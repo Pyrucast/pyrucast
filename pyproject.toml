@@ -1,0 +1,16 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "pyrucast"
+version = "0.0.0"
+description = "Finite-element library in Rust, inspired by cast3m, exposed to Python"
+requires-python = ">=3.9"
+
+[tool.maturin]
+# Enable the Cargo `extension-module` feature (correct Python linkage).
+features = ["extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]

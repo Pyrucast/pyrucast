@@ -1,0 +1,114 @@
+"""Python tests for SubMesh + Mesh (Phase 2 step 2)."""
+
+import gc as pygc
+
+import pyrucast
+
+
+def test_submesh_poi1_is_node_list():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    sm = pyrucast.SubMesh(c, "POI1")
+    sm.add_cell([a.id])
+    sm.add_cell([b.id])
+    assert sm.cell_count() == 2
+    assert sm.cell(0) == [a.id]
+    assert sm.cell(1) == [b.id]
+    assert sm.element_type == "POI1"
+
+
+def test_submesh_tri3_invalid_arity():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    sm = pyrucast.SubMesh(c, "TRI3")
+    try:
+        sm.add_cell([a.id])
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for invalid arity")
+
+
+def test_submesh_protects_nodes_from_gc():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.5, 1.0])
+    ids = (a.id, b.id, cc.id)
+
+    sm = pyrucast.SubMesh(c, "TRI3")
+    sm.add_cell(list(ids))
+    # The 3 Python Nodes AND the SubMesh each reference every node ⇒ refcount = 2.
+    for i in ids:
+        assert c.refcount(i) == 2
+
+    # Drop the Python Nodes; the SubMesh keeps the nodes alive.
+    del a
+    del b
+    del cc
+    pygc.collect()
+    for i in ids:
+        assert c.refcount(i) == 1
+        assert c.is_alive(i)
+    assert c.gc() == 0
+
+    # Drop the SubMesh ⇒ refcount drops to 0 ⇒ gc collects.
+    del sm
+    pygc.collect()
+    assert c.gc() == 3
+    for i in ids:
+        assert not c.is_alive(i)
+
+
+def test_unknown_element_type():
+    c = pyrucast.Configuration(2)
+    try:
+        pyrucast.SubMesh(c, "BOGUS")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for unknown type")
+
+
+def test_mesh_aggregates_submeshes():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.5, 1.0])
+
+    sm_pts = pyrucast.SubMesh(c, "POI1")
+    sm_pts.add_cell([a.id])
+    sm_pts.add_cell([b.id])
+
+    sm_tri = pyrucast.SubMesh(c, "TRI3")
+    sm_tri.add_cell([a.id, b.id, cc.id])
+
+    mesh = pyrucast.Mesh(c)
+    mesh.add_submesh(sm_pts)
+    mesh.add_submesh(sm_tri)
+    assert mesh.submesh_count() == 2
+    assert mesh.cell_count() == 3  # 2 POI1 + 1 TRI3
+
+
+def test_mesh_rejects_submesh_from_other_configuration():
+    c1 = pyrucast.Configuration(2)
+    c2 = pyrucast.Configuration(2)
+    sm = pyrucast.SubMesh(c1, "POI1")
+    mesh = pyrucast.Mesh(c2)
+    try:
+        mesh.add_submesh(sm)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for mismatched Configurations")
+
+
+def test_repr_str_submesh_and_mesh():
+    c = pyrucast.Configuration(1)
+    sm = pyrucast.SubMesh(c, "SEG2")
+    assert "SubMesh" in repr(sm)
+    assert "SEG2" in str(sm)
+    mesh = pyrucast.Mesh(c)
+    assert "Mesh" in repr(mesh)
+    assert "submesh" in str(mesh)
