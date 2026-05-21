@@ -736,6 +736,153 @@ impl Mesh {
         Ok(result)
     }
 
+    /// Fill the interior of a closed SEG2 contour with 2-D elements.
+    ///
+    /// `contour` must be a [`Mesh`] with exactly **one** SEG2 submesh
+    /// whose segments form a single closed simple loop (each node appears
+    /// once as the start of a segment and once as its end). The
+    /// `Configuration` must be 2-D for now.
+    ///
+    /// `element_type` selects the 2-D element to fill with. **Only**
+    /// [`ElementType::TRI3`] is currently supported; passing any other
+    /// type returns a clear error.
+    ///
+    /// The returned mesh has a single submesh of `element_type`, sharing
+    /// the contour's `Configuration`: the existing contour nodes are
+    /// re-used (their refcount is incremented). No new nodes are created
+    /// in this first iteration — the algorithm is plain ear clipping and
+    /// produces exactly `n - 2` triangles for `n` contour nodes.
+    ///
+    /// Triangles are oriented **CCW** in the plane regardless of the
+    /// contour's orientation.
+    ///
+    /// # Example
+    /// ```
+    /// use pyrucast::configuration::Configuration;
+    /// use pyrucast::element_type::ElementType;
+    /// use pyrucast::mesh::Mesh;
+    /// use pyrucast::node::Node;
+    /// use pyrucast::store::insert;
+    ///
+    /// // Unit square contour, CCW.
+    /// let cfg = insert(Configuration::new(2).unwrap());
+    /// let n = [
+    ///     Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap(),
+    ///     Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap(),
+    ///     Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap(),
+    ///     Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap(),
+    /// ];
+    /// let mut contour = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+    /// for i in 0..4 {
+    ///     contour.add_cell(&[n[i].id(), n[(i + 1) % 4].id()]).unwrap();
+    /// }
+    ///
+    /// let tri = Mesh::fill_2d(&contour, ElementType::TRI3).unwrap();
+    /// assert_eq!(tri.cell_count().unwrap(), 2); // 4 - 2 = 2 triangles
+    /// ```
+    pub fn fill_2d(contour: &Mesh, element_type: ElementType) -> Result<Mesh> {
+        if element_type != ElementType::TRI3 {
+            return Err(PyrucastError::Message(format!(
+                "fill_2d: only TRI3 is supported for now, got {}",
+                element_type
+            )));
+        }
+        if contour.submesh_count() != 1 {
+            return Err(PyrucastError::Message(format!(
+                "fill_2d: contour must have exactly one SEG2 submesh, got {} submesh(es)",
+                contour.submesh_count()
+            )));
+        }
+        let cfg = contour.config.clone();
+        let dim = with(&cfg, |c| c.dim())?;
+        if dim != 2 {
+            return Err(PyrucastError::Message(format!(
+                "fill_2d: contour configuration must be 2-D, got dim={}",
+                dim
+            )));
+        }
+
+        let sm = contour.submesh(0)?;
+        let (et, n_elems, conn) = with(&sm, |s| {
+            (s.element_type(), s.cell_count(), s.connectivity().to_vec())
+        })?;
+        if et != ElementType::SEG2 {
+            return Err(PyrucastError::Message(format!(
+                "fill_2d: contour submesh must be SEG2, got {}",
+                et
+            )));
+        }
+        if n_elems < 3 {
+            return Err(PyrucastError::Message(format!(
+                "fill_2d: contour must have ≥ 3 segments, got {}",
+                n_elems
+            )));
+        }
+
+        // Walk the contour: build next[a] = b for each segment (a, b),
+        // then traverse from conn[0] until we come back.
+        let mut next: std::collections::HashMap<NodeId, NodeId> =
+            std::collections::HashMap::with_capacity(n_elems);
+        for i in 0..n_elems {
+            let a = conn[2 * i];
+            let b = conn[2 * i + 1];
+            if next.insert(a, b).is_some() {
+                return Err(PyrucastError::Message(format!(
+                    "fill_2d: node {} starts more than one segment (contour not a simple loop)",
+                    a
+                )));
+            }
+        }
+        let start = conn[0];
+        let mut chain: Vec<NodeId> = Vec::with_capacity(n_elems);
+        chain.push(start);
+        let mut current = *next.get(&start).ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "fill_2d: node {} has no outgoing segment (contour broken)",
+                start
+            ))
+        })?;
+        while current != start {
+            if chain.len() > n_elems {
+                return Err(PyrucastError::Message(
+                    "fill_2d: contour is not a closed simple loop".into(),
+                ));
+            }
+            chain.push(current);
+            current = *next.get(&current).ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "fill_2d: node {} has no outgoing segment (contour broken)",
+                    current
+                ))
+            })?;
+        }
+        if chain.len() != n_elems {
+            return Err(PyrucastError::Message(format!(
+                "fill_2d: contour has multiple disjoint loops ({} nodes traced out of {})",
+                chain.len(),
+                n_elems
+            )));
+        }
+
+        // Collect 2-D coordinates of every chained node in one lock.
+        let mut points: Vec<crate::triangulation::Point2> = Vec::with_capacity(chain.len());
+        with(&cfg, |c| -> Result<()> {
+            for &id in &chain {
+                let s = c.coord(id)?;
+                points.push((s[0], s[1]));
+            }
+            Ok(())
+        })??;
+
+        let triangles = crate::triangulation::ear_clip_2d(&points)?;
+
+        let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+        for [i, j, k] in triangles {
+            mesh.add_cell(&[chain[i], chain[j], chain[k]])?;
+        }
+        Ok(mesh)
+    }
+
     /// Visualize this mesh — every TRI3 submesh is drawn, each in its own
     /// [`SubMesh::face_color`]. Other element types are silently skipped
     /// (support will be added incrementally). See [`SubMesh::plot`] for
@@ -1575,6 +1722,197 @@ mod tests {
         let mut tri = Mesh::with_element_type(cfg, ElementType::TRI3);
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         assert!(Mesh::extrude(&tri, &[0.0, 0.0], 1).is_err());
+    }
+
+    /// Build a closed SEG2 contour from a polyline of 2-D points.
+    /// Returns the contour mesh and the (owned) node handles in input order.
+    fn build_contour_2d(cfg: Handle<Configuration>, pts: &[(f64, f64)]) -> (Mesh, Vec<Node>) {
+        let nodes: Vec<Node> = pts
+            .iter()
+            .map(|&(x, y)| Node::create_in(cfg.clone(), &[x, y]).unwrap())
+            .collect();
+        let mut contour = Mesh::with_element_type(cfg, ElementType::SEG2);
+        let n = nodes.len();
+        for i in 0..n {
+            contour
+                .add_cell(&[nodes[i].id(), nodes[(i + 1) % n].id()])
+                .unwrap();
+        }
+        (contour, nodes)
+    }
+
+    #[test]
+    fn fill_2d_square_gives_two_triangles() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let (contour, nodes) =
+            build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+
+        let tri = Mesh::fill_2d(&contour, ElementType::TRI3).unwrap();
+        assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
+        assert_eq!(tri.cell_count().unwrap(), 2);
+
+        // Every triangle node must be one of the four contour nodes
+        // (no Steiner points in this first iteration).
+        let node_ids: std::collections::HashSet<_> = nodes.iter().map(|n| n.id()).collect();
+        for ci in 0..2 {
+            for ni in 0..3 {
+                let id = tri.node(0, ci, ni).unwrap().id();
+                assert!(node_ids.contains(&id), "triangle node {} not in contour", id);
+            }
+        }
+    }
+
+    #[test]
+    fn fill_2d_triangles_sum_to_polygon_area() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        // Concave L-shape, CCW; expected area = 5.
+        let l = [
+            (0.0, 0.0),
+            (3.0, 0.0),
+            (3.0, 1.0),
+            (1.0, 1.0),
+            (1.0, 3.0),
+            (0.0, 3.0),
+        ];
+        let (contour, _nodes) = build_contour_2d(cfg.clone(), &l);
+
+        let tri = Mesh::fill_2d(&contour, ElementType::TRI3).unwrap();
+        assert_eq!(tri.cell_count().unwrap(), 4); // n - 2
+
+        let mut total = 0.0;
+        for ci in 0..4 {
+            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
+            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
+            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
+            // Signed area, all triangles must be CCW (positive).
+            let a = 0.5
+                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            assert!(a > 0.0, "triangle {} not CCW (signed area {})", ci, a);
+            total += a;
+        }
+        assert!((total - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn fill_2d_increfs_contour_nodes() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let (contour, nodes) =
+            build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let ids: Vec<_> = nodes.iter().map(|n| n.id()).collect();
+
+        // Before filling: each node is referenced by its Node handle (+1)
+        // and by the SEG2 contour (×2 because each node belongs to two
+        // consecutive segments) ⇒ refcount = 3.
+        with(&cfg, |c| {
+            for &id in &ids {
+                assert_eq!(c.refcount(id), 3);
+            }
+        })
+        .unwrap();
+
+        let tri = Mesh::fill_2d(&contour, ElementType::TRI3).unwrap();
+
+        // After filling: each contour node is referenced once more per
+        // incident triangle.
+        let mut extra = [0u32; 4];
+        for ci in 0..2 {
+            for ni in 0..3 {
+                let id = tri.node(0, ci, ni).unwrap().id();
+                let k = ids.iter().position(|&x| x == id).unwrap();
+                extra[k] += 1;
+            }
+        }
+        with(&cfg, |c| {
+            for k in 0..4 {
+                assert_eq!(c.refcount(ids[k]), 3 + extra[k]);
+            }
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn fill_2d_rejects_non_tri3() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let (contour, _n) =
+            build_contour_2d(cfg, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        assert!(Mesh::fill_2d(&contour, ElementType::QUA4).is_err());
+    }
+
+    #[test]
+    fn fill_2d_rejects_non_seg2_contour() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let mut bogus = Mesh::with_element_type(cfg, ElementType::TRI3);
+        bogus.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        assert!(Mesh::fill_2d(&bogus, ElementType::TRI3).is_err());
+    }
+
+    #[test]
+    fn fill_2d_rejects_non_2d_configuration() {
+        let cfg = insert(Configuration::new(3).unwrap());
+        let pts = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ];
+        let nodes: Vec<Node> = pts
+            .iter()
+            .map(|&(x, y, z)| Node::create_in(cfg.clone(), &[x, y, z]).unwrap())
+            .collect();
+        let mut contour = Mesh::with_element_type(cfg, ElementType::SEG2);
+        for i in 0..4 {
+            contour
+                .add_cell(&[nodes[i].id(), nodes[(i + 1) % 4].id()])
+                .unwrap();
+        }
+        assert!(Mesh::fill_2d(&contour, ElementType::TRI3).is_err());
+    }
+
+    #[test]
+    fn fill_2d_rejects_multiple_submeshes() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let (mut contour, _n) =
+            build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let extra = insert(SubMesh::new(cfg, ElementType::SEG2));
+        contour.add_submesh(extra).unwrap();
+        assert!(Mesh::fill_2d(&contour, ElementType::TRI3).is_err());
+    }
+
+    #[test]
+    fn fill_2d_rejects_open_contour() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        // Three segments but not closed: a→b, b→c, c→a is closed; here we leave it open.
+        let mut open = Mesh::with_element_type(cfg, ElementType::SEG2);
+        open.add_cell(&[a.id(), b.id()]).unwrap();
+        open.add_cell(&[b.id(), c.id()]).unwrap();
+        // Missing the closing c→a segment.
+        assert!(Mesh::fill_2d(&open, ElementType::TRI3).is_err());
+    }
+
+    #[test]
+    fn fill_2d_works_with_cw_contour() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        // Same square but listed clockwise.
+        let (contour, _n) =
+            build_contour_2d(cfg, &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)]);
+        let tri = Mesh::fill_2d(&contour, ElementType::TRI3).unwrap();
+        assert_eq!(tri.cell_count().unwrap(), 2);
+
+        // Resulting triangles must still be CCW (positive signed area).
+        for ci in 0..2 {
+            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
+            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
+            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
+            let a = 0.5
+                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            assert!(a > 0.0, "triangle {} not CCW", ci);
+        }
     }
 
     #[test]

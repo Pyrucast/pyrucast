@@ -159,6 +159,40 @@ fn submesh_protects_nodes_via_refcount() -> Result<()> {
 }
 
 #[test]
+fn fill_2d_from_circle_contour() -> Result<()> {
+    // Build a closed SEG2 circle (8 segments) and fill it with TRI3
+    // through the public API. The result must have 6 triangles
+    // (n - 2 with n = 8) and a total area close to π·r².
+    let cfg = insert(Configuration::new(2)?);
+    let center = Node::create_in(cfg.clone(), &[0.0, 0.0])?;
+    let circle = Mesh::circle_seg2(&center, &[0.0, 0.0, 1.0], 1.0, 8)?;
+    let tri = Mesh::fill_2d(&circle, ElementType::TRI3)?;
+    assert_eq!(tri.element_types()?, vec![ElementType::TRI3]);
+    assert_eq!(tri.cell_count()?, 6);
+
+    // Sum of signed triangle areas should approximate the inscribed
+    // octagon's area (= 8 · 0.5 · r² · sin(2π/8) = 2√2 ≈ 2.8284).
+    let mut total = 0.0;
+    for ci in 0..6 {
+        let p0 = tri.node(0, ci, 0)?.coord()?;
+        let p1 = tri.node(0, ci, 1)?.coord()?;
+        let p2 = tri.node(0, ci, 2)?.coord()?;
+        let area = 0.5
+            * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+        assert!(area > 0.0, "triangle {} not CCW", ci);
+        total += area;
+    }
+    let expected = 2.0 * std::f64::consts::SQRT_2;
+    assert!(
+        (total - expected).abs() < 1e-10,
+        "total area {} ≠ inscribed octagon area {}",
+        total,
+        expected
+    );
+    Ok(())
+}
+
+#[test]
 fn mesh_composed_of_multiple_submeshes() -> Result<()> {
     let cfg = insert(Configuration::new(2)?);
     let a = Node::create_in(cfg.clone(), &[0.0, 0.0])?;

@@ -38,6 +38,7 @@ pub mod node;
 pub mod node_field;
 pub mod persist;
 pub mod store;
+pub mod triangulation;
 
 #[cfg(feature = "viz")]
 pub mod viz;
