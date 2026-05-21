@@ -13,6 +13,9 @@
 
 use crate::error::{PyrucastError, Result};
 
+mod cdt;
+pub use cdt::delaunay_2d;
+
 /// 2-D point as `(x, y)`.
 pub type Point2 = (f64, f64);
 
