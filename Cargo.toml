@@ -14,6 +14,10 @@ crate-type = ["cdylib", "rlib"]
 pyo3 = { version = "0.23" }
 serde = { version = "1", features = ["derive"] }
 bincode = "1.3"
+# Vector / matrix primitives used across geometry helpers, mesh
+# builders and the visualization layer. `serde-serialize` lets nalgebra
+# types travel through the Persist trait alongside our own structs.
+nalgebra = { version = "0.33", features = ["serde-serialize"] }
 # Visualization stack (gated by features below).
 plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "bitmap_encoder", "svg_backend", "ttf", "line_series", "all_series"], optional = true }
 winit = { version = "0.30", optional = true }

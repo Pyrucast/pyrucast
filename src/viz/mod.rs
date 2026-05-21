@@ -71,7 +71,7 @@ pub struct View {
     pub yaw: f64,
     pub pitch: f64,
     pub scale: f64,
-    pub target: Option<[f64; 3]>,
+    pub target: Option<crate::triangulation::Point3>,
 }
 
 impl View {

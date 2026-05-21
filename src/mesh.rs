@@ -423,45 +423,27 @@ impl Mesh {
             ));
         }
 
-        // Normalize the normal vector.
-        let n_norm: f64 = normal.iter().map(|x| x * x).sum::<f64>().sqrt();
-        if n_norm < 1e-15 {
+        use crate::triangulation::{in_plane_basis, Vector3};
+        let n_vec = Vector3::new(normal[0], normal[1], normal[2]);
+        if n_vec.norm() < 1e-15 {
             return Err(PyrucastError::Message(
                 "circle_seg2: normal vector must not be zero".into(),
             ));
         }
-        let n = [normal[0] / n_norm, normal[1] / n_norm, normal[2] / n_norm];
+        let n = n_vec.normalize();
+        let (u, v) = in_plane_basis(n);
 
-        // In-plane basis: pick e as the coordinate axis least aligned with n,
-        // then orthogonalise (Gram-Schmidt) to get u, and v = n × u.
-        let abs_n = [n[0].abs(), n[1].abs(), n[2].abs()];
-        let e: [f64; 3] = if abs_n[0] <= abs_n[1] && abs_n[0] <= abs_n[2] {
-            [1.0, 0.0, 0.0]
-        } else if abs_n[1] <= abs_n[2] {
-            [0.0, 1.0, 0.0]
-        } else {
-            [0.0, 0.0, 1.0]
-        };
-        let e_dot_n = e[0] * n[0] + e[1] * n[1] + e[2] * n[2];
-        let u_raw = [e[0] - e_dot_n * n[0], e[1] - e_dot_n * n[1], e[2] - e_dot_n * n[2]];
-        let u_norm: f64 = u_raw.iter().map(|x| x * x).sum::<f64>().sqrt();
-        let u = [u_raw[0] / u_norm, u_raw[1] / u_norm, u_raw[2] / u_norm];
-        let v = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
-
-        // Create n_elems evenly spaced nodes on the circle.
-        let cx = center_coords.first().copied().unwrap_or(0.0);
-        let cy = center_coords.get(1).copied().unwrap_or(0.0);
-        let cz = center_coords.get(2).copied().unwrap_or(0.0);
+        // Center as 3-D point (zero-padded if the node lives in 2-D).
+        let centre = Vector3::new(
+            center_coords.first().copied().unwrap_or(0.0),
+            center_coords.get(1).copied().unwrap_or(0.0),
+            center_coords.get(2).copied().unwrap_or(0.0),
+        );
         let mut nodes: Vec<Node> = Vec::with_capacity(n_elems);
         for i in 0..n_elems {
             let theta = 2.0 * PI * i as f64 / n_elems as f64;
-            let (cos_t, sin_t) = (theta.cos(), theta.sin());
-            let p3 = [
-                cx + radius * (cos_t * u[0] + sin_t * v[0]),
-                cy + radius * (cos_t * u[1] + sin_t * v[1]),
-                cz + radius * (cos_t * u[2] + sin_t * v[2]),
-            ];
-            nodes.push(Node::create_in(cfg.clone(), &p3[..dim])?);
+            let p3 = centre + radius * (theta.cos() * u + theta.sin() * v);
+            nodes.push(Node::create_in(cfg.clone(), &p3.as_slice()[..dim])?);
         }
 
         // Closed loop: element i connects node i to node (i+1) % n_elems.
@@ -899,22 +881,23 @@ impl Mesh {
         //    in 3-D project on the best-fit plane (Newell normal of the
         //    first non-degenerate loop + centroid origin), then verify
         //    planarity across **all** loops jointly.
-        let points_2d: Vec<crate::triangulation::Point2> = if dim == 2 {
+        use crate::triangulation::{Point2, Point3, Vector3};
+        let points_2d: Vec<Point2> = if dim == 2 {
             let mut pts = Vec::with_capacity(n_total);
             with(&cfg, |c| -> Result<()> {
                 for &id in &flat_nodes {
                     let s = c.coord(id)?;
-                    pts.push((s[0], s[1]));
+                    pts.push(Point2::new(s[0], s[1]));
                 }
                 Ok(())
             })??;
             pts
         } else {
-            let mut pts3: Vec<crate::triangulation::Point3> = Vec::with_capacity(n_total);
+            let mut pts3: Vec<Point3> = Vec::with_capacity(n_total);
             with(&cfg, |c| -> Result<()> {
                 for &id in &flat_nodes {
                     let s = c.coord(id)?;
-                    pts3.push([s[0], s[1], s[2]]);
+                    pts3.push(Point3::new(s[0], s[1], s[2]));
                 }
                 Ok(())
             })??;
@@ -922,10 +905,11 @@ impl Mesh {
             // Pick the normal from the first chain that has a well-defined
             // Newell normal. Co-planarity of the other loops is checked
             // afterwards by the global planarity test.
-            let normal = (0..n_sub)
+            let normal: Vector3 = (0..n_sub)
                 .find_map(|i| {
-                    let pts_chain: Vec<crate::triangulation::Point3> =
-                        (chain_offsets[i]..chain_offsets[i + 1]).map(|j| pts3[j]).collect();
+                    let pts_chain: Vec<Point3> = (chain_offsets[i]..chain_offsets[i + 1])
+                        .map(|j| pts3[j])
+                        .collect();
                     crate::triangulation::newell_normal(&pts_chain)
                 })
                 .ok_or_else(|| {
@@ -934,40 +918,25 @@ impl Mesh {
                     )
                 })?;
 
-            let mut origin = [0.0_f64; 3];
-            for p in &pts3 {
-                origin[0] += p[0];
-                origin[1] += p[1];
-                origin[2] += p[2];
-            }
-            let inv_n = 1.0 / pts3.len() as f64;
-            for k in 0..3 {
-                origin[k] *= inv_n;
-            }
+            // Centroid as the plane origin.
+            let origin: Point3 = {
+                let sum: Vector3 = pts3.iter().map(|p| p.coords).sum();
+                Point3::from(sum / pts3.len() as f64)
+            };
 
-            let mut bb_min = [f64::INFINITY; 3];
-            let mut bb_max = [f64::NEG_INFINITY; 3];
+            // Planarity check + AABB diagonal in one pass.
+            let mut bb_min = Vector3::repeat(f64::INFINITY);
+            let mut bb_max = Vector3::repeat(f64::NEG_INFINITY);
             let mut max_dev = 0.0_f64;
             for p in &pts3 {
-                let d = (p[0] - origin[0]) * normal[0]
-                    + (p[1] - origin[1]) * normal[1]
-                    + (p[2] - origin[2]) * normal[2];
-                if d.abs() > max_dev {
-                    max_dev = d.abs();
+                let dev = (p - origin).dot(&normal).abs();
+                if dev > max_dev {
+                    max_dev = dev;
                 }
-                for k in 0..3 {
-                    if p[k] < bb_min[k] {
-                        bb_min[k] = p[k];
-                    }
-                    if p[k] > bb_max[k] {
-                        bb_max[k] = p[k];
-                    }
-                }
+                bb_min = bb_min.zip_map(&p.coords, f64::min);
+                bb_max = bb_max.zip_map(&p.coords, f64::max);
             }
-            let diag = ((bb_max[0] - bb_min[0]).powi(2)
-                + (bb_max[1] - bb_min[1]).powi(2)
-                + (bb_max[2] - bb_min[2]).powi(2))
-            .sqrt();
+            let diag = (bb_max - bb_min).norm();
             let tol = 1e-6 * diag;
             if max_dev > tol {
                 return Err(PyrucastError::Message(format!(
@@ -979,10 +948,8 @@ impl Mesh {
             let (u, v) = crate::triangulation::in_plane_basis(normal);
             pts3.iter()
                 .map(|p| {
-                    let d = [p[0] - origin[0], p[1] - origin[1], p[2] - origin[2]];
-                    let pu = d[0] * u[0] + d[1] * u[1] + d[2] * u[2];
-                    let pv = d[0] * v[0] + d[1] * v[1] + d[2] * v[2];
-                    (pu, pv)
+                    let d = p - origin;
+                    Point2::new(d.dot(&u), d.dot(&v))
                 })
                 .collect()
         };

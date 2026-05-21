@@ -21,21 +21,23 @@ use crate::viz::View;
 use plotters::coord::Shift;
 use plotters::prelude::*;
 
-/// Pad world coordinates to `[x, y, z]`, filling missing components with 0.0.
-fn pad3(coords: &[f64]) -> [f64; 3] {
-    let mut p = [0.0; 3];
-    for (k, &c) in coords.iter().take(3).enumerate() {
-        p[k] = c;
-    }
-    p
+use crate::triangulation::Point3;
+
+/// Pad world coordinates to a 3-D point, filling missing components with 0.0.
+fn pad3(coords: &[f64]) -> Point3 {
+    Point3::new(
+        coords.first().copied().unwrap_or(0.0),
+        coords.get(1).copied().unwrap_or(0.0),
+        coords.get(2).copied().unwrap_or(0.0),
+    )
 }
 
-/// Read every node referenced by `connectivity` from `config`, padded to 3D.
+/// Read every node referenced by `connectivity` from `config`, padded to 3-D.
 fn read_points(
     config: &Handle<Configuration>,
     connectivity: &[NodeId],
-) -> Result<Vec<[f64; 3]>> {
-    with(config, |c| -> Result<Vec<[f64; 3]>> {
+) -> Result<Vec<Point3>> {
+    with(config, |c| -> Result<Vec<Point3>> {
         connectivity
             .iter()
             .map(|&nid| c.coord(nid).map(pad3))
@@ -46,7 +48,7 @@ fn read_points(
 /// Triangle with its display colour, expressed in world coordinates.
 #[derive(Debug, Clone, Copy)]
 struct ColoredTri {
-    p: [[f64; 3]; 3],
+    p: [Point3; 3],
     color: RgbColor,
 }
 
@@ -99,11 +101,12 @@ where
     let bbox = triangles_bbox(tris);
     let proj = Projector::new(view, bbox.center());
 
-    // Project every vertex once.
+    // Project every vertex once. nalgebra `Vector3` carries (sx, sy, depth).
+    use crate::triangulation::Vector3;
     struct Proj2 {
-        a: [f64; 3],
-        b: [f64; 3],
-        c: [f64; 3],
+        a: Vector3,
+        b: Vector3,
+        c: Vector3,
         color: RgbColor,
         depth: f64,
     }
@@ -113,7 +116,7 @@ where
             let a = proj.project(t.p[0]);
             let b = proj.project(t.p[1]);
             let c = proj.project(t.p[2]);
-            let depth = (a[2] + b[2] + c[2]) / 3.0;
+            let depth = (a.z + b.z + c.z) / 3.0;
             Proj2 {
                 a,
                 b,
@@ -139,10 +142,10 @@ where
     let mut sy_max = f64::NEG_INFINITY;
     for p in &projected {
         for v in [p.a, p.b, p.c] {
-            sx_min = sx_min.min(v[0]);
-            sx_max = sx_max.max(v[0]);
-            sy_min = sy_min.min(v[1]);
-            sy_max = sy_max.max(v[1]);
+            sx_min = sx_min.min(v.x);
+            sx_max = sx_max.max(v.x);
+            sy_min = sy_min.min(v.y);
+            sy_max = sy_max.max(v.y);
         }
     }
     if !sx_min.is_finite() || !sy_min.is_finite() {
@@ -188,9 +191,9 @@ where
             filled: true,
             stroke_width: 0,
         };
-        let pa = (t.a[0], t.a[1]);
-        let pb = (t.b[0], t.b[1]);
-        let pc = (t.c[0], t.c[1]);
+        let pa = (t.a.x, t.a.y);
+        let pb = (t.b.x, t.b.y);
+        let pc = (t.c.x, t.c.y);
         chart
             .draw_series(std::iter::once(Polygon::new(
                 vec![pa, pb, pc],
@@ -291,8 +294,8 @@ mod tests {
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         let bb = sm.bbox().unwrap();
-        assert_eq!(bb.min, [0.0, 0.0, 0.0]);
-        assert_eq!(bb.max, [2.0, 3.0, 0.0]);
+        assert_eq!(bb.min, Point3::new(0.0, 0.0, 0.0));
+        assert_eq!(bb.max, Point3::new(2.0, 3.0, 0.0));
     }
 
     #[test]
@@ -321,10 +324,10 @@ mod tests {
 
     #[test]
     fn pad3_truncates_and_pads() {
-        assert_eq!(pad3(&[]), [0.0, 0.0, 0.0]);
-        assert_eq!(pad3(&[1.0]), [1.0, 0.0, 0.0]);
-        assert_eq!(pad3(&[1.0, 2.0]), [1.0, 2.0, 0.0]);
-        assert_eq!(pad3(&[1.0, 2.0, 3.0]), [1.0, 2.0, 3.0]);
-        assert_eq!(pad3(&[1.0, 2.0, 3.0, 4.0]), [1.0, 2.0, 3.0]);
+        assert_eq!(pad3(&[]), Point3::new(0.0, 0.0, 0.0));
+        assert_eq!(pad3(&[1.0]), Point3::new(1.0, 0.0, 0.0));
+        assert_eq!(pad3(&[1.0, 2.0]), Point3::new(1.0, 2.0, 0.0));
+        assert_eq!(pad3(&[1.0, 2.0, 3.0]), Point3::new(1.0, 2.0, 3.0));
+        assert_eq!(pad3(&[1.0, 2.0, 3.0, 4.0]), Point3::new(1.0, 2.0, 3.0));
     }
 }

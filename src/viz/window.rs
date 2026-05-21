@@ -33,7 +33,7 @@ const INIT_HEIGHT: u32 = 600;
 struct App<'a, D: Drawable> {
     object: &'a D,
     /// Cached so we don't recompute the bbox each frame.
-    target: [f64; 3],
+    target: crate::triangulation::Point3,
     yaw: f64,
     pitch: f64,
     scale: f64,

@@ -1,26 +1,35 @@
-//! 2-D triangulation primitives.
+//! 2-D / 3-D geometry primitives shared by the mesh builders.
 //!
-//! Pure-geometry helpers shared by mesh builders. The functions here
-//! operate on plain arrays of 2-D points and integer indices; they do
-//! not know about [`crate::mesh::Mesh`] or the refcount machinery —
-//! that wiring lives in [`crate::mesh`].
+//! All vector / point arithmetic in this module is built on
+//! [`nalgebra`]: 2-D points are [`nalgebra::Point2<f64>`], 3-D points
+//! are [`nalgebra::Point3<f64>`], and free vectors are
+//! [`nalgebra::Vector2`] / [`Vector3`]. Re-exported as [`Point2`],
+//! [`Point3`], [`Vector2`], [`Vector3`] for terseness throughout the
+//! crate.
 //!
-//! For now only one algorithm is exposed: [`ear_clip_2d`], the classic
-//! ear-clipping triangulation of a **simple closed polygon** without
-//! holes and without Steiner points. It is the simplest building block;
-//! later iterations of the meshing pipeline (holes, refinement) will
-//! layer on top of it.
+//! The module exposes:
+//! - [`signed_area`] / [`ear_clip_2d`] — ear clipping triangulation of
+//!   a simple closed polygon,
+//! - [`newell_normal`] / [`in_plane_basis`] — best-fit plane utilities
+//!   for nearly-planar 3-D polygons,
+//! - [`delaunay_2d`], [`constrained_delaunay_2d`],
+//!   [`triangulate_polygon_with_holes`] — full constrained Delaunay
+//!   pipeline (Bowyer-Watson + edge enforcement + parity flood-fill,
+//!   in a private `cdt` sub-module).
 
 use crate::error::{PyrucastError, Result};
 
 mod cdt;
 pub use cdt::{constrained_delaunay_2d, delaunay_2d, triangulate_polygon_with_holes};
 
-/// 2-D point as `(x, y)`.
-pub type Point2 = (f64, f64);
-
-/// 3-D point as `[x, y, z]`.
-pub type Point3 = [f64; 3];
+/// 2-D point, `nalgebra::Point2<f64>`.
+pub type Point2 = nalgebra::Point2<f64>;
+/// 3-D point, `nalgebra::Point3<f64>`.
+pub type Point3 = nalgebra::Point3<f64>;
+/// 2-D vector, `nalgebra::Vector2<f64>`.
+pub type Vector2 = nalgebra::Vector2<f64>;
+/// 3-D vector, `nalgebra::Vector3<f64>`.
+pub type Vector3 = nalgebra::Vector3<f64>;
 
 /// Unit normal of a 3-D polygon by **Newell's method**.
 ///
@@ -29,40 +38,43 @@ pub type Point3 = [f64; 3];
 /// Returns `None` if the polygon is degenerate (collinear / zero area)
 /// or has fewer than 3 vertices.
 ///
-/// The method sums the cross products of consecutive vertices in a way
-/// that is robust to small departures from planarity: the magnitude of
-/// the unnormalised result equals **twice the projected area** of the
-/// polygon, so the dominant terms come from the largest-area projection.
+/// The method sums signed components of consecutive edges in a way that
+/// is robust to small departures from planarity: the magnitude of the
+/// raw sum equals **twice the area projected onto each axis plane**, so
+/// the dominant terms come from the largest-area projection.
 ///
 /// # Example
 /// ```
-/// use pyrucast::triangulation::newell_normal;
+/// use pyrucast::triangulation::{newell_normal, Point3};
 ///
 /// // Unit square in the plane z = 0, CCW seen from +z.
-/// let pts = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
+/// let pts = vec![
+///     Point3::new(0.0, 0.0, 0.0),
+///     Point3::new(1.0, 0.0, 0.0),
+///     Point3::new(1.0, 1.0, 0.0),
+///     Point3::new(0.0, 1.0, 0.0),
+/// ];
 /// let n = newell_normal(&pts).unwrap();
-/// assert!((n[2] - 1.0).abs() < 1e-12);
+/// assert!((n.z - 1.0).abs() < 1e-12);
 /// ```
-pub fn newell_normal(points: &[Point3]) -> Option<[f64; 3]> {
+pub fn newell_normal(points: &[Point3]) -> Option<Vector3> {
     let n = points.len();
     if n < 3 {
         return None;
     }
-    let mut nx = 0.0;
-    let mut ny = 0.0;
-    let mut nz = 0.0;
+    let mut nrm = Vector3::zeros();
     for i in 0..n {
-        let p = points[i];
-        let q = points[(i + 1) % n];
-        nx += (p[1] - q[1]) * (p[2] + q[2]);
-        ny += (p[2] - q[2]) * (p[0] + q[0]);
-        nz += (p[0] - q[0]) * (p[1] + q[1]);
+        let p = &points[i];
+        let q = &points[(i + 1) % n];
+        nrm.x += (p.y - q.y) * (p.z + q.z);
+        nrm.y += (p.z - q.z) * (p.x + q.x);
+        nrm.z += (p.x - q.x) * (p.y + q.y);
     }
-    let mag = (nx * nx + ny * ny + nz * nz).sqrt();
+    let mag = nrm.norm();
     if mag < 1e-15 {
         return None;
     }
-    Some([nx / mag, ny / mag, nz / mag])
+    Some(nrm / mag)
 }
 
 /// Orthonormal in-plane basis `(u, v)` such that `(u, v, normal)` is
@@ -72,34 +84,23 @@ pub fn newell_normal(points: &[Point3]) -> Option<[f64; 3]> {
 /// `normal`. The choice of axis is deterministic — same input ⇒ same
 /// basis — but otherwise arbitrary; do not rely on `u` or `v` having a
 /// specific direction.
-pub fn in_plane_basis(normal: [f64; 3]) -> ([f64; 3], [f64; 3]) {
-    let abs_n = [normal[0].abs(), normal[1].abs(), normal[2].abs()];
-    let e: [f64; 3] = if abs_n[0] <= abs_n[1] && abs_n[0] <= abs_n[2] {
-        [1.0, 0.0, 0.0]
-    } else if abs_n[1] <= abs_n[2] {
-        [0.0, 1.0, 0.0]
+pub fn in_plane_basis(normal: Vector3) -> (Vector3, Vector3) {
+    let abs_n = normal.map(|x| x.abs());
+    let e: Vector3 = if abs_n.x <= abs_n.y && abs_n.x <= abs_n.z {
+        Vector3::x()
+    } else if abs_n.y <= abs_n.z {
+        Vector3::y()
     } else {
-        [0.0, 0.0, 1.0]
+        Vector3::z()
     };
-    let e_dot_n = e[0] * normal[0] + e[1] * normal[1] + e[2] * normal[2];
-    let u_raw = [
-        e[0] - e_dot_n * normal[0],
-        e[1] - e_dot_n * normal[1],
-        e[2] - e_dot_n * normal[2],
-    ];
-    let u_mag = (u_raw[0].powi(2) + u_raw[1].powi(2) + u_raw[2].powi(2)).sqrt();
-    let u = [u_raw[0] / u_mag, u_raw[1] / u_mag, u_raw[2] / u_mag];
-    let v = [
-        normal[1] * u[2] - normal[2] * u[1],
-        normal[2] * u[0] - normal[0] * u[2],
-        normal[0] * u[1] - normal[1] * u[0],
-    ];
+    let u = (e - normal * e.dot(&normal)).normalize();
+    let v = normal.cross(&u);
     (u, v)
 }
 
 /// Signed area of the polygon `points`, taken as a closed loop
-/// (`points[n-1]` connects back to `points[0]`; the last vertex must not
-/// repeat the first).
+/// (`points[n-1]` connects back to `points[0]`; the last vertex must
+/// not repeat the first).
 ///
 /// Returns a **positive** value for a counter-clockwise polygon, a
 /// negative value for clockwise, and a value close to zero for a
@@ -111,22 +112,21 @@ pub fn signed_area(points: &[Point2]) -> f64 {
     }
     let mut s = 0.0;
     for i in 0..n {
-        let (x1, y1) = points[i];
-        let (x2, y2) = points[(i + 1) % n];
-        s += x1 * y2 - x2 * y1;
+        let p = &points[i];
+        let q = &points[(i + 1) % n];
+        s += p.x * q.y - q.x * p.y;
     }
     0.5 * s
 }
 
-/// Cross product `(b - a) × (c - a)` in 2-D.
+/// Cross product `(b - a) × (c - a)` in 2-D — the *perp dot* product.
 #[inline]
-fn cross2(a: Point2, b: Point2, c: Point2) -> f64 {
-    (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)
+pub(crate) fn cross2(a: Point2, b: Point2, c: Point2) -> f64 {
+    (b - a).perp(&(c - a))
 }
 
 /// True if `p` lies in the closed triangle `(a, b, c)`. Robust to the
-/// triangle's winding (CW or CCW): the test checks that `p` is on the
-/// same side of every edge.
+/// triangle's winding (CW or CCW).
 fn point_in_triangle(p: Point2, a: Point2, b: Point2, c: Point2) -> bool {
     let d1 = cross2(a, b, p);
     let d2 = cross2(b, c, p);
@@ -155,10 +155,15 @@ fn point_in_triangle(p: Point2, a: Point2, b: Point2, c: Point2) -> bool {
 ///
 /// # Example
 /// ```
-/// use pyrucast::triangulation::ear_clip_2d;
+/// use pyrucast::triangulation::{ear_clip_2d, Point2};
 ///
 /// // Unit square, CCW.
-/// let pts = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+/// let pts = vec![
+///     Point2::new(0.0, 0.0),
+///     Point2::new(1.0, 0.0),
+///     Point2::new(1.0, 1.0),
+///     Point2::new(0.0, 1.0),
+/// ];
 /// let tris = ear_clip_2d(&pts).unwrap();
 /// assert_eq!(tris.len(), 2);
 /// ```
@@ -178,8 +183,7 @@ pub fn ear_clip_2d(points: &[Point2]) -> Result<Vec<[usize; 3]>> {
     }
 
     // Work on a CCW view of the indices: if the input is CW, reverse
-    // the index sequence so the algorithm always sees CCW. The output
-    // triangles built from these indices are then CCW in the plane.
+    // the index sequence so the algorithm always sees CCW.
     let mut active: Vec<usize> = if area < 0.0 {
         (0..n).rev().collect()
     } else {
@@ -197,11 +201,9 @@ pub fn ear_clip_2d(points: &[Point2]) -> Result<Vec<[usize; 3]>> {
             let a = points[active[ip]];
             let b = points[active[i]];
             let c = points[active[in_]];
-            // Convex vertex in CCW ⇔ cross2(a, b, c) > 0.
             if cross2(a, b, c) <= 0.0 {
                 continue;
             }
-            // No other vertex of the polygon must lie inside the candidate ear.
             let mut contains = false;
             for (j, &idx) in active.iter().enumerate() {
                 if j == ip || j == i || j == in_ {
@@ -227,7 +229,6 @@ pub fn ear_clip_2d(points: &[Point2]) -> Result<Vec<[usize; 3]>> {
         triangles.push([active[ip], active[ear_i], active[in_]]);
         active.remove(ear_i);
     }
-    // Last remaining triangle.
     triangles.push([active[0], active[1], active[2]]);
     Ok(triangles)
 }
@@ -240,27 +241,34 @@ mod tests {
         assert!((a - b).abs() < tol, "expected {} ≈ {} (tol={})", a, b, tol);
     }
 
+    fn p2(x: f64, y: f64) -> Point2 {
+        Point2::new(x, y)
+    }
+    fn p3(x: f64, y: f64, z: f64) -> Point3 {
+        Point3::new(x, y, z)
+    }
+
     #[test]
     fn signed_area_unit_square_ccw() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(1.0, 1.0), p2(0.0, 1.0)];
         assert_close(signed_area(&pts), 1.0, 1e-12);
     }
 
     #[test]
     fn signed_area_unit_square_cw() {
-        let pts = vec![(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)];
+        let pts = vec![p2(0.0, 0.0), p2(0.0, 1.0), p2(1.0, 1.0), p2(1.0, 0.0)];
         assert_close(signed_area(&pts), -1.0, 1e-12);
     }
 
     #[test]
     fn signed_area_degenerate() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(2.0, 0.0)];
         assert!(signed_area(&pts).abs() < 1e-12);
     }
 
     #[test]
     fn ear_clip_triangle() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(0.0, 1.0)];
         let tris = ear_clip_2d(&pts).unwrap();
         assert_eq!(tris.len(), 1);
         assert_eq!(tris[0], [0, 1, 2]);
@@ -268,10 +276,9 @@ mod tests {
 
     #[test]
     fn ear_clip_square_ccw_gives_two_triangles() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(1.0, 1.0), p2(0.0, 1.0)];
         let tris = ear_clip_2d(&pts).unwrap();
         assert_eq!(tris.len(), 2);
-        // Every triangle must be CCW (positive area).
         for [i, j, k] in &tris {
             let area = cross2(pts[*i], pts[*j], pts[*k]);
             assert!(area > 0.0, "triangle {:?} not CCW", [i, j, k]);
@@ -280,8 +287,7 @@ mod tests {
 
     #[test]
     fn ear_clip_square_cw_still_ccw_output() {
-        // Same vertices but listed CW.
-        let pts = vec![(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)];
+        let pts = vec![p2(0.0, 0.0), p2(0.0, 1.0), p2(1.0, 1.0), p2(1.0, 0.0)];
         let tris = ear_clip_2d(&pts).unwrap();
         assert_eq!(tris.len(), 2);
         for [i, j, k] in &tris {
@@ -292,31 +298,23 @@ mod tests {
 
     #[test]
     fn ear_clip_concave_l_shape() {
-        // L-shaped polygon, 6 vertices, CCW.
-        //   (0,3)─(1,3)
-        //     │     │
-        //     │   (1,1)─(3,1)
-        //     │             │
-        //   (0,0)──────── (3,0)
         let pts = vec![
-            (0.0, 0.0),
-            (3.0, 0.0),
-            (3.0, 1.0),
-            (1.0, 1.0),
-            (1.0, 3.0),
-            (0.0, 3.0),
+            p2(0.0, 0.0),
+            p2(3.0, 0.0),
+            p2(3.0, 1.0),
+            p2(1.0, 1.0),
+            p2(1.0, 3.0),
+            p2(0.0, 3.0),
         ];
         let tris = ear_clip_2d(&pts).unwrap();
-        assert_eq!(tris.len(), 4); // n - 2
+        assert_eq!(tris.len(), 4);
 
-        // Total area must equal the L-shape area (5).
         let mut total = 0.0;
         for [i, j, k] in &tris {
             total += 0.5 * cross2(pts[*i], pts[*j], pts[*k]);
         }
         assert_close(total, 5.0, 1e-12);
 
-        // Every vertex of the polygon must appear at least once.
         let mut used = [false; 6];
         for [i, j, k] in &tris {
             used[*i] = true;
@@ -328,118 +326,93 @@ mod tests {
 
     #[test]
     fn ear_clip_rejects_too_few_vertices() {
-        assert!(ear_clip_2d(&[(0.0, 0.0), (1.0, 0.0)]).is_err());
+        assert!(ear_clip_2d(&[p2(0.0, 0.0), p2(1.0, 0.0)]).is_err());
     }
 
     #[test]
     fn ear_clip_rejects_degenerate_polygon() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(2.0, 0.0)];
         assert!(ear_clip_2d(&pts).is_err());
     }
 
     #[test]
     fn newell_unit_square_in_xy_plane() {
         let pts = vec![
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0],
-            [0.0, 1.0, 0.0],
+            p3(0.0, 0.0, 0.0),
+            p3(1.0, 0.0, 0.0),
+            p3(1.0, 1.0, 0.0),
+            p3(0.0, 1.0, 0.0),
         ];
         let n = newell_normal(&pts).unwrap();
-        assert_close(n[0], 0.0, 1e-12);
-        assert_close(n[1], 0.0, 1e-12);
-        assert_close(n[2], 1.0, 1e-12);
+        assert_close(n.x, 0.0, 1e-12);
+        assert_close(n.y, 0.0, 1e-12);
+        assert_close(n.z, 1.0, 1e-12);
     }
 
     #[test]
     fn newell_square_in_xz_plane() {
-        // CCW seen from +y ⇒ normal = -y? Actually, traversing (0,0,0)→(1,0,0)→(1,0,1)→(0,0,1)
-        // in the XZ plane is CCW seen from +y direction (right-hand rule).
         let pts = vec![
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [1.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0],
+            p3(0.0, 0.0, 0.0),
+            p3(1.0, 0.0, 0.0),
+            p3(1.0, 0.0, 1.0),
+            p3(0.0, 0.0, 1.0),
         ];
         let n = newell_normal(&pts).unwrap();
-        // The polygon is in y = 0, traversed (x→x+z→z), normal is -y.
-        assert_close(n[0], 0.0, 1e-12);
-        assert_close(n[1], -1.0, 1e-12);
-        assert_close(n[2], 0.0, 1e-12);
+        assert_close(n.x, 0.0, 1e-12);
+        assert_close(n.y, -1.0, 1e-12);
+        assert_close(n.z, 0.0, 1e-12);
     }
 
     #[test]
     fn newell_translated_polygon_same_normal() {
-        // Translating the polygon must not change the normal direction.
-        let p1 = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
-        let p2: Vec<Point3> = p1.iter().map(|p| [p[0] + 10.0, p[1] - 5.0, p[2] + 3.0]).collect();
+        let p1 = vec![p3(0.0, 0.0, 0.0), p3(1.0, 0.0, 0.0), p3(0.0, 1.0, 0.0)];
+        let p2: Vec<Point3> = p1.iter().map(|p| p3(p.x + 10.0, p.y - 5.0, p.z + 3.0)).collect();
         let n1 = newell_normal(&p1).unwrap();
         let n2 = newell_normal(&p2).unwrap();
-        for k in 0..3 {
-            assert_close(n1[k], n2[k], 1e-12);
-        }
+        assert!((n1 - n2).norm() < 1e-12);
     }
 
     #[test]
     fn newell_rejects_collinear_polygon() {
-        let pts = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]];
+        let pts = vec![p3(0.0, 0.0, 0.0), p3(1.0, 0.0, 0.0), p3(2.0, 0.0, 0.0)];
         assert!(newell_normal(&pts).is_none());
     }
 
     #[test]
     fn newell_rejects_too_few_vertices() {
-        assert!(newell_normal(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]).is_none());
+        assert!(newell_normal(&[p3(0.0, 0.0, 0.0), p3(1.0, 0.0, 0.0)]).is_none());
     }
 
     #[test]
     fn in_plane_basis_is_orthonormal_right_handed() {
-        // A handful of normals covering the three "least-aligned-axis" branches.
         let normals = [
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-            // Off-axis case.
-            {
-                let m = (1.0_f64 + 4.0 + 9.0).sqrt();
-                [1.0 / m, 2.0 / m, 3.0 / m]
-            },
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector3::new(1.0, 2.0, 3.0).normalize(),
         ];
         for n in normals {
             let (u, v) = in_plane_basis(n);
-            // Norms ≈ 1.
-            let nu = (u[0].powi(2) + u[1].powi(2) + u[2].powi(2)).sqrt();
-            let nv = (v[0].powi(2) + v[1].powi(2) + v[2].powi(2)).sqrt();
-            assert_close(nu, 1.0, 1e-12);
-            assert_close(nv, 1.0, 1e-12);
-            // Pairwise orthogonality.
-            let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-            assert_close(dot(u, v), 0.0, 1e-12);
-            assert_close(dot(u, n), 0.0, 1e-12);
-            assert_close(dot(v, n), 0.0, 1e-12);
+            assert_close(u.norm(), 1.0, 1e-12);
+            assert_close(v.norm(), 1.0, 1e-12);
+            assert_close(u.dot(&v), 0.0, 1e-12);
+            assert_close(u.dot(&n), 0.0, 1e-12);
+            assert_close(v.dot(&n), 0.0, 1e-12);
             // Right-handed: u × v == n.
-            let uv = [
-                u[1] * v[2] - u[2] * v[1],
-                u[2] * v[0] - u[0] * v[2],
-                u[0] * v[1] - u[1] * v[0],
-            ];
-            for k in 0..3 {
-                assert_close(uv[k], n[k], 1e-12);
-            }
+            assert!((u.cross(&v) - n).norm() < 1e-12);
         }
     }
 
     #[test]
     fn ear_clip_pentagon_uses_all_vertices_once() {
-        // Regular pentagon, CCW.
         let n = 5;
         let mut pts: Vec<Point2> = Vec::with_capacity(n);
         for i in 0..n {
             let t = 2.0 * std::f64::consts::PI * i as f64 / n as f64;
-            pts.push((t.cos(), t.sin()));
+            pts.push(p2(t.cos(), t.sin()));
         }
         let tris = ear_clip_2d(&pts).unwrap();
         assert_eq!(tris.len(), n - 2);
-        // Sum of triangle areas ≈ pentagon area (≈ 2.3776 for unit-circle pentagon).
         let mut total = 0.0;
         for [i, j, k] in &tris {
             total += 0.5 * cross2(pts[*i], pts[*j], pts[*k]);

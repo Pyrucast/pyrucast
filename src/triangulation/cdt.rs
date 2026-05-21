@@ -28,7 +28,7 @@
 //! and hole removal will be layered on top in subsequent commits.
 
 use crate::error::{PyrucastError, Result};
-use crate::triangulation::Point2;
+use crate::triangulation::{cross2, Point2, Vector2};
 use std::collections::HashMap;
 
 /// Sentinel for "no neighbour" in the topology arrays.
@@ -243,7 +243,7 @@ impl Cdt {
         for &(u, v) in &external_edges {
             let pu = self.points[u];
             let pv = self.points[v];
-            let mid = ((pu.0 + pv.0) * 0.5, (pu.1 + pv.1) * 0.5);
+            let mid = Point2::from((pu.coords + pv.coords) * 0.5);
             let side = orient2d(pa, pb, mid);
             if side > 0.0 {
                 left_edges.push((u, v));
@@ -511,7 +511,7 @@ fn build_chain(edges: &[(usize, usize)], start: usize, end: usize) -> Result<Vec
 
 #[inline]
 fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
-    (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)
+    cross2(a, b, c)
 }
 
 /// True iff the two open segments `(a, b)` and `(c, d)` cross strictly
@@ -527,49 +527,38 @@ fn segments_cross_strict(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
 /// Bounding super-triangle of an input point set. Returns three
 /// vertices large enough to enclose every point with margin.
 fn super_triangle(points: &[Point2]) -> [Point2; 3] {
-    let mut min_x = f64::INFINITY;
-    let mut min_y = f64::INFINITY;
-    let mut max_x = f64::NEG_INFINITY;
-    let mut max_y = f64::NEG_INFINITY;
-    for &(x, y) in points {
-        if x < min_x {
-            min_x = x;
-        }
-        if y < min_y {
-            min_y = y;
-        }
-        if x > max_x {
-            max_x = x;
-        }
-        if y > max_y {
-            max_y = y;
-        }
+    let mut min = Vector2::new(f64::INFINITY, f64::INFINITY);
+    let mut max = Vector2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for p in points {
+        min = min.zip_map(&p.coords, f64::min);
+        max = max.zip_map(&p.coords, f64::max);
     }
-    let dx = (max_x - min_x).max(1.0);
-    let dy = (max_y - min_y).max(1.0);
-    let dmax = dx.max(dy);
-    let cx = 0.5 * (min_x + max_x);
-    let cy = 0.5 * (min_y + max_y);
+    let extents = (max - min).map(|d| d.max(1.0));
+    let dmax = extents.x.max(extents.y);
+    let centre = (min + max) * 0.5;
     // A wide isoceles triangle sitting under the centre. 20× the AABB
     // diagonal is overkill for robustness but trivial in cost.
     let r = 20.0 * dmax;
-    [(cx - r, cy - r), (cx + r, cy - r), (cx, cy + 2.0 * r)]
+    [
+        Point2::new(centre.x - r, centre.y - r),
+        Point2::new(centre.x + r, centre.y - r),
+        Point2::new(centre.x, centre.y + 2.0 * r),
+    ]
 }
 
 /// Sign of the in-circle predicate: `> 0` means `d` lies **inside** the
 /// circumcircle of `(a, b, c)`, assuming `(a, b, c)` is CCW.
 #[inline]
 fn in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
-    let ax = a.0 - d.0;
-    let ay = a.1 - d.1;
-    let bx = b.0 - d.0;
-    let by = b.1 - d.1;
-    let cx = c.0 - d.0;
-    let cy = c.1 - d.1;
-    let am = ax * ax + ay * ay;
-    let bm = bx * bx + by * by;
-    let cm = cx * cx + cy * cy;
-    ax * (by * cm - bm * cy) - ay * (bx * cm - bm * cx) + am * (bx * cy - by * cx)
+    let va = a - d;
+    let vb = b - d;
+    let vc = c - d;
+    let am = va.norm_squared();
+    let bm = vb.norm_squared();
+    let cm = vc.norm_squared();
+    va.x * (vb.y * cm - bm * vc.y)
+        - va.y * (vb.x * cm - bm * vc.x)
+        + am * (vb.x * vc.y - vb.y * vc.x)
 }
 
 /// Delaunay triangulation of a 2-D point set by Bowyer-Watson.
@@ -588,9 +577,12 @@ fn in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
 ///
 /// # Example
 /// ```
-/// use pyrucast::triangulation::delaunay_2d;
+/// use pyrucast::triangulation::{delaunay_2d, Point2};
 ///
-/// let pts = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+/// let pts = vec![
+///     Point2::new(0.0, 0.0), Point2::new(1.0, 0.0),
+///     Point2::new(1.0, 1.0), Point2::new(0.0, 1.0),
+/// ];
 /// let tris = delaunay_2d(&pts).unwrap();
 /// assert_eq!(tris.len(), 2);
 /// ```
@@ -605,9 +597,7 @@ pub fn delaunay_2d(points: &[Point2]) -> Result<Vec<[usize; 3]>> {
     // Detect coincident points (would derail the in_circle predicate).
     for i in 0..n {
         for j in (i + 1)..n {
-            let dx = points[i].0 - points[j].0;
-            let dy = points[i].1 - points[j].1;
-            if dx * dx + dy * dy < 1e-24 {
+            if (points[i] - points[j]).norm_squared() < 1e-24 {
                 return Err(PyrucastError::Message(format!(
                     "delaunay_2d: points {} and {} are (nearly) coincident",
                     i, j
@@ -665,9 +655,7 @@ pub fn constrained_delaunay_2d(
     }
     for i in 0..n {
         for j in (i + 1)..n {
-            let dx = points[i].0 - points[j].0;
-            let dy = points[i].1 - points[j].1;
-            if dx * dx + dy * dy < 1e-24 {
+            if (points[i] - points[j]).norm_squared() < 1e-24 {
                 return Err(PyrucastError::Message(format!(
                     "constrained_delaunay_2d: points {} and {} are (nearly) coincident",
                     i, j
@@ -760,9 +748,7 @@ pub fn triangulate_polygon_with_holes(
     // Coincident-point check (across the whole flat list).
     for i in 0..n_total {
         for j in (i + 1)..n_total {
-            let dx = points[i].0 - points[j].0;
-            let dy = points[i].1 - points[j].1;
-            if dx * dx + dy * dy < 1e-24 {
+            if (points[i] - points[j]).norm_squared() < 1e-24 {
                 return Err(PyrucastError::Message(format!(
                     "triangulate_polygon_with_holes: points {} and {} are (nearly) coincident",
                     i, j
@@ -796,8 +782,12 @@ pub fn triangulate_polygon_with_holes(
 mod tests {
     use super::*;
 
+    fn p2(x: f64, y: f64) -> Point2 {
+        Point2::new(x, y)
+    }
+
     fn signed_area(a: Point2, b: Point2, c: Point2) -> f64 {
-        0.5 * ((b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0))
+        0.5 * cross2(a, b, c)
     }
 
     fn assert_all_ccw(tris: &[[usize; 3]], pts: &[Point2]) {
@@ -815,7 +805,7 @@ mod tests {
 
     #[test]
     fn delaunay_single_triangle() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(0.0, 1.0)];
         let tris = delaunay_2d(&pts).unwrap();
         assert_eq!(tris.len(), 1);
         assert_all_ccw(&tris, &pts);
@@ -823,7 +813,7 @@ mod tests {
 
     #[test]
     fn delaunay_square_two_triangles() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(1.0, 1.0), p2(0.0, 1.0)];
         let tris = delaunay_2d(&pts).unwrap();
         assert_eq!(tris.len(), 2);
         assert_all_ccw(&tris, &pts);
@@ -836,7 +826,7 @@ mod tests {
         let pts: Vec<Point2> = (0..n)
             .map(|i| {
                 let t = 2.0 * std::f64::consts::PI * i as f64 / n as f64;
-                (t.cos(), t.sin())
+                p2(t.cos(), t.sin())
             })
             .collect();
         let tris = delaunay_2d(&pts).unwrap();
@@ -852,11 +842,11 @@ mod tests {
         // (a fan from the centre to each square corner is the Delaunay
         // triangulation when the point is centred).
         let pts = vec![
-            (0.0, 0.0),
-            (1.0, 0.0),
-            (1.0, 1.0),
-            (0.0, 1.0),
-            (0.5, 0.5),
+            p2(0.0, 0.0),
+            p2(1.0, 0.0),
+            p2(1.0, 1.0),
+            p2(0.0, 1.0),
+            p2(0.5, 0.5),
         ];
         let tris = delaunay_2d(&pts).unwrap();
         assert_eq!(tris.len(), 4); // 2·5 - 4 - 2
@@ -870,7 +860,7 @@ mod tests {
         let mut pts = Vec::with_capacity(9);
         for j in 0..3 {
             for i in 0..3 {
-                pts.push((i as f64, j as f64));
+                pts.push(p2(i as f64, j as f64));
             }
         }
         let tris = delaunay_2d(&pts).unwrap();
@@ -882,13 +872,13 @@ mod tests {
 
     #[test]
     fn delaunay_rejects_fewer_than_three_points() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0)];
         assert!(delaunay_2d(&pts).is_err());
     }
 
     #[test]
     fn delaunay_rejects_coincident_points() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.5, 1.0), (1.0, 0.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(0.5, 1.0), p2(1.0, 0.0)];
         assert!(delaunay_2d(&pts).is_err());
     }
 
@@ -901,7 +891,7 @@ mod tests {
 
     #[test]
     fn cdt_no_constraint_matches_delaunay() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(1.0, 1.0), p2(0.0, 1.0)];
         let unconstrained = delaunay_2d(&pts).unwrap();
         let constrained = constrained_delaunay_2d(&pts, &[]).unwrap();
         assert_eq!(unconstrained.len(), constrained.len());
@@ -909,8 +899,7 @@ mod tests {
 
     #[test]
     fn cdt_redundant_constraint_is_noop() {
-        // Constrain an edge that the Delaunay triangulation already has.
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(0.0, 1.0)];
         let tris = constrained_delaunay_2d(&pts, &[(0, 1)]).unwrap();
         assert_eq!(tris.len(), 1);
         assert_all_ccw(&tris, &pts);
@@ -918,9 +907,7 @@ mod tests {
 
     #[test]
     fn cdt_forces_long_rectangle_diagonal() {
-        // 2×1 rectangle: Delaunay picks the (0)→(2) diagonal (shorter).
-        // We force the other one (1)→(3) — must appear.
-        let pts = vec![(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0)];
+        let pts = vec![p2(0.0, 0.0), p2(2.0, 0.0), p2(2.0, 1.0), p2(0.0, 1.0)];
         let unconstrained = delaunay_2d(&pts).unwrap();
         assert!(triangulation_has_edge(&unconstrained, 0, 2));
         assert!(!triangulation_has_edge(&unconstrained, 1, 3));
@@ -938,42 +925,36 @@ mod tests {
 
     #[test]
     fn cdt_forces_edge_across_interior_point() {
-        // Square with an off-centre interior point (NOT on the (0)→(2)
-        // diagonal — otherwise the diagonal would pass through a vertex
-        // and the walk could not start). Forcing the long diagonal must
-        // retire one or more triangles and re-triangulate the cavity.
         let pts = vec![
-            (0.0, 0.0),
-            (2.0, 0.0),
-            (2.0, 2.0),
-            (0.0, 2.0),
-            (1.0, 0.6),
+            p2(0.0, 0.0),
+            p2(2.0, 0.0),
+            p2(2.0, 2.0),
+            p2(0.0, 2.0),
+            p2(1.0, 0.6),
         ];
         let unconstrained = delaunay_2d(&pts).unwrap();
         let constrained = constrained_delaunay_2d(&pts, &[(0, 2)]).unwrap();
         assert!(triangulation_has_edge(&constrained, 0, 2));
         assert_all_ccw(&constrained, &pts);
         assert!((total_area(&constrained, &pts) - 4.0).abs() < 1e-12);
-        // The constraint should change the triangulation (the (0,2) edge
-        // is not generically Delaunay with point 4 nearby).
         assert_eq!(constrained.len(), unconstrained.len());
     }
 
     #[test]
     fn cdt_rejects_degenerate_constraint() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(0.5, 1.0)];
         assert!(constrained_delaunay_2d(&pts, &[(1, 1)]).is_err());
     }
 
     #[test]
     fn cdt_rejects_out_of_bounds_constraint() {
-        let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)];
+        let pts = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(0.5, 1.0)];
         assert!(constrained_delaunay_2d(&pts, &[(0, 5)]).is_err());
     }
 
     #[test]
     fn holes_square_no_holes_matches_plain_triangulation() {
-        let outer = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let outer = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(1.0, 1.0), p2(0.0, 1.0)];
         let tris = triangulate_polygon_with_holes(&outer, &[]).unwrap();
         assert_eq!(tris.len(), 2);
         assert_all_ccw(&tris, &outer);
@@ -982,23 +963,17 @@ mod tests {
 
     #[test]
     fn holes_square_with_one_square_hole() {
-        // 4×4 outer square with a 2×2 hole centred at (2, 2).
-        let outer = vec![(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
-        let hole = vec![(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)];
+        let outer = vec![p2(0.0, 0.0), p2(4.0, 0.0), p2(4.0, 4.0), p2(0.0, 4.0)];
+        let hole = vec![p2(1.0, 1.0), p2(3.0, 1.0), p2(3.0, 3.0), p2(1.0, 3.0)];
         let tris = triangulate_polygon_with_holes(&outer, &[hole.clone()]).unwrap();
 
-        // Build the flat point list to check coordinates / area.
         let mut all: Vec<Point2> = outer.clone();
         all.extend_from_slice(&hole);
         assert_all_ccw(&tris, &all);
 
-        // Expected total area: 16 - 4 = 12.
         let area = total_area(&tris, &all);
         assert!((area - 12.0).abs() < 1e-12, "area = {}", area);
 
-        // Every hole edge must appear as a triangle edge (i.e. the hole
-        // is materially carved out).
-        // Hole indices: 4, 5, 6, 7 in the flat list (after outer's 0..4).
         for k in 0..4 {
             assert!(triangulation_has_edge(&tris, 4 + k, 4 + (k + 1) % 4));
         }
@@ -1006,40 +981,37 @@ mod tests {
 
     #[test]
     fn holes_square_with_two_holes() {
-        // 6×4 outer + two distinct 1×1 holes.
-        let outer = vec![(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0.0, 4.0)];
-        let h1 = vec![(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)];
-        let h2 = vec![(4.0, 2.0), (5.0, 2.0), (5.0, 3.0), (4.0, 3.0)];
+        let outer = vec![p2(0.0, 0.0), p2(6.0, 0.0), p2(6.0, 4.0), p2(0.0, 4.0)];
+        let h1 = vec![p2(1.0, 1.0), p2(2.0, 1.0), p2(2.0, 2.0), p2(1.0, 2.0)];
+        let h2 = vec![p2(4.0, 2.0), p2(5.0, 2.0), p2(5.0, 3.0), p2(4.0, 3.0)];
         let tris = triangulate_polygon_with_holes(&outer, &[h1.clone(), h2.clone()]).unwrap();
         let mut all: Vec<Point2> = outer.clone();
         all.extend_from_slice(&h1);
         all.extend_from_slice(&h2);
         assert_all_ccw(&tris, &all);
 
-        // Outer area 24 - 1 - 1 = 22.
         let area = total_area(&tris, &all);
         assert!((area - 22.0).abs() < 1e-12, "area = {}", area);
     }
 
     #[test]
     fn holes_rejects_outer_with_fewer_than_three_vertices() {
-        let outer = vec![(0.0, 0.0), (1.0, 0.0)];
+        let outer = vec![p2(0.0, 0.0), p2(1.0, 0.0)];
         assert!(triangulate_polygon_with_holes(&outer, &[]).is_err());
     }
 
     #[test]
     fn holes_rejects_undersized_hole() {
-        let outer = vec![(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
-        let bad_hole = vec![(1.0, 1.0), (2.0, 2.0)];
+        let outer = vec![p2(0.0, 0.0), p2(4.0, 0.0), p2(4.0, 4.0), p2(0.0, 4.0)];
+        let bad_hole = vec![p2(1.0, 1.0), p2(2.0, 2.0)];
         assert!(triangulate_polygon_with_holes(&outer, &[bad_hole]).is_err());
     }
 
     #[test]
     fn holes_orientation_independent() {
-        // Outer CCW, hole CCW vs CW — same valid polygon either way.
-        let outer = vec![(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
-        let hole_ccw = vec![(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)];
-        let hole_cw = vec![(1.0, 1.0), (1.0, 3.0), (3.0, 3.0), (3.0, 1.0)];
+        let outer = vec![p2(0.0, 0.0), p2(4.0, 0.0), p2(4.0, 4.0), p2(0.0, 4.0)];
+        let hole_ccw = vec![p2(1.0, 1.0), p2(3.0, 1.0), p2(3.0, 3.0), p2(1.0, 3.0)];
+        let hole_cw = vec![p2(1.0, 1.0), p2(1.0, 3.0), p2(3.0, 3.0), p2(3.0, 1.0)];
 
         let tris_ccw = triangulate_polygon_with_holes(&outer, &[hole_ccw]).unwrap();
         let tris_cw = triangulate_polygon_with_holes(&outer, &[hole_cw]).unwrap();
@@ -1048,18 +1020,14 @@ mod tests {
 
     #[test]
     fn delaunay_satisfies_empty_circle_property() {
-        // Pick a small random-ish point set and verify that no point
-        // sits inside any triangle's circumcircle. We use the same
-        // in_circle predicate as the algorithm — this is a coherence
-        // check, not a proof of correctness, but catches gross errors.
         let pts = vec![
-            (0.0, 0.0),
-            (4.0, 0.0),
-            (4.0, 3.0),
-            (0.0, 3.0),
-            (1.0, 1.0),
-            (3.0, 2.0),
-            (2.0, 2.5),
+            p2(0.0, 0.0),
+            p2(4.0, 0.0),
+            p2(4.0, 3.0),
+            p2(0.0, 3.0),
+            p2(1.0, 1.0),
+            p2(3.0, 2.0),
+            p2(2.0, 2.5),
         ];
         let tris = delaunay_2d(&pts).unwrap();
         for [i, j, k] in &tris {
