@@ -29,6 +29,7 @@
 //! assert_eq!(a, b);
 //! ```
 
+pub mod color;
 pub mod configuration;
 pub mod element_type;
 pub mod error;
@@ -37,6 +38,9 @@ pub mod node;
 pub mod node_field;
 pub mod persist;
 pub mod store;
+
+#[cfg(feature = "viz")]
+pub mod viz;
 
 pub use error::{PyrucastError, Result};
 

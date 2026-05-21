@@ -140,6 +140,10 @@ mod python {
         pub(crate) fn from_node(node: Node) -> Self {
             Self { node }
         }
+
+        pub(crate) fn as_node(&self) -> &Node {
+            &self.node
+        }
     }
 
     #[pymethods]

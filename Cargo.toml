@@ -14,8 +14,17 @@ crate-type = ["cdylib", "rlib"]
 pyo3 = { version = "0.23" }
 serde = { version = "1", features = ["derive"] }
 bincode = "1.3"
+# Visualization stack (gated by features below).
+plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "bitmap_encoder", "svg_backend", "ttf", "line_series", "all_series"], optional = true }
+winit = { version = "0.30", optional = true }
+softbuffer = { version = "0.4", optional = true }
 
 [features]
 # Enabled only by maturin when building the Python module.
 # Left off for `cargo test` / doctests (local libpython linkage works).
 extension-module = ["pyo3/extension-module"]
+# Off-screen visualization (PNG / SVG export). Pure CPU rendering.
+viz = ["dep:plotters"]
+# Interactive visualization (mouse-driven window).
+# Implies `viz`; requires a display server at runtime.
+viz-interactive = ["viz", "dep:winit", "dep:softbuffer"]

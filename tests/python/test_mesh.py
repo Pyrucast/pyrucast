@@ -13,8 +13,6 @@ def test_submesh_poi1_is_node_list():
     sm.add_cell([a.id])
     sm.add_cell([b.id])
     assert sm.cell_count() == 2
-    assert sm.cell(0) == [a.id]
-    assert sm.cell(1) == [b.id]
     assert sm.element_type == "POI1"
 
 

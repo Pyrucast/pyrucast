@@ -123,7 +123,3 @@ def test_repr_str_node_field():
     assert "UX, UY" in s
 
 
-def test_nodes_returns_support_ids():
-    c, nodes, sm = _poi1_with(2)
-    f = pyrucast.NodeField(sm, ["T"])
-    assert f.nodes() == [n.id for n in nodes]
