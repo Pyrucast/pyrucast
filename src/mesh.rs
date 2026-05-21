@@ -896,6 +896,59 @@ impl Mesh {
         crate::viz::render(self, view, save)
     }
 
+    /// Return a new mesh where submeshes of the same element type are fused
+    /// into a single submesh, and duplicate cells (identical node sequences)
+    /// are removed. Types appear in their first-seen order; the face colour of
+    /// the first submesh of each type is kept.
+    pub fn consolidate(&self) -> Result<Mesh> {
+        use std::collections::HashSet;
+
+        let mut result = Mesh::new(self.config.clone());
+
+        // Collect types in first-seen order.
+        let mut ordered_types: Vec<ElementType> = Vec::new();
+        for sm_handle in &self.submeshes {
+            let et = with(sm_handle, |s| s.element_type())?;
+            if !ordered_types.contains(&et) {
+                ordered_types.push(et);
+            }
+        }
+
+        for et in ordered_types {
+            let npc = et.nodes_per_cell();
+
+            // Face colour from the first submesh of this type.
+            let first_color = self
+                .submeshes
+                .iter()
+                .find(|h| with(h, |s| s.element_type()).ok() == Some(et))
+                .map(|h| with(h, |s| s.face_color()))
+                .transpose()?
+                .unwrap_or_default();
+
+            let mut new_sm = SubMesh::new(self.config.clone(), et);
+            new_sm.set_face_color(first_color);
+
+            let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
+            for sm_handle in &self.submeshes {
+                let sm_et = with(sm_handle, |s| s.element_type())?;
+                if sm_et != et {
+                    continue;
+                }
+                let conn = with(sm_handle, |s| s.connectivity().to_vec())?;
+                for chunk in conn.chunks(npc) {
+                    if seen.insert(chunk.to_vec()) {
+                        new_sm.add_cell(chunk)?;
+                    }
+                }
+            }
+
+            result.submeshes.push(insert(new_sm));
+        }
+
+        Ok(result)
+    }
+
     /// Return a new mesh containing all submeshes of `self` followed by all
     /// submeshes of `other`. Both meshes must share the same `Configuration`.
     pub fn merge(&self, other: &Mesh) -> Result<Mesh> {
@@ -1178,6 +1231,13 @@ mod python {
             let mesh = with(&self.handle, |a| {
                 with(&other_handle, |b| a.merge(b))
             })???;
+            Ok(PyMesh { handle: insert(mesh) })
+        }
+
+        /// Fusionne les sous-maillages de même type et supprime les mailles en
+        /// double. Retourne un nouveau maillage avec un sous-maillage par type.
+        fn consolidate(&self) -> PyResult<PyMesh> {
+            let mesh = with(&self.handle, |m| m.consolidate())??;
             Ok(PyMesh { handle: insert(mesh) })
         }
 
@@ -1927,6 +1987,102 @@ mod tests {
                 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
             assert!(a > 0.0, "triangle {} not CCW", ci);
         }
+    }
+
+    #[test]
+    fn consolidate_merges_same_type_submeshes() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+
+        // Deux sous-maillages TRI3 séparés avec une cellule chacun.
+        let sm1 = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+            insert(sm)
+        };
+        let sm2 = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[b.id(), c.id(), a.id()]).unwrap(); // nouvelle cellule
+            insert(sm)
+        };
+
+        let mut mesh = Mesh::new(cfg.clone());
+        mesh.add_submesh(sm1).unwrap();
+        mesh.add_submesh(sm2).unwrap();
+        assert_eq!(mesh.submesh_count(), 2);
+
+        let c2 = mesh.consolidate().unwrap();
+        assert_eq!(c2.submesh_count(), 1, "doit fusionner les deux TRI3");
+        assert_eq!(c2.cell_count().unwrap(), 2, "deux cellules distinctes conservées");
+        assert_eq!(c2.element_types().unwrap(), vec![ElementType::TRI3]);
+    }
+
+    #[test]
+    fn consolidate_removes_duplicate_cells() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+
+        let sm1 = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+            insert(sm)
+        };
+        let sm2 = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap(); // doublon exact
+            insert(sm)
+        };
+
+        let mut mesh = Mesh::new(cfg.clone());
+        mesh.add_submesh(sm1).unwrap();
+        mesh.add_submesh(sm2).unwrap();
+
+        let c2 = mesh.consolidate().unwrap();
+        assert_eq!(c2.submesh_count(), 1);
+        assert_eq!(c2.cell_count().unwrap(), 1, "le doublon doit être supprimé");
+    }
+
+    #[test]
+    fn consolidate_preserves_distinct_types() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+
+        let sm_tri = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+            insert(sm)
+        };
+        let sm_poi = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+            sm.add_cell(&[a.id()]).unwrap();
+            insert(sm)
+        };
+        // Deuxième TRI3 avec doublon.
+        let sm_tri2 = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+            insert(sm)
+        };
+
+        let mut mesh = Mesh::new(cfg.clone());
+        mesh.add_submesh(sm_tri).unwrap();
+        mesh.add_submesh(sm_poi).unwrap();
+        mesh.add_submesh(sm_tri2).unwrap();
+
+        let c2 = mesh.consolidate().unwrap();
+        assert_eq!(c2.submesh_count(), 2, "TRI3 + POI1");
+        assert_eq!(
+            c2.element_types().unwrap(),
+            vec![ElementType::TRI3, ElementType::POI1],
+            "ordre premier-rencontré"
+        );
+        assert_eq!(c2.cell_counts().unwrap(), vec![1, 1]);
     }
 
     #[test]
