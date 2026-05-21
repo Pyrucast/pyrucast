@@ -14,7 +14,7 @@
 use crate::error::{PyrucastError, Result};
 
 mod cdt;
-pub use cdt::{constrained_delaunay_2d, delaunay_2d};
+pub use cdt::{constrained_delaunay_2d, delaunay_2d, triangulate_polygon_with_holes};
 
 /// 2-D point as `(x, y)`.
 pub type Point2 = (f64, f64);

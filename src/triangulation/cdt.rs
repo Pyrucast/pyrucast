@@ -392,6 +392,85 @@ impl Cdt {
         }
         out
     }
+
+    /// Colour every triangle "outside" or "inside" by parity of the
+    /// number of constrained edges crossed on any walk from the
+    /// super-triangle.
+    ///
+    /// Triangles touching the super-triangle are seeded as **outside**.
+    /// Crossing a constrained edge flips the colour; crossing a non-
+    /// constrained edge preserves it. This is the standard "two-
+    /// colouring across constraints" for polygon-with-holes flood-fill:
+    /// 0 constraints crossed ⇒ outside the outer loop, 1 ⇒ inside the
+    /// outer loop and outside every hole, 2 ⇒ inside a hole, etc.
+    ///
+    /// Returns a `Vec<bool>` of length `self.triangles.len()` where
+    /// `true` marks a triangle to drop (outside the outer loop or
+    /// inside a hole). Dead triangles are marked `true` so the caller
+    /// can ignore them uniformly.
+    fn flood_fill_outside(
+        &self,
+        constrained_edges: &std::collections::HashSet<(usize, usize)>,
+    ) -> Vec<bool> {
+        let n = self.triangles.len();
+        // None ⇒ not visited; Some(true) ⇒ outside; Some(false) ⇒ inside.
+        let mut colour: Vec<Option<bool>> = vec![None; n];
+        let mut queue: Vec<usize> = Vec::new();
+
+        for (idx, t) in self.triangles.iter().enumerate() {
+            if !t.alive {
+                colour[idx] = Some(true); // dead = drop
+                continue;
+            }
+            if t.v.iter().any(|&v| v >= self.n_input) {
+                colour[idx] = Some(true);
+                queue.push(idx);
+            }
+        }
+
+        while let Some(t_idx) = queue.pop() {
+            let t = self.triangles[t_idx];
+            let c = colour[t_idx].unwrap();
+            for k in 0..3 {
+                let nb = t.n[k];
+                if nb == NO_NEIGHBOUR || colour[nb].is_some() {
+                    continue;
+                }
+                let a = t.v[(k + 1) % 3];
+                let b = t.v[(k + 2) % 3];
+                let key = if a < b { (a, b) } else { (b, a) };
+                let next_c = if constrained_edges.contains(&key) {
+                    !c
+                } else {
+                    c
+                };
+                colour[nb] = Some(next_c);
+                queue.push(nb);
+            }
+        }
+
+        colour.into_iter().map(|c| c.unwrap_or(true)).collect()
+    }
+
+    /// Return every triangle judged to be **inside** the polygon
+    /// defined by the constrained edges (i.e. neither outside the
+    /// outer loop nor inside any hole).
+    pub(super) fn extract_interior_with_constraints(
+        &self,
+        constrained_edges: &std::collections::HashSet<(usize, usize)>,
+    ) -> Vec<[usize; 3]> {
+        let outside = self.flood_fill_outside(constrained_edges);
+        let mut out = Vec::new();
+        for (idx, t) in self.triangles.iter().enumerate() {
+            if outside[idx] {
+                continue;
+            }
+            if t.v.iter().all(|&v| v < self.n_input) {
+                out.push(t.v);
+            }
+        }
+        out
+    }
 }
 
 /// Walk the chain implied by an unordered edge set between `start` and `end`.
@@ -607,6 +686,112 @@ pub fn constrained_delaunay_2d(
     Ok(cdt.extract_input_triangles())
 }
 
+/// Triangulate the interior of a closed polygon with optional holes.
+///
+/// `outer` is the ordered (CCW or CW) vertex list of the outer boundary;
+/// `holes` lists the ordered vertex lists of each hole. Each loop closes
+/// implicitly from its last vertex back to its first.
+///
+/// All vertices are flattened into a single list internally: the outer
+/// loop first, then each hole concatenated in order. The returned
+/// triangles use indices into this flat list, with the convention:
+/// - outer indices: `0..outer.len()`
+/// - hole `h` indices: `outer.len() + sum(holes[0..h].len()) + i`
+///   for `i in 0..holes[h].len()`.
+///
+/// Algorithm:
+/// 1. Build a constrained Delaunay triangulation with every loop edge
+///    enforced as a constraint.
+/// 2. Flood-fill from the bounding super-triangle through every
+///    non-constrained edge; the visited triangles are everything that
+///    is either outside the outer loop **or** inside a hole.
+/// 3. Return the complement — the triangles that survived the
+///    flood-fill, all CCW.
+///
+/// # Errors
+/// - any loop has `< 3` vertices,
+/// - two vertices coincide,
+/// - a constraint cannot be enforced (e.g. loops cross),
+/// - the flood-fill ends up empty (likely a degenerate or self-
+///   intersecting polygon).
+pub fn triangulate_polygon_with_holes(
+    outer: &[Point2],
+    holes: &[Vec<Point2>],
+) -> Result<Vec<[usize; 3]>> {
+    if outer.len() < 3 {
+        return Err(PyrucastError::Message(format!(
+            "triangulate_polygon_with_holes: outer loop must have ≥ 3 vertices, got {}",
+            outer.len()
+        )));
+    }
+    for (h, hole) in holes.iter().enumerate() {
+        if hole.len() < 3 {
+            return Err(PyrucastError::Message(format!(
+                "triangulate_polygon_with_holes: hole #{} must have ≥ 3 vertices, got {}",
+                h,
+                hole.len()
+            )));
+        }
+    }
+
+    // Flatten points: outer first, then each hole.
+    let mut points: Vec<Point2> = outer.to_vec();
+    let mut hole_starts: Vec<usize> = Vec::with_capacity(holes.len());
+    for hole in holes {
+        hole_starts.push(points.len());
+        points.extend_from_slice(hole);
+    }
+    let n_total = points.len();
+
+    // Build closed-loop edge constraints.
+    let mut constraints: Vec<(usize, usize)> = Vec::new();
+    let n_outer = outer.len();
+    for i in 0..n_outer {
+        constraints.push((i, (i + 1) % n_outer));
+    }
+    for (h, hole) in holes.iter().enumerate() {
+        let start = hole_starts[h];
+        let n_hole = hole.len();
+        for i in 0..n_hole {
+            constraints.push((start + i, start + (i + 1) % n_hole));
+        }
+    }
+
+    // Coincident-point check (across the whole flat list).
+    for i in 0..n_total {
+        for j in (i + 1)..n_total {
+            let dx = points[i].0 - points[j].0;
+            let dy = points[i].1 - points[j].1;
+            if dx * dx + dy * dy < 1e-24 {
+                return Err(PyrucastError::Message(format!(
+                    "triangulate_polygon_with_holes: points {} and {} are (nearly) coincident",
+                    i, j
+                )));
+            }
+        }
+    }
+
+    let mut cdt = Cdt::new(&points);
+    for i in 0..n_total {
+        cdt.insert_point(i)?;
+    }
+    let mut edge_set: std::collections::HashSet<(usize, usize)> =
+        std::collections::HashSet::with_capacity(constraints.len());
+    for &(a, b) in &constraints {
+        cdt.insert_constraint(a, b)?;
+        edge_set.insert(if a < b { (a, b) } else { (b, a) });
+    }
+
+    let tris = cdt.extract_interior_with_constraints(&edge_set);
+    if tris.is_empty() {
+        return Err(PyrucastError::Message(
+            "triangulate_polygon_with_holes: no interior triangle survived — degenerate polygon?"
+                .into(),
+        ));
+    }
+    Ok(tris)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -784,6 +969,81 @@ mod tests {
     fn cdt_rejects_out_of_bounds_constraint() {
         let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)];
         assert!(constrained_delaunay_2d(&pts, &[(0, 5)]).is_err());
+    }
+
+    #[test]
+    fn holes_square_no_holes_matches_plain_triangulation() {
+        let outer = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let tris = triangulate_polygon_with_holes(&outer, &[]).unwrap();
+        assert_eq!(tris.len(), 2);
+        assert_all_ccw(&tris, &outer);
+        assert!((total_area(&tris, &outer) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn holes_square_with_one_square_hole() {
+        // 4×4 outer square with a 2×2 hole centred at (2, 2).
+        let outer = vec![(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
+        let hole = vec![(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)];
+        let tris = triangulate_polygon_with_holes(&outer, &[hole.clone()]).unwrap();
+
+        // Build the flat point list to check coordinates / area.
+        let mut all: Vec<Point2> = outer.clone();
+        all.extend_from_slice(&hole);
+        assert_all_ccw(&tris, &all);
+
+        // Expected total area: 16 - 4 = 12.
+        let area = total_area(&tris, &all);
+        assert!((area - 12.0).abs() < 1e-12, "area = {}", area);
+
+        // Every hole edge must appear as a triangle edge (i.e. the hole
+        // is materially carved out).
+        // Hole indices: 4, 5, 6, 7 in the flat list (after outer's 0..4).
+        for k in 0..4 {
+            assert!(triangulation_has_edge(&tris, 4 + k, 4 + (k + 1) % 4));
+        }
+    }
+
+    #[test]
+    fn holes_square_with_two_holes() {
+        // 6×4 outer + two distinct 1×1 holes.
+        let outer = vec![(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0.0, 4.0)];
+        let h1 = vec![(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)];
+        let h2 = vec![(4.0, 2.0), (5.0, 2.0), (5.0, 3.0), (4.0, 3.0)];
+        let tris = triangulate_polygon_with_holes(&outer, &[h1.clone(), h2.clone()]).unwrap();
+        let mut all: Vec<Point2> = outer.clone();
+        all.extend_from_slice(&h1);
+        all.extend_from_slice(&h2);
+        assert_all_ccw(&tris, &all);
+
+        // Outer area 24 - 1 - 1 = 22.
+        let area = total_area(&tris, &all);
+        assert!((area - 22.0).abs() < 1e-12, "area = {}", area);
+    }
+
+    #[test]
+    fn holes_rejects_outer_with_fewer_than_three_vertices() {
+        let outer = vec![(0.0, 0.0), (1.0, 0.0)];
+        assert!(triangulate_polygon_with_holes(&outer, &[]).is_err());
+    }
+
+    #[test]
+    fn holes_rejects_undersized_hole() {
+        let outer = vec![(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
+        let bad_hole = vec![(1.0, 1.0), (2.0, 2.0)];
+        assert!(triangulate_polygon_with_holes(&outer, &[bad_hole]).is_err());
+    }
+
+    #[test]
+    fn holes_orientation_independent() {
+        // Outer CCW, hole CCW vs CW — same valid polygon either way.
+        let outer = vec![(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
+        let hole_ccw = vec![(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)];
+        let hole_cw = vec![(1.0, 1.0), (1.0, 3.0), (3.0, 3.0), (3.0, 1.0)];
+
+        let tris_ccw = triangulate_polygon_with_holes(&outer, &[hole_ccw]).unwrap();
+        let tris_cw = triangulate_polygon_with_holes(&outer, &[hole_cw]).unwrap();
+        assert_eq!(tris_ccw.len(), tris_cw.len());
     }
 
     #[test]

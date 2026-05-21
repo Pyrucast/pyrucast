@@ -736,20 +736,25 @@ impl Mesh {
         Ok(result)
     }
 
-    /// Fill the interior of a closed SEG2 contour with 2-D elements.
+    /// Fill the interior of one or more closed SEG2 contours with 2-D elements.
     ///
-    /// `contour` must be a [`Mesh`] with exactly **one** SEG2 submesh
-    /// whose segments form a single closed simple loop (each node appears
-    /// once as the start of a segment and once as its end). The
+    /// `contour` must be a [`Mesh`] with **one or more** SEG2 submeshes.
+    /// Each submesh is treated as a single closed simple loop (each node
+    /// appears once as the start of a segment and once as its end). The
     /// `Configuration` can be either:
     /// - **2-D** — points are used directly,
-    /// - **3-D** — the contour must be (nearly) planar; an in-plane basis
-    ///   is computed by Newell's method and the points are projected onto
-    ///   the best-fit plane before triangulation. The maximum signed
-    ///   distance from a point to the plane must not exceed
-    ///   `1e-6 × diag`, where `diag` is the diagonal of the contour's
-    ///   axis-aligned bounding box; otherwise the call fails with a clear
-    ///   error.
+    /// - **3-D** — every loop must be (nearly) co-planar; an in-plane
+    ///   basis is computed by Newell's method and the points are
+    ///   projected onto the best-fit plane before triangulation. The
+    ///   maximum signed distance from any node to that plane must not
+    ///   exceed `1e-6 × diag`, where `diag` is the AABB diagonal of the
+    ///   union of all loops; otherwise the call fails with a clear error.
+    ///
+    /// When more than one loop is provided, the **outer boundary** is
+    /// detected automatically as the loop with the largest signed area
+    /// (after 2-D projection if needed); the remaining loops are treated
+    /// as **holes**. Orientation does not matter — every loop is
+    /// internally re-oriented as needed.
     ///
     /// `element_type` selects the 2-D element to fill with. **Only**
     /// [`ElementType::TRI3`] is currently supported; passing any other
@@ -757,15 +762,18 @@ impl Mesh {
     ///
     /// The returned mesh has a single submesh of `element_type`, sharing
     /// the contour's `Configuration`: the existing contour nodes are
-    /// re-used (their refcount is incremented). No new nodes are created
-    /// in this iteration — the algorithm is plain ear clipping and
-    /// produces exactly `n - 2` triangles for `n` contour nodes. In 3-D
-    /// the output triangles live in the original 3-D space (they are
-    /// triangulated in the plane but their connectivity references the
-    /// 3-D contour nodes).
+    /// re-used (their refcount is incremented). No new nodes (Steiner
+    /// points) are created in this iteration.
+    ///
+    /// Algorithm:
+    /// - **single loop, no holes** — fast path using plain ear clipping;
+    ///   produces exactly `n - 2` triangles for `n` contour nodes.
+    /// - **multiple loops (outer + holes)** — constrained Delaunay
+    ///   triangulation (Bowyer-Watson + edge enforcement + parity
+    ///   flood-fill across constrained edges).
     ///
     /// Triangles are oriented **CCW** in the projection plane regardless
-    /// of the contour's orientation.
+    /// of the input contour's orientation.
     ///
     /// # Example
     /// ```
@@ -798,11 +806,11 @@ impl Mesh {
                 element_type
             )));
         }
-        if contour.submesh_count() != 1 {
-            return Err(PyrucastError::Message(format!(
-                "fill_surface: contour must have exactly one SEG2 submesh, got {} submesh(es)",
-                contour.submesh_count()
-            )));
+        let n_sub = contour.submesh_count();
+        if n_sub == 0 {
+            return Err(PyrucastError::Message(
+                "fill_surface: contour must contain at least one SEG2 submesh".into(),
+            ));
         }
         let cfg = contour.config.clone();
         let dim = with(&cfg, |c| c.dim())?;
@@ -813,75 +821,88 @@ impl Mesh {
             )));
         }
 
-        let sm = contour.submesh(0)?;
-        let (et, n_elems, conn) = with(&sm, |s| {
-            (s.element_type(), s.cell_count(), s.connectivity().to_vec())
-        })?;
-        if et != ElementType::SEG2 {
-            return Err(PyrucastError::Message(format!(
-                "fill_surface: contour submesh must be SEG2, got {}",
-                et
-            )));
-        }
-        if n_elems < 3 {
-            return Err(PyrucastError::Message(format!(
-                "fill_surface: contour must have ≥ 3 segments, got {}",
-                n_elems
-            )));
-        }
-
-        // Walk the contour: build next[a] = b for each segment (a, b),
-        // then traverse from conn[0] until we come back.
-        let mut next: std::collections::HashMap<NodeId, NodeId> =
-            std::collections::HashMap::with_capacity(n_elems);
-        for i in 0..n_elems {
-            let a = conn[2 * i];
-            let b = conn[2 * i + 1];
-            if next.insert(a, b).is_some() {
+        // 1. Validate each submesh and extract its ordered closed chain of node ids.
+        let mut chains: Vec<Vec<NodeId>> = Vec::with_capacity(n_sub);
+        for sm_idx in 0..n_sub {
+            let sm = contour.submesh(sm_idx)?;
+            let (et, n_elems, conn) = with(&sm, |s| {
+                (s.element_type(), s.cell_count(), s.connectivity().to_vec())
+            })?;
+            if et != ElementType::SEG2 {
                 return Err(PyrucastError::Message(format!(
-                    "fill_surface: node {} starts more than one segment (contour not a simple loop)",
-                    a
+                    "fill_surface: submesh #{} must be SEG2, got {}",
+                    sm_idx, et
                 )));
             }
-        }
-        let start = conn[0];
-        let mut chain: Vec<NodeId> = Vec::with_capacity(n_elems);
-        chain.push(start);
-        let mut current = *next.get(&start).ok_or_else(|| {
-            PyrucastError::Message(format!(
-                "fill_surface: node {} has no outgoing segment (contour broken)",
-                start
-            ))
-        })?;
-        while current != start {
-            if chain.len() > n_elems {
-                return Err(PyrucastError::Message(
-                    "fill_surface: contour is not a closed simple loop".into(),
-                ));
+            if n_elems < 3 {
+                return Err(PyrucastError::Message(format!(
+                    "fill_surface: submesh #{} must have ≥ 3 segments, got {}",
+                    sm_idx, n_elems
+                )));
             }
-            chain.push(current);
-            current = *next.get(&current).ok_or_else(|| {
+            let mut next_node: std::collections::HashMap<NodeId, NodeId> =
+                std::collections::HashMap::with_capacity(n_elems);
+            for i in 0..n_elems {
+                let a = conn[2 * i];
+                let b = conn[2 * i + 1];
+                if next_node.insert(a, b).is_some() {
+                    return Err(PyrucastError::Message(format!(
+                        "fill_surface: submesh #{}: node {} starts more than one segment",
+                        sm_idx, a
+                    )));
+                }
+            }
+            let start = conn[0];
+            let mut chain: Vec<NodeId> = Vec::with_capacity(n_elems);
+            chain.push(start);
+            let mut current = *next_node.get(&start).ok_or_else(|| {
                 PyrucastError::Message(format!(
-                    "fill_surface: node {} has no outgoing segment (contour broken)",
-                    current
+                    "fill_surface: submesh #{}: node {} has no outgoing segment",
+                    sm_idx, start
                 ))
             })?;
-        }
-        if chain.len() != n_elems {
-            return Err(PyrucastError::Message(format!(
-                "fill_surface: contour has multiple disjoint loops ({} nodes traced out of {})",
-                chain.len(),
-                n_elems
-            )));
+            while current != start {
+                if chain.len() > n_elems {
+                    return Err(PyrucastError::Message(format!(
+                        "fill_surface: submesh #{}: contour is not a closed simple loop",
+                        sm_idx
+                    )));
+                }
+                chain.push(current);
+                current = *next_node.get(&current).ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "fill_surface: submesh #{}: node {} has no outgoing segment",
+                        sm_idx, current
+                    ))
+                })?;
+            }
+            if chain.len() != n_elems {
+                return Err(PyrucastError::Message(format!(
+                    "fill_surface: submesh #{}: contour has multiple disjoint loops ({} nodes traced out of {})",
+                    sm_idx, chain.len(), n_elems
+                )));
+            }
+            chains.push(chain);
         }
 
-        // Collect points in the plane to triangulate. In 2-D we read
-        // (x, y) directly; in 3-D we project onto the best-fit plane
-        // (Newell normal + in-plane basis) after checking planarity.
-        let points: Vec<crate::triangulation::Point2> = if dim == 2 {
-            let mut pts = Vec::with_capacity(chain.len());
+        // 2. Flatten the chains into a single list with per-chain offsets.
+        let mut chain_offsets: Vec<usize> = Vec::with_capacity(n_sub + 1);
+        chain_offsets.push(0);
+        let mut flat_nodes: Vec<NodeId> = Vec::new();
+        for chain in &chains {
+            flat_nodes.extend_from_slice(chain);
+            chain_offsets.push(flat_nodes.len());
+        }
+        let n_total = flat_nodes.len();
+
+        // 3. Collect 2-D points to triangulate. In 2-D direct (x, y);
+        //    in 3-D project on the best-fit plane (Newell normal of the
+        //    first non-degenerate loop + centroid origin), then verify
+        //    planarity across **all** loops jointly.
+        let points_2d: Vec<crate::triangulation::Point2> = if dim == 2 {
+            let mut pts = Vec::with_capacity(n_total);
             with(&cfg, |c| -> Result<()> {
-                for &id in &chain {
+                for &id in &flat_nodes {
                     let s = c.coord(id)?;
                     pts.push((s[0], s[1]));
                 }
@@ -889,23 +910,30 @@ impl Mesh {
             })??;
             pts
         } else {
-            // dim == 3
-            let mut pts3: Vec<crate::triangulation::Point3> = Vec::with_capacity(chain.len());
+            let mut pts3: Vec<crate::triangulation::Point3> = Vec::with_capacity(n_total);
             with(&cfg, |c| -> Result<()> {
-                for &id in &chain {
+                for &id in &flat_nodes {
                     let s = c.coord(id)?;
                     pts3.push([s[0], s[1], s[2]]);
                 }
                 Ok(())
             })??;
 
-            // Best-fit plane: Newell normal + centroid as origin.
-            let normal = crate::triangulation::newell_normal(&pts3).ok_or_else(|| {
-                PyrucastError::Message(
-                    "fill_surface: 3-D contour is collinear or zero-area (cannot define a plane)"
-                        .into(),
-                )
-            })?;
+            // Pick the normal from the first chain that has a well-defined
+            // Newell normal. Co-planarity of the other loops is checked
+            // afterwards by the global planarity test.
+            let normal = (0..n_sub)
+                .find_map(|i| {
+                    let pts_chain: Vec<crate::triangulation::Point3> =
+                        (chain_offsets[i]..chain_offsets[i + 1]).map(|j| pts3[j]).collect();
+                    crate::triangulation::newell_normal(&pts_chain)
+                })
+                .ok_or_else(|| {
+                    PyrucastError::Message(
+                        "fill_surface: every 3-D loop is collinear or zero-area".into(),
+                    )
+                })?;
+
             let mut origin = [0.0_f64; 3];
             for p in &pts3 {
                 origin[0] += p[0];
@@ -917,7 +945,6 @@ impl Mesh {
                 origin[k] *= inv_n;
             }
 
-            // Planarity check: max |signed distance to plane| ≤ 1e-6 × diag.
             let mut bb_min = [f64::INFINITY; 3];
             let mut bb_max = [f64::NEG_INFINITY; 3];
             let mut max_dev = 0.0_f64;
@@ -949,7 +976,6 @@ impl Mesh {
                 )));
             }
 
-            // Project to (u, v) coordinates.
             let (u, v) = crate::triangulation::in_plane_basis(normal);
             pts3.iter()
                 .map(|p| {
@@ -961,11 +987,55 @@ impl Mesh {
                 .collect()
         };
 
-        let triangles = crate::triangulation::ear_clip_2d(&points)?;
+        // 4. Triangulate. Single loop ⇒ ear clipping fast path; multi-loop
+        //    ⇒ detect the outer loop (largest |signed area|) and use the
+        //    CDT with holes.
+        let (triangles, flat_to_node): (Vec<[usize; 3]>, Vec<NodeId>) = if n_sub == 1 {
+            let tris = crate::triangulation::ear_clip_2d(&points_2d)?;
+            (tris, flat_nodes)
+        } else {
+            let mut areas: Vec<f64> = Vec::with_capacity(n_sub);
+            for i in 0..n_sub {
+                let slice = &points_2d[chain_offsets[i]..chain_offsets[i + 1]];
+                areas.push(crate::triangulation::signed_area(slice).abs());
+            }
+            let outer_idx = (0..n_sub)
+                .max_by(|&a, &b| {
+                    areas[a]
+                        .partial_cmp(&areas[b])
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .unwrap();
 
+            let mut outer_pts: Vec<crate::triangulation::Point2> = Vec::new();
+            let mut new_flat_nodes: Vec<NodeId> = Vec::new();
+            for j in chain_offsets[outer_idx]..chain_offsets[outer_idx + 1] {
+                outer_pts.push(points_2d[j]);
+                new_flat_nodes.push(flat_nodes[j]);
+            }
+            let mut hole_pts_list: Vec<Vec<crate::triangulation::Point2>> = Vec::new();
+            for i in 0..n_sub {
+                if i == outer_idx {
+                    continue;
+                }
+                let mut hole_pts = Vec::new();
+                for j in chain_offsets[i]..chain_offsets[i + 1] {
+                    hole_pts.push(points_2d[j]);
+                    new_flat_nodes.push(flat_nodes[j]);
+                }
+                hole_pts_list.push(hole_pts);
+            }
+            let tris = crate::triangulation::triangulate_polygon_with_holes(
+                &outer_pts,
+                &hole_pts_list,
+            )?;
+            (tris, new_flat_nodes)
+        };
+
+        // 5. Build the TRI3 mesh: each triangle is a triple of NodeIds.
         let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
         for [i, j, k] in triangles {
-            mesh.add_cell(&[chain[i], chain[j], chain[k]])?;
+            mesh.add_cell(&[flat_to_node[i], flat_to_node[j], flat_to_node[k]])?;
         }
         Ok(mesh)
     }
@@ -2161,13 +2231,174 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_rejects_multiple_submeshes() {
+    fn fill_surface_rejects_empty_submesh() {
+        // A submesh with zero cells is still rejected (< 3 segments).
         let cfg = insert(Configuration::new(2).unwrap());
         let (mut contour, _n) =
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
         let extra = insert(SubMesh::new(cfg, ElementType::SEG2));
         contour.add_submesh(extra).unwrap();
         assert!(Mesh::fill_surface(&contour, ElementType::TRI3).is_err());
+    }
+
+    #[test]
+    fn fill_surface_with_one_hole_2d() {
+        // 4×4 outer square with a 2×2 inner hole centred at (2, 2).
+        let cfg = insert(Configuration::new(2).unwrap());
+        let (outer, _no) = build_contour_2d(
+            cfg.clone(),
+            &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
+        );
+        let (hole, _nh) = build_contour_2d(
+            cfg.clone(),
+            &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
+        );
+        let combined = (&outer + &hole).unwrap();
+        assert_eq!(combined.submesh_count(), 2);
+
+        let tri = Mesh::fill_surface(&combined, ElementType::TRI3).unwrap();
+        assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
+
+        // Triangulated area must equal the outer area minus the hole: 16 - 4 = 12.
+        let n_cells = tri.cell_count().unwrap();
+        let mut total = 0.0;
+        for ci in 0..n_cells {
+            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
+            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
+            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
+            let a = 0.5
+                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            assert!(a > 0.0, "triangle {} not CCW (signed area {})", ci, a);
+            total += a;
+        }
+        assert!((total - 12.0).abs() < 1e-9, "total area = {}", total);
+    }
+
+    #[test]
+    fn fill_surface_outer_loop_is_autodetected() {
+        // Same as above but the outer loop is given **second**.
+        let cfg = insert(Configuration::new(2).unwrap());
+        let (hole, _) = build_contour_2d(
+            cfg.clone(),
+            &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
+        );
+        let (outer, _) = build_contour_2d(
+            cfg.clone(),
+            &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
+        );
+        let combined = (&hole + &outer).unwrap();
+        let tri = Mesh::fill_surface(&combined, ElementType::TRI3).unwrap();
+        let n_cells = tri.cell_count().unwrap();
+        let mut total = 0.0;
+        for ci in 0..n_cells {
+            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
+            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
+            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
+            total += 0.5
+                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+        }
+        // Area is invariant w.r.t. submesh order.
+        assert!((total - 12.0).abs() < 1e-9, "total area = {}", total);
+    }
+
+    #[test]
+    fn fill_surface_with_two_holes_2d() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let (outer, _) = build_contour_2d(
+            cfg.clone(),
+            &[(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0.0, 4.0)],
+        );
+        let (h1, _) = build_contour_2d(
+            cfg.clone(),
+            &[(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)],
+        );
+        let (h2, _) = build_contour_2d(
+            cfg.clone(),
+            &[(4.0, 2.0), (5.0, 2.0), (5.0, 3.0), (4.0, 3.0)],
+        );
+        let combined = (&(&outer + &h1).unwrap() + &h2).unwrap();
+        assert_eq!(combined.submesh_count(), 3);
+        let tri = Mesh::fill_surface(&combined, ElementType::TRI3).unwrap();
+        let n_cells = tri.cell_count().unwrap();
+        let mut total = 0.0;
+        for ci in 0..n_cells {
+            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
+            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
+            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
+            total += 0.5
+                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+        }
+        // 6×4 - 1 - 1 = 22.
+        assert!((total - 22.0).abs() < 1e-9, "total area = {}", total);
+    }
+
+    #[test]
+    fn fill_surface_with_one_hole_3d() {
+        // Outer + hole both in z = 1 plane.
+        let cfg = insert(Configuration::new(3).unwrap());
+        let (outer, _) = build_contour_3d(
+            cfg.clone(),
+            &[
+                (0.0, 0.0, 1.0),
+                (4.0, 0.0, 1.0),
+                (4.0, 4.0, 1.0),
+                (0.0, 4.0, 1.0),
+            ],
+        );
+        let (hole, _) = build_contour_3d(
+            cfg.clone(),
+            &[
+                (1.0, 1.0, 1.0),
+                (3.0, 1.0, 1.0),
+                (3.0, 3.0, 1.0),
+                (1.0, 3.0, 1.0),
+            ],
+        );
+        let combined = (&outer + &hole).unwrap();
+
+        let tri = Mesh::fill_surface(&combined, ElementType::TRI3).unwrap();
+
+        // Every triangle vertex must sit exactly on z = 1.
+        let n_cells = tri.cell_count().unwrap();
+        for ci in 0..n_cells {
+            for ni in 0..3 {
+                let p = tri.node(0, ci, ni).unwrap().coord().unwrap();
+                assert!((p[2] - 1.0).abs() < 1e-12);
+            }
+        }
+        // Sum of 3-D triangle areas must equal 16 - 4 = 12.
+        let mut total = 0.0;
+        for ci in 0..n_cells {
+            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
+            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
+            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
+            let e1 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+            let e2 = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
+            let cross = [
+                e1[1] * e2[2] - e1[2] * e2[1],
+                e1[2] * e2[0] - e1[0] * e2[2],
+                e1[0] * e2[1] - e1[1] * e2[0],
+            ];
+            total += 0.5 * (cross[0].powi(2) + cross[1].powi(2) + cross[2].powi(2)).sqrt();
+        }
+        assert!((total - 12.0).abs() < 1e-9, "total area = {}", total);
+    }
+
+    #[test]
+    fn fill_surface_with_hole_rejects_different_configurations() {
+        let cfg1 = insert(Configuration::new(2).unwrap());
+        let cfg2 = insert(Configuration::new(2).unwrap());
+        let (outer, _) = build_contour_2d(
+            cfg1.clone(),
+            &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
+        );
+        let (hole, _) = build_contour_2d(
+            cfg2,
+            &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
+        );
+        // merge() rejects mismatched configurations, so this should fail
+        // before fill_surface ever sees a mixed contour.
+        assert!((&outer + &hole).is_err());
     }
 
     #[test]
