@@ -16,6 +16,84 @@ use crate::error::{PyrucastError, Result};
 /// 2-D point as `(x, y)`.
 pub type Point2 = (f64, f64);
 
+/// 3-D point as `[x, y, z]`.
+pub type Point3 = [f64; 3];
+
+/// Unit normal of a 3-D polygon by **Newell's method**.
+///
+/// The polygon is given as an ordered list of vertices `points`, with
+/// the loop closing implicitly from `points[n - 1]` back to `points[0]`.
+/// Returns `None` if the polygon is degenerate (collinear / zero area)
+/// or has fewer than 3 vertices.
+///
+/// The method sums the cross products of consecutive vertices in a way
+/// that is robust to small departures from planarity: the magnitude of
+/// the unnormalised result equals **twice the projected area** of the
+/// polygon, so the dominant terms come from the largest-area projection.
+///
+/// # Example
+/// ```
+/// use pyrucast::triangulation::newell_normal;
+///
+/// // Unit square in the plane z = 0, CCW seen from +z.
+/// let pts = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
+/// let n = newell_normal(&pts).unwrap();
+/// assert!((n[2] - 1.0).abs() < 1e-12);
+/// ```
+pub fn newell_normal(points: &[Point3]) -> Option<[f64; 3]> {
+    let n = points.len();
+    if n < 3 {
+        return None;
+    }
+    let mut nx = 0.0;
+    let mut ny = 0.0;
+    let mut nz = 0.0;
+    for i in 0..n {
+        let p = points[i];
+        let q = points[(i + 1) % n];
+        nx += (p[1] - q[1]) * (p[2] + q[2]);
+        ny += (p[2] - q[2]) * (p[0] + q[0]);
+        nz += (p[0] - q[0]) * (p[1] + q[1]);
+    }
+    let mag = (nx * nx + ny * ny + nz * nz).sqrt();
+    if mag < 1e-15 {
+        return None;
+    }
+    Some([nx / mag, ny / mag, nz / mag])
+}
+
+/// Orthonormal in-plane basis `(u, v)` such that `(u, v, normal)` is
+/// right-handed, given a **unit** normal.
+///
+/// Built by Gram-Schmidt against the coordinate axis least aligned with
+/// `normal`. The choice of axis is deterministic — same input ⇒ same
+/// basis — but otherwise arbitrary; do not rely on `u` or `v` having a
+/// specific direction.
+pub fn in_plane_basis(normal: [f64; 3]) -> ([f64; 3], [f64; 3]) {
+    let abs_n = [normal[0].abs(), normal[1].abs(), normal[2].abs()];
+    let e: [f64; 3] = if abs_n[0] <= abs_n[1] && abs_n[0] <= abs_n[2] {
+        [1.0, 0.0, 0.0]
+    } else if abs_n[1] <= abs_n[2] {
+        [0.0, 1.0, 0.0]
+    } else {
+        [0.0, 0.0, 1.0]
+    };
+    let e_dot_n = e[0] * normal[0] + e[1] * normal[1] + e[2] * normal[2];
+    let u_raw = [
+        e[0] - e_dot_n * normal[0],
+        e[1] - e_dot_n * normal[1],
+        e[2] - e_dot_n * normal[2],
+    ];
+    let u_mag = (u_raw[0].powi(2) + u_raw[1].powi(2) + u_raw[2].powi(2)).sqrt();
+    let u = [u_raw[0] / u_mag, u_raw[1] / u_mag, u_raw[2] / u_mag];
+    let v = [
+        normal[1] * u[2] - normal[2] * u[1],
+        normal[2] * u[0] - normal[0] * u[2],
+        normal[0] * u[1] - normal[1] * u[0],
+    ];
+    (u, v)
+}
+
 /// Signed area of the polygon `points`, taken as a closed loop
 /// (`points[n-1]` connects back to `points[0]`; the last vertex must not
 /// repeat the first).
@@ -254,6 +332,97 @@ mod tests {
     fn ear_clip_rejects_degenerate_polygon() {
         let pts = vec![(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)];
         assert!(ear_clip_2d(&pts).is_err());
+    }
+
+    #[test]
+    fn newell_unit_square_in_xy_plane() {
+        let pts = vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ];
+        let n = newell_normal(&pts).unwrap();
+        assert_close(n[0], 0.0, 1e-12);
+        assert_close(n[1], 0.0, 1e-12);
+        assert_close(n[2], 1.0, 1e-12);
+    }
+
+    #[test]
+    fn newell_square_in_xz_plane() {
+        // CCW seen from +y ⇒ normal = -y? Actually, traversing (0,0,0)→(1,0,0)→(1,0,1)→(0,0,1)
+        // in the XZ plane is CCW seen from +y direction (right-hand rule).
+        let pts = vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+        ];
+        let n = newell_normal(&pts).unwrap();
+        // The polygon is in y = 0, traversed (x→x+z→z), normal is -y.
+        assert_close(n[0], 0.0, 1e-12);
+        assert_close(n[1], -1.0, 1e-12);
+        assert_close(n[2], 0.0, 1e-12);
+    }
+
+    #[test]
+    fn newell_translated_polygon_same_normal() {
+        // Translating the polygon must not change the normal direction.
+        let p1 = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+        let p2: Vec<Point3> = p1.iter().map(|p| [p[0] + 10.0, p[1] - 5.0, p[2] + 3.0]).collect();
+        let n1 = newell_normal(&p1).unwrap();
+        let n2 = newell_normal(&p2).unwrap();
+        for k in 0..3 {
+            assert_close(n1[k], n2[k], 1e-12);
+        }
+    }
+
+    #[test]
+    fn newell_rejects_collinear_polygon() {
+        let pts = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]];
+        assert!(newell_normal(&pts).is_none());
+    }
+
+    #[test]
+    fn newell_rejects_too_few_vertices() {
+        assert!(newell_normal(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]).is_none());
+    }
+
+    #[test]
+    fn in_plane_basis_is_orthonormal_right_handed() {
+        // A handful of normals covering the three "least-aligned-axis" branches.
+        let normals = [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            // Off-axis case.
+            {
+                let m = (1.0_f64 + 4.0 + 9.0).sqrt();
+                [1.0 / m, 2.0 / m, 3.0 / m]
+            },
+        ];
+        for n in normals {
+            let (u, v) = in_plane_basis(n);
+            // Norms ≈ 1.
+            let nu = (u[0].powi(2) + u[1].powi(2) + u[2].powi(2)).sqrt();
+            let nv = (v[0].powi(2) + v[1].powi(2) + v[2].powi(2)).sqrt();
+            assert_close(nu, 1.0, 1e-12);
+            assert_close(nv, 1.0, 1e-12);
+            // Pairwise orthogonality.
+            let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+            assert_close(dot(u, v), 0.0, 1e-12);
+            assert_close(dot(u, n), 0.0, 1e-12);
+            assert_close(dot(v, n), 0.0, 1e-12);
+            // Right-handed: u × v == n.
+            let uv = [
+                u[1] * v[2] - u[2] * v[1],
+                u[2] * v[0] - u[0] * v[2],
+                u[0] * v[1] - u[1] * v[0],
+            ];
+            for k in 0..3 {
+                assert_close(uv[k], n[k], 1e-12);
+            }
+        }
     }
 
     #[test]

@@ -741,7 +741,15 @@ impl Mesh {
     /// `contour` must be a [`Mesh`] with exactly **one** SEG2 submesh
     /// whose segments form a single closed simple loop (each node appears
     /// once as the start of a segment and once as its end). The
-    /// `Configuration` must be 2-D for now.
+    /// `Configuration` can be either:
+    /// - **2-D** — points are used directly,
+    /// - **3-D** — the contour must be (nearly) planar; an in-plane basis
+    ///   is computed by Newell's method and the points are projected onto
+    ///   the best-fit plane before triangulation. The maximum signed
+    ///   distance from a point to the plane must not exceed
+    ///   `1e-6 × diag`, where `diag` is the diagonal of the contour's
+    ///   axis-aligned bounding box; otherwise the call fails with a clear
+    ///   error.
     ///
     /// `element_type` selects the 2-D element to fill with. **Only**
     /// [`ElementType::TRI3`] is currently supported; passing any other
@@ -750,11 +758,14 @@ impl Mesh {
     /// The returned mesh has a single submesh of `element_type`, sharing
     /// the contour's `Configuration`: the existing contour nodes are
     /// re-used (their refcount is incremented). No new nodes are created
-    /// in this first iteration — the algorithm is plain ear clipping and
-    /// produces exactly `n - 2` triangles for `n` contour nodes.
+    /// in this iteration — the algorithm is plain ear clipping and
+    /// produces exactly `n - 2` triangles for `n` contour nodes. In 3-D
+    /// the output triangles live in the original 3-D space (they are
+    /// triangulated in the plane but their connectivity references the
+    /// 3-D contour nodes).
     ///
-    /// Triangles are oriented **CCW** in the plane regardless of the
-    /// contour's orientation.
+    /// Triangles are oriented **CCW** in the projection plane regardless
+    /// of the contour's orientation.
     ///
     /// # Example
     /// ```
@@ -777,27 +788,27 @@ impl Mesh {
     ///     contour.add_cell(&[n[i].id(), n[(i + 1) % 4].id()]).unwrap();
     /// }
     ///
-    /// let tri = Mesh::fill_2d(&contour, ElementType::TRI3).unwrap();
+    /// let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
     /// assert_eq!(tri.cell_count().unwrap(), 2); // 4 - 2 = 2 triangles
     /// ```
-    pub fn fill_2d(contour: &Mesh, element_type: ElementType) -> Result<Mesh> {
+    pub fn fill_surface(contour: &Mesh, element_type: ElementType) -> Result<Mesh> {
         if element_type != ElementType::TRI3 {
             return Err(PyrucastError::Message(format!(
-                "fill_2d: only TRI3 is supported for now, got {}",
+                "fill_surface: only TRI3 is supported for now, got {}",
                 element_type
             )));
         }
         if contour.submesh_count() != 1 {
             return Err(PyrucastError::Message(format!(
-                "fill_2d: contour must have exactly one SEG2 submesh, got {} submesh(es)",
+                "fill_surface: contour must have exactly one SEG2 submesh, got {} submesh(es)",
                 contour.submesh_count()
             )));
         }
         let cfg = contour.config.clone();
         let dim = with(&cfg, |c| c.dim())?;
-        if dim != 2 {
+        if dim != 2 && dim != 3 {
             return Err(PyrucastError::Message(format!(
-                "fill_2d: contour configuration must be 2-D, got dim={}",
+                "fill_surface: contour configuration must be 2-D or 3-D, got dim={}",
                 dim
             )));
         }
@@ -808,13 +819,13 @@ impl Mesh {
         })?;
         if et != ElementType::SEG2 {
             return Err(PyrucastError::Message(format!(
-                "fill_2d: contour submesh must be SEG2, got {}",
+                "fill_surface: contour submesh must be SEG2, got {}",
                 et
             )));
         }
         if n_elems < 3 {
             return Err(PyrucastError::Message(format!(
-                "fill_2d: contour must have ≥ 3 segments, got {}",
+                "fill_surface: contour must have ≥ 3 segments, got {}",
                 n_elems
             )));
         }
@@ -828,7 +839,7 @@ impl Mesh {
             let b = conn[2 * i + 1];
             if next.insert(a, b).is_some() {
                 return Err(PyrucastError::Message(format!(
-                    "fill_2d: node {} starts more than one segment (contour not a simple loop)",
+                    "fill_surface: node {} starts more than one segment (contour not a simple loop)",
                     a
                 )));
             }
@@ -838,41 +849,117 @@ impl Mesh {
         chain.push(start);
         let mut current = *next.get(&start).ok_or_else(|| {
             PyrucastError::Message(format!(
-                "fill_2d: node {} has no outgoing segment (contour broken)",
+                "fill_surface: node {} has no outgoing segment (contour broken)",
                 start
             ))
         })?;
         while current != start {
             if chain.len() > n_elems {
                 return Err(PyrucastError::Message(
-                    "fill_2d: contour is not a closed simple loop".into(),
+                    "fill_surface: contour is not a closed simple loop".into(),
                 ));
             }
             chain.push(current);
             current = *next.get(&current).ok_or_else(|| {
                 PyrucastError::Message(format!(
-                    "fill_2d: node {} has no outgoing segment (contour broken)",
+                    "fill_surface: node {} has no outgoing segment (contour broken)",
                     current
                 ))
             })?;
         }
         if chain.len() != n_elems {
             return Err(PyrucastError::Message(format!(
-                "fill_2d: contour has multiple disjoint loops ({} nodes traced out of {})",
+                "fill_surface: contour has multiple disjoint loops ({} nodes traced out of {})",
                 chain.len(),
                 n_elems
             )));
         }
 
-        // Collect 2-D coordinates of every chained node in one lock.
-        let mut points: Vec<crate::triangulation::Point2> = Vec::with_capacity(chain.len());
-        with(&cfg, |c| -> Result<()> {
-            for &id in &chain {
-                let s = c.coord(id)?;
-                points.push((s[0], s[1]));
+        // Collect points in the plane to triangulate. In 2-D we read
+        // (x, y) directly; in 3-D we project onto the best-fit plane
+        // (Newell normal + in-plane basis) after checking planarity.
+        let points: Vec<crate::triangulation::Point2> = if dim == 2 {
+            let mut pts = Vec::with_capacity(chain.len());
+            with(&cfg, |c| -> Result<()> {
+                for &id in &chain {
+                    let s = c.coord(id)?;
+                    pts.push((s[0], s[1]));
+                }
+                Ok(())
+            })??;
+            pts
+        } else {
+            // dim == 3
+            let mut pts3: Vec<crate::triangulation::Point3> = Vec::with_capacity(chain.len());
+            with(&cfg, |c| -> Result<()> {
+                for &id in &chain {
+                    let s = c.coord(id)?;
+                    pts3.push([s[0], s[1], s[2]]);
+                }
+                Ok(())
+            })??;
+
+            // Best-fit plane: Newell normal + centroid as origin.
+            let normal = crate::triangulation::newell_normal(&pts3).ok_or_else(|| {
+                PyrucastError::Message(
+                    "fill_surface: 3-D contour is collinear or zero-area (cannot define a plane)"
+                        .into(),
+                )
+            })?;
+            let mut origin = [0.0_f64; 3];
+            for p in &pts3 {
+                origin[0] += p[0];
+                origin[1] += p[1];
+                origin[2] += p[2];
             }
-            Ok(())
-        })??;
+            let inv_n = 1.0 / pts3.len() as f64;
+            for k in 0..3 {
+                origin[k] *= inv_n;
+            }
+
+            // Planarity check: max |signed distance to plane| ≤ 1e-6 × diag.
+            let mut bb_min = [f64::INFINITY; 3];
+            let mut bb_max = [f64::NEG_INFINITY; 3];
+            let mut max_dev = 0.0_f64;
+            for p in &pts3 {
+                let d = (p[0] - origin[0]) * normal[0]
+                    + (p[1] - origin[1]) * normal[1]
+                    + (p[2] - origin[2]) * normal[2];
+                if d.abs() > max_dev {
+                    max_dev = d.abs();
+                }
+                for k in 0..3 {
+                    if p[k] < bb_min[k] {
+                        bb_min[k] = p[k];
+                    }
+                    if p[k] > bb_max[k] {
+                        bb_max[k] = p[k];
+                    }
+                }
+            }
+            let diag = ((bb_max[0] - bb_min[0]).powi(2)
+                + (bb_max[1] - bb_min[1]).powi(2)
+                + (bb_max[2] - bb_min[2]).powi(2))
+            .sqrt();
+            let tol = 1e-6 * diag;
+            if max_dev > tol {
+                return Err(PyrucastError::Message(format!(
+                    "fill_surface: contour is not planar — max deviation {:.3e} exceeds tolerance {:.3e} (1e-6 × diag={:.3e})",
+                    max_dev, tol, diag
+                )));
+            }
+
+            // Project to (u, v) coordinates.
+            let (u, v) = crate::triangulation::in_plane_basis(normal);
+            pts3.iter()
+                .map(|p| {
+                    let d = [p[0] - origin[0], p[1] - origin[1], p[2] - origin[2]];
+                    let pu = d[0] * u[0] + d[1] * u[1] + d[2] * u[2];
+                    let pv = d[0] * v[0] + d[1] * v[1] + d[2] * v[2];
+                    (pu, pv)
+                })
+                .collect()
+        };
 
         let triangles = crate::triangulation::ear_clip_2d(&points)?;
 
@@ -1213,7 +1300,7 @@ mod python {
         }
 
         #[classmethod]
-        fn fill_2d(
+        fn fill_surface(
             _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
             contour: PyRef<PyMesh>,
             element_type: &str,
@@ -1222,7 +1309,7 @@ mod python {
                 PyValueError::new_err(format!("unknown element type: {element_type}"))
             })?;
             let handle = contour.handle.clone();
-            let mesh = with(&handle, |c| Mesh::fill_2d(c, et))??;
+            let mesh = with(&handle, |c| Mesh::fill_surface(c, et))??;
             Ok(Self { handle: insert(mesh) })
         }
 
@@ -1816,12 +1903,12 @@ mod tests {
     }
 
     #[test]
-    fn fill_2d_square_gives_two_triangles() {
+    fn fill_surface_square_gives_two_triangles() {
         let cfg = insert(Configuration::new(2).unwrap());
         let (contour, nodes) =
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
 
-        let tri = Mesh::fill_2d(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
         assert_eq!(tri.cell_count().unwrap(), 2);
 
@@ -1837,7 +1924,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_2d_triangles_sum_to_polygon_area() {
+    fn fill_surface_triangles_sum_to_polygon_area() {
         let cfg = insert(Configuration::new(2).unwrap());
         // Concave L-shape, CCW; expected area = 5.
         let l = [
@@ -1850,7 +1937,7 @@ mod tests {
         ];
         let (contour, _nodes) = build_contour_2d(cfg.clone(), &l);
 
-        let tri = Mesh::fill_2d(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 4); // n - 2
 
         let mut total = 0.0;
@@ -1868,7 +1955,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_2d_increfs_contour_nodes() {
+    fn fill_surface_increfs_contour_nodes() {
         let cfg = insert(Configuration::new(2).unwrap());
         let (contour, nodes) =
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
@@ -1884,7 +1971,7 @@ mod tests {
         })
         .unwrap();
 
-        let tri = Mesh::fill_2d(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
 
         // After filling: each contour node is referenced once more per
         // incident triangle.
@@ -1905,36 +1992,33 @@ mod tests {
     }
 
     #[test]
-    fn fill_2d_rejects_non_tri3() {
+    fn fill_surface_rejects_non_tri3() {
         let cfg = insert(Configuration::new(2).unwrap());
         let (contour, _n) =
             build_contour_2d(cfg, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
-        assert!(Mesh::fill_2d(&contour, ElementType::QUA4).is_err());
+        assert!(Mesh::fill_surface(&contour, ElementType::QUA4).is_err());
     }
 
     #[test]
-    fn fill_2d_rejects_non_seg2_contour() {
+    fn fill_surface_rejects_non_seg2_contour() {
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
         let mut bogus = Mesh::with_element_type(cfg, ElementType::TRI3);
         bogus.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        assert!(Mesh::fill_2d(&bogus, ElementType::TRI3).is_err());
+        assert!(Mesh::fill_surface(&bogus, ElementType::TRI3).is_err());
     }
 
     #[test]
-    fn fill_2d_rejects_non_2d_configuration() {
-        let cfg = insert(Configuration::new(3).unwrap());
-        let pts = [
-            (0.0, 0.0, 0.0),
-            (1.0, 0.0, 0.0),
-            (1.0, 1.0, 0.0),
-            (0.0, 1.0, 0.0),
-        ];
-        let nodes: Vec<Node> = pts
-            .iter()
-            .map(|&(x, y, z)| Node::create_in(cfg.clone(), &[x, y, z]).unwrap())
+    fn fill_surface_rejects_dim_above_three() {
+        // dim = 4 is not supported (no projection defined).
+        let cfg = insert(Configuration::new(4).unwrap());
+        let nodes: Vec<Node> = (0..4)
+            .map(|i| {
+                let t = i as f64;
+                Node::create_in(cfg.clone(), &[t, 0.0, 0.0, 0.0]).unwrap()
+            })
             .collect();
         let mut contour = Mesh::with_element_type(cfg, ElementType::SEG2);
         for i in 0..4 {
@@ -1942,21 +2026,152 @@ mod tests {
                 .add_cell(&[nodes[i].id(), nodes[(i + 1) % 4].id()])
                 .unwrap();
         }
-        assert!(Mesh::fill_2d(&contour, ElementType::TRI3).is_err());
+        assert!(Mesh::fill_surface(&contour, ElementType::TRI3).is_err());
+    }
+
+    /// Build a closed SEG2 contour in 3-D from a polyline of 3-D points.
+    fn build_contour_3d(cfg: Handle<Configuration>, pts: &[(f64, f64, f64)]) -> (Mesh, Vec<Node>) {
+        let nodes: Vec<Node> = pts
+            .iter()
+            .map(|&(x, y, z)| Node::create_in(cfg.clone(), &[x, y, z]).unwrap())
+            .collect();
+        let mut contour = Mesh::with_element_type(cfg, ElementType::SEG2);
+        let n = nodes.len();
+        for i in 0..n {
+            contour
+                .add_cell(&[nodes[i].id(), nodes[(i + 1) % n].id()])
+                .unwrap();
+        }
+        (contour, nodes)
     }
 
     #[test]
-    fn fill_2d_rejects_multiple_submeshes() {
+    fn fill_surface_3d_square_in_z_plane() {
+        // Unit square at z = 5: planar, CCW seen from +z.
+        let cfg = insert(Configuration::new(3).unwrap());
+        let (contour, _nodes) = build_contour_3d(
+            cfg.clone(),
+            &[
+                (0.0, 0.0, 5.0),
+                (1.0, 0.0, 5.0),
+                (1.0, 1.0, 5.0),
+                (0.0, 1.0, 5.0),
+            ],
+        );
+
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+        assert_eq!(tri.cell_count().unwrap(), 2);
+
+        // Every triangle vertex must lie exactly on z = 5 (nodes are
+        // reused, no Steiner points).
+        for ci in 0..2 {
+            for ni in 0..3 {
+                let p = tri.node(0, ci, ni).unwrap().coord().unwrap();
+                assert!((p[2] - 5.0).abs() < 1e-12);
+            }
+        }
+
+        // Sum of 3-D triangle areas = 1 (unit square).
+        let mut total = 0.0;
+        for ci in 0..2 {
+            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
+            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
+            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
+            let e1 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+            let e2 = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
+            let cross = [
+                e1[1] * e2[2] - e1[2] * e2[1],
+                e1[2] * e2[0] - e1[0] * e2[2],
+                e1[0] * e2[1] - e1[1] * e2[0],
+            ];
+            total += 0.5 * (cross[0].powi(2) + cross[1].powi(2) + cross[2].powi(2)).sqrt();
+        }
+        assert!((total - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn fill_surface_3d_tilted_square() {
+        // Square rotated 45° about the x axis; its plane has normal (0, -1, 1)/√2.
+        // Vertices in CCW order (seen from +normal):
+        let s = 1.0_f64 / 2.0_f64.sqrt();
+        let cfg = insert(Configuration::new(3).unwrap());
+        let (contour, _nodes) = build_contour_3d(
+            cfg.clone(),
+            &[
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (1.0, s, s),
+                (0.0, s, s),
+            ],
+        );
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+        assert_eq!(tri.cell_count().unwrap(), 2);
+
+        // Total 3-D area = 1 (unit square in the tilted plane).
+        let mut total = 0.0;
+        for ci in 0..2 {
+            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
+            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
+            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
+            let e1 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+            let e2 = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
+            let cross = [
+                e1[1] * e2[2] - e1[2] * e2[1],
+                e1[2] * e2[0] - e1[0] * e2[2],
+                e1[0] * e2[1] - e1[1] * e2[0],
+            ];
+            total += 0.5 * (cross[0].powi(2) + cross[1].powi(2) + cross[2].powi(2)).sqrt();
+        }
+        assert!((total - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn fill_surface_3d_rejects_non_planar_contour() {
+        // Square corners with one vertex significantly out of plane.
+        let cfg = insert(Configuration::new(3).unwrap());
+        let (contour, _nodes) = build_contour_3d(
+            cfg.clone(),
+            &[
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (1.0, 1.0, 0.5), // out of the z=0 plane by 0.5 — > 1e-6 × diag
+                (0.0, 1.0, 0.0),
+            ],
+        );
+        let err = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap_err();
+        let msg = format!("{}", err);
+        assert!(msg.contains("not planar"), "unexpected message: {}", msg);
+    }
+
+    #[test]
+    fn fill_surface_3d_accepts_tiny_numerical_noise() {
+        // Same square but with sub-tolerance noise — must still triangulate.
+        let cfg = insert(Configuration::new(3).unwrap());
+        let (contour, _nodes) = build_contour_3d(
+            cfg.clone(),
+            &[
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (1.0, 1.0, 1e-10), // diag ≈ √2 ⇒ tol ≈ 1.4e-6 ; 1e-10 ≪ tol
+                (0.0, 1.0, 0.0),
+            ],
+        );
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+        assert_eq!(tri.cell_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn fill_surface_rejects_multiple_submeshes() {
         let cfg = insert(Configuration::new(2).unwrap());
         let (mut contour, _n) =
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
         let extra = insert(SubMesh::new(cfg, ElementType::SEG2));
         contour.add_submesh(extra).unwrap();
-        assert!(Mesh::fill_2d(&contour, ElementType::TRI3).is_err());
+        assert!(Mesh::fill_surface(&contour, ElementType::TRI3).is_err());
     }
 
     #[test]
-    fn fill_2d_rejects_open_contour() {
+    fn fill_surface_rejects_open_contour() {
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
@@ -1966,16 +2181,16 @@ mod tests {
         open.add_cell(&[a.id(), b.id()]).unwrap();
         open.add_cell(&[b.id(), c.id()]).unwrap();
         // Missing the closing c→a segment.
-        assert!(Mesh::fill_2d(&open, ElementType::TRI3).is_err());
+        assert!(Mesh::fill_surface(&open, ElementType::TRI3).is_err());
     }
 
     #[test]
-    fn fill_2d_works_with_cw_contour() {
+    fn fill_surface_works_with_cw_contour() {
         let cfg = insert(Configuration::new(2).unwrap());
         // Same square but listed clockwise.
         let (contour, _n) =
             build_contour_2d(cfg, &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)]);
-        let tri = Mesh::fill_2d(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
 
         // Resulting triangles must still be CCW (positive signed area).

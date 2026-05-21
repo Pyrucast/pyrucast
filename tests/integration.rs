@@ -159,14 +159,14 @@ fn submesh_protects_nodes_via_refcount() -> Result<()> {
 }
 
 #[test]
-fn fill_2d_from_circle_contour() -> Result<()> {
+fn fill_surface_from_circle_contour() -> Result<()> {
     // Build a closed SEG2 circle (8 segments) and fill it with TRI3
     // through the public API. The result must have 6 triangles
     // (n - 2 with n = 8) and a total area close to π·r².
     let cfg = insert(Configuration::new(2)?);
     let center = Node::create_in(cfg.clone(), &[0.0, 0.0])?;
     let circle = Mesh::circle_seg2(&center, &[0.0, 0.0, 1.0], 1.0, 8)?;
-    let tri = Mesh::fill_2d(&circle, ElementType::TRI3)?;
+    let tri = Mesh::fill_surface(&circle, ElementType::TRI3)?;
     assert_eq!(tri.element_types()?, vec![ElementType::TRI3]);
     assert_eq!(tri.cell_count()?, 6);
 
