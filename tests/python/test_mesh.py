@@ -102,7 +102,7 @@ def test_mesh_rejects_submesh_from_other_configuration():
         raise AssertionError("expected RuntimeError for mismatched Configurations")
 
 
-def test_fill_2d_square_gives_two_triangles():
+def test_fill_surface_square_gives_two_triangles():
     c = pyrucast.Configuration(2)
     nodes = [
         c.add_node([0.0, 0.0]),
@@ -114,12 +114,12 @@ def test_fill_2d_square_gives_two_triangles():
     for i in range(4):
         contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
 
-    tri = pyrucast.Mesh.fill_2d(contour, "TRI3")
+    tri = pyrucast.Mesh.fill_surface(contour, "TRI3")
     assert tri.element_types() == ["TRI3"]
     assert tri.cell_count() == 2  # n - 2
 
 
-def test_fill_2d_unknown_element_type():
+def test_fill_surface_unknown_element_type():
     c = pyrucast.Configuration(2)
     nodes = [
         c.add_node([0.0, 0.0]),
@@ -131,14 +131,14 @@ def test_fill_2d_unknown_element_type():
         contour.add_cell([nodes[i].id, nodes[(i + 1) % 3].id])
 
     try:
-        pyrucast.Mesh.fill_2d(contour, "BOGUS")
+        pyrucast.Mesh.fill_surface(contour, "BOGUS")
     except ValueError:
         pass
     else:
         raise AssertionError("expected ValueError for unknown element type")
 
 
-def test_fill_2d_rejects_unsupported_target_element():
+def test_fill_surface_rejects_unsupported_target_element():
     c = pyrucast.Configuration(2)
     nodes = [
         c.add_node([0.0, 0.0]),
@@ -150,14 +150,57 @@ def test_fill_2d_rejects_unsupported_target_element():
         contour.add_cell([nodes[i].id, nodes[(i + 1) % 3].id])
 
     try:
-        pyrucast.Mesh.fill_2d(contour, "QUA4")
+        pyrucast.Mesh.fill_surface(contour, "QUA4")
     except RuntimeError:
         pass
     else:
         raise AssertionError("expected RuntimeError for unsupported target type")
 
 
-def test_fill_2d_rejects_non_seg2_contour():
+def test_fill_surface_3d_tilted_square():
+    # Square rotated 45° around the x axis: planar in 3-D, must triangulate.
+    import math
+
+    s = 1.0 / math.sqrt(2.0)
+    c = pyrucast.Configuration(3)
+    pts = [
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (1.0, s, s),
+        (0.0, s, s),
+    ]
+    nodes = [c.add_node(list(p)) for p in pts]
+    contour = pyrucast.Mesh(c, "SEG2")
+    for i in range(4):
+        contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
+
+    tri = pyrucast.Mesh.fill_surface(contour, "TRI3")
+    assert tri.cell_count() == 2  # n - 2
+
+
+def test_fill_surface_3d_rejects_non_planar_contour():
+    c = pyrucast.Configuration(3)
+    # One corner well out of the z = 0 plane.
+    pts = [
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (1.0, 1.0, 0.5),
+        (0.0, 1.0, 0.0),
+    ]
+    nodes = [c.add_node(list(p)) for p in pts]
+    contour = pyrucast.Mesh(c, "SEG2")
+    for i in range(4):
+        contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
+
+    try:
+        pyrucast.Mesh.fill_surface(contour, "TRI3")
+    except RuntimeError as e:
+        assert "not planar" in str(e)
+    else:
+        raise AssertionError("expected RuntimeError for non-planar 3-D contour")
+
+
+def test_fill_surface_rejects_non_seg2_contour():
     c = pyrucast.Configuration(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
@@ -166,7 +209,7 @@ def test_fill_2d_rejects_non_seg2_contour():
     bogus.add_cell([a.id, b.id, cc.id])
 
     try:
-        pyrucast.Mesh.fill_2d(bogus, "TRI3")
+        pyrucast.Mesh.fill_surface(bogus, "TRI3")
     except RuntimeError:
         pass
     else:
