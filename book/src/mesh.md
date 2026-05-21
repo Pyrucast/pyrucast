@@ -76,29 +76,34 @@ mesh.add_submesh(sm_tri)
 print(mesh)               # Mesh: 1 submesh(es), 1 cell(s) total
 ```
 
-## Triangulation d'un contour fermé : `fill_2d`
+## Triangulation d'un contour fermé : `fill_surface`
 
-`Mesh::fill_2d(contour, element_type)` prend un maillage **SEG2** dont les segments forment une **boucle fermée simple** et le remplit avec des éléments 2D. La configuration doit être en dimension 2.
+`Mesh::fill_surface(contour, element_type)` prend un maillage **SEG2** dont les segments forment une **boucle fermée simple** et le remplit avec des éléments 2D. La configuration peut être en dimension **2** (cas le plus direct) ou **3** (le contour doit alors être quasi plan — voir plus bas).
 
 Pour l'instant un seul type cible est supporté : **`TRI3`**. La fonction utilise un *ear clipping* élémentaire :
 
 1. les segments sont chaînés dans l'ordre (un seul cycle, sinon erreur),
-2. l'orientation du polygone est détectée (l'aire signée est calculée),
-3. à chaque itération on retire un sommet *convexe* dont le triangle prev-curr-next ne contient aucun autre sommet du polygone (une « oreille »),
-4. le triangle est ajouté au maillage, le sommet retiré, on recommence — jusqu'à ne plus avoir que 3 sommets.
+2. en 3D, la normale du plan moyen est calculée par la **méthode de Newell** ; les points sont projetés sur ce plan via une base orthonormée locale `(u, v)` orthogonale à la normale,
+3. l'orientation du polygone est détectée (aire signée),
+4. à chaque itération on retire un sommet *convexe* dont le triangle prev-curr-next ne contient aucun autre sommet du polygone (une « oreille »),
+5. le triangle est ajouté au maillage, le sommet retiré, on recommence — jusqu'à ne plus avoir que 3 sommets.
 
-Le résultat contient exactement `n − 2` triangles pour `n` nœuds de contour ; **aucun nœud interne n'est créé** dans cette première itération (pas de raffinement). Les nœuds du contour sont réutilisés (leur compteur de références est incrémenté). Les triangles produits sont orientés **CCW** dans le plan, quel que soit le sens du contour d'entrée.
+Le résultat contient exactement `n − 2` triangles pour `n` nœuds de contour ; **aucun nœud interne n'est créé** (pas de raffinement). Les nœuds du contour sont réutilisés (leur compteur de références est incrémenté). En 3D, les triangles vivent dans l'espace 3D global — seule la triangulation est faite dans le plan moyen. Les triangles produits sont orientés **CCW** dans le plan de projection, quel que soit le sens du contour d'entrée.
+
+### Contrôle de planéité (cas 3D)
+
+Lorsque la configuration est en 3D, la déviation maximale d'un nœud du contour au plan moyen doit rester inférieure à `1e-6 × diag`, où `diag` est la diagonale de la boîte englobante du contour. Si ce seuil est dépassé, `fill_surface` retourne une erreur claire indiquant la déviation observée et la tolérance. Ce seuil relatif tolère le bruit numérique habituel tout en refusant les vrais contours gauches.
 
 ### Limitations actuelles
 
 - un seul contour simple, pas de trous ;
-- dimension 2 uniquement (pas de projection 3D plane) ;
 - pas de point Steiner — la qualité géométrique dépend entièrement du contour ;
-- seul `TRI3` est supporté en sortie.
+- seul `TRI3` est supporté en sortie ;
+- en 3D, l'algorithme refuse les contours franchement non plans (par construction).
 
-Ces limitations seront levées par itérations : projection 3D plane → trous → raffinement (taille cible + critère de qualité).
+Les deux premières limitations seront levées par itérations : trous → raffinement (taille cible + critère de qualité).
 
-### Exemple Python
+### Exemple Python (2D)
 
 ```python
 import pyrucast
@@ -110,11 +115,31 @@ contour = pyrucast.Mesh(c, "SEG2")
 for i in range(4):
     contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
 
-surface = pyrucast.Mesh.fill_2d(contour, "TRI3")
+surface = pyrucast.Mesh.fill_surface(contour, "TRI3")
 print(surface)        # Mesh: 1 submesh(es), 2 cell(s) total
 ```
 
-L'algorithme géométrique est isolé dans le module `pyrucast::triangulation` (`signed_area`, `ear_clip_2d`) — il opère sur des tableaux 2D bruts et reste réutilisable indépendamment du système `Mesh`.
+### Exemple Python (3D plan)
+
+```python
+import math
+import pyrucast
+
+c = pyrucast.Configuration(dim=3)
+s = 1.0 / math.sqrt(2.0)
+# Carré unitaire incliné à 45° autour de l'axe x.
+pts = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, s, s), (0.0, s, s)]
+nodes = [c.add_node(list(p)) for p in pts]
+
+contour = pyrucast.Mesh(c, "SEG2")
+for i in range(4):
+    contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
+
+surface = pyrucast.Mesh.fill_surface(contour, "TRI3")
+# 2 triangles dont les sommets vivent dans le repère 3D global.
+```
+
+L'algorithme géométrique est isolé dans le module `pyrucast::triangulation` (`signed_area`, `ear_clip_2d`, `newell_normal`, `in_plane_basis`) — il opère sur des tableaux bruts et reste réutilisable indépendamment du système `Mesh`.
 
 ## Sûreté du swap
 
