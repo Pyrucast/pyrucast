@@ -1,0 +1,9 @@
+[book]
+title = "pyrucast — documentation théorique"
+authors = ["pyrucast"]
+language = "fr"
+src = "src"
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "ayu"
