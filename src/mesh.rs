@@ -1159,6 +1159,20 @@ mod python {
             Ok(Self { handle: insert(result) })
         }
 
+        #[classmethod]
+        fn fill_2d(
+            _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+            contour: PyRef<PyMesh>,
+            element_type: &str,
+        ) -> PyResult<Self> {
+            let et = ElementType::from_name(element_type).ok_or_else(|| {
+                PyValueError::new_err(format!("unknown element type: {element_type}"))
+            })?;
+            let handle = contour.handle.clone();
+            let mesh = with(&handle, |c| Mesh::fill_2d(c, et))??;
+            Ok(Self { handle: insert(mesh) })
+        }
+
         fn __add__(&self, other: PyRef<PyMesh>) -> PyResult<PyMesh> {
             let other_handle = other.handle.clone();
             let mesh = with(&self.handle, |a| {

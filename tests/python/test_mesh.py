@@ -102,6 +102,77 @@ def test_mesh_rejects_submesh_from_other_configuration():
         raise AssertionError("expected RuntimeError for mismatched Configurations")
 
 
+def test_fill_2d_square_gives_two_triangles():
+    c = pyrucast.Configuration(2)
+    nodes = [
+        c.add_node([0.0, 0.0]),
+        c.add_node([1.0, 0.0]),
+        c.add_node([1.0, 1.0]),
+        c.add_node([0.0, 1.0]),
+    ]
+    contour = pyrucast.Mesh(c, "SEG2")
+    for i in range(4):
+        contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
+
+    tri = pyrucast.Mesh.fill_2d(contour, "TRI3")
+    assert tri.element_types() == ["TRI3"]
+    assert tri.cell_count() == 2  # n - 2
+
+
+def test_fill_2d_unknown_element_type():
+    c = pyrucast.Configuration(2)
+    nodes = [
+        c.add_node([0.0, 0.0]),
+        c.add_node([1.0, 0.0]),
+        c.add_node([0.5, 1.0]),
+    ]
+    contour = pyrucast.Mesh(c, "SEG2")
+    for i in range(3):
+        contour.add_cell([nodes[i].id, nodes[(i + 1) % 3].id])
+
+    try:
+        pyrucast.Mesh.fill_2d(contour, "BOGUS")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for unknown element type")
+
+
+def test_fill_2d_rejects_unsupported_target_element():
+    c = pyrucast.Configuration(2)
+    nodes = [
+        c.add_node([0.0, 0.0]),
+        c.add_node([1.0, 0.0]),
+        c.add_node([0.5, 1.0]),
+    ]
+    contour = pyrucast.Mesh(c, "SEG2")
+    for i in range(3):
+        contour.add_cell([nodes[i].id, nodes[(i + 1) % 3].id])
+
+    try:
+        pyrucast.Mesh.fill_2d(contour, "QUA4")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for unsupported target type")
+
+
+def test_fill_2d_rejects_non_seg2_contour():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.5, 1.0])
+    bogus = pyrucast.Mesh(c, "TRI3")
+    bogus.add_cell([a.id, b.id, cc.id])
+
+    try:
+        pyrucast.Mesh.fill_2d(bogus, "TRI3")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for non-SEG2 contour")
+
+
 def test_repr_str_submesh_and_mesh():
     c = pyrucast.Configuration(1)
     sm = pyrucast.SubMesh(c, "SEG2")
