@@ -1349,11 +1349,27 @@ mod python {
             mesh_b: PyRef<PyMesh>,
             n_layers: usize,
         ) -> PyResult<Self> {
+            // Cannot nest `with` on two Handle<Mesh> values (same Mutex).
+            // Snapshot each side into a local Mesh (just clones the
+            // submesh handles + the configuration handle), then call the
+            // pure-Rust API on the snapshots — outside any store lock.
             let handle_a = mesh_a.handle.clone();
             let handle_b = mesh_b.handle.clone();
-            let mesh = with(&handle_a, |a| {
-                with(&handle_b, |b| Mesh::sweep_qua4(a, b, n_layers))
-            })???;
+            let snap_a = with(&handle_a, |a| -> Result<Mesh> {
+                let mut copy = Mesh::new(a.configuration());
+                for i in 0..a.submesh_count() {
+                    copy.add_submesh(a.submesh(i)?)?;
+                }
+                Ok(copy)
+            })??;
+            let snap_b = with(&handle_b, |b| -> Result<Mesh> {
+                let mut copy = Mesh::new(b.configuration());
+                for i in 0..b.submesh_count() {
+                    copy.add_submesh(b.submesh(i)?)?;
+                }
+                Ok(copy)
+            })??;
+            let mesh = Mesh::sweep_qua4(&snap_a, &snap_b, n_layers)?;
             Ok(Self { handle: insert(mesh) })
         }
 
@@ -1384,10 +1400,37 @@ mod python {
         }
 
         fn __add__(&self, other: PyRef<PyMesh>) -> PyResult<PyMesh> {
+            // Cannot nest `with` on two Handle<Mesh> values — they share
+            // the same per-type Mutex. Snapshot each side separately and
+            // assemble outside the locks.
             let other_handle = other.handle.clone();
-            let mesh = with(&self.handle, |a| {
-                with(&other_handle, |b| a.merge(b))
-            })???;
+            let (other_cfg, other_subs): (Handle<Configuration>, Vec<Handle<SubMesh>>) =
+                with(&other_handle, |b| -> Result<_> {
+                    let mut subs = Vec::with_capacity(b.submesh_count());
+                    for i in 0..b.submesh_count() {
+                        subs.push(b.submesh(i)?);
+                    }
+                    Ok((b.configuration(), subs))
+                })??;
+
+            let mesh = with(&self.handle, |a| -> Result<Mesh> {
+                let self_cfg = a.configuration();
+                if self_cfg.index() != other_cfg.index()
+                    || self_cfg.generation() != other_cfg.generation()
+                {
+                    return Err(PyrucastError::Message(
+                        "merge: meshes are attached to different Configurations".into(),
+                    ));
+                }
+                let mut result = Mesh::new(self_cfg);
+                for i in 0..a.submesh_count() {
+                    result.add_submesh(a.submesh(i)?)?;
+                }
+                for sm in &other_subs {
+                    result.add_submesh(sm.clone())?;
+                }
+                Ok(result)
+            })??;
             Ok(PyMesh { handle: insert(mesh) })
         }
 

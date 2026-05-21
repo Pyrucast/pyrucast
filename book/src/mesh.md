@@ -78,9 +78,13 @@ print(mesh)               # Mesh: 1 submesh(es), 1 cell(s) total
 
 ## Triangulation d'un contour fermé : `fill_surface`
 
-`Mesh::fill_surface(contour, element_type)` prend un maillage **SEG2** dont les segments forment une **boucle fermée simple** et le remplit avec des éléments 2D. La configuration peut être en dimension **2** (cas le plus direct) ou **3** (le contour doit alors être quasi plan — voir plus bas).
+`Mesh::fill_surface(contour, element_type)` prend un maillage `Mesh` contenant **un ou plusieurs sous-maillages SEG2** (chacun représentant une boucle fermée) et remplit la surface ainsi définie avec des éléments 2D. La configuration peut être en dimension **2** (cas le plus direct) ou **3** (les boucles doivent alors être quasi co-planaires — voir plus bas).
 
-Pour l'instant un seul type cible est supporté : **`TRI3`**. La fonction utilise un *ear clipping* élémentaire :
+Pour l'instant un seul type cible est supporté : **`TRI3`**.
+
+### Cas d'un seul contour (sans trous)
+
+Avec un unique sous-maillage SEG2, la fonction prend un chemin rapide via *ear clipping* :
 
 1. les segments sont chaînés dans l'ordre (un seul cycle, sinon erreur),
 2. en 3D, la normale du plan moyen est calculée par la **méthode de Newell** ; les points sont projetés sur ce plan via une base orthonormée locale `(u, v)` orthogonale à la normale,
@@ -88,7 +92,21 @@ Pour l'instant un seul type cible est supporté : **`TRI3`**. La fonction utilis
 4. à chaque itération on retire un sommet *convexe* dont le triangle prev-curr-next ne contient aucun autre sommet du polygone (une « oreille »),
 5. le triangle est ajouté au maillage, le sommet retiré, on recommence — jusqu'à ne plus avoir que 3 sommets.
 
-Le résultat contient exactement `n − 2` triangles pour `n` nœuds de contour ; **aucun nœud interne n'est créé** (pas de raffinement). Les nœuds du contour sont réutilisés (leur compteur de références est incrémenté). En 3D, les triangles vivent dans l'espace 3D global — seule la triangulation est faite dans le plan moyen. Les triangles produits sont orientés **CCW** dans le plan de projection, quel que soit le sens du contour d'entrée.
+Le résultat contient exactement `n − 2` triangles pour `n` nœuds de contour. **Aucun nœud interne n'est créé** (pas de raffinement). Les nœuds du contour sont réutilisés (leur compteur de références est incrémenté). En 3D, les triangles vivent dans l'espace 3D global — seule la triangulation est faite dans le plan moyen. Les triangles produits sont orientés **CCW** dans le plan de projection, quel que soit le sens du contour d'entrée.
+
+### Cas avec trous (plusieurs contours)
+
+Quand `contour` contient deux sous-maillages SEG2 ou plus, `fill_surface` bascule sur une **triangulation de Delaunay contrainte (CDT)** maison :
+
+1. chaque sous-maillage est traité comme une boucle fermée indépendante (chaînage + validation),
+2. la boucle dont l'aire absolue (dans le plan de projection) est la plus grande est automatiquement désignée comme **contour extérieur** ; les autres deviennent des **trous** ;
+3. les points sont insérés un à un dans une triangulation de Bowyer-Watson (avec un super-triangle englobant),
+4. chaque arête de boucle est ensuite **forcée** dans la triangulation (retrait des triangles qui la croisent + re-triangulation des deux polygones formés par *ear clipping*),
+5. un *flood-fill* par parité depuis le super-triangle marque ce qui est extérieur au domaine (chaque traversée d'arête contrainte inverse le statut « extérieur / intérieur »), puis les triangles extérieurs et les triangles à l'intérieur des trous sont retirés.
+
+L'orientation des boucles d'entrée n'a pas d'importance : la détection extérieur/trous se base uniquement sur l'aire absolue. Les triangles produits sont CCW dans le plan de projection. Aucun nœud interne n'est créé pour le moment ; ce sera le rôle de l'étape de raffinement à venir.
+
+L'algorithme géométrique vit dans `pyrucast::triangulation::cdt`, exposé via `triangulate_polygon_with_holes(outer, holes)` pour les besoins indépendants du système `Mesh`.
 
 ### Contrôle de planéité (cas 3D)
 
@@ -96,12 +114,12 @@ Lorsque la configuration est en 3D, la déviation maximale d'un nœud du contour
 
 ### Limitations actuelles
 
-- un seul contour simple, pas de trous ;
-- pas de point Steiner — la qualité géométrique dépend entièrement du contour ;
+- pas de point Steiner — la qualité géométrique dépend entièrement de la densité des nœuds de contour ;
 - seul `TRI3` est supporté en sortie ;
-- en 3D, l'algorithme refuse les contours franchement non plans (par construction).
+- en 3D, l'algorithme refuse les contours franchement non plans (par construction) ;
+- les boucles doivent être deux à deux disjointes (pas de trous emboîtés, pas de croisements).
 
-Les deux premières limitations seront levées par itérations : trous → raffinement (taille cible + critère de qualité).
+La première limitation sera levée par l'étape suivante : raffinement par insertion de points Steiner (taille cible + critère de qualité).
 
 ### Exemple Python (2D)
 
@@ -139,7 +157,30 @@ surface = pyrucast.Mesh.fill_surface(contour, "TRI3")
 # 2 triangles dont les sommets vivent dans le repère 3D global.
 ```
 
-L'algorithme géométrique est isolé dans le module `pyrucast::triangulation` (`signed_area`, `ear_clip_2d`, `newell_normal`, `in_plane_basis`) — il opère sur des tableaux bruts et reste réutilisable indépendamment du système `Mesh`.
+### Exemple Python (avec trou)
+
+```python
+import pyrucast
+
+c = pyrucast.Configuration(dim=2)
+
+# Contour extérieur : carré 4×4.
+outer = pyrucast.Mesh(c, "SEG2")
+outer_nodes = [c.add_node(list(p)) for p in [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]]
+for i in range(4):
+    outer.add_cell([outer_nodes[i].id, outer_nodes[(i + 1) % 4].id])
+
+# Trou : carré 2×2 centré.
+hole = pyrucast.Mesh(c, "SEG2")
+hole_nodes = [c.add_node(list(p)) for p in [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]]
+for i in range(4):
+    hole.add_cell([hole_nodes[i].id, hole_nodes[(i + 1) % 4].id])
+
+surface = pyrucast.Mesh.fill_surface(outer + hole, "TRI3")
+# Aire triangulée = 16 - 4 = 12.
+```
+
+Le module `pyrucast::triangulation` regroupe les briques géométriques (`signed_area`, `ear_clip_2d`, `newell_normal`, `in_plane_basis`, `delaunay_2d`, `constrained_delaunay_2d`, `triangulate_polygon_with_holes`) — toutes opèrent sur des tableaux bruts et restent réutilisables indépendamment du système `Mesh`.
 
 ## Sûreté du swap
 

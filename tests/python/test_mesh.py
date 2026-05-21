@@ -157,6 +157,55 @@ def test_fill_surface_rejects_unsupported_target_element():
         raise AssertionError("expected RuntimeError for unsupported target type")
 
 
+def _build_seg2_loop(c, pts):
+    """Helper: create a closed SEG2 Mesh from a list of (x, y[, z]) points."""
+    nodes = [c.add_node(list(p)) for p in pts]
+    contour = pyrucast.Mesh(c, "SEG2")
+    n = len(nodes)
+    for i in range(n):
+        contour.add_cell([nodes[i].id, nodes[(i + 1) % n].id])
+    return contour, nodes
+
+
+def test_fill_surface_with_one_hole_2d():
+    # 4×4 outer square, 2×2 inner hole centred at (2, 2).
+    c = pyrucast.Configuration(2)
+    outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
+    hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
+    combined = outer + hole
+    assert combined.submesh_count() == 2
+
+    tri = pyrucast.Mesh.fill_surface(combined, "TRI3")
+    n_cells = tri.cell_count()
+
+    # Triangulated area should equal outer 16 minus hole 4 = 12.
+    total = 0.0
+    for ci in range(n_cells):
+        p0 = tri.node(0, ci, 0).coord()
+        p1 = tri.node(0, ci, 1).coord()
+        p2 = tri.node(0, ci, 2).coord()
+        total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]))
+    assert abs(total - 12.0) < 1e-9
+
+
+def test_fill_surface_outer_loop_autodetected():
+    # Pass the hole first; the outer loop is still detected correctly.
+    c = pyrucast.Configuration(2)
+    hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
+    outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
+    combined = hole + outer
+    tri = pyrucast.Mesh.fill_surface(combined, "TRI3")
+    n_cells = tri.cell_count()
+
+    total = 0.0
+    for ci in range(n_cells):
+        p0 = tri.node(0, ci, 0).coord()
+        p1 = tri.node(0, ci, 1).coord()
+        p2 = tri.node(0, ci, 2).coord()
+        total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]))
+    assert abs(total - 12.0) < 1e-9
+
+
 def test_fill_surface_3d_tilted_square():
     # Square rotated 45° around the x axis: planar in 3-D, must triangulate.
     import math
