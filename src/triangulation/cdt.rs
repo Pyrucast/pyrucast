@@ -190,6 +190,193 @@ impl Cdt {
         }
     }
 
+    /// Force the edge `(a, b)` to appear in the triangulation.
+    ///
+    /// Both indices must refer to input points already inserted. If the
+    /// edge already exists, this is a no-op. Otherwise the function:
+    /// 1. walks the triangles that the segment `(a, b)` crosses,
+    /// 2. retires them,
+    /// 3. rebuilds two polygons (one each side of the new edge),
+    /// 4. re-triangulates each polygon by ear clipping.
+    ///
+    /// The Delaunay empty-circle property is **not** preserved across
+    /// the constrained edge — by definition of a CDT.
+    pub(super) fn insert_constraint(&mut self, a: usize, b: usize) -> Result<()> {
+        if a == b {
+            return Err(PyrucastError::Message(format!(
+                "cdt::insert_constraint: degenerate edge ({}, {})",
+                a, b
+            )));
+        }
+        if self.edge_exists(a, b) {
+            return Ok(());
+        }
+
+        let crossed = self.triangles_crossing_segment(a, b)?;
+        let crossed_set: std::collections::HashSet<usize> = crossed.iter().copied().collect();
+
+        // External boundary of the cavity = edges of crossed triangles whose
+        // opposite neighbour is **not** itself crossed.
+        let mut external_edges: Vec<(usize, usize)> = Vec::new();
+        for &t_idx in &crossed {
+            let t = self.triangles[t_idx];
+            for k in 0..3 {
+                let nb = t.n[k];
+                let is_outside = nb == NO_NEIGHBOUR || !crossed_set.contains(&nb);
+                if is_outside {
+                    let p = t.v[(k + 1) % 3];
+                    let q = t.v[(k + 2) % 3];
+                    external_edges.push((p, q));
+                }
+            }
+        }
+
+        for &t_idx in &crossed {
+            self.triangles[t_idx].alive = false;
+        }
+
+        // Split external edges into "left" and "right" of the oriented line a→b.
+        let pa = self.points[a];
+        let pb = self.points[b];
+        let mut left_edges: Vec<(usize, usize)> = Vec::new();
+        let mut right_edges: Vec<(usize, usize)> = Vec::new();
+        for &(u, v) in &external_edges {
+            let pu = self.points[u];
+            let pv = self.points[v];
+            let mid = ((pu.0 + pv.0) * 0.5, (pu.1 + pv.1) * 0.5);
+            let side = orient2d(pa, pb, mid);
+            if side > 0.0 {
+                left_edges.push((u, v));
+            } else if side < 0.0 {
+                right_edges.push((u, v));
+            } else {
+                return Err(PyrucastError::Message(format!(
+                    "cdt::insert_constraint: edge ({}, {}) is collinear with constraint a={} b={}",
+                    u, v, a, b
+                )));
+            }
+        }
+
+        let left_chain = build_chain(&left_edges, a, b)?;
+        let right_chain = build_chain(&right_edges, b, a)?;
+
+        for chain in [left_chain, right_chain] {
+            if chain.len() < 3 {
+                return Err(PyrucastError::Message(format!(
+                    "cdt::insert_constraint: side polygon has only {} vertices",
+                    chain.len()
+                )));
+            }
+            let pts: Vec<Point2> = chain.iter().map(|&v| self.points[v]).collect();
+            let tris = crate::triangulation::ear_clip_2d(&pts)?;
+            for [i, j, k] in tris {
+                self.triangles.push(Triangle {
+                    v: [chain[i], chain[j], chain[k]],
+                    n: [NO_NEIGHBOUR; 3],
+                    alive: true,
+                });
+            }
+        }
+
+        self.rebuild_neighbours();
+        Ok(())
+    }
+
+    /// True iff `(a, b)` is an edge of some alive triangle.
+    fn edge_exists(&self, a: usize, b: usize) -> bool {
+        for t in &self.triangles {
+            if !t.alive {
+                continue;
+            }
+            for k in 0..3 {
+                let (i, j) = (t.v[k], t.v[(k + 1) % 3]);
+                if (i == a && j == b) || (i == b && j == a) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Walk the triangles strictly crossed by the open segment `(a, b)`,
+    /// in order from `a` to `b`.
+    fn triangles_crossing_segment(&self, a: usize, b: usize) -> Result<Vec<usize>> {
+        let pa = self.points[a];
+        let pb = self.points[b];
+
+        // Find a starting triangle: one with `a` as a vertex whose
+        // opposite edge is strictly crossed by (a, b).
+        let mut start: Option<usize> = None;
+        for (t_idx, t) in self.triangles.iter().enumerate() {
+            if !t.alive {
+                continue;
+            }
+            let a_pos = match t.v.iter().position(|&v| v == a) {
+                Some(p) => p,
+                None => continue,
+            };
+            let p = t.v[(a_pos + 1) % 3];
+            let q = t.v[(a_pos + 2) % 3];
+            let pp = self.points[p];
+            let pq = self.points[q];
+            if segments_cross_strict(pa, pb, pp, pq) {
+                start = Some(t_idx);
+                break;
+            }
+        }
+        let mut current = start.ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "cdt::insert_constraint: cannot start walk from vertex {}",
+                a
+            ))
+        })?;
+        let mut crossed = vec![current];
+
+        loop {
+            if self.triangles[current].v.contains(&b) {
+                break;
+            }
+            let t = self.triangles[current];
+            let mut moved = false;
+            for k in 0..3 {
+                let p = t.v[(k + 1) % 3];
+                let q = t.v[(k + 2) % 3];
+                // Skip the edge opposite to vertex `a` (we came in through there).
+                if p == a || q == a {
+                    continue;
+                }
+                let pp = self.points[p];
+                let pq = self.points[q];
+                if segments_cross_strict(pa, pb, pp, pq) {
+                    let nb = t.n[k];
+                    if nb == NO_NEIGHBOUR {
+                        return Err(PyrucastError::Message(format!(
+                            "cdt::insert_constraint: walk fell off the hull (a={}, b={})",
+                            a, b
+                        )));
+                    }
+                    current = nb;
+                    crossed.push(current);
+                    moved = true;
+                    break;
+                }
+            }
+            if !moved {
+                return Err(PyrucastError::Message(format!(
+                    "cdt::insert_constraint: walk got stuck (a={}, b={})",
+                    a, b
+                )));
+            }
+            if crossed.len() > self.triangles.len() {
+                return Err(PyrucastError::Message(format!(
+                    "cdt::insert_constraint: walk did not terminate (a={}, b={})",
+                    a, b
+                )));
+            }
+        }
+        Ok(crossed)
+    }
+
     /// Return every alive triangle whose three vertices are all input
     /// points (i.e. drop triangles still touching the super-triangle).
     /// Each triangle is returned as `[i, j, k]` with `i, j, k < n_input`.
@@ -205,6 +392,57 @@ impl Cdt {
         }
         out
     }
+}
+
+/// Walk the chain implied by an unordered edge set between `start` and `end`.
+fn build_chain(edges: &[(usize, usize)], start: usize, end: usize) -> Result<Vec<usize>> {
+    let mut adj: HashMap<usize, Vec<usize>> = HashMap::new();
+    for &(u, v) in edges {
+        adj.entry(u).or_default().push(v);
+        adj.entry(v).or_default().push(u);
+    }
+    let mut chain = vec![start];
+    let mut prev: Option<usize> = None;
+    let mut current = start;
+    loop {
+        let nexts = adj.get(&current).ok_or_else(|| {
+            PyrucastError::Message(format!("cdt::build_chain: vertex {} has no edges", current))
+        })?;
+        let next = nexts
+            .iter()
+            .find(|&&x| Some(x) != prev)
+            .copied()
+            .ok_or_else(|| {
+                PyrucastError::Message(format!("cdt::build_chain: dead end at vertex {}", current))
+            })?;
+        chain.push(next);
+        if next == end {
+            break;
+        }
+        prev = Some(current);
+        current = next;
+        if chain.len() > edges.len() + 1 {
+            return Err(PyrucastError::Message(
+                "cdt::build_chain: chain failed to reach the endpoint".into(),
+            ));
+        }
+    }
+    Ok(chain)
+}
+
+#[inline]
+fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
+    (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)
+}
+
+/// True iff the two open segments `(a, b)` and `(c, d)` cross strictly
+/// (i.e. their interiors intersect; shared endpoints do not count).
+fn segments_cross_strict(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
+    let o1 = orient2d(a, b, c);
+    let o2 = orient2d(a, b, d);
+    let o3 = orient2d(c, d, a);
+    let o4 = orient2d(c, d, b);
+    o1 * o2 < 0.0 && o3 * o4 < 0.0
 }
 
 /// Bounding super-triangle of an input point set. Returns three
@@ -302,6 +540,69 @@ pub fn delaunay_2d(points: &[Point2]) -> Result<Vec<[usize; 3]>> {
     let mut cdt = Cdt::new(points);
     for i in 0..n {
         cdt.insert_point(i)?;
+    }
+    Ok(cdt.extract_input_triangles())
+}
+
+/// Constrained Delaunay triangulation: every edge in `constraints` is
+/// guaranteed to appear in the output.
+///
+/// `points` is a flat list of 2-D points; `constraints` lists pairs of
+/// indices into `points` that must remain as triangulation edges. The
+/// function inserts every point first (Bowyer-Watson), then forces each
+/// constraint by retiring the triangles it crosses and re-triangulating
+/// the two resulting polygons by ear clipping.
+///
+/// Returns one CCW triangle per `[i, j, k]` triple, indexing into
+/// `points`. Triangles still touching the bounding super-triangle are
+/// discarded, but no further "inside the polygon" filtering is applied
+/// at this layer — that is the job of the caller (`Mesh::fill_surface`
+/// in the hole-removal step).
+///
+/// # Errors
+/// - same as [`delaunay_2d`] for the point set,
+/// - a constraint references a point index outside `0..points.len()`,
+/// - a constraint cannot be enforced (e.g. its segment lies on the hull
+///   in a way the walk cannot follow, or it crosses another already-
+///   forced constraint).
+pub fn constrained_delaunay_2d(
+    points: &[Point2],
+    constraints: &[(usize, usize)],
+) -> Result<Vec<[usize; 3]>> {
+    let n = points.len();
+    if n < 3 {
+        return Err(PyrucastError::Message(format!(
+            "constrained_delaunay_2d: need ≥ 3 points, got {}",
+            n
+        )));
+    }
+    for (i, j) in constraints {
+        if *i >= n || *j >= n {
+            return Err(PyrucastError::Message(format!(
+                "constrained_delaunay_2d: constraint ({}, {}) out of bounds (n={})",
+                i, j, n
+            )));
+        }
+    }
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let dx = points[i].0 - points[j].0;
+            let dy = points[i].1 - points[j].1;
+            if dx * dx + dy * dy < 1e-24 {
+                return Err(PyrucastError::Message(format!(
+                    "constrained_delaunay_2d: points {} and {} are (nearly) coincident",
+                    i, j
+                )));
+            }
+        }
+    }
+
+    let mut cdt = Cdt::new(points);
+    for i in 0..n {
+        cdt.insert_point(i)?;
+    }
+    for &(a, b) in constraints {
+        cdt.insert_constraint(a, b)?;
     }
     Ok(cdt.extract_input_triangles())
 }
@@ -404,6 +705,85 @@ mod tests {
     fn delaunay_rejects_coincident_points() {
         let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.5, 1.0), (1.0, 0.0)];
         assert!(delaunay_2d(&pts).is_err());
+    }
+
+    fn triangulation_has_edge(tris: &[[usize; 3]], a: usize, b: usize) -> bool {
+        tris.iter().any(|[i, j, k]| {
+            let e = [(*i, *j), (*j, *k), (*k, *i)];
+            e.iter().any(|&(p, q)| (p == a && q == b) || (p == b && q == a))
+        })
+    }
+
+    #[test]
+    fn cdt_no_constraint_matches_delaunay() {
+        let pts = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        let unconstrained = delaunay_2d(&pts).unwrap();
+        let constrained = constrained_delaunay_2d(&pts, &[]).unwrap();
+        assert_eq!(unconstrained.len(), constrained.len());
+    }
+
+    #[test]
+    fn cdt_redundant_constraint_is_noop() {
+        // Constrain an edge that the Delaunay triangulation already has.
+        let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)];
+        let tris = constrained_delaunay_2d(&pts, &[(0, 1)]).unwrap();
+        assert_eq!(tris.len(), 1);
+        assert_all_ccw(&tris, &pts);
+    }
+
+    #[test]
+    fn cdt_forces_long_rectangle_diagonal() {
+        // 2×1 rectangle: Delaunay picks the (0)→(2) diagonal (shorter).
+        // We force the other one (1)→(3) — must appear.
+        let pts = vec![(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0)];
+        let unconstrained = delaunay_2d(&pts).unwrap();
+        assert!(triangulation_has_edge(&unconstrained, 0, 2));
+        assert!(!triangulation_has_edge(&unconstrained, 1, 3));
+
+        let constrained = constrained_delaunay_2d(&pts, &[(1, 3)]).unwrap();
+        assert_eq!(constrained.len(), 2);
+        assert!(
+            triangulation_has_edge(&constrained, 1, 3),
+            "forced edge (1, 3) missing: {:?}",
+            constrained
+        );
+        assert_all_ccw(&constrained, &pts);
+        assert!((total_area(&constrained, &pts) - 2.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn cdt_forces_edge_across_interior_point() {
+        // Square with an off-centre interior point (NOT on the (0)→(2)
+        // diagonal — otherwise the diagonal would pass through a vertex
+        // and the walk could not start). Forcing the long diagonal must
+        // retire one or more triangles and re-triangulate the cavity.
+        let pts = vec![
+            (0.0, 0.0),
+            (2.0, 0.0),
+            (2.0, 2.0),
+            (0.0, 2.0),
+            (1.0, 0.6),
+        ];
+        let unconstrained = delaunay_2d(&pts).unwrap();
+        let constrained = constrained_delaunay_2d(&pts, &[(0, 2)]).unwrap();
+        assert!(triangulation_has_edge(&constrained, 0, 2));
+        assert_all_ccw(&constrained, &pts);
+        assert!((total_area(&constrained, &pts) - 4.0).abs() < 1e-12);
+        // The constraint should change the triangulation (the (0,2) edge
+        // is not generically Delaunay with point 4 nearby).
+        assert_eq!(constrained.len(), unconstrained.len());
+    }
+
+    #[test]
+    fn cdt_rejects_degenerate_constraint() {
+        let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)];
+        assert!(constrained_delaunay_2d(&pts, &[(1, 1)]).is_err());
+    }
+
+    #[test]
+    fn cdt_rejects_out_of_bounds_constraint() {
+        let pts = vec![(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)];
+        assert!(constrained_delaunay_2d(&pts, &[(0, 5)]).is_err());
     }
 
     #[test]
