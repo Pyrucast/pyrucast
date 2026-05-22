@@ -1,18 +1,22 @@
 //! `Drawable` implementations for [`SubMesh`] and [`Mesh`].
 //!
-//! Currently only `TRI3` cells are rendered; other element types are
-//! ignored when aggregating a [`Mesh`], and a `SubMesh` of another type
-//! returns a clear error when plotted on its own. The rendering pipeline
-//! is the painter's algorithm:
+//! Every supported element type is converted into one of three rendering
+//! primitives:
 //!
-//! 1. project every vertex into 2D + depth;
-//! 2. sort triangles by mean depth (far → near);
-//! 3. fill faces with [`SubMesh::face_color`], then overlay black edges.
+//! - **Point** — POI1
+//! - **Segment** — SEG2
+//! - **Face** — TRI3 / QUA4 / TET4 (each volume face) / HEX8 (each volume face)
+//!
+//! The pipeline is the painter's algorithm: every primitive is projected
+//! to 2D + depth, the list is sorted far → near, then primitives are drawn
+//! in order — filled with [`SubMesh::face_color`] for faces, drawn with
+//! the same colour for points/segments, and overlaid with black edges for
+//! face boundaries.
 
 use crate::color::RgbColor;
 use crate::configuration::{Configuration, NodeId};
 use crate::element_type::ElementType;
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::mesh::{Mesh, SubMesh};
 use crate::store::{with, Handle};
 use crate::viz::camera::{Bbox3, Projector};
@@ -45,112 +49,258 @@ fn read_points(
     })?
 }
 
-/// Triangle with its display colour, expressed in world coordinates.
-#[derive(Debug, Clone, Copy)]
-struct ColoredTri {
-    p: [Point3; 3],
-    color: RgbColor,
+/// Geometric primitive emitted by a submesh and consumed by the painter.
+///
+/// `Face::verts` is 3 (triangle) or 4 (quadrangle) vertices in CCW order
+/// when seen from outside the solid; the renderer fills the polygon and
+/// then overlays its boundary as a black wireframe.
+#[derive(Debug, Clone)]
+enum Primitive {
+    Point { p: Point3, color: RgbColor },
+    Segment { a: Point3, b: Point3, color: RgbColor },
+    Face { verts: Vec<Point3>, color: RgbColor },
 }
 
-/// Build the coloured triangles of a `SubMesh`. Returns an empty vector
-/// for any element type that isn't `TRI3` (so [`Drawable for Mesh`] can
-/// just concatenate without errors).
-fn submesh_triangles(sm: &SubMesh) -> Result<Vec<ColoredTri>> {
-    if sm.element_type() != ElementType::TRI3 {
-        return Ok(Vec::new());
-    }
+// ─── Element-type → primitives ──────────────────────────────────────────────
+
+/// Faces of a TET4 — each oriented outwards (CCW seen from outside).
+const TET4_FACES: [[usize; 3]; 4] = [
+    [0, 2, 1],
+    [0, 1, 3],
+    [0, 3, 2],
+    [1, 2, 3],
+];
+
+/// Faces of a HEX8 — bot / top / 4 lateral, in the convention used by
+/// [`Mesh::extrude`]: HEX8 = [bot[0..4], top[0..4]], both CCW seen from
+/// outside the lateral surface.
+const HEX8_FACES: [[usize; 4]; 6] = [
+    [0, 3, 2, 1], // bottom (normal opposed to extrusion direction)
+    [4, 5, 6, 7], // top
+    [0, 1, 5, 4],
+    [1, 2, 6, 5],
+    [2, 3, 7, 6],
+    [3, 0, 4, 7],
+];
+
+/// Build the rendering primitives of a single `SubMesh`. The output is
+/// empty for an empty submesh; every supported element type produces at
+/// least one primitive per cell.
+fn submesh_primitives(sm: &SubMesh) -> Result<Vec<Primitive>> {
     let cfg = sm.configuration();
     let pts = read_points(&cfg, sm.connectivity())?;
     let color = sm.face_color();
-    let n = pts.len() / 3;
-    let mut out = Vec::with_capacity(n);
-    for i in 0..n {
-        out.push(ColoredTri {
-            p: [pts[3 * i], pts[3 * i + 1], pts[3 * i + 2]],
-            color,
-        });
+    let et = sm.element_type();
+    let npc = et.nodes_per_cell();
+    let n_cells = if npc == 0 { 0 } else { pts.len() / npc };
+    let mut out: Vec<Primitive> = Vec::new();
+
+    match et {
+        ElementType::POI1 => {
+            for i in 0..n_cells {
+                out.push(Primitive::Point { p: pts[i], color });
+            }
+        }
+        ElementType::SEG2 => {
+            for i in 0..n_cells {
+                out.push(Primitive::Segment {
+                    a: pts[2 * i],
+                    b: pts[2 * i + 1],
+                    color,
+                });
+            }
+        }
+        ElementType::TRI3 => {
+            for i in 0..n_cells {
+                out.push(Primitive::Face {
+                    verts: vec![pts[3 * i], pts[3 * i + 1], pts[3 * i + 2]],
+                    color,
+                });
+            }
+        }
+        ElementType::QUA4 => {
+            for i in 0..n_cells {
+                out.push(Primitive::Face {
+                    verts: vec![
+                        pts[4 * i],
+                        pts[4 * i + 1],
+                        pts[4 * i + 2],
+                        pts[4 * i + 3],
+                    ],
+                    color,
+                });
+            }
+        }
+        ElementType::TET4 => {
+            for i in 0..n_cells {
+                let base = 4 * i;
+                for face in &TET4_FACES {
+                    out.push(Primitive::Face {
+                        verts: vec![
+                            pts[base + face[0]],
+                            pts[base + face[1]],
+                            pts[base + face[2]],
+                        ],
+                        color,
+                    });
+                }
+            }
+        }
+        ElementType::HEX8 => {
+            for i in 0..n_cells {
+                let base = 8 * i;
+                for face in &HEX8_FACES {
+                    out.push(Primitive::Face {
+                        verts: vec![
+                            pts[base + face[0]],
+                            pts[base + face[1]],
+                            pts[base + face[2]],
+                            pts[base + face[3]],
+                        ],
+                        color,
+                    });
+                }
+            }
+        }
     }
+
     Ok(out)
 }
 
-/// Compute the union bbox of a slice of triangles.
-fn triangles_bbox(tris: &[ColoredTri]) -> Bbox3 {
-    let mut b = Bbox3::empty();
-    for t in tris {
-        for p in &t.p {
-            b.extend(*p);
+/// Bbox covering every vertex used by `prims`.
+fn primitives_bbox(prims: &[Primitive]) -> Bbox3 {
+    let mut bb = Bbox3::empty();
+    for prim in prims {
+        match prim {
+            Primitive::Point { p, .. } => bb.extend(*p),
+            Primitive::Segment { a, b, .. } => {
+                bb.extend(*a);
+                bb.extend(*b);
+            }
+            Primitive::Face { verts, .. } => {
+                for v in verts {
+                    bb.extend(*v);
+                }
+            }
         }
     }
-    b
+    bb
 }
 
-/// Common rendering core: project, sort by depth, draw filled faces then
-/// black wireframe overlay. Shared by `SubMesh` and `Mesh`.
-fn render_triangles<DB: DrawingBackend>(
+// ─── Renderer ───────────────────────────────────────────────────────────────
+
+/// Projected primitive: 2-D screen coordinates + a single depth value used
+/// to order the painter's pass.
+#[derive(Debug, Clone)]
+enum ProjPrim {
+    Point { p: (f64, f64), color: RgbColor, depth: f64 },
+    Segment { a: (f64, f64), b: (f64, f64), color: RgbColor, depth: f64 },
+    Face { verts: Vec<(f64, f64)>, color: RgbColor, depth: f64 },
+}
+
+impl ProjPrim {
+    fn depth(&self) -> f64 {
+        match self {
+            ProjPrim::Point { depth, .. }
+            | ProjPrim::Segment { depth, .. }
+            | ProjPrim::Face { depth, .. } => *depth,
+        }
+    }
+}
+
+/// Common rendering core: project, sort far → near, draw points / segments
+/// / filled faces with black face boundaries on top. Shared by `SubMesh`
+/// and `Mesh`.
+fn render_primitives<DB: DrawingBackend>(
     area: &DrawingArea<DB, Shift>,
     view: &View,
-    tris: &[ColoredTri],
+    prims: &[Primitive],
 ) -> Result<()>
 where
     DB::ErrorType: 'static,
 {
-    if tris.is_empty() {
+    if prims.is_empty() {
         return Ok(());
     }
 
-    let bbox = triangles_bbox(tris);
+    let bbox = primitives_bbox(prims);
     let proj = Projector::new(view, bbox.center());
 
-    // Project every vertex once. nalgebra `Vector3` carries (sx, sy, depth).
-    use crate::triangulation::Vector3;
-    struct Proj2 {
-        a: Vector3,
-        b: Vector3,
-        c: Vector3,
-        color: RgbColor,
-        depth: f64,
-    }
-    let mut projected: Vec<Proj2> = tris
+    let mut projected: Vec<ProjPrim> = prims
         .iter()
-        .map(|t| {
-            let a = proj.project(t.p[0]);
-            let b = proj.project(t.p[1]);
-            let c = proj.project(t.p[2]);
-            let depth = (a.z + b.z + c.z) / 3.0;
-            Proj2 {
-                a,
-                b,
-                c,
-                color: t.color,
-                depth,
+        .map(|prim| match prim {
+            Primitive::Point { p, color } => {
+                let v = proj.project(*p);
+                ProjPrim::Point {
+                    p: (v.x, v.y),
+                    color: *color,
+                    depth: v.z,
+                }
+            }
+            Primitive::Segment { a, b, color } => {
+                let va = proj.project(*a);
+                let vb = proj.project(*b);
+                ProjPrim::Segment {
+                    a: (va.x, va.y),
+                    b: (vb.x, vb.y),
+                    color: *color,
+                    depth: 0.5 * (va.z + vb.z),
+                }
+            }
+            Primitive::Face { verts, color } => {
+                let projected_verts: Vec<_> =
+                    verts.iter().map(|v| proj.project(*v)).collect();
+                let n = projected_verts.len().max(1);
+                let depth: f64 =
+                    projected_verts.iter().map(|v| v.z).sum::<f64>() / n as f64;
+                let v2d: Vec<(f64, f64)> =
+                    projected_verts.iter().map(|v| (v.x, v.y)).collect();
+                ProjPrim::Face {
+                    verts: v2d,
+                    color: *color,
+                    depth,
+                }
             }
         })
         .collect();
 
-    // Painter's algorithm: far triangles first.
+    // Painter's algorithm: far first.
     projected.sort_by(|x, y| {
-        y.depth
-            .partial_cmp(&x.depth)
+        y.depth()
+            .partial_cmp(&x.depth())
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // Compute screen-space bbox, then expand to match the area's aspect ratio
-    // and apply the user-supplied scale and a small visual margin.
+    // Compute screen-space bbox, then expand to match the area's aspect
+    // ratio and apply the user-supplied scale and a small visual margin.
     let mut sx_min = f64::INFINITY;
     let mut sx_max = f64::NEG_INFINITY;
     let mut sy_min = f64::INFINITY;
     let mut sy_max = f64::NEG_INFINITY;
+    let mut update = |x: f64, y: f64| {
+        sx_min = sx_min.min(x);
+        sx_max = sx_max.max(x);
+        sy_min = sy_min.min(y);
+        sy_max = sy_max.max(y);
+    };
     for p in &projected {
-        for v in [p.a, p.b, p.c] {
-            sx_min = sx_min.min(v.x);
-            sx_max = sx_max.max(v.x);
-            sy_min = sy_min.min(v.y);
-            sy_max = sy_max.max(v.y);
+        match p {
+            ProjPrim::Point { p, .. } => update(p.0, p.1),
+            ProjPrim::Segment { a, b, .. } => {
+                update(a.0, a.1);
+                update(b.0, b.1);
+            }
+            ProjPrim::Face { verts, .. } => {
+                for v in verts {
+                    update(v.0, v.1);
+                }
+            }
         }
     }
     if !sx_min.is_finite() || !sy_min.is_finite() {
         return Ok(());
     }
+
     let (w, h) = area.dim_in_pixel();
     let aspect = if h == 0 { 1.0 } else { w as f64 / h as f64 };
     let cx = 0.5 * (sx_min + sx_max);
@@ -184,25 +334,52 @@ where
         .map_err(pl_err)?;
 
     let edge_style = ShapeStyle::from(&BLACK).stroke_width(1);
-    for t in &projected {
-        let face = RGBAColor(t.color.r, t.color.g, t.color.b, 0.85);
-        let face_style = ShapeStyle {
-            color: face,
-            filled: true,
-            stroke_width: 0,
-        };
-        let pa = (t.a.x, t.a.y);
-        let pb = (t.b.x, t.b.y);
-        let pc = (t.c.x, t.c.y);
-        chart
-            .draw_series(std::iter::once(Polygon::new(
-                vec![pa, pb, pc],
-                face_style,
-            )))
-            .map_err(pl_err)?;
-        chart
-            .draw_series(LineSeries::new(vec![pa, pb, pc, pa], edge_style))
-            .map_err(pl_err)?;
+
+    for p in &projected {
+        match p {
+            ProjPrim::Point { p, color, .. } => {
+                let style = ShapeStyle {
+                    color: RGBAColor(color.r, color.g, color.b, 1.0),
+                    filled: true,
+                    stroke_width: 0,
+                };
+                chart
+                    .draw_series(std::iter::once(Circle::new(*p, 3, style)))
+                    .map_err(pl_err)?;
+            }
+            ProjPrim::Segment { a, b, color, .. } => {
+                let style = ShapeStyle {
+                    color: RGBAColor(color.r, color.g, color.b, 1.0),
+                    filled: false,
+                    stroke_width: 2,
+                };
+                chart
+                    .draw_series(LineSeries::new(vec![*a, *b], style))
+                    .map_err(pl_err)?;
+            }
+            ProjPrim::Face { verts, color, .. } => {
+                let face_rgba = RGBAColor(color.r, color.g, color.b, 0.85);
+                let face_style = ShapeStyle {
+                    color: face_rgba,
+                    filled: true,
+                    stroke_width: 0,
+                };
+                chart
+                    .draw_series(std::iter::once(Polygon::new(
+                        verts.clone(),
+                        face_style,
+                    )))
+                    .map_err(pl_err)?;
+                // Close the loop for the wireframe overlay.
+                let mut closed = verts.clone();
+                if let Some(first) = verts.first() {
+                    closed.push(*first);
+                }
+                chart
+                    .draw_series(LineSeries::new(closed, edge_style))
+                    .map_err(pl_err)?;
+            }
+        }
     }
 
     Ok(())
@@ -229,14 +406,8 @@ impl Drawable for SubMesh {
     where
         DB::ErrorType: 'static,
     {
-        if self.element_type() != ElementType::TRI3 {
-            return Err(PyrucastError::Message(format!(
-                "viz: SubMesh<{}> not supported yet (only TRI3 is implemented)",
-                self.element_type()
-            )));
-        }
-        let tris = submesh_triangles(self)?;
-        render_triangles(area, view, &tris)
+        let prims = submesh_primitives(self)?;
+        render_primitives(area, view, &prims)
     }
 }
 
@@ -267,10 +438,10 @@ impl Drawable for Mesh {
         let mut all = Vec::new();
         for i in 0..self.submesh_count() {
             let sm = self.submesh(i)?;
-            let mut tris = with(&sm, |s| submesh_triangles(s))??;
-            all.append(&mut tris);
+            let mut prims = with(&sm, |s| submesh_primitives(s))??;
+            all.append(&mut prims);
         }
-        render_triangles(area, view, &all)
+        render_primitives(area, view, &all)
     }
 }
 
@@ -299,17 +470,98 @@ mod tests {
     }
 
     #[test]
-    fn submesh_triangles_skips_non_tri3() {
+    fn primitives_poi1_emits_points() {
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 2.0]).unwrap();
         let mut sm = SubMesh::new(cfg, ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
-        let tris = submesh_triangles(&sm).unwrap();
-        assert!(tris.is_empty());
+        sm.add_cell(&[b.id()]).unwrap();
+        let prims = submesh_primitives(&sm).unwrap();
+        assert_eq!(prims.len(), 2);
+        assert!(matches!(prims[0], Primitive::Point { .. }));
+        assert!(matches!(prims[1], Primitive::Point { .. }));
     }
 
     #[test]
-    fn submesh_triangles_carries_face_color() {
+    fn primitives_seg2_emits_segments() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let mut sm = SubMesh::new(cfg, ElementType::SEG2);
+        sm.add_cell(&[a.id(), b.id()]).unwrap();
+        let prims = submesh_primitives(&sm).unwrap();
+        assert_eq!(prims.len(), 1);
+        assert!(matches!(prims[0], Primitive::Segment { .. }));
+    }
+
+    #[test]
+    fn primitives_qua4_emits_one_face_per_cell() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let d = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let mut sm = SubMesh::new(cfg, ElementType::QUA4);
+        sm.add_cell(&[a.id(), b.id(), c.id(), d.id()]).unwrap();
+        let prims = submesh_primitives(&sm).unwrap();
+        assert_eq!(prims.len(), 1);
+        match &prims[0] {
+            Primitive::Face { verts, .. } => assert_eq!(verts.len(), 4),
+            other => panic!("expected Face, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn primitives_tet4_emits_four_triangular_faces() {
+        let cfg = insert(Configuration::new(3).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.0, 1.0, 0.0]).unwrap();
+        let d = Node::create_in(cfg.clone(), &[0.0, 0.0, 1.0]).unwrap();
+        let mut sm = SubMesh::new(cfg, ElementType::TET4);
+        sm.add_cell(&[a.id(), b.id(), c.id(), d.id()]).unwrap();
+        let prims = submesh_primitives(&sm).unwrap();
+        assert_eq!(prims.len(), 4);
+        for p in &prims {
+            match p {
+                Primitive::Face { verts, .. } => assert_eq!(verts.len(), 3),
+                other => panic!("expected triangular Face, got {:?}", other),
+            }
+        }
+    }
+
+    #[test]
+    fn primitives_hex8_emits_six_quadrangular_faces() {
+        let cfg = insert(Configuration::new(3).unwrap());
+        let n: Vec<_> = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0],
+        ]
+        .iter()
+        .map(|c| Node::create_in(cfg.clone(), c).unwrap())
+        .collect();
+        let mut sm = SubMesh::new(cfg, ElementType::HEX8);
+        let ids: Vec<_> = n.iter().map(|nn| nn.id()).collect();
+        sm.add_cell(&ids).unwrap();
+        let prims = submesh_primitives(&sm).unwrap();
+        assert_eq!(prims.len(), 6);
+        for p in &prims {
+            match p {
+                Primitive::Face { verts, .. } => assert_eq!(verts.len(), 4),
+                other => panic!("expected quadrangular Face, got {:?}", other),
+            }
+        }
+    }
+
+    #[test]
+    fn submesh_primitives_carries_face_color() {
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
@@ -317,9 +569,14 @@ mod tests {
         let mut sm = SubMesh::new(cfg, ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         sm.set_face_color(RgbColor::new(10, 20, 30));
-        let tris = submesh_triangles(&sm).unwrap();
-        assert_eq!(tris.len(), 1);
-        assert_eq!(tris[0].color, RgbColor::new(10, 20, 30));
+        let prims = submesh_primitives(&sm).unwrap();
+        assert_eq!(prims.len(), 1);
+        match &prims[0] {
+            Primitive::Face { color, .. } => {
+                assert_eq!(*color, RgbColor::new(10, 20, 30));
+            }
+            other => panic!("expected Face, got {:?}", other),
+        }
     }
 
     #[test]

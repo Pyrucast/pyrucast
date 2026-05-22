@@ -70,16 +70,48 @@ fn submesh_default_view_is_iso() {
 }
 
 #[test]
-fn submesh_unsupported_element_type_errors() {
-    let cfg = insert(Configuration::new(2).unwrap());
-    let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-    let mut sm = SubMesh::new(cfg, ElementType::POI1);
-    sm.add_cell(&[a.id()]).unwrap();
+fn submesh_renders_every_element_type() {
+    use pyrucast::configuration::NodeId;
+    let cfg = insert(Configuration::new(3).unwrap());
+    let n: Vec<_> = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [1.0, 0.0, 1.0],
+        [1.0, 1.0, 1.0],
+        [0.0, 1.0, 1.0],
+    ]
+    .iter()
+    .map(|c| Node::create_in(cfg.clone(), c).unwrap())
+    .collect();
+
+    let cases: Vec<(ElementType, Vec<NodeId>)> = vec![
+        (ElementType::POI1, vec![n[0].id()]),
+        (ElementType::SEG2, vec![n[0].id(), n[1].id()]),
+        (ElementType::TRI3, vec![n[0].id(), n[1].id(), n[2].id()]),
+        (
+            ElementType::QUA4,
+            vec![n[0].id(), n[1].id(), n[2].id(), n[3].id()],
+        ),
+        (
+            ElementType::TET4,
+            vec![n[0].id(), n[1].id(), n[2].id(), n[4].id()],
+        ),
+        (ElementType::HEX8, n.iter().map(|nn| nn.id()).collect()),
+    ];
+
     let dir = tmpdir();
-    let path = dir.join("poi.png");
-    let err = sm.plot(None, Some(&path)).unwrap_err();
-    let msg = format!("{err}");
-    assert!(msg.contains("TRI3"), "error should mention TRI3, got: {msg}");
+    for (et, ids) in cases {
+        let mut sm = SubMesh::new(cfg.clone(), et);
+        sm.add_cell(&ids).unwrap();
+        let path = dir.join(format!("{}.png", et.name().to_ascii_lowercase()));
+        sm.plot(Some(View::iso()), Some(&path))
+            .unwrap_or_else(|e| panic!("{}: {}", et, e));
+        let len = std::fs::metadata(&path).unwrap().len();
+        assert!(len > 0, "{}: PNG should not be empty", et);
+    }
 }
 
 #[test]
@@ -139,7 +171,7 @@ fn mesh_plot_renders_each_submesh_with_its_color() {
 }
 
 #[test]
-fn mesh_skips_non_tri3_submeshes() {
+fn mesh_renders_mixed_element_types() {
     let cfg = insert(Configuration::new(2).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
     let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();

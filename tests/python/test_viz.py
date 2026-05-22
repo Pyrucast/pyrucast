@@ -70,13 +70,51 @@ def test_plot_unsupported_extension(tmp_path):
         sm.plot(save=str(path))
 
 
-def test_plot_non_tri3_errors(tmp_path):
-    c = pyrucast.Configuration(2)
-    a = c.add_node([0.0, 0.0])
-    sm = pyrucast.SubMesh(c, "POI1")
-    sm.add_cell([a.id])
-    with pytest.raises(RuntimeError):
-        sm.plot(save=str(tmp_path / "poi.png"))
+@pytest.mark.parametrize(
+    "element_type,coords,connectivity",
+    [
+        ("POI1", [[0.0, 0.0, 0.0]], [0]),
+        ("SEG2", [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], [0, 1]),
+        ("TRI3", [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], [0, 1, 2]),
+        (
+            "QUA4",
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]],
+            [0, 1, 2, 3],
+        ),
+        (
+            "TET4",
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            [0, 1, 2, 3],
+        ),
+        (
+            "HEX8",
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0],
+                [0.0, 1.0, 1.0],
+            ],
+            [0, 1, 2, 3, 4, 5, 6, 7],
+        ),
+    ],
+)
+def test_plot_every_element_type(tmp_path, element_type, coords, connectivity):
+    c = pyrucast.Configuration(3)
+    nodes = [c.add_node(p) for p in coords]
+    sm = pyrucast.SubMesh(c, element_type)
+    sm.add_cell([nodes[i].id for i in connectivity])
+    path = tmp_path / f"{element_type.lower()}.png"
+    sm.plot(save=str(path))
+    assert path.stat().st_size > 0
 
 
 def test_mesh_plot_uses_each_submesh_color(tmp_path):

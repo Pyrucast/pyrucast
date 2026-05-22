@@ -152,8 +152,9 @@ impl SubMesh {
     /// - `save = Some(path)` ⇒ write an image file; the format is inferred
     ///   from the extension (`.png` or `.svg`).
     ///
-    /// Only `TRI3` submeshes are supported for now; calling this on
-    /// another element type returns a clear error.
+    /// Every supported element type is rendered: POI1 as dots, SEG2 as
+    /// segments, TRI3 / QUA4 as filled polygons, and TET4 / HEX8 as their
+    /// outer faces (4 triangles or 6 quads) under the painter's algorithm.
     #[cfg(feature = "viz")]
     pub fn plot(
         &self,
@@ -1068,10 +1069,9 @@ impl Mesh {
         Ok(mesh)
     }
 
-    /// Visualize this mesh — every TRI3 submesh is drawn, each in its own
-    /// [`SubMesh::face_color`]. Other element types are silently skipped
-    /// (support will be added incrementally). See [`SubMesh::plot`] for
-    /// the meaning of `view` and `save`.
+    /// Visualize this mesh — every submesh is drawn, each in its own
+    /// [`SubMesh::face_color`]. See [`SubMesh::plot`] for the meaning of
+    /// `view` and `save` and the supported element types.
     #[cfg(feature = "viz")]
     pub fn plot(
         &self,
