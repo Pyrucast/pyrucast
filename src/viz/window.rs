@@ -10,16 +10,20 @@
 //! - left-button drag → updates `yaw` (horizontal) and `pitch` (vertical),
 //! - mouse wheel → multiplies `scale` (zoom).
 //!
-//! The whole loop is kept small (a single `App` struct + one event match);
-//! adapting it for additional inputs is straightforward.
+//! `winit::EventLoop::new()` may be called at most once per process on
+//! most platforms. To stay usable from long-lived Python interpreters,
+//! the event loop is cached in a thread-local and re-driven via
+//! `run_app_on_demand`, so repeated `plot()` calls reuse the same loop.
 
+use std::cell::RefCell;
 use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use plotters::prelude::*;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::platform::run_on_demand::EventLoopExtRunOnDemand;
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use crate::error::{PyrucastError, Result};
@@ -178,7 +182,15 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                // Drop the surface and window *before* asking the loop to
+                // exit. On some compositors (X11/Wayland), keeping them
+                // alive past exit() causes the loop to spin on pending
+                // expose/redraw events and never return.
+                self.surface = None;
+                self.window = None;
+                event_loop.exit();
+            }
             WindowEvent::Resized(size) => self.resize(size.width, size.height),
             WindowEvent::MouseInput {
                 state,
@@ -221,18 +233,36 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
     }
 }
 
+thread_local! {
+    /// `EventLoop::new()` can only be called once per process on most
+    /// platforms; we lazily build one and reuse it across `plot()` calls
+    /// via `run_app_on_demand`. `EventLoop` is `!Send`, so a `thread_local!`
+    /// `RefCell` is the right container — Python always drives us from the
+    /// main thread.
+    static EVENT_LOOP: RefCell<Option<EventLoop<()>>> = const { RefCell::new(None) };
+}
+
 /// Run the interactive viewer on `object`. Returns when the user closes
 /// the window. Cancels with an error if winit fails to start.
 pub(crate) fn run_interactive<D: Drawable>(object: &D, view: View) -> Result<()> {
     let bbox = object.bbox()?;
-    let event_loop = EventLoop::new()
-        .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?;
-    let mut app = App::new(object, view, bbox);
-    event_loop
-        .run_app(&mut app)
-        .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?;
-    // Touch the field so the compiler keeps it (the loop returns; we just
-    // want to make sure the View round-trip is reachable).
-    let _ = app.current_view();
-    Ok(())
+    EVENT_LOOP.with(|cell| -> Result<()> {
+        let mut slot = cell.borrow_mut();
+        if slot.is_none() {
+            *slot = Some(
+                EventLoop::new()
+                    .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?,
+            );
+        }
+        let event_loop = slot.as_mut().expect("just initialised");
+        event_loop.set_control_flow(ControlFlow::Wait);
+        let mut app = App::new(object, view, bbox);
+        event_loop
+            .run_app_on_demand(&mut app)
+            .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?;
+        // Touch the field so the compiler keeps it (the loop returns; we
+        // just want to make sure the View round-trip is reachable).
+        let _ = app.current_view();
+        Ok(())
+    })
 }
