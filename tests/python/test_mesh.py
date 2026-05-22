@@ -89,6 +89,40 @@ def test_mesh_aggregates_submeshes():
     assert mesh.cell_count() == 3  # 2 POI1 + 1 TRI3
 
 
+def test_mesh_indexing_and_iteration():
+    """`mesh[i]`, `len(mesh)`, `for sm in mesh:` should all work, and the
+    `SubMesh` returned by `mesh[i]` shares storage with the parent mesh
+    so colour changes survive."""
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.5, 1.0])
+
+    sm_pts = pyrucast.SubMesh(c, "POI1")
+    sm_pts.add_cell([a.id])
+
+    sm_tri = pyrucast.SubMesh(c, "TRI3")
+    sm_tri.add_cell([a.id, b.id, cc.id])
+
+    mesh = pyrucast.Mesh(c)
+    mesh.add_submesh(sm_pts)
+    mesh.add_submesh(sm_tri)
+
+    assert len(mesh) == 2
+    assert [sm.element_type for sm in mesh] == ["POI1", "TRI3"]
+    assert mesh[-1].element_type == "TRI3"
+
+    mesh[1].face_color = (1, 2, 3)
+    assert mesh[1].face_color == (1, 2, 3)
+
+    try:
+        _ = mesh[5]
+    except IndexError:
+        pass
+    else:
+        raise AssertionError("expected IndexError on out-of-range index")
+
+
 def test_mesh_rejects_submesh_from_other_configuration():
     c1 = pyrucast.Configuration(2)
     c2 = pyrucast.Configuration(2)

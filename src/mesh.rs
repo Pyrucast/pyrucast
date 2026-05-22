@@ -1159,6 +1159,24 @@ impl std::ops::Add<&Mesh> for &Mesh {
     }
 }
 
+/// `mesh[i]` returns the i-th submesh handle (panics out of bounds,
+/// matching the `Vec`/slice convention).
+impl std::ops::Index<usize> for Mesh {
+    type Output = Handle<SubMesh>;
+    fn index(&self, idx: usize) -> &Self::Output {
+        &self.submeshes[idx]
+    }
+}
+
+/// `for sm in &mesh { … }` iterates over submesh handles in order.
+impl<'a> IntoIterator for &'a Mesh {
+    type Item = &'a Handle<SubMesh>;
+    type IntoIter = std::slice::Iter<'a, Handle<SubMesh>>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.submeshes.iter()
+    }
+}
+
 impl fmt::Debug for Mesh {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Mesh")
@@ -1187,7 +1205,7 @@ mod python {
     use crate::configuration::PyConfiguration;
     use crate::node::PyNode;
     use crate::store::insert;
-    use pyo3::exceptions::PyValueError;
+    use pyo3::exceptions::{PyIndexError, PyValueError};
     use pyo3::prelude::*;
 
     /// Python wrapper for [`SubMesh`].
@@ -1492,6 +1510,34 @@ mod python {
             Ok(with(&self.handle, |m| m.submesh_count())?)
         }
 
+        /// Return the submesh at index `idx` as a `SubMesh` wrapper.
+        /// The returned object shares storage with the parent mesh, so
+        /// mutating it (e.g. setting `face_color`) is visible through
+        /// the mesh too.
+        fn submesh(&self, idx: usize) -> PyResult<PySubMesh> {
+            let h = with(&self.handle, |m| m.submesh(idx))??;
+            Ok(PySubMesh { handle: h })
+        }
+
+        /// `len(mesh)` → number of submeshes.
+        fn __len__(&self) -> PyResult<usize> {
+            Ok(with(&self.handle, |m| m.submesh_count())?)
+        }
+
+        /// `mesh[i]` → the i-th submesh. Supports negative indices and
+        /// raises `IndexError` when out of range so `for sm in mesh:` works.
+        fn __getitem__(&self, idx: isize) -> PyResult<PySubMesh> {
+            let n = with(&self.handle, |m| m.submesh_count())? as isize;
+            let normalized = if idx < 0 { n + idx } else { idx };
+            if normalized < 0 || normalized >= n {
+                return Err(PyIndexError::new_err(format!(
+                    "mesh index {idx} out of range (len={n})"
+                )));
+            }
+            let h = with(&self.handle, |m| m.submesh(normalized as usize))??;
+            Ok(PySubMesh { handle: h })
+        }
+
         fn cell_count(&self) -> PyResult<usize> {
             Ok(with(&self.handle, |m| m.cell_count())??)
         }
@@ -1678,6 +1724,34 @@ mod tests {
             vec![ElementType::POI1, ElementType::TRI3]
         );
         assert_eq!(m.cell_counts().unwrap(), vec![2, 1]);
+    }
+
+    #[test]
+    fn mesh_index_and_iter_sugar() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+
+        let mut m = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        m.add_cell(&[a.id()]).unwrap();
+        let sm_tri = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+            insert(sm)
+        };
+        m.add_submesh(sm_tri).unwrap();
+
+        let et0 = with(&m[0], |s| s.element_type()).unwrap();
+        let et1 = with(&m[1], |s| s.element_type()).unwrap();
+        assert_eq!(et0, ElementType::POI1);
+        assert_eq!(et1, ElementType::TRI3);
+
+        let types: Vec<ElementType> = (&m)
+            .into_iter()
+            .map(|h| with(h, |s| s.element_type()).unwrap())
+            .collect();
+        assert_eq!(types, vec![ElementType::POI1, ElementType::TRI3]);
     }
 
     #[test]
