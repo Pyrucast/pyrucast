@@ -11,7 +11,8 @@
 | Sujet | Décision |
 |---|---|
 | Mémoire | Store central à handles : arène + indices générationnels + comptage de références + swap disque. Exposé via `Session`. |
-| Algèbre linéaire | Implémentation maison, derrière un trait `LinearSolver` enfichable (backend externe possible plus tard, sur accord). |
+| Primitives géométriques | `nalgebra` (vecteurs et matrices de petite taille — géométrie, maillage, visualisation). |
+| Algèbre linéaire (solveur) | Implémentation maison, derrière un trait `LinearSolver` enfichable (backend externe possible plus tard, sur accord). |
 | Sérialisation | `serde` + `bincode` via un trait `Persist` **unique**, partagé entre swap disque et sauvegarde/relecture fichier. |
 | Binding Python | `pyo3` + `maturin`, incrémental objet par objet. |
 | Documentation | `mdbook` (théorie + doctests). |
@@ -19,7 +20,7 @@
 
 ### Dépendances approuvées (socle figé)
 
-`pyo3`, `maturin`, `mdbook`, `serde`, `bincode`. Tout autre ajout = nouvelle demande explicite.
+`pyo3`, `maturin`, `mdbook`, `serde`, `bincode`, `nalgebra`. Visualisation (optionnelle) : `plotters`, `winit`, `softbuffer`. Tout autre ajout = nouvelle demande explicite.
 
 ## Persistance : swap et sauvegarde mutualisés (portable Linux ↔ Windows)
 

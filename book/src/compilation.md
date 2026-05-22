@@ -172,7 +172,7 @@ mdbook test book           # exécute le code testable de la documentation
 
 `cargo doc --no-deps --lib` génère la **référence API Rust** à partir des commentaires `///` du code source. Le résultat est écrit dans `target/doc/pyrucast/index.html`.
 
-- `--no-deps` exclut la doc des dépendances (`pyo3`, `serde`, `bincode`) — gain de temps majeur.
+- `--no-deps` exclut la doc des dépendances (`pyo3`, `serde`, `bincode`, `nalgebra`) — gain de temps majeur.
 - `--lib` limite à la crate `pyrucast` (sans les tests d'intégration).
 - Ajouter `--open` ouvre la page dans le navigateur par défaut à la fin de la génération.
 
