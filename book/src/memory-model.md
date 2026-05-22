@@ -16,7 +16,141 @@ Ce chapitre décrit comment pyrucast gère la mémoire : principes directeurs, i
 
 ## Implémentation actuelle
 
+### Vue d'ensemble : une analogie
+
+Imaginez une **bibliothèque municipale** où chaque rayon est dédié à un type d'ouvrage : un rayon pour les `Configuration`, un autre pour les `SubMesh`, un autre pour les `NodeField`, etc. Chaque rayon est une **étagère numérotée** : la case 0, la case 1, la case 2…
+
+- Quand vous déposez un livre, la bibliothécaire vous remet un **ticket** : « rayon Configuration, case n°7, *édition 3* ». Ce ticket, c'est un `Handle`.
+- Pour relire votre livre, vous présentez le ticket à la bibliothécaire : elle vérifie la case et l'édition (anti-falsification), puis vous laisse consulter le livre **sur place**, à un guichet, jamais en l'emportant chez vous.
+- Quand votre ticket disparaît (et tous ses duplicatas), le livre est jeté et la case redevient libre. Mais la prochaine personne qui dépose un livre dans cette case repartira avec un ticket portant l'**édition 4** — votre vieux ticket édition 3 ne marchera plus, même si la case est la même.
+
+Tout pyrucast tient dans cette image. Les sections suivantes en déroulent les morceaux.
+
+### Le store : un grand tableau par type
+
+Chaque type d'objet (`Configuration`, `SubMesh`, …) possède **son propre store** : un `Vec<Slot<T>>` global au processus, créé à la demande lors du premier `insert::<T>(...)`. Tous les stores sont enregistrés dans une **table globale** indexée par `TypeId`, ce qui permet à `insert::<T>` de retrouver le bon `Vec` à l'exécution. Le code utilisateur n'a pas besoin de connaître cette table : il ne voit que les fonctions `insert`, `with`, `with_mut`, `swap_out`, `compact`.
+
+Un `Slot<T>` contient trois informations :
+
+```rust,ignore
+struct Slot<T> {
+    state: SlotState<T>,  // Resident(value) | OnDisk(path) | Free
+    gen: u32,             // génération courante du slot
+    refcount: u32,        // nombre de Handle vivants pointant sur ce slot
+}
+```
+
+Visuellement, le store ressemble à ceci :
+
+```text
+   store<Configuration> :
+   ┌─────┬─────┬─────┬─────┬─────┐
+   │ #0  │ #1  │ #2  │ #3  │ #4  │ ← indices de slot
+   │Res  │Free │Res  │OnDsk│Res  │ ← état
+   │gen=1│gen=2│gen=1│gen=1│gen=3│ ← génération
+   │rc=2 │     │rc=1 │rc=1 │rc=4 │ ← refcount
+   └─────┴─────┴─────┴─────┴─────┘
+                  ↑
+            free-list : [1]   ← cases libres prêtes à être recyclées
+```
+
+### Le `Handle` : votre ticket d'accès
+
+`insert(value)` ajoute la valeur dans le store et vous rend un `Handle<T>` :
+
+```rust,ignore
+pub struct Handle<T> {
+    idx: u32,   // numéro de case
+    gen: u32,   // édition au moment de la remise du ticket
+    _t: PhantomData<T>,  // marqueur de type (zéro octet)
+}
+```
+
+Trois choses à retenir sur le handle :
+
+1. **C'est juste deux `u32`** (8 octets). Pas de pointeur, pas d'allocation. Vous pouvez le copier (`.clone()`), le mettre dans une struct, le sérialiser.
+2. **`Clone` n'allocate rien non plus** : il incrémente le `refcount` du slot puis renvoie une copie de `(idx, gen)`. Tous les clones pointent **sur la même case** du store.
+3. **`Drop` décrémente le `refcount`**. Quand le compteur tombe à 0, la case est rendue à la free-list et la valeur est détruite. Tout cela est automatique : aucune fonction `remove()` à appeler.
+
+```rust,ignore
+let h1 = insert(MaStruct(42));   // case n°7, refcount = 1
+let h2 = h1.clone();             // refcount = 2 (même case)
+let h3 = h1.clone();             // refcount = 3
+drop(h1); drop(h2);              // refcount = 1
+drop(h3);                        // refcount = 0 → case libérée, valeur droppée
+```
+
+### Recyclage et générations : la sécurité du ticket
+
+Quand un slot atteint `refcount = 0`, son index est poussé dans la **free-list** du store. Au prochain `insert`, plutôt que d'agrandir le `Vec`, le store dépile cet index et y range la nouvelle valeur. Bénéfice : **les indices restent bornés**, la mémoire ne croît pas à chaque cycle création/destruction.
+
+Mais que se passe-t-il si un ancien handle (un ticket périmé) traîne quelque part ? Sans précaution, il pointerait sur une case maintenant occupée par un **autre** objet — un classique bug *use-after-free*. La parade : la **génération**.
+
+Chaque slot porte un compteur `gen`. À chaque recyclage, `gen` est incrémenté. Le handle stocke la génération au moment de sa création :
+
+```text
+   Avant :  slot #7  gen=3  →  Handle{idx: 7, gen: 3} ✓ valide
+   Drop tous les handles → slot #7 libéré.
+   Nouvel insert → slot #7 réutilisé, gen passe à 4.
+   Après :  slot #7  gen=4  →  ancien Handle{idx: 7, gen: 3} ✗ invalide
+                            →  nouveau Handle{idx: 7, gen: 4} ✓ valide
+```
+
+Toute lecture/écriture commence par `validate(idx, gen)` : si la génération du slot ne correspond pas à celle du handle, l'accès renvoie `PyrucastError::StaleHandle`. Le bug *use-after-free* devient une **erreur récupérable**, jamais une corruption silencieuse.
+
+### Pourquoi des `Handle`, et pas des `&Configuration` directs ?
+
+Une question naturelle : pourquoi ne pas simplement passer une référence Rust `&Configuration` ou un `Arc<Configuration>` ? Trois raisons cumulées :
+
+1. **Indépendance identité / placement.** Le store doit pouvoir **déplacer un objet** (vers le disque par swap, plus tard vers une autre case par compactage déplaçant). Une `&Configuration` interdit ce déplacement (le borrow-checker fige l'adresse). Un `Handle` désigne l'identité ; le store gère l'emplacement physique.
+2. **Sérialisation.** Un `&Configuration` n'est pas sérialisable. Un `Handle` est juste `(u32, u32)` : on peut le stocker dans un autre objet, le sauvegarder sur disque, et le relire — le pointage logique survit au round-trip. Combiné au swap Drop-safe, un `SubMesh` qui contient un `Handle<Configuration>` traverse le disque sans casser le graphe d'objets.
+3. **API uniforme côté Python.** PyO3 a besoin d'objets `Clone + Send + 'static` côté Rust pour les exposer en classes Python. `Handle<T>` coche ces cases ; `&Configuration` non.
+
+### Accès via `with` / `with_mut` : pourquoi des closures ?
+
+Avec un `Handle`, le code utilisateur ne peut pas écrire `handle.dim` directement. Il doit passer par :
+
+```rust,ignore
+with(&handle, |cfg: &Configuration| {
+    println!("dim = {}", cfg.dim());
+}).unwrap();
+
+with_mut(&handle, |cfg: &mut Configuration| {
+    cfg.add_node(&[0.0, 0.0]).unwrap();
+}).unwrap();
+```
+
+Pourquoi ce pattern (la « closure scoped ») plutôt qu'un `.get()` qui renverrait une référence ? Deux raisons techniques qui se renforcent.
+
+**1. Le mutex doit être tenu pendant tout l'accès.**
+
+Chaque store interne est protégé par un `Mutex` (un seul, partagé pour tous les slots du même type `T`). Pour accéder à la valeur, il faut **verrouiller** ce mutex. Si `get()` renvoyait une référence `&Configuration`, deux scénarios mauvais s'ouvriraient :
+
+- soit le mutex est relâché juste après — et la référence retournée pointe sur des données qui peuvent être modifiées sous nos pieds (data race) ;
+- soit le mutex reste verrouillé tant que la référence existe — mais on ne sait plus garantir quand elle disparaît, et un oubli gèle tout le store.
+
+L'API par closure résout les deux : `with` verrouille, exécute votre closure, puis déverrouille **forcément** à la sortie du scope. Pas de fuite possible.
+
+**2. Le borrow-checker fait son travail à l'intérieur.**
+
+À l'intérieur de la closure, vous manipulez un vrai `&T` (ou `&mut T`). Le borrow-checker Rust s'applique normalement : pas de mutation pendant une lecture, exclusion mutuelle automatique entre `with` et `with_mut`, etc. La closure est juste un **scope explicite** qui dit au compilateur : « la référence ne s'échappe pas d'ici ».
+
+Conséquence pratique : à l'intérieur d'une `with` / `with_mut`, votre code Rust ressemble à n'importe quel autre code Rust idiomatique. Toute la cuisine (verrou, rechargement depuis disque si swap, validation de génération) est faite **avant** d'appeler votre closure et **après** son retour.
+
+### Concurrence : un mutex par type, indépendants
+
+Le registre global associe un `Mutex<StoreInner<T>>` à chaque `TypeId`. Conséquence directe :
+
+- deux threads qui manipulent **des types différents** (un sur `Configuration`, l'autre sur `SubMesh`) ne se gênent pas ;
+- deux threads qui manipulent **le même type** sont sérialisés par le mutex de ce type.
+
+Granularité grossière, mais cohérente avec le profil FE : on construit les objets, puis on les utilise — peu de contention en pratique. Si elle devient un problème, le mutex par type pourra évoluer en `RwLock` ou en sharding (un mutex par groupe de slots) sans changer l'API publique.
+
+**Une seule règle à respecter** : **ne pas réentrer sur le même type `T` à l'intérieur d'une closure passée à `with` / `with_mut`**. Le mutex n'est pas réentrant ; appeler `insert::<T>(...)` ou `with::<T>(...)` depuis une closure qui détient déjà le verrou de `T` provoque un interblocage. C'est la seule contrainte d'usage du store ; les opérations sur des types différents sont libres.
+
 ### API par fonctions de module
+
+Rust :
 
 ```rust,ignore
 use pyrucast::store::{insert, with, with_mut, swap_out, compact};
@@ -28,15 +162,21 @@ swap_out(&h).unwrap();                  // évince sur disque, libère la RAM
 compact::<MonObjet>();                  // rétrécit la mémoire en queue de Vec
 ```
 
-Côté Python, les bindings sont ajoutés objet par objet (Phase 2) ; le module expose en plus `pyrucast.set_swap_dir(path)` et `pyrucast.swap_dir()` pour configurer le répertoire de swap.
+Python — configuration du répertoire de swap :
 
-### `Handle<T>` générationnel et compté
+```python
+import pyrucast
+import pathlib
 
-`Handle<T>` est une struct comportant :
+# Vérifier le répertoire de swap actuel (par défaut : répertoire temporaire OS).
+print(pyrucast.swap_dir())
 
-- un **index** de slot dans le store du type `T` ;
-- une **génération** : un slot recyclé incrémente sa génération, rendant tout ancien handle automatiquement obsolète (l'accès renvoie `PyrucastError::StaleHandle`) ;
-- un compteur de références implicite : `Clone` incrémente, `Drop` décrémente. Quand le refcount atteint 0, le slot est marqué libre, et la valeur résidente est droppée **hors du verrou interne** pour éviter toute rentrance.
+# Pointer vers un répertoire dédié (SSD NVMe, espace garanti).
+pyrucast.set_swap_dir(pathlib.Path("/data/pyrucast_swap"))
+print(pyrucast.swap_dir())  # /data/pyrucast_swap
+```
+
+> `swap_out` sur un objet individuel reste côté Rust pour l'instant. L'API Python exposera une fonction de haut niveau (Phase 5) pour déclencher l'éviction depuis un script.
 
 ### États du slot
 
@@ -70,14 +210,39 @@ Beaucoup d'objets pyrucast portent des effets de bord dans leur `Drop` (ex. `Sub
 - `swap_out` n'exécute **pas** le `Drop` de la valeur évincée (`std::mem::forget` interne) — l'objet est logiquement vivant, juste relocalisé.
 - Au décrément final du refcount, si le slot est `OnDisk`, on recharge depuis le disque avant de dropper. `Drop` s'exécute donc une et une seule fois sur la durée de vie de l'objet, quel que soit le parcours swap.
 
-### Fragmentation et compactage
+### Fragmentation et compactage : ce qui borne la mémoire
 
-- Les slots libres sont enchaînés dans une **free-list** et réutilisés en priorité par `insert` : les indices restent stables dans le temps.
-- `compact::<T>()` retire les slots libres en **queue** de `Vec` et rétrécit la mémoire allouée. Le compactage ne déplace pas les slots vivants : les handles existants restent valides.
+Trois mécanismes coopèrent pour éviter que le `Vec` interne ne gonfle indéfiniment :
 
-### Concurrence
+1. **La free-list** (vue plus haut). Les indices libérés sont **repris en priorité** par `insert` : si vous créez 1 000 objets puis en détruisez 999, le slot libéré sera réutilisé au prochain `insert` — pas d'extension du `Vec`. Le high-water mark reste borné par le nombre maximal d'objets vivants simultanément.
 
-Le store interne de chaque type `T` est protégé par un `Mutex`. Les opérations sur des **types différents** sont indépendantes. Une seule contrainte d'usage : **ne pas appeler `insert`/`with`/`with_mut`/`swap_out`/`compact` sur le même type `T` à l'intérieur d'un closure passé à `with` ou `with_mut`** — la rentrance sur le même mutex provoquerait un interblocage.
+2. **`compact::<T>()`** — réduit le `Vec` quand sa **queue** est libre. Imaginez :
+
+   ```text
+   Avant compact :
+   ┌───┬───┬───┬───┬───┬───┐
+   │Res│Res│Free│Res│Free│Free│   capacité = 6
+   └───┴───┴───┴───┴───┴───┘
+                       ↑   ↑
+                    queue libre
+
+   Après compact::<T>() :
+   ┌───┬───┬───┬───┐
+   │Res│Res│Free│Res│            capacité = 4 (mémoire rendue à l'OS)
+   └───┴───┴───┴───┘
+   ```
+
+   Le slot `Free` au milieu reste : `compact` **ne déplace pas** les slots vivants, pour ne pas invalider les handles existants. Conséquence : la fragmentation **interne** (trous au milieu du `Vec`) n'est pas résolue par cette opération — voir la table des évolutions plus bas (approche A).
+
+3. **Le swap disque**. Quand la RAM devient un sujet plus pressant que le nombre de slots, `swap_out(&h)` sérialise la valeur vers un fichier (via `Persist`) et passe le slot dans l'état `OnDisk`. Le slot reste compté et adressable ; seule la valeur quitte la RAM. Le prochain `with` / `with_mut` la recharge automatiquement.
+
+Ces trois leviers se complètent : la free-list évite la croissance, `compact` rend la mémoire en queue, le swap déleste la RAM quand la queue est encombrée mais pas libérable.
+
+### Concurrence : ce que le compilateur garantit
+
+Le store interne de chaque type `T` est protégé par un `Mutex`. Au-delà de ce verrou, **toute la sûreté à l'intérieur d'une closure** est celle du borrow-checker Rust standard : pas de mutation pendant qu'une lecture est active, pas de référence qui s'échappe du scope, pas de data race entre threads sur le même slot. Le store n'invente aucune règle nouvelle — il fournit juste un **point d'entrée verrouillé** vers une référence Rust classique.
+
+Les opérations sur des **types différents** sont indépendantes (un mutex par `TypeId`). Une seule contrainte d'usage : **ne pas appeler `insert`/`with`/`with_mut`/`swap_out`/`compact` sur le même type `T` à l'intérieur d'une closure passée à `with` / `with_mut`** — la rentrance sur le même mutex provoquerait un interblocage. Cette contrainte n'est pas vérifiée à la compilation ; elle se respecte par construction (les fonctions internes du store évitent soigneusement cette rentrance).
 
 ### Pourquoi pas d'ownership Rust direct ?
 

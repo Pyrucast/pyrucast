@@ -70,10 +70,36 @@ Les deux niveaux sont indépendants :
 
 Utile pour basculer entre référence / déformée / prédite. Le jeu actif est désigné par index ; `coord(id)` lit le jeu actif. `add_coord_set(name)` clone le jeu actif sous un nouveau nom.
 
+Rust :
+
 ```rust,ignore
 let s2 = with_mut(&cfg, |c| c.add_coord_set("deformed")).unwrap();
 with_mut(&cfg, |c| c.switch_to(s2)).unwrap().unwrap();
 // les `set_coord` suivants modifient désormais le jeu "deformed".
+```
+
+Python :
+
+```python
+import pyrucast
+
+c = pyrucast.Configuration(dim=2)
+n = c.add_node([0.0, 0.0])
+
+# Créer un deuxième jeu de coordonnées (clone du jeu actif).
+s2 = c.add_coord_set("deformed")
+print(c.set_names())  # ['default', 'deformed']
+
+# Basculer sur le jeu déformé et modifier les coordonnées.
+c.switch_to(s2)
+c.set_coord(n.id, [0.1, 0.05])
+
+# Les coordonnées lues dépendent du jeu actif.
+c.switch_to(0)
+print(c.coord(n.id))  # [0.0, 0.0]  — jeu de référence
+c.switch_to(s2)
+print(c.coord(n.id))  # [0.1, 0.05] — jeu déformé
+print(c.active_set)   # 1
 ```
 
 ## Pourquoi plusieurs jeux dans une `Configuration` plutôt que plusieurs `Configuration` ?
@@ -92,6 +118,48 @@ Le store sait mécaniquement énumérer toutes les `Configuration` résidentes (
 ## Permutation solveur
 
 Une permutation optionnelle (`Vec<u32>`, longueur = `capacity`) sépare l'**ordre solveur** de l'**identité** : `permutation[node_id]` donne l'ordre solveur associé. Phase 4 (renumérotation Cuthill–McKee) la calculera pour réduire la bande/profil. L'identité (`NodeId`) n'est jamais modifiée.
+
+Rust :
+
+```rust,ignore
+use pyrucast::configuration::Configuration;
+use pyrucast::store::{insert, with, with_mut};
+
+let cfg = insert(Configuration::new(2).unwrap());
+// Trois nœuds créés ; ids = 0, 1, 2.
+with_mut(&cfg, |c| { c.add_node(&[0.0, 0.0]).unwrap(); }).unwrap();
+with_mut(&cfg, |c| { c.add_node(&[1.0, 0.0]).unwrap(); }).unwrap();
+with_mut(&cfg, |c| { c.add_node(&[0.5, 1.0]).unwrap(); }).unwrap();
+
+// Permutation manuelle (Cuthill–McKee automatique en Phase 4).
+with_mut(&cfg, |c| c.set_permutation(vec![2, 0, 1])).unwrap().unwrap();
+with(&cfg, |c| {
+    // permutation[0] = 2 : le nœud d'id 0 est en position solveur 2.
+    println!("{:?}", c.permutation());
+}).unwrap();
+
+// Retour à l'identité.
+with_mut(&cfg, |c| c.clear_permutation()).unwrap();
+```
+
+Python :
+
+```python
+import pyrucast
+
+c = pyrucast.Configuration(dim=2)
+c.add_node([0.0, 0.0])
+c.add_node([1.0, 0.0])
+c.add_node([0.5, 1.0])
+
+# Affecter une permutation manuellement.
+c.set_permutation([2, 0, 1])
+print(c.permutation())  # [2, 0, 1]
+
+# Retour à l'identité (None = identité).
+c.clear_permutation()
+print(c.permutation())  # None
+```
 
 ## API Python
 

@@ -18,6 +18,52 @@ avec la convention d'indices modulo \\(n\\). Le signe de \\(A\\) encode l'orient
 
 Implémentation : [`signed_area`](https://docs.rs/pyrucast) dans `src/triangulation.rs`.
 
+```rust,ignore
+use pyrucast::triangulation::{signed_area, Point2};
+
+// Carré unitaire CCW — aire = +1.
+let pts = vec![
+    Point2::new(0.0, 0.0),
+    Point2::new(1.0, 0.0),
+    Point2::new(1.0, 1.0),
+    Point2::new(0.0, 1.0),
+];
+assert!((signed_area(&pts) - 1.0).abs() < 1e-12);
+
+// Même carré CW — aire = -1.
+let pts_cw: Vec<_> = pts.iter().cloned().rev().collect();
+assert!((signed_area(&pts_cw) + 1.0).abs() < 1e-12);
+```
+
+> `signed_area` n'est pas exposée en Python : elle est utilisée en interne par `fill_surface`. Pour obtenir l'aire d'un maillage depuis Python, calculez-la à partir des coordonnées des triangles.
+
+## Ear clipping : usage direct
+
+La fonction `ear_clip_2d` est utilisable indépendamment de `Mesh::fill_surface` sur n'importe quel polygone 2D simple :
+
+```rust,ignore
+use pyrucast::triangulation::{ear_clip_2d, Point2};
+
+// Pentagone CCW quelconque.
+let pts = vec![
+    Point2::new(0.0, 0.0),
+    Point2::new(2.0, 0.0),
+    Point2::new(2.5, 1.5),
+    Point2::new(1.0, 2.5),
+    Point2::new(-0.5, 1.5),
+];
+let triangles = ear_clip_2d(&pts).unwrap();
+// n - 2 = 3 triangles, indices dans pts.
+assert_eq!(triangles.len(), 3);
+
+// Vérifier qu'un triangle est CCW (aire signée > 0).
+use pyrucast::triangulation::signed_area;
+for [i, j, k] in &triangles {
+    let area = signed_area(&[pts[*i], pts[*j], pts[*k]]);
+    assert!(area > 0.0, "triangle non-CCW détecté");
+}
+```
+
 ## Test d'oreille (ear clipping)
 
 Pour un polygone simple CCW à \\(n\\) sommets, un sommet \\(P_i\\) est une **oreille** si :
@@ -35,6 +81,37 @@ Pour un polygone simple CCW à \\(n\\) sommets, un sommet \\(P_i\\) est une **or
 L'algorithme retire itérativement une oreille (créant un triangle de sortie et un polygone à \\(n-1\\) sommets) jusqu'à ne plus avoir que 3 sommets. Au total **\\(n - 2\\) triangles** sont produits.
 
 L'orientation est détectée d'abord via \\(A\\) ; si \\(A < 0\\), on parcourt les indices à l'envers pour ramener à du CCW.
+
+## Plan moyen et base locale : usage direct
+
+```rust,ignore
+use pyrucast::triangulation::{newell_normal, in_plane_basis, Point3};
+
+// Triangle dans le plan y = 0 (plan xz).
+let pts = vec![
+    Point3::new(0.0, 0.0, 0.0),
+    Point3::new(1.0, 0.0, 0.0),
+    Point3::new(0.5, 0.0, 1.0),
+];
+
+let normal = newell_normal(&pts).unwrap();
+// Normale attendue : (0, -1, 0) ou (0, 1, 0) selon le sens.
+assert!(normal.y.abs() > 0.99);
+
+let (u, v) = in_plane_basis(normal);
+// u et v sont orthogonaux entre eux et à la normale.
+assert!(u.dot(&v).abs() < 1e-12);
+assert!(u.dot(&normal).abs() < 1e-12);
+
+// Projeter un point dans le repère local (u, v).
+let origin = Point3::new(0.0, 0.0, 0.0);
+let p = Point3::new(0.5, 0.0, 0.5);
+let pu = (p - origin).dot(&u);
+let pv = (p - origin).dot(&v);
+println!("({pu:.3}, {pv:.3})");
+```
+
+> `newell_normal` et `in_plane_basis` ne sont pas exposées en Python. Elles sont utilisées en interne par `fill_surface` pour les configurations 3D.
 
 ## Plan moyen d'un polygone 3D : méthode de Newell
 
@@ -101,6 +178,74 @@ Le contour est jugé « plan » si
 \\]
 
 où `diag` est la longueur de la diagonale de la AABB de l'ensemble des sommets. La tolérance relative \\(10^{-6}\\) tolère le bruit numérique sans laisser passer une vraie courbure 3D.
+
+## Pipeline Delaunay et CDT : usage direct en Rust
+
+Les fonctions du module `pyrucast::triangulation` sont utilisables indépendamment du système `Mesh`.
+
+### Delaunay pur
+
+```rust,ignore
+use pyrucast::triangulation::{delaunay_2d, Point2};
+
+let pts = vec![
+    Point2::new(0.0, 0.0),
+    Point2::new(3.0, 0.0),
+    Point2::new(3.0, 3.0),
+    Point2::new(0.0, 3.0),
+    Point2::new(1.5, 1.5), // point intérieur
+];
+let triangles = delaunay_2d(&pts).unwrap();
+// 4 points = 2 triangles Delaunay ; le 5e point intérieur en ajoute d'autres.
+println!("{} triangles", triangles.len());
+```
+
+### Delaunay contraint (CDT) avec trous
+
+```rust,ignore
+use pyrucast::triangulation::{triangulate_polygon_with_holes, Point2};
+
+// Contour extérieur : carré 4×4.
+let outer = vec![
+    Point2::new(0.0, 0.0),
+    Point2::new(4.0, 0.0),
+    Point2::new(4.0, 4.0),
+    Point2::new(0.0, 4.0),
+];
+// Trou : carré 2×2 centré.
+let hole = vec![
+    Point2::new(1.0, 1.0),
+    Point2::new(3.0, 1.0),
+    Point2::new(3.0, 3.0),
+    Point2::new(1.0, 3.0),
+];
+let triangles = triangulate_polygon_with_holes(&outer, &[hole]).unwrap();
+// Aire = 16 - 4 = 12 ; sans Steiner : 6 triangles bruts.
+println!("{} triangles", triangles.len());
+```
+
+### CDT avec raffinement de Ruppert
+
+```rust,ignore
+use pyrucast::triangulation::{
+    triangulate_polygon_with_holes_refined, Point2, RefinementOptions,
+};
+
+let outer = vec![
+    Point2::new(0.0, 0.0),
+    Point2::new(4.0, 0.0),
+    Point2::new(4.0, 4.0),
+    Point2::new(0.0, 4.0),
+];
+let opts = RefinementOptions {
+    max_edge_length: Some(1.0),
+    min_angle_deg: Some(20.0),
+};
+let triangles = triangulate_polygon_with_holes_refined(&outer, &[], Some(opts)).unwrap();
+println!("{} triangles après raffinement", triangles.len());
+```
+
+> Ces fonctions renvoient des indices dans le tableau de points fourni en entrée (plus les Steiner éventuels). Elles ne touchent pas au store ni à la `Configuration` — `fill_surface` se charge de la conversion vers les `NodeId`.
 
 ## Triangulation de Delaunay : la propriété du cercle vide
 

@@ -74,6 +74,34 @@ print(c)
 print(mesh)
 ```
 
+### Premier exemple complet en Rust
+
+L'exemple équivalent au script Python ci-dessus, compilable en tant que binary ou test d'intégration :
+
+```rust,ignore
+use pyrucast::configuration::Configuration;
+use pyrucast::element_type::ElementType;
+use pyrucast::mesh::{Mesh, SubMesh};
+use pyrucast::node::Node;
+use pyrucast::store::insert;
+
+fn main() {
+    let cfg = insert(Configuration::new(2).unwrap());
+    let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+    let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+
+    let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    sm.add_cell(&[a.id()]).unwrap();
+    sm.add_cell(&[b.id()]).unwrap();
+
+    let sm_h = insert(sm);
+    let mut mesh = Mesh::new(cfg);
+    mesh.add_submesh(sm_h).unwrap();
+
+    println!("{}", mesh); // Mesh: 1 submesh(es), 2 cell(s) total
+}
+```
+
 ### Recompilation après modification du Rust
 
 ```bash

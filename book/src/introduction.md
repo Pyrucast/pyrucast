@@ -19,6 +19,47 @@
 7. **Model** — modèle physique (élasticité, plasticité, thermique…) sur un FE space.
 8. **Matrix** — matrice creuse, hand-built ou assemblée depuis un Model.
 
+## Premiers pas
+
+Exemple minimal en Rust :
+
+```rust,ignore
+use pyrucast::configuration::Configuration;
+use pyrucast::element_type::ElementType;
+use pyrucast::mesh::{Mesh, SubMesh};
+use pyrucast::node::Node;
+use pyrucast::store::insert;
+
+let cfg = insert(Configuration::new(2).unwrap());
+let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+
+let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+sm.add_cell(&[a.id(), b.id()]).unwrap();
+
+let sm_h = insert(sm);
+let mut mesh = Mesh::new(cfg);
+mesh.add_submesh(sm_h).unwrap();
+println!("{}", mesh); // Mesh: 1 submesh(es), 1 cell(s) total
+```
+
+Exemple équivalent en Python :
+
+```python
+import pyrucast
+
+c = pyrucast.Configuration(dim=2)
+a = c.add_node([0.0, 0.0])
+b = c.add_node([1.0, 0.0])
+
+sm = pyrucast.SubMesh(c, "SEG2")
+sm.add_cell([a.id, b.id])
+
+mesh = pyrucast.Mesh(c)
+mesh.add_submesh(sm)
+print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
+```
+
 ## Feuille de route
 
 Le déroulé des phases (0 à 6) est décrit dans `ROADMAP.md` à la racine du dépôt.
