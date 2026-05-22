@@ -206,6 +206,64 @@ def test_fill_surface_outer_loop_autodetected():
     assert abs(total - 12.0) < 1e-9
 
 
+def test_fill_surface_refined_creates_more_triangles():
+    # 4×4 square with max_edge_length=1.5 must produce strictly more
+    # triangles than the un-refined 2.
+    c = pyrucast.Configuration(2)
+    outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
+    tri = pyrucast.Mesh.fill_surface(outer, "TRI3", max_edge_length=1.5)
+    assert tri.cell_count() > 2
+
+    # Conservation of area: 4 × 4 = 16.
+    total = 0.0
+    for ci in range(tri.cell_count()):
+        p0 = tri.node(0, ci, 0).coord()
+        p1 = tri.node(0, ci, 1).coord()
+        p2 = tri.node(0, ci, 2).coord()
+        total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]))
+    assert abs(total - 16.0) < 1e-9
+
+
+def test_fill_surface_refined_with_hole():
+    # 4×4 square minus 2×2 hole, refined: area must still be 12.
+    c = pyrucast.Configuration(2)
+    outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
+    hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
+    combined = outer + hole
+    tri = pyrucast.Mesh.fill_surface(combined, "TRI3", max_edge_length=1.0)
+    total = 0.0
+    for ci in range(tri.cell_count()):
+        p0 = tri.node(0, ci, 0).coord()
+        p1 = tri.node(0, ci, 1).coord()
+        p2 = tri.node(0, ci, 2).coord()
+        total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]))
+    assert abs(total - 12.0) < 1e-9
+
+
+def test_fill_surface_refined_angle_criterion():
+    # 4×1 rectangle refined to min angle 20°: initial Delaunay has ~14°
+    # somewhere; after refinement no triangle should be below ~19°.
+    c = pyrucast.Configuration(2)
+    rect, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 1.0), (0.0, 1.0)])
+    tri = pyrucast.Mesh.fill_surface(rect, "TRI3", min_angle_deg=20.0)
+    # Compute min angle across all triangles.
+    import math
+    min_deg = math.inf
+    for ci in range(tri.cell_count()):
+        pts = [tri.node(0, ci, k).coord() for k in range(3)]
+        for k in range(3):
+            u, v, w = pts[k], pts[(k + 1) % 3], pts[(k + 2) % 3]
+            e1 = (v[0] - u[0], v[1] - u[1])
+            e2 = (w[0] - u[0], w[1] - u[1])
+            cos = (e1[0] * e2[0] + e1[1] * e2[1]) / (
+                math.sqrt(e1[0] ** 2 + e1[1] ** 2) * math.sqrt(e2[0] ** 2 + e2[1] ** 2)
+            )
+            cos = max(-1.0, min(1.0, cos))
+            ang = math.degrees(math.acos(cos))
+            min_deg = min(min_deg, ang)
+    assert min_deg >= 19.0, f"min angle still bad: {min_deg} deg"
+
+
 def test_fill_surface_3d_tilted_square():
     # Square rotated 45° around the x axis: planar in 3-D, must triangulate.
     import math

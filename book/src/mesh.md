@@ -112,14 +112,30 @@ L'algorithme géométrique vit dans `pyrucast::triangulation::cdt`, exposé via 
 
 Lorsque la configuration est en 3D, la déviation maximale d'un nœud du contour au plan moyen doit rester inférieure à `1e-6 × diag`, où `diag` est la diagonale de la boîte englobante du contour. Si ce seuil est dépassé, `fill_surface` retourne une erreur claire indiquant la déviation observée et la tolérance. Ce seuil relatif tolère le bruit numérique habituel tout en refusant les vrais contours gauches.
 
+### Raffinement (étape 4) — points Steiner
+
+`Mesh::fill_surface` accepte un troisième argument optionnel `refinement: Option<RefinementOptions>`. La struct expose deux critères indépendants :
+
+- `max_edge_length: Option<f64>` — longueur d'arête maximale tolérée ;
+- `min_angle_deg: Option<f64>` — angle minimum garanti (en degrés).
+
+Quand au moins un est renseigné, l'algorithme bascule sur la CDT (Bowyer-Watson contraint + raffinement de **Ruppert**) :
+
+1. tant qu'une arête contrainte est *encroachée* (un sommet de la triangulation tombe dans son disque diamétral), on la coupe en son milieu — un nouveau nœud est inséré et l'ancienne contrainte est remplacée par les deux moitiés ;
+2. sinon on cherche un triangle « mauvais » (arête trop longue OU rapport circumrayon/arête plus courte dépassant `1/(2 sin α)`) ;
+3. on calcule son centre du cercle circonscrit ; s'il *encroache* une contrainte, on la coupe (retour à 1) ; sinon on l'insère par Bowyer-Watson contraint ;
+4. on itère jusqu'à ce qu'aucun triangle ne viole les critères.
+
+La convergence n'est théoriquement garantie que pour `min_angle_deg ≤ 20.7°` (Shewchuk). pyrucast plafonne le nombre total d'insertions à `50 · n_contour + 1000` pour éviter les divergences sur entrées pathologiques ; l'erreur est explicite si la limite est atteinte.
+
+Les nouveaux nœuds (« Steiner ») sont créés dans la `Configuration` du contour, exactement comme les nœuds utilisateur. En 3D, leurs coordonnées sont calculées dans le plan local puis ré-injectées dans l'espace 3D via la base `(u, v, n)`.
+
 ### Limitations actuelles
 
-- pas de point Steiner — la qualité géométrique dépend entièrement de la densité des nœuds de contour ;
 - seul `TRI3` est supporté en sortie ;
 - en 3D, l'algorithme refuse les contours franchement non plans (par construction) ;
-- les boucles doivent être deux à deux disjointes (pas de trous emboîtés, pas de croisements).
-
-La première limitation sera levée par l'étape suivante : raffinement par insertion de points Steiner (taille cible + critère de qualité).
+- les boucles doivent être deux à deux disjointes (pas de trous emboîtés, pas de croisements) ;
+- la fonction de taille reste **globale** (un seul `max_edge_length`) — une carte de taille variable `h(x, y)` viendra plus tard.
 
 ### Exemple Python (2D)
 
@@ -157,7 +173,7 @@ surface = pyrucast.Mesh.fill_surface(contour, "TRI3")
 # 2 triangles dont les sommets vivent dans le repère 3D global.
 ```
 
-### Exemple Python (avec trou)
+### Exemple Python (avec trou et raffinement)
 
 ```python
 import pyrucast
@@ -176,8 +192,28 @@ hole_nodes = [c.add_node(list(p)) for p in [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), 
 for i in range(4):
     hole.add_cell([hole_nodes[i].id, hole_nodes[(i + 1) % 4].id])
 
-surface = pyrucast.Mesh.fill_surface(outer + hole, "TRI3")
-# Aire triangulée = 16 - 4 = 12.
+# Sans raffinement : 6 triangles « bruts ».
+brut = pyrucast.Mesh.fill_surface(outer + hole, "TRI3")
+
+# Avec raffinement : arête max 1.0 + angle min 20° → maillage fin et de bonne qualité.
+fin = pyrucast.Mesh.fill_surface(
+    outer + hole, "TRI3",
+    max_edge_length=1.0,
+    min_angle_deg=20.0,
+)
+# Aire triangulée = 16 - 4 = 12, mais bien plus de cellules.
+```
+
+Côté Rust :
+
+```rust,ignore
+use pyrucast::triangulation::RefinementOptions;
+
+let opts = RefinementOptions {
+    max_edge_length: Some(1.0),
+    min_angle_deg: Some(20.0),
+};
+let fin = Mesh::fill_surface(&combined, ElementType::TRI3, Some(opts))?;
 ```
 
 Le module `pyrucast::triangulation` regroupe les briques géométriques (`signed_area`, `ear_clip_2d`, `newell_normal`, `in_plane_basis`, `delaunay_2d`, `constrained_delaunay_2d`, `triangulate_polygon_with_holes`) — toutes opèrent sur des tableaux bruts et restent réutilisables indépendamment du système `Mesh`.
