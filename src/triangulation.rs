@@ -20,7 +20,10 @@
 use crate::error::{PyrucastError, Result};
 
 mod cdt;
-pub use cdt::{constrained_delaunay_2d, delaunay_2d, triangulate_polygon_with_holes};
+pub use cdt::{
+    constrained_delaunay_2d, delaunay_2d, triangulate_polygon_with_holes,
+    triangulate_polygon_with_holes_refined, RefinementOptions,
+};
 
 /// 2-D point, `nalgebra::Point2<f64>`.
 pub type Point2 = nalgebra::Point2<f64>;
@@ -127,7 +130,7 @@ pub(crate) fn cross2(a: Point2, b: Point2, c: Point2) -> f64 {
 
 /// True if `p` lies in the closed triangle `(a, b, c)`. Robust to the
 /// triangle's winding (CW or CCW).
-fn point_in_triangle(p: Point2, a: Point2, b: Point2, c: Point2) -> bool {
+pub(crate) fn point_in_triangle(p: Point2, a: Point2, b: Point2, c: Point2) -> bool {
     let d1 = cross2(a, b, p);
     let d2 = cross2(b, c, p);
     let d3 = cross2(c, a, p);

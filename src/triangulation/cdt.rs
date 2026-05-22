@@ -28,8 +28,39 @@
 //! and hole removal will be layered on top in subsequent commits.
 
 use crate::error::{PyrucastError, Result};
-use crate::triangulation::{cross2, Point2, Vector2};
-use std::collections::HashMap;
+use crate::triangulation::{cross2, point_in_triangle, Point2, Vector2};
+use std::collections::{HashMap, HashSet};
+
+/// Refinement criteria applied after the constrained Delaunay
+/// triangulation is built.
+///
+/// Both options are independent and additive. When both are set, a
+/// triangle is "bad" if it violates **either** criterion.
+///
+/// # Termination
+/// Ruppert's algorithm is **only proven to terminate** for
+/// `min_angle_deg ≤ 20.7`. Higher thresholds usually work in practice
+/// but may diverge on pathological inputs; pyrucast guards against this
+/// by capping the total number of inserted Steiner points and returning
+/// a clear error if the cap is hit.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RefinementOptions {
+    /// Maximum allowed length for any triangle edge. Triangles having an
+    /// edge longer than this are split by inserting their circumcenter
+    /// (or the midpoint of an encroached constrained edge — see Ruppert).
+    pub max_edge_length: Option<f64>,
+    /// Minimum allowed triangle angle, in degrees. Equivalent to a
+    /// circumradius-to-shortest-edge ratio bound:
+    /// `r / L_min ≤ 1 / (2 sin α)`.
+    pub min_angle_deg: Option<f64>,
+}
+
+impl RefinementOptions {
+    /// True iff the options request any refinement work.
+    pub fn is_active(&self) -> bool {
+        self.max_edge_length.is_some() || self.min_angle_deg.is_some()
+    }
+}
 
 /// Sentinel for "no neighbour" in the topology arrays.
 const NO_NEIGHBOUR: usize = usize::MAX;
@@ -377,6 +408,368 @@ impl Cdt {
         Ok(crossed)
     }
 
+    /// Insert a point with the **constrained** Bowyer-Watson variant:
+    /// the cavity is grown by BFS from the triangle containing `p`,
+    /// never crossing a constrained edge. This keeps every forced edge
+    /// of the CDT intact even when the new point would otherwise pull
+    /// triangles across it.
+    ///
+    /// `p_idx` must point at an entry of `self.points` that the caller
+    /// already pushed; the function does not allocate. Returns an error
+    /// if the seed triangle (the one that contains the point) cannot be
+    /// found — typically because `p` lies on a constrained edge.
+    fn insert_point_constrained(
+        &mut self,
+        p_idx: usize,
+        constrained_edges: &HashSet<(usize, usize)>,
+    ) -> Result<()> {
+        let p = self.points[p_idx];
+
+        // 1. Locate a triangle containing `p`.
+        let mut seed: Option<usize> = None;
+        for (idx, t) in self.triangles.iter().enumerate() {
+            if !t.alive {
+                continue;
+            }
+            let a = self.points[t.v[0]];
+            let b = self.points[t.v[1]];
+            let c = self.points[t.v[2]];
+            if point_in_triangle(p, a, b, c) {
+                seed = Some(idx);
+                break;
+            }
+        }
+        let seed = seed.ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "cdt::insert_point_constrained: no triangle contains point #{}",
+                p_idx
+            ))
+        })?;
+
+        // 2. BFS from `seed`, only crossing non-constrained edges and only
+        //    when in_circle > 0.
+        let mut bad: Vec<usize> = Vec::new();
+        let mut visited = vec![false; self.triangles.len()];
+        let mut queue = vec![seed];
+        visited[seed] = true;
+        while let Some(t_idx) = queue.pop() {
+            let t = self.triangles[t_idx];
+            if !t.alive {
+                continue;
+            }
+            let a = self.points[t.v[0]];
+            let b = self.points[t.v[1]];
+            let c = self.points[t.v[2]];
+            if in_circle(a, b, c, p) <= 0.0 {
+                continue;
+            }
+            bad.push(t_idx);
+            for k in 0..3 {
+                let nb = t.n[k];
+                if nb == NO_NEIGHBOUR || visited[nb] {
+                    continue;
+                }
+                let va = t.v[(k + 1) % 3];
+                let vb = t.v[(k + 2) % 3];
+                let key = if va < vb { (va, vb) } else { (vb, va) };
+                if constrained_edges.contains(&key) {
+                    continue;
+                }
+                visited[nb] = true;
+                queue.push(nb);
+            }
+        }
+
+        if bad.is_empty() {
+            return Err(PyrucastError::Message(format!(
+                "cdt::insert_point_constrained: point #{} did not produce a cavity",
+                p_idx
+            )));
+        }
+
+        // 3. Cavity boundary: edges of bad triangles whose opposite
+        //    neighbour is not itself bad.
+        let bad_set: HashSet<usize> = bad.iter().copied().collect();
+        let mut cavity_edges: Vec<(usize, usize)> = Vec::new();
+        for &t_idx in &bad {
+            let t = self.triangles[t_idx];
+            for k in 0..3 {
+                let nb = t.n[k];
+                if nb == NO_NEIGHBOUR || !bad_set.contains(&nb) {
+                    cavity_edges.push((t.v[(k + 1) % 3], t.v[(k + 2) % 3]));
+                }
+            }
+        }
+
+        for &t_idx in &bad {
+            self.triangles[t_idx].alive = false;
+        }
+        for (a, b) in cavity_edges {
+            self.triangles.push(Triangle {
+                v: [a, b, p_idx],
+                n: [NO_NEIGHBOUR; 3],
+                alive: true,
+            });
+        }
+        self.rebuild_neighbours();
+        Ok(())
+    }
+
+    /// Circumcenter of the triangle at index `t_idx`, or `None` if it
+    /// is degenerate (collinear vertices).
+    fn triangle_circumcenter(&self, t_idx: usize) -> Option<Point2> {
+        let t = self.triangles[t_idx];
+        let a = self.points[t.v[0]];
+        let b = self.points[t.v[1]];
+        let c = self.points[t.v[2]];
+        circumcenter(a, b, c)
+    }
+
+    /// Squared length of the longest edge of triangle `t_idx`.
+    fn triangle_longest_edge_sq(&self, t_idx: usize) -> f64 {
+        let t = self.triangles[t_idx];
+        let a = self.points[t.v[0]];
+        let b = self.points[t.v[1]];
+        let c = self.points[t.v[2]];
+        let ab = (b - a).norm_squared();
+        let bc = (c - b).norm_squared();
+        let ca = (a - c).norm_squared();
+        ab.max(bc).max(ca)
+    }
+
+    /// Squared length of the shortest edge of triangle `t_idx`.
+    fn triangle_shortest_edge_sq(&self, t_idx: usize) -> f64 {
+        let t = self.triangles[t_idx];
+        let a = self.points[t.v[0]];
+        let b = self.points[t.v[1]];
+        let c = self.points[t.v[2]];
+        let ab = (b - a).norm_squared();
+        let bc = (c - b).norm_squared();
+        let ca = (a - c).norm_squared();
+        ab.min(bc).min(ca)
+    }
+
+    /// Squared circumradius of triangle `t_idx`, or `f64::INFINITY` if
+    /// the triangle is degenerate.
+    fn triangle_circumradius_sq(&self, t_idx: usize) -> f64 {
+        let Some(c) = self.triangle_circumcenter(t_idx) else {
+            return f64::INFINITY;
+        };
+        let t = self.triangles[t_idx];
+        (self.points[t.v[0]] - c).norm_squared()
+    }
+
+    /// Find one interior triangle that violates the given criteria.
+    /// `outside[i] = true` for triangles to skip (super-triangle, holes,
+    /// outer exterior, dead).
+    ///
+    /// - `max_edge_sq`: triangles with longest edge² > this are bad,
+    /// - `radius_ratio_sq_threshold`: triangles with
+    ///   `circumradius² / shortest_edge² > this` are skinny.
+    fn find_bad_interior_triangle(
+        &self,
+        outside: &[bool],
+        max_edge_sq: Option<f64>,
+        radius_ratio_sq_threshold: Option<f64>,
+    ) -> Option<usize> {
+        for (idx, t) in self.triangles.iter().enumerate() {
+            if !t.alive || outside[idx] {
+                continue;
+            }
+            if let Some(max_sq) = max_edge_sq {
+                if self.triangle_longest_edge_sq(idx) > max_sq {
+                    return Some(idx);
+                }
+            }
+            if let Some(threshold) = radius_ratio_sq_threshold {
+                let r2 = self.triangle_circumradius_sq(idx);
+                let l2 = self.triangle_shortest_edge_sq(idx);
+                if l2 > 0.0 && r2 / l2 > threshold {
+                    return Some(idx);
+                }
+            }
+        }
+        None
+    }
+
+    /// First constrained edge whose diametral disk strictly contains a
+    /// point of `self.points` other than its two endpoints and the
+    /// three super-triangle vertices.
+    fn first_encroached_constraint(
+        &self,
+        constrained_edges: &HashSet<(usize, usize)>,
+    ) -> Option<(usize, usize)> {
+        for &(a, b) in constrained_edges {
+            if self.constraint_has_encroaching_point(a, b, None) {
+                return Some((a, b));
+            }
+        }
+        None
+    }
+
+    /// True iff some point of `self.points` strictly lies in the
+    /// diametral disk of the constrained edge `(a, b)`. `extra_point`
+    /// is also tested if supplied (used to check whether the
+    /// circumcenter we are about to insert encroaches).
+    fn constraint_has_encroaching_point(
+        &self,
+        a: usize,
+        b: usize,
+        extra_point: Option<Point2>,
+    ) -> bool {
+        let pa = self.points[a];
+        let pb = self.points[b];
+        let mid = Point2::from((pa.coords + pb.coords) * 0.5);
+        let r2 = (pb - pa).norm_squared() * 0.25;
+        let strict = 1e-12;
+        for (i, &p) in self.points.iter().enumerate() {
+            if i == a || i == b {
+                continue;
+            }
+            if i >= self.n_input && i < self.n_input + 3 {
+                continue; // super-triangle vertex
+            }
+            if (p - mid).norm_squared() < r2 - strict {
+                return true;
+            }
+        }
+        if let Some(p) = extra_point {
+            if (p - mid).norm_squared() < r2 - strict {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// If `p` lies strictly in the diametral disk of any constrained
+    /// edge, return one such edge. Used by Ruppert's algorithm before
+    /// inserting a circumcenter.
+    fn encroached_constraint_by(
+        &self,
+        p: Point2,
+        constrained_edges: &HashSet<(usize, usize)>,
+    ) -> Option<(usize, usize)> {
+        let strict = 1e-12;
+        for &(a, b) in constrained_edges {
+            let pa = self.points[a];
+            let pb = self.points[b];
+            let mid = Point2::from((pa.coords + pb.coords) * 0.5);
+            let r2 = (pb - pa).norm_squared() * 0.25;
+            if (p - mid).norm_squared() < r2 - strict {
+                return Some((a, b));
+            }
+        }
+        None
+    }
+
+    /// Split the constrained edge `(a, b)` at its midpoint: the midpoint
+    /// is added to `self.points`, inserted as a constrained Steiner
+    /// point, and `constrained_edges` is updated to replace `(a, b)`
+    /// with `(a, m)` and `(m, b)`. Returns the new point index `m`.
+    fn split_constraint(
+        &mut self,
+        a: usize,
+        b: usize,
+        constrained_edges: &mut HashSet<(usize, usize)>,
+    ) -> Result<usize> {
+        let pa = self.points[a];
+        let pb = self.points[b];
+        let mid = Point2::from((pa.coords + pb.coords) * 0.5);
+        let m_idx = self.points.len();
+        self.points.push(mid);
+
+        // Remove the original constraint *before* the insertion so that
+        // the BFS can grow the cavity across it.
+        let key_ab = if a < b { (a, b) } else { (b, a) };
+        constrained_edges.remove(&key_ab);
+
+        self.insert_point_constrained(m_idx, constrained_edges)?;
+
+        // The two halves are the new constraints.
+        let key_am = if a < m_idx { (a, m_idx) } else { (m_idx, a) };
+        let key_mb = if m_idx < b { (m_idx, b) } else { (b, m_idx) };
+        constrained_edges.insert(key_am);
+        constrained_edges.insert(key_mb);
+        Ok(m_idx)
+    }
+
+    /// Ruppert-style refinement loop.
+    ///
+    /// Repeats two steps until neither applies:
+    /// 1. Split every constrained edge that has a vertex inside its
+    ///    diametral disk (an *encroachment*).
+    /// 2. Pick a bad interior triangle (size or angle criterion) and
+    ///    try to insert its circumcenter — unless that circumcenter
+    ///    encroaches a constrained edge, in which case split the
+    ///    constraint instead.
+    ///
+    /// Total Steiner-point insertions are capped at
+    /// `50 × initial_input_count + 1000` as a divergence guard.
+    pub(super) fn refine(
+        &mut self,
+        opts: &RefinementOptions,
+        constrained_edges: &mut HashSet<(usize, usize)>,
+    ) -> Result<()> {
+        if !opts.is_active() {
+            return Ok(());
+        }
+        let max_edge_sq = opts.max_edge_length.map(|h| h * h);
+        // Skinniness threshold expressed as (circumradius / shortest_edge)².
+        let radius_ratio_sq_threshold = opts.min_angle_deg.map(|deg| {
+            let s = deg.to_radians().sin();
+            let r = 1.0 / (2.0 * s);
+            r * r
+        });
+
+        let max_inserts = self.n_input * 50 + 1000;
+        let initial_points = self.points.len();
+
+        loop {
+            if self.points.len() >= initial_points + max_inserts {
+                return Err(PyrucastError::Message(format!(
+                    "cdt::refine: did not converge after {} Steiner insertions \
+                     (max_edge_length={:?}, min_angle_deg={:?}); criteria may be too tight",
+                    max_inserts, opts.max_edge_length, opts.min_angle_deg
+                )));
+            }
+
+            // 1. Encroached constraint?
+            if let Some((a, b)) = self.first_encroached_constraint(constrained_edges) {
+                self.split_constraint(a, b, constrained_edges)?;
+                continue;
+            }
+
+            // 2. Find a bad interior triangle.
+            let outside = self.flood_fill_outside(constrained_edges);
+            let bad = self.find_bad_interior_triangle(
+                &outside,
+                max_edge_sq,
+                radius_ratio_sq_threshold,
+            );
+            let Some(t_idx) = bad else {
+                return Ok(());
+            };
+
+            let Some(cc) = self.triangle_circumcenter(t_idx) else {
+                return Err(PyrucastError::Message(format!(
+                    "cdt::refine: triangle {} has no circumcenter",
+                    t_idx
+                )));
+            };
+
+            // If the circumcenter would encroach a constraint, split
+            // that constraint instead.
+            if let Some((a, b)) = self.encroached_constraint_by(cc, constrained_edges) {
+                self.split_constraint(a, b, constrained_edges)?;
+                continue;
+            }
+
+            let new_idx = self.points.len();
+            self.points.push(cc);
+            self.insert_point_constrained(new_idx, constrained_edges)?;
+        }
+    }
+
     /// Return every alive triangle whose three vertices are all input
     /// points (i.e. drop triangles still touching the super-triangle).
     /// Each triangle is returned as `[i, j, k]` with `i, j, k < n_input`.
@@ -422,7 +815,9 @@ impl Cdt {
                 colour[idx] = Some(true); // dead = drop
                 continue;
             }
-            if t.v.iter().any(|&v| v >= self.n_input) {
+            // Super-triangle sentinels live at indices [n_input, n_input + 3);
+            // anything past that is a Steiner point added by refinement.
+            if t.v.iter().any(|&v| v >= self.n_input && v < self.n_input + 3) {
                 colour[idx] = Some(true);
                 queue.push(idx);
             }
@@ -512,6 +907,22 @@ fn build_chain(edges: &[(usize, usize)], start: usize, end: usize) -> Result<Vec
 #[inline]
 fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
     cross2(a, b, c)
+}
+
+/// Circumcenter of the triangle `(a, b, c)`. Returns `None` if the
+/// three vertices are (nearly) collinear.
+fn circumcenter(a: Point2, b: Point2, c: Point2) -> Option<Point2> {
+    let d = 2.0
+        * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+    if d.abs() < 1e-15 {
+        return None;
+    }
+    let am = a.x * a.x + a.y * a.y;
+    let bm = b.x * b.x + b.y * b.y;
+    let cm = c.x * c.x + c.y * c.y;
+    let ux = (am * (b.y - c.y) + bm * (c.y - a.y) + cm * (a.y - b.y)) / d;
+    let uy = (am * (c.x - b.x) + bm * (a.x - c.x) + cm * (b.x - a.x)) / d;
+    Some(Point2::new(ux, uy))
 }
 
 /// True iff the two open segments `(a, b)` and `(c, d)` cross strictly
@@ -778,6 +1189,141 @@ pub fn triangulate_polygon_with_holes(
     Ok(tris)
 }
 
+/// Same as [`triangulate_polygon_with_holes`] plus Ruppert refinement.
+///
+/// In addition to the inputs accepted by the unrefined variant, this
+/// function takes a [`RefinementOptions`] descriptor (a maximum edge
+/// length, a minimum triangle angle, or both). After building the CDT
+/// it inserts Steiner points to satisfy the criteria.
+///
+/// Because the refinement step adds **new** points, the function returns
+/// a pair `(points, triangles)`: `points` contains every vertex of the
+/// final triangulation (input vertices first, then Steiner points in
+/// insertion order); `triangles` indexes into that combined list. When
+/// `options` is inactive (both fields `None`), the result is identical
+/// to [`triangulate_polygon_with_holes`] except that `points` echoes
+/// the input flat list.
+pub fn triangulate_polygon_with_holes_refined(
+    outer: &[Point2],
+    holes: &[Vec<Point2>],
+    options: RefinementOptions,
+) -> Result<(Vec<Point2>, Vec<[usize; 3]>)> {
+    if outer.len() < 3 {
+        return Err(PyrucastError::Message(format!(
+            "triangulate_polygon_with_holes_refined: outer loop must have ≥ 3 vertices, got {}",
+            outer.len()
+        )));
+    }
+    for (h, hole) in holes.iter().enumerate() {
+        if hole.len() < 3 {
+            return Err(PyrucastError::Message(format!(
+                "triangulate_polygon_with_holes_refined: hole #{} must have ≥ 3 vertices, got {}",
+                h,
+                hole.len()
+            )));
+        }
+    }
+    if let Some(h) = options.max_edge_length {
+        if !(h > 0.0) {
+            return Err(PyrucastError::Message(format!(
+                "triangulate_polygon_with_holes_refined: max_edge_length must be > 0, got {}",
+                h
+            )));
+        }
+    }
+    if let Some(a) = options.min_angle_deg {
+        if !(a > 0.0 && a < 60.0) {
+            return Err(PyrucastError::Message(format!(
+                "triangulate_polygon_with_holes_refined: min_angle_deg must be in (0, 60), got {}",
+                a
+            )));
+        }
+    }
+
+    // Flatten and build constraints — same as the unrefined façade.
+    let mut points: Vec<Point2> = outer.to_vec();
+    let mut hole_starts: Vec<usize> = Vec::with_capacity(holes.len());
+    for hole in holes {
+        hole_starts.push(points.len());
+        points.extend_from_slice(hole);
+    }
+    let n_total = points.len();
+
+    let mut constraints: Vec<(usize, usize)> = Vec::new();
+    let n_outer = outer.len();
+    for i in 0..n_outer {
+        constraints.push((i, (i + 1) % n_outer));
+    }
+    for (h, hole) in holes.iter().enumerate() {
+        let start = hole_starts[h];
+        let n_hole = hole.len();
+        for i in 0..n_hole {
+            constraints.push((start + i, start + (i + 1) % n_hole));
+        }
+    }
+
+    for i in 0..n_total {
+        for j in (i + 1)..n_total {
+            if (points[i] - points[j]).norm_squared() < 1e-24 {
+                return Err(PyrucastError::Message(format!(
+                    "triangulate_polygon_with_holes_refined: points {} and {} are (nearly) coincident",
+                    i, j
+                )));
+            }
+        }
+    }
+
+    let mut cdt = Cdt::new(&points);
+    for i in 0..n_total {
+        cdt.insert_point(i)?;
+    }
+    let mut edge_set: HashSet<(usize, usize)> = HashSet::with_capacity(constraints.len());
+    for &(a, b) in &constraints {
+        cdt.insert_constraint(a, b)?;
+        edge_set.insert(if a < b { (a, b) } else { (b, a) });
+    }
+
+    cdt.refine(&options, &mut edge_set)?;
+
+    // Build the final list of "user-visible" points: input points first,
+    // then Steiner points (everything past index `n_input + 3`).
+    let n_input = cdt.n_input;
+    let mut out_points: Vec<Point2> = Vec::with_capacity(cdt.points.len() - 3);
+    out_points.extend_from_slice(&cdt.points[..n_input]);
+    if cdt.points.len() > n_input + 3 {
+        out_points.extend_from_slice(&cdt.points[n_input + 3..]);
+    }
+
+    // Re-map triangle vertex indices: Steiner indices (≥ n_input + 3)
+    // shift down by 3 in the user-visible list.
+    let remap = |v: usize| -> usize {
+        if v < n_input {
+            v
+        } else {
+            v - 3
+        }
+    };
+
+    let outside = cdt.flood_fill_outside(&edge_set);
+    let mut tris: Vec<[usize; 3]> = Vec::new();
+    for (idx, t) in cdt.triangles.iter().enumerate() {
+        if outside[idx] {
+            continue;
+        }
+        // Skip triangles still touching the super-triangle.
+        if t.v.iter().any(|&v| v >= n_input && v < n_input + 3) {
+            continue;
+        }
+        tris.push([remap(t.v[0]), remap(t.v[1]), remap(t.v[2])]);
+    }
+    if tris.is_empty() {
+        return Err(PyrucastError::Message(
+            "triangulate_polygon_with_holes_refined: no interior triangle survived".into(),
+        ));
+    }
+    Ok((out_points, tris))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1016,6 +1562,115 @@ mod tests {
         let tris_ccw = triangulate_polygon_with_holes(&outer, &[hole_ccw]).unwrap();
         let tris_cw = triangulate_polygon_with_holes(&outer, &[hole_cw]).unwrap();
         assert_eq!(tris_ccw.len(), tris_cw.len());
+    }
+
+    fn min_angle_deg(tris: &[[usize; 3]], pts: &[Point2]) -> f64 {
+        let mut min_deg = f64::INFINITY;
+        for [i, j, k] in tris {
+            let a = pts[*i];
+            let b = pts[*j];
+            let c = pts[*k];
+            for (u, v, w) in [(a, b, c), (b, c, a), (c, a, b)] {
+                let e1 = v - u;
+                let e2 = w - u;
+                let cos = e1.dot(&e2) / (e1.norm() * e2.norm());
+                let ang = cos.clamp(-1.0, 1.0).acos().to_degrees();
+                if ang < min_deg {
+                    min_deg = ang;
+                }
+            }
+        }
+        min_deg
+    }
+
+    fn max_edge_length(tris: &[[usize; 3]], pts: &[Point2]) -> f64 {
+        let mut m = 0.0_f64;
+        for [i, j, k] in tris {
+            for (u, v) in [(*i, *j), (*j, *k), (*k, *i)] {
+                let l = (pts[v] - pts[u]).norm();
+                if l > m {
+                    m = l;
+                }
+            }
+        }
+        m
+    }
+
+    #[test]
+    fn refine_inactive_options_is_noop() {
+        let outer = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(1.0, 1.0), p2(0.0, 1.0)];
+        let (pts, tris) =
+            triangulate_polygon_with_holes_refined(&outer, &[], RefinementOptions::default())
+                .unwrap();
+        assert_eq!(pts.len(), outer.len());
+        assert_eq!(tris.len(), 2);
+    }
+
+    #[test]
+    fn refine_size_only_inserts_steiner_points() {
+        let outer = vec![p2(0.0, 0.0), p2(4.0, 0.0), p2(4.0, 4.0), p2(0.0, 4.0)];
+        let opts = RefinementOptions {
+            max_edge_length: Some(1.5),
+            min_angle_deg: None,
+        };
+        let (pts, tris) = triangulate_polygon_with_holes_refined(&outer, &[], opts).unwrap();
+        assert!(pts.len() > outer.len(), "no Steiner points were added");
+        assert_all_ccw(&tris, &pts);
+        assert!(max_edge_length(&tris, &pts) <= 1.5 + 1e-9);
+        // Area conserved (4×4 = 16).
+        assert!((total_area(&tris, &pts) - 16.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn refine_angle_only_improves_min_angle() {
+        // A moderately thin rectangle (4×1) has minimum angles around 14°
+        // in its initial Delaunay triangulation. Refining with min_angle =
+        // 20° should bring every triangle above the threshold.
+        let outer = vec![p2(0.0, 0.0), p2(4.0, 0.0), p2(4.0, 1.0), p2(0.0, 1.0)];
+        let opts = RefinementOptions {
+            max_edge_length: None,
+            min_angle_deg: Some(20.0),
+        };
+        let (pts, tris) = triangulate_polygon_with_holes_refined(&outer, &[], opts).unwrap();
+        assert!(pts.len() > outer.len(), "no Steiner points were added");
+        assert_all_ccw(&tris, &pts);
+        // Some numerical slack — Ruppert can leave a couple of degrees.
+        let m = min_angle_deg(&tris, &pts);
+        assert!(m >= 19.0, "min angle still bad: {} deg", m);
+        // Area conserved (4.0).
+        assert!((total_area(&tris, &pts) - 4.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn refine_size_with_hole() {
+        // 4×4 square with a 2×2 hole, plus size criterion.
+        let outer = vec![p2(0.0, 0.0), p2(4.0, 0.0), p2(4.0, 4.0), p2(0.0, 4.0)];
+        let hole = vec![p2(1.0, 1.0), p2(3.0, 1.0), p2(3.0, 3.0), p2(1.0, 3.0)];
+        let opts = RefinementOptions {
+            max_edge_length: Some(1.0),
+            min_angle_deg: None,
+        };
+        let (pts, tris) =
+            triangulate_polygon_with_holes_refined(&outer, &[hole], opts).unwrap();
+        assert_all_ccw(&tris, &pts);
+        assert!(max_edge_length(&tris, &pts) <= 1.0 + 1e-9);
+        // Total area = 16 - 4 = 12.
+        assert!((total_area(&tris, &pts) - 12.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn refine_rejects_invalid_options() {
+        let outer = vec![p2(0.0, 0.0), p2(1.0, 0.0), p2(1.0, 1.0)];
+        let bad_h = RefinementOptions {
+            max_edge_length: Some(-0.5),
+            min_angle_deg: None,
+        };
+        assert!(triangulate_polygon_with_holes_refined(&outer, &[], bad_h).is_err());
+        let bad_a = RefinementOptions {
+            max_edge_length: None,
+            min_angle_deg: Some(90.0),
+        };
+        assert!(triangulate_polygon_with_holes_refined(&outer, &[], bad_a).is_err());
     }
 
     #[test]
