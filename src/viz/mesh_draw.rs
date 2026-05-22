@@ -271,43 +271,24 @@ where
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // Compute screen-space bbox, then expand to match the area's aspect
-    // ratio and apply the user-supplied scale and a small visual margin.
-    let mut sx_min = f64::INFINITY;
-    let mut sx_max = f64::NEG_INFINITY;
-    let mut sy_min = f64::INFINITY;
-    let mut sy_max = f64::NEG_INFINITY;
-    let mut update = |x: f64, y: f64| {
-        sx_min = sx_min.min(x);
-        sx_max = sx_max.max(x);
-        sy_min = sy_min.min(y);
-        sy_max = sy_max.max(y);
+    // Size the viewport from the 3-D bbox diagonal — invariant under the
+    // camera's yaw/pitch — so the figure doesn't "breathe" while the user
+    // drags to rotate. The center of the projection of bbox.center() is
+    // (0, 0) by construction (it's the Projector target). For a degenerate
+    // bbox (a single point), fall back to a unit-sized viewport so the
+    // point is still visible.
+    let diag = bbox.diagonal();
+    let radius = if diag.is_finite() && diag > 0.0 {
+        0.5 * diag
+    } else {
+        1.0
     };
-    for p in &projected {
-        match p {
-            ProjPrim::Point { p, .. } => update(p.0, p.1),
-            ProjPrim::Segment { a, b, .. } => {
-                update(a.0, a.1);
-                update(b.0, b.1);
-            }
-            ProjPrim::Face { verts, .. } => {
-                for v in verts {
-                    update(v.0, v.1);
-                }
-            }
-        }
-    }
-    if !sx_min.is_finite() || !sy_min.is_finite() {
-        return Ok(());
-    }
 
     let (w, h) = area.dim_in_pixel();
     let aspect = if h == 0 { 1.0 } else { w as f64 / h as f64 };
-    let cx = 0.5 * (sx_min + sx_max);
-    let cy = 0.5 * (sy_min + sy_max);
     let scale = view.scale.max(1e-6);
-    let mut dx = ((sx_max - sx_min) / scale).max(1e-9);
-    let mut dy = ((sy_max - sy_min) / scale).max(1e-9);
+    let mut dx = (2.0 * radius / scale).max(1e-9);
+    let mut dy = (2.0 * radius / scale).max(1e-9);
     if dx / dy > aspect {
         dy = dx / aspect;
     } else {
@@ -316,10 +297,10 @@ where
     let margin = 0.05;
     dx *= 1.0 + 2.0 * margin;
     dy *= 1.0 + 2.0 * margin;
-    let xmin = cx - dx / 2.0;
-    let xmax = cx + dx / 2.0;
-    let ymin = cy - dy / 2.0;
-    let ymax = cy + dy / 2.0;
+    let xmin = -dx / 2.0;
+    let xmax = dx / 2.0;
+    let ymin = -dy / 2.0;
+    let ymax = dy / 2.0;
 
     let mut chart = ChartBuilder::on(area)
         .margin(5)
