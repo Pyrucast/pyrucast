@@ -38,6 +38,7 @@
 //! sm.plot(Some(View::iso()), Some(std::path::Path::new("triangle.png"))).unwrap();
 //! ```
 
+pub mod axes;
 pub mod camera;
 pub mod drawable;
 pub mod mesh_draw;
@@ -72,27 +73,54 @@ pub struct View {
     pub pitch: f64,
     pub scale: f64,
     pub target: Option<crate::triangulation::Point3>,
+    /// Show the orientation gizmo (small red/green/blue axes triad in the
+    /// bottom-left corner) on top of the rendered object.
+    pub show_axes: bool,
 }
 
 impl View {
     /// Front view: yaw = 0, pitch = 0.
     pub fn front() -> Self {
-        Self { yaw: 0.0, pitch: 0.0, scale: 1.0, target: None }
+        Self {
+            yaw: 0.0,
+            pitch: 0.0,
+            scale: 1.0,
+            target: None,
+            show_axes: true,
+        }
     }
 
     /// Top view: looking down the −Z axis.
     pub fn top() -> Self {
-        Self { yaw: 0.0, pitch: 90.0, scale: 1.0, target: None }
+        Self {
+            yaw: 0.0,
+            pitch: 90.0,
+            scale: 1.0,
+            target: None,
+            show_axes: true,
+        }
     }
 
     /// Side view: yaw = 90, pitch = 0.
     pub fn side() -> Self {
-        Self { yaw: 90.0, pitch: 0.0, scale: 1.0, target: None }
+        Self {
+            yaw: 90.0,
+            pitch: 0.0,
+            scale: 1.0,
+            target: None,
+            show_axes: true,
+        }
     }
 
     /// Isometric view: yaw = 45, pitch ≈ 35.264.
     pub fn iso() -> Self {
-        Self { yaw: 45.0, pitch: 35.264_389_682_754_654, scale: 1.0, target: None }
+        Self {
+            yaw: 45.0,
+            pitch: 35.264_389_682_754_654,
+            scale: 1.0,
+            target: None,
+            show_axes: true,
+        }
     }
 }
 
@@ -182,6 +210,9 @@ fn render_to_file<D: Drawable>(object: &D, view: View, path: &Path) -> Result<()
                 PyrucastError::Message(m) => PyrucastError::Message(format!("plotters: {m}")),
                 other => other,
             })?;
+            if view.show_axes {
+                axes::draw_gizmo(&area, &view)?;
+            }
             area.present().map_err(|e| map_err(Box::new(e)))?;
         }
         SaveFormat::Svg => {
@@ -192,6 +223,9 @@ fn render_to_file<D: Drawable>(object: &D, view: View, path: &Path) -> Result<()
                 PyrucastError::Message(m) => PyrucastError::Message(format!("plotters: {m}")),
                 other => other,
             })?;
+            if view.show_axes {
+                axes::draw_gizmo(&area, &view)?;
+            }
             area.present().map_err(|e| map_err(Box::new(e)))?;
         }
     }

@@ -21,8 +21,9 @@ use std::rc::Rc;
 
 use plotters::prelude::*;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::Key;
 use winit::platform::run_on_demand::EventLoopExtRunOnDemand;
 use winit::window::{Window, WindowAttributes, WindowId};
 
@@ -41,6 +42,7 @@ struct App<'a, D: Drawable> {
     yaw: f64,
     pitch: f64,
     scale: f64,
+    show_axes: bool,
 
     width: u32,
     height: u32,
@@ -65,6 +67,7 @@ impl<'a, D: Drawable> App<'a, D> {
             yaw: view.yaw,
             pitch: view.pitch,
             scale: view.scale,
+            show_axes: view.show_axes,
             width: w,
             height: h,
             pixel_buf: vec![255; (w * h * 3) as usize],
@@ -81,6 +84,7 @@ impl<'a, D: Drawable> App<'a, D> {
             pitch: self.pitch,
             scale: self.scale,
             target: Some(self.target),
+            show_axes: self.show_axes,
         }
     }
 
@@ -118,8 +122,12 @@ impl<'a, D: Drawable> App<'a, D> {
                     pitch: self.pitch,
                     scale: self.scale,
                     target: Some(self.target),
+                    show_axes: self.show_axes,
                 };
                 let _ = self.object.draw_on(&area, &view);
+                if self.show_axes {
+                    let _ = crate::viz::axes::draw_gizmo(&area, &view);
+                }
                 let _ = area.present();
             }
         }
@@ -225,6 +233,25 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                 self.scale = (self.scale * factor).clamp(0.01, 1000.0);
                 if let Some(w) = &self.window {
                     w.request_redraw();
+                }
+            }
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        state: ElementState::Pressed,
+                        logical_key,
+                        repeat: false,
+                        ..
+                    },
+                ..
+            } => {
+                if let Key::Character(s) = &logical_key {
+                    if s.eq_ignore_ascii_case("a") {
+                        self.show_axes = !self.show_axes;
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
                 }
             }
             WindowEvent::RedrawRequested => self.draw(),

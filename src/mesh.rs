@@ -1244,21 +1244,29 @@ mod python {
         /// - `save=None`: interactive window (requires `viz-interactive`).
         /// - `save="<path>.png"` or `.svg`: image file.
         /// - `view`: optional `(yaw, pitch, scale)` triple; default is iso.
+        /// - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
+        ///   corner (default `True`). In the interactive window, the key
+        ///   `A` toggles it at runtime.
         #[cfg(feature = "viz")]
-        #[pyo3(signature = (view=None, save=None))]
+        #[pyo3(signature = (view=None, save=None, show_axes=true))]
         fn plot(
             &self,
             view: Option<(f64, f64, f64)>,
             save: Option<std::path::PathBuf>,
+            show_axes: bool,
         ) -> PyResult<()> {
-            let view = view.map(|(yaw, pitch, scale)| crate::viz::View {
-                yaw,
-                pitch,
-                scale,
-                target: None,
-            });
+            let mut view = view
+                .map(|(yaw, pitch, scale)| crate::viz::View {
+                    yaw,
+                    pitch,
+                    scale,
+                    target: None,
+                    show_axes,
+                })
+                .unwrap_or_else(crate::viz::View::default);
+            view.show_axes = show_axes;
             let save_ref = save.as_deref();
-            with(&self.handle, |s| s.plot(view, save_ref))??;
+            with(&self.handle, |s| s.plot(Some(view), save_ref))??;
             Ok(())
         }
 
@@ -1488,23 +1496,28 @@ mod python {
             Ok(with(&self.handle, |m| m.cell_count())??)
         }
 
-        /// Visualize this mesh (every TRI3 submesh, each in its own colour).
-        /// See `SubMesh.plot` for the meaning of `view` and `save`.
+        /// Visualize this mesh (every submesh in its own colour). See
+        /// `SubMesh.plot` for the meaning of `view`, `save` and `show_axes`.
         #[cfg(feature = "viz")]
-        #[pyo3(signature = (view=None, save=None))]
+        #[pyo3(signature = (view=None, save=None, show_axes=true))]
         fn plot(
             &self,
             view: Option<(f64, f64, f64)>,
             save: Option<std::path::PathBuf>,
+            show_axes: bool,
         ) -> PyResult<()> {
-            let view = view.map(|(yaw, pitch, scale)| crate::viz::View {
-                yaw,
-                pitch,
-                scale,
-                target: None,
-            });
+            let mut view = view
+                .map(|(yaw, pitch, scale)| crate::viz::View {
+                    yaw,
+                    pitch,
+                    scale,
+                    target: None,
+                    show_axes,
+                })
+                .unwrap_or_else(crate::viz::View::default);
+            view.show_axes = show_axes;
             let save_ref = save.as_deref();
-            with(&self.handle, |m| m.plot(view, save_ref))??;
+            with(&self.handle, |m| m.plot(Some(view), save_ref))??;
             Ok(())
         }
 
