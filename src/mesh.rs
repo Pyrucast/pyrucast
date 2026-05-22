@@ -778,10 +778,14 @@ impl Mesh {
     ///     contour.add_cell(&[n[i].id(), n[(i + 1) % 4].id()]).unwrap();
     /// }
     ///
-    /// let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+    /// let tri = Mesh::fill_surface(&contour, ElementType::TRI3, None).unwrap();
     /// assert_eq!(tri.cell_count().unwrap(), 2); // 4 - 2 = 2 triangles
     /// ```
-    pub fn fill_surface(contour: &Mesh, element_type: ElementType) -> Result<Mesh> {
+    pub fn fill_surface(
+        contour: &Mesh,
+        element_type: ElementType,
+        refinement: Option<crate::triangulation::RefinementOptions>,
+    ) -> Result<Mesh> {
         if element_type != ElementType::TRI3 {
             return Err(PyrucastError::Message(format!(
                 "fill_surface: only TRI3 is supported for now, got {}",
@@ -882,6 +886,15 @@ impl Mesh {
         //    first non-degenerate loop + centroid origin), then verify
         //    planarity across **all** loops jointly.
         use crate::triangulation::{Point2, Point3, Vector3};
+        // Projection state — only Some(...) when dim == 3. Carried past the
+        // triangulation step so Steiner points born in the 2-D plane can be
+        // anti-projected back into 3-D node coordinates.
+        struct Projection3D {
+            origin: Point3,
+            u: Vector3,
+            v: Vector3,
+        }
+        let mut projection: Option<Projection3D> = None;
         let points_2d: Vec<Point2> = if dim == 2 {
             let mut pts = Vec::with_capacity(n_total);
             with(&cfg, |c| -> Result<()> {
@@ -946,21 +959,31 @@ impl Mesh {
             }
 
             let (u, v) = crate::triangulation::in_plane_basis(normal);
-            pts3.iter()
+            let pts_2d: Vec<Point2> = pts3
+                .iter()
                 .map(|p| {
                     let d = p - origin;
                     Point2::new(d.dot(&u), d.dot(&v))
                 })
-                .collect()
+                .collect();
+            projection = Some(Projection3D { origin, u, v });
+            pts_2d
         };
 
-        // 4. Triangulate. Single loop ⇒ ear clipping fast path; multi-loop
-        //    ⇒ detect the outer loop (largest |signed area|) and use the
-        //    CDT with holes.
-        let (triangles, flat_to_node): (Vec<[usize; 3]>, Vec<NodeId>) = if n_sub == 1 {
+        // 4. Triangulate. Fast path is plain ear clipping for a single loop
+        //    without refinement; everything else goes through the CDT
+        //    (constrained Delaunay + optional Ruppert refinement).
+        let refine = refinement.filter(|o| o.is_active());
+        let (triangles, mut flat_to_node, steiner_points_2d): (
+            Vec<[usize; 3]>,
+            Vec<NodeId>,
+            Vec<Point2>,
+        ) = if n_sub == 1 && refine.is_none() {
             let tris = crate::triangulation::ear_clip_2d(&points_2d)?;
-            (tris, flat_nodes)
+            (tris, flat_nodes, Vec::new())
         } else {
+            // Detect the outer loop (largest |signed area|), then build
+            // the (outer, holes) input for the CDT façades.
             let mut areas: Vec<f64> = Vec::with_capacity(n_sub);
             for i in 0..n_sub {
                 let slice = &points_2d[chain_offsets[i]..chain_offsets[i + 1]];
@@ -974,13 +997,13 @@ impl Mesh {
                 })
                 .unwrap();
 
-            let mut outer_pts: Vec<crate::triangulation::Point2> = Vec::new();
+            let mut outer_pts: Vec<Point2> = Vec::new();
             let mut new_flat_nodes: Vec<NodeId> = Vec::new();
             for j in chain_offsets[outer_idx]..chain_offsets[outer_idx + 1] {
                 outer_pts.push(points_2d[j]);
                 new_flat_nodes.push(flat_nodes[j]);
             }
-            let mut hole_pts_list: Vec<Vec<crate::triangulation::Point2>> = Vec::new();
+            let mut hole_pts_list: Vec<Vec<Point2>> = Vec::new();
             for i in 0..n_sub {
                 if i == outer_idx {
                     continue;
@@ -992,14 +1015,52 @@ impl Mesh {
                 }
                 hole_pts_list.push(hole_pts);
             }
-            let tris = crate::triangulation::triangulate_polygon_with_holes(
-                &outer_pts,
-                &hole_pts_list,
-            )?;
-            (tris, new_flat_nodes)
+
+            let n_existing = new_flat_nodes.len();
+            if let Some(opts) = refine {
+                let (all_pts, tris) =
+                    crate::triangulation::triangulate_polygon_with_holes_refined(
+                        &outer_pts,
+                        &hole_pts_list,
+                        opts,
+                    )?;
+                // Steiner points are everything past the original contour count.
+                let steiner = all_pts[n_existing..].to_vec();
+                (tris, new_flat_nodes, steiner)
+            } else {
+                let tris = crate::triangulation::triangulate_polygon_with_holes(
+                    &outer_pts,
+                    &hole_pts_list,
+                )?;
+                (tris, new_flat_nodes, Vec::new())
+            }
         };
 
-        // 5. Build the TRI3 mesh: each triangle is a triple of NodeIds.
+        // 5. Create one Configuration node per Steiner point. In 2-D the
+        //    (x, y) coordinates are used directly; in 3-D they are
+        //    anti-projected back through the saved plane basis.
+        //
+        //    The handles are kept alive in `_steiner_nodes` until after
+        //    `add_cell` has bumped the Configuration's per-node refcount
+        //    — otherwise a Drop in between would let the GC reclaim the
+        //    just-created node.
+        let mut _steiner_nodes: Vec<Node> = Vec::with_capacity(steiner_points_2d.len());
+        for p in &steiner_points_2d {
+            let coords: Vec<f64> = match &projection {
+                None => vec![p.x, p.y],
+                Some(proj) => {
+                    let p3 = proj.origin + proj.u * p.x + proj.v * p.y;
+                    vec![p3.x, p3.y, p3.z]
+                }
+            };
+            let node = Node::create_in(cfg.clone(), &coords)?;
+            flat_to_node.push(node.id());
+            _steiner_nodes.push(node);
+        }
+
+        // 6. Build the TRI3 mesh: each triangle is a triple of NodeIds.
+        //    `add_cell` increfs every node it touches, so the Steiner
+        //    nodes stay alive after `_steiner_nodes` drops at end of scope.
         let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
         for [i, j, k] in triangles {
             mesh.add_cell(&[flat_to_node[i], flat_to_node[j], flat_to_node[k]])?;
@@ -1353,16 +1414,27 @@ mod python {
         }
 
         #[classmethod]
+        #[pyo3(signature = (contour, element_type, max_edge_length=None, min_angle_deg=None))]
         fn fill_surface(
             _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
             contour: PyRef<PyMesh>,
             element_type: &str,
+            max_edge_length: Option<f64>,
+            min_angle_deg: Option<f64>,
         ) -> PyResult<Self> {
             let et = ElementType::from_name(element_type).ok_or_else(|| {
                 PyValueError::new_err(format!("unknown element type: {element_type}"))
             })?;
+            let refinement = if max_edge_length.is_some() || min_angle_deg.is_some() {
+                Some(crate::triangulation::RefinementOptions {
+                    max_edge_length,
+                    min_angle_deg,
+                })
+            } else {
+                None
+            };
             let handle = contour.handle.clone();
-            let mesh = with(&handle, |c| Mesh::fill_surface(c, et))??;
+            let mesh = with(&handle, |c| Mesh::fill_surface(c, et, refinement))??;
             Ok(Self { handle: insert(mesh) })
         }
 
@@ -1988,7 +2060,7 @@ mod tests {
         let (contour, nodes) =
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
 
-        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
         assert_eq!(tri.cell_count().unwrap(), 2);
 
@@ -2017,7 +2089,7 @@ mod tests {
         ];
         let (contour, _nodes) = build_contour_2d(cfg.clone(), &l);
 
-        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 4); // n - 2
 
         let mut total = 0.0;
@@ -2051,7 +2123,7 @@ mod tests {
         })
         .unwrap();
 
-        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3, None).unwrap();
 
         // After filling: each contour node is referenced once more per
         // incident triangle.
@@ -2076,7 +2148,7 @@ mod tests {
         let cfg = insert(Configuration::new(2).unwrap());
         let (contour, _n) =
             build_contour_2d(cfg, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
-        assert!(Mesh::fill_surface(&contour, ElementType::QUA4).is_err());
+        assert!(Mesh::fill_surface(&contour, ElementType::QUA4, None).is_err());
     }
 
     #[test]
@@ -2087,7 +2159,7 @@ mod tests {
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
         let mut bogus = Mesh::with_element_type(cfg, ElementType::TRI3);
         bogus.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        assert!(Mesh::fill_surface(&bogus, ElementType::TRI3).is_err());
+        assert!(Mesh::fill_surface(&bogus, ElementType::TRI3, None).is_err());
     }
 
     #[test]
@@ -2106,7 +2178,7 @@ mod tests {
                 .add_cell(&[nodes[i].id(), nodes[(i + 1) % 4].id()])
                 .unwrap();
         }
-        assert!(Mesh::fill_surface(&contour, ElementType::TRI3).is_err());
+        assert!(Mesh::fill_surface(&contour, ElementType::TRI3, None).is_err());
     }
 
     /// Build a closed SEG2 contour in 3-D from a polyline of 3-D points.
@@ -2139,7 +2211,7 @@ mod tests {
             ],
         );
 
-        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
 
         // Every triangle vertex must lie exactly on z = 5 (nodes are
@@ -2184,7 +2256,7 @@ mod tests {
                 (0.0, s, s),
             ],
         );
-        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
 
         // Total 3-D area = 1 (unit square in the tilted plane).
@@ -2218,7 +2290,7 @@ mod tests {
                 (0.0, 1.0, 0.0),
             ],
         );
-        let err = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap_err();
+        let err = Mesh::fill_surface(&contour, ElementType::TRI3, None).unwrap_err();
         let msg = format!("{}", err);
         assert!(msg.contains("not planar"), "unexpected message: {}", msg);
     }
@@ -2236,7 +2308,7 @@ mod tests {
                 (0.0, 1.0, 0.0),
             ],
         );
-        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
     }
 
@@ -2248,7 +2320,7 @@ mod tests {
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
         let extra = insert(SubMesh::new(cfg, ElementType::SEG2));
         contour.add_submesh(extra).unwrap();
-        assert!(Mesh::fill_surface(&contour, ElementType::TRI3).is_err());
+        assert!(Mesh::fill_surface(&contour, ElementType::TRI3, None).is_err());
     }
 
     #[test]
@@ -2266,7 +2338,7 @@ mod tests {
         let combined = (&outer + &hole).unwrap();
         assert_eq!(combined.submesh_count(), 2);
 
-        let tri = Mesh::fill_surface(&combined, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
 
         // Triangulated area must equal the outer area minus the hole: 16 - 4 = 12.
@@ -2297,7 +2369,7 @@ mod tests {
             &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
         );
         let combined = (&hole + &outer).unwrap();
-        let tri = Mesh::fill_surface(&combined, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
         let mut total = 0.0;
         for ci in 0..n_cells {
@@ -2328,7 +2400,7 @@ mod tests {
         );
         let combined = (&(&outer + &h1).unwrap() + &h2).unwrap();
         assert_eq!(combined.submesh_count(), 3);
-        let tri = Mesh::fill_surface(&combined, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
         let mut total = 0.0;
         for ci in 0..n_cells {
@@ -2366,7 +2438,7 @@ mod tests {
         );
         let combined = (&outer + &hole).unwrap();
 
-        let tri = Mesh::fill_surface(&combined, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
 
         // Every triangle vertex must sit exactly on z = 1.
         let n_cells = tri.cell_count().unwrap();
@@ -2422,7 +2494,131 @@ mod tests {
         open.add_cell(&[a.id(), b.id()]).unwrap();
         open.add_cell(&[b.id(), c.id()]).unwrap();
         // Missing the closing c→a segment.
-        assert!(Mesh::fill_surface(&open, ElementType::TRI3).is_err());
+        assert!(Mesh::fill_surface(&open, ElementType::TRI3, None).is_err());
+    }
+
+    #[test]
+    fn fill_surface_refined_2d_square_creates_steiner_nodes() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let (contour, contour_nodes) =
+            build_contour_2d(cfg.clone(), &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
+        let initial_node_count = with(&cfg, |c| c.node_count()).unwrap();
+
+        let opts = crate::triangulation::RefinementOptions {
+            max_edge_length: Some(1.5),
+            min_angle_deg: None,
+        };
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3, Some(opts)).unwrap();
+
+        // Steiner nodes were created in the Configuration.
+        let new_node_count = with(&cfg, |c| c.node_count()).unwrap();
+        assert!(
+            new_node_count > initial_node_count,
+            "no Steiner nodes added: was {}, still {}",
+            initial_node_count,
+            new_node_count
+        );
+
+        // Conservation of area and CCW orientation.
+        let n_cells = tri.cell_count().unwrap();
+        let mut total = 0.0;
+        let mut max_edge = 0.0_f64;
+        for ci in 0..n_cells {
+            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
+            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
+            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
+            let a = 0.5
+                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            assert!(a > 0.0, "triangle {} not CCW", ci);
+            total += a;
+            for (u, v) in [(p0.as_slice(), p1.as_slice()), (p1.as_slice(), p2.as_slice()), (p2.as_slice(), p0.as_slice())] {
+                let dx = v[0] - u[0];
+                let dy = v[1] - u[1];
+                max_edge = max_edge.max((dx * dx + dy * dy).sqrt());
+            }
+        }
+        assert!((total - 16.0).abs() < 1e-9);
+        assert!(max_edge <= 1.5 + 1e-9, "max edge length {} > 1.5", max_edge);
+
+        // Make sure the contour nodes still exist (they are referenced by the
+        // new TRI3 mesh, the contour mesh, and the user-held Node handles).
+        for n in &contour_nodes {
+            assert!(with(&cfg, |c| c.is_alive(n.id())).unwrap());
+        }
+    }
+
+    #[test]
+    fn fill_surface_refined_inactive_options_is_noop() {
+        // Passing Some(RefinementOptions::default()) should behave just
+        // like None — no Steiner points, fast ear-clipping path.
+        let cfg = insert(Configuration::new(2).unwrap());
+        let (contour, _nodes) =
+            build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let initial_count = with(&cfg, |c| c.node_count()).unwrap();
+        let tri =
+            Mesh::fill_surface(&contour, ElementType::TRI3, Some(Default::default())).unwrap();
+        let final_count = with(&cfg, |c| c.node_count()).unwrap();
+        assert_eq!(tri.cell_count().unwrap(), 2);
+        assert_eq!(initial_count, final_count, "no Steiner expected");
+    }
+
+    #[test]
+    fn fill_surface_refined_3d_keeps_steiner_in_plane() {
+        // 4×4 square in the plane z = 1, refined by size: every Steiner
+        // node must land on z = 1 exactly (within float precision).
+        let cfg = insert(Configuration::new(3).unwrap());
+        let (contour, _) = build_contour_3d(
+            cfg.clone(),
+            &[
+                (0.0, 0.0, 1.0),
+                (4.0, 0.0, 1.0),
+                (4.0, 4.0, 1.0),
+                (0.0, 4.0, 1.0),
+            ],
+        );
+        let opts = crate::triangulation::RefinementOptions {
+            max_edge_length: Some(1.5),
+            min_angle_deg: None,
+        };
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3, Some(opts)).unwrap();
+        let n_cells = tri.cell_count().unwrap();
+        assert!(n_cells > 2, "no refinement happened: got only {} cells", n_cells);
+        for ci in 0..n_cells {
+            for ni in 0..3 {
+                let p = tri.node(0, ci, ni).unwrap().coord().unwrap();
+                assert!((p[2] - 1.0).abs() < 1e-9, "Steiner node off plane: z={}", p[2]);
+            }
+        }
+    }
+
+    #[test]
+    fn fill_surface_refined_with_hole_conserves_area() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let (outer, _) = build_contour_2d(
+            cfg.clone(),
+            &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
+        );
+        let (hole, _) = build_contour_2d(
+            cfg.clone(),
+            &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
+        );
+        let combined = (&outer + &hole).unwrap();
+        let opts = crate::triangulation::RefinementOptions {
+            max_edge_length: Some(1.0),
+            min_angle_deg: None,
+        };
+        let tri = Mesh::fill_surface(&combined, ElementType::TRI3, Some(opts)).unwrap();
+        let n_cells = tri.cell_count().unwrap();
+        let mut total = 0.0;
+        for ci in 0..n_cells {
+            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
+            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
+            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
+            total += 0.5
+                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+        }
+        // 16 - 4 = 12.
+        assert!((total - 12.0).abs() < 1e-9, "area drift: {}", total);
     }
 
     #[test]
@@ -2431,7 +2627,7 @@ mod tests {
         // Same square but listed clockwise.
         let (contour, _n) =
             build_contour_2d(cfg, &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)]);
-        let tri = Mesh::fill_surface(&contour, ElementType::TRI3).unwrap();
+        let tri = Mesh::fill_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
 
         // Resulting triangles must still be CCW (positive signed area).

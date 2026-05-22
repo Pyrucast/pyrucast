@@ -166,7 +166,7 @@ fn fill_surface_from_circle_contour() -> Result<()> {
     let cfg = insert(Configuration::new(2)?);
     let center = Node::create_in(cfg.clone(), &[0.0, 0.0])?;
     let circle = Mesh::circle_seg2(&center, &[0.0, 0.0, 1.0], 1.0, 8)?;
-    let tri = Mesh::fill_surface(&circle, ElementType::TRI3)?;
+    let tri = Mesh::fill_surface(&circle, ElementType::TRI3, None)?;
     assert_eq!(tri.element_types()?, vec![ElementType::TRI3]);
     assert_eq!(tri.cell_count()?, 6);
 
