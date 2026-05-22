@@ -1212,7 +1212,7 @@ impl fmt::Display for Mesh {
 
 // ─── Python binding ─────────────────────────────────────────────────────────
 
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 mod python {
     use super::*;
     use crate::configuration::PyConfiguration;
@@ -1222,11 +1222,13 @@ mod python {
     use pyo3::prelude::*;
 
     /// Python wrapper for [`SubMesh`].
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
     #[pyclass(name = "SubMesh")]
     pub struct PySubMesh {
         pub(crate) handle: Handle<SubMesh>,
     }
 
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
     #[pymethods]
     impl PySubMesh {
         #[new]
@@ -1331,11 +1333,13 @@ mod python {
     }
 
     /// Python wrapper for [`Mesh`].
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
     #[pyclass(name = "Mesh")]
     pub struct PyMesh {
         pub(crate) handle: Handle<Mesh>,
     }
 
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
     #[pymethods]
     impl PyMesh {
         /// `Mesh(config)` — empty mesh.
@@ -1622,7 +1626,7 @@ mod python {
     }
 }
 
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 pub use python::{PyMesh, PySubMesh};
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────

@@ -701,7 +701,7 @@ impl Div<f64> for &NodeField {
 
 // ─── Python binding ─────────────────────────────────────────────────────────
 
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 mod python {
     use super::*;
     use crate::mesh::{PyMesh, PySubMesh};
@@ -709,11 +709,13 @@ mod python {
     use pyo3::prelude::*;
 
     /// Python wrapper for [`NodeField`].
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
     #[pyclass(name = "NodeField")]
     pub struct PyNodeField {
         handle: Handle<NodeField>,
     }
 
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
     #[pymethods]
     impl PyNodeField {
         #[new]
@@ -882,7 +884,7 @@ mod python {
     }
 }
 
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 pub use python::PyNodeField;
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────

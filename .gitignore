@@ -220,6 +220,11 @@ rust-project.json
 pyvenv.cfg
 pip-selfcheck.json
 
+# Whitelist Cargo's binary-crate directory (the venv patterns above
+# would otherwise hide src/bin/).
+!/src/bin/
+!/src/bin/**
+
 ### Vim ###
 # Swap
 [._]*.s[a-v][a-z]

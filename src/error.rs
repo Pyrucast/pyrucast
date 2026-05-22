@@ -55,7 +55,7 @@ impl From<std::io::Error> for PyrucastError {
     }
 }
 
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 impl From<PyrucastError> for pyo3::PyErr {
     fn from(e: PyrucastError) -> Self {
         pyo3::exceptions::PyRuntimeError::new_err(e.to_string())

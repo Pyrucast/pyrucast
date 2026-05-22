@@ -356,7 +356,7 @@ impl fmt::Display for Configuration {
 
 // ─── Python binding ─────────────────────────────────────────────────────────
 
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 mod python {
     use super::*;
     use crate::node::PyNode;
@@ -364,11 +364,13 @@ mod python {
     use pyo3::prelude::*;
 
     /// Python wrapper for [`Configuration`].
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
     #[pyclass(name = "Configuration")]
     pub struct PyConfiguration {
         pub(crate) handle: Handle<Configuration>,
     }
 
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
     #[pymethods]
     impl PyConfiguration {
         #[new]
@@ -469,7 +471,7 @@ mod python {
     }
 }
 
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 pub use python::PyConfiguration;
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────

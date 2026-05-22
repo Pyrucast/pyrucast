@@ -49,26 +49,33 @@ pub use error::{PyrucastError, Result};
 /// Library version (taken from `Cargo.toml`).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 use pyo3::prelude::*;
 
 /// Set the swap directory (Python binding of [`store::set_swap_dir`]).
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 fn set_swap_dir(path: std::path::PathBuf) {
     store::set_swap_dir(path);
 }
 
 /// Return the effective swap directory (Python binding of [`store::swap_dir`]).
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 fn swap_dir() -> PyResult<std::path::PathBuf> {
     Ok(store::swap_dir()?)
 }
 
+// Stub-info gatherer used by the `stub_gen` binary to produce
+// `pyrucast.pyi`. Only present when the `stub-gen` feature is on.
+#[cfg(feature = "stub-gen")]
+pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
+
 /// Python extension module. Built only under maturin (feature
 /// `extension-module`).
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 #[pymodule]
 fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", VERSION)?;

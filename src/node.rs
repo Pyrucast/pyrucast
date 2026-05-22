@@ -116,12 +116,13 @@ impl fmt::Display for Node {
 
 // ─── Python binding ─────────────────────────────────────────────────────────
 
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 mod python {
     use super::*;
     use pyo3::prelude::*;
 
     /// Python wrapper for [`Node`].
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
     #[pyclass(name = "Node")]
     pub struct PyNode {
         node: Node,
@@ -146,6 +147,7 @@ mod python {
         }
     }
 
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
     #[pymethods]
     impl PyNode {
         #[getter]
@@ -172,7 +174,7 @@ mod python {
     }
 }
 
-#[cfg(feature = "extension-module")]
+#[cfg(feature = "python-api")]
 pub use python::PyNode;
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────

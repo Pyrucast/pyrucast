@@ -178,6 +178,32 @@ mdbook test book           # exécute le code testable de la documentation
 
 Rustdoc et mdbook sont complémentaires : rustdoc couvre la **référence par item** (modules, types, fonctions) ; le présent mdbook couvre les **principes, l'architecture et les exemples transverses**.
 
+## Features Cargo
+
+Plusieurs morceaux de la bibliothèque sont gardés derrière des *features* Cargo : ce qu'on n'active pas n'est ni compilé, ni embarqué dans le binaire. Toutes optionnelles, elles s'activent en cumul (`--features a,b`).
+
+| Feature | Apport | Implique | Quand l'activer |
+|---|---|---|---|
+| `python-api` | code des `#[pyclass]` (toutes les classes Python : `Configuration`, `Mesh`, `SubMesh`, `Cell`, `Node`, `NodeField`) | — | rarement à la main ; activée automatiquement par `extension-module` et `stub-gen`. Utile pour `cargo test` quand on veut compiler les bindings sans link spécial à libpython. |
+| `extension-module` | `python-api` + dit à `pyo3` de **ne pas** se lier à `libpython` (l'interpréteur hôte la fournit au chargement du `.so`) | `python-api`, `pyo3/extension-module` | systématique pour `maturin develop` / `maturin build` — sans elle, le module Python compilé ne s'importerait pas. |
+| `viz` | export PNG/SVG (rendu CPU via `plotters`) | — | scripts headless, captures pour la doc, CI. |
+| `viz-interactive` | fenêtre interactive `winit`/`softbuffer` (rotation souris, zoom molette, gizmo X/Y/Z) | `viz` | environnement graphique disponible (Linux X11/Wayland, Windows, macOS). |
+| `stub-gen` | `python-api` + binaire `stub_gen` qui produit le fichier `pyrucast.pyi` | `python-api`, `pyo3-stub-gen` | quand on a modifié les bindings et qu'on veut rafraîchir le stub vu par les IDE. |
+
+> **`extension-module` vs `stub-gen`.** `extension-module` est faite pour produire un `.so` chargé par Python : `pyo3` se passe alors du link à `libpython`. À l'inverse, `stub-gen` produit un **binaire exécutable** : on a besoin de `libpython` linkée normalement, donc on n'active **pas** `extension-module` ce jour-là. Les deux ne sont jamais activées ensemble — `python-api` les rejoint.
+
+### Génération du stub Python (`.pyi`)
+
+Les IDE (Pylance/Pyright, PyCharm) ne savent pas inspecter directement un `.so` compilé : sans fichier de stubs, les complétions tombent sur `Any` et les docstrings disparaissent. Le binaire `stub_gen` lit les annotations `///` du code Rust + les macros `#[gen_stub_*]` et écrit un `pyrucast.pyi` complet à la racine du repo :
+
+```sh
+# Activer le venv comme d'habitude (le binaire link à libpython).
+source .venv/bin/activate
+cargo run --bin stub_gen --features stub-gen
+```
+
+Le fichier `pyrucast.pyi` doit être généré chaque fois qu'une signature Python change (nouvelle classe, nouveau paramètre, nouveau docstring `///`). Versionné dans le repo, il est utilisable tel quel par les IDE — pas besoin de configuration côté éditeur.
+
 ## Script « tout-en-un »
 
 Pour enchaîner toutes les vérifications dans l'ordre :
