@@ -317,6 +317,19 @@ impl Mesh {
         Node::acquire(self.config.clone(), nid)
     }
 
+    /// Return a `Cell` view on cell `cell_idx` of submesh `submesh_idx`.
+    pub fn cell(&self, submesh_idx: usize, cell_idx: usize) -> Result<crate::cell::Cell> {
+        let sm = self.submesh(submesh_idx)?;
+        crate::cell::Cell::new(sm, cell_idx)
+    }
+
+    /// Iterator over every cell of submesh `submesh_idx`.
+    pub fn cells(&self, submesh_idx: usize) -> Result<crate::cell::CellIter> {
+        let sm = self.submesh(submesh_idx)?;
+        let end = with(&sm, |s| s.cell_count())?;
+        Ok(crate::cell::CellIter::new(sm, end))
+    }
+
     /// Create a POI1 mesh containing all live nodes of `config`.
     pub fn from_live_nodes(config: Handle<Configuration>) -> Result<Mesh> {
         let node_ids: Vec<NodeId> = with(&config, |c| c.iter_live().collect())?;
@@ -1288,6 +1301,26 @@ mod python {
             Ok(())
         }
 
+        /// `len(submesh)` → number of cells.
+        fn __len__(&self) -> PyResult<usize> {
+            Ok(with(&self.handle, |s| s.cell_count())?)
+        }
+
+        /// `submesh[i]` → `Cell` view on cell i. Supports negative
+        /// indices and raises `IndexError` out of range so
+        /// `for cell in submesh:` works.
+        fn __getitem__(&self, idx: isize) -> PyResult<crate::cell::PyCell> {
+            let n = with(&self.handle, |s| s.cell_count())? as isize;
+            let normalized = if idx < 0 { n + idx } else { idx };
+            if normalized < 0 || normalized >= n {
+                return Err(PyIndexError::new_err(format!(
+                    "submesh index {idx} out of range (len={n})"
+                )));
+            }
+            let cell = crate::cell::Cell::new(self.handle.clone(), normalized as usize)?;
+            Ok(crate::cell::PyCell::from_cell(cell))
+        }
+
         fn __repr__(&self) -> PyResult<String> {
             Ok(with(&self.handle, |s| format!("{:?}", s))?)
         }
@@ -1517,6 +1550,18 @@ mod python {
         fn submesh(&self, idx: usize) -> PyResult<PySubMesh> {
             let h = with(&self.handle, |m| m.submesh(idx))??;
             Ok(PySubMesh { handle: h })
+        }
+
+        /// `mesh.cell(submesh_idx, cell_idx)` → `Cell` view; same thing
+        /// as `mesh[submesh_idx][cell_idx]`.
+        fn cell(
+            &self,
+            submesh_idx: usize,
+            cell_idx: usize,
+        ) -> PyResult<crate::cell::PyCell> {
+            let cell =
+                with(&self.handle, |m| m.cell(submesh_idx, cell_idx))??;
+            Ok(crate::cell::PyCell::from_cell(cell))
         }
 
         /// `len(mesh)` → number of submeshes.

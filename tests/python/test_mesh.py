@@ -89,6 +89,37 @@ def test_mesh_aggregates_submeshes():
     assert mesh.cell_count() == 3  # 2 POI1 + 1 TRI3
 
 
+def test_submesh_cell_indexing_and_iteration():
+    """`len(sm)` = cell count, `sm[i]` returns a Cell, and a Cell is
+    itself iterable over its nodes."""
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.5, 1.0])
+
+    sm = pyrucast.SubMesh(c, "TRI3")
+    sm.add_cell([a.id, b.id, cc.id])
+
+    assert len(sm) == 1
+    cell = sm[0]
+    assert cell.element_type == "TRI3"
+    assert cell.index == 0
+    assert cell.node_ids == [a.id, b.id, cc.id]
+    assert len(cell) == 3
+    assert [n.id for n in cell] == [a.id, b.id, cc.id]
+    assert cell[-1].id == cc.id
+
+    # for-loop on the submesh yields one Cell per cell.
+    assert [c.index for c in sm] == [0]
+
+    try:
+        _ = sm[5]
+    except IndexError:
+        pass
+    else:
+        raise AssertionError("expected IndexError on out-of-range cell")
+
+
 def test_mesh_indexing_and_iteration():
     """`mesh[i]`, `len(mesh)`, `for sm in mesh:` should all work, and the
     `SubMesh` returned by `mesh[i]` shares storage with the parent mesh

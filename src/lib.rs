@@ -29,6 +29,7 @@
 //! assert_eq!(a, b);
 //! ```
 
+pub mod cell;
 pub mod color;
 pub mod configuration;
 pub mod element_type;
@@ -77,6 +78,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<node::PyNode>()?;
     m.add_class::<mesh::PySubMesh>()?;
     m.add_class::<mesh::PyMesh>()?;
+    m.add_class::<cell::PyCell>()?;
     m.add_class::<node_field::PyNodeField>()?;
     Ok(())
 }

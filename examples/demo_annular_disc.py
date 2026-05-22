@@ -24,14 +24,15 @@ def main() -> None:
     # `circle_seg2` always takes a 3-D normal, even for a 2-D config:
     # (0, 0, 1) means "circle in the XY plane".
     normal = [0.0, 0.0, 1.0]
-    inner_mesh = pc.Mesh.circle_seg2(center, normal, 1.0, 48)
-    outer_mesh = pc.Mesh.circle_seg2(center, normal, 2.0, 80)
+    inner_mesh = pc.Mesh.circle_seg2(center, normal, 1.0, 12)
+    outer_mesh = pc.Mesh.circle_seg2(center, normal, 2.0, 12)
 
     # Contour for fill_surface: a Mesh holding both SEG2 loops. The CDT
     # detects the outer loop automatically (largest signed area) and
     # treats the inner one as a hole.
     contour = inner_mesh + outer_mesh
     surface_mesh = pc.Mesh.fill_surface(contour, "TRI3")
+    print(surface_mesh)
 
     # `mesh[i]` returns the i-th submesh handle and shares storage with
     # the parent mesh, so colour changes survive every later
@@ -49,6 +50,8 @@ def main() -> None:
     print("submeshes:", final.element_types())
     print("cells per submesh:", final.cell_counts())
     print("len(final):", len(final), "— iterable:", [sm.element_type for sm in final])
+    # `mesh[i]` → SubMesh, `submesh[j]` → Cell, `cell[k]` → Node.
+    print("first cell of the inner ring:", [n.id for n in final[0][0]])
 
     final.plot()
 
