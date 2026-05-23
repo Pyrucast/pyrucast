@@ -12,10 +12,12 @@ __all__ = [
     "FiniteElementSpace",
     "Matrix",
     "Mesh",
+    "Model",
     "Node",
     "NodeField",
     "SubFESpace",
     "SubMesh",
+    "SubModel",
     "set_swap_dir",
     "swap_dir",
 ]
@@ -273,6 +275,21 @@ class Mesh:
     def __str__(self) -> builtins.str: ...
 
 @typing.final
+class Model:
+    r"""
+    Python wrapper for [`Model`].
+    """
+    def __new__(cls) -> Model: ...
+    def add_sub_model(self, sub: SubModel) -> None: ...
+    def sub_model_count(self) -> builtins.int: ...
+    def primal_vars(self) -> builtins.list[builtins.str]: ...
+    def dual_vars(self) -> builtins.list[builtins.str]: ...
+    def stiffness(self) -> Matrix: ...
+    def mass(self) -> Matrix: ...
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+
+@typing.final
 class Node:
     r"""
     Python wrapper for [`Node`].
@@ -424,6 +441,30 @@ class SubMesh:
         indices and raises `IndexError` out of range so
         `for cell in submesh:` works.
         """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+
+@typing.final
+class SubModel:
+    r"""
+    Python wrapper for [`SubModel`].
+    """
+    @classmethod
+    def heat_conduction(cls, fespace: SubFESpace, material: ElementField) -> SubModel:
+        r"""
+        `SubModel.heat_conduction(fespace, material)` — heat-conduction
+        sub-model on a finite-element subspace.
+        """
+    @classmethod
+    def dirichlet(cls, config: Configuration, primal_var: builtins.str, primal_dual: builtins.str, constrained_node_ids: typing.Sequence[builtins.int]) -> SubModel:
+        r"""
+        `SubModel.dirichlet(config, primal_var, primal_dual, constrained_node_ids)`
+        — Dirichlet constraint via Lagrange multipliers. The multiplier
+        nodes are created on the fly in `config` at the same coordinates
+        as the constrained nodes.
+        """
+    def primal_vars(self) -> builtins.list[builtins.str]: ...
+    def dual_vars(self) -> builtins.list[builtins.str]: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
 

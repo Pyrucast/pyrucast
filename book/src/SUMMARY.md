@@ -11,4 +11,5 @@
 - [Espace éléments finis](fe-space.md)
 - [Champ aux points de Gauss](element-field.md)
 - [Matrice creuse](matrix.md)
+- [Modèle physique](model.md)
 - [Visualisation](visualization.md)

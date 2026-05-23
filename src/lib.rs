@@ -39,6 +39,7 @@ pub mod fe_space;
 pub mod interpolation;
 pub mod matrix;
 pub mod mesh;
+pub mod model;
 pub mod node;
 pub mod node_field;
 pub mod persist;
@@ -96,5 +97,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<fe_space::PyFiniteElementSpace>()?;
     m.add_class::<element_field::PyElementField>()?;
     m.add_class::<matrix::PyMatrix>()?;
+    m.add_class::<model::PySubModel>()?;
+    m.add_class::<model::PyModel>()?;
     Ok(())
 }
