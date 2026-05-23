@@ -712,7 +712,7 @@ mod python {
     #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
     #[pyclass(name = "NodeField")]
     pub struct PyNodeField {
-        handle: Handle<NodeField>,
+        pub(crate) handle: Handle<NodeField>,
     }
 
     #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]

@@ -290,6 +290,20 @@ impl SubModel {
         &self.physics
     }
 
+    /// Multiplier node ids introduced by this sub-model. Non-empty only
+    /// for Lagrange variants (`Dirichlet`, future `MultipointConstraint`,
+    /// …); empty for the other physics.
+    ///
+    /// Useful for the user who needs to write the imposed value `u_d` at
+    /// the multiplier node's `<primal_var>` component of the load
+    /// `NodeField`.
+    pub fn multiplier_nodes(&self) -> &[NodeId] {
+        match &self.physics {
+            Physics::Dirichlet { multiplier_nodes, .. } => multiplier_nodes,
+            _ => &[],
+        }
+    }
+
     /// Primal variable names introduced by this sub-model.
     pub fn primal_vars(&self) -> Vec<String> {
         self.physics.primal_vars()
@@ -667,6 +681,13 @@ mod python {
             Ok(with(&self.handle, |s| s.dual_vars())?)
         }
 
+        /// Multiplier node ids (Lagrange physics only — empty otherwise).
+        fn multiplier_nodes(&self) -> PyResult<Vec<u32>> {
+            Ok(with(&self.handle, |s| {
+                s.multiplier_nodes().iter().map(|n| n.0).collect()
+            })?)
+        }
+
         fn __repr__(&self) -> PyResult<String> {
             Ok(with(&self.handle, |s| format!("{:?}", s))?)
         }
@@ -694,10 +715,27 @@ mod python {
         }
 
         fn add_sub_model(&self, sub: PyRef<PySubModel>) -> PyResult<()> {
-            // Take the SubModel by snapshot: extract its Physics out of
-            // the store and rebuild a Vec inside the Model. We use a
-            // simple Clone of the Physics (which is Clone + Serialize).
+            // Snapshot the Physics out of the store. Physics::Clone is a
+            // flat deep-clone of the Vec<NodeId> for Dirichlet — it does
+            // **not** touch the Configuration's refcounts. We therefore
+            // bump them by hand here so the Model-owned SubModel owns
+            // its own refs and the original PySubModel keeps owning its
+            // own ones too. Without this, both Drops would decrement
+            // the same units, over-collecting the multiplier nodes.
             let physics = with(&sub.handle, |s| s.physics().clone())?;
+            if let Physics::Dirichlet {
+                config,
+                constrained_nodes,
+                multiplier_nodes,
+                ..
+            } = &physics
+            {
+                with_mut(config, |c| {
+                    for &nid in constrained_nodes.iter().chain(multiplier_nodes.iter()) {
+                        let _ = c.incref(nid);
+                    }
+                })?;
+            }
             with_mut(&self.handle, |m| m.add_sub_model(SubModel::new(physics)))??;
             Ok(())
         }

@@ -19,6 +19,7 @@ __all__ = [
     "SubMesh",
     "SubModel",
     "set_swap_dir",
+    "solve",
     "swap_dir",
 ]
 
@@ -465,12 +466,24 @@ class SubModel:
         """
     def primal_vars(self) -> builtins.list[builtins.str]: ...
     def dual_vars(self) -> builtins.list[builtins.str]: ...
+    def multiplier_nodes(self) -> builtins.list[builtins.int]:
+        r"""
+        Multiplier node ids (Lagrange physics only — empty otherwise).
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
 
 def set_swap_dir(path: builtins.str | os.PathLike | pathlib.Path) -> None:
     r"""
     Set the swap directory (Python binding of [`store::set_swap_dir`]).
+    """
+
+def solve(matrix: Matrix, rhs: NodeField) -> NodeField:
+    r"""
+    `pyrucast.solve(matrix, rhs) -> NodeField`
+    
+    Dense LU solver. See [`crate::solver::solve`] for the semantics
+    of the rhs and of the returned NodeField.
     """
 
 def swap_dir() -> pathlib.Path:

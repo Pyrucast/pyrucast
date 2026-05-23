@@ -44,6 +44,7 @@ pub mod node;
 pub mod node_field;
 pub mod persist;
 pub mod quadrature;
+pub mod solver;
 pub mod store;
 pub mod triangulation;
 
@@ -87,6 +88,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", VERSION)?;
     m.add_function(wrap_pyfunction!(set_swap_dir, m)?)?;
     m.add_function(wrap_pyfunction!(swap_dir, m)?)?;
+    m.add_function(wrap_pyfunction!(solver::py_solve, m)?)?;
     m.add_class::<configuration::PyConfiguration>()?;
     m.add_class::<node::PyNode>()?;
     m.add_class::<mesh::PySubMesh>()?;

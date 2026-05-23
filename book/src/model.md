@@ -162,9 +162,61 @@ print("dual_vars =",   model.dual_vars())     # ['q', 'T']
 print(K)                                       # Matrix: 3 row(s) × 3 col(s), …
 ```
 
+## Solveur dense — fonction `solve(matrix, rhs)`
+
+Pour valider l'assemblage de bout en bout, pyrucast embarque un **solveur dense LU minimal** (`pyrucast::solver::solve` / `pyrucast.solve`) qui :
+
+1. lit le `NodeField` de chargement à chacune des **lignes** de la matrice (les entrées absentes valent `0.0` par défaut) ;
+2. convertit la `Matrix` en `nalgebra::DMatrix<f64>` ;
+3. factorise `A = LU` et résout `A x = b` ;
+4. emballe la solution dans un `NodeField` indexé sur les **colonnes** de la matrice.
+
+C'est un harnais de test — pas le solveur final. Un objet `LinearSolver` enfichable (itératif, direct creux, préconditionné) arrivera en **Phase 3** par-dessus `nalgebra-sparse` ; les conversions `Matrix::to_csr` / `to_csc` sont déjà en place pour le brancher sans changement d'API.
+
+**Exemple complet : Poisson 1-D `-u'' = 0` avec `u(0) = 0`, `u(1) = 1`** (solution analytique `u(x) = x`, multiplicateurs aux bords = flux ±1) :
+
+```python
+import pyrucast
+
+# 1) Maillage + FE space + matériau (k = 1)
+c = pyrucast.Configuration(dim=1)
+nodes = [c.add_node([i / 4.0]) for i in range(5)]
+mesh = pyrucast.Mesh(c, "SEG2")
+for i in range(4):
+    mesh.add_cell([nodes[i].id, nodes[i + 1].id])
+fes = pyrucast.FiniteElementSpace(mesh)
+sub = fes[0]
+mat = pyrucast.ElementField(sub, ["k"])
+mat.set_uniform("k", 1.0)
+
+# 2) Modèle : conduction + Dirichlet aux deux bouts
+model = pyrucast.Model()
+model.add_sub_model(pyrucast.SubModel.heat_conduction(sub, mat))
+left = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[0].id])
+right = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[-1].id])
+mult_left = left.multiplier_nodes()[0]
+mult_right = right.multiplier_nodes()[0]
+model.add_sub_model(left)
+model.add_sub_model(right)
+
+# 3) Chargement : valeurs imposées aux nœuds-multiplicateurs
+rhs_sm = pyrucast.SubMesh(c, "POI1")
+rhs_sm.add_cell([mult_left])
+rhs_sm.add_cell([mult_right])
+rhs = pyrucast.NodeField(rhs_sm, ["T"])
+rhs.set_value(mult_left, "T", 0.0)
+rhs.set_value(mult_right, "T", 1.0)
+
+# 4) Assemblage + résolution
+K = model.stiffness()
+solution = pyrucast.solve(K, rhs)
+assert abs(solution.value(nodes[2].id, "T") - 0.5) < 1e-10  # T au milieu = 0.5
+assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux à gauche
+```
+
 ## Limitations actuelles
 
 - **Mass non assemblée** : `Model::mass()` retourne une matrice vide en v0. L'intégrande `∫ ρc_p · N_i N_j dx` (et son équivalent pour les autres physiques) est additif et sera ajouté quand le besoin transient se présentera.
 - **Une seule physique « réelle »** : `HeatConduction`. `LinearElasticity`, `Timoshenko`, `Periodic`, etc. viendront comme nouvelles variantes de `Physics`, chacune avec son match-arm dans l'assemblage. Le pattern est borné et lisible.
 - **Pas de check de cohérence pré-assemblage** : la consistance (matériau définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre sub-models, etc.) est vérifiée au moment du `stiffness()` / `mass()`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose problème, un check eager est facile à ajouter.
-- **Solveur non fourni** : la chaîne `Matrix → solveur → NodeField` reste à l'utilisateur (en pratique : `matrix.to_dmatrix()` + `nalgebra::DMatrix::lu().solve(&b)` pour les cas de test). Un objet `LinearSolver` dédié arrivera en Phase 3 de la ROADMAP.
+- **Solveur dense seulement** : le `solve` fourni est un harnais de test (LU dense via `nalgebra`). Pour les vrais problèmes Phase 3 introduira un trait `LinearSolver` enfichable (itératifs, direct creux, factorisation Cholesky pour les cas symétriques détectés via le drapeau de la `Matrix`).
