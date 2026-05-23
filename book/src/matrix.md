@@ -26,7 +26,14 @@ Conséquences :
 - L'ordre des insertions est sans effet sur le résultat numérique final (commutativité de la somme).
 - L'ordre des DOFs dans `row_dofs()` / `col_dofs()` est **l'ordre de première rencontre** lors des `add_entry`. C'est stable et reproductible pour une séquence d'assemblage donnée.
 
-CSR ou autres formats compactés sont reportés à Phase 6 : seul COO est implémenté pour l'instant, suffisant pour les solveurs itératifs et les factorisations directes via matrice dense intermédiaire.
+Le stockage propre à pyrucast reste COO pour la phase d'assemblage ; les opérations qui en profitent (matrice-vecteur, factorisation directe) utilisent `nalgebra-sparse` via des conversions à la demande :
+
+- [`Matrix::to_csr`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CsrMatrix<f64>`
+- [`Matrix::to_csc`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CscMatrix<f64>`
+- [`Matrix::to_coo`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CooMatrix<f64>`
+- [`Matrix::to_dmatrix`](#api-rust--accès-en-lecture) → `nalgebra::DMatrix<f64>`
+
+Cette stratégie « COO en construction, CSR/CSC à l'usage » colle au style cast3m (« finalisation au gel ») tout en évitant de réimplémenter ce que `nalgebra-sparse` fait déjà très bien.
 
 ## Drapeau `symmetric`
 
@@ -82,9 +89,16 @@ assert_eq!(c.field_names().len(), 1);
 // Valeur à une coordonnée (somme de toutes les entrées COO à ce point).
 let v: f64 = k.get(NodeId(0), "q", NodeId(0), "T");
 
-// Vue dense ligne-major, pour test ou hand-off à un solveur dense.
+// Vue dense ligne-major (flat Vec, pratique pour Python).
 let d: Vec<f64> = k.dense();
 assert_eq!(d.len(), k.n_rows() * k.n_cols());
+
+// Vue dense typée nalgebra (column-major DMatrix), prête pour LU/Cholesky.
+let m: nalgebra::DMatrix<f64> = k.to_dmatrix();
+
+// Vues creuses nalgebra-sparse, prêtes pour les solveurs creux.
+let csr: nalgebra_sparse::CsrMatrix<f64> = k.to_csr();
+let csc: nalgebra_sparse::CscMatrix<f64> = k.to_csc();
 
 // Itération sur les triplets bruts (ordre d'insertion préservé).
 for (row_dof, col_dof, value) in k.iter_entries() {
@@ -93,7 +107,7 @@ for (row_dof, col_dof, value) in k.iter_entries() {
     // …
 }
 
-// Produit matrice-vecteur dense : y = A · x.
+// Produit matrice-vecteur dense : y = A · x (passe par CSR sous le capot).
 let y = k.mul_dense(&[1.0, 1.0]).unwrap();
 ```
 
@@ -137,7 +151,7 @@ for row_node, row_field, col_node, col_field, value in k.entries():
 
 ## Limitations actuelles
 
-- **Format COO uniquement** : suffisant pour des solveurs itératifs / dense, sous-optimal pour des solveurs creux directs. Un format CSR (ou COO → CSR au gel, style cast3m) sera ajouté si la mesure le justifie.
-- **Recherche linéaire des DOFs et de noms** lors de l'insertion : O(n_dofs + n_fields) par `add_entry`. Pour les premiers besoins (assemblage de quelques milliers de DOFs), c'est négligeable. Une indexation hash pourra être ajoutée en Phase 6 sans casser l'API publique.
+- **COO interne uniquement pendant l'assemblage** : `add_entry` n'utilise pas (encore) le `CooMatrix` de `nalgebra-sparse` parce que celui-ci exige des dimensions fixes à la construction ; or pyrucast découvre les DOFs au fil de l'insertion. La conversion vers `CooMatrix` / `CsrMatrix` / `CscMatrix` est faite à la demande au moment où ces vues sont utiles.
+- **Recherche linéaire des DOFs et des noms** lors de l'insertion : O(n_dofs + n_fields) par `add_entry`. Pour les premiers besoins (assemblage de quelques milliers de DOFs), c'est négligeable. Une indexation hash pourra être ajoutée en Phase 6 sans casser l'API publique.
 - **Pas de produit matrice-matrice** ni d'opérations entre matrices (somme, etc.) : à venir avec les premiers besoins concrets (préconditionneurs, formulations couplées).
 - Le drapeau `symmetric` n'est pas vérifié numériquement à l'assemblage. C'est de la responsabilité de l'assembleur (du `Model`) d'apparier correctement la déclaration et la réalité.

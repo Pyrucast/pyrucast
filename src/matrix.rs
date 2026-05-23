@@ -53,6 +53,8 @@
 
 use crate::configuration::NodeId;
 use crate::error::{PyrucastError, Result};
+use nalgebra::{DMatrix, DVector};
+use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -220,21 +222,63 @@ impl Matrix {
 
     /// Materialise the matrix as a flat row-major dense buffer of length
     /// `n_rows × n_cols`, with `out[i * n_cols + j]` = sum of all COO
-    /// entries at `(row i, col j)`.
+    /// entries at `(row i, col j)`. Convenient for the Python binding.
     ///
-    /// Convenient for testing and for hand-off to a dense linear solver.
+    /// Internally delegates to [`Matrix::to_dmatrix`] (nalgebra).
     pub fn dense(&self) -> Vec<f64> {
-        let nr = self.row_dofs.len();
-        let nc = self.col_dofs.len();
-        let mut out = vec![0.0; nr * nc];
-        for &(r, c, v) in &self.entries {
-            out[r as usize * nc + c as usize] += v;
+        let m = self.to_dmatrix();
+        // DMatrix is column-major; we want row-major flat output.
+        let mut out = Vec::with_capacity(m.nrows() * m.ncols());
+        for i in 0..m.nrows() {
+            for j in 0..m.ncols() {
+                out.push(m[(i, j)]);
+            }
         }
         out
     }
 
+    /// Materialise the matrix as a [`nalgebra::DMatrix<f64>`] of size
+    /// `n_rows × n_cols`. Entries at the same `(row, col)` are summed.
+    pub fn to_dmatrix(&self) -> DMatrix<f64> {
+        let nr = self.row_dofs.len();
+        let nc = self.col_dofs.len();
+        let mut out = DMatrix::<f64>::zeros(nr, nc);
+        for &(r, c, v) in &self.entries {
+            out[(r as usize, c as usize)] += v;
+        }
+        out
+    }
+
+    /// Convert this matrix to a [`nalgebra_sparse::CooMatrix`], summing
+    /// duplicate `(row, col)` entries on the way (the resulting COO has
+    /// at most one triplet per coordinate).
+    pub fn to_coo(&self) -> CooMatrix<f64> {
+        let nr = self.row_dofs.len();
+        let nc = self.col_dofs.len();
+        let mut coo = CooMatrix::<f64>::new(nr, nc);
+        for &(r, c, v) in &self.entries {
+            coo.push(r as usize, c as usize, v);
+        }
+        coo
+    }
+
+    /// Convert this matrix to a [`nalgebra_sparse::CsrMatrix`] —
+    /// the format of choice for matrix-vector products.
+    pub fn to_csr(&self) -> CsrMatrix<f64> {
+        CsrMatrix::from(&self.to_coo())
+    }
+
+    /// Convert this matrix to a [`nalgebra_sparse::CscMatrix`] —
+    /// useful for direct factorizations (Cholesky, LU).
+    pub fn to_csc(&self) -> CscMatrix<f64> {
+        CscMatrix::from(&self.to_coo())
+    }
+
     /// Apply this matrix to a dense vector `x` of length `n_cols`,
     /// returning a dense vector `y = A · x` of length `n_rows`.
+    ///
+    /// Internally uses a CSR conversion and `nalgebra_sparse`'s
+    /// matrix-vector product.
     ///
     /// Returns an error if `x.len() != n_cols`.
     pub fn mul_dense(&self, x: &[f64]) -> Result<Vec<f64>> {
@@ -245,11 +289,10 @@ impl Matrix {
                 self.n_cols()
             )));
         }
-        let mut y = vec![0.0; self.n_rows()];
-        for &(r, c, v) in &self.entries {
-            y[r as usize] += v * x[c as usize];
-        }
-        Ok(y)
+        let csr = self.to_csr();
+        let x_vec = DVector::<f64>::from_column_slice(x);
+        let y_vec: DVector<f64> = &csr * &x_vec;
+        Ok(y_vec.iter().copied().collect())
     }
 
     // ── Internals ───────────────────────────────────────────────────────────
@@ -596,6 +639,62 @@ mod tests {
         assert_eq!(m.n_rows(), 2);
         assert_eq!(m.n_cols(), 2);
         assert_eq!(m.field_names(), &["ux".to_string(), "uy".to_string()]);
+    }
+
+    #[test]
+    fn to_dmatrix_round_trip() {
+        let mut m = Matrix::new(true);
+        m.add_entry(nid(0), "q", nid(0), "T", 2.0);
+        m.add_entry(nid(0), "q", nid(1), "T", -1.0);
+        m.add_entry(nid(1), "q", nid(0), "T", -1.0);
+        m.add_entry(nid(1), "q", nid(1), "T", 2.0);
+        let d = m.to_dmatrix();
+        assert_eq!(d.nrows(), 2);
+        assert_eq!(d.ncols(), 2);
+        assert_eq!(d[(0, 0)], 2.0);
+        assert_eq!(d[(0, 1)], -1.0);
+        assert_eq!(d[(1, 0)], -1.0);
+        assert_eq!(d[(1, 1)], 2.0);
+    }
+
+    #[test]
+    fn to_csr_carries_correct_dimensions_and_values() {
+        let mut m = Matrix::new(false);
+        m.add_entry(nid(0), "q", nid(0), "T", 1.0);
+        m.add_entry(nid(0), "q", nid(1), "T", 2.0);
+        m.add_entry(nid(1), "q", nid(2), "T", 3.0);
+        let csr = m.to_csr();
+        assert_eq!(csr.nrows(), 2);
+        assert_eq!(csr.ncols(), 3);
+        assert_eq!(csr.nnz(), 3);
+    }
+
+    #[test]
+    fn to_csc_round_trip() {
+        let mut m = Matrix::new(true);
+        m.add_entry(nid(0), "q", nid(0), "T", 4.0);
+        m.add_entry(nid(0), "q", nid(1), "T", 1.0);
+        m.add_entry(nid(1), "q", nid(0), "T", 1.0);
+        m.add_entry(nid(1), "q", nid(1), "T", 3.0);
+        let csc = m.to_csc();
+        assert_eq!(csc.nrows(), 2);
+        assert_eq!(csc.ncols(), 2);
+        assert_eq!(csc.nnz(), 4);
+    }
+
+    #[test]
+    fn to_coo_sums_duplicates_into_one_triplet_logically() {
+        // CooMatrix from nalgebra-sparse preserves all pushed triplets;
+        // we only verify size and total nnz here. Summation is checked
+        // by `to_dmatrix` / `get` in other tests.
+        let mut m = Matrix::new(false);
+        m.add_entry(nid(0), "q", nid(0), "T", 1.0);
+        m.add_entry(nid(0), "q", nid(0), "T", 2.0);
+        let coo = m.to_coo();
+        assert_eq!(coo.nrows(), 1);
+        assert_eq!(coo.ncols(), 1);
+        // CooMatrix exposes nnz() that counts triplets, including duplicates.
+        assert_eq!(coo.nnz(), 2);
     }
 
     #[test]
