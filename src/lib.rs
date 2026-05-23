@@ -32,6 +32,7 @@
 pub mod cell;
 pub mod color;
 pub mod configuration;
+pub mod element_field;
 pub mod element_type;
 pub mod error;
 pub mod fe_space;
@@ -92,5 +93,6 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<node_field::PyNodeField>()?;
     m.add_class::<fe_space::PySubFESpace>()?;
     m.add_class::<fe_space::PyFiniteElementSpace>()?;
+    m.add_class::<element_field::PyElementField>()?;
     Ok(())
 }

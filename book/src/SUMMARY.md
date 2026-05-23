@@ -9,4 +9,5 @@
 - [Triangulation : briques mathématiques](triangulation.md)
 - [Champ aux nœuds](node-field.md)
 - [Espace éléments finis](fe-space.md)
+- [Champ aux points de Gauss](element-field.md)
 - [Visualisation](visualization.md)
