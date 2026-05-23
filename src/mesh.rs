@@ -1536,8 +1536,8 @@ mod python {
             Ok(PyMesh { handle: insert(mesh) })
         }
 
-        /// Fusionne les sous-maillages de même type et supprime les mailles en
-        /// double. Retourne un nouveau maillage avec un sous-maillage par type.
+        /// Merge submeshes of the same type and drop duplicate cells.
+        /// Returns a new mesh with one submesh per element type.
         fn consolidate(&self) -> PyResult<PyMesh> {
             let mesh = with(&self.handle, |m| m.consolidate())??;
             Ok(PyMesh { handle: insert(mesh) })
@@ -1814,10 +1814,10 @@ mod tests {
         m.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         let n = m.node(0, 0, 0).unwrap();
-        assert_eq!(n.id(), a.id()); // noeud 0 de l'élément 0 = a
-        assert!(m.node(1, 0, 0).is_err()); // sous-maillage hors bornes
-        assert!(m.node(0, 1, 0).is_err()); // cellule hors bornes
-        assert!(m.node(0, 0, 3).is_err()); // noeud hors bornes (TRI3 : indices 0..2)
+        assert_eq!(n.id(), a.id()); // node 0 of element 0 = a
+        assert!(m.node(1, 0, 0).is_err()); // submesh out of bounds
+        assert!(m.node(0, 1, 0).is_err()); // cell out of bounds
+        assert!(m.node(0, 0, 3).is_err()); // node out of bounds (TRI3: indices 0..2)
     }
 
     #[test]
@@ -1831,8 +1831,8 @@ mod tests {
         assert_eq!(m.element_types().unwrap(), vec![ElementType::POI1]);
         assert_eq!(m.cell_count().unwrap(), 3);
 
-        // from_live_nodes est un snapshot : le maillage m tient les refs,
-        // un second appel sur la même configuration donne le même résultat.
+        // from_live_nodes is a snapshot: mesh m holds the refs, so a
+        // second call on the same configuration yields the same result.
         let m2 = Mesh::from_live_nodes(cfg).unwrap();
         assert_eq!(m2.cell_count().unwrap(), 3);
     }
@@ -1874,7 +1874,7 @@ mod tests {
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG2]);
         assert_eq!(mesh.cell_count().unwrap(), 3);
 
-        // noeud 0 de chaque cellule
+        // node 0 of each cell
         let n00 = mesh.node(0, 0, 0).unwrap();
         let n10 = mesh.node(0, 1, 0).unwrap();
         let n20 = mesh.node(0, 2, 0).unwrap();
@@ -1882,7 +1882,7 @@ mod tests {
         assert!((n10.coord().unwrap()[0] - 2.0).abs() < 1e-12);
         assert!((n20.coord().unwrap()[0] - 4.0).abs() < 1e-12);
 
-        // dernier nœud de la dernière cellule = nœud b
+        // last node of the last cell = node b
         let n21 = mesh.node(0, 2, 1).unwrap();
         assert_eq!(n21.id(), b.id());
     }
@@ -1895,7 +1895,7 @@ mod tests {
 
         let mesh = Mesh::line_seg2(&a, &b, 1).unwrap();
         assert_eq!(mesh.cell_count().unwrap(), 1);
-        // aucun nœud intermédiaire créé : seuls a et b sont dans le maillage
+        // no intermediate node created: only a and b are in the mesh
         assert_eq!(mesh.node(0, 0, 0).unwrap().id(), a.id());
         assert_eq!(mesh.node(0, 0, 1).unwrap().id(), b.id());
     }
@@ -1917,11 +1917,11 @@ mod tests {
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG2]);
         assert_eq!(mesh.cell_count().unwrap(), 4);
 
-        // Nœud 0 : θ=0 → (1, 0)
+        // Node 0: θ=0 → (1, 0)
         let n0 = mesh.node(0, 0, 0).unwrap();
         assert!((n0.coord().unwrap()[0] - 1.0).abs() < 1e-12);
         assert!((n0.coord().unwrap()[1]).abs() < 1e-12);
-        // Nœud 1 : θ=π/2 → (0, 1)
+        // Node 1: θ=π/2 → (0, 1)
         let n1 = mesh.node(0, 1, 0).unwrap();
         assert!((n1.coord().unwrap()[0]).abs() < 1e-12);
         assert!((n1.coord().unwrap()[1] - 1.0).abs() < 1e-12);
@@ -1933,7 +1933,7 @@ mod tests {
         let center = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let mesh = Mesh::circle_seg2(&center, &[0.0, 0.0, 1.0], 1.0, 6).unwrap();
 
-        // Le 2e nœud du dernier élément = le 1er nœud du 1er élément
+        // 2nd node of the last element = 1st node of the first element
         let last_end = mesh.node(0, 5, 1).unwrap();
         let first_start = mesh.node(0, 0, 0).unwrap();
         assert_eq!(last_end.id(), first_start.id());
@@ -1948,7 +1948,7 @@ mod tests {
         for ei in 0..8 {
             let c = mesh.node(0, ei, 0).unwrap().coord().unwrap();
             let dist = ((c[0] - 1.0).powi(2) + (c[1] - 2.0).powi(2)).sqrt();
-            assert!((dist - 3.0).abs() < 1e-10, "élément {ei}: distance={dist}");
+            assert!((dist - 3.0).abs() < 1e-10, "element {ei}: distance={dist}");
         }
     }
 
@@ -1956,15 +1956,15 @@ mod tests {
     fn circle_seg2_3d_xz_plane() {
         let cfg = insert(Configuration::new(3).unwrap());
         let center = Node::create_in(cfg.clone(), &[0.0, 0.0, 0.0]).unwrap();
-        // Normale selon Y → cercle dans le plan XZ
+        // Normal along Y → circle in the XZ plane
         let mesh = Mesh::circle_seg2(&center, &[0.0, 1.0, 0.0], 2.0, 8).unwrap();
         assert_eq!(mesh.cell_count().unwrap(), 8);
 
         for ei in 0..8 {
             let c = mesh.node(0, ei, 0).unwrap().coord().unwrap();
-            assert!((c[1]).abs() < 1e-12, "élément {ei}: y={}", c[1]);
+            assert!((c[1]).abs() < 1e-12, "element {ei}: y={}", c[1]);
             let dist = (c[0].powi(2) + c[2].powi(2)).sqrt();
-            assert!((dist - 2.0).abs() < 1e-10, "élément {ei}: distance={dist}");
+            assert!((dist - 2.0).abs() < 1e-10, "element {ei}: distance={dist}");
         }
     }
 
@@ -1993,29 +1993,29 @@ mod tests {
     #[test]
     fn sweep_qua4_basic() {
         let cfg = insert(Configuration::new(2).unwrap());
-        // mesh_a : y=0, 2 éléments SEG2 de (0,0) à (2,0)
+        // mesh_a: y=0, 2 SEG2 elements from (0,0) to (2,0)
         let a0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let a2 = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
         let mesh_a = Mesh::line_seg2(&a0, &a2, 2).unwrap();
 
-        // mesh_b : y=1, 2 éléments SEG2 de (0,1) à (2,1)
+        // mesh_b: y=1, 2 SEG2 elements from (0,1) to (2,1)
         let b0 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
         let b2 = Node::create_in(cfg.clone(), &[2.0, 1.0]).unwrap();
         let mesh_b = Mesh::line_seg2(&b0, &b2, 2).unwrap();
 
         let qua = Mesh::sweep_qua4(&mesh_a, &mesh_b, 2).unwrap();
         assert_eq!(qua.element_types().unwrap(), vec![ElementType::QUA4]);
-        // 2 éléments × 2 couches = 4 cellules QUA4
+        // 2 elements × 2 layers = 4 QUA4 cells
         assert_eq!(qua.cell_count().unwrap(), 4);
 
-        // Cellule (k=0, j=0) : coin inférieur gauche doit être (0,0)
+        // Cell (k=0, j=0): bottom-left corner must be (0,0)
         let n00 = qua.node(0, 0, 0).unwrap();
         assert_eq!(n00.coord().unwrap(), vec![0.0, 0.0]);
-        // coin inférieur droit : (1,0)
+        // bottom-right corner: (1,0)
         let n01 = qua.node(0, 0, 1).unwrap();
         assert!((n01.coord().unwrap()[0] - 1.0).abs() < 1e-12);
         assert!((n01.coord().unwrap()[1]).abs() < 1e-12);
-        // coin supérieur droit : (1,0.5) — couche intermédiaire
+        // top-right corner: (1,0.5) — intermediate layer
         let n02 = qua.node(0, 0, 2).unwrap();
         assert!((n02.coord().unwrap()[0] - 1.0).abs() < 1e-12);
         assert!((n02.coord().unwrap()[1] - 0.5).abs() < 1e-12);
@@ -2035,7 +2035,7 @@ mod tests {
         let qua = Mesh::sweep_qua4(&mesh_a, &mesh_b, 1).unwrap();
         assert_eq!(qua.cell_count().unwrap(), 1);
 
-        // Les nœuds originaux doivent être réutilisés
+        // The original nodes must be reused
         let n0 = qua.node(0, 0, 0).unwrap();
         let n1 = qua.node(0, 0, 1).unwrap();
         let n2 = qua.node(0, 0, 2).unwrap();
@@ -2073,7 +2073,7 @@ mod tests {
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let seg = Mesh::line_seg2(&a, &b, 1).unwrap();
 
-        // maillage TRI3 à la place d'un SEG2
+        // TRI3 mesh in place of a SEG2
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
         let mut tri_mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
         tri_mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
@@ -2085,21 +2085,21 @@ mod tests {
     #[test]
     fn extrude_seg2_to_qua4() {
         let cfg = insert(Configuration::new(2).unwrap());
-        // SEG2 de (0,0) à (2,0) avec 2 éléments, 3 nœuds : x=0,1,2
+        // SEG2 from (0,0) to (2,0) with 2 elements, 3 nodes: x=0,1,2
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
         let seg = Mesh::line_seg2(&a, &b, 2).unwrap();
 
-        // extrusion de 3 couches vers (0,3)
+        // extrude 3 layers towards (0,3)
         let qua = Mesh::extrude(&seg, &[0.0, 3.0], 3).unwrap();
         assert_eq!(qua.element_types().unwrap(), vec![ElementType::QUA4]);
-        // 2 éléments × 3 couches = 6 cellules
+        // 2 elements × 3 layers = 6 cells
         assert_eq!(qua.cell_count().unwrap(), 6);
 
-        // Coin bas-gauche de la 1ère cellule = (0,0)
+        // Bottom-left corner of the 1st cell = (0,0)
         let n = qua.node(0, 0, 0).unwrap();
         assert_eq!(n.coord().unwrap(), vec![0.0, 0.0]);
-        // Coin haut-gauche de la 1ère cellule = (0,1) — couche 1 sur 3
+        // Top-left corner of the 1st cell = (0,1) — layer 1 of 3
         let n = qua.node(0, 0, 3).unwrap();
         assert!((n.coord().unwrap()[0]).abs() < 1e-12);
         assert!((n.coord().unwrap()[1] - 1.0).abs() < 1e-12);
@@ -2113,9 +2113,9 @@ mod tests {
         let seg = Mesh::line_seg2(&a, &b, 2).unwrap();
 
         let qua = Mesh::extrude(&seg, &[0.0, 1.0], 1).unwrap();
-        // 2 cellules QUA4, le nœud du milieu (bas) doit être commun
-        let mid_cell0 = qua.node(0, 0, 1).unwrap(); // coin droit de la cellule 0
-        let mid_cell1 = qua.node(0, 1, 0).unwrap(); // coin gauche de la cellule 1
+        // 2 QUA4 cells, the middle (bottom) node must be shared
+        let mid_cell0 = qua.node(0, 0, 1).unwrap(); // right corner of cell 0
+        let mid_cell1 = qua.node(0, 1, 0).unwrap(); // left corner of cell 1
         assert_eq!(mid_cell0.id(), mid_cell1.id());
     }
 
@@ -2133,12 +2133,12 @@ mod tests {
         assert_eq!(hex.element_types().unwrap(), vec![ElementType::HEX8]);
         assert_eq!(hex.cell_count().unwrap(), 1);
 
-        // Les 4 nœuds du bas sont réutilisés
+        // The 4 bottom nodes are reused
         assert_eq!(hex.node(0, 0, 0).unwrap().id(), n0.id());
         assert_eq!(hex.node(0, 0, 1).unwrap().id(), n1.id());
         assert_eq!(hex.node(0, 0, 2).unwrap().id(), n2.id());
         assert_eq!(hex.node(0, 0, 3).unwrap().id(), n3.id());
-        // Le 1er nœud du haut est à (0,0,2)
+        // The 1st top node is at (0,0,2)
         let top0 = hex.node(0, 0, 4).unwrap();
         assert_eq!(top0.coord().unwrap(), vec![0.0, 0.0, 2.0]);
     }
@@ -2158,7 +2158,7 @@ mod tests {
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let seg = Mesh::line_seg2(&a, &b, 1).unwrap();
-        // direction à 3 composantes pour des nœuds en 2D
+        // 3-component direction for 2-D nodes
         assert!(Mesh::extrude(&seg, &[0.0, 1.0, 0.0], 1).is_err());
     }
 
@@ -2784,7 +2784,7 @@ mod tests {
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
 
-        // Deux sous-maillages TRI3 séparés avec une cellule chacun.
+        // Two separate TRI3 submeshes with one cell each.
         let sm1 = {
             let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
@@ -2792,7 +2792,7 @@ mod tests {
         };
         let sm2 = {
             let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
-            sm.add_cell(&[b.id(), c.id(), a.id()]).unwrap(); // nouvelle cellule
+            sm.add_cell(&[b.id(), c.id(), a.id()]).unwrap(); // new cell
             insert(sm)
         };
 
@@ -2802,8 +2802,8 @@ mod tests {
         assert_eq!(mesh.submesh_count(), 2);
 
         let c2 = mesh.consolidate().unwrap();
-        assert_eq!(c2.submesh_count(), 1, "doit fusionner les deux TRI3");
-        assert_eq!(c2.cell_count().unwrap(), 2, "deux cellules distinctes conservées");
+        assert_eq!(c2.submesh_count(), 1, "must merge the two TRI3 submeshes");
+        assert_eq!(c2.cell_count().unwrap(), 2, "two distinct cells must be kept");
         assert_eq!(c2.element_types().unwrap(), vec![ElementType::TRI3]);
     }
 
@@ -2821,7 +2821,7 @@ mod tests {
         };
         let sm2 = {
             let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
-            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap(); // doublon exact
+            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap(); // exact duplicate
             insert(sm)
         };
 
@@ -2831,7 +2831,7 @@ mod tests {
 
         let c2 = mesh.consolidate().unwrap();
         assert_eq!(c2.submesh_count(), 1);
-        assert_eq!(c2.cell_count().unwrap(), 1, "le doublon doit être supprimé");
+        assert_eq!(c2.cell_count().unwrap(), 1, "the duplicate must be removed");
     }
 
     #[test]
@@ -2851,7 +2851,7 @@ mod tests {
             sm.add_cell(&[a.id()]).unwrap();
             insert(sm)
         };
-        // Deuxième TRI3 avec doublon.
+        // Second TRI3 with a duplicate.
         let sm_tri2 = {
             let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
@@ -2868,7 +2868,7 @@ mod tests {
         assert_eq!(
             c2.element_types().unwrap(),
             vec![ElementType::TRI3, ElementType::POI1],
-            "ordre premier-rencontré"
+            "first-seen order"
         );
         assert_eq!(c2.cell_counts().unwrap(), vec![1, 1]);
     }
