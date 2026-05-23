@@ -37,6 +37,7 @@ pub mod element_type;
 pub mod error;
 pub mod fe_space;
 pub mod interpolation;
+pub mod matrix;
 pub mod mesh;
 pub mod node;
 pub mod node_field;
@@ -94,5 +95,6 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<fe_space::PySubFESpace>()?;
     m.add_class::<fe_space::PyFiniteElementSpace>()?;
     m.add_class::<element_field::PyElementField>()?;
+    m.add_class::<matrix::PyMatrix>()?;
     Ok(())
 }

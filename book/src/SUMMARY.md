@@ -10,4 +10,5 @@
 - [Champ aux nœuds](node-field.md)
 - [Espace éléments finis](fe-space.md)
 - [Champ aux points de Gauss](element-field.md)
+- [Matrice creuse](matrix.md)
 - [Visualisation](visualization.md)

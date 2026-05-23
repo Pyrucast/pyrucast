@@ -10,6 +10,7 @@ __all__ = [
     "Configuration",
     "ElementField",
     "FiniteElementSpace",
+    "Matrix",
     "Mesh",
     "Node",
     "NodeField",
@@ -160,6 +161,48 @@ class FiniteElementSpace:
         r"""
         `fes[i]` → SubFESpace. Supports negative indices.
         """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+
+@typing.final
+class Matrix:
+    r"""
+    Python wrapper for [`Matrix`].
+    """
+    @property
+    def symmetric(self) -> builtins.bool: ...
+    def __new__(cls, symmetric: builtins.bool = False) -> Matrix:
+        r"""
+        `Matrix(symmetric=False)`.
+        """
+    def add_entry(self, row_node: builtins.int, row_field: builtins.str, col_node: builtins.int, col_field: builtins.str, value: builtins.float) -> None: ...
+    def get(self, row_node: builtins.int, row_field: builtins.str, col_node: builtins.int, col_field: builtins.str) -> builtins.float: ...
+    def n_rows(self) -> builtins.int: ...
+    def n_cols(self) -> builtins.int: ...
+    def entry_count(self) -> builtins.int: ...
+    def field_names(self) -> builtins.list[builtins.str]: ...
+    def row_dofs(self) -> builtins.list[tuple[builtins.int, builtins.str]]:
+        r"""
+        `(node_id, field_name)` tuples for each row, in order.
+        """
+    def col_dofs(self) -> builtins.list[tuple[builtins.int, builtins.str]]:
+        r"""
+        `(node_id, field_name)` tuples for each column, in order.
+        """
+    def dense(self) -> builtins.list[builtins.float]:
+        r"""
+        Dense row-major buffer, length `n_rows × n_cols`.
+        """
+    def mul_dense(self, x: typing.Sequence[builtins.float]) -> builtins.list[builtins.float]:
+        r"""
+        Matrix-vector product `y = A · x` (dense).
+        """
+    def entries(self) -> builtins.list[tuple[builtins.int, builtins.str, builtins.int, builtins.str, builtins.float]]:
+        r"""
+        Iterator-like materialisation: list of `(row_node, row_field,
+        col_node, col_field, value)` tuples, in insertion order.
+        """
+    def __len__(self) -> builtins.int: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
 
