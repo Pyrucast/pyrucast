@@ -5,24 +5,59 @@
 //! ([`nodes_per_cell`](ElementType::nodes_per_cell),
 //! [`topological_dim`](ElementType::topological_dim),
 //! [`name`](ElementType::name)).
+//!
+//! # Reference frame and local node numbering
+//!
+//! These conventions define the reference element `ξ` of each
+//! [`ElementType`] and the order in which a cell's nodes must be supplied
+//! to [`crate::mesh::SubMesh::add_cell`] / [`crate::mesh::Mesh::add_cell`].
+//! They are the contract between the geometry layer (mesh) and any
+//! interpolation layer ([`crate::interpolation::Interpolation`]) built on
+//! top.
+//!
+//! | Variant | Reference domain | Reference node coordinates (in order) |
+//! |---|---|---|
+//! | `POI1` | `{ξ = 0}` (no reference frame) | none — POI1 is just a node list |
+//! | `SEG2` | `ξ ∈ [-1, +1]` | node 0 at `ξ = -1`, node 1 at `ξ = +1` |
+//! | `TRI3` | `ξ, η ∈ [0, 1]` with `ξ + η ≤ 1` | `(0, 0)`, `(1, 0)`, `(0, 1)` — CCW |
+//! | `QUA4` | `ξ, η ∈ [-1, +1]` | `(-1, -1)`, `(1, -1)`, `(1, 1)`, `(-1, 1)` — CCW |
+//! | `TET4` | `ξ, η, ζ ∈ [0, 1]` with `ξ + η + ζ ≤ 1` | `(0,0,0)`, `(1,0,0)`, `(0,1,0)`, `(0,0,1)` — face 0-1-2 CCW seen from node 3 |
+//! | `HEX8` | `ξ, η, ζ ∈ [-1, +1]` | bottom face CCW then top face CCW: `(-1,-1,-1)`, `(1,-1,-1)`, `(1,1,-1)`, `(-1,1,-1)`, `(-1,-1,1)`, `(1,-1,1)`, `(1,1,1)`, `(-1,1,1)` |
+//!
+//! These conventions are compatible with the orientations already enforced
+//! elsewhere in the codebase (CCW filling in
+//! [`crate::mesh::Mesh::fill_surface`], HEX8 node ordering in
+//! [`crate::mesh::Mesh::extrude`]).
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Supported element types. Names follow the cast3m convention.
+///
+/// See the module-level documentation for the reference frame `ξ` and the
+/// local node numbering attached to each variant.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum ElementType {
-    /// 1 node. A POI1 submesh is effectively a list of nodes.
+    /// 1 node. A POI1 submesh is effectively a list of nodes; no reference
+    /// frame is attached.
     POI1,
-    /// 2-node segment (1D).
+    /// 2-node segment. Reference: `ξ ∈ [-1, +1]`. Local order: node 0 at
+    /// `ξ = -1`, node 1 at `ξ = +1`.
     SEG2,
-    /// 3-node triangle (2D).
+    /// 3-node triangle. Reference: `ξ, η ∈ [0, 1]`, `ξ + η ≤ 1`. Local
+    /// order (CCW): `(0, 0)`, `(1, 0)`, `(0, 1)`.
     TRI3,
-    /// 4-node quadrangle (2D).
+    /// 4-node quadrangle. Reference: `ξ, η ∈ [-1, +1]`. Local order (CCW):
+    /// `(-1, -1)`, `(1, -1)`, `(1, 1)`, `(-1, 1)`.
     QUA4,
-    /// 4-node tetrahedron (3D).
+    /// 4-node tetrahedron. Reference: `ξ, η, ζ ∈ [0, 1]`, `ξ + η + ζ ≤ 1`.
+    /// Local order: `(0,0,0)`, `(1,0,0)`, `(0,1,0)`, `(0,0,1)` — face
+    /// 0-1-2 CCW seen from node 3.
     TET4,
-    /// 8-node hexahedron (3D).
+    /// 8-node hexahedron. Reference: `ξ, η, ζ ∈ [-1, +1]`. Local order:
+    /// bottom face CCW (nodes 0..3), then top face CCW (nodes 4..7),
+    /// i.e. `(-1,-1,-1)`, `(1,-1,-1)`, `(1,1,-1)`, `(-1,1,-1)`,
+    /// `(-1,-1,1)`, `(1,-1,1)`, `(1,1,1)`, `(-1,1,1)`.
     HEX8,
 }
 

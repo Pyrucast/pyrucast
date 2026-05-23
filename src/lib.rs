@@ -34,10 +34,13 @@ pub mod color;
 pub mod configuration;
 pub mod element_type;
 pub mod error;
+pub mod fe_space;
+pub mod interpolation;
 pub mod mesh;
 pub mod node;
 pub mod node_field;
 pub mod persist;
+pub mod quadrature;
 pub mod store;
 pub mod triangulation;
 
@@ -87,5 +90,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<mesh::PyMesh>()?;
     m.add_class::<cell::PyCell>()?;
     m.add_class::<node_field::PyNodeField>()?;
+    m.add_class::<fe_space::PySubFESpace>()?;
+    m.add_class::<fe_space::PyFiniteElementSpace>()?;
     Ok(())
 }

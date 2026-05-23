@@ -8,4 +8,5 @@
 - [Maillage](mesh.md)
 - [Triangulation : briques mathématiques](triangulation.md)
 - [Champ aux nœuds](node-field.md)
+- [Espace éléments finis](fe-space.md)
 - [Visualisation](visualization.md)

@@ -8,9 +8,11 @@ import typing
 __all__ = [
     "Cell",
     "Configuration",
+    "FiniteElementSpace",
     "Mesh",
     "Node",
     "NodeField",
+    "SubFESpace",
     "SubMesh",
     "set_swap_dir",
     "swap_dir",
@@ -82,6 +84,39 @@ class Configuration:
     def __str__(self) -> builtins.str: ...
 
 @typing.final
+class FiniteElementSpace:
+    r"""
+    Python wrapper for [`FiniteElementSpace`].
+    """
+    def __new__(cls, mesh: Mesh, interpolation: builtins.str = 'LAGRANGE1', quadrature: builtins.str = 'GAUSS') -> FiniteElementSpace:
+        r"""
+        `FiniteElementSpace(mesh)` — Lagrange-1 + default Gauss for
+        every submesh.
+        
+        `FiniteElementSpace(mesh, interpolation="LAGRANGE1", quadrature="GAUSS")`
+        — same `(interpolation, quadrature)` applied to every submesh.
+        """
+    @classmethod
+    def with_choices(cls, mesh: Mesh, choices: typing.Sequence[tuple[builtins.str, builtins.str]]) -> FiniteElementSpace:
+        r"""
+        Explicit `(interpolation, quadrature)` per submesh.
+        """
+    @classmethod
+    def lagrange1(cls, mesh: Mesh) -> FiniteElementSpace:
+        r"""
+        Convenience: same as `FiniteElementSpace(mesh)`.
+        """
+    def subspace_count(self) -> builtins.int: ...
+    def subspace(self, i: builtins.int) -> SubFESpace: ...
+    def __len__(self) -> builtins.int: ...
+    def __getitem__(self, idx: builtins.int) -> SubFESpace:
+        r"""
+        `fes[i]` → SubFESpace. Supports negative indices.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+
+@typing.final
 class Mesh:
     r"""
     Python wrapper for [`Mesh`].
@@ -113,8 +148,8 @@ class Mesh:
     def __add__(self, other: Mesh) -> Mesh: ...
     def consolidate(self) -> Mesh:
         r"""
-        Fusionne les sous-maillages de même type et supprime les mailles en
-        double. Retourne un nouveau maillage avec un sous-maillage par type.
+        Merge submeshes of the same type and drop duplicate cells.
+        Returns a new mesh with one submesh per element type.
         """
     def submesh_count(self) -> builtins.int: ...
     def submesh(self, idx: builtins.int) -> SubMesh:
@@ -196,6 +231,64 @@ class NodeField:
     def __setitem__(self, key: tuple[builtins.int, builtins.str], value: builtins.float) -> None:
         r"""
         `field[node_id, "UX"] = v` — raises IndexError if absent.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+
+@typing.final
+class SubFESpace:
+    r"""
+    Python wrapper for [`SubFESpace`].
+    """
+    @property
+    def element_type(self) -> builtins.str: ...
+    @property
+    def interpolation(self) -> builtins.str: ...
+    @property
+    def quadrature(self) -> builtins.str: ...
+    @property
+    def ref_dim(self) -> builtins.int: ...
+    @property
+    def space_dim(self) -> builtins.int: ...
+    @property
+    def nodes_per_cell(self) -> builtins.int: ...
+    def cell_count(self) -> builtins.int: ...
+    def gauss_count(self) -> builtins.int: ...
+    def gauss_xi(self, g: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        Reference coordinates of the `g`-th Gauss point.
+        """
+    def gauss_weight(self, g: builtins.int) -> builtins.float:
+        r"""
+        Weight of the `g`-th Gauss point.
+        """
+    def n_at_g(self, g: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        `N_i(ξ_g)` at the `g`-th Gauss point (flat, length `nodes_per_cell`).
+        """
+    def dn_at_g(self, g: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        `∂N_i/∂ξ_j(ξ_g)` at the `g`-th Gauss point.
+        
+        Flat row-major: index `[i * ref_dim + j]`.
+        """
+    def jacobian(self, cell_idx: builtins.int, g: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        Jacobian `J = ∂x/∂ξ` of cell `cell_idx` at Gauss point `g`.
+        
+        Flat row-major buffer of length `space_dim × ref_dim`,
+        indexed `[a * ref_dim + k]`.
+        """
+    def det_jacobian(self, cell_idx: builtins.int, g: builtins.int) -> builtins.float:
+        r"""
+        `|J|` — `|det(J)|` if `space_dim == ref_dim`, else
+        `sqrt(det(JᵀJ))`. Always non-negative.
+        """
+    def dn_dx(self, cell_idx: builtins.int, g: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        Physical derivatives `∂N_i/∂x_a` of cell `cell_idx` at Gauss
+        point `g`. Flat row-major buffer of length
+        `nodes_per_cell × space_dim`, indexed `[i * space_dim + a]`.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...

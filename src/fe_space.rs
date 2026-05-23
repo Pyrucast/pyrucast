@@ -1,0 +1,1188 @@
+//! Finite-element space — interpolation + quadrature layer on top of a mesh.
+//!
+//! Hierarchy mirroring [`crate::mesh`]:
+//!
+//! - [`SubFESpace`] — one [`crate::interpolation::Interpolation`] and one
+//!   [`crate::quadrature::QuadratureRule`] applied to a single
+//!   [`crate::mesh::SubMesh`]. It stores the **reference-space tables**
+//!   that do not depend on the physical coordinates of the nodes
+//!   (Gauss points and weights, shape functions and reference
+//!   derivatives at those Gauss points) and computes the physical
+//!   quantities — Jacobian, `|J|`, `dN/dx` — **on the fly** from the
+//!   current node coordinates in the
+//!   [`crate::configuration::Configuration`].
+//! - [`FiniteElementSpace`] — collection of `SubFESpace` matching the
+//!   submeshes of a [`crate::mesh::Mesh`] one-for-one. The mesh handle
+//!   is captured at construction.
+//!
+//! The mesh **topology** (connectivity, element types) is frozen at the
+//! `FiniteElementSpace` construction. The mesh **geometry** (node
+//! coordinates) may evolve later (e.g. mesh displacement); the
+//! on-the-fly Jacobian computation always reflects the current
+//! coordinates.
+//!
+//! POI1 submeshes are rejected: a point element has no reference frame.
+//!
+//! # Example
+//!
+//! ```
+//! use pyrucast::configuration::Configuration;
+//! use pyrucast::element_type::ElementType;
+//! use pyrucast::fe_space::FiniteElementSpace;
+//! use pyrucast::mesh::Mesh;
+//! use pyrucast::node::Node;
+//! use pyrucast::store::{insert, with};
+//!
+//! let cfg = insert(Configuration::new(2).unwrap());
+//! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+//! let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
+//! let c = Node::create_in(cfg.clone(), &[0.0, 2.0]).unwrap();
+//!
+//! let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+//! mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+//! let mesh_h = insert(mesh);
+//!
+//! let fes = FiniteElementSpace::lagrange1(mesh_h).unwrap();
+//! let sub = fes.subspace(0).unwrap();
+//! with(&sub, |s| {
+//!     assert_eq!(s.gauss_count(), 3);
+//!     // |J| of a triangle with vertices (0,0), (2,0), (0,2): the mapping
+//!     // is linear, |J| = 4 (twice the area, since ref triangle has area 1/2).
+//!     for g in 0..s.gauss_count() {
+//!         let dj = s.det_jacobian(0, g).unwrap();
+//!         assert!((dj - 4.0).abs() < 1e-12);
+//!     }
+//! })
+//! .unwrap();
+//! ```
+
+use crate::configuration::{Configuration, NodeId};
+use crate::element_type::ElementType;
+use crate::error::{PyrucastError, Result};
+use crate::interpolation::Interpolation;
+use crate::mesh::{Mesh, SubMesh};
+use crate::quadrature::QuadratureRule;
+use crate::store::{insert, with, Handle};
+use serde::{Deserialize, Serialize};
+use std::fmt;
+
+// ─── SubFESpace ────────────────────────────────────────────────────────────
+
+/// Finite-element space attached to a single [`SubMesh`].
+///
+/// Stores only the **reference-space** tables (independent of the node
+/// coordinates); physical quantities are computed on the fly.
+#[derive(Serialize, Deserialize)]
+pub struct SubFESpace {
+    submesh: Handle<SubMesh>,
+    interpolation: Interpolation,
+    quadrature: QuadratureRule,
+    /// Geometric dimension of the owning `Configuration` at construction
+    /// time (used only to size the on-the-fly Jacobians). The
+    /// `Configuration` may not change dimension, so this is stable for
+    /// the lifetime of the subspace.
+    space_dim: usize,
+
+    // Reference-space tables (invariant under mesh deformation):
+    /// Flat `n_g × ref_dim` reference coordinates of the Gauss points.
+    gauss_xi: Vec<f64>,
+    /// `n_g` Gauss weights.
+    gauss_w: Vec<f64>,
+    /// Flat `n_g × n_nodes` values of `N_i(ξ_g)`.
+    n_at_g: Vec<f64>,
+    /// Flat `n_g × n_nodes × ref_dim` values of `∂N_i/∂ξ_j(ξ_g)`.
+    dn_at_g: Vec<f64>,
+}
+
+impl SubFESpace {
+    /// Build a subspace over `submesh` with the given interpolation and
+    /// quadrature.
+    ///
+    /// Validates structural compatibility only (POI1 rejected,
+    /// `(ElementType, Interpolation)` pair supported,
+    /// `space_dim ≥ ref_dim`). The Jacobian is **not** evaluated at
+    /// construction.
+    pub fn new(
+        submesh: Handle<SubMesh>,
+        interpolation: Interpolation,
+        quadrature: QuadratureRule,
+    ) -> Result<Self> {
+        let (et, cfg) = with(&submesh, |s| (s.element_type(), s.configuration()))?;
+        if et == ElementType::POI1 {
+            return Err(PyrucastError::Message(
+                "SubFESpace: POI1 submesh is not supported (no reference frame)".into(),
+            ));
+        }
+        if !interpolation.is_compatible_with(et) {
+            return Err(PyrucastError::Message(format!(
+                "SubFESpace: interpolation {} not compatible with element type {}",
+                interpolation, et
+            )));
+        }
+        if !quadrature.is_compatible_with(et) {
+            return Err(PyrucastError::Message(format!(
+                "SubFESpace: quadrature {} not compatible with element type {}",
+                quadrature, et
+            )));
+        }
+        let space_dim = with(&cfg, |c| c.dim())? as usize;
+        let ref_dim = et.topological_dim();
+        if space_dim < ref_dim {
+            return Err(PyrucastError::Message(format!(
+                "SubFESpace: space dim {} < reference dim {} of {} (cannot define a Jacobian)",
+                space_dim, ref_dim, et
+            )));
+        }
+
+        let n_nodes = et.nodes_per_cell();
+        let (gauss_xi, gauss_w) = quadrature.points(et)?;
+        let n_g = gauss_w.len();
+
+        let mut n_at_g = Vec::with_capacity(n_g * n_nodes);
+        let mut dn_at_g = Vec::with_capacity(n_g * n_nodes * ref_dim);
+        for g in 0..n_g {
+            let xi = &gauss_xi[g * ref_dim..(g + 1) * ref_dim];
+            n_at_g.extend_from_slice(&interpolation.shape(et, xi)?);
+            dn_at_g.extend_from_slice(&interpolation.dshape_dxi(et, xi)?);
+        }
+
+        Ok(Self {
+            submesh,
+            interpolation,
+            quadrature,
+            space_dim,
+            gauss_xi,
+            gauss_w,
+            n_at_g,
+            dn_at_g,
+        })
+    }
+
+    // ── Accessors (structural) ──────────────────────────────────────────────
+
+    /// Handle to the underlying submesh (internal clone).
+    pub fn submesh(&self) -> Handle<SubMesh> {
+        self.submesh.clone()
+    }
+
+    /// Handle to the owning `Configuration` (internal clone).
+    pub fn configuration(&self) -> Result<Handle<Configuration>> {
+        with(&self.submesh, |s| s.configuration())
+    }
+
+    /// Interpolation in use.
+    pub fn interpolation(&self) -> Interpolation {
+        self.interpolation
+    }
+
+    /// Quadrature rule in use.
+    pub fn quadrature(&self) -> QuadratureRule {
+        self.quadrature
+    }
+
+    /// Element type of the submesh.
+    pub fn element_type(&self) -> Result<ElementType> {
+        with(&self.submesh, |s| s.element_type())
+    }
+
+    /// Reference dimension (= topological dim of the element type).
+    pub fn ref_dim(&self) -> Result<usize> {
+        Ok(self.element_type()?.topological_dim())
+    }
+
+    /// Geometric (physical) dimension of the underlying `Configuration`.
+    pub fn space_dim(&self) -> usize {
+        self.space_dim
+    }
+
+    /// Number of nodes per cell (= `element_type().nodes_per_cell()`).
+    pub fn nodes_per_cell(&self) -> Result<usize> {
+        Ok(self.element_type()?.nodes_per_cell())
+    }
+
+    /// Number of cells in the underlying submesh.
+    pub fn cell_count(&self) -> Result<usize> {
+        with(&self.submesh, |s| s.cell_count())
+    }
+
+    /// Number of Gauss points per cell.
+    pub fn gauss_count(&self) -> usize {
+        self.gauss_w.len()
+    }
+
+    // ── Reference-space accessors ───────────────────────────────────────────
+
+    /// Reference coordinates of the `g`-th Gauss point (length `ref_dim`).
+    pub fn gauss_xi(&self, g: usize) -> Result<&[f64]> {
+        self.check_g(g)?;
+        let ref_dim = self.ref_dim()?;
+        Ok(&self.gauss_xi[g * ref_dim..(g + 1) * ref_dim])
+    }
+
+    /// Weight of the `g`-th Gauss point.
+    pub fn gauss_weight(&self, g: usize) -> Result<f64> {
+        self.check_g(g)?;
+        Ok(self.gauss_w[g])
+    }
+
+    /// `N_i(ξ_g)` for all nodes `i` at the `g`-th Gauss point
+    /// (length `nodes_per_cell`).
+    pub fn n_at_g(&self, g: usize) -> Result<&[f64]> {
+        self.check_g(g)?;
+        let n_nodes = self.nodes_per_cell()?;
+        Ok(&self.n_at_g[g * n_nodes..(g + 1) * n_nodes])
+    }
+
+    /// `∂N_i/∂ξ_j(ξ_g)` for all nodes at the `g`-th Gauss point.
+    ///
+    /// Flat row-major buffer of length `nodes_per_cell × ref_dim`, with
+    /// `[i * ref_dim + j]` = `∂N_i/∂ξ_j`.
+    pub fn dn_at_g(&self, g: usize) -> Result<&[f64]> {
+        self.check_g(g)?;
+        let n_nodes = self.nodes_per_cell()?;
+        let ref_dim = self.ref_dim()?;
+        let stride = n_nodes * ref_dim;
+        Ok(&self.dn_at_g[g * stride..(g + 1) * stride])
+    }
+
+    // ── Physical quantities (on-the-fly) ────────────────────────────────────
+
+    /// Jacobian `J = ∂x/∂ξ` of cell `cell_idx` at the `g`-th Gauss point.
+    ///
+    /// Flat row-major buffer of length `space_dim × ref_dim`, with
+    /// `[a * ref_dim + k]` = `∂x_a/∂ξ_k`. Each entry is built from the
+    /// **current** node coordinates in the `Configuration`.
+    pub fn jacobian(&self, cell_idx: usize, g: usize) -> Result<Vec<f64>> {
+        self.check_g(g)?;
+        let coords = self.cell_node_coords(cell_idx)?;
+        let dn = self.dn_at_g(g)?;
+        Ok(build_jacobian(
+            &coords,
+            dn,
+            self.space_dim,
+            self.ref_dim()?,
+            self.nodes_per_cell()?,
+        ))
+    }
+
+    /// Determinant `|J|` of the Jacobian — `det(J)` if `space_dim ==
+    /// ref_dim`, `sqrt(det(JᵀJ))` for manifold elements
+    /// (`space_dim > ref_dim`). The returned value is always
+    /// non-negative; it is the **measure scaling factor** to use in
+    /// numerical integration.
+    pub fn det_jacobian(&self, cell_idx: usize, g: usize) -> Result<f64> {
+        let jac = self.jacobian(cell_idx, g)?;
+        Ok(jacobian_measure(&jac, self.space_dim, self.ref_dim()?))
+    }
+
+    /// Physical derivatives `∂N_i/∂x_a` at cell `cell_idx`, Gauss point
+    /// `g`.
+    ///
+    /// Flat row-major buffer of length `nodes_per_cell × space_dim`,
+    /// with `[i * space_dim + a]` = `∂N_i/∂x_a`. For manifold elements
+    /// (`space_dim > ref_dim`), the returned gradient is the **tangent**
+    /// gradient on the embedded surface / curve.
+    pub fn dn_dx(&self, cell_idx: usize, g: usize) -> Result<Vec<f64>> {
+        let jac = self.jacobian(cell_idx, g)?;
+        let dn_dxi = self.dn_at_g(g)?;
+        let n_nodes = self.nodes_per_cell()?;
+        let ref_dim = self.ref_dim()?;
+        let space_dim = self.space_dim;
+        build_dn_dx(&jac, dn_dxi, space_dim, ref_dim, n_nodes)
+    }
+
+    // ── Internals ───────────────────────────────────────────────────────────
+
+    /// Read all node coordinates of a cell into a flat buffer
+    /// `[n_nodes × space_dim]`, row-major (`[i * space_dim + a]`).
+    fn cell_node_coords(&self, cell_idx: usize) -> Result<Vec<f64>> {
+        let n_nodes = self.nodes_per_cell()?;
+        let (cfg, ids): (Handle<Configuration>, Vec<NodeId>) =
+            with(&self.submesh, |s| -> Result<_> {
+                let total = s.cell_count();
+                if cell_idx >= total {
+                    return Err(PyrucastError::Message(format!(
+                        "SubFESpace: cell index {} ≥ cell_count {}",
+                        cell_idx, total
+                    )));
+                }
+                let conn = s.connectivity();
+                let ids = conn[cell_idx * n_nodes..(cell_idx + 1) * n_nodes].to_vec();
+                Ok((s.configuration(), ids))
+            })??;
+        let mut out = Vec::with_capacity(n_nodes * self.space_dim);
+        with(&cfg, |c| -> Result<()> {
+            for id in ids {
+                out.extend_from_slice(c.coord(id)?);
+            }
+            Ok(())
+        })??;
+        Ok(out)
+    }
+
+    fn check_g(&self, g: usize) -> Result<()> {
+        if g >= self.gauss_count() {
+            return Err(PyrucastError::Message(format!(
+                "SubFESpace: gauss index {} ≥ n_g {}",
+                g,
+                self.gauss_count()
+            )));
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for SubFESpace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SubFESpace")
+            .field("interpolation", &self.interpolation)
+            .field("quadrature", &self.quadrature)
+            .field("space_dim", &self.space_dim)
+            .field("n_g", &self.gauss_count())
+            .finish()
+    }
+}
+
+impl fmt::Display for SubFESpace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let et = self
+            .element_type()
+            .map(|e| e.name())
+            .unwrap_or("?");
+        write!(
+            f,
+            "SubFESpace<{}, {}, {}>: {} Gauss point(s)",
+            et,
+            self.interpolation,
+            self.quadrature,
+            self.gauss_count()
+        )
+    }
+}
+
+// ─── FiniteElementSpace ────────────────────────────────────────────────────
+
+/// Finite-element space attached to a [`Mesh`] — one [`SubFESpace`] per
+/// submesh, in the same order.
+///
+/// The mesh handle is captured at construction and stays the same for
+/// the lifetime of the space: topology (connectivity, element types) is
+/// frozen, only the node coordinates may change.
+#[derive(Serialize, Deserialize)]
+pub struct FiniteElementSpace {
+    mesh: Handle<Mesh>,
+    subspaces: Vec<Handle<SubFESpace>>,
+}
+
+impl FiniteElementSpace {
+    /// Build a `FiniteElementSpace` by attaching the supplied
+    /// `(interpolation, quadrature)` pair to each submesh of `mesh`, in
+    /// order.
+    ///
+    /// `choices.len()` must equal `mesh.submesh_count()`. The mesh must
+    /// have at least one submesh and none of them may be POI1.
+    pub fn with(
+        mesh: Handle<Mesh>,
+        choices: &[(Interpolation, QuadratureRule)],
+    ) -> Result<Self> {
+        let n_sub = with(&mesh, |m| m.submesh_count())?;
+        if n_sub == 0 {
+            return Err(PyrucastError::Message(
+                "FiniteElementSpace: mesh has no submesh".into(),
+            ));
+        }
+        if choices.len() != n_sub {
+            return Err(PyrucastError::Message(format!(
+                "FiniteElementSpace: {} (interpolation, quadrature) pair(s) supplied for {} submesh(es)",
+                choices.len(),
+                n_sub
+            )));
+        }
+        let mut subspaces = Vec::with_capacity(n_sub);
+        for (i, &(interp, quad)) in choices.iter().enumerate() {
+            let sm = with(&mesh, |m| m.submesh(i))??;
+            let sub = SubFESpace::new(sm, interp, quad)?;
+            subspaces.push(insert(sub));
+        }
+        Ok(Self { mesh, subspaces })
+    }
+
+    /// Build a `FiniteElementSpace` using the same `interpolation` for
+    /// every submesh, with the default Gauss quadrature.
+    pub fn new(mesh: Handle<Mesh>, interpolation: Interpolation) -> Result<Self> {
+        let n_sub = with(&mesh, |m| m.submesh_count())?;
+        let choices: Vec<_> = (0..n_sub)
+            .map(|_| (interpolation, QuadratureRule::Gauss))
+            .collect();
+        Self::with(mesh, &choices)
+    }
+
+    /// Build the default Lagrange-1 FE space over `mesh`. Equivalent to
+    /// `FiniteElementSpace::new(mesh, Interpolation::Lagrange1)`.
+    pub fn lagrange1(mesh: Handle<Mesh>) -> Result<Self> {
+        Self::new(mesh, Interpolation::Lagrange1)
+    }
+
+    /// Handle to the underlying mesh (internal clone).
+    pub fn mesh(&self) -> Handle<Mesh> {
+        self.mesh.clone()
+    }
+
+    /// Number of subspaces (= number of submeshes of the mesh).
+    pub fn subspace_count(&self) -> usize {
+        self.subspaces.len()
+    }
+
+    /// Handle to the `i`-th subspace (internal clone).
+    pub fn subspace(&self, i: usize) -> Result<Handle<SubFESpace>> {
+        self.subspaces
+            .get(i)
+            .cloned()
+            .ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "FiniteElementSpace: subspace index {} out of bounds",
+                    i
+                ))
+            })
+    }
+}
+
+impl std::ops::Index<usize> for FiniteElementSpace {
+    type Output = Handle<SubFESpace>;
+    fn index(&self, idx: usize) -> &Self::Output {
+        &self.subspaces[idx]
+    }
+}
+
+impl<'a> IntoIterator for &'a FiniteElementSpace {
+    type Item = &'a Handle<SubFESpace>;
+    type IntoIter = std::slice::Iter<'a, Handle<SubFESpace>>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.subspaces.iter()
+    }
+}
+
+impl fmt::Debug for FiniteElementSpace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FiniteElementSpace")
+            .field("subspace_count", &self.subspaces.len())
+            .finish()
+    }
+}
+
+impl fmt::Display for FiniteElementSpace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "FiniteElementSpace: {} subspace(s)",
+            self.subspaces.len()
+        )
+    }
+}
+
+// ─── Numerical helpers ─────────────────────────────────────────────────────
+
+/// Build the Jacobian `J[a*ref_dim + k] = Σ_i x_i[a] · dN_i/dξ_k`.
+///
+/// `coords` has layout `[i * space_dim + a]`, `dn_dxi` has layout
+/// `[i * ref_dim + k]`.
+fn build_jacobian(
+    coords: &[f64],
+    dn_dxi: &[f64],
+    space_dim: usize,
+    ref_dim: usize,
+    n_nodes: usize,
+) -> Vec<f64> {
+    let mut jac = vec![0.0; space_dim * ref_dim];
+    for a in 0..space_dim {
+        for k in 0..ref_dim {
+            let mut sum = 0.0;
+            for i in 0..n_nodes {
+                sum += coords[i * space_dim + a] * dn_dxi[i * ref_dim + k];
+            }
+            jac[a * ref_dim + k] = sum;
+        }
+    }
+    jac
+}
+
+/// Compute `sqrt(det(JᵀJ))` — the measure scaling factor used in
+/// numerical integration. For square `J` this equals `|det(J)|`.
+fn jacobian_measure(jac: &[f64], space_dim: usize, ref_dim: usize) -> f64 {
+    let g = gram_matrix(jac, space_dim, ref_dim);
+    det_small(&g, ref_dim).max(0.0).sqrt()
+}
+
+/// Build `G = JᵀJ` of size `ref_dim × ref_dim`, row-major.
+fn gram_matrix(jac: &[f64], space_dim: usize, ref_dim: usize) -> Vec<f64> {
+    let mut g = vec![0.0; ref_dim * ref_dim];
+    for i in 0..ref_dim {
+        for j in 0..ref_dim {
+            let mut s = 0.0;
+            for a in 0..space_dim {
+                s += jac[a * ref_dim + i] * jac[a * ref_dim + j];
+            }
+            g[i * ref_dim + j] = s;
+        }
+    }
+    g
+}
+
+/// Determinant of a small (1×1, 2×2, 3×3) row-major square matrix.
+fn det_small(m: &[f64], n: usize) -> f64 {
+    match n {
+        1 => m[0],
+        2 => m[0] * m[3] - m[1] * m[2],
+        3 => {
+            m[0] * (m[4] * m[8] - m[5] * m[7])
+                - m[1] * (m[3] * m[8] - m[5] * m[6])
+                + m[2] * (m[3] * m[7] - m[4] * m[6])
+        }
+        _ => unreachable!("det_small: only n ∈ {{1,2,3}} supported"),
+    }
+}
+
+/// Invert a small (1×1, 2×2, 3×3) row-major square matrix.
+///
+/// Returns an error if the matrix is (numerically) singular.
+fn inverse_small(m: &[f64], n: usize) -> Result<Vec<f64>> {
+    let det = det_small(m, n);
+    if det.abs() < f64::EPSILON {
+        return Err(PyrucastError::Message(
+            "inverse_small: singular matrix".into(),
+        ));
+    }
+    let inv = match n {
+        1 => vec![1.0 / m[0]],
+        2 => {
+            let d = det;
+            vec![m[3] / d, -m[1] / d, -m[2] / d, m[0] / d]
+        }
+        3 => {
+            let d = det;
+            vec![
+                (m[4] * m[8] - m[5] * m[7]) / d,
+                (m[2] * m[7] - m[1] * m[8]) / d,
+                (m[1] * m[5] - m[2] * m[4]) / d,
+                (m[5] * m[6] - m[3] * m[8]) / d,
+                (m[0] * m[8] - m[2] * m[6]) / d,
+                (m[2] * m[3] - m[0] * m[5]) / d,
+                (m[3] * m[7] - m[4] * m[6]) / d,
+                (m[1] * m[6] - m[0] * m[7]) / d,
+                (m[0] * m[4] - m[1] * m[3]) / d,
+            ]
+        }
+        _ => unreachable!(),
+    };
+    Ok(inv)
+}
+
+/// Compute `dN_i/dx_a` from the Jacobian and reference derivatives.
+///
+/// Uses the unified formula `M = J · (JᵀJ)⁻¹`, which collapses to
+/// `J⁻ᵀ` when `J` is square. Output layout: `[i * space_dim + a]`.
+fn build_dn_dx(
+    jac: &[f64],
+    dn_dxi: &[f64],
+    space_dim: usize,
+    ref_dim: usize,
+    n_nodes: usize,
+) -> Result<Vec<f64>> {
+    let g = gram_matrix(jac, space_dim, ref_dim);
+    let g_inv = inverse_small(&g, ref_dim)?;
+
+    // M[a*ref_dim + l] = Σ_k J[a*ref_dim + k] · G_inv[k*ref_dim + l]
+    let mut m = vec![0.0; space_dim * ref_dim];
+    for a in 0..space_dim {
+        for l in 0..ref_dim {
+            let mut s = 0.0;
+            for k in 0..ref_dim {
+                s += jac[a * ref_dim + k] * g_inv[k * ref_dim + l];
+            }
+            m[a * ref_dim + l] = s;
+        }
+    }
+
+    // dN/dx[i*space_dim + a] = Σ_l M[a*ref_dim + l] · dN/dξ[i*ref_dim + l]
+    let mut out = vec![0.0; n_nodes * space_dim];
+    for i in 0..n_nodes {
+        for a in 0..space_dim {
+            let mut s = 0.0;
+            for l in 0..ref_dim {
+                s += m[a * ref_dim + l] * dn_dxi[i * ref_dim + l];
+            }
+            out[i * space_dim + a] = s;
+        }
+    }
+    Ok(out)
+}
+
+// ─── Python binding ────────────────────────────────────────────────────────
+
+#[cfg(feature = "python-api")]
+mod python {
+    use super::*;
+    use crate::mesh::PyMesh;
+    use crate::store::insert;
+    use pyo3::exceptions::{PyIndexError, PyValueError};
+    use pyo3::prelude::*;
+
+    fn parse_interpolation(s: &str) -> PyResult<Interpolation> {
+        Interpolation::from_name(s)
+            .ok_or_else(|| PyValueError::new_err(format!("unknown interpolation: {s}")))
+    }
+
+    fn parse_quadrature(s: &str) -> PyResult<QuadratureRule> {
+        QuadratureRule::from_name(s)
+            .ok_or_else(|| PyValueError::new_err(format!("unknown quadrature rule: {s}")))
+    }
+
+    /// Python wrapper for [`SubFESpace`].
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+    #[pyclass(name = "SubFESpace")]
+    pub struct PySubFESpace {
+        pub(crate) handle: Handle<SubFESpace>,
+    }
+
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+    #[pymethods]
+    impl PySubFESpace {
+        #[getter]
+        fn element_type(&self) -> PyResult<String> {
+            Ok(with(&self.handle, |s| s.element_type())??.name().to_string())
+        }
+
+        #[getter]
+        fn interpolation(&self) -> PyResult<String> {
+            Ok(with(&self.handle, |s| s.interpolation().name().to_string())?)
+        }
+
+        #[getter]
+        fn quadrature(&self) -> PyResult<String> {
+            Ok(with(&self.handle, |s| s.quadrature().name().to_string())?)
+        }
+
+        #[getter]
+        fn ref_dim(&self) -> PyResult<usize> {
+            Ok(with(&self.handle, |s| s.ref_dim())??)
+        }
+
+        #[getter]
+        fn space_dim(&self) -> PyResult<usize> {
+            Ok(with(&self.handle, |s| s.space_dim())?)
+        }
+
+        #[getter]
+        fn nodes_per_cell(&self) -> PyResult<usize> {
+            Ok(with(&self.handle, |s| s.nodes_per_cell())??)
+        }
+
+        fn cell_count(&self) -> PyResult<usize> {
+            Ok(with(&self.handle, |s| s.cell_count())??)
+        }
+
+        fn gauss_count(&self) -> PyResult<usize> {
+            Ok(with(&self.handle, |s| s.gauss_count())?)
+        }
+
+        /// Reference coordinates of the `g`-th Gauss point.
+        fn gauss_xi(&self, g: usize) -> PyResult<Vec<f64>> {
+            Ok(with(&self.handle, |s| s.gauss_xi(g).map(|x| x.to_vec()))??)
+        }
+
+        /// Weight of the `g`-th Gauss point.
+        fn gauss_weight(&self, g: usize) -> PyResult<f64> {
+            Ok(with(&self.handle, |s| s.gauss_weight(g))??)
+        }
+
+        /// `N_i(ξ_g)` at the `g`-th Gauss point (flat, length `nodes_per_cell`).
+        fn n_at_g(&self, g: usize) -> PyResult<Vec<f64>> {
+            Ok(with(&self.handle, |s| s.n_at_g(g).map(|x| x.to_vec()))??)
+        }
+
+        /// `∂N_i/∂ξ_j(ξ_g)` at the `g`-th Gauss point.
+        ///
+        /// Flat row-major: index `[i * ref_dim + j]`.
+        fn dn_at_g(&self, g: usize) -> PyResult<Vec<f64>> {
+            Ok(with(&self.handle, |s| s.dn_at_g(g).map(|x| x.to_vec()))??)
+        }
+
+        /// Jacobian `J = ∂x/∂ξ` of cell `cell_idx` at Gauss point `g`.
+        ///
+        /// Flat row-major buffer of length `space_dim × ref_dim`,
+        /// indexed `[a * ref_dim + k]`.
+        fn jacobian(&self, cell_idx: usize, g: usize) -> PyResult<Vec<f64>> {
+            Ok(with(&self.handle, |s| s.jacobian(cell_idx, g))??)
+        }
+
+        /// `|J|` — `|det(J)|` if `space_dim == ref_dim`, else
+        /// `sqrt(det(JᵀJ))`. Always non-negative.
+        fn det_jacobian(&self, cell_idx: usize, g: usize) -> PyResult<f64> {
+            Ok(with(&self.handle, |s| s.det_jacobian(cell_idx, g))??)
+        }
+
+        /// Physical derivatives `∂N_i/∂x_a` of cell `cell_idx` at Gauss
+        /// point `g`. Flat row-major buffer of length
+        /// `nodes_per_cell × space_dim`, indexed `[i * space_dim + a]`.
+        fn dn_dx(&self, cell_idx: usize, g: usize) -> PyResult<Vec<f64>> {
+            Ok(with(&self.handle, |s| s.dn_dx(cell_idx, g))??)
+        }
+
+        fn __repr__(&self) -> PyResult<String> {
+            Ok(with(&self.handle, |s| format!("{:?}", s))?)
+        }
+
+        fn __str__(&self) -> PyResult<String> {
+            Ok(with(&self.handle, |s| format!("{}", s))?)
+        }
+    }
+
+    /// Python wrapper for [`FiniteElementSpace`].
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+    #[pyclass(name = "FiniteElementSpace")]
+    pub struct PyFiniteElementSpace {
+        pub(crate) handle: Handle<FiniteElementSpace>,
+    }
+
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+    #[pymethods]
+    impl PyFiniteElementSpace {
+        /// `FiniteElementSpace(mesh)` — Lagrange-1 + default Gauss for
+        /// every submesh.
+        ///
+        /// `FiniteElementSpace(mesh, interpolation="LAGRANGE1", quadrature="GAUSS")`
+        /// — same `(interpolation, quadrature)` applied to every submesh.
+        #[new]
+        #[pyo3(signature = (mesh, interpolation="LAGRANGE1", quadrature="GAUSS"))]
+        fn py_new(
+            mesh: PyRef<PyMesh>,
+            interpolation: &str,
+            quadrature: &str,
+        ) -> PyResult<Self> {
+            let interp = parse_interpolation(interpolation)?;
+            let quad = parse_quadrature(quadrature)?;
+            let mesh_h = mesh.handle.clone();
+            let n_sub = with(&mesh_h, |m| m.submesh_count())?;
+            let choices: Vec<(Interpolation, QuadratureRule)> =
+                (0..n_sub).map(|_| (interp, quad)).collect();
+            let fes = FiniteElementSpace::with(mesh_h, &choices)?;
+            Ok(Self { handle: insert(fes) })
+        }
+
+        /// Explicit `(interpolation, quadrature)` per submesh.
+        #[classmethod]
+        fn with_choices(
+            _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+            mesh: PyRef<PyMesh>,
+            choices: Vec<(String, String)>,
+        ) -> PyResult<Self> {
+            let parsed: Result<Vec<_>> = choices
+                .iter()
+                .map(|(i, q)| -> Result<(Interpolation, QuadratureRule)> {
+                    let interp = Interpolation::from_name(i).ok_or_else(|| {
+                        PyrucastError::Message(format!("unknown interpolation: {i}"))
+                    })?;
+                    let quad = QuadratureRule::from_name(q).ok_or_else(|| {
+                        PyrucastError::Message(format!("unknown quadrature rule: {q}"))
+                    })?;
+                    Ok((interp, quad))
+                })
+                .collect();
+            let parsed = parsed?;
+            let fes = FiniteElementSpace::with(mesh.handle.clone(), &parsed)?;
+            Ok(Self { handle: insert(fes) })
+        }
+
+        /// Convenience: same as `FiniteElementSpace(mesh)`.
+        #[classmethod]
+        fn lagrange1(
+            _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+            mesh: PyRef<PyMesh>,
+        ) -> PyResult<Self> {
+            let fes = FiniteElementSpace::lagrange1(mesh.handle.clone())?;
+            Ok(Self { handle: insert(fes) })
+        }
+
+        fn subspace_count(&self) -> PyResult<usize> {
+            Ok(with(&self.handle, |f| f.subspace_count())?)
+        }
+
+        fn subspace(&self, i: usize) -> PyResult<PySubFESpace> {
+            let h = with(&self.handle, |f| f.subspace(i))??;
+            Ok(PySubFESpace { handle: h })
+        }
+
+        fn __len__(&self) -> PyResult<usize> {
+            self.subspace_count()
+        }
+
+        /// `fes[i]` → SubFESpace. Supports negative indices.
+        fn __getitem__(&self, idx: isize) -> PyResult<PySubFESpace> {
+            let n = with(&self.handle, |f| f.subspace_count())? as isize;
+            let normalized = if idx < 0 { n + idx } else { idx };
+            if normalized < 0 || normalized >= n {
+                return Err(PyIndexError::new_err(format!(
+                    "fe-space index {idx} out of range (len={n})"
+                )));
+            }
+            self.subspace(normalized as usize)
+        }
+
+        fn __repr__(&self) -> PyResult<String> {
+            Ok(with(&self.handle, |f| format!("{:?}", f))?)
+        }
+
+        fn __str__(&self) -> PyResult<String> {
+            Ok(with(&self.handle, |f| format!("{}", f))?)
+        }
+    }
+}
+
+#[cfg(feature = "python-api")]
+pub use python::{PyFiniteElementSpace, PySubFESpace};
+
+// ─── Unit tests ────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node::Node;
+    use crate::store::{insert, with};
+
+    fn cfg2d() -> Handle<Configuration> {
+        insert(Configuration::new(2).unwrap())
+    }
+
+    fn cfg3d() -> Handle<Configuration> {
+        insert(Configuration::new(3).unwrap())
+    }
+
+    // ── SubFESpace structural checks ────────────────────────────────────────
+
+    #[test]
+    fn rejects_poi1_submesh() {
+        let cfg = cfg2d();
+        let n = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+            sm.add_cell(&[n.id()]).unwrap();
+            insert(sm)
+        };
+        let err = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap_err();
+        assert!(matches!(err, PyrucastError::Message(_)));
+    }
+
+    #[test]
+    fn rejects_mesh_with_lower_space_dim_than_ref_dim() {
+        // 1-D Configuration but TRI3 (ref_dim = 2) → must be rejected.
+        let cfg = insert(Configuration::new(1).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+            insert(sm)
+        };
+        assert!(SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).is_err());
+    }
+
+    // ── Jacobian: closed-form checks ────────────────────────────────────────
+
+    /// SEG2 of length L in 1-D: J is constant, |J| = L/2.
+    #[test]
+    fn seg2_jacobian_1d() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[5.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(cfg, ElementType::SEG2);
+            sm.add_cell(&[a.id(), b.id()]).unwrap();
+            insert(sm)
+        };
+        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        for g in 0..sub.gauss_count() {
+            let jac = sub.jacobian(0, g).unwrap();
+            assert_eq!(jac.len(), 1);
+            assert!((jac[0] - 2.5).abs() < 1e-12);
+            assert!((sub.det_jacobian(0, g).unwrap() - 2.5).abs() < 1e-12);
+        }
+    }
+
+    /// SEG2 of length 3 in 2-D (line in the x-direction): the Jacobian is
+    /// a 2×1 column [3/2, 0]; |J|_curve = 3/2.
+    #[test]
+    fn seg2_jacobian_in_plane() {
+        let cfg = cfg2d();
+        let a = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[3.0, 1.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(cfg, ElementType::SEG2);
+            sm.add_cell(&[a.id(), b.id()]).unwrap();
+            insert(sm)
+        };
+        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        for g in 0..sub.gauss_count() {
+            let jac = sub.jacobian(0, g).unwrap();
+            assert_eq!(jac.len(), 2);
+            assert!((jac[0] - 1.5).abs() < 1e-12); // dx/dξ
+            assert!(jac[1].abs() < 1e-12); // dy/dξ
+            assert!((sub.det_jacobian(0, g).unwrap() - 1.5).abs() < 1e-12);
+        }
+    }
+
+    /// TRI3 of vertices (0,0), (a,0), (0,b): |J| = a·b (twice the area,
+    /// since ref triangle has area 1/2).
+    #[test]
+    fn tri3_jacobian_planar() {
+        let cfg = cfg2d();
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[3.0, 0.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[0.0, 4.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+            sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
+            insert(sm)
+        };
+        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        for g in 0..sub.gauss_count() {
+            let dj = sub.det_jacobian(0, g).unwrap();
+            assert!((dj - 12.0).abs() < 1e-12);
+        }
+    }
+
+    /// TRI3 living in 3-D (xy-plane): same |J| as the planar case
+    /// (manifold area element).
+    #[test]
+    fn tri3_jacobian_manifold_in_3d() {
+        let cfg = cfg3d();
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0, 7.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[3.0, 0.0, 7.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[0.0, 4.0, 7.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+            sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
+            insert(sm)
+        };
+        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        for g in 0..sub.gauss_count() {
+            let dj = sub.det_jacobian(0, g).unwrap();
+            assert!((dj - 12.0).abs() < 1e-12);
+        }
+    }
+
+    /// QUA4 unit square aligned with axes: |J| = 1/4 at every Gauss point
+    /// (∂x/∂ξ = ∂y/∂η = 1/2, cross-terms 0). Twice the centroid area? No:
+    /// for [0,1]² with reference [-1,1]², |J| = 1/4 because each ref-unit
+    /// maps to half a physical unit.
+    #[test]
+    fn qua4_jacobian_unit_square() {
+        let cfg = cfg2d();
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let n3 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(cfg, ElementType::QUA4);
+            sm.add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()]).unwrap();
+            insert(sm)
+        };
+        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        // Integral of |J| over reference square should equal physical area = 1.
+        let mut area = 0.0;
+        for g in 0..sub.gauss_count() {
+            area += sub.gauss_weight(g).unwrap() * sub.det_jacobian(0, g).unwrap();
+        }
+        assert!((area - 1.0).abs() < 1e-12);
+    }
+
+    /// HEX8 unit cube: similar to QUA4 test in 3-D.
+    #[test]
+    fn hex8_jacobian_unit_cube() {
+        let cfg = cfg3d();
+        let n: Vec<_> = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0],
+        ]
+        .iter()
+        .map(|p| Node::create_in(cfg.clone(), p).unwrap())
+        .collect();
+        let sm = {
+            let mut sm = SubMesh::new(cfg, ElementType::HEX8);
+            sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+            insert(sm)
+        };
+        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let mut vol = 0.0;
+        for g in 0..sub.gauss_count() {
+            vol += sub.gauss_weight(g).unwrap() * sub.det_jacobian(0, g).unwrap();
+        }
+        assert!((vol - 1.0).abs() < 1e-12);
+    }
+
+    // ── dN/dx ───────────────────────────────────────────────────────────────
+
+    /// On a TRI3 with vertices (0,0), (3,0), (0,4), the gradient of N_1 is
+    /// `(-1/3, -1/4)` (constant across the cell, since Lagrange-1).
+    #[test]
+    fn tri3_dn_dx_constant() {
+        let cfg = cfg2d();
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[3.0, 0.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[0.0, 4.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+            sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
+            insert(sm)
+        };
+        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        for g in 0..sub.gauss_count() {
+            let dn = sub.dn_dx(0, g).unwrap();
+            // ∂N_1/∂x = -1/3, ∂N_1/∂y = -1/4
+            assert!((dn[0] - (-1.0 / 3.0)).abs() < 1e-12);
+            assert!((dn[1] - (-1.0 / 4.0)).abs() < 1e-12);
+            // ∂N_2/∂x = 1/3, ∂N_2/∂y = 0
+            assert!((dn[2] - (1.0 / 3.0)).abs() < 1e-12);
+            assert!(dn[3].abs() < 1e-12);
+            // ∂N_3/∂x = 0, ∂N_3/∂y = 1/4
+            assert!(dn[4].abs() < 1e-12);
+            assert!((dn[5] - (1.0 / 4.0)).abs() < 1e-12);
+        }
+    }
+
+    // ── On-the-fly under deformation ────────────────────────────────────────
+
+    /// After moving a node, the on-the-fly Jacobian must reflect the new
+    /// coordinates — the FE space caches nothing physical.
+    #[test]
+    fn jacobian_reflects_mesh_displacement() {
+        let cfg = cfg2d();
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            sm.add_cell(&[a.id(), b.id()]).unwrap();
+            insert(sm)
+        };
+        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+
+        let dj_before = sub.det_jacobian(0, 0).unwrap();
+        assert!((dj_before - 0.5).abs() < 1e-12);
+
+        // Stretch the SEG2 to length 4 (move node b from x=1 to x=4).
+        crate::store::with_mut(&cfg, |c| c.set_coord(b.id(), &[4.0, 0.0])).unwrap().unwrap();
+
+        let dj_after = sub.det_jacobian(0, 0).unwrap();
+        assert!((dj_after - 2.0).abs() < 1e-12);
+    }
+
+    // ── FiniteElementSpace ──────────────────────────────────────────────────
+
+    #[test]
+    fn lagrange1_constructor_matches_submeshes_one_to_one() {
+        let cfg = cfg2d();
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+
+        let mut mesh = Mesh::new(cfg.clone());
+        let sm_tri = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
+            insert(sm)
+        };
+        let sm_qua = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::QUA4);
+            sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
+            insert(sm)
+        };
+        mesh.add_submesh(sm_tri).unwrap();
+        mesh.add_submesh(sm_qua).unwrap();
+        let mesh_h = insert(mesh);
+
+        let fes = FiniteElementSpace::lagrange1(mesh_h).unwrap();
+        assert_eq!(fes.subspace_count(), 2);
+        with(&fes.subspace(0).unwrap(), |s| {
+            assert_eq!(s.element_type().unwrap(), ElementType::TRI3);
+            assert_eq!(s.gauss_count(), 3);
+        })
+        .unwrap();
+        with(&fes.subspace(1).unwrap(), |s| {
+            assert_eq!(s.element_type().unwrap(), ElementType::QUA4);
+            assert_eq!(s.gauss_count(), 4);
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn rejects_mesh_with_poi1_submesh() {
+        let cfg = cfg2d();
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let mesh = Mesh::from_live_nodes(cfg).unwrap();
+        // from_live_nodes builds a POI1 mesh.
+        assert!(mesh.submesh_count() >= 1);
+        let _ = a; // keep alive
+        let mesh_h = insert(mesh);
+        assert!(FiniteElementSpace::lagrange1(mesh_h).is_err());
+    }
+
+    #[test]
+    fn rejects_empty_mesh() {
+        let cfg = cfg2d();
+        let mesh_h = insert(Mesh::new(cfg));
+        assert!(FiniteElementSpace::lagrange1(mesh_h).is_err());
+    }
+
+    #[test]
+    fn with_constructor_validates_length() {
+        let cfg = cfg2d();
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+        mesh.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
+        let mesh_h = insert(mesh);
+        let too_few: Vec<(Interpolation, QuadratureRule)> = vec![];
+        assert!(FiniteElementSpace::with(mesh_h.clone(), &too_few).is_err());
+        let too_many = vec![
+            (Interpolation::Lagrange1, QuadratureRule::Gauss),
+            (Interpolation::Lagrange1, QuadratureRule::Gauss),
+        ];
+        assert!(FiniteElementSpace::with(mesh_h, &too_many).is_err());
+    }
+
+    // ── Display ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn display_and_debug() {
+        let cfg = cfg2d();
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+        mesh.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
+        let mesh_h = insert(mesh);
+        let fes = FiniteElementSpace::lagrange1(mesh_h).unwrap();
+        let s = format!("{}", fes);
+        assert!(s.contains("FiniteElementSpace"));
+        assert!(s.contains("1 subspace"));
+        let d = format!("{:?}", fes);
+        assert!(d.contains("FiniteElementSpace"));
+
+        with(&fes.subspace(0).unwrap(), |sub| {
+            let s = format!("{}", sub);
+            assert!(s.contains("SubFESpace"));
+            assert!(s.contains("TRI3"));
+            assert!(s.contains("LAGRANGE1"));
+            assert!(s.contains("GAUSS"));
+        })
+        .unwrap();
+    }
+}
