@@ -7,9 +7,10 @@
 //! data types like [`matrix::Matrix`] and [`node_field::NodeField`] live
 //! here too.
 //!
-//! Python wrappers for everything in this tree live under
-//! [`crate::py`]; operators that take containers in and out live under
-//! `crate::ops` (themed by build / geom / field / assemble).
+//! Python wrappers for everything in this tree live under `crate::py`
+//! (only compiled with the `python-api` feature); operators that take
+//! containers in and out live under [`crate::ops`] (themed by build /
+//! geom / field / assemble).
 
 pub mod element_field;
 pub mod fe_space;
