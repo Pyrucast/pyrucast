@@ -25,14 +25,9 @@ pub use cdt::{
     triangulate_polygon_with_holes_refined, RefinementOptions,
 };
 
-/// 2-D point, `nalgebra::Point2<f64>`.
-pub type Point2 = nalgebra::Point2<f64>;
-/// 3-D point, `nalgebra::Point3<f64>`.
-pub type Point3 = nalgebra::Point3<f64>;
-/// 2-D vector, `nalgebra::Vector2<f64>`.
-pub type Vector2 = nalgebra::Vector2<f64>;
-/// 3-D vector, `nalgebra::Vector3<f64>`.
-pub type Vector3 = nalgebra::Vector3<f64>;
+// Geometry primitives now live in [`crate::mesh::point`]; re-exported
+// here so existing `crate::triangulation::Point*` paths keep working.
+pub use crate::mesh::point::{Point2, Point3, Vector2, Vector3};
 
 /// Unit normal of a 3-D polygon by **Newell's method**.
 ///

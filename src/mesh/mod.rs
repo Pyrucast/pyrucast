@@ -39,6 +39,7 @@
 
 pub mod element_type;
 pub mod node;
+pub mod point;
 
 use crate::aggregate::Aggregate;
 use crate::color::RgbColor;
