@@ -55,7 +55,7 @@ fn read_points(
 /// when seen from outside the solid; the renderer fills the polygon and
 /// then overlays its boundary as a black wireframe.
 #[derive(Debug, Clone)]
-enum Primitive {
+pub(crate) enum Primitive {
     Point { p: Point3, color: RgbColor },
     Segment { a: Point3, b: Point3, color: RgbColor },
     Face { verts: Vec<Point3>, color: RgbColor },
@@ -86,19 +86,56 @@ const HEX8_FACES: [[usize; 4]; 6] = [
 /// Build the rendering primitives of a single `SubMesh`. The output is
 /// empty for an empty submesh; every supported element type produces at
 /// least one primitive per cell.
-fn submesh_primitives(sm: &SubMesh) -> Result<Vec<Primitive>> {
+///
+/// If `colors_per_cell` is `Some`, each cell's primitives use the
+/// supplied colour at index `cell_idx`; otherwise the submesh's own
+/// `face_color` is used uniformly. The length of `colors_per_cell`
+/// must equal the number of cells when provided.
+pub(crate) fn submesh_primitives(sm: &SubMesh) -> Result<Vec<Primitive>> {
+    submesh_primitives_impl(sm, None)
+}
+
+/// Variant of [`submesh_primitives`] with one colour per cell (one cell
+/// can contribute several primitives, e.g. TET4 → 4 faces; all faces of
+/// a given cell share the cell's colour).
+pub(crate) fn submesh_primitives_with_colors(
+    sm: &SubMesh,
+    colors_per_cell: &[RgbColor],
+) -> Result<Vec<Primitive>> {
+    submesh_primitives_impl(sm, Some(colors_per_cell))
+}
+
+fn submesh_primitives_impl(
+    sm: &SubMesh,
+    colors_per_cell: Option<&[RgbColor]>,
+) -> Result<Vec<Primitive>> {
     let cfg = sm.configuration();
     let pts = read_points(&cfg, sm.connectivity())?;
-    let color = sm.face_color();
+    let default_color = sm.face_color();
     let et = sm.element_type();
     let npc = et.nodes_per_cell();
     let n_cells = if npc == 0 { 0 } else { pts.len() / npc };
+    if let Some(colors) = colors_per_cell {
+        if colors.len() != n_cells {
+            return Err(crate::error::PyrucastError::Message(format!(
+                "submesh_primitives_with_colors: got {} colors for {} cells",
+                colors.len(),
+                n_cells
+            )));
+        }
+    }
+    let cell_color = |i: usize| -> RgbColor {
+        match colors_per_cell {
+            Some(c) => c[i],
+            None => default_color,
+        }
+    };
     let mut out: Vec<Primitive> = Vec::new();
 
     match et {
         ElementType::POI1 => {
             for i in 0..n_cells {
-                out.push(Primitive::Point { p: pts[i], color });
+                out.push(Primitive::Point { p: pts[i], color: cell_color(i) });
             }
         }
         ElementType::SEG2 => {
@@ -106,7 +143,7 @@ fn submesh_primitives(sm: &SubMesh) -> Result<Vec<Primitive>> {
                 out.push(Primitive::Segment {
                     a: pts[2 * i],
                     b: pts[2 * i + 1],
-                    color,
+                    color: cell_color(i),
                 });
             }
         }
@@ -114,7 +151,7 @@ fn submesh_primitives(sm: &SubMesh) -> Result<Vec<Primitive>> {
             for i in 0..n_cells {
                 out.push(Primitive::Face {
                     verts: vec![pts[3 * i], pts[3 * i + 1], pts[3 * i + 2]],
-                    color,
+                    color: cell_color(i),
                 });
             }
         }
@@ -127,13 +164,14 @@ fn submesh_primitives(sm: &SubMesh) -> Result<Vec<Primitive>> {
                         pts[4 * i + 2],
                         pts[4 * i + 3],
                     ],
-                    color,
+                    color: cell_color(i),
                 });
             }
         }
         ElementType::TET4 => {
             for i in 0..n_cells {
                 let base = 4 * i;
+                let c = cell_color(i);
                 for face in &TET4_FACES {
                     out.push(Primitive::Face {
                         verts: vec![
@@ -141,7 +179,7 @@ fn submesh_primitives(sm: &SubMesh) -> Result<Vec<Primitive>> {
                             pts[base + face[1]],
                             pts[base + face[2]],
                         ],
-                        color,
+                        color: c,
                     });
                 }
             }
@@ -149,6 +187,7 @@ fn submesh_primitives(sm: &SubMesh) -> Result<Vec<Primitive>> {
         ElementType::HEX8 => {
             for i in 0..n_cells {
                 let base = 8 * i;
+                let c = cell_color(i);
                 for face in &HEX8_FACES {
                     out.push(Primitive::Face {
                         verts: vec![
@@ -157,7 +196,7 @@ fn submesh_primitives(sm: &SubMesh) -> Result<Vec<Primitive>> {
                             pts[base + face[2]],
                             pts[base + face[3]],
                         ],
-                        color,
+                        color: c,
                     });
                 }
             }
@@ -211,7 +250,7 @@ impl ProjPrim {
 /// Common rendering core: project, sort far → near, draw points / segments
 /// / filled faces with black face boundaries on top. Shared by `SubMesh`
 /// and `Mesh`.
-fn render_primitives<DB: DrawingBackend>(
+pub(crate) fn render_primitives<DB: DrawingBackend>(
     area: &DrawingArea<DB, Shift>,
     view: &View,
     prims: &[Primitive],

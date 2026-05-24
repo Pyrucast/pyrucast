@@ -41,7 +41,9 @@
 pub mod axes;
 pub mod camera;
 pub mod drawable;
+pub mod field_color;
 pub mod mesh_draw;
+pub mod overlay;
 #[cfg(feature = "viz-interactive")]
 pub mod window;
 
@@ -177,6 +179,82 @@ pub(crate) fn render<D: Drawable>(
             #[cfg(feature = "viz-interactive")]
             {
                 window::run_interactive(object, view)
+            }
+            #[cfg(not(feature = "viz-interactive"))]
+            {
+                Err(PyrucastError::Message(
+                    "interactive viz disabled — recompile with --features viz-interactive \
+                     or pass an output path to save a PNG/SVG"
+                        .into(),
+                ))
+            }
+        }
+    }
+}
+
+/// Render a [`crate::mesh::Mesh`] coloured by a `NodeField` component.
+/// File export draws the supplied `component`; the interactive window
+/// adds a clickable button (top-centre) and a `Tab` keyboard shortcut
+/// to cycle through every component.
+pub(crate) fn render_mesh_with_field(
+    mesh: &crate::mesh::Mesh,
+    field: &crate::node_field::NodeField,
+    component: Option<&str>,
+    view: Option<View>,
+    save: Option<&Path>,
+) -> Result<()> {
+    let view = view.unwrap_or_default();
+    let resolved = field_color::resolve_component(field, component)?;
+    match save {
+        Some(path) => {
+            let drawable = field_color::MeshFieldView {
+                mesh,
+                field,
+                component: resolved,
+            };
+            render_to_file(&drawable, view, path)
+        }
+        None => {
+            #[cfg(feature = "viz-interactive")]
+            {
+                window::run_interactive_mesh_field(mesh, field, resolved, view)
+            }
+            #[cfg(not(feature = "viz-interactive"))]
+            {
+                Err(PyrucastError::Message(
+                    "interactive viz disabled — recompile with --features viz-interactive \
+                     or pass an output path to save a PNG/SVG"
+                        .into(),
+                ))
+            }
+        }
+    }
+}
+
+/// Render a [`crate::mesh::SubMesh`] coloured by a `NodeField`
+/// component. Same semantics as [`render_mesh_with_field`].
+pub(crate) fn render_submesh_with_field(
+    submesh: &crate::mesh::SubMesh,
+    field: &crate::node_field::NodeField,
+    component: Option<&str>,
+    view: Option<View>,
+    save: Option<&Path>,
+) -> Result<()> {
+    let view = view.unwrap_or_default();
+    let resolved = field_color::resolve_component(field, component)?;
+    match save {
+        Some(path) => {
+            let drawable = field_color::SubMeshFieldView {
+                submesh,
+                field,
+                component: resolved,
+            };
+            render_to_file(&drawable, view, path)
+        }
+        None => {
+            #[cfg(feature = "viz-interactive")]
+            {
+                window::run_interactive_submesh_field(submesh, field, resolved, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {

@@ -267,10 +267,12 @@ class Mesh:
         raises `IndexError` when out of range so `for sm in mesh:` works.
         """
     def cell_count(self) -> builtins.int: ...
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None) -> None:
         r"""
-        Visualize this mesh (every submesh in its own colour). See
-        `SubMesh.plot` for the meaning of `view`, `save` and `show_axes`.
+        Visualize this mesh (every submesh in its own colour, or
+        coloured by a `NodeField` if `field` is supplied). See
+        `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
+        `field` and `component`.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -421,7 +423,7 @@ class SubMesh:
     def __new__(cls, config: Configuration, element_type: builtins.str) -> SubMesh: ...
     def add_cell(self, nodes: typing.Sequence[builtins.int]) -> builtins.int: ...
     def cell_count(self) -> builtins.int: ...
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None) -> None:
         r"""
         Visualize this submesh.
         
@@ -431,6 +433,13 @@ class SubMesh:
         - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
           corner (default `True`). In the interactive window, the key
           `A` toggles it at runtime.
+        - `field`: optional `NodeField` whose values colour each cell
+          (per-cell value = mean over the cell's nodes of the chosen
+          component). Default `None` ⇒ uniform face colour.
+        - `component`: component name to display when `field` is set
+          (defaults to the field's first component). In the
+          interactive window, click the top button or press `Tab` to
+          cycle through every component.
         """
     def __len__(self) -> builtins.int:
         r"""

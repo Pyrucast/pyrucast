@@ -163,6 +163,28 @@ impl SubMesh {
     ) -> Result<()> {
         crate::viz::render(self, view, save)
     }
+
+    /// Visualize this submesh coloured by a [`crate::node_field::NodeField`]
+    /// component.
+    ///
+    /// Per-cell colour is the mean of the field's component at the cell's
+    /// nodes, mapped through a blue → green → red colormap. Nodes
+    /// absent from the field's support are ignored in the mean.
+    /// `component = None` selects the field's first component.
+    ///
+    /// The interactive window draws a clickable button at the top
+    /// showing the current component and value range; clicking it (or
+    /// pressing `Tab`) cycles through the field's components.
+    #[cfg(feature = "viz")]
+    pub fn plot_with_field(
+        &self,
+        view: Option<crate::viz::View>,
+        save: Option<&std::path::Path>,
+        field: &crate::node_field::NodeField,
+        component: Option<&str>,
+    ) -> Result<()> {
+        crate::viz::render_submesh_with_field(self, field, component, view, save)
+    }
 }
 
 impl Drop for SubMesh {
@@ -1094,6 +1116,22 @@ impl Mesh {
         crate::viz::render(self, view, save)
     }
 
+    /// Visualize this mesh coloured by a [`crate::node_field::NodeField`]
+    /// component. See [`SubMesh::plot_with_field`] for the meaning of
+    /// `view`, `save`, `field` and `component`. In the interactive
+    /// window the same component button is drawn over the whole mesh
+    /// and cycles through every component of `field`.
+    #[cfg(feature = "viz")]
+    pub fn plot_with_field(
+        &self,
+        view: Option<crate::viz::View>,
+        save: Option<&std::path::Path>,
+        field: &crate::node_field::NodeField,
+        component: Option<&str>,
+    ) -> Result<()> {
+        crate::viz::render_mesh_with_field(self, field, component, view, save)
+    }
+
     /// Return a new mesh where submeshes of the same element type are fused
     /// into a single submesh, and duplicate cells (identical node sequences)
     /// are removed. Types appear in their first-seen order; the face colour of
@@ -1280,13 +1318,22 @@ mod python {
         /// - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
         ///   corner (default `True`). In the interactive window, the key
         ///   `A` toggles it at runtime.
+        /// - `field`: optional `NodeField` whose values colour each cell
+        ///   (per-cell value = mean over the cell's nodes of the chosen
+        ///   component). Default `None` ⇒ uniform face colour.
+        /// - `component`: component name to display when `field` is set
+        ///   (defaults to the field's first component). In the
+        ///   interactive window, click the top button or press `Tab` to
+        ///   cycle through every component.
         #[cfg(feature = "viz")]
-        #[pyo3(signature = (view=None, save=None, show_axes=true))]
+        #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None))]
         fn plot(
             &self,
             view: Option<(f64, f64, f64)>,
             save: Option<std::path::PathBuf>,
             show_axes: bool,
+            field: Option<PyRef<crate::node_field::PyNodeField>>,
+            component: Option<String>,
         ) -> PyResult<()> {
             let mut view = view
                 .map(|(yaw, pitch, scale)| crate::viz::View {
@@ -1299,7 +1346,21 @@ mod python {
                 .unwrap_or_else(crate::viz::View::default);
             view.show_axes = show_axes;
             let save_ref = save.as_deref();
-            with(&self.handle, |s| s.plot(Some(view), save_ref))??;
+            match field {
+                Some(f) => {
+                    let comp_ref = component.as_deref();
+                    let sm_handle = self.handle.clone();
+                    let field_handle = f.handle.clone();
+                    crate::store::with(&sm_handle, |s| {
+                        crate::store::with(&field_handle, |fld| {
+                            s.plot_with_field(Some(view), save_ref, fld, comp_ref)
+                        })?
+                    })??;
+                }
+                None => {
+                    with(&self.handle, |s| s.plot(Some(view), save_ref))??;
+                }
+            }
             Ok(())
         }
 
@@ -1591,15 +1652,19 @@ mod python {
             Ok(with(&self.handle, |m| m.cell_count())??)
         }
 
-        /// Visualize this mesh (every submesh in its own colour). See
-        /// `SubMesh.plot` for the meaning of `view`, `save` and `show_axes`.
+        /// Visualize this mesh (every submesh in its own colour, or
+        /// coloured by a `NodeField` if `field` is supplied). See
+        /// `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
+        /// `field` and `component`.
         #[cfg(feature = "viz")]
-        #[pyo3(signature = (view=None, save=None, show_axes=true))]
+        #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None))]
         fn plot(
             &self,
             view: Option<(f64, f64, f64)>,
             save: Option<std::path::PathBuf>,
             show_axes: bool,
+            field: Option<PyRef<crate::node_field::PyNodeField>>,
+            component: Option<String>,
         ) -> PyResult<()> {
             let mut view = view
                 .map(|(yaw, pitch, scale)| crate::viz::View {
@@ -1612,7 +1677,21 @@ mod python {
                 .unwrap_or_else(crate::viz::View::default);
             view.show_axes = show_axes;
             let save_ref = save.as_deref();
-            with(&self.handle, |m| m.plot(Some(view), save_ref))??;
+            match field {
+                Some(f) => {
+                    let comp_ref = component.as_deref();
+                    let mesh_handle = self.handle.clone();
+                    let field_handle = f.handle.clone();
+                    crate::store::with(&mesh_handle, |m| {
+                        crate::store::with(&field_handle, |fld| {
+                            m.plot_with_field(Some(view), save_ref, fld, comp_ref)
+                        })?
+                    })??;
+                }
+                None => {
+                    with(&self.handle, |m| m.plot(Some(view), save_ref))??;
+                }
+            }
             Ok(())
         }
 

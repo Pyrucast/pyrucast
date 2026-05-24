@@ -126,6 +126,47 @@ assert sm.face_color == (220, 60, 60)
 
 Quand on appelle `Mesh::plot`, chaque sous-maillage est rendu avec **sa propre** `face_color`, ce qui permet de distinguer visuellement des composants regroupés dans un même maillage (par exemple : peau / cœur / interfaces).
 
+## Coloration par un `NodeField`
+
+`plot` accepte un argument optionnel `field` (un [`NodeField`](node-field.md)) qui **remplace la couleur uniforme par cellule** par une couleur tirée d'une colormap appliquée aux valeurs du champ.
+
+- **Valeur par cellule** = moyenne des valeurs du champ aux nœuds de la cellule (les nœuds absents du support ne contribuent pas).
+- **Colormap** : « jet-lite » bleu → vert → rouge, échelle linéaire entre le minimum et le maximum **observés** sur le maillage rendu.
+- **Composante par défaut** : la première composante du champ. On peut en sélectionner une autre via `component="<nom>"`.
+- **Étiquette** : un petit bandeau est dessiné en haut de l'image avec le nom de la composante affichée et l'intervalle `[min, max]`.
+
+Côté Rust :
+
+```rust,ignore
+use pyrucast::node_field::NodeField;
+
+// Champ déplacement à 2 composantes "UX" / "UY" sur un POI1.
+let mut u = NodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();
+// ... remplissage ...
+
+mesh.plot_with_field(None, Some(std::path::Path::new("ux.svg")), &u, None).unwrap();
+// Composante explicite :
+mesh.plot_with_field(None, Some(std::path::Path::new("uy.svg")), &u, Some("UY")).unwrap();
+```
+
+Côté Python :
+
+```python
+# Composante par défaut (la première).
+mesh.plot(save="t.svg", field=t_field)
+# Composante explicite :
+mesh.plot(save="uy.svg", field=u_field, component="UY")
+```
+
+### Bouton de sélection dans la fenêtre interactive
+
+En mode interactif (`viz-interactive`), un **bouton cliquable** apparaît au sommet de la fenêtre, affichant la composante actuelle et son intervalle. Deux manières équivalentes d'en changer :
+
+- **Clic** sur le bouton — cycle dans l'ordre des composantes du champ ;
+- **Touche `Tab`** — même effet, sans toucher à la souris.
+
+La caméra (rotation à la souris, molette, axes affichés via `A`) continue de fonctionner exactement comme en plot classique ; seul un clic *sur* le bouton est intercepté, les clics ailleurs lancent une rotation comme d'habitude.
+
 ## État actuel du support
 
 Pour cette première itération, **seuls les éléments `TRI3` sont rendus** :

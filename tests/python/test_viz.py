@@ -142,3 +142,73 @@ def test_mesh_plot_uses_each_submesh_color(tmp_path):
     text = path.read_text().lower()
     assert "dc3c3c" in text or "rgb(220,60,60)" in text
     assert "3c3cdc" in text or "rgb(60,60,220)" in text
+
+
+# ─── field-coloured plotting ────────────────────────────────────────────────
+
+
+def _build_field_on_nodes(c, nodes, components, values_per_component):
+    """Helper: build a POI1 NodeField on `nodes` and fill values."""
+    poi1 = pyrucast.SubMesh(c, "POI1")
+    for n in nodes:
+        poi1.add_cell([n.id])
+    nf = pyrucast.NodeField(poi1, list(components))
+    for ci, comp in enumerate(components):
+        for ni, n in enumerate(nodes):
+            nf.set_value(n.id, comp, values_per_component[ci][ni])
+    return nf
+
+
+def test_mesh_plot_with_field_writes_overlay_label(tmp_path):
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.0, 1.0])
+    tri = pyrucast.SubMesh(c, "TRI3")
+    tri.add_cell([a.id, b.id, cc.id])
+    mesh = pyrucast.Mesh(c)
+    mesh.add_submesh(tri)
+
+    nf = _build_field_on_nodes(c, [a, b, cc], ["T"], [[0.0, 1.0, 2.0]])
+
+    path = tmp_path / "field.svg"
+    mesh.plot(save=str(path), field=nf)
+    text = path.read_text()
+    # Overlay label must show the current component and min/max range.
+    assert "[T]" in text
+    assert "min=" in text and "max=" in text
+
+
+def test_submesh_plot_with_field_explicit_component(tmp_path):
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.0, 1.0])
+    tri = pyrucast.SubMesh(c, "TRI3")
+    tri.add_cell([a.id, b.id, cc.id])
+
+    nf = _build_field_on_nodes(
+        c, [a, b, cc], ["UX", "UY"], [[0.0, 0.0, 0.0], [3.14, 2.71, 1.41]]
+    )
+    path = tmp_path / "uy.svg"
+    # Default would pick "UX" (first component). Ask for "UY" explicitly.
+    tri.plot(save=str(path), field=nf, component="UY")
+    text = path.read_text()
+    assert "[UY]" in text
+
+
+def test_plot_with_field_unknown_component_errors(tmp_path):
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.0, 1.0])
+    tri = pyrucast.SubMesh(c, "TRI3")
+    tri.add_cell([a.id, b.id, cc.id])
+    nf = _build_field_on_nodes(c, [a, b, cc], ["T"], [[0.0, 1.0, 2.0]])
+    path = tmp_path / "nope.svg"
+    try:
+        tri.plot(save=str(path), field=nf, component="DOES_NOT_EXIST")
+    except RuntimeError as e:
+        assert "DOES_NOT_EXIST" in str(e)
+    else:
+        raise AssertionError("expected RuntimeError for unknown component")
