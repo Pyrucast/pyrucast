@@ -55,13 +55,16 @@
 //! .unwrap();
 //! ```
 
+pub mod interpolation;
+pub mod quadrature;
+
 use crate::aggregate::Aggregate;
 use crate::configuration::{Configuration, NodeId};
-use crate::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
-use crate::interpolation::Interpolation;
+use crate::fespace::interpolation::Interpolation;
+use crate::fespace::quadrature::QuadratureRule;
+use crate::mesh::element_type::ElementType;
 use crate::mesh::{Mesh, SubMesh};
-use crate::quadrature::QuadratureRule;
 use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;

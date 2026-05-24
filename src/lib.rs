@@ -35,20 +35,25 @@ pub mod color;
 pub mod configuration;
 pub mod containers;
 pub mod error;
-pub mod interpolation;
+pub mod fespace;
 pub mod mesh;
 pub mod models;
 pub mod ops;
 pub mod persist;
-pub mod quadrature;
 pub mod solver;
 pub mod store;
 pub mod triangulation;
 
 // Re-export each container at the crate root so existing paths
-// (`crate::fe_space::SubFESpace`, ...) keep working after the on-disk
-// move into `containers/`.
-pub use containers::{element_field, fe_space, matrix, model, node_field};
+// (`crate::matrix::Matrix`, ...) keep working after the on-disk move
+// into `containers/`.
+pub use containers::{element_field, matrix, model, node_field};
+
+// `fespace` is the canonical home for FE-space data; alias `fe_space`
+// for the existing `crate::fe_space::*` import sites, and surface its
+// sub-modules at the crate root for the same reason.
+pub use fespace as fe_space;
+pub use fespace::{interpolation, quadrature};
 
 // Re-export `mesh` sub-modules at the crate root so existing
 // `pyrucast::node::Node` / `pyrucast::element_type::ElementType` paths

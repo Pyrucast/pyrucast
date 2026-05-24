@@ -13,7 +13,6 @@
 //! geom / field / assemble).
 
 pub mod element_field;
-pub mod fe_space;
 pub mod matrix;
 pub mod model;
 pub mod node_field;
