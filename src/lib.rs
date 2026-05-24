@@ -33,21 +33,21 @@ pub mod aggregate;
 pub mod cell;
 pub mod color;
 pub mod configuration;
-pub mod element_field;
+pub mod containers;
 pub mod element_type;
 pub mod error;
-pub mod fe_space;
 pub mod interpolation;
-pub mod matrix;
-pub mod mesh;
-pub mod model;
 pub mod node;
-pub mod node_field;
 pub mod persist;
 pub mod quadrature;
 pub mod solver;
 pub mod store;
 pub mod triangulation;
+
+// Re-export each container at the crate root so existing paths
+// (`pyrucast::mesh::Mesh`, `crate::fe_space::SubFESpace`, ...) keep
+// working after the on-disk move into `containers/`.
+pub use containers::{element_field, fe_space, matrix, mesh, model, node_field};
 
 #[cfg(feature = "python-api")]
 pub mod py;
