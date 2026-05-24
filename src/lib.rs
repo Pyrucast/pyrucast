@@ -49,6 +49,9 @@ pub mod solver;
 pub mod store;
 pub mod triangulation;
 
+#[cfg(feature = "python-api")]
+pub mod py;
+
 #[cfg(feature = "viz")]
 pub mod viz;
 
@@ -89,19 +92,19 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", VERSION)?;
     m.add_function(wrap_pyfunction!(set_swap_dir, m)?)?;
     m.add_function(wrap_pyfunction!(swap_dir, m)?)?;
-    m.add_function(wrap_pyfunction!(solver::py_solve, m)?)?;
-    m.add_class::<configuration::PyConfiguration>()?;
-    m.add_class::<node::PyNode>()?;
-    m.add_class::<mesh::PySubMesh>()?;
-    m.add_class::<mesh::PyMesh>()?;
-    m.add_class::<cell::PyCell>()?;
-    m.add_class::<node_field::PyNodeField>()?;
-    m.add_class::<fe_space::PySubFESpace>()?;
-    m.add_class::<fe_space::PyFiniteElementSpace>()?;
-    m.add_class::<element_field::PySubElementField>()?;
-    m.add_class::<element_field::PyElementField>()?;
-    m.add_class::<matrix::PyMatrix>()?;
-    m.add_class::<model::PySubModel>()?;
-    m.add_class::<model::PyModel>()?;
+    m.add_function(wrap_pyfunction!(py::solver::solve, m)?)?;
+    m.add_class::<py::configuration::PyConfiguration>()?;
+    m.add_class::<py::node::PyNode>()?;
+    m.add_class::<py::mesh::PySubMesh>()?;
+    m.add_class::<py::mesh::PyMesh>()?;
+    m.add_class::<py::cell::PyCell>()?;
+    m.add_class::<py::node_field::PyNodeField>()?;
+    m.add_class::<py::fe_space::PySubFESpace>()?;
+    m.add_class::<py::fe_space::PyFiniteElementSpace>()?;
+    m.add_class::<py::element_field::PySubElementField>()?;
+    m.add_class::<py::element_field::PyElementField>()?;
+    m.add_class::<py::matrix::PyMatrix>()?;
+    m.add_class::<py::model::PySubModel>()?;
+    m.add_class::<py::model::PyModel>()?;
     Ok(())
 }

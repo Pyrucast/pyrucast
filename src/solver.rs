@@ -160,40 +160,6 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
     Ok(result)
 }
 
-// ─── Python binding ────────────────────────────────────────────────────────
-
-#[cfg(feature = "python-api")]
-mod python {
-    use crate::matrix::PyMatrix;
-    use crate::node_field::PyNodeField;
-    use crate::store::{insert, with};
-    use pyo3::prelude::*;
-
-    /// `pyrucast.solve(matrix, rhs) -> NodeField`
-    ///
-    /// Dense LU solver. See [`crate::solver::solve`] for the semantics
-    /// of the rhs and of the returned NodeField.
-    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-    #[pyfunction]
-    pub fn solve(matrix: PyRef<PyMatrix>, rhs: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
-        // Cannot lock Matrix and NodeField inside one another's `with`
-        // closure when they live in different stores: here they do, so
-        // a simple sequence works.
-        let result = {
-            let solution = with(&matrix.handle, |m| {
-                with(&rhs.handle, |r| super::solve(m, r))?
-            })??;
-            solution
-        };
-        Ok(PyNodeField {
-            handle: insert(result),
-        })
-    }
-}
-
-#[cfg(feature = "python-api")]
-pub use python::solve as py_solve;
-
 // ─── Unit tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
