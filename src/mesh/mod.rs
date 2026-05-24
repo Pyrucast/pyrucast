@@ -37,12 +37,15 @@
 //! with(&cfg, |c| assert_eq!(c.refcount(a.id()), 1)).unwrap();
 //! ```
 
+pub mod element_type;
+pub mod node;
+
 use crate::aggregate::Aggregate;
 use crate::color::RgbColor;
 use crate::configuration::{Configuration, NodeId};
-use crate::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
-use crate::node::Node;
+use crate::mesh::element_type::ElementType;
+use crate::mesh::node::Node;
 use crate::store::{insert, with, with_mut, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;

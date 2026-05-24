@@ -34,11 +34,10 @@ pub mod cell;
 pub mod color;
 pub mod configuration;
 pub mod containers;
-pub mod element_type;
 pub mod error;
 pub mod interpolation;
+pub mod mesh;
 pub mod models;
-pub mod node;
 pub mod ops;
 pub mod persist;
 pub mod quadrature;
@@ -47,9 +46,14 @@ pub mod store;
 pub mod triangulation;
 
 // Re-export each container at the crate root so existing paths
-// (`pyrucast::mesh::Mesh`, `crate::fe_space::SubFESpace`, ...) keep
-// working after the on-disk move into `containers/`.
-pub use containers::{element_field, fe_space, matrix, mesh, model, node_field};
+// (`crate::fe_space::SubFESpace`, ...) keep working after the on-disk
+// move into `containers/`.
+pub use containers::{element_field, fe_space, matrix, model, node_field};
+
+// Re-export `mesh` sub-modules at the crate root so existing
+// `pyrucast::node::Node` / `pyrucast::element_type::ElementType` paths
+// keep working after the move under `mesh/`.
+pub use mesh::{element_type, node};
 
 #[cfg(feature = "python-api")]
 pub mod py;
