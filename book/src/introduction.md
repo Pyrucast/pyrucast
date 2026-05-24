@@ -8,16 +8,47 @@
 - **Dépendances minimales.** Tout ajout de dépendance externe (Rust ou Python) requiert un accord explicite.
 - **Vérification continue.** Chaque objet est livré avec des tests unitaires Rust, des doctests, des tests Python et un chapitre de cette documentation.
 
-## Modèle d'objets (ordre de dépendance)
+## Modèle d'objets (arbre de dépendances)
 
-1. **Configuration** — jeux de coordonnées de nœuds (plusieurs jeux possibles).
-2. **Node** — accesseur utilisateur d'un nœud et de ses coordonnées.
-3. **Mesh / SubMesh** — un sous-maillage groupe les cellules d'un même type d'élément. POI1 = élément à 1 nœud ; un sous-maillage POI1 est une liste de nœuds.
-4. **NodeField** — valeurs par nœud (sur un maillage POI1), multi-composantes.
-5. **FiniteElementSpace** — maillage + formulation EF.
-6. **ElementField** — valeurs par point de Gauss × composante.
-7. **Model** — modèle physique (élasticité, plasticité, thermique…) sur un FE space.
-8. **Matrix** — matrice creuse, hand-built ou assemblée depuis un Model.
+Chaque structure ne dépend que des structures qui la précèdent dans le graphe.
+Les noms entre parenthèses sont des types auxiliaires (enum / primitif) sans état partagé.
+
+```text
+Configuration
+├── NodeId            (u32 opaque)
+├── Node              (accesseur RAII — maintient le refcount GC)
+├── NodeField         (valeurs par nœud × composante)
+└── SubMesh           (+ ElementType)
+      └── Mesh        (agrège N × SubMesh)
+            └── SubFESpace  (+ Interpolation, QuadratureRule)
+                  ├── FiniteElementSpace  (agrège N × SubFESpace)
+                  └── ElementField        (valeurs par cellule × point de Gauss)
+
+SubFESpace + ElementField ──► SubModel::HeatConduction ──┐
+Configuration              ──► SubModel::Dirichlet       ├──► Model
+                                                         ┘
+NodeId ──► DofId ──► Matrix  (matrice creuse, DOFs nommés par (NodeId, champ))
+
+Model + NodeField (second membre) + Matrix ──► solve() ──► NodeField (solution)
+```
+
+Résumé des rôles :
+
+| Structure              | Rôle                                                              |
+|------------------------|-------------------------------------------------------------------|
+| `Configuration`        | Référentiel de coordonnées de nœuds (plusieurs jeux possibles)    |
+| `NodeId`               | Identifiant opaque u32 d'un nœud                                  |
+| `Node`                 | Accesseur utilisateur avec protection GC automatique              |
+| `SubMesh`              | Cellules d'un même `ElementType` (SEG2, TRI3, …)                  |
+| `Mesh`                 | Union de sous-maillages                                           |
+| `NodeField`            | Valeurs scalaires ou vectorielles par nœud × composante           |
+| `SubFESpace`           | Formulation EF sur un sous-maillage (interpolation + quadrature)  |
+| `FiniteElementSpace`   | Union de sous-espaces EF                                          |
+| `ElementField`         | Valeurs par cellule × point de Gauss × composante                 |
+| `SubModel`             | Physique locale : `HeatConduction` ou `Dirichlet`                 |
+| `Model`                | Problème physique complet (agrège N × SubModel)                   |
+| `DofId`                | Degré de liberté : `(NodeId, index de champ)`                     |
+| `Matrix`               | Matrice creuse dont les lignes/colonnes sont des `DofId`          |
 
 ## Premiers pas
 

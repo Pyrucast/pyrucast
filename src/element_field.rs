@@ -1,9 +1,17 @@
 //! ElementField — multi-component values per `(cell, Gauss point)` on a
-//! [`SubFESpace`].
+//! [`crate::fe_space::FiniteElementSpace`].
 //!
-//! Where [`crate::node_field::NodeField`] stores values **at nodes**,
-//! [`ElementField`] stores them **at the Gauss points of every cell** of a
-//! finite-element subspace. It is the natural support for:
+//! Hierarchy mirroring [`crate::fe_space`]:
+//!
+//! - [`SubElementField`] — multi-component values per `(cell, Gauss point)`
+//!   on a single [`crate::fe_space::SubFESpace`]. Where
+//!   [`crate::node_field::NodeField`] stores values **at nodes**, a
+//!   `SubElementField` stores them **at the Gauss points of every cell**
+//!   of a finite-element subspace.
+//! - [`ElementField`] — aggregate of `SubElementField`, one per subspace
+//!   of a [`crate::fe_space::FiniteElementSpace`], in the same order.
+//!
+//! Typical uses:
 //!
 //! - **material properties** (Young's modulus, density, conductivity, …)
 //!   evaluated at the Gauss points where the integrals are computed;
@@ -14,8 +22,8 @@
 //!
 //! # Snapshot of the FE space layout
 //!
-//! On construction the field captures the three dimensions of the host
-//! `SubFESpace`:
+//! On construction every `SubElementField` captures three dimensions of
+//! its host `SubFESpace`:
 //!
 //! - `cell_count`  — number of cells (`SubMesh::cell_count` at that moment);
 //! - `gauss_count` — number of Gauss points per cell;
@@ -46,12 +54,10 @@
 //! use pyrucast::configuration::Configuration;
 //! use pyrucast::element_field::ElementField;
 //! use pyrucast::element_type::ElementType;
-//! use pyrucast::fe_space::{FiniteElementSpace, SubFESpace};
-//! use pyrucast::interpolation::Interpolation;
-//! use pyrucast::mesh::{Mesh, SubMesh};
+//! use pyrucast::fe_space::FiniteElementSpace;
+//! use pyrucast::mesh::Mesh;
 //! use pyrucast::node::Node;
-//! use pyrucast::quadrature::QuadratureRule;
-//! use pyrucast::store::{insert, with};
+//! use pyrucast::store::{insert, with, with_mut};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
 //! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -59,37 +65,46 @@
 //! let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
 //! let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
 //! mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-//! let mesh_h = insert(mesh);
 //!
-//! let fes = FiniteElementSpace::lagrange1(mesh_h).unwrap();
-//! let sub_h = fes.subspace(0).unwrap();
+//! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //!
-//! // Linear elasticity 2D — two material properties (E, nu).
-//! let mut mat = ElementField::new(sub_h, vec!["E".into(), "nu".into()]).unwrap();
-//! mat.set_uniform("E", 210e9).unwrap();
-//! mat.set_uniform("nu", 0.3).unwrap();
+//! // Linear elasticity 2D — two material properties (E, nu) on every subspace.
+//! let mat = ElementField::new(&fes, vec!["E".into(), "nu".into()]).unwrap();
+//! assert_eq!(mat.subfield_count(), 1);
 //!
-//! assert_eq!(mat.cell_count(), 1);
-//! assert_eq!(mat.gauss_count(), 3);   // TRI3 Hammer
-//! assert_eq!(mat.component_count(), 2);
-//! assert_eq!(mat.value(0, 0, "E").unwrap(), 210e9);
+//! let sub0 = mat.subfield(0).unwrap();
+//! with_mut(&sub0, |s| {
+//!     s.set_uniform("E", 210e9).unwrap();
+//!     s.set_uniform("nu", 0.3).unwrap();
+//! })
+//! .unwrap();
+//!
+//! with(&sub0, |s| {
+//!     assert_eq!(s.cell_count(), 1);
+//!     assert_eq!(s.gauss_count(), 3);   // TRI3 Hammer
+//!     assert_eq!(s.component_count(), 2);
+//!     assert_eq!(s.value(0, 0, "E").unwrap(), 210e9);
+//! })
+//! .unwrap();
 //! ```
 
+use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
-use crate::fe_space::SubFESpace;
-use crate::store::{with, Handle};
+use crate::fe_space::{FiniteElementSpace, SubFESpace};
+use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
 
-// ─── ElementField ──────────────────────────────────────────────────────────
+// ─── SubElementField ───────────────────────────────────────────────────────
 
-/// Multi-component values per `(cell, Gauss point)` on a [`SubFESpace`].
+/// Multi-component values per `(cell, Gauss point)` on a single
+/// [`SubFESpace`].
 ///
 /// Layout: flat row-major in the order *cell → gauss → component*
 /// (see the module-level documentation).
 #[derive(Serialize, Deserialize)]
-pub struct ElementField {
+pub struct SubElementField {
     fespace: Handle<SubFESpace>,
     components: Vec<String>,
     /// Dimensions captured at construction; the buffer is never resized.
@@ -99,9 +114,9 @@ pub struct ElementField {
     values: Vec<f64>,
 }
 
-impl ElementField {
-    /// Build a field on the given FE subspace with the supplied component
-    /// names. Every value is initialized to `0.0`.
+impl SubElementField {
+    /// Build a sub-field on the given FE subspace with the supplied
+    /// component names. Every value is initialized to `0.0`.
     ///
     /// # Errors
     ///
@@ -123,7 +138,7 @@ impl ElementField {
         })
     }
 
-    /// Convenience: build a field with a uniform value per component.
+    /// Convenience: build a sub-field with a uniform value per component.
     ///
     /// `values_per_component` must have the same length as `components`.
     pub fn from_uniform_per_component(
@@ -312,7 +327,7 @@ impl ElementField {
     fn check_cell(&self, cell: usize) -> Result<()> {
         if cell >= self.n_cells {
             return Err(PyrucastError::Message(format!(
-                "ElementField: cell index {} ≥ cell_count {}",
+                "SubElementField: cell index {} ≥ cell_count {}",
                 cell, self.n_cells
             )));
         }
@@ -322,7 +337,7 @@ impl ElementField {
     fn check_gauss(&self, gauss: usize) -> Result<()> {
         if gauss >= self.n_gauss {
             return Err(PyrucastError::Message(format!(
-                "ElementField: gauss index {} ≥ gauss_count {}",
+                "SubElementField: gauss index {} ≥ gauss_count {}",
                 gauss, self.n_gauss
             )));
         }
@@ -332,7 +347,7 @@ impl ElementField {
     fn check_comp(&self, comp: usize) -> Result<()> {
         if comp >= self.components.len() {
             return Err(PyrucastError::Message(format!(
-                "ElementField: component index {} ≥ component_count {}",
+                "SubElementField: component index {} ≥ component_count {}",
                 comp,
                 self.components.len()
             )));
@@ -349,7 +364,7 @@ impl ElementField {
 fn check_components(components: &[String]) -> Result<()> {
     if components.is_empty() {
         return Err(PyrucastError::Message(
-            "ElementField requires at least one component".into(),
+            "SubElementField requires at least one component".into(),
         ));
     }
     for i in 0..components.len() {
@@ -367,7 +382,7 @@ fn check_components(components: &[String]) -> Result<()> {
 
 // ─── Clone ─────────────────────────────────────────────────────────────────
 
-impl Clone for ElementField {
+impl Clone for SubElementField {
     fn clone(&self) -> Self {
         Self {
             fespace: self.fespace.clone(),
@@ -381,9 +396,9 @@ impl Clone for ElementField {
 
 // ─── Debug / Display ───────────────────────────────────────────────────────
 
-impl fmt::Debug for ElementField {
+impl fmt::Debug for SubElementField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ElementField")
+        f.debug_struct("SubElementField")
             .field("cell_count", &self.n_cells)
             .field("gauss_count", &self.n_gauss)
             .field("components", &self.components)
@@ -391,11 +406,11 @@ impl fmt::Debug for ElementField {
     }
 }
 
-impl fmt::Display for ElementField {
+impl fmt::Display for SubElementField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "ElementField: {} cell(s) × {} gauss × {} component(s) [{}]",
+            "SubElementField: {} cell(s) × {} gauss × {} component(s) [{}]",
             self.n_cells,
             self.n_gauss,
             self.components.len(),
@@ -408,9 +423,9 @@ impl fmt::Display for ElementField {
 //
 // Consuming versions (mutate self in place); reference versions clone first.
 
-impl Add<f64> for ElementField {
-    type Output = ElementField;
-    fn add(mut self, rhs: f64) -> ElementField {
+impl Add<f64> for SubElementField {
+    type Output = SubElementField;
+    fn add(mut self, rhs: f64) -> SubElementField {
         for v in &mut self.values {
             *v += rhs;
         }
@@ -418,9 +433,9 @@ impl Add<f64> for ElementField {
     }
 }
 
-impl Add<f64> for &ElementField {
-    type Output = ElementField;
-    fn add(self, rhs: f64) -> ElementField {
+impl Add<f64> for &SubElementField {
+    type Output = SubElementField;
+    fn add(self, rhs: f64) -> SubElementField {
         let mut out = self.clone();
         for v in &mut out.values {
             *v += rhs;
@@ -429,9 +444,9 @@ impl Add<f64> for &ElementField {
     }
 }
 
-impl Sub<f64> for ElementField {
-    type Output = ElementField;
-    fn sub(mut self, rhs: f64) -> ElementField {
+impl Sub<f64> for SubElementField {
+    type Output = SubElementField;
+    fn sub(mut self, rhs: f64) -> SubElementField {
         for v in &mut self.values {
             *v -= rhs;
         }
@@ -439,9 +454,9 @@ impl Sub<f64> for ElementField {
     }
 }
 
-impl Sub<f64> for &ElementField {
-    type Output = ElementField;
-    fn sub(self, rhs: f64) -> ElementField {
+impl Sub<f64> for &SubElementField {
+    type Output = SubElementField;
+    fn sub(self, rhs: f64) -> SubElementField {
         let mut out = self.clone();
         for v in &mut out.values {
             *v -= rhs;
@@ -450,9 +465,9 @@ impl Sub<f64> for &ElementField {
     }
 }
 
-impl Mul<f64> for ElementField {
-    type Output = ElementField;
-    fn mul(mut self, rhs: f64) -> ElementField {
+impl Mul<f64> for SubElementField {
+    type Output = SubElementField;
+    fn mul(mut self, rhs: f64) -> SubElementField {
         for v in &mut self.values {
             *v *= rhs;
         }
@@ -460,9 +475,9 @@ impl Mul<f64> for ElementField {
     }
 }
 
-impl Mul<f64> for &ElementField {
-    type Output = ElementField;
-    fn mul(self, rhs: f64) -> ElementField {
+impl Mul<f64> for &SubElementField {
+    type Output = SubElementField;
+    fn mul(self, rhs: f64) -> SubElementField {
         let mut out = self.clone();
         for v in &mut out.values {
             *v *= rhs;
@@ -471,9 +486,9 @@ impl Mul<f64> for &ElementField {
     }
 }
 
-impl Div<f64> for ElementField {
-    type Output = ElementField;
-    fn div(mut self, rhs: f64) -> ElementField {
+impl Div<f64> for SubElementField {
+    type Output = SubElementField;
+    fn div(mut self, rhs: f64) -> SubElementField {
         for v in &mut self.values {
             *v /= rhs;
         }
@@ -481,14 +496,134 @@ impl Div<f64> for ElementField {
     }
 }
 
-impl Div<f64> for &ElementField {
-    type Output = ElementField;
-    fn div(self, rhs: f64) -> ElementField {
+impl Div<f64> for &SubElementField {
+    type Output = SubElementField;
+    fn div(self, rhs: f64) -> SubElementField {
         let mut out = self.clone();
         for v in &mut out.values {
             *v /= rhs;
         }
         out
+    }
+}
+
+// ─── ElementField (aggregate) ──────────────────────────────────────────────
+
+/// Aggregate of [`SubElementField`] — one per subspace of a
+/// [`FiniteElementSpace`], in the same order.
+///
+/// Mirrors the [`FiniteElementSpace`] / [`SubFESpace`] hierarchy: an
+/// `ElementField` is to `FiniteElementSpace` what a `SubElementField` is
+/// to `SubFESpace`. The component lists captured by the underlying
+/// sub-fields may differ from one subspace to the next.
+#[derive(Serialize, Deserialize)]
+pub struct ElementField {
+    subfields: Vec<Handle<SubElementField>>,
+}
+
+impl Aggregate for ElementField {
+    type Sub = SubElementField;
+    fn items(&self) -> &[Handle<SubElementField>] {
+        &self.subfields
+    }
+    fn items_mut(&mut self) -> &mut Vec<Handle<SubElementField>> {
+        &mut self.subfields
+    }
+}
+
+impl ElementField {
+    /// Build an `ElementField` on `fespace` with the **same** `components`
+    /// on every subspace.
+    ///
+    /// `fespace` must have at least one subspace.
+    pub fn new(fespace: &FiniteElementSpace, components: Vec<String>) -> Result<Self> {
+        let n_sub = fespace.subspace_count();
+        if n_sub == 0 {
+            return Err(PyrucastError::Message(
+                "ElementField: FE space has no subspace".into(),
+            ));
+        }
+        check_components(&components)?;
+        let mut subfields = Vec::with_capacity(n_sub);
+        for i in 0..n_sub {
+            let sub = fespace.subspace(i)?;
+            let sf = SubElementField::new(sub, components.clone())?;
+            subfields.push(insert(sf));
+        }
+        Ok(Self { subfields })
+    }
+
+    /// Build an `ElementField` with an explicit `components` list per
+    /// subspace. `components_per_subspace.len()` must equal
+    /// `fespace.subspace_count()`.
+    pub fn with(
+        fespace: &FiniteElementSpace,
+        components_per_subspace: &[Vec<String>],
+    ) -> Result<Self> {
+        let n_sub = fespace.subspace_count();
+        if n_sub == 0 {
+            return Err(PyrucastError::Message(
+                "ElementField: FE space has no subspace".into(),
+            ));
+        }
+        if components_per_subspace.len() != n_sub {
+            return Err(PyrucastError::Message(format!(
+                "ElementField: {} component list(s) supplied for {} subspace(s)",
+                components_per_subspace.len(),
+                n_sub
+            )));
+        }
+        let mut subfields = Vec::with_capacity(n_sub);
+        for (i, comps) in components_per_subspace.iter().enumerate() {
+            let sub = fespace.subspace(i)?;
+            let sf = SubElementField::new(sub, comps.clone())?;
+            subfields.push(insert(sf));
+        }
+        Ok(Self { subfields })
+    }
+
+    /// Number of sub-fields (= number of subspaces of the host FE space).
+    pub fn subfield_count(&self) -> usize {
+        self.subfields.len()
+    }
+
+    /// Handle to the `i`-th sub-field (internal clone).
+    pub fn subfield(&self, i: usize) -> Result<Handle<SubElementField>> {
+        self.subfields.get(i).cloned().ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "ElementField: subfield index {} out of bounds",
+                i
+            ))
+        })
+    }
+}
+
+impl std::ops::Index<usize> for ElementField {
+    type Output = Handle<SubElementField>;
+    fn index(&self, idx: usize) -> &Self::Output {
+        &self.subfields[idx]
+    }
+}
+
+impl<'a> IntoIterator for &'a ElementField {
+    type Item = &'a Handle<SubElementField>;
+    type IntoIter = std::slice::Iter<'a, Handle<SubElementField>>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.subfields.iter()
+    }
+}
+
+impl fmt::Debug for ElementField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ElementField")
+            .field("subfield_count", &self.subfields.len())
+            .finish()
+    }
+}
+
+impl fmt::Display for ElementField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ElementField: {} subfield(s)", self.subfields.len())
     }
 }
 
@@ -497,26 +632,29 @@ impl Div<f64> for &ElementField {
 #[cfg(feature = "python-api")]
 mod python {
     use super::*;
-    use crate::fe_space::PySubFESpace;
+    use crate::fe_space::{PyFiniteElementSpace, PySubFESpace};
     use crate::store::insert;
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
 
-    /// Python wrapper for [`ElementField`].
+    /// Python wrapper for [`SubElementField`].
     #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-    #[pyclass(name = "ElementField")]
-    pub struct PyElementField {
-        pub(crate) handle: Handle<ElementField>,
+    #[pyclass(name = "SubElementField")]
+    pub struct PySubElementField {
+        pub(crate) handle: Handle<SubElementField>,
     }
 
     #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
     #[pymethods]
-    impl PyElementField {
-        /// `ElementField(subfespace, components)` — zero-initialized field.
+    impl PySubElementField {
+        /// `SubElementField(subfespace, components)` — zero-initialized
+        /// sub-field on a single [`SubFESpace`].
         #[new]
         fn py_new(fespace: PyRef<PySubFESpace>, components: Vec<String>) -> PyResult<Self> {
-            let field = ElementField::new(fespace.handle.clone(), components)?;
-            Ok(Self { handle: insert(field) })
+            let field = SubElementField::new(fespace.handle.clone(), components)?;
+            Ok(Self {
+                handle: insert(field),
+            })
         }
 
         /// Alternate constructor: uniform value per component.
@@ -527,12 +665,14 @@ mod python {
             components: Vec<String>,
             values_per_component: Vec<f64>,
         ) -> PyResult<Self> {
-            let field = ElementField::from_uniform_per_component(
+            let field = SubElementField::from_uniform_per_component(
                 fespace.handle.clone(),
                 components,
                 &values_per_component,
             )?;
-            Ok(Self { handle: insert(field) })
+            Ok(Self {
+                handle: insert(field),
+            })
         }
 
         fn cell_count(&self) -> PyResult<usize> {
@@ -619,26 +759,34 @@ mod python {
             Ok(())
         }
 
-        // ── Scalar operators (return a new field) ───────────────────────────
+        // ── Scalar operators (return a new sub-field) ───────────────────────
 
-        fn __add__(&self, rhs: f64) -> PyResult<PyElementField> {
+        fn __add__(&self, rhs: f64) -> PyResult<PySubElementField> {
             let res = with(&self.handle, |f| f + rhs)?;
-            Ok(PyElementField { handle: insert(res) })
+            Ok(PySubElementField {
+                handle: insert(res),
+            })
         }
 
-        fn __sub__(&self, rhs: f64) -> PyResult<PyElementField> {
+        fn __sub__(&self, rhs: f64) -> PyResult<PySubElementField> {
             let res = with(&self.handle, |f| f - rhs)?;
-            Ok(PyElementField { handle: insert(res) })
+            Ok(PySubElementField {
+                handle: insert(res),
+            })
         }
 
-        fn __mul__(&self, rhs: f64) -> PyResult<PyElementField> {
+        fn __mul__(&self, rhs: f64) -> PyResult<PySubElementField> {
             let res = with(&self.handle, |f| f * rhs)?;
-            Ok(PyElementField { handle: insert(res) })
+            Ok(PySubElementField {
+                handle: insert(res),
+            })
         }
 
-        fn __truediv__(&self, rhs: f64) -> PyResult<PyElementField> {
+        fn __truediv__(&self, rhs: f64) -> PyResult<PySubElementField> {
             let res = with(&self.handle, |f| f / rhs)?;
-            Ok(PyElementField { handle: insert(res) })
+            Ok(PySubElementField {
+                handle: insert(res),
+            })
         }
 
         /// `field[cell, gauss, "name"]` — raises ValueError if the component
@@ -664,10 +812,65 @@ mod python {
             Ok(with(&self.handle, |f| format!("{}", f))?)
         }
     }
+
+    /// Python wrapper for [`ElementField`].
+    ///
+    /// Owns the `ElementField` struct directly — no longer stored in the
+    /// global store. Identity is the Python object identity.
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+    #[pyclass(name = "ElementField")]
+    pub struct PyElementField {
+        pub(crate) inner: ElementField,
+    }
+
+    #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+    #[pymethods]
+    impl PyElementField {
+        /// `ElementField(fespace, components)` — one sub-field per subspace
+        /// of `fespace`, sharing the same `components` list. Zero-initialized.
+        #[new]
+        fn py_new(
+            fespace: PyRef<PyFiniteElementSpace>,
+            components: Vec<String>,
+        ) -> PyResult<Self> {
+            let ef = ElementField::new(&fespace.inner, components)?;
+            Ok(Self { inner: ef })
+        }
+
+        /// Explicit `components` list per subspace.
+        #[classmethod]
+        fn with_components_per_subspace(
+            _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+            fespace: PyRef<PyFiniteElementSpace>,
+            components_per_subspace: Vec<Vec<String>>,
+        ) -> PyResult<Self> {
+            let ef = ElementField::with(&fespace.inner, &components_per_subspace)?;
+            Ok(Self { inner: ef })
+        }
+
+        fn subfield_count(&self) -> PyResult<usize> {
+            Ok(self.inner.subfield_count())
+        }
+
+        fn subfield(&self, i: usize) -> PyResult<PySubElementField> {
+            let h = self.inner.subfield(i)?;
+            Ok(PySubElementField { handle: h })
+        }
+
+        fn __repr__(&self) -> PyResult<String> {
+            Ok(format!("{:?}", self.inner))
+        }
+
+        fn __str__(&self) -> PyResult<String> {
+            Ok(format!("{}", self.inner))
+        }
+    }
+
+    crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField");
 }
 
 #[cfg(feature = "python-api")]
-pub use python::PyElementField;
+pub use python::{PyElementField, PySubElementField};
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
 
@@ -681,7 +884,7 @@ mod tests {
     use crate::mesh::{Mesh, SubMesh};
     use crate::node::Node;
     use crate::quadrature::QuadratureRule;
-    use crate::store::insert;
+    use crate::store::{insert, with, with_mut};
 
     fn make_tri3_subfespace() -> Handle<SubFESpace> {
         let cfg = insert(Configuration::new(2).unwrap());
@@ -716,10 +919,34 @@ mod tests {
         insert(SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap())
     }
 
+    fn make_mesh_with_tri_and_qua() -> Mesh {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let mut mesh = Mesh::new(cfg.clone());
+        let sm_tri = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
+            insert(sm)
+        };
+        let sm_qua = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::QUA4);
+            sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
+            insert(sm)
+        };
+        mesh.add_submesh(sm_tri).unwrap();
+        mesh.add_submesh(sm_qua).unwrap();
+        mesh
+    }
+
+    // ── SubElementField ─────────────────────────────────────────────────────
+
     #[test]
-    fn new_zero_initialized() {
+    fn sub_new_zero_initialized() {
         let sub = make_tri3_subfespace();
-        let f = ElementField::new(sub, vec!["E".into(), "nu".into()]).unwrap();
+        let f = SubElementField::new(sub, vec!["E".into(), "nu".into()]).unwrap();
         assert_eq!(f.cell_count(), 1);
         assert_eq!(f.gauss_count(), 3);
         assert_eq!(f.component_count(), 2);
@@ -730,21 +957,22 @@ mod tests {
     }
 
     #[test]
-    fn new_rejects_empty_components() {
+    fn sub_new_rejects_empty_components() {
         let sub = make_tri3_subfespace();
-        assert!(ElementField::new(sub, vec![]).is_err());
+        assert!(SubElementField::new(sub, vec![]).is_err());
     }
 
     #[test]
-    fn new_rejects_duplicate_components() {
+    fn sub_new_rejects_duplicate_components() {
         let sub = make_tri3_subfespace();
-        assert!(ElementField::new(sub, vec!["E".into(), "E".into()]).is_err());
+        assert!(SubElementField::new(sub, vec!["E".into(), "E".into()]).is_err());
     }
 
     #[test]
-    fn get_set_roundtrip() {
+    fn sub_get_set_roundtrip() {
         let sub = make_multi_cell_tri3_subfespace(3);
-        let mut f = ElementField::new(sub, vec!["sigma_xx".into(), "sigma_yy".into()]).unwrap();
+        let mut f =
+            SubElementField::new(sub, vec!["sigma_xx".into(), "sigma_yy".into()]).unwrap();
         assert_eq!(f.cell_count(), 3);
         f.set(0, 0, 0, 1.0).unwrap();
         f.set(1, 2, 1, -3.5).unwrap();
@@ -754,9 +982,9 @@ mod tests {
     }
 
     #[test]
-    fn value_and_set_value_by_name() {
+    fn sub_value_and_set_value_by_name() {
         let sub = make_tri3_subfespace();
-        let mut f = ElementField::new(sub, vec!["T".into(), "P".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["T".into(), "P".into()]).unwrap();
         f.set_value(0, 1, "P", 42.0).unwrap();
         assert_eq!(f.value(0, 1, "P").unwrap(), 42.0);
         assert!(f.value(0, 0, "unknown").is_err());
@@ -764,9 +992,10 @@ mod tests {
     }
 
     #[test]
-    fn point_values_returns_all_components() {
+    fn sub_point_values_returns_all_components() {
         let sub = make_tri3_subfespace();
-        let mut f = ElementField::new(sub, vec!["a".into(), "b".into(), "c".into()]).unwrap();
+        let mut f =
+            SubElementField::new(sub, vec!["a".into(), "b".into(), "c".into()]).unwrap();
         f.set(0, 1, 0, 1.0).unwrap();
         f.set(0, 1, 1, 2.0).unwrap();
         f.set(0, 1, 2, 3.0).unwrap();
@@ -774,9 +1003,9 @@ mod tests {
     }
 
     #[test]
-    fn out_of_bounds_errors() {
+    fn sub_out_of_bounds_errors() {
         let sub = make_tri3_subfespace();
-        let mut f = ElementField::new(sub, vec!["x".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["x".into()]).unwrap();
         assert!(f.get(99, 0, 0).is_err());
         assert!(f.get(0, 99, 0).is_err());
         assert!(f.get(0, 0, 99).is_err());
@@ -785,9 +1014,9 @@ mod tests {
     }
 
     #[test]
-    fn set_uniform_fills_every_point_of_one_component() {
+    fn sub_set_uniform_fills_every_point_of_one_component() {
         let sub = make_multi_cell_tri3_subfespace(2);
-        let mut f = ElementField::new(sub, vec!["E".into(), "nu".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["E".into(), "nu".into()]).unwrap();
         f.set_uniform("E", 210e9).unwrap();
         for cell in 0..2 {
             for g in 0..3 {
@@ -798,9 +1027,9 @@ mod tests {
     }
 
     #[test]
-    fn set_cell_uniform_touches_only_one_cell() {
+    fn sub_set_cell_uniform_touches_only_one_cell() {
         let sub = make_multi_cell_tri3_subfespace(2);
-        let mut f = ElementField::new(sub, vec!["rho".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["rho".into()]).unwrap();
         f.set_cell_uniform(1, "rho", 7800.0).unwrap();
         for g in 0..3 {
             assert_eq!(f.get(0, g, 0).unwrap(), 0.0);
@@ -809,9 +1038,9 @@ mod tests {
     }
 
     #[test]
-    fn from_uniform_per_component_constructor() {
+    fn sub_from_uniform_per_component_constructor() {
         let sub = make_tri3_subfespace();
-        let f = ElementField::from_uniform_per_component(
+        let f = SubElementField::from_uniform_per_component(
             sub,
             vec!["E".into(), "nu".into(), "rho".into()],
             &[210e9, 0.3, 7800.0],
@@ -825,9 +1054,9 @@ mod tests {
     }
 
     #[test]
-    fn from_uniform_per_component_length_mismatch_errors() {
+    fn sub_from_uniform_per_component_length_mismatch_errors() {
         let sub = make_tri3_subfespace();
-        assert!(ElementField::from_uniform_per_component(
+        assert!(SubElementField::from_uniform_per_component(
             sub,
             vec!["a".into(), "b".into()],
             &[1.0]
@@ -836,9 +1065,9 @@ mod tests {
     }
 
     #[test]
-    fn component_scalar_ops_isolate_components() {
+    fn sub_component_scalar_ops_isolate_components() {
         let sub = make_tri3_subfespace();
-        let mut f = ElementField::new(sub, vec!["a".into(), "b".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["a".into(), "b".into()]).unwrap();
         f.set_uniform("a", 10.0).unwrap();
         f.set_uniform("b", 1.0).unwrap();
         f.add_to_component("a", 5.0).unwrap();
@@ -853,16 +1082,16 @@ mod tests {
     }
 
     #[test]
-    fn component_scalar_div_by_zero_errors() {
+    fn sub_component_scalar_div_by_zero_errors() {
         let sub = make_tri3_subfespace();
-        let mut f = ElementField::new(sub, vec!["x".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["x".into()]).unwrap();
         assert!(f.div_to_component("x", 0.0).is_err());
     }
 
     #[test]
-    fn component_scalar_unknown_name_errors() {
+    fn sub_component_scalar_unknown_name_errors() {
         let sub = make_tri3_subfespace();
-        let mut f = ElementField::new(sub, vec!["x".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["x".into()]).unwrap();
         assert!(f.add_to_component("missing", 1.0).is_err());
         assert!(f.sub_to_component("missing", 1.0).is_err());
         assert!(f.mul_to_component("missing", 1.0).is_err());
@@ -870,9 +1099,9 @@ mod tests {
     }
 
     #[test]
-    fn clone_is_independent() {
+    fn sub_clone_is_independent() {
         let sub = make_tri3_subfespace();
-        let mut f = ElementField::new(sub, vec!["x".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["x".into()]).unwrap();
         f.set(0, 0, 0, 1.0).unwrap();
         let g = f.clone();
         f.set(0, 0, 0, 99.0).unwrap();
@@ -880,9 +1109,9 @@ mod tests {
     }
 
     #[test]
-    fn operator_add_f64_reference_keeps_self_intact() {
+    fn sub_operator_add_f64_reference_keeps_self_intact() {
         let sub = make_tri3_subfespace();
-        let mut f = ElementField::new(sub, vec!["x".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["x".into()]).unwrap();
         f.set(0, 1, 0, 4.0).unwrap();
         let g = &f + 10.0;
         assert_eq!(g.get(0, 1, 0).unwrap(), 14.0);
@@ -890,9 +1119,9 @@ mod tests {
     }
 
     #[test]
-    fn operator_chained_sub_mul_div() {
+    fn sub_operator_chained_sub_mul_div() {
         let sub = make_tri3_subfespace();
-        let mut f = ElementField::new(sub, vec!["x".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["x".into()]).unwrap();
         f.set_uniform("x", 12.0).unwrap();
         let g = (f.clone() - 2.0) * 3.0 / 2.0;
         for gp in 0..3 {
@@ -901,35 +1130,133 @@ mod tests {
     }
 
     #[test]
-    fn debug_and_display() {
+    fn sub_debug_and_display() {
         let sub = make_multi_cell_tri3_subfespace(2);
-        let f = ElementField::new(sub, vec!["E".into(), "nu".into()]).unwrap();
+        let f = SubElementField::new(sub, vec!["E".into(), "nu".into()]).unwrap();
         let d = format!("{:?}", f);
-        assert!(d.contains("ElementField"));
+        assert!(d.contains("SubElementField"));
         assert!(d.contains("cell_count"));
         assert!(d.contains("E"));
         let s = format!("{}", f);
-        assert!(s.contains("ElementField"));
+        assert!(s.contains("SubElementField"));
         assert!(s.contains("2 cell(s)"));
         assert!(s.contains("3 gauss"));
         assert!(s.contains("2 component(s)"));
         assert!(s.contains("E, nu"));
     }
 
+    // ── ElementField (aggregate) ────────────────────────────────────────────
+
     #[test]
-    fn integrates_with_finite_element_space() {
-        // Sanity: a Mesh+FE space can drive ElementField construction
-        // without going through bare SubFESpace handles.
+    fn ef_new_creates_one_subfield_per_subspace() {
+        let mesh = make_mesh_with_tri_and_qua();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let ef = ElementField::new(&fes, vec!["E".into(), "nu".into()]).unwrap();
+        assert_eq!(ef.subfield_count(), 2);
+
+        // TRI3: 1 cell × 3 gauss × 2 components
+        with(&ef.subfield(0).unwrap(), |s| {
+            assert_eq!(s.cell_count(), 1);
+            assert_eq!(s.gauss_count(), 3);
+            assert_eq!(s.component_count(), 2);
+            assert_eq!(s.components(), &["E", "nu"]);
+        })
+        .unwrap();
+
+        // QUA4: 1 cell × 4 gauss × 2 components
+        with(&ef.subfield(1).unwrap(), |s| {
+            assert_eq!(s.cell_count(), 1);
+            assert_eq!(s.gauss_count(), 4);
+            assert_eq!(s.component_count(), 2);
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn ef_with_supports_per_subspace_components() {
+        let mesh = make_mesh_with_tri_and_qua();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let comps = vec![vec!["k".into()], vec!["E".into(), "nu".into()]];
+        let ef = ElementField::with(&fes, &comps).unwrap();
+        assert_eq!(ef.subfield_count(), 2);
+        with(&ef.subfield(0).unwrap(), |s| {
+            assert_eq!(s.components(), &["k"]);
+        })
+        .unwrap();
+        with(&ef.subfield(1).unwrap(), |s| {
+            assert_eq!(s.components(), &["E", "nu"]);
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn ef_with_rejects_mismatched_length() {
+        let mesh = make_mesh_with_tri_and_qua();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let comps_one = vec![vec!["k".into()]];
+        assert!(ElementField::with(&fes, &comps_one).is_err());
+        let comps_three = vec![
+            vec!["k".into()],
+            vec!["k".into()],
+            vec!["k".into()],
+        ];
+        assert!(ElementField::with(&fes, &comps_three).is_err());
+    }
+
+    #[test]
+    fn ef_subfield_out_of_bounds_errors() {
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
         let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(insert(mesh)).unwrap();
-        let sub = fes.subspace(0).unwrap();
-        let f = ElementField::new(sub, vec!["sigma".into()]).unwrap();
-        assert_eq!(f.cell_count(), 1);
-        assert_eq!(f.gauss_count(), 3);
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();
+        assert!(ef.subfield(5).is_err());
+    }
+
+    #[test]
+    fn ef_aggregate_iter_and_index() {
+        let mesh = make_mesh_with_tri_and_qua();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();
+        // Iteration walks all subfields in order.
+        let counts: Vec<usize> = ef
+            .into_iter()
+            .map(|h| with(h, |s| s.gauss_count()).unwrap())
+            .collect();
+        assert_eq!(counts, vec![3, 4]);
+        // Indexing matches subfield().
+        let _h = &ef[0];
+    }
+
+    #[test]
+    fn ef_subfields_are_mutated_independently() {
+        let mesh = make_mesh_with_tri_and_qua();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();
+        with_mut(&ef.subfield(0).unwrap(), |s| s.set_uniform("k", 1.5).unwrap()).unwrap();
+        with_mut(&ef.subfield(1).unwrap(), |s| s.set_uniform("k", 2.5).unwrap()).unwrap();
+        with(&ef.subfield(0).unwrap(), |s| {
+            assert_eq!(s.value(0, 0, "k").unwrap(), 1.5);
+        })
+        .unwrap();
+        with(&ef.subfield(1).unwrap(), |s| {
+            assert_eq!(s.value(0, 0, "k").unwrap(), 2.5);
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn ef_debug_and_display() {
+        let mesh = make_mesh_with_tri_and_qua();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();
+        let d = format!("{:?}", ef);
+        assert!(d.contains("ElementField"));
+        let s = format!("{}", ef);
+        assert!(s.contains("ElementField"));
+        assert!(s.contains("2 subfield"));
     }
 }

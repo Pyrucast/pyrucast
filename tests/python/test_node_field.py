@@ -96,13 +96,15 @@ def test_field_protects_nodes_from_gc():
     sm.add_cell([nid])
     field = pyrucast.NodeField(sm, ["T"])
 
-    # refcount = Node + SubMesh + NodeField = 3
-    assert c.refcount(nid) == 3
+    # NodeField shares the SubMesh handle, so per-node refcounts are
+    # only Node + SubMesh = 2 (the field adds no per-node incref).
+    assert c.refcount(nid) == 2
 
     del a
     del sm
     pygc.collect()
-    # Field still keeps it alive.
+    # The field still holds a clone of the SubMesh handle, so the
+    # SubMesh stays alive and keeps the node alive (refcount = 1).
     assert c.refcount(nid) == 1
     assert c.is_alive(nid)
     assert c.gc() == 0

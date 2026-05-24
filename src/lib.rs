@@ -29,6 +29,7 @@
 //! assert_eq!(a, b);
 //! ```
 
+pub mod aggregate;
 pub mod cell;
 pub mod color;
 pub mod configuration;
@@ -97,6 +98,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<node_field::PyNodeField>()?;
     m.add_class::<fe_space::PySubFESpace>()?;
     m.add_class::<fe_space::PyFiniteElementSpace>()?;
+    m.add_class::<element_field::PySubElementField>()?;
     m.add_class::<element_field::PyElementField>()?;
     m.add_class::<matrix::PyMatrix>()?;
     m.add_class::<model::PySubModel>()?;

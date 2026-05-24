@@ -14,7 +14,7 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     mesh.add_cell([a.id, b.id])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    mat = pyrucast.ElementField(sub, ["k"])
+    mat = pyrucast.SubElementField(sub, ["k"])
     mat.set_uniform("k", k)
 
     model = pyrucast.Model()
@@ -69,7 +69,7 @@ def test_two_seg2_assembly_is_tridiagonal():
     mesh.add_cell([n1.id, n2.id])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    mat = pyrucast.ElementField(sub, ["k"])
+    mat = pyrucast.SubElementField(sub, ["k"])
     mat.set_uniform("k", 1.0)
 
     model = pyrucast.Model()

@@ -37,6 +37,7 @@
 //! with(&cfg, |c| assert_eq!(c.refcount(a.id()), 1)).unwrap();
 //! ```
 
+use crate::aggregate::Aggregate;
 use crate::color::RgbColor;
 use crate::configuration::{Configuration, NodeId};
 use crate::element_type::ElementType;
@@ -119,6 +120,44 @@ impl SubMesh {
             Ok(())
         })?;
         result?;
+        let idx = self.connectivity.len() / npc;
+        self.connectivity.extend_from_slice(nodes);
+        Ok(idx)
+    }
+
+    /// Add a cell whose nodes are **already owned** by the caller (one
+    /// refcount unit per node). The SubMesh adopts those units without
+    /// increfing further; its `Drop` will decref as usual, which
+    /// balances the donation.
+    ///
+    /// Typical use: a freshly created node (`Configuration::add_node`
+    /// returns refcount = 1) is handed directly to a POI1 SubMesh which
+    /// then becomes its sole owner.
+    ///
+    /// The caller is responsible for the ownership claim; this method
+    /// only checks that the cell length matches the element type and
+    /// that the nodes are alive at the moment of the call.
+    pub fn add_cell_taking(&mut self, nodes: &[NodeId]) -> Result<usize> {
+        let npc = self.element_type.nodes_per_cell();
+        if nodes.len() != npc {
+            return Err(PyrucastError::Message(format!(
+                "add_cell_taking({}): expected {} nodes, got {}",
+                self.element_type,
+                npc,
+                nodes.len()
+            )));
+        }
+        with(&self.config, |c| -> Result<()> {
+            for &n in nodes {
+                if !c.is_alive(n) {
+                    return Err(PyrucastError::Message(format!(
+                        "add_cell_taking: node {} is not alive",
+                        n
+                    )));
+                }
+            }
+            Ok(())
+        })??;
         let idx = self.connectivity.len() / npc;
         self.connectivity.extend_from_slice(nodes);
         Ok(idx)
@@ -225,6 +264,16 @@ impl fmt::Display for SubMesh {
 pub struct Mesh {
     config: Handle<Configuration>,
     submeshes: Vec<Handle<SubMesh>>,
+}
+
+impl Aggregate for Mesh {
+    type Sub = SubMesh;
+    fn items(&self) -> &[Handle<SubMesh>] {
+        &self.submeshes
+    }
+    fn items_mut(&mut self) -> &mut Vec<Handle<SubMesh>> {
+        &mut self.submeshes
+    }
 }
 
 impl Mesh {
@@ -1394,10 +1443,14 @@ mod python {
     }
 
     /// Python wrapper for [`Mesh`].
+    ///
+    /// Owns the `Mesh` struct directly — `Mesh` is no longer kept in the
+    /// global store. Identity is the Python object identity itself
+    /// (two Python references to the same `PyMesh` see the same submeshes).
     #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
     #[pyclass(name = "Mesh")]
     pub struct PyMesh {
-        pub(crate) handle: Handle<Mesh>,
+        pub(crate) inner: Mesh,
     }
 
     #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
@@ -1418,47 +1471,41 @@ mod python {
                 }
                 None => Mesh::new(cfg),
             };
-            Ok(Self { handle: insert(mesh) })
+            Ok(Self { inner: mesh })
         }
 
-        fn add_submesh(&self, sm: PyRef<PySubMesh>) -> PyResult<()> {
+        fn add_submesh(&mut self, sm: PyRef<PySubMesh>) -> PyResult<()> {
             let sm_handle = sm.handle.clone();
-            with_mut(&self.handle, |m| m.add_submesh(sm_handle))??;
+            self.inner.add_submesh(sm_handle)?;
             Ok(())
         }
 
-        fn add_cell(&self, nodes: Vec<u32>) -> PyResult<usize> {
+        fn add_cell(&mut self, nodes: Vec<u32>) -> PyResult<usize> {
             let nodes_typed: Vec<NodeId> = nodes.iter().map(|&i| NodeId(i)).collect();
-            let idx = with_mut(&self.handle, move |m| m.add_cell(&nodes_typed))??;
-            Ok(idx)
+            Ok(self.inner.add_cell(&nodes_typed)?)
         }
 
         #[getter]
         fn element_type(&self) -> PyResult<Option<String>> {
-            let maybe_sm = with(&self.handle, |m| -> Option<Handle<SubMesh>> {
-                if m.submesh_count() == 1 {
-                    m.submesh(0).ok()
-                } else {
-                    None
-                }
-            })?;
-            match maybe_sm {
-                Some(h) => Ok(Some(with(&h, |sm| sm.element_type().name().to_string())?)),
-                None => Ok(None),
+            if self.inner.submesh_count() == 1 {
+                let h = self.inner.submesh(0)?;
+                Ok(Some(with(&h, |sm| sm.element_type().name().to_string())?))
+            } else {
+                Ok(None)
             }
         }
 
         fn element_types(&self) -> PyResult<Vec<String>> {
-            let types = with(&self.handle, |m| m.element_types())??;
+            let types = self.inner.element_types()?;
             Ok(types.into_iter().map(|et| et.name().to_string()).collect())
         }
 
         fn cell_counts(&self) -> PyResult<Vec<usize>> {
-            Ok(with(&self.handle, |m| m.cell_counts())??)
+            Ok(self.inner.cell_counts()?)
         }
 
         fn node(&self, submesh_idx: usize, cell_idx: usize, node_idx: usize) -> PyResult<PyNode> {
-            let node = with(&self.handle, |m| m.node(submesh_idx, cell_idx, node_idx))??;
+            let node = self.inner.node(submesh_idx, cell_idx, node_idx)?;
             Ok(PyNode::from_node(node))
         }
 
@@ -1468,7 +1515,7 @@ mod python {
             config: PyRef<PyConfiguration>,
         ) -> PyResult<Self> {
             let mesh = Mesh::from_live_nodes(config.handle.clone())?;
-            Ok(Self { handle: insert(mesh) })
+            Ok(Self { inner: mesh })
         }
 
         #[classmethod]
@@ -1479,7 +1526,7 @@ mod python {
             n_elems: usize,
         ) -> PyResult<Self> {
             let mesh = Mesh::line_seg2(a.as_node(), b.as_node(), n_elems)?;
-            Ok(Self { handle: insert(mesh) })
+            Ok(Self { inner: mesh })
         }
 
         #[classmethod]
@@ -1491,7 +1538,7 @@ mod python {
             n_elems: usize,
         ) -> PyResult<Self> {
             let mesh = Mesh::circle_seg2(center.as_node(), &normal, radius, n_elems)?;
-            Ok(Self { handle: insert(mesh) })
+            Ok(Self { inner: mesh })
         }
 
         #[classmethod]
@@ -1501,28 +1548,8 @@ mod python {
             mesh_b: PyRef<PyMesh>,
             n_layers: usize,
         ) -> PyResult<Self> {
-            // Cannot nest `with` on two Handle<Mesh> values (same Mutex).
-            // Snapshot each side into a local Mesh (just clones the
-            // submesh handles + the configuration handle), then call the
-            // pure-Rust API on the snapshots — outside any store lock.
-            let handle_a = mesh_a.handle.clone();
-            let handle_b = mesh_b.handle.clone();
-            let snap_a = with(&handle_a, |a| -> Result<Mesh> {
-                let mut copy = Mesh::new(a.configuration());
-                for i in 0..a.submesh_count() {
-                    copy.add_submesh(a.submesh(i)?)?;
-                }
-                Ok(copy)
-            })??;
-            let snap_b = with(&handle_b, |b| -> Result<Mesh> {
-                let mut copy = Mesh::new(b.configuration());
-                for i in 0..b.submesh_count() {
-                    copy.add_submesh(b.submesh(i)?)?;
-                }
-                Ok(copy)
-            })??;
-            let mesh = Mesh::sweep_qua4(&snap_a, &snap_b, n_layers)?;
-            Ok(Self { handle: insert(mesh) })
+            let mesh = Mesh::sweep_qua4(&mesh_a.inner, &mesh_b.inner, n_layers)?;
+            Ok(Self { inner: mesh })
         }
 
         #[classmethod]
@@ -1532,9 +1559,8 @@ mod python {
             direction: Vec<f64>,
             n_layers: usize,
         ) -> PyResult<Self> {
-            let handle = mesh.handle.clone();
-            let result = with(&handle, |m| Mesh::extrude(m, &direction, n_layers))??;
-            Ok(Self { handle: insert(result) })
+            let result = Mesh::extrude(&mesh.inner, &direction, n_layers)?;
+            Ok(Self { inner: result })
         }
 
         #[classmethod]
@@ -1557,55 +1583,24 @@ mod python {
             } else {
                 None
             };
-            let handle = contour.handle.clone();
-            let mesh = with(&handle, |c| Mesh::fill_surface(c, et, refinement))??;
-            Ok(Self { handle: insert(mesh) })
+            let mesh = Mesh::fill_surface(&contour.inner, et, refinement)?;
+            Ok(Self { inner: mesh })
         }
 
         fn __add__(&self, other: PyRef<PyMesh>) -> PyResult<PyMesh> {
-            // Cannot nest `with` on two Handle<Mesh> values — they share
-            // the same per-type Mutex. Snapshot each side separately and
-            // assemble outside the locks.
-            let other_handle = other.handle.clone();
-            let (other_cfg, other_subs): (Handle<Configuration>, Vec<Handle<SubMesh>>) =
-                with(&other_handle, |b| -> Result<_> {
-                    let mut subs = Vec::with_capacity(b.submesh_count());
-                    for i in 0..b.submesh_count() {
-                        subs.push(b.submesh(i)?);
-                    }
-                    Ok((b.configuration(), subs))
-                })??;
-
-            let mesh = with(&self.handle, |a| -> Result<Mesh> {
-                let self_cfg = a.configuration();
-                if self_cfg.index() != other_cfg.index()
-                    || self_cfg.generation() != other_cfg.generation()
-                {
-                    return Err(PyrucastError::Message(
-                        "merge: meshes are attached to different Configurations".into(),
-                    ));
-                }
-                let mut result = Mesh::new(self_cfg);
-                for i in 0..a.submesh_count() {
-                    result.add_submesh(a.submesh(i)?)?;
-                }
-                for sm in &other_subs {
-                    result.add_submesh(sm.clone())?;
-                }
-                Ok(result)
-            })??;
-            Ok(PyMesh { handle: insert(mesh) })
+            let mesh = self.inner.merge(&other.inner)?;
+            Ok(PyMesh { inner: mesh })
         }
 
         /// Merge submeshes of the same type and drop duplicate cells.
         /// Returns a new mesh with one submesh per element type.
         fn consolidate(&self) -> PyResult<PyMesh> {
-            let mesh = with(&self.handle, |m| m.consolidate())??;
-            Ok(PyMesh { handle: insert(mesh) })
+            let mesh = self.inner.consolidate()?;
+            Ok(PyMesh { inner: mesh })
         }
 
         fn submesh_count(&self) -> PyResult<usize> {
-            Ok(with(&self.handle, |m| m.submesh_count())?)
+            Ok(self.inner.submesh_count())
         }
 
         /// Return the submesh at index `idx` as a `SubMesh` wrapper.
@@ -1613,7 +1608,7 @@ mod python {
         /// mutating it (e.g. setting `face_color`) is visible through
         /// the mesh too.
         fn submesh(&self, idx: usize) -> PyResult<PySubMesh> {
-            let h = with(&self.handle, |m| m.submesh(idx))??;
+            let h = self.inner.submesh(idx)?;
             Ok(PySubMesh { handle: h })
         }
 
@@ -1624,32 +1619,12 @@ mod python {
             submesh_idx: usize,
             cell_idx: usize,
         ) -> PyResult<crate::cell::PyCell> {
-            let cell =
-                with(&self.handle, |m| m.cell(submesh_idx, cell_idx))??;
+            let cell = self.inner.cell(submesh_idx, cell_idx)?;
             Ok(crate::cell::PyCell::from_cell(cell))
         }
 
-        /// `len(mesh)` → number of submeshes.
-        fn __len__(&self) -> PyResult<usize> {
-            Ok(with(&self.handle, |m| m.submesh_count())?)
-        }
-
-        /// `mesh[i]` → the i-th submesh. Supports negative indices and
-        /// raises `IndexError` when out of range so `for sm in mesh:` works.
-        fn __getitem__(&self, idx: isize) -> PyResult<PySubMesh> {
-            let n = with(&self.handle, |m| m.submesh_count())? as isize;
-            let normalized = if idx < 0 { n + idx } else { idx };
-            if normalized < 0 || normalized >= n {
-                return Err(PyIndexError::new_err(format!(
-                    "mesh index {idx} out of range (len={n})"
-                )));
-            }
-            let h = with(&self.handle, |m| m.submesh(normalized as usize))??;
-            Ok(PySubMesh { handle: h })
-        }
-
         fn cell_count(&self) -> PyResult<usize> {
-            Ok(with(&self.handle, |m| m.cell_count())??)
+            Ok(self.inner.cell_count()?)
         }
 
         /// Visualize this mesh (every submesh in its own colour, or
@@ -1680,29 +1655,28 @@ mod python {
             match field {
                 Some(f) => {
                     let comp_ref = component.as_deref();
-                    let mesh_handle = self.handle.clone();
                     let field_handle = f.handle.clone();
-                    crate::store::with(&mesh_handle, |m| {
-                        crate::store::with(&field_handle, |fld| {
-                            m.plot_with_field(Some(view), save_ref, fld, comp_ref)
-                        })?
+                    crate::store::with(&field_handle, |fld| {
+                        self.inner.plot_with_field(Some(view), save_ref, fld, comp_ref)
                     })??;
                 }
                 None => {
-                    with(&self.handle, |m| m.plot(Some(view), save_ref))??;
+                    self.inner.plot(Some(view), save_ref)?;
                 }
             }
             Ok(())
         }
 
         fn __repr__(&self) -> PyResult<String> {
-            Ok(with(&self.handle, |m| format!("{:?}", m))?)
+            Ok(format!("{:?}", self.inner))
         }
 
         fn __str__(&self) -> PyResult<String> {
-            Ok(with(&self.handle, |m| format!("{}", m))?)
+            Ok(format!("{}", self.inner))
         }
     }
+
+    crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh");
 }
 
 #[cfg(feature = "python-api")]

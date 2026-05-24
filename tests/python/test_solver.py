@@ -18,7 +18,7 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
         mesh.add_cell([nodes[i].id, nodes[i + 1].id])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    mat = pyrucast.ElementField(sub, ["k"])
+    mat = pyrucast.SubElementField(sub, ["k"])
     mat.set_uniform("k", 1.0)
 
     model = pyrucast.Model()
@@ -82,7 +82,7 @@ def test_solver_singular_matrix_errors():
     mesh.add_cell([a.id, b.id])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    mat = pyrucast.ElementField(sub, ["k"])
+    mat = pyrucast.SubElementField(sub, ["k"])
     mat.set_uniform("k", 1.0)
 
     model = pyrucast.Model()
@@ -114,7 +114,7 @@ def test_solver_with_nonzero_neumann():
         mesh.add_cell([nodes[i].id, nodes[i + 1].id])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    mat = pyrucast.ElementField(sub, ["k"])
+    mat = pyrucast.SubElementField(sub, ["k"])
     mat.set_uniform("k", 2.0)
 
     model = pyrucast.Model()

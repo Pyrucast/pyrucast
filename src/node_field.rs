@@ -1,12 +1,17 @@
 //! NodeField — multi-component values on a POI1 submesh.
 //!
 //! A [`NodeField`] stores one or more named components per node of a
-//! support defined by a POI1 [`SubMesh`] (a list of nodes). The set of
-//! nodes is captured **at construction** as a snapshot, and remains
-//! stable for the lifetime of the field: cells added to the originating
-//! POI1 SubMesh after construction do not affect a previously created
-//! field. Each node in the support is increfed in the
-//! [`Configuration`]; the field's `Drop` decrefs them all.
+//! support defined by a POI1 [`SubMesh`] (a list of nodes). The field
+//! holds a `Handle<SubMesh>` on its support: the SubMesh is the
+//! single owner of per-node refcounts in the [`Configuration`] (its
+//! `add_cell` increfs, its `Drop` decrefs). The field itself does no
+//! per-node refcount bookkeeping — keeping a clone of the support
+//! handle is enough to keep the SubMesh (and therefore its nodes)
+//! alive.
+//!
+//! By project convention, a SubMesh's connectivity is frozen after
+//! creation (see project memory), so the field caches the node list
+//! once at construction for fast lookup.
 //!
 //! The default value of every component is `0.0`.
 //!
@@ -47,7 +52,9 @@ use crate::configuration::{Configuration, NodeId};
 use crate::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::mesh::{Mesh, SubMesh};
-use crate::store::{insert, with, with_mut, Handle};
+use crate::store::{insert, with, Handle};
+#[cfg(any(feature = "python-api", test))]
+use crate::store::with_mut;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Add, Div, Index, IndexMut, Mul, Sub};
@@ -60,8 +67,12 @@ use std::ops::{Add, Div, Index, IndexMut, Mul, Sub};
 /// `i * component_count + c` in the internal flat buffer.
 #[derive(Serialize, Deserialize)]
 pub struct NodeField {
-    cfg: Handle<Configuration>,
-    /// Snapshot of the support. Each id holds one incref in the Configuration.
+    /// POI1 SubMesh owning the per-node refcounts. The field keeps a
+    /// clone of this handle for its whole lifetime; that is the only
+    /// thing keeping the support (and its nodes) alive.
+    support: Handle<SubMesh>,
+    /// Cached connectivity of `support` (POI1 ⇒ one node per cell).
+    /// Frozen at construction by [[project-submesh-immutable-size]].
     nodes: Vec<NodeId>,
     components: Vec<String>,
     /// Row-major: `values[i * components.len() + c]`.
@@ -94,43 +105,24 @@ impl NodeField {
             }
         }
 
-        let (cfg, nodes) = with(submesh, |sm| -> Result<_> {
+        let nodes: Vec<NodeId> = with(submesh, |sm| -> Result<_> {
             if sm.element_type() != ElementType::POI1 {
                 return Err(PyrucastError::Message(format!(
                     "NodeField requires a POI1 SubMesh, got {}",
                     sm.element_type()
                 )));
             }
-            let cfg = sm.configuration();
             // POI1: connectivity is exactly the node list (1 node per cell).
-            let nodes: Vec<NodeId> = sm.connectivity().to_vec();
-            Ok((cfg, nodes))
+            Ok(sm.connectivity().to_vec())
         })??;
-
-        // Acquire one incref per node, rolling back on partial failure.
-        let result: Result<()> = with_mut(&cfg, |c| {
-            let mut acquired = 0usize;
-            for &nid in &nodes {
-                if let Err(e) = c.incref(nid) {
-                    for &m in &nodes[..acquired] {
-                        let _ = c.decref(m);
-                    }
-                    return Err(e);
-                }
-                acquired += 1;
-            }
-            Ok(())
-        })?;
-        result?;
 
         let n_nodes = nodes.len();
         let n_comp = components.len();
-        let values = vec![0.0; n_nodes * n_comp];
         Ok(NodeField {
-            cfg,
+            support: submesh.clone(),
             nodes,
             components,
-            values,
+            values: vec![0.0; n_nodes * n_comp],
         })
     }
 
@@ -149,9 +141,15 @@ impl NodeField {
         &self.components
     }
 
-    /// Handle to the owning `Configuration` (internal clone).
+    /// Handle to the owning `Configuration` (derived from the support).
     pub fn configuration(&self) -> Handle<Configuration> {
-        self.cfg.clone()
+        with(&self.support, |sm| sm.configuration())
+            .expect("NodeField support handle is held by self → must be alive")
+    }
+
+    /// Handle to the POI1 SubMesh backing this field's support.
+    pub fn support(&self) -> Handle<SubMesh> {
+        self.support.clone()
     }
 
     /// Read a value by `(node_index, component_index)`.
@@ -229,7 +227,7 @@ impl NodeField {
     /// assert_eq!(m.node(0, 1, 0).unwrap().id(), b.id());
     /// ```
     pub fn to_poi1_submesh(&self) -> Result<SubMesh> {
-        let mut sm = SubMesh::new(self.cfg.clone(), ElementType::POI1);
+        let mut sm = SubMesh::new(self.configuration(), ElementType::POI1);
         for &nid in &self.nodes {
             sm.add_cell(&[nid])?;
         }
@@ -240,7 +238,7 @@ impl NodeField {
     /// this field.
     pub fn to_poi1_mesh(&self) -> Result<Mesh> {
         let sm_handle = insert(self.to_poi1_submesh()?);
-        let mut mesh = Mesh::new(self.cfg.clone());
+        let mut mesh = Mesh::new(self.configuration());
         mesh.add_submesh(sm_handle)?;
         Ok(mesh)
     }
@@ -261,7 +259,9 @@ impl NodeField {
     // ── Constructeur interne ────────────────────────────────────────────────
 
     /// Builds a NodeField from an explicit node list, with all values at 0.0.
-    /// Increfs every node; on partial failure the acquired increfs are rolled back.
+    /// Materialises a fresh POI1 SubMesh holding the per-node refcounts:
+    /// if any `add_cell` fails, the partial SubMesh's `Drop` rolls back
+    /// the increfs already done.
     fn new_with_nodes(
         cfg: Handle<Configuration>,
         nodes: Vec<NodeId>,
@@ -269,22 +269,12 @@ impl NodeField {
     ) -> Result<Self> {
         let n_nodes = nodes.len();
         let n_comp = components.len();
-        let result: Result<()> = with_mut(&cfg, |c| {
-            let mut acquired = 0usize;
-            for &nid in &nodes {
-                if let Err(e) = c.incref(nid) {
-                    for &m in &nodes[..acquired] {
-                        let _ = c.decref(m);
-                    }
-                    return Err(e);
-                }
-                acquired += 1;
-            }
-            Ok(())
-        })?;
-        result?;
+        let mut sm = SubMesh::new(cfg, ElementType::POI1);
+        for &nid in &nodes {
+            sm.add_cell(&[nid])?;
+        }
         Ok(NodeField {
-            cfg,
+            support: insert(sm),
             nodes,
             components,
             values: vec![0.0; n_nodes * n_comp],
@@ -304,9 +294,9 @@ impl NodeField {
     }
 
     fn check_compatible(&self, other: &NodeField) -> Result<()> {
-        if self.cfg.index() != other.cfg.index()
-            || self.cfg.generation() != other.cfg.generation()
-        {
+        let a = self.configuration();
+        let b = other.configuration();
+        if a.index() != b.index() || a.generation() != b.generation() {
             return Err(PyrucastError::Message(
                 "fields are not attached to the same Configuration".into(),
             ));
@@ -369,7 +359,7 @@ impl NodeField {
         self.check_compatible(other)?;
         let (components, nodes) = self.union_layout(other);
         let mut result =
-            NodeField::new_with_nodes(self.cfg.clone(), nodes.clone(), components.clone())?;
+            NodeField::new_with_nodes(self.configuration(), nodes.clone(), components.clone())?;
         let ncomp = components.len();
         for (ni, &nid) in nodes.iter().enumerate() {
             for (ci, comp) in components.iter().enumerate() {
@@ -389,7 +379,7 @@ impl NodeField {
         self.check_compatible(other)?;
         let (components, nodes) = self.union_layout(other);
         let mut result =
-            NodeField::new_with_nodes(self.cfg.clone(), nodes.clone(), components.clone())?;
+            NodeField::new_with_nodes(self.configuration(), nodes.clone(), components.clone())?;
         let ncomp = components.len();
         for (ni, &nid) in nodes.iter().enumerate() {
             for (ci, comp) in components.iter().enumerate() {
@@ -481,7 +471,10 @@ impl NodeField {
     /// same `Configuration` as this field.
     pub fn restrict(&self, mesh: &Mesh) -> Result<NodeField> {
         let mesh_cfg = mesh.configuration();
-        if mesh_cfg.index() != self.cfg.index() || mesh_cfg.generation() != self.cfg.generation() {
+        let self_cfg = self.configuration();
+        if mesh_cfg.index() != self_cfg.index()
+            || mesh_cfg.generation() != self_cfg.generation()
+        {
             return Err(PyrucastError::Message(
                 "restrict: mesh is not attached to the same Configuration".into(),
             ));
@@ -498,7 +491,7 @@ impl NodeField {
         }
         let ncomp = self.components.len();
         let mut result =
-            NodeField::new_with_nodes(self.cfg.clone(), mesh_nodes, self.components.clone())?;
+            NodeField::new_with_nodes(self_cfg, mesh_nodes, self.components.clone())?;
         for (ni, &nid) in result.nodes.iter().enumerate() {
             if let Some(self_ni) = self.index_of(nid) {
                 let src = self_ni * ncomp;
@@ -525,17 +518,6 @@ impl NodeField {
             )));
         }
         Ok(())
-    }
-}
-
-impl Drop for NodeField {
-    fn drop(&mut self) {
-        // One lock acquisition for all decrefs.
-        let _ = with_mut(&self.cfg, |c| {
-            for &n in &self.nodes {
-                let _ = c.decref(n);
-            }
-        });
     }
 }
 
@@ -594,15 +576,11 @@ impl IndexMut<(NodeId, &str)> for NodeField {
 
 impl Clone for NodeField {
     fn clone(&self) -> Self {
-        // Self holds an incref on every node, so they are guaranteed alive.
-        with_mut(&self.cfg, |c| {
-            for &nid in &self.nodes {
-                let _ = c.incref(nid);
-            }
-        })
-        .unwrap();
+        // Cloning the support Handle bumps the SubMesh's store refcount;
+        // per-node refcounts in the Configuration are already covered by
+        // the shared SubMesh.
         NodeField {
-            cfg: self.cfg.clone(),
+            support: self.support.clone(),
             nodes: self.nodes.clone(),
             components: self.components.clone(),
             values: self.values.clone(),
@@ -774,7 +752,7 @@ mod python {
 
         fn to_poi1_mesh(&self) -> PyResult<PyMesh> {
             let mesh = with(&self.handle, |f| f.to_poi1_mesh())??;
-            Ok(PyMesh { handle: insert(mesh) })
+            Ok(PyMesh { inner: mesh })
         }
 
         fn value(&self, node_id: u32, component: &str) -> PyResult<f64> {
@@ -825,9 +803,7 @@ mod python {
         }
 
         fn restrict(&self, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
-            let result = with(&self.handle, |nf| {
-                with(&mesh.handle, |m| nf.restrict(m))?
-            })??;
+            let result = with(&self.handle, |nf| nf.restrict(&mesh.inner))??;
             Ok(PyNodeField {
                 handle: insert(result),
             })
@@ -944,23 +920,23 @@ mod tests {
     }
 
     #[test]
-    fn increfs_and_drop_decrefs() {
+    fn shares_support_refcounts() {
         let (cfg, nodes, sm) = make_poi1_with(2);
-        // At this point each node has refcount = 2 (Node + SubMesh).
+        // Each node has refcount = 2 (Node + SubMesh).
         with(&cfg, |c| {
             assert_eq!(c.refcount(nodes[0].id()), 2);
             assert_eq!(c.refcount(nodes[1].id()), 2);
         })
         .unwrap();
         let f = NodeField::from_poi1(&sm, vec!["P".into()]).unwrap();
-        // After NodeField construction: +1 each = 3.
+        // The field shares the SubMesh handle, so per-node refcounts
+        // are unchanged.
         with(&cfg, |c| {
-            assert_eq!(c.refcount(nodes[0].id()), 3);
-            assert_eq!(c.refcount(nodes[1].id()), 3);
+            assert_eq!(c.refcount(nodes[0].id()), 2);
+            assert_eq!(c.refcount(nodes[1].id()), 2);
         })
         .unwrap();
         drop(f);
-        // Back to 2.
         with(&cfg, |c| {
             assert_eq!(c.refcount(nodes[0].id()), 2);
             assert_eq!(c.refcount(nodes[1].id()), 2);
@@ -1019,7 +995,9 @@ mod tests {
             insert(sm)
         };
         let field = NodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
-        // Drop the Node and the SubMesh handle; the field still holds an incref.
+        // Drop the Node and the user's SubMesh handle; the field still
+        // holds a clone of the SubMesh handle, which keeps the SubMesh
+        // alive, which keeps the nodes alive.
         drop(n);
         drop(sm_handle);
         with_mut(&cfg, |c| assert_eq!(c.gc(), 0)).unwrap();
@@ -1030,33 +1008,16 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_is_independent_of_later_submesh_growth() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let sm_handle = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-            sm.add_cell(&[a.id()]).unwrap();
-            insert(sm)
-        };
-        let field = NodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
-        assert_eq!(field.node_count(), 1);
-
-        // Add another node + cell to the original SubMesh; field is unaffected.
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        with_mut(&sm_handle, |sm| sm.add_cell(&[b.id()])).unwrap().unwrap();
-        assert_eq!(field.node_count(), 1);
-    }
-
-    #[test]
     fn to_poi1_submesh_mirrors_support() {
         let (cfg, nodes, sm) = make_poi1_with(3);
         let f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
-        // refcount before: Node + SubMesh + NodeField = 3 each
-        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 3)).unwrap();
+        // refcount before: Node + SubMesh = 2 each (the field shares
+        // the user's SubMesh, no extra per-node incref).
+        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 2)).unwrap();
 
         let sm2 = f.to_poi1_submesh().unwrap();
-        // new submesh adds one more incref each
-        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 4)).unwrap();
+        // the freshly built SubMesh adds one incref each → 3
+        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 3)).unwrap();
 
         assert_eq!(sm2.cell_count(), 3);
         let conn = sm2.connectivity();
@@ -1065,8 +1026,8 @@ mod tests {
         }
 
         drop(sm2);
-        // back to 3
-        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 3)).unwrap();
+        // back to 2
+        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 2)).unwrap();
     }
 
     #[test]
@@ -1289,14 +1250,14 @@ mod tests {
         let mut f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         f.set(0, 0, 42.0).unwrap();
         let g = f.clone();
-        // Clone holds extra increfs
-        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 4)).unwrap();
-        // Mutation of f does not affect g
+        // Both fields share the same SubMesh handle, so per-node
+        // refcounts in the Configuration stay at 2 (Node + SubMesh).
+        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 2)).unwrap();
+        // Mutation of f does not affect g (values are independent).
         f.set(0, 0, 99.0).unwrap();
         assert_eq!(g.get(0, 0).unwrap(), 42.0);
         drop(g);
-        // Back to 3 after clone is dropped
-        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 3)).unwrap();
+        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 2)).unwrap();
     }
 
     // ── Opérateurs +,-,*,/ avec f64 ─────────────────────────────────────────

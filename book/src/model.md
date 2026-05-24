@@ -114,7 +114,7 @@ let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
 let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
 let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
 mesh.add_cell(&[a.id(), b.id()]).unwrap();
-let fes = FiniteElementSpace::lagrange1(insert(mesh)).unwrap();
+let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 let sub = fes.subspace(0).unwrap();
 
 // Matériau : k = 1 partout.
@@ -124,12 +124,12 @@ mat.set_uniform("k", 1.0).unwrap();
 // Modèle : conduction + Dirichlet à gauche.
 let mut model = Model::new();
 model
-    .add_sub_model(SubModel::heat_conduction(sub, insert(mat)))
+    .add_sub_model(insert(SubModel::heat_conduction(sub, insert(mat))))
     .unwrap();
 model
-    .add_sub_model(
+    .add_sub_model(insert(
         SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap(),
-    )
+    ))
     .unwrap();
 
 let k = model.stiffness().unwrap();

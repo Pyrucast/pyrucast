@@ -13,7 +13,7 @@
 //!
 //! ```text
 //! Model
-//! ├── sub_models: Vec<SubModel>
+//! ├── sub_models: Vec<Handle<SubModel>>
 //! ├── primal_vars(): Vec<String>      # union over sub-models — columns
 //! ├── dual_vars():   Vec<String>      # union over sub-models — rows
 //! ├── stiffness() -> Matrix            # rows: dual × cols: primal
@@ -58,7 +58,7 @@
 //!
 //! ```
 //! use pyrucast::configuration::{Configuration, NodeId};
-//! use pyrucast::element_field::ElementField;
+//! use pyrucast::element_field::SubElementField;
 //! use pyrucast::element_type::ElementType;
 //! use pyrucast::fe_space::FiniteElementSpace;
 //! use pyrucast::mesh::Mesh;
@@ -72,25 +72,22 @@
 //! let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
 //! let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
 //! mesh.add_cell(&[a.id(), b.id()]).unwrap();
-//! let fes = FiniteElementSpace::lagrange1(insert(mesh)).unwrap();
+//! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //! let sub = fes.subspace(0).unwrap();
 //!
 //! // Conductivity k = 1, uniform.
-//! let mut mat = ElementField::new(sub.clone(), vec!["k".into()]).unwrap();
+//! let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
 //! mat.set_uniform("k", 1.0).unwrap();
 //! let mat_h = insert(mat);
 //!
 //! let mut model = Model::new();
 //! model
-//!     .add_sub_model(SubModel::heat_conduction(sub, mat_h))
+//!     .add_sub_model(insert(SubModel::heat_conduction(sub, mat_h)))
 //!     .unwrap();
 //! model
-//!     .add_sub_model(SubModel::dirichlet(
-//!         cfg.clone(),
-//!         "T".into(),
-//!         "q".into(),
-//!         vec![a.id()],
-//!     ).unwrap())
+//!     .add_sub_model(insert(
+//!         SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap(),
+//!     ))
 //!     .unwrap();
 //!
 //! let k = model.stiffness().unwrap();
@@ -99,12 +96,15 @@
 //! assert_eq!(k.n_cols(), 3);
 //! ```
 
+use crate::aggregate::Aggregate;
 use crate::configuration::{Configuration, NodeId};
-use crate::element_field::ElementField;
+use crate::element_field::SubElementField;
+use crate::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::fe_space::SubFESpace;
 use crate::matrix::Matrix;
-use crate::store::{with, with_mut, Handle};
+use crate::mesh::SubMesh;
+use crate::store::{insert, with, with_mut, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -122,13 +122,13 @@ pub enum Physics {
     ///
     /// - primal variable: `"T"` (temperature, columns).
     /// - dual variable:   `"q"` (heat flux row labels).
-    /// - The `material` [`ElementField`] **must** carry a component
+    /// - The `material` [`SubElementField`] **must** carry a component
     ///   named `"k"` (isotropic conductivity at each Gauss point). The
     ///   optional `"rho_cp"` component is reserved for the mass
     ///   matrix; not used in this v0.
     HeatConduction {
         fespace: Handle<SubFESpace>,
-        material: Handle<ElementField>,
+        material: Handle<SubElementField>,
     },
 
     /// Dirichlet constraint imposed via Lagrange multipliers.
@@ -150,11 +150,22 @@ pub enum Physics {
     ///   conduction, `"f_x"` for elasticity in `x`, …): it tells the
     ///   constraint where in the row index to write the `Cᵀ` block.
     Dirichlet {
-        config: Handle<Configuration>,
         primal_var: String,
         primal_dual: String,
+        /// POI1 SubMesh holding the per-node refcounts on the
+        /// constrained nodes. Cells are in the same order as
+        /// `constrained_nodes`.
+        constrained_support: Handle<SubMesh>,
+        /// POI1 SubMesh owning the multiplier nodes (one cell per
+        /// multiplier, in the same order as `multiplier_nodes`). The
+        /// SubMesh holds the only refcount on each multiplier; its
+        /// `Drop` collects them.
+        multiplier_support: Handle<SubMesh>,
+        /// Cache of `constrained_support`'s connectivity for the
+        /// assembly hot path.
         constrained_nodes: Vec<NodeId>,
-        /// One multiplier node per constrained node, in the same order.
+        /// Cache of `multiplier_support`'s connectivity. One multiplier
+        /// node per constrained node, in the same order.
         multiplier_nodes: Vec<NodeId>,
     },
 }
@@ -188,7 +199,7 @@ impl Physics {
 
 // ─── SubModel ──────────────────────────────────────────────────────────────
 
-/// One physics + its support binding. A [`Model`] is a `Vec<SubModel>`.
+/// One physics + its support binding. A [`Model`] is a `Vec<Handle<SubModel>>`.
 #[derive(Serialize, Deserialize)]
 pub struct SubModel {
     physics: Physics,
@@ -201,14 +212,14 @@ impl SubModel {
     }
 
     /// Heat-conduction sub-model on an FE subspace, with material
-    /// properties supplied by an [`ElementField`].
+    /// properties supplied by a [`SubElementField`].
     ///
     /// The `material` field **must** define a component named `"k"`
     /// (isotropic conductivity). The check is performed at assembly,
     /// not at construction.
     pub fn heat_conduction(
         fespace: Handle<SubFESpace>,
-        material: Handle<ElementField>,
+        material: Handle<SubElementField>,
     ) -> Self {
         Self {
             physics: Physics::HeatConduction { fespace, material },
@@ -238,10 +249,20 @@ impl SubModel {
                 "Dirichlet: constrained_nodes must not be empty".into(),
             ));
         }
-        // Read coords of constrained nodes, create one multiplier node per
-        // constrained node at the same coordinates, and increment the
-        // refcount of every constrained node so the sub-model protects
-        // them from the GC for its lifetime.
+
+        // Build the POI1 SubMesh that will own the per-node refcounts on
+        // the constrained nodes. `add_cell` increfs each; if any fails,
+        // the partial SubMesh's `Drop` rolls back via `?`.
+        let mut constrained_sm = SubMesh::new(config.clone(), ElementType::POI1);
+        for &nid in &constrained_nodes {
+            constrained_sm.add_cell(&[nid])?;
+        }
+        let constrained_support = insert(constrained_sm);
+
+        // Create the multiplier nodes at the same coordinates as the
+        // constrained ones, then hand each multiplier's initial
+        // refcount (left by `add_node`) over to a POI1 SubMesh via
+        // `add_cell_taking` — ownership transfer, no extra incref/decref.
         let mut coords: Vec<Vec<f64>> = Vec::with_capacity(constrained_nodes.len());
         with(&config, |c| -> Result<()> {
             for &nid in &constrained_nodes {
@@ -250,35 +271,26 @@ impl SubModel {
             Ok(())
         })??;
 
-        let mut multiplier_nodes: Vec<NodeId> = Vec::with_capacity(constrained_nodes.len());
-        with_mut(&config, |c| -> Result<()> {
-            // First, incref all the constrained nodes we plan to protect.
-            // If any incref fails, roll back what we already did.
-            let mut acquired = 0usize;
-            for &nid in &constrained_nodes {
-                if let Err(e) = c.incref(nid) {
-                    for &m in &constrained_nodes[..acquired] {
-                        let _ = c.decref(m);
-                    }
-                    return Err(e);
-                }
-                acquired += 1;
-            }
-            // Then create the multiplier nodes. `add_node` initializes
-            // refcount = 1, which is exactly what we want — the sub-model
-            // owns that unit and will decref it on Drop.
+        let multiplier_nodes: Vec<NodeId> = with_mut(&config, |c| -> Result<Vec<NodeId>> {
+            let mut out = Vec::with_capacity(coords.len());
             for coord in &coords {
-                let nid = c.add_node(coord)?;
-                multiplier_nodes.push(nid);
+                out.push(c.add_node(coord)?);
             }
-            Ok(())
+            Ok(out)
         })??;
+
+        let mut multiplier_sm = SubMesh::new(config.clone(), ElementType::POI1);
+        for &nid in &multiplier_nodes {
+            multiplier_sm.add_cell_taking(&[nid])?;
+        }
+        let multiplier_support = insert(multiplier_sm);
 
         Ok(Self {
             physics: Physics::Dirichlet {
-                config,
                 primal_var,
                 primal_dual,
+                constrained_support,
+                multiplier_support,
                 constrained_nodes,
                 multiplier_nodes,
             },
@@ -353,29 +365,6 @@ impl SubModel {
     }
 }
 
-impl Drop for SubModel {
-    fn drop(&mut self) {
-        if let Physics::Dirichlet {
-            config,
-            constrained_nodes,
-            multiplier_nodes,
-            ..
-        } = &self.physics
-        {
-            // Decref every node we held a reference on. Done in one lock
-            // acquisition.
-            let _ = with_mut(config, |c| {
-                for &nid in constrained_nodes {
-                    let _ = c.decref(nid);
-                }
-                for &nid in multiplier_nodes {
-                    let _ = c.decref(nid);
-                }
-            });
-        }
-    }
-}
-
 impl fmt::Debug for SubModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SubModel")
@@ -411,9 +400,25 @@ impl fmt::Display for SubModel {
 // ─── Model ─────────────────────────────────────────────────────────────────
 
 /// Aggregate of sub-models. Produces matrices on explicit demand.
+///
+/// Internally a `Vec<Handle<SubModel>>` — see [`Aggregate`]. The Handle
+/// refcount keeps each sub-model alive as long as any `Model` (or
+/// `PySubModel`) references it; dropping the last reference triggers the
+/// sub-model's `Drop` (which releases the Lagrange-multiplier nodes for
+/// Dirichlet sub-models).
 #[derive(Serialize, Deserialize, Default)]
 pub struct Model {
-    sub_models: Vec<SubModel>,
+    sub_models: Vec<Handle<SubModel>>,
+}
+
+impl Aggregate for Model {
+    type Sub = SubModel;
+    fn items(&self) -> &[Handle<SubModel>] {
+        &self.sub_models
+    }
+    fn items_mut(&mut self) -> &mut Vec<Handle<SubModel>> {
+        &mut self.sub_models
+    }
 }
 
 impl Model {
@@ -424,50 +429,61 @@ impl Model {
 
     /// Add a sub-model. Validation (consistency of supports, materials,
     /// etc.) is deferred to assembly.
-    pub fn add_sub_model(&mut self, sub: SubModel) -> Result<()> {
+    pub fn add_sub_model(&mut self, sub: Handle<SubModel>) -> Result<()> {
         self.sub_models.push(sub);
         Ok(())
     }
 
-    /// Number of sub-models.
+    /// Number of sub-models. Alias of [`Aggregate::len`].
     pub fn sub_model_count(&self) -> usize {
-        self.sub_models.len()
+        self.len()
     }
 
-    /// Access a sub-model by index.
-    pub fn sub_model(&self, i: usize) -> Result<&SubModel> {
-        self.sub_models.get(i).ok_or_else(|| {
-            PyrucastError::Message(format!("sub_model: index {} out of bounds", i))
-        })
+    /// Handle to the `i`-th sub-model (cloned). Alias of [`Aggregate::get`].
+    pub fn sub_model(&self, i: usize) -> Result<Handle<SubModel>> {
+        self.get(i)
     }
 
     /// Primal variable names — union over all sub-models, first-seen order.
     /// These are the **column labels** of the assembled matrices and the
     /// component names of the solution `NodeField`.
-    pub fn primal_vars(&self) -> Vec<String> {
-        union_names(self.sub_models.iter().flat_map(|s| s.primal_vars()))
+    pub fn primal_vars(&self) -> Result<Vec<String>> {
+        let mut all: Vec<String> = Vec::new();
+        for h in &self.sub_models {
+            all.extend(with(h, |s| s.primal_vars())?);
+        }
+        Ok(union_names(all))
     }
 
     /// Dual variable names — union over all sub-models, first-seen order.
     /// These are the **row labels** of the assembled matrices and the
     /// component names of the load `NodeField`.
-    pub fn dual_vars(&self) -> Vec<String> {
-        union_names(self.sub_models.iter().flat_map(|s| s.dual_vars()))
+    pub fn dual_vars(&self) -> Result<Vec<String>> {
+        let mut all: Vec<String> = Vec::new();
+        for h in &self.sub_models {
+            all.extend(with(h, |s| s.dual_vars())?);
+        }
+        Ok(union_names(all))
     }
 
     /// Assemble the stiffness matrix `K` of the full model.
     pub fn stiffness(&self) -> Result<Matrix> {
-        // Symmetry is reported only if every sub-model contributes a
-        // symmetric block AND no Dirichlet block is present. Once Dirichlet
-        // writes both `C` and `Cᵀ`, the matrix is structurally symmetric
-        // too — so we keep the flag based on the sub-model list.
-        let symmetric = self
-            .sub_models
-            .iter()
-            .all(|s| matches!(s.physics, Physics::HeatConduction { .. } | Physics::Dirichlet { .. }));
+        let mut symmetric = true;
+        for h in &self.sub_models {
+            let is_sym = with(h, |s| {
+                matches!(
+                    s.physics(),
+                    Physics::HeatConduction { .. } | Physics::Dirichlet { .. }
+                )
+            })?;
+            if !is_sym {
+                symmetric = false;
+                break;
+            }
+        }
         let mut k = Matrix::new(symmetric);
-        for sub in &self.sub_models {
-            sub.assemble_stiffness(&mut k)?;
+        for h in &self.sub_models {
+            with(h, |sub| sub.assemble_stiffness(&mut k))??;
         }
         Ok(k)
     }
@@ -477,8 +493,8 @@ impl Model {
     /// empty unless a future physics fills it.
     pub fn mass(&self) -> Result<Matrix> {
         let mut m = Matrix::new(true);
-        for sub in &self.sub_models {
-            sub.assemble_mass(&mut m)?;
+        for h in &self.sub_models {
+            with(h, |sub| sub.assemble_mass(&mut m))??;
         }
         Ok(m)
     }
@@ -518,7 +534,7 @@ fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
 ///   row = `(NodeId_i, "q")`, col = `(NodeId_j, "T")`.
 fn assemble_heat_conduction_stiffness(
     fespace: &Handle<SubFESpace>,
-    material: &Handle<ElementField>,
+    material: &Handle<SubElementField>,
     k: &mut Matrix,
 ) -> Result<()> {
     // Snapshot everything we need from the FE space and submesh in one
@@ -628,7 +644,7 @@ fn assemble_dirichlet_block(
 mod python {
     use super::*;
     use crate::configuration::PyConfiguration;
-    use crate::element_field::PyElementField;
+    use crate::element_field::PySubElementField;
     use crate::fe_space::PySubFESpace;
     use crate::matrix::PyMatrix;
     use crate::store::insert;
@@ -650,7 +666,7 @@ mod python {
         fn heat_conduction(
             _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
             fespace: PyRef<PySubFESpace>,
-            material: PyRef<PyElementField>,
+            material: PyRef<PySubElementField>,
         ) -> PyResult<Self> {
             let sub = SubModel::heat_conduction(fespace.handle.clone(), material.handle.clone());
             Ok(Self { handle: insert(sub) })
@@ -698,10 +714,13 @@ mod python {
     }
 
     /// Python wrapper for [`Model`].
+    ///
+    /// Owns the `Model` struct directly — no longer stored in the global
+    /// store. Identity is the Python object identity itself.
     #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
     #[pyclass(name = "Model")]
     pub struct PyModel {
-        pub(crate) handle: Handle<Model>,
+        pub(crate) inner: Model,
     }
 
     #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
@@ -710,66 +729,57 @@ mod python {
         #[new]
         fn py_new() -> PyResult<Self> {
             Ok(Self {
-                handle: insert(Model::new()),
+                inner: Model::new(),
             })
         }
 
-        fn add_sub_model(&self, sub: PyRef<PySubModel>) -> PyResult<()> {
-            // Snapshot the Physics out of the store. Physics::Clone is a
-            // flat deep-clone of the Vec<NodeId> for Dirichlet — it does
-            // **not** touch the Configuration's refcounts. We therefore
-            // bump them by hand here so the Model-owned SubModel owns
-            // its own refs and the original PySubModel keeps owning its
-            // own ones too. Without this, both Drops would decrement
-            // the same units, over-collecting the multiplier nodes.
-            let physics = with(&sub.handle, |s| s.physics().clone())?;
-            if let Physics::Dirichlet {
-                config,
-                constrained_nodes,
-                multiplier_nodes,
-                ..
-            } = &physics
-            {
-                with_mut(config, |c| {
-                    for &nid in constrained_nodes.iter().chain(multiplier_nodes.iter()) {
-                        let _ = c.incref(nid);
-                    }
-                })?;
-            }
-            with_mut(&self.handle, |m| m.add_sub_model(SubModel::new(physics)))??;
+        fn add_sub_model(&mut self, sub: PyRef<PySubModel>) -> PyResult<()> {
+            // Sharing through Handle::clone: the SubModel slot's refcount
+            // is bumped, so the original PySubModel and the Model both own
+            // one reference. Drop side effects (multiplier-node decrefs
+            // etc.) run exactly once, when the final reference goes away.
+            let h = sub.handle.clone();
+            self.inner.add_sub_model(h)?;
             Ok(())
         }
 
         fn sub_model_count(&self) -> PyResult<usize> {
-            Ok(with(&self.handle, |m| m.sub_model_count())?)
+            Ok(self.inner.sub_model_count())
+        }
+
+        fn sub_model(&self, i: usize) -> PyResult<PySubModel> {
+            let h = self.inner.sub_model(i)?;
+            Ok(PySubModel { handle: h })
         }
 
         fn primal_vars(&self) -> PyResult<Vec<String>> {
-            Ok(with(&self.handle, |m| m.primal_vars())?)
+            Ok(self.inner.primal_vars()?)
         }
 
         fn dual_vars(&self) -> PyResult<Vec<String>> {
-            Ok(with(&self.handle, |m| m.dual_vars())?)
+            Ok(self.inner.dual_vars()?)
         }
 
         fn stiffness(&self) -> PyResult<PyMatrix> {
-            let k = with(&self.handle, |m| m.stiffness())??;
+            let k = self.inner.stiffness()?;
             Ok(PyMatrix { handle: insert(k) })
         }
 
         fn mass(&self) -> PyResult<PyMatrix> {
-            let m_mat = with(&self.handle, |m| m.mass())??;
+            let m_mat = self.inner.mass()?;
             Ok(PyMatrix { handle: insert(m_mat) })
         }
 
         fn __repr__(&self) -> PyResult<String> {
-            Ok(with(&self.handle, |m| format!("{:?}", m))?)
+            Ok(format!("{:?}", self.inner))
         }
 
         fn __str__(&self) -> PyResult<String> {
-            Ok(with(&self.handle, |m| format!("{}", m))?)
+            Ok(format!("{}", self.inner))
         }
     }
+
+    crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model");
 }
 
 #[cfg(feature = "python-api")]
@@ -800,28 +810,23 @@ mod tests {
         let b = Node::create_in(cfg.clone(), &[length]).unwrap();
         let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(insert(mesh)).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();
 
-        let mut mat = ElementField::new(sub.clone(), vec!["k".into()]).unwrap();
+        let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", k).unwrap();
         let mat_h = insert(mat);
 
         let mut model = Model::new();
         model
-            .add_sub_model(SubModel::heat_conduction(sub, mat_h))
+            .add_sub_model(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
         if dirichlet_at_left {
             model
-                .add_sub_model(
-                    SubModel::dirichlet(
-                        cfg.clone(),
-                        "T".into(),
-                        "q".into(),
-                        vec![a.id()],
-                    )
-                    .unwrap(),
-                )
+                .add_sub_model(insert(
+                    SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()])
+                        .unwrap(),
+                ))
                 .unwrap();
         }
         (cfg, a.id(), b.id(), model)
@@ -830,21 +835,21 @@ mod tests {
     #[test]
     fn primal_dual_vars_for_heat_conduction_alone() {
         let (_cfg, _, _, model) = build_seg2_heat_model(1.0, 1.0, false);
-        assert_eq!(model.primal_vars(), vec!["T".to_string()]);
-        assert_eq!(model.dual_vars(), vec!["q".to_string()]);
+        assert_eq!(model.primal_vars().unwrap(), vec!["T".to_string()]);
+        assert_eq!(model.dual_vars().unwrap(), vec!["q".to_string()]);
     }
 
     #[test]
     fn primal_dual_vars_include_lagrange_after_dirichlet() {
         let (_cfg, _, _, model) = build_seg2_heat_model(1.0, 1.0, true);
         assert_eq!(
-            model.primal_vars(),
+            model.primal_vars().unwrap(),
             vec!["T".to_string(), "lambda_T".to_string()]
         );
         // Dual side: "q" from heat conduction + "T" (dual of Dirichlet,
         // same string but on different (NodeId, name) pairs).
         assert_eq!(
-            model.dual_vars(),
+            model.dual_vars().unwrap(),
             vec!["q".to_string(), "T".to_string()]
         );
     }
@@ -879,15 +884,15 @@ mod tests {
         let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
         mesh.add_cell(&[n0.id(), n1.id()]).unwrap();
         mesh.add_cell(&[n1.id(), n2.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(insert(mesh)).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();
-        let mut mat = ElementField::new(sub.clone(), vec!["k".into()]).unwrap();
+        let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mat_h = insert(mat);
 
         let mut model = Model::new();
         model
-            .add_sub_model(SubModel::heat_conduction(sub, mat_h))
+            .add_sub_model(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
         let k = model.stiffness().unwrap();
         assert_eq!(k.n_rows(), 3);
@@ -995,13 +1000,13 @@ mod tests {
         let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(insert(mesh)).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();
-        let mat = ElementField::new(sub.clone(), vec!["rho_cp".into()]).unwrap();
+        let mat = SubElementField::new(sub.clone(), vec!["rho_cp".into()]).unwrap();
         let mat_h = insert(mat);
         let mut model = Model::new();
         model
-            .add_sub_model(SubModel::heat_conduction(sub, mat_h))
+            .add_sub_model(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
         assert!(model.stiffness().is_err());
     }

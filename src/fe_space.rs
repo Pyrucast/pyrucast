@@ -40,9 +40,8 @@
 //!
 //! let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
 //! mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-//! let mesh_h = insert(mesh);
 //!
-//! let fes = FiniteElementSpace::lagrange1(mesh_h).unwrap();
+//! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //! let sub = fes.subspace(0).unwrap();
 //! with(&sub, |s| {
 //!     assert_eq!(s.gauss_count(), 3);
@@ -56,6 +55,7 @@
 //! .unwrap();
 //! ```
 
+use crate::aggregate::Aggregate;
 use crate::configuration::{Configuration, NodeId};
 use crate::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
@@ -365,13 +365,23 @@ impl fmt::Display for SubFESpace {
 /// Finite-element space attached to a [`Mesh`] — one [`SubFESpace`] per
 /// submesh, in the same order.
 ///
-/// The mesh handle is captured at construction and stays the same for
-/// the lifetime of the space: topology (connectivity, element types) is
-/// frozen, only the node coordinates may change.
+/// Topology (connectivity, element types) is frozen at construction:
+/// each `SubFESpace` captures its `SubMesh` handle. The node coordinates
+/// in the underlying `Configuration` may evolve later; the on-the-fly
+/// Jacobian computation always reflects the current coordinates.
 #[derive(Serialize, Deserialize)]
 pub struct FiniteElementSpace {
-    mesh: Handle<Mesh>,
     subspaces: Vec<Handle<SubFESpace>>,
+}
+
+impl Aggregate for FiniteElementSpace {
+    type Sub = SubFESpace;
+    fn items(&self) -> &[Handle<SubFESpace>] {
+        &self.subspaces
+    }
+    fn items_mut(&mut self) -> &mut Vec<Handle<SubFESpace>> {
+        &mut self.subspaces
+    }
 }
 
 impl FiniteElementSpace {
@@ -382,10 +392,10 @@ impl FiniteElementSpace {
     /// `choices.len()` must equal `mesh.submesh_count()`. The mesh must
     /// have at least one submesh and none of them may be POI1.
     pub fn with(
-        mesh: Handle<Mesh>,
+        mesh: &Mesh,
         choices: &[(Interpolation, QuadratureRule)],
     ) -> Result<Self> {
-        let n_sub = with(&mesh, |m| m.submesh_count())?;
+        let n_sub = mesh.submesh_count();
         if n_sub == 0 {
             return Err(PyrucastError::Message(
                 "FiniteElementSpace: mesh has no submesh".into(),
@@ -400,17 +410,17 @@ impl FiniteElementSpace {
         }
         let mut subspaces = Vec::with_capacity(n_sub);
         for (i, &(interp, quad)) in choices.iter().enumerate() {
-            let sm = with(&mesh, |m| m.submesh(i))??;
+            let sm = mesh.submesh(i)?;
             let sub = SubFESpace::new(sm, interp, quad)?;
             subspaces.push(insert(sub));
         }
-        Ok(Self { mesh, subspaces })
+        Ok(Self { subspaces })
     }
 
     /// Build a `FiniteElementSpace` using the same `interpolation` for
     /// every submesh, with the default Gauss quadrature.
-    pub fn new(mesh: Handle<Mesh>, interpolation: Interpolation) -> Result<Self> {
-        let n_sub = with(&mesh, |m| m.submesh_count())?;
+    pub fn new(mesh: &Mesh, interpolation: Interpolation) -> Result<Self> {
+        let n_sub = mesh.submesh_count();
         let choices: Vec<_> = (0..n_sub)
             .map(|_| (interpolation, QuadratureRule::Gauss))
             .collect();
@@ -419,13 +429,8 @@ impl FiniteElementSpace {
 
     /// Build the default Lagrange-1 FE space over `mesh`. Equivalent to
     /// `FiniteElementSpace::new(mesh, Interpolation::Lagrange1)`.
-    pub fn lagrange1(mesh: Handle<Mesh>) -> Result<Self> {
+    pub fn lagrange1(mesh: &Mesh) -> Result<Self> {
         Self::new(mesh, Interpolation::Lagrange1)
-    }
-
-    /// Handle to the underlying mesh (internal clone).
-    pub fn mesh(&self) -> Handle<Mesh> {
-        self.mesh.clone()
     }
 
     /// Number of subspaces (= number of submeshes of the mesh).
@@ -623,8 +628,7 @@ fn build_dn_dx(
 mod python {
     use super::*;
     use crate::mesh::PyMesh;
-    use crate::store::insert;
-    use pyo3::exceptions::{PyIndexError, PyValueError};
+    use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
 
     fn parse_interpolation(s: &str) -> PyResult<Interpolation> {
@@ -738,10 +742,13 @@ mod python {
     }
 
     /// Python wrapper for [`FiniteElementSpace`].
+    ///
+    /// Owns the `FiniteElementSpace` struct directly — no longer stored
+    /// in the global store. Identity is the Python object identity.
     #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
     #[pyclass(name = "FiniteElementSpace")]
     pub struct PyFiniteElementSpace {
-        pub(crate) handle: Handle<FiniteElementSpace>,
+        pub(crate) inner: FiniteElementSpace,
     }
 
     #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
@@ -761,12 +768,11 @@ mod python {
         ) -> PyResult<Self> {
             let interp = parse_interpolation(interpolation)?;
             let quad = parse_quadrature(quadrature)?;
-            let mesh_h = mesh.handle.clone();
-            let n_sub = with(&mesh_h, |m| m.submesh_count())?;
+            let n_sub = mesh.inner.submesh_count();
             let choices: Vec<(Interpolation, QuadratureRule)> =
                 (0..n_sub).map(|_| (interp, quad)).collect();
-            let fes = FiniteElementSpace::with(mesh_h, &choices)?;
-            Ok(Self { handle: insert(fes) })
+            let fes = FiniteElementSpace::with(&mesh.inner, &choices)?;
+            Ok(Self { inner: fes })
         }
 
         /// Explicit `(interpolation, quadrature)` per submesh.
@@ -789,8 +795,8 @@ mod python {
                 })
                 .collect();
             let parsed = parsed?;
-            let fes = FiniteElementSpace::with(mesh.handle.clone(), &parsed)?;
-            Ok(Self { handle: insert(fes) })
+            let fes = FiniteElementSpace::with(&mesh.inner, &parsed)?;
+            Ok(Self { inner: fes })
         }
 
         /// Convenience: same as `FiniteElementSpace(mesh)`.
@@ -799,43 +805,29 @@ mod python {
             _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
             mesh: PyRef<PyMesh>,
         ) -> PyResult<Self> {
-            let fes = FiniteElementSpace::lagrange1(mesh.handle.clone())?;
-            Ok(Self { handle: insert(fes) })
+            let fes = FiniteElementSpace::lagrange1(&mesh.inner)?;
+            Ok(Self { inner: fes })
         }
 
         fn subspace_count(&self) -> PyResult<usize> {
-            Ok(with(&self.handle, |f| f.subspace_count())?)
+            Ok(self.inner.subspace_count())
         }
 
         fn subspace(&self, i: usize) -> PyResult<PySubFESpace> {
-            let h = with(&self.handle, |f| f.subspace(i))??;
+            let h = self.inner.subspace(i)?;
             Ok(PySubFESpace { handle: h })
         }
 
-        fn __len__(&self) -> PyResult<usize> {
-            self.subspace_count()
-        }
-
-        /// `fes[i]` → SubFESpace. Supports negative indices.
-        fn __getitem__(&self, idx: isize) -> PyResult<PySubFESpace> {
-            let n = with(&self.handle, |f| f.subspace_count())? as isize;
-            let normalized = if idx < 0 { n + idx } else { idx };
-            if normalized < 0 || normalized >= n {
-                return Err(PyIndexError::new_err(format!(
-                    "fe-space index {idx} out of range (len={n})"
-                )));
-            }
-            self.subspace(normalized as usize)
-        }
-
         fn __repr__(&self) -> PyResult<String> {
-            Ok(with(&self.handle, |f| format!("{:?}", f))?)
+            Ok(format!("{:?}", self.inner))
         }
 
         fn __str__(&self) -> PyResult<String> {
-            Ok(with(&self.handle, |f| format!("{}", f))?)
+            Ok(format!("{}", self.inner))
         }
     }
+
+    crate::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFESpace, "FiniteElementSpace");
 }
 
 #[cfg(feature = "python-api")]
@@ -1105,9 +1097,8 @@ mod tests {
         };
         mesh.add_submesh(sm_tri).unwrap();
         mesh.add_submesh(sm_qua).unwrap();
-        let mesh_h = insert(mesh);
 
-        let fes = FiniteElementSpace::lagrange1(mesh_h).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         assert_eq!(fes.subspace_count(), 2);
         with(&fes.subspace(0).unwrap(), |s| {
             assert_eq!(s.element_type().unwrap(), ElementType::TRI3);
@@ -1129,15 +1120,14 @@ mod tests {
         // from_live_nodes builds a POI1 mesh.
         assert!(mesh.submesh_count() >= 1);
         let _ = a; // keep alive
-        let mesh_h = insert(mesh);
-        assert!(FiniteElementSpace::lagrange1(mesh_h).is_err());
+        assert!(FiniteElementSpace::lagrange1(&mesh).is_err());
     }
 
     #[test]
     fn rejects_empty_mesh() {
         let cfg = cfg2d();
-        let mesh_h = insert(Mesh::new(cfg));
-        assert!(FiniteElementSpace::lagrange1(mesh_h).is_err());
+        let mesh = Mesh::new(cfg);
+        assert!(FiniteElementSpace::lagrange1(&mesh).is_err());
     }
 
     #[test]
@@ -1148,14 +1138,13 @@ mod tests {
         let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
         let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
         mesh.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-        let mesh_h = insert(mesh);
         let too_few: Vec<(Interpolation, QuadratureRule)> = vec![];
-        assert!(FiniteElementSpace::with(mesh_h.clone(), &too_few).is_err());
+        assert!(FiniteElementSpace::with(&mesh, &too_few).is_err());
         let too_many = vec![
             (Interpolation::Lagrange1, QuadratureRule::Gauss),
             (Interpolation::Lagrange1, QuadratureRule::Gauss),
         ];
-        assert!(FiniteElementSpace::with(mesh_h, &too_many).is_err());
+        assert!(FiniteElementSpace::with(&mesh, &too_many).is_err());
     }
 
     // ── Display ─────────────────────────────────────────────────────────────
@@ -1168,8 +1157,7 @@ mod tests {
         let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
         let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
         mesh.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-        let mesh_h = insert(mesh);
-        let fes = FiniteElementSpace::lagrange1(mesh_h).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let s = format!("{}", fes);
         assert!(s.contains("FiniteElementSpace"));
         assert!(s.contains("1 subspace"));

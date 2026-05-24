@@ -31,7 +31,9 @@ def main() -> None:
     # detects the outer loop automatically (largest signed area) and
     # treats the inner one as a hole.
     contour = inner_mesh + outer_mesh
-    surface_mesh = pc.Mesh.fill_surface(contour, "TRI3")
+    contour = outer_mesh
+    surface_mesh = pc.Mesh.sweep_qua4(inner_mesh,outer_mesh,2)
+    
     print(surface_mesh)
 
     # `mesh[i]` returns the i-th submesh handle and shares storage with

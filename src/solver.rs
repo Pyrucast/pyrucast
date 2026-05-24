@@ -22,7 +22,7 @@
 //!
 //! ```
 //! use pyrucast::configuration::Configuration;
-//! use pyrucast::element_field::ElementField;
+//! use pyrucast::element_field::SubElementField;
 //! use pyrucast::element_type::ElementType;
 //! use pyrucast::fe_space::FiniteElementSpace;
 //! use pyrucast::mesh::{Mesh, SubMesh};
@@ -38,19 +38,21 @@
 //! let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
 //! let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
 //! mesh.add_cell(&[a.id(), b.id()]).unwrap();
-//! let fes = FiniteElementSpace::lagrange1(insert(mesh)).unwrap();
+//! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //! let sub = fes.subspace(0).unwrap();
-//! let mut mat = ElementField::new(sub.clone(), vec!["k".into()]).unwrap();
+//! let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
 //! mat.set_uniform("k", 1.0).unwrap();
 //!
 //! let mut model = Model::new();
-//! model.add_sub_model(SubModel::heat_conduction(sub, insert(mat))).unwrap();
+//! model
+//!     .add_sub_model(insert(SubModel::heat_conduction(sub, insert(mat))))
+//!     .unwrap();
 //! let dir_a = SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap();
 //! let dir_b = SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![b.id()]).unwrap();
 //! let mult_a = dir_a.multiplier_nodes()[0];
 //! let mult_b = dir_b.multiplier_nodes()[0];
-//! model.add_sub_model(dir_a).unwrap();
-//! model.add_sub_model(dir_b).unwrap();
+//! model.add_sub_model(insert(dir_a)).unwrap();
+//! model.add_sub_model(insert(dir_b)).unwrap();
 //!
 //! // Load: imposed values T_a = 0, T_b = 1 at the multiplier nodes.
 //! let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
@@ -198,12 +200,12 @@ pub use python::solve as py_solve;
 mod tests {
     use super::*;
     use crate::configuration::Configuration;
-    use crate::element_field::ElementField;
+    use crate::element_field::SubElementField;
     use crate::fe_space::FiniteElementSpace;
     use crate::mesh::Mesh;
     use crate::model::{Model, SubModel};
     use crate::node::Node;
-    use crate::store::{insert, with};
+    use crate::store::{insert};
 
     /// 1-D Poisson `-u'' = 0` on `[0, 1]` with `u(0) = 0` and `u(1) = 1`,
     /// discretized with `n` SEG2 elements. The analytical solution is
@@ -224,18 +226,18 @@ mod tests {
         for i in 0..n_elems {
             mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
         }
-        let fes = FiniteElementSpace::lagrange1(insert(mesh)).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();
 
         // k = 1 uniform.
-        let mut mat = ElementField::new(sub.clone(), vec!["k".into()]).unwrap();
+        let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mat_h = insert(mat);
 
         // Model.
         let mut model = Model::new();
         model
-            .add_sub_model(SubModel::heat_conduction(sub, mat_h))
+            .add_sub_model(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
         let left_dir =
             SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![nodes[0].id()])
@@ -249,8 +251,8 @@ mod tests {
         .unwrap();
         let mult_left = left_dir.multiplier_nodes()[0];
         let mult_right = right_dir.multiplier_nodes()[0];
-        model.add_sub_model(left_dir).unwrap();
-        model.add_sub_model(right_dir).unwrap();
+        model.add_sub_model(insert(left_dir)).unwrap();
+        model.add_sub_model(insert(right_dir)).unwrap();
 
         // Build rhs: T_left = 0 at mult_left, T_right = 1 at mult_right.
         let mut rhs_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
@@ -298,14 +300,14 @@ mod tests {
         let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(insert(mesh)).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();
-        let mut mat = ElementField::new(sub.clone(), vec!["k".into()]).unwrap();
+        let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mat_h = insert(mat);
         let mut model = Model::new();
         model
-            .add_sub_model(SubModel::heat_conduction(sub, mat_h))
+            .add_sub_model(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
         let k = model.stiffness().unwrap();
 

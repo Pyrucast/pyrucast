@@ -239,9 +239,8 @@ let c = Node::create_in(cfg.clone(), &[0.0, 2.0]).unwrap();
 
 let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
 mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-let mesh_h = insert(mesh);
 
-let fes = FiniteElementSpace::lagrange1(mesh_h).unwrap();
+let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 let sub = fes.subspace(0).unwrap();
 with(&sub, |s| {
     assert_eq!(s.gauss_count(), 3);

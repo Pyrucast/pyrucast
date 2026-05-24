@@ -212,17 +212,15 @@ fn mesh_composed_of_multiple_submeshes() -> Result<()> {
         insert(sm)
     };
 
-    let mesh_handle = {
+    let mesh = {
         let mut mesh = Mesh::new(cfg.clone());
         mesh.add_submesh(sm_pts)?;
         mesh.add_submesh(sm_tri)?;
-        insert(mesh)
+        mesh
     };
 
-    with(&mesh_handle, |m| {
-        assert_eq!(m.submesh_count(), 2);
-    })?;
-    let total = with(&mesh_handle, |m| m.cell_count())??;
+    assert_eq!(mesh.submesh_count(), 2);
+    let total = mesh.cell_count()?;
     assert_eq!(total, 4); // 3 points + 1 triangle
     Ok(())
 }
