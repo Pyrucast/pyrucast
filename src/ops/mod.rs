@@ -26,3 +26,4 @@ pub mod assemble;
 pub mod build;
 pub mod field;
 pub mod geom;
+pub mod mesher;

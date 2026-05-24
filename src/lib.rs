@@ -42,7 +42,10 @@ pub mod ops;
 pub mod persist;
 pub mod solver;
 pub mod store;
-pub mod triangulation;
+
+// `triangulation` is now `ops::mesher::triangulation`; the alias keeps
+// the public `pyrucast::triangulation::*` API in place.
+pub use ops::mesher::triangulation;
 
 // Re-export each container at the crate root so existing paths
 // (`crate::matrix::Matrix`, ...) keep working after the on-disk move
