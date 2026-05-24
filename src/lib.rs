@@ -39,6 +39,7 @@ pub mod error;
 pub mod interpolation;
 pub mod models;
 pub mod node;
+pub mod ops;
 pub mod persist;
 pub mod quadrature;
 pub mod solver;
