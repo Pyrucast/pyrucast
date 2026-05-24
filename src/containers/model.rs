@@ -99,12 +99,12 @@
 use crate::aggregate::Aggregate;
 use crate::configuration::{Configuration, NodeId};
 use crate::element_field::SubElementField;
-use crate::element_type::ElementType;
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::fe_space::SubFESpace;
 use crate::matrix::Matrix;
 use crate::mesh::SubMesh;
-use crate::store::{insert, with, with_mut, Handle};
+use crate::models::{dirichlet, heat_conduction};
+use crate::store::{with, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -175,10 +175,8 @@ impl Physics {
     /// the Matrix block contributed by this physics).
     pub fn primal_vars(&self) -> Vec<String> {
         match self {
-            Physics::HeatConduction { .. } => vec!["T".to_string()],
-            Physics::Dirichlet { primal_var, .. } => {
-                vec![format!("lambda_{}", primal_var)]
-            }
+            Physics::HeatConduction { .. } => vec![heat_conduction::PRIMAL_VAR.to_string()],
+            Physics::Dirichlet { primal_var, .. } => vec![dirichlet::multiplier_name(primal_var)],
         }
     }
 
@@ -186,14 +184,9 @@ impl Physics {
     /// Matrix block contributed by this physics).
     pub fn dual_vars(&self) -> Vec<String> {
         match self {
-            Physics::HeatConduction { .. } => vec!["q".to_string()],
+            Physics::HeatConduction { .. } => vec![heat_conduction::DUAL_VAR.to_string()],
             Physics::Dirichlet { primal_var, .. } => vec![primal_var.clone()],
         }
-    }
-
-    /// Multiplier-node name auto-generated from a primal variable name.
-    pub fn multiplier_name(primal_var: &str) -> String {
-        format!("lambda_{primal_var}")
     }
 }
 
@@ -244,55 +237,15 @@ impl SubModel {
         primal_dual: String,
         constrained_nodes: Vec<NodeId>,
     ) -> Result<Self> {
-        if constrained_nodes.is_empty() {
-            return Err(PyrucastError::Message(
-                "Dirichlet: constrained_nodes must not be empty".into(),
-            ));
-        }
-
-        // Build the POI1 SubMesh that will own the per-node refcounts on
-        // the constrained nodes. `add_cell` increfs each; if any fails,
-        // the partial SubMesh's `Drop` rolls back via `?`.
-        let mut constrained_sm = SubMesh::new(config.clone(), ElementType::POI1);
-        for &nid in &constrained_nodes {
-            constrained_sm.add_cell(&[nid])?;
-        }
-        let constrained_support = insert(constrained_sm);
-
-        // Create the multiplier nodes at the same coordinates as the
-        // constrained ones, then hand each multiplier's initial
-        // refcount (left by `add_node`) over to a POI1 SubMesh via
-        // `add_cell_taking` — ownership transfer, no extra incref/decref.
-        let mut coords: Vec<Vec<f64>> = Vec::with_capacity(constrained_nodes.len());
-        with(&config, |c| -> Result<()> {
-            for &nid in &constrained_nodes {
-                coords.push(c.coord(nid)?.to_vec());
-            }
-            Ok(())
-        })??;
-
-        let multiplier_nodes: Vec<NodeId> = with_mut(&config, |c| -> Result<Vec<NodeId>> {
-            let mut out = Vec::with_capacity(coords.len());
-            for coord in &coords {
-                out.push(c.add_node(coord)?);
-            }
-            Ok(out)
-        })??;
-
-        let mut multiplier_sm = SubMesh::new(config.clone(), ElementType::POI1);
-        for &nid in &multiplier_nodes {
-            multiplier_sm.add_cell_taking(&[nid])?;
-        }
-        let multiplier_support = insert(multiplier_sm);
-
+        let built = dirichlet::build(config, &constrained_nodes)?;
         Ok(Self {
             physics: Physics::Dirichlet {
                 primal_var,
                 primal_dual,
-                constrained_support,
-                multiplier_support,
+                constrained_support: built.constrained_support,
+                multiplier_support: built.multiplier_support,
                 constrained_nodes,
-                multiplier_nodes,
+                multiplier_nodes: built.multiplier_nodes,
             },
         })
     }
@@ -331,7 +284,7 @@ impl SubModel {
     pub fn assemble_stiffness(&self, k: &mut Matrix) -> Result<()> {
         match &self.physics {
             Physics::HeatConduction { fespace, material } => {
-                assemble_heat_conduction_stiffness(fespace, material, k)
+                heat_conduction::assemble_stiffness(fespace, material, k)
             }
             Physics::Dirichlet {
                 primal_var,
@@ -340,7 +293,7 @@ impl SubModel {
                 multiplier_nodes,
                 ..
             } => {
-                assemble_dirichlet_block(
+                dirichlet::assemble_block(
                     constrained_nodes,
                     multiplier_nodes,
                     primal_var,
@@ -514,7 +467,7 @@ impl fmt::Display for Model {
     }
 }
 
-// ─── Assembly helpers ──────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
 fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -524,118 +477,6 @@ fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
         }
     }
     out
-}
-
-/// Assemble the stiffness contribution of a heat-conduction sub-model.
-///
-/// On each cell of `fespace`'s submesh, at each Gauss point `g`:
-///   `K_local[i, j] += k(g) · (∇N_i · ∇N_j)|_g · |J|_g · w_g`
-/// and the local 2D block is added into the global matrix at
-///   row = `(NodeId_i, "q")`, col = `(NodeId_j, "T")`.
-fn assemble_heat_conduction_stiffness(
-    fespace: &Handle<SubFESpace>,
-    material: &Handle<SubElementField>,
-    k: &mut Matrix,
-) -> Result<()> {
-    // Snapshot everything we need from the FE space and submesh in one
-    // pass. We then drop the FE space lock before reading the material
-    // (different store type, but better hygiene to keep critical
-    // sections small).
-    struct CellSnapshot {
-        node_ids: Vec<NodeId>,
-        // Per Gauss point:
-        dn_dx: Vec<Vec<f64>>, // [g][i * space_dim + a]
-        det_j_w: Vec<f64>,    // |J|_g · w_g
-    }
-
-    let snapshots: Vec<CellSnapshot> = with(fespace, |s| -> Result<_> {
-        let n_cells = s.cell_count()?;
-        let space_dim = s.space_dim();
-        let n_nodes = s.nodes_per_cell()?;
-        let n_g = s.gauss_count();
-        let submesh = s.submesh();
-
-        // Pull connectivity once.
-        let conn: Vec<NodeId> = with(&submesh, |sm| sm.connectivity().to_vec())?;
-
-        let mut out = Vec::with_capacity(n_cells);
-        for cell in 0..n_cells {
-            let ids = conn[cell * n_nodes..(cell + 1) * n_nodes].to_vec();
-            let mut dn_dx: Vec<Vec<f64>> = Vec::with_capacity(n_g);
-            let mut det_j_w: Vec<f64> = Vec::with_capacity(n_g);
-            for g in 0..n_g {
-                dn_dx.push(s.dn_dx(cell, g)?);
-                det_j_w.push(s.det_jacobian(cell, g)? * s.gauss_weight(g)?);
-            }
-            out.push(CellSnapshot {
-                node_ids: ids,
-                dn_dx,
-                det_j_w,
-            });
-            // Silence unused warning if space_dim never used in error path.
-            let _ = space_dim;
-        }
-        Ok(out)
-    })??;
-
-    let space_dim = with(fespace, |s| s.space_dim())?;
-    let n_nodes = with(fespace, |s| s.nodes_per_cell())??;
-    let n_g = with(fespace, |s| s.gauss_count())?;
-
-    // Read material conductivity once per (cell, gauss).
-    let mut conductivities: Vec<Vec<f64>> = Vec::with_capacity(snapshots.len());
-    with(material, |f| -> Result<()> {
-        for cell in 0..snapshots.len() {
-            let mut row = Vec::with_capacity(n_g);
-            for g in 0..n_g {
-                row.push(f.value(cell, g, "k")?);
-            }
-            conductivities.push(row);
-        }
-        Ok(())
-    })??;
-
-    // Assemble cell by cell.
-    for (cell, snap) in snapshots.iter().enumerate() {
-        for i in 0..n_nodes {
-            for j in 0..n_nodes {
-                let mut k_ij = 0.0;
-                for g in 0..n_g {
-                    let mut grad_dot = 0.0;
-                    for a in 0..space_dim {
-                        grad_dot += snap.dn_dx[g][i * space_dim + a]
-                            * snap.dn_dx[g][j * space_dim + a];
-                    }
-                    k_ij += conductivities[cell][g] * grad_dot * snap.det_j_w[g];
-                }
-                k.add_entry(snap.node_ids[i], "q", snap.node_ids[j], "T", k_ij);
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Write the Lagrange block of a Dirichlet sub-model into `k`.
-///
-/// For each `(constrained_node, multiplier_node)` pair indexed by `i`:
-/// - **C entry**  at `(multiplier_node, primal_var)` × `(constrained_node,
-///   primal_var)` = `1`;
-/// - **Cᵀ entry** at `(constrained_node, primal_dual)` × `(multiplier_node,
-///   lambda_<primal_var>)` = `1`.
-fn assemble_dirichlet_block(
-    constrained_nodes: &[NodeId],
-    multiplier_nodes: &[NodeId],
-    primal_var: &str,
-    primal_dual: &str,
-    k: &mut Matrix,
-) {
-    let lambda_name = Physics::multiplier_name(primal_var);
-    for (c_node, m_node) in constrained_nodes.iter().zip(multiplier_nodes.iter()) {
-        // C : row (multiplier, primal_var) × col (constrained, primal_var) = 1
-        k.add_entry(*m_node, primal_var, *c_node, primal_var, 1.0);
-        // Cᵀ : row (constrained, primal_dual) × col (multiplier, lambda_<primal_var>) = 1
-        k.add_entry(*c_node, primal_dual, *m_node, &lambda_name, 1.0);
-    }
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
@@ -648,7 +489,7 @@ mod tests {
     use crate::fe_space::FiniteElementSpace;
     use crate::mesh::Mesh;
     use crate::node::Node;
-    use crate::store::insert;
+    use crate::store::{insert, with_mut};
 
     /// Build a 1-D heat-conduction model on a single SEG2 element of
     /// length `length`, uniform conductivity `k`, with optional Dirichlet

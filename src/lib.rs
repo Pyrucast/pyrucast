@@ -37,6 +37,7 @@ pub mod containers;
 pub mod element_type;
 pub mod error;
 pub mod interpolation;
+pub mod models;
 pub mod node;
 pub mod persist;
 pub mod quadrature;
