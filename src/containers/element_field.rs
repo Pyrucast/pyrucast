@@ -88,7 +88,6 @@
 //! .unwrap();
 //! ```
 
-use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
 use crate::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::store::{insert, with, Handle};
@@ -518,16 +517,10 @@ impl Div<f64> for &SubElementField {
 /// sub-fields may differ from one subspace to the next.
 #[derive(Serialize, Deserialize, Default)]
 pub struct ElementField {
-    subfields: Vec<Handle<SubElementField>>,
+    subs: Vec<Handle<SubElementField>>,
 }
 
-impl Aggregate for ElementField {
-    type Sub = SubElementField;
-    fn items(&self) -> &[Handle<SubElementField>] { &self.subfields }
-    fn items_mut(&mut self) -> &mut Vec<Handle<SubElementField>> { &mut self.subfields }
-    fn type_name() -> &'static str { "ElementField" }
-    fn sub_display_name() -> &'static str { "subfield(s)" }
-}
+crate::impl_aggregate!(ElementField, SubElementField, subfield, "subfield(s)");
 
 impl ElementField {
     /// Build an `ElementField` on `fespace` with the **same** `components`
@@ -542,13 +535,13 @@ impl ElementField {
             ));
         }
         check_components(&components)?;
-        let mut subfields = Vec::with_capacity(n_sub);
+        let mut subs = Vec::with_capacity(n_sub);
         for i in 0..n_sub {
             let sub = fespace.subspace(i)?;
             let sf = SubElementField::new(sub, components.clone())?;
-            subfields.push(insert(sf));
+            subs.push(insert(sf));
         }
-        Ok(Self { subfields })
+        Ok(Self { subs })
     }
 
     /// Build an `ElementField` with an explicit `components` list per
@@ -571,33 +564,22 @@ impl ElementField {
                 n_sub
             )));
         }
-        let mut subfields = Vec::with_capacity(n_sub);
+        let mut subs = Vec::with_capacity(n_sub);
         for (i, comps) in components_per_subspace.iter().enumerate() {
             let sub = fespace.subspace(i)?;
             let sf = SubElementField::new(sub, comps.clone())?;
-            subfields.push(insert(sf));
+            subs.push(insert(sf));
         }
-        Ok(Self { subfields })
-    }
-
-    /// Number of sub-fields (= number of subspaces of the host FE space).
-    pub fn subfield_count(&self) -> usize {
-        self.len()
-    }
-
-    /// Handle to the `i`-th sub-field (internal clone).
-    pub fn subfield(&self, i: usize) -> Result<Handle<SubElementField>> {
-        self.get(i)
+        Ok(Self { subs })
     }
 }
-
-crate::impl_aggregate_std_traits!(ElementField);
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::Aggregate;
     use crate::mesh::configuration::Configuration;
     use crate::mesh::element_type::ElementType;
     use crate::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};

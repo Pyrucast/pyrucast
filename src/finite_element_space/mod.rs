@@ -58,7 +58,6 @@
 pub mod interpolation;
 pub mod quadrature;
 
-use crate::aggregate::Aggregate;
 use crate::mesh::configuration::{Configuration, NodeId};
 use crate::error::{PyrucastError, Result};
 use crate::finite_element_space::interpolation::Interpolation;
@@ -374,16 +373,10 @@ impl fmt::Display for SubFiniteElementSpace {
 /// Jacobian computation always reflects the current coordinates.
 #[derive(Serialize, Deserialize, Default)]
 pub struct FiniteElementSpace {
-    subspaces: Vec<Handle<SubFiniteElementSpace>>,
+    subs: Vec<Handle<SubFiniteElementSpace>>,
 }
 
-impl Aggregate for FiniteElementSpace {
-    type Sub = SubFiniteElementSpace;
-    fn items(&self) -> &[Handle<SubFiniteElementSpace>] { &self.subspaces }
-    fn items_mut(&mut self) -> &mut Vec<Handle<SubFiniteElementSpace>> { &mut self.subspaces }
-    fn type_name() -> &'static str { "FiniteElementSpace" }
-    fn sub_display_name() -> &'static str { "subspace(s)" }
-}
+crate::impl_aggregate!(FiniteElementSpace, SubFiniteElementSpace, subspace, "subspace(s)");
 
 impl FiniteElementSpace {
     /// Build a `FiniteElementSpace` by attaching the supplied
@@ -409,13 +402,13 @@ impl FiniteElementSpace {
                 n_sub
             )));
         }
-        let mut subspaces = Vec::with_capacity(n_sub);
+        let mut subs = Vec::with_capacity(n_sub);
         for (i, &(interp, quad)) in choices.iter().enumerate() {
             let sm = mesh.submesh(i)?;
             let sub = SubFiniteElementSpace::new(sm, interp, quad)?;
-            subspaces.push(insert(sub));
+            subs.push(insert(sub));
         }
-        Ok(Self { subspaces })
+        Ok(Self { subs })
     }
 
     /// Build a `FiniteElementSpace` using the same `interpolation` for
@@ -434,19 +427,8 @@ impl FiniteElementSpace {
         Self::new(mesh, Interpolation::Lagrange1)
     }
 
-    /// Number of subspaces (= number of submeshes of the mesh).
-    pub fn subspace_count(&self) -> usize {
-        self.len()
-    }
-
-    /// Handle to the `i`-th subspace (internal clone).
-    pub fn subspace(&self, i: usize) -> Result<Handle<SubFiniteElementSpace>> {
-        self.get(i)
-    }
 
 }
-
-crate::impl_aggregate_std_traits!(FiniteElementSpace);
 
 // ─── Numerical helpers ─────────────────────────────────────────────────────
 
@@ -590,6 +572,7 @@ fn build_dn_dx(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::Aggregate;
     use crate::mesh::node::Node;
     use crate::store::{insert, with};
 

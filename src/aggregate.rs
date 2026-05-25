@@ -233,6 +233,70 @@ macro_rules! impl_aggregate_pymethods {
     };
 }
 
+// ─── Unified aggregate macro ────────────────────────────────────────────────
+
+/// Derive a complete `Aggregate` implementation for a struct whose only
+/// collection field is named `subs: Vec<Handle<Sub>>`.
+///
+/// The sub-name `$sub` is given **once** and all derived names follow:
+/// * `$sub(i)`             — indexed accessor
+/// * `{$sub}_count()`     — length alias
+/// * `add_{$sub}(h)`      — checked push
+///
+/// An optional trailing `{ … }` block is forwarded verbatim into the
+/// `impl Aggregate` body to override default methods (`check_push`,
+/// `display_extra`, …).
+///
+/// # Usage
+/// ```ignore
+/// impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
+///     fn check_push(&self, h: &Handle<SubMesh>) -> Result<()> { … }
+///     fn display_extra(&self) -> Option<String> { … }
+/// });
+/// impl_aggregate!(Model, SubModel, sub_model, "sub-model(s)");
+/// ```
+#[macro_export]
+macro_rules! impl_aggregate {
+    // Without Aggregate overrides.
+    ($T:ty, $Sub:ty, $sub:ident, $display:literal) => {
+        $crate::impl_aggregate!($T, $Sub, $sub, $display, {});
+    };
+    // With Aggregate overrides (check_push, display_extra, …).
+    ($T:ty, $Sub:ty, $sub:ident, $display:literal, { $($override:tt)* }) => {
+        paste::paste! {
+            impl $crate::aggregate::Aggregate for $T {
+                type Sub = $Sub;
+                fn items(&self) -> &[$crate::store::Handle<$Sub>] { &self.subs }
+                fn items_mut(&mut self) -> &mut Vec<$crate::store::Handle<$Sub>> {
+                    &mut self.subs
+                }
+                fn type_name() -> &'static str { stringify!($T) }
+                fn sub_display_name() -> &'static str { $display }
+                $($override)*
+            }
+
+            impl $T {
+                pub fn [<$sub _count>](&self) -> usize {
+                    $crate::aggregate::Aggregate::len(self)
+                }
+                pub fn $sub(&self, i: usize)
+                    -> $crate::error::Result<$crate::store::Handle<$Sub>>
+                {
+                    $crate::aggregate::Aggregate::get(self, i)
+                }
+                pub fn [<add_ $sub>](
+                    &mut self,
+                    h: $crate::store::Handle<$Sub>,
+                ) -> $crate::error::Result<()> {
+                    $crate::aggregate::Aggregate::add_sub(self, h)
+                }
+            }
+
+            $crate::impl_aggregate_std_traits!($T);
+        }
+    };
+}
+
 // ─── Std-trait macro ────────────────────────────────────────────────────────
 
 /// Generate `Index`, `IntoIterator`, `fmt::Debug`, `fmt::Display`, and

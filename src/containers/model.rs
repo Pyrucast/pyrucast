@@ -97,7 +97,6 @@
 //! assert_eq!(k.n_cols(), 3);
 //! ```
 
-use crate::aggregate::Aggregate;
 use crate::mesh::configuration::{Configuration, NodeId};
 use crate::containers::element_field::SubElementField;
 use crate::error::Result;
@@ -362,38 +361,18 @@ impl fmt::Display for SubModel {
 /// Dirichlet sub-models).
 #[derive(Serialize, Deserialize, Default)]
 pub struct Model {
-    sub_models: Vec<Handle<SubModel>>,
+    subs: Vec<Handle<SubModel>>,
 }
 
-impl Aggregate for Model {
-    type Sub = SubModel;
-    fn items(&self) -> &[Handle<SubModel>] { &self.sub_models }
-    fn items_mut(&mut self) -> &mut Vec<Handle<SubModel>> { &mut self.sub_models }
-    fn type_name() -> &'static str { "Model" }
-    fn sub_display_name() -> &'static str { "sub-model(s)" }
-}
+crate::impl_aggregate!(Model, SubModel, sub_model, "sub-model(s)");
 
 impl Model {
-
-    /// Add a sub-model. Validation (consistency of supports, materials,
-    /// etc.) is deferred to assembly.
-
-    /// Number of sub-models. Alias of [`Aggregate::len`].
-    pub fn sub_model_count(&self) -> usize {
-        self.len()
-    }
-
-    /// Handle to the `i`-th sub-model (cloned). Alias of [`Aggregate::get`].
-    pub fn sub_model(&self, i: usize) -> Result<Handle<SubModel>> {
-        self.get(i)
-    }
-
     /// Primal variable names — union over all sub-models, first-seen order.
     /// These are the **column labels** of the assembled matrices and the
     /// component names of the solution `NodeField`.
     pub fn primal_vars(&self) -> Result<Vec<String>> {
         let mut all: Vec<String> = Vec::new();
-        for h in &self.sub_models {
+        for h in self {
             all.extend(with(h, |s| s.primal_vars())?);
         }
         Ok(union_names(all))
@@ -404,7 +383,7 @@ impl Model {
     /// component names of the load `NodeField`.
     pub fn dual_vars(&self) -> Result<Vec<String>> {
         let mut all: Vec<String> = Vec::new();
-        for h in &self.sub_models {
+        for h in self {
             all.extend(with(h, |s| s.dual_vars())?);
         }
         Ok(union_names(all))
@@ -413,7 +392,7 @@ impl Model {
     /// Assemble the stiffness matrix `K` of the full model.
     pub fn stiffness(&self) -> Result<Matrix> {
         let mut symmetric = true;
-        for h in &self.sub_models {
+        for h in self {
             let is_sym = with(h, |s| {
                 matches!(
                     s.physics(),
@@ -426,7 +405,7 @@ impl Model {
             }
         }
         let mut k = Matrix::new(symmetric);
-        for h in &self.sub_models {
+        for h in self {
             with(h, |sub| sub.assemble_stiffness(&mut k))??;
         }
         Ok(k)
@@ -437,15 +416,12 @@ impl Model {
     /// empty unless a future physics fills it.
     pub fn mass(&self) -> Result<Matrix> {
         let mut m = Matrix::new(true);
-        for h in &self.sub_models {
+        for h in self {
             with(h, |sub| sub.assemble_mass(&mut m))??;
         }
         Ok(m)
     }
-
 }
-
-crate::impl_aggregate_std_traits!(Model);
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -464,6 +440,7 @@ fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::Aggregate;
     use crate::mesh::configuration::Configuration;
     use crate::mesh::element_type::ElementType;
     use crate::finite_element_space::FiniteElementSpace;

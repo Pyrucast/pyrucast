@@ -271,23 +271,15 @@ impl fmt::Display for SubMesh {
 /// configuration homogeneity.
 #[derive(Serialize, Deserialize, Default)]
 pub struct Mesh {
-    pub(crate) submeshes: Vec<Handle<SubMesh>>,
+    subs: Vec<Handle<SubMesh>>,
 }
 
-impl Aggregate for Mesh {
-    type Sub = SubMesh;
-    fn items(&self) -> &[Handle<SubMesh>] { &self.submeshes }
-    fn items_mut(&mut self) -> &mut Vec<Handle<SubMesh>> { &mut self.submeshes }
-    fn type_name() -> &'static str { "Mesh" }
-    fn sub_display_name() -> &'static str { "submesh(es)" }
+crate::impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
     fn display_extra(&self) -> Option<String> {
         Some(format!(", {} cell(s) total", self.cell_count().unwrap_or(0)))
     }
-
     fn check_push(&self, h: &Handle<SubMesh>) -> Result<()> {
-        if self.submeshes.is_empty() {
-            return Ok(());
-        }
+        if self.is_empty() { return Ok(()); }
         let a = self.configuration()?;
         let b = with(h, |s| s.configuration())?;
         if a.index() != b.index() || a.generation() != b.generation() {
@@ -296,24 +288,13 @@ impl Aggregate for Mesh {
             Ok(())
         }
     }
-}
+});
 
 impl Mesh {
-
-    /// Number of submeshes.
-    pub fn submesh_count(&self) -> usize {
-        self.len()
-    }
-
-    /// Return a clone of the handle to the submesh at index `idx`.
-    pub fn submesh(&self, idx: usize) -> Result<Handle<SubMesh>> {
-        self.get(idx)
-    }
-
     /// Total cells in the mesh (sum across submeshes).
     pub fn cell_count(&self) -> Result<usize> {
         let mut total = 0usize;
-        for sm in &self.submeshes {
+        for sm in self {
             total += with(sm, |s| s.cell_count())?;
         }
         Ok(total)
@@ -323,7 +304,7 @@ impl Mesh {
     ///
     /// Returns an error if the mesh has no submeshes.
     pub fn configuration(&self) -> Result<Handle<Configuration>> {
-        let sm = self.submeshes.first().ok_or_else(|| {
+        let sm = self.items().first().ok_or_else(|| {
             PyrucastError::Message("configuration: mesh has no submeshes".into())
         })?;
         with(sm, |s| s.configuration())
@@ -333,32 +314,30 @@ impl Mesh {
     pub fn with_element_type(config: Handle<Configuration>, element_type: ElementType) -> Self {
         let sm = insert(SubMesh::new(config, element_type));
         let mut mesh = Self::default();
-        mesh.submeshes.push(sm);
+        mesh.subs.push(sm);
         mesh
     }
 
     /// Add a cell directly when the mesh has exactly one submesh.
     pub fn add_cell(&mut self, nodes: &[NodeId]) -> Result<usize> {
-        if self.submeshes.len() != 1 {
+        if self.len() != 1 {
             return Err(PyrucastError::Message(
                 "add_cell: mesh must have exactly one submesh".into(),
             ));
         }
-        with_mut(&self.submeshes[0], |s| s.add_cell(nodes))?
+        with_mut(&self.subs[0], |s| s.add_cell(nodes))?
     }
 
     /// Element type of each submesh, in order.
     pub fn element_types(&self) -> Result<Vec<ElementType>> {
-        self.submeshes
-            .iter()
+        self.iter()
             .map(|sm| with(sm, |s| s.element_type()))
             .collect()
     }
 
     /// Cell count of each submesh, in order.
     pub fn cell_counts(&self) -> Result<Vec<usize>> {
-        self.submeshes
-            .iter()
+        self.iter()
             .map(|sm| with(sm, |s| s.cell_count()))
             .collect()
     }
@@ -442,7 +421,7 @@ impl Mesh {
 
         // Collect types in first-seen order.
         let mut ordered_types: Vec<ElementType> = Vec::new();
-        for sm_handle in &self.submeshes {
+        for sm_handle in self {
             let et = with(sm_handle, |s| s.element_type())?;
             if !ordered_types.contains(&et) {
                 ordered_types.push(et);
@@ -454,7 +433,6 @@ impl Mesh {
 
             // Face colour from the first submesh of this type.
             let first_color = self
-                .submeshes
                 .iter()
                 .find(|h| with(h, |s| s.element_type()).ok() == Some(et))
                 .map(|h| with(h, |s| s.face_color()))
@@ -465,7 +443,7 @@ impl Mesh {
             new_sm.set_face_color(first_color);
 
             let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
-            for sm_handle in &self.submeshes {
+            for sm_handle in self {
                 let sm_et = with(sm_handle, |s| s.element_type())?;
                 if sm_et != et {
                     continue;
@@ -478,15 +456,13 @@ impl Mesh {
                 }
             }
 
-            result.submeshes.push(insert(new_sm));
+            result.subs.push(insert(new_sm));
         }
 
         Ok(result)
     }
 
 }
-
-crate::impl_aggregate_std_traits!(Mesh);
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────
 

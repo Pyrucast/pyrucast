@@ -166,7 +166,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
     let mut col_map: std::collections::HashMap<NodeId, usize> =
         std::collections::HashMap::new();
     let mut ordered_ids: Vec<NodeId> = Vec::new();
-    for sm in &mesh.submeshes {
+    for sm in mesh {
         for id in with(sm, |s| s.connectivity().to_vec())? {
             col_map.entry(id).or_insert_with(|| {
                 let col = ordered_ids.len();
@@ -226,7 +226,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 
     let mut result = Mesh::empty();
 
-    for sm_handle in &mesh.submeshes {
+    for sm_handle in mesh {
         let (et, n_cells, conn) = with(sm_handle, |s| {
             (s.element_type(), s.cell_count(), s.connectivity().to_vec())
         })?;
