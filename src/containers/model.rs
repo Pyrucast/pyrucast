@@ -370,7 +370,6 @@ impl Aggregate for Model {
     fn items(&self) -> &[Handle<SubModel>] { &self.sub_models }
     fn items_mut(&mut self) -> &mut Vec<Handle<SubModel>> { &mut self.sub_models }
     fn type_name() -> &'static str { "Model" }
-    fn new_empty() -> Self { Self::default() }
     fn sub_display_name() -> &'static str { "sub-model(s)" }
 }
 

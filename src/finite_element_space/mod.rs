@@ -372,7 +372,7 @@ impl fmt::Display for SubFiniteElementSpace {
 /// each `SubFiniteElementSpace` captures its `SubMesh` handle. The node coordinates
 /// in the underlying `Configuration` may evolve later; the on-the-fly
 /// Jacobian computation always reflects the current coordinates.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct FiniteElementSpace {
     subspaces: Vec<Handle<SubFiniteElementSpace>>,
 }
@@ -382,7 +382,6 @@ impl Aggregate for FiniteElementSpace {
     fn items(&self) -> &[Handle<SubFiniteElementSpace>] { &self.subspaces }
     fn items_mut(&mut self) -> &mut Vec<Handle<SubFiniteElementSpace>> { &mut self.subspaces }
     fn type_name() -> &'static str { "FiniteElementSpace" }
-    fn new_empty() -> Self { Self { subspaces: Vec::new() } }
     fn sub_display_name() -> &'static str { "subspace(s)" }
 }
 

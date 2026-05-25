@@ -516,7 +516,7 @@ impl Div<f64> for &SubElementField {
 /// `ElementField` is to `FiniteElementSpace` what a `SubElementField` is
 /// to `SubFiniteElementSpace`. The component lists captured by the underlying
 /// sub-fields may differ from one subspace to the next.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct ElementField {
     subfields: Vec<Handle<SubElementField>>,
 }
@@ -526,7 +526,6 @@ impl Aggregate for ElementField {
     fn items(&self) -> &[Handle<SubElementField>] { &self.subfields }
     fn items_mut(&mut self) -> &mut Vec<Handle<SubElementField>> { &mut self.subfields }
     fn type_name() -> &'static str { "ElementField" }
-    fn new_empty() -> Self { Self { subfields: Vec::new() } }
     fn sub_display_name() -> &'static str { "subfield(s)" }
 }
 

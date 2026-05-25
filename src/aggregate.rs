@@ -25,7 +25,6 @@
 //!     fn items(&self) -> &[Handle<Item>] { &self.items }
 //!     fn items_mut(&mut self) -> &mut Vec<Handle<Item>> { &mut self.items }
 //!     fn type_name() -> &'static str { "Bag" }
-//!     fn new_empty() -> Self { Self::default() }
 //! }
 //!
 //! let mut b = Bag::default();
@@ -45,7 +44,7 @@ use std::any::Any;
 ///
 /// All access mechanics (length, indexing, iteration) are derived from the
 /// two required methods [`Aggregate::items`] and [`Aggregate::items_mut`].
-pub trait Aggregate {
+pub trait Aggregate: Default {
     /// Type of the sub-object held in the store (referenced via `Handle<Sub>`).
     type Sub: Persist + Any + Send;
 
@@ -58,9 +57,6 @@ pub trait Aggregate {
     /// Human-readable name of this aggregate type (e.g. `"Mesh"`).
     /// Used by the default `Debug` and `Display` implementations.
     fn type_name() -> &'static str;
-
-    /// Construct an empty aggregate with no sub-items.
-    fn new_empty() -> Self where Self: Sized;
 
     /// Plural label for the sub-item used by the default `Display`
     /// (e.g. `"submesh(es)"`). Defaults to `"item(s)"`.
@@ -75,7 +71,7 @@ pub trait Aggregate {
     /// Delegates to [`try_extend_from`] so domain constraints (e.g.
     /// `Configuration` compatibility for `Mesh`) are enforced.
     fn merge(&self, other: &Self) -> Result<Self> where Self: Sized {
-        let mut result = Self::new_empty();
+        let mut result = Self::default();
         result.try_extend_from(self)?;
         result.try_extend_from(other)?;
         Ok(result)
@@ -317,7 +313,6 @@ mod tests {
         fn items(&self) -> &[Handle<Item>] { &self.items }
         fn items_mut(&mut self) -> &mut Vec<Handle<Item>> { &mut self.items }
         fn type_name() -> &'static str { "Bag" }
-        fn new_empty() -> Self { Self::default() }
     }
 
     #[test]

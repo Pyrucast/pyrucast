@@ -279,7 +279,6 @@ impl Aggregate for Mesh {
     fn items(&self) -> &[Handle<SubMesh>] { &self.submeshes }
     fn items_mut(&mut self) -> &mut Vec<Handle<SubMesh>> { &mut self.submeshes }
     fn type_name() -> &'static str { "Mesh" }
-    fn new_empty() -> Self { Self::default() }
     fn sub_display_name() -> &'static str { "submesh(es)" }
     fn display_extra(&self) -> Option<String> {
         Some(format!(", {} cell(s) total", self.cell_count().unwrap_or(0)))
