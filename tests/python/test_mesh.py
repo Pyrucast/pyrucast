@@ -181,7 +181,7 @@ def test_fill_surface_square_gives_two_triangles():
     for i in range(4):
         contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
 
-    tri = pyrucast.Mesh.fill_surface(contour, "TRI3")
+    tri = pyrucast.fill_surface(contour, "TRI3")
     assert tri.element_types() == ["TRI3"]
     assert tri.cell_count() == 2  # n - 2
 
@@ -198,7 +198,7 @@ def test_fill_surface_unknown_element_type():
         contour.add_cell([nodes[i].id, nodes[(i + 1) % 3].id])
 
     try:
-        pyrucast.Mesh.fill_surface(contour, "BOGUS")
+        pyrucast.fill_surface(contour, "BOGUS")
     except ValueError:
         pass
     else:
@@ -217,7 +217,7 @@ def test_fill_surface_rejects_unsupported_target_element():
         contour.add_cell([nodes[i].id, nodes[(i + 1) % 3].id])
 
     try:
-        pyrucast.Mesh.fill_surface(contour, "QUA4")
+        pyrucast.fill_surface(contour, "QUA4")
     except RuntimeError:
         pass
     else:
@@ -242,7 +242,7 @@ def test_fill_surface_with_one_hole_2d():
     combined = outer + hole
     assert combined.submesh_count() == 2
 
-    tri = pyrucast.Mesh.fill_surface(combined, "TRI3")
+    tri = pyrucast.fill_surface(combined, "TRI3")
     n_cells = tri.cell_count()
 
     # Triangulated area should equal outer 16 minus hole 4 = 12.
@@ -261,7 +261,7 @@ def test_fill_surface_outer_loop_autodetected():
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     combined = hole + outer
-    tri = pyrucast.Mesh.fill_surface(combined, "TRI3")
+    tri = pyrucast.fill_surface(combined, "TRI3")
     n_cells = tri.cell_count()
 
     total = 0.0
@@ -278,7 +278,7 @@ def test_fill_surface_refined_creates_more_triangles():
     # triangles than the un-refined 2.
     c = pyrucast.Configuration(2)
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
-    tri = pyrucast.Mesh.fill_surface(outer, "TRI3", max_edge_length=1.5)
+    tri = pyrucast.fill_surface(outer, "TRI3", max_edge_length=1.5)
     assert tri.cell_count() > 2
 
     # Conservation of area: 4 × 4 = 16.
@@ -297,7 +297,7 @@ def test_fill_surface_refined_with_hole():
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
     combined = outer + hole
-    tri = pyrucast.Mesh.fill_surface(combined, "TRI3", max_edge_length=1.0)
+    tri = pyrucast.fill_surface(combined, "TRI3", max_edge_length=1.0)
     total = 0.0
     for ci in range(tri.cell_count()):
         p0 = tri.node(0, ci, 0).coord()
@@ -312,7 +312,7 @@ def test_fill_surface_refined_angle_criterion():
     # somewhere; after refinement no triangle should be below ~19°.
     c = pyrucast.Configuration(2)
     rect, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 1.0), (0.0, 1.0)])
-    tri = pyrucast.Mesh.fill_surface(rect, "TRI3", min_angle_deg=20.0)
+    tri = pyrucast.fill_surface(rect, "TRI3", min_angle_deg=20.0)
     # Compute min angle across all triangles.
     import math
     min_deg = math.inf
@@ -348,7 +348,7 @@ def test_fill_surface_3d_tilted_square():
     for i in range(4):
         contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
 
-    tri = pyrucast.Mesh.fill_surface(contour, "TRI3")
+    tri = pyrucast.fill_surface(contour, "TRI3")
     assert tri.cell_count() == 2  # n - 2
 
 
@@ -367,7 +367,7 @@ def test_fill_surface_3d_rejects_non_planar_contour():
         contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
 
     try:
-        pyrucast.Mesh.fill_surface(contour, "TRI3")
+        pyrucast.fill_surface(contour, "TRI3")
     except RuntimeError as e:
         assert "not planar" in str(e)
     else:
@@ -383,7 +383,7 @@ def test_fill_surface_rejects_non_seg2_contour():
     bogus.add_cell([a.id, b.id, cc.id])
 
     try:
-        pyrucast.Mesh.fill_surface(bogus, "TRI3")
+        pyrucast.fill_surface(bogus, "TRI3")
     except RuntimeError:
         pass
     else:

@@ -10,6 +10,7 @@ use pyrucast::mesh::configuration::Configuration;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
 use pyrucast::mesh::node::Node;
+use pyrucast::aggregate::Aggregate;
 use pyrucast::store::insert;
 use pyrucast::viz::View;
 
