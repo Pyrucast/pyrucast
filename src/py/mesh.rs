@@ -274,7 +274,7 @@ impl PyMesh {
 
 }
 
-crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh_count, submesh, add_submesh);
+crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh);
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

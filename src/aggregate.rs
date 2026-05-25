@@ -170,64 +170,69 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 /// sequence protocol: if `__iter__` is not defined, CPython falls back to
 /// `__getitem__` until it receives an `IndexError`.
 ///
-/// # Usage example (post-refactor B)
+/// # Usage
 ///
 /// ```ignore
-/// pyrucast::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh");
-/// pyrucast::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace");
-/// pyrucast::impl_aggregate_pymethods!(PyModel, PySubModel, "Model");
+/// pyrucast::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh);
+/// pyrucast::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace", subspace);
+/// pyrucast::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model);
 /// ```
+///
+/// `$sub` is given once; `paste!` derives `{$sub}_count`, `$sub(i)`, and
+/// `add_{$sub}` automatically.
 #[cfg(feature = "python-api")]
 #[macro_export]
 macro_rules! impl_aggregate_pymethods {
-    ($PyParent:ident, $PySub:ident, $name:literal, $count_fn:ident, $accessor_fn:ident, $add_fn:ident) => {
-        #[cfg_attr(
-            feature = "stub-gen",
-            pyo3_stub_gen::derive::gen_stub_pymethods
-        )]
-        #[pyo3::pymethods]
-        impl $PyParent {
-            fn __len__(&self) -> pyo3::PyResult<usize> {
-                Ok($crate::aggregate::Aggregate::len(&self.inner))
-            }
+    ($PyParent:ident, $PySub:ident, $name:literal, $sub:ident) => {
+        paste::paste! {
+            #[cfg_attr(
+                feature = "stub-gen",
+                pyo3_stub_gen::derive::gen_stub_pymethods
+            )]
+            #[pyo3::pymethods]
+            impl $PyParent {
+                fn __len__(&self) -> pyo3::PyResult<usize> {
+                    Ok($crate::aggregate::Aggregate::len(&self.inner))
+                }
 
-            fn __getitem__(&self, idx: isize) -> pyo3::PyResult<$PySub> {
-                let n = $crate::aggregate::Aggregate::len(&self.inner);
-                let i = $crate::aggregate::normalize_index(idx, n).ok_or_else(|| {
-                    pyo3::exceptions::PyIndexError::new_err(format!(
-                        concat!($name, " index {} out of range (len={})"),
-                        idx, n
-                    ))
-                })?;
-                let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
-                Ok($PySub { handle: h })
-            }
+                fn __getitem__(&self, idx: isize) -> pyo3::PyResult<$PySub> {
+                    let n = $crate::aggregate::Aggregate::len(&self.inner);
+                    let i = $crate::aggregate::normalize_index(idx, n).ok_or_else(|| {
+                        pyo3::exceptions::PyIndexError::new_err(format!(
+                            concat!($name, " index {} out of range (len={})"),
+                            idx, n
+                        ))
+                    })?;
+                    let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
+                    Ok($PySub { handle: h })
+                }
 
-            fn $count_fn(&self) -> pyo3::PyResult<usize> {
-                Ok($crate::aggregate::Aggregate::len(&self.inner))
-            }
+                fn [<$sub _count>](&self) -> pyo3::PyResult<usize> {
+                    Ok($crate::aggregate::Aggregate::len(&self.inner))
+                }
 
-            fn $accessor_fn(&self, i: usize) -> pyo3::PyResult<$PySub> {
-                let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
-                Ok($PySub { handle: h })
-            }
+                fn $sub(&self, i: usize) -> pyo3::PyResult<$PySub> {
+                    let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
+                    Ok($PySub { handle: h })
+                }
 
-            fn add_sub(&mut self, sub: pyo3::PyRef<'_, $PySub>) -> pyo3::PyResult<()> {
-                $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
-                Ok(())
-            }
+                fn add_sub(&mut self, sub: pyo3::PyRef<'_, $PySub>) -> pyo3::PyResult<()> {
+                    $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
+                    Ok(())
+                }
 
-            fn $add_fn(&mut self, sub: pyo3::PyRef<'_, $PySub>) -> pyo3::PyResult<()> {
-                $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
-                Ok(())
-            }
+                fn [<add_ $sub>](&mut self, sub: pyo3::PyRef<'_, $PySub>) -> pyo3::PyResult<()> {
+                    $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
+                    Ok(())
+                }
 
-            fn __repr__(&self) -> pyo3::PyResult<String> {
-                Ok(format!("{:?}", self.inner))
-            }
+                fn __repr__(&self) -> pyo3::PyResult<String> {
+                    Ok(format!("{:?}", self.inner))
+                }
 
-            fn __str__(&self) -> pyo3::PyResult<String> {
-                Ok(format!("{}", self.inner))
+                fn __str__(&self) -> pyo3::PyResult<String> {
+                    Ok(format!("{}", self.inner))
+                }
             }
         }
     };

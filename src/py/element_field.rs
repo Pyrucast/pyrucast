@@ -220,4 +220,4 @@ impl PyElementField {
 
 }
 
-crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField", subfield_count, subfield, add_subfield);
+crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField", subfield);
