@@ -110,13 +110,6 @@ impl PyModel {
         Ok(PyMatrix { handle: insert(m_mat) })
     }
 
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.inner))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.inner))
-    }
 }
 
 crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model_count, sub_model, add_submodel);

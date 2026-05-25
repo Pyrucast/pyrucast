@@ -194,6 +194,14 @@ macro_rules! impl_aggregate_pymethods {
                 $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
                 Ok(())
             }
+
+            fn __repr__(&self) -> pyo3::PyResult<String> {
+                Ok(format!("{:?}", self.inner))
+            }
+
+            fn __str__(&self) -> pyo3::PyResult<String> {
+                Ok(format!("{}", self.inner))
+            }
         }
     };
 }

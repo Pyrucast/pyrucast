@@ -349,13 +349,6 @@ impl PyMesh {
         Ok(())
     }
 
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.inner))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.inner))
-    }
 }
 
 crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh_count, submesh, add_submesh);

@@ -188,13 +188,6 @@ impl PyFiniteElementSpace {
         Ok(Self { inner: fes })
     }
 
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.inner))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.inner))
-    }
 }
 
 crate::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace", subspace_count, subspace, add_subspace);

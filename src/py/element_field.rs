@@ -218,13 +218,6 @@ impl PyElementField {
         Ok(Self { inner: ef })
     }
 
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.inner))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.inner))
-    }
 }
 
 crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField", subfield_count, subfield, add_subfield);
