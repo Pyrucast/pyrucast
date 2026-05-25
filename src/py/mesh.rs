@@ -358,4 +358,4 @@ impl PyMesh {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh_count, submesh);
+crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh_count, submesh, add_submesh);

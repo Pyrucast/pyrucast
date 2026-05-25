@@ -197,4 +197,4 @@ impl PyFiniteElementSpace {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace", subspace_count, subspace);
+crate::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace", subspace_count, subspace, add_subspace);

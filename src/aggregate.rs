@@ -153,7 +153,7 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 #[cfg(feature = "python-api")]
 #[macro_export]
 macro_rules! impl_aggregate_pymethods {
-    ($PyParent:ident, $PySub:ident, $name:literal, $count_fn:ident, $accessor_fn:ident) => {
+    ($PyParent:ident, $PySub:ident, $name:literal, $count_fn:ident, $accessor_fn:ident, $add_fn:ident) => {
         #[cfg_attr(
             feature = "stub-gen",
             pyo3_stub_gen::derive::gen_stub_pymethods
@@ -186,6 +186,11 @@ macro_rules! impl_aggregate_pymethods {
             }
 
             fn add_sub(&mut self, sub: pyo3::PyRef<'_, $PySub>) -> pyo3::PyResult<()> {
+                $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
+                Ok(())
+            }
+
+            fn $add_fn(&mut self, sub: pyo3::PyRef<'_, $PySub>) -> pyo3::PyResult<()> {
                 $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
                 Ok(())
             }
