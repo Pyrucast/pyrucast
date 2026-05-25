@@ -82,6 +82,13 @@ pub trait Aggregate {
     fn iter(&self) -> std::slice::Iter<'_, Handle<Self::Sub>> {
         self.items().iter()
     }
+
+    /// Append all handles from `other` into `self` (clone each handle).
+    fn extend_from(&mut self, other: &Self) {
+        for h in other.iter() {
+            self.items_mut().push(h.clone());
+        }
+    }
 }
 
 // ─── Helper: Python indexing (signed → unsigned) ────────────────────────────

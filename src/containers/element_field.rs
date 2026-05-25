@@ -680,7 +680,7 @@ mod tests {
         let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
         let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
-        let mut mesh = Mesh::new(cfg.clone());
+        let mut mesh = Mesh::empty();
         let sm_tri = {
             let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();

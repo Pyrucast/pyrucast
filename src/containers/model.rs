@@ -451,6 +451,22 @@ impl Model {
         }
         Ok(m)
     }
+
+    /// Return a new `Model` containing all sub-models of `self` followed by
+    /// all sub-models of `other`.
+    pub fn merge(&self, other: &Model) -> Model {
+        let mut result = Model::new();
+        result.extend_from(self);
+        result.extend_from(other);
+        result
+    }
+}
+
+impl std::ops::Add<&Model> for &Model {
+    type Output = Model;
+    fn add(self, rhs: &Model) -> Model {
+        self.merge(rhs)
+    }
 }
 
 impl fmt::Debug for Model {

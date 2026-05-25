@@ -453,6 +453,22 @@ impl FiniteElementSpace {
                 ))
             })
     }
+
+    /// Return a new `FiniteElementSpace` containing all subspaces of `self`
+    /// followed by all subspaces of `other`.
+    pub fn merge(&self, other: &FiniteElementSpace) -> FiniteElementSpace {
+        let mut result = FiniteElementSpace { subspaces: Vec::new() };
+        result.extend_from(self);
+        result.extend_from(other);
+        result
+    }
+}
+
+impl std::ops::Add<&FiniteElementSpace> for &FiniteElementSpace {
+    type Output = FiniteElementSpace;
+    fn add(self, rhs: &FiniteElementSpace) -> FiniteElementSpace {
+        self.merge(rhs)
+    }
 }
 
 impl std::ops::Index<usize> for FiniteElementSpace {
@@ -876,7 +892,7 @@ mod tests {
         let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
         let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
 
-        let mut mesh = Mesh::new(cfg.clone());
+        let mut mesh = Mesh::empty();
         let sm_tri = {
             let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
@@ -918,7 +934,7 @@ mod tests {
     #[test]
     fn rejects_empty_mesh() {
         let cfg = cfg2d();
-        let mesh = Mesh::new(cfg);
+        let mesh = Mesh::empty();
         assert!(FiniteElementSpace::lagrange1(&mesh).is_err());
     }
 

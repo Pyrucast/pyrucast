@@ -38,16 +38,15 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
             "sweep_qua4: mesh_b must have exactly one submesh".into(),
         ));
     }
-    if mesh_a.config.index() != mesh_b.config.index()
-        || mesh_a.config.generation() != mesh_b.config.generation()
-    {
+    let sm_a = mesh_a.submesh(0)?;
+    let sm_b = mesh_b.submesh(0)?;
+    let cfg_a = with(&sm_a, |s| s.configuration())?;
+    let cfg_b = with(&sm_b, |s| s.configuration())?;
+    if cfg_a.index() != cfg_b.index() || cfg_a.generation() != cfg_b.generation() {
         return Err(PyrucastError::Message(
             "sweep_qua4: meshes are attached to different Configurations".into(),
         ));
     }
-
-    let sm_a = mesh_a.submesh(0)?;
-    let sm_b = mesh_b.submesh(0)?;
 
     let (et_a, n_elems, conn_a) =
         with(&sm_a, |s| (s.element_type(), s.cell_count(), s.connectivity().to_vec()))?;
@@ -71,7 +70,7 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
         )));
     }
 
-    let cfg = mesh_a.config.clone();
+    let cfg = cfg_a;
     let n_cols = n_elems + 1;
 
     // Column j: first node of elem 0 (j=0), or second node of elem j-1 (j≥1).
@@ -160,7 +159,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
         ));
     }
 
-    let cfg = mesh.config.clone();
+    let cfg = mesh.configuration()?;
 
     // Collect unique NodeIds across all submeshes, first-seen order.
     let mut col_map: std::collections::HashMap<NodeId, usize> =
@@ -224,7 +223,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 
     let col = |id: NodeId| *col_map.get(&id).unwrap();
 
-    let mut result = Mesh::new(cfg.clone());
+    let mut result = Mesh::empty();
 
     for sm_handle in &mesh.submeshes {
         let (et, n_cells, conn) = with(sm_handle, |s| {

@@ -221,7 +221,7 @@ impl NodeField {
     /// let sm2 = field.to_poi1_submesh().unwrap();
     /// assert_eq!(sm2.cell_count(), 2);
     /// // Verify node order via Mesh::node (public API).
-    /// let mut m = Mesh::new(cfg.clone());
+    /// let mut m = Mesh::empty();
     /// m.add_submesh(insert(sm2)).unwrap();
     /// assert_eq!(m.node(0, 0, 0).unwrap().id(), a.id());
     /// assert_eq!(m.node(0, 1, 0).unwrap().id(), b.id());
@@ -238,7 +238,7 @@ impl NodeField {
     /// this field.
     pub fn to_poi1_mesh(&self) -> Result<Mesh> {
         let sm_handle = insert(self.to_poi1_submesh()?);
-        let mut mesh = Mesh::new(self.configuration());
+        let mut mesh = Mesh::empty();
         mesh.add_submesh(sm_handle)?;
         Ok(mesh)
     }
@@ -470,7 +470,7 @@ impl NodeField {
     /// from this field are assigned `0.0`. The mesh must be attached to the
     /// same `Configuration` as this field.
     pub fn restrict(&self, mesh: &Mesh) -> Result<NodeField> {
-        let mesh_cfg = mesh.configuration();
+        let mesh_cfg = mesh.configuration()?;
         let self_cfg = self.configuration();
         if mesh_cfg.index() != self_cfg.index()
             || mesh_cfg.generation() != self_cfg.generation()
@@ -1169,7 +1169,14 @@ mod tests {
             insert(sm)
         };
         let f = NodeField::from_poi1(&sm1, vec!["T".into()]).unwrap();
-        let m2 = Mesh::new(cfg2);
+        let n2 = Node::create_in(cfg2.clone(), &[0.0]).unwrap();
+        let sm2 = {
+            let mut sm = SubMesh::new(cfg2.clone(), ElementType::POI1);
+            sm.add_cell(&[n2.id()]).unwrap();
+            insert(sm)
+        };
+        let mut m2 = Mesh::empty();
+        m2.add_submesh(sm2).unwrap();
         assert!(f.restrict(&m2).is_err());
     }
 }

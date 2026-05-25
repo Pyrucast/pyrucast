@@ -266,10 +266,11 @@ impl fmt::Display for SubMesh {
 
 // ─── Mesh ───────────────────────────────────────────────────────────────────
 
-/// Mesh: aggregate of submeshes attached to the same `Configuration`.
-#[derive(Serialize, Deserialize)]
+/// Mesh: aggregate of submeshes. Each submesh carries its own
+/// `Handle<Configuration>`; the mesh itself imposes no constraint on
+/// configuration homogeneity.
+#[derive(Serialize, Deserialize, Default)]
 pub struct Mesh {
-    pub(crate) config: Handle<Configuration>,
     pub(crate) submeshes: Vec<Handle<SubMesh>>,
 }
 
@@ -284,24 +285,13 @@ impl Aggregate for Mesh {
 }
 
 impl Mesh {
-    /// Create an empty mesh attached to `config`.
-    pub fn new(config: Handle<Configuration>) -> Self {
-        Self {
-            config,
-            submeshes: Vec::new(),
-        }
+    /// Create an empty mesh with no submeshes.
+    pub fn empty() -> Self {
+        Self::default()
     }
 
-    /// Add a submesh. Requires that the submesh's `Configuration` matches
-    /// the mesh's.
+    /// Add a submesh.
     pub fn add_submesh(&mut self, sm: Handle<SubMesh>) -> Result<()> {
-        let sm_cfg = with(&sm, |s| s.configuration())?;
-        if sm_cfg.index() != self.config.index() || sm_cfg.generation() != self.config.generation()
-        {
-            return Err(PyrucastError::Message(
-                "add_submesh: submesh attached to a different Configuration".into(),
-            ));
-        }
         self.submeshes.push(sm);
         Ok(())
     }
@@ -328,18 +318,20 @@ impl Mesh {
         Ok(total)
     }
 
-    /// Handle to the `Configuration` (internal clone).
-    pub fn configuration(&self) -> Handle<Configuration> {
-        self.config.clone()
+    /// Handle to the `Configuration` of the first submesh.
+    ///
+    /// Returns an error if the mesh has no submeshes.
+    pub fn configuration(&self) -> Result<Handle<Configuration>> {
+        let sm = self.submeshes.first().ok_or_else(|| {
+            PyrucastError::Message("configuration: mesh has no submeshes".into())
+        })?;
+        with(sm, |s| s.configuration())
     }
 
     /// Create a mesh pre-loaded with one empty submesh of `element_type`.
     pub fn with_element_type(config: Handle<Configuration>, element_type: ElementType) -> Self {
-        let sm = insert(SubMesh::new(config.clone(), element_type));
-        let mut mesh = Self {
-            config,
-            submeshes: Vec::new(),
-        };
+        let sm = insert(SubMesh::new(config, element_type));
+        let mut mesh = Self::default();
         mesh.submeshes.push(sm);
         mesh
     }
@@ -392,7 +384,8 @@ impl Mesh {
                     ))
                 })
         })??;
-        Node::acquire(self.config.clone(), nid)
+        let cfg = with(&sm, |s| s.configuration())?;
+        Node::acquire(cfg, nid)
     }
 
     /// Return a `Cell` view on cell `cell_idx` of submesh `submesh_idx`.
@@ -660,7 +653,7 @@ impl Mesh {
                 "fill_surface: contour must contain at least one SEG2 submesh".into(),
             ));
         }
-        let cfg = contour.config.clone();
+        let cfg = contour.configuration()?;
         let dim = with(&cfg, |c| c.dim())?;
         if dim != 2 && dim != 3 {
             return Err(PyrucastError::Message(format!(
@@ -965,7 +958,8 @@ impl Mesh {
     pub fn consolidate(&self) -> Result<Mesh> {
         use std::collections::HashSet;
 
-        let mut result = Mesh::new(self.config.clone());
+        let cfg = self.configuration()?;
+        let mut result = Mesh::empty();
 
         // Collect types in first-seen order.
         let mut ordered_types: Vec<ElementType> = Vec::new();
@@ -988,7 +982,7 @@ impl Mesh {
                 .transpose()?
                 .unwrap_or_default();
 
-            let mut new_sm = SubMesh::new(self.config.clone(), et);
+            let mut new_sm = SubMesh::new(cfg.clone(), et);
             new_sm.set_face_color(first_color);
 
             let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
@@ -1012,26 +1006,18 @@ impl Mesh {
     }
 
     /// Return a new mesh containing all submeshes of `self` followed by all
-    /// submeshes of `other`. Both meshes must share the same `Configuration`.
-    pub fn merge(&self, other: &Mesh) -> Result<Mesh> {
-        if self.config.index() != other.config.index()
-            || self.config.generation() != other.config.generation()
-        {
-            return Err(PyrucastError::Message(
-                "merge: meshes are attached to different Configurations".into(),
-            ));
-        }
-        let mut result = Mesh::new(self.config.clone());
-        for sm in self.submeshes.iter().chain(other.submeshes.iter()) {
-            result.submeshes.push(sm.clone());
-        }
-        Ok(result)
+    /// submeshes of `other`.
+    pub fn merge(&self, other: &Mesh) -> Mesh {
+        let mut result = Mesh::empty();
+        result.extend_from(self);
+        result.extend_from(other);
+        result
     }
 }
 
 impl std::ops::Add<&Mesh> for &Mesh {
-    type Output = Result<Mesh>;
-    fn add(self, rhs: &Mesh) -> Result<Mesh> {
+    type Output = Mesh;
+    fn add(self, rhs: &Mesh) -> Mesh {
         self.merge(rhs)
     }
 }
@@ -1178,22 +1164,11 @@ mod tests {
             insert(sm)
         };
 
-        let mut mesh = Mesh::new(cfg.clone());
+        let mut mesh = Mesh::empty();
         mesh.add_submesh(sm_pts).unwrap();
         mesh.add_submesh(sm_tri).unwrap();
         assert_eq!(mesh.submesh_count(), 2);
         assert_eq!(mesh.cell_count().unwrap(), 3); // 2 points + 1 triangle
-    }
-
-    #[test]
-    fn mesh_rejects_submesh_from_other_configuration() {
-        let cfg1 = insert(Configuration::new(2).unwrap());
-        let cfg2 = insert(Configuration::new(2).unwrap());
-
-        let sm = insert(SubMesh::new(cfg1.clone(), ElementType::POI1));
-        let mut mesh = Mesh::new(cfg2);
-        let err = mesh.add_submesh(sm).unwrap_err();
-        assert!(matches!(err, PyrucastError::Message(_)));
     }
 
     #[test]
@@ -1296,17 +1271,9 @@ mod tests {
         let mut m2 = Mesh::with_element_type(cfg.clone(), ElementType::TRI3);
         m2.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
-        let merged = (&m1 + &m2).unwrap();
+        let merged = &m1 + &m2;
         assert_eq!(merged.submesh_count(), 2);
         assert_eq!(merged.cell_count().unwrap(), 3); // 2 POI1 + 1 TRI3
-    }
-
-    #[test]
-    fn mesh_merge_rejects_different_configurations() {
-        let cfg1 = insert(Configuration::new(2).unwrap());
-        let cfg2 = insert(Configuration::new(2).unwrap());
-        let err = Mesh::new(cfg1).merge(&Mesh::new(cfg2)).unwrap_err();
-        assert!(matches!(err, PyrucastError::Message(_)));
     }
 
     #[test]
@@ -1916,7 +1883,7 @@ mod tests {
             cfg.clone(),
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
-        let combined = (&outer + &hole).unwrap();
+        let combined = &outer + &hole;
         assert_eq!(combined.submesh_count(), 2);
 
         let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
@@ -1949,7 +1916,7 @@ mod tests {
             cfg.clone(),
             &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
         );
-        let combined = (&hole + &outer).unwrap();
+        let combined = &hole + &outer;
         let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
         let mut total = 0.0;
@@ -1979,7 +1946,7 @@ mod tests {
             cfg.clone(),
             &[(4.0, 2.0), (5.0, 2.0), (5.0, 3.0), (4.0, 3.0)],
         );
-        let combined = (&(&outer + &h1).unwrap() + &h2).unwrap();
+        let combined = &(&outer + &h1) + &h2;
         assert_eq!(combined.submesh_count(), 3);
         let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
@@ -2017,7 +1984,7 @@ mod tests {
                 (1.0, 3.0, 1.0),
             ],
         );
-        let combined = (&outer + &hole).unwrap();
+        let combined = &outer + &hole;
 
         let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
 
@@ -2059,9 +2026,9 @@ mod tests {
             cfg2,
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
-        // merge() rejects mismatched configurations, so this should fail
-        // before fill_surface ever sees a mixed contour.
-        assert!((&outer + &hole).is_err());
+        // Merge is now infallible; fill_surface rejects mixed-config contours.
+        let contour = &outer + &hole;
+        assert!(Mesh::fill_surface(&contour, ElementType::TRI3, None).is_err());
     }
 
     #[test]
@@ -2183,7 +2150,7 @@ mod tests {
             cfg.clone(),
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
-        let combined = (&outer + &hole).unwrap();
+        let combined = &outer + &hole;
         let opts = crate::ops::mesher::triangulation::RefinementOptions {
             max_edge_length: Some(1.0),
             min_angle_deg: None,
@@ -2241,7 +2208,7 @@ mod tests {
             insert(sm)
         };
 
-        let mut mesh = Mesh::new(cfg.clone());
+        let mut mesh = Mesh::empty();
         mesh.add_submesh(sm1).unwrap();
         mesh.add_submesh(sm2).unwrap();
         assert_eq!(mesh.submesh_count(), 2);
@@ -2270,7 +2237,7 @@ mod tests {
             insert(sm)
         };
 
-        let mut mesh = Mesh::new(cfg.clone());
+        let mut mesh = Mesh::empty();
         mesh.add_submesh(sm1).unwrap();
         mesh.add_submesh(sm2).unwrap();
 
@@ -2303,7 +2270,7 @@ mod tests {
             insert(sm)
         };
 
-        let mut mesh = Mesh::new(cfg.clone());
+        let mut mesh = Mesh::empty();
         mesh.add_submesh(sm_tri).unwrap();
         mesh.add_submesh(sm_poi).unwrap();
         mesh.add_submesh(sm_tri2).unwrap();
@@ -2327,7 +2294,7 @@ mod tests {
         assert!(d.contains("SubMesh"));
         assert!(s.contains("SEG2"));
 
-        let mesh = Mesh::new(cfg);
+        let mesh = Mesh::empty();
         assert!(format!("{:?}", mesh).contains("Mesh"));
         assert!(format!("{}", mesh).contains("submesh"));
     }

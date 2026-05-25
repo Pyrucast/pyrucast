@@ -170,7 +170,7 @@ impl PyMesh {
                 })?;
                 Mesh::with_element_type(cfg, et)
             }
-            None => Mesh::new(cfg),
+            None => Mesh::empty(),
         };
         Ok(Self { inner: mesh })
     }
@@ -289,7 +289,7 @@ impl PyMesh {
     }
 
     fn __add__(&self, other: PyRef<PyMesh>) -> PyResult<PyMesh> {
-        let mesh = self.inner.merge(&other.inner)?;
+        let mesh = self.inner.merge(&other.inner);
         Ok(PyMesh { inner: mesh })
     }
 

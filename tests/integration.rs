@@ -213,7 +213,7 @@ fn mesh_composed_of_multiple_submeshes() -> Result<()> {
     };
 
     let mesh = {
-        let mut mesh = Mesh::new(cfg.clone());
+        let mut mesh = Mesh::empty();
         mesh.add_submesh(sm_pts)?;
         mesh.add_submesh(sm_tri)?;
         mesh
