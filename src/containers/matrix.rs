@@ -1,40 +1,27 @@
 //! Sparse matrix indexed by **named DOFs** `(NodeId, field_name)`.
 //!
-//! [`Matrix`] is the output container of [`crate::containers::model::Model`] assembly
-//! (stiffness, mass, …). Rows and columns are identified by a [`DofId`] —
-//! a pair `(NodeId, field index)` where the field index points into a
-//! small per-matrix table of names. This keeps storage compact (no string
-//! per entry) while preserving the semantics: every row/column tells the
-//! user which variable at which node it represents.
+//! Hierarchy:
 //!
-//! Storage is **COO** (coordinate triplet list): each insertion appends a
-//! `(row_idx, col_idx, value)` entry. Multiple insertions at the same
-//! `(row_idx, col_idx)` are kept as-is and **sum** when the matrix is
-//! read or densified. This makes assembly trivially incremental and
-//! commutes with the order in which sub-models contribute.
+//! - [`SubMatrix`] — one COO block. Carries its own field-name table and
+//!   its own row/col DOF lists. Mutating: `add_entry` appends a
+//!   `(row_idx, col_idx, value)` triplet; duplicates at the same
+//!   `(row, col)` accumulate when the block is read or densified.
+//! - [`Matrix`] — aggregate of [`SubMatrix`] blocks (one
+//!   `Vec<Handle<SubMatrix>>`), produced by
+//!   [`crate::containers::model::Model`] assembly (one block per
+//!   sub-model). Read-only: every accessor unions the blocks on the fly.
 //!
-//! A `symmetric: bool` flag records whether the assembler intends the
-//! matrix to be numerically symmetric (`A[i, j] = A[j, i]` for all paired
-//! row/column indices). The flag is **informative only**: the storage
-//! does not de-duplicate the lower triangle. Solvers that exploit
-//! symmetry (e.g. Cholesky) read the flag to decide on factorization;
-//! solvers that do not just see the full COO list.
+//! A `symmetric: bool` flag lives on each [`SubMatrix`]. The aggregate
+//! [`Matrix`] is reported symmetric iff every one of its blocks is. The
+//! flag is **informative only**: storage is not de-duplicated.
 //!
-//! Row and column DOF sets can have **different sizes** (rectangular
-//! matrices — e.g. the Lagrange-multiplier block of a Dirichlet
-//! constraint). They can also have **different field names** (rows
-//! tagged with dual variables such as `q` while columns are tagged with
-//! primal variables such as `T`).
-//!
-//! # Example
+//! # Example — single block
 //!
 //! ```
 //! use pyrucast::containers::mesh::configuration::NodeId;
-//! use pyrucast::containers::matrix::Matrix;
+//! use pyrucast::containers::matrix::SubMatrix;
 //!
-//! let mut k = Matrix::new(true);
-//! // Heat conduction on two nodes:
-//! //  row `q` at node i × col `T` at node j.
+//! let mut k = SubMatrix::new(true);
 //! k.add_entry(NodeId(0), "q", NodeId(0), "T", 2.0);
 //! k.add_entry(NodeId(0), "q", NodeId(1), "T", -1.0);
 //! k.add_entry(NodeId(1), "q", NodeId(0), "T", -1.0);
@@ -44,15 +31,38 @@
 //! assert_eq!(k.n_cols(), 2);
 //! assert!(k.symmetric());
 //! assert_eq!(k.get(NodeId(0), "q", NodeId(0), "T"), 2.0);
-//! assert_eq!(k.get(NodeId(1), "q", NodeId(0), "T"), -1.0);
+//! ```
 //!
-//! // Repeated insertions at the same (row, col) accumulate:
-//! k.add_entry(NodeId(0), "q", NodeId(0), "T", 1.5);
-//! assert_eq!(k.get(NodeId(0), "q", NodeId(0), "T"), 3.5);
+//! # Example — aggregate
+//!
+//! ```
+//! use pyrucast::aggregate::Aggregate;
+//! use pyrucast::containers::mesh::configuration::NodeId;
+//! use pyrucast::containers::matrix::{Matrix, SubMatrix};
+//! use pyrucast::store::insert;
+//!
+//! let mut a = SubMatrix::new(true);
+//! a.add_entry(NodeId(0), "q", NodeId(0), "T", 2.0);
+//! a.add_entry(NodeId(0), "q", NodeId(1), "T", -1.0);
+//!
+//! let mut b = SubMatrix::new(true);
+//! b.add_entry(NodeId(1), "q", NodeId(0), "T", -1.0);
+//! b.add_entry(NodeId(1), "q", NodeId(1), "T", 2.0);
+//!
+//! let mut k = Matrix::empty();
+//! k.add_sub(insert(a)).unwrap();
+//! k.add_sub(insert(b)).unwrap();
+//!
+//! assert_eq!(k.n_rows().unwrap(), 2);
+//! assert_eq!(k.n_cols().unwrap(), 2);
+//! assert!(k.symmetric().unwrap());
+//! assert_eq!(k.get(NodeId(0), "q", NodeId(0), "T").unwrap(), 2.0);
+//! assert_eq!(k.get(NodeId(1), "q", NodeId(1), "T").unwrap(), 2.0);
 //! ```
 
 use crate::containers::mesh::configuration::NodeId;
 use crate::error::{PyrucastError, Result};
+use crate::store::{with, Handle};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use serde::{Deserialize, Serialize};
@@ -60,24 +70,23 @@ use std::fmt;
 
 // ─── DofId ─────────────────────────────────────────────────────────────────
 
-/// Identifier of one row or one column of a [`Matrix`].
+/// Identifier of one row or one column of a [`SubMatrix`].
 ///
 /// A DOF is the pair `(node_id, field_idx)` where `field_idx` indexes into
-/// the owning matrix's field-name table (see [`Matrix::field_name`]). Two
-/// DOFs compare equal iff both components match.
+/// the owning sub-matrix's field-name table (see [`SubMatrix::field_name`]).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct DofId {
     /// Node this DOF lives on.
     pub node_id: NodeId,
-    /// Index into the owning matrix's field-name table.
+    /// Index into the owning sub-matrix's field-name table.
     pub field_idx: u32,
 }
 
-// ─── Matrix ────────────────────────────────────────────────────────────────
+// ─── SubMatrix ─────────────────────────────────────────────────────────────
 
-/// Sparse matrix in COO format with DOFs labelled by `(NodeId, field name)`.
+/// One sparse COO block with DOFs labelled by `(NodeId, field name)`.
 #[derive(Serialize, Deserialize)]
-pub struct Matrix {
+pub struct SubMatrix {
     /// Field names referenced by `row_dofs` and `col_dofs`.
     ///
     /// A name appears at most once in this table; `field_idx` of a DOF
@@ -93,10 +102,10 @@ pub struct Matrix {
     symmetric: bool,
 }
 
-impl Matrix {
-    /// Build an empty matrix. The `symmetric` flag is **informative**: it
-    /// is read by solvers that can exploit symmetry, but the storage is
-    /// not de-duplicated.
+impl SubMatrix {
+    /// Build an empty sub-matrix. The `symmetric` flag is **informative**:
+    /// it is read by solvers that can exploit symmetry, but the storage
+    /// is not de-duplicated.
     pub fn new(symmetric: bool) -> Self {
         Self {
             field_names: Vec::new(),
@@ -107,7 +116,7 @@ impl Matrix {
         }
     }
 
-    /// Whether the assembler declared the matrix numerically symmetric.
+    /// Whether the assembler declared this block numerically symmetric.
     pub fn symmetric(&self) -> bool {
         self.symmetric
     }
@@ -159,9 +168,8 @@ impl Matrix {
     /// Append an entry at `(row_node, row_field, col_node, col_field)`.
     ///
     /// The row and column DOFs are created on first use; the field names
-    /// are interned in the matrix's table. Repeated calls at the same
-    /// `(row, col)` accumulate: the final value at that position is the
-    /// sum of all `value`s added.
+    /// are interned in the sub-matrix's table. Repeated calls at the
+    /// same `(row, col)` accumulate.
     pub fn add_entry(
         &mut self,
         row_node: NodeId,
@@ -178,8 +186,7 @@ impl Matrix {
     }
 
     /// Sum of all entries at `(row, col)`. Returns `0.0` if no entry has
-    /// ever been added there (or if the DOFs were never seen by the
-    /// matrix).
+    /// ever been added there.
     pub fn get(
         &self,
         row_node: NodeId,
@@ -208,8 +215,7 @@ impl Matrix {
             .sum()
     }
 
-    /// Iterate over the raw COO triplets, in insertion order. Each
-    /// triplet is `(row_dof, col_dof, value)`.
+    /// Iterate over the raw COO triplets, in insertion order.
     pub fn iter_entries(&self) -> impl Iterator<Item = (DofId, DofId, f64)> + '_ {
         self.entries.iter().map(move |&(r, c, v)| {
             (
@@ -220,14 +226,9 @@ impl Matrix {
         })
     }
 
-    /// Materialise the matrix as a flat row-major dense buffer of length
-    /// `n_rows × n_cols`, with `out[i * n_cols + j]` = sum of all COO
-    /// entries at `(row i, col j)`. Convenient for the Python binding.
-    ///
-    /// Internally delegates to [`Matrix::to_dmatrix`] (nalgebra).
+    /// Materialise as a row-major dense buffer of length `n_rows × n_cols`.
     pub fn dense(&self) -> Vec<f64> {
         let m = self.to_dmatrix();
-        // DMatrix is column-major; we want row-major flat output.
         let mut out = Vec::with_capacity(m.nrows() * m.ncols());
         for i in 0..m.nrows() {
             for j in 0..m.ncols() {
@@ -237,7 +238,7 @@ impl Matrix {
         out
     }
 
-    /// Materialise the matrix as a [`nalgebra::DMatrix<f64>`] of size
+    /// Materialise as a [`nalgebra::DMatrix<f64>`] of size
     /// `n_rows × n_cols`. Entries at the same `(row, col)` are summed.
     pub fn to_dmatrix(&self) -> DMatrix<f64> {
         let nr = self.row_dofs.len();
@@ -249,9 +250,7 @@ impl Matrix {
         out
     }
 
-    /// Convert this matrix to a [`nalgebra_sparse::CooMatrix`], summing
-    /// duplicate `(row, col)` entries on the way (the resulting COO has
-    /// at most one triplet per coordinate).
+    /// Convert this block to a [`nalgebra_sparse::CooMatrix`].
     pub fn to_coo(&self) -> CooMatrix<f64> {
         let nr = self.row_dofs.len();
         let nc = self.col_dofs.len();
@@ -262,29 +261,21 @@ impl Matrix {
         coo
     }
 
-    /// Convert this matrix to a [`nalgebra_sparse::CsrMatrix`] —
-    /// the format of choice for matrix-vector products.
+    /// Convert this block to a [`nalgebra_sparse::CsrMatrix`].
     pub fn to_csr(&self) -> CsrMatrix<f64> {
         CsrMatrix::from(&self.to_coo())
     }
 
-    /// Convert this matrix to a [`nalgebra_sparse::CscMatrix`] —
-    /// useful for direct factorizations (Cholesky, LU).
+    /// Convert this block to a [`nalgebra_sparse::CscMatrix`].
     pub fn to_csc(&self) -> CscMatrix<f64> {
         CscMatrix::from(&self.to_coo())
     }
 
-    /// Apply this matrix to a dense vector `x` of length `n_cols`,
-    /// returning a dense vector `y = A · x` of length `n_rows`.
-    ///
-    /// Internally uses a CSR conversion and `nalgebra_sparse`'s
-    /// matrix-vector product.
-    ///
-    /// Returns an error if `x.len() != n_cols`.
+    /// `y = A · x` (dense). Returns an error if `x.len() != n_cols`.
     pub fn mul_dense(&self, x: &[f64]) -> Result<Vec<f64>> {
         if x.len() != self.n_cols() {
             return Err(PyrucastError::Message(format!(
-                "mul_dense: x has length {} but matrix has {} columns",
+                "mul_dense: x has length {} but sub-matrix has {} columns",
                 x.len(),
                 self.n_cols()
             )));
@@ -340,9 +331,9 @@ impl Matrix {
     }
 }
 
-impl fmt::Debug for Matrix {
+impl fmt::Debug for SubMatrix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Matrix")
+        f.debug_struct("SubMatrix")
             .field("n_rows", &self.row_dofs.len())
             .field("n_cols", &self.col_dofs.len())
             .field("entries", &self.entries.len())
@@ -352,11 +343,11 @@ impl fmt::Debug for Matrix {
     }
 }
 
-impl fmt::Display for Matrix {
+impl fmt::Display for SubMatrix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Matrix: {} row(s) × {} col(s), {} entries{}",
+            "SubMatrix: {} row(s) × {} col(s), {} entries{}",
             self.row_dofs.len(),
             self.col_dofs.len(),
             self.entries.len(),
@@ -365,19 +356,261 @@ impl fmt::Display for Matrix {
     }
 }
 
+// ─── Matrix (aggregate) ────────────────────────────────────────────────────
+
+/// Aggregate of [`SubMatrix`] blocks. Read-only: every accessor unions
+/// the contributions of all blocks on the fly.
+///
+/// Internally a `Vec<Handle<SubMatrix>>` — see [`crate::aggregate::Aggregate`].
+/// Two blocks may share row/col DOFs; the aggregate sums their entries
+/// at coincident `(row, col)`.
+#[derive(Serialize, Deserialize, Default)]
+pub struct Matrix {
+    subs: Vec<Handle<SubMatrix>>,
+}
+
+crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
+    fn display_extra(&self) -> Option<String> {
+        let n_rows = self.n_rows().unwrap_or(0);
+        let n_cols = self.n_cols().unwrap_or(0);
+        let sym = self.symmetric().unwrap_or(false);
+        Some(format!(
+            ", {} row(s) × {} col(s){}",
+            n_rows,
+            n_cols,
+            if sym { ", symmetric" } else { "" }
+        ))
+    }
+});
+
+/// One row or column DOF of an aggregate [`Matrix`], in materialized form.
+pub type NamedDof = (NodeId, String);
+
+impl Matrix {
+    /// Aggregate is symmetric iff every block is. Vacuously true for an
+    /// empty aggregate.
+    pub fn symmetric(&self) -> Result<bool> {
+        for h in self {
+            if !with(h, |s| s.symmetric())? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    /// Union of all row DOFs across blocks, in first-seen order.
+    pub fn row_dofs(&self) -> Result<Vec<NamedDof>> {
+        let mut out: Vec<NamedDof> = Vec::new();
+        for h in self {
+            with(h, |s| {
+                for dof in s.row_dofs() {
+                    let name = s.field_name(dof.field_idx).to_string();
+                    let pair = (dof.node_id, name);
+                    if !out.contains(&pair) {
+                        out.push(pair);
+                    }
+                }
+            })?;
+        }
+        Ok(out)
+    }
+
+    /// Union of all column DOFs across blocks, in first-seen order.
+    pub fn col_dofs(&self) -> Result<Vec<NamedDof>> {
+        let mut out: Vec<NamedDof> = Vec::new();
+        for h in self {
+            with(h, |s| {
+                for dof in s.col_dofs() {
+                    let name = s.field_name(dof.field_idx).to_string();
+                    let pair = (dof.node_id, name);
+                    if !out.contains(&pair) {
+                        out.push(pair);
+                    }
+                }
+            })?;
+        }
+        Ok(out)
+    }
+
+    /// Union of all field names across blocks, first-seen order.
+    pub fn field_names(&self) -> Result<Vec<String>> {
+        let mut out: Vec<String> = Vec::new();
+        for h in self {
+            with(h, |s| {
+                for name in s.field_names() {
+                    if !out.contains(name) {
+                        out.push(name.clone());
+                    }
+                }
+            })?;
+        }
+        Ok(out)
+    }
+
+    /// Number of distinct row DOFs (union across blocks).
+    pub fn n_rows(&self) -> Result<usize> {
+        Ok(self.row_dofs()?.len())
+    }
+
+    /// Number of distinct column DOFs (union across blocks).
+    pub fn n_cols(&self) -> Result<usize> {
+        Ok(self.col_dofs()?.len())
+    }
+
+    /// Total COO entries stored across all blocks (counting duplicates).
+    pub fn entry_count(&self) -> Result<usize> {
+        let mut total = 0usize;
+        for h in self {
+            total += with(h, |s| s.entry_count())?;
+        }
+        Ok(total)
+    }
+
+    /// Sum of `(row, col)` contributions across every block. `0.0` if no
+    /// block has an entry at this coordinate.
+    pub fn get(
+        &self,
+        row_node: NodeId,
+        row_field: &str,
+        col_node: NodeId,
+        col_field: &str,
+    ) -> Result<f64> {
+        let mut total = 0.0;
+        for h in self {
+            total += with(h, |s| s.get(row_node, row_field, col_node, col_field))?;
+        }
+        Ok(total)
+    }
+
+    /// All COO entries, in `(block_idx, sub-block_insertion)` order, with
+    /// DOFs materialised as `(NodeId, field_name)` pairs.
+    pub fn iter_entries(&self) -> Result<Vec<(NodeId, String, NodeId, String, f64)>> {
+        let mut out = Vec::new();
+        for h in self {
+            with(h, |s| {
+                for (r, c, v) in s.iter_entries() {
+                    out.push((
+                        r.node_id,
+                        s.field_name(r.field_idx).to_string(),
+                        c.node_id,
+                        s.field_name(c.field_idx).to_string(),
+                        v,
+                    ));
+                }
+            })?;
+        }
+        Ok(out)
+    }
+
+    /// Materialise as a [`nalgebra::DMatrix<f64>`] of size
+    /// `n_rows × n_cols` (union DOFs in first-seen order). Block
+    /// contributions are summed at coincident `(row, col)`.
+    pub fn to_dmatrix(&self) -> Result<DMatrix<f64>> {
+        let row_dofs = self.row_dofs()?;
+        let col_dofs = self.col_dofs()?;
+        let mut out = DMatrix::<f64>::zeros(row_dofs.len(), col_dofs.len());
+        for h in self {
+            with(h, |s| {
+                for (rdof, cdof, v) in s.iter_entries() {
+                    let r_name = s.field_name(rdof.field_idx);
+                    let c_name = s.field_name(cdof.field_idx);
+                    let i = row_dofs
+                        .iter()
+                        .position(|(n, nm)| *n == rdof.node_id && nm == r_name)
+                        .expect("row dof must be in union");
+                    let j = col_dofs
+                        .iter()
+                        .position(|(n, nm)| *n == cdof.node_id && nm == c_name)
+                        .expect("col dof must be in union");
+                    out[(i, j)] += v;
+                }
+            })?;
+        }
+        Ok(out)
+    }
+
+    /// Row-major dense buffer of length `n_rows × n_cols`.
+    pub fn dense(&self) -> Result<Vec<f64>> {
+        let m = self.to_dmatrix()?;
+        let mut out = Vec::with_capacity(m.nrows() * m.ncols());
+        for i in 0..m.nrows() {
+            for j in 0..m.ncols() {
+                out.push(m[(i, j)]);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Aggregate COO with rows / cols in the union order. Duplicates at
+    /// the same `(row, col)` are preserved (one triplet per block contribution).
+    pub fn to_coo(&self) -> Result<CooMatrix<f64>> {
+        let row_dofs = self.row_dofs()?;
+        let col_dofs = self.col_dofs()?;
+        let mut coo = CooMatrix::<f64>::new(row_dofs.len(), col_dofs.len());
+        for h in self {
+            with(h, |s| {
+                for (rdof, cdof, v) in s.iter_entries() {
+                    let r_name = s.field_name(rdof.field_idx);
+                    let c_name = s.field_name(cdof.field_idx);
+                    let i = row_dofs
+                        .iter()
+                        .position(|(n, nm)| *n == rdof.node_id && nm == r_name)
+                        .expect("row dof must be in union");
+                    let j = col_dofs
+                        .iter()
+                        .position(|(n, nm)| *n == cdof.node_id && nm == c_name)
+                        .expect("col dof must be in union");
+                    coo.push(i, j, v);
+                }
+            })?;
+        }
+        Ok(coo)
+    }
+
+    /// Aggregate CSR view (sums duplicates as part of the conversion).
+    pub fn to_csr(&self) -> Result<CsrMatrix<f64>> {
+        Ok(CsrMatrix::from(&self.to_coo()?))
+    }
+
+    /// Aggregate CSC view (sums duplicates as part of the conversion).
+    pub fn to_csc(&self) -> Result<CscMatrix<f64>> {
+        Ok(CscMatrix::from(&self.to_coo()?))
+    }
+
+    /// `y = A · x` (dense). `x` is read in the union column order.
+    pub fn mul_dense(&self, x: &[f64]) -> Result<Vec<f64>> {
+        let n_cols = self.n_cols()?;
+        if x.len() != n_cols {
+            return Err(PyrucastError::Message(format!(
+                "mul_dense: x has length {} but matrix has {} columns",
+                x.len(),
+                n_cols
+            )));
+        }
+        let csr = self.to_csr()?;
+        let x_vec = DVector::<f64>::from_column_slice(x);
+        let y_vec: DVector<f64> = &csr * &x_vec;
+        Ok(y_vec.iter().copied().collect())
+    }
+}
+
 // ─── Unit tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::Aggregate;
+    use crate::store::insert;
 
     fn nid(i: u32) -> NodeId {
         NodeId(i)
     }
 
+    // ── SubMatrix tests ─────────────────────────────────────────────────────
+
     #[test]
-    fn empty_matrix() {
-        let m = Matrix::new(false);
+    fn empty_sub_matrix() {
+        let m = SubMatrix::new(false);
         assert_eq!(m.n_rows(), 0);
         assert_eq!(m.n_cols(), 0);
         assert_eq!(m.entry_count(), 0);
@@ -386,18 +619,18 @@ mod tests {
 
     #[test]
     fn symmetric_flag_round_trip() {
-        let m = Matrix::new(true);
+        let m = SubMatrix::new(true);
         assert!(m.symmetric());
     }
 
     #[test]
     fn add_entry_interns_fields_and_dofs() {
-        let mut m = Matrix::new(false);
+        let mut m = SubMatrix::new(false);
         m.add_entry(nid(0), "q", nid(0), "T", 2.0);
         m.add_entry(nid(0), "q", nid(1), "T", -1.0);
         m.add_entry(nid(1), "q", nid(0), "T", -1.0);
         m.add_entry(nid(1), "q", nid(1), "T", 2.0);
-        assert_eq!(m.field_names().len(), 2); // "q" + "T"
+        assert_eq!(m.field_names().len(), 2);
         assert_eq!(m.n_rows(), 2);
         assert_eq!(m.n_cols(), 2);
         assert_eq!(m.entry_count(), 4);
@@ -405,13 +638,13 @@ mod tests {
 
     #[test]
     fn get_unknown_returns_zero() {
-        let m = Matrix::new(false);
+        let m = SubMatrix::new(false);
         assert_eq!(m.get(nid(0), "x", nid(0), "y"), 0.0);
     }
 
     #[test]
     fn get_sums_duplicates() {
-        let mut m = Matrix::new(false);
+        let mut m = SubMatrix::new(false);
         m.add_entry(nid(0), "q", nid(0), "T", 2.0);
         m.add_entry(nid(0), "q", nid(0), "T", 1.5);
         m.add_entry(nid(0), "q", nid(0), "T", -0.5);
@@ -420,26 +653,18 @@ mod tests {
 
     #[test]
     fn dense_matches_get() {
-        let mut m = Matrix::new(false);
+        let mut m = SubMatrix::new(false);
         m.add_entry(nid(0), "q", nid(0), "T", 2.0);
         m.add_entry(nid(0), "q", nid(1), "T", -1.0);
         m.add_entry(nid(1), "q", nid(0), "T", -1.0);
         m.add_entry(nid(1), "q", nid(1), "T", 2.0);
         let d = m.dense();
         assert_eq!(d, vec![2.0, -1.0, -1.0, 2.0]);
-        // Order of rows / cols is insertion order.
-        for (i, rd) in m.row_dofs().iter().enumerate() {
-            for (j, cd) in m.col_dofs().iter().enumerate() {
-                let v = m.get(rd.node_id, m.field_name(rd.field_idx), cd.node_id, m.field_name(cd.field_idx));
-                assert_eq!(d[i * m.n_cols() + j], v);
-            }
-        }
     }
 
     #[test]
     fn mul_dense_against_known_matrix() {
-        // K = [[2, -1], [-1, 2]],  x = [1, 1],  y = K x = [1, 1]
-        let mut m = Matrix::new(true);
+        let mut m = SubMatrix::new(true);
         m.add_entry(nid(0), "q", nid(0), "T", 2.0);
         m.add_entry(nid(0), "q", nid(1), "T", -1.0);
         m.add_entry(nid(1), "q", nid(0), "T", -1.0);
@@ -452,31 +677,27 @@ mod tests {
 
     #[test]
     fn mul_dense_rejects_wrong_size() {
-        let mut m = Matrix::new(false);
+        let mut m = SubMatrix::new(false);
         m.add_entry(nid(0), "q", nid(0), "T", 1.0);
         assert!(m.mul_dense(&[1.0, 2.0]).is_err());
     }
 
     #[test]
-    fn rectangular_matrix_distinct_row_and_col_dofs() {
-        // Lagrange-multiplier block: rows = multiplier DOFs, cols = primal DOFs.
-        let mut c = Matrix::new(false);
-        c.add_entry(nid(100), "T", nid(3), "T", 1.0); // mult node 100 constrains real node 3
+    fn rectangular_sub_matrix_distinct_row_and_col_dofs() {
+        let mut c = SubMatrix::new(false);
+        c.add_entry(nid(100), "T", nid(3), "T", 1.0);
         c.add_entry(nid(101), "T", nid(7), "T", 1.0);
         assert_eq!(c.n_rows(), 2);
         assert_eq!(c.n_cols(), 2);
-        assert_eq!(c.field_names().len(), 1); // both "T" map to one field
-        // Verify the row DOFs are at multiplier nodes, col DOFs at real nodes:
-        assert_eq!(c.row_dofs()[0].node_id, nid(100));
-        assert_eq!(c.col_dofs()[0].node_id, nid(3));
+        assert_eq!(c.field_names().len(), 1);
     }
 
     #[test]
-    fn iter_entries_preserves_insertion_order() {
-        let mut m = Matrix::new(false);
+    fn sub_iter_entries_preserves_insertion_order() {
+        let mut m = SubMatrix::new(false);
         m.add_entry(nid(0), "a", nid(0), "b", 1.0);
         m.add_entry(nid(1), "a", nid(1), "b", 2.0);
-        m.add_entry(nid(0), "a", nid(0), "b", 3.0); // duplicate of first
+        m.add_entry(nid(0), "a", nid(0), "b", 3.0);
         let entries: Vec<_> = m.iter_entries().collect();
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].2, 1.0);
@@ -485,100 +706,142 @@ mod tests {
     }
 
     #[test]
-    fn distinct_field_names_distinct_dofs() {
-        let mut m = Matrix::new(false);
-        // Same node, different fields → different DOFs.
-        m.add_entry(nid(0), "ux", nid(0), "ux", 1.0);
-        m.add_entry(nid(0), "uy", nid(0), "uy", 2.0);
-        m.add_entry(nid(0), "ux", nid(0), "uy", 3.0);
-        m.add_entry(nid(0), "uy", nid(0), "ux", 4.0);
-        assert_eq!(m.n_rows(), 2);
-        assert_eq!(m.n_cols(), 2);
-        assert_eq!(m.field_names(), &["ux".to_string(), "uy".to_string()]);
-    }
-
-    #[test]
-    fn to_dmatrix_round_trip() {
-        let mut m = Matrix::new(true);
-        m.add_entry(nid(0), "q", nid(0), "T", 2.0);
-        m.add_entry(nid(0), "q", nid(1), "T", -1.0);
-        m.add_entry(nid(1), "q", nid(0), "T", -1.0);
-        m.add_entry(nid(1), "q", nid(1), "T", 2.0);
-        let d = m.to_dmatrix();
-        assert_eq!(d.nrows(), 2);
-        assert_eq!(d.ncols(), 2);
-        assert_eq!(d[(0, 0)], 2.0);
-        assert_eq!(d[(0, 1)], -1.0);
-        assert_eq!(d[(1, 0)], -1.0);
-        assert_eq!(d[(1, 1)], 2.0);
-    }
-
-    #[test]
-    fn to_csr_carries_correct_dimensions_and_values() {
-        let mut m = Matrix::new(false);
-        m.add_entry(nid(0), "q", nid(0), "T", 1.0);
-        m.add_entry(nid(0), "q", nid(1), "T", 2.0);
-        m.add_entry(nid(1), "q", nid(2), "T", 3.0);
-        let csr = m.to_csr();
-        assert_eq!(csr.nrows(), 2);
-        assert_eq!(csr.ncols(), 3);
-        assert_eq!(csr.nnz(), 3);
-    }
-
-    #[test]
-    fn to_csc_round_trip() {
-        let mut m = Matrix::new(true);
-        m.add_entry(nid(0), "q", nid(0), "T", 4.0);
-        m.add_entry(nid(0), "q", nid(1), "T", 1.0);
-        m.add_entry(nid(1), "q", nid(0), "T", 1.0);
-        m.add_entry(nid(1), "q", nid(1), "T", 3.0);
-        let csc = m.to_csc();
-        assert_eq!(csc.nrows(), 2);
-        assert_eq!(csc.ncols(), 2);
-        assert_eq!(csc.nnz(), 4);
-    }
-
-    #[test]
-    fn to_coo_sums_duplicates_into_one_triplet_logically() {
-        // CooMatrix from nalgebra-sparse preserves all pushed triplets;
-        // we only verify size and total nnz here. Summation is checked
-        // by `to_dmatrix` / `get` in other tests.
-        let mut m = Matrix::new(false);
-        m.add_entry(nid(0), "q", nid(0), "T", 1.0);
-        m.add_entry(nid(0), "q", nid(0), "T", 2.0);
-        let coo = m.to_coo();
-        assert_eq!(coo.nrows(), 1);
-        assert_eq!(coo.ncols(), 1);
-        // CooMatrix exposes nnz() that counts triplets, including duplicates.
-        assert_eq!(coo.nnz(), 2);
-    }
-
-    #[test]
-    fn round_trip_serde() {
-        let mut m = Matrix::new(true);
+    fn sub_round_trip_serde() {
+        let mut m = SubMatrix::new(true);
         m.add_entry(nid(0), "q", nid(0), "T", 2.0);
         m.add_entry(nid(0), "q", nid(1), "T", -1.0);
         m.add_entry(nid(1), "q", nid(1), "T", 2.0);
         use crate::persist::Persist;
         let bytes = m.to_bytes().unwrap();
-        let m2 = Matrix::from_bytes(&bytes).unwrap();
+        let m2 = SubMatrix::from_bytes(&bytes).unwrap();
         assert_eq!(m2.n_rows(), 2);
         assert_eq!(m2.n_cols(), 2);
         assert!(m2.symmetric());
         assert_eq!(m2.get(nid(0), "q", nid(0), "T"), 2.0);
-        assert_eq!(m2.get(nid(0), "q", nid(1), "T"), -1.0);
-        assert_eq!(m2.get(nid(1), "q", nid(1), "T"), 2.0);
     }
 
     #[test]
-    fn debug_and_display() {
-        let mut m = Matrix::new(true);
+    fn sub_debug_and_display() {
+        let mut m = SubMatrix::new(true);
         m.add_entry(nid(0), "q", nid(0), "T", 2.0);
         let d = format!("{:?}", m);
-        assert!(d.contains("Matrix"));
+        assert!(d.contains("SubMatrix"));
         assert!(d.contains("n_rows"));
         assert!(d.contains("symmetric"));
         let s = format!("{}", m);
+        assert!(s.contains("SubMatrix"));
+        assert!(s.contains("1 row"));
+        assert!(s.contains("symmetric"));
+    }
+
+    // ── Matrix (aggregate) tests ────────────────────────────────────────────
+
+    #[test]
+    fn empty_aggregate_is_vacuous_symmetric() {
+        let m = Matrix::empty();
+        assert_eq!(m.n_rows().unwrap(), 0);
+        assert_eq!(m.n_cols().unwrap(), 0);
+        assert!(m.symmetric().unwrap());
+        assert_eq!(m.entry_count().unwrap(), 0);
+    }
+
+    #[test]
+    fn aggregate_unions_dofs_and_sums_at_coincidence() {
+        let mut a = SubMatrix::new(true);
+        a.add_entry(nid(0), "q", nid(0), "T", 2.0);
+        a.add_entry(nid(0), "q", nid(1), "T", -1.0);
+
+        let mut b = SubMatrix::new(true);
+        b.add_entry(nid(0), "q", nid(0), "T", 0.5); // coincident with a
+        b.add_entry(nid(1), "q", nid(0), "T", -1.0);
+        b.add_entry(nid(1), "q", nid(1), "T", 2.0);
+
+        let mut k = Matrix::empty();
+        k.add_sub(insert(a)).unwrap();
+        k.add_sub(insert(b)).unwrap();
+
+        assert_eq!(k.n_rows().unwrap(), 2);
+        assert_eq!(k.n_cols().unwrap(), 2);
+        assert!(k.symmetric().unwrap());
+        assert_eq!(k.get(nid(0), "q", nid(0), "T").unwrap(), 2.5);
+        assert_eq!(k.get(nid(0), "q", nid(1), "T").unwrap(), -1.0);
+        assert_eq!(k.get(nid(1), "q", nid(0), "T").unwrap(), -1.0);
+        assert_eq!(k.get(nid(1), "q", nid(1), "T").unwrap(), 2.0);
+    }
+
+    #[test]
+    fn aggregate_symmetric_is_and_of_subs() {
+        let a = SubMatrix::new(true);
+        let b = SubMatrix::new(false);
+        let mut k = Matrix::empty();
+        k.add_sub(insert(a)).unwrap();
+        k.add_sub(insert(b)).unwrap();
+        assert!(!k.symmetric().unwrap());
+    }
+
+    #[test]
+    fn aggregate_to_dmatrix_layout_is_union_first_seen() {
+        let mut a = SubMatrix::new(false);
+        a.add_entry(nid(0), "q", nid(0), "T", 2.0);
+        let mut b = SubMatrix::new(false);
+        b.add_entry(nid(1), "q", nid(1), "T", 3.0);
+
+        let mut k = Matrix::empty();
+        k.add_sub(insert(a)).unwrap();
+        k.add_sub(insert(b)).unwrap();
+
+        let d = k.to_dmatrix().unwrap();
+        assert_eq!(d.nrows(), 2);
+        assert_eq!(d.ncols(), 2);
+        assert_eq!(d[(0, 0)], 2.0);
+        assert_eq!(d[(0, 1)], 0.0);
+        assert_eq!(d[(1, 0)], 0.0);
+        assert_eq!(d[(1, 1)], 3.0);
+    }
+
+    #[test]
+    fn aggregate_mul_dense_matches_dense() {
+        let mut a = SubMatrix::new(true);
+        a.add_entry(nid(0), "q", nid(0), "T", 2.0);
+        a.add_entry(nid(0), "q", nid(1), "T", -1.0);
+        let mut b = SubMatrix::new(true);
+        b.add_entry(nid(1), "q", nid(0), "T", -1.0);
+        b.add_entry(nid(1), "q", nid(1), "T", 2.0);
+
+        let mut k = Matrix::empty();
+        k.add_sub(insert(a)).unwrap();
+        k.add_sub(insert(b)).unwrap();
+
+        assert_eq!(k.mul_dense(&[1.0, 1.0]).unwrap(), vec![1.0, 1.0]);
+        assert_eq!(k.mul_dense(&[1.0, 2.0]).unwrap(), vec![0.0, 3.0]);
+    }
+
+    #[test]
+    fn aggregate_entries_concatenates_blocks() {
+        let mut a = SubMatrix::new(false);
+        a.add_entry(nid(0), "q", nid(0), "T", 1.0);
+        let mut b = SubMatrix::new(false);
+        b.add_entry(nid(1), "q", nid(1), "T", 2.0);
+
+        let mut k = Matrix::empty();
+        k.add_sub(insert(a)).unwrap();
+        k.add_sub(insert(b)).unwrap();
+
+        let entries = k.iter_entries().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].4, 1.0);
+        assert_eq!(entries[1].4, 2.0);
+    }
+
+    #[test]
+    fn aggregate_debug_and_display() {
+        let mut a = SubMatrix::new(true);
+        a.add_entry(nid(0), "q", nid(0), "T", 2.0);
+        let mut k = Matrix::empty();
+        k.add_sub(insert(a)).unwrap();
+        let d = format!("{:?}", k);
+        assert!(d.contains("Matrix"));
+        let s = format!("{}", k);
         assert!(s.contains("Matrix"));
         assert!(s.contains("1 row"));
         assert!(s.contains("symmetric"));

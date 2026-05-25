@@ -10,7 +10,7 @@
 use crate::containers::mesh::configuration::{Configuration, NodeId};
 use crate::containers::mesh::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
-use crate::containers::matrix::Matrix;
+use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::SubMesh;
 use crate::store::{insert, with, with_mut, Handle};
 
@@ -96,7 +96,7 @@ pub fn assemble_block(
     multiplier_nodes: &[NodeId],
     primal_var: &str,
     primal_dual: &str,
-    k: &mut Matrix,
+    k: &mut SubMatrix,
 ) {
     let lambda_name = multiplier_name(primal_var);
     for (c_node, m_node) in constrained_nodes.iter().zip(multiplier_nodes.iter()) {

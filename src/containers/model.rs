@@ -93,15 +93,16 @@
 //!
 //! let k = model.stiffness().unwrap();
 //! // 2 real DOFs ("T") + 1 multiplier DOF + 2 real rows ("q") + 1 multiplier row.
-//! assert_eq!(k.n_rows(), 3);
-//! assert_eq!(k.n_cols(), 3);
+//! assert_eq!(k.n_rows().unwrap(), 3);
+//! assert_eq!(k.n_cols().unwrap(), 3);
 //! ```
 
 use crate::containers::mesh::configuration::{Configuration, NodeId};
 use crate::containers::element_field::SubElementField;
 use crate::error::Result;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::matrix::Matrix;
+use crate::aggregate::Aggregate;
+use crate::containers::matrix::{Matrix, SubMatrix};
 use crate::containers::mesh::SubMesh;
 use crate::models::{dirichlet, heat_conduction};
 use crate::store::{with, Handle};
@@ -280,8 +281,8 @@ impl SubModel {
     }
 
     /// Assemble the local stiffness contribution of this sub-model into
-    /// the provided global `Matrix`.
-    pub fn assemble_stiffness(&self, k: &mut Matrix) -> Result<()> {
+    /// the provided block `SubMatrix`.
+    pub fn assemble_stiffness(&self, k: &mut SubMatrix) -> Result<()> {
         match &self.physics {
             Physics::HeatConduction { fespace, material } => {
                 heat_conduction::assemble_stiffness(fespace, material, k)
@@ -306,11 +307,11 @@ impl SubModel {
     }
 
     /// Assemble the local mass contribution of this sub-model into the
-    /// provided global `Matrix`. Returns `Ok(())` and produces no entries
-    /// when the physics has no inertial term (Dirichlet, …) — this is
-    /// the **v0**, mass assembly for `HeatConduction` is intentionally
-    /// left as a stub.
-    pub fn assemble_mass(&self, _m: &mut Matrix) -> Result<()> {
+    /// provided block `SubMatrix`. Returns `Ok(())` and produces no
+    /// entries when the physics has no inertial term (Dirichlet, …) —
+    /// this is the **v0**, mass assembly for `HeatConduction` is
+    /// intentionally left as a stub.
+    pub fn assemble_mass(&self, _m: &mut SubMatrix) -> Result<()> {
         // v0: mass is not yet wired for any physics. Adding `rho_cp`
         // to HeatConduction would be additive once the integrand
         // ∫ N_i N_j dx is implemented.
@@ -390,34 +391,39 @@ impl Model {
     }
 
     /// Assemble the stiffness matrix `K` of the full model.
+    ///
+    /// Emits **one [`SubMatrix`] per [`SubModel`]** and returns the
+    /// aggregate [`Matrix`] holding those blocks. Block-local `symmetric`
+    /// flags match each physics; the aggregate is symmetric iff every
+    /// block is.
     pub fn stiffness(&self) -> Result<Matrix> {
-        let mut symmetric = true;
+        let mut k = Matrix::empty();
         for h in self {
-            let is_sym = with(h, |s| {
-                matches!(
-                    s.physics(),
+            let sm = with(h, |sub| -> Result<SubMatrix> {
+                let symmetric = matches!(
+                    sub.physics(),
                     Physics::HeatConduction { .. } | Physics::Dirichlet { .. }
-                )
-            })?;
-            if !is_sym {
-                symmetric = false;
-                break;
-            }
-        }
-        let mut k = Matrix::new(symmetric);
-        for h in self {
-            with(h, |sub| sub.assemble_stiffness(&mut k))??;
+                );
+                let mut block = SubMatrix::new(symmetric);
+                sub.assemble_stiffness(&mut block)?;
+                Ok(block)
+            })??;
+            k.add_sub(crate::store::insert(sm))?;
         }
         Ok(k)
     }
 
     /// Assemble the mass matrix `M` of the full model. In this v0 each
-    /// physics's `assemble_mass` is a stub, so the returned matrix is
-    /// empty unless a future physics fills it.
+    /// physics's `assemble_mass` is a stub, so each emitted block is empty.
     pub fn mass(&self) -> Result<Matrix> {
-        let mut m = Matrix::new(true);
+        let mut m = Matrix::empty();
         for h in self {
-            with(h, |sub| sub.assemble_mass(&mut m))??;
+            let sm = with(h, |sub| -> Result<SubMatrix> {
+                let mut block = SubMatrix::new(true);
+                sub.assemble_mass(&mut block)?;
+                Ok(block)
+            })??;
+            m.add_sub(crate::store::insert(sm))?;
         }
         Ok(m)
     }
@@ -514,14 +520,14 @@ mod tests {
         let (_cfg, a_id, b_id, model) = build_seg2_heat_model(length, k_val, false);
         let k = model.stiffness().unwrap();
 
-        assert_eq!(k.n_rows(), 2);
-        assert_eq!(k.n_cols(), 2);
+        assert_eq!(k.n_rows().unwrap(), 2);
+        assert_eq!(k.n_cols().unwrap(), 2);
         let expected = k_val / length;
         let tol = 1e-12;
-        assert!((k.get(a_id, "q", a_id, "T") - expected).abs() < tol);
-        assert!((k.get(a_id, "q", b_id, "T") + expected).abs() < tol);
-        assert!((k.get(b_id, "q", a_id, "T") + expected).abs() < tol);
-        assert!((k.get(b_id, "q", b_id, "T") - expected).abs() < tol);
+        assert!((k.get(a_id, "q", a_id, "T").unwrap() - expected).abs() < tol);
+        assert!((k.get(a_id, "q", b_id, "T").unwrap() + expected).abs() < tol);
+        assert!((k.get(b_id, "q", a_id, "T").unwrap() + expected).abs() < tol);
+        assert!((k.get(b_id, "q", b_id, "T").unwrap() - expected).abs() < tol);
     }
 
     /// Two SEG2 elements sharing the middle node form the classic
@@ -546,10 +552,10 @@ mod tests {
             .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
         let k = model.stiffness().unwrap();
-        assert_eq!(k.n_rows(), 3);
-        assert_eq!(k.n_cols(), 3);
+        assert_eq!(k.n_rows().unwrap(), 3);
+        assert_eq!(k.n_cols().unwrap(), 3);
 
-        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T");
+        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T").unwrap();
         let tol = 1e-12;
         // h = 1 ⇒ K_global = [[1, -1, 0], [-1, 2, -1], [0, -1, 1]].
         assert!((v(n0.id(), n0.id()) - 1.0).abs() < tol);
@@ -576,29 +582,27 @@ mod tests {
         let k = model.stiffness().unwrap();
         // 2 real "q" rows + 1 multiplier "T" row = 3 rows.
         // 2 real "T" cols + 1 multiplier "lambda_T" col = 3 cols.
-        assert_eq!(k.n_rows(), 3);
-        assert_eq!(k.n_cols(), 3);
+        assert_eq!(k.n_rows().unwrap(), 3);
+        assert_eq!(k.n_cols().unwrap(), 3);
 
         // Find the multiplier node id: the only NodeId that appears in
         // a row labelled "T" of K.
-        let t_idx = k.field_index("T").unwrap();
-        let lambda_idx = k.field_index("lambda_T").unwrap();
-        let mult = k
-            .row_dofs()
+        let row_dofs = k.row_dofs().unwrap();
+        let mult = row_dofs
             .iter()
-            .find(|d| d.field_idx == t_idx)
+            .find(|(_, name)| name == "T")
             .expect("multiplier row missing")
-            .node_id;
+            .0;
 
         // C entry: (mult, "T") × (a_id, "T") = 1
-        assert_eq!(k.get(mult, "T", a_id, "T"), 1.0);
+        assert_eq!(k.get(mult, "T", a_id, "T").unwrap(), 1.0);
         // Cᵀ entry: (a_id, "q") × (mult, "lambda_T") = 1
-        assert_eq!(k.get(a_id, "q", mult, "lambda_T"), 1.0);
+        assert_eq!(k.get(a_id, "q", mult, "lambda_T").unwrap(), 1.0);
         // Ensure lambda_T appears as a column.
-        let lambda_col_present = k
-            .col_dofs()
+        let col_dofs = k.col_dofs().unwrap();
+        let lambda_col_present = col_dofs
             .iter()
-            .any(|d| d.field_idx == lambda_idx && d.node_id == mult);
+            .any(|(n, name)| name == "lambda_T" && *n == mult);
         assert!(lambda_col_present);
     }
 
@@ -667,10 +671,10 @@ mod tests {
         let model = Model::empty();
         let k = model.stiffness().unwrap();
         let m = model.mass().unwrap();
-        assert_eq!(k.n_rows(), 0);
-        assert_eq!(k.n_cols(), 0);
-        assert_eq!(m.n_rows(), 0);
-        assert_eq!(m.n_cols(), 0);
+        assert_eq!(k.n_rows().unwrap(), 0);
+        assert_eq!(k.n_cols().unwrap(), 0);
+        assert_eq!(m.n_rows().unwrap(), 0);
+        assert_eq!(m.n_cols().unwrap(), 0);
     }
 
     #[test]

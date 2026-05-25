@@ -59,10 +59,12 @@ def test_solver_rectangular_matrix_errors():
     sm.add_cell([a.id])
     rhs = pyrucast.NodeField(sm, ["q"])
 
-    m = pyrucast.Matrix()
-    m.add_entry(0, "q", 0, "T", 1.0)
-    m.add_entry(1, "q", 0, "T", 1.0)
+    block = pyrucast.SubMatrix()
+    block.add_entry(0, "q", 0, "T", 1.0)
+    block.add_entry(1, "q", 0, "T", 1.0)
     # 2 rows × 1 col
+    m = pyrucast.Matrix()
+    m.add_sub_matrix(block)
 
     try:
         pyrucast.solve(m, rhs)

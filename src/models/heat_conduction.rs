@@ -9,7 +9,7 @@ use crate::containers::mesh::configuration::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::error::Result;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::matrix::Matrix;
+use crate::containers::matrix::SubMatrix;
 use crate::store::{with, Handle};
 
 /// Column DOF name (temperature).
@@ -29,7 +29,7 @@ pub const MATERIAL_COMPONENT: &str = "k";
 pub fn assemble_stiffness(
     fespace: &Handle<SubFiniteElementSpace>,
     material: &Handle<SubElementField>,
-    k: &mut Matrix,
+    k: &mut SubMatrix,
 ) -> Result<()> {
     // Snapshot everything we need from the FE space and submesh in one
     // pass. We then drop the FE space lock before reading the material

@@ -80,6 +80,7 @@ use crate::containers::node_field::NodeField;
 use crate::store::insert;
 use nalgebra::DVector;
 
+
 /// Solve `matrix · x = rhs` using dense LU factorization.
 ///
 /// `matrix` must be square (`n_rows == n_cols ≥ 1`). The `rhs`
@@ -91,14 +92,16 @@ use nalgebra::DVector;
 /// matrix (a POI1 submesh built on the fly) and exposes one component
 /// per distinct column field name.
 pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
-    if matrix.n_rows() != matrix.n_cols() {
+    let row_dofs = matrix.row_dofs()?;
+    let col_dofs = matrix.col_dofs()?;
+    if row_dofs.len() != col_dofs.len() {
         return Err(PyrucastError::Message(format!(
             "solve: matrix must be square; got {}×{}",
-            matrix.n_rows(),
-            matrix.n_cols()
+            row_dofs.len(),
+            col_dofs.len()
         )));
     }
-    let n = matrix.n_rows();
+    let n = row_dofs.len();
     if n == 0 {
         return Err(PyrucastError::Message("solve: matrix is empty".into()));
     }
@@ -106,20 +109,18 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
     // ── Step 1 — build the b vector ────────────────────────────────────
     let mut b = DVector::<f64>::zeros(n);
     let rhs_components: Vec<String> = rhs.components().to_vec();
-    for (i, dof) in matrix.row_dofs().iter().enumerate() {
-        let field_name = matrix.field_name(dof.field_idx);
+    for (i, (node_id, field_name)) in row_dofs.iter().enumerate() {
         if rhs_components.iter().any(|c| c == field_name) {
-            // value() errors if `dof.node_id` isn't in the rhs's
-            // support — we treat that as "no imposed value here", i.e.
-            // zero.
-            if let Ok(v) = rhs.value(dof.node_id, field_name) {
+            // value() errors if `node_id` isn't in the rhs's support —
+            // we treat that as "no imposed value here", i.e. zero.
+            if let Ok(v) = rhs.value(*node_id, field_name) {
                 b[i] = v;
             }
         }
     }
 
     // ── Step 2 — LU factorization + solve ──────────────────────────────
-    let a = matrix.to_dmatrix();
+    let a = matrix.to_dmatrix()?;
     let lu = a.lu();
     let x = lu.solve(&b).ok_or_else(|| {
         PyrucastError::Message("solve: LU failed (matrix is singular)".into())
@@ -130,17 +131,16 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
 
     // Unique col nodes in first-seen order.
     let mut unique_nodes: Vec<NodeId> = Vec::new();
-    for dof in matrix.col_dofs() {
-        if !unique_nodes.contains(&dof.node_id) {
-            unique_nodes.push(dof.node_id);
+    for (node_id, _) in &col_dofs {
+        if !unique_nodes.contains(node_id) {
+            unique_nodes.push(*node_id);
         }
     }
     // Unique col field names in first-seen order.
     let mut unique_components: Vec<String> = Vec::new();
-    for dof in matrix.col_dofs() {
-        let name = matrix.field_name(dof.field_idx).to_string();
-        if !unique_components.contains(&name) {
-            unique_components.push(name);
+    for (_, name) in &col_dofs {
+        if !unique_components.contains(name) {
+            unique_components.push(name.clone());
         }
     }
 
@@ -154,9 +154,8 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
     let sm_h = insert(sm);
 
     let mut result = NodeField::from_poi1(&sm_h, unique_components)?;
-    for (i, dof) in matrix.col_dofs().iter().enumerate() {
-        let field_name = matrix.field_name(dof.field_idx).to_string();
-        result.set_value(dof.node_id, &field_name, x[i])?;
+    for (i, (node_id, field_name)) in col_dofs.iter().enumerate() {
+        result.set_value(*node_id, field_name, x[i])?;
     }
     Ok(result)
 }
@@ -291,10 +290,13 @@ mod tests {
 
     #[test]
     fn rectangular_matrix_yields_error() {
-        let mut m = Matrix::new(false);
-        m.add_entry(NodeId(0), "q", NodeId(0), "T", 1.0);
-        m.add_entry(NodeId(1), "q", NodeId(0), "T", 1.0);
+        use crate::containers::matrix::SubMatrix;
+        let mut block = SubMatrix::new(false);
+        block.add_entry(NodeId(0), "q", NodeId(0), "T", 1.0);
+        block.add_entry(NodeId(1), "q", NodeId(0), "T", 1.0);
         // 2 rows × 1 col — rectangular.
+        let mut m = crate::containers::matrix::Matrix::empty();
+        m.add_sub(insert(block)).unwrap();
 
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
@@ -306,7 +308,7 @@ mod tests {
 
     #[test]
     fn empty_matrix_yields_error() {
-        let m = Matrix::new(false);
+        let m = crate::containers::matrix::Matrix::empty();
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let mut sm = SubMesh::new(cfg, ElementType::POI1);
