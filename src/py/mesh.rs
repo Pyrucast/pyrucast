@@ -289,7 +289,7 @@ impl PyMesh {
     }
 
     fn __add__(&self, other: PyRef<PyMesh>) -> PyResult<PyMesh> {
-        let mesh = self.inner.merge(&other.inner);
+        let mesh = self.inner.merge(&other.inner)?;
         Ok(PyMesh { inner: mesh })
     }
 

@@ -282,6 +282,21 @@ impl Aggregate for Mesh {
     fn items_mut(&mut self) -> &mut Vec<Handle<SubMesh>> {
         &mut self.submeshes
     }
+
+    fn check_merge_compatibility(&self, other: &Mesh) -> Result<()> {
+        if self.submeshes.is_empty() || other.submeshes.is_empty() {
+            return Ok(());
+        }
+        let a = self.configuration()?;
+        let b = other.configuration()?;
+        if a.index() != b.index() || a.generation() != b.generation() {
+            Err(PyrucastError::Message(
+                "merge: meshes are attached to different Configurations".into(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl Mesh {
@@ -1006,18 +1021,19 @@ impl Mesh {
     }
 
     /// Return a new mesh containing all submeshes of `self` followed by all
-    /// submeshes of `other`.
-    pub fn merge(&self, other: &Mesh) -> Mesh {
+    /// submeshes of `other`. Both meshes must share the same `Configuration`
+    /// (or at least one must be empty).
+    pub fn merge(&self, other: &Mesh) -> Result<Mesh> {
         let mut result = Mesh::empty();
-        result.extend_from(self);
-        result.extend_from(other);
-        result
+        result.try_extend_from(self)?;
+        result.try_extend_from(other)?;
+        Ok(result)
     }
 }
 
 impl std::ops::Add<&Mesh> for &Mesh {
-    type Output = Mesh;
-    fn add(self, rhs: &Mesh) -> Mesh {
+    type Output = Result<Mesh>;
+    fn add(self, rhs: &Mesh) -> Result<Mesh> {
         self.merge(rhs)
     }
 }
@@ -1271,7 +1287,7 @@ mod tests {
         let mut m2 = Mesh::with_element_type(cfg.clone(), ElementType::TRI3);
         m2.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
-        let merged = &m1 + &m2;
+        let merged = (&m1 + &m2).unwrap();
         assert_eq!(merged.submesh_count(), 2);
         assert_eq!(merged.cell_count().unwrap(), 3); // 2 POI1 + 1 TRI3
     }
@@ -1883,7 +1899,7 @@ mod tests {
             cfg.clone(),
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
-        let combined = &outer + &hole;
+        let combined = (&outer + &hole).unwrap();
         assert_eq!(combined.submesh_count(), 2);
 
         let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
@@ -1916,7 +1932,7 @@ mod tests {
             cfg.clone(),
             &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
         );
-        let combined = &hole + &outer;
+        let combined = (&hole + &outer).unwrap();
         let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
         let mut total = 0.0;
@@ -1946,7 +1962,7 @@ mod tests {
             cfg.clone(),
             &[(4.0, 2.0), (5.0, 2.0), (5.0, 3.0), (4.0, 3.0)],
         );
-        let combined = &(&outer + &h1) + &h2;
+        let combined = (&(&outer + &h1).unwrap() + &h2).unwrap();
         assert_eq!(combined.submesh_count(), 3);
         let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
@@ -1984,7 +2000,7 @@ mod tests {
                 (1.0, 3.0, 1.0),
             ],
         );
-        let combined = &outer + &hole;
+        let combined = (&outer + &hole).unwrap();
 
         let tri = Mesh::fill_surface(&combined, ElementType::TRI3, None).unwrap();
 
@@ -2026,9 +2042,7 @@ mod tests {
             cfg2,
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
-        // Merge is now infallible; fill_surface rejects mixed-config contours.
-        let contour = &outer + &hole;
-        assert!(Mesh::fill_surface(&contour, ElementType::TRI3, None).is_err());
+        assert!((&outer + &hole).is_err());
     }
 
     #[test]
@@ -2150,7 +2164,7 @@ mod tests {
             cfg.clone(),
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
-        let combined = &outer + &hole;
+        let combined = (&outer + &hole).unwrap();
         let opts = crate::ops::mesher::triangulation::RefinementOptions {
             max_edge_length: Some(1.0),
             min_angle_deg: None,

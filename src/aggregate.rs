@@ -89,6 +89,20 @@ pub trait Aggregate {
             self.items_mut().push(h.clone());
         }
     }
+
+    /// Hook called by [`try_extend_from`] before concatenating. Override to
+    /// enforce domain-specific constraints (e.g. same `Configuration`).
+    /// The default accepts everything.
+    fn check_merge_compatibility(&self, _other: &Self) -> crate::error::Result<()> {
+        Ok(())
+    }
+
+    /// Check compatibility then append all handles from `other` into `self`.
+    fn try_extend_from(&mut self, other: &Self) -> crate::error::Result<()> {
+        self.check_merge_compatibility(other)?;
+        self.extend_from(other);
+        Ok(())
+    }
 }
 
 // ─── Helper: Python indexing (signed → unsigned) ────────────────────────────
