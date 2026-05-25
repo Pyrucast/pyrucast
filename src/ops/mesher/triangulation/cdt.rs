@@ -1038,7 +1038,7 @@ pub fn delaunay_2d(points: &[Point2]) -> Result<Vec<[usize; 3]>> {
 /// Returns one CCW triangle per `[i, j, k]` triple, indexing into
 /// `points`. Triangles still touching the bounding super-triangle are
 /// discarded, but no further "inside the polygon" filtering is applied
-/// at this layer — that is the job of the caller (`Mesh::fill_surface`
+/// at this layer — that is the job of the caller (`ops::mesher::fill_surface`
 /// in the hole-removal step).
 ///
 /// # Errors

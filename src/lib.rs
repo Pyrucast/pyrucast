@@ -83,6 +83,12 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_swap_dir, m)?)?;
     m.add_function(wrap_pyfunction!(swap_dir, m)?)?;
     m.add_function(wrap_pyfunction!(py::solver::solve, m)?)?;
+    m.add_function(wrap_pyfunction!(py::mesh::from_live_nodes, m)?)?;
+    m.add_function(wrap_pyfunction!(py::mesh::line_seg2, m)?)?;
+    m.add_function(wrap_pyfunction!(py::mesh::circle_seg2, m)?)?;
+    m.add_function(wrap_pyfunction!(py::mesh::sweep_qua4, m)?)?;
+    m.add_function(wrap_pyfunction!(py::mesh::extrude, m)?)?;
+    m.add_function(wrap_pyfunction!(py::mesh::fill_surface, m)?)?;
     m.add_class::<py::configuration::PyConfiguration>()?;
     m.add_class::<py::node::PyNode>()?;
     m.add_class::<py::mesh::PySubMesh>()?;

@@ -1,0 +1,112 @@
+use crate::error::Result;
+use crate::mesh::Mesh;
+
+/// Extrude a mesh by `n_layers` layers along `direction`.
+///
+/// `direction` is the **total** displacement vector; each intermediate
+/// layer is placed at an evenly spaced fraction. Supported element types:
+/// SEG2 → QUA4, QUA4 → HEX8. Other types produce an error.
+///
+/// Nodes shared between cells in the source mesh remain shared in the
+/// extruded mesh. Source nodes are re-used (refcount incremented);
+/// intermediate layer nodes are newly created.
+///
+/// Node ordering:
+/// - QUA4: `bot[0], bot[1], top[1], top[0]`
+/// - HEX8: `bot[0..4], top[0..4]`
+pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> {
+    crate::ops::mesher::sweep::extrude(mesh, direction, n_layers)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mesh::configuration::Configuration;
+    use crate::mesh::element_type::ElementType;
+    use crate::mesh::node::Node;
+    use crate::mesh::Mesh;
+    use crate::ops::mesher::line_seg2::line_seg2;
+    use crate::store::insert;
+
+    #[test]
+    fn extrude_seg2_to_qua4() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
+        let seg = line_seg2(&a, &b, 2).unwrap();
+
+        let qua = extrude(&seg, &[0.0, 3.0], 3).unwrap();
+        assert_eq!(qua.element_types().unwrap(), vec![ElementType::QUA4]);
+        assert_eq!(qua.cell_count().unwrap(), 6);
+
+        let n = qua.node(0, 0, 0).unwrap();
+        assert_eq!(n.coord().unwrap(), vec![0.0, 0.0]);
+        let n = qua.node(0, 0, 3).unwrap();
+        assert!((n.coord().unwrap()[0]).abs() < 1e-12);
+        assert!((n.coord().unwrap()[1] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn extrude_seg2_shared_nodes_stay_shared() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
+        let seg = line_seg2(&a, &b, 2).unwrap();
+
+        let qua = extrude(&seg, &[0.0, 1.0], 1).unwrap();
+        let mid_cell0 = qua.node(0, 0, 1).unwrap();
+        let mid_cell1 = qua.node(0, 1, 0).unwrap();
+        assert_eq!(mid_cell0.id(), mid_cell1.id());
+    }
+
+    #[test]
+    fn extrude_qua4_to_hex8() {
+        let cfg = insert(Configuration::new(3).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0, 0.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[1.0, 1.0, 0.0]).unwrap();
+        let n3 = Node::create_in(cfg.clone(), &[0.0, 1.0, 0.0]).unwrap();
+        let mut qua_mesh = Mesh::with_element_type(cfg.clone(), ElementType::QUA4);
+        qua_mesh.add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()]).unwrap();
+
+        let hex = extrude(&qua_mesh, &[0.0, 0.0, 2.0], 1).unwrap();
+        assert_eq!(hex.element_types().unwrap(), vec![ElementType::HEX8]);
+        assert_eq!(hex.cell_count().unwrap(), 1);
+
+        assert_eq!(hex.node(0, 0, 0).unwrap().id(), n0.id());
+        assert_eq!(hex.node(0, 0, 1).unwrap().id(), n1.id());
+        assert_eq!(hex.node(0, 0, 2).unwrap().id(), n2.id());
+        assert_eq!(hex.node(0, 0, 3).unwrap().id(), n3.id());
+        let top0 = hex.node(0, 0, 4).unwrap();
+        assert_eq!(top0.coord().unwrap(), vec![0.0, 0.0, 2.0]);
+    }
+
+    #[test]
+    fn extrude_rejects_zero_layers() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let seg = line_seg2(&a, &b, 1).unwrap();
+        assert!(extrude(&seg, &[0.0, 1.0], 0).is_err());
+    }
+
+    #[test]
+    fn extrude_rejects_wrong_direction_dim() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let seg = line_seg2(&a, &b, 1).unwrap();
+        assert!(extrude(&seg, &[0.0, 1.0, 0.0], 1).is_err());
+    }
+
+    #[test]
+    fn extrude_rejects_unsupported_element_type() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let mut tri = Mesh::with_element_type(cfg, ElementType::TRI3);
+        tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        assert!(extrude(&tri, &[0.0, 0.0], 1).is_err());
+    }
+}

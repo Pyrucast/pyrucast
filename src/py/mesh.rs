@@ -204,84 +204,6 @@ impl PyMesh {
         Ok(PyNode::from_node(node))
     }
 
-    #[classmethod]
-    fn from_live_nodes(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        config: PyRef<PyConfiguration>,
-    ) -> PyResult<Self> {
-        let mesh = Mesh::from_live_nodes(config.handle.clone())?;
-        Ok(Self { inner: mesh })
-    }
-
-    #[classmethod]
-    fn line_seg2(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        a: PyRef<PyNode>,
-        b: PyRef<PyNode>,
-        n_elems: usize,
-    ) -> PyResult<Self> {
-        let mesh = Mesh::line_seg2(a.as_node(), b.as_node(), n_elems)?;
-        Ok(Self { inner: mesh })
-    }
-
-    #[classmethod]
-    fn circle_seg2(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        center: PyRef<PyNode>,
-        normal: Vec<f64>,
-        radius: f64,
-        n_elems: usize,
-    ) -> PyResult<Self> {
-        let mesh = Mesh::circle_seg2(center.as_node(), &normal, radius, n_elems)?;
-        Ok(Self { inner: mesh })
-    }
-
-    #[classmethod]
-    fn sweep_qua4(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        mesh_a: PyRef<PyMesh>,
-        mesh_b: PyRef<PyMesh>,
-        n_layers: usize,
-    ) -> PyResult<Self> {
-        let mesh = Mesh::sweep_qua4(&mesh_a.inner, &mesh_b.inner, n_layers)?;
-        Ok(Self { inner: mesh })
-    }
-
-    #[classmethod]
-    fn extrude(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        mesh: PyRef<PyMesh>,
-        direction: Vec<f64>,
-        n_layers: usize,
-    ) -> PyResult<Self> {
-        let result = Mesh::extrude(&mesh.inner, &direction, n_layers)?;
-        Ok(Self { inner: result })
-    }
-
-    #[classmethod]
-    #[pyo3(signature = (contour, element_type, max_edge_length=None, min_angle_deg=None))]
-    fn fill_surface(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        contour: PyRef<PyMesh>,
-        element_type: &str,
-        max_edge_length: Option<f64>,
-        min_angle_deg: Option<f64>,
-    ) -> PyResult<Self> {
-        let et = ElementType::from_name(element_type).ok_or_else(|| {
-            PyValueError::new_err(format!("unknown element type: {element_type}"))
-        })?;
-        let refinement = if max_edge_length.is_some() || min_angle_deg.is_some() {
-            Some(crate::ops::mesher::triangulation::RefinementOptions {
-                max_edge_length,
-                min_angle_deg,
-            })
-        } else {
-            None
-        };
-        let mesh = Mesh::fill_surface(&contour.inner, et, refinement)?;
-        Ok(Self { inner: mesh })
-    }
-
     fn __add__(&self, other: PyRef<PyMesh>) -> PyResult<PyMesh> {
         let mesh = self.inner.merge(&other.inner)?;
         Ok(PyMesh { inner: mesh })
@@ -352,3 +274,67 @@ impl PyMesh {
 }
 
 crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh_count, submesh, add_submesh);
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn from_live_nodes(config: PyRef<PyConfiguration>) -> PyResult<PyMesh> {
+    let mesh = crate::ops::mesher::from_live_nodes(config.handle.clone())?;
+    Ok(PyMesh { inner: mesh })
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn line_seg2(a: PyRef<PyNode>, b: PyRef<PyNode>, n_elems: usize) -> PyResult<PyMesh> {
+    let mesh = crate::ops::mesher::line_seg2(a.as_node(), b.as_node(), n_elems)?;
+    Ok(PyMesh { inner: mesh })
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn circle_seg2(
+    center: PyRef<PyNode>,
+    normal: Vec<f64>,
+    radius: f64,
+    n_elems: usize,
+) -> PyResult<PyMesh> {
+    let mesh = crate::ops::mesher::circle_seg2(center.as_node(), &normal, radius, n_elems)?;
+    Ok(PyMesh { inner: mesh })
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn sweep_qua4(mesh_a: PyRef<PyMesh>, mesh_b: PyRef<PyMesh>, n_layers: usize) -> PyResult<PyMesh> {
+    let mesh = crate::ops::mesher::sweep_qua4(&mesh_a.inner, &mesh_b.inner, n_layers)?;
+    Ok(PyMesh { inner: mesh })
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn extrude(mesh: PyRef<PyMesh>, direction: Vec<f64>, n_layers: usize) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::extrude(&mesh.inner, &direction, n_layers)?;
+    Ok(PyMesh { inner: result })
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (contour, element_type, max_edge_length=None, min_angle_deg=None))]
+pub fn fill_surface(
+    contour: PyRef<PyMesh>,
+    element_type: &str,
+    max_edge_length: Option<f64>,
+    min_angle_deg: Option<f64>,
+) -> PyResult<PyMesh> {
+    let et = ElementType::from_name(element_type).ok_or_else(|| {
+        PyValueError::new_err(format!("unknown element type: {element_type}"))
+    })?;
+    let refinement = if max_edge_length.is_some() || min_angle_deg.is_some() {
+        Some(crate::ops::mesher::triangulation::RefinementOptions {
+            max_edge_length,
+            min_angle_deg,
+        })
+    } else {
+        None
+    };
+    let mesh = crate::ops::mesher::fill_surface(&contour.inner, et, refinement)?;
+    Ok(PyMesh { inner: mesh })
+}

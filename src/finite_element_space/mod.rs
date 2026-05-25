@@ -916,7 +916,7 @@ mod tests {
     fn rejects_mesh_with_poi1_submesh() {
         let cfg = cfg2d();
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let mesh = Mesh::from_live_nodes(cfg).unwrap();
+        let mesh = crate::ops::mesher::from_live_nodes(cfg).unwrap();
         // from_live_nodes builds a POI1 mesh.
         assert!(mesh.submesh_count() >= 1);
         let _ = a; // keep alive

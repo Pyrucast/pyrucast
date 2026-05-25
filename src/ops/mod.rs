@@ -8,8 +8,6 @@
 //!
 //! Themes:
 //! - [`build`]: construct containers (fills, refinements, transforms).
-//!   Will absorb the existing `Mesh::fill_*`, `Mesh::extrude`,
-//!   `Mesh::sweep_qua4`, ... as they move out of `containers/mesh.rs`.
 //! - [`geom`]: geometric measures (bbox, centroid, area, jacobian
 //!   helpers, normals).
 //! - [`field`]: field-on-mesh operations (gradient, divergence,

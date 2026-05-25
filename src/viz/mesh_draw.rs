@@ -72,7 +72,7 @@ const TET4_FACES: [[usize; 3]; 4] = [
 ];
 
 /// Faces of a HEX8 — bot / top / 4 lateral, in the convention used by
-/// [`Mesh::extrude`]: HEX8 = [bot[0..4], top[0..4]], both CCW seen from
+/// [`crate::ops::mesher::extrude`]: HEX8 = [bot[0..4], top[0..4]], both CCW seen from
 /// outside the lateral surface.
 const HEX8_FACES: [[usize; 4]; 6] = [
     [0, 3, 2, 1], // bottom (normal opposed to extrusion direction)
