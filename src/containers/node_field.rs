@@ -48,6 +48,7 @@
 //! assert_eq!(field.get(1, 0).unwrap(), 0.0);  // default
 //! ```
 
+use crate::aggregate::Aggregate;
 use crate::mesh::configuration::{Configuration, NodeId};
 use crate::mesh::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
@@ -199,6 +200,7 @@ impl NodeField {
     /// # Example
     ///
     /// ```
+    /// use pyrucast::aggregate::Aggregate;
     /// use pyrucast::mesh::configuration::Configuration;
     /// use pyrucast::mesh::element_type::ElementType;
     /// use pyrucast::mesh::{Mesh, SubMesh};
@@ -222,7 +224,7 @@ impl NodeField {
     /// assert_eq!(sm2.cell_count(), 2);
     /// // Verify node order via Mesh::node (public API).
     /// let mut m = Mesh::empty();
-    /// m.add_submesh(insert(sm2)).unwrap();
+    /// m.add_sub(insert(sm2)).unwrap();
     /// assert_eq!(m.node(0, 0, 0).unwrap().id(), a.id());
     /// assert_eq!(m.node(0, 1, 0).unwrap().id(), b.id());
     /// ```
@@ -239,7 +241,7 @@ impl NodeField {
     pub fn to_poi1_mesh(&self) -> Result<Mesh> {
         let sm_handle = insert(self.to_poi1_submesh()?);
         let mut mesh = Mesh::empty();
-        mesh.add_submesh(sm_handle)?;
+        mesh.add_sub(sm_handle)?;
         Ok(mesh)
     }
 
@@ -1176,7 +1178,7 @@ mod tests {
             insert(sm)
         };
         let mut m2 = Mesh::empty();
-        m2.add_submesh(sm2).unwrap();
+        m2.add_sub(sm2).unwrap();
         assert!(f.restrict(&m2).is_err());
     }
 }

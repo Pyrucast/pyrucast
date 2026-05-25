@@ -83,8 +83,8 @@ def test_mesh_aggregates_submeshes():
     sm_tri.add_cell([a.id, b.id, cc.id])
 
     mesh = pyrucast.Mesh(c)
-    mesh.add_submesh(sm_pts)
-    mesh.add_submesh(sm_tri)
+    mesh.add_sub(sm_pts)
+    mesh.add_sub(sm_tri)
     assert mesh.submesh_count() == 2
     assert mesh.cell_count() == 3  # 2 POI1 + 1 TRI3
 
@@ -136,8 +136,8 @@ def test_mesh_indexing_and_iteration():
     sm_tri.add_cell([a.id, b.id, cc.id])
 
     mesh = pyrucast.Mesh(c)
-    mesh.add_submesh(sm_pts)
-    mesh.add_submesh(sm_tri)
+    mesh.add_sub(sm_pts)
+    mesh.add_sub(sm_tri)
 
     assert len(mesh) == 2
     assert [sm.element_type for sm in mesh] == ["POI1", "TRI3"]
@@ -157,10 +157,12 @@ def test_mesh_indexing_and_iteration():
 def test_mesh_rejects_submesh_from_other_configuration():
     c1 = pyrucast.Configuration(2)
     c2 = pyrucast.Configuration(2)
-    sm = pyrucast.SubMesh(c1, "POI1")
-    mesh = pyrucast.Mesh(c2)
+    sm1 = pyrucast.SubMesh(c1, "POI1")
+    sm2 = pyrucast.SubMesh(c2, "POI1")
+    mesh = pyrucast.Mesh(c1, "POI1")
+    mesh.add_sub(sm1)  # same config — ok
     try:
-        mesh.add_submesh(sm)
+        mesh.add_sub(sm2)  # different config — must fail
     except RuntimeError:
         pass
     else:

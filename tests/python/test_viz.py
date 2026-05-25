@@ -134,8 +134,8 @@ def test_mesh_plot_uses_each_submesh_color(tmp_path):
     sm_blue.face_color = (60, 60, 220)
 
     mesh = pyrucast.Mesh(c)
-    mesh.add_submesh(sm_red)
-    mesh.add_submesh(sm_blue)
+    mesh.add_sub(sm_red)
+    mesh.add_sub(sm_blue)
 
     path = tmp_path / "mesh.svg"
     mesh.plot(save=str(path))
@@ -167,7 +167,7 @@ def test_mesh_plot_with_field_writes_overlay_label(tmp_path):
     tri = pyrucast.SubMesh(c, "TRI3")
     tri.add_cell([a.id, b.id, cc.id])
     mesh = pyrucast.Mesh(c)
-    mesh.add_submesh(tri)
+    mesh.add_sub(tri)
 
     nf = _build_field_on_nodes(c, [a, b, cc], ["T"], [[0.0, 1.0, 2.0]])
 

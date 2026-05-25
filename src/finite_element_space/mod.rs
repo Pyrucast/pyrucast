@@ -438,20 +438,12 @@ impl FiniteElementSpace {
 
     /// Number of subspaces (= number of submeshes of the mesh).
     pub fn subspace_count(&self) -> usize {
-        self.subspaces.len()
+        self.len()
     }
 
     /// Handle to the `i`-th subspace (internal clone).
     pub fn subspace(&self, i: usize) -> Result<Handle<SubFiniteElementSpace>> {
-        self.subspaces
-            .get(i)
-            .cloned()
-            .ok_or_else(|| {
-                PyrucastError::Message(format!(
-                    "FiniteElementSpace: subspace index {} out of bounds",
-                    i
-                ))
-            })
+        self.get(i)
     }
 
     /// Return a new `FiniteElementSpace` containing all subspaces of `self`
@@ -903,8 +895,8 @@ mod tests {
             sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
             insert(sm)
         };
-        mesh.add_submesh(sm_tri).unwrap();
-        mesh.add_submesh(sm_qua).unwrap();
+        mesh.add_sub(sm_tri).unwrap();
+        mesh.add_sub(sm_qua).unwrap();
 
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         assert_eq!(fes.subspace_count(), 2);
@@ -933,7 +925,6 @@ mod tests {
 
     #[test]
     fn rejects_empty_mesh() {
-        let cfg = cfg2d();
         let mesh = Mesh::empty();
         assert!(FiniteElementSpace::lagrange1(&mesh).is_err());
     }

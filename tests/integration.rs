@@ -1,6 +1,7 @@
 //! Integration test: verifies that pyrucast's public API is usable from
 //! an external crate (Phase 0 + Phase 1 + Phase 2).
 
+use pyrucast::aggregate::Aggregate;
 use pyrucast::mesh::configuration::{Configuration, NodeId};
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
@@ -214,8 +215,8 @@ fn mesh_composed_of_multiple_submeshes() -> Result<()> {
 
     let mesh = {
         let mut mesh = Mesh::empty();
-        mesh.add_submesh(sm_pts)?;
-        mesh.add_submesh(sm_tri)?;
+        mesh.add_sub(sm_pts)?;
+        mesh.add_sub(sm_tri)?;
         mesh
     };
 

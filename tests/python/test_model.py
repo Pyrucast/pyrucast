@@ -18,9 +18,9 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     mat.set_uniform("k", k)
 
     model = pyrucast.Model()
-    model.add_sub_model(pyrucast.SubModel.heat_conduction(sub, mat))
+    model.add_sub(pyrucast.SubModel.heat_conduction(sub, mat))
     if dirichlet_left:
-        model.add_sub_model(
+        model.add_sub(
             pyrucast.SubModel.dirichlet(c, "T", "q", [a.id])
         )
     return c, mesh, fes, sub, mat, model, a, b
@@ -73,7 +73,7 @@ def test_two_seg2_assembly_is_tridiagonal():
     mat.set_uniform("k", 1.0)
 
     model = pyrucast.Model()
-    model.add_sub_model(pyrucast.SubModel.heat_conduction(sub, mat))
+    model.add_sub(pyrucast.SubModel.heat_conduction(sub, mat))
     K = model.stiffness()
     assert K.n_rows() == 3
     assert K.n_cols() == 3

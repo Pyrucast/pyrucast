@@ -188,15 +188,6 @@ impl PyFiniteElementSpace {
         Ok(Self { inner: fes })
     }
 
-    fn subspace_count(&self) -> PyResult<usize> {
-        Ok(self.inner.subspace_count())
-    }
-
-    fn subspace(&self, i: usize) -> PyResult<PySubFiniteElementSpace> {
-        let h = self.inner.subspace(i)?;
-        Ok(PySubFiniteElementSpace { handle: h })
-    }
-
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!("{:?}", self.inner))
     }
@@ -206,4 +197,4 @@ impl PyFiniteElementSpace {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace");
+crate::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace", subspace_count, subspace);

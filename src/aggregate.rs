@@ -90,19 +90,30 @@ pub trait Aggregate {
         }
     }
 
-    /// Hook called by [`try_extend_from`] before concatenating. Override to
-    /// enforce domain-specific constraints (e.g. same `Configuration`).
+    /// Hook called before inserting a single handle. Override to enforce
+    /// domain-specific constraints (e.g. same `Configuration` for `Mesh`).
     /// The default accepts everything.
-    fn check_merge_compatibility(&self, _other: &Self) -> crate::error::Result<()> {
+    fn check_push(&self, _h: &Handle<Self::Sub>) -> crate::error::Result<()> {
         Ok(())
     }
 
-    /// Check compatibility then append all handles from `other` into `self`.
+    /// Check compatibility (via [`check_push`]) then append a single handle.
+    fn add_sub(&mut self, h: Handle<Self::Sub>) -> crate::error::Result<()> {
+        self.check_push(&h)?;
+        self.push(h);
+        Ok(())
+    }
+
+    /// Check compatibility (via [`check_push`] on the first item of `other`)
+    /// then append all handles from `other` into `self`.
     fn try_extend_from(&mut self, other: &Self) -> crate::error::Result<()> {
-        self.check_merge_compatibility(other)?;
+        if let Some(h) = other.items().first() {
+            self.check_push(h)?;
+        }
         self.extend_from(other);
         Ok(())
     }
+
 }
 
 // ─── Helper: Python indexing (signed → unsigned) ────────────────────────────
@@ -142,7 +153,7 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 #[cfg(feature = "python-api")]
 #[macro_export]
 macro_rules! impl_aggregate_pymethods {
-    ($PyParent:ident, $PySub:ident, $name:literal) => {
+    ($PyParent:ident, $PySub:ident, $name:literal, $count_fn:ident, $accessor_fn:ident) => {
         #[cfg_attr(
             feature = "stub-gen",
             pyo3_stub_gen::derive::gen_stub_pymethods
@@ -163,6 +174,20 @@ macro_rules! impl_aggregate_pymethods {
                 })?;
                 let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
                 Ok($PySub { handle: h })
+            }
+
+            fn $count_fn(&self) -> pyo3::PyResult<usize> {
+                Ok($crate::aggregate::Aggregate::len(&self.inner))
+            }
+
+            fn $accessor_fn(&self, i: usize) -> pyo3::PyResult<$PySub> {
+                let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
+                Ok($PySub { handle: h })
+            }
+
+            fn add_sub(&mut self, sub: pyo3::PyRef<'_, $PySub>) -> pyo3::PyResult<()> {
+                $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
+                Ok(())
             }
         }
     };

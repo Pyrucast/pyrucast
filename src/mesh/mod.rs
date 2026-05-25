@@ -283,15 +283,15 @@ impl Aggregate for Mesh {
         &mut self.submeshes
     }
 
-    fn check_merge_compatibility(&self, other: &Mesh) -> Result<()> {
-        if self.submeshes.is_empty() || other.submeshes.is_empty() {
+    fn check_push(&self, h: &Handle<SubMesh>) -> Result<()> {
+        if self.submeshes.is_empty() {
             return Ok(());
         }
         let a = self.configuration()?;
-        let b = other.configuration()?;
+        let b = with(h, |s| s.configuration())?;
         if a.index() != b.index() || a.generation() != b.generation() {
             Err(PyrucastError::Message(
-                "merge: meshes are attached to different Configurations".into(),
+                "mismatched Configurations".into(),
             ))
         } else {
             Ok(())
@@ -305,23 +305,15 @@ impl Mesh {
         Self::default()
     }
 
-    /// Add a submesh.
-    pub fn add_submesh(&mut self, sm: Handle<SubMesh>) -> Result<()> {
-        self.submeshes.push(sm);
-        Ok(())
-    }
 
     /// Number of submeshes.
     pub fn submesh_count(&self) -> usize {
-        self.submeshes.len()
+        self.len()
     }
 
     /// Return a clone of the handle to the submesh at index `idx`.
     pub fn submesh(&self, idx: usize) -> Result<Handle<SubMesh>> {
-        self.submeshes
-            .get(idx)
-            .cloned()
-            .ok_or_else(|| PyrucastError::Message(format!("submesh: index {} out of bounds", idx)))
+        self.get(idx)
     }
 
     /// Total cells in the mesh (sum across submeshes).
@@ -1181,8 +1173,8 @@ mod tests {
         };
 
         let mut mesh = Mesh::empty();
-        mesh.add_submesh(sm_pts).unwrap();
-        mesh.add_submesh(sm_tri).unwrap();
+        mesh.add_sub(sm_pts).unwrap();
+        mesh.add_sub(sm_tri).unwrap();
         assert_eq!(mesh.submesh_count(), 2);
         assert_eq!(mesh.cell_count().unwrap(), 3); // 2 points + 1 triangle
     }
@@ -1202,7 +1194,7 @@ mod tests {
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
-        m.add_submesh(sm_tri).unwrap();
+        m.add_sub(sm_tri).unwrap();
 
         assert_eq!(
             m.element_types().unwrap(),
@@ -1225,7 +1217,7 @@ mod tests {
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
-        m.add_submesh(sm_tri).unwrap();
+        m.add_sub(sm_tri).unwrap();
 
         let et0 = with(&m[0], |s| s.element_type()).unwrap();
         let et1 = with(&m[1], |s| s.element_type()).unwrap();
@@ -1883,7 +1875,7 @@ mod tests {
         let (mut contour, _n) =
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
         let extra = insert(SubMesh::new(cfg, ElementType::SEG2));
-        contour.add_submesh(extra).unwrap();
+        contour.add_sub(extra).unwrap();
         assert!(Mesh::fill_surface(&contour, ElementType::TRI3, None).is_err());
     }
 
@@ -2223,8 +2215,8 @@ mod tests {
         };
 
         let mut mesh = Mesh::empty();
-        mesh.add_submesh(sm1).unwrap();
-        mesh.add_submesh(sm2).unwrap();
+        mesh.add_sub(sm1).unwrap();
+        mesh.add_sub(sm2).unwrap();
         assert_eq!(mesh.submesh_count(), 2);
 
         let c2 = mesh.consolidate().unwrap();
@@ -2252,8 +2244,8 @@ mod tests {
         };
 
         let mut mesh = Mesh::empty();
-        mesh.add_submesh(sm1).unwrap();
-        mesh.add_submesh(sm2).unwrap();
+        mesh.add_sub(sm1).unwrap();
+        mesh.add_sub(sm2).unwrap();
 
         let c2 = mesh.consolidate().unwrap();
         assert_eq!(c2.submesh_count(), 1);
@@ -2285,9 +2277,9 @@ mod tests {
         };
 
         let mut mesh = Mesh::empty();
-        mesh.add_submesh(sm_tri).unwrap();
-        mesh.add_submesh(sm_poi).unwrap();
-        mesh.add_submesh(sm_tri2).unwrap();
+        mesh.add_sub(sm_tri).unwrap();
+        mesh.add_sub(sm_poi).unwrap();
+        mesh.add_sub(sm_tri2).unwrap();
 
         let c2 = mesh.consolidate().unwrap();
         assert_eq!(c2.submesh_count(), 2, "TRI3 + POI1");

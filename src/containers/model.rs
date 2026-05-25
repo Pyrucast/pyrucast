@@ -57,6 +57,7 @@
 //! # Example: 1-D heat conduction with a Dirichlet condition
 //!
 //! ```
+//! use pyrucast::aggregate::Aggregate;
 //! use pyrucast::mesh::configuration::{Configuration, NodeId};
 //! use pyrucast::containers::element_field::SubElementField;
 //! use pyrucast::mesh::element_type::ElementType;
@@ -82,10 +83,10 @@
 //!
 //! let mut model = Model::new();
 //! model
-//!     .add_sub_model(insert(SubModel::heat_conduction(sub, mat_h)))
+//!     .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
 //!     .unwrap();
 //! model
-//!     .add_sub_model(insert(
+//!     .add_sub(insert(
 //!         SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap(),
 //!     ))
 //!     .unwrap();
@@ -382,10 +383,6 @@ impl Model {
 
     /// Add a sub-model. Validation (consistency of supports, materials,
     /// etc.) is deferred to assembly.
-    pub fn add_sub_model(&mut self, sub: Handle<SubModel>) -> Result<()> {
-        self.sub_models.push(sub);
-        Ok(())
-    }
 
     /// Number of sub-models. Alias of [`Aggregate::len`].
     pub fn sub_model_count(&self) -> usize {
@@ -529,11 +526,11 @@ mod tests {
 
         let mut model = Model::new();
         model
-            .add_sub_model(insert(SubModel::heat_conduction(sub, mat_h)))
+            .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
         if dirichlet_at_left {
             model
-                .add_sub_model(insert(
+                .add_sub(insert(
                     SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()])
                         .unwrap(),
                 ))
@@ -602,7 +599,7 @@ mod tests {
 
         let mut model = Model::new();
         model
-            .add_sub_model(insert(SubModel::heat_conduction(sub, mat_h)))
+            .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
         let k = model.stiffness().unwrap();
         assert_eq!(k.n_rows(), 3);
@@ -716,7 +713,7 @@ mod tests {
         let mat_h = insert(mat);
         let mut model = Model::new();
         model
-            .add_sub_model(insert(SubModel::heat_conduction(sub, mat_h)))
+            .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
         assert!(model.stiffness().is_err());
     }

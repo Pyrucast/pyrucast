@@ -92,25 +92,6 @@ impl PyModel {
         })
     }
 
-    fn add_sub_model(&mut self, sub: PyRef<PySubModel>) -> PyResult<()> {
-        // Sharing through Handle::clone: the SubModel slot's refcount
-        // is bumped, so the original PySubModel and the Model both own
-        // one reference. Drop side effects (multiplier-node decrefs
-        // etc.) run exactly once, when the final reference goes away.
-        let h = sub.handle.clone();
-        self.inner.add_sub_model(h)?;
-        Ok(())
-    }
-
-    fn sub_model_count(&self) -> PyResult<usize> {
-        Ok(self.inner.sub_model_count())
-    }
-
-    fn sub_model(&self, i: usize) -> PyResult<PySubModel> {
-        let h = self.inner.sub_model(i)?;
-        Ok(PySubModel { handle: h })
-    }
-
     fn primal_vars(&self) -> PyResult<Vec<String>> {
         Ok(self.inner.primal_vars()?)
     }
@@ -138,4 +119,4 @@ impl PyModel {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model");
+crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model_count, sub_model);

@@ -175,12 +175,6 @@ impl PyMesh {
         Ok(Self { inner: mesh })
     }
 
-    fn add_submesh(&mut self, sm: PyRef<PySubMesh>) -> PyResult<()> {
-        let sm_handle = sm.handle.clone();
-        self.inner.add_submesh(sm_handle)?;
-        Ok(())
-    }
-
     fn add_cell(&mut self, nodes: Vec<u32>) -> PyResult<usize> {
         let nodes_typed: Vec<NodeId> = nodes.iter().map(|&i| NodeId(i)).collect();
         Ok(self.inner.add_cell(&nodes_typed)?)
@@ -300,19 +294,6 @@ impl PyMesh {
         Ok(PyMesh { inner: mesh })
     }
 
-    fn submesh_count(&self) -> PyResult<usize> {
-        Ok(self.inner.submesh_count())
-    }
-
-    /// Return the submesh at index `idx` as a `SubMesh` wrapper.
-    /// The returned object shares storage with the parent mesh, so
-    /// mutating it (e.g. setting `face_color`) is visible through
-    /// the mesh too.
-    fn submesh(&self, idx: usize) -> PyResult<PySubMesh> {
-        let h = self.inner.submesh(idx)?;
-        Ok(PySubMesh { handle: h })
-    }
-
     /// `mesh.cell(submesh_idx, cell_idx)` → `Cell` view; same thing
     /// as `mesh[submesh_idx][cell_idx]`.
     fn cell(
@@ -377,4 +358,4 @@ impl PyMesh {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh");
+crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh_count, submesh);

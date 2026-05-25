@@ -584,17 +584,12 @@ impl ElementField {
 
     /// Number of sub-fields (= number of subspaces of the host FE space).
     pub fn subfield_count(&self) -> usize {
-        self.subfields.len()
+        self.len()
     }
 
     /// Handle to the `i`-th sub-field (internal clone).
     pub fn subfield(&self, i: usize) -> Result<Handle<SubElementField>> {
-        self.subfields.get(i).cloned().ok_or_else(|| {
-            PyrucastError::Message(format!(
-                "ElementField: subfield index {} out of bounds",
-                i
-            ))
-        })
+        self.get(i)
     }
 }
 
@@ -691,8 +686,8 @@ mod tests {
             sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
             insert(sm)
         };
-        mesh.add_submesh(sm_tri).unwrap();
-        mesh.add_submesh(sm_qua).unwrap();
+        mesh.add_sub(sm_tri).unwrap();
+        mesh.add_sub(sm_qua).unwrap();
         mesh
     }
 

@@ -22,13 +22,13 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     mat.set_uniform("k", 1.0)
 
     model = pyrucast.Model()
-    model.add_sub_model(pyrucast.SubModel.heat_conduction(sub, mat))
+    model.add_sub(pyrucast.SubModel.heat_conduction(sub, mat))
     left = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[0].id])
     right = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[-1].id])
     mult_left = left.multiplier_nodes()[0]
     mult_right = right.multiplier_nodes()[0]
-    model.add_sub_model(left)
-    model.add_sub_model(right)
+    model.add_sub(left)
+    model.add_sub(right)
 
     # Load: imposed values at the multiplier nodes.
     rhs_sm = pyrucast.SubMesh(c, "POI1")
@@ -86,7 +86,7 @@ def test_solver_singular_matrix_errors():
     mat.set_uniform("k", 1.0)
 
     model = pyrucast.Model()
-    model.add_sub_model(pyrucast.SubModel.heat_conduction(sub, mat))
+    model.add_sub(pyrucast.SubModel.heat_conduction(sub, mat))
     K = model.stiffness()
 
     rhs_sm = pyrucast.SubMesh(c, "POI1")
@@ -118,10 +118,10 @@ def test_solver_with_nonzero_neumann():
     mat.set_uniform("k", 2.0)
 
     model = pyrucast.Model()
-    model.add_sub_model(pyrucast.SubModel.heat_conduction(sub, mat))
+    model.add_sub(pyrucast.SubModel.heat_conduction(sub, mat))
     left = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[0].id])
     mult_left = left.multiplier_nodes()[0]
-    model.add_sub_model(left)
+    model.add_sub(left)
 
     # Build a load NodeField with both components:
     #   "T" at mult_left  → 5.0 (imposed value)

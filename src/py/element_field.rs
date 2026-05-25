@@ -218,15 +218,6 @@ impl PyElementField {
         Ok(Self { inner: ef })
     }
 
-    fn subfield_count(&self) -> PyResult<usize> {
-        Ok(self.inner.subfield_count())
-    }
-
-    fn subfield(&self, i: usize) -> PyResult<PySubElementField> {
-        let h = self.inner.subfield(i)?;
-        Ok(PySubElementField { handle: h })
-    }
-
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!("{:?}", self.inner))
     }
@@ -236,4 +227,4 @@ impl PyElementField {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField");
+crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField", subfield_count, subfield);

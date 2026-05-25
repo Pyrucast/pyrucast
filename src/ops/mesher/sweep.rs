@@ -6,6 +6,7 @@
 //!   `n_layers` layers, bumping element dimension (SEG2 → QUA4,
 //!   QUA4 → HEX8).
 
+use crate::aggregate::Aggregate;
 use crate::mesh::configuration::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::mesh::element_type::ElementType;
@@ -267,7 +268,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
             }
         }
 
-        result.add_submesh(insert(sm_out))?;
+        result.add_sub(insert(sm_out))?;
     }
 
     Ok(result)

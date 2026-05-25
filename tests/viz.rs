@@ -149,9 +149,9 @@ fn mesh_plot_renders_each_submesh_with_its_color() {
         insert(sm)
     };
 
-    let mut mesh = Mesh::new(cfg);
-    mesh.add_submesh(sm_red_handle).unwrap();
-    mesh.add_submesh(sm_blue_handle).unwrap();
+    let mut mesh = Mesh::empty();
+    mesh.add_sub(sm_red_handle).unwrap();
+    mesh.add_sub(sm_blue_handle).unwrap();
 
     let dir = tmpdir();
     let path = dir.join("mesh.svg");
@@ -188,9 +188,9 @@ fn mesh_renders_mixed_element_types() {
         insert(sm)
     };
 
-    let mut mesh = Mesh::new(cfg);
-    mesh.add_submesh(sm_pts).unwrap();
-    mesh.add_submesh(sm_tri).unwrap();
+    let mut mesh = Mesh::empty();
+    mesh.add_sub(sm_pts).unwrap();
+    mesh.add_sub(sm_tri).unwrap();
 
     let dir = tmpdir();
     let path = dir.join("mixed.png");
@@ -210,8 +210,8 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
     let mut tri = SubMesh::new(cfg.clone(), ElementType::TRI3);
     tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
     let tri_h = insert(tri);
-    let mut mesh = Mesh::new(cfg.clone());
-    mesh.add_submesh(tri_h).unwrap();
+    let mut mesh = Mesh::empty();
+    mesh.add_sub(tri_h).unwrap();
 
     // Field defined on (a, b, c) with component "T".
     let mut poi1 = SubMesh::new(cfg.clone(), ElementType::POI1);
