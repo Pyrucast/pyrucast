@@ -183,19 +183,19 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 #[cfg(feature = "python-api")]
 #[macro_export]
 macro_rules! impl_aggregate_pymethods {
-    ($PyParent:ident, $PySub:ident, $name:literal, $sub:ident) => {
+    ($T:ident, $Sub:ident, $name:literal, $sub:ident) => {
         paste::paste! {
             #[cfg_attr(
                 feature = "stub-gen",
                 pyo3_stub_gen::derive::gen_stub_pymethods
             )]
             #[pyo3::pymethods]
-            impl $PyParent {
+            impl $T {
                 fn __len__(&self) -> pyo3::PyResult<usize> {
                     Ok($crate::aggregate::Aggregate::len(&self.inner))
                 }
 
-                fn __getitem__(&self, idx: isize) -> pyo3::PyResult<$PySub> {
+                fn __getitem__(&self, idx: isize) -> pyo3::PyResult<$Sub> {
                     let n = $crate::aggregate::Aggregate::len(&self.inner);
                     let i = $crate::aggregate::normalize_index(idx, n).ok_or_else(|| {
                         pyo3::exceptions::PyIndexError::new_err(format!(
@@ -204,24 +204,24 @@ macro_rules! impl_aggregate_pymethods {
                         ))
                     })?;
                     let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
-                    Ok($PySub { handle: h })
+                    Ok($Sub { handle: h })
                 }
 
                 fn [<$sub _count>](&self) -> pyo3::PyResult<usize> {
                     Ok($crate::aggregate::Aggregate::len(&self.inner))
                 }
 
-                fn $sub(&self, i: usize) -> pyo3::PyResult<$PySub> {
+                fn $sub(&self, i: usize) -> pyo3::PyResult<$Sub> {
                     let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
-                    Ok($PySub { handle: h })
+                    Ok($Sub { handle: h })
                 }
 
-                fn add_sub(&mut self, sub: pyo3::PyRef<'_, $PySub>) -> pyo3::PyResult<()> {
+                fn add_sub(&mut self, sub: pyo3::PyRef<'_, $Sub>) -> pyo3::PyResult<()> {
                     $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
                     Ok(())
                 }
 
-                fn [<add_ $sub>](&mut self, sub: pyo3::PyRef<'_, $PySub>) -> pyo3::PyResult<()> {
+                fn [<add_ $sub>](&mut self, sub: pyo3::PyRef<'_, $Sub>) -> pyo3::PyResult<()> {
                     $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
                     Ok(())
                 }
@@ -263,11 +263,11 @@ macro_rules! impl_aggregate_pymethods {
 #[macro_export]
 macro_rules! impl_aggregate {
     // Without Aggregate overrides.
-    ($T:ty, $Sub:ty, $sub:ident, $display:literal) => {
-        $crate::impl_aggregate!($T, $Sub, $sub, $display, {});
+    ($T:ty, $Sub:ty, $sub:ident, $name:literal) => {
+        $crate::impl_aggregate!($T, $Sub, $sub, $name, {});
     };
     // With Aggregate overrides (check_push, display_extra, …).
-    ($T:ty, $Sub:ty, $sub:ident, $display:literal, { $($override:tt)* }) => {
+    ($T:ty, $Sub:ty, $sub:ident, $name:literal, { $($override:tt)* }) => {
         paste::paste! {
             impl $crate::aggregate::Aggregate for $T {
                 type Sub = $Sub;
@@ -276,7 +276,7 @@ macro_rules! impl_aggregate {
                     &mut self.subs
                 }
                 fn type_name() -> &'static str { stringify!($T) }
-                fn sub_display_name() -> &'static str { $display }
+                fn sub_display_name() -> &'static str { $name }
                 $($override)*
             }
 
