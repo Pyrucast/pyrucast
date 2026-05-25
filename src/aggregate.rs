@@ -164,11 +164,16 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 
 /// Defines `__len__` and `__getitem__` on a `pyclass` that owns an `inner`
 /// field implementing [`Aggregate`], wrapping each sub-handle in a
-/// `$PySub { handle: h }` wrapper.
+/// `$Sub { handle: h }` wrapper.
 ///
 /// Python iteration (`for x in parent:`) naturally falls back to the
 /// sequence protocol: if `__iter__` is not defined, CPython falls back to
 /// `__getitem__` until it receives an `IndexError`.
+///
+/// # Struct precondition
+///
+/// The struct `$T` **must** have a field named `inner` that implements
+/// [`Aggregate`]. The name `inner` is hardcoded by this macro.
 ///
 /// # Usage
 ///
@@ -243,7 +248,14 @@ macro_rules! impl_aggregate_pymethods {
 /// Derive a complete `Aggregate` implementation for a struct whose only
 /// collection field is named `subs: Vec<Handle<Sub>>`.
 ///
-/// The sub-name `$sub` is given **once** and all derived names follow:
+/// # Struct precondition
+///
+/// The struct `$T` **must** have a field named `subs: Vec<Handle<$Sub>>`.
+/// The name `subs` is hardcoded by this macro.
+///
+/// # Derived names
+///
+/// `$sub` is given once; `paste!` derives:
 /// * `$sub(i)`             — indexed accessor
 /// * `{$sub}_count()`     — length alias
 /// * `add_{$sub}(h)`      — checked push
