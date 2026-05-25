@@ -16,10 +16,10 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::configuration::Configuration;
-//! use pyrucast::element_type::ElementType;
+//! use pyrucast::mesh::configuration::Configuration;
+//! use pyrucast::mesh::element_type::ElementType;
 //! use pyrucast::mesh::SubMesh;
-//! use pyrucast::node::Node;
+//! use pyrucast::mesh::node::Node;
 //! use pyrucast::store::{insert, with, with_mut};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
@@ -37,13 +37,16 @@
 //! with(&cfg, |c| assert_eq!(c.refcount(a.id()), 1)).unwrap();
 //! ```
 
+pub mod cell;
+pub mod color;
+pub mod configuration;
 pub mod element_type;
 pub mod node;
 pub mod point;
 
 use crate::aggregate::Aggregate;
-use crate::color::RgbColor;
-use crate::configuration::{Configuration, NodeId};
+use crate::mesh::color::RgbColor;
+use crate::mesh::configuration::{Configuration, NodeId};
 use crate::error::{PyrucastError, Result};
 use crate::mesh::element_type::ElementType;
 use crate::mesh::node::Node;
@@ -207,7 +210,7 @@ impl SubMesh {
         crate::viz::render(self, view, save)
     }
 
-    /// Visualize this submesh coloured by a [`crate::node_field::NodeField`]
+    /// Visualize this submesh coloured by a [`crate::containers::node_field::NodeField`]
     /// component.
     ///
     /// Per-cell colour is the mean of the field's component at the cell's
@@ -223,7 +226,7 @@ impl SubMesh {
         &self,
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
-        field: &crate::node_field::NodeField,
+        field: &crate::containers::node_field::NodeField,
         component: Option<&str>,
     ) -> Result<()> {
         crate::viz::render_submesh_with_field(self, field, component, view, save)
@@ -393,16 +396,16 @@ impl Mesh {
     }
 
     /// Return a `Cell` view on cell `cell_idx` of submesh `submesh_idx`.
-    pub fn cell(&self, submesh_idx: usize, cell_idx: usize) -> Result<crate::cell::Cell> {
+    pub fn cell(&self, submesh_idx: usize, cell_idx: usize) -> Result<crate::mesh::cell::Cell> {
         let sm = self.submesh(submesh_idx)?;
-        crate::cell::Cell::new(sm, cell_idx)
+        crate::mesh::cell::Cell::new(sm, cell_idx)
     }
 
     /// Iterator over every cell of submesh `submesh_idx`.
-    pub fn cells(&self, submesh_idx: usize) -> Result<crate::cell::CellIter> {
+    pub fn cells(&self, submesh_idx: usize) -> Result<crate::mesh::cell::CellIter> {
         let sm = self.submesh(submesh_idx)?;
         let end = with(&sm, |s| s.cell_count())?;
-        Ok(crate::cell::CellIter::new(sm, end))
+        Ok(crate::mesh::cell::CellIter::new(sm, end))
     }
 
     /// Create a POI1 mesh containing all live nodes of `config`.
@@ -512,7 +515,8 @@ impl Mesh {
             ));
         }
 
-        use crate::triangulation::{in_plane_basis, Vector3};
+        use crate::mesh::point::Vector3;
+        use crate::ops::mesher::triangulation::in_plane_basis;
         let n_vec = Vector3::new(normal[0], normal[1], normal[2]);
         if n_vec.norm() < 1e-15 {
             return Err(PyrucastError::Message(
@@ -617,10 +621,10 @@ impl Mesh {
     ///
     /// # Example
     /// ```
-    /// use pyrucast::configuration::Configuration;
-    /// use pyrucast::element_type::ElementType;
+    /// use pyrucast::mesh::configuration::Configuration;
+    /// use pyrucast::mesh::element_type::ElementType;
     /// use pyrucast::mesh::Mesh;
-    /// use pyrucast::node::Node;
+    /// use pyrucast::mesh::node::Node;
     /// use pyrucast::store::insert;
     ///
     /// // Unit square contour, CCW.
@@ -642,7 +646,7 @@ impl Mesh {
     pub fn fill_surface(
         contour: &Mesh,
         element_type: ElementType,
-        refinement: Option<crate::triangulation::RefinementOptions>,
+        refinement: Option<crate::ops::mesher::triangulation::RefinementOptions>,
     ) -> Result<Mesh> {
         if element_type != ElementType::TRI3 {
             return Err(PyrucastError::Message(format!(
@@ -743,7 +747,7 @@ impl Mesh {
         //    in 3-D project on the best-fit plane (Newell normal of the
         //    first non-degenerate loop + centroid origin), then verify
         //    planarity across **all** loops jointly.
-        use crate::triangulation::{Point2, Point3, Vector3};
+        use crate::mesh::point::{Point2, Point3, Vector3};
         // Projection state — only Some(...) when dim == 3. Carried past the
         // triangulation step so Steiner points born in the 2-D plane can be
         // anti-projected back into 3-D node coordinates.
@@ -781,7 +785,7 @@ impl Mesh {
                     let pts_chain: Vec<Point3> = (chain_offsets[i]..chain_offsets[i + 1])
                         .map(|j| pts3[j])
                         .collect();
-                    crate::triangulation::newell_normal(&pts_chain)
+                    crate::ops::mesher::triangulation::newell_normal(&pts_chain)
                 })
                 .ok_or_else(|| {
                     PyrucastError::Message(
@@ -816,7 +820,7 @@ impl Mesh {
                 )));
             }
 
-            let (u, v) = crate::triangulation::in_plane_basis(normal);
+            let (u, v) = crate::ops::mesher::triangulation::in_plane_basis(normal);
             let pts_2d: Vec<Point2> = pts3
                 .iter()
                 .map(|p| {
@@ -837,7 +841,7 @@ impl Mesh {
             Vec<NodeId>,
             Vec<Point2>,
         ) = if n_sub == 1 && refine.is_none() {
-            let tris = crate::triangulation::ear_clip_2d(&points_2d)?;
+            let tris = crate::ops::mesher::triangulation::ear_clip_2d(&points_2d)?;
             (tris, flat_nodes, Vec::new())
         } else {
             // Detect the outer loop (largest |signed area|), then build
@@ -845,7 +849,7 @@ impl Mesh {
             let mut areas: Vec<f64> = Vec::with_capacity(n_sub);
             for i in 0..n_sub {
                 let slice = &points_2d[chain_offsets[i]..chain_offsets[i + 1]];
-                areas.push(crate::triangulation::signed_area(slice).abs());
+                areas.push(crate::ops::mesher::triangulation::signed_area(slice).abs());
             }
             let outer_idx = (0..n_sub)
                 .max_by(|&a, &b| {
@@ -877,7 +881,7 @@ impl Mesh {
             let n_existing = new_flat_nodes.len();
             if let Some(opts) = refine {
                 let (all_pts, tris) =
-                    crate::triangulation::triangulate_polygon_with_holes_refined(
+                    crate::ops::mesher::triangulation::triangulate_polygon_with_holes_refined(
                         &outer_pts,
                         &hole_pts_list,
                         opts,
@@ -886,7 +890,7 @@ impl Mesh {
                 let steiner = all_pts[n_existing..].to_vec();
                 (tris, new_flat_nodes, steiner)
             } else {
-                let tris = crate::triangulation::triangulate_polygon_with_holes(
+                let tris = crate::ops::mesher::triangulation::triangulate_polygon_with_holes(
                     &outer_pts,
                     &hole_pts_list,
                 )?;
@@ -938,7 +942,7 @@ impl Mesh {
         crate::viz::render(self, view, save)
     }
 
-    /// Visualize this mesh coloured by a [`crate::node_field::NodeField`]
+    /// Visualize this mesh coloured by a [`crate::containers::node_field::NodeField`]
     /// component. See [`SubMesh::plot_with_field`] for the meaning of
     /// `view`, `save`, `field` and `component`. In the interactive
     /// window the same component button is drawn over the whole mesh
@@ -948,7 +952,7 @@ impl Mesh {
         &self,
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
-        field: &crate::node_field::NodeField,
+        field: &crate::containers::node_field::NodeField,
         component: Option<&str>,
     ) -> Result<()> {
         crate::viz::render_mesh_with_field(self, field, component, view, save)
@@ -1075,7 +1079,7 @@ impl fmt::Display for Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::Node;
+    use crate::mesh::node::Node;
     use crate::store::{insert, with};
 
     #[test]
@@ -2081,7 +2085,7 @@ mod tests {
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
         let initial_node_count = with(&cfg, |c| c.node_count()).unwrap();
 
-        let opts = crate::triangulation::RefinementOptions {
+        let opts = crate::ops::mesher::triangulation::RefinementOptions {
             max_edge_length: Some(1.5),
             min_angle_deg: None,
         };
@@ -2153,7 +2157,7 @@ mod tests {
                 (0.0, 4.0, 1.0),
             ],
         );
-        let opts = crate::triangulation::RefinementOptions {
+        let opts = crate::ops::mesher::triangulation::RefinementOptions {
             max_edge_length: Some(1.5),
             min_angle_deg: None,
         };
@@ -2180,7 +2184,7 @@ mod tests {
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
         let combined = (&outer + &hole).unwrap();
-        let opts = crate::triangulation::RefinementOptions {
+        let opts = crate::ops::mesher::triangulation::RefinementOptions {
             max_edge_length: Some(1.0),
             min_angle_deg: None,
         };

@@ -6,7 +6,7 @@
 //!   `n_layers` layers, bumping element dimension (SEG2 → QUA4,
 //!   QUA4 → HEX8).
 
-use crate::configuration::NodeId;
+use crate::mesh::configuration::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::mesh::element_type::ElementType;
 use crate::mesh::node::Node;

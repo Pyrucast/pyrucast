@@ -1,4 +1,4 @@
-"""Python tests for FiniteElementSpace + SubFESpace (Phase 2 step 5)."""
+"""Python tests for FiniteElementSpace + SubFiniteElementSpace (Phase 2 step 5)."""
 
 import math
 
@@ -423,7 +423,7 @@ def test_repr_and_str():
     assert "FiniteElementSpace" in repr(fes)
     assert "1 subspace" in str(fes)
     sub = fes[0]
-    assert "SubFESpace" in repr(sub)
+    assert "SubFiniteElementSpace" in repr(sub)
     s = str(sub)
     assert "TRI3" in s
     assert "LAGRANGE1" in s

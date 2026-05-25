@@ -115,7 +115,7 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 ///
 /// ```ignore
 /// pyrucast::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh");
-/// pyrucast::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFESpace, "FiniteElementSpace");
+/// pyrucast::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace");
 /// pyrucast::impl_aggregate_pymethods!(PyModel, PySubModel, "Model");
 /// ```
 #[cfg(feature = "python-api")]

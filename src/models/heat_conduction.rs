@@ -5,11 +5,11 @@
 //! rows). The conductivity is read from a [`SubElementField`] component
 //! named [`MATERIAL_COMPONENT`].
 
-use crate::configuration::NodeId;
-use crate::element_field::SubElementField;
+use crate::mesh::configuration::NodeId;
+use crate::containers::element_field::SubElementField;
 use crate::error::Result;
-use crate::fe_space::SubFESpace;
-use crate::matrix::Matrix;
+use crate::finite_element_space::SubFiniteElementSpace;
+use crate::containers::matrix::Matrix;
 use crate::store::{with, Handle};
 
 /// Column DOF name (temperature).
@@ -27,7 +27,7 @@ pub const MATERIAL_COMPONENT: &str = "k";
 /// and the local block is written into `k` at
 ///   row = `(NodeId_i, "q")`, col = `(NodeId_j, "T")`.
 pub fn assemble_stiffness(
-    fespace: &Handle<SubFESpace>,
+    fespace: &Handle<SubFiniteElementSpace>,
     material: &Handle<SubElementField>,
     k: &mut Matrix,
 ) -> Result<()> {

@@ -3,7 +3,7 @@
 //!
 //! The model layer is the **physics-aware** counterpart of the
 //! geometry layer (`Mesh`, `SubMesh`) and the interpolation layer
-//! (`FiniteElementSpace`, `SubFESpace`). A [`Model`] is an aggregate of
+//! (`FiniteElementSpace`, `SubFiniteElementSpace`). A [`Model`] is an aggregate of
 //! [`SubModel`]s, each binding **one or more FE spaces** to a
 //! [`Physics`] (the actual law). The Model is a pure orchestrator: it
 //! enumerates the DOFs of its sub-models, dimensions a [`Matrix`], and
@@ -30,7 +30,7 @@
 //!
 //! The model layer is purely matrix-producing. Loads (right-hand side
 //! vectors) are entirely the user's responsibility: read
-//! `model.dual_vars()`, build a [`crate::node_field::NodeField`] with
+//! `model.dual_vars()`, build a [`crate::containers::node_field::NodeField`] with
 //! the matching component names, and feed `Matrix + NodeField` to the
 //! solver.
 //!
@@ -57,13 +57,13 @@
 //! # Example: 1-D heat conduction with a Dirichlet condition
 //!
 //! ```
-//! use pyrucast::configuration::{Configuration, NodeId};
-//! use pyrucast::element_field::SubElementField;
-//! use pyrucast::element_type::ElementType;
-//! use pyrucast::fe_space::FiniteElementSpace;
+//! use pyrucast::mesh::configuration::{Configuration, NodeId};
+//! use pyrucast::containers::element_field::SubElementField;
+//! use pyrucast::mesh::element_type::ElementType;
+//! use pyrucast::finite_element_space::FiniteElementSpace;
 //! use pyrucast::mesh::Mesh;
-//! use pyrucast::model::{Model, Physics, SubModel};
-//! use pyrucast::node::Node;
+//! use pyrucast::containers::model::{Model, Physics, SubModel};
+//! use pyrucast::mesh::node::Node;
 //! use pyrucast::store::{insert, with};
 //!
 //! // 1-D Configuration with two nodes spanning [0, 1].
@@ -97,11 +97,11 @@
 //! ```
 
 use crate::aggregate::Aggregate;
-use crate::configuration::{Configuration, NodeId};
-use crate::element_field::SubElementField;
+use crate::mesh::configuration::{Configuration, NodeId};
+use crate::containers::element_field::SubElementField;
 use crate::error::Result;
-use crate::fe_space::SubFESpace;
-use crate::matrix::Matrix;
+use crate::finite_element_space::SubFiniteElementSpace;
+use crate::containers::matrix::Matrix;
 use crate::mesh::SubMesh;
 use crate::models::{dirichlet, heat_conduction};
 use crate::store::{with, Handle};
@@ -127,7 +127,7 @@ pub enum Physics {
     ///   optional `"rho_cp"` component is reserved for the mass
     ///   matrix; not used in this v0.
     HeatConduction {
-        fespace: Handle<SubFESpace>,
+        fespace: Handle<SubFiniteElementSpace>,
         material: Handle<SubElementField>,
     },
 
@@ -211,7 +211,7 @@ impl SubModel {
     /// (isotropic conductivity). The check is performed at assembly,
     /// not at construction.
     pub fn heat_conduction(
-        fespace: Handle<SubFESpace>,
+        fespace: Handle<SubFiniteElementSpace>,
         material: Handle<SubElementField>,
     ) -> Self {
         Self {
@@ -484,11 +484,11 @@ fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::configuration::Configuration;
-    use crate::element_type::ElementType;
-    use crate::fe_space::FiniteElementSpace;
+    use crate::mesh::configuration::Configuration;
+    use crate::mesh::element_type::ElementType;
+    use crate::finite_element_space::FiniteElementSpace;
     use crate::mesh::Mesh;
-    use crate::node::Node;
+    use crate::mesh::node::Node;
     use crate::store::{insert, with_mut};
 
     /// Build a 1-D heat-conduction model on a single SEG2 element of

@@ -11,7 +11,7 @@ Chaque nœud créé reçoit un identifiant interne **stable** (`NodeId`), unique
 **Il n'existe aucune méthode `remove_node`.** Un nœud référencé est protégé. Seul le ramasse-miettes `Configuration::gc()` retire les nœuds dont le refcount **interne** est tombé à 0.
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
+use pyrucast::mesh::configuration::Configuration;
 use pyrucast::store::{insert, with_mut};
 
 let cfg = insert(Configuration::new(2).unwrap());
@@ -32,8 +32,8 @@ Le `Node` est l'**accesseur utilisateur** d'un nœud. Il porte un handle vers la
 - `Drop` décrémente.
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
-use pyrucast::node::Node;
+use pyrucast::mesh::configuration::Configuration;
+use pyrucast::mesh::node::Node;
 use pyrucast::store::{insert, with_mut};
 
 let cfg = insert(Configuration::new(2).unwrap());
@@ -122,7 +122,7 @@ Une permutation optionnelle (`Vec<u32>`, longueur = `capacity`) sépare l'**ordr
 Rust :
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
+use pyrucast::mesh::configuration::Configuration;
 use pyrucast::store::{insert, with, with_mut};
 
 let cfg = insert(Configuration::new(2).unwrap());

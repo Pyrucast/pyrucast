@@ -1,6 +1,6 @@
 //! Sparse matrix indexed by **named DOFs** `(NodeId, field_name)`.
 //!
-//! [`Matrix`] is the output container of [`crate::model::Model`] assembly
+//! [`Matrix`] is the output container of [`crate::containers::model::Model`] assembly
 //! (stiffness, mass, …). Rows and columns are identified by a [`DofId`] —
 //! a pair `(NodeId, field index)` where the field index points into a
 //! small per-matrix table of names. This keeps storage compact (no string
@@ -29,8 +29,8 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::configuration::NodeId;
-//! use pyrucast::matrix::Matrix;
+//! use pyrucast::mesh::configuration::NodeId;
+//! use pyrucast::containers::matrix::Matrix;
 //!
 //! let mut k = Matrix::new(true);
 //! // Heat conduction on two nodes:
@@ -51,7 +51,7 @@
 //! assert_eq!(k.get(NodeId(0), "q", NodeId(0), "T"), 3.5);
 //! ```
 
-use crate::configuration::NodeId;
+use crate::mesh::configuration::NodeId;
 use crate::error::{PyrucastError, Result};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};

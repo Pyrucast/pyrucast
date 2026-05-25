@@ -7,10 +7,10 @@
 //! enforces `u_n = u_d_n` once the user fills the load `NodeField` at
 //! `(multiplier_node, primal_var)`.
 
-use crate::configuration::{Configuration, NodeId};
-use crate::element_type::ElementType;
+use crate::mesh::configuration::{Configuration, NodeId};
+use crate::mesh::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
-use crate::matrix::Matrix;
+use crate::containers::matrix::Matrix;
 use crate::mesh::SubMesh;
 use crate::store::{insert, with, with_mut, Handle};
 
@@ -21,7 +21,7 @@ pub fn multiplier_name(primal_var: &str) -> String {
 
 /// Materials needed to instantiate the Dirichlet variant.
 ///
-/// `build` returns this bundle and the [`crate::model::Physics::Dirichlet`]
+/// `build` returns this bundle and the [`crate::containers::model::Physics::Dirichlet`]
 /// variant simply moves its fields in.
 pub struct Built {
     pub constrained_support: Handle<SubMesh>,

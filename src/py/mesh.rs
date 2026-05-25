@@ -1,7 +1,7 @@
 //! Python wrappers for [`crate::mesh::SubMesh`] and [`crate::mesh::Mesh`].
 
-use crate::configuration::NodeId;
-use crate::element_type::ElementType;
+use crate::mesh::configuration::NodeId;
+use crate::mesh::element_type::ElementType;
 use crate::mesh::{Mesh, SubMesh};
 use crate::py::configuration::PyConfiguration;
 use crate::py::node::PyNode;
@@ -55,7 +55,7 @@ impl PySubMesh {
     #[setter]
     fn set_face_color(&self, rgb: (u8, u8, u8)) -> PyResult<()> {
         with_mut(&self.handle, |s| {
-            s.set_face_color(crate::color::RgbColor::new(rgb.0, rgb.1, rgb.2))
+            s.set_face_color(crate::mesh::color::RgbColor::new(rgb.0, rgb.1, rgb.2))
         })?;
         Ok(())
     }
@@ -130,7 +130,7 @@ impl PySubMesh {
                 "submesh index {idx} out of range (len={n})"
             )));
         }
-        let cell = crate::cell::Cell::new(self.handle.clone(), normalized as usize)?;
+        let cell = crate::mesh::cell::Cell::new(self.handle.clone(), normalized as usize)?;
         Ok(crate::py::cell::PyCell::from_cell(cell))
     }
 
@@ -277,7 +277,7 @@ impl PyMesh {
             PyValueError::new_err(format!("unknown element type: {element_type}"))
         })?;
         let refinement = if max_edge_length.is_some() || min_angle_deg.is_some() {
-            Some(crate::triangulation::RefinementOptions {
+            Some(crate::ops::mesher::triangulation::RefinementOptions {
                 max_edge_length,
                 min_angle_deg,
             })

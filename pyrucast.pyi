@@ -16,7 +16,7 @@ __all__ = [
     "Node",
     "NodeField",
     "SubElementField",
-    "SubFESpace",
+    "SubFiniteElementSpace",
     "SubMesh",
     "SubModel",
     "set_swap_dir",
@@ -141,11 +141,11 @@ class FiniteElementSpace:
         Convenience: same as `FiniteElementSpace(mesh)`.
         """
     def subspace_count(self) -> builtins.int: ...
-    def subspace(self, i: builtins.int) -> SubFESpace: ...
+    def subspace(self, i: builtins.int) -> SubFiniteElementSpace: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, idx: builtins.int) -> SubFESpace: ...
+    def __getitem__(self, idx: builtins.int) -> SubFiniteElementSpace: ...
 
 @typing.final
 class Matrix:
@@ -333,13 +333,13 @@ class SubElementField:
     r"""
     Python wrapper for [`SubElementField`].
     """
-    def __new__(cls, fespace: SubFESpace, components: typing.Sequence[builtins.str]) -> SubElementField:
+    def __new__(cls, fespace: SubFiniteElementSpace, components: typing.Sequence[builtins.str]) -> SubElementField:
         r"""
         `SubElementField(subfespace, components)` — zero-initialized
-        sub-field on a single [`SubFESpace`].
+        sub-field on a single [`SubFiniteElementSpace`].
         """
     @classmethod
-    def from_uniform_per_component(cls, fespace: SubFESpace, components: typing.Sequence[builtins.str], values_per_component: typing.Sequence[builtins.float]) -> SubElementField:
+    def from_uniform_per_component(cls, fespace: SubFiniteElementSpace, components: typing.Sequence[builtins.str], values_per_component: typing.Sequence[builtins.float]) -> SubElementField:
         r"""
         Alternate constructor: uniform value per component.
         """
@@ -376,9 +376,9 @@ class SubElementField:
     def __str__(self) -> builtins.str: ...
 
 @typing.final
-class SubFESpace:
+class SubFiniteElementSpace:
     r"""
-    Python wrapper for [`SubFESpace`].
+    Python wrapper for [`SubFiniteElementSpace`].
     """
     @property
     def element_type(self) -> builtins.str: ...
@@ -490,7 +490,7 @@ class SubModel:
     Python wrapper for [`SubModel`].
     """
     @classmethod
-    def heat_conduction(cls, fespace: SubFESpace, material: SubElementField) -> SubModel:
+    def heat_conduction(cls, fespace: SubFiniteElementSpace, material: SubElementField) -> SubModel:
         r"""
         `SubModel.heat_conduction(fespace, material)` — heat-conduction
         sub-model on a finite-element subspace.
@@ -521,7 +521,7 @@ def solve(matrix: Matrix, rhs: NodeField) -> NodeField:
     r"""
     `pyrucast.solve(matrix, rhs) -> NodeField`
     
-    Dense LU solver. See [`crate::solver::solve`] for the semantics
+    Dense LU solver. See [`crate::ops::solver::lu::solve`] for the semantics
     of the rhs and of the returned NodeField.
     """
 

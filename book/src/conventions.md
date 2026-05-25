@@ -9,7 +9,7 @@ Toute l'API publique renvoie `pyrucast::Result<T>`, alias de `Result<T, Pyrucast
 Rust :
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
+use pyrucast::mesh::configuration::Configuration;
 
 // Dimension nulle — erreur attendue.
 let err = Configuration::new(0).unwrap_err();
@@ -46,7 +46,7 @@ Le binding PyO3 branche ces deux vues sur les dunder methods Python correspondan
 Rust :
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
+use pyrucast::mesh::configuration::Configuration;
 use pyrucast::store::{insert, with};
 
 let cfg = insert(Configuration::new(2).unwrap());

@@ -5,11 +5,11 @@
 
 #![cfg(feature = "viz")]
 
-use pyrucast::color::RgbColor;
-use pyrucast::configuration::Configuration;
-use pyrucast::element_type::ElementType;
+use pyrucast::mesh::color::RgbColor;
+use pyrucast::mesh::configuration::Configuration;
+use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
-use pyrucast::node::Node;
+use pyrucast::mesh::node::Node;
 use pyrucast::store::insert;
 use pyrucast::viz::View;
 
@@ -71,7 +71,7 @@ fn submesh_default_view_is_iso() {
 
 #[test]
 fn submesh_renders_every_element_type() {
-    use pyrucast::configuration::NodeId;
+    use pyrucast::mesh::configuration::NodeId;
     let cfg = insert(Configuration::new(3).unwrap());
     let n: Vec<_> = [
         [0.0, 0.0, 0.0],
@@ -200,7 +200,7 @@ fn mesh_renders_mixed_element_types() {
 
 #[test]
 fn mesh_plot_with_field_export_svg_contains_overlay_label() {
-    use pyrucast::node_field::NodeField;
+    use pyrucast::containers::node_field::NodeField;
 
     let cfg = insert(Configuration::new(2).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -240,7 +240,7 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
 
 #[test]
 fn plot_with_field_explicit_component_choice() {
-    use pyrucast::node_field::NodeField;
+    use pyrucast::containers::node_field::NodeField;
 
     let cfg = insert(Configuration::new(2).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -275,7 +275,7 @@ fn plot_with_field_explicit_component_choice() {
 
 #[test]
 fn plot_with_field_unknown_component_errors() {
-    use pyrucast::node_field::NodeField;
+    use pyrucast::containers::node_field::NodeField;
 
     let cfg = insert(Configuration::new(1).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();

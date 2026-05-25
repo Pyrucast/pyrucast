@@ -1,7 +1,7 @@
-//! Python wrapper for [`crate::matrix::Matrix`].
+//! Python wrapper for [`crate::containers::matrix::Matrix`].
 
-use crate::configuration::NodeId;
-use crate::matrix::Matrix;
+use crate::mesh::configuration::NodeId;
+use crate::containers::matrix::Matrix;
 use crate::store::{insert, with, Handle};
 use pyo3::prelude::*;
 

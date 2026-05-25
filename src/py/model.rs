@@ -1,10 +1,10 @@
-//! Python wrappers for [`crate::model::SubModel`] and [`crate::model::Model`].
+//! Python wrappers for [`crate::containers::model::SubModel`] and [`crate::containers::model::Model`].
 
-use crate::configuration::NodeId;
-use crate::model::{Model, SubModel};
+use crate::mesh::configuration::NodeId;
+use crate::containers::model::{Model, SubModel};
 use crate::py::configuration::PyConfiguration;
 use crate::py::element_field::PySubElementField;
-use crate::py::fe_space::PySubFESpace;
+use crate::py::finite_element_space::PySubFiniteElementSpace;
 use crate::py::matrix::PyMatrix;
 use crate::store::{insert, with, Handle};
 use pyo3::prelude::*;
@@ -24,7 +24,7 @@ impl PySubModel {
     #[classmethod]
     fn heat_conduction(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        fespace: PyRef<PySubFESpace>,
+        fespace: PyRef<PySubFiniteElementSpace>,
         material: PyRef<PySubElementField>,
     ) -> PyResult<Self> {
         let sub = SubModel::heat_conduction(fespace.handle.clone(), material.handle.clone());

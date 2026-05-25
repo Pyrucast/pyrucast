@@ -20,11 +20,11 @@ Configuration
 ├── NodeField         (valeurs par nœud × composante)
 └── SubMesh           (+ ElementType)
       └── Mesh        (agrège N × SubMesh)
-            └── SubFESpace  (+ Interpolation, QuadratureRule)
-                  ├── FiniteElementSpace  (agrège N × SubFESpace)
+            └── SubFiniteElementSpace  (+ Interpolation, QuadratureRule)
+                  ├── FiniteElementSpace  (agrège N × SubFiniteElementSpace)
                   └── ElementField        (valeurs par cellule × point de Gauss)
 
-SubFESpace + ElementField ──► SubModel::HeatConduction ──┐
+SubFiniteElementSpace + ElementField ──► SubModel::HeatConduction ──┐
 Configuration              ──► SubModel::Dirichlet       ├──► Model
                                                          ┘
 NodeId ──► DofId ──► Matrix  (matrice creuse, DOFs nommés par (NodeId, champ))
@@ -42,7 +42,7 @@ Résumé des rôles :
 | `SubMesh`              | Cellules d'un même `ElementType` (SEG2, TRI3, …)                  |
 | `Mesh`                 | Union de sous-maillages                                           |
 | `NodeField`            | Valeurs scalaires ou vectorielles par nœud × composante           |
-| `SubFESpace`           | Formulation EF sur un sous-maillage (interpolation + quadrature)  |
+| `SubFiniteElementSpace`           | Formulation EF sur un sous-maillage (interpolation + quadrature)  |
 | `FiniteElementSpace`   | Union de sous-espaces EF                                          |
 | `ElementField`         | Valeurs par cellule × point de Gauss × composante                 |
 | `SubModel`             | Physique locale : `HeatConduction` ou `Dirichlet`                 |
@@ -55,10 +55,10 @@ Résumé des rôles :
 Exemple minimal en Rust :
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
-use pyrucast::element_type::ElementType;
+use pyrucast::mesh::configuration::Configuration;
+use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
-use pyrucast::node::Node;
+use pyrucast::mesh::node::Node;
 use pyrucast::store::insert;
 
 let cfg = insert(Configuration::new(2).unwrap());

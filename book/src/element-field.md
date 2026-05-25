@@ -8,7 +8,7 @@ Un **`ElementField`** porte une ou plusieurs valeurs **par `(cellule, point de G
 
 ## Support : un sous-espace éléments finis
 
-Un `ElementField` est attaché à un seul `SubFESpace` (cf. [Espace éléments finis](fe-space.md)) — celui-ci détermine :
+Un `ElementField` est attaché à un seul `SubFiniteElementSpace` (cf. [Espace éléments finis](fe-space.md)) — celui-ci détermine :
 
 - la liste des cellules concernées (via son `SubMesh`) ;
 - le nombre de points de Gauss par cellule (via sa `QuadratureRule`).
@@ -21,7 +21,7 @@ Les trois dimensions de l'objet sont **figées à la construction** :
 
 Le buffer interne est dimensionné une fois pour toutes et n'est **jamais réalloué**. La topologie du maillage sous-jacent doit rester figée pour la durée de vie du champ — c'est le contrat déjà documenté sur [`FiniteElementSpace`](fe-space.md) (les coordonnées peuvent évoluer, mais pas la connectivité ni le nombre de cellules).
 
-Les coordonnées et poids des points de Gauss eux-mêmes ne sont **pas** stockés dans l'`ElementField` : ils restent sur le `SubFESpace` comme données de référence, accessibles à la demande. L'`ElementField` ne contient que les valeurs utilisateur.
+Les coordonnées et poids des points de Gauss eux-mêmes ne sont **pas** stockés dans l'`ElementField` : ils restent sur le `SubFiniteElementSpace` comme données de référence, accessibles à la demande. L'`ElementField` ne contient que les valeurs utilisateur.
 
 ## Composantes nommées
 
@@ -50,19 +50,19 @@ La méthode `point_values(cell, g)` expose directement le premier de ces pattern
 
 ## Refcount et cycle de vie
 
-L'`ElementField` détient un `Handle<SubFESpace>` (cloné, donc compté par référence). Tant que le champ est vivant, son sous-espace ne peut pas être collecté. Quand le `Drop` du champ s'exécute, le refcount du sous-espace est décrémenté ; s'il atteint zéro, la cascade descend jusqu'au `SubMesh` et à la `Configuration`.
+L'`ElementField` détient un `Handle<SubFiniteElementSpace>` (cloné, donc compté par référence). Tant que le champ est vivant, son sous-espace ne peut pas être collecté. Quand le `Drop` du champ s'exécute, le refcount du sous-espace est décrémenté ; s'il atteint zéro, la cascade descend jusqu'au `SubMesh` et à la `Configuration`.
 
 `ElementField` lui-même n'incrémente **pas** le refcount des nœuds : il n'a pas de support nodal direct. Les nœuds restent protégés par le `SubMesh` du sous-espace, qui les incref déjà.
 
 ## API Rust
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
-use pyrucast::element_field::ElementField;
-use pyrucast::element_type::ElementType;
-use pyrucast::fe_space::FiniteElementSpace;
+use pyrucast::mesh::configuration::Configuration;
+use pyrucast::containers::element_field::ElementField;
+use pyrucast::mesh::element_type::ElementType;
+use pyrucast::finite_element_space::FiniteElementSpace;
 use pyrucast::mesh::Mesh;
-use pyrucast::node::Node;
+use pyrucast::mesh::node::Node;
 use pyrucast::store::{insert, with};
 
 let cfg = insert(Configuration::new(2).unwrap());
@@ -142,10 +142,10 @@ mat = pyrucast.ElementField.from_uniform_per_component(
 
 ## Sérialisation
 
-`ElementField` implémente `Persist` via `serde` (comme tous les objets pyrucast). Le swap disque et la future sauvegarde fichier le traversent sans intervention de l'utilisateur ; seul le buffer de valeurs, la liste de noms et le `Handle<SubFESpace>` voyagent dans le format binaire portable Linux ↔ Windows.
+`ElementField` implémente `Persist` via `serde` (comme tous les objets pyrucast). Le swap disque et la future sauvegarde fichier le traversent sans intervention de l'utilisateur ; seul le buffer de valeurs, la liste de noms et le `Handle<SubFiniteElementSpace>` voyagent dans le format binaire portable Linux ↔ Windows.
 
 ## Limitations actuelles
 
-- L'`ElementField` est dimensionné par un seul `SubFESpace`. Pour des grandeurs définies sur un maillage agrégé (`FiniteElementSpace`), il faudra construire un `ElementField` par sous-espace et les combiner côté utilisateur. Une variante agrégée pourra être ajoutée si le besoin se mesure.
+- L'`ElementField` est dimensionné par un seul `SubFiniteElementSpace`. Pour des grandeurs définies sur un maillage agrégé (`FiniteElementSpace`), il faudra construire un `ElementField` par sous-espace et les combiner côté utilisateur. Une variante agrégée pourra être ajoutée si le besoin se mesure.
 - Pas encore d'opérations entre `ElementField` (addition champ + champ, contraction, etc.). À venir avec les premiers besoins concrets de l'assemblage et du post-traitement.
 - Pas de mécanisme de **rééchantillonnage** entre quadratures (par exemple « projeter ce champ Gauss-2-points sur un autre Gauss-3-points »). Le sous-espace est implicitement figé à la création du champ.

@@ -4,7 +4,7 @@ Un **`Model`** est l'objet orchestrateur qui décrit un problème physique et **
 
 ```text
 Géométrie         Mesh / SubMesh                       (purement géométrique)
-Formulation EF    FiniteElementSpace / SubFESpace      (interpolation, quadrature)
+Formulation EF    FiniteElementSpace / SubFiniteElementSpace      (interpolation, quadrature)
 Physique          Model / SubModel / Physics           (loi, matériaux, assemblage)
 ```
 
@@ -99,13 +99,13 @@ Cette uniformité simplifie tout : le solveur reçoit une seule `Matrix` + un se
 ## API Rust
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
-use pyrucast::element_field::ElementField;
-use pyrucast::element_type::ElementType;
-use pyrucast::fe_space::FiniteElementSpace;
+use pyrucast::mesh::configuration::Configuration;
+use pyrucast::containers::element_field::ElementField;
+use pyrucast::mesh::element_type::ElementType;
+use pyrucast::finite_element_space::FiniteElementSpace;
 use pyrucast::mesh::Mesh;
-use pyrucast::model::{Model, SubModel};
-use pyrucast::node::Node;
+use pyrucast::containers::model::{Model, SubModel};
+use pyrucast::mesh::node::Node;
 use pyrucast::store::insert;
 
 // 1-D : maillage [0, 1] à un seul SEG2.
@@ -164,7 +164,7 @@ print(K)                                       # Matrix: 3 row(s) × 3 col(s), �
 
 ## Solveur dense — fonction `solve(matrix, rhs)`
 
-Pour valider l'assemblage de bout en bout, pyrucast embarque un **solveur dense LU minimal** (`pyrucast::solver::solve` / `pyrucast.solve`) qui :
+Pour valider l'assemblage de bout en bout, pyrucast embarque un **solveur dense LU minimal** (`pyrucast::ops::solver::lu::solve` / `pyrucast.solve`) qui :
 
 1. lit le `NodeField` de chargement à chacune des **lignes** de la matrice (les entrées absentes valent `0.0` par défaut) ;
 2. convertit la `Matrix` en `nalgebra::DMatrix<f64>` ;

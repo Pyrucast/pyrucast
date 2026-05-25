@@ -3,19 +3,19 @@
 //! A [`QuadratureRule`] returns a list of `(ξ_g, w_g)` pairs — reference
 //! coordinates and weights — over the reference element of a given
 //! [`ElementType`]. It is the **numerical** counterpart of an
-//! [`crate::interpolation::Interpolation`]: the points at which shape
+//! [`crate::finite_element_space::interpolation::Interpolation`]: the points at which shape
 //! functions are sampled when integrating.
 //!
 //! The reference frames are those documented on each `ElementType`
-//! variant (see [`crate::element_type`]). The weights are calibrated so
+//! variant (see [`crate::mesh::element_type`]). The weights are calibrated so
 //! that the sum equals the measure of the reference domain (i.e., 2 for
 //! SEG2, 1/2 for TRI3, 4 for QUA4, 1/6 for TET4, 8 for HEX8).
 //!
 //! # Example
 //!
 //! ```
-//! use pyrucast::element_type::ElementType;
-//! use pyrucast::quadrature::QuadratureRule;
+//! use pyrucast::mesh::element_type::ElementType;
+//! use pyrucast::finite_element_space::quadrature::QuadratureRule;
 //!
 //! let (xi, w) = QuadratureRule::Gauss.points(ElementType::QUA4).unwrap();
 //! assert_eq!(w.len(), 4);          // 2×2 Gauss-Legendre on [-1,1]²
@@ -24,7 +24,7 @@
 //! assert_eq!(xi.len(), 4 * 2);       // n_g × ref_dim, flat
 //! ```
 
-use crate::element_type::ElementType;
+use crate::mesh::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;

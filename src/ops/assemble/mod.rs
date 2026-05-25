@@ -1,6 +1,6 @@
-//! Assembly operators — turn a [`crate::model::Model`] into a
-//! [`crate::matrix::Matrix`] (stiffness, mass) or
-//! [`crate::node_field::NodeField`] (RHS).
+//! Assembly operators — turn a [`crate::containers::model::Model`] into a
+//! [`crate::containers::matrix::Matrix`] (stiffness, mass) or
+//! [`crate::containers::node_field::NodeField`] (RHS).
 //!
 //! The per-physics integrands live in [`crate::models`]
 //! (`heat_conduction`, `dirichlet`, …). This layer orchestrates the

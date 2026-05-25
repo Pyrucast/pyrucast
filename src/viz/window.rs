@@ -52,7 +52,7 @@ struct App<'a, D: Drawable> {
     /// rendering path).
     field_button: Option<&'a dyn FieldButton>,
     /// Cached so we don't recompute the bbox each frame.
-    target: crate::triangulation::Point3,
+    target: crate::mesh::point::Point3,
     yaw: f64,
     pitch: f64,
     scale: f64,
@@ -318,7 +318,7 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
 /// App can cycle through components on click / Tab).
 struct FieldDrawable<'a> {
     source: FieldSource<'a>,
-    field: &'a crate::node_field::NodeField,
+    field: &'a crate::containers::node_field::NodeField,
     components: Vec<String>,
     /// Index into `components`. `Cell` because the App only has `&self`
     /// access on draw, but mutates this from the event-handling path.
@@ -333,7 +333,7 @@ enum FieldSource<'a> {
 impl<'a> FieldDrawable<'a> {
     fn new(
         source: FieldSource<'a>,
-        field: &'a crate::node_field::NodeField,
+        field: &'a crate::containers::node_field::NodeField,
         initial_component: &str,
     ) -> Self {
         let components: Vec<String> = field.components().to_vec();
@@ -403,7 +403,7 @@ impl<'a> FieldButton for FieldDrawable<'a> {
 /// component (with a button that cycles through components).
 pub(crate) fn run_interactive_mesh_field(
     mesh: &crate::mesh::Mesh,
-    field: &crate::node_field::NodeField,
+    field: &crate::containers::node_field::NodeField,
     initial_component: &str,
     view: View,
 ) -> Result<()> {
@@ -436,7 +436,7 @@ pub(crate) fn run_interactive_mesh_field(
 /// component (same UX as [`run_interactive_mesh_field`]).
 pub(crate) fn run_interactive_submesh_field(
     submesh: &crate::mesh::SubMesh,
-    field: &crate::node_field::NodeField,
+    field: &crate::containers::node_field::NodeField,
     initial_component: &str,
     view: View,
 ) -> Result<()> {

@@ -30,38 +30,14 @@
 //! ```
 
 pub mod aggregate;
-pub mod cell;
-pub mod color;
-pub mod configuration;
 pub mod containers;
 pub mod error;
-pub mod fespace;
+pub mod finite_element_space;
 pub mod mesh;
 pub mod models;
 pub mod ops;
 pub mod persist;
-pub mod solver;
 pub mod store;
-
-// `triangulation` is now `ops::mesher::triangulation`; the alias keeps
-// the public `pyrucast::triangulation::*` API in place.
-pub use ops::mesher::triangulation;
-
-// Re-export each container at the crate root so existing paths
-// (`crate::matrix::Matrix`, ...) keep working after the on-disk move
-// into `containers/`.
-pub use containers::{element_field, matrix, model, node_field};
-
-// `fespace` is the canonical home for FE-space data; alias `fe_space`
-// for the existing `crate::fe_space::*` import sites, and surface its
-// sub-modules at the crate root for the same reason.
-pub use fespace as fe_space;
-pub use fespace::{interpolation, quadrature};
-
-// Re-export `mesh` sub-modules at the crate root so existing
-// `pyrucast::node::Node` / `pyrucast::element_type::ElementType` paths
-// keep working after the move under `mesh/`.
-pub use mesh::{element_type, node};
 
 #[cfg(feature = "python-api")]
 pub mod py;
@@ -113,8 +89,8 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<py::mesh::PyMesh>()?;
     m.add_class::<py::cell::PyCell>()?;
     m.add_class::<py::node_field::PyNodeField>()?;
-    m.add_class::<py::fe_space::PySubFESpace>()?;
-    m.add_class::<py::fe_space::PyFiniteElementSpace>()?;
+    m.add_class::<py::finite_element_space::PySubFiniteElementSpace>()?;
+    m.add_class::<py::finite_element_space::PyFiniteElementSpace>()?;
     m.add_class::<py::element_field::PySubElementField>()?;
     m.add_class::<py::element_field::PyElementField>()?;
     m.add_class::<py::matrix::PyMatrix>()?;

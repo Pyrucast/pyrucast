@@ -1,7 +1,7 @@
-//! Python wrapper for [`crate::node_field::NodeField`].
+//! Python wrapper for [`crate::containers::node_field::NodeField`].
 
-use crate::configuration::NodeId;
-use crate::node_field::NodeField;
+use crate::mesh::configuration::NodeId;
+use crate::containers::node_field::NodeField;
 use crate::py::mesh::{PyMesh, PySubMesh};
 use crate::store::{insert, with, with_mut, Handle};
 use pyo3::prelude::*;

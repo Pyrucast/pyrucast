@@ -1,6 +1,6 @@
 # Espace éléments finis (`FiniteElementSpace`)
 
-Ce chapitre couvre `FiniteElementSpace` et son objet associé `SubFESpace` : la couche **éléments finis** posée par-dessus la couche **géométrique** (`Mesh` / `SubMesh`). Le `Mesh` reste purement géométrique ; le `FiniteElementSpace` lui ajoute la **formulation** (fonctions de forme, points de Gauss, dérivées). Cette séparation permet de réutiliser un même maillage avec plusieurs formulations, et — plus tard — d'admettre un déplacement du maillage tout en réévaluant correctement les grandeurs physiques.
+Ce chapitre couvre `FiniteElementSpace` et son objet associé `SubFiniteElementSpace` : la couche **éléments finis** posée par-dessus la couche **géométrique** (`Mesh` / `SubMesh`). Le `Mesh` reste purement géométrique ; le `FiniteElementSpace` lui ajoute la **formulation** (fonctions de forme, points de Gauss, dérivées). Cette séparation permet de réutiliser un même maillage avec plusieurs formulations, et — plus tard — d'admettre un déplacement du maillage tout en réévaluant correctement les grandeurs physiques.
 
 ## Architecture
 
@@ -8,15 +8,15 @@ Hiérarchie miroir de celle du maillage :
 
 ```text
 Mesh                                  FiniteElementSpace
-├── SubMesh (ElementType)             ├── SubFESpace (Interpolation, QuadratureRule)
-├── SubMesh                           ├── SubFESpace
+├── SubMesh (ElementType)             ├── SubFiniteElementSpace (Interpolation, QuadratureRule)
+├── SubMesh                           ├── SubFiniteElementSpace
 └── ...                               └── ...
 ```
 
-- **`SubFESpace`** détient un `Handle<SubMesh>`, une `Interpolation` et une `QuadratureRule`. Il porte les **tables de référence** précalculées une fois pour toute (points de Gauss, fonctions de forme et dérivées de référence évaluées à ces points).
-- **`FiniteElementSpace`** détient un `Handle<Mesh>` figé et un `Vec<Handle<SubFESpace>>` en correspondance **un-pour-un** avec les sous-maillages. La topologie (connectivité, types d'éléments) est figée à la construction.
+- **`SubFiniteElementSpace`** détient un `Handle<SubMesh>`, une `Interpolation` et une `QuadratureRule`. Il porte les **tables de référence** précalculées une fois pour toute (points de Gauss, fonctions de forme et dérivées de référence évaluées à ces points).
+- **`FiniteElementSpace`** détient un `Handle<Mesh>` figé et un `Vec<Handle<SubFiniteElementSpace>>` en correspondance **un-pour-un** avec les sous-maillages. La topologie (connectivité, types d'éléments) est figée à la construction.
 
-`POI1` n'est pas un élément fini au sens classique : un sous-maillage `POI1` est rejeté à la construction d'un `SubFESpace`.
+`POI1` n'est pas un élément fini au sens classique : un sous-maillage `POI1` est rejeté à la construction d'un `SubFiniteElementSpace`.
 
 ## Conventions de l'élément de référence
 
@@ -135,11 +135,11 @@ J_{a,k}(\xi) = \frac{\partial x_a}{\partial \xi_k}
 \quad
 \text{de taille } d_s \times d_r
 \\]
-où \\( a \in \{0, \dots, d_s - 1\} \\) parcourt les directions physiques et \\( k \in \{0, \dots, d_r - 1\} \\) les directions de référence. Le buffer plat retourné par `SubFESpace::jacobian(cell, g)` suit la convention row-major \\( \mathtt{J}[a \times d_r + k] = J_{a,k} \\).
+où \\( a \in \{0, \dots, d_s - 1\} \\) parcourt les directions physiques et \\( k \in \{0, \dots, d_r - 1\} \\) les directions de référence. Le buffer plat retourné par `SubFiniteElementSpace::jacobian(cell, g)` suit la convention row-major \\( \mathtt{J}[a \times d_r + k] = J_{a,k} \\).
 
 ### Cas standard : \\( d_s = d_r \\)
 
-Quand le maillage et son espace ambiant ont la même dimension (par exemple TRI3 dans une `Configuration` 2D), \\( J \\) est carrée. Le déterminant ordinaire \\( \det(J) \\) mesure la dilatation locale du volume ; son **valeur absolue** intervient dans l'intégration. La fonction `SubFESpace::det_jacobian` retourne \\( |\det(J)| \\).
+Quand le maillage et son espace ambiant ont la même dimension (par exemple TRI3 dans une `Configuration` 2D), \\( J \\) est carrée. Le déterminant ordinaire \\( \det(J) \\) mesure la dilatation locale du volume ; son **valeur absolue** intervient dans l'intégration. La fonction `SubFiniteElementSpace::det_jacobian` retourne \\( |\det(J)| \\).
 
 La dérivation des fonctions de forme par rapport aux coordonnées physiques utilise l'inverse de \\( J \\) :
 \\[
@@ -167,7 +167,7 @@ Le **gradient tangent** d'un champ sur la surface (la projection du vrai gradien
 \\[
 \nabla_s N_i = J\, G^{-1}\, \nabla_\xi N_i
 \\]
-La fonction `SubFESpace::dn_dx` retourne ces composantes, dans le repère ambiant à \\( d_s \\) dimensions. Pour \\( d_s = d_r \\), ces formules se réduisent à celles du cas standard (\\( J G^{-1} = J^{-T} \\)).
+La fonction `SubFiniteElementSpace::dn_dx` retourne ces composantes, dans le repère ambiant à \\( d_s \\) dimensions. Pour \\( d_s = d_r \\), ces formules se réduisent à celles du cas standard (\\( J G^{-1} = J^{-T} \\)).
 
 ### Combinaisons valides
 
@@ -181,7 +181,7 @@ Le couple \\( (d_r, d_s) \\) possible pour notre v0 :
 | TET4 | 3 | 3 |
 | HEX8 | 3 | 3 |
 
-\\( d_s < d_r \\) n'a pas de sens (impossible de définir un élément 2D dans un espace 1D) ; le constructeur de `SubFESpace` rejette ce cas.
+\\( d_s < d_r \\) n'a pas de sens (impossible de définir un élément 2D dans un espace 1D) ; le constructeur de `SubFiniteElementSpace` rejette ce cas.
 
 ## Stratégie de stockage : invariant vs variant à la déformation
 
@@ -189,14 +189,14 @@ Le maillage support d'un `FiniteElementSpace` est topologiquement figé, mais se
 
 | Grandeur | Variant avec les coordonnées ? | Stratégie |
 |---|---|---|
-| Points de Gauss \\( \xi_g \\), poids \\( w_g \\) | non (référence pure) | **précalculés** dans le `SubFESpace` |
-| \\( N_i(\xi_g) \\), \\( \partial N_i / \partial \xi_k(\xi_g) \\) | non (référence pure) | **précalculés** dans le `SubFESpace` |
+| Points de Gauss \\( \xi_g \\), poids \\( w_g \\) | non (référence pure) | **précalculés** dans le `SubFiniteElementSpace` |
+| \\( N_i(\xi_g) \\), \\( \partial N_i / \partial \xi_k(\xi_g) \\) | non (référence pure) | **précalculés** dans le `SubFiniteElementSpace` |
 | Jacobien \\( J(\xi_g) \\) sur chaque cellule | oui | **calculé à la volée** |
 | \\( |J|(\xi_g) \\), \\( \partial N_i / \partial x_a(\xi_g) \\) | oui | **calculé à la volée** |
 
 Ce choix donne deux propriétés importantes :
 
-1. **Empreinte mémoire indépendante du nombre de cellules.** Un `SubFESpace` ne stocke que de l'ordre de \\( n_g \times n_\text{nodes} \times d_r \\) flottants — quelques centaines au plus par sous-espace. À comparer aux GB qu'un précalcul des Jacobiens demanderait sur un maillage 3D fin.
+1. **Empreinte mémoire indépendante du nombre de cellules.** Un `SubFiniteElementSpace` ne stocke que de l'ordre de \\( n_g \times n_\text{nodes} \times d_r \\) flottants — quelques centaines au plus par sous-espace. À comparer aux GB qu'un précalcul des Jacobiens demanderait sur un maillage 3D fin.
 2. **Robustesse au déplacement.** Réécrire les coordonnées dans la `Configuration` (par exemple via `Configuration::set_coord`) suffit à mettre à jour automatiquement toutes les évaluations de \\( J \\), \\( |J| \\) et \\( \partial N_i / \partial x_a \\) — pas d'invalidation à signaler, pas de cache à reconstruire.
 
 Le coût est CPU plutôt que mémoire : chaque appel à `jacobian(cell, g)` recalcule la somme \\( J = \sum_i \mathbf{x}_i\, \nabla_\xi N_i \\). En pratique, l'assemblage matrice-élémentaire procède **cellule par cellule** : on calcule \\( J \\), \\( |J| \\), \\( \nabla_x N_i \\) une fois par couple (cellule, Gauss), puis on les réutilise pour tous les termes intégrés. Le surcoût reste donc proportionnel à \\( n_\text{cells} \times n_g \\) — soit le minimum incompressible — et non à \\( n_\text{cells} \times n_g \times n_\text{termes} \\).
@@ -205,7 +205,7 @@ Si une mesure montrait un jour que ce recalcul devient un goulot d'étranglement
 
 ## Validation à la construction
 
-`SubFESpace::new` rejette à la création :
+`SubFiniteElementSpace::new` rejette à la création :
 
 - un sous-maillage de type `POI1` (pas de repère de référence) ;
 - un couple `(ElementType, Interpolation)` non supporté (par exemple `TRI3` + `Lagrange2` tant que `Lagrange2` n'existe pas) ;
@@ -216,7 +216,7 @@ Si une mesure montrait un jour que ce recalcul devient un goulot d'étranglement
 
 - que le maillage contient au moins un sous-maillage ;
 - que la longueur de la liste `(interpolation, quadrature)` correspond au nombre de sous-maillages ;
-- que chaque `SubFESpace` se construit sans erreur.
+- que chaque `SubFiniteElementSpace` se construit sans erreur.
 
 Le déterminant du Jacobien n'est **pas** vérifié à la construction : un élément dégénéré ou inversé ne sera détecté qu'à la première évaluation de `det_jacobian`. Cette validation paresseuse permet de construire un FE space sans toucher aux coordonnées et reste correcte vis-à-vis du déplacement de maillage ultérieur (un élément valide peut devenir dégénéré après un déplacement et inversement).
 
@@ -225,11 +225,11 @@ Le déterminant du Jacobien n'est **pas** vérifié à la construction : un él�
 Constructeur principal — Lagrange-1 partout, quadrature de Gauss par défaut :
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
-use pyrucast::element_type::ElementType;
-use pyrucast::fe_space::FiniteElementSpace;
+use pyrucast::mesh::configuration::Configuration;
+use pyrucast::mesh::element_type::ElementType;
+use pyrucast::finite_element_space::FiniteElementSpace;
 use pyrucast::mesh::Mesh;
-use pyrucast::node::Node;
+use pyrucast::mesh::node::Node;
 use pyrucast::store::{insert, with};
 
 let cfg = insert(Configuration::new(2).unwrap());
@@ -256,8 +256,8 @@ with(&sub, |s| {
 Constructeur explicite — utile pour mélanger les interpolations / quadratures par sous-maillage :
 
 ```rust,ignore
-use pyrucast::interpolation::Interpolation;
-use pyrucast::quadrature::QuadratureRule;
+use pyrucast::finite_element_space::interpolation::Interpolation;
+use pyrucast::finite_element_space::quadrature::QuadratureRule;
 
 let fes = FiniteElementSpace::with(
     mesh_h,
@@ -305,7 +305,7 @@ assert!((dj_after - 2.0).abs() < 1e-12);
 ## API Python
 
 L'objet est exposé sous le nom `pyrucast.FiniteElementSpace`, avec les
-sous-espaces accessibles via `pyrucast.SubFESpace`. Les interpolations et
+sous-espaces accessibles via `pyrucast.SubFiniteElementSpace`. Les interpolations et
 règles de quadrature sont passées en chaînes de caractères
 (`"LAGRANGE1"`, `"GAUSS"`).
 

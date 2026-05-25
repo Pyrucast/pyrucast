@@ -23,7 +23,7 @@
 //!   usual [`crate::store::Handle`] refcount.
 //! - **Each node** inside the Configuration has its own refcount,
 //!   manipulated via [`Configuration::incref`] / [`Configuration::decref`]
-//!   (used by [`crate::node::Node`] and, later, by meshes and fields).
+//!   (used by [`crate::mesh::node::Node`] and, later, by meshes and fields).
 //!
 //! # Identity vs solver ordering
 //!
@@ -41,7 +41,7 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::configuration::{Configuration, NodeId};
+//! use pyrucast::mesh::configuration::{Configuration, NodeId};
 //! use pyrucast::store::{insert, with, with_mut};
 //!
 //! let h = insert(Configuration::new(2).unwrap());
@@ -130,7 +130,7 @@ impl Configuration {
 
     /// Add a node with these coordinates in **all** sets. Initializes its
     /// refcount to 1 — the caller is responsible for at least one decrement
-    /// (typically through the end-of-life of a [`crate::node::Node`]).
+    /// (typically through the end-of-life of a [`crate::mesh::node::Node`]).
     pub fn add_node(&mut self, coords: &[f64]) -> Result<NodeId> {
         if coords.len() != self.dim as usize {
             return Err(PyrucastError::Message(format!(

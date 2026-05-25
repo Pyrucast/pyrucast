@@ -38,10 +38,10 @@ En cas d'échec partiel d'`add_cell` (par exemple un nœud déjà ramassé), les
 ## API Rust
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
-use pyrucast::element_type::ElementType;
+use pyrucast::mesh::configuration::Configuration;
+use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
-use pyrucast::node::Node;
+use pyrucast::mesh::node::Node;
 use pyrucast::store::{insert, with, with_mut};
 
 let cfg = insert(Configuration::new(2).unwrap());
@@ -106,7 +106,7 @@ Quand `contour` contient deux sous-maillages SEG2 ou plus, `fill_surface` bascul
 
 L'orientation des boucles d'entrée n'a pas d'importance : la détection extérieur/trous se base uniquement sur l'aire absolue. Les triangles produits sont CCW dans le plan de projection. Aucun nœud interne n'est créé pour le moment ; ce sera le rôle de l'étape de raffinement à venir.
 
-L'algorithme géométrique vit dans `pyrucast::triangulation::cdt`, exposé via `triangulate_polygon_with_holes(outer, holes)` pour les besoins indépendants du système `Mesh`.
+L'algorithme géométrique vit dans `pyrucast::ops::mesher::triangulation::cdt`, exposé via `triangulate_polygon_with_holes(outer, holes)` pour les besoins indépendants du système `Mesh`.
 
 ### Contrôle de planéité (cas 3D)
 
@@ -207,7 +207,7 @@ fin = pyrucast.Mesh.fill_surface(
 Côté Rust :
 
 ```rust,ignore
-use pyrucast::triangulation::RefinementOptions;
+use pyrucast::ops::mesher::triangulation::RefinementOptions;
 
 let opts = RefinementOptions {
     max_edge_length: Some(1.0),
@@ -216,7 +216,7 @@ let opts = RefinementOptions {
 let fin = Mesh::fill_surface(&combined, ElementType::TRI3, Some(opts))?;
 ```
 
-Le module `pyrucast::triangulation` regroupe les briques géométriques (`signed_area`, `ear_clip_2d`, `newell_normal`, `in_plane_basis`, `delaunay_2d`, `constrained_delaunay_2d`, `triangulate_polygon_with_holes`) — toutes opèrent sur des tableaux bruts et restent réutilisables indépendamment du système `Mesh`.
+Le module `pyrucast::ops::mesher::triangulation` regroupe les briques géométriques (`signed_area`, `ear_clip_2d`, `newell_normal`, `in_plane_basis`, `delaunay_2d`, `constrained_delaunay_2d`, `triangulate_polygon_with_holes`) — toutes opèrent sur des tableaux bruts et restent réutilisables indépendamment du système `Mesh`.
 
 ## Sûreté du swap
 

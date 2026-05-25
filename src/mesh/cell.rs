@@ -9,10 +9,10 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::configuration::Configuration;
-//! use pyrucast::element_type::ElementType;
+//! use pyrucast::mesh::configuration::Configuration;
+//! use pyrucast::mesh::element_type::ElementType;
 //! use pyrucast::mesh::{Mesh, SubMesh};
-//! use pyrucast::node::Node;
+//! use pyrucast::mesh::node::Node;
 //! use pyrucast::store::insert;
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
@@ -32,11 +32,11 @@
 
 use std::fmt;
 
-use crate::configuration::NodeId;
-use crate::element_type::ElementType;
+use crate::mesh::configuration::NodeId;
+use crate::mesh::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::mesh::SubMesh;
-use crate::node::Node;
+use crate::mesh::node::Node;
 use crate::store::{with, Handle};
 
 /// Lightweight view on a single cell of a `SubMesh`.
@@ -154,9 +154,9 @@ impl ExactSizeIterator for CellIter {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::configuration::Configuration;
+    use crate::mesh::configuration::Configuration;
     use crate::mesh::{Mesh, SubMesh};
-    use crate::node::Node;
+    use crate::mesh::node::Node;
     use crate::store::insert;
 
     #[test]

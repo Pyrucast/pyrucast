@@ -1,6 +1,6 @@
 //! Field-aware colouring for mesh visualization.
 //!
-//! Given a [`crate::node_field::NodeField`] sampled at the nodes, paint
+//! Given a [`crate::containers::node_field::NodeField`] sampled at the nodes, paint
 //! each mesh cell with the colour the field value maps to under a
 //! standard "jet-lite" colormap (blue → green → red, no perceptual
 //! ordering pretensions — good enough for early-stage debugging).
@@ -10,11 +10,11 @@
 //! from the field do not contribute; a cell with no node in the
 //! support gets value `0.0`.
 
-use crate::color::RgbColor;
-use crate::configuration::NodeId;
+use crate::mesh::color::RgbColor;
+use crate::mesh::configuration::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::mesh::{Mesh, SubMesh};
-use crate::node_field::NodeField;
+use crate::containers::node_field::NodeField;
 use crate::store::with;
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
@@ -240,10 +240,10 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::configuration::Configuration;
-    use crate::element_type::ElementType;
+    use crate::mesh::configuration::Configuration;
+    use crate::mesh::element_type::ElementType;
     use crate::mesh::SubMesh as RawSubMesh;
-    use crate::node::Node;
+    use crate::mesh::node::Node;
     use crate::store::insert;
 
     #[test]

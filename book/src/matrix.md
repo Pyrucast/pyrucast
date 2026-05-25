@@ -47,8 +47,8 @@ Cette stratégie « COO en construction, CSR/CSC à l'usage » colle au style ca
 ## Cas d'usage typique : matrice de raideur du laplacien
 
 ```rust,ignore
-use pyrucast::configuration::NodeId;
-use pyrucast::matrix::Matrix;
+use pyrucast::mesh::configuration::NodeId;
+use pyrucast::containers::matrix::Matrix;
 
 let mut k = Matrix::new(true);  // matrice de raideur, symétrique
 // Modèle simple à 2 nœuds (segment) :

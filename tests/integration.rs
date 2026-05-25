@@ -1,10 +1,10 @@
 //! Integration test: verifies that pyrucast's public API is usable from
 //! an external crate (Phase 0 + Phase 1 + Phase 2).
 
-use pyrucast::configuration::{Configuration, NodeId};
-use pyrucast::element_type::ElementType;
+use pyrucast::mesh::configuration::{Configuration, NodeId};
+use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
-use pyrucast::node::Node;
+use pyrucast::mesh::node::Node;
 use pyrucast::persist::Persist;
 use pyrucast::store::{compact, insert, live_count, swap_out, with, with_mut};
 use pyrucast::{PyrucastError, Result};

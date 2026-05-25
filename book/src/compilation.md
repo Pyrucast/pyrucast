@@ -79,10 +79,10 @@ print(mesh)
 L'exemple équivalent au script Python ci-dessus, compilable en tant que binary ou test d'intégration :
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
-use pyrucast::element_type::ElementType;
+use pyrucast::mesh::configuration::Configuration;
+use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
-use pyrucast::node::Node;
+use pyrucast::mesh::node::Node;
 use pyrucast::store::insert;
 
 fn main() {

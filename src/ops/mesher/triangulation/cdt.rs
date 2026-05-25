@@ -28,7 +28,8 @@
 //! and hole removal will be layered on top in subsequent commits.
 
 use crate::error::{PyrucastError, Result};
-use crate::triangulation::{cross2, point_in_triangle, Point2, Vector2};
+use crate::mesh::point::{Point2, Vector2};
+use super::{cross2, point_in_triangle};
 use std::collections::{HashMap, HashSet};
 
 /// Refinement criteria applied after the constrained Delaunay
@@ -299,7 +300,7 @@ impl Cdt {
                 )));
             }
             let pts: Vec<Point2> = chain.iter().map(|&v| self.points[v]).collect();
-            let tris = crate::triangulation::ear_clip_2d(&pts)?;
+            let tris = crate::ops::mesher::triangulation::ear_clip_2d(&pts)?;
             for [i, j, k] in tris {
                 self.triangles.push(Triangle {
                     v: [chain[i], chain[j], chain[k]],
@@ -988,7 +989,8 @@ fn in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
 ///
 /// # Example
 /// ```
-/// use pyrucast::triangulation::{delaunay_2d, Point2};
+/// use pyrucast::mesh::point::Point2;
+/// use pyrucast::ops::mesher::triangulation::delaunay_2d;
 ///
 /// let pts = vec![
 ///     Point2::new(0.0, 0.0), Point2::new(1.0, 0.0),

@@ -6,17 +6,17 @@
 //! long as at least one `Node` exists, the node is protected from the
 //! `Configuration`'s garbage collector.
 //!
-//! Internal code can still manipulate [`crate::configuration::NodeId`]
+//! Internal code can still manipulate [`crate::mesh::configuration::NodeId`]
 //! values directly, but then loses the automatic GC protection: it must
-//! call [`Configuration::incref`](crate::configuration::Configuration::incref) /
-//! [`Configuration::decref`](crate::configuration::Configuration::decref)
+//! call [`Configuration::incref`](crate::mesh::configuration::Configuration::incref) /
+//! [`Configuration::decref`](crate::mesh::configuration::Configuration::decref)
 //! by hand.
 //!
 //! # Example
 //!
 //! ```
-//! use pyrucast::configuration::Configuration;
-//! use pyrucast::node::Node;
+//! use pyrucast::mesh::configuration::Configuration;
+//! use pyrucast::mesh::node::Node;
 //! use pyrucast::store::{insert, with, with_mut};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
@@ -33,7 +33,7 @@
 //! with(&cfg, |c| assert!(!c.is_alive(id))).unwrap();
 //! ```
 
-use crate::configuration::{Configuration, NodeId};
+use crate::mesh::configuration::{Configuration, NodeId};
 use crate::error::Result;
 use crate::store::{with, with_mut, Handle};
 use std::fmt;

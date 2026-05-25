@@ -18,10 +18,10 @@
 //! # Example
 //!
 //! ```no_run
-//! use pyrucast::configuration::Configuration;
-//! use pyrucast::element_type::ElementType;
+//! use pyrucast::mesh::configuration::Configuration;
+//! use pyrucast::mesh::element_type::ElementType;
 //! use pyrucast::mesh::SubMesh;
-//! use pyrucast::node::Node;
+//! use pyrucast::mesh::node::Node;
 //! use pyrucast::store::insert;
 //! use pyrucast::viz::View;
 //!
@@ -48,10 +48,8 @@ pub mod overlay;
 pub mod window;
 
 use crate::error::{PyrucastError, Result};
+use crate::viz::drawable::Drawable;
 use std::path::Path;
-
-pub use camera::{Bbox3, Projector};
-pub use drawable::Drawable;
 
 // ─── Point of view ──────────────────────────────────────────────────────────
 
@@ -74,7 +72,7 @@ pub struct View {
     pub yaw: f64,
     pub pitch: f64,
     pub scale: f64,
-    pub target: Option<crate::triangulation::Point3>,
+    pub target: Option<crate::mesh::point::Point3>,
     /// Show the orientation gizmo (small red/green/blue axes triad in the
     /// bottom-left corner) on top of the rendered object.
     pub show_axes: bool,
@@ -198,7 +196,7 @@ pub(crate) fn render<D: Drawable>(
 /// to cycle through every component.
 pub(crate) fn render_mesh_with_field(
     mesh: &crate::mesh::Mesh,
-    field: &crate::node_field::NodeField,
+    field: &crate::containers::node_field::NodeField,
     component: Option<&str>,
     view: Option<View>,
     save: Option<&Path>,
@@ -235,7 +233,7 @@ pub(crate) fn render_mesh_with_field(
 /// component. Same semantics as [`render_mesh_with_field`].
 pub(crate) fn render_submesh_with_field(
     submesh: &crate::mesh::SubMesh,
-    field: &crate::node_field::NodeField,
+    field: &crate::containers::node_field::NodeField,
     component: Option<&str>,
     view: Option<View>,
     save: Option<&Path>,

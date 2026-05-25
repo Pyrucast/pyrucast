@@ -42,11 +42,11 @@ En cas d'échec partiel pendant la construction (par exemple un nœud collecté 
 ## API Rust
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
-use pyrucast::element_type::ElementType;
+use pyrucast::mesh::configuration::Configuration;
+use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::SubMesh;
-use pyrucast::node::Node;
-use pyrucast::node_field::NodeField;
+use pyrucast::mesh::node::Node;
+use pyrucast::containers::node_field::NodeField;
 use pyrucast::store::{insert, with};
 
 let cfg = insert(Configuration::new(2).unwrap());

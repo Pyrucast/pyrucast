@@ -2,16 +2,16 @@
 //!
 //! Hierarchy mirroring [`crate::mesh`]:
 //!
-//! - [`SubFESpace`] — one [`crate::interpolation::Interpolation`] and one
-//!   [`crate::quadrature::QuadratureRule`] applied to a single
+//! - [`SubFiniteElementSpace`] — one [`crate::finite_element_space::interpolation::Interpolation`] and one
+//!   [`crate::finite_element_space::quadrature::QuadratureRule`] applied to a single
 //!   [`crate::mesh::SubMesh`]. It stores the **reference-space tables**
 //!   that do not depend on the physical coordinates of the nodes
 //!   (Gauss points and weights, shape functions and reference
 //!   derivatives at those Gauss points) and computes the physical
 //!   quantities — Jacobian, `|J|`, `dN/dx` — **on the fly** from the
 //!   current node coordinates in the
-//!   [`crate::configuration::Configuration`].
-//! - [`FiniteElementSpace`] — collection of `SubFESpace` matching the
+//!   [`crate::mesh::configuration::Configuration`].
+//! - [`FiniteElementSpace`] — collection of `SubFiniteElementSpace` matching the
 //!   submeshes of a [`crate::mesh::Mesh`] one-for-one. The mesh handle
 //!   is captured at construction.
 //!
@@ -26,11 +26,11 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::configuration::Configuration;
-//! use pyrucast::element_type::ElementType;
-//! use pyrucast::fe_space::FiniteElementSpace;
+//! use pyrucast::mesh::configuration::Configuration;
+//! use pyrucast::mesh::element_type::ElementType;
+//! use pyrucast::finite_element_space::FiniteElementSpace;
 //! use pyrucast::mesh::Mesh;
-//! use pyrucast::node::Node;
+//! use pyrucast::mesh::node::Node;
 //! use pyrucast::store::{insert, with};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
@@ -59,24 +59,24 @@ pub mod interpolation;
 pub mod quadrature;
 
 use crate::aggregate::Aggregate;
-use crate::configuration::{Configuration, NodeId};
+use crate::mesh::configuration::{Configuration, NodeId};
 use crate::error::{PyrucastError, Result};
-use crate::fespace::interpolation::Interpolation;
-use crate::fespace::quadrature::QuadratureRule;
+use crate::finite_element_space::interpolation::Interpolation;
+use crate::finite_element_space::quadrature::QuadratureRule;
 use crate::mesh::element_type::ElementType;
 use crate::mesh::{Mesh, SubMesh};
 use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-// ─── SubFESpace ────────────────────────────────────────────────────────────
+// ─── SubFiniteElementSpace ────────────────────────────────────────────────────────────
 
 /// Finite-element space attached to a single [`SubMesh`].
 ///
 /// Stores only the **reference-space** tables (independent of the node
 /// coordinates); physical quantities are computed on the fly.
 #[derive(Serialize, Deserialize)]
-pub struct SubFESpace {
+pub struct SubFiniteElementSpace {
     submesh: Handle<SubMesh>,
     interpolation: Interpolation,
     quadrature: QuadratureRule,
@@ -97,7 +97,7 @@ pub struct SubFESpace {
     dn_at_g: Vec<f64>,
 }
 
-impl SubFESpace {
+impl SubFiniteElementSpace {
     /// Build a subspace over `submesh` with the given interpolation and
     /// quadrature.
     ///
@@ -113,18 +113,18 @@ impl SubFESpace {
         let (et, cfg) = with(&submesh, |s| (s.element_type(), s.configuration()))?;
         if et == ElementType::POI1 {
             return Err(PyrucastError::Message(
-                "SubFESpace: POI1 submesh is not supported (no reference frame)".into(),
+                "SubFiniteElementSpace: POI1 submesh is not supported (no reference frame)".into(),
             ));
         }
         if !interpolation.is_compatible_with(et) {
             return Err(PyrucastError::Message(format!(
-                "SubFESpace: interpolation {} not compatible with element type {}",
+                "SubFiniteElementSpace: interpolation {} not compatible with element type {}",
                 interpolation, et
             )));
         }
         if !quadrature.is_compatible_with(et) {
             return Err(PyrucastError::Message(format!(
-                "SubFESpace: quadrature {} not compatible with element type {}",
+                "SubFiniteElementSpace: quadrature {} not compatible with element type {}",
                 quadrature, et
             )));
         }
@@ -132,7 +132,7 @@ impl SubFESpace {
         let ref_dim = et.topological_dim();
         if space_dim < ref_dim {
             return Err(PyrucastError::Message(format!(
-                "SubFESpace: space dim {} < reference dim {} of {} (cannot define a Jacobian)",
+                "SubFiniteElementSpace: space dim {} < reference dim {} of {} (cannot define a Jacobian)",
                 space_dim, ref_dim, et
             )));
         }
@@ -305,7 +305,7 @@ impl SubFESpace {
                 let total = s.cell_count();
                 if cell_idx >= total {
                     return Err(PyrucastError::Message(format!(
-                        "SubFESpace: cell index {} ≥ cell_count {}",
+                        "SubFiniteElementSpace: cell index {} ≥ cell_count {}",
                         cell_idx, total
                     )));
                 }
@@ -326,7 +326,7 @@ impl SubFESpace {
     fn check_g(&self, g: usize) -> Result<()> {
         if g >= self.gauss_count() {
             return Err(PyrucastError::Message(format!(
-                "SubFESpace: gauss index {} ≥ n_g {}",
+                "SubFiniteElementSpace: gauss index {} ≥ n_g {}",
                 g,
                 self.gauss_count()
             )));
@@ -335,9 +335,9 @@ impl SubFESpace {
     }
 }
 
-impl fmt::Debug for SubFESpace {
+impl fmt::Debug for SubFiniteElementSpace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SubFESpace")
+        f.debug_struct("SubFiniteElementSpace")
             .field("interpolation", &self.interpolation)
             .field("quadrature", &self.quadrature)
             .field("space_dim", &self.space_dim)
@@ -346,7 +346,7 @@ impl fmt::Debug for SubFESpace {
     }
 }
 
-impl fmt::Display for SubFESpace {
+impl fmt::Display for SubFiniteElementSpace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let et = self
             .element_type()
@@ -354,7 +354,7 @@ impl fmt::Display for SubFESpace {
             .unwrap_or("?");
         write!(
             f,
-            "SubFESpace<{}, {}, {}>: {} Gauss point(s)",
+            "SubFiniteElementSpace<{}, {}, {}>: {} Gauss point(s)",
             et,
             self.interpolation,
             self.quadrature,
@@ -365,24 +365,24 @@ impl fmt::Display for SubFESpace {
 
 // ─── FiniteElementSpace ────────────────────────────────────────────────────
 
-/// Finite-element space attached to a [`Mesh`] — one [`SubFESpace`] per
+/// Finite-element space attached to a [`Mesh`] — one [`SubFiniteElementSpace`] per
 /// submesh, in the same order.
 ///
 /// Topology (connectivity, element types) is frozen at construction:
-/// each `SubFESpace` captures its `SubMesh` handle. The node coordinates
+/// each `SubFiniteElementSpace` captures its `SubMesh` handle. The node coordinates
 /// in the underlying `Configuration` may evolve later; the on-the-fly
 /// Jacobian computation always reflects the current coordinates.
 #[derive(Serialize, Deserialize)]
 pub struct FiniteElementSpace {
-    subspaces: Vec<Handle<SubFESpace>>,
+    subspaces: Vec<Handle<SubFiniteElementSpace>>,
 }
 
 impl Aggregate for FiniteElementSpace {
-    type Sub = SubFESpace;
-    fn items(&self) -> &[Handle<SubFESpace>] {
+    type Sub = SubFiniteElementSpace;
+    fn items(&self) -> &[Handle<SubFiniteElementSpace>] {
         &self.subspaces
     }
-    fn items_mut(&mut self) -> &mut Vec<Handle<SubFESpace>> {
+    fn items_mut(&mut self) -> &mut Vec<Handle<SubFiniteElementSpace>> {
         &mut self.subspaces
     }
 }
@@ -414,7 +414,7 @@ impl FiniteElementSpace {
         let mut subspaces = Vec::with_capacity(n_sub);
         for (i, &(interp, quad)) in choices.iter().enumerate() {
             let sm = mesh.submesh(i)?;
-            let sub = SubFESpace::new(sm, interp, quad)?;
+            let sub = SubFiniteElementSpace::new(sm, interp, quad)?;
             subspaces.push(insert(sub));
         }
         Ok(Self { subspaces })
@@ -442,7 +442,7 @@ impl FiniteElementSpace {
     }
 
     /// Handle to the `i`-th subspace (internal clone).
-    pub fn subspace(&self, i: usize) -> Result<Handle<SubFESpace>> {
+    pub fn subspace(&self, i: usize) -> Result<Handle<SubFiniteElementSpace>> {
         self.subspaces
             .get(i)
             .cloned()
@@ -456,15 +456,15 @@ impl FiniteElementSpace {
 }
 
 impl std::ops::Index<usize> for FiniteElementSpace {
-    type Output = Handle<SubFESpace>;
+    type Output = Handle<SubFiniteElementSpace>;
     fn index(&self, idx: usize) -> &Self::Output {
         &self.subspaces[idx]
     }
 }
 
 impl<'a> IntoIterator for &'a FiniteElementSpace {
-    type Item = &'a Handle<SubFESpace>;
-    type IntoIter = std::slice::Iter<'a, Handle<SubFESpace>>;
+    type Item = &'a Handle<SubFiniteElementSpace>;
+    type IntoIter = std::slice::Iter<'a, Handle<SubFiniteElementSpace>>;
     fn into_iter(self) -> Self::IntoIter {
         self.subspaces.iter()
     }
@@ -630,7 +630,7 @@ fn build_dn_dx(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::Node;
+    use crate::mesh::node::Node;
     use crate::store::{insert, with};
 
     fn cfg2d() -> Handle<Configuration> {
@@ -641,7 +641,7 @@ mod tests {
         insert(Configuration::new(3).unwrap())
     }
 
-    // ── SubFESpace structural checks ────────────────────────────────────────
+    // ── SubFiniteElementSpace structural checks ────────────────────────────────────────
 
     #[test]
     fn rejects_poi1_submesh() {
@@ -652,7 +652,7 @@ mod tests {
             sm.add_cell(&[n.id()]).unwrap();
             insert(sm)
         };
-        let err = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap_err();
+        let err = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
     }
 
@@ -668,7 +668,7 @@ mod tests {
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
-        assert!(SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).is_err());
+        assert!(SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).is_err());
     }
 
     // ── Jacobian: closed-form checks ────────────────────────────────────────
@@ -684,7 +684,7 @@ mod tests {
             sm.add_cell(&[a.id(), b.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
         for g in 0..sub.gauss_count() {
             let jac = sub.jacobian(0, g).unwrap();
             assert_eq!(jac.len(), 1);
@@ -705,7 +705,7 @@ mod tests {
             sm.add_cell(&[a.id(), b.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
         for g in 0..sub.gauss_count() {
             let jac = sub.jacobian(0, g).unwrap();
             assert_eq!(jac.len(), 2);
@@ -728,7 +728,7 @@ mod tests {
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
         for g in 0..sub.gauss_count() {
             let dj = sub.det_jacobian(0, g).unwrap();
             assert!((dj - 12.0).abs() < 1e-12);
@@ -748,7 +748,7 @@ mod tests {
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
         for g in 0..sub.gauss_count() {
             let dj = sub.det_jacobian(0, g).unwrap();
             assert!((dj - 12.0).abs() < 1e-12);
@@ -771,7 +771,7 @@ mod tests {
             sm.add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
         // Integral of |J| over reference square should equal physical area = 1.
         let mut area = 0.0;
         for g in 0..sub.gauss_count() {
@@ -802,7 +802,7 @@ mod tests {
             sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
             insert(sm)
         };
-        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
         let mut vol = 0.0;
         for g in 0..sub.gauss_count() {
             vol += sub.gauss_weight(g).unwrap() * sub.det_jacobian(0, g).unwrap();
@@ -825,7 +825,7 @@ mod tests {
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
         for g in 0..sub.gauss_count() {
             let dn = sub.dn_dx(0, g).unwrap();
             // ∂N_1/∂x = -1/3, ∂N_1/∂y = -1/4
@@ -854,7 +854,7 @@ mod tests {
             sm.add_cell(&[a.id(), b.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
 
         let dj_before = sub.det_jacobian(0, 0).unwrap();
         assert!((dj_before - 0.5).abs() < 1e-12);
@@ -958,7 +958,7 @@ mod tests {
 
         with(&fes.subspace(0).unwrap(), |sub| {
             let s = format!("{}", sub);
-            assert!(s.contains("SubFESpace"));
+            assert!(s.contains("SubFiniteElementSpace"));
             assert!(s.contains("TRI3"));
             assert!(s.contains("LAGRANGE1"));
             assert!(s.contains("GAUSS"));

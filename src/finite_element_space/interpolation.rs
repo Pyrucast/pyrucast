@@ -4,7 +4,7 @@
 //! shape functions `N_i(ξ)` and their reference derivatives
 //! `∂N_i/∂ξ_j` for a given [`ElementType`]. It is independent of any
 //! particular cell or coordinate set: every evaluation lives in the
-//! reference frame of the element type (see [`crate::element_type`]).
+//! reference frame of the element type (see [`crate::mesh::element_type`]).
 //!
 //! Adding a new interpolation means:
 //! - adding a variant to [`Interpolation`];
@@ -14,8 +14,8 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::element_type::ElementType;
-//! use pyrucast::interpolation::Interpolation;
+//! use pyrucast::mesh::element_type::ElementType;
+//! use pyrucast::finite_element_space::interpolation::Interpolation;
 //!
 //! // Lagrange-1 shape functions of a TRI3 at the centroid (1/3, 1/3).
 //! let n = Interpolation::Lagrange1
@@ -26,7 +26,7 @@
 //! assert!((s - 1.0).abs() < 1e-12);  // partition of unity
 //! ```
 
-use crate::element_type::ElementType;
+use crate::mesh::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;

@@ -1,15 +1,15 @@
 //! ElementField — multi-component values per `(cell, Gauss point)` on a
-//! [`crate::fe_space::FiniteElementSpace`].
+//! [`crate::finite_element_space::FiniteElementSpace`].
 //!
-//! Hierarchy mirroring [`crate::fe_space`]:
+//! Hierarchy mirroring [`crate::finite_element_space`]:
 //!
 //! - [`SubElementField`] — multi-component values per `(cell, Gauss point)`
-//!   on a single [`crate::fe_space::SubFESpace`]. Where
-//!   [`crate::node_field::NodeField`] stores values **at nodes**, a
+//!   on a single [`crate::finite_element_space::SubFiniteElementSpace`]. Where
+//!   [`crate::containers::node_field::NodeField`] stores values **at nodes**, a
 //!   `SubElementField` stores them **at the Gauss points of every cell**
 //!   of a finite-element subspace.
 //! - [`ElementField`] — aggregate of `SubElementField`, one per subspace
-//!   of a [`crate::fe_space::FiniteElementSpace`], in the same order.
+//!   of a [`crate::finite_element_space::FiniteElementSpace`], in the same order.
 //!
 //! Typical uses:
 //!
@@ -23,7 +23,7 @@
 //! # Snapshot of the FE space layout
 //!
 //! On construction every `SubElementField` captures three dimensions of
-//! its host `SubFESpace`:
+//! its host `SubFiniteElementSpace`:
 //!
 //! - `cell_count`  — number of cells (`SubMesh::cell_count` at that moment);
 //! - `gauss_count` — number of Gauss points per cell;
@@ -32,8 +32,8 @@
 //! The internal buffer is sized accordingly and **never reallocated**. The
 //! mesh topology underlying the FE space is expected to stay frozen for
 //! the lifetime of the field (per the contract documented on
-//! [`crate::fe_space::FiniteElementSpace`]). The Gauss-point coordinates
-//! and weights are kept as reference data on the `SubFESpace` itself and
+//! [`crate::finite_element_space::FiniteElementSpace`]). The Gauss-point coordinates
+//! and weights are kept as reference data on the `SubFiniteElementSpace` itself and
 //! may be re-read on demand; only the user data lives here.
 //!
 //! # Layout
@@ -51,12 +51,12 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::configuration::Configuration;
-//! use pyrucast::element_field::ElementField;
-//! use pyrucast::element_type::ElementType;
-//! use pyrucast::fe_space::FiniteElementSpace;
+//! use pyrucast::mesh::configuration::Configuration;
+//! use pyrucast::containers::element_field::ElementField;
+//! use pyrucast::mesh::element_type::ElementType;
+//! use pyrucast::finite_element_space::FiniteElementSpace;
 //! use pyrucast::mesh::Mesh;
-//! use pyrucast::node::Node;
+//! use pyrucast::mesh::node::Node;
 //! use pyrucast::store::{insert, with, with_mut};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
@@ -90,7 +90,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
-use crate::fe_space::{FiniteElementSpace, SubFESpace};
+use crate::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -99,13 +99,13 @@ use std::ops::{Add, Div, Mul, Sub};
 // ─── SubElementField ───────────────────────────────────────────────────────
 
 /// Multi-component values per `(cell, Gauss point)` on a single
-/// [`SubFESpace`].
+/// [`SubFiniteElementSpace`].
 ///
 /// Layout: flat row-major in the order *cell → gauss → component*
 /// (see the module-level documentation).
 #[derive(Serialize, Deserialize)]
 pub struct SubElementField {
-    fespace: Handle<SubFESpace>,
+    fespace: Handle<SubFiniteElementSpace>,
     components: Vec<String>,
     /// Dimensions captured at construction; the buffer is never resized.
     n_cells: usize,
@@ -122,7 +122,7 @@ impl SubElementField {
     ///
     /// - `components` is empty;
     /// - `components` contains a duplicate name.
-    pub fn new(fespace: Handle<SubFESpace>, components: Vec<String>) -> Result<Self> {
+    pub fn new(fespace: Handle<SubFiniteElementSpace>, components: Vec<String>) -> Result<Self> {
         check_components(&components)?;
         let (n_cells, n_gauss) = with(&fespace, |s| -> Result<_> {
             Ok((s.cell_count()?, s.gauss_count()))
@@ -142,7 +142,7 @@ impl SubElementField {
     ///
     /// `values_per_component` must have the same length as `components`.
     pub fn from_uniform_per_component(
-        fespace: Handle<SubFESpace>,
+        fespace: Handle<SubFiniteElementSpace>,
         components: Vec<String>,
         values_per_component: &[f64],
     ) -> Result<Self> {
@@ -163,7 +163,7 @@ impl SubElementField {
     // ── Structural accessors ────────────────────────────────────────────────
 
     /// Handle to the underlying FE subspace (internal clone).
-    pub fn fespace(&self) -> Handle<SubFESpace> {
+    pub fn fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
 
@@ -512,9 +512,9 @@ impl Div<f64> for &SubElementField {
 /// Aggregate of [`SubElementField`] — one per subspace of a
 /// [`FiniteElementSpace`], in the same order.
 ///
-/// Mirrors the [`FiniteElementSpace`] / [`SubFESpace`] hierarchy: an
+/// Mirrors the [`FiniteElementSpace`] / [`SubFiniteElementSpace`] hierarchy: an
 /// `ElementField` is to `FiniteElementSpace` what a `SubElementField` is
-/// to `SubFESpace`. The component lists captured by the underlying
+/// to `SubFiniteElementSpace`. The component lists captured by the underlying
 /// sub-fields may differ from one subspace to the next.
 #[derive(Serialize, Deserialize)]
 pub struct ElementField {
@@ -632,16 +632,16 @@ impl fmt::Display for ElementField {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::configuration::Configuration;
-    use crate::element_type::ElementType;
-    use crate::fe_space::{FiniteElementSpace, SubFESpace};
-    use crate::interpolation::Interpolation;
+    use crate::mesh::configuration::Configuration;
+    use crate::mesh::element_type::ElementType;
+    use crate::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    use crate::finite_element_space::interpolation::Interpolation;
     use crate::mesh::{Mesh, SubMesh};
-    use crate::node::Node;
-    use crate::quadrature::QuadratureRule;
+    use crate::mesh::node::Node;
+    use crate::finite_element_space::quadrature::QuadratureRule;
     use crate::store::{insert, with, with_mut};
 
-    fn make_tri3_subfespace() -> Handle<SubFESpace> {
+    fn make_tri3_subfespace() -> Handle<SubFiniteElementSpace> {
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
@@ -651,10 +651,10 @@ mod tests {
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
-        insert(SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap())
+        insert(SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap())
     }
 
-    fn make_multi_cell_tri3_subfespace(n_cells: usize) -> Handle<SubFESpace> {
+    fn make_multi_cell_tri3_subfespace(n_cells: usize) -> Handle<SubFiniteElementSpace> {
         // n_cells triangles sharing a common apex, like a fan from origin.
         let cfg = insert(Configuration::new(2).unwrap());
         let apex = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -671,7 +671,7 @@ mod tests {
             }
             insert(sm)
         };
-        insert(SubFESpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap())
+        insert(SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap())
     }
 
     fn make_mesh_with_tri_and_qua() -> Mesh {

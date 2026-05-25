@@ -10,11 +10,11 @@
 //! - `depth   = (p - target) · forward`  (positive = away from viewer)
 //!
 //! Used by every backend (PNG, SVG, interactive window) — the trait
-//! [`Drawable`](crate::viz::Drawable) gets the same `Projector`
+//! [`Drawable`](crate::viz::drawable::Drawable) gets the same `Projector`
 //! regardless. All vector / point arithmetic goes through
 //! [`nalgebra`].
 
-use crate::triangulation::{Point3, Vector3};
+use crate::mesh::point::{Point3, Vector3};
 use crate::viz::View;
 
 /// Axis-aligned bounding box in 3-D.

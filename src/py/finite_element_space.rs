@@ -1,11 +1,11 @@
-//! Python wrappers for [`crate::fe_space::SubFESpace`] and
-//! [`crate::fe_space::FiniteElementSpace`].
+//! Python wrappers for [`crate::finite_element_space::SubFiniteElementSpace`] and
+//! [`crate::finite_element_space::FiniteElementSpace`].
 
 use crate::error::{PyrucastError, Result};
-use crate::fe_space::{FiniteElementSpace, SubFESpace};
-use crate::interpolation::Interpolation;
+use crate::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+use crate::finite_element_space::interpolation::Interpolation;
 use crate::py::mesh::PyMesh;
-use crate::quadrature::QuadratureRule;
+use crate::finite_element_space::quadrature::QuadratureRule;
 use crate::store::{with, Handle};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -20,16 +20,16 @@ fn parse_quadrature(s: &str) -> PyResult<QuadratureRule> {
         .ok_or_else(|| PyValueError::new_err(format!("unknown quadrature rule: {s}")))
 }
 
-/// Python wrapper for [`SubFESpace`].
+/// Python wrapper for [`SubFiniteElementSpace`].
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(name = "SubFESpace")]
-pub struct PySubFESpace {
-    pub(crate) handle: Handle<SubFESpace>,
+#[pyclass(name = "SubFiniteElementSpace")]
+pub struct PySubFiniteElementSpace {
+    pub(crate) handle: Handle<SubFiniteElementSpace>,
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
-impl PySubFESpace {
+impl PySubFiniteElementSpace {
     #[getter]
     fn element_type(&self) -> PyResult<String> {
         Ok(with(&self.handle, |s| s.element_type())??.name().to_string())
@@ -192,9 +192,9 @@ impl PyFiniteElementSpace {
         Ok(self.inner.subspace_count())
     }
 
-    fn subspace(&self, i: usize) -> PyResult<PySubFESpace> {
+    fn subspace(&self, i: usize) -> PyResult<PySubFiniteElementSpace> {
         let h = self.inner.subspace(i)?;
-        Ok(PySubFESpace { handle: h })
+        Ok(PySubFiniteElementSpace { handle: h })
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -206,4 +206,4 @@ impl PyFiniteElementSpace {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFESpace, "FiniteElementSpace");
+crate::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace");

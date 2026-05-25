@@ -3,9 +3,10 @@
 //! All vector / point arithmetic in this module is built on
 //! [`nalgebra`]: 2-D points are [`nalgebra::Point2<f64>`], 3-D points
 //! are [`nalgebra::Point3<f64>`], and free vectors are
-//! [`nalgebra::Vector2`] / [`Vector3`]. Re-exported as [`Point2`],
-//! [`Point3`], [`Vector2`], [`Vector3`] for terseness throughout the
-//! crate.
+//! [`nalgebra::Vector2`] / [`nalgebra::Vector3`]. The canonical aliases
+//! ([`crate::mesh::point::Point2`], [`crate::mesh::point::Point3`],
+//! [`crate::mesh::point::Vector2`], [`crate::mesh::point::Vector3`])
+//! live under [`crate::mesh::point`] and are used here directly.
 //!
 //! The module exposes:
 //! - [`signed_area`] / [`ear_clip_2d`] — ear clipping triangulation of
@@ -25,9 +26,7 @@ pub use cdt::{
     triangulate_polygon_with_holes_refined, RefinementOptions,
 };
 
-// Geometry primitives now live in [`crate::mesh::point`]; re-exported
-// here so existing `crate::triangulation::Point*` paths keep working.
-pub use crate::mesh::point::{Point2, Point3, Vector2, Vector3};
+use crate::mesh::point::{Point2, Point3, Vector3};
 
 /// Unit normal of a 3-D polygon by **Newell's method**.
 ///
@@ -43,7 +42,8 @@ pub use crate::mesh::point::{Point2, Point3, Vector2, Vector3};
 ///
 /// # Example
 /// ```
-/// use pyrucast::triangulation::{newell_normal, Point3};
+/// use pyrucast::mesh::point::Point3;
+/// use pyrucast::ops::mesher::triangulation::newell_normal;
 ///
 /// // Unit square in the plane z = 0, CCW seen from +z.
 /// let pts = vec![
@@ -153,7 +153,8 @@ pub(crate) fn point_in_triangle(p: Point2, a: Point2, b: Point2, c: Point2) -> b
 ///
 /// # Example
 /// ```
-/// use pyrucast::triangulation::{ear_clip_2d, Point2};
+/// use pyrucast::mesh::point::Point2;
+/// use pyrucast::ops::mesher::triangulation::ear_clip_2d;
 ///
 /// // Unit square, CCW.
 /// let pts = vec![

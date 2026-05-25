@@ -62,10 +62,10 @@ Tout autre extension est rejetée avec une erreur explicite. Le format vectoriel
 Exemple Rust :
 
 ```rust,ignore
-use pyrucast::configuration::Configuration;
-use pyrucast::element_type::ElementType;
+use pyrucast::mesh::configuration::Configuration;
+use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::SubMesh;
-use pyrucast::node::Node;
+use pyrucast::mesh::node::Node;
 use pyrucast::store::insert;
 use pyrucast::viz::View;
 use std::path::Path;
@@ -107,8 +107,8 @@ Chaque `SubMesh` porte une propriété `face_color` (type `RgbColor`, format `(r
 Côté Rust :
 
 ```rust,ignore
-use pyrucast::color::RgbColor;
-use pyrucast::element_type::ElementType;
+use pyrucast::mesh::color::RgbColor;
+use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::SubMesh;
 
 let mut sm = SubMesh::new(cfg, ElementType::TRI3);
@@ -138,7 +138,7 @@ Quand on appelle `Mesh::plot`, chaque sous-maillage est rendu avec **sa propre**
 Côté Rust :
 
 ```rust,ignore
-use pyrucast::node_field::NodeField;
+use pyrucast::containers::node_field::NodeField;
 
 // Champ déplacement à 2 composantes "UX" / "UY" sur un POI1.
 let mut u = NodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();

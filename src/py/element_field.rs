@@ -1,8 +1,8 @@
-//! Python wrappers for [`crate::element_field::SubElementField`] and
-//! [`crate::element_field::ElementField`].
+//! Python wrappers for [`crate::containers::element_field::SubElementField`] and
+//! [`crate::containers::element_field::ElementField`].
 
-use crate::element_field::{ElementField, SubElementField};
-use crate::py::fe_space::{PyFiniteElementSpace, PySubFESpace};
+use crate::containers::element_field::{ElementField, SubElementField};
+use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
 use crate::store::{insert, with, Handle};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -18,9 +18,9 @@ pub struct PySubElementField {
 #[pymethods]
 impl PySubElementField {
     /// `SubElementField(subfespace, components)` — zero-initialized
-    /// sub-field on a single [`SubFESpace`].
+    /// sub-field on a single [`SubFiniteElementSpace`].
     #[new]
-    fn py_new(fespace: PyRef<PySubFESpace>, components: Vec<String>) -> PyResult<Self> {
+    fn py_new(fespace: PyRef<PySubFiniteElementSpace>, components: Vec<String>) -> PyResult<Self> {
         let field = SubElementField::new(fespace.handle.clone(), components)?;
         Ok(Self {
             handle: insert(field),
@@ -31,7 +31,7 @@ impl PySubElementField {
     #[classmethod]
     fn from_uniform_per_component(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        fespace: PyRef<PySubFESpace>,
+        fespace: PyRef<PySubFiniteElementSpace>,
         components: Vec<String>,
         values_per_component: Vec<f64>,
     ) -> PyResult<Self> {
