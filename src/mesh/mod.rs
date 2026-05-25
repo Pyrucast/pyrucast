@@ -276,11 +276,13 @@ pub struct Mesh {
 
 impl Aggregate for Mesh {
     type Sub = SubMesh;
-    fn items(&self) -> &[Handle<SubMesh>] {
-        &self.submeshes
-    }
-    fn items_mut(&mut self) -> &mut Vec<Handle<SubMesh>> {
-        &mut self.submeshes
+    fn items(&self) -> &[Handle<SubMesh>] { &self.submeshes }
+    fn items_mut(&mut self) -> &mut Vec<Handle<SubMesh>> { &mut self.submeshes }
+    fn type_name() -> &'static str { "Mesh" }
+    fn new_empty() -> Self { Self::default() }
+    fn sub_display_name() -> &'static str { "submesh(es)" }
+    fn display_extra(&self) -> Option<String> {
+        Some(format!(", {} cell(s) total", self.cell_count().unwrap_or(0)))
     }
 
     fn check_push(&self, h: &Handle<SubMesh>) -> Result<()> {
@@ -290,9 +292,7 @@ impl Aggregate for Mesh {
         let a = self.configuration()?;
         let b = with(h, |s| s.configuration())?;
         if a.index() != b.index() || a.generation() != b.generation() {
-            Err(PyrucastError::Message(
-                "mismatched Configurations".into(),
-            ))
+            Err(PyrucastError::Message("mismatched Configurations".into()))
         } else {
             Ok(())
         }
@@ -490,61 +490,9 @@ impl Mesh {
         Ok(result)
     }
 
-    /// Return a new mesh containing all submeshes of `self` followed by all
-    /// submeshes of `other`. Both meshes must share the same `Configuration`
-    /// (or at least one must be empty).
-    pub fn merge(&self, other: &Mesh) -> Result<Mesh> {
-        let mut result = Mesh::empty();
-        result.try_extend_from(self)?;
-        result.try_extend_from(other)?;
-        Ok(result)
-    }
 }
 
-impl std::ops::Add<&Mesh> for &Mesh {
-    type Output = Result<Mesh>;
-    fn add(self, rhs: &Mesh) -> Result<Mesh> {
-        self.merge(rhs)
-    }
-}
-
-/// `mesh[i]` returns the i-th submesh handle (panics out of bounds,
-/// matching the `Vec`/slice convention).
-impl std::ops::Index<usize> for Mesh {
-    type Output = Handle<SubMesh>;
-    fn index(&self, idx: usize) -> &Self::Output {
-        &self.submeshes[idx]
-    }
-}
-
-/// `for sm in &mesh { … }` iterates over submesh handles in order.
-impl<'a> IntoIterator for &'a Mesh {
-    type Item = &'a Handle<SubMesh>;
-    type IntoIter = std::slice::Iter<'a, Handle<SubMesh>>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.submeshes.iter()
-    }
-}
-
-impl fmt::Debug for Mesh {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Mesh")
-            .field("submesh_count", &self.submeshes.len())
-            .finish()
-    }
-}
-
-impl fmt::Display for Mesh {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let total = self.cell_count().unwrap_or(0);
-        write!(
-            f,
-            "Mesh: {} submesh(es), {} cell(s) total",
-            self.submeshes.len(),
-            total
-        )
-    }
-}
+crate::impl_aggregate_std_traits!(Mesh);
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────
 

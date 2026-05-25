@@ -24,6 +24,8 @@
 //!     type Sub = Item;
 //!     fn items(&self) -> &[Handle<Item>] { &self.items }
 //!     fn items_mut(&mut self) -> &mut Vec<Handle<Item>> { &mut self.items }
+//!     fn type_name() -> &'static str { "Bag" }
+//!     fn new_empty() -> Self { Self::default() }
 //! }
 //!
 //! let mut b = Bag::default();
@@ -52,6 +54,32 @@ pub trait Aggregate {
 
     /// Mutable reference to the internal list of handles.
     fn items_mut(&mut self) -> &mut Vec<Handle<Self::Sub>>;
+
+    /// Human-readable name of this aggregate type (e.g. `"Mesh"`).
+    /// Used by the default `Debug` and `Display` implementations.
+    fn type_name() -> &'static str;
+
+    /// Construct an empty aggregate with no sub-items.
+    fn new_empty() -> Self where Self: Sized;
+
+    /// Plural label for the sub-item used by the default `Display`
+    /// (e.g. `"submesh(es)"`). Defaults to `"item(s)"`.
+    fn sub_display_name() -> &'static str { "item(s)" }
+
+    /// Optional suffix appended by the default `Display` after the count
+    /// (e.g. `", 12 cell(s) total"`). Defaults to nothing.
+    fn display_extra(&self) -> Option<String> { None }
+
+    /// Merge `self` and `other` into a fresh aggregate.
+    ///
+    /// Delegates to [`try_extend_from`] so domain constraints (e.g.
+    /// `Configuration` compatibility for `Mesh`) are enforced.
+    fn merge(&self, other: &Self) -> Result<Self> where Self: Sized {
+        let mut result = Self::new_empty();
+        result.try_extend_from(self)?;
+        result.try_extend_from(other)?;
+        Ok(result)
+    }
 
     fn len(&self) -> usize {
         self.items().len()
@@ -206,6 +234,68 @@ macro_rules! impl_aggregate_pymethods {
     };
 }
 
+// ─── Std-trait macro ────────────────────────────────────────────────────────
+
+/// Generate `Index`, `IntoIterator`, `fmt::Debug`, `fmt::Display`, and
+/// `Add<&T> for &T` (returning `Result<T>`) for a concrete type that
+/// implements [`Aggregate`].
+///
+/// # Usage
+/// ```ignore
+/// impl_aggregate_std_traits!(Mesh);
+/// impl_aggregate_std_traits!(FiniteElementSpace);
+/// ```
+#[macro_export]
+macro_rules! impl_aggregate_std_traits {
+    ($T:ty) => {
+        impl std::ops::Index<usize> for $T {
+            type Output = $crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>;
+            fn index(&self, idx: usize) -> &Self::Output {
+                &$crate::aggregate::Aggregate::items(self)[idx]
+            }
+        }
+
+        impl<'a> IntoIterator for &'a $T {
+            type Item = &'a $crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>;
+            type IntoIter = std::slice::Iter<'a, $crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>>;
+            fn into_iter(self) -> Self::IntoIter {
+                $crate::aggregate::Aggregate::iter(self)
+            }
+        }
+
+        impl std::fmt::Debug for $T {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_struct(<$T as $crate::aggregate::Aggregate>::type_name())
+                    .field("count", &$crate::aggregate::Aggregate::len(self))
+                    .finish()
+            }
+        }
+
+        impl std::fmt::Display for $T {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(
+                    f,
+                    "{}: {} {}",
+                    <$T as $crate::aggregate::Aggregate>::type_name(),
+                    $crate::aggregate::Aggregate::len(self),
+                    <$T as $crate::aggregate::Aggregate>::sub_display_name(),
+                )?;
+                if let Some(extra) = $crate::aggregate::Aggregate::display_extra(self) {
+                    f.write_str(&extra)?;
+                }
+                Ok(())
+            }
+        }
+
+        impl std::ops::Add<&$T> for &$T {
+            type Output = $crate::error::Result<$T>;
+            fn add(self, rhs: &$T) -> Self::Output {
+                $crate::aggregate::Aggregate::merge(self, rhs)
+            }
+        }
+    };
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 
@@ -224,12 +314,10 @@ mod tests {
     }
     impl Aggregate for Bag {
         type Sub = Item;
-        fn items(&self) -> &[Handle<Item>] {
-            &self.items
-        }
-        fn items_mut(&mut self) -> &mut Vec<Handle<Item>> {
-            &mut self.items
-        }
+        fn items(&self) -> &[Handle<Item>] { &self.items }
+        fn items_mut(&mut self) -> &mut Vec<Handle<Item>> { &mut self.items }
+        fn type_name() -> &'static str { "Bag" }
+        fn new_empty() -> Self { Self::default() }
     }
 
     #[test]

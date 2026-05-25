@@ -523,12 +523,11 @@ pub struct ElementField {
 
 impl Aggregate for ElementField {
     type Sub = SubElementField;
-    fn items(&self) -> &[Handle<SubElementField>] {
-        &self.subfields
-    }
-    fn items_mut(&mut self) -> &mut Vec<Handle<SubElementField>> {
-        &mut self.subfields
-    }
+    fn items(&self) -> &[Handle<SubElementField>] { &self.subfields }
+    fn items_mut(&mut self) -> &mut Vec<Handle<SubElementField>> { &mut self.subfields }
+    fn type_name() -> &'static str { "ElementField" }
+    fn new_empty() -> Self { Self { subfields: Vec::new() } }
+    fn sub_display_name() -> &'static str { "subfield(s)" }
 }
 
 impl ElementField {
@@ -593,34 +592,7 @@ impl ElementField {
     }
 }
 
-impl std::ops::Index<usize> for ElementField {
-    type Output = Handle<SubElementField>;
-    fn index(&self, idx: usize) -> &Self::Output {
-        &self.subfields[idx]
-    }
-}
-
-impl<'a> IntoIterator for &'a ElementField {
-    type Item = &'a Handle<SubElementField>;
-    type IntoIter = std::slice::Iter<'a, Handle<SubElementField>>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.subfields.iter()
-    }
-}
-
-impl fmt::Debug for ElementField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ElementField")
-            .field("subfield_count", &self.subfields.len())
-            .finish()
-    }
-}
-
-impl fmt::Display for ElementField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ElementField: {} subfield(s)", self.subfields.len())
-    }
-}
+crate::impl_aggregate_std_traits!(ElementField);
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
 

@@ -367,12 +367,11 @@ pub struct Model {
 
 impl Aggregate for Model {
     type Sub = SubModel;
-    fn items(&self) -> &[Handle<SubModel>] {
-        &self.sub_models
-    }
-    fn items_mut(&mut self) -> &mut Vec<Handle<SubModel>> {
-        &mut self.sub_models
-    }
+    fn items(&self) -> &[Handle<SubModel>] { &self.sub_models }
+    fn items_mut(&mut self) -> &mut Vec<Handle<SubModel>> { &mut self.sub_models }
+    fn type_name() -> &'static str { "Model" }
+    fn new_empty() -> Self { Self::default() }
+    fn sub_display_name() -> &'static str { "sub-model(s)" }
 }
 
 impl Model {
@@ -449,36 +448,9 @@ impl Model {
         Ok(m)
     }
 
-    /// Return a new `Model` containing all sub-models of `self` followed by
-    /// all sub-models of `other`.
-    pub fn merge(&self, other: &Model) -> Model {
-        let mut result = Model::new();
-        result.extend_from(self);
-        result.extend_from(other);
-        result
-    }
 }
 
-impl std::ops::Add<&Model> for &Model {
-    type Output = Model;
-    fn add(self, rhs: &Model) -> Model {
-        self.merge(rhs)
-    }
-}
-
-impl fmt::Debug for Model {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Model")
-            .field("sub_model_count", &self.sub_models.len())
-            .finish()
-    }
-}
-
-impl fmt::Display for Model {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Model: {} sub-model(s)", self.sub_models.len())
-    }
-}
+crate::impl_aggregate_std_traits!(Model);
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 

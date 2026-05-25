@@ -379,12 +379,11 @@ pub struct FiniteElementSpace {
 
 impl Aggregate for FiniteElementSpace {
     type Sub = SubFiniteElementSpace;
-    fn items(&self) -> &[Handle<SubFiniteElementSpace>] {
-        &self.subspaces
-    }
-    fn items_mut(&mut self) -> &mut Vec<Handle<SubFiniteElementSpace>> {
-        &mut self.subspaces
-    }
+    fn items(&self) -> &[Handle<SubFiniteElementSpace>] { &self.subspaces }
+    fn items_mut(&mut self) -> &mut Vec<Handle<SubFiniteElementSpace>> { &mut self.subspaces }
+    fn type_name() -> &'static str { "FiniteElementSpace" }
+    fn new_empty() -> Self { Self { subspaces: Vec::new() } }
+    fn sub_display_name() -> &'static str { "subspace(s)" }
 }
 
 impl FiniteElementSpace {
@@ -446,55 +445,9 @@ impl FiniteElementSpace {
         self.get(i)
     }
 
-    /// Return a new `FiniteElementSpace` containing all subspaces of `self`
-    /// followed by all subspaces of `other`.
-    pub fn merge(&self, other: &FiniteElementSpace) -> FiniteElementSpace {
-        let mut result = FiniteElementSpace { subspaces: Vec::new() };
-        result.extend_from(self);
-        result.extend_from(other);
-        result
-    }
 }
 
-impl std::ops::Add<&FiniteElementSpace> for &FiniteElementSpace {
-    type Output = FiniteElementSpace;
-    fn add(self, rhs: &FiniteElementSpace) -> FiniteElementSpace {
-        self.merge(rhs)
-    }
-}
-
-impl std::ops::Index<usize> for FiniteElementSpace {
-    type Output = Handle<SubFiniteElementSpace>;
-    fn index(&self, idx: usize) -> &Self::Output {
-        &self.subspaces[idx]
-    }
-}
-
-impl<'a> IntoIterator for &'a FiniteElementSpace {
-    type Item = &'a Handle<SubFiniteElementSpace>;
-    type IntoIter = std::slice::Iter<'a, Handle<SubFiniteElementSpace>>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.subspaces.iter()
-    }
-}
-
-impl fmt::Debug for FiniteElementSpace {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FiniteElementSpace")
-            .field("subspace_count", &self.subspaces.len())
-            .finish()
-    }
-}
-
-impl fmt::Display for FiniteElementSpace {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "FiniteElementSpace: {} subspace(s)",
-            self.subspaces.len()
-        )
-    }
-}
+crate::impl_aggregate_std_traits!(FiniteElementSpace);
 
 // ─── Numerical helpers ─────────────────────────────────────────────────────
 
