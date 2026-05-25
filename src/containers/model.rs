@@ -81,7 +81,7 @@
 //! mat.set_uniform("k", 1.0).unwrap();
 //! let mat_h = insert(mat);
 //!
-//! let mut model = Model::new();
+//! let mut model = Model::empty();
 //! model
 //!     .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
 //!     .unwrap();
@@ -374,10 +374,6 @@ impl Aggregate for Model {
 }
 
 impl Model {
-    /// Build an empty Model.
-    pub fn new() -> Self {
-        Self::default()
-    }
 
     /// Add a sub-model. Validation (consistency of supports, materials,
     /// etc.) is deferred to assembly.
@@ -495,7 +491,7 @@ mod tests {
         mat.set_uniform("k", k).unwrap();
         let mat_h = insert(mat);
 
-        let mut model = Model::new();
+        let mut model = Model::empty();
         model
             .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
@@ -568,7 +564,7 @@ mod tests {
         mat.set_uniform("k", 1.0).unwrap();
         let mat_h = insert(mat);
 
-        let mut model = Model::new();
+        let mut model = Model::empty();
         model
             .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
@@ -682,7 +678,7 @@ mod tests {
         let sub = fes.subspace(0).unwrap();
         let mat = SubElementField::new(sub.clone(), vec!["rho_cp".into()]).unwrap();
         let mat_h = insert(mat);
-        let mut model = Model::new();
+        let mut model = Model::empty();
         model
             .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
@@ -691,7 +687,7 @@ mod tests {
 
     #[test]
     fn empty_model_produces_empty_matrices() {
-        let model = Model::new();
+        let model = Model::empty();
         let k = model.stiffness().unwrap();
         let m = model.mass().unwrap();
         assert_eq!(k.n_rows(), 0);

@@ -58,6 +58,9 @@ pub trait Aggregate: Default {
     /// Used by the default `Debug` and `Display` implementations.
     fn type_name() -> &'static str;
 
+    /// Construct an empty aggregate (no sub-items). Equivalent to `Default::default()`.
+    fn empty() -> Self where Self: Sized { Self::default() }
+
     /// Plural label for the sub-item used by the default `Display`
     /// (e.g. `"submesh(es)"`). Defaults to `"item(s)"`.
     fn sub_display_name() -> &'static str { "item(s)" }

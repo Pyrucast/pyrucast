@@ -1,4 +1,3 @@
-use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
 use crate::mesh::configuration::NodeId;
 use crate::mesh::element_type::ElementType;
@@ -305,6 +304,7 @@ pub fn fill_surface(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::Aggregate;
     use crate::mesh::configuration::Configuration;
     use crate::mesh::element_type::ElementType;
     use crate::mesh::node::Node;

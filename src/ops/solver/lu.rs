@@ -44,7 +44,7 @@
 //! let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
 //! mat.set_uniform("k", 1.0).unwrap();
 //!
-//! let mut model = Model::new();
+//! let mut model = Model::empty();
 //! model
 //!     .add_sub(insert(SubModel::heat_conduction(sub, insert(mat))))
 //!     .unwrap();
@@ -203,7 +203,7 @@ mod tests {
         let mat_h = insert(mat);
 
         // Model.
-        let mut model = Model::new();
+        let mut model = Model::empty();
         model
             .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();
@@ -273,7 +273,7 @@ mod tests {
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mat_h = insert(mat);
-        let mut model = Model::new();
+        let mut model = Model::empty();
         model
             .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
             .unwrap();

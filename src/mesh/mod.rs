@@ -299,11 +299,6 @@ impl Aggregate for Mesh {
 }
 
 impl Mesh {
-    /// Create an empty mesh with no submeshes.
-    pub fn empty() -> Self {
-        Self::default()
-    }
-
 
     /// Number of submeshes.
     pub fn submesh_count(&self) -> usize {

@@ -1,5 +1,6 @@
 //! Python wrappers for [`crate::mesh::SubMesh`] and [`crate::mesh::Mesh`].
 
+use crate::aggregate::Aggregate;
 use crate::mesh::configuration::NodeId;
 use crate::mesh::element_type::ElementType;
 use crate::mesh::{Mesh, SubMesh};
