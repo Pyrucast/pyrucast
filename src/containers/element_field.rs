@@ -1,15 +1,15 @@
 //! ElementField — multi-component values per `(cell, Gauss point)` on a
-//! [`crate::finite_element_space::FiniteElementSpace`].
+//! [`crate::containers::finite_element_space::FiniteElementSpace`].
 //!
 //! Hierarchy mirroring [`crate::finite_element_space`]:
 //!
 //! - [`SubElementField`] — multi-component values per `(cell, Gauss point)`
-//!   on a single [`crate::finite_element_space::SubFiniteElementSpace`]. Where
+//!   on a single [`crate::containers::finite_element_space::SubFiniteElementSpace`]. Where
 //!   [`crate::containers::node_field::NodeField`] stores values **at nodes**, a
 //!   `SubElementField` stores them **at the Gauss points of every cell**
 //!   of a finite-element subspace.
 //! - [`ElementField`] — aggregate of `SubElementField`, one per subspace
-//!   of a [`crate::finite_element_space::FiniteElementSpace`], in the same order.
+//!   of a [`crate::containers::finite_element_space::FiniteElementSpace`], in the same order.
 //!
 //! Typical uses:
 //!
@@ -32,7 +32,7 @@
 //! The internal buffer is sized accordingly and **never reallocated**. The
 //! mesh topology underlying the FE space is expected to stay frozen for
 //! the lifetime of the field (per the contract documented on
-//! [`crate::finite_element_space::FiniteElementSpace`]). The Gauss-point coordinates
+//! [`crate::containers::finite_element_space::FiniteElementSpace`]). The Gauss-point coordinates
 //! and weights are kept as reference data on the `SubFiniteElementSpace` itself and
 //! may be re-read on demand; only the user data lives here.
 //!
@@ -51,12 +51,12 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::mesh::configuration::Configuration;
+//! use pyrucast::containers::mesh::configuration::Configuration;
 //! use pyrucast::containers::element_field::ElementField;
-//! use pyrucast::mesh::element_type::ElementType;
-//! use pyrucast::finite_element_space::FiniteElementSpace;
-//! use pyrucast::mesh::Mesh;
-//! use pyrucast::mesh::node::Node;
+//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::finite_element_space::FiniteElementSpace;
+//! use pyrucast::containers::mesh::Mesh;
+//! use pyrucast::containers::mesh::node::Node;
 //! use pyrucast::store::{insert, with, with_mut};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
@@ -89,7 +89,7 @@
 //! ```
 
 use crate::error::{PyrucastError, Result};
-use crate::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -580,13 +580,13 @@ impl ElementField {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::mesh::configuration::Configuration;
-    use crate::mesh::element_type::ElementType;
-    use crate::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-    use crate::finite_element_space::interpolation::Interpolation;
-    use crate::mesh::{Mesh, SubMesh};
-    use crate::mesh::node::Node;
-    use crate::finite_element_space::quadrature::QuadratureRule;
+    use crate::containers::mesh::configuration::Configuration;
+    use crate::containers::mesh::element_type::ElementType;
+    use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    use crate::containers::finite_element_space::interpolation::Interpolation;
+    use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::containers::mesh::node::Node;
+    use crate::containers::finite_element_space::quadrature::QuadratureRule;
     use crate::store::{insert, with, with_mut};
 
     fn make_tri3_subfespace() -> Handle<SubFiniteElementSpace> {

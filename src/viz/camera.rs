@@ -14,7 +14,7 @@
 //! regardless. All vector / point arithmetic goes through
 //! [`nalgebra`].
 
-use crate::mesh::point::{Point3, Vector3};
+use crate::containers::mesh::point::{Point3, Vector3};
 use crate::viz::View;
 
 /// Axis-aligned bounding box in 3-D.

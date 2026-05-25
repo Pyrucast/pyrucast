@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::mesh::Mesh;
+use crate::containers::mesh::Mesh;
 
 /// Extrude a mesh by `n_layers` layers along `direction`.
 ///
@@ -21,10 +21,10 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mesh::configuration::Configuration;
-    use crate::mesh::element_type::ElementType;
-    use crate::mesh::node::Node;
-    use crate::mesh::Mesh;
+    use crate::containers::mesh::configuration::Configuration;
+    use crate::containers::mesh::element_type::ElementType;
+    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Mesh;
     use crate::ops::mesher::line_seg2::line_seg2;
     use crate::store::insert;
 

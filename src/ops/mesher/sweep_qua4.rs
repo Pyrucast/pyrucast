@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::mesh::Mesh;
+use crate::containers::mesh::Mesh;
 
 /// Sweep two SEG2 meshes into a QUA4 mesh by building `n_layers` layers.
 ///
@@ -20,10 +20,10 @@ pub fn sweep_qua4(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mesh>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mesh::configuration::Configuration;
-    use crate::mesh::element_type::ElementType;
-    use crate::mesh::node::Node;
-    use crate::mesh::Mesh;
+    use crate::containers::mesh::configuration::Configuration;
+    use crate::containers::mesh::element_type::ElementType;
+    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Mesh;
     use crate::ops::mesher::line_seg2::line_seg2;
     use crate::store::insert;
 

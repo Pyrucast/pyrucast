@@ -1,6 +1,6 @@
 //! Python wrapper for [`crate::containers::matrix::Matrix`].
 
-use crate::mesh::configuration::NodeId;
+use crate::containers::mesh::configuration::NodeId;
 use crate::containers::matrix::Matrix;
 use crate::store::{insert, with, Handle};
 use pyo3::prelude::*;

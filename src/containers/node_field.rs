@@ -18,10 +18,10 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::mesh::configuration::Configuration;
-//! use pyrucast::mesh::element_type::ElementType;
-//! use pyrucast::mesh::SubMesh;
-//! use pyrucast::mesh::node::Node;
+//! use pyrucast::containers::mesh::configuration::Configuration;
+//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::SubMesh;
+//! use pyrucast::containers::mesh::node::Node;
 //! use pyrucast::containers::node_field::NodeField;
 //! use pyrucast::store::{insert, with, with_mut};
 //!
@@ -49,10 +49,10 @@
 //! ```
 
 use crate::aggregate::Aggregate;
-use crate::mesh::configuration::{Configuration, NodeId};
-use crate::mesh::element_type::ElementType;
+use crate::containers::mesh::configuration::{Configuration, NodeId};
+use crate::containers::mesh::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
-use crate::mesh::{Mesh, SubMesh};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::store::{insert, with, Handle};
 #[cfg(test)]
 use crate::store::with_mut;
@@ -201,10 +201,10 @@ impl NodeField {
     ///
     /// ```
     /// use pyrucast::aggregate::Aggregate;
-    /// use pyrucast::mesh::configuration::Configuration;
-    /// use pyrucast::mesh::element_type::ElementType;
-    /// use pyrucast::mesh::{Mesh, SubMesh};
-    /// use pyrucast::mesh::node::Node;
+    /// use pyrucast::containers::mesh::configuration::Configuration;
+    /// use pyrucast::containers::mesh::element_type::ElementType;
+    /// use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// use pyrucast::containers::mesh::node::Node;
     /// use pyrucast::containers::node_field::NodeField;
     /// use pyrucast::store::{insert, with};
     ///
@@ -684,7 +684,7 @@ impl Div<f64> for &NodeField {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mesh::node::Node;
+    use crate::containers::mesh::node::Node;
     use crate::store::insert;
 
     fn make_poi1_with(n_nodes: usize) -> (Handle<Configuration>, Vec<Node>, Handle<SubMesh>) {
@@ -1106,7 +1106,7 @@ mod tests {
 
     #[test]
     fn restrict_subset() {
-        use crate::mesh::Mesh;
+        use crate::containers::mesh::Mesh;
         let (cfg, nodes, _sm) = make_poi1_with(3);
         // Build a full field on all 3 nodes
         let sm_all = {
@@ -1136,7 +1136,7 @@ mod tests {
 
     #[test]
     fn restrict_node_absent_from_field_gives_zero() {
-        use crate::mesh::Mesh;
+        use crate::containers::mesh::Mesh;
         let cfg = insert(Configuration::new(1).unwrap());
         let na = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let nb = Node::create_in(cfg.clone(), &[1.0]).unwrap();
@@ -1161,7 +1161,7 @@ mod tests {
 
     #[test]
     fn restrict_incompatible_cfg_errors() {
-        use crate::mesh::Mesh;
+        use crate::containers::mesh::Mesh;
         let cfg1 = insert(Configuration::new(1).unwrap());
         let cfg2 = insert(Configuration::new(1).unwrap());
         let n1 = Node::create_in(cfg1.clone(), &[0.0]).unwrap();

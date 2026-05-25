@@ -52,7 +52,7 @@ struct App<'a, D: Drawable> {
     /// rendering path).
     field_button: Option<&'a dyn FieldButton>,
     /// Cached so we don't recompute the bbox each frame.
-    target: crate::mesh::point::Point3,
+    target: crate::containers::mesh::point::Point3,
     yaw: f64,
     pitch: f64,
     scale: f64,
@@ -326,8 +326,8 @@ struct FieldDrawable<'a> {
 }
 
 enum FieldSource<'a> {
-    Mesh(&'a crate::mesh::Mesh),
-    SubMesh(&'a crate::mesh::SubMesh),
+    Mesh(&'a crate::containers::mesh::Mesh),
+    SubMesh(&'a crate::containers::mesh::SubMesh),
 }
 
 impl<'a> FieldDrawable<'a> {
@@ -402,7 +402,7 @@ impl<'a> FieldButton for FieldDrawable<'a> {
 /// Run the interactive viewer on a `Mesh` coloured by a `NodeField`
 /// component (with a button that cycles through components).
 pub(crate) fn run_interactive_mesh_field(
-    mesh: &crate::mesh::Mesh,
+    mesh: &crate::containers::mesh::Mesh,
     field: &crate::containers::node_field::NodeField,
     initial_component: &str,
     view: View,
@@ -435,7 +435,7 @@ pub(crate) fn run_interactive_mesh_field(
 /// Run the interactive viewer on a `SubMesh` coloured by a `NodeField`
 /// component (same UX as [`run_interactive_mesh_field`]).
 pub(crate) fn run_interactive_submesh_field(
-    submesh: &crate::mesh::SubMesh,
+    submesh: &crate::containers::mesh::SubMesh,
     field: &crate::containers::node_field::NodeField,
     initial_component: &str,
     view: View,

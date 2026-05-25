@@ -58,13 +58,13 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::mesh::configuration::{Configuration, NodeId};
+//! use pyrucast::containers::mesh::configuration::{Configuration, NodeId};
 //! use pyrucast::containers::element_field::SubElementField;
-//! use pyrucast::mesh::element_type::ElementType;
-//! use pyrucast::finite_element_space::FiniteElementSpace;
-//! use pyrucast::mesh::Mesh;
+//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::finite_element_space::FiniteElementSpace;
+//! use pyrucast::containers::mesh::Mesh;
 //! use pyrucast::containers::model::{Model, Physics, SubModel};
-//! use pyrucast::mesh::node::Node;
+//! use pyrucast::containers::mesh::node::Node;
 //! use pyrucast::store::{insert, with};
 //!
 //! // 1-D Configuration with two nodes spanning [0, 1].
@@ -97,12 +97,12 @@
 //! assert_eq!(k.n_cols(), 3);
 //! ```
 
-use crate::mesh::configuration::{Configuration, NodeId};
+use crate::containers::mesh::configuration::{Configuration, NodeId};
 use crate::containers::element_field::SubElementField;
 use crate::error::Result;
-use crate::finite_element_space::SubFiniteElementSpace;
+use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::Matrix;
-use crate::mesh::SubMesh;
+use crate::containers::mesh::SubMesh;
 use crate::models::{dirichlet, heat_conduction};
 use crate::store::{with, Handle};
 use serde::{Deserialize, Serialize};
@@ -441,11 +441,11 @@ fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::mesh::configuration::Configuration;
-    use crate::mesh::element_type::ElementType;
-    use crate::finite_element_space::FiniteElementSpace;
-    use crate::mesh::Mesh;
-    use crate::mesh::node::Node;
+    use crate::containers::mesh::configuration::Configuration;
+    use crate::containers::mesh::element_type::ElementType;
+    use crate::containers::finite_element_space::FiniteElementSpace;
+    use crate::containers::mesh::Mesh;
+    use crate::containers::mesh::node::Node;
     use crate::store::{insert, with_mut};
 
     /// Build a 1-D heat-conduction model on a single SEG2 element of

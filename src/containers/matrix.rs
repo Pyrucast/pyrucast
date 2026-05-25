@@ -29,7 +29,7 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::mesh::configuration::NodeId;
+//! use pyrucast::containers::mesh::configuration::NodeId;
 //! use pyrucast::containers::matrix::Matrix;
 //!
 //! let mut k = Matrix::new(true);
@@ -51,7 +51,7 @@
 //! assert_eq!(k.get(NodeId(0), "q", NodeId(0), "T"), 3.5);
 //! ```
 
-use crate::mesh::configuration::NodeId;
+use crate::containers::mesh::configuration::NodeId;
 use crate::error::{PyrucastError, Result};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};

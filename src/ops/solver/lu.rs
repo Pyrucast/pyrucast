@@ -22,13 +22,13 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::mesh::configuration::Configuration;
+//! use pyrucast::containers::mesh::configuration::Configuration;
 //! use pyrucast::containers::element_field::SubElementField;
-//! use pyrucast::mesh::element_type::ElementType;
-//! use pyrucast::finite_element_space::FiniteElementSpace;
-//! use pyrucast::mesh::{Mesh, SubMesh};
+//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::finite_element_space::FiniteElementSpace;
+//! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::model::{Model, SubModel};
-//! use pyrucast::mesh::node::Node;
+//! use pyrucast::containers::mesh::node::Node;
 //! use pyrucast::containers::node_field::NodeField;
 //! use pyrucast::ops::solver::lu::solve;
 //! use pyrucast::store::insert;
@@ -71,11 +71,11 @@
 //! assert!((solution.value(b.id(), "T").unwrap() - 1.0).abs() < 1e-12);
 //! ```
 
-use crate::mesh::configuration::NodeId;
-use crate::mesh::element_type::ElementType;
+use crate::containers::mesh::configuration::NodeId;
+use crate::containers::mesh::element_type::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::containers::matrix::Matrix;
-use crate::mesh::SubMesh;
+use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::NodeField;
 use crate::store::insert;
 use nalgebra::DVector;
@@ -167,12 +167,12 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::mesh::configuration::Configuration;
+    use crate::containers::mesh::configuration::Configuration;
     use crate::containers::element_field::SubElementField;
-    use crate::finite_element_space::FiniteElementSpace;
-    use crate::mesh::Mesh;
+    use crate::containers::finite_element_space::FiniteElementSpace;
+    use crate::containers::mesh::Mesh;
     use crate::containers::model::{Model, SubModel};
-    use crate::mesh::node::Node;
+    use crate::containers::mesh::node::Node;
     use crate::store::{insert};
 
     /// 1-D Poisson `-u'' = 0` on `[0, 1]` with `u(0) = 0` and `u(1) = 1`,

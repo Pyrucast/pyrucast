@@ -5,11 +5,11 @@
 
 #![cfg(feature = "viz")]
 
-use pyrucast::mesh::color::RgbColor;
-use pyrucast::mesh::configuration::Configuration;
-use pyrucast::mesh::element_type::ElementType;
-use pyrucast::mesh::{Mesh, SubMesh};
-use pyrucast::mesh::node::Node;
+use pyrucast::containers::mesh::color::RgbColor;
+use pyrucast::containers::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::element_type::ElementType;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
+use pyrucast::containers::mesh::node::Node;
 use pyrucast::aggregate::Aggregate;
 use pyrucast::store::insert;
 use pyrucast::viz::View;
@@ -72,7 +72,7 @@ fn submesh_default_view_is_iso() {
 
 #[test]
 fn submesh_renders_every_element_type() {
-    use pyrucast::mesh::configuration::NodeId;
+    use pyrucast::containers::mesh::configuration::NodeId;
     let cfg = insert(Configuration::new(3).unwrap());
     let n: Vec<_> = [
         [0.0, 0.0, 0.0],

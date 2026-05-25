@@ -28,7 +28,7 @@
 //! and hole removal will be layered on top in subsequent commits.
 
 use crate::error::{PyrucastError, Result};
-use crate::mesh::point::{Point2, Vector2};
+use crate::containers::mesh::point::{Point2, Vector2};
 use super::{cross2, point_in_triangle};
 use std::collections::{HashMap, HashSet};
 
@@ -989,7 +989,7 @@ fn in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
 ///
 /// # Example
 /// ```
-/// use pyrucast::mesh::point::Point2;
+/// use pyrucast::containers::mesh::point::Point2;
 /// use pyrucast::ops::mesher::triangulation::delaunay_2d;
 ///
 /// let pts = vec![

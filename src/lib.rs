@@ -32,8 +32,6 @@
 pub mod aggregate;
 pub mod containers;
 pub mod error;
-pub mod finite_element_space;
-pub mod mesh;
 pub mod models;
 pub mod ops;
 pub mod persist;

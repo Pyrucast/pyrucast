@@ -1,7 +1,7 @@
 use crate::error::Result;
-use crate::mesh::configuration::Configuration;
-use crate::mesh::element_type::ElementType;
-use crate::mesh::Mesh;
+use crate::containers::mesh::configuration::Configuration;
+use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::Mesh;
 use crate::store::{with, Handle};
 
 /// Create a POI1 mesh containing all live nodes of `config`.
@@ -17,9 +17,9 @@ pub fn from_live_nodes(config: Handle<Configuration>) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mesh::configuration::Configuration;
-    use crate::mesh::element_type::ElementType;
-    use crate::mesh::node::Node;
+    use crate::containers::mesh::configuration::Configuration;
+    use crate::containers::mesh::element_type::ElementType;
+    use crate::containers::mesh::node::Node;
     use crate::store::insert;
 
     #[test]

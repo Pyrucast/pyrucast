@@ -6,7 +6,7 @@
 //! mouse-driven rotation and zoom.
 //!
 //! User-facing entry points live on the visualized objects themselves
-//! (e.g. [`crate::mesh::SubMesh::plot`]). Internals:
+//! (e.g. [`crate::containers::mesh::SubMesh::plot`]). Internals:
 //!
 //! - [`View`] is a small point-of-view descriptor (yaw, pitch, scale, target).
 //! - [`Bbox3`] is the axis-aligned 3D bounding box, used to centre and scale.
@@ -18,10 +18,10 @@
 //! # Example
 //!
 //! ```no_run
-//! use pyrucast::mesh::configuration::Configuration;
-//! use pyrucast::mesh::element_type::ElementType;
-//! use pyrucast::mesh::SubMesh;
-//! use pyrucast::mesh::node::Node;
+//! use pyrucast::containers::mesh::configuration::Configuration;
+//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::SubMesh;
+//! use pyrucast::containers::mesh::node::Node;
 //! use pyrucast::store::insert;
 //! use pyrucast::viz::View;
 //!
@@ -72,7 +72,7 @@ pub struct View {
     pub yaw: f64,
     pub pitch: f64,
     pub scale: f64,
-    pub target: Option<crate::mesh::point::Point3>,
+    pub target: Option<crate::containers::mesh::point::Point3>,
     /// Show the orientation gizmo (small red/green/blue axes triad in the
     /// bottom-left corner) on top of the rendered object.
     pub show_axes: bool,
@@ -190,12 +190,12 @@ pub(crate) fn render<D: Drawable>(
     }
 }
 
-/// Render a [`crate::mesh::Mesh`] coloured by a `NodeField` component.
+/// Render a [`crate::containers::mesh::Mesh`] coloured by a `NodeField` component.
 /// File export draws the supplied `component`; the interactive window
 /// adds a clickable button (top-centre) and a `Tab` keyboard shortcut
 /// to cycle through every component.
 pub(crate) fn render_mesh_with_field(
-    mesh: &crate::mesh::Mesh,
+    mesh: &crate::containers::mesh::Mesh,
     field: &crate::containers::node_field::NodeField,
     component: Option<&str>,
     view: Option<View>,
@@ -229,10 +229,10 @@ pub(crate) fn render_mesh_with_field(
     }
 }
 
-/// Render a [`crate::mesh::SubMesh`] coloured by a `NodeField`
+/// Render a [`crate::containers::mesh::SubMesh`] coloured by a `NodeField`
 /// component. Same semantics as [`render_mesh_with_field`].
 pub(crate) fn render_submesh_with_field(
-    submesh: &crate::mesh::SubMesh,
+    submesh: &crate::containers::mesh::SubMesh,
     field: &crate::containers::node_field::NodeField,
     component: Option<&str>,
     view: Option<View>,

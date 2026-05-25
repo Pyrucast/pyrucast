@@ -7,7 +7,7 @@
 //! own bounding box / scale.
 
 use crate::error::Result;
-use crate::mesh::point::{Point3, Vector3};
+use crate::containers::mesh::point::{Point3, Vector3};
 use crate::viz::camera::Projector;
 use crate::viz::drawable::pl_err;
 use crate::viz::View;

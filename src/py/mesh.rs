@@ -1,9 +1,9 @@
-//! Python wrappers for [`crate::mesh::SubMesh`] and [`crate::mesh::Mesh`].
+//! Python wrappers for [`crate::containers::mesh::SubMesh`] and [`crate::containers::mesh::Mesh`].
 
 use crate::aggregate::Aggregate;
-use crate::mesh::configuration::NodeId;
-use crate::mesh::element_type::ElementType;
-use crate::mesh::{Mesh, SubMesh};
+use crate::containers::mesh::configuration::NodeId;
+use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::py::configuration::PyConfiguration;
 use crate::py::node::PyNode;
 use crate::store::{insert, with, with_mut, Handle};
@@ -56,7 +56,7 @@ impl PySubMesh {
     #[setter]
     fn set_face_color(&self, rgb: (u8, u8, u8)) -> PyResult<()> {
         with_mut(&self.handle, |s| {
-            s.set_face_color(crate::mesh::color::RgbColor::new(rgb.0, rgb.1, rgb.2))
+            s.set_face_color(crate::containers::mesh::color::RgbColor::new(rgb.0, rgb.1, rgb.2))
         })?;
         Ok(())
     }
@@ -131,7 +131,7 @@ impl PySubMesh {
                 "submesh index {idx} out of range (len={n})"
             )));
         }
-        let cell = crate::mesh::cell::Cell::new(self.handle.clone(), normalized as usize)?;
+        let cell = crate::containers::mesh::cell::Cell::new(self.handle.clone(), normalized as usize)?;
         Ok(crate::py::cell::PyCell::from_cell(cell))
     }
 

@@ -1,11 +1,11 @@
-//! Python wrappers for [`crate::finite_element_space::SubFiniteElementSpace`] and
-//! [`crate::finite_element_space::FiniteElementSpace`].
+//! Python wrappers for [`crate::containers::finite_element_space::SubFiniteElementSpace`] and
+//! [`crate::containers::finite_element_space::FiniteElementSpace`].
 
 use crate::error::{PyrucastError, Result};
-use crate::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::finite_element_space::interpolation::Interpolation;
+use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+use crate::containers::finite_element_space::interpolation::Interpolation;
 use crate::py::mesh::PyMesh;
-use crate::finite_element_space::quadrature::QuadratureRule;
+use crate::containers::finite_element_space::quadrature::QuadratureRule;
 use crate::store::{with, Handle};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

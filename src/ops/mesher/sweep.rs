@@ -7,11 +7,11 @@
 //!   QUA4 → HEX8).
 
 use crate::aggregate::Aggregate;
-use crate::mesh::configuration::NodeId;
+use crate::containers::mesh::configuration::NodeId;
 use crate::error::{PyrucastError, Result};
-use crate::mesh::element_type::ElementType;
-use crate::mesh::node::Node;
-use crate::mesh::{Mesh, SubMesh};
+use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::node::Node;
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::store::{insert, with};
 
 /// Sweep between two SEG2 contour meshes to produce a QUA4 strip.

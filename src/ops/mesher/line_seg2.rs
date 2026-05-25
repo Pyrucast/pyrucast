@@ -1,7 +1,7 @@
 use crate::error::{PyrucastError, Result};
-use crate::mesh::element_type::ElementType;
-use crate::mesh::node::Node;
-use crate::mesh::Mesh;
+use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::node::Node;
+use crate::containers::mesh::Mesh;
 
 /// Build a mesh of `n_elems` SEG2 elements along the straight line from
 /// node `a` to node `b`.
@@ -56,9 +56,9 @@ pub fn line_seg2(a: &Node, b: &Node, n_elems: usize) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mesh::configuration::Configuration;
-    use crate::mesh::element_type::ElementType;
-    use crate::mesh::node::Node;
+    use crate::containers::mesh::configuration::Configuration;
+    use crate::containers::mesh::element_type::ElementType;
+    use crate::containers::mesh::node::Node;
     use crate::store::insert;
 
     #[test]

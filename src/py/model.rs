@@ -1,7 +1,7 @@
 //! Python wrappers for [`crate::containers::model::SubModel`] and [`crate::containers::model::Model`].
 
 use crate::aggregate::Aggregate;
-use crate::mesh::configuration::NodeId;
+use crate::containers::mesh::configuration::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::py::configuration::PyConfiguration;
 use crate::py::element_field::PySubElementField;
