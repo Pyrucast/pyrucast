@@ -102,10 +102,11 @@ use crate::containers::element_field::SubElementField;
 use crate::error::Result;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::aggregate::Aggregate;
-use crate::containers::matrix::{Matrix, SubMatrix};
+use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+use crate::containers::mesh::element_type::ElementType;
 use crate::containers::mesh::SubMesh;
 use crate::models::{dirichlet, heat_conduction};
-use crate::store::{with, Handle};
+use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -280,42 +281,62 @@ impl SubModel {
         self.physics.dual_vars()
     }
 
-    /// Assemble the local stiffness contribution of this sub-model into
-    /// the provided block `SubMatrix`.
-    pub fn assemble_stiffness(&self, k: &mut SubMatrix) -> Result<()> {
+    /// Build and fill the stiffness [`SubMatrix`] block(s) for this sub-model.
+    ///
+    /// - `HeatConduction` → 1 block (square, symmetric).
+    /// - `Dirichlet`      → 2 blocks: the C block and the Cᵀ block.
+    pub(crate) fn build_stiffness_blocks(&self) -> Result<Vec<SubMatrix>> {
         match &self.physics {
             Physics::HeatConduction { fespace, material } => {
-                heat_conduction::assemble_stiffness(fespace, material, k)
+                let submesh = with(fespace, |s| s.submesh())?;
+                let cfg = with(&submesh, |s| s.configuration())?;
+                let flat_conn = with(&submesh, |s| s.connectivity().to_vec())?;
+                let mut unique_nodes: Vec<NodeId> = Vec::new();
+                for &nid in &flat_conn {
+                    if !unique_nodes.contains(&nid) { unique_nodes.push(nid); }
+                }
+                let mut poi1 = SubMesh::new(cfg, ElementType::POI1);
+                for &nid in &unique_nodes {
+                    poi1.add_cell(&[nid])?;
+                }
+                let support = insert(poi1);
+                let mut block = SubMatrix::new(
+                    support.clone(), support,
+                    vec![heat_conduction::DUAL_VAR.to_string()],
+                    vec![heat_conduction::PRIMAL_VAR.to_string()],
+                    DofOrdering::NodesThenVars, true,
+                )?;
+                heat_conduction::assemble_stiffness(fespace, material, &mut block)?;
+                Ok(vec![block])
             }
             Physics::Dirichlet {
-                primal_var,
-                primal_dual,
-                constrained_nodes,
-                multiplier_nodes,
-                ..
+                primal_var, primal_dual,
+                constrained_support, multiplier_support,
+                constrained_nodes, multiplier_nodes,
             } => {
-                dirichlet::assemble_block(
-                    constrained_nodes,
-                    multiplier_nodes,
-                    primal_var,
-                    primal_dual,
-                    k,
-                );
-                Ok(())
+                let lambda_name = dirichlet::multiplier_name(primal_var);
+                // C block: rows = multiplier × primal_var, cols = constrained × primal_var
+                let mut c_block = SubMatrix::new(
+                    multiplier_support.clone(), constrained_support.clone(),
+                    vec![primal_var.clone()],
+                    vec![primal_var.clone()],
+                    DofOrdering::NodesThenVars, true,
+                )?;
+                // Cᵀ block: rows = constrained × primal_dual, cols = multiplier × lambda
+                let mut ct_block = SubMatrix::new(
+                    constrained_support.clone(), multiplier_support.clone(),
+                    vec![primal_dual.clone()],
+                    vec![lambda_name],
+                    DofOrdering::NodesThenVars, true,
+                )?;
+                dirichlet::assemble_blocks(
+                    constrained_nodes, multiplier_nodes,
+                    primal_var, primal_dual,
+                    &mut c_block, &mut ct_block,
+                )?;
+                Ok(vec![c_block, ct_block])
             }
         }
-    }
-
-    /// Assemble the local mass contribution of this sub-model into the
-    /// provided block `SubMatrix`. Returns `Ok(())` and produces no
-    /// entries when the physics has no inertial term (Dirichlet, …) —
-    /// this is the **v0**, mass assembly for `HeatConduction` is
-    /// intentionally left as a stub.
-    pub fn assemble_mass(&self, _m: &mut SubMatrix) -> Result<()> {
-        // v0: mass is not yet wired for any physics. Adding `rho_cp`
-        // to HeatConduction would be additive once the integrand
-        // ∫ N_i N_j dx is implemented.
-        Ok(())
     }
 }
 
@@ -392,39 +413,28 @@ impl Model {
 
     /// Assemble the stiffness matrix `K` of the full model.
     ///
-    /// Emits **one [`SubMatrix`] per [`SubModel`]** and returns the
-    /// aggregate [`Matrix`] holding those blocks. Block-local `symmetric`
-    /// flags match each physics; the aggregate is symmetric iff every
-    /// block is.
+    /// Each [`SubModel`] contributes one or more [`SubMatrix`] blocks
+    /// (e.g. `HeatConduction` → 1 block, `Dirichlet` → C + Cᵀ).
+    /// The aggregate is finalized before being returned.
     pub fn stiffness(&self) -> Result<Matrix> {
         let mut k = Matrix::empty();
         for h in self {
-            let sm = with(h, |sub| -> Result<SubMatrix> {
-                let symmetric = matches!(
-                    sub.physics(),
-                    Physics::HeatConduction { .. } | Physics::Dirichlet { .. }
-                );
-                let mut block = SubMatrix::new(symmetric);
-                sub.assemble_stiffness(&mut block)?;
-                Ok(block)
-            })??;
-            k.add_sub(crate::store::insert(sm))?;
+            let blocks = with(h, |sub| sub.build_stiffness_blocks())??;
+            for block in blocks {
+                k.add_sub(insert(block))?;
+            }
         }
+        k.finalize()?;
         Ok(k)
     }
 
-    /// Assemble the mass matrix `M` of the full model. In this v0 each
-    /// physics's `assemble_mass` is a stub, so each emitted block is empty.
+    /// Assemble the mass matrix `M` of the full model.
+    ///
+    /// v0 stub: no physics has a mass term yet. Returns an empty finalized
+    /// [`Matrix`].
     pub fn mass(&self) -> Result<Matrix> {
         let mut m = Matrix::empty();
-        for h in self {
-            let sm = with(h, |sub| -> Result<SubMatrix> {
-                let mut block = SubMatrix::new(true);
-                sub.assemble_mass(&mut block)?;
-                Ok(block)
-            })??;
-            m.add_sub(crate::store::insert(sm))?;
-        }
+        m.finalize()?;
         Ok(m)
     }
 }

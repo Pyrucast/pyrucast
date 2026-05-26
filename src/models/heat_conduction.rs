@@ -97,7 +97,7 @@ pub fn assemble_stiffness(
                     }
                     k_ij += conductivities[cell][g] * grad_dot * snap.det_j_w[g];
                 }
-                k.add_entry(snap.node_ids[i], DUAL_VAR, snap.node_ids[j], PRIMAL_VAR, k_ij);
+                k.add_entry(snap.node_ids[i], DUAL_VAR, snap.node_ids[j], PRIMAL_VAR, k_ij)?;
             }
         }
     }

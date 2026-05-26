@@ -124,10 +124,16 @@ pub trait Aggregate: Default {
         Ok(())
     }
 
+    /// Hook called after a handle has been successfully pushed. Override to
+    /// perform side-effects such as cache invalidation.
+    /// The default is a no-op.
+    fn post_push(&mut self) {}
+
     /// Check compatibility (via [`check_push`]) then append a single handle.
     fn add_sub(&mut self, h: Handle<Self::Sub>) -> crate::error::Result<()> {
         self.check_push(&h)?;
         self.push(h);
+        self.post_push();
         Ok(())
     }
 
@@ -137,7 +143,10 @@ pub trait Aggregate: Default {
         if let Some(h) = other.items().first() {
             self.check_push(h)?;
         }
-        self.extend_from(other);
+        for h in other.iter() {
+            self.items_mut().push(h.clone());
+            self.post_push();
+        }
         Ok(())
     }
 

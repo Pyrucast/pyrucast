@@ -2,8 +2,9 @@
 //! aggregate [`crate::containers::matrix::Matrix`].
 
 use crate::aggregate::Aggregate;
-use crate::containers::matrix::{Matrix, SubMatrix};
+use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
 use crate::containers::mesh::configuration::NodeId;
+use crate::py::mesh::PySubMesh;
 use crate::store::{insert, with, Handle};
 use pyo3::prelude::*;
 
@@ -19,13 +20,35 @@ pub struct PySubMatrix {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubMatrix {
-    /// `SubMatrix(symmetric=False)`.
+    /// `SubMatrix(row_mesh, col_mesh, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=False)`.
+    ///
+    /// `ordering` is either `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
     #[new]
-    #[pyo3(signature = (symmetric=false))]
-    fn py_new(symmetric: bool) -> PyResult<Self> {
-        Ok(Self {
-            handle: insert(SubMatrix::new(symmetric)),
-        })
+    #[pyo3(signature = (row_mesh, col_mesh, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=false))]
+    fn py_new(
+        row_mesh: PyRef<'_, PySubMesh>,
+        col_mesh: PyRef<'_, PySubMesh>,
+        dual_vars: Vec<String>,
+        primal_vars: Vec<String>,
+        ordering: &str,
+        symmetric: bool,
+    ) -> PyResult<Self> {
+        let ord = match ordering {
+            "nodes_then_vars" => DofOrdering::NodesThenVars,
+            "vars_then_nodes" => DofOrdering::VarsThenNodes,
+            other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "unknown ordering '{other}'; expected 'nodes_then_vars' or 'vars_then_nodes'"
+            ))),
+        };
+        let sub = SubMatrix::new(
+            row_mesh.handle.clone(),
+            col_mesh.handle.clone(),
+            dual_vars,
+            primal_vars,
+            ord,
+            symmetric,
+        ).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(Self { handle: insert(sub) })
     }
 
     fn add_entry(
@@ -38,7 +61,7 @@ impl PySubMatrix {
     ) -> PyResult<()> {
         crate::store::with_mut(&self.handle, |m| {
             m.add_entry(NodeId(row_node), row_field, NodeId(col_node), col_field, value)
-        })?;
+        })??;
         Ok(())
     }
 
@@ -72,26 +95,20 @@ impl PySubMatrix {
     }
 
     fn field_names(&self) -> PyResult<Vec<String>> {
-        Ok(with(&self.handle, |m| m.field_names().to_vec())?)
+        Ok(with(&self.handle, |m| m.field_names())?)
     }
 
     /// `(node_id, field_name)` tuples for each row, in order.
     fn row_dofs(&self) -> PyResult<Vec<(u32, String)>> {
         Ok(with(&self.handle, |m| {
-            m.row_dofs()
-                .iter()
-                .map(|d| (d.node_id.0, m.field_name(d.field_idx).to_string()))
-                .collect()
+            m.row_dofs().into_iter().map(|(nid, name)| (nid.0, name)).collect()
         })?)
     }
 
     /// `(node_id, field_name)` tuples for each column, in order.
     fn col_dofs(&self) -> PyResult<Vec<(u32, String)>> {
         Ok(with(&self.handle, |m| {
-            m.col_dofs()
-                .iter()
-                .map(|d| (d.node_id.0, m.field_name(d.field_idx).to_string()))
-                .collect()
+            m.col_dofs().into_iter().map(|(nid, name)| (nid.0, name)).collect()
         })?)
     }
 
@@ -109,17 +126,7 @@ impl PySubMatrix {
     /// tuples, in insertion order.
     fn entries(&self) -> PyResult<Vec<(u32, String, u32, String, f64)>> {
         Ok(with(&self.handle, |m| {
-            m.iter_entries()
-                .map(|(r, c, v)| {
-                    (
-                        r.node_id.0,
-                        m.field_name(r.field_idx).to_string(),
-                        c.node_id.0,
-                        m.field_name(c.field_idx).to_string(),
-                        v,
-                    )
-                })
-                .collect()
+            m.iter_entries().into_iter().map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v)).collect()
         })?)
     }
 
@@ -159,6 +166,13 @@ impl PyMatrix {
 
     fn add_sub_matrix(&self, sub: PyRef<'_, PySubMatrix>) -> PyResult<()> {
         crate::store::with_mut(&self.handle, |m| m.add_sub(sub.handle.clone()))??;
+        Ok(())
+    }
+
+    /// Build the global DOF table and CSR. Must be called before any
+    /// solver-facing method (`dense`, `mul_dense`, …).
+    fn finalize(&self) -> PyResult<()> {
+        crate::store::with_mut(&self.handle, |m| m.finalize())??;
         Ok(())
     }
 

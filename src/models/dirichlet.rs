@@ -84,23 +84,25 @@ pub fn build(
     })
 }
 
-/// Write the Lagrange block of a Dirichlet sub-model into `k`.
+/// Fill the C and Cᵀ blocks of a Dirichlet sub-model.
 ///
 /// For each `(constrained_node, multiplier_node)` pair:
-/// - **C entry**  at `(multiplier_node, primal_var)` × `(constrained_node,
-///   primal_var)` = `1`;
-/// - **Cᵀ entry** at `(constrained_node, primal_dual)` × `(multiplier_node,
-///   lambda_<primal_var>)` = `1`.
-pub fn assemble_block(
+/// - **C entry**  into `c_block`  at `(multiplier_node, primal_var)` ×
+///   `(constrained_node, primal_var)` = `1`;
+/// - **Cᵀ entry** into `ct_block` at `(constrained_node, primal_dual)` ×
+///   `(multiplier_node, lambda_<primal_var>)` = `1`.
+pub fn assemble_blocks(
     constrained_nodes: &[NodeId],
     multiplier_nodes: &[NodeId],
     primal_var: &str,
     primal_dual: &str,
-    k: &mut SubMatrix,
-) {
+    c_block: &mut SubMatrix,
+    ct_block: &mut SubMatrix,
+) -> crate::error::Result<()> {
     let lambda_name = multiplier_name(primal_var);
     for (c_node, m_node) in constrained_nodes.iter().zip(multiplier_nodes.iter()) {
-        k.add_entry(*m_node, primal_var, *c_node, primal_var, 1.0);
-        k.add_entry(*c_node, primal_dual, *m_node, &lambda_name, 1.0);
+        c_block.add_entry(*m_node, primal_var, *c_node, primal_var, 1.0)?;
+        ct_block.add_entry(*c_node, primal_dual, *m_node, &lambda_name, 1.0)?;
     }
+    Ok(())
 }

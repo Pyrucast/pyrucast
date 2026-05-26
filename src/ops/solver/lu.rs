@@ -290,19 +290,35 @@ mod tests {
 
     #[test]
     fn rectangular_matrix_yields_error() {
-        use crate::containers::matrix::SubMatrix;
-        let mut block = SubMatrix::new(false);
-        block.add_entry(NodeId(0), "q", NodeId(0), "T", 1.0);
-        block.add_entry(NodeId(1), "q", NodeId(0), "T", 1.0);
+        use crate::containers::matrix::{DofOrdering, SubMatrix};
+        use crate::containers::mesh::element_type::ElementType;
+        use crate::containers::mesh::SubMesh;
+        // 2-row support, 1-col support → 2×1 rectangular block.
+        let cfg = insert(Configuration::new(1).unwrap());
+        let r0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let r1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let c0 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+        let mut row_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        row_sm.add_cell(&[r0.id()]).unwrap();
+        row_sm.add_cell(&[r1.id()]).unwrap();
+        let mut col_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        col_sm.add_cell(&[c0.id()]).unwrap();
+        let mut block = SubMatrix::new(
+            insert(row_sm), insert(col_sm),
+            vec!["q".into()], vec!["T".into()],
+            DofOrdering::NodesThenVars, false,
+        ).unwrap();
+        block.add_entry(r0.id(), "q", c0.id(), "T", 1.0).unwrap();
+        block.add_entry(r1.id(), "q", c0.id(), "T", 1.0).unwrap();
         // 2 rows × 1 col — rectangular.
         let mut m = crate::containers::matrix::Matrix::empty();
         m.add_sub(insert(block)).unwrap();
+        m.finalize().unwrap();
 
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-        sm.add_cell(&[a.id()]).unwrap();
-        let rhs = NodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap();
+        // Build a minimal rhs on the same cfg.
+        let mut rhs_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        rhs_sm.add_cell(&[r0.id()]).unwrap();
+        let rhs = NodeField::from_poi1(&insert(rhs_sm), vec!["q".into()]).unwrap();
         assert!(solve(&m, &rhs).is_err());
     }
 
