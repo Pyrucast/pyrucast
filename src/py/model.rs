@@ -59,9 +59,8 @@ impl PySubModel {
 
     /// Multiplier node ids (Lagrange physics only — empty otherwise).
     fn multiplier_nodes(&self) -> PyResult<Vec<u32>> {
-        Ok(with(&self.handle, |s| {
-            s.multiplier_nodes().iter().map(|n| n.0).collect()
-        })?)
+        let ids = with(&self.handle, |s| s.multiplier_nodes())??;
+        Ok(ids.into_iter().map(|n| n.0).collect())
     }
 
     fn __repr__(&self) -> PyResult<String> {

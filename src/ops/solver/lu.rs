@@ -52,8 +52,8 @@
 //!     .unwrap();
 //! let dir_a = SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap();
 //! let dir_b = SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![b.id()]).unwrap();
-//! let mult_a = dir_a.multiplier_nodes()[0];
-//! let mult_b = dir_b.multiplier_nodes()[0];
+//! let mult_a = dir_a.multiplier_nodes().unwrap()[0];
+//! let mult_b = dir_b.multiplier_nodes().unwrap()[0];
 //! model.add_sub(insert(dir_a)).unwrap();
 //! model.add_sub(insert(dir_b)).unwrap();
 //!
@@ -218,8 +218,8 @@ mod tests {
             vec![nodes[n_elems].id()],
         )
         .unwrap();
-        let mult_left = left_dir.multiplier_nodes()[0];
-        let mult_right = right_dir.multiplier_nodes()[0];
+        let mult_left = left_dir.multiplier_nodes().unwrap()[0];
+        let mult_right = right_dir.multiplier_nodes().unwrap()[0];
         model.add_sub(insert(left_dir)).unwrap();
         model.add_sub(insert(right_dir)).unwrap();
 

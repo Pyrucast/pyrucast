@@ -22,11 +22,12 @@ pub fn multiplier_name(primal_var: &str) -> String {
 /// Materials needed to instantiate the Dirichlet variant.
 ///
 /// `build` returns this bundle and the [`crate::containers::model::Physics::Dirichlet`]
-/// variant simply moves its fields in.
+/// variant simply moves its fields in. The node sequences are recoverable
+/// at any time by reading the POI1 supports' connectivity (size immutable
+/// on insert into the store).
 pub struct Built {
     pub constrained_support: Handle<SubMesh>,
     pub multiplier_support: Handle<SubMesh>,
-    pub multiplier_nodes: Vec<NodeId>,
 }
 
 /// Build the Lagrange-multiplier infrastructure for a Dirichlet constraint
@@ -80,7 +81,6 @@ pub fn build(
     Ok(Built {
         constrained_support,
         multiplier_support,
-        multiplier_nodes,
     })
 }
 

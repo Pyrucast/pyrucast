@@ -156,21 +156,15 @@ pub enum Physics {
     Dirichlet {
         primal_var: String,
         primal_dual: String,
-        /// POI1 SubMesh holding the per-node refcounts on the
-        /// constrained nodes. Cells are in the same order as
-        /// `constrained_nodes`.
+        /// POI1 SubMesh holding the per-node refcounts on the constrained
+        /// nodes. Connectivity is the constrained-node sequence (immutable
+        /// once inserted into the store).
         constrained_support: Handle<SubMesh>,
         /// POI1 SubMesh owning the multiplier nodes (one cell per
-        /// multiplier, in the same order as `multiplier_nodes`). The
+        /// multiplier, in the same order as the constrained nodes). The
         /// SubMesh holds the only refcount on each multiplier; its
         /// `Drop` collects them.
         multiplier_support: Handle<SubMesh>,
-        /// Cache of `constrained_support`'s connectivity for the
-        /// assembly hot path.
-        constrained_nodes: Vec<NodeId>,
-        /// Cache of `multiplier_support`'s connectivity. One multiplier
-        /// node per constrained node, in the same order.
-        multiplier_nodes: Vec<NodeId>,
     },
 }
 
@@ -263,8 +257,6 @@ impl SubModel {
                 primal_dual,
                 constrained_support: built.constrained_support,
                 multiplier_support: built.multiplier_support,
-                constrained_nodes,
-                multiplier_nodes: built.multiplier_nodes,
             },
         })
     }
@@ -281,10 +273,12 @@ impl SubModel {
     /// Useful for the user who needs to write the imposed value `u_d` at
     /// the multiplier node's `<primal_var>` component of the load
     /// `NodeField`.
-    pub fn multiplier_nodes(&self) -> &[NodeId] {
+    pub fn multiplier_nodes(&self) -> Result<Vec<NodeId>> {
         match &self.physics {
-            Physics::Dirichlet { multiplier_nodes, .. } => multiplier_nodes,
-            _ => &[],
+            Physics::Dirichlet { multiplier_support, .. } => {
+                with(multiplier_support, |s| s.connectivity().to_vec())
+            }
+            _ => Ok(Vec::new()),
         }
     }
 
@@ -324,9 +318,12 @@ impl SubModel {
             Physics::Dirichlet {
                 primal_var, primal_dual,
                 constrained_support, multiplier_support,
-                constrained_nodes, multiplier_nodes,
             } => {
                 let _ = material;
+                let constrained_nodes: Vec<NodeId> =
+                    with(constrained_support, |s| s.connectivity().to_vec())?;
+                let multiplier_nodes: Vec<NodeId> =
+                    with(multiplier_support, |s| s.connectivity().to_vec())?;
                 let lambda_name = dirichlet::multiplier_name(primal_var);
                 // C block: rows = multiplier × primal_var, cols = constrained × primal_var
                 let mut c_block = SubMatrix::new(
@@ -343,7 +340,7 @@ impl SubModel {
                     DofOrdering::NodesThenVars, true,
                 )?;
                 dirichlet::assemble_blocks(
-                    constrained_nodes, multiplier_nodes,
+                    &constrained_nodes, &multiplier_nodes,
                     primal_var, primal_dual,
                     &mut c_block, &mut ct_block,
                 )?;
@@ -373,14 +370,17 @@ impl fmt::Display for SubModel {
             Physics::HeatConduction { .. } => write!(f, "SubModel<HeatConduction>"),
             Physics::Dirichlet {
                 primal_var,
-                constrained_nodes,
+                constrained_support,
                 ..
-            } => write!(
-                f,
-                "SubModel<Dirichlet({})>: {} constrained node(s)",
-                primal_var,
-                constrained_nodes.len()
-            ),
+            } => {
+                let n = with(constrained_support, |s| s.cell_count())
+                    .unwrap_or(0);
+                write!(
+                    f,
+                    "SubModel<Dirichlet({})>: {} constrained node(s)",
+                    primal_var, n
+                )
+            }
         }
     }
 }
@@ -633,10 +633,7 @@ mod tests {
         // After: the Node + the SubModel each hold 1 ref ⇒ 2.
         with(&cfg, |c| assert_eq!(c.refcount(a_id), 2)).unwrap();
         // The multiplier node has refcount 1 (owned by the sub-model).
-        let mult_id = match sub.physics() {
-            Physics::Dirichlet { multiplier_nodes, .. } => multiplier_nodes[0],
-            _ => unreachable!(),
-        };
+        let mult_id = sub.multiplier_nodes().unwrap()[0];
         with(&cfg, |c| assert_eq!(c.refcount(mult_id), 1)).unwrap();
 
         drop(sub);
