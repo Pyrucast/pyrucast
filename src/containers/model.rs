@@ -65,6 +65,7 @@
 //! use pyrucast::containers::mesh::Mesh;
 //! use pyrucast::containers::model::{Model, Physics, SubModel};
 //! use pyrucast::containers::mesh::node::Node;
+//! use pyrucast::ops::assemble;
 //! use pyrucast::store::{insert, with};
 //!
 //! // 1-D Configuration with two nodes spanning [0, 1].
@@ -76,14 +77,14 @@
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //! let sub = fes.subspace(0).unwrap();
 //!
-//! // Conductivity k = 1, uniform.
+//! // Conductivity k = 1, uniform — passed at assembly time, not stored in the model.
 //! let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
 //! mat.set_uniform("k", 1.0).unwrap();
 //! let mat_h = insert(mat);
 //!
 //! let mut model = Model::empty();
 //! model
-//!     .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
+//!     .add_sub(insert(SubModel::heat_conduction(sub)))
 //!     .unwrap();
 //! model
 //!     .add_sub(insert(
@@ -91,7 +92,7 @@
 //!     ))
 //!     .unwrap();
 //!
-//! let k = model.stiffness().unwrap();
+//! let k = assemble::stiffness(&model, &mat_h).unwrap();
 //! // 2 real DOFs ("T") + 1 multiplier DOF + 2 real rows ("q") + 1 multiplier row.
 //! assert_eq!(k.n_rows().unwrap(), 3);
 //! assert_eq!(k.n_cols().unwrap(), 3);
@@ -124,13 +125,10 @@ pub enum Physics {
     ///
     /// - primal variable: `"T"` (temperature, columns).
     /// - dual variable:   `"q"` (heat flux row labels).
-    /// - The `material` [`SubElementField`] **must** carry a component
-    ///   named `"k"` (isotropic conductivity at each Gauss point). The
-    ///   optional `"rho_cp"` component is reserved for the mass
-    ///   matrix; not used in this v0.
+    /// - Material data (conductivity `"k"`, …) is **not** stored here;
+    ///   it is supplied at assembly time via [`crate::ops::assemble::stiffness`].
     HeatConduction {
         fespace: Handle<SubFiniteElementSpace>,
-        material: Handle<SubElementField>,
     },
 
     /// Dirichlet constraint imposed via Lagrange multipliers.
@@ -206,18 +204,14 @@ impl SubModel {
         Self { physics }
     }
 
-    /// Heat-conduction sub-model on an FE subspace, with material
-    /// properties supplied by a [`SubElementField`].
+    /// Heat-conduction sub-model on an FE subspace.
     ///
-    /// The `material` field **must** define a component named `"k"`
-    /// (isotropic conductivity). The check is performed at assembly,
-    /// not at construction.
-    pub fn heat_conduction(
-        fespace: Handle<SubFiniteElementSpace>,
-        material: Handle<SubElementField>,
-    ) -> Self {
+    /// Material data (conductivity `"k"`, …) is supplied separately at
+    /// assembly time via [`crate::ops::assemble::stiffness`], keeping
+    /// the model immutable and material-independent.
+    pub fn heat_conduction(fespace: Handle<SubFiniteElementSpace>) -> Self {
         Self {
-            physics: Physics::HeatConduction { fespace, material },
+            physics: Physics::HeatConduction { fespace },
         }
     }
 
@@ -283,11 +277,18 @@ impl SubModel {
 
     /// Build and fill the stiffness [`SubMatrix`] block(s) for this sub-model.
     ///
-    /// - `HeatConduction` → 1 block (square, symmetric).
+    /// - `HeatConduction` → 1 block (square, symmetric). `material` must be
+    ///   `Some(_)` — the caller ([`crate::ops::assemble::stiffness`]) always
+    ///   provides it.
     /// - `Dirichlet`      → 2 blocks: the C block and the Cᵀ block.
-    pub(crate) fn build_stiffness_blocks(&self) -> Result<Vec<SubMatrix>> {
+    ///   `material` is ignored.
+    pub(crate) fn build_stiffness_blocks(
+        &self,
+        material: Option<&Handle<SubElementField>>,
+    ) -> Result<Vec<SubMatrix>> {
         match &self.physics {
-            Physics::HeatConduction { fespace, material } => {
+            Physics::HeatConduction { fespace } => {
+                let mat = material.expect("HeatConduction requires a material field");
                 let submesh = with(fespace, |s| s.submesh())?;
                 let cfg = with(&submesh, |s| s.configuration())?;
                 let flat_conn = with(&submesh, |s| s.connectivity().to_vec())?;
@@ -306,7 +307,7 @@ impl SubModel {
                     vec![heat_conduction::PRIMAL_VAR.to_string()],
                     DofOrdering::NodesThenVars, true,
                 )?;
-                heat_conduction::assemble_stiffness(fespace, material, &mut block)?;
+                heat_conduction::assemble_stiffness(fespace, mat, &mut block)?;
                 Ok(vec![block])
             }
             Physics::Dirichlet {
@@ -314,6 +315,7 @@ impl SubModel {
                 constrained_support, multiplier_support,
                 constrained_nodes, multiplier_nodes,
             } => {
+                let _ = material;
                 let lambda_name = dirichlet::multiplier_name(primal_var);
                 // C block: rows = multiplier × primal_var, cols = constrained × primal_var
                 let mut c_block = SubMatrix::new(
@@ -347,7 +349,7 @@ impl fmt::Debug for SubModel {
                 "physics",
                 &match &self.physics {
                     Physics::HeatConduction { .. } => "HeatConduction",
-                    Physics::Dirichlet { .. } => "Dirichlet",
+                    Physics::Dirichlet { .. }    => "Dirichlet",
                 },
             )
             .finish()
@@ -411,23 +413,6 @@ impl Model {
         Ok(union_names(all))
     }
 
-    /// Assemble the stiffness matrix `K` of the full model.
-    ///
-    /// Each [`SubModel`] contributes one or more [`SubMatrix`] blocks
-    /// (e.g. `HeatConduction` → 1 block, `Dirichlet` → C + Cᵀ).
-    /// The aggregate is finalized before being returned.
-    pub fn stiffness(&self) -> Result<Matrix> {
-        let mut k = Matrix::empty();
-        for h in self {
-            let blocks = with(h, |sub| sub.build_stiffness_blocks())??;
-            for block in blocks {
-                k.add_sub(insert(block))?;
-            }
-        }
-        k.finalize()?;
-        Ok(k)
-    }
-
     /// Assemble the mass matrix `M` of the full model.
     ///
     /// v0 stub: no physics has a mass term yet. Returns an empty finalized
@@ -462,16 +447,15 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::containers::mesh::node::Node;
+    use crate::ops::assemble;
     use crate::store::{insert, with_mut};
 
-    /// Build a 1-D heat-conduction model on a single SEG2 element of
-    /// length `length`, uniform conductivity `k`, with optional Dirichlet
-    /// at the left node.
+    /// Returns `(cfg, a_id, b_id, model, mat_h)`.
     fn build_seg2_heat_model(
         length: f64,
         k: f64,
         dirichlet_at_left: bool,
-    ) -> (Handle<Configuration>, NodeId, NodeId, Model) {
+    ) -> (Handle<Configuration>, NodeId, NodeId, Model, Handle<SubElementField>) {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[length]).unwrap();
@@ -486,7 +470,7 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
+            .add_sub(insert(SubModel::heat_conduction(sub)))
             .unwrap();
         if dirichlet_at_left {
             model
@@ -496,19 +480,19 @@ mod tests {
                 ))
                 .unwrap();
         }
-        (cfg, a.id(), b.id(), model)
+        (cfg, a.id(), b.id(), model, mat_h)
     }
 
     #[test]
     fn primal_dual_vars_for_heat_conduction_alone() {
-        let (_cfg, _, _, model) = build_seg2_heat_model(1.0, 1.0, false);
+        let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, false);
         assert_eq!(model.primal_vars().unwrap(), vec!["T".to_string()]);
         assert_eq!(model.dual_vars().unwrap(), vec!["q".to_string()]);
     }
 
     #[test]
     fn primal_dual_vars_include_lagrange_after_dirichlet() {
-        let (_cfg, _, _, model) = build_seg2_heat_model(1.0, 1.0, true);
+        let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
         assert_eq!(
             model.primal_vars().unwrap(),
             vec!["T".to_string(), "lambda_T".to_string()]
@@ -527,8 +511,8 @@ mod tests {
     fn heat_conduction_assembles_analytical_seg2_stiffness() {
         let length = 2.0;
         let k_val = 1.5;
-        let (_cfg, a_id, b_id, model) = build_seg2_heat_model(length, k_val, false);
-        let k = model.stiffness().unwrap();
+        let (_cfg, a_id, b_id, model, mat_h) = build_seg2_heat_model(length, k_val, false);
+        let k = assemble::stiffness(&model, &mat_h).unwrap();
 
         assert_eq!(k.n_rows().unwrap(), 2);
         assert_eq!(k.n_cols().unwrap(), 2);
@@ -559,9 +543,9 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
+            .add_sub(insert(SubModel::heat_conduction(sub)))
             .unwrap();
-        let k = model.stiffness().unwrap();
+        let k = assemble::stiffness(&model, &mat_h).unwrap();
         assert_eq!(k.n_rows().unwrap(), 3);
         assert_eq!(k.n_cols().unwrap(), 3);
 
@@ -583,13 +567,13 @@ mod tests {
     /// both `C` and `Cᵀ` entries (each value 1.0).
     #[test]
     fn dirichlet_adds_one_multiplier_node_and_two_block_entries() {
-        let (cfg, a_id, _b_id, model) = build_seg2_heat_model(1.0, 1.0, true);
+        let (cfg, a_id, _b_id, model, mat_h) = build_seg2_heat_model(1.0, 1.0, true);
 
         // The Configuration grew by one node (the multiplier).
         let n_nodes = with(&cfg, |c| c.node_count()).unwrap();
         assert_eq!(n_nodes, 3);
 
-        let k = model.stiffness().unwrap();
+        let k = assemble::stiffness(&model, &mat_h).unwrap();
         // 2 real "q" rows + 1 multiplier "T" row = 3 rows.
         // 2 real "T" cols + 1 multiplier "lambda_T" col = 3 cols.
         assert_eq!(k.n_rows().unwrap(), 3);
@@ -671,25 +655,24 @@ mod tests {
         let mat_h = insert(mat);
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
+            .add_sub(insert(SubModel::heat_conduction(sub)))
             .unwrap();
-        assert!(model.stiffness().is_err());
+        assert!(assemble::stiffness(&model, &mat_h).is_err());
     }
 
     #[test]
-    fn empty_model_produces_empty_matrices() {
+    fn empty_model_has_no_vars_and_empty_mass() {
         let model = Model::empty();
-        let k = model.stiffness().unwrap();
+        assert_eq!(model.primal_vars().unwrap(), Vec::<String>::new());
+        assert_eq!(model.dual_vars().unwrap(), Vec::<String>::new());
         let m = model.mass().unwrap();
-        assert_eq!(k.n_rows().unwrap(), 0);
-        assert_eq!(k.n_cols().unwrap(), 0);
         assert_eq!(m.n_rows().unwrap(), 0);
         assert_eq!(m.n_cols().unwrap(), 0);
     }
 
     #[test]
     fn debug_and_display() {
-        let (_cfg, _, _, model) = build_seg2_heat_model(1.0, 1.0, true);
+        let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
         let d = format!("{:?}", model);
         assert!(d.contains("Model"));
         let s = format!("{}", model);

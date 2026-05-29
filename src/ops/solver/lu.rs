@@ -30,6 +30,7 @@
 //! use pyrucast::containers::model::{Model, SubModel};
 //! use pyrucast::containers::mesh::node::Node;
 //! use pyrucast::containers::node_field::NodeField;
+//! use pyrucast::ops::assemble;
 //! use pyrucast::ops::solver::lu::solve;
 //! use pyrucast::store::insert;
 //!
@@ -43,10 +44,11 @@
 //! let sub = fes.subspace(0).unwrap();
 //! let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
 //! mat.set_uniform("k", 1.0).unwrap();
+//! let mat_h = insert(mat);
 //!
 //! let mut model = Model::empty();
 //! model
-//!     .add_sub(insert(SubModel::heat_conduction(sub, insert(mat))))
+//!     .add_sub(insert(SubModel::heat_conduction(sub)))
 //!     .unwrap();
 //! let dir_a = SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap();
 //! let dir_b = SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![b.id()]).unwrap();
@@ -64,7 +66,7 @@
 //! rhs.set_value(mult_a, "T", 0.0).unwrap();
 //! rhs.set_value(mult_b, "T", 1.0).unwrap();
 //!
-//! let k = model.stiffness().unwrap();
+//! let k = assemble::stiffness(&model, &mat_h).unwrap();
 //! let solution = solve(&k, &rhs).unwrap();
 //! // Solution: T(a) = 0, T(b) = 1, λ_a = +1, λ_b = -1 (boundary fluxes).
 //! assert!((solution.value(a.id(), "T").unwrap() - 0.0).abs() < 1e-12);
@@ -204,7 +206,7 @@ mod tests {
         // Model.
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
+            .add_sub(insert(SubModel::heat_conduction(sub)))
             .unwrap();
         let left_dir =
             SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![nodes[0].id()])
@@ -231,7 +233,7 @@ mod tests {
         rhs.set_value(mult_right, "T", 1.0).unwrap();
 
         // Assemble + solve.
-        let k = model.stiffness().unwrap();
+        let k = crate::ops::assemble::stiffness(&model, &mat_h).unwrap();
         let solution = solve(&k, &rhs).unwrap();
 
         // Verify T at every node equals its physical coordinate.
@@ -274,9 +276,9 @@ mod tests {
         let mat_h = insert(mat);
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub, mat_h)))
+            .add_sub(insert(SubModel::heat_conduction(sub)))
             .unwrap();
-        let k = model.stiffness().unwrap();
+        let k = crate::ops::assemble::stiffness(&model, &mat_h).unwrap();
 
         // Build a tiny non-empty rhs on a real node so we can find the
         // Configuration of the result NodeField.

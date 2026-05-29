@@ -20,15 +20,15 @@ pub struct PySubModel {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubModel {
-    /// `SubModel.heat_conduction(fespace, material)` — heat-conduction
-    /// sub-model on a finite-element subspace.
+    /// `SubModel.heat_conduction(fespace)` — heat-conduction sub-model on
+    /// a finite-element subspace. Material data is supplied at assembly
+    /// time via `assemble.stiffness(model, material)`.
     #[classmethod]
     fn heat_conduction(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         fespace: PyRef<PySubFiniteElementSpace>,
-        material: PyRef<PySubElementField>,
     ) -> PyResult<Self> {
-        let sub = SubModel::heat_conduction(fespace.handle.clone(), material.handle.clone());
+        let sub = SubModel::heat_conduction(fespace.handle.clone());
         Ok(Self { handle: insert(sub) })
     }
 
@@ -101,8 +101,8 @@ impl PyModel {
         Ok(self.inner.dual_vars()?)
     }
 
-    fn stiffness(&self) -> PyResult<PyMatrix> {
-        let k = self.inner.stiffness()?;
+    fn stiffness(&self, material: PyRef<PySubElementField>) -> PyResult<PyMatrix> {
+        let k = crate::ops::assemble::stiffness(&self.inner, &material.handle)?;
         Ok(PyMatrix { handle: insert(k) })
     }
 
