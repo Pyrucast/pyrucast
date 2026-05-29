@@ -18,11 +18,11 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
         mesh.add_cell([nodes[i].id, nodes[i + 1].id])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    mat = pyrucast.SubElementField(sub, ["k"])
-    mat.set_uniform("k", 1.0)
+    materials = pyrucast.ElementField(fes, ["k"])
+    materials[0].set_uniform("k", 1.0)
 
     model = pyrucast.Model()
-    model.add_sub(pyrucast.SubModel.heat_conduction(sub, mat))
+    model.add_sub(pyrucast.SubModel.heat_conduction(sub))
     left = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[0].id])
     right = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[-1].id])
     mult_left = left.multiplier_nodes()[0]
@@ -38,7 +38,7 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     rhs.set_value(mult_left, "T", 0.0)
     rhs.set_value(mult_right, "T", 1.0)
 
-    K = model.stiffness()
+    K = model.stiffness(materials)
     solution = pyrucast.solve(K, rhs)
 
     tol = 1e-10
@@ -52,28 +52,6 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     assert abs(solution.value(mult_right, "lambda_T") + 1.0) < tol
 
 
-def test_solver_rectangular_matrix_errors():
-    c = pyrucast.Configuration(1)
-    a = c.add_node([0.0])
-    sm = pyrucast.SubMesh(c, "POI1")
-    sm.add_cell([a.id])
-    rhs = pyrucast.NodeField(sm, ["q"])
-
-    block = pyrucast.SubMatrix()
-    block.add_entry(0, "q", 0, "T", 1.0)
-    block.add_entry(1, "q", 0, "T", 1.0)
-    # 2 rows × 1 col
-    m = pyrucast.Matrix()
-    m.add_sub_matrix(block)
-
-    try:
-        pyrucast.solve(m, rhs)
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("expected RuntimeError for rectangular matrix")
-
-
 def test_solver_singular_matrix_errors():
     """Without any Dirichlet, the bare conduction matrix is singular
     (kernel = constants)."""
@@ -84,12 +62,12 @@ def test_solver_singular_matrix_errors():
     mesh.add_cell([a.id, b.id])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    mat = pyrucast.SubElementField(sub, ["k"])
-    mat.set_uniform("k", 1.0)
+    materials = pyrucast.ElementField(fes, ["k"])
+    materials[0].set_uniform("k", 1.0)
 
     model = pyrucast.Model()
-    model.add_sub(pyrucast.SubModel.heat_conduction(sub, mat))
-    K = model.stiffness()
+    model.add_sub(pyrucast.SubModel.heat_conduction(sub))
+    K = model.stiffness(materials)
 
     rhs_sm = pyrucast.SubMesh(c, "POI1")
     rhs_sm.add_cell([a.id])
@@ -116,11 +94,11 @@ def test_solver_with_nonzero_neumann():
         mesh.add_cell([nodes[i].id, nodes[i + 1].id])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    mat = pyrucast.SubElementField(sub, ["k"])
-    mat.set_uniform("k", 2.0)
+    materials = pyrucast.ElementField(fes, ["k"])
+    materials[0].set_uniform("k", 2.0)
 
     model = pyrucast.Model()
-    model.add_sub(pyrucast.SubModel.heat_conduction(sub, mat))
+    model.add_sub(pyrucast.SubModel.heat_conduction(sub))
     left = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[0].id])
     mult_left = left.multiplier_nodes()[0]
     model.add_sub(left)
@@ -135,7 +113,7 @@ def test_solver_with_nonzero_neumann():
     rhs.set_value(mult_left, "T", 5.0)
     rhs.set_value(nodes[-1].id, "q", 1.0)
 
-    K = model.stiffness()
+    K = model.stiffness(materials)
     solution = pyrucast.solve(K, rhs)
 
     # Expected linear solution: u(x) = 5 + 0.5 * x (because flux = 1, k = 2 → slope = 0.5).

@@ -23,7 +23,7 @@
 //! ```
 //! use pyrucast::aggregate::Aggregate;
 //! use pyrucast::containers::mesh::configuration::Configuration;
-//! use pyrucast::containers::element_field::SubElementField;
+//! use pyrucast::containers::element_field::{ElementField, SubElementField};
 //! use pyrucast::containers::mesh::element_type::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -44,7 +44,8 @@
 //! let sub = fes.subspace(0).unwrap();
 //! let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
 //! mat.set_uniform("k", 1.0).unwrap();
-//! let mat_h = insert(mat);
+//! let mut materials = ElementField::empty();
+//! materials.add_sub(insert(mat)).unwrap();
 //!
 //! let mut model = Model::empty();
 //! model
@@ -66,7 +67,7 @@
 //! rhs.set_value(mult_a, "T", 0.0).unwrap();
 //! rhs.set_value(mult_b, "T", 1.0).unwrap();
 //!
-//! let k = assemble::stiffness(&model, &mat_h).unwrap();
+//! let k = assemble::stiffness(&model, &materials).unwrap();
 //! let solution = solve(&k, &rhs).unwrap();
 //! // Solution: T(a) = 0, T(b) = 1, λ_a = +1, λ_b = -1 (boundary fluxes).
 //! assert!((solution.value(a.id(), "T").unwrap() - 0.0).abs() < 1e-12);
@@ -201,7 +202,8 @@ mod tests {
         // k = 1 uniform.
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
-        let mat_h = insert(mat);
+        let mut materials = crate::containers::element_field::ElementField::empty();
+        materials.add_sub(insert(mat)).unwrap();
 
         // Model.
         let mut model = Model::empty();
@@ -233,7 +235,7 @@ mod tests {
         rhs.set_value(mult_right, "T", 1.0).unwrap();
 
         // Assemble + solve.
-        let k = crate::ops::assemble::stiffness(&model, &mat_h).unwrap();
+        let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
         let solution = solve(&k, &rhs).unwrap();
 
         // Verify T at every node equals its physical coordinate.
@@ -273,12 +275,13 @@ mod tests {
         let sub = fes.subspace(0).unwrap();
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
-        let mat_h = insert(mat);
+        let mut materials = crate::containers::element_field::ElementField::empty();
+        materials.add_sub(insert(mat)).unwrap();
         let mut model = Model::empty();
         model
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
-        let k = crate::ops::assemble::stiffness(&model, &mat_h).unwrap();
+        let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
 
         // Build a tiny non-empty rhs on a real node so we can find the
         // Configuration of the result NodeField.

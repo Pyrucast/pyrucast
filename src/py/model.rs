@@ -4,7 +4,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::mesh::configuration::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::py::configuration::PyConfiguration;
-use crate::py::element_field::PySubElementField;
+use crate::py::element_field::PyElementField;
 use crate::py::finite_element_space::PySubFiniteElementSpace;
 use crate::py::matrix::PyMatrix;
 use crate::store::{insert, with, Handle};
@@ -100,8 +100,13 @@ impl PyModel {
         Ok(self.inner.dual_vars()?)
     }
 
-    fn stiffness(&self, material: PyRef<PySubElementField>) -> PyResult<PyMatrix> {
-        let k = crate::ops::assemble::stiffness(&self.inner, &material.handle)?;
+    /// Assemble the stiffness matrix.
+    ///
+    /// `materials` carries the per-zone material data: every sub-model
+    /// that needs it picks the [`crate::containers::element_field::SubElementField`]
+    /// whose FE subspace matches its own.
+    fn stiffness(&self, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
+        let k = crate::ops::assemble::stiffness(&self.inner, &materials.inner)?;
         Ok(PyMatrix { handle: insert(k) })
     }
 

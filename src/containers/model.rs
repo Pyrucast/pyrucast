@@ -80,7 +80,9 @@
 //! // Conductivity k = 1, uniform — passed at assembly time, not stored in the model.
 //! let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
 //! mat.set_uniform("k", 1.0).unwrap();
-//! let mat_h = insert(mat);
+//! use pyrucast::containers::element_field::ElementField;
+//! let mut materials = ElementField::empty();
+//! materials.add_sub(insert(mat)).unwrap();
 //!
 //! let mut model = Model::empty();
 //! model
@@ -92,7 +94,7 @@
 //!     ))
 //!     .unwrap();
 //!
-//! let k = assemble::stiffness(&model, &mat_h).unwrap();
+//! let k = assemble::stiffness(&model, &materials).unwrap();
 //! // 2 real DOFs ("T") + 1 multiplier DOF + 2 real rows ("q") + 1 multiplier row.
 //! assert_eq!(k.n_rows().unwrap(), 3);
 //! assert_eq!(k.n_cols().unwrap(), 3);
@@ -455,18 +457,19 @@ mod tests {
     use crate::aggregate::Aggregate;
     use crate::containers::mesh::configuration::Configuration;
     use crate::containers::mesh::element_type::ElementType;
+    use crate::containers::element_field::ElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::containers::mesh::node::Node;
     use crate::ops::assemble;
     use crate::store::{insert, with_mut};
 
-    /// Returns `(cfg, a_id, b_id, model, mat_h)`.
+    /// Returns `(cfg, a_id, b_id, model, materials)`.
     fn build_seg2_heat_model(
         length: f64,
         k: f64,
         dirichlet_at_left: bool,
-    ) -> (Handle<Configuration>, NodeId, NodeId, Model, Handle<SubElementField>) {
+    ) -> (Handle<Configuration>, NodeId, NodeId, Model, ElementField) {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[length]).unwrap();
@@ -477,7 +480,8 @@ mod tests {
 
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", k).unwrap();
-        let mat_h = insert(mat);
+        let mut materials = ElementField::empty();
+        materials.add_sub(insert(mat)).unwrap();
 
         let mut model = Model::empty();
         model
@@ -491,7 +495,7 @@ mod tests {
                 ))
                 .unwrap();
         }
-        (cfg, a.id(), b.id(), model, mat_h)
+        (cfg, a.id(), b.id(), model, materials)
     }
 
     #[test]
@@ -522,8 +526,8 @@ mod tests {
     fn heat_conduction_assembles_analytical_seg2_stiffness() {
         let length = 2.0;
         let k_val = 1.5;
-        let (_cfg, a_id, b_id, model, mat_h) = build_seg2_heat_model(length, k_val, false);
-        let k = assemble::stiffness(&model, &mat_h).unwrap();
+        let (_cfg, a_id, b_id, model, materials) = build_seg2_heat_model(length, k_val, false);
+        let k = assemble::stiffness(&model, &materials).unwrap();
 
         assert_eq!(k.n_rows().unwrap(), 2);
         assert_eq!(k.n_cols().unwrap(), 2);
@@ -550,13 +554,14 @@ mod tests {
         let sub = fes.subspace(0).unwrap();
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
-        let mat_h = insert(mat);
+        let mut materials = ElementField::empty();
+        materials.add_sub(insert(mat)).unwrap();
 
         let mut model = Model::empty();
         model
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
-        let k = assemble::stiffness(&model, &mat_h).unwrap();
+        let k = assemble::stiffness(&model, &materials).unwrap();
         assert_eq!(k.n_rows().unwrap(), 3);
         assert_eq!(k.n_cols().unwrap(), 3);
 
@@ -578,13 +583,13 @@ mod tests {
     /// both `C` and `Cᵀ` entries (each value 1.0).
     #[test]
     fn dirichlet_adds_one_multiplier_node_and_two_block_entries() {
-        let (cfg, a_id, _b_id, model, mat_h) = build_seg2_heat_model(1.0, 1.0, true);
+        let (cfg, a_id, _b_id, model, materials) = build_seg2_heat_model(1.0, 1.0, true);
 
         // The Configuration grew by one node (the multiplier).
         let n_nodes = with(&cfg, |c| c.node_count()).unwrap();
         assert_eq!(n_nodes, 3);
 
-        let k = assemble::stiffness(&model, &mat_h).unwrap();
+        let k = assemble::stiffness(&model, &materials).unwrap();
         // 2 real "q" rows + 1 multiplier "T" row = 3 rows.
         // 2 real "T" cols + 1 multiplier "lambda_T" col = 3 cols.
         assert_eq!(k.n_rows().unwrap(), 3);
@@ -660,12 +665,13 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();
         let mat = SubElementField::new(sub.clone(), vec!["rho_cp".into()]).unwrap();
-        let mat_h = insert(mat);
+        let mut materials = ElementField::empty();
+        materials.add_sub(insert(mat)).unwrap();
         let mut model = Model::empty();
         model
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
-        assert!(assemble::stiffness(&model, &mat_h).is_err());
+        assert!(assemble::stiffness(&model, &materials).is_err());
     }
 
     #[test]
@@ -686,5 +692,94 @@ mod tests {
         let s = format!("{}", model);
         assert!(s.contains("Model"));
         assert!(s.contains("2 sub-model"));
+    }
+
+    /// Two SEG2 zones with **different** conductivities, each carried by
+    /// its own sub-model and its own SubElementField in a shared
+    /// ElementField. The assembler must pick the right material per
+    /// SubFiniteElementSpace.
+    #[test]
+    fn assemble_picks_per_zone_material() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+
+        // Zone A: SEG2 on [0, 1]. Zone B: SEG2 on [1, 2]. Each as its own
+        // SubMesh inside one Mesh.
+        let mut mesh = Mesh::empty();
+        let sm_a = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            sm.add_cell(&[n0.id(), n1.id()]).unwrap();
+            insert(sm)
+        };
+        let sm_b = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            sm.add_cell(&[n1.id(), n2.id()]).unwrap();
+            insert(sm)
+        };
+        mesh.add_sub(sm_a).unwrap();
+        mesh.add_sub(sm_b).unwrap();
+
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let sub_a = fes.subspace(0).unwrap();
+        let sub_b = fes.subspace(1).unwrap();
+
+        // Different conductivities on each zone.
+        let k_a = 1.0;
+        let k_b = 4.0;
+        let mut mat_a = SubElementField::new(sub_a.clone(), vec!["k".into()]).unwrap();
+        mat_a.set_uniform("k", k_a).unwrap();
+        let mut mat_b = SubElementField::new(sub_b.clone(), vec!["k".into()]).unwrap();
+        mat_b.set_uniform("k", k_b).unwrap();
+        let mut materials = ElementField::empty();
+        materials.add_sub(insert(mat_a)).unwrap();
+        materials.add_sub(insert(mat_b)).unwrap();
+
+        let mut model = Model::empty();
+        model
+            .add_sub(insert(SubModel::heat_conduction(sub_a).unwrap()))
+            .unwrap();
+        model
+            .add_sub(insert(SubModel::heat_conduction(sub_b).unwrap()))
+            .unwrap();
+
+        let k = assemble::stiffness(&model, &materials).unwrap();
+
+        // For a SEG2 of length h = 1 and conductivity k:
+        // K_local = (k / h) [[1, -1], [-1, 1]] = k [[1, -1], [-1, 1]].
+        let tol = 1e-12;
+        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T").unwrap();
+        // Diagonal at n0 = k_a only.
+        assert!((v(n0.id(), n0.id()) - k_a).abs() < tol);
+        // Diagonal at n1 = k_a + k_b (shared node).
+        assert!((v(n1.id(), n1.id()) - (k_a + k_b)).abs() < tol);
+        // Diagonal at n2 = k_b only.
+        assert!((v(n2.id(), n2.id()) - k_b).abs() < tol);
+        // Off-diagonals.
+        assert!((v(n0.id(), n1.id()) + k_a).abs() < tol);
+        assert!((v(n1.id(), n2.id()) + k_b).abs() < tol);
+    }
+
+    /// `assemble::stiffness` must fail with a clear error when no
+    /// SubElementField matches a HeatConduction's FE subspace.
+    #[test]
+    fn assemble_errors_when_no_material_matches_fespace() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
+        mesh.add_cell(&[a.id(), b.id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let sub = fes.subspace(0).unwrap();
+
+        // Empty ElementField — no SubElementField matches anything.
+        let materials = ElementField::empty();
+        let mut model = Model::empty();
+        model
+            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+            .unwrap();
+        let err = assemble::stiffness(&model, &materials).unwrap_err();
+        assert!(format!("{}", err).contains("no SubElementField"));
     }
 }
