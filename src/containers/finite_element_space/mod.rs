@@ -55,8 +55,11 @@
 //! .unwrap();
 //! ```
 
+pub mod element;
 pub mod interpolation;
 pub mod quadrature;
+
+pub use element::{Element, ElementIter};
 
 use crate::containers::mesh::configuration::{Configuration, NodeId};
 use crate::error::{PyrucastError, Result};
@@ -427,7 +430,18 @@ impl FiniteElementSpace {
         Self::new(mesh, Interpolation::Lagrange1)
     }
 
+    /// Element view on cell `cell_idx` of subspace `subspace_idx`.
+    pub fn element(&self, subspace_idx: usize, cell_idx: usize) -> Result<Element> {
+        let sub = self.subspace(subspace_idx)?;
+        Element::new(sub, cell_idx)
+    }
 
+    /// Iterator over every element of subspace `subspace_idx`.
+    pub fn elements(&self, subspace_idx: usize) -> Result<ElementIter> {
+        let sub = self.subspace(subspace_idx)?;
+        let n = with(&sub, |s| s.cell_count())??;
+        Ok(ElementIter::new(sub, n))
+    }
 }
 
 // ─── Numerical helpers ─────────────────────────────────────────────────────
