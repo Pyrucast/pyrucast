@@ -120,3 +120,23 @@ def test_model_build_material_field_per_sub_model_length_mismatch_errors():
     _, _, _, model = _two_zone_model()
     with pytest.raises(RuntimeError):
         model.build_material_field_per_sub_model([[("k", 1.0)]])
+
+
+def test_model_indexed_sub_model_builds_its_own_material_field():
+    """`model[i].build_material_field(...)` builds the SubElementField
+    for a single sub-model selected by index."""
+    _, _, fes, model = _two_zone_model()
+    # model[0] = HC zone A. Building its material there gives a
+    # SubElementField on the corresponding FE subspace.
+    sub_a_mat = model[0].build_material_field([("k", 7.0)])
+    for g in range(fes[0].gauss_count()):
+        assert sub_a_mat.value(0, g, "k") == pytest.approx(7.0)
+
+    # model[1] is the Dirichlet sub-model — no material to build.
+    with pytest.raises(RuntimeError):
+        model[1].build_material_field([("k", 1.0)])
+
+    # model[2] = HC zone B.
+    sub_b_mat = model[2].build_material_field([("k", 3.0)])
+    for g in range(fes[1].gauss_count()):
+        assert sub_b_mat.value(0, g, "k") == pytest.approx(3.0)
