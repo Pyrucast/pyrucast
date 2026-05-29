@@ -4,7 +4,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::mesh::configuration::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::py::configuration::PyConfiguration;
-use crate::py::element_field::PyElementField;
+use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::finite_element_space::PySubFiniteElementSpace;
 use crate::py::matrix::PyMatrix;
 use crate::store::{insert, with, Handle};
@@ -63,6 +63,22 @@ impl PySubModel {
         Ok(ids.into_iter().map(|n| n.0).collect())
     }
 
+    /// `sub_model.build_material_field([("k", 1.0), ...])` — fresh
+    /// SubElementField on this sub-model's FE subspace, pre-filled with
+    /// the given uniform value per component. Errors for physics that
+    /// don't need a material (e.g. Dirichlet).
+    fn build_material_field(
+        &self,
+        components_and_values: Vec<(String, f64)>,
+    ) -> PyResult<PySubElementField> {
+        let pairs: Vec<(&str, f64)> = components_and_values
+            .iter()
+            .map(|(c, v)| (c.as_str(), *v))
+            .collect();
+        let sub = with(&self.handle, |s| s.build_material_field(&pairs))??;
+        Ok(PySubElementField { handle: insert(sub) })
+    }
+
     fn __repr__(&self) -> PyResult<String> {
         Ok(with(&self.handle, |s| format!("{:?}", s))?)
     }
@@ -115,6 +131,41 @@ impl PyModel {
         Ok(PyMatrix { inner: m_mat })
     }
 
+    /// `model.build_material_field([("k", 1.0), ...])` — material
+    /// ElementField with the same uniform `(component, value)` pairs
+    /// applied to every material-hungry sub-model. Sub-models that don't
+    /// need a material (Dirichlet, …) are skipped.
+    fn build_material_field(
+        &self,
+        components_and_values: Vec<(String, f64)>,
+    ) -> PyResult<PyElementField> {
+        let pairs: Vec<(&str, f64)> = components_and_values
+            .iter()
+            .map(|(c, v)| (c.as_str(), *v))
+            .collect();
+        let ef = self.inner.build_material_field(&pairs)?;
+        Ok(PyElementField { inner: ef })
+    }
+
+    /// `model.build_material_field_per_sub_model([[("k", 1.0)], [], [("k", 4.0)]])`
+    /// — material ElementField where each sub-model gets its own
+    /// `(component, value)` list. The outer list length must equal
+    /// `sub_model_count()`. An empty inner list **skips** the matching
+    /// sub-model (typical for Dirichlet).
+    fn build_material_field_per_sub_model(
+        &self,
+        components_and_values_per_sub_model: Vec<Vec<(String, f64)>>,
+    ) -> PyResult<PyElementField> {
+        // Materialise each inner Vec<(String, f64)> into a Vec<(&str, f64)>,
+        // then collect slices into a Vec<&[(&str, f64)]>.
+        let owned: Vec<Vec<(&str, f64)>> = components_and_values_per_sub_model
+            .iter()
+            .map(|v| v.iter().map(|(c, x)| (c.as_str(), *x)).collect())
+            .collect();
+        let slices: Vec<&[(&str, f64)]> = owned.iter().map(|v| v.as_slice()).collect();
+        let ef = self.inner.build_material_field_per_sub_model(&slices)?;
+        Ok(PyElementField { inner: ef })
+    }
 }
 
 crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model);
