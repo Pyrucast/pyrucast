@@ -2,12 +2,13 @@
 //! [`crate::containers::finite_element_space::FiniteElementSpace`].
 
 use crate::error::{PyrucastError, Result};
-use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+use crate::containers::finite_element_space::{Element, FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::finite_element_space::interpolation::Interpolation;
+use crate::py::element::PyElement;
 use crate::py::mesh::PyMesh;
 use crate::containers::finite_element_space::quadrature::QuadratureRule;
 use crate::store::{with, Handle};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 
 fn parse_interpolation(s: &str) -> PyResult<Interpolation> {
@@ -111,6 +112,44 @@ impl PySubFiniteElementSpace {
         Ok(with(&self.handle, |s| s.dn_dx(cell_idx, g))??)
     }
 
+    /// Element view on the `i`-th cell of this subspace.
+    fn element(&self, i: usize) -> PyResult<PyElement> {
+        let el = Element::new(self.handle.clone(), i)?;
+        Ok(PyElement { inner: el })
+    }
+
+    /// All elements as a Python list.
+    fn elements(&self) -> PyResult<Vec<PyElement>> {
+        let n = with(&self.handle, |s| s.cell_count())??;
+        let mut out = Vec::with_capacity(n);
+        for i in 0..n {
+            out.push(PyElement {
+                inner: Element::new(self.handle.clone(), i)?,
+            });
+        }
+        Ok(out)
+    }
+
+    /// `len(subspace)` → number of elements (= number of cells).
+    fn __len__(&self) -> PyResult<usize> {
+        Ok(with(&self.handle, |s| s.cell_count())??)
+    }
+
+    /// `subspace[i]` → `Element` view on element `i`. Supports negative
+    /// indices and raises `IndexError` out of range so
+    /// `for el in subspace:` works.
+    fn __getitem__(&self, idx: isize) -> PyResult<PyElement> {
+        let n = with(&self.handle, |s| s.cell_count())?? as isize;
+        let normalized = if idx < 0 { n + idx } else { idx };
+        if normalized < 0 || normalized >= n {
+            return Err(PyIndexError::new_err(format!(
+                "subspace element index {idx} out of range (len={n})"
+            )));
+        }
+        let el = Element::new(self.handle.clone(), normalized as usize)?;
+        Ok(PyElement { inner: el })
+    }
+
     fn __repr__(&self) -> PyResult<String> {
         Ok(with(&self.handle, |s| format!("{:?}", s))?)
     }
@@ -188,6 +227,19 @@ impl PyFiniteElementSpace {
         Ok(Self { inner: fes })
     }
 
+    /// `fes.element(sub_idx, cell_idx)` — Element view on a single cell.
+    /// Mirrors `Mesh.cell(sub_idx, cell_idx)`.
+    fn element(&self, sub_idx: usize, cell_idx: usize) -> PyResult<PyElement> {
+        let el = self.inner.element(sub_idx, cell_idx)?;
+        Ok(PyElement { inner: el })
+    }
+
+    /// `fes.elements(sub_idx)` — list of every Element in subspace `sub_idx`.
+    /// Mirrors `Mesh.cells(sub_idx)`.
+    fn elements(&self, sub_idx: usize) -> PyResult<Vec<PyElement>> {
+        let iter = self.inner.elements(sub_idx)?;
+        Ok(iter.map(|el| PyElement { inner: el }).collect())
+    }
 }
 
 crate::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace", subspace);

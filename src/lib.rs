@@ -92,6 +92,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<py::mesh::PySubMesh>()?;
     m.add_class::<py::mesh::PyMesh>()?;
     m.add_class::<py::cell::PyCell>()?;
+    m.add_class::<py::element::PyElement>()?;
     m.add_class::<py::node_field::PyNodeField>()?;
     m.add_class::<py::finite_element_space::PySubFiniteElementSpace>()?;
     m.add_class::<py::finite_element_space::PyFiniteElementSpace>()?;

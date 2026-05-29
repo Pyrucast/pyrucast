@@ -7,6 +7,7 @@
 
 pub mod cell;
 pub mod configuration;
+pub mod element;
 pub mod element_field;
 pub mod finite_element_space;
 pub mod matrix;
