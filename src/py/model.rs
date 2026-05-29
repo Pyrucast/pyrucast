@@ -63,6 +63,15 @@ impl PySubModel {
         Ok(ids.into_iter().map(|n| n.0).collect())
     }
 
+    /// Names of the material components this sub-model expects, or
+    /// `None` for physics that don't need material data (Dirichlet, …).
+    fn material_components(&self) -> PyResult<Option<Vec<String>>> {
+        Ok(with(&self.handle, |s| {
+            s.material_components()
+                .map(|c| c.iter().map(|s| s.to_string()).collect())
+        })?)
+    }
+
     /// `sub_model.build_material_field([("k", 1.0), ...])` — fresh
     /// SubElementField on this sub-model's FE subspace, pre-filled with
     /// the given uniform value per component. Errors for physics that

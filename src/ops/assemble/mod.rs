@@ -46,7 +46,12 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
         let blocks = with(sub_h, |sub| -> Result<_> {
             let material = match sub.physics() {
                 Physics::HeatConduction { fespace, .. } => {
-                    Some(find_material_for_fespace(materials, fespace)?)
+                    let m = find_material_for_fespace(materials, fespace)?;
+                    let required = sub.material_components().expect(
+                        "HeatConduction always declares its material components",
+                    );
+                    validate_material(&m, required)?;
+                    Some(m)
                 }
                 Physics::Dirichlet { .. } => None,
             };
@@ -81,4 +86,24 @@ fn find_material_for_fespace(
         fespace.index(),
         fespace.generation()
     )))
+}
+
+/// Ensure `material` carries every component declared as required by
+/// the physics. Errors with both lists for a clear message.
+fn validate_material(
+    material: &Handle<SubElementField>,
+    required: &[&str],
+) -> Result<()> {
+    let have: Vec<String> = with(material, |s| s.components().to_vec())?;
+    for req in required {
+        if !have.iter().any(|c| c == req) {
+            return Err(PyrucastError::Message(format!(
+                "assemble::stiffness: required material component '{}' missing on \
+                 SubElementField (has: [{}])",
+                req,
+                have.join(", ")
+            )));
+        }
+    }
+    Ok(())
 }

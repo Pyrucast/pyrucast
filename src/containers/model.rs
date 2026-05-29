@@ -188,6 +188,22 @@ impl Physics {
             Physics::Dirichlet { primal_var, .. } => vec![primal_var.clone()],
         }
     }
+
+    /// Names of the material components this physics expects in its
+    /// material [`SubElementField`], or `None` if it doesn't need any
+    /// material data (e.g. `Dirichlet`).
+    ///
+    /// The list is the **contract** between the physics and any material
+    /// provider: [`SubModel::build_material_field`] uses it to know what
+    /// to create, and [`crate::ops::assemble::stiffness`] uses it to
+    /// validate the supplied material early, before the per-cell loop.
+    pub fn material_components(&self) -> Option<&'static [&'static str]> {
+        const HC_COMPS: &[&str] = &[heat_conduction::MATERIAL_COMPONENT];
+        match self {
+            Physics::HeatConduction { .. } => Some(HC_COMPS),
+            Physics::Dirichlet { .. } => None,
+        }
+    }
 }
 
 // ─── SubModel ──────────────────────────────────────────────────────────────
@@ -293,14 +309,24 @@ impl SubModel {
         }
     }
 
+    /// Material component names this sub-model expects, or `None` if it
+    /// doesn't need material data. Thin pass-through of
+    /// [`Physics::material_components`].
+    pub fn material_components(&self) -> Option<&'static [&'static str]> {
+        self.physics.material_components()
+    }
+
     /// Build a [`SubElementField`] on the FE subspace this sub-model
-    /// needs, pre-filled with one **uniform value per component**.
+    /// needs, pre-filled with the value supplied for each component
+    /// declared by [`SubModel::material_components`].
     ///
-    /// Each tuple `(name, v)` adds a component named `name` whose value
-    /// is `v` at every cell and every Gauss point.
+    /// `components_and_values` is treated as a **dict** of available
+    /// values: only the components declared by the physics are kept (any
+    /// extra is silently ignored), and **every declared component must
+    /// be present** — a missing one errors.
     ///
     /// Errors if this physics doesn't need material data (e.g.
-    /// `Dirichlet`) or if `components_and_values` is empty.
+    /// `Dirichlet`).
     pub fn build_material_field(
         &self,
         components_and_values: &[(&str, f64)],
@@ -310,19 +336,26 @@ impl SubModel {
                 "build_material_field: this sub-model does not need material data".into(),
             )
         })?;
-        if components_and_values.is_empty() {
-            return Err(PyrucastError::Message(
-                "build_material_field: components list is empty".into(),
-            ));
+        let required = self.material_components().expect(
+            "material_fespace().is_some() ⇒ material_components() is Some",
+        );
+        let mut components: Vec<String> = Vec::with_capacity(required.len());
+        let mut values: Vec<f64> = Vec::with_capacity(required.len());
+        for req in required {
+            let v = components_and_values
+                .iter()
+                .find(|(c, _)| c == req)
+                .map(|(_, v)| *v)
+                .ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "build_material_field: missing required component '{}' \
+                         (this physics expects: {:?})",
+                        req, required
+                    ))
+                })?;
+            components.push((*req).to_string());
+            values.push(v);
         }
-        let components: Vec<String> = components_and_values
-            .iter()
-            .map(|(c, _)| (*c).to_string())
-            .collect();
-        let values: Vec<f64> = components_and_values
-            .iter()
-            .map(|(_, v)| *v)
-            .collect();
         SubElementField::from_uniform_per_component(fespace, components, &values)
     }
 
@@ -898,6 +931,57 @@ mod tests {
         let sub = fes.subspace(0).unwrap();
         let hc = SubModel::heat_conduction(sub).unwrap();
         assert!(hc.build_material_field(&[]).is_err());
+    }
+
+    #[test]
+    fn physics_declares_material_components() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+        mesh.add_cell(&[a.id(), b.id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let sub = fes.subspace(0).unwrap();
+        let hc = SubModel::heat_conduction(sub).unwrap();
+        assert_eq!(hc.material_components(), Some(&["k"][..]));
+
+        let dir = SubModel::dirichlet(cfg, "T".into(), "q".into(), vec![a.id()]).unwrap();
+        assert!(dir.material_components().is_none());
+    }
+
+    #[test]
+    fn build_material_field_errors_on_missing_required_component() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
+        mesh.add_cell(&[a.id(), b.id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let sub = fes.subspace(0).unwrap();
+        let hc = SubModel::heat_conduction(sub).unwrap();
+        // "rho" is not what HeatConduction needs ⇒ missing "k".
+        let err = hc.build_material_field(&[("rho", 1.0)]).unwrap_err();
+        let msg = format!("{}", err);
+        assert!(msg.contains("'k'"), "unexpected error: {}", msg);
+    }
+
+    #[test]
+    fn build_material_field_filters_extra_components() {
+        // Extras (like "rho") are silently dropped; only declared ones are kept.
+        let cfg = insert(Configuration::new(1).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
+        mesh.add_cell(&[a.id(), b.id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let sub = fes.subspace(0).unwrap();
+        let hc = SubModel::heat_conduction(sub).unwrap();
+        let mat = hc
+            .build_material_field(&[("k", 2.0), ("rho", 7.0), ("cp", 9.0)])
+            .unwrap();
+        assert_eq!(mat.components(), &["k".to_string()]);
+        assert!((mat.value(0, 0, "k").unwrap() - 2.0).abs() < 1e-12);
+        assert!(mat.value(0, 0, "rho").is_err());
     }
 
     /// Model::build_material_field (uniform mode) skips Dirichlet

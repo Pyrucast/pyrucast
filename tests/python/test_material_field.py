@@ -122,6 +122,40 @@ def test_model_build_material_field_per_sub_model_length_mismatch_errors():
         model.build_material_field_per_sub_model([[("k", 1.0)]])
 
 
+def test_sub_model_material_components_lists_required_components():
+    c = pyrucast.Configuration(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    mesh = pyrucast.Mesh(c, "SEG2")
+    mesh.add_cell([a.id, b.id])
+    fes = pyrucast.FiniteElementSpace(mesh)
+    hc = pyrucast.SubModel.heat_conduction(fes[0])
+    assert hc.material_components() == ["k"]
+
+    dir_sub = pyrucast.SubModel.dirichlet(c, "T", "q", [a.id])
+    assert dir_sub.material_components() is None
+
+
+def test_sub_model_build_material_field_filters_extras_and_errors_on_missing():
+    c = pyrucast.Configuration(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    mesh = pyrucast.Mesh(c, "SEG2")
+    mesh.add_cell([a.id, b.id])
+    fes = pyrucast.FiniteElementSpace(mesh)
+    hc = pyrucast.SubModel.heat_conduction(fes[0])
+
+    # Extras are kept silent — only the declared component ("k") survives.
+    mat = hc.build_material_field([("k", 2.0), ("rho", 7.0)])
+    assert mat.value(0, 0, "k") == pytest.approx(2.0)
+    with pytest.raises(RuntimeError):
+        mat.value(0, 0, "rho")
+
+    # Missing required component → error.
+    with pytest.raises(RuntimeError):
+        hc.build_material_field([("rho", 1.0)])
+
+
 def test_model_indexed_sub_model_builds_its_own_material_field():
     """`model[i].build_material_field(...)` builds the SubElementField
     for a single sub-model selected by index."""
