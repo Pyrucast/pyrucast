@@ -107,12 +107,12 @@ impl PyModel {
     /// whose FE subspace matches its own.
     fn stiffness(&self, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
         let k = crate::ops::assemble::stiffness(&self.inner, &materials.inner)?;
-        Ok(PyMatrix { handle: insert(k) })
+        Ok(PyMatrix { inner: k })
     }
 
     fn mass(&self) -> PyResult<PyMatrix> {
         let m_mat = self.inner.mass()?;
-        Ok(PyMatrix { handle: insert(m_mat) })
+        Ok(PyMatrix { inner: m_mat })
     }
 
 }
