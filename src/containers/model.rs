@@ -84,7 +84,7 @@
 //!
 //! let mut model = Model::empty();
 //! model
-//!     .add_sub(insert(SubModel::heat_conduction(sub)))
+//!     .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
 //!     .unwrap();
 //! model
 //!     .add_sub(insert(
@@ -129,6 +129,10 @@ pub enum Physics {
     ///   it is supplied at assembly time via [`crate::ops::assemble::stiffness`].
     HeatConduction {
         fespace: Handle<SubFiniteElementSpace>,
+        /// POI1 SubMesh covering the unique nodes of `fespace`'s submesh,
+        /// built once at construction. Reused as the row/col support of
+        /// every assembled stiffness block — no per-assembly rebuild.
+        support: Handle<SubMesh>,
     },
 
     /// Dirichlet constraint imposed via Lagrange multipliers.
@@ -209,10 +213,29 @@ impl SubModel {
     /// Material data (conductivity `"k"`, …) is supplied separately at
     /// assembly time via [`crate::ops::assemble::stiffness`], keeping
     /// the model immutable and material-independent.
-    pub fn heat_conduction(fespace: Handle<SubFiniteElementSpace>) -> Self {
-        Self {
-            physics: Physics::HeatConduction { fespace },
+    ///
+    /// A stable POI1 [`SubMesh`] covering the unique nodes of the FE
+    /// subspace is built once and stored — reused as the row/col support
+    /// of every assembled stiffness block.
+    pub fn heat_conduction(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        let submesh = with(&fespace, |s| s.submesh())?;
+        let (cfg, flat_conn) = with(&submesh, |s| {
+            (s.configuration(), s.connectivity().to_vec())
+        })?;
+        let mut unique_nodes: Vec<NodeId> = Vec::new();
+        for &nid in &flat_conn {
+            if !unique_nodes.contains(&nid) {
+                unique_nodes.push(nid);
+            }
         }
+        let mut poi1 = SubMesh::new(cfg, ElementType::POI1);
+        for &nid in &unique_nodes {
+            poi1.add_cell(&[nid])?;
+        }
+        let support = insert(poi1);
+        Ok(Self {
+            physics: Physics::HeatConduction { fespace, support },
+        })
     }
 
     /// Dirichlet sub-model: enforce `<primal_var> = u_d` on each
@@ -287,22 +310,10 @@ impl SubModel {
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
         match &self.physics {
-            Physics::HeatConduction { fespace } => {
+            Physics::HeatConduction { fespace, support } => {
                 let mat = material.expect("HeatConduction requires a material field");
-                let submesh = with(fespace, |s| s.submesh())?;
-                let cfg = with(&submesh, |s| s.configuration())?;
-                let flat_conn = with(&submesh, |s| s.connectivity().to_vec())?;
-                let mut unique_nodes: Vec<NodeId> = Vec::new();
-                for &nid in &flat_conn {
-                    if !unique_nodes.contains(&nid) { unique_nodes.push(nid); }
-                }
-                let mut poi1 = SubMesh::new(cfg, ElementType::POI1);
-                for &nid in &unique_nodes {
-                    poi1.add_cell(&[nid])?;
-                }
-                let support = insert(poi1);
                 let mut block = SubMatrix::new(
-                    support.clone(), support,
+                    support.clone(), support.clone(),
                     vec![heat_conduction::DUAL_VAR.to_string()],
                     vec![heat_conduction::PRIMAL_VAR.to_string()],
                     DofOrdering::NodesThenVars, true,
@@ -470,7 +481,7 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub)))
+            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         if dirichlet_at_left {
             model
@@ -543,7 +554,7 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub)))
+            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         let k = assemble::stiffness(&model, &mat_h).unwrap();
         assert_eq!(k.n_rows().unwrap(), 3);
@@ -655,7 +666,7 @@ mod tests {
         let mat_h = insert(mat);
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub)))
+            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         assert!(assemble::stiffness(&model, &mat_h).is_err());
     }

@@ -28,7 +28,7 @@ impl PySubModel {
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         fespace: PyRef<PySubFiniteElementSpace>,
     ) -> PyResult<Self> {
-        let sub = SubModel::heat_conduction(fespace.handle.clone());
+        let sub = SubModel::heat_conduction(fespace.handle.clone())?;
         Ok(Self { handle: insert(sub) })
     }
 

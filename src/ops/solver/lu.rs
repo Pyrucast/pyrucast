@@ -48,7 +48,7 @@
 //!
 //! let mut model = Model::empty();
 //! model
-//!     .add_sub(insert(SubModel::heat_conduction(sub)))
+//!     .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
 //!     .unwrap();
 //! let dir_a = SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap();
 //! let dir_b = SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![b.id()]).unwrap();
@@ -206,7 +206,7 @@ mod tests {
         // Model.
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub)))
+            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         let left_dir =
             SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![nodes[0].id()])
@@ -276,7 +276,7 @@ mod tests {
         let mat_h = insert(mat);
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub)))
+            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         let k = crate::ops::assemble::stiffness(&model, &mat_h).unwrap();
 
