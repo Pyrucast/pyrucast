@@ -101,13 +101,13 @@ Cette uniformité simplifie tout : le solveur reçoit une seule `Matrix` + un se
 ## API Rust
 
 ```rust,ignore
-use pyrucast::mesh::configuration::Configuration;
-use pyrucast::containers::element_field::ElementField;
-use pyrucast::mesh::element_type::ElementType;
-use pyrucast::finite_element_space::FiniteElementSpace;
-use pyrucast::mesh::Mesh;
+use pyrucast::containers::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::element_type::ElementType;
+use pyrucast::containers::mesh::node::Node;
+use pyrucast::containers::mesh::Mesh;
+use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::model::{Model, SubModel};
-use pyrucast::mesh::node::Node;
+use pyrucast::ops::{assemble, build};
 use pyrucast::store::insert;
 
 // 1-D : maillage [0, 1] à un seul SEG2.
@@ -117,25 +117,24 @@ let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
 let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
 mesh.add_cell(&[a.id(), b.id()]).unwrap();
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-let sub = fes.subspace(0).unwrap();
 
-// Matériau : k = 1 partout.
-let mut mat = ElementField::new(sub.clone(), vec!["k".into()]).unwrap();
-mat.set_uniform("k", 1.0).unwrap();
-
-// Modèle : conduction + Dirichlet à gauche.
-let mut model = Model::new();
+// Modèle : conduction (le matériau est fourni à l'assemblage, pas ici)
+// + Dirichlet à gauche.
+let mut model = Model::empty();
 model
-    .add_sub_model(insert(SubModel::heat_conduction(sub, insert(mat))))
+    .add_sub(insert(SubModel::heat_conduction(fes.subspace(0).unwrap()).unwrap()))
     .unwrap();
 model
-    .add_sub_model(insert(
+    .add_sub(insert(
         SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap(),
     ))
     .unwrap();
 
-let k = model.stiffness().unwrap();
-assert_eq!(k.n_rows(), 3);  // 2 nœuds physiques + 1 multiplicateur
+// Matériau k = 1, appliqué aux sous-modèles qui en ont besoin (Dirichlet
+// est automatiquement ignoré), puis assemblage.
+let materials = build::material_field(&model, &[("k", 1.0)]).unwrap();
+let k = assemble::stiffness(&model, &materials).unwrap();
+assert_eq!(k.n_rows().unwrap(), 3);  // 2 nœuds physiques + 1 multiplicateur
 ```
 
 ## API Python
@@ -149,19 +148,19 @@ b = c.add_node([1.0])
 mesh = pyrucast.Mesh(c, "SEG2")
 mesh.add_cell([a.id, b.id])
 fes = pyrucast.FiniteElementSpace(mesh)
-sub = fes[0]
 
-mat = pyrucast.ElementField(sub, ["k"])
-mat.set_uniform("k", 1.0)
-
+# Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
 model = pyrucast.Model()
-model.add_sub_model(pyrucast.SubModel.heat_conduction(sub, mat))
-model.add_sub_model(pyrucast.SubModel.dirichlet(c, "T", "q", [a.id]))
+model.add_sub(pyrucast.SubModel.heat_conduction(fes[0]))
+model.add_sub(pyrucast.SubModel.dirichlet(c, "T", "q", [a.id]))
 
-K = model.stiffness()
+# Matériau k = 1 (les sous-modèles Dirichlet sont ignorés automatiquement).
+materials = pyrucast.material_field(model, [("k", 1.0)])
+
+K = pyrucast.stiffness(model, materials)
 print("primal_vars =", model.primal_vars())   # ['T', 'lambda_T']
-print("dual_vars =",   model.dual_vars())     # ['q', 'T']
-print(K)                                       # Matrix: 3 row(s) × 3 col(s), …
+print("dual_vars =",   model.dual_vars())      # ['q', 'T']
+print(K)                                        # Matrix: 3 row(s) × 3 col(s), …
 ```
 
 ## Solveur dense — fonction `solve(matrix, rhs)`
@@ -180,28 +179,28 @@ C'est un harnais de test — pas le solveur final. Un objet `LinearSolver` enfic
 ```python
 import pyrucast
 
-# 1) Maillage + FE space + matériau (k = 1)
+# 1) Maillage + FE space
 c = pyrucast.Configuration(dim=1)
 nodes = [c.add_node([i / 4.0]) for i in range(5)]
 mesh = pyrucast.Mesh(c, "SEG2")
 for i in range(4):
     mesh.add_cell([nodes[i].id, nodes[i + 1].id])
 fes = pyrucast.FiniteElementSpace(mesh)
-sub = fes[0]
-mat = pyrucast.ElementField(sub, ["k"])
-mat.set_uniform("k", 1.0)
 
 # 2) Modèle : conduction + Dirichlet aux deux bouts
 model = pyrucast.Model()
-model.add_sub_model(pyrucast.SubModel.heat_conduction(sub, mat))
+model.add_sub(pyrucast.SubModel.heat_conduction(fes[0]))
 left = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[0].id])
 right = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[-1].id])
 mult_left = left.multiplier_nodes()[0]
 mult_right = right.multiplier_nodes()[0]
-model.add_sub_model(left)
-model.add_sub_model(right)
+model.add_sub(left)
+model.add_sub(right)
 
-# 3) Chargement : valeurs imposées aux nœuds-multiplicateurs
+# 3) Matériau k = 1 (appliqué à la conduction, Dirichlet ignoré)
+materials = pyrucast.material_field(model, [("k", 1.0)])
+
+# 4) Chargement : valeurs imposées aux nœuds-multiplicateurs
 rhs_sm = pyrucast.SubMesh(c, "POI1")
 rhs_sm.add_cell([mult_left])
 rhs_sm.add_cell([mult_right])
@@ -209,8 +208,8 @@ rhs = pyrucast.NodeField(rhs_sm, ["T"])
 rhs.set_value(mult_left, "T", 0.0)
 rhs.set_value(mult_right, "T", 1.0)
 
-# 4) Assemblage + résolution
-K = model.stiffness()
+# 5) Assemblage + résolution
+K = pyrucast.stiffness(model, materials)
 solution = pyrucast.solve(K, rhs)
 assert abs(solution.value(nodes[2].id, "T") - 0.5) < 1e-10  # T au milieu = 0.5
 assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux à gauche
