@@ -8,6 +8,7 @@ import typing
 __all__ = [
     "Cell",
     "Configuration",
+    "Element",
     "ElementField",
     "FiniteElementSpace",
     "Matrix",
@@ -21,6 +22,7 @@ __all__ = [
     "SubMesh",
     "SubModel",
     "circle_seg2",
+    "coordinates",
     "extrude",
     "fill_surface",
     "from_live_nodes",
@@ -29,6 +31,7 @@ __all__ = [
     "solve",
     "swap_dir",
     "sweep_qua4",
+    "to_poi1",
 ]
 
 @typing.final
@@ -97,6 +100,63 @@ class Configuration:
     def __str__(self) -> builtins.str: ...
 
 @typing.final
+class Element:
+    r"""
+    Python wrapper for [`Element`] — a thin view on a single element of a
+    [`crate::containers::finite_element_space::SubFiniteElementSpace`].
+    """
+    @property
+    def index(self) -> builtins.int: ...
+    @property
+    def nodes_per_cell(self) -> builtins.int: ...
+    @property
+    def space_dim(self) -> builtins.int: ...
+    @property
+    def ref_dim(self) -> builtins.int: ...
+    @property
+    def gauss_count(self) -> builtins.int: ...
+    def cell(self) -> Cell:
+        r"""
+        Underlying mesh cell view.
+        """
+    def node_ids(self) -> builtins.list[builtins.int]:
+        r"""
+        Connectivity (node ids) of this element.
+        """
+    def gauss_xi(self, g: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        Reference coordinates of the `g`-th Gauss point.
+        """
+    def gauss_weight(self, g: builtins.int) -> builtins.float:
+        r"""
+        Weight of the `g`-th Gauss point.
+        """
+    def n_at_g(self, g: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        `N_i(ξ_g)` at the `g`-th Gauss point (length `nodes_per_cell`).
+        """
+    def dn_at_g(self, g: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        `∂N_i/∂ξ_j(ξ_g)` at the `g`-th Gauss point.
+        
+        Flat row-major: index `[i * ref_dim + j]`.
+        """
+    def jacobian(self, g: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        Jacobian `J = ∂x/∂ξ` at the `g`-th Gauss point.
+        """
+    def det_jacobian(self, g: builtins.int) -> builtins.float:
+        r"""
+        `|J|` at the `g`-th Gauss point.
+        """
+    def dn_dx(self, g: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        Physical derivatives `∂N_i/∂x_a` at the `g`-th Gauss point.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+
+@typing.final
 class ElementField:
     r"""
     Python wrapper for [`ElementField`].
@@ -149,6 +209,16 @@ class FiniteElementSpace:
         r"""
         Convenience: same as `FiniteElementSpace(mesh)`.
         """
+    def element(self, sub_idx: builtins.int, cell_idx: builtins.int) -> Element:
+        r"""
+        `fes.element(sub_idx, cell_idx)` — Element view on a single cell.
+        Mirrors `Mesh.cell(sub_idx, cell_idx)`.
+        """
+    def elements(self, sub_idx: builtins.int) -> builtins.list[Element]:
+        r"""
+        `fes.elements(sub_idx)` — list of every Element in subspace `sub_idx`.
+        Mirrors `Mesh.cells(sub_idx)`.
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, idx: builtins.int) -> SubFiniteElementSpace: ...
     def subspace_count(self) -> builtins.int: ...
@@ -161,8 +231,10 @@ class FiniteElementSpace:
 @typing.final
 class Matrix:
     r"""
-    Python wrapper for the aggregate [`Matrix`]. Read-only: every accessor
-    unions the underlying [`PySubMatrix`] blocks on the fly.
+    Python wrapper for the aggregate [`Matrix`].
+    
+    Owns the `Matrix` struct directly — no longer stored in the global
+    store. Identity is the Python object identity itself.
     """
     @property
     def symmetric(self) -> builtins.bool: ...
@@ -171,6 +243,11 @@ class Matrix:
         `Matrix()` — empty aggregate. Populate via `add_sub_matrix`.
         """
     def add_sub_matrix(self, sub: SubMatrix) -> None: ...
+    def finalize(self) -> None:
+        r"""
+        Build the global DOF table and CSR. Must be called before any
+        solver-facing method (`dense`, `mul_dense`, …).
+        """
     def sub_matrix_count(self) -> builtins.int: ...
     def sub_matrix(self, i: builtins.int) -> SubMatrix: ...
     def __len__(self) -> builtins.int: ...
@@ -250,8 +327,30 @@ class Model:
     def __new__(cls) -> Model: ...
     def primal_vars(self) -> builtins.list[builtins.str]: ...
     def dual_vars(self) -> builtins.list[builtins.str]: ...
-    def stiffness(self) -> Matrix: ...
+    def stiffness(self, materials: ElementField) -> Matrix:
+        r"""
+        Assemble the stiffness matrix.
+        
+        `materials` carries the per-zone material data: every sub-model
+        that needs it picks the [`crate::containers::element_field::SubElementField`]
+        whose FE subspace matches its own.
+        """
     def mass(self) -> Matrix: ...
+    def build_material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
+        r"""
+        `model.build_material_field([("k", 1.0), ...])` — material
+        ElementField with the same uniform `(component, value)` pairs
+        applied to every material-hungry sub-model. Sub-models that don't
+        need a material (Dirichlet, …) are skipped.
+        """
+    def build_material_field_per_sub_model(self, components_and_values_per_sub_model: typing.Sequence[typing.Sequence[tuple[builtins.str, builtins.float]]]) -> ElementField:
+        r"""
+        `model.build_material_field_per_sub_model([[("k", 1.0)], [], [("k", 4.0)]])`
+        — material ElementField where each sub-model gets its own
+        `(component, value)` list. The outer list length must equal
+        `sub_model_count()`. An empty inner list **skips** the matching
+        sub-model (typical for Dirichlet).
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, idx: builtins.int) -> SubModel: ...
     def sub_model_count(self) -> builtins.int: ...
@@ -416,6 +515,24 @@ class SubFiniteElementSpace:
         point `g`. Flat row-major buffer of length
         `nodes_per_cell × space_dim`, indexed `[i * space_dim + a]`.
         """
+    def element(self, i: builtins.int) -> Element:
+        r"""
+        Element view on the `i`-th cell of this subspace.
+        """
+    def elements(self) -> builtins.list[Element]:
+        r"""
+        All elements as a Python list.
+        """
+    def __len__(self) -> builtins.int:
+        r"""
+        `len(subspace)` → number of elements (= number of cells).
+        """
+    def __getitem__(self, idx: builtins.int) -> Element:
+        r"""
+        `subspace[i]` → `Element` view on element `i`. Supports negative
+        indices and raises `IndexError` out of range so
+        `for el in subspace:` works.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
 
@@ -426,9 +543,11 @@ class SubMatrix:
     """
     @property
     def symmetric(self) -> builtins.bool: ...
-    def __new__(cls, symmetric: builtins.bool = False) -> SubMatrix:
+    def __new__(cls, row_mesh: SubMesh, col_mesh: SubMesh, dual_vars: typing.Sequence[builtins.str], primal_vars: typing.Sequence[builtins.str], ordering: builtins.str = 'nodes_then_vars', symmetric: builtins.bool = False) -> SubMatrix:
         r"""
-        `SubMatrix(symmetric=False)`.
+        `SubMatrix(row_mesh, col_mesh, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=False)`.
+        
+        `ordering` is either `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
         """
     def add_entry(self, row_node: builtins.int, row_field: builtins.str, col_node: builtins.int, col_field: builtins.str, value: builtins.float) -> None: ...
     def get(self, row_node: builtins.int, row_field: builtins.str, col_node: builtins.int, col_field: builtins.str) -> builtins.float: ...
@@ -518,10 +637,11 @@ class SubModel:
     Python wrapper for [`SubModel`].
     """
     @classmethod
-    def heat_conduction(cls, fespace: SubFiniteElementSpace, material: SubElementField) -> SubModel:
+    def heat_conduction(cls, fespace: SubFiniteElementSpace) -> SubModel:
         r"""
-        `SubModel.heat_conduction(fespace, material)` — heat-conduction
-        sub-model on a finite-element subspace.
+        `SubModel.heat_conduction(fespace)` — heat-conduction sub-model on
+        a finite-element subspace. Material data is supplied at assembly
+        time via `assemble.stiffness(model, material)`.
         """
     @classmethod
     def dirichlet(cls, config: Configuration, primal_var: builtins.str, primal_dual: builtins.str, constrained_node_ids: typing.Sequence[builtins.int]) -> SubModel:
@@ -537,10 +657,33 @@ class SubModel:
         r"""
         Multiplier node ids (Lagrange physics only — empty otherwise).
         """
+    def material_components(self) -> typing.Optional[builtins.list[builtins.str]]:
+        r"""
+        Names of the material components this sub-model expects, or
+        `None` for physics that don't need material data (Dirichlet, …).
+        """
+    def build_material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
+        r"""
+        `sub_model.build_material_field([("k", 1.0), ...])` — fresh
+        SubElementField on this sub-model's FE subspace, pre-filled with
+        the given uniform value per component. Errors for physics that
+        don't need a material (e.g. Dirichlet).
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
 
 def circle_seg2(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int) -> Mesh: ...
+
+def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
+    r"""
+    Build a `NodeField` carrying the coordinates of every node of `mesh`.
+    
+    One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
+    requests all the axes the mesh's `Configuration` has (`["X"]` in 1-D,
+    `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D). A non-POI1 mesh is
+    converted to POI1 internally (see `to_poi1`); the support is the unique
+    nodes of the mesh, in order of first appearance.
+    """
 
 def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh: ...
 
@@ -569,4 +712,13 @@ def swap_dir() -> pathlib.Path:
     """
 
 def sweep_qua4(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh: ...
+
+def to_poi1(mesh: Mesh) -> Mesh:
+    r"""
+    Convert a mesh to POI1, submesh by submesh.
+    
+    Returns a new mesh with the same number of submeshes; each output
+    submesh is a POI1 submesh holding the de-duplicated nodes of the
+    corresponding input submesh, in order of first appearance.
+    """
 

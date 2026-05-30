@@ -6,3 +6,7 @@
 //! per-element operations stay close to the data (on the field
 //! types) — this module is for operations that **cross containers**
 //! (mesh + field, fe_space + field).
+
+pub mod coordinates;
+
+pub use coordinates::coordinates;

@@ -115,6 +115,66 @@ def test_field_protects_nodes_from_gc():
     assert not c.is_alive(nid)
 
 
+def test_coordinates_poi1_mesh_xyz():
+    c = pyrucast.Configuration(3)
+    a = c.add_node([1.0, 2.0, 3.0])
+    b = c.add_node([4.0, 5.0, 6.0])
+    mesh = pyrucast.Mesh(c, "POI1")
+    mesh.add_cell([a.id])
+    mesh.add_cell([b.id])
+
+    f = pyrucast.coordinates(mesh)
+    assert f.components() == ["X", "Y", "Z"]
+    assert f.node_count() == 2
+    assert f[a.id, "X"] == 1.0
+    assert f[a.id, "Y"] == 2.0
+    assert f[a.id, "Z"] == 3.0
+    assert f[b.id, "Z"] == 6.0
+
+
+def test_coordinates_converts_non_poi1_and_deduplicates():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.5, 1.0])
+    d = c.add_node([1.5, 1.0])
+
+    tri = pyrucast.Mesh(c, "TRI3")
+    tri.add_cell([a.id, b.id, cc.id])
+    tri.add_cell([b.id, d.id, cc.id])
+
+    f = pyrucast.coordinates(tri)
+    assert f.components() == ["X", "Y"]  # 2-D ⇒ X, Y only
+    assert f.node_count() == 4  # shared nodes appear once
+    assert f[cc.id, "X"] == 0.5
+    assert f[d.id, "X"] == 1.5
+
+
+def test_coordinates_component_subset():
+    c = pyrucast.Configuration(3)
+    a = c.add_node([1.0, 2.0, 3.0])
+    mesh = pyrucast.Mesh(c, "POI1")
+    mesh.add_cell([a.id])
+
+    f = pyrucast.coordinates(mesh, ["X", "Z"])
+    assert f.components() == ["X", "Z"]
+    assert f[a.id, "X"] == 1.0
+    assert f[a.id, "Z"] == 3.0
+
+
+def test_coordinates_rejects_axis_beyond_dimension():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    mesh = pyrucast.Mesh(c, "POI1")
+    mesh.add_cell([a.id])
+    try:
+        pyrucast.coordinates(mesh, ["Z"])  # no Z in 2-D
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for Z on a 2-D mesh")
+
+
 def test_repr_str_node_field():
     c, _nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["UX", "UY"])

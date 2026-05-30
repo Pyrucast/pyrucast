@@ -178,3 +178,23 @@ impl PyNodeField {
         Ok(with(&self.handle, |f| format!("{}", f))?)
     }
 }
+
+/// Build a `NodeField` carrying the coordinates of every node of `mesh`.
+///
+/// One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
+/// requests all the axes the mesh's `Configuration` has (`["X"]` in 1-D,
+/// `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D). A non-POI1 mesh is
+/// converted to POI1 internally (see `to_poi1`); the support is the unique
+/// nodes of the mesh, in order of first appearance.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, components=None))]
+pub fn coordinates(
+    mesh: PyRef<PyMesh>,
+    components: Option<Vec<String>>,
+) -> PyResult<PyNodeField> {
+    let field = crate::ops::field::coordinates(&mesh.inner, components)?;
+    Ok(PyNodeField {
+        handle: insert(field),
+    })
+}
