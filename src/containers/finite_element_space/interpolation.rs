@@ -15,7 +15,7 @@
 //!
 //! ```
 //! use pyrucast::containers::mesh::ElementType;
-//! use pyrucast::containers::finite_element_space::interpolation::Interpolation;
+//! use pyrucast::containers::finite_element_space::Interpolation;
 //!
 //! // Lagrange-1 shape functions of a TRI3 at the centroid (1/3, 1/3).
 //! let n = Interpolation::Lagrange1

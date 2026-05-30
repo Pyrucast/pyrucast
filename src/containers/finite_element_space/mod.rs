@@ -2,8 +2,8 @@
 //!
 //! Hierarchy mirroring [`crate::mesh`]:
 //!
-//! - [`SubFiniteElementSpace`] — one [`crate::containers::finite_element_space::interpolation::Interpolation`] and one
-//!   [`crate::containers::finite_element_space::quadrature::QuadratureRule`] applied to a single
+//! - [`SubFiniteElementSpace`] — one [`crate::containers::finite_element_space::Interpolation`] and one
+//!   [`crate::containers::finite_element_space::QuadratureRule`] applied to a single
 //!   [`crate::containers::mesh::SubMesh`]. It stores the **reference-space tables**
 //!   that do not depend on the physical coordinates of the nodes
 //!   (Gauss points and weights, shape functions and reference
@@ -60,11 +60,11 @@ pub mod interpolation;
 pub mod quadrature;
 
 pub use element::{Element, ElementIter};
+pub use interpolation::Interpolation;
+pub use quadrature::QuadratureRule;
 
 use crate::containers::mesh::{Configuration, NodeId};
 use crate::error::{PyrucastError, Result};
-use crate::containers::finite_element_space::interpolation::Interpolation;
-use crate::containers::finite_element_space::quadrature::QuadratureRule;
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::store::{insert, with, Handle};

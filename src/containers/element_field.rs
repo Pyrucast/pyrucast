@@ -583,10 +583,10 @@ mod tests {
     use crate::containers::mesh::Configuration;
     use crate::containers::mesh::ElementType;
     use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-    use crate::containers::finite_element_space::interpolation::Interpolation;
+    use crate::containers::finite_element_space::Interpolation;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::mesh::Node;
-    use crate::containers::finite_element_space::quadrature::QuadratureRule;
+    use crate::containers::finite_element_space::QuadratureRule;
     use crate::store::{insert, with, with_mut};
 
     fn make_tri3_subfespace() -> Handle<SubFiniteElementSpace> {

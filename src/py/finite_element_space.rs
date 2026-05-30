@@ -3,10 +3,10 @@
 
 use crate::error::{PyrucastError, Result};
 use crate::containers::finite_element_space::{Element, FiniteElementSpace, SubFiniteElementSpace};
-use crate::containers::finite_element_space::interpolation::Interpolation;
+use crate::containers::finite_element_space::Interpolation;
 use crate::py::element::PyElement;
 use crate::py::mesh::PyMesh;
-use crate::containers::finite_element_space::quadrature::QuadratureRule;
+use crate::containers::finite_element_space::QuadratureRule;
 use crate::store::{with, Handle};
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;

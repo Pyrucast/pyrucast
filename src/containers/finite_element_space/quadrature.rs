@@ -3,7 +3,7 @@
 //! A [`QuadratureRule`] returns a list of `(ξ_g, w_g)` pairs — reference
 //! coordinates and weights — over the reference element of a given
 //! [`ElementType`]. It is the **numerical** counterpart of an
-//! [`crate::containers::finite_element_space::interpolation::Interpolation`]: the points at which shape
+//! [`crate::containers::finite_element_space::Interpolation`]: the points at which shape
 //! functions are sampled when integrating.
 //!
 //! The reference frames are those documented on each `ElementType`
@@ -15,7 +15,7 @@
 //!
 //! ```
 //! use pyrucast::containers::mesh::ElementType;
-//! use pyrucast::containers::finite_element_space::quadrature::QuadratureRule;
+//! use pyrucast::containers::finite_element_space::QuadratureRule;
 //!
 //! let (xi, w) = QuadratureRule::Gauss.points(ElementType::QUA4).unwrap();
 //! assert_eq!(w.len(), 4);          // 2×2 Gauss-Legendre on [-1,1]²
