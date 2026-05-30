@@ -185,3 +185,100 @@ def test_repr_str_node_field():
     assert "UX, UY" in s
 
 
+
+
+# ─── Field arithmetic & combination (module operators) ──────────────────────
+
+
+def test_add_scalar():
+    c, nodes, sm = _poi1_with(2)
+    f = pyrucast.NodeField(sm, ["T"])
+    f.set_value(nodes[0].id, "T", 1.0)
+    f.set_value(nodes[1].id, "T", 2.0)
+    g = f + 10.0
+    assert g.value(nodes[0].id, "T") == 11.0
+    assert g.value(nodes[1].id, "T") == 12.0
+
+
+def test_add_field_plus_field():
+    # Regression: `a + b` previously deadlocked (nested per-type store lock).
+    c, nodes, sm = _poi1_with(2)
+    a = pyrucast.NodeField(sm, ["T"])
+    b = pyrucast.NodeField(sm, ["T"])
+    a.set_value(nodes[0].id, "T", 1.0)
+    b.set_value(nodes[0].id, "T", 10.0)
+    b.set_value(nodes[1].id, "T", 5.0)
+    c2 = a + b
+    assert c2.value(nodes[0].id, "T") == 11.0
+    assert c2.value(nodes[1].id, "T") == 5.0
+
+
+def test_add_field_to_itself_does_not_deadlock():
+    # Same handle on both sides must not re-lock the store mutex.
+    c, nodes, sm = _poi1_with(1)
+    a = pyrucast.NodeField(sm, ["T"])
+    a.set_value(nodes[0].id, "T", 3.0)
+    assert (a + a).value(nodes[0].id, "T") == 6.0
+
+
+def test_add_rejects_bad_operand():
+    c, _nodes, sm = _poi1_with(1)
+    f = pyrucast.NodeField(sm, ["T"])
+    try:
+        f + "nope"
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("expected TypeError for str operand")
+
+
+def test_merge_compatible_and_conflict():
+    # a on {n0, n1}, b on {n1, n2} — n1 shared. Union = {n0, n1, n2}.
+    c = pyrucast.Configuration(1)
+    n0 = c.add_node([0.0])
+    n1 = c.add_node([1.0])
+    n2 = c.add_node([2.0])
+    sm_a = pyrucast.SubMesh(c, "POI1")
+    sm_a.add_cell([n0.id])
+    sm_a.add_cell([n1.id])
+    sm_b = pyrucast.SubMesh(c, "POI1")
+    sm_b.add_cell([n1.id])
+    sm_b.add_cell([n2.id])
+    a = pyrucast.NodeField(sm_a, ["T"])
+    b = pyrucast.NodeField(sm_b, ["T"])
+    a.set_value(n0.id, "T", 5.0)
+    a.set_value(n1.id, "T", 3.0)
+    b.set_value(n1.id, "T", 3.0)  # same value at the shared node → compatible
+    b.set_value(n2.id, "T", 9.0)
+
+    m = pyrucast.merge(a, b)
+    assert m.node_count() == 3
+    assert m.value(n0.id, "T") == 5.0
+    assert m.value(n1.id, "T") == 3.0
+    assert m.value(n2.id, "T") == 9.0
+
+    # Conflicting value at the shared node → error.
+    b.set_value(n1.id, "T", 7.0)
+    try:
+        pyrucast.merge(a, b)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError on conflicting merge")
+
+
+def test_restrict_to_mesh_subset():
+    c, nodes, sm = _poi1_with(3)
+    f = pyrucast.NodeField(sm, ["T"])
+    for i, n in enumerate(nodes):
+        f.set_value(n.id, "T", float(i + 1))
+
+    # Mesh covering only nodes[0] and nodes[2].
+    mesh = pyrucast.Mesh(c, "POI1")
+    mesh.add_cell([nodes[0].id])
+    mesh.add_cell([nodes[2].id])
+
+    r = pyrucast.restrict(f, mesh)
+    assert r.node_count() == 2
+    assert r.value(nodes[0].id, "T") == 1.0
+    assert r.value(nodes[2].id, "T") == 3.0

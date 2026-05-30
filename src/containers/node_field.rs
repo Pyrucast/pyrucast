@@ -349,29 +349,6 @@ impl NodeField {
         Ok(())
     }
 
-    // ── Opérations entre champs ─────────────────────────────────────────────
-
-    /// Component-wise addition of two fields.
-    ///
-    /// Missing nodes or components in either field are treated as `0.0`.
-    /// Both fields must be attached to the same `Configuration`.
-    /// The result's component list is the union of both fields' (self first),
-    /// and similarly for nodes.
-    pub fn add_fields(&self, other: &NodeField) -> Result<NodeField> {
-        self.check_compatible(other)?;
-        let (components, nodes) = self.union_layout(other);
-        let mut result =
-            NodeField::new_with_nodes(self.configuration(), nodes.clone(), components.clone())?;
-        let ncomp = components.len();
-        for (ni, &nid) in nodes.iter().enumerate() {
-            for (ci, comp) in components.iter().enumerate() {
-                result.values[ni * ncomp + ci] =
-                    self.get_or_default(nid, comp) + other.get_or_default(nid, comp);
-            }
-        }
-        Ok(result)
-    }
-
     // ── Opérations scalaires sur une composante ─────────────────────────────
 
     /// Add `scalar` to every node's value for the named component.
@@ -608,6 +585,31 @@ impl Div<f64> for &NodeField {
     }
 }
 
+/// Component-wise addition of two fields (`&a + &b`).
+///
+/// Missing nodes or components in either field are treated as `0.0`. Both
+/// fields must be attached to the same `Configuration`. The result's
+/// component list is the union of both fields' (self first), and similarly
+/// for nodes. Returns `Result` because the configuration check can fail —
+/// same convention as `&mesh1 + &mesh2`.
+impl Add<&NodeField> for &NodeField {
+    type Output = Result<NodeField>;
+    fn add(self, rhs: &NodeField) -> Result<NodeField> {
+        self.check_compatible(rhs)?;
+        let (components, nodes) = self.union_layout(rhs);
+        let mut result =
+            NodeField::new_with_nodes(self.configuration(), nodes.clone(), components.clone())?;
+        let ncomp = components.len();
+        for (ni, &nid) in nodes.iter().enumerate() {
+            for (ci, comp) in components.iter().enumerate() {
+                result.values[ni * ncomp + ci] =
+                    self.get_or_default(nid, comp) + rhs.get_or_default(nid, comp);
+            }
+        }
+        Ok(result)
+    }
+}
+
 // ─── Unit tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -833,7 +835,7 @@ mod tests {
         assert!(f.set_value(nodes[0].id(), "UZ", 1.0).is_err());
     }
 
-    // ── add_fields ───────────────────────────────────────────────────────────
+    // ── &a + &b (field addition) ───────────────────────────────────────────
 
     #[test]
     fn add_fields_same_support() {
@@ -843,7 +845,7 @@ mod tests {
         a.set(0, 0, 1.0).unwrap();
         b.set(0, 0, 2.0).unwrap();
         b.set(1, 0, 5.0).unwrap();
-        let c = a.add_fields(&b).unwrap();
+        let c = (&a + &b).unwrap();
         assert_eq!(c.value(a.nodes[0], "T").unwrap(), 3.0);
         assert_eq!(c.value(a.nodes[1], "T").unwrap(), 5.0);
         assert_eq!(c.value(a.nodes[2], "T").unwrap(), 0.0);
@@ -856,7 +858,7 @@ mod tests {
         let mut b = NodeField::from_poi1(&sm, vec!["UY".into()]).unwrap();
         a.set(0, 0, 10.0).unwrap();
         b.set(0, 0, 20.0).unwrap();
-        let c = a.add_fields(&b).unwrap();
+        let c = (&a + &b).unwrap();
         assert_eq!(c.components(), &["UX", "UY"]);
         assert_eq!(c.value(nodes[0].id(), "UX").unwrap(), 10.0);
         assert_eq!(c.value(nodes[0].id(), "UY").unwrap(), 20.0);
@@ -881,7 +883,7 @@ mod tests {
         let mut b = NodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
         a.set(0, 0, 3.0).unwrap();
         b.set(0, 0, 7.0).unwrap();
-        let c = a.add_fields(&b).unwrap();
+        let c = (&a + &b).unwrap();
         assert_eq!(c.node_count(), 2);
         assert_eq!(c.value(na.id(), "T").unwrap(), 3.0);
         assert_eq!(c.value(nb.id(), "T").unwrap(), 7.0);
@@ -902,7 +904,7 @@ mod tests {
         };
         let a = mk(&cfg1);
         let b = mk(&cfg2);
-        assert!(a.add_fields(&b).is_err());
+        assert!((&a + &b).is_err());
     }
 
     // ── Scalaires sur composante ──────────────────────────────────────────────

@@ -84,15 +84,6 @@ impl PyNodeField {
         Ok(())
     }
 
-    fn add_fields(&self, other: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
-        let result = with(&self.handle, |a| {
-            with(&other.handle, |b| a.add_fields(b))?
-        })??;
-        Ok(PyNodeField {
-            handle: insert(result),
-        })
-    }
-
     fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
         with_mut(&self.handle, |f| f.add_to_component(component, scalar))??;
         Ok(())
@@ -113,8 +104,22 @@ impl PyNodeField {
         Ok(())
     }
 
-    fn __add__(&self, rhs: f64) -> PyResult<PyNodeField> {
-        let result = with(&self.handle, |f| f + rhs)?;
+    /// `field + x` — `x` may be a scalar (added to every value) or another
+    /// `NodeField` (component-wise addition over the union of supports).
+    fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
+        let result = if let Ok(scalar) = rhs.extract::<f64>() {
+            with(&self.handle, |f| f + scalar)?
+        } else if let Ok(other) = rhs.extract::<PyRef<PyNodeField>>() {
+            // The store mutex is per-type and non-reentrant, so we must not
+            // nest two `with::<NodeField>` calls. Clone the rhs out first,
+            // then operate while holding only the lhs lock.
+            let fb = with(&other.handle, |f| f.clone())?;
+            with(&self.handle, |a| a + &fb)??
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "NodeField + expects a float or a NodeField",
+            ));
+        };
         Ok(PyNodeField {
             handle: insert(result),
         })
@@ -206,8 +211,10 @@ pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNo
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
-    let result =
-        with(&a.handle, |fa| with(&b.handle, |fb| crate::ops::field::merge(fa, fb))?)??;
+    // The store mutex is per-type and non-reentrant: clone `b` out before
+    // locking `a` rather than nesting two `with::<NodeField>` calls.
+    let fb = with(&b.handle, |f| f.clone())?;
+    let result = with(&a.handle, |fa| crate::ops::field::merge(fa, &fb))??;
     Ok(PyNodeField {
         handle: insert(result),
     })
