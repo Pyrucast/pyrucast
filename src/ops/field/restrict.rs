@@ -1,4 +1,4 @@
-use crate::containers::mesh::configuration::NodeId;
+use crate::containers::mesh::NodeId;
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
@@ -49,9 +49,9 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::element_type::ElementType;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
+    use crate::containers::mesh::Node;
     use crate::containers::mesh::SubMesh;
     use crate::store::insert;
 

@@ -18,10 +18,10 @@
 //! # Example
 //!
 //! ```no_run
-//! use pyrucast::containers::mesh::configuration::Configuration;
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
-//! use pyrucast::containers::mesh::node::Node;
+//! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::insert;
 //! use pyrucast::viz::View;
 //!
@@ -72,7 +72,7 @@ pub struct View {
     pub yaw: f64,
     pub pitch: f64,
     pub scale: f64,
-    pub target: Option<crate::containers::mesh::point::Point3>,
+    pub target: Option<crate::containers::mesh::Point3>,
     /// Show the orientation gizmo (small red/green/blue axes triad in the
     /// bottom-left corner) on top of the rendered object.
     pub show_axes: bool,

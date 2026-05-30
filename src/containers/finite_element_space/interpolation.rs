@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::interpolation::Interpolation;
 //!
 //! // Lagrange-1 shape functions of a TRI3 at the centroid (1/3, 1/3).
@@ -26,7 +26,7 @@
 //! assert!((s - 1.0).abs() < 1e-12);  // partition of unity
 //! ```
 
-use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::ElementType;
 use crate::error::{PyrucastError, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;

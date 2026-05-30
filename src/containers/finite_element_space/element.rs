@@ -1,7 +1,7 @@
 //! `Element` — lightweight view on a single element of a
 //! [`SubFiniteElementSpace`].
 //!
-//! It is to [`SubFiniteElementSpace`] what [`crate::containers::mesh::cell::Cell`]
+//! It is to [`SubFiniteElementSpace`] what [`crate::containers::mesh::Cell`]
 //! is to [`crate::containers::mesh::SubMesh`] : a `(handle, cell_idx)`
 //! pair that exposes the FE quantities (shape functions, Jacobian,
 //! physical derivatives, …) for a single cell. Cloning an `Element` is
@@ -11,11 +11,11 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::configuration::Configuration;
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::Mesh;
-//! use pyrucast::containers::mesh::node::Node;
+//! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::insert;
 //!
 //! let cfg = insert(Configuration::new(1).unwrap());
@@ -35,8 +35,8 @@
 
 use std::fmt;
 
-use crate::containers::mesh::configuration::NodeId;
-use crate::containers::mesh::cell::Cell;
+use crate::containers::mesh::NodeId;
+use crate::containers::mesh::Cell;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::error::{PyrucastError, Result};
 use crate::store::{with, Handle};
@@ -208,9 +208,9 @@ mod tests {
     use super::*;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::element_type::ElementType;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
+    use crate::containers::mesh::Node;
     use crate::store::insert;
 
     fn seg2_fes() -> (Handle<Configuration>, Vec<Node>, FiniteElementSpace) {

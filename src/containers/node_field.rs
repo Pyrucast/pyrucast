@@ -18,10 +18,10 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::configuration::Configuration;
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
-//! use pyrucast::containers::mesh::node::Node;
+//! use pyrucast::containers::mesh::Node;
 //! use pyrucast::containers::node_field::NodeField;
 //! use pyrucast::store::{insert, with, with_mut};
 //!
@@ -49,8 +49,8 @@
 //! ```
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::configuration::{Configuration, NodeId};
-use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::store::{insert, with, Handle};
@@ -201,10 +201,10 @@ impl NodeField {
     ///
     /// ```
     /// use pyrucast::aggregate::Aggregate;
-    /// use pyrucast::containers::mesh::configuration::Configuration;
-    /// use pyrucast::containers::mesh::element_type::ElementType;
+    /// use pyrucast::containers::mesh::Configuration;
+    /// use pyrucast::containers::mesh::ElementType;
     /// use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// use pyrucast::containers::mesh::node::Node;
+    /// use pyrucast::containers::mesh::Node;
     /// use pyrucast::containers::node_field::NodeField;
     /// use pyrucast::store::{insert, with};
     ///
@@ -615,7 +615,7 @@ impl Add<&NodeField> for &NodeField {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Node;
     use crate::store::insert;
 
     fn make_poi1_with(n_nodes: usize) -> (Handle<Configuration>, Vec<Node>, Handle<SubMesh>) {

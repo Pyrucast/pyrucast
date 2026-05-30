@@ -51,12 +51,12 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::configuration::Configuration;
+//! use pyrucast::containers::mesh::Configuration;
 //! use pyrucast::containers::element_field::ElementField;
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::Mesh;
-//! use pyrucast::containers::mesh::node::Node;
+//! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::{insert, with, with_mut};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
@@ -580,12 +580,12 @@ impl ElementField {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::element_type::ElementType;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
     use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
     use crate::containers::finite_element_space::interpolation::Interpolation;
     use crate::containers::mesh::{Mesh, SubMesh};
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Node;
     use crate::containers::finite_element_space::quadrature::QuadratureRule;
     use crate::store::{insert, with, with_mut};
 

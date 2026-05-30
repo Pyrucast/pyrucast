@@ -1,7 +1,7 @@
 use crate::error::{PyrucastError, Result};
-use crate::containers::mesh::configuration::NodeId;
-use crate::containers::mesh::element_type::ElementType;
-use crate::containers::mesh::node::Node;
+use crate::containers::mesh::NodeId;
+use crate::containers::mesh::ElementType;
+use crate::containers::mesh::Node;
 use crate::containers::mesh::Mesh;
 use crate::store::with;
 
@@ -140,7 +140,7 @@ pub fn fill_surface(
 
     // 3. Collect 2-D points to triangulate. In 2-D direct (x, y);
     //    in 3-D project on the best-fit plane (Newell normal + centroid origin).
-    use crate::containers::mesh::point::{Point2, Point3, Vector3};
+    use crate::containers::mesh::{Point2, Point3, Vector3};
     struct Projection3D {
         origin: Point3,
         u: Vector3,
@@ -305,9 +305,9 @@ pub fn fill_surface(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::element_type::ElementType;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
+    use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::store::{insert, with, Handle};
 

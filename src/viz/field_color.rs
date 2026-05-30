@@ -10,8 +10,8 @@
 //! from the field do not contribute; a cell with no node in the
 //! support gets value `0.0`.
 
-use crate::containers::mesh::color::RgbColor;
-use crate::containers::mesh::configuration::NodeId;
+use crate::containers::mesh::RgbColor;
+use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeField;
@@ -240,10 +240,10 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::element_type::ElementType;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
     use crate::containers::mesh::SubMesh as RawSubMesh;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Node;
     use crate::store::insert;
 
     #[test]

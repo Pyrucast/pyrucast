@@ -16,10 +16,10 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::configuration::Configuration;
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
-//! use pyrucast::containers::mesh::node::Node;
+//! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::{insert, with, with_mut};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
@@ -44,12 +44,18 @@ pub mod element_type;
 pub mod node;
 pub mod point;
 
+// Flat re-exports: the public types of this module are reachable as
+// `mesh::Cell`, `mesh::Configuration`, … alongside the `SubMesh` / `Mesh`
+// defined here, instead of through their defining sub-module.
+pub use cell::{Cell, CellIter};
+pub use color::RgbColor;
+pub use configuration::{Configuration, NodeId};
+pub use element_type::ElementType;
+pub use node::Node;
+pub use point::{Point2, Point3, Vector2, Vector3};
+
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::color::RgbColor;
-use crate::containers::mesh::configuration::{Configuration, NodeId};
 use crate::error::{PyrucastError, Result};
-use crate::containers::mesh::element_type::ElementType;
-use crate::containers::mesh::node::Node;
 use crate::store::{insert, with, with_mut, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -369,16 +375,16 @@ impl Mesh {
     }
 
     /// Return a `Cell` view on cell `cell_idx` of submesh `submesh_idx`.
-    pub fn cell(&self, submesh_idx: usize, cell_idx: usize) -> Result<crate::containers::mesh::cell::Cell> {
+    pub fn cell(&self, submesh_idx: usize, cell_idx: usize) -> Result<Cell> {
         let sm = self.submesh(submesh_idx)?;
-        crate::containers::mesh::cell::Cell::new(sm, cell_idx)
+        Cell::new(sm, cell_idx)
     }
 
     /// Iterator over every cell of submesh `submesh_idx`.
-    pub fn cells(&self, submesh_idx: usize) -> Result<crate::containers::mesh::cell::CellIter> {
+    pub fn cells(&self, submesh_idx: usize) -> Result<CellIter> {
         let sm = self.submesh(submesh_idx)?;
         let end = with(&sm, |s| s.cell_count())?;
-        Ok(crate::containers::mesh::cell::CellIter::new(sm, end))
+        Ok(CellIter::new(sm, end))
     }
 
     /// Visualize this mesh — every submesh is drawn, each in its own
@@ -416,7 +422,6 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::node::Node;
     use crate::store::{insert, with};
 
     #[test]

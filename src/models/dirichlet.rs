@@ -7,8 +7,8 @@
 //! enforces `u_n = u_d_n` once the user fills the load `NodeField` at
 //! `(multiplier_node, primal_var)`.
 
-use crate::containers::mesh::configuration::{Configuration, NodeId};
-use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::SubMesh;

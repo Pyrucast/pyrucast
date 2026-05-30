@@ -1,7 +1,7 @@
-//! Python wrapper for [`crate::containers::mesh::cell::Cell`].
+//! Python wrapper for [`crate::containers::mesh::Cell`].
 
-use crate::containers::mesh::cell::Cell;
-use crate::containers::mesh::node::Node;
+use crate::containers::mesh::Cell;
+use crate::containers::mesh::Node;
 use crate::py::node::PyNode;
 use crate::store::with;
 use pyo3::exceptions::PyIndexError;

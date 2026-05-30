@@ -5,7 +5,7 @@
 //! rows). The conductivity is read from a [`SubElementField`] component
 //! named [`MATERIAL_COMPONENT`].
 
-use crate::containers::mesh::configuration::NodeId;
+use crate::containers::mesh::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::error::Result;
 use crate::containers::finite_element_space::SubFiniteElementSpace;

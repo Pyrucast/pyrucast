@@ -40,10 +40,10 @@
 //! # Example — single block
 //!
 //! ```
-//! use pyrucast::containers::mesh::configuration::Configuration;
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
-//! use pyrucast::containers::mesh::node::Node;
+//! use pyrucast::containers::mesh::Node;
 //! use pyrucast::containers::matrix::{SubMatrix, DofOrdering};
 //! use pyrucast::store::insert;
 //!
@@ -71,7 +71,7 @@
 //! assert_eq!(k.get(a.id(), "q", a.id(), "T"), 2.0);
 //! ```
 
-use crate::containers::mesh::configuration::NodeId;
+use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::error::{PyrucastError, Result};
 use crate::store::{with, Handle};
@@ -731,9 +731,9 @@ impl Matrix {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::element_type::ElementType;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
+    use crate::containers::mesh::Node;
     use crate::store::insert;
 
     /// Build a POI1 SubMesh with `n` fresh nodes in a new 1-D Configuration.

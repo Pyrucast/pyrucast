@@ -1,7 +1,7 @@
 use crate::aggregate::Aggregate;
 use crate::error::Result;
-use crate::containers::mesh::configuration::NodeId;
-use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::NodeId;
+use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::store::{insert, with};
 
@@ -37,9 +37,9 @@ pub fn to_poi1(mesh: &Mesh) -> Result<Mesh> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::element_type::ElementType;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
+    use crate::containers::mesh::Node;
     use crate::containers::mesh::Mesh;
     use crate::store::{insert, with};
 

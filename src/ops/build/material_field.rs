@@ -99,9 +99,9 @@ mod tests {
     use super::*;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::matrix::Matrix;
-    use crate::containers::mesh::configuration::{Configuration, NodeId};
-    use crate::containers::mesh::element_type::ElementType;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::{Configuration, NodeId};
+    use crate::containers::mesh::ElementType;
+    use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::ops::assemble;
     use crate::store::Handle;

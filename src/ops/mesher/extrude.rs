@@ -21,9 +21,9 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::element_type::ElementType;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
+    use crate::containers::mesh::Node;
     use crate::containers::mesh::Mesh;
     use crate::ops::mesher::line_seg2::line_seg2;
     use crate::store::insert;

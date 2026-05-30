@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::quadrature::QuadratureRule;
 //!
 //! let (xi, w) = QuadratureRule::Gauss.points(ElementType::QUA4).unwrap();
@@ -24,7 +24,7 @@
 //! assert_eq!(xi.len(), 4 * 2);       // n_g × ref_dim, flat
 //! ```
 
-use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::ElementType;
 use crate::error::{PyrucastError, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;

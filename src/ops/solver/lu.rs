@@ -22,13 +22,13 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::containers::mesh::configuration::Configuration;
+//! use pyrucast::containers::mesh::Configuration;
 //! use pyrucast::containers::element_field::{ElementField, SubElementField};
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::model::{Model, SubModel};
-//! use pyrucast::containers::mesh::node::Node;
+//! use pyrucast::containers::mesh::Node;
 //! use pyrucast::containers::node_field::NodeField;
 //! use pyrucast::ops::assemble;
 //! use pyrucast::ops::solver::lu::solve;
@@ -74,8 +74,8 @@
 //! assert!((solution.value(b.id(), "T").unwrap() - 1.0).abs() < 1e-12);
 //! ```
 
-use crate::containers::mesh::configuration::NodeId;
-use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::NodeId;
+use crate::containers::mesh::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::containers::matrix::Matrix;
 use crate::containers::mesh::SubMesh;
@@ -169,12 +169,12 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::configuration::Configuration;
+    use crate::containers::mesh::Configuration;
     use crate::containers::element_field::SubElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::containers::model::{Model, SubModel};
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Node;
     use crate::store::{insert};
 
     /// 1-D Poisson `-u'' = 0` on `[0, 1]` with `u(0) = 0` and `u(1) = 1`,
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn rectangular_matrix_yields_error() {
         use crate::containers::matrix::{DofOrdering, SubMatrix};
-        use crate::containers::mesh::element_type::ElementType;
+        use crate::containers::mesh::ElementType;
         use crate::containers::mesh::SubMesh;
         // 2-row support, 1-col support → 2×1 rectangular block.
         let cfg = insert(Configuration::new(1).unwrap());

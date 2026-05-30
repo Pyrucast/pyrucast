@@ -1,7 +1,7 @@
-//! Python wrapper for [`crate::containers::mesh::node::Node`].
+//! Python wrapper for [`crate::containers::mesh::Node`].
 
-use crate::containers::mesh::configuration::{Configuration, NodeId};
-use crate::containers::mesh::node::Node;
+use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::Node;
 use crate::store::Handle;
 use pyo3::prelude::*;
 

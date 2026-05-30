@@ -13,9 +13,9 @@
 //! the same colour for points/segments, and overlaid with black edges for
 //! face boundaries.
 
-use crate::containers::mesh::color::RgbColor;
-use crate::containers::mesh::configuration::{Configuration, NodeId};
-use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::RgbColor;
+use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::ElementType;
 use crate::error::Result;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::store::{with, Handle};
@@ -25,7 +25,7 @@ use crate::viz::View;
 use plotters::coord::Shift;
 use plotters::prelude::*;
 
-use crate::containers::mesh::point::Point3;
+use crate::containers::mesh::Point3;
 
 /// Pad world coordinates to a 3-D point, filling missing components with 0.0.
 fn pad3(coords: &[f64]) -> Point3 {
@@ -470,8 +470,8 @@ impl Drawable for Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Node;
     use crate::store::insert;
 
     #[test]

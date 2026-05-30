@@ -1,6 +1,6 @@
 //! Python wrapper for [`crate::containers::node_field::NodeField`].
 
-use crate::containers::mesh::configuration::NodeId;
+use crate::containers::mesh::NodeId;
 use crate::containers::node_field::NodeField;
 use crate::py::mesh::{PyMesh, PySubMesh};
 use crate::store::{insert, with, with_mut, Handle};

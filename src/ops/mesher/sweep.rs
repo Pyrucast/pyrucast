@@ -7,10 +7,10 @@
 //!   QUA4 → HEX8).
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::configuration::NodeId;
+use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
-use crate::containers::mesh::element_type::ElementType;
-use crate::containers::mesh::node::Node;
+use crate::containers::mesh::ElementType;
+use crate::containers::mesh::Node;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::store::{insert, with};
 

@@ -52,7 +52,7 @@ struct App<'a, D: Drawable> {
     /// rendering path).
     field_button: Option<&'a dyn FieldButton>,
     /// Cached so we don't recompute the bbox each frame.
-    target: crate::containers::mesh::point::Point3,
+    target: crate::containers::mesh::Point3,
     yaw: f64,
     pitch: f64,
     scale: f64,

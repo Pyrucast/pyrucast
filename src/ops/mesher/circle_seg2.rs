@@ -1,6 +1,6 @@
 use crate::error::{PyrucastError, Result};
-use crate::containers::mesh::element_type::ElementType;
-use crate::containers::mesh::node::Node;
+use crate::containers::mesh::ElementType;
+use crate::containers::mesh::Node;
 use crate::containers::mesh::Mesh;
 
 /// Build a closed circle of `n_elems` SEG2 elements.
@@ -45,7 +45,7 @@ pub fn circle_seg2(center: &Node, normal: &[f64], radius: f64, n_elems: usize) -
         ));
     }
 
-    use crate::containers::mesh::point::Vector3;
+    use crate::containers::mesh::Vector3;
     use crate::ops::mesher::triangulation::in_plane_basis;
     let n_vec = Vector3::new(normal[0], normal[1], normal[2]);
     if n_vec.norm() < 1e-15 {
@@ -78,9 +78,9 @@ pub fn circle_seg2(center: &Node, normal: &[f64], radius: f64, n_elems: usize) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::element_type::ElementType;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
+    use crate::containers::mesh::Node;
     use crate::store::insert;
 
     #[test]

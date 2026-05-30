@@ -10,7 +10,7 @@
 //!   derivatives at those Gauss points) and computes the physical
 //!   quantities — Jacobian, `|J|`, `dN/dx` — **on the fly** from the
 //!   current node coordinates in the
-//!   [`crate::containers::mesh::configuration::Configuration`].
+//!   [`crate::containers::mesh::Configuration`].
 //! - [`FiniteElementSpace`] — collection of `SubFiniteElementSpace` matching the
 //!   submeshes of a [`crate::containers::mesh::Mesh`] one-for-one. The mesh handle
 //!   is captured at construction.
@@ -26,11 +26,11 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::configuration::Configuration;
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::Mesh;
-//! use pyrucast::containers::mesh::node::Node;
+//! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::{insert, with};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
@@ -61,11 +61,11 @@ pub mod quadrature;
 
 pub use element::{Element, ElementIter};
 
-use crate::containers::mesh::configuration::{Configuration, NodeId};
+use crate::containers::mesh::{Configuration, NodeId};
 use crate::error::{PyrucastError, Result};
 use crate::containers::finite_element_space::interpolation::Interpolation;
 use crate::containers::finite_element_space::quadrature::QuadratureRule;
-use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
@@ -587,7 +587,7 @@ fn build_dn_dx(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Node;
     use crate::store::{insert, with};
 
     fn cfg2d() -> Handle<Configuration> {

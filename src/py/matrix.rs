@@ -3,7 +3,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
-use crate::containers::mesh::configuration::NodeId;
+use crate::containers::mesh::NodeId;
 use crate::py::mesh::PySubMesh;
 use crate::store::{insert, with, Handle};
 use pyo3::prelude::*;

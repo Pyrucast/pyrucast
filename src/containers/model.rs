@@ -60,13 +60,13 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::containers::mesh::configuration::{Configuration, NodeId};
+//! use pyrucast::containers::mesh::{Configuration, NodeId};
 //! use pyrucast::containers::element_field::SubElementField;
-//! use pyrucast::containers::mesh::element_type::ElementType;
+//! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::Mesh;
 //! use pyrucast::containers::model::{Model, Physics, SubModel};
-//! use pyrucast::containers::mesh::node::Node;
+//! use pyrucast::containers::mesh::Node;
 //! use pyrucast::ops::assemble;
 //! use pyrucast::store::{insert, with};
 //!
@@ -102,12 +102,12 @@
 //! assert_eq!(k.n_cols().unwrap(), 3);
 //! ```
 
-use crate::containers::mesh::configuration::{Configuration, NodeId};
+use crate::containers::mesh::{Configuration, NodeId};
 use crate::containers::element_field::SubElementField;
 use crate::error::Result;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::element_type::ElementType;
+use crate::containers::mesh::ElementType;
 use crate::containers::mesh::SubMesh;
 use crate::models::{dirichlet, heat_conduction};
 use crate::store::{insert, with, Handle};
@@ -479,12 +479,12 @@ fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::configuration::Configuration;
-    use crate::containers::mesh::element_type::ElementType;
+    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
     use crate::containers::element_field::ElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
-    use crate::containers::mesh::node::Node;
+    use crate::containers::mesh::Node;
     use crate::ops::assemble;
     use crate::store::{insert, with_mut};
 
