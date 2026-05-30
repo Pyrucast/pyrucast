@@ -38,7 +38,7 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     rhs.set_value(mult_left, "T", 0.0)
     rhs.set_value(mult_right, "T", 1.0)
 
-    K = model.stiffness(materials)
+    K = pyrucast.stiffness(model, materials)
     solution = pyrucast.solve(K, rhs)
 
     tol = 1e-10
@@ -67,7 +67,7 @@ def test_solver_singular_matrix_errors():
 
     model = pyrucast.Model()
     model.add_sub(pyrucast.SubModel.heat_conduction(sub))
-    K = model.stiffness(materials)
+    K = pyrucast.stiffness(model, materials)
 
     rhs_sm = pyrucast.SubMesh(c, "POI1")
     rhs_sm.add_cell([a.id])
@@ -113,7 +113,7 @@ def test_solver_with_nonzero_neumann():
     rhs.set_value(mult_left, "T", 5.0)
     rhs.set_value(nodes[-1].id, "q", 1.0)
 
-    K = model.stiffness(materials)
+    K = pyrucast.stiffness(model, materials)
     solution = pyrucast.solve(K, rhs)
 
     # Expected linear solution: u(x) = 5 + 0.5 * x (because flux = 1, k = 2 → slope = 0.5).

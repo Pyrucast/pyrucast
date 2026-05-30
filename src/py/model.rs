@@ -125,16 +125,6 @@ impl PyModel {
         Ok(self.inner.dual_vars()?)
     }
 
-    /// Assemble the stiffness matrix.
-    ///
-    /// `materials` carries the per-zone material data: every sub-model
-    /// that needs it picks the [`crate::containers::element_field::SubElementField`]
-    /// whose FE subspace matches its own.
-    fn stiffness(&self, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
-        let k = crate::ops::assemble::stiffness(&self.inner, &materials.inner)?;
-        Ok(PyMatrix { inner: k })
-    }
-
     /// `model.build_material_field([("k", 1.0), ...])` — material
     /// ElementField with the same uniform `(component, value)` pairs
     /// applied to every material-hungry sub-model. Sub-models that don't
@@ -173,6 +163,17 @@ impl PyModel {
 }
 
 crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model);
+
+/// Assemble the stiffness matrix `K` of `model`.
+///
+/// `materials` carries the per-zone material data: every sub-model that
+/// needs it picks the `SubElementField` whose FE subspace matches its own.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn stiffness(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
+    let k = crate::ops::assemble::stiffness(&model.inner, &materials.inner)?;
+    Ok(PyMatrix { inner: k })
+}
 
 /// Assemble the mass matrix `M` of `model`.
 ///

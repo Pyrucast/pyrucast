@@ -78,7 +78,7 @@ def test_model_build_material_field_uniform_skips_dirichlet():
     assert len(materials) == 2
 
     # Assemble and verify k/h = 1.5/1 = 1.5 on each side of the shared node.
-    K = model.stiffness(materials)
+    K = pyrucast.stiffness(model, materials)
     tol = 1e-12
 
     def v(i, j):
@@ -103,7 +103,7 @@ def test_model_build_material_field_per_sub_model_different_zones():
     ])
     assert len(materials) == 2  # only the two HC slots
 
-    K = model.stiffness(materials)
+    K = pyrucast.stiffness(model, materials)
     n0, n1, n2 = (n.id for n in nodes)
     tol = 1e-12
 

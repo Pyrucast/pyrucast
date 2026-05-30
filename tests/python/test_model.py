@@ -50,7 +50,7 @@ def test_heat_conduction_single_seg2_stiffness():
     length = 2.0
     k_val = 1.5
     _, _, _, _, materials, model, a, b = _seg2_heat_model(length=length, k=k_val)
-    K = model.stiffness(materials)
+    K = pyrucast.stiffness(model, materials)
     assert K.n_rows() == 2
     assert K.n_cols() == 2
     expected = k_val / length
@@ -76,7 +76,7 @@ def test_two_seg2_assembly_is_tridiagonal():
 
     model = pyrucast.Model()
     model.add_sub(pyrucast.SubModel.heat_conduction(sub))
-    K = model.stiffness(materials)
+    K = pyrucast.stiffness(model, materials)
     assert K.n_rows() == 3
     assert K.n_cols() == 3
 
@@ -103,7 +103,7 @@ def test_dirichlet_creates_multiplier_node_and_writes_both_blocks():
     # The Configuration now has 3 live nodes (2 real + 1 multiplier).
     assert c.node_count() == 3
 
-    K = model.stiffness(materials)
+    K = pyrucast.stiffness(model, materials)
     assert K.n_rows() == 3
     assert K.n_cols() == 3
 
