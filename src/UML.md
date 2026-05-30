@@ -261,8 +261,8 @@ classDiagram
         +set_by_node(node_id:u32, comp_idx:usize, value:f64) PyResult~()~
         +component_index(name:&str) PyResult~Option<usize>~
         +node_values(node_idx:usize) PyResult~Vec<f64>~
-        +to_poi1_submesh() PyResult~py_PySubMesh~
-        +to_poi1_mesh() PyResult~py_PyMesh~
+        +support_submesh() PyResult~py_PySubMesh~
+        +support_mesh() PyResult~py_PyMesh~
         +value(node_id:u32, component:&str) PyResult~f64~
         +set_value(node_id:u32, component:&str, value:f64) PyResult~()~
         +add_fields(other:PyRef~py_PyNodeField~) PyResult~py_PyNodeField~
@@ -468,8 +468,8 @@ classDiagram
         +set_by_node(nid:mesh_NodeId, comp_idx:usize, value:f64) Result~()~
         +index_of(nid:mesh_NodeId) Option~usize~
         +component_index(name:&str) Option~usize~
-        +to_poi1_submesh() Result~mesh_SubMesh~
-        +to_poi1_mesh() Result~mesh_Mesh~
+        +support_submesh() Result~mesh_SubMesh~
+        +support_mesh() Result~mesh_Mesh~
         +node_values(node_idx:usize) Result~&[f64]~
         +new_with_nodes(cfg:Handle~mesh_Configuration~, nodes:Vec~mesh_NodeId~, components:Vec~String~) Result~Self~
         +component_value_opt(nid:mesh_NodeId, comp:&str) Option~f64~

@@ -65,13 +65,13 @@ impl PyNodeField {
         Ok(with(&self.handle, |f| f.node_values(node_idx).map(|s| s.to_vec()))??)
     }
 
-    fn to_poi1_submesh(&self) -> PyResult<PySubMesh> {
-        let sm = with(&self.handle, |f| f.to_poi1_submesh())??;
+    fn support_submesh(&self) -> PyResult<PySubMesh> {
+        let sm = with(&self.handle, |f| f.support_submesh())??;
         Ok(PySubMesh { handle: insert(sm) })
     }
 
-    fn to_poi1_mesh(&self) -> PyResult<PyMesh> {
-        let mesh = with(&self.handle, |f| f.to_poi1_mesh())??;
+    fn support_mesh(&self) -> PyResult<PyMesh> {
+        let mesh = with(&self.handle, |f| f.support_mesh())??;
         Ok(PyMesh { inner: mesh })
     }
 

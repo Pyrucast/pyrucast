@@ -220,7 +220,7 @@ impl NodeField {
     /// };
     ///
     /// let field = NodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
-    /// let sm2 = field.to_poi1_submesh().unwrap();
+    /// let sm2 = field.support_submesh().unwrap();
     /// assert_eq!(sm2.cell_count(), 2);
     /// // Verify node order via Mesh::node (public API).
     /// let mut m = Mesh::empty();
@@ -228,7 +228,7 @@ impl NodeField {
     /// assert_eq!(m.node(0, 0, 0).unwrap().id(), a.id());
     /// assert_eq!(m.node(0, 1, 0).unwrap().id(), b.id());
     /// ```
-    pub fn to_poi1_submesh(&self) -> Result<SubMesh> {
+    pub fn support_submesh(&self) -> Result<SubMesh> {
         let mut sm = SubMesh::new(self.configuration(), ElementType::POI1);
         for &nid in &self.nodes {
             sm.add_cell(&[nid])?;
@@ -238,8 +238,8 @@ impl NodeField {
 
     /// Build a [`Mesh`] with a single POI1 submesh mirroring the support of
     /// this field.
-    pub fn to_poi1_mesh(&self) -> Result<Mesh> {
-        let sm_handle = insert(self.to_poi1_submesh()?);
+    pub fn support_mesh(&self) -> Result<Mesh> {
+        let sm_handle = insert(self.support_submesh()?);
         let mut mesh = Mesh::empty();
         mesh.add_sub(sm_handle)?;
         Ok(mesh)
@@ -755,14 +755,14 @@ mod tests {
     }
 
     #[test]
-    fn to_poi1_submesh_mirrors_support() {
+    fn support_submesh_mirrors_field_nodes() {
         let (cfg, nodes, sm) = make_poi1_with(3);
         let f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         // refcount before: Node + SubMesh = 2 each (the field shares
         // the user's SubMesh, no extra per-node incref).
         with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 2)).unwrap();
 
-        let sm2 = f.to_poi1_submesh().unwrap();
+        let sm2 = f.support_submesh().unwrap();
         // the freshly built SubMesh adds one incref each → 3
         with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 3)).unwrap();
 
