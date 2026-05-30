@@ -3,6 +3,7 @@
 - [Introduction](introduction.md)
 - [Compilation et tests](compilation.md)
 - [Conventions & philosophie](conventions.md)
+- [Correspondance Rust ↔ Python](correspondance-rust-python.md)
 - [Modèle mémoire](memory-model.md)
 - [Configuration](configuration.md)
 - [Maillage](mesh.md)
