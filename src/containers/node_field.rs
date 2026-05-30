@@ -264,7 +264,7 @@ impl NodeField {
     /// Materialises a fresh POI1 SubMesh holding the per-node refcounts:
     /// if any `add_cell` fails, the partial SubMesh's `Drop` rolls back
     /// the increfs already done.
-    fn new_with_nodes(
+    pub(crate) fn new_with_nodes(
         cfg: Handle<Configuration>,
         nodes: Vec<NodeId>,
         components: Vec<String>,
@@ -467,43 +467,6 @@ impl NodeField {
 
     /// Restrict this field to the nodes of `mesh`.
     ///
-    /// Returns a new field with the same components, defined on the unique
-    /// nodes of `mesh` in order of first appearance. Nodes of `mesh` absent
-    /// from this field are assigned `0.0`. The mesh must be attached to the
-    /// same `Configuration` as this field.
-    pub fn restrict(&self, mesh: &Mesh) -> Result<NodeField> {
-        let mesh_cfg = mesh.configuration()?;
-        let self_cfg = self.configuration();
-        if mesh_cfg.index() != self_cfg.index()
-            || mesh_cfg.generation() != self_cfg.generation()
-        {
-            return Err(PyrucastError::Message(
-                "restrict: mesh is not attached to the same Configuration".into(),
-            ));
-        }
-        let mut mesh_nodes: Vec<NodeId> = Vec::new();
-        for i in 0..mesh.submesh_count() {
-            let sm_handle = mesh.submesh(i)?;
-            let connectivity = with(&sm_handle, |sm| sm.connectivity().to_vec())?;
-            for nid in connectivity {
-                if !mesh_nodes.contains(&nid) {
-                    mesh_nodes.push(nid);
-                }
-            }
-        }
-        let ncomp = self.components.len();
-        let mut result =
-            NodeField::new_with_nodes(self_cfg, mesh_nodes, self.components.clone())?;
-        for (ni, &nid) in result.nodes.iter().enumerate() {
-            if let Some(self_ni) = self.index_of(nid) {
-                let src = self_ni * ncomp;
-                let dst = ni * ncomp;
-                result.values[dst..dst + ncomp].copy_from_slice(&self.values[src..src + ncomp]);
-            }
-        }
-        Ok(result)
-    }
-
     fn check_indices(&self, ni: usize, ci: usize) -> Result<()> {
         if ni >= self.nodes.len() {
             return Err(PyrucastError::Message(format!(
@@ -1102,83 +1065,4 @@ mod tests {
         assert_eq!((f * 4.0 / 2.0).get(0, 0).unwrap(), 24.0);
     }
 
-    // ── restrict ─────────────────────────────────────────────────────────────
-
-    #[test]
-    fn restrict_subset() {
-        use crate::containers::mesh::Mesh;
-        let (cfg, nodes, _sm) = make_poi1_with(3);
-        // Build a full field on all 3 nodes
-        let sm_all = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-            for n in &nodes {
-                sm.add_cell(&[n.id()]).unwrap();
-            }
-            insert(sm)
-        };
-        let mut f = NodeField::from_poi1(&sm_all, vec!["T".into(), "P".into()]).unwrap();
-        f.set(0, 0, 1.0).unwrap();
-        f.set(1, 0, 2.0).unwrap();
-        f.set(2, 0, 3.0).unwrap();
-
-        // Build a mesh with only nodes[0] and nodes[2]
-        let mut m = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
-        m.add_cell(&[nodes[0].id()]).unwrap();
-        m.add_cell(&[nodes[2].id()]).unwrap();
-
-        let r = f.restrict(&m).unwrap();
-        assert_eq!(r.node_count(), 2);
-        assert_eq!(r.components(), &["T", "P"]);
-        assert_eq!(r.value(nodes[0].id(), "T").unwrap(), 1.0);
-        assert_eq!(r.value(nodes[2].id(), "T").unwrap(), 3.0);
-        assert_eq!(r.value(nodes[0].id(), "P").unwrap(), 0.0); // absent → 0
-    }
-
-    #[test]
-    fn restrict_node_absent_from_field_gives_zero() {
-        use crate::containers::mesh::Mesh;
-        let cfg = insert(Configuration::new(1).unwrap());
-        let na = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let nb = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let sm_a = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-            sm.add_cell(&[na.id()]).unwrap();
-            insert(sm)
-        };
-        let mut f = NodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
-        f.set(0, 0, 7.0).unwrap();
-
-        // Mesh contains nb which is NOT in the field
-        let mut m = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
-        m.add_cell(&[na.id()]).unwrap();
-        m.add_cell(&[nb.id()]).unwrap();
-
-        let r = f.restrict(&m).unwrap();
-        assert_eq!(r.node_count(), 2);
-        assert_eq!(r.value(na.id(), "T").unwrap(), 7.0);
-        assert_eq!(r.value(nb.id(), "T").unwrap(), 0.0);
-    }
-
-    #[test]
-    fn restrict_incompatible_cfg_errors() {
-        use crate::containers::mesh::Mesh;
-        let cfg1 = insert(Configuration::new(1).unwrap());
-        let cfg2 = insert(Configuration::new(1).unwrap());
-        let n1 = Node::create_in(cfg1.clone(), &[0.0]).unwrap();
-        let sm1 = {
-            let mut sm = SubMesh::new(cfg1.clone(), ElementType::POI1);
-            sm.add_cell(&[n1.id()]).unwrap();
-            insert(sm)
-        };
-        let f = NodeField::from_poi1(&sm1, vec!["T".into()]).unwrap();
-        let n2 = Node::create_in(cfg2.clone(), &[0.0]).unwrap();
-        let sm2 = {
-            let mut sm = SubMesh::new(cfg2.clone(), ElementType::POI1);
-            sm.add_cell(&[n2.id()]).unwrap();
-            insert(sm)
-        };
-        let mut m2 = Mesh::empty();
-        m2.add_sub(sm2).unwrap();
-        assert!(f.restrict(&m2).is_err());
-    }
 }

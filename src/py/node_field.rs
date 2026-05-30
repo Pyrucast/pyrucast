@@ -122,13 +122,6 @@ impl PyNodeField {
         Ok(())
     }
 
-    fn restrict(&self, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
-        let result = with(&self.handle, |nf| nf.restrict(&mesh.inner))??;
-        Ok(PyNodeField {
-            handle: insert(result),
-        })
-    }
-
     fn __add__(&self, rhs: f64) -> PyResult<PyNodeField> {
         let result = with(&self.handle, |f| f + rhs)?;
         Ok(PyNodeField {
@@ -196,5 +189,20 @@ pub fn coordinates(
     let field = crate::ops::field::coordinates(&mesh.inner, components)?;
     Ok(PyNodeField {
         handle: insert(field),
+    })
+}
+
+/// Restrict `field` to the nodes used by `mesh`.
+///
+/// Returns a new `NodeField` with the same components, supported on the
+/// unique nodes of `mesh` (order of first appearance). Nodes of `mesh`
+/// absent from `field` are assigned `0.0`. Errors if `mesh` and `field`
+/// are attached to different `Configuration`s.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
+    let result = with(&field.handle, |nf| crate::ops::field::restrict(nf, &mesh.inner))??;
+    Ok(PyNodeField {
+        handle: insert(result),
     })
 }
