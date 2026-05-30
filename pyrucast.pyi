@@ -22,13 +22,18 @@ __all__ = [
     "SubMesh",
     "SubModel",
     "circle_seg2",
+    "consolidate",
     "coordinates",
     "extrude",
     "fill_surface",
     "from_live_nodes",
     "line_seg2",
+    "mass",
+    "merge",
+    "restrict",
     "set_swap_dir",
     "solve",
+    "stiffness",
     "swap_dir",
     "sweep_qua4",
     "to_poi1",
@@ -289,11 +294,6 @@ class Mesh:
     def cell_counts(self) -> builtins.list[builtins.int]: ...
     def node(self, submesh_idx: builtins.int, cell_idx: builtins.int, node_idx: builtins.int) -> Node: ...
     def __add__(self, other: Mesh) -> Mesh: ...
-    def consolidate(self) -> Mesh:
-        r"""
-        Merge submeshes of the same type and drop duplicate cells.
-        Returns a new mesh with one submesh per element type.
-        """
     def cell(self, submesh_idx: builtins.int, cell_idx: builtins.int) -> Cell:
         r"""
         `mesh.cell(submesh_idx, cell_idx)` → `Cell` view; same thing
@@ -327,15 +327,6 @@ class Model:
     def __new__(cls) -> Model: ...
     def primal_vars(self) -> builtins.list[builtins.str]: ...
     def dual_vars(self) -> builtins.list[builtins.str]: ...
-    def stiffness(self, materials: ElementField) -> Matrix:
-        r"""
-        Assemble the stiffness matrix.
-        
-        `materials` carries the per-zone material data: every sub-model
-        that needs it picks the [`crate::containers::element_field::SubElementField`]
-        whose FE subspace matches its own.
-        """
-    def mass(self) -> Matrix: ...
     def build_material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
         `model.build_material_field([("k", 1.0), ...])` — material
@@ -392,12 +383,10 @@ class NodeField:
     def value(self, node_id: builtins.int, component: builtins.str) -> builtins.float: ...
     def set_value(self, node_id: builtins.int, component: builtins.str, value: builtins.float) -> None: ...
     def add_fields(self, other: NodeField) -> NodeField: ...
-    def merge_fields(self, other: NodeField) -> NodeField: ...
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
     def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
     def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
     def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
-    def restrict(self, mesh: Mesh) -> NodeField: ...
     def __add__(self, rhs: builtins.float) -> NodeField: ...
     def __sub__(self, rhs: builtins.float) -> NodeField: ...
     def __mul__(self, rhs: builtins.float) -> NodeField: ...
@@ -674,6 +663,13 @@ class SubModel:
 
 def circle_seg2(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int) -> Mesh: ...
 
+def consolidate(mesh: Mesh) -> Mesh:
+    r"""
+    Fuse submeshes of the same element type into one and drop duplicate
+    cells. Returns a new mesh with one submesh per element type, in
+    first-seen order.
+    """
+
 def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
     r"""
     Build a `NodeField` carrying the coordinates of every node of `mesh`.
@@ -693,6 +689,33 @@ def from_live_nodes(config: Configuration) -> Mesh: ...
 
 def line_seg2(a: Node, b: Node, n_elems: builtins.int) -> Mesh: ...
 
+def mass(model: Model) -> Matrix:
+    r"""
+    Assemble the mass matrix `M` of `model`.
+    
+    v0 stub: no physics has a mass term yet, so this returns an empty
+    finalized `Matrix` with the model's DOF layout.
+    """
+
+def merge(a: NodeField, b: NodeField) -> NodeField:
+    r"""
+    Merge two node fields over the union of their supports.
+    
+    Keeps each field's value where only one is defined, `0.0` where
+    neither is. Errors if the two fields hold different values at the same
+    `(node, component)` pair, or are attached to different `Configuration`s.
+    """
+
+def restrict(field: NodeField, mesh: Mesh) -> NodeField:
+    r"""
+    Restrict `field` to the nodes used by `mesh`.
+    
+    Returns a new `NodeField` with the same components, supported on the
+    unique nodes of `mesh` (order of first appearance). Nodes of `mesh`
+    absent from `field` are assigned `0.0`. Errors if `mesh` and `field`
+    are attached to different `Configuration`s.
+    """
+
 def set_swap_dir(path: builtins.str | os.PathLike | pathlib.Path) -> None:
     r"""
     Set the swap directory (Python binding of [`store::set_swap_dir`]).
@@ -704,6 +727,14 @@ def solve(matrix: Matrix, rhs: NodeField) -> NodeField:
     
     Dense LU solver. See [`crate::ops::solver::lu::solve`] for the semantics
     of the rhs and of the returned NodeField.
+    """
+
+def stiffness(model: Model, materials: ElementField) -> Matrix:
+    r"""
+    Assemble the stiffness matrix `K` of `model`.
+    
+    `materials` carries the per-zone material data: every sub-model that
+    needs it picks the `SubElementField` whose FE subspace matches its own.
     """
 
 def swap_dir() -> pathlib.Path:
