@@ -283,6 +283,18 @@ pub fn from_live_nodes(config: PyRef<PyConfiguration>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: mesh })
 }
 
+/// Convert a mesh to POI1, submesh by submesh.
+///
+/// Returns a new mesh with the same number of submeshes; each output
+/// submesh is a POI1 submesh holding the de-duplicated nodes of the
+/// corresponding input submesh, in order of first appearance.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn to_poi1(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::to_poi1(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn line_seg2(a: PyRef<PyNode>, b: PyRef<PyNode>, n_elems: usize) -> PyResult<PyMesh> {

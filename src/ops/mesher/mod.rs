@@ -16,6 +16,7 @@ pub mod from_live_nodes;
 pub mod line_seg2;
 pub mod sweep;
 pub mod sweep_qua4;
+pub mod to_poi1;
 pub mod triangulation;
 
 pub use circle_seg2::circle_seg2;
@@ -24,3 +25,4 @@ pub use fill_surface::fill_surface;
 pub use from_live_nodes::from_live_nodes;
 pub use line_seg2::line_seg2;
 pub use sweep_qua4::sweep_qua4;
+pub use to_poi1::to_poi1;

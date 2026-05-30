@@ -390,6 +390,46 @@ def test_fill_surface_rejects_non_seg2_contour():
         raise AssertionError("expected RuntimeError for non-SEG2 contour")
 
 
+def test_to_poi1_converts_each_submesh_to_node_list():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.5, 1.0])
+    d = c.add_node([1.5, 1.0])
+
+    # Two triangles sharing edge (b, cc): 4 unique nodes.
+    tri = pyrucast.Mesh(c, "TRI3")
+    tri.add_cell([a.id, b.id, cc.id])
+    tri.add_cell([b.id, d.id, cc.id])
+
+    poi = pyrucast.to_poi1(tri)
+    assert poi.submesh_count() == 1
+    assert poi.element_types() == ["POI1"]
+    assert poi.cell_count() == 4  # 6 connectivity entries, deduplicated
+    ids = [poi.node(0, i, 0).id for i in range(4)]
+    assert ids == [a.id, b.id, cc.id, d.id]
+
+
+def test_to_poi1_preserves_submesh_count():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.5, 1.0])
+
+    pts = pyrucast.SubMesh(c, "POI1")
+    pts.add_cell([a.id])
+    tri = pyrucast.SubMesh(c, "TRI3")
+    tri.add_cell([a.id, b.id, cc.id])
+    mesh = pyrucast.Mesh(c)
+    mesh.add_sub(pts)
+    mesh.add_sub(tri)
+
+    poi = pyrucast.to_poi1(mesh)
+    assert poi.submesh_count() == 2
+    assert poi.element_types() == ["POI1", "POI1"]
+    assert poi.cell_counts() == [1, 3]
+
+
 def test_repr_str_submesh_and_mesh():
     c = pyrucast.Configuration(1)
     sm = pyrucast.SubMesh(c, "SEG2")
