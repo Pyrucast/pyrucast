@@ -65,6 +65,20 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     Ok(k)
 }
 
+/// Assemble the mass matrix `M` for `model`.
+///
+/// v0 stub: no physics has a mass term yet, so this returns an empty
+/// finalized [`Matrix`] with the model's DOF layout. Kept alongside
+/// [`stiffness`] so the assembler family lives in one place.
+pub fn mass(model: &Model) -> Result<Matrix> {
+    // `model` is unused until a physics introduces a mass term; binding it
+    // documents the intended signature (assemble over the model's DOFs).
+    let _ = model;
+    let mut m = Matrix::empty();
+    m.finalize()?;
+    Ok(m)
+}
+
 /// Find the [`SubElementField`] in `materials` whose FE subspace handle
 /// matches `fespace`. Errors if no match is found.
 fn find_material_for_fespace(

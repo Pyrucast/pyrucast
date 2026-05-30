@@ -135,11 +135,6 @@ impl PyModel {
         Ok(PyMatrix { inner: k })
     }
 
-    fn mass(&self) -> PyResult<PyMatrix> {
-        let m_mat = self.inner.mass()?;
-        Ok(PyMatrix { inner: m_mat })
-    }
-
     /// `model.build_material_field([("k", 1.0), ...])` — material
     /// ElementField with the same uniform `(component, value)` pairs
     /// applied to every material-hungry sub-model. Sub-models that don't
@@ -178,3 +173,14 @@ impl PyModel {
 }
 
 crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model);
+
+/// Assemble the mass matrix `M` of `model`.
+///
+/// v0 stub: no physics has a mass term yet, so this returns an empty
+/// finalized `Matrix` with the model's DOF layout.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn mass(model: PyRef<PyModel>) -> PyResult<PyMatrix> {
+    let m = crate::ops::assemble::mass(&model.inner)?;
+    Ok(PyMatrix { inner: m })
+}

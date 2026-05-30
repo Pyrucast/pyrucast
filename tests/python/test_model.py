@@ -134,7 +134,7 @@ def test_dirichlet_empty_constraint_list_rejected():
 
 def test_mass_is_empty_in_v0():
     _, _, _, _, _, model, *_ = _seg2_heat_model()
-    M = model.mass()
+    M = pyrucast.mass(model)
     assert M.n_rows() == 0
     assert M.n_cols() == 0
 

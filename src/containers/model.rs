@@ -15,9 +15,11 @@
 //! Model
 //! ├── sub_models: Vec<Handle<SubModel>>
 //! ├── primal_vars(): Vec<String>      # union over sub-models — columns
-//! ├── dual_vars():   Vec<String>      # union over sub-models — rows
-//! ├── stiffness() -> Matrix            # rows: dual × cols: primal
-//! └── mass()      -> Matrix            # same DOF layout, may be empty
+//! └── dual_vars():   Vec<String>      # union over sub-models — rows
+//!
+//! ops::assemble (operators, not Model methods)
+//! ├── stiffness(model, materials) -> Matrix   # rows: dual × cols: primal
+//! └── mass(model)                 -> Matrix   # same DOF layout, may be empty
 //!
 //! SubModel
 //! └── physics: Physics
@@ -105,7 +107,7 @@ use crate::containers::element_field::SubElementField;
 use crate::error::{PyrucastError, Result};
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::aggregate::Aggregate;
-use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::element_type::ElementType;
 use crate::containers::mesh::SubMesh;
 use crate::models::{dirichlet, heat_conduction};
@@ -501,16 +503,6 @@ impl Model {
         Ok(union_names(all))
     }
 
-    /// Assemble the mass matrix `M` of the full model.
-    ///
-    /// v0 stub: no physics has a mass term yet. Returns an empty finalized
-    /// [`Matrix`].
-    pub fn mass(&self) -> Result<Matrix> {
-        let mut m = Matrix::empty();
-        m.finalize()?;
-        Ok(m)
-    }
-
     /// Build a material [`crate::containers::element_field::ElementField`]
     /// with the given uniform `(component, value)` pairs applied to every
     /// sub-model that needs material data. Sub-models that don't
@@ -809,7 +801,7 @@ mod tests {
         let model = Model::empty();
         assert_eq!(model.primal_vars().unwrap(), Vec::<String>::new());
         assert_eq!(model.dual_vars().unwrap(), Vec::<String>::new());
-        let m = model.mass().unwrap();
+        let m = assemble::mass(&model).unwrap();
         assert_eq!(m.n_rows().unwrap(), 0);
         assert_eq!(m.n_cols().unwrap(), 0);
     }
