@@ -104,3 +104,53 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 > `ops::geom` (mesures géométriques) est réservé mais encore vide ; aucune
 > fonction exposée pour l'instant.
+
+## Opérateurs (dunders ↔ traits Rust)
+
+**Toutes** les classes implémentent `__repr__` (← `Debug`, vue
+structurelle) et `__str__` (← `Display`, vue résumée façon cast3m) — voir
+[Conventions](conventions.md). Les autres opérateurs, classe par classe :
+
+### Arithmétique sur les champs
+
+| Classe | Opérateurs Python | Sémantique | Trait Rust |
+|---|---|---|---|
+| `NodeField` | `f + s`, `f - s`, `f * s`, `f / s` | composante par composante avec un scalaire `s` | `Add`/`Sub`/`Mul`/`Div<f64>` |
+| `NodeField` | `a + b` | addition de deux champs (union des supports) | `Add<&NodeField>` |
+| `SubElementField` | `f + s`, `f - s`, `f * s`, `f / s` | scalaire, composante par composante | `Add`/`Sub`/`Mul`/`Div<f64>` |
+
+> `f + s` et `a + b` renvoient un **nouveau** champ ; `+= ` n'est pas
+> surchargé. Côté Python, `NodeField.__add__` accepte un `float` **ou** un
+> `NodeField`.
+
+### Indexation par clé
+
+| Classe | Opérateurs Python | Clé | Backing Rust |
+|---|---|---|---|
+| `NodeField` | `f[nid, "c"]`, `f[nid, "c"] = v` | `(NodeId, composante)` | `Index`/`IndexMut<(NodeId, &str)>` |
+| `SubElementField` | `f[cell, g, "c"]`, `f[cell, g, "c"] = v` | `(maille, point de Gauss, composante)` | méthodes `value` / `set_value` (pas de trait `Index`) |
+
+### Protocole séquence — `len(x)`, `x[i]`, `for _ in x`
+
+| Classe | `len(x)` | `x[i]` → | Backing Rust |
+|---|---|---|---|
+| `Cell` | nombre de nœuds | `Node` | méthodes |
+| `SubMesh` | nombre de mailles | `Cell` | méthodes |
+| `Mesh` | nombre de sous-maillages | `SubMesh` | `Aggregate` (macro) |
+| `SubFiniteElementSpace` | nombre d'éléments | `Element` | méthodes |
+| `FiniteElementSpace` | nombre de sous-espaces | `SubFiniteElementSpace` | `Aggregate` (macro) |
+| `ElementField` | nombre de sous-champs | `SubElementField` | `Aggregate` (macro) |
+| `Model` | nombre de sous-modèles | `SubModel` | `Aggregate` (macro) |
+| `Matrix` | nombre de sous-matrices | — (pas de `[i]`) | `Aggregate` (macro pour `len`) |
+| `SubMatrix` | nombre d'entrées | — | méthode `entry_count` |
+
+### Fusion
+
+| Classe | Opérateur Python | Sémantique | Trait Rust |
+|---|---|---|---|
+| `Mesh` | `a + b` | concaténation des sous-maillages (= `merge`) | `Aggregate::merge` / `Add<&Mesh>` |
+
+> Côté Rust, **tous** les agrégats (`Mesh`, `FiniteElementSpace`,
+> `ElementField`, `Matrix`, `Model`) ont `&a + &b` (fusion) via le trait
+> `Aggregate`. Seul `Mesh` l'expose pour l'instant comme `__add__` en
+> Python.
