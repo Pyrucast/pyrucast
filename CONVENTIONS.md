@@ -62,8 +62,8 @@ d'opérateurs ne se scinde pas entre `ops/` et les `impl` de conteneur.
 
 ## Règle Rust → Python : miroir 1:1
 
-- fonction libre `ops::<thème>::f` → fonction de module Python
-  `pyrucast.<thème>.f(...)` ;
+- fonction libre `ops::<thème>::f` → fonction **top-level** Python
+  `pyrucast.f(...)` ;
 - méthode Rust `Type::m` → méthode Python `obj.m(...)` ;
 - surcharge d'opérateur Rust → dunder Python (`__add__`, `__getitem__`, …) ;
 - constructeur nommé Rust → `classmethod` Python.
@@ -73,21 +73,39 @@ l'autre. Le wrapper `py/` est une projection mécanique, pas un lieu de
 redesign de l'API.
 
 Le style visé côté Python est celui de **numpy / scipy** (et l'héritage
-**cast3m**) : des opérateurs nommés dans des sous-modules thématiques
-(`pyrucast.mesher.to_poi1(mesh)`, `pyrucast.assemble.stiffness(model, mat)`),
-et des méthodes réservées aux accesseurs, mutations et vues dérivées.
+**cast3m**) : des opérateurs **nommés** (`pyrucast.to_poi1(mesh)`,
+`pyrucast.stiffness(model, mat)`) plutôt que des chaînes de méthodes, et
+des méthodes réservées aux accesseurs, mutations et vues dérivées.
+
+### Le thème vit côté Rust, pas dans la hiérarchie de modules Python
+
+Le rangement par thème (`mesher`, `field`, `assemble`, `build`, `solver`)
+est une organisation **du code Rust** (`src/ops/<thème>/`). Côté Python,
+toutes les fonctions sont exposées **à plat** au top-level
+(`pyrucast.to_poi1`, `pyrucast.coordinates`, `pyrucast.stiffness`,
+`pyrucast.solve`, …), **pas** dans des sous-modules `pyrucast.mesher.*`.
+
+Pourquoi : de vrais sous-modules Python typés imposeraient de passer le
+projet en *layout mixte* maturin (dossier `python/pyrucast/`, stubs en
+package) — `pyo3-stub-gen` en layout « Pure Rust » refuse explicitement
+plusieurs modules. On garde donc un seul `pyrucast.pyi` et un namespace
+plat. Si le besoin de sous-modules se confirme, c'est une migration
+packaging à part entière (voir l'historique de cette décision).
 
 ## Table de projection (état cible)
 
-| Opération | Rust | Python |
+Côté Python, toutes les fonctions des thèmes ci-dessous sont **à plat**
+(`pyrucast.f(...)`) — voir la note sur le namespace plat plus haut.
+
+| Opération | Rust | Python (top-level) |
 |---|---|---|
 | accesseur / mutation mono-conteneur | méthode | méthode |
 | vue dérivée d'un seul conteneur | méthode | méthode |
-| transformation mesh→mesh | `ops::mesher::*` | `pyrucast.mesher.*` |
-| construction de conteneur | `ops::build::*` | `pyrucast.build.*` |
-| opérateur sur field croisant un mesh/field | `ops::field::*` | `pyrucast.field.*` |
-| assemblage `Model` → `Matrix` | `ops::assemble::*` | `pyrucast.assemble.*` |
-| résolution `A·x = b` | `ops::solver::*` | `pyrucast.solver.*` |
+| transformation mesh→mesh | `ops::mesher::*` | `pyrucast.to_poi1`, `pyrucast.consolidate`, … |
+| construction de conteneur | `ops::build::*` | `pyrucast.material_field`, … |
+| opérateur sur field croisant un mesh/field | `ops::field::*` | `pyrucast.coordinates`, `pyrucast.restrict`, `pyrucast.merge` |
+| assemblage `Model` → `Matrix` | `ops::assemble::*` | `pyrucast.stiffness`, `pyrucast.mass` |
+| résolution `A·x = b` | `ops::solver::*` | `pyrucast.solve` |
 | arithmétique (`+ - * /`, indexation) | `impl` d'opérateur | dunder |
 | constructeur nommé | fn associée | `classmethod` |
 
@@ -108,6 +126,7 @@ et des méthodes réservées aux accesseurs, mutations et vues dérivées.
   garder la chaîne `build → assemble → solve` uniforme.*
 - `mul_dense(self, x: &[f64])` → **méthode** (`x` est un slice, pas un
   conteneur lourd : produit matrice-vecteur mono-conteneur).
-- `to_poi1_submesh` / `to_poi1_mesh` sur `NodeField` → **méthodes** (vue du
-  support d'un seul field). À renommer `support_submesh` / `support_mesh`
-  pour ne pas se confondre avec l'opérateur `ops::mesher::to_poi1(mesh)`.
+- `support_submesh` / `support_mesh` sur `NodeField` → **méthodes** (vue du
+  support d'un seul field). Renommées depuis `to_poi1_submesh` /
+  `to_poi1_mesh` pour ne pas se confondre avec l'opérateur
+  `ops::mesher::to_poi1(mesh)`.

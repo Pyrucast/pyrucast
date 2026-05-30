@@ -15,9 +15,11 @@ une **fonction libre** d'un module `ops/` est figée dans le fichier
   mat)`, `ops::mesher::consolidate(mesh)`).
 
 Le binding Python est un **miroir 1:1** : une fonction Rust devient une
-fonction de module Python, une méthode reste une méthode. On vise le style
-numpy/scipy (et l'héritage cast3m) — des opérateurs nommés dans des
-modules thématiques plutôt que des chaînes de méthodes :
+fonction Python, une méthode reste une méthode. On vise le style
+numpy/scipy (et l'héritage cast3m) — des opérateurs **nommés** plutôt que
+des chaînes de méthodes. Côté Python elles sont exposées **à plat** au
+top-level (le rangement par thème `ops/<thème>` reste une organisation du
+code Rust ; pas de sous-modules `pyrucast.mesher.*`) :
 
 ```python
 import pyrucast
