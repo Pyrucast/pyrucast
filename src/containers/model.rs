@@ -104,9 +104,8 @@
 
 use crate::containers::mesh::configuration::{Configuration, NodeId};
 use crate::containers::element_field::SubElementField;
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::aggregate::Aggregate;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::element_type::ElementType;
 use crate::containers::mesh::SubMesh;
@@ -318,49 +317,6 @@ impl SubModel {
         self.physics.material_components()
     }
 
-    /// Build a [`SubElementField`] on the FE subspace this sub-model
-    /// needs, pre-filled with the value supplied for each component
-    /// declared by [`SubModel::material_components`].
-    ///
-    /// `components_and_values` is treated as a **dict** of available
-    /// values: only the components declared by the physics are kept (any
-    /// extra is silently ignored), and **every declared component must
-    /// be present** — a missing one errors.
-    ///
-    /// Errors if this physics doesn't need material data (e.g.
-    /// `Dirichlet`).
-    pub fn build_material_field(
-        &self,
-        components_and_values: &[(&str, f64)],
-    ) -> Result<SubElementField> {
-        let fespace = self.material_fespace().ok_or_else(|| {
-            PyrucastError::Message(
-                "build_material_field: this sub-model does not need material data".into(),
-            )
-        })?;
-        let required = self.material_components().expect(
-            "material_fespace().is_some() ⇒ material_components() is Some",
-        );
-        let mut components: Vec<String> = Vec::with_capacity(required.len());
-        let mut values: Vec<f64> = Vec::with_capacity(required.len());
-        for req in required {
-            let v = components_and_values
-                .iter()
-                .find(|(c, _)| c == req)
-                .map(|(_, v)| *v)
-                .ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "build_material_field: missing required component '{}' \
-                         (this physics expects: {:?})",
-                        req, required
-                    ))
-                })?;
-            components.push((*req).to_string());
-            values.push(v);
-        }
-        SubElementField::from_uniform_per_component(fespace, components, &values)
-    }
-
     /// Primal variable names introduced by this sub-model.
     pub fn primal_vars(&self) -> Vec<String> {
         self.physics.primal_vars()
@@ -503,60 +459,6 @@ impl Model {
         Ok(union_names(all))
     }
 
-    /// Build a material [`crate::containers::element_field::ElementField`]
-    /// with the given uniform `(component, value)` pairs applied to every
-    /// sub-model that needs material data. Sub-models that don't
-    /// (`Dirichlet`, …) are skipped automatically.
-    ///
-    /// Errors if `components_and_values` is empty.
-    pub fn build_material_field(
-        &self,
-        components_and_values: &[(&str, f64)],
-    ) -> Result<crate::containers::element_field::ElementField> {
-        let mut out = crate::containers::element_field::ElementField::empty();
-        for h in self {
-            let opt_sub = with(h, |sub| -> Result<Option<SubElementField>> {
-                if sub.material_fespace().is_none() {
-                    return Ok(None);
-                }
-                Ok(Some(sub.build_material_field(components_and_values)?))
-            })??;
-            if let Some(sub) = opt_sub {
-                out.add_sub(insert(sub))?;
-            }
-        }
-        Ok(out)
-    }
-
-    /// Build a material [`crate::containers::element_field::ElementField`]
-    /// with **per-sub-model** uniform `(component, value)` lists.
-    ///
-    /// `components_and_values_per_sub_model.len()` must equal
-    /// `self.sub_model_count()`. A **slot empty** (`&[]`) skips that
-    /// sub-model — typical for `Dirichlet`.
-    pub fn build_material_field_per_sub_model(
-        &self,
-        components_and_values_per_sub_model: &[&[(&str, f64)]],
-    ) -> Result<crate::containers::element_field::ElementField> {
-        let n = self.sub_model_count();
-        if components_and_values_per_sub_model.len() != n {
-            return Err(PyrucastError::Message(format!(
-                "build_material_field_per_sub_model: {} list(s) supplied for {} sub-model(s)",
-                components_and_values_per_sub_model.len(),
-                n
-            )));
-        }
-        let mut out = crate::containers::element_field::ElementField::empty();
-        for (i, h) in self.iter().enumerate() {
-            let spec = components_and_values_per_sub_model[i];
-            if spec.is_empty() {
-                continue;
-            }
-            let sub = with(h, |sub| sub.build_material_field(spec))??;
-            out.add_sub(insert(sub))?;
-        }
-        Ok(out)
-    }
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -883,48 +785,6 @@ mod tests {
         assert!((v(n1.id(), n2.id()) + k_b).abs() < tol);
     }
 
-    // ── SubModel/Model::build_material_field ──────────────────────────
-
-    #[test]
-    fn sub_model_build_material_field_uniform_per_component() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
-        mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
-        let hc = SubModel::heat_conduction(sub.clone()).unwrap();
-
-        let mat = hc.build_material_field(&[("k", 2.5)]).unwrap();
-        // Verify the values at every (cell, gauss).
-        let n_g = with(&sub, |s| s.gauss_count()).unwrap();
-        for g in 0..n_g {
-            assert!((mat.value(0, g, "k").unwrap() - 2.5).abs() < 1e-12);
-        }
-    }
-
-    #[test]
-    fn sub_model_build_material_field_errors_on_dirichlet() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let dir = SubModel::dirichlet(cfg, "T".into(), "q".into(), vec![a.id()]).unwrap();
-        assert!(dir.build_material_field(&[("k", 1.0)]).is_err());
-    }
-
-    #[test]
-    fn sub_model_build_material_field_errors_on_empty_list() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
-        mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
-        let hc = SubModel::heat_conduction(sub).unwrap();
-        assert!(hc.build_material_field(&[]).is_err());
-    }
-
     #[test]
     fn physics_declares_material_components() {
         let cfg = insert(Configuration::new(1).unwrap());
@@ -939,128 +799,6 @@ mod tests {
 
         let dir = SubModel::dirichlet(cfg, "T".into(), "q".into(), vec![a.id()]).unwrap();
         assert!(dir.material_components().is_none());
-    }
-
-    #[test]
-    fn build_material_field_errors_on_missing_required_component() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
-        mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
-        let hc = SubModel::heat_conduction(sub).unwrap();
-        // "rho" is not what HeatConduction needs ⇒ missing "k".
-        let err = hc.build_material_field(&[("rho", 1.0)]).unwrap_err();
-        let msg = format!("{}", err);
-        assert!(msg.contains("'k'"), "unexpected error: {}", msg);
-    }
-
-    #[test]
-    fn build_material_field_filters_extra_components() {
-        // Extras (like "rho") are silently dropped; only declared ones are kept.
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
-        mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
-        let hc = SubModel::heat_conduction(sub).unwrap();
-        let mat = hc
-            .build_material_field(&[("k", 2.0), ("rho", 7.0), ("cp", 9.0)])
-            .unwrap();
-        assert_eq!(mat.components(), &["k".to_string()]);
-        assert!((mat.value(0, 0, "k").unwrap() - 2.0).abs() < 1e-12);
-        assert!(mat.value(0, 0, "rho").is_err());
-    }
-
-    /// Model::build_material_field (uniform mode) skips Dirichlet
-    /// sub-models and applies the same `(component, value)` list to
-    /// every material-hungry sub-model.
-    #[test]
-    fn model_build_material_field_uniform_skips_dirichlet_and_assembles() {
-        let (_cfg, a_id, b_id, model, _) = build_seg2_heat_model(2.0, 1.5, true);
-        // build_seg2_heat_model gave us a model with 1 HC + 1 Dirichlet.
-        let materials = model.build_material_field(&[("k", 1.5)]).unwrap();
-        // Only the HC slot is present.
-        assert_eq!(materials.len(), 1);
-
-        // End-to-end : assembled stiffness must match the analytical
-        // value k/L on the diagonal, just like the existing analytical test.
-        let k = assemble::stiffness(&model, &materials).unwrap();
-        let tol = 1e-12;
-        let expected = 1.5 / 2.0;
-        assert!((k.get(a_id, "q", a_id, "T").unwrap() - expected).abs() < tol);
-        assert!((k.get(b_id, "q", b_id, "T").unwrap() - expected).abs() < tol);
-    }
-
-    /// Model::build_material_field_per_sub_model lets each zone carry
-    /// its own (component, value) list. Empty slot = skip.
-    #[test]
-    fn model_build_material_field_per_sub_model_two_zones() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-        let mut mesh = Mesh::empty();
-        let sm_a = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
-            sm.add_cell(&[n0.id(), n1.id()]).unwrap();
-            insert(sm)
-        };
-        let sm_b = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
-            sm.add_cell(&[n1.id(), n2.id()]).unwrap();
-            insert(sm)
-        };
-        mesh.add_sub(sm_a).unwrap();
-        mesh.add_sub(sm_b).unwrap();
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-
-        let mut model = Model::empty();
-        model
-            .add_sub(insert(SubModel::heat_conduction(fes.subspace(0).unwrap()).unwrap()))
-            .unwrap();
-        model
-            .add_sub(insert(
-                SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![n0.id()]).unwrap(),
-            ))
-            .unwrap();
-        model
-            .add_sub(insert(SubModel::heat_conduction(fes.subspace(1).unwrap()).unwrap()))
-            .unwrap();
-
-        // Slot lengths must match the sub_model_count (3): HC, Dirichlet (skip), HC.
-        let materials = model
-            .build_material_field_per_sub_model(&[
-                &[("k", 1.0)], // zone A
-                &[],           // Dirichlet — skip
-                &[("k", 4.0)], // zone B
-            ])
-            .unwrap();
-        // Only the two HC slots are present.
-        assert_eq!(materials.len(), 2);
-
-        // End-to-end : same analytical layout as the existing multi-zone test.
-        let k = assemble::stiffness(&model, &materials).unwrap();
-        let tol = 1e-12;
-        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T").unwrap();
-        // n1 is shared between the two zones, so diagonal = 1.0 + 4.0 = 5.0.
-        assert!((v(n0.id(), n0.id()) - 1.0).abs() < tol);
-        assert!((v(n1.id(), n1.id()) - 5.0).abs() < tol);
-        assert!((v(n2.id(), n2.id()) - 4.0).abs() < tol);
-    }
-
-    #[test]
-    fn model_build_material_field_per_sub_model_length_mismatch_errors() {
-        let (_cfg, _, _, model, _) = build_seg2_heat_model(1.0, 1.0, true);
-        // Model has 2 sub-models ; only 1 spec ⇒ error.
-        let res = model.build_material_field_per_sub_model(&[&[("k", 1.0)]]);
-        assert!(res.is_err());
-        let msg = format!("{}", res.unwrap_err());
-        assert!(msg.contains("1") && msg.contains("2"));
     }
 
     /// `assemble::stiffness` must fail with a clear error when no

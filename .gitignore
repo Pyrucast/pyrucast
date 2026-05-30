@@ -225,6 +225,13 @@ pip-selfcheck.json
 !/src/bin/
 !/src/bin/**
 
+# Whitelist the ops::build source module — the `build/` pattern from the
+# Python template above otherwise hides src/ops/build/ and its files
+# never get committed (the crate then fails to compile from a fresh
+# clone, since ops/mod.rs declares `pub mod build;`).
+!/src/ops/build/
+!/src/ops/build/**
+
 ### Vim ###
 # Swap
 [._]*.s[a-v][a-z]

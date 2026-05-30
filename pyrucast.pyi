@@ -29,11 +29,14 @@ __all__ = [
     "from_live_nodes",
     "line_seg2",
     "mass",
+    "material_field",
+    "material_field_per_sub_model",
     "merge",
     "restrict",
     "set_swap_dir",
     "solve",
     "stiffness",
+    "sub_material_field",
     "swap_dir",
     "sweep_qua4",
     "to_poi1",
@@ -327,21 +330,6 @@ class Model:
     def __new__(cls) -> Model: ...
     def primal_vars(self) -> builtins.list[builtins.str]: ...
     def dual_vars(self) -> builtins.list[builtins.str]: ...
-    def build_material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
-        r"""
-        `model.build_material_field([("k", 1.0), ...])` — material
-        ElementField with the same uniform `(component, value)` pairs
-        applied to every material-hungry sub-model. Sub-models that don't
-        need a material (Dirichlet, …) are skipped.
-        """
-    def build_material_field_per_sub_model(self, components_and_values_per_sub_model: typing.Sequence[typing.Sequence[tuple[builtins.str, builtins.float]]]) -> ElementField:
-        r"""
-        `model.build_material_field_per_sub_model([[("k", 1.0)], [], [("k", 4.0)]])`
-        — material ElementField where each sub-model gets its own
-        `(component, value)` list. The outer list length must equal
-        `sub_model_count()`. An empty inner list **skips** the matching
-        sub-model (typical for Dirichlet).
-        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, idx: builtins.int) -> SubModel: ...
     def sub_model_count(self) -> builtins.int: ...
@@ -651,13 +639,6 @@ class SubModel:
         Names of the material components this sub-model expects, or
         `None` for physics that don't need material data (Dirichlet, …).
         """
-    def build_material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
-        r"""
-        `sub_model.build_material_field([("k", 1.0), ...])` — fresh
-        SubElementField on this sub-model's FE subspace, pre-filled with
-        the given uniform value per component. Errors for physics that
-        don't need a material (e.g. Dirichlet).
-        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
 
@@ -695,6 +676,21 @@ def mass(model: Model) -> Matrix:
     
     v0 stub: no physics has a mass term yet, so this returns an empty
     finalized `Matrix` with the model's DOF layout.
+    """
+
+def material_field(model: Model, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
+    r"""
+    Build a material `ElementField` applying the same uniform
+    `(component, value)` pairs to every material-hungry sub-model of
+    `model`. Sub-models that need no material (Dirichlet, …) are skipped.
+    """
+
+def material_field_per_sub_model(model: Model, components_and_values_per_sub_model: typing.Sequence[typing.Sequence[tuple[builtins.str, builtins.float]]]) -> ElementField:
+    r"""
+    Build a material `ElementField` where each sub-model gets its own
+    `(component, value)` list. The outer list length must equal
+    `model.sub_model_count()`. An empty inner list **skips** the matching
+    sub-model (typical for Dirichlet).
     """
 
 def merge(a: NodeField, b: NodeField) -> NodeField:
@@ -735,6 +731,16 @@ def stiffness(model: Model, materials: ElementField) -> Matrix:
     
     `materials` carries the per-zone material data: every sub-model that
     needs it picks the `SubElementField` whose FE subspace matches its own.
+    """
+
+def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
+    r"""
+    Build the material `SubElementField` of one sub-model.
+    
+    `sub_material_field(sub_model, [("k", 1.0), ...])` — fresh
+    SubElementField on the sub-model's FE subspace, pre-filled with the
+    given uniform value per declared component. Errors for physics that
+    need no material (e.g. Dirichlet).
     """
 
 def swap_dir() -> pathlib.Path:
