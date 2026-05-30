@@ -206,7 +206,6 @@ impl ExactSizeIterator for ElementIter {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::aggregate::Aggregate;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::containers::mesh::configuration::Configuration;
