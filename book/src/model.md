@@ -14,9 +14,11 @@ Physique          Model / SubModel / Physics           (loi, matériaux, assembl
 Model
 ├── sub_models: Vec<SubModel>
 ├── primal_vars(): Vec<String>      # union — colonnes des matrices
-├── dual_vars():   Vec<String>      # union — lignes des matrices
-├── stiffness() -> Matrix            # K  (assemblé sur demande)
-└── mass()      -> Matrix            # M  (assemblé sur demande)
+└── dual_vars():   Vec<String>      # union — lignes des matrices
+
+ops::assemble (opérateurs, pas des méthodes de Model)
+├── stiffness(model, materials) -> Matrix   # K  (assemblé sur demande)
+└── mass(model)                 -> Matrix   # M  (assemblé sur demande)
 
 SubModel
 └── physics: Physics                  # un SubModel = une physique
@@ -92,7 +94,7 @@ Le multiplicateur lui-même se retrouve dans la solution sous le nom `lambda_<pr
 
 ## Règle invariante : un Model = une Matrice
 
-`stiffness()` et `mass()` produisent chacune **une seule** `Matrix` couvrant l'ensemble des DOFs du Model (primaux ⊕ multiplicateurs). Les conditions limites n'ont pas de statut spécial — ce sont des sub-models comme les autres qui contribuent leurs entrées dans la même matrice globale.
+`assemble::stiffness(model, materials)` et `assemble::mass(model)` produisent chacune **une seule** `Matrix` couvrant l'ensemble des DOFs du Model (primaux ⊕ multiplicateurs). Les conditions limites n'ont pas de statut spécial — ce sont des sub-models comme les autres qui contribuent leurs entrées dans la même matrice globale.
 
 Cette uniformité simplifie tout : le solveur reçoit une seule `Matrix` + un seul `NodeField` ; pas besoin de jongler avec un système saddle-point composé.
 
@@ -216,7 +218,7 @@ assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux à gauch
 
 ## Limitations actuelles
 
-- **Mass non assemblée** : `Model::mass()` retourne une matrice vide en v0. L'intégrande `∫ ρc_p · N_i N_j dx` (et son équivalent pour les autres physiques) est additif et sera ajouté quand le besoin transient se présentera.
+- **Mass non assemblée** : `assemble::mass(model)` retourne une matrice vide en v0. L'intégrande `∫ ρc_p · N_i N_j dx` (et son équivalent pour les autres physiques) est additif et sera ajouté quand le besoin transient se présentera.
 - **Une seule physique « réelle »** : `HeatConduction`. `LinearElasticity`, `Timoshenko`, `Periodic`, etc. viendront comme nouvelles variantes de `Physics`, chacune avec son match-arm dans l'assemblage. Le pattern est borné et lisible.
-- **Pas de check de cohérence pré-assemblage** : la consistance (matériau définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre sub-models, etc.) est vérifiée au moment du `stiffness()` / `mass()`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose problème, un check eager est facile à ajouter.
+- **Pas de check de cohérence pré-assemblage** : la consistance (matériau définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre sub-models, etc.) est vérifiée au moment de `assemble::stiffness` / `assemble::mass`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose problème, un check eager est facile à ajouter.
 - **Solveur dense seulement** : le `solve` fourni est un harnais de test (LU dense via `nalgebra`). Pour les vrais problèmes Phase 3 introduira un trait `LinearSolver` enfichable (itératifs, direct creux, factorisation Cholesky pour les cas symétriques détectés via le drapeau de la `Matrix`).

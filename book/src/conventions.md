@@ -1,5 +1,34 @@
 # Conventions & philosophie
 
+## Méthodes vs fonctions libres
+
+La règle qui décide si une opération est une **méthode** d'un conteneur ou
+une **fonction libre** d'un module `ops/` est figée dans le fichier
+`CONVENTIONS.md` à la racine du dépôt. En résumé :
+
+- **méthode** — accesseur, mutation préservant l'invariant, ou vue dérivée
+  d'**un seul** conteneur (`mesh.cell_count()`, `field.set(...)`,
+  `field.components()`) ;
+- **fonction libre `ops::<thème>`** — tout opérateur qui croise des
+  conteneurs ou appartient à une famille d'opérateurs
+  (`ops::field::restrict(field, mesh)`, `ops::assemble::stiffness(model,
+  mat)`, `ops::mesher::consolidate(mesh)`).
+
+Le binding Python est un **miroir 1:1** : une fonction Rust devient une
+fonction de module Python, une méthode reste une méthode. On vise le style
+numpy/scipy (et l'héritage cast3m) — des opérateurs nommés dans des
+modules thématiques plutôt que des chaînes de méthodes :
+
+```python
+import pyrucast
+
+# fonctions (opérateurs), pas des méthodes :
+poi = pyrucast.to_poi1(mesh)
+coords = pyrucast.coordinates(mesh)
+K = pyrucast.stiffness(model, materials)
+sol = pyrucast.solve(K, rhs)
+```
+
 ## Erreurs
 
 Toute l'API publique renvoie `pyrucast::Result<T>`, alias de `Result<T, PyrucastError>`.

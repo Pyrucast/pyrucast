@@ -1,6 +1,6 @@
 # Matrice creuse (`Matrix`)
 
-`Matrix` est le **conteneur de sortie** d'un assemblage : c'est ce que [`Model`](model.md) (à venir) produit via `stiffness()` ou `mass()`. Elle représente une matrice creuse dont les lignes et les colonnes sont identifiées par des **DOFs nommés**.
+`Matrix` est le **conteneur de sortie** d'un assemblage : c'est ce que produisent les opérateurs `assemble::stiffness(model, materials)` / `assemble::mass(model)` à partir d'un [`Model`](model.md). Elle représente une matrice creuse dont les lignes et les colonnes sont identifiées par des **DOFs nommés**.
 
 ## Identification des DOFs : `(NodeId, nom_de_champ)`
 
