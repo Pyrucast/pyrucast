@@ -93,15 +93,6 @@ impl PyNodeField {
         })
     }
 
-    fn merge_fields(&self, other: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
-        let result = with(&self.handle, |a| {
-            with(&other.handle, |b| a.merge_fields(b))?
-        })??;
-        Ok(PyNodeField {
-            handle: insert(result),
-        })
-    }
-
     fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
         with_mut(&self.handle, |f| f.add_to_component(component, scalar))??;
         Ok(())
@@ -202,6 +193,21 @@ pub fn coordinates(
 #[pyfunction]
 pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
     let result = with(&field.handle, |nf| crate::ops::field::restrict(nf, &mesh.inner))??;
+    Ok(PyNodeField {
+        handle: insert(result),
+    })
+}
+
+/// Merge two node fields over the union of their supports.
+///
+/// Keeps each field's value where only one is defined, `0.0` where
+/// neither is. Errors if the two fields hold different values at the same
+/// `(node, component)` pair, or are attached to different `Configuration`s.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
+    let result =
+        with(&a.handle, |fa| with(&b.handle, |fb| crate::ops::field::merge(fa, fb))?)??;
     Ok(PyNodeField {
         handle: insert(result),
     })

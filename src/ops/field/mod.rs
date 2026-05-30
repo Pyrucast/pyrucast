@@ -8,7 +8,9 @@
 //! fe_space + field).
 
 pub mod coordinates;
+pub mod merge;
 pub mod restrict;
 
 pub use coordinates::coordinates;
+pub use merge::merge;
 pub use restrict::restrict;

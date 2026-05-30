@@ -285,7 +285,7 @@ impl NodeField {
 
     // ── Helpers privés ──────────────────────────────────────────────────────
 
-    fn component_value_opt(&self, nid: NodeId, comp: &str) -> Option<f64> {
+    pub(crate) fn component_value_opt(&self, nid: NodeId, comp: &str) -> Option<f64> {
         let ni = self.index_of(nid)?;
         let ci = self.component_index(comp)?;
         Some(self.values[ni * self.components.len() + ci])
@@ -295,7 +295,7 @@ impl NodeField {
         self.component_value_opt(nid, comp).unwrap_or(0.0)
     }
 
-    fn check_compatible(&self, other: &NodeField) -> Result<()> {
+    pub(crate) fn check_compatible(&self, other: &NodeField) -> Result<()> {
         let a = self.configuration();
         let b = other.configuration();
         if a.index() != b.index() || a.generation() != b.generation() {
@@ -307,7 +307,7 @@ impl NodeField {
     }
 
     /// Returns (union_components, union_nodes): self's items first, then other's extras.
-    fn union_layout(&self, other: &NodeField) -> (Vec<String>, Vec<NodeId>) {
+    pub(crate) fn union_layout(&self, other: &NodeField) -> (Vec<String>, Vec<NodeId>) {
         let mut components = self.components.clone();
         for c in &other.components {
             if !components.iter().any(|x| x == c) {
@@ -367,40 +367,6 @@ impl NodeField {
             for (ci, comp) in components.iter().enumerate() {
                 result.values[ni * ncomp + ci] =
                     self.get_or_default(nid, comp) + other.get_or_default(nid, comp);
-            }
-        }
-        Ok(result)
-    }
-
-    /// Merge two fields.
-    ///
-    /// Like [`add_fields`](Self::add_fields) but errors if both fields have
-    /// a **different** value at the same `(node, component)` pair. Equal
-    /// values at shared points are kept as-is.
-    pub fn merge_fields(&self, other: &NodeField) -> Result<NodeField> {
-        self.check_compatible(other)?;
-        let (components, nodes) = self.union_layout(other);
-        let mut result =
-            NodeField::new_with_nodes(self.configuration(), nodes.clone(), components.clone())?;
-        let ncomp = components.len();
-        for (ni, &nid) in nodes.iter().enumerate() {
-            for (ci, comp) in components.iter().enumerate() {
-                let va = self.component_value_opt(nid, comp);
-                let vb = other.component_value_opt(nid, comp);
-                let v = match (va, vb) {
-                    (None, None) => 0.0,
-                    (Some(a), None) => a,
-                    (None, Some(b)) => b,
-                    (Some(a), Some(b)) if a == b => a,
-                    (Some(a), Some(b)) => {
-                        return Err(PyrucastError::Message(format!(
-                            "merge_fields: conflicting values at node {}, \
-                             component \"{}\": {} vs {}",
-                            nid, comp, a, b
-                        )))
-                    }
-                };
-                result.values[ni * ncomp + ci] = v;
             }
         }
         Ok(result)
@@ -937,51 +903,6 @@ mod tests {
         let a = mk(&cfg1);
         let b = mk(&cfg2);
         assert!(a.add_fields(&b).is_err());
-    }
-
-    // ── merge_fields ─────────────────────────────────────────────────────────
-
-    #[test]
-    fn merge_fields_compatible() {
-        // a: nodes [na, nb] with T = [5.0, 3.0]
-        // b: nodes [nb, nc] with T = [3.0, 9.0]  (nb shared, same value → compatible)
-        let cfg = insert(Configuration::new(1).unwrap());
-        let na = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let nb = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let nc = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-        let sm_a = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-            sm.add_cell(&[na.id()]).unwrap();
-            sm.add_cell(&[nb.id()]).unwrap();
-            insert(sm)
-        };
-        let sm_b = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-            sm.add_cell(&[nb.id()]).unwrap();
-            sm.add_cell(&[nc.id()]).unwrap();
-            insert(sm)
-        };
-        let mut a = NodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
-        let mut b = NodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
-        a.set(0, 0, 5.0).unwrap(); // na → 5.0
-        a.set(1, 0, 3.0).unwrap(); // nb → 3.0
-        b.set(0, 0, 3.0).unwrap(); // nb → 3.0 (same value, compatible)
-        b.set(1, 0, 9.0).unwrap(); // nc → 9.0
-        let c = a.merge_fields(&b).unwrap();
-        assert_eq!(c.node_count(), 3);
-        assert_eq!(c.value(na.id(), "T").unwrap(), 5.0);
-        assert_eq!(c.value(nb.id(), "T").unwrap(), 3.0);
-        assert_eq!(c.value(nc.id(), "T").unwrap(), 9.0);
-    }
-
-    #[test]
-    fn merge_fields_conflict_errors() {
-        let (_cfg, _nodes, sm) = make_poi1_with(1);
-        let mut a = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
-        let mut b = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
-        a.set(0, 0, 1.0).unwrap();
-        b.set(0, 0, 2.0).unwrap();
-        assert!(a.merge_fields(&b).is_err());
     }
 
     // ── Scalaires sur composante ──────────────────────────────────────────────

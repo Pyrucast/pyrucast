@@ -90,6 +90,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::mesh::to_poi1, m)?)?;
     m.add_function(wrap_pyfunction!(py::node_field::coordinates, m)?)?;
     m.add_function(wrap_pyfunction!(py::node_field::restrict, m)?)?;
+    m.add_function(wrap_pyfunction!(py::node_field::merge, m)?)?;
     m.add_class::<py::configuration::PyConfiguration>()?;
     m.add_class::<py::node::PyNode>()?;
     m.add_class::<py::mesh::PySubMesh>()?;
