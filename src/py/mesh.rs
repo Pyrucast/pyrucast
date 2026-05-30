@@ -210,13 +210,6 @@ impl PyMesh {
         Ok(PyMesh { inner: mesh })
     }
 
-    /// Merge submeshes of the same type and drop duplicate cells.
-    /// Returns a new mesh with one submesh per element type.
-    fn consolidate(&self) -> PyResult<PyMesh> {
-        let mesh = self.inner.consolidate()?;
-        Ok(PyMesh { inner: mesh })
-    }
-
     /// `mesh.cell(submesh_idx, cell_idx)` → `Cell` view; same thing
     /// as `mesh[submesh_idx][cell_idx]`.
     fn cell(
@@ -292,6 +285,16 @@ pub fn from_live_nodes(config: PyRef<PyConfiguration>) -> PyResult<PyMesh> {
 #[pyfunction]
 pub fn to_poi1(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     let result = crate::ops::mesher::to_poi1(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Fuse submeshes of the same element type into one and drop duplicate
+/// cells. Returns a new mesh with one submesh per element type, in
+/// first-seen order.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn consolidate(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::consolidate(&mesh.inner)?;
     Ok(PyMesh { inner: result })
 }
 

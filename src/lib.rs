@@ -88,6 +88,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::mesh::extrude, m)?)?;
     m.add_function(wrap_pyfunction!(py::mesh::fill_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::mesh::to_poi1, m)?)?;
+    m.add_function(wrap_pyfunction!(py::mesh::consolidate, m)?)?;
     m.add_function(wrap_pyfunction!(py::node_field::coordinates, m)?)?;
     m.add_function(wrap_pyfunction!(py::node_field::restrict, m)?)?;
     m.add_function(wrap_pyfunction!(py::node_field::merge, m)?)?;
