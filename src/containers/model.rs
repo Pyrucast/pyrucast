@@ -64,7 +64,7 @@
 //! use pyrucast::containers::element_field::SubElementField;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
-//! use pyrucast::containers::mesh::Mesh;
+//! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::model::{Model, Physics, SubModel};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::ops::assemble;
@@ -74,7 +74,7 @@
 //! let cfg = insert(Configuration::new(1).unwrap());
 //! let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
 //! let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-//! let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
 //! mesh.add_cell(&[a.id(), b.id()]).unwrap();
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //! let sub = fes.subspace(0).unwrap();
@@ -92,7 +92,7 @@
 //!     .unwrap();
 //! model
 //!     .add_sub(insert(
-//!         SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap(),
+//!         SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap(),
 //!     ))
 //!     .unwrap();
 //!
@@ -102,13 +102,14 @@
 //! assert_eq!(k.n_cols().unwrap(), 3);
 //! ```
 
-use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::{Node, NodeId};
 use crate::containers::element_field::SubElementField;
 use crate::error::Result;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::ElementType;
-use crate::containers::mesh::SubMesh;
+use crate::containers::mesh::{Mesh, SubMesh};
+use crate::aggregate::Aggregate;
 use crate::models::{dirichlet, heat_conduction};
 use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
@@ -264,12 +265,11 @@ impl SubModel {
     /// multiplier nodes that carry the `lambda_<primal_var>` and
     /// `<primal_var>` DOFs of the constraint sub-model.
     pub fn dirichlet(
-        config: Handle<Configuration>,
         primal_var: String,
         primal_dual: String,
-        constrained_nodes: Vec<NodeId>,
+        constrained_nodes: &[Node],
     ) -> Result<Self> {
-        let built = dirichlet::build(config, &constrained_nodes)?;
+        let built = dirichlet::build(constrained_nodes)?;
         Ok(Self {
             physics: Physics::Dirichlet {
                 primal_var,
@@ -299,6 +299,20 @@ impl SubModel {
             }
             _ => Ok(Vec::new()),
         }
+    }
+
+    /// POI1 [`Mesh`] of the multiplier nodes (shares the multiplier
+    /// support submesh — zero-copy). Empty for non-Lagrange physics.
+    ///
+    /// This is the user-facing handle to the multiplier nodes: build a
+    /// load [`crate::containers::node_field::NodeField`] on its single
+    /// submesh to impose the constrained values.
+    pub fn multiplier_mesh(&self) -> Result<Mesh> {
+        let mut mesh = Mesh::empty();
+        if let Physics::Dirichlet { multiplier_support, .. } = &self.physics {
+            mesh.add_sub(multiplier_support.clone())?;
+        }
+        Ok(mesh)
     }
 
     /// FE subspace on which this sub-model expects its material data, or
@@ -497,7 +511,7 @@ mod tests {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[length]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();
@@ -514,7 +528,7 @@ mod tests {
         if dirichlet_at_left {
             model
                 .add_sub(insert(
-                    SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()])
+                    SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a))
                         .unwrap(),
                 ))
                 .unwrap();
@@ -571,7 +585,7 @@ mod tests {
         let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[n0.id(), n1.id()]).unwrap();
         mesh.add_cell(&[n1.id(), n2.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
@@ -652,10 +666,9 @@ mod tests {
         with(&cfg, |c| assert_eq!(c.refcount(a_id), 1)).unwrap();
 
         let sub = SubModel::dirichlet(
-            cfg.clone(),
             "T".into(),
             "q".into(),
-            vec![a_id],
+            std::slice::from_ref(&a),
         )
         .unwrap();
 
@@ -674,8 +687,7 @@ mod tests {
 
     #[test]
     fn dirichlet_empty_constraint_list_rejected() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        assert!(SubModel::dirichlet(cfg, "T".into(), "q".into(), vec![]).is_err());
+        assert!(SubModel::dirichlet("T".into(), "q".into(), &[]).is_err());
     }
 
     #[test]
@@ -684,7 +696,7 @@ mod tests {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();
@@ -790,14 +802,14 @@ mod tests {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();
         let hc = SubModel::heat_conduction(sub).unwrap();
         assert_eq!(hc.material_components(), Some(&["k"][..]));
 
-        let dir = SubModel::dirichlet(cfg, "T".into(), "q".into(), vec![a.id()]).unwrap();
+        let dir = SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap();
         assert!(dir.material_components().is_none());
     }
 
@@ -808,7 +820,7 @@ mod tests {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();

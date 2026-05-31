@@ -1,7 +1,7 @@
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::Node;
-use crate::containers::mesh::Mesh;
+use crate::containers::mesh::{Mesh, SubMesh};
 
 /// Build a closed circle of `n_elems` SEG2 elements.
 ///
@@ -68,7 +68,7 @@ pub fn circle_seg2(center: &Node, normal: &[f64], radius: f64, n_elems: usize) -
         nodes.push(Node::create_in(cfg.clone(), &p3.as_slice()[..dim])?);
     }
 
-    let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
+    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
     for i in 0..n_elems {
         mesh.add_cell(&[nodes[i].id(), nodes[(i + 1) % n_elems].id()])?;
     }

@@ -17,16 +17,16 @@ def _two_zone_model():
     nodes = [c.add_node([i * 1.0]) for i in range(3)]
     mesh = pyrucast.Mesh(c)
     sm_a = pyrucast.SubMesh(c, "SEG2")
-    sm_a.add_cell([nodes[0].id, nodes[1].id])
+    sm_a.add_cell([nodes[0], nodes[1]])
     sm_b = pyrucast.SubMesh(c, "SEG2")
-    sm_b.add_cell([nodes[1].id, nodes[2].id])
+    sm_b.add_cell([nodes[1], nodes[2]])
     mesh.add_sub(sm_a)
     mesh.add_sub(sm_b)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model()
     model.add_sub(pyrucast.SubModel.heat_conduction(fes[0]))
-    model.add_sub(pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[0].id]))
+    model.add_sub(pyrucast.SubModel.dirichlet("T", "q", [nodes[0]]))
     model.add_sub(pyrucast.SubModel.heat_conduction(fes[1]))
     return c, nodes, fes, model
 
@@ -39,7 +39,7 @@ def test_sub_model_build_material_field_uniform_value():
     a = c.add_node([0.0])
     b = c.add_node([2.0])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([a.id, b.id])
+    mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     hc = pyrucast.SubModel.heat_conduction(fes[0])
 
@@ -52,7 +52,7 @@ def test_sub_model_build_material_field_uniform_value():
 def test_sub_model_build_material_field_errors_on_dirichlet():
     c = pyrucast.Configuration(1)
     a = c.add_node([0.0])
-    dir_sub = pyrucast.SubModel.dirichlet(c, "T", "q", [a.id])
+    dir_sub = pyrucast.SubModel.dirichlet("T", "q", [a])
     with pytest.raises(RuntimeError):
         pyrucast.sub_material_field(dir_sub, [("k", 1.0)])
 
@@ -62,7 +62,7 @@ def test_sub_model_build_material_field_errors_on_empty_list():
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([a.id, b.id])
+    mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     hc = pyrucast.SubModel.heat_conduction(fes[0])
     with pytest.raises(RuntimeError):
@@ -85,7 +85,7 @@ def test_model_build_material_field_uniform_skips_dirichlet():
     def v(i, j):
         return K.get(i, "q", j, "T")
 
-    n0, n1, n2 = (n.id for n in nodes)
+    n0, n1, n2 = nodes
     assert abs(v(n0, n0) - 1.5) < tol
     # Shared middle node: contributions sum.
     assert abs(v(n1, n1) - 3.0) < tol
@@ -105,7 +105,7 @@ def test_model_build_material_field_per_sub_model_different_zones():
     assert len(materials) == 2  # only the two HC slots
 
     K = pyrucast.stiffness(model, materials)
-    n0, n1, n2 = (n.id for n in nodes)
+    n0, n1, n2 = nodes
     tol = 1e-12
 
     def v(i, j):
@@ -128,12 +128,12 @@ def test_sub_model_material_components_lists_required_components():
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([a.id, b.id])
+    mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     hc = pyrucast.SubModel.heat_conduction(fes[0])
     assert hc.material_components() == ["k"]
 
-    dir_sub = pyrucast.SubModel.dirichlet(c, "T", "q", [a.id])
+    dir_sub = pyrucast.SubModel.dirichlet("T", "q", [a])
     assert dir_sub.material_components() is None
 
 
@@ -142,7 +142,7 @@ def test_sub_model_build_material_field_filters_extras_and_errors_on_missing():
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([a.id, b.id])
+    mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     hc = pyrucast.SubModel.heat_conduction(fes[0])
 

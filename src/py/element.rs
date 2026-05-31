@@ -2,6 +2,7 @@
 
 use crate::containers::finite_element_space::Element;
 use crate::py::cell::PyCell;
+use crate::py::node::PyNode;
 use pyo3::prelude::*;
 
 /// Python wrapper for [`Element`] — a thin view on a single element of a
@@ -46,9 +47,11 @@ impl PyElement {
         Ok(PyCell { inner: c })
     }
 
-    /// Connectivity (node ids) of this element.
-    fn node_ids(&self) -> PyResult<Vec<u32>> {
-        Ok(self.inner.node_ids()?.into_iter().map(|n| n.0).collect())
+    /// Materialised nodes of this element (each refcounted on the
+    /// Configuration) — symmetric with `Cell.nodes()`.
+    fn nodes(&self) -> PyResult<Vec<PyNode>> {
+        let nodes = self.inner.cell()?.nodes()?;
+        Ok(nodes.into_iter().map(PyNode::from_node).collect())
     }
 
     /// Reference coordinates of the `g`-th Gauss point.

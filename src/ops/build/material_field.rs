@@ -115,7 +115,7 @@ mod tests {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[length]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let mut model = Model::empty();
@@ -125,7 +125,7 @@ mod tests {
         if dirichlet_at_left {
             model
                 .add_sub(insert(
-                    SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()])
+                    SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a))
                         .unwrap(),
                 ))
                 .unwrap();
@@ -137,7 +137,7 @@ mod tests {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let hc = SubModel::heat_conduction(fes.subspace(0).unwrap()).unwrap();
@@ -161,7 +161,7 @@ mod tests {
     fn sub_errors_on_dirichlet() {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let dir = SubModel::dirichlet(cfg, "T".into(), "q".into(), vec![a.id()]).unwrap();
+        let dir = SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap();
         assert!(sub_material_field(&dir, &[("k", 1.0)]).is_err());
     }
 
@@ -233,7 +233,7 @@ mod tests {
             .unwrap();
         model
             .add_sub(insert(
-                SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![n0.id()]).unwrap(),
+                SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&n0)).unwrap(),
             ))
             .unwrap();
         model

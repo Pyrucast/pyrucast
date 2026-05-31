@@ -7,7 +7,7 @@
 //! enforces `u_n = u_d_n` once the user fills the load `NodeField` at
 //! `(multiplier_node, primal_var)`.
 
-use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::{Node, NodeId};
 use crate::containers::mesh::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::containers::matrix::SubMatrix;
@@ -31,24 +31,23 @@ pub struct Built {
 }
 
 /// Build the Lagrange-multiplier infrastructure for a Dirichlet constraint
-/// on `constrained_nodes` inside `config`. One new multiplier node per
-/// constrained node is added to `config` at the same coordinates.
-pub fn build(
-    config: Handle<Configuration>,
-    constrained_nodes: &[NodeId],
-) -> Result<Built> {
-    if constrained_nodes.is_empty() {
-        return Err(PyrucastError::Message(
-            "Dirichlet: constrained_nodes must not be empty".into(),
-        ));
-    }
+/// on `constrained_nodes`. The Configuration is taken from the nodes
+/// themselves (every [`Node`] carries its own); one new multiplier node
+/// per constrained node is added to it at the same coordinates.
+pub fn build(constrained_nodes: &[Node]) -> Result<Built> {
+    let config = constrained_nodes
+        .first()
+        .ok_or_else(|| {
+            PyrucastError::Message("Dirichlet: constrained_nodes must not be empty".into())
+        })?
+        .configuration();
 
     // POI1 SubMesh that owns the per-node refcounts on the constrained
     // nodes. `add_cell` increfs each; if any fails, the partial SubMesh's
     // `Drop` rolls back via `?`.
     let mut constrained_sm = SubMesh::new(config.clone(), ElementType::POI1);
-    for &nid in constrained_nodes {
-        constrained_sm.add_cell(&[nid])?;
+    for n in constrained_nodes {
+        constrained_sm.add_cell(&[n.id()])?;
     }
     let constrained_support = insert(constrained_sm);
 
@@ -58,8 +57,8 @@ pub fn build(
     // — ownership transfer, no extra incref/decref.
     let mut coords: Vec<Vec<f64>> = Vec::with_capacity(constrained_nodes.len());
     with(&config, |c| -> Result<()> {
-        for &nid in constrained_nodes {
-            coords.push(c.coord(nid)?.to_vec());
+        for n in constrained_nodes {
+            coords.push(c.coord(n.id())?.to_vec());
         }
         Ok(())
     })??;

@@ -3,8 +3,8 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
-use crate::containers::mesh::NodeId;
 use crate::py::mesh::PySubMesh;
+use crate::py::node::PyNode;
 use crate::store::{insert, with, Handle};
 use pyo3::prelude::*;
 
@@ -53,27 +53,29 @@ impl PySubMatrix {
 
     fn add_entry(
         &self,
-        row_node: u32,
+        row_node: PyRef<'_, PyNode>,
         row_field: &str,
-        col_node: u32,
+        col_node: PyRef<'_, PyNode>,
         col_field: &str,
         value: f64,
     ) -> PyResult<()> {
+        let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
         crate::store::with_mut(&self.handle, |m| {
-            m.add_entry(NodeId(row_node), row_field, NodeId(col_node), col_field, value)
+            m.add_entry(rn, row_field, cn, col_field, value)
         })??;
         Ok(())
     }
 
     fn get(
         &self,
-        row_node: u32,
+        row_node: PyRef<'_, PyNode>,
         row_field: &str,
-        col_node: u32,
+        col_node: PyRef<'_, PyNode>,
         col_field: &str,
     ) -> PyResult<f64> {
+        let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
         Ok(with(&self.handle, |m| {
-            m.get(NodeId(row_node), row_field, NodeId(col_node), col_field)
+            m.get(rn, row_field, cn, col_field)
         })?)
     }
 
@@ -230,14 +232,13 @@ impl PyMatrix {
 
     fn get(
         &self,
-        row_node: u32,
+        row_node: PyRef<'_, PyNode>,
         row_field: &str,
-        col_node: u32,
+        col_node: PyRef<'_, PyNode>,
         col_field: &str,
     ) -> PyResult<f64> {
-        Ok(self
-            .inner
-            .get(NodeId(row_node), row_field, NodeId(col_node), col_field)?)
+        let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
+        Ok(self.inner.get(rn, row_field, cn, col_field)?)
     }
 
     fn dense(&self) -> PyResult<Vec<f64>> {

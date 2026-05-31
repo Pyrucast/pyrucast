@@ -130,7 +130,7 @@ mod tests {
         let cfg = insert(Configuration::new(3).unwrap());
         let a = Node::create_in(cfg.clone(), &[1.0, 2.0, 3.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[4.0, 5.0, 6.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         mesh.add_cell(&[b.id()]).unwrap();
 
@@ -152,7 +152,7 @@ mod tests {
         let d = Node::create_in(cfg.clone(), &[1.5, 1.0]).unwrap();
 
         // Two triangles sharing edge (b, c): 4 unique nodes.
-        let mut tri = Mesh::with_element_type(cfg.clone(), ElementType::TRI3);
+        let mut tri = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         tri.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
 
@@ -168,7 +168,7 @@ mod tests {
     fn default_components_follow_dimension() {
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[7.0, 8.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
 
         let f = coordinates(&mesh, None).unwrap();
@@ -179,7 +179,7 @@ mod tests {
     fn explicit_component_subset() {
         let cfg = insert(Configuration::new(3).unwrap());
         let a = Node::create_in(cfg.clone(), &[1.0, 2.0, 3.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
 
         let f = coordinates(&mesh, Some(vec!["X".into(), "Z".into()])).unwrap();
@@ -192,7 +192,7 @@ mod tests {
     fn rejects_unknown_component() {
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         assert!(coordinates(&mesh, Some(vec!["W".into()])).is_err());
     }
@@ -201,7 +201,7 @@ mod tests {
     fn rejects_axis_beyond_dimension() {
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         // "Z" needs dim ≥ 3 but the mesh is 2-D.
         assert!(coordinates(&mesh, Some(vec!["Z".into()])).is_err());

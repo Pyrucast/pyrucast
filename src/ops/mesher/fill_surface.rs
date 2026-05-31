@@ -2,7 +2,7 @@ use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::Node;
-use crate::containers::mesh::Mesh;
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::store::with;
 
 /// Fill the interior of one or more closed SEG2 contours with 2-D elements.
@@ -294,7 +294,7 @@ pub fn fill_surface(
     }
 
     // 6. Build the TRI3 mesh.
-    let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
     for [i, j, k] in triangles {
         mesh.add_cell(&[flat_to_node[i], flat_to_node[j], flat_to_node[k]])?;
     }
@@ -316,7 +316,7 @@ mod tests {
             .iter()
             .map(|&(x, y)| Node::create_in(cfg.clone(), &[x, y]).unwrap())
             .collect();
-        let mut contour = Mesh::with_element_type(cfg, ElementType::SEG2);
+        let mut contour = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
         let n = nodes.len();
         for i in 0..n {
             contour
@@ -331,7 +331,7 @@ mod tests {
             .iter()
             .map(|&(x, y, z)| Node::create_in(cfg.clone(), &[x, y, z]).unwrap())
             .collect();
-        let mut contour = Mesh::with_element_type(cfg, ElementType::SEG2);
+        let mut contour = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
         let n = nodes.len();
         for i in 0..n {
             contour
@@ -435,7 +435,7 @@ mod tests {
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
-        let mut bogus = Mesh::with_element_type(cfg, ElementType::TRI3);
+        let mut bogus = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
         bogus.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         assert!(fill_surface(&bogus, ElementType::TRI3, None).is_err());
     }
@@ -449,7 +449,7 @@ mod tests {
                 Node::create_in(cfg.clone(), &[t, 0.0, 0.0, 0.0]).unwrap()
             })
             .collect();
-        let mut contour = Mesh::with_element_type(cfg, ElementType::SEG2);
+        let mut contour = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
         for i in 0..4 {
             contour
                 .add_cell(&[nodes[i].id(), nodes[(i + 1) % 4].id()])
@@ -725,7 +725,7 @@ mod tests {
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
-        let mut open = Mesh::with_element_type(cfg, ElementType::SEG2);
+        let mut open = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
         open.add_cell(&[a.id(), b.id()]).unwrap();
         open.add_cell(&[b.id(), c.id()]).unwrap();
         assert!(fill_surface(&open, ElementType::TRI3, None).is_err());

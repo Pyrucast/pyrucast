@@ -23,8 +23,8 @@ def _make_two_triangles():
     cc = c.add_node([1.0, 1.0, 0.0])
     d = c.add_node([0.0, 1.0, 0.5])
     sm = pyrucast.SubMesh(c, "TRI3")
-    sm.add_cell([a.id, b.id, cc.id])
-    sm.add_cell([a.id, cc.id, d.id])
+    sm.add_cell([a, b, cc])
+    sm.add_cell([a, cc, d])
     return c, sm
 
 
@@ -111,7 +111,7 @@ def test_plot_every_element_type(tmp_path, element_type, coords, connectivity):
     c = pyrucast.Configuration(3)
     nodes = [c.add_node(p) for p in coords]
     sm = pyrucast.SubMesh(c, element_type)
-    sm.add_cell([nodes[i].id for i in connectivity])
+    sm.add_cell([nodes[i] for i in connectivity])
     path = tmp_path / f"{element_type.lower()}.png"
     sm.plot(save=str(path))
     assert path.stat().st_size > 0
@@ -126,11 +126,11 @@ def test_mesh_plot_uses_each_submesh_color(tmp_path):
     e = c.add_node([2.0, 1.0, 0.0])
 
     sm_red = pyrucast.SubMesh(c, "TRI3")
-    sm_red.add_cell([a.id, b.id, cc.id])
+    sm_red.add_cell([a, b, cc])
     sm_red.face_color = (220, 60, 60)
 
     sm_blue = pyrucast.SubMesh(c, "TRI3")
-    sm_blue.add_cell([b.id, d.id, e.id])
+    sm_blue.add_cell([b, d, e])
     sm_blue.face_color = (60, 60, 220)
 
     mesh = pyrucast.Mesh(c)
@@ -151,11 +151,11 @@ def _build_field_on_nodes(c, nodes, components, values_per_component):
     """Helper: build a POI1 NodeField on `nodes` and fill values."""
     poi1 = pyrucast.SubMesh(c, "POI1")
     for n in nodes:
-        poi1.add_cell([n.id])
+        poi1.add_cell([n])
     nf = pyrucast.NodeField(poi1, list(components))
     for ci, comp in enumerate(components):
         for ni, n in enumerate(nodes):
-            nf.set_value(n.id, comp, values_per_component[ci][ni])
+            nf.set_value(n, comp, values_per_component[ci][ni])
     return nf
 
 
@@ -165,7 +165,7 @@ def test_mesh_plot_with_field_writes_overlay_label(tmp_path):
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])
     tri = pyrucast.SubMesh(c, "TRI3")
-    tri.add_cell([a.id, b.id, cc.id])
+    tri.add_cell([a, b, cc])
     mesh = pyrucast.Mesh(c)
     mesh.add_sub(tri)
 
@@ -185,7 +185,7 @@ def test_submesh_plot_with_field_explicit_component(tmp_path):
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])
     tri = pyrucast.SubMesh(c, "TRI3")
-    tri.add_cell([a.id, b.id, cc.id])
+    tri.add_cell([a, b, cc])
 
     nf = _build_field_on_nodes(
         c, [a, b, cc], ["UX", "UY"], [[0.0, 0.0, 0.0], [3.14, 2.71, 1.41]]
@@ -203,7 +203,7 @@ def test_plot_with_field_unknown_component_errors(tmp_path):
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])
     tri = pyrucast.SubMesh(c, "TRI3")
-    tri.add_cell([a.id, b.id, cc.id])
+    tri.add_cell([a, b, cc])
     nf = _build_field_on_nodes(c, [a, b, cc], ["T"], [[0.0, 1.0, 2.0]])
     path = tmp_path / "nope.svg"
     try:

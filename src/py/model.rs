@@ -1,12 +1,13 @@
 //! Python wrappers for [`crate::containers::model::SubModel`] and [`crate::containers::model::Model`].
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::NodeId;
+use crate::containers::mesh::Node;
 use crate::containers::model::{Model, SubModel};
-use crate::py::configuration::PyConfiguration;
 use crate::py::element_field::{PyElementField, PySubElementField};
+use crate::py::node::PyNode;
 use crate::py::finite_element_space::PySubFiniteElementSpace;
 use crate::py::matrix::PyMatrix;
+use crate::py::mesh::PyMesh;
 use crate::store::{insert, with, Handle};
 use pyo3::prelude::*;
 
@@ -32,20 +33,20 @@ impl PySubModel {
         Ok(Self { handle: insert(sub) })
     }
 
-    /// `SubModel.dirichlet(config, primal_var, primal_dual, constrained_node_ids)`
-    /// — Dirichlet constraint via Lagrange multipliers. The multiplier
-    /// nodes are created on the fly in `config` at the same coordinates
+    /// `SubModel.dirichlet(primal_var, primal_dual, constrained_nodes)`
+    /// — Dirichlet constraint via Lagrange multipliers. `constrained_nodes`
+    /// is a list of `Node` objects (each carries its own `Configuration`);
+    /// the multiplier nodes are created on the fly at the same coordinates
     /// as the constrained nodes.
     #[classmethod]
     fn dirichlet(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        config: PyRef<PyConfiguration>,
         primal_var: String,
         primal_dual: String,
-        constrained_node_ids: Vec<u32>,
+        constrained_nodes: Vec<PyRef<'_, PyNode>>,
     ) -> PyResult<Self> {
-        let nodes: Vec<NodeId> = constrained_node_ids.into_iter().map(NodeId).collect();
-        let sub = SubModel::dirichlet(config.handle.clone(), primal_var, primal_dual, nodes)?;
+        let nodes: Vec<Node> = constrained_nodes.iter().map(|n| n.as_node().clone()).collect();
+        let sub = SubModel::dirichlet(primal_var, primal_dual, &nodes)?;
         Ok(Self { handle: insert(sub) })
     }
 
@@ -57,10 +58,12 @@ impl PySubModel {
         Ok(with(&self.handle, |s| s.dual_vars())?)
     }
 
-    /// Multiplier node ids (Lagrange physics only — empty otherwise).
-    fn multiplier_nodes(&self) -> PyResult<Vec<u32>> {
-        let ids = with(&self.handle, |s| s.multiplier_nodes())??;
-        Ok(ids.into_iter().map(|n| n.0).collect())
+    /// POI1 `Mesh` of the multiplier nodes (Lagrange physics only — empty
+    /// otherwise). Build a load `NodeField` on `mesh[0]` to impose the
+    /// constrained values, or read the nodes via `mesh.node(0, i, 0)`.
+    fn multiplier_mesh(&self) -> PyResult<PyMesh> {
+        let mesh = with(&self.handle, |s| s.multiplier_mesh())??;
+        Ok(PyMesh { inner: mesh })
     }
 
     /// Names of the material components this sub-model expects, or

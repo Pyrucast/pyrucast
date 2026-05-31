@@ -126,7 +126,7 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
             .collect::<Result<Vec<_>>>()?,
     );
 
-    let mut mesh = Mesh::with_element_type(cfg, ElementType::QUA4);
+    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::QUA4));
     for k in 0..n_layers {
         for j in 0..n_elems {
             mesh.add_cell(&[

@@ -327,11 +327,12 @@ impl Mesh {
         with(sm, |s| s.configuration())
     }
 
-    /// Create a mesh pre-loaded with one empty submesh of `element_type`.
-    pub fn with_element_type(config: Handle<Configuration>, element_type: ElementType) -> Self {
-        let sm = insert(SubMesh::new(config, element_type));
+    /// Create a mesh wrapping a single `SubMesh`. Config-free at the Mesh
+    /// level: the submesh already carries its `Configuration` (a Mesh is a
+    /// pure aggregate of submeshes). The submesh is moved into the store.
+    pub fn from_submesh(sub: SubMesh) -> Self {
         let mut mesh = Self::default();
-        mesh.subs.push(sm);
+        mesh.subs.push(insert(sub));
         mesh
     }
 
@@ -545,7 +546,7 @@ mod tests {
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
 
-        let mut m = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         m.add_cell(&[a.id()]).unwrap();
         m.add_cell(&[b.id()]).unwrap();
         let sm_tri = {
@@ -569,7 +570,7 @@ mod tests {
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
 
-        let mut m = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         m.add_cell(&[a.id()]).unwrap();
         let sm_tri = {
             let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
@@ -597,7 +598,7 @@ mod tests {
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
 
-        let mut m = Mesh::with_element_type(cfg.clone(), ElementType::TRI3);
+        let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
         m.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         let n = m.node(0, 0, 0).unwrap();
@@ -614,11 +615,11 @@ mod tests {
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
 
-        let mut m1 = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut m1 = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         m1.add_cell(&[a.id()]).unwrap();
         m1.add_cell(&[b.id()]).unwrap();
 
-        let mut m2 = Mesh::with_element_type(cfg.clone(), ElementType::TRI3);
+        let mut m2 = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
         m2.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         let merged = (&m1 + &m2).unwrap();

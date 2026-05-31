@@ -23,7 +23,7 @@ mod tests {
     use crate::containers::mesh::Configuration;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
-    use crate::containers::mesh::Mesh;
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::ops::mesher::line_seg2::line_seg2;
     use crate::store::insert;
 
@@ -100,7 +100,7 @@ mod tests {
         let seg = line_seg2(&a, &b, 1).unwrap();
 
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
-        let mut tri_mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+        let mut tri_mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
         tri_mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         assert!(sweep_qua4(&tri_mesh, &seg, 1).is_err());

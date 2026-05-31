@@ -35,8 +35,8 @@ impl PySubMesh {
         Ok(with(&self.handle, |s| s.element_type().name().to_string())?)
     }
 
-    fn add_cell(&self, nodes: Vec<u32>) -> PyResult<usize> {
-        let nodes_typed: Vec<NodeId> = nodes.iter().map(|&i| NodeId(i)).collect();
+    fn add_cell(&self, nodes: Vec<PyRef<'_, PyNode>>) -> PyResult<usize> {
+        let nodes_typed: Vec<NodeId> = nodes.iter().map(|n| n.as_node().id()).collect();
         let idx = with_mut(&self.handle, move |s| s.add_cell(&nodes_typed))??;
         Ok(idx)
     }
@@ -169,15 +169,15 @@ impl PyMesh {
                 let et = ElementType::from_name(et_str).ok_or_else(|| {
                     PyValueError::new_err(format!("unknown element type: {et_str}"))
                 })?;
-                Mesh::with_element_type(cfg, et)
+                Mesh::from_submesh(SubMesh::new(cfg, et))
             }
             None => Mesh::empty(),
         };
         Ok(Self { inner: mesh })
     }
 
-    fn add_cell(&mut self, nodes: Vec<u32>) -> PyResult<usize> {
-        let nodes_typed: Vec<NodeId> = nodes.iter().map(|&i| NodeId(i)).collect();
+    fn add_cell(&mut self, nodes: Vec<PyRef<'_, PyNode>>) -> PyResult<usize> {
+        let nodes_typed: Vec<NodeId> = nodes.iter().map(|n| n.as_node().id()).collect();
         Ok(self.inner.add_cell(&nodes_typed)?)
     }
 

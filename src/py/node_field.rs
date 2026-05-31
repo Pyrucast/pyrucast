@@ -1,8 +1,8 @@
 //! Python wrapper for [`crate::containers::node_field::NodeField`].
 
-use crate::containers::mesh::NodeId;
 use crate::containers::node_field::NodeField;
 use crate::py::mesh::{PyMesh, PySubMesh};
+use crate::py::node::PyNode;
 use crate::store::{insert, with, with_mut, Handle};
 use pyo3::prelude::*;
 
@@ -46,13 +46,15 @@ impl PyNodeField {
         Ok(())
     }
 
-    fn get_by_node(&self, node_id: u32, comp_idx: usize) -> PyResult<f64> {
-        Ok(with(&self.handle, |f| f.get_by_node(NodeId(node_id), comp_idx))??)
+    fn get_by_node(&self, node: PyRef<'_, PyNode>, comp_idx: usize) -> PyResult<f64> {
+        let nid = node.as_node().id();
+        Ok(with(&self.handle, |f| f.get_by_node(nid, comp_idx))??)
     }
 
-    fn set_by_node(&self, node_id: u32, comp_idx: usize, value: f64) -> PyResult<()> {
+    fn set_by_node(&self, node: PyRef<'_, PyNode>, comp_idx: usize, value: f64) -> PyResult<()> {
+        let nid = node.as_node().id();
         with_mut(&self.handle, |f| {
-            f.set_by_node(NodeId(node_id), comp_idx, value)
+            f.set_by_node(nid, comp_idx, value)
         })??;
         Ok(())
     }
@@ -75,12 +77,14 @@ impl PyNodeField {
         Ok(PyMesh { inner: mesh })
     }
 
-    fn value(&self, node_id: u32, component: &str) -> PyResult<f64> {
-        Ok(with(&self.handle, |f| f.value(NodeId(node_id), component))??)
+    fn value(&self, node: PyRef<'_, PyNode>, component: &str) -> PyResult<f64> {
+        let nid = node.as_node().id();
+        Ok(with(&self.handle, |f| f.value(nid, component))??)
     }
 
-    fn set_value(&self, node_id: u32, component: &str, value: f64) -> PyResult<()> {
-        with_mut(&self.handle, |f| f.set_value(NodeId(node_id), component, value))??;
+    fn set_value(&self, node: PyRef<'_, PyNode>, component: &str, value: f64) -> PyResult<()> {
+        let nid = node.as_node().id();
+        with_mut(&self.handle, |f| f.set_value(nid, component, value))??;
         Ok(())
     }
 
@@ -146,16 +150,18 @@ impl PyNodeField {
         })
     }
 
-    /// `field[node_id, "UX"]` — raises IndexError if absent.
-    fn __getitem__(&self, key: (u32, String)) -> PyResult<f64> {
-        let (node_id, comp) = key;
-        Ok(with(&self.handle, |f| f.value(NodeId(node_id), &comp))??)
+    /// `field[node, "UX"]` — raises IndexError if absent.
+    fn __getitem__(&self, key: (PyRef<'_, PyNode>, String)) -> PyResult<f64> {
+        let (node, comp) = key;
+        let nid = node.as_node().id();
+        Ok(with(&self.handle, |f| f.value(nid, &comp))??)
     }
 
-    /// `field[node_id, "UX"] = v` — raises IndexError if absent.
-    fn __setitem__(&self, key: (u32, String), value: f64) -> PyResult<()> {
-        let (node_id, comp) = key;
-        with_mut(&self.handle, |f| f.set_value(NodeId(node_id), &comp, value))??;
+    /// `field[node, "UX"] = v` — raises IndexError if absent.
+    fn __setitem__(&self, key: (PyRef<'_, PyNode>, String), value: f64) -> PyResult<()> {
+        let (node, comp) = key;
+        let nid = node.as_node().id();
+        with_mut(&self.handle, |f| f.set_value(nid, &comp, value))??;
         Ok(())
     }
 

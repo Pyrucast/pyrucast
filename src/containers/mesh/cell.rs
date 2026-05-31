@@ -20,7 +20,7 @@
 //! let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
 //! let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
 //!
-//! let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
 //! mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 //!
 //! let cell = mesh.cell(0, 0).unwrap();
@@ -193,7 +193,7 @@ mod tests {
         let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[2.0]).unwrap();
 
-        let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         mesh.add_cell(&[b.id(), c.id()]).unwrap();
 

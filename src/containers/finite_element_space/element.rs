@@ -14,14 +14,14 @@
 //! use pyrucast::containers::mesh::Configuration;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
-//! use pyrucast::containers::mesh::Mesh;
+//! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::insert;
 //!
 //! let cfg = insert(Configuration::new(1).unwrap());
 //! let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
 //! let b = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-//! let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
 //! mesh.add_cell(&[a.id(), b.id()]).unwrap();
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //!
@@ -207,7 +207,7 @@ impl ExactSizeIterator for ElementIter {}
 mod tests {
     use super::*;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::Mesh;
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::mesh::Configuration;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
@@ -218,7 +218,7 @@ mod tests {
         let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[n0.id(), n1.id()]).unwrap();
         mesh.add_cell(&[n1.id(), n2.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();

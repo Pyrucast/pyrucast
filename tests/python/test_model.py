@@ -11,7 +11,7 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     a = c.add_node([0.0])
     b = c.add_node([length])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([a.id, b.id])
+    mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
 
@@ -23,7 +23,7 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     model.add_sub(pyrucast.SubModel.heat_conduction(sub))
     if dirichlet_left:
         model.add_sub(
-            pyrucast.SubModel.dirichlet(c, "T", "q", [a.id])
+            pyrucast.SubModel.dirichlet("T", "q", [a])
         )
     return c, mesh, fes, sub, materials, model, a, b
 
@@ -55,10 +55,10 @@ def test_heat_conduction_single_seg2_stiffness():
     assert K.n_cols() == 2
     expected = k_val / length
     tol = 1e-12
-    assert abs(K.get(a.id, "q", a.id, "T") - expected) < tol
-    assert abs(K.get(a.id, "q", b.id, "T") + expected) < tol
-    assert abs(K.get(b.id, "q", a.id, "T") + expected) < tol
-    assert abs(K.get(b.id, "q", b.id, "T") - expected) < tol
+    assert abs(K.get(a, "q", a, "T") - expected) < tol
+    assert abs(K.get(a, "q", b, "T") + expected) < tol
+    assert abs(K.get(b, "q", a, "T") + expected) < tol
+    assert abs(K.get(b, "q", b, "T") - expected) < tol
 
 
 def test_two_seg2_assembly_is_tridiagonal():
@@ -67,8 +67,8 @@ def test_two_seg2_assembly_is_tridiagonal():
     n1 = c.add_node([1.0])
     n2 = c.add_node([2.0])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([n0.id, n1.id])
-    mesh.add_cell([n1.id, n2.id])
+    mesh.add_cell([n0, n1])
+    mesh.add_cell([n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     materials = pyrucast.ElementField(fes, ["k"])
@@ -84,15 +84,15 @@ def test_two_seg2_assembly_is_tridiagonal():
         return K.get(i, "q", j, "T")
 
     tol = 1e-12
-    assert abs(v(n0.id, n0.id) - 1.0) < tol
-    assert abs(v(n0.id, n1.id) + 1.0) < tol
-    assert abs(v(n0.id, n2.id)) < tol
-    assert abs(v(n1.id, n0.id) + 1.0) < tol
-    assert abs(v(n1.id, n1.id) - 2.0) < tol
-    assert abs(v(n1.id, n2.id) + 1.0) < tol
-    assert abs(v(n2.id, n0.id)) < tol
-    assert abs(v(n2.id, n1.id) + 1.0) < tol
-    assert abs(v(n2.id, n2.id) - 1.0) < tol
+    assert abs(v(n0, n0) - 1.0) < tol
+    assert abs(v(n0, n1) + 1.0) < tol
+    assert abs(v(n0, n2)) < tol
+    assert abs(v(n1, n0) + 1.0) < tol
+    assert abs(v(n1, n1) - 2.0) < tol
+    assert abs(v(n1, n2) + 1.0) < tol
+    assert abs(v(n2, n0)) < tol
+    assert abs(v(n2, n1) + 1.0) < tol
+    assert abs(v(n2, n2) - 1.0) < tol
 
 
 # ─── Dirichlet block ────────────────────────────────────────────────────────
@@ -112,17 +112,18 @@ def test_dirichlet_creates_multiplier_node_and_writes_both_blocks():
     rows = K.row_dofs()
     mult_id = next(nid for (nid, name) in rows if name == "T")
     assert mult_id != a.id  # new node
+    mult = c.acquire(mult_id)
 
     # C entry (mult, "T") × (a, "T")
-    assert K.get(mult_id, "T", a.id, "T") == 1.0
+    assert K.get(mult, "T", a, "T") == 1.0
     # Cᵀ entry (a, "q") × (mult, "lambda_T")
-    assert K.get(a.id, "q", mult_id, "lambda_T") == 1.0
+    assert K.get(a, "q", mult, "lambda_T") == 1.0
 
 
 def test_dirichlet_empty_constraint_list_rejected():
     c = pyrucast.Configuration(1)
     try:
-        pyrucast.SubModel.dirichlet(c, "T", "q", [])
+        pyrucast.SubModel.dirichlet("T", "q", [])
     except RuntimeError:
         pass
     else:

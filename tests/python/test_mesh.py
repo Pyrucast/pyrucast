@@ -10,8 +10,8 @@ def test_submesh_poi1_is_node_list():
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     sm = pyrucast.SubMesh(c, "POI1")
-    sm.add_cell([a.id])
-    sm.add_cell([b.id])
+    sm.add_cell([a])
+    sm.add_cell([b])
     assert sm.cell_count() == 2
     assert sm.element_type == "POI1"
 
@@ -21,7 +21,7 @@ def test_submesh_tri3_invalid_arity():
     a = c.add_node([0.0, 0.0])
     sm = pyrucast.SubMesh(c, "TRI3")
     try:
-        sm.add_cell([a.id])
+        sm.add_cell([a])
     except RuntimeError:
         pass
     else:
@@ -36,7 +36,7 @@ def test_submesh_protects_nodes_from_gc():
     ids = (a.id, b.id, cc.id)
 
     sm = pyrucast.SubMesh(c, "TRI3")
-    sm.add_cell(list(ids))
+    sm.add_cell([a, b, cc])
     # The 3 Python Nodes AND the SubMesh each reference every node ⇒ refcount = 2.
     for i in ids:
         assert c.refcount(i) == 2
@@ -76,11 +76,11 @@ def test_mesh_aggregates_submeshes():
     cc = c.add_node([0.5, 1.0])
 
     sm_pts = pyrucast.SubMesh(c, "POI1")
-    sm_pts.add_cell([a.id])
-    sm_pts.add_cell([b.id])
+    sm_pts.add_cell([a])
+    sm_pts.add_cell([b])
 
     sm_tri = pyrucast.SubMesh(c, "TRI3")
-    sm_tri.add_cell([a.id, b.id, cc.id])
+    sm_tri.add_cell([a, b, cc])
 
     mesh = pyrucast.Mesh(c)
     mesh.add_sub(sm_pts)
@@ -98,13 +98,13 @@ def test_submesh_cell_indexing_and_iteration():
     cc = c.add_node([0.5, 1.0])
 
     sm = pyrucast.SubMesh(c, "TRI3")
-    sm.add_cell([a.id, b.id, cc.id])
+    sm.add_cell([a, b, cc])
 
     assert len(sm) == 1
     cell = sm[0]
     assert cell.element_type == "TRI3"
     assert cell.index == 0
-    assert cell.node_ids == [a.id, b.id, cc.id]
+    assert [n.id for n in cell.nodes()] == [a.id, b.id, cc.id]
     assert len(cell) == 3
     assert [n.id for n in cell] == [a.id, b.id, cc.id]
     assert cell[-1].id == cc.id
@@ -130,10 +130,10 @@ def test_mesh_indexing_and_iteration():
     cc = c.add_node([0.5, 1.0])
 
     sm_pts = pyrucast.SubMesh(c, "POI1")
-    sm_pts.add_cell([a.id])
+    sm_pts.add_cell([a])
 
     sm_tri = pyrucast.SubMesh(c, "TRI3")
-    sm_tri.add_cell([a.id, b.id, cc.id])
+    sm_tri.add_cell([a, b, cc])
 
     mesh = pyrucast.Mesh(c)
     mesh.add_sub(sm_pts)
@@ -179,7 +179,7 @@ def test_fill_surface_square_gives_two_triangles():
     ]
     contour = pyrucast.Mesh(c, "SEG2")
     for i in range(4):
-        contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
+        contour.add_cell([nodes[i], nodes[(i + 1) % 4]])
 
     tri = pyrucast.fill_surface(contour, "TRI3")
     assert tri.element_types() == ["TRI3"]
@@ -195,7 +195,7 @@ def test_fill_surface_unknown_element_type():
     ]
     contour = pyrucast.Mesh(c, "SEG2")
     for i in range(3):
-        contour.add_cell([nodes[i].id, nodes[(i + 1) % 3].id])
+        contour.add_cell([nodes[i], nodes[(i + 1) % 3]])
 
     try:
         pyrucast.fill_surface(contour, "BOGUS")
@@ -214,7 +214,7 @@ def test_fill_surface_rejects_unsupported_target_element():
     ]
     contour = pyrucast.Mesh(c, "SEG2")
     for i in range(3):
-        contour.add_cell([nodes[i].id, nodes[(i + 1) % 3].id])
+        contour.add_cell([nodes[i], nodes[(i + 1) % 3]])
 
     try:
         pyrucast.fill_surface(contour, "QUA4")
@@ -230,7 +230,7 @@ def _build_seg2_loop(c, pts):
     contour = pyrucast.Mesh(c, "SEG2")
     n = len(nodes)
     for i in range(n):
-        contour.add_cell([nodes[i].id, nodes[(i + 1) % n].id])
+        contour.add_cell([nodes[i], nodes[(i + 1) % n]])
     return contour, nodes
 
 
@@ -346,7 +346,7 @@ def test_fill_surface_3d_tilted_square():
     nodes = [c.add_node(list(p)) for p in pts]
     contour = pyrucast.Mesh(c, "SEG2")
     for i in range(4):
-        contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
+        contour.add_cell([nodes[i], nodes[(i + 1) % 4]])
 
     tri = pyrucast.fill_surface(contour, "TRI3")
     assert tri.cell_count() == 2  # n - 2
@@ -364,7 +364,7 @@ def test_fill_surface_3d_rejects_non_planar_contour():
     nodes = [c.add_node(list(p)) for p in pts]
     contour = pyrucast.Mesh(c, "SEG2")
     for i in range(4):
-        contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
+        contour.add_cell([nodes[i], nodes[(i + 1) % 4]])
 
     try:
         pyrucast.fill_surface(contour, "TRI3")
@@ -380,7 +380,7 @@ def test_fill_surface_rejects_non_seg2_contour():
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
     bogus = pyrucast.Mesh(c, "TRI3")
-    bogus.add_cell([a.id, b.id, cc.id])
+    bogus.add_cell([a, b, cc])
 
     try:
         pyrucast.fill_surface(bogus, "TRI3")
@@ -399,8 +399,8 @@ def test_to_poi1_converts_each_submesh_to_node_list():
 
     # Two triangles sharing edge (b, cc): 4 unique nodes.
     tri = pyrucast.Mesh(c, "TRI3")
-    tri.add_cell([a.id, b.id, cc.id])
-    tri.add_cell([b.id, d.id, cc.id])
+    tri.add_cell([a, b, cc])
+    tri.add_cell([b, d, cc])
 
     poi = pyrucast.to_poi1(tri)
     assert poi.submesh_count() == 1
@@ -417,9 +417,9 @@ def test_to_poi1_preserves_submesh_count():
     cc = c.add_node([0.5, 1.0])
 
     pts = pyrucast.SubMesh(c, "POI1")
-    pts.add_cell([a.id])
+    pts.add_cell([a])
     tri = pyrucast.SubMesh(c, "TRI3")
-    tri.add_cell([a.id, b.id, cc.id])
+    tri.add_cell([a, b, cc])
     mesh = pyrucast.Mesh(c)
     mesh.add_sub(pts)
     mesh.add_sub(tri)

@@ -29,7 +29,7 @@
 //! use pyrucast::containers::mesh::Configuration;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
-//! use pyrucast::containers::mesh::Mesh;
+//! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::{insert, with};
 //!
@@ -38,7 +38,7 @@
 //! let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
 //! let c = Node::create_in(cfg.clone(), &[0.0, 2.0]).unwrap();
 //!
-//! let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
 //! mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 //!
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
@@ -885,7 +885,7 @@ mod tests {
         let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
         mesh.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
         let too_few: Vec<(Interpolation, QuadratureRule)> = vec![];
         assert!(FiniteElementSpace::with(&mesh, &too_few).is_err());
@@ -904,7 +904,7 @@ mod tests {
         let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
         mesh.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let s = format!("{}", fes);

@@ -14,7 +14,7 @@ def _tri3_subspace(n_cells=1):
             c.add_node([0.0, 1.0]),
         ]
         mesh = pyrucast.Mesh(c, "TRI3")
-        mesh.add_cell([nodes[0].id, nodes[1].id, nodes[2].id])
+        mesh.add_cell([nodes[0], nodes[1], nodes[2]])
     else:
         # Fan of n_cells triangles sharing the origin.
         apex = c.add_node([0.0, 0.0])
@@ -24,7 +24,7 @@ def _tri3_subspace(n_cells=1):
             perim.append(c.add_node([1.0, t]))
         mesh = pyrucast.Mesh(c, "TRI3")
         for i in range(n_cells):
-            mesh.add_cell([apex.id, perim[i].id, perim[i + 1].id])
+            mesh.add_cell([apex, perim[i], perim[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh)
     return c, mesh, fes, fes[0]
 

@@ -24,7 +24,7 @@ mod tests {
     use crate::containers::mesh::Configuration;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
-    use crate::containers::mesh::Mesh;
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::ops::mesher::line_seg2::line_seg2;
     use crate::store::insert;
 
@@ -66,7 +66,7 @@ mod tests {
         let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0, 0.0]).unwrap();
         let n2 = Node::create_in(cfg.clone(), &[1.0, 1.0, 0.0]).unwrap();
         let n3 = Node::create_in(cfg.clone(), &[0.0, 1.0, 0.0]).unwrap();
-        let mut qua_mesh = Mesh::with_element_type(cfg.clone(), ElementType::QUA4);
+        let mut qua_mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::QUA4));
         qua_mesh.add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()]).unwrap();
 
         let hex = extrude(&qua_mesh, &[0.0, 0.0, 2.0], 1).unwrap();
@@ -105,7 +105,7 @@ mod tests {
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
-        let mut tri = Mesh::with_element_type(cfg, ElementType::TRI3);
+        let mut tri = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         assert!(extrude(&tri, &[0.0, 0.0], 1).is_err());
     }

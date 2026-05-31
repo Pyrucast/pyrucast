@@ -15,7 +15,7 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
 
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(n_elems):
-        mesh.add_cell([nodes[i].id, nodes[i + 1].id])
+        mesh.add_cell([nodes[i], nodes[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     materials = pyrucast.ElementField(fes, ["k"])
@@ -23,10 +23,10 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
 
     model = pyrucast.Model()
     model.add_sub(pyrucast.SubModel.heat_conduction(sub))
-    left = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[0].id])
-    right = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[-1].id])
-    mult_left = left.multiplier_nodes()[0]
-    mult_right = right.multiplier_nodes()[0]
+    left = pyrucast.SubModel.dirichlet("T", "q", [nodes[0]])
+    right = pyrucast.SubModel.dirichlet("T", "q", [nodes[-1]])
+    mult_left = left.multiplier_mesh().node(0, 0, 0)
+    mult_right = right.multiplier_mesh().node(0, 0, 0)
     model.add_sub(left)
     model.add_sub(right)
 
@@ -45,7 +45,7 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     # T(x_i) = x_i at every node.
     for i, node in enumerate(nodes):
         expected = i * h
-        got = solution.value(node.id, "T")
+        got = solution.value(node, "T")
         assert abs(got - expected) < tol, f"node {i}: got {got}, expected {expected}"
     # Boundary fluxes (Lagrange multipliers).
     assert abs(solution.value(mult_left, "lambda_T") - 1.0) < tol
@@ -59,7 +59,7 @@ def test_solver_singular_matrix_errors():
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([a.id, b.id])
+    mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     materials = pyrucast.ElementField(fes, ["k"])
@@ -70,7 +70,7 @@ def test_solver_singular_matrix_errors():
     K = pyrucast.stiffness(model, materials)
 
     rhs_sm = pyrucast.SubMesh(c, "POI1")
-    rhs_sm.add_cell([a.id])
+    rhs_sm.add_cell([a])
     rhs = pyrucast.NodeField(rhs_sm, ["q"])
 
     try:
@@ -91,7 +91,7 @@ def test_solver_with_nonzero_neumann():
     nodes = [c.add_node([i * h]) for i in range(n_elems + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(n_elems):
-        mesh.add_cell([nodes[i].id, nodes[i + 1].id])
+        mesh.add_cell([nodes[i], nodes[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     materials = pyrucast.ElementField(fes, ["k"])
@@ -99,19 +99,19 @@ def test_solver_with_nonzero_neumann():
 
     model = pyrucast.Model()
     model.add_sub(pyrucast.SubModel.heat_conduction(sub))
-    left = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[0].id])
-    mult_left = left.multiplier_nodes()[0]
+    left = pyrucast.SubModel.dirichlet("T", "q", [nodes[0]])
+    mult_left = left.multiplier_mesh().node(0, 0, 0)
     model.add_sub(left)
 
     # Build a load NodeField with both components:
     #   "T" at mult_left  → 5.0 (imposed value)
     #   "q" at nodes[-1]  → 1.0 (Neumann source on the boundary row)
     load_sm = pyrucast.SubMesh(c, "POI1")
-    load_sm.add_cell([nodes[-1].id])
+    load_sm.add_cell([nodes[-1]])
     load_sm.add_cell([mult_left])
     rhs = pyrucast.NodeField(load_sm, ["T", "q"])
     rhs.set_value(mult_left, "T", 5.0)
-    rhs.set_value(nodes[-1].id, "q", 1.0)
+    rhs.set_value(nodes[-1], "q", 1.0)
 
     K = pyrucast.stiffness(model, materials)
     solution = pyrucast.solve(K, rhs)
@@ -121,5 +121,5 @@ def test_solver_with_nonzero_neumann():
     for i, node in enumerate(nodes):
         x = i * h
         expected = 5.0 + 0.5 * x
-        got = solution.value(node.id, "T")
+        got = solution.value(node, "T")
         assert abs(got - expected) < tol, f"node {i}: got {got}, expected {expected}"

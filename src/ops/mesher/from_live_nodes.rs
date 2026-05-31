@@ -1,13 +1,13 @@
 use crate::error::Result;
 use crate::containers::mesh::Configuration;
 use crate::containers::mesh::ElementType;
-use crate::containers::mesh::Mesh;
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::store::{with, Handle};
 
 /// Create a POI1 mesh containing all live nodes of `config`.
 pub fn from_live_nodes(config: Handle<Configuration>) -> Result<Mesh> {
     let node_ids: Vec<_> = with(&config, |c| c.iter_live().collect())?;
-    let mut mesh = Mesh::with_element_type(config, ElementType::POI1);
+    let mut mesh = Mesh::from_submesh(SubMesh::new(config, ElementType::POI1));
     for nid in node_ids {
         mesh.add_cell(&[nid])?;
     }

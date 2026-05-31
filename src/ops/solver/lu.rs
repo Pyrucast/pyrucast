@@ -38,7 +38,7 @@
 //! let cfg = insert(Configuration::new(1).unwrap());
 //! let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
 //! let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-//! let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
 //! mesh.add_cell(&[a.id(), b.id()]).unwrap();
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //! let sub = fes.subspace(0).unwrap();
@@ -51,8 +51,8 @@
 //! model
 //!     .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
 //!     .unwrap();
-//! let dir_a = SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap();
-//! let dir_b = SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![b.id()]).unwrap();
+//! let dir_a = SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap();
+//! let dir_b = SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&b)).unwrap();
 //! let mult_a = dir_a.multiplier_nodes().unwrap()[0];
 //! let mult_b = dir_b.multiplier_nodes().unwrap()[0];
 //! model.add_sub(insert(dir_a)).unwrap();
@@ -192,7 +192,7 @@ mod tests {
             .collect();
 
         // Mesh.
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         for i in 0..n_elems {
             mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
         }
@@ -211,13 +211,12 @@ mod tests {
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         let left_dir =
-            SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![nodes[0].id()])
+            SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&nodes[0]))
                 .unwrap();
         let right_dir = SubModel::dirichlet(
-            cfg.clone(),
             "T".into(),
             "q".into(),
-            vec![nodes[n_elems].id()],
+            std::slice::from_ref(&nodes[n_elems]),
         )
         .unwrap();
         let mult_left = left_dir.multiplier_nodes().unwrap()[0];
@@ -269,7 +268,7 @@ mod tests {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.subspace(0).unwrap();

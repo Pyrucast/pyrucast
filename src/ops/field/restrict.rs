@@ -81,7 +81,7 @@ mod tests {
         f.set(2, 0, 3.0).unwrap();
 
         // Mesh with only nodes[0] and nodes[2].
-        let mut m = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         m.add_cell(&[nodes[0].id()]).unwrap();
         m.add_cell(&[nodes[2].id()]).unwrap();
 
@@ -100,7 +100,7 @@ mod tests {
         let nb = Node::create_in(cfg.clone(), &[1.0]).unwrap();
 
         // Mesh contains nb which is NOT in the field.
-        let mut m = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         m.add_cell(&[nodes[0].id()]).unwrap();
         m.add_cell(&[nb.id()]).unwrap();
 
@@ -116,7 +116,7 @@ mod tests {
         // A mesh attached to a *different* Configuration.
         let cfg2 = insert(Configuration::new(1).unwrap());
         let n2 = Node::create_in(cfg2.clone(), &[0.0]).unwrap();
-        let mut m2 = Mesh::with_element_type(cfg2.clone(), ElementType::POI1);
+        let mut m2 = Mesh::from_submesh(SubMesh::new(cfg2.clone(), ElementType::POI1));
         m2.add_cell(&[n2.id()]).unwrap();
         assert!(restrict(&f, &m2).is_err());
     }

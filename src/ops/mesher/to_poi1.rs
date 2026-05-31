@@ -52,7 +52,7 @@ mod tests {
         let d = Node::create_in(cfg.clone(), &[1.5, 1.0]).unwrap();
 
         // Two triangles sharing the edge (b, c): 4 distinct nodes total.
-        let mut tri = Mesh::with_element_type(cfg.clone(), ElementType::TRI3);
+        let mut tri = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         tri.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
 
@@ -74,7 +74,7 @@ mod tests {
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
 
         // One POI1 submesh + one TRI3 submesh.
-        let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::POI1);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         let sm_tri = {
             let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);

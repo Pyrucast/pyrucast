@@ -55,7 +55,7 @@
 //! use pyrucast::containers::element_field::ElementField;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
-//! use pyrucast::containers::mesh::Mesh;
+//! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::{insert, with, with_mut};
 //!
@@ -63,7 +63,7 @@
 //! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
 //! let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
 //! let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-//! let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
 //! mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 //!
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
@@ -928,7 +928,7 @@ mod tests {
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();

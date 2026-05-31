@@ -1,7 +1,7 @@
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::Node;
-use crate::containers::mesh::Mesh;
+use crate::containers::mesh::{Mesh, SubMesh};
 
 /// Build a mesh of `n_elems` SEG2 elements along the straight line from
 /// node `a` to node `b`.
@@ -46,7 +46,7 @@ pub fn line_seg2(a: &Node, b: &Node, n_elems: usize) -> Result<Mesh> {
     }
     nodes.push(Node::acquire(cfg.clone(), b.id())?);
 
-    let mut mesh = Mesh::with_element_type(cfg, ElementType::SEG2);
+    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
     for i in 0..n_elems {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }

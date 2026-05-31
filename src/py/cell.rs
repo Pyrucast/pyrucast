@@ -33,17 +33,6 @@ impl PyCell {
         Ok(self.inner.element_type()?.name().to_string())
     }
 
-    /// Raw connectivity (list of node ids).
-    #[getter]
-    fn node_ids(&self) -> PyResult<Vec<u32>> {
-        Ok(self
-            .inner
-            .node_ids()?
-            .into_iter()
-            .map(|n| n.0)
-            .collect())
-    }
-
     /// Materialised nodes (each one refcounted on the
     /// Configuration).
     fn nodes(&self) -> PyResult<Vec<PyNode>> {
