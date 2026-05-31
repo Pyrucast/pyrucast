@@ -105,7 +105,7 @@
 use crate::containers::mesh::{Node, NodeId};
 use crate::containers::element_field::SubElementField;
 use crate::error::Result;
-use crate::containers::finite_element_space::SubFiniteElementSpace;
+use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
@@ -451,6 +451,41 @@ pub struct Model {
 crate::impl_aggregate!(Model, SubModel, sub_model, "sub-model(s)");
 
 impl Model {
+    /// Heat-conduction `Model` spanning **every** subspace of `fes` — one
+    /// [`Physics::HeatConduction`] sub-model per [`SubFiniteElementSpace`].
+    ///
+    /// This is the parent-level named constructor (see `CONVENTIONS.md`):
+    /// it consumes the FE-space *parent* and returns a `Model`, so the
+    /// caller never builds a `SubModel` by hand. A single-subspace `fes`
+    /// yields the unit case; several subspaces yield one zone each.
+    /// Compose heterogeneous physics with `+` (merge), e.g.
+    /// `Model::heat_conduction(&fes)? + Model::dirichlet(...)?`.
+    pub fn heat_conduction(fes: &FiniteElementSpace) -> Result<Self> {
+        let mut model = Self::empty();
+        for sub in fes {
+            model.add_sub(insert(SubModel::heat_conduction(sub.clone())?))?;
+        }
+        Ok(model)
+    }
+
+    /// Dirichlet `Model` (a single sub-model) constraining `<primal_var>`
+    /// on `constrained_nodes` via Lagrange multipliers. Parent-level
+    /// named constructor — see [`SubModel::dirichlet`] for the semantics
+    /// of `primal_var` / `primal_dual`.
+    pub fn dirichlet(
+        primal_var: String,
+        primal_dual: String,
+        constrained_nodes: &[Node],
+    ) -> Result<Self> {
+        let mut model = Self::empty();
+        model.add_sub(insert(SubModel::dirichlet(
+            primal_var,
+            primal_dual,
+            constrained_nodes,
+        )?))?;
+        Ok(model)
+    }
+
     /// Primal variable names — union over all sub-models, first-seen order.
     /// These are the **column labels** of the assembled matrices and the
     /// component names of the solution `NodeField`.
@@ -718,6 +753,62 @@ mod tests {
         let m = assemble::mass(&model).unwrap();
         assert_eq!(m.n_rows().unwrap(), 0);
         assert_eq!(m.n_cols().unwrap(), 0);
+    }
+
+    /// Parent-level `Model::heat_conduction(&fes)` builds one sub-model per
+    /// subspace and matches the hand-rolled `SubModel + add_sub` path, and
+    /// `+` (merge) composes it with a Dirichlet `Model`.
+    #[test]
+    fn parent_constructors_span_subspaces_and_compose() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+
+        // Two SEG2 zones, one SubMesh each → fes with two subspaces.
+        let mut mesh = Mesh::empty();
+        let sm_a = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            sm.add_cell(&[n0.id(), n1.id()]).unwrap();
+            insert(sm)
+        };
+        let sm_b = {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            sm.add_cell(&[n1.id(), n2.id()]).unwrap();
+            insert(sm)
+        };
+        mesh.add_sub(sm_a).unwrap();
+        mesh.add_sub(sm_b).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+
+        // One HeatConduction sub-model per subspace.
+        let hc = Model::heat_conduction(&fes).unwrap();
+        assert_eq!(hc.sub_model_count(), 2);
+        assert_eq!(hc.primal_vars().unwrap(), vec!["T".to_string()]);
+        assert_eq!(hc.dual_vars().unwrap(), vec!["q".to_string()]);
+
+        // Compose with a Dirichlet model via `+` (merge).
+        let dir = Model::dirichlet("T".into(), "q".into(), std::slice::from_ref(&n0)).unwrap();
+        assert_eq!(dir.sub_model_count(), 1);
+        let full = (&hc + &dir).unwrap();
+        assert_eq!(full.sub_model_count(), 3);
+        assert_eq!(
+            full.primal_vars().unwrap(),
+            vec!["T".to_string(), "lambda_T".to_string()]
+        );
+    }
+
+    /// Single-subspace `fes` → unit `Model` (the common case).
+    #[test]
+    fn parent_heat_conduction_unit_case() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        mesh.add_cell(&[a.id(), b.id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let model = Model::heat_conduction(&fes).unwrap();
+        assert_eq!(model.sub_model_count(), 1);
     }
 
     #[test]
