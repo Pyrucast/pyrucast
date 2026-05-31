@@ -152,6 +152,50 @@ pub trait Aggregate: Default {
 
 }
 
+// ─── Debug helper: recurse into each sub-object ─────────────────────────────
+
+/// Wraps an aggregate's handle slice so its `Debug` **dereferences** each
+/// handle and prints the full `Debug` of the pointed-to sub-object, instead
+/// of only the handle's `idx`/`gen`. A handle that can no longer be resolved
+/// (stale / collected slot) falls back to printing the handle itself.
+///
+/// Honours the alternate (`{:#?}`) flag, so the sub-objects are
+/// pretty-printed and indented when the aggregate is.
+///
+/// Safe against the per-type, non-reentrant store mutex: the only lock taken
+/// is the sub-object store's, and every sub-object `Debug` is itself
+/// lock-free, so no nesting of `with::<Sub>` inside `with::<Sub>` occurs.
+pub struct DebugItems<'a, S: Persist + Any + Send>(pub &'a [Handle<S>]);
+
+impl<S: Persist + Any + Send + std::fmt::Debug> std::fmt::Debug for DebugItems<'_, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut list = f.debug_list();
+        for h in self.0 {
+            list.entry(&DebugItem(h));
+        }
+        list.finish()
+    }
+}
+
+/// A single dereferenced handle (see [`DebugItems`]).
+struct DebugItem<'a, S: Persist + Any + Send>(&'a Handle<S>);
+
+impl<S: Persist + Any + Send + std::fmt::Debug> std::fmt::Debug for DebugItem<'_, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match crate::store::with(self.0, |s| {
+            if f.alternate() {
+                write!(f, "{:#?}", s)
+            } else {
+                write!(f, "{:?}", s)
+            }
+        }) {
+            Ok(res) => res,
+            // Unresolvable handle: fall back to its idx/gen identity.
+            Err(_) => std::fmt::Debug::fmt(self.0, f),
+        }
+    }
+}
+
 // ─── Helper: Python indexing (signed → unsigned) ────────────────────────────
 
 /// Normalize a Python index (possibly negative) against `len`.
@@ -356,7 +400,12 @@ macro_rules! impl_aggregate_std_traits {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 f.debug_struct(<$T as $crate::aggregate::Aggregate>::type_name())
                     .field("count", &$crate::aggregate::Aggregate::len(self))
-                    .field("items", &$crate::aggregate::Aggregate::items(self))
+                    .field(
+                        "items",
+                        &$crate::aggregate::DebugItems(
+                            $crate::aggregate::Aggregate::items(self),
+                        ),
+                    )
                     .finish()
             }
         }
