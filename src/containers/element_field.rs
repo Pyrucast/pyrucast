@@ -397,10 +397,26 @@ impl Clone for SubElementField {
 
 impl fmt::Debug for SubElementField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ncomp = self.components.len();
+        // Per-(cell, gauss) values, each slice in `components` order.
+        let values: Vec<((usize, usize), &[f64])> = if ncomp > 0 {
+            let mut v = Vec::with_capacity(self.n_cells * self.n_gauss);
+            for cell in 0..self.n_cells {
+                for g in 0..self.n_gauss {
+                    let base = (cell * self.n_gauss + g) * ncomp;
+                    v.push(((cell, g), &self.values[base..base + ncomp]));
+                }
+            }
+            v
+        } else {
+            Vec::new()
+        };
         f.debug_struct("SubElementField")
+            .field("fespace", &self.fespace)
             .field("cell_count", &self.n_cells)
             .field("gauss_count", &self.n_gauss)
             .field("components", &self.components)
+            .field("values", &values)
             .finish()
     }
 }

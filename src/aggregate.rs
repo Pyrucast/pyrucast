@@ -356,6 +356,7 @@ macro_rules! impl_aggregate_std_traits {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 f.debug_struct(<$T as $crate::aggregate::Aggregate>::type_name())
                     .field("count", &$crate::aggregate::Aggregate::len(self))
+                    .field("items", &$crate::aggregate::Aggregate::items(self))
                     .finish()
             }
         }

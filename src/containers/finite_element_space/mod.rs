@@ -340,6 +340,7 @@ impl SubFiniteElementSpace {
 impl fmt::Debug for SubFiniteElementSpace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SubFiniteElementSpace")
+            .field("submesh", &self.submesh)
             .field("interpolation", &self.interpolation)
             .field("quadrature", &self.quadrature)
             .field("space_dim", &self.space_dim)

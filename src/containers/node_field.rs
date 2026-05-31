@@ -431,9 +431,22 @@ impl NodeField {
 
 impl fmt::Debug for NodeField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ncomp = self.components.len();
+        // Per-node values, each slice in `components` order.
+        let values: Vec<(NodeId, &[f64])> = if ncomp > 0 {
+            self.nodes
+                .iter()
+                .enumerate()
+                .map(|(i, &nid)| (nid, &self.values[i * ncomp..(i + 1) * ncomp]))
+                .collect()
+        } else {
+            Vec::new()
+        };
         f.debug_struct("NodeField")
+            .field("support", &self.support)
             .field("node_count", &self.nodes.len())
             .field("components", &self.components)
+            .field("values", &values)
             .finish()
     }
 }

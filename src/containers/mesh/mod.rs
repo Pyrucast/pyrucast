@@ -252,9 +252,20 @@ impl Drop for SubMesh {
 
 impl fmt::Debug for SubMesh {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let npc = self.element_type.nodes_per_cell();
+        // Connectivity grouped per cell: cell `i` → its node ids, in
+        // submesh order. `npc == 0` cannot happen for a real element type
+        // but the guard keeps `chunks` from panicking.
+        let cells: Vec<&[NodeId]> = if npc > 0 {
+            self.connectivity.chunks(npc).collect()
+        } else {
+            Vec::new()
+        };
         f.debug_struct("SubMesh")
             .field("element_type", &self.element_type)
+            .field("configuration", &self.config)
             .field("cell_count", &self.cell_count())
+            .field("cells", &cells)
             .finish()
     }
 }
