@@ -58,7 +58,10 @@ d'opérateurs ne se scinde pas entre `ops/` et les `impl` de conteneur.
   et field+field passe par là (`a + b`), pas par une `ops::field::add`.
 - **Constructeurs nommés** (`from_poi1`, `lagrange1`, `heat_conduction`,
   `dirichlet`) : fonctions associées / `classmethod`. Elles fabriquent
-  *leur propre* type → elles restent sur le type.
+  *leur propre* type → elles restent sur le type. Quand ce type est un
+  **agrégat** (`Mesh`, `FiniteElementSpace`, `Model`, `ElementField`), le
+  constructeur vit au niveau du **parent** et renvoie un parent — voir
+  « Agrégats : un ou plusieurs, de manière transparente » ci-dessous.
 
 ## Règle Rust → Python : miroir 1:1
 
@@ -91,6 +94,61 @@ package) — `pyo3-stub-gen` en layout « Pure Rust » refuse explicitement
 plusieurs modules. On garde donc un seul `pyrucast.pyi` et un namespace
 plat. Si le besoin de sous-modules se confirme, c'est une migration
 packaging à part entière (voir l'historique de cette décision).
+
+## Agrégats : un ou plusieurs, de manière transparente
+
+Les conteneurs `Mesh`, `FiniteElementSpace`, `Model` et `ElementField` sont
+des **agrégats** : chacun est un `Vec<Handle<Sub>>` (voir `aggregate.rs`).
+Le but de l'agrégat est de manipuler **1 ou plusieurs** sous-objets d'un
+geste, de façon transparente. Pour que ce soit *réellement* transparent à
+l'usage, l'utilisateur ne doit jamais avoir à construire un sous-objet puis
+à l'attacher à la main, ni à « plonger » dans l'agrégat avec `parent[0]`
+pour le cas courant (un seul sous-objet).
+
+D'où **une seule règle** :
+
+> **Les constructeurs nommés vivent au niveau du parent et renvoient un
+> parent ; on compose des parents avec `+` (merge) ; le `Sub*` est une vue
+> indexée, jamais un objet qu'on construit-puis-attache.**
+
+Trois conséquences mécaniques :
+
+1. **Construire = un parent prêt à l'emploi.** Un constructeur nommé qui
+   produit un agrégat renvoie le parent, pas le sous-objet. Quand il a
+   besoin d'un support, il consomme le **parent** correspondant et balaie
+   ses sous-objets : un support unitaire → agrégat unitaire, un support à N
+   zones → agrégat à N zones. C'est *là* qu'est la transparence « 1 ou
+   plusieurs ». Précédents déjà en place : `FiniteElementSpace(mesh)`
+   fabrique un sous-espace par sous-maillage ; `Mesh(config, element_type)`
+   crée un maillage à un sous-maillage. Cible : `Model::heat_conduction(&fes)`
+   crée une zone par sous-espace.
+
+2. **Composer = `+` (merge), jamais `add_sub` à la main.** Pour assembler
+   des physiques / zones hétérogènes, on additionne des parents :
+   `Model::heat_conduction(&fes)? + Model::dirichlet(...)?`. `merge` clone
+   les `Handle` (bump de refcount, pas de copie profonde), donc les
+   sous-objets sont **partagés** entre parents. `add_sub` reste un primitif
+   bas niveau (et le chemin interne des constructeurs), pas l'API d'usage.
+
+3. **Le `Sub*` est une vue, pas un point de construction.** On y accède par
+   indexation (`parent[i]`), exactement comme `submesh[j] → Cell` et
+   `cell[k] → Node` sont déjà des vues. Le `Sub*` garde une identité dans le
+   store (refcount, partage de `Handle`), mais il sort du chemin de
+   construction côté utilisateur. Corollaire : un agrégat **unitaire se
+   comporte comme son sous-objet** — les accesseurs/mutations/vues mono-zone
+   sont exposés au niveau parent (p. ex. `Mesh::add_cell`, `Model::dual_vars`),
+   pour qu'on n'ait jamais à écrire `parent[0]` dans le cas courant.
+
+**Coercition aux frontières.** Là où une opération exige *vraiment* un seul
+sous-objet (p. ex. le support d'un `NodeField`), elle accepte le **parent**
+et déballe `self[0]` si l'agrégat est unitaire ; sinon, erreur explicite.
+On ne demande jamais à l'utilisateur de fournir le `Sub*` lui-même.
+
+Cette règle est **projetée mécaniquement** vers Python (miroir 1:1) :
+constructeur nommé Rust → `classmethod` du parent ; `merge` → `__add__` ;
+indexation → `__getitem__`. Elle s'applique uniformément aux quatre agrégats
+et a vocation à être portée par les macros `impl_aggregate!` /
+`impl_aggregate_pymethods!`.
 
 ## Table de projection (état cible)
 
