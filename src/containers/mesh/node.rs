@@ -108,10 +108,16 @@ impl Drop for Node {
 
 impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Node")
-            .field("id", &self.id)
-            .field("handle", &self.handle)
-            .finish()
+        let mut s = f.debug_struct("Node");
+        s.field("id", &self.id).field("handle", &self.handle);
+        // Debug may take the lock to surface the actual values (Display
+        // stays lock-free). If the node is no longer reachable, fall back
+        // to the error rather than failing to format.
+        match self.coord() {
+            Ok(coord) => s.field("coord", &coord),
+            Err(e) => s.field("coord", &format_args!("<{e}>")),
+        };
+        s.finish()
     }
 }
 
@@ -178,10 +184,12 @@ mod tests {
 
     #[test]
     fn debug_and_display() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n = Node::create_in(cfg, &[0.0]).unwrap();
+        let cfg = insert(Configuration::new(2).unwrap());
+        let n = Node::create_in(cfg, &[1.5, 2.5]).unwrap();
         let d = format!("{:?}", n);
         assert!(d.contains("Node"));
+        assert!(d.contains("coord"));
+        assert!(d.contains("1.5") && d.contains("2.5"));
         let s = format!("{}", n);
         assert!(s.starts_with("<Node #"));
     }
