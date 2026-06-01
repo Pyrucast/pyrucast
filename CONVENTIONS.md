@@ -72,8 +72,34 @@ d'opérateurs ne se scinde pas entre `ops/` et les `impl` de conteneur.
 - constructeur nommé Rust → `classmethod` Python.
 
 Aucune op n'a le droit d'être une fonction d'un côté et une méthode de
-l'autre. Le wrapper `py/` est une projection mécanique, pas un lieu de
-redesign de l'API.
+l'autre, ni de changer de sémantique entre les deux langages. Le wrapper
+`py/` ne **redessine** pas l'API ; il peut seulement la **restreindre** —
+voir l'exception ci-dessous.
+
+### Exception assumée : Rust bas niveau, Python curé
+
+Une seule asymétrie est tolérée entre les deux surfaces : **Python peut
+masquer les constructeurs directs de sous-objets `Sub*`** que Rust, lui,
+expose en `pub`.
+
+- **Côté Rust (couche bas niveau).** `SubMesh::new`, `SubElementField::new`,
+  `SubMatrix::new`, `SubModel::heat_conduction` / `dirichlet`, … restent
+  `pub`. La couche qui écrit les mailleurs, les assembleurs et les
+  constructeurs parent *doit* pouvoir fabriquer des `Sub*` et les insérer
+  dans le store ; le contrôle total est le rôle de l'API Rust.
+- **Côté Python (surface curée).** Les `Sub*` sont des **vues** obtenues par
+  indexation du parent (`parent[i]`) ; ils ne se **construisent pas**
+  directement. On construit au niveau parent et on compose par `+` (voir
+  « Agrégats : un ou plusieurs » ci-dessous). La coercition parent→sub
+  unitaire (`Aggregate::unit`) est l'autre face de cette restriction : là où
+  une op a besoin d'un seul sous-objet, on lui passe un parent unitaire.
+
+C'est une **restriction de surface**, pas un redesign : Python n'invente
+aucune op, n'en renomme aucune, n'en change pas la sémantique ; il **n'expose
+pas** certains constructeurs. Tout ce qui est exposé des deux côtés reste un
+miroir 1:1. Si une nouvelle op apparaît, elle suit la règle 1:1 par défaut ;
+masquer un constructeur `Sub*` est le **seul** écart permis, et il doit rester
+limité à ce cas.
 
 Le style visé côté Python est celui de **numpy / scipy** (et l'héritage
 **cast3m**) : des opérateurs **nommés** (`pyrucast.to_poi1(mesh)`,
@@ -130,25 +156,31 @@ Trois conséquences mécaniques :
    sous-objets sont **partagés** entre parents. `add_sub` reste un primitif
    bas niveau (et le chemin interne des constructeurs), pas l'API d'usage.
 
-3. **Le `Sub*` est une vue, pas un point de construction.** On y accède par
-   indexation (`parent[i]`), exactement comme `submesh[j] → Cell` et
-   `cell[k] → Node` sont déjà des vues. Le `Sub*` garde une identité dans le
-   store (refcount, partage de `Handle`), mais il sort du chemin de
-   construction côté utilisateur. Corollaire : un agrégat **unitaire se
-   comporte comme son sous-objet** — les accesseurs/mutations/vues mono-zone
-   sont exposés au niveau parent (p. ex. `Mesh::add_cell`, `Model::dual_vars`),
-   pour qu'on n'ait jamais à écrire `parent[0]` dans le cas courant.
+3. **Le `Sub*` est une vue, pas un point de construction (surface Python).**
+   On y accède par indexation (`parent[i]`), exactement comme
+   `submesh[j] → Cell` et `cell[k] → Node` sont déjà des vues. Le `Sub*`
+   garde une identité dans le store (refcount, partage de `Handle`), mais il
+   sort du chemin de construction **côté Python** : les constructeurs
+   `Sub*` n'y sont pas exposés (c'est l'« Exception assumée : Rust bas
+   niveau, Python curé » ci-dessus). **Côté Rust**, `SubMesh::new` & co.
+   restent `pub` — la couche bas niveau en a besoin. Corollaire : un agrégat
+   **unitaire se comporte comme son sous-objet** — les
+   accesseurs/mutations/vues mono-zone sont exposés au niveau parent
+   (p. ex. `Mesh::add_cell`, `Model::dual_vars`), pour qu'on n'ait jamais à
+   écrire `parent[0]` dans le cas courant.
 
 **Coercition aux frontières.** Là où une opération exige *vraiment* un seul
 sous-objet (p. ex. le support d'un `NodeField`), elle accepte le **parent**
 et déballe `self[0]` si l'agrégat est unitaire ; sinon, erreur explicite.
 On ne demande jamais à l'utilisateur de fournir le `Sub*` lui-même.
 
-Cette règle est **projetée mécaniquement** vers Python (miroir 1:1) :
-constructeur nommé Rust → `classmethod` du parent ; `merge` → `__add__` ;
-indexation → `__getitem__`. Elle s'applique uniformément aux quatre agrégats
-et a vocation à être portée par les macros `impl_aggregate!` /
-`impl_aggregate_pymethods!`.
+Ce qui est **projeté mécaniquement** vers Python (miroir 1:1) : le
+constructeur nommé du parent (Rust `Model::heat_conduction` → `classmethod`
+Python), `merge` → `__add__`, l'indexation → `__getitem__`. La seule
+asymétrie est la **non-exposition** des constructeurs `Sub*` côté Python (et
+la coercition parent→sub unitaire qui l'accompagne) — l'exception décrite
+plus haut. La règle s'applique uniformément aux quatre agrégats et a vocation
+à être portée par les macros `impl_aggregate!` / `impl_aggregate_pymethods!`.
 
 ## Table de projection (état cible)
 
