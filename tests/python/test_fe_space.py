@@ -426,3 +426,32 @@ def test_repr_and_str():
     assert "TRI3" in s
     assert "LAGRANGE1" in s
     assert "GAUSS" in s
+
+
+# ─── Aggregate addition (merge) ─────────────────────────────────────────────
+
+
+def test_add_merges_subspaces():
+    """`fes_a + fes_b` concatenates subspaces into a fresh space, like the
+    other aggregates. No DOF check is performed."""
+    c = pyrucast.Configuration(2)
+    n0 = c.add_node([0.0, 0.0])
+    n1 = c.add_node([1.0, 0.0])
+    n2 = c.add_node([0.0, 1.0])
+    n3 = c.add_node([1.0, 1.0])
+
+    tri = pyrucast.Mesh(c, "TRI3")
+    tri.unit().add_cell([n0, n1, n2])
+    qua = pyrucast.Mesh(c, "QUA4")
+    qua.unit().add_cell([n0, n1, n3, n2])
+
+    fes_a = pyrucast.FiniteElementSpace(tri)
+    fes_b = pyrucast.FiniteElementSpace(qua)
+    merged = fes_a + fes_b
+
+    assert len(merged) == 2
+    assert merged[0].element_type == "TRI3"
+    assert merged[1].element_type == "QUA4"
+    # Operands are left untouched (fresh aggregate, first-seen order).
+    assert len(fes_a) == 1
+    assert len(fes_b) == 1

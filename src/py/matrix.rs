@@ -173,14 +173,6 @@ impl PyMatrix {
         Ok(Self { inner: m })
     }
 
-    /// `matrix_a + matrix_b` — merge two matrices into a fresh aggregate
-    /// (union of blocks, first-seen order). Block handles are **shared**
-    /// (refcount bump). Call `finalize()` on the result before solving.
-    fn __add__(&self, other: PyRef<PyMatrix>) -> PyResult<PyMatrix> {
-        let inner = self.inner.merge(&other.inner)?;
-        Ok(PyMatrix { inner })
-    }
-
     /// Build the global DOF table and CSR. Must be called before any
     /// solver-facing method (`dense`, `mul_dense`, …).
     fn finalize(&mut self) -> PyResult<()> {

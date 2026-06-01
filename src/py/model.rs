@@ -112,14 +112,6 @@ impl PyModel {
         Ok(Self { inner })
     }
 
-    /// `model_a + model_b` — merge two models into a fresh model (union of
-    /// sub-models, first-seen order). Sub-model handles are **shared**
-    /// (refcount bump), not deep-copied.
-    fn __add__(&self, other: PyRef<PyModel>) -> PyResult<PyModel> {
-        let inner = self.inner.merge(&other.inner)?;
-        Ok(PyModel { inner })
-    }
-
     fn primal_vars(&self) -> PyResult<Vec<String>> {
         Ok(self.inner.primal_vars()?)
     }

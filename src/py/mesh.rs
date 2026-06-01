@@ -205,11 +205,6 @@ impl PyMesh {
         Ok(PyNode::from_node(node))
     }
 
-    fn __add__(&self, other: PyRef<PyMesh>) -> PyResult<PyMesh> {
-        let mesh = self.inner.merge(&other.inner)?;
-        Ok(PyMesh { inner: mesh })
-    }
-
     /// `mesh.cell(submesh_idx, cell_idx)` → `Cell` view; same thing
     /// as `mesh[submesh_idx][cell_idx]`.
     fn cell(

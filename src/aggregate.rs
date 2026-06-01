@@ -320,6 +320,15 @@ macro_rules! impl_aggregate_pymethods {
                 fn __str__(&self) -> pyo3::PyResult<String> {
                     Ok(format!("{}", self.inner))
                 }
+
+                /// `a + b` — merge two aggregates of this type into a fresh
+                /// one (union of sub-objects, first-seen order). Sub-handles
+                /// are **shared** (refcount bump), not deep-copied.
+                fn __add__(&self, other: pyo3::PyRef<'_, $T>) -> pyo3::PyResult<$T> {
+                    let inner =
+                        $crate::aggregate::Aggregate::merge(&self.inner, &other.inner)?;
+                    Ok($T { inner })
+                }
             }
         }
     };

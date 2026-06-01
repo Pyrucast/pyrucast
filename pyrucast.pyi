@@ -178,13 +178,6 @@ class ElementField:
         r"""
         Explicit `components` list per subspace.
         """
-    def __add__(self, other: ElementField) -> ElementField:
-        r"""
-        `field_a + field_b` — merge two element fields into a fresh one
-        (union of sub-fields, first-seen order). Sub-field handles are
-        **shared** (refcount bump), not deep-copied. Mirrors `Model.__add__`
-        for composing per-zone materials built separately.
-        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, idx: builtins.int) -> SubElementField: ...
     def subfield_count(self) -> builtins.int: ...
@@ -201,6 +194,12 @@ class ElementField:
     def add_subfield(self, sub: SubElementField) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def __add__(self, other: ElementField) -> ElementField:
+        r"""
+        `a + b` — merge two aggregates of this type into a fresh
+        one (union of sub-objects, first-seen order). Sub-handles
+        are **shared** (refcount bump), not deep-copied.
+        """
 
 @typing.final
 class FiniteElementSpace:
@@ -254,6 +253,12 @@ class FiniteElementSpace:
     def add_subspace(self, sub: SubFiniteElementSpace) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def __add__(self, other: FiniteElementSpace) -> FiniteElementSpace:
+        r"""
+        `a + b` — merge two aggregates of this type into a fresh
+        one (union of sub-objects, first-seen order). Sub-handles
+        are **shared** (refcount bump), not deep-copied.
+        """
 
 @typing.final
 class Matrix:
@@ -279,12 +284,6 @@ class Matrix:
         `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
         Fill entries via the block view (`block[0].add_entry(...)`) and
         compose several blocks with `+`, then `finalize()`.
-        """
-    def __add__(self, other: Matrix) -> Matrix:
-        r"""
-        `matrix_a + matrix_b` — merge two matrices into a fresh aggregate
-        (union of blocks, first-seen order). Block handles are **shared**
-        (refcount bump). Call `finalize()` on the result before solving.
         """
     def finalize(self) -> None:
         r"""
@@ -321,6 +320,12 @@ class Matrix:
     def add_sub_matrix(self, sub: SubMatrix) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def __add__(self, other: Matrix) -> Matrix:
+        r"""
+        `a + b` — merge two aggregates of this type into a fresh
+        one (union of sub-objects, first-seen order). Sub-handles
+        are **shared** (refcount bump), not deep-copied.
+        """
 
 @typing.final
 class Mesh:
@@ -339,7 +344,6 @@ class Mesh:
     def element_types(self) -> builtins.list[builtins.str]: ...
     def cell_counts(self) -> builtins.list[builtins.int]: ...
     def node(self, submesh_idx: builtins.int, cell_idx: builtins.int, node_idx: builtins.int) -> Node: ...
-    def __add__(self, other: Mesh) -> Mesh: ...
     def cell(self, submesh_idx: builtins.int, cell_idx: builtins.int) -> Cell:
         r"""
         `mesh.cell(submesh_idx, cell_idx)` → `Cell` view; same thing
@@ -369,6 +373,12 @@ class Mesh:
     def add_submesh(self, sub: SubMesh) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def __add__(self, other: Mesh) -> Mesh:
+        r"""
+        `a + b` — merge two aggregates of this type into a fresh
+        one (union of sub-objects, first-seen order). Sub-handles
+        are **shared** (refcount bump), not deep-copied.
+        """
 
 @typing.final
 class Model:
@@ -399,12 +409,6 @@ class Model:
         it targets (e.g. `"q"` for heat conduction) — see the model
         chapter of the book for the full semantics.
         """
-    def __add__(self, other: Model) -> Model:
-        r"""
-        `model_a + model_b` — merge two models into a fresh model (union of
-        sub-models, first-seen order). Sub-model handles are **shared**
-        (refcount bump), not deep-copied.
-        """
     def primal_vars(self) -> builtins.list[builtins.str]: ...
     def dual_vars(self) -> builtins.list[builtins.str]: ...
     def __len__(self) -> builtins.int: ...
@@ -423,6 +427,12 @@ class Model:
     def add_sub_model(self, sub: SubModel) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def __add__(self, other: Model) -> Model:
+        r"""
+        `a + b` — merge two aggregates of this type into a fresh
+        one (union of sub-objects, first-seen order). Sub-handles
+        are **shared** (refcount bump), not deep-copied.
+        """
 
 @typing.final
 class Node:
