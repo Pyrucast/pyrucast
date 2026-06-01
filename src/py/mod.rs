@@ -16,4 +16,3 @@ pub mod model;
 pub mod node;
 pub mod node_field;
 pub mod ops;
-pub mod solver;

@@ -1,4 +1,8 @@
-//! Python wrapper for [`crate::ops::solver::lu::solve`].
+//! Python wrapper for the solver operations in [`crate::ops::solver`].
+//!
+//! Free function solving a linear system into a [`PyNodeField`]. Kept here —
+//! mirroring `src/ops/solver/` — per the `py/ops/` convention (its identity
+//! is the *operation*, not its `NodeField` result).
 
 use crate::py::matrix::PyMatrix;
 use crate::py::node_field::PyNodeField;
