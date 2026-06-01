@@ -6,5 +6,7 @@
 //! `src/py/<type>.rs` (mirroring `src/containers/`); this `ops` tree holds
 //! the *verbs*, those the *nouns*.
 
+pub mod assemble;
+pub mod build;
 pub mod field;
 pub mod mesher;

@@ -92,11 +92,11 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::field::coordinates, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::restrict, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::merge, m)?)?;
-    m.add_function(wrap_pyfunction!(py::model::stiffness, m)?)?;
-    m.add_function(wrap_pyfunction!(py::model::mass, m)?)?;
-    m.add_function(wrap_pyfunction!(py::model::sub_material_field, m)?)?;
-    m.add_function(wrap_pyfunction!(py::model::material_field, m)?)?;
-    m.add_function(wrap_pyfunction!(py::model::material_field_per_sub_model, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::assemble::stiffness, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::assemble::mass, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::build::sub_material_field, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::build::material_field, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::build::material_field_per_sub_model, m)?)?;
     m.add_class::<py::configuration::PyConfiguration>()?;
     m.add_class::<py::node::PyNode>()?;
     m.add_class::<py::mesh::PySubMesh>()?;
