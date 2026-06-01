@@ -324,6 +324,30 @@ class Model:
     store. Identity is the Python object identity itself.
     """
     def __new__(cls) -> Model: ...
+    @classmethod
+    def heat_conduction(cls, fespace: FiniteElementSpace) -> Model:
+        r"""
+        `Model.heat_conduction(fespace)` — heat-conduction model spanning
+        **every** subspace of `fespace` (one zone per subspace). A
+        single-subspace space gives the unit case; several give one zone
+        each. Compose heterogeneous physics with `+`:
+        `Model.heat_conduction(fes) + Model.dirichlet(...)`.
+        """
+    @classmethod
+    def dirichlet(cls, primal_var: builtins.str, primal_dual: builtins.str, constrained_nodes: typing.Sequence[Node]) -> Model:
+        r"""
+        `Model.dirichlet(primal_var, primal_dual, constrained_nodes)` —
+        Dirichlet-constraint model (a single sub-model) imposed via
+        Lagrange multipliers. `constrained_nodes` is a list of `Node`
+        objects. See `SubModel.dirichlet` for the meaning of
+        `primal_var` / `primal_dual`.
+        """
+    def __add__(self, other: Model) -> Model:
+        r"""
+        `model_a + model_b` — merge two models into a fresh model (union of
+        sub-models, first-seen order). Sub-model handles are **shared**
+        (refcount bump), not deep-copied.
+        """
     def primal_vars(self) -> builtins.list[builtins.str]: ...
     def dual_vars(self) -> builtins.list[builtins.str]: ...
     def __len__(self) -> builtins.int: ...

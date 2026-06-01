@@ -5,7 +5,7 @@ use crate::containers::mesh::Node;
 use crate::containers::model::{Model, SubModel};
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::node::PyNode;
-use crate::py::finite_element_space::PySubFiniteElementSpace;
+use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
 use crate::py::matrix::PyMatrix;
 use crate::py::mesh::PyMesh;
 use crate::store::{insert, with, Handle};
@@ -102,6 +102,45 @@ impl PyModel {
         Ok(Self {
             inner: Model::empty(),
         })
+    }
+
+    /// `Model.heat_conduction(fespace)` — heat-conduction model spanning
+    /// **every** subspace of `fespace` (one zone per subspace). A
+    /// single-subspace space gives the unit case; several give one zone
+    /// each. Compose heterogeneous physics with `+`:
+    /// `Model.heat_conduction(fes) + Model.dirichlet(...)`.
+    #[classmethod]
+    fn heat_conduction(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+    ) -> PyResult<Self> {
+        let inner = Model::heat_conduction(&fespace.inner)?;
+        Ok(Self { inner })
+    }
+
+    /// `Model.dirichlet(primal_var, primal_dual, constrained_nodes)` —
+    /// Dirichlet-constraint model (a single sub-model) imposed via
+    /// Lagrange multipliers. `constrained_nodes` is a list of `Node`
+    /// objects. See `SubModel.dirichlet` for the meaning of
+    /// `primal_var` / `primal_dual`.
+    #[classmethod]
+    fn dirichlet(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        primal_var: String,
+        primal_dual: String,
+        constrained_nodes: Vec<PyRef<'_, PyNode>>,
+    ) -> PyResult<Self> {
+        let nodes: Vec<Node> = constrained_nodes.iter().map(|n| n.as_node().clone()).collect();
+        let inner = Model::dirichlet(primal_var, primal_dual, &nodes)?;
+        Ok(Self { inner })
+    }
+
+    /// `model_a + model_b` — merge two models into a fresh model (union of
+    /// sub-models, first-seen order). Sub-model handles are **shared**
+    /// (refcount bump), not deep-copied.
+    fn __add__(&self, other: PyRef<PyModel>) -> PyResult<PyModel> {
+        let inner = self.inner.merge(&other.inner)?;
+        Ok(PyModel { inner })
     }
 
     fn primal_vars(&self) -> PyResult<Vec<String>> {
