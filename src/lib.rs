@@ -89,9 +89,9 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesher::fill_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::to_poi1, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::consolidate, m)?)?;
-    m.add_function(wrap_pyfunction!(py::node_field::coordinates, m)?)?;
-    m.add_function(wrap_pyfunction!(py::node_field::restrict, m)?)?;
-    m.add_function(wrap_pyfunction!(py::node_field::merge, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::coordinates, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::restrict, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::merge, m)?)?;
     m.add_function(wrap_pyfunction!(py::model::stiffness, m)?)?;
     m.add_function(wrap_pyfunction!(py::model::mass, m)?)?;
     m.add_function(wrap_pyfunction!(py::model::sub_material_field, m)?)?;
