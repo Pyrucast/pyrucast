@@ -226,7 +226,9 @@ impl SubMesh {
     ///
     /// The interactive window draws a clickable button at the top
     /// showing the current component and value range; clicking it (or
-    /// pressing `Tab`) cycles through the field's components.
+    /// pressing `Tab`) cycles through the field's components. A colorbar
+    /// is drawn on the right edge; `scale` pins its bounds (default:
+    /// the data's own min/max).
     #[cfg(feature = "viz")]
     pub fn plot_with_field(
         &self,
@@ -234,8 +236,9 @@ impl SubMesh {
         save: Option<&std::path::Path>,
         field: &crate::containers::node_field::NodeField,
         component: Option<&str>,
+        scale: crate::viz::ColorScale,
     ) -> Result<()> {
-        crate::viz::render_submesh_with_field(self, field, component, view, save)
+        crate::viz::render_submesh_with_field(self, field, component, scale, view, save)
     }
 }
 
@@ -423,8 +426,9 @@ impl Mesh {
         save: Option<&std::path::Path>,
         field: &crate::containers::node_field::NodeField,
         component: Option<&str>,
+        scale: crate::viz::ColorScale,
     ) -> Result<()> {
-        crate::viz::render_mesh_with_field(self, field, component, view, save)
+        crate::viz::render_mesh_with_field(self, field, component, scale, view, save)
     }
 
 }

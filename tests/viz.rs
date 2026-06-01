@@ -12,7 +12,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::mesh::node::Node;
 use pyrucast::aggregate::Aggregate;
 use pyrucast::store::insert;
-use pyrucast::viz::View;
+use pyrucast::viz::{ColorScale, View};
 
 fn tmpdir() -> std::path::PathBuf {
     let p = std::env::temp_dir().join(format!(
@@ -227,8 +227,14 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
 
     let dir = tmpdir();
     let path = dir.join("mesh_field.svg");
-    mesh.plot_with_field(Some(View::front()), Some(&path), &field, None)
-        .unwrap();
+    mesh.plot_with_field(
+        Some(View::front()),
+        Some(&path),
+        &field,
+        None,
+        ColorScale::default(),
+    )
+    .unwrap();
 
     let text = std::fs::read_to_string(&path).unwrap();
     // Overlay label must mention the displayed component.
@@ -237,6 +243,55 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
         text.contains("min=") && text.contains("max="),
         "value range not present in SVG"
     );
+}
+
+#[test]
+fn plot_with_field_colorbar_uses_explicit_bounds() {
+    use pyrucast::containers::node_field::NodeField;
+
+    let cfg = insert(Configuration::new(2).unwrap());
+    let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+    let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+    let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+
+    let mut tri = SubMesh::new(cfg.clone(), ElementType::TRI3);
+    tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+    let tri_h = insert(tri);
+    let mut mesh = Mesh::empty();
+    mesh.add_sub(tri_h).unwrap();
+
+    let mut poi1 = SubMesh::new(cfg.clone(), ElementType::POI1);
+    poi1.add_cell(&[a.id()]).unwrap();
+    poi1.add_cell(&[b.id()]).unwrap();
+    poi1.add_cell(&[c.id()]).unwrap();
+    let poi1_h = insert(poi1);
+    let mut field = NodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
+    field.set_value(a.id(), "T", 0.0).unwrap();
+    field.set_value(b.id(), "T", 1.0).unwrap();
+    field.set_value(c.id(), "T", 2.0).unwrap();
+
+    let dir = tmpdir();
+    let path = dir.join("mesh_field_scaled.svg");
+    // Pin the scale to [-10, 10]; the colorbar ticks (and the overlay
+    // range) must reflect the override, not the data's own [1, 1] cell mean.
+    mesh.plot_with_field(
+        Some(View::front()),
+        Some(&path),
+        &field,
+        None,
+        ColorScale {
+            vmin: Some(-10.0),
+            vmax: Some(10.0),
+        },
+    )
+    .unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("min=-10.000"), "vmin override not applied");
+    assert!(text.contains("max=10.000"), "vmax override not applied");
+    // Colorbar tick labels: bottom = vmin, top = vmax, midpoint = 0.
+    assert!(text.contains("-10.000") && text.contains("10.000"));
+    assert!(text.contains("0.000"), "midpoint colorbar tick missing");
 }
 
 #[test]
@@ -266,7 +321,13 @@ fn plot_with_field_explicit_component_choice() {
     let dir = tmpdir();
     let path = dir.join("submesh_uy.svg");
     pyrucast::store::with(&tri_h, |s| {
-        s.plot_with_field(Some(View::front()), Some(&path), &field, Some("UY"))
+        s.plot_with_field(
+            Some(View::front()),
+            Some(&path),
+            &field,
+            Some("UY"),
+            ColorScale::default(),
+        )
     })
     .unwrap()
     .unwrap();
@@ -291,7 +352,7 @@ fn plot_with_field_unknown_component_errors() {
     let dir = tmpdir();
     let path = dir.join("nope.svg");
     let err = tri
-        .plot_with_field(None, Some(&path), &field, Some("UNKNOWN"))
+        .plot_with_field(None, Some(&path), &field, Some("UNKNOWN"), ColorScale::default())
         .unwrap_err();
     let msg = format!("{err}");
     assert!(msg.contains("UNKNOWN"), "error should mention the bad name");

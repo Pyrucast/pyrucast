@@ -346,7 +346,7 @@ class Mesh:
         as `mesh[submesh_idx][cell_idx]`.
         """
     def cell_count(self) -> builtins.int: ...
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None) -> None:
         r"""
         Visualize this mesh (every submesh in its own colour, or
         coloured by a `NodeField` if `field` is supplied). See
@@ -654,7 +654,7 @@ class SubMesh:
         """
     def add_cell(self, nodes: typing.Sequence[Node]) -> builtins.int: ...
     def cell_count(self) -> builtins.int: ...
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None) -> None:
         r"""
         Visualize this submesh.
         
@@ -671,6 +671,9 @@ class SubMesh:
           (defaults to the field's first component). In the
           interactive window, click the top button or press `Tab` to
           cycle through every component.
+        - `vmin` / `vmax`: pin the bottom / top of the colour scale (and
+          of the colorbar drawn on the right). Either may be left `None`
+          to track the data's own min / max for that bound.
         """
     def __len__(self) -> builtins.int:
         r"""

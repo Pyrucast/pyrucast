@@ -85,8 +85,11 @@ impl PySubMesh {
     ///   (defaults to the field's first component). In the
     ///   interactive window, click the top button or press `Tab` to
     ///   cycle through every component.
+    /// - `vmin` / `vmax`: pin the bottom / top of the colour scale (and
+    ///   of the colorbar drawn on the right). Either may be left `None`
+    ///   to track the data's own min / max for that bound.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None))]
     fn plot(
         &self,
         view: Option<(f64, f64, f64)>,
@@ -94,6 +97,8 @@ impl PySubMesh {
         show_axes: bool,
         field: Option<PyRef<crate::py::node_field::PyNodeField>>,
         component: Option<String>,
+        vmin: Option<f64>,
+        vmax: Option<f64>,
     ) -> PyResult<()> {
         let mut view = view
             .map(|(yaw, pitch, scale)| crate::viz::View {
@@ -105,6 +110,7 @@ impl PySubMesh {
             })
             .unwrap_or_else(crate::viz::View::default);
         view.show_axes = show_axes;
+        let scale = crate::viz::ColorScale { vmin, vmax };
         let save_ref = save.as_deref();
         match field {
             Some(f) => {
@@ -113,7 +119,7 @@ impl PySubMesh {
                 let field_handle = f.handle.clone();
                 crate::store::with(&sm_handle, |s| {
                     crate::store::with(&field_handle, |fld| {
-                        s.plot_with_field(Some(view), save_ref, fld, comp_ref)
+                        s.plot_with_field(Some(view), save_ref, fld, comp_ref, scale)
                     })?
                 })??;
             }
@@ -224,7 +230,7 @@ impl PyMesh {
     /// `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
     /// `field` and `component`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None))]
     fn plot(
         &self,
         view: Option<(f64, f64, f64)>,
@@ -232,6 +238,8 @@ impl PyMesh {
         show_axes: bool,
         field: Option<PyRef<crate::py::node_field::PyNodeField>>,
         component: Option<String>,
+        vmin: Option<f64>,
+        vmax: Option<f64>,
     ) -> PyResult<()> {
         let mut view = view
             .map(|(yaw, pitch, scale)| crate::viz::View {
@@ -243,13 +251,14 @@ impl PyMesh {
             })
             .unwrap_or_else(crate::viz::View::default);
         view.show_axes = show_axes;
+        let scale = crate::viz::ColorScale { vmin, vmax };
         let save_ref = save.as_deref();
         match field {
             Some(f) => {
                 let comp_ref = component.as_deref();
                 let field_handle = f.handle.clone();
                 crate::store::with(&field_handle, |fld| {
-                    self.inner.plot_with_field(Some(view), save_ref, fld, comp_ref)
+                    self.inner.plot_with_field(Some(view), save_ref, fld, comp_ref, scale)
                 })??;
             }
             None => {

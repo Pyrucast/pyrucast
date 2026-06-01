@@ -130,6 +130,28 @@ impl Default for View {
     }
 }
 
+// ─── Colour scale ─────────────────────────────────────────────────────────────
+
+/// User override for the colour-scale bounds of a field plot.
+///
+/// A `None` bound means "use the data's own min (resp. max) for that
+/// end", so the two bounds can be pinned independently — pass only
+/// `vmax` to clamp the top of the scale and let the bottom follow the
+/// data, matching the `vmin` / `vmax` convention of common plotting
+/// libraries.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ColorScale {
+    pub vmin: Option<f64>,
+    pub vmax: Option<f64>,
+}
+
+impl ColorScale {
+    /// Resolve the effective `(vmin, vmax)` against the data-derived range.
+    pub fn resolve(&self, data_min: f64, data_max: f64) -> (f64, f64) {
+        (self.vmin.unwrap_or(data_min), self.vmax.unwrap_or(data_max))
+    }
+}
+
 // ─── Output format dispatch ─────────────────────────────────────────────────
 
 /// Picture format inferred from the output path's extension.
@@ -198,6 +220,7 @@ pub(crate) fn render_mesh_with_field(
     mesh: &crate::containers::mesh::Mesh,
     field: &crate::containers::node_field::NodeField,
     component: Option<&str>,
+    scale: ColorScale,
     view: Option<View>,
     save: Option<&Path>,
 ) -> Result<()> {
@@ -209,13 +232,14 @@ pub(crate) fn render_mesh_with_field(
                 mesh,
                 field,
                 component: resolved,
+                scale,
             };
             render_to_file(&drawable, view, path)
         }
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_mesh_field(mesh, field, resolved, view)
+                window::run_interactive_mesh_field(mesh, field, resolved, scale, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {
@@ -235,6 +259,7 @@ pub(crate) fn render_submesh_with_field(
     submesh: &crate::containers::mesh::SubMesh,
     field: &crate::containers::node_field::NodeField,
     component: Option<&str>,
+    scale: ColorScale,
     view: Option<View>,
     save: Option<&Path>,
 ) -> Result<()> {
@@ -246,13 +271,14 @@ pub(crate) fn render_submesh_with_field(
                 submesh,
                 field,
                 component: resolved,
+                scale,
             };
             render_to_file(&drawable, view, path)
         }
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_submesh_field(submesh, field, resolved, view)
+                window::run_interactive_submesh_field(submesh, field, resolved, scale, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {

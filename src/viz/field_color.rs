@@ -176,6 +176,9 @@ pub struct MeshFieldView<'a> {
     pub mesh: &'a Mesh,
     pub field: &'a NodeField,
     pub component: &'a str,
+    /// Caller override for the colour-scale bounds; defaults to the
+    /// data's own range.
+    pub scale: crate::viz::ColorScale,
 }
 
 impl<'a> Drawable for MeshFieldView<'a> {
@@ -191,8 +194,9 @@ impl<'a> Drawable for MeshFieldView<'a> {
     where
         DB::ErrorType: 'static,
     {
-        let (per_sub, vmin, vmax) =
+        let (per_sub, dmin, dmax) =
             mesh_cell_values(self.mesh, self.field, self.component)?;
+        let (vmin, vmax) = self.scale.resolve(dmin, dmax);
         let mut all_prims: Vec<Primitive> = Vec::new();
         for (i, values) in per_sub.iter().enumerate() {
             let sm = self.mesh.submesh(i)?;
@@ -202,6 +206,7 @@ impl<'a> Drawable for MeshFieldView<'a> {
         }
         render_primitives(area, view, &all_prims)?;
         super::overlay::draw_field_overlay(area, self.component, vmin, vmax)?;
+        super::overlay::draw_colorbar(area, vmin, vmax)?;
         Ok(())
     }
 }
@@ -212,6 +217,9 @@ pub struct SubMeshFieldView<'a> {
     pub submesh: &'a SubMesh,
     pub field: &'a NodeField,
     pub component: &'a str,
+    /// Caller override for the colour-scale bounds; defaults to the
+    /// data's own range.
+    pub scale: crate::viz::ColorScale,
 }
 
 impl<'a> Drawable for SubMeshFieldView<'a> {
@@ -228,11 +236,13 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
         DB::ErrorType: 'static,
     {
         let values = submesh_cell_values(self.submesh, self.field, self.component)?;
-        let (vmin, vmax) = value_range([values.as_slice()]);
+        let (dmin, dmax) = value_range([values.as_slice()]);
+        let (vmin, vmax) = self.scale.resolve(dmin, dmax);
         let colors = colors_from_values(&values, vmin, vmax);
         let prims = submesh_primitives_with_colors(self.submesh, &colors)?;
         render_primitives(area, view, &prims)?;
         super::overlay::draw_field_overlay(area, self.component, vmin, vmax)?;
+        super::overlay::draw_colorbar(area, vmin, vmax)?;
         Ok(())
     }
 }
