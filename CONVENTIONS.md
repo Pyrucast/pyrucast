@@ -121,6 +121,25 @@ plusieurs modules. On garde donc un seul `pyrucast.pyi` et un namespace
 plat. Si le besoin de sous-modules se confirme, c'est une migration
 packaging à part entière (voir l'historique de cette décision).
 
+### Les fichiers wrappers reflètent l'arborescence Rust
+
+Le namespace Python reste plat (ci-dessus), mais les **fichiers** de la
+couche FFI suivent le même découpage que Rust — `containers/` (data) vs
+`ops/` (algos) :
+
+- **wrappers de type** → `src/py/<type>.rs`, en miroir de
+  `src/containers/<type>` ; n'y vivent que des `#[pyclass]` + `#[pymethods]`
+  (méthodes, vues, dunders, `classmethod` constructeurs du type) ;
+- **wrappers d'opération** → `src/py/ops/<famille>.rs`, en miroir de
+  `src/ops/<famille>/` ; n'y vivent que des `#[pyfunction]` libres.
+
+C'est un **repère de navigation**, pas un changement de surface : depuis un
+wrapper on retrouve l'impl Rust par parité de chemin —
+`py/ops/mesher.rs` ↔ `ops/mesher/`, et `line_seg2` ↔ `ops/mesher/line_seg2.rs`.
+Corollaire : une fonction libre se range par sa **famille `ops`** (cf. table
+de projection et cas tranchés ci-dessous), jamais par son type d'entrée ni
+de sortie.
+
 ## Agrégats : un ou plusieurs, de manière transparente
 
 Les conteneurs `Mesh`, `FiniteElementSpace`, `Model` et `ElementField` sont
