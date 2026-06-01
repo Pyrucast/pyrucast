@@ -181,50 +181,11 @@ impl PyMatrix {
         Ok(PyMatrix { inner })
     }
 
-    fn add_sub_matrix(&mut self, sub: PyRef<'_, PySubMatrix>) -> PyResult<()> {
-        self.inner.add_sub(sub.handle.clone())?;
-        Ok(())
-    }
-
     /// Build the global DOF table and CSR. Must be called before any
     /// solver-facing method (`dense`, `mul_dense`, …).
     fn finalize(&mut self) -> PyResult<()> {
         self.inner.finalize()?;
         Ok(())
-    }
-
-    fn sub_matrix_count(&self) -> PyResult<usize> {
-        Ok(self.inner.len())
-    }
-
-    fn sub_matrix(&self, i: usize) -> PyResult<PySubMatrix> {
-        let h = Aggregate::get(&self.inner, i)?;
-        Ok(PySubMatrix { handle: h })
-    }
-
-    /// The sole block **view** of a unitary matrix (exactly one block),
-    /// else a clear error — e.g. `matrix.unit().add_entry(...)`.
-    fn unit(&self) -> PyResult<PySubMatrix> {
-        let h = self.inner.unit()?;
-        Ok(PySubMatrix { handle: h })
-    }
-
-    /// `matrix[i]` → `SubMatrix` view on block `i` (negative indices
-    /// supported; `IndexError` out of range), so `for block in matrix:`
-    /// works and blocks are reachable as views.
-    fn __getitem__(&self, idx: isize) -> PyResult<PySubMatrix> {
-        let n = self.inner.len();
-        let i = crate::aggregate::normalize_index(idx, n).ok_or_else(|| {
-            pyo3::exceptions::PyIndexError::new_err(format!(
-                "Matrix index {idx} out of range (len={n})"
-            ))
-        })?;
-        let h = Aggregate::get(&self.inner, i)?;
-        Ok(PySubMatrix { handle: h })
-    }
-
-    fn __len__(&self) -> PyResult<usize> {
-        Ok(self.inner.len())
     }
 
     fn n_rows(&self) -> PyResult<usize> {
@@ -295,12 +256,6 @@ impl PyMatrix {
             .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
             .collect())
     }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.inner))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.inner))
-    }
 }
+
+crate::impl_aggregate_pymethods!(PyMatrix, PySubMatrix, "Matrix", sub_matrix);
