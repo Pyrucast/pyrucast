@@ -163,16 +163,27 @@ Trois conséquences mécaniques :
    sort du chemin de construction **côté Python** : les constructeurs
    `Sub*` n'y sont pas exposés (c'est l'« Exception assumée : Rust bas
    niveau, Python curé » ci-dessus). **Côté Rust**, `SubMesh::new` & co.
-   restent `pub` — la couche bas niveau en a besoin. Corollaire : un agrégat
-   **unitaire se comporte comme son sous-objet** — les
-   accesseurs/mutations/vues mono-zone sont exposés au niveau parent
-   (p. ex. `Mesh::add_cell`, `Model::dual_vars`), pour qu'on n'ait jamais à
-   écrire `parent[0]` dans le cas courant.
+   restent `pub` — la couche bas niveau en a besoin.
+
+   **Cas unitaire : `.unit()`, pas de re-codage au parent.** Pour atteindre
+   une méthode du sous-objet quand l'agrégat est unitaire, on **n'expose
+   pas** la méthode du `Sub` sur le parent (zéro re-codage) : on expose
+   `.unit()` — la **vue de l'unique sous-objet**, erreur claire si l'agrégat
+   n'est pas exactement unitaire — et on écrit `parent.unit().méthode(...)`
+   (`mesh.unit().add_cell(...)`, `ef.unit().set_uniform(...)`,
+   `K.unit().add_entry(...)`). C'est plus honnête que `parent[0]` (qui prend
+   silencieusement le premier de plusieurs) et garde l'utilisateur conscient
+   qu'il manipule un agrégat unitaire. Attention à ne **pas** confondre avec
+   les méthodes parent qui *agrègent réellement* — somme/union/liste/global
+   (`Mesh::cell_count`, `Model::dual_vars`, `Matrix::n_rows`, …) : celles-là
+   ne sont pas des délégations et restent au parent. Côté Rust, la couche bas
+   niveau garde par commodité ses quelques délégations (`Mesh::add_cell`).
 
 **Coercition aux frontières.** Là où une opération exige *vraiment* un seul
-sous-objet (p. ex. le support d'un `NodeField`), elle accepte le **parent**
-et déballe `self[0]` si l'agrégat est unitaire ; sinon, erreur explicite.
-On ne demande jamais à l'utilisateur de fournir le `Sub*` lui-même.
+sous-objet (p. ex. le support d'un `NodeField`, ou `Matrix.block`), elle
+accepte le **parent** et déballe son unique sous-objet via `Aggregate::unit`
+(erreur explicite si l'agrégat n'est pas unitaire). On ne demande jamais à
+l'utilisateur de fournir le `Sub*` lui-même.
 
 Ce qui est **projeté mécaniquement** vers Python (miroir 1:1) : le
 constructeur nommé du parent (Rust `Model::heat_conduction` → `classmethod`

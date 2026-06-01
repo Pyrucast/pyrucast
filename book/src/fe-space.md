@@ -318,7 +318,7 @@ n1 = c.add_node([2.0, 0.0])
 n2 = c.add_node([0.0, 2.0])
 
 mesh = pyrucast.Mesh(c, "TRI3")
-mesh.add_cell([n0.id, n1.id, n2.id])
+mesh.unit().add_cell([n0, n1, n2])
 
 # Constructeur par défaut : Lagrange1 + Gauss partout.
 fes = pyrucast.FiniteElementSpace(mesh)

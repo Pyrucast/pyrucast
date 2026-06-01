@@ -69,7 +69,7 @@ b = c.add_node([1.0, 0.0])
 n3 = c.add_node([0.5, 1.0])
 
 mesh = pyrucast.Mesh(c, "TRI3")
-mesh.add_cell([a, b, n3])
+mesh.unit().add_cell([a, b, n3])
 print(mesh)               # Mesh: 1 submesh(es), 1 cell(s) total
 ```
 
@@ -144,7 +144,7 @@ nodes = [c.add_node(p) for p in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
 
 contour = pyrucast.Mesh(c, "SEG2")
 for i in range(4):
-    contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
+    contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
 surface = pyrucast.Mesh.fill_surface(contour, "TRI3")
 print(surface)        # Mesh: 1 submesh(es), 2 cell(s) total
@@ -164,7 +164,7 @@ nodes = [c.add_node(list(p)) for p in pts]
 
 contour = pyrucast.Mesh(c, "SEG2")
 for i in range(4):
-    contour.add_cell([nodes[i].id, nodes[(i + 1) % 4].id])
+    contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
 surface = pyrucast.Mesh.fill_surface(contour, "TRI3")
 # 2 triangles dont les sommets vivent dans le repère 3D global.
@@ -181,13 +181,13 @@ c = pyrucast.Configuration(dim=2)
 outer = pyrucast.Mesh(c, "SEG2")
 outer_nodes = [c.add_node(list(p)) for p in [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]]
 for i in range(4):
-    outer.add_cell([outer_nodes[i].id, outer_nodes[(i + 1) % 4].id])
+    outer.unit().add_cell([outer_nodes[i], outer_nodes[(i + 1) % 4]])
 
 # Trou : carré 2×2 centré.
 hole = pyrucast.Mesh(c, "SEG2")
 hole_nodes = [c.add_node(list(p)) for p in [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]]
 for i in range(4):
-    hole.add_cell([hole_nodes[i].id, hole_nodes[(i + 1) % 4].id])
+    hole.unit().add_cell([hole_nodes[i], hole_nodes[(i + 1) % 4]])
 
 # Sans raffinement : 6 triangles « bruts ».
 brut = pyrucast.Mesh.fill_surface(outer + hole, "TRI3")

@@ -64,8 +64,8 @@ a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
 mesh = pyrucast.Mesh(c, "POI1")      # un sous-maillage = liste de nœuds
-mesh.add_cell([a])
-mesh.add_cell([b])
+mesh.unit().add_cell([a])
+mesh.unit().add_cell([b])
 
 print(c)
 print(mesh)

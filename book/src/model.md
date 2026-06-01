@@ -142,7 +142,7 @@ c = pyrucast.Configuration(dim=1)
 a = c.add_node([0.0])
 b = c.add_node([1.0])
 mesh = pyrucast.Mesh(c, "SEG2")
-mesh.add_cell([a, b])
+mesh.unit().add_cell([a, b])
 fes = pyrucast.FiniteElementSpace(mesh)
 
 # Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
@@ -179,7 +179,7 @@ c = pyrucast.Configuration(dim=1)
 nodes = [c.add_node([i / 4.0]) for i in range(5)]
 mesh = pyrucast.Mesh(c, "SEG2")
 for i in range(4):
-    mesh.add_cell([nodes[i], nodes[i + 1]])
+    mesh.unit().add_cell([nodes[i], nodes[i + 1]])
 fes = pyrucast.FiniteElementSpace(mesh)
 
 # 2) Modèle : conduction + Dirichlet aux deux bouts.
@@ -198,8 +198,8 @@ materials = pyrucast.material_field(model, [("k", 1.0)])
 # 4) Chargement : valeurs imposées aux nœuds-multiplicateurs.
 # NodeField accepte un Mesh unitaire comme support (coercition parent→sub).
 rhs_mesh = pyrucast.Mesh(c, "POI1")
-rhs_mesh.add_cell([mult_left])
-rhs_mesh.add_cell([mult_right])
+rhs_mesh.unit().add_cell([mult_left])
+rhs_mesh.unit().add_cell([mult_right])
 rhs = pyrucast.NodeField(rhs_mesh, ["T"])
 rhs.set_value(mult_left, "T", 0.0)
 rhs.set_value(mult_right, "T", 1.0)

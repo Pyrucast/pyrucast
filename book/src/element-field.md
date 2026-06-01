@@ -116,7 +116,7 @@ a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 c2 = c.add_node([0.0, 1.0])
 mesh = pyrucast.Mesh(c, "TRI3")
-mesh.add_cell([a.id, b.id, c2.id])
+mesh.unit().add_cell([a, b, c2])
 fes = pyrucast.FiniteElementSpace(mesh)
 sub = fes[0]
 

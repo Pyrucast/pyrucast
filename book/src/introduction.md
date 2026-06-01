@@ -84,7 +84,7 @@ a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
 mesh = pyrucast.Mesh(c, "SEG2")
-mesh.add_cell([a, b])
+mesh.unit().add_cell([a, b])
 print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
 ```
 

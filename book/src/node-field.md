@@ -84,8 +84,8 @@ a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
 mesh = pyrucast.Mesh(c, "POI1")
-mesh.add_cell([a])
-mesh.add_cell([b])
+mesh.unit().add_cell([a])
+mesh.unit().add_cell([b])
 
 u = pyrucast.NodeField(mesh, ["UX", "UY"])
 u.set(0, 0, 1.5)

@@ -94,7 +94,7 @@ b = cfg.add_node([1.0, 0.0, 0.0])
 c = cfg.add_node([0.0, 1.0, 0.0])
 
 mesh = pyrucast.Mesh(cfg, "TRI3")
-mesh.add_cell([a, b, c])
+mesh.unit().add_cell([a, b, c])
 
 # (yaw, pitch, scale) ; save=None ouvre la fenêtre interactive.
 mesh.plot(view=(45.0, 35.264, 1.0), save="triangle.svg")
