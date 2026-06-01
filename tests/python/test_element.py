@@ -8,7 +8,7 @@ def _seg2_fes(length=2.0):
     a = c.add_node([0.0])
     b = c.add_node([length])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([a, b])
+    mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     return c, a, b, fes
 
@@ -31,8 +31,8 @@ def test_fes_elements_returns_a_list():
     c = pyrucast.Configuration(1)
     nodes = [c.add_node([i * 1.0]) for i in range(3)]
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([nodes[0], nodes[1]])
-    mesh.add_cell([nodes[1], nodes[2]])
+    mesh.unit().add_cell([nodes[0], nodes[1]])
+    mesh.unit().add_cell([nodes[1], nodes[2]])
     fes = pyrucast.FiniteElementSpace(mesh)
     elements = fes.elements(0)
     assert len(elements) == 2
@@ -44,7 +44,7 @@ def test_subspace_is_iterable_over_elements():
     nodes = [c.add_node([i * 1.0]) for i in range(4)]
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(3):
-        mesh.add_cell([nodes[i], nodes[i + 1]])
+        mesh.unit().add_cell([nodes[i], nodes[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     # __len__ + __getitem__: sequence iteration works.

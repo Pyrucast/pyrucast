@@ -8,7 +8,7 @@ def _poi1(c, ids):
     block support — Matrix.block accepts a unitary Mesh)."""
     mesh = pyrucast.Mesh(c, "POI1")
     for nid in ids:
-        mesh.add_cell([nid])
+        mesh.unit().add_cell([nid])
     return mesh
 
 

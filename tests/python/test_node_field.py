@@ -11,7 +11,7 @@ def _poi1_with(n_nodes, dim=2):
     nodes = [c.add_node([float(i)] + coords[1:]) for i in range(n_nodes)]
     mesh = pyrucast.Mesh(c, "POI1")
     for n in nodes:
-        mesh.add_cell([n])
+        mesh.unit().add_cell([n])
     return c, nodes, mesh
 
 
@@ -94,7 +94,7 @@ def test_field_protects_nodes_from_gc():
     a = c.add_node([0.0])
     nid = a.id
     sm = pyrucast.Mesh(c, "POI1")
-    sm.add_cell([a])
+    sm.unit().add_cell([a])
     field = pyrucast.NodeField(sm, ["T"])
 
     # NodeField shares the SubMesh handle, so per-node refcounts are
@@ -121,8 +121,8 @@ def test_coordinates_poi1_mesh_xyz():
     a = c.add_node([1.0, 2.0, 3.0])
     b = c.add_node([4.0, 5.0, 6.0])
     mesh = pyrucast.Mesh(c, "POI1")
-    mesh.add_cell([a])
-    mesh.add_cell([b])
+    mesh.unit().add_cell([a])
+    mesh.unit().add_cell([b])
 
     f = pyrucast.coordinates(mesh)
     assert f.components() == ["X", "Y", "Z"]
@@ -141,8 +141,8 @@ def test_coordinates_converts_non_poi1_and_deduplicates():
     d = c.add_node([1.5, 1.0])
 
     tri = pyrucast.Mesh(c, "TRI3")
-    tri.add_cell([a, b, cc])
-    tri.add_cell([b, d, cc])
+    tri.unit().add_cell([a, b, cc])
+    tri.unit().add_cell([b, d, cc])
 
     f = pyrucast.coordinates(tri)
     assert f.components() == ["X", "Y"]  # 2-D ⇒ X, Y only
@@ -155,7 +155,7 @@ def test_coordinates_component_subset():
     c = pyrucast.Configuration(3)
     a = c.add_node([1.0, 2.0, 3.0])
     mesh = pyrucast.Mesh(c, "POI1")
-    mesh.add_cell([a])
+    mesh.unit().add_cell([a])
 
     f = pyrucast.coordinates(mesh, ["X", "Z"])
     assert f.components() == ["X", "Z"]
@@ -167,7 +167,7 @@ def test_coordinates_rejects_axis_beyond_dimension():
     c = pyrucast.Configuration(2)
     a = c.add_node([0.0, 0.0])
     mesh = pyrucast.Mesh(c, "POI1")
-    mesh.add_cell([a])
+    mesh.unit().add_cell([a])
     try:
         pyrucast.coordinates(mesh, ["Z"])  # no Z in 2-D
     except RuntimeError:
@@ -240,11 +240,11 @@ def test_merge_compatible_and_conflict():
     n1 = c.add_node([1.0])
     n2 = c.add_node([2.0])
     sm_a = pyrucast.Mesh(c, "POI1")
-    sm_a.add_cell([n0])
-    sm_a.add_cell([n1])
+    sm_a.unit().add_cell([n0])
+    sm_a.unit().add_cell([n1])
     sm_b = pyrucast.Mesh(c, "POI1")
-    sm_b.add_cell([n1])
-    sm_b.add_cell([n2])
+    sm_b.unit().add_cell([n1])
+    sm_b.unit().add_cell([n2])
     a = pyrucast.NodeField(sm_a, ["T"])
     b = pyrucast.NodeField(sm_b, ["T"])
     a.set_value(n0, "T", 5.0)
@@ -276,8 +276,8 @@ def test_restrict_to_mesh_subset():
 
     # Mesh covering only nodes[0] and nodes[2].
     mesh = pyrucast.Mesh(c, "POI1")
-    mesh.add_cell([nodes[0]])
-    mesh.add_cell([nodes[2]])
+    mesh.unit().add_cell([nodes[0]])
+    mesh.unit().add_cell([nodes[2]])
 
     r = pyrucast.restrict(f, mesh)
     assert r.node_count() == 2

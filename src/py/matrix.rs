@@ -202,6 +202,13 @@ impl PyMatrix {
         Ok(PySubMatrix { handle: h })
     }
 
+    /// The sole block **view** of a unitary matrix (exactly one block),
+    /// else a clear error — e.g. `matrix.unit().add_entry(...)`.
+    fn unit(&self) -> PyResult<PySubMatrix> {
+        let h = self.inner.unit()?;
+        Ok(PySubMatrix { handle: h })
+    }
+
     /// `matrix[i]` → `SubMatrix` view on block `i` (negative indices
     /// supported; `IndexError` out of range), so `for block in matrix:`
     /// works and blocks are reachable as views.

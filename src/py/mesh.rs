@@ -185,21 +185,6 @@ impl PyMesh {
         Ok(Self { inner: mesh })
     }
 
-    fn add_cell(&mut self, nodes: Vec<PyRef<'_, PyNode>>) -> PyResult<usize> {
-        let nodes_typed: Vec<NodeId> = nodes.iter().map(|n| n.as_node().id()).collect();
-        Ok(self.inner.add_cell(&nodes_typed)?)
-    }
-
-    #[getter]
-    fn element_type(&self) -> PyResult<Option<String>> {
-        if self.inner.submesh_count() == 1 {
-            let h = self.inner.submesh(0)?;
-            Ok(Some(with(&h, |sm| sm.element_type().name().to_string())?))
-        } else {
-            Ok(None)
-        }
-    }
-
     fn element_types(&self) -> PyResult<Vec<String>> {
         let types = self.inner.element_types()?;
         Ok(types.into_iter().map(|et| et.name().to_string()).collect())

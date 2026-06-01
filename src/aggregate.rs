@@ -293,6 +293,16 @@ macro_rules! impl_aggregate_pymethods {
                     Ok($Sub { handle: h })
                 }
 
+                /// The sole sub-object **view** of a unitary aggregate
+                /// (exactly one sub), else a clear error. Use it where the
+                /// single-zone case needs a sub method: `parent.unit().m(...)`.
+                /// More honest than `parent[0]` (which silently takes the
+                /// first of several) — see `CONVENTIONS.md`.
+                fn unit(&self) -> pyo3::PyResult<$Sub> {
+                    let h = $crate::aggregate::Aggregate::unit(&self.inner)?;
+                    Ok($Sub { handle: h })
+                }
+
                 fn add_sub(&mut self, sub: pyo3::PyRef<'_, $Sub>) -> pyo3::PyResult<()> {
                     $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
                     Ok(())

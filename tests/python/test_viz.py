@@ -126,11 +126,11 @@ def test_mesh_plot_uses_each_submesh_color(tmp_path):
     e = c.add_node([2.0, 1.0, 0.0])
 
     red = pyrucast.Mesh(c, "TRI3")
-    red.add_cell([a, b, cc])
+    red.unit().add_cell([a, b, cc])
     red[0].face_color = (220, 60, 60)
 
     blue = pyrucast.Mesh(c, "TRI3")
-    blue.add_cell([b, d, e])
+    blue.unit().add_cell([b, d, e])
     blue[0].face_color = (60, 60, 220)
 
     mesh = red + blue
@@ -149,7 +149,7 @@ def _build_field_on_nodes(c, nodes, components, values_per_component):
     """Helper: build a POI1 NodeField on `nodes` and fill values."""
     poi1 = pyrucast.Mesh(c, "POI1")
     for n in nodes:
-        poi1.add_cell([n])
+        poi1.unit().add_cell([n])
     nf = pyrucast.NodeField(poi1, list(components))
     for ci, comp in enumerate(components):
         for ni, n in enumerate(nodes):
@@ -163,7 +163,7 @@ def test_mesh_plot_with_field_writes_overlay_label(tmp_path):
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([a, b, cc])
+    mesh.unit().add_cell([a, b, cc])
 
     nf = _build_field_on_nodes(c, [a, b, cc], ["T"], [[0.0, 1.0, 2.0]])
 

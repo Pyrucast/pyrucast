@@ -16,9 +16,9 @@ def test_lagrange1_constructor_one_to_one_with_submeshes():
     n3 = c.add_node([1.0, 1.0])
 
     tri = pyrucast.Mesh(c, "TRI3")
-    tri.add_cell([n0, n1, n2])
+    tri.unit().add_cell([n0, n1, n2])
     qua = pyrucast.Mesh(c, "QUA4")
-    qua.add_cell([n0, n1, n3, n2])
+    qua.unit().add_cell([n0, n1, n3, n2])
     mesh = tri + qua
 
     fes = pyrucast.FiniteElementSpace(mesh)
@@ -39,7 +39,7 @@ def test_lagrange1_classmethod_equivalent():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
 
     fes_a = pyrucast.FiniteElementSpace(mesh)
     fes_b = pyrucast.FiniteElementSpace.lagrange1(mesh)
@@ -54,7 +54,7 @@ def test_with_choices_explicit_per_submesh():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
 
     fes = pyrucast.FiniteElementSpace.with_choices(
         mesh, [("LAGRANGE1", "GAUSS")]
@@ -69,7 +69,7 @@ def test_with_choices_rejects_bad_length():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
 
     try:
         pyrucast.FiniteElementSpace.with_choices(mesh, [])
@@ -85,7 +85,7 @@ def test_unknown_interpolation_raises():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
 
     try:
         pyrucast.FiniteElementSpace(mesh, interpolation="BOGUS")
@@ -101,7 +101,7 @@ def test_unknown_quadrature_raises():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
 
     try:
         pyrucast.FiniteElementSpace(mesh, quadrature="BOGUS")
@@ -115,7 +115,7 @@ def test_rejects_mesh_with_poi1_submesh():
     c = pyrucast.Configuration(2)
     a = c.add_node([0.0, 0.0])
     mesh = pyrucast.Mesh(c, "POI1")
-    mesh.add_cell([a])
+    mesh.unit().add_cell([a])
     try:
         pyrucast.FiniteElementSpace(mesh)
     except RuntimeError:
@@ -145,7 +145,7 @@ def test_reference_tables_partition_of_unity():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     for g in range(sub.gauss_count()):
@@ -161,7 +161,7 @@ def test_reference_tables_dn_dxi_sums_to_zero():
     n2 = c.add_node([1.0, 1.0])
     n3 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "QUA4")
-    mesh.add_cell([n0, n1, n2, n3])
+    mesh.unit().add_cell([n0, n1, n2, n3])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     n_nodes = sub.nodes_per_cell
@@ -200,7 +200,7 @@ def test_gauss_weights_sum_to_reference_volume():
                 (0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (0.0, 1.0, 1.0),
             ]]
         mesh = pyrucast.Mesh(c, et)
-        mesh.add_cell([n for n in nodes])
+        mesh.unit().add_cell([n for n in nodes])
         fes = pyrucast.FiniteElementSpace(mesh)
         sub = fes[0]
         s = sum(sub.gauss_weight(g) for g in range(sub.gauss_count()))
@@ -216,7 +216,7 @@ def test_seg2_jacobian_1d():
     a = c.add_node([0.0])
     b = c.add_node([5.0])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([a, b])
+    mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     for g in range(sub.gauss_count()):
@@ -229,7 +229,7 @@ def test_seg2_jacobian_in_plane():
     a = c.add_node([0.0, 1.0])
     b = c.add_node([3.0, 1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([a, b])
+    mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     for g in range(sub.gauss_count()):
@@ -247,7 +247,7 @@ def test_tri3_jacobian_planar():
     n1 = c.add_node([3.0, 0.0])
     n2 = c.add_node([0.0, 4.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     for g in range(sub.gauss_count()):
@@ -262,7 +262,7 @@ def test_tri3_manifold_in_3d():
     n1 = c.add_node([3.0, 0.0, 7.0])
     n2 = c.add_node([0.0, 4.0, 7.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     assert sub.space_dim == 3
@@ -279,7 +279,7 @@ def test_qua4_unit_square_integrates_to_area():
     n2 = c.add_node([1.0, 1.0])
     n3 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "QUA4")
-    mesh.add_cell([n0, n1, n2, n3])
+    mesh.unit().add_cell([n0, n1, n2, n3])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     area = sum(sub.gauss_weight(g) * sub.det_jacobian(0, g) for g in range(sub.gauss_count()))
@@ -294,7 +294,7 @@ def test_hex8_unit_cube_integrates_to_volume():
     ]
     nodes = [c.add_node(list(p)) for p in pts]
     mesh = pyrucast.Mesh(c, "HEX8")
-    mesh.add_cell([n for n in nodes])
+    mesh.unit().add_cell([n for n in nodes])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     vol = sum(sub.gauss_weight(g) * sub.det_jacobian(0, g) for g in range(sub.gauss_count()))
@@ -309,7 +309,7 @@ def test_tri3_dn_dx_constant_known_values():
     n1 = c.add_node([3.0, 0.0])
     n2 = c.add_node([0.0, 4.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     for g in range(sub.gauss_count()):
@@ -331,7 +331,7 @@ def test_jacobian_reflects_mesh_displacement():
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.add_cell([a, b])
+    mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
 
@@ -352,7 +352,7 @@ def test_index_out_of_range():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     try:
         _ = fes[5]
@@ -368,7 +368,7 @@ def test_negative_indexing_works():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     assert fes[-1].element_type == "TRI3"
 
@@ -379,7 +379,7 @@ def test_gauss_index_out_of_range_raises():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     try:
@@ -396,7 +396,7 @@ def test_cell_index_out_of_range_raises():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     try:
@@ -416,7 +416,7 @@ def test_repr_and_str():
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
     mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.add_cell([n0, n1, n2])
+    mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     assert "FiniteElementSpace" in repr(fes)
     assert "1 subspace" in str(fes)
