@@ -19,26 +19,31 @@ pub struct PyElement {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyElement {
+    /// Index of this element within its subspace.
     #[getter]
     fn index(&self) -> PyResult<usize> {
         Ok(self.inner.index())
     }
 
+    /// Number of nodes of this element.
     #[getter]
     fn nodes_per_cell(&self) -> PyResult<usize> {
         Ok(self.inner.nodes_per_cell()?)
     }
 
+    /// Spatial dimension the element lives in.
     #[getter]
     fn space_dim(&self) -> PyResult<usize> {
         Ok(self.inner.space_dim()?)
     }
 
+    /// Reference (parametric) dimension of the element.
     #[getter]
     fn ref_dim(&self) -> PyResult<usize> {
         Ok(self.inner.ref_dim()?)
     }
 
+    /// Number of Gauss (quadrature) points.
     #[getter]
     fn gauss_count(&self) -> PyResult<usize> {
         Ok(self.inner.gauss_count())

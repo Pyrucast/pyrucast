@@ -22,6 +22,8 @@ pub struct PySubMatrix {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubMatrix {
+    /// Accumulate `value` at row `(row_node, row_field)`, column
+    /// `(col_node, col_field)` (COO entry).
     fn add_entry(
         &self,
         row_node: PyRef<'_, PyNode>,
@@ -37,6 +39,7 @@ impl PySubMatrix {
         Ok(())
     }
 
+    /// Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
     fn get(
         &self,
         row_node: PyRef<'_, PyNode>,
@@ -50,23 +53,28 @@ impl PySubMatrix {
         })?)
     }
 
+    /// Number of rows of this block.
     fn n_rows(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |m| m.n_rows())?)
     }
 
+    /// Number of columns of this block.
     fn n_cols(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |m| m.n_cols())?)
     }
 
+    /// Number of stored COO entries.
     fn entry_count(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |m| m.entry_count())?)
     }
 
+    /// Whether this block is declared symmetric.
     #[getter]
     fn symmetric(&self) -> PyResult<bool> {
         Ok(with(&self.handle, |m| m.symmetric())?)
     }
 
+    /// Variable (field) names this block addresses.
     fn field_names(&self) -> PyResult<Vec<String>> {
         Ok(with(&self.handle, |m| m.field_names())?)
     }
@@ -179,27 +187,33 @@ impl PyMatrix {
         Ok(())
     }
 
+    /// Total number of rows of the (finalized) global matrix.
     fn n_rows(&self) -> PyResult<usize> {
         Ok(self.inner.n_rows()?)
     }
 
+    /// Total number of columns of the (finalized) global matrix.
     fn n_cols(&self) -> PyResult<usize> {
         Ok(self.inner.n_cols()?)
     }
 
+    /// Total number of stored entries across all blocks.
     fn entry_count(&self) -> PyResult<usize> {
         Ok(self.inner.entry_count()?)
     }
 
+    /// Whether the matrix is declared symmetric.
     #[getter]
     fn symmetric(&self) -> PyResult<bool> {
         Ok(self.inner.symmetric()?)
     }
 
+    /// Variable (field) names across the whole matrix.
     fn field_names(&self) -> PyResult<Vec<String>> {
         Ok(self.inner.field_names()?)
     }
 
+    /// `(node_id, field_name)` of each global row, in order.
     fn row_dofs(&self) -> PyResult<Vec<(u32, String)>> {
         Ok(self
             .inner
@@ -209,6 +223,7 @@ impl PyMatrix {
             .collect())
     }
 
+    /// `(node_id, field_name)` of each global column, in order.
     fn col_dofs(&self) -> PyResult<Vec<(u32, String)>> {
         Ok(self
             .inner
@@ -218,6 +233,7 @@ impl PyMatrix {
             .collect())
     }
 
+    /// Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
     fn get(
         &self,
         row_node: PyRef<'_, PyNode>,
@@ -229,10 +245,12 @@ impl PyMatrix {
         Ok(self.inner.get(rn, row_field, cn, col_field)?)
     }
 
+    /// Dense row-major buffer of the finalized matrix (`n_rows × n_cols`).
     fn dense(&self) -> PyResult<Vec<f64>> {
         Ok(self.inner.dense()?)
     }
 
+    /// `y = A · x` against a dense vector `x`.
     fn mul_dense(&self, x: Vec<f64>) -> PyResult<Vec<f64>> {
         Ok(self.inner.mul_dense(&x)?)
     }

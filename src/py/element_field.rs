@@ -20,39 +20,48 @@ pub struct PySubElementField {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubElementField {
+    /// Number of cells (elements) this field covers.
     fn cell_count(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |f| f.cell_count())?)
     }
 
+    /// Number of Gauss points per cell.
     fn gauss_count(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |f| f.gauss_count())?)
     }
 
+    /// Number of components stored per point.
     fn component_count(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |f| f.component_count())?)
     }
 
+    /// Component names, in order.
     fn components(&self) -> PyResult<Vec<String>> {
         Ok(with(&self.handle, |f| f.components().to_vec())?)
     }
 
+    /// Index of component `name`, or `None` if unknown.
     fn component_index(&self, name: &str) -> PyResult<Option<usize>> {
         Ok(with(&self.handle, |f| f.component_index(name))?)
     }
 
+    /// Value at `(cell, gauss)` for component index `comp`.
     fn get(&self, cell: usize, gauss: usize, comp: usize) -> PyResult<f64> {
         Ok(with(&self.handle, |f| f.get(cell, gauss, comp))??)
     }
 
+    /// Set the value at `(cell, gauss)` for component index `comp`.
     fn set(&self, cell: usize, gauss: usize, comp: usize, value: f64) -> PyResult<()> {
         crate::store::with_mut(&self.handle, |f| f.set(cell, gauss, comp, value))??;
         Ok(())
     }
 
+    /// Value at `(cell, gauss)` for the named `component`.
     fn value(&self, cell: usize, gauss: usize, component: &str) -> PyResult<f64> {
         Ok(with(&self.handle, |f| f.value(cell, gauss, component))??)
     }
 
+    /// Set the value at `(cell, gauss)` for the named `component`.
     fn set_value(
         &self,
         cell: usize,
@@ -66,17 +75,20 @@ impl PySubElementField {
         Ok(())
     }
 
+    /// All component values at `(cell, gauss)`, in component order.
     fn point_values(&self, cell: usize, gauss: usize) -> PyResult<Vec<f64>> {
         Ok(with(&self.handle, |f| {
             f.point_values(cell, gauss).map(|s| s.to_vec())
         })??)
     }
 
+    /// Set `component` to `value` at every point.
     fn set_uniform(&self, component: &str, value: f64) -> PyResult<()> {
         crate::store::with_mut(&self.handle, |f| f.set_uniform(component, value))??;
         Ok(())
     }
 
+    /// Set `component` to `value` at every point of `cell`.
     fn set_cell_uniform(&self, cell: usize, component: &str, value: f64) -> PyResult<()> {
         crate::store::with_mut(&self.handle, |f| {
             f.set_cell_uniform(cell, component, value)
@@ -84,21 +96,25 @@ impl PySubElementField {
         Ok(())
     }
 
+    /// Add `scalar` to every value of `component` (in place).
     fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
         crate::store::with_mut(&self.handle, |f| f.add_to_component(component, scalar))??;
         Ok(())
     }
 
+    /// Subtract `scalar` from every value of `component` (in place).
     fn sub_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
         crate::store::with_mut(&self.handle, |f| f.sub_to_component(component, scalar))??;
         Ok(())
     }
 
+    /// Multiply every value of `component` by `scalar` (in place).
     fn mul_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
         crate::store::with_mut(&self.handle, |f| f.mul_to_component(component, scalar))??;
         Ok(())
     }
 
+    /// Divide every value of `component` by `scalar` (in place).
     fn div_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
         crate::store::with_mut(&self.handle, |f| f.div_to_component(component, scalar))??;
         Ok(())

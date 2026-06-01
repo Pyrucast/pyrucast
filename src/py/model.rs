@@ -22,10 +22,12 @@ pub struct PySubModel {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubModel {
+    /// Names of the primal (primary) variables of this sub-model.
     fn primal_vars(&self) -> PyResult<Vec<String>> {
         Ok(with(&self.handle, |s| s.primal_vars())?)
     }
 
+    /// Names of the dual variables of this sub-model.
     fn dual_vars(&self) -> PyResult<Vec<String>> {
         Ok(with(&self.handle, |s| s.dual_vars())?)
     }
@@ -70,6 +72,7 @@ pub struct PyModel {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyModel {
+    /// `Model()` — an empty model; add physics with `+`.
     #[new]
     fn py_new() -> PyResult<Self> {
         Ok(Self {
@@ -110,10 +113,12 @@ impl PyModel {
         Ok(Self { inner })
     }
 
+    /// Names of the primal (primary) variables across the whole model.
     fn primal_vars(&self) -> PyResult<Vec<String>> {
         Ok(self.inner.primal_vars()?)
     }
 
+    /// Names of the dual variables across the whole model.
     fn dual_vars(&self) -> PyResult<Vec<String>> {
         Ok(self.inner.dual_vars()?)
     }

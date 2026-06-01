@@ -27,11 +27,13 @@ impl PyCell {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyCell {
+    /// Index of this cell within its submesh.
     #[getter]
     fn index(&self) -> usize {
         self.inner.index()
     }
 
+    /// Element type name of this cell (e.g. `"TRI3"`).
     #[getter]
     fn element_type(&self) -> PyResult<String> {
         Ok(self.inner.element_type()?.name().to_string())

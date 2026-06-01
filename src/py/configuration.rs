@@ -20,6 +20,7 @@ pub struct PyConfiguration {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyConfiguration {
+    /// `Configuration(dim)` — an empty configuration in `dim` dimensions.
     #[new]
     fn py_new(dim: u8) -> PyResult<Self> {
         let cfg = Configuration::new(dim)?;
@@ -28,19 +29,23 @@ impl PyConfiguration {
         })
     }
 
+    /// Spatial dimension of the coordinates (1, 2 or 3).
     #[getter]
     fn dim(&self) -> PyResult<u8> {
         Ok(with(&self.handle, |c| c.dim())?)
     }
 
+    /// Number of live nodes.
     fn node_count(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |c| c.node_count())?)
     }
 
+    /// Number of allocated node slots (live plus not-yet-collected).
     fn capacity(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |c| c.capacity())?)
     }
 
+    /// Whether node `id` is still live (not garbage-collected).
     fn is_alive(&self, id: u32) -> PyResult<bool> {
         Ok(with(&self.handle, |c| c.is_alive(NodeId(id)))?)
     }
@@ -57,6 +62,7 @@ impl PyConfiguration {
         Ok(PyNode::from_raw(self.handle.clone(), NodeId(id)))
     }
 
+    /// Reference count of node `id` (how many holders keep it alive).
     fn refcount(&self, id: u32) -> PyResult<u32> {
         Ok(with(&self.handle, |c| c.refcount(NodeId(id)))?)
     }
@@ -66,43 +72,53 @@ impl PyConfiguration {
         Ok(with_mut(&self.handle, |c| c.gc())?)
     }
 
+    /// Coordinates of node `id` in the active coordinate set.
     fn coord(&self, id: u32) -> PyResult<Vec<f64>> {
         let v = with(&self.handle, |c| c.coord(NodeId(id)).map(|s| s.to_vec()))??;
         Ok(v)
     }
 
+    /// Overwrite the coordinates of node `id` in the active set.
     fn set_coord(&self, id: u32, coords: Vec<f64>) -> PyResult<()> {
         with_mut(&self.handle, |c| c.set_coord(NodeId(id), &coords))??;
         Ok(())
     }
 
+    /// Add a named alternative coordinate set (same nodes, new coordinates);
+    /// returns its index.
     fn add_coord_set(&self, name: String) -> PyResult<usize> {
         Ok(with_mut(&self.handle, |c| c.add_coord_set(name))?)
     }
 
+    /// Make coordinate set `set` the active one.
     fn switch_to(&self, set: usize) -> PyResult<()> {
         with_mut(&self.handle, |c| c.switch_to(set))??;
         Ok(())
     }
 
+    /// Index of the active coordinate set.
     #[getter]
     fn active_set(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |c| c.active_set())?)
     }
 
+    /// Names of the coordinate sets, by index.
     fn set_names(&self) -> PyResult<Vec<String>> {
         Ok(with(&self.handle, |c| c.set_names().to_vec())?)
     }
 
+    /// Current node permutation (a renumbering), or `None` if unset.
     fn permutation(&self) -> PyResult<Option<Vec<u32>>> {
         Ok(with(&self.handle, |c| c.permutation().map(|s| s.to_vec()))?)
     }
 
+    /// Set a node permutation (a renumbering of the nodes).
     fn set_permutation(&self, perm: Vec<u32>) -> PyResult<()> {
         with_mut(&self.handle, |c| c.set_permutation(perm))??;
         Ok(())
     }
 
+    /// Drop any node permutation.
     fn clear_permutation(&self) -> PyResult<()> {
         with_mut(&self.handle, |c| c.clear_permutation())?;
         Ok(())

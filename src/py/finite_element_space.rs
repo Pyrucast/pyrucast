@@ -35,40 +35,48 @@ pub struct PySubFiniteElementSpace {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubFiniteElementSpace {
+    /// Element type name (e.g. `"TRI3"`).
     #[getter]
     fn element_type(&self) -> PyResult<String> {
         Ok(with(&self.handle, |s| s.element_type())??.name().to_string())
     }
 
+    /// Interpolation name (e.g. `"LAGRANGE1"`).
     #[getter]
     fn interpolation(&self) -> PyResult<String> {
         Ok(with(&self.handle, |s| s.interpolation().name().to_string())?)
     }
 
+    /// Quadrature-rule name (e.g. `"GAUSS"`).
     #[getter]
     fn quadrature(&self) -> PyResult<String> {
         Ok(with(&self.handle, |s| s.quadrature().name().to_string())?)
     }
 
+    /// Reference (parametric) dimension of the elements.
     #[getter]
     fn ref_dim(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |s| s.ref_dim())??)
     }
 
+    /// Spatial dimension the elements live in.
     #[getter]
     fn space_dim(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |s| s.space_dim())?)
     }
 
+    /// Number of nodes per element.
     #[getter]
     fn nodes_per_cell(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |s| s.nodes_per_cell())??)
     }
 
+    /// Number of elements (cells) in this subspace.
     fn cell_count(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |s| s.cell_count())??)
     }
 
+    /// Number of Gauss (quadrature) points per element.
     fn gauss_count(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |s| s.gauss_count())?)
     }

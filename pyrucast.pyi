@@ -52,9 +52,15 @@ class Cell:
     cell yields its `Node`s.
     """
     @property
-    def index(self) -> builtins.int: ...
+    def index(self) -> builtins.int:
+        r"""
+        Index of this cell within its submesh.
+        """
     @property
-    def element_type(self) -> builtins.str: ...
+    def element_type(self) -> builtins.str:
+        r"""
+        Element type name of this cell (e.g. `"TRI3"`).
+        """
     def nodes(self) -> builtins.list[Node]:
         r"""
         Materialised nodes (each one refcounted on the
@@ -80,13 +86,31 @@ class Configuration:
     `Configuration`.
     """
     @property
-    def dim(self) -> builtins.int: ...
+    def dim(self) -> builtins.int:
+        r"""
+        Spatial dimension of the coordinates (1, 2 or 3).
+        """
     @property
-    def active_set(self) -> builtins.int: ...
-    def __new__(cls, dim: builtins.int) -> Configuration: ...
-    def node_count(self) -> builtins.int: ...
-    def capacity(self) -> builtins.int: ...
-    def is_alive(self, id: builtins.int) -> builtins.bool: ...
+    def active_set(self) -> builtins.int:
+        r"""
+        Index of the active coordinate set.
+        """
+    def __new__(cls, dim: builtins.int) -> Configuration:
+        r"""
+        `Configuration(dim)` — an empty configuration in `dim` dimensions.
+        """
+    def node_count(self) -> builtins.int:
+        r"""
+        Number of live nodes.
+        """
+    def capacity(self) -> builtins.int:
+        r"""
+        Number of allocated node slots (live plus not-yet-collected).
+        """
+    def is_alive(self, id: builtins.int) -> builtins.bool:
+        r"""
+        Whether node `id` is still live (not garbage-collected).
+        """
     def add_node(self, coords: typing.Sequence[builtins.float]) -> Node:
         r"""
         Add a node at `coords` and return it as a `Node` (refcount = 1).
@@ -95,19 +119,47 @@ class Configuration:
         r"""
         Return an additional `Node` for an existing id (refcount += 1).
         """
-    def refcount(self, id: builtins.int) -> builtins.int: ...
+    def refcount(self, id: builtins.int) -> builtins.int:
+        r"""
+        Reference count of node `id` (how many holders keep it alive).
+        """
     def gc(self) -> builtins.int:
         r"""
         Run the garbage collector; return the number of collected nodes.
         """
-    def coord(self, id: builtins.int) -> builtins.list[builtins.float]: ...
-    def set_coord(self, id: builtins.int, coords: typing.Sequence[builtins.float]) -> None: ...
-    def add_coord_set(self, name: builtins.str) -> builtins.int: ...
-    def switch_to(self, set: builtins.int) -> None: ...
-    def set_names(self) -> builtins.list[builtins.str]: ...
-    def permutation(self) -> typing.Optional[builtins.list[builtins.int]]: ...
-    def set_permutation(self, perm: typing.Sequence[builtins.int]) -> None: ...
-    def clear_permutation(self) -> None: ...
+    def coord(self, id: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        Coordinates of node `id` in the active coordinate set.
+        """
+    def set_coord(self, id: builtins.int, coords: typing.Sequence[builtins.float]) -> None:
+        r"""
+        Overwrite the coordinates of node `id` in the active set.
+        """
+    def add_coord_set(self, name: builtins.str) -> builtins.int:
+        r"""
+        Add a named alternative coordinate set (same nodes, new coordinates);
+        returns its index.
+        """
+    def switch_to(self, set: builtins.int) -> None:
+        r"""
+        Make coordinate set `set` the active one.
+        """
+    def set_names(self) -> builtins.list[builtins.str]:
+        r"""
+        Names of the coordinate sets, by index.
+        """
+    def permutation(self) -> typing.Optional[builtins.list[builtins.int]]:
+        r"""
+        Current node permutation (a renumbering), or `None` if unset.
+        """
+    def set_permutation(self, perm: typing.Sequence[builtins.int]) -> None:
+        r"""
+        Set a node permutation (a renumbering of the nodes).
+        """
+    def clear_permutation(self) -> None:
+        r"""
+        Drop any node permutation.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
 
@@ -121,15 +173,30 @@ class Element:
     (`fes[i][j]`); not constructed directly.
     """
     @property
-    def index(self) -> builtins.int: ...
+    def index(self) -> builtins.int:
+        r"""
+        Index of this element within its subspace.
+        """
     @property
-    def nodes_per_cell(self) -> builtins.int: ...
+    def nodes_per_cell(self) -> builtins.int:
+        r"""
+        Number of nodes of this element.
+        """
     @property
-    def space_dim(self) -> builtins.int: ...
+    def space_dim(self) -> builtins.int:
+        r"""
+        Spatial dimension the element lives in.
+        """
     @property
-    def ref_dim(self) -> builtins.int: ...
+    def ref_dim(self) -> builtins.int:
+        r"""
+        Reference (parametric) dimension of the element.
+        """
     @property
-    def gauss_count(self) -> builtins.int: ...
+    def gauss_count(self) -> builtins.int:
+        r"""
+        Number of Gauss (quadrature) points.
+        """
     def cell(self) -> Cell:
         r"""
         Underlying mesh cell view.
@@ -286,7 +353,10 @@ class Matrix:
     `finalize()` before solving. Index it (`matrix[i]`) to reach a block.
     """
     @property
-    def symmetric(self) -> builtins.bool: ...
+    def symmetric(self) -> builtins.bool:
+        r"""
+        Whether the matrix is declared symmetric.
+        """
     def __new__(cls) -> Matrix:
         r"""
         `Matrix()` — empty aggregate. Populate via `add_sub_matrix`, or
@@ -307,15 +377,42 @@ class Matrix:
         Build the global DOF table and CSR. Must be called before any
         solver-facing method (`dense`, `mul_dense`, …).
         """
-    def n_rows(self) -> builtins.int: ...
-    def n_cols(self) -> builtins.int: ...
-    def entry_count(self) -> builtins.int: ...
-    def field_names(self) -> builtins.list[builtins.str]: ...
-    def row_dofs(self) -> builtins.list[tuple[builtins.int, builtins.str]]: ...
-    def col_dofs(self) -> builtins.list[tuple[builtins.int, builtins.str]]: ...
-    def get(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str) -> builtins.float: ...
-    def dense(self) -> builtins.list[builtins.float]: ...
-    def mul_dense(self, x: typing.Sequence[builtins.float]) -> builtins.list[builtins.float]: ...
+    def n_rows(self) -> builtins.int:
+        r"""
+        Total number of rows of the (finalized) global matrix.
+        """
+    def n_cols(self) -> builtins.int:
+        r"""
+        Total number of columns of the (finalized) global matrix.
+        """
+    def entry_count(self) -> builtins.int:
+        r"""
+        Total number of stored entries across all blocks.
+        """
+    def field_names(self) -> builtins.list[builtins.str]:
+        r"""
+        Variable (field) names across the whole matrix.
+        """
+    def row_dofs(self) -> builtins.list[tuple[builtins.int, builtins.str]]:
+        r"""
+        `(node_id, field_name)` of each global row, in order.
+        """
+    def col_dofs(self) -> builtins.list[tuple[builtins.int, builtins.str]]:
+        r"""
+        `(node_id, field_name)` of each global column, in order.
+        """
+    def get(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str) -> builtins.float:
+        r"""
+        Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
+        """
+    def dense(self) -> builtins.list[builtins.float]:
+        r"""
+        Dense row-major buffer of the finalized matrix (`n_rows × n_cols`).
+        """
+    def mul_dense(self, x: typing.Sequence[builtins.float]) -> builtins.list[builtins.float]:
+        r"""
+        `y = A · x` against a dense vector `x`.
+        """
     def entries(self) -> builtins.list[tuple[builtins.int, builtins.str, builtins.int, builtins.str, builtins.float]]:
         r"""
         List of `(row_node, row_field, col_node, col_field, value)`
@@ -358,15 +455,27 @@ class Mesh:
         `Mesh(config)` — empty mesh.
         `Mesh(config, element_type)` — mesh with one pre-created submesh.
         """
-    def element_types(self) -> builtins.list[builtins.str]: ...
-    def cell_counts(self) -> builtins.list[builtins.int]: ...
-    def node(self, submesh_idx: builtins.int, cell_idx: builtins.int, node_idx: builtins.int) -> Node: ...
+    def element_types(self) -> builtins.list[builtins.str]:
+        r"""
+        Element type name of each submesh, in order.
+        """
+    def cell_counts(self) -> builtins.list[builtins.int]:
+        r"""
+        Number of cells in each submesh, in order.
+        """
+    def node(self, submesh_idx: builtins.int, cell_idx: builtins.int, node_idx: builtins.int) -> Node:
+        r"""
+        The `node_idx`-th node of cell `cell_idx` in submesh `submesh_idx`.
+        """
     def cell(self, submesh_idx: builtins.int, cell_idx: builtins.int) -> Cell:
         r"""
         `mesh.cell(submesh_idx, cell_idx)` → `Cell` view; same thing
         as `mesh[submesh_idx][cell_idx]`.
         """
-    def cell_count(self) -> builtins.int: ...
+    def cell_count(self) -> builtins.int:
+        r"""
+        Total number of cells across all submeshes.
+        """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None) -> None:
         r"""
         Visualize this mesh (every submesh in its own colour, or
@@ -406,7 +515,10 @@ class Model:
     Build sub-models with `Model.heat_conduction(fes)` / `Model.dirichlet(...)`
     and compose them with `+`; assemble with `stiffness` / `mass`.
     """
-    def __new__(cls) -> Model: ...
+    def __new__(cls) -> Model:
+        r"""
+        `Model()` — an empty model; add physics with `+`.
+        """
     @classmethod
     def heat_conduction(cls, fespace: FiniteElementSpace) -> Model:
         r"""
@@ -427,8 +539,14 @@ class Model:
         it targets (e.g. `"q"` for heat conduction) — see the model
         chapter of the book for the full semantics.
         """
-    def primal_vars(self) -> builtins.list[builtins.str]: ...
-    def dual_vars(self) -> builtins.list[builtins.str]: ...
+    def primal_vars(self) -> builtins.list[builtins.str]:
+        r"""
+        Names of the primal (primary) variables across the whole model.
+        """
+    def dual_vars(self) -> builtins.list[builtins.str]:
+        r"""
+        Names of the dual variables across the whole model.
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, idx: builtins.int) -> SubModel: ...
     def sub_model_count(self) -> builtins.int: ...
@@ -462,9 +580,18 @@ class Node:
     API needs a node.
     """
     @property
-    def id(self) -> builtins.int: ...
-    def coord(self) -> builtins.list[builtins.float]: ...
-    def set_coord(self, coords: typing.Sequence[builtins.float]) -> None: ...
+    def id(self) -> builtins.int:
+        r"""
+        Stable integer id of this node within its `Configuration`.
+        """
+    def coord(self) -> builtins.list[builtins.float]:
+        r"""
+        This node's coordinates in the active coordinate set.
+        """
+    def set_coord(self, coords: typing.Sequence[builtins.float]) -> None:
+        r"""
+        Overwrite this node's coordinates.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
 
@@ -484,23 +611,74 @@ class NodeField:
         **unitary** `Mesh` (the parent→sub coercion: a one-submesh mesh is
         accepted directly, so callers rarely need `mesh[0]`).
         """
-    def node_count(self) -> builtins.int: ...
-    def component_count(self) -> builtins.int: ...
-    def components(self) -> builtins.list[builtins.str]: ...
-    def get(self, node_idx: builtins.int, comp_idx: builtins.int) -> builtins.float: ...
-    def set(self, node_idx: builtins.int, comp_idx: builtins.int, value: builtins.float) -> None: ...
-    def get_by_node(self, node: Node, comp_idx: builtins.int) -> builtins.float: ...
-    def set_by_node(self, node: Node, comp_idx: builtins.int, value: builtins.float) -> None: ...
-    def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]: ...
-    def node_values(self, node_idx: builtins.int) -> builtins.list[builtins.float]: ...
-    def support_submesh(self) -> SubMesh: ...
-    def support_mesh(self) -> Mesh: ...
-    def value(self, node: Node, component: builtins.str) -> builtins.float: ...
-    def set_value(self, node: Node, component: builtins.str, value: builtins.float) -> None: ...
-    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
-    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
-    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
-    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
+    def node_count(self) -> builtins.int:
+        r"""
+        Number of nodes in the support.
+        """
+    def component_count(self) -> builtins.int:
+        r"""
+        Number of components stored per node.
+        """
+    def components(self) -> builtins.list[builtins.str]:
+        r"""
+        Component names, in order.
+        """
+    def get(self, node_idx: builtins.int, comp_idx: builtins.int) -> builtins.float:
+        r"""
+        Value at node index `node_idx`, component index `comp_idx`.
+        """
+    def set(self, node_idx: builtins.int, comp_idx: builtins.int, value: builtins.float) -> None:
+        r"""
+        Set the value at node index `node_idx`, component index `comp_idx`.
+        """
+    def get_by_node(self, node: Node, comp_idx: builtins.int) -> builtins.float:
+        r"""
+        Value at `node`, component index `comp_idx`.
+        """
+    def set_by_node(self, node: Node, comp_idx: builtins.int, value: builtins.float) -> None:
+        r"""
+        Set the value at `node`, component index `comp_idx`.
+        """
+    def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
+        r"""
+        Index of component `name`, or `None` if unknown.
+        """
+    def node_values(self, node_idx: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        All component values at node index `node_idx`, in order.
+        """
+    def support_submesh(self) -> SubMesh:
+        r"""
+        The POI1 `SubMesh` this field is supported on.
+        """
+    def support_mesh(self) -> Mesh:
+        r"""
+        The POI1 `Mesh` this field is supported on.
+        """
+    def value(self, node: Node, component: builtins.str) -> builtins.float:
+        r"""
+        Value at `node` for the named `component`.
+        """
+    def set_value(self, node: Node, component: builtins.str, value: builtins.float) -> None:
+        r"""
+        Set the value at `node` for the named `component`.
+        """
+    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Add `scalar` to every value of `component` (in place).
+        """
+    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Subtract `scalar` from every value of `component` (in place).
+        """
+    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Multiply every value of `component` by `scalar` (in place).
+        """
+    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Divide every value of `component` by `scalar` (in place).
+        """
     def __add__(self, rhs: typing.Any) -> NodeField:
         r"""
         `field + x` — `x` may be a scalar (added to every value) or another
@@ -528,22 +706,70 @@ class SubElementField:
     level instead: `ElementField(fes, components)` or
     `material_field(model, ...)`, composed with `+`.
     """
-    def cell_count(self) -> builtins.int: ...
-    def gauss_count(self) -> builtins.int: ...
-    def component_count(self) -> builtins.int: ...
-    def components(self) -> builtins.list[builtins.str]: ...
-    def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]: ...
-    def get(self, cell: builtins.int, gauss: builtins.int, comp: builtins.int) -> builtins.float: ...
-    def set(self, cell: builtins.int, gauss: builtins.int, comp: builtins.int, value: builtins.float) -> None: ...
-    def value(self, cell: builtins.int, gauss: builtins.int, component: builtins.str) -> builtins.float: ...
-    def set_value(self, cell: builtins.int, gauss: builtins.int, component: builtins.str, value: builtins.float) -> None: ...
-    def point_values(self, cell: builtins.int, gauss: builtins.int) -> builtins.list[builtins.float]: ...
-    def set_uniform(self, component: builtins.str, value: builtins.float) -> None: ...
-    def set_cell_uniform(self, cell: builtins.int, component: builtins.str, value: builtins.float) -> None: ...
-    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
-    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
-    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
-    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None: ...
+    def cell_count(self) -> builtins.int:
+        r"""
+        Number of cells (elements) this field covers.
+        """
+    def gauss_count(self) -> builtins.int:
+        r"""
+        Number of Gauss points per cell.
+        """
+    def component_count(self) -> builtins.int:
+        r"""
+        Number of components stored per point.
+        """
+    def components(self) -> builtins.list[builtins.str]:
+        r"""
+        Component names, in order.
+        """
+    def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
+        r"""
+        Index of component `name`, or `None` if unknown.
+        """
+    def get(self, cell: builtins.int, gauss: builtins.int, comp: builtins.int) -> builtins.float:
+        r"""
+        Value at `(cell, gauss)` for component index `comp`.
+        """
+    def set(self, cell: builtins.int, gauss: builtins.int, comp: builtins.int, value: builtins.float) -> None:
+        r"""
+        Set the value at `(cell, gauss)` for component index `comp`.
+        """
+    def value(self, cell: builtins.int, gauss: builtins.int, component: builtins.str) -> builtins.float:
+        r"""
+        Value at `(cell, gauss)` for the named `component`.
+        """
+    def set_value(self, cell: builtins.int, gauss: builtins.int, component: builtins.str, value: builtins.float) -> None:
+        r"""
+        Set the value at `(cell, gauss)` for the named `component`.
+        """
+    def point_values(self, cell: builtins.int, gauss: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        All component values at `(cell, gauss)`, in component order.
+        """
+    def set_uniform(self, component: builtins.str, value: builtins.float) -> None:
+        r"""
+        Set `component` to `value` at every point.
+        """
+    def set_cell_uniform(self, cell: builtins.int, component: builtins.str, value: builtins.float) -> None:
+        r"""
+        Set `component` to `value` at every point of `cell`.
+        """
+    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Add `scalar` to every value of `component` (in place).
+        """
+    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Subtract `scalar` from every value of `component` (in place).
+        """
+    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Multiply every value of `component` by `scalar` (in place).
+        """
+    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Divide every value of `component` by `scalar` (in place).
+        """
     def __add__(self, rhs: builtins.float) -> SubElementField: ...
     def __sub__(self, rhs: builtins.float) -> SubElementField: ...
     def __mul__(self, rhs: builtins.float) -> SubElementField: ...
@@ -570,19 +796,43 @@ class SubFiniteElementSpace:
     further (`fes[i][j]`) to reach an `Element`. Not constructed directly.
     """
     @property
-    def element_type(self) -> builtins.str: ...
+    def element_type(self) -> builtins.str:
+        r"""
+        Element type name (e.g. `"TRI3"`).
+        """
     @property
-    def interpolation(self) -> builtins.str: ...
+    def interpolation(self) -> builtins.str:
+        r"""
+        Interpolation name (e.g. `"LAGRANGE1"`).
+        """
     @property
-    def quadrature(self) -> builtins.str: ...
+    def quadrature(self) -> builtins.str:
+        r"""
+        Quadrature-rule name (e.g. `"GAUSS"`).
+        """
     @property
-    def ref_dim(self) -> builtins.int: ...
+    def ref_dim(self) -> builtins.int:
+        r"""
+        Reference (parametric) dimension of the elements.
+        """
     @property
-    def space_dim(self) -> builtins.int: ...
+    def space_dim(self) -> builtins.int:
+        r"""
+        Spatial dimension the elements live in.
+        """
     @property
-    def nodes_per_cell(self) -> builtins.int: ...
-    def cell_count(self) -> builtins.int: ...
-    def gauss_count(self) -> builtins.int: ...
+    def nodes_per_cell(self) -> builtins.int:
+        r"""
+        Number of nodes per element.
+        """
+    def cell_count(self) -> builtins.int:
+        r"""
+        Number of elements (cells) in this subspace.
+        """
+    def gauss_count(self) -> builtins.int:
+        r"""
+        Number of Gauss (quadrature) points per element.
+        """
     def gauss_xi(self, g: builtins.int) -> builtins.list[builtins.float]:
         r"""
         Reference coordinates of the `g`-th Gauss point.
@@ -648,13 +898,35 @@ class SubMatrix:
     level with `Matrix.block(...)` (a unit `Matrix`), composed with `+`.
     """
     @property
-    def symmetric(self) -> builtins.bool: ...
-    def add_entry(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str, value: builtins.float) -> None: ...
-    def get(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str) -> builtins.float: ...
-    def n_rows(self) -> builtins.int: ...
-    def n_cols(self) -> builtins.int: ...
-    def entry_count(self) -> builtins.int: ...
-    def field_names(self) -> builtins.list[builtins.str]: ...
+    def symmetric(self) -> builtins.bool:
+        r"""
+        Whether this block is declared symmetric.
+        """
+    def add_entry(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str, value: builtins.float) -> None:
+        r"""
+        Accumulate `value` at row `(row_node, row_field)`, column
+        `(col_node, col_field)` (COO entry).
+        """
+    def get(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str) -> builtins.float:
+        r"""
+        Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
+        """
+    def n_rows(self) -> builtins.int:
+        r"""
+        Number of rows of this block.
+        """
+    def n_cols(self) -> builtins.int:
+        r"""
+        Number of columns of this block.
+        """
+    def entry_count(self) -> builtins.int:
+        r"""
+        Number of stored COO entries.
+        """
+    def field_names(self) -> builtins.list[builtins.str]:
+        r"""
+        Variable (field) names this block addresses.
+        """
     def row_dofs(self) -> builtins.list[tuple[builtins.int, builtins.str]]:
         r"""
         `(node_id, field_name)` tuples for each row, in order.
@@ -689,7 +961,10 @@ class SubMesh:
     single zone, composed with `+` for several.
     """
     @property
-    def element_type(self) -> builtins.str: ...
+    def element_type(self) -> builtins.str:
+        r"""
+        Element type name of this submesh (e.g. `"TRI3"`).
+        """
     @property
     def face_color(self) -> tuple[builtins.int, builtins.int, builtins.int]:
         r"""
@@ -700,8 +975,14 @@ class SubMesh:
         r"""
         Set the face colour from an `(r, g, b)` tuple of bytes.
         """
-    def add_cell(self, nodes: typing.Sequence[Node]) -> builtins.int: ...
-    def cell_count(self) -> builtins.int: ...
+    def add_cell(self, nodes: typing.Sequence[Node]) -> builtins.int:
+        r"""
+        Append a cell from its list of nodes; returns the new cell's index.
+        """
+    def cell_count(self) -> builtins.int:
+        r"""
+        Number of cells in this submesh.
+        """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None) -> None:
         r"""
         Visualize this submesh.
@@ -744,8 +1025,14 @@ class SubModel:
     level instead: `Model.heat_conduction(fes)` or `Model.dirichlet(...)`,
     composed with `+`.
     """
-    def primal_vars(self) -> builtins.list[builtins.str]: ...
-    def dual_vars(self) -> builtins.list[builtins.str]: ...
+    def primal_vars(self) -> builtins.list[builtins.str]:
+        r"""
+        Names of the primal (primary) variables of this sub-model.
+        """
+    def dual_vars(self) -> builtins.list[builtins.str]:
+        r"""
+        Names of the dual variables of this sub-model.
+        """
     def multiplier_mesh(self) -> Mesh:
         r"""
         POI1 `Mesh` of the multiplier nodes (Lagrange physics only — empty

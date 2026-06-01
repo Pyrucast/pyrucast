@@ -38,15 +38,18 @@ impl PyNode {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyNode {
+    /// Stable integer id of this node within its `Configuration`.
     #[getter]
     fn id(&self) -> u32 {
         self.node.id().0
     }
 
+    /// This node's coordinates in the active coordinate set.
     fn coord(&self) -> PyResult<Vec<f64>> {
         Ok(self.node.coord()?)
     }
 
+    /// Overwrite this node's coordinates.
     fn set_coord(&self, coords: Vec<f64>) -> PyResult<()> {
         self.node.set_coord(&coords)?;
         Ok(())

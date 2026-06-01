@@ -38,17 +38,20 @@ pub struct PySubMesh {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubMesh {
+    /// Element type name of this submesh (e.g. `"TRI3"`).
     #[getter]
     fn element_type(&self) -> PyResult<String> {
         Ok(with(&self.handle, |s| s.element_type().name().to_string())?)
     }
 
+    /// Append a cell from its list of nodes; returns the new cell's index.
     fn add_cell(&self, nodes: Vec<PyRef<'_, PyNode>>) -> PyResult<usize> {
         let nodes_typed: Vec<NodeId> = nodes.iter().map(|n| n.as_node().id()).collect();
         let idx = with_mut(&self.handle, move |s| s.add_cell(&nodes_typed))??;
         Ok(idx)
     }
 
+    /// Number of cells in this submesh.
     fn cell_count(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |s| s.cell_count())?)
     }
@@ -190,15 +193,18 @@ impl PyMesh {
         Ok(Self { inner: mesh })
     }
 
+    /// Element type name of each submesh, in order.
     fn element_types(&self) -> PyResult<Vec<String>> {
         let types = self.inner.element_types()?;
         Ok(types.into_iter().map(|et| et.name().to_string()).collect())
     }
 
+    /// Number of cells in each submesh, in order.
     fn cell_counts(&self) -> PyResult<Vec<usize>> {
         Ok(self.inner.cell_counts()?)
     }
 
+    /// The `node_idx`-th node of cell `cell_idx` in submesh `submesh_idx`.
     fn node(&self, submesh_idx: usize, cell_idx: usize, node_idx: usize) -> PyResult<PyNode> {
         let node = self.inner.node(submesh_idx, cell_idx, node_idx)?;
         Ok(PyNode::from_node(node))
@@ -215,6 +221,7 @@ impl PyMesh {
         Ok(crate::py::cell::PyCell::from_cell(cell))
     }
 
+    /// Total number of cells across all submeshes.
     fn cell_count(&self) -> PyResult<usize> {
         Ok(self.inner.cell_count()?)
     }
