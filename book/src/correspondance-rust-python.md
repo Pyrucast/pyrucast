@@ -37,7 +37,7 @@ Le nom de la classe Python est identique au nom de la structure Rust.
 | `containers::element_field` | `ElementField` | `pyrucast.ElementField` | [Champ aux points de Gauss](element-field.md) |
 | `containers::matrix` | `SubMatrix` | `pyrucast.SubMatrix` | [Matrice creuse](matrix.md) |
 | `containers::matrix` | `Matrix` | `pyrucast.Matrix` | [Matrice creuse](matrix.md) |
-| `containers::model` | `SubModel` | `pyrucast.SubModel` | [Modèle physique](model.md) |
+| `containers::model` | `SubModel` | `pyrucast.SubModel` *(vue, via `model[i]`)* | [Modèle physique](model.md) |
 | `containers::model` | `Model` | `pyrucast.Model` | [Modèle physique](model.md) |
 
 Quelques types Rust **ne sont pas** exposés en classes Python : ce sont des

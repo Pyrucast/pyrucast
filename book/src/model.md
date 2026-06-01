@@ -106,7 +106,7 @@ use pyrucast::containers::mesh::element_type::ElementType;
 use pyrucast::containers::mesh::node::Node;
 use pyrucast::containers::mesh::Mesh;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::model::{Model, SubModel};
+use pyrucast::containers::model::Model;
 use pyrucast::ops::{assemble, build};
 use pyrucast::store::insert;
 
@@ -119,16 +119,12 @@ mesh.add_cell(&[a.id(), b.id()]).unwrap();
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
 // Modèle : conduction (le matériau est fourni à l'assemblage, pas ici)
-// + Dirichlet à gauche.
-let mut model = Model::empty();
-model
-    .add_sub(insert(SubModel::heat_conduction(fes.subspace(0).unwrap()).unwrap()))
-    .unwrap();
-model
-    .add_sub(insert(
-        SubModel::dirichlet(cfg.clone(), "T".into(), "q".into(), vec![a.id()]).unwrap(),
-    ))
-    .unwrap();
+// + Dirichlet à gauche. Constructeurs au niveau parent (balaient les
+// sous-espaces de `fes`), composés par `+` (merge) — on ne construit
+// jamais de `SubModel` à la main (cf. CONVENTIONS.md).
+let hc = Model::heat_conduction(&fes).unwrap();
+let dir = Model::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap();
+let model = (&hc + &dir).unwrap();
 
 // Matériau k = 1, appliqué aux sous-modèles qui en ont besoin (Dirichlet
 // est automatiquement ignoré), puis assemblage.
@@ -150,9 +146,8 @@ mesh.add_cell([a.id, b.id])
 fes = pyrucast.FiniteElementSpace(mesh)
 
 # Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
-model = pyrucast.Model()
-model.add_sub(pyrucast.SubModel.heat_conduction(fes[0]))
-model.add_sub(pyrucast.SubModel.dirichlet(c, "T", "q", [a.id]))
+# Constructeurs au niveau parent, composés par `+` — pas de SubModel à la main.
+model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet("T", "q", [a])
 
 # Matériau k = 1 (les sous-modèles Dirichlet sont ignorés automatiquement).
 materials = pyrucast.material_field(model, [("k", 1.0)])
@@ -187,15 +182,15 @@ for i in range(4):
     mesh.add_cell([nodes[i].id, nodes[i + 1].id])
 fes = pyrucast.FiniteElementSpace(mesh)
 
-# 2) Modèle : conduction + Dirichlet aux deux bouts
-model = pyrucast.Model()
-model.add_sub(pyrucast.SubModel.heat_conduction(fes[0]))
-left = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[0].id])
-right = pyrucast.SubModel.dirichlet(c, "T", "q", [nodes[-1].id])
-mult_left = left.multiplier_nodes()[0]
-mult_right = right.multiplier_nodes()[0]
-model.add_sub(left)
-model.add_sub(right)
+# 2) Modèle : conduction + Dirichlet aux deux bouts.
+# Chaque physique est un Model au niveau parent ; on les compose par `+`.
+# Un Model unitaire se réindexe (`left[0]`) pour atteindre la vue du
+# sous-modèle (p. ex. ses nœuds-multiplicateurs).
+left = pyrucast.Model.dirichlet("T", "q", [nodes[0]])
+right = pyrucast.Model.dirichlet("T", "q", [nodes[-1]])
+mult_left = left[0].multiplier_nodes()[0]
+mult_right = right[0].multiplier_nodes()[0]
+model = pyrucast.Model.heat_conduction(fes) + left + right
 
 # 3) Matériau k = 1 (appliqué à la conduction, Dirichlet ignoré)
 materials = pyrucast.material_field(model, [("k", 1.0)])

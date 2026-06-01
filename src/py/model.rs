@@ -5,7 +5,7 @@ use crate::containers::mesh::Node;
 use crate::containers::model::{Model, SubModel};
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::node::PyNode;
-use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
+use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::matrix::PyMatrix;
 use crate::py::mesh::PyMesh;
 use crate::store::{insert, with, Handle};
@@ -18,38 +18,13 @@ pub struct PySubModel {
     pub(crate) handle: Handle<SubModel>,
 }
 
+/// `SubModel` is a **view** into a `Model`, obtained by indexing
+/// (`model[i]`) — it is never constructed directly from Python. Build
+/// physics at the parent level instead: `Model.heat_conduction(fes)`,
+/// `Model.dirichlet(...)`, composed with `+` (see `CONVENTIONS.md`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubModel {
-    /// `SubModel.heat_conduction(fespace)` — heat-conduction sub-model on
-    /// a finite-element subspace. Material data is supplied at assembly
-    /// time via `assemble.stiffness(model, material)`.
-    #[classmethod]
-    fn heat_conduction(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        fespace: PyRef<PySubFiniteElementSpace>,
-    ) -> PyResult<Self> {
-        let sub = SubModel::heat_conduction(fespace.handle.clone())?;
-        Ok(Self { handle: insert(sub) })
-    }
-
-    /// `SubModel.dirichlet(primal_var, primal_dual, constrained_nodes)`
-    /// — Dirichlet constraint via Lagrange multipliers. `constrained_nodes`
-    /// is a list of `Node` objects (each carries its own `Configuration`);
-    /// the multiplier nodes are created on the fly at the same coordinates
-    /// as the constrained nodes.
-    #[classmethod]
-    fn dirichlet(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        primal_var: String,
-        primal_dual: String,
-        constrained_nodes: Vec<PyRef<'_, PyNode>>,
-    ) -> PyResult<Self> {
-        let nodes: Vec<Node> = constrained_nodes.iter().map(|n| n.as_node().clone()).collect();
-        let sub = SubModel::dirichlet(primal_var, primal_dual, &nodes)?;
-        Ok(Self { handle: insert(sub) })
-    }
-
     fn primal_vars(&self) -> PyResult<Vec<String>> {
         Ok(with(&self.handle, |s| s.primal_vars())?)
     }
@@ -121,8 +96,10 @@ impl PyModel {
     /// `Model.dirichlet(primal_var, primal_dual, constrained_nodes)` —
     /// Dirichlet-constraint model (a single sub-model) imposed via
     /// Lagrange multipliers. `constrained_nodes` is a list of `Node`
-    /// objects. See `SubModel.dirichlet` for the meaning of
-    /// `primal_var` / `primal_dual`.
+    /// objects. `primal_var` is the constrained primary variable (e.g.
+    /// `"T"`); `primal_dual` is the dual variable of the primary physics
+    /// it targets (e.g. `"q"` for heat conduction) — see the model
+    /// chapter of the book for the full semantics.
     #[classmethod]
     fn dirichlet(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,

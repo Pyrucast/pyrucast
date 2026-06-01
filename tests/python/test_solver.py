@@ -17,18 +17,14 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     for i in range(n_elems):
         mesh.add_cell([nodes[i], nodes[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh)
-    sub = fes[0]
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", 1.0)
 
-    model = pyrucast.Model()
-    model.add_sub(pyrucast.SubModel.heat_conduction(sub))
-    left = pyrucast.SubModel.dirichlet("T", "q", [nodes[0]])
-    right = pyrucast.SubModel.dirichlet("T", "q", [nodes[-1]])
-    mult_left = left.multiplier_mesh().node(0, 0, 0)
-    mult_right = right.multiplier_mesh().node(0, 0, 0)
-    model.add_sub(left)
-    model.add_sub(right)
+    left = pyrucast.Model.dirichlet("T", "q", [nodes[0]])
+    right = pyrucast.Model.dirichlet("T", "q", [nodes[-1]])
+    mult_left = left[0].multiplier_mesh().node(0, 0, 0)
+    mult_right = right[0].multiplier_mesh().node(0, 0, 0)
+    model = pyrucast.Model.heat_conduction(fes) + left + right
 
     # Load: imposed values at the multiplier nodes.
     rhs_sm = pyrucast.SubMesh(c, "POI1")
@@ -61,12 +57,10 @@ def test_solver_singular_matrix_errors():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    sub = fes[0]
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", 1.0)
 
-    model = pyrucast.Model()
-    model.add_sub(pyrucast.SubModel.heat_conduction(sub))
+    model = pyrucast.Model.heat_conduction(fes)
     K = pyrucast.stiffness(model, materials)
 
     rhs_sm = pyrucast.SubMesh(c, "POI1")
@@ -93,15 +87,12 @@ def test_solver_with_nonzero_neumann():
     for i in range(n_elems):
         mesh.add_cell([nodes[i], nodes[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh)
-    sub = fes[0]
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", 2.0)
 
-    model = pyrucast.Model()
-    model.add_sub(pyrucast.SubModel.heat_conduction(sub))
-    left = pyrucast.SubModel.dirichlet("T", "q", [nodes[0]])
-    mult_left = left.multiplier_mesh().node(0, 0, 0)
-    model.add_sub(left)
+    left = pyrucast.Model.dirichlet("T", "q", [nodes[0]])
+    mult_left = left[0].multiplier_mesh().node(0, 0, 0)
+    model = pyrucast.Model.heat_conduction(fes) + left
 
     # Build a load NodeField with both components:
     #   "T" at mult_left  → 5.0 (imposed value)

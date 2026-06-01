@@ -19,12 +19,9 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", k)
 
-    model = pyrucast.Model()
-    model.add_sub(pyrucast.SubModel.heat_conduction(sub))
+    model = pyrucast.Model.heat_conduction(fes)
     if dirichlet_left:
-        model.add_sub(
-            pyrucast.SubModel.dirichlet("T", "q", [a])
-        )
+        model = model + pyrucast.Model.dirichlet("T", "q", [a])
     return c, mesh, fes, sub, materials, model, a, b
 
 
@@ -70,12 +67,10 @@ def test_two_seg2_assembly_is_tridiagonal():
     mesh.add_cell([n0, n1])
     mesh.add_cell([n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
-    sub = fes[0]
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", 1.0)
 
-    model = pyrucast.Model()
-    model.add_sub(pyrucast.SubModel.heat_conduction(sub))
+    model = pyrucast.Model.heat_conduction(fes)
     K = pyrucast.stiffness(model, materials)
     assert K.n_rows() == 3
     assert K.n_cols() == 3
@@ -121,9 +116,9 @@ def test_dirichlet_creates_multiplier_node_and_writes_both_blocks():
 
 
 def test_dirichlet_empty_constraint_list_rejected():
-    c = pyrucast.Configuration(1)
+    pyrucast.Configuration(1)
     try:
-        pyrucast.SubModel.dirichlet("T", "q", [])
+        pyrucast.Model.dirichlet("T", "q", [])
     except RuntimeError:
         pass
     else:

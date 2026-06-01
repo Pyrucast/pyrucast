@@ -8,9 +8,10 @@ import pyrucast
 
 def _two_zone_model():
     """Build a 3-node 2-SEG2 mesh, FE space and a model with:
-      - HC on zone A (cells 0..1, on subspace 0)
-      - Dirichlet on the leftmost node
-      - HC on zone B (cell 1..2, on subspace 1)
+      - HC over both zones via Model.heat_conduction(fes), spanning
+        subspace 0 (zone A) and subspace 1 (zone B);
+      - a Dirichlet constraint on the leftmost node, composed with `+`.
+    Sub-model order: [HC_A (model[0]), HC_B (model[1]), Dirichlet (model[2])].
     Returns (cfg, [n0, n1, n2], fes, model).
     """
     c = pyrucast.Configuration(1)
@@ -24,10 +25,9 @@ def _two_zone_model():
     mesh.add_sub(sm_b)
     fes = pyrucast.FiniteElementSpace(mesh)
 
-    model = pyrucast.Model()
-    model.add_sub(pyrucast.SubModel.heat_conduction(fes[0]))
-    model.add_sub(pyrucast.SubModel.dirichlet("T", "q", [nodes[0]]))
-    model.add_sub(pyrucast.SubModel.heat_conduction(fes[1]))
+    model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet(
+        "T", "q", [nodes[0]]
+    )
     return c, nodes, fes, model
 
 
@@ -41,7 +41,7 @@ def test_sub_model_build_material_field_uniform_value():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    hc = pyrucast.SubModel.heat_conduction(fes[0])
+    hc = pyrucast.Model.heat_conduction(fes)[0]
 
     sub = pyrucast.sub_material_field(hc, [("k", 2.5)])
     # Pre-filled uniformly at every (cell, gauss).
@@ -52,7 +52,7 @@ def test_sub_model_build_material_field_uniform_value():
 def test_sub_model_build_material_field_errors_on_dirichlet():
     c = pyrucast.Configuration(1)
     a = c.add_node([0.0])
-    dir_sub = pyrucast.SubModel.dirichlet("T", "q", [a])
+    dir_sub = pyrucast.Model.dirichlet("T", "q", [a])[0]
     with pytest.raises(RuntimeError):
         pyrucast.sub_material_field(dir_sub, [("k", 1.0)])
 
@@ -64,7 +64,7 @@ def test_sub_model_build_material_field_errors_on_empty_list():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    hc = pyrucast.SubModel.heat_conduction(fes[0])
+    hc = pyrucast.Model.heat_conduction(fes)[0]
     with pytest.raises(RuntimeError):
         pyrucast.sub_material_field(hc, [])
 
@@ -98,9 +98,9 @@ def test_model_build_material_field_uniform_skips_dirichlet():
 def test_model_build_material_field_per_sub_model_different_zones():
     _, nodes, _, model = _two_zone_model()
     materials = pyrucast.material_field_per_sub_model(model, [
-        [("k", 1.0)],   # zone A
-        [],             # Dirichlet — skip
-        [("k", 4.0)],   # zone B
+        [("k", 1.0)],   # zone A (model[0])
+        [("k", 4.0)],   # zone B (model[1])
+        [],             # Dirichlet (model[2]) — skip
     ])
     assert len(materials) == 2  # only the two HC slots
 
@@ -130,10 +130,10 @@ def test_sub_model_material_components_lists_required_components():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    hc = pyrucast.SubModel.heat_conduction(fes[0])
+    hc = pyrucast.Model.heat_conduction(fes)[0]
     assert hc.material_components() == ["k"]
 
-    dir_sub = pyrucast.SubModel.dirichlet("T", "q", [a])
+    dir_sub = pyrucast.Model.dirichlet("T", "q", [a])[0]
     assert dir_sub.material_components() is None
 
 
@@ -144,7 +144,7 @@ def test_sub_model_build_material_field_filters_extras_and_errors_on_missing():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    hc = pyrucast.SubModel.heat_conduction(fes[0])
+    hc = pyrucast.Model.heat_conduction(fes)[0]
 
     # Extras are kept silent — only the declared component ("k") survives.
     mat = pyrucast.sub_material_field(hc, [("k", 2.0), ("rho", 7.0)])
@@ -167,11 +167,11 @@ def test_model_indexed_sub_model_builds_its_own_material_field():
     for g in range(fes[0].gauss_count()):
         assert sub_a_mat.value(0, g, "k") == pytest.approx(7.0)
 
-    # model[1] is the Dirichlet sub-model — no material to build.
-    with pytest.raises(RuntimeError):
-        pyrucast.sub_material_field(model[1], [("k", 1.0)])
-
-    # model[2] = HC zone B.
-    sub_b_mat = pyrucast.sub_material_field(model[2], [("k", 3.0)])
+    # model[1] = HC zone B.
+    sub_b_mat = pyrucast.sub_material_field(model[1], [("k", 3.0)])
     for g in range(fes[1].gauss_count()):
         assert sub_b_mat.value(0, g, "k") == pytest.approx(3.0)
+
+    # model[2] is the Dirichlet sub-model — no material to build.
+    with pytest.raises(RuntimeError):
+        pyrucast.sub_material_field(model[2], [("k", 1.0)])

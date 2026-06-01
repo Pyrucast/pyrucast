@@ -346,8 +346,10 @@ class Model:
         `Model.dirichlet(primal_var, primal_dual, constrained_nodes)` —
         Dirichlet-constraint model (a single sub-model) imposed via
         Lagrange multipliers. `constrained_nodes` is a list of `Node`
-        objects. See `SubModel.dirichlet` for the meaning of
-        `primal_var` / `primal_dual`.
+        objects. `primal_var` is the constrained primary variable (e.g.
+        `"T"`); `primal_dual` is the dual variable of the primary physics
+        it targets (e.g. `"q"` for heat conduction) — see the model
+        chapter of the book for the full semantics.
         """
     def __add__(self, other: Model) -> Model:
         r"""
@@ -649,22 +651,6 @@ class SubModel:
     r"""
     Python wrapper for [`SubModel`].
     """
-    @classmethod
-    def heat_conduction(cls, fespace: SubFiniteElementSpace) -> SubModel:
-        r"""
-        `SubModel.heat_conduction(fespace)` — heat-conduction sub-model on
-        a finite-element subspace. Material data is supplied at assembly
-        time via `assemble.stiffness(model, material)`.
-        """
-    @classmethod
-    def dirichlet(cls, primal_var: builtins.str, primal_dual: builtins.str, constrained_nodes: typing.Sequence[Node]) -> SubModel:
-        r"""
-        `SubModel.dirichlet(primal_var, primal_dual, constrained_nodes)`
-        — Dirichlet constraint via Lagrange multipliers. `constrained_nodes`
-        is a list of `Node` objects (each carries its own `Configuration`);
-        the multiplier nodes are created on the fly at the same coordinates
-        as the constrained nodes.
-        """
     def primal_vars(self) -> builtins.list[builtins.str]: ...
     def dual_vars(self) -> builtins.list[builtins.str]: ...
     def multiplier_mesh(self) -> Mesh:
