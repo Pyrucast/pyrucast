@@ -5,8 +5,11 @@ use crate::py::cell::PyCell;
 use crate::py::node::PyNode;
 use pyo3::prelude::*;
 
-/// Python wrapper for [`Element`] — a thin view on a single element of a
-/// [`crate::containers::finite_element_space::SubFiniteElementSpace`].
+/// A single finite element — its geometry together with the interpolation
+/// and quadrature of its space.
+///
+/// A read-only view obtained by indexing a finite-element subspace
+/// (`fes[i][j]`); not constructed directly.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Element")]
 pub struct PyElement {

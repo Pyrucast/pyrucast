@@ -7,7 +7,11 @@ use crate::store::with;
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 
-/// Python wrapper for [`Cell`].
+/// One cell of a mesh — the ordered nodes of a single element.
+///
+/// A read-only view obtained by indexing a submesh (`submesh[i]`) or via
+/// `mesh.cell(submesh, cell)`. `len(cell)` is its node count; iterating a
+/// cell yields its `Node`s.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Cell")]
 pub struct PyCell {

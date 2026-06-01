@@ -45,7 +45,11 @@ __all__ = [
 @typing.final
 class Cell:
     r"""
-    Python wrapper for [`Cell`].
+    One cell of a mesh — the ordered nodes of a single element.
+    
+    A read-only view obtained by indexing a submesh (`submesh[i]`) or via
+    `mesh.cell(submesh, cell)`. `len(cell)` is its node count; iterating a
+    cell yields its `Node`s.
     """
     @property
     def index(self) -> builtins.int: ...
@@ -68,7 +72,12 @@ class Cell:
 @typing.final
 class Configuration:
     r"""
-    Python wrapper for [`Configuration`].
+    The registry of live nodes and their coordinates, in a fixed spatial
+    dimension.
+    
+    Create one with `Configuration(dim)`, then add nodes with
+    `add_node([x, y, ...])`. Every mesh, node and field is attached to a
+    `Configuration`.
     """
     @property
     def dim(self) -> builtins.int: ...
@@ -80,11 +89,11 @@ class Configuration:
     def is_alive(self, id: builtins.int) -> builtins.bool: ...
     def add_node(self, coords: typing.Sequence[builtins.float]) -> Node:
         r"""
-        Add a node and return a [`Node`] (refcount = 1).
+        Add a node at `coords` and return it as a `Node` (refcount = 1).
         """
     def acquire(self, id: builtins.int) -> Node:
         r"""
-        Return an additional [`Node`] for an existing id (refcount += 1).
+        Return an additional `Node` for an existing id (refcount += 1).
         """
     def refcount(self, id: builtins.int) -> builtins.int: ...
     def gc(self) -> builtins.int:
@@ -105,8 +114,11 @@ class Configuration:
 @typing.final
 class Element:
     r"""
-    Python wrapper for [`Element`] — a thin view on a single element of a
-    [`crate::containers::finite_element_space::SubFiniteElementSpace`].
+    A single finite element — its geometry together with the interpolation
+    and quadrature of its space.
+    
+    A read-only view obtained by indexing a finite-element subspace
+    (`fes[i][j]`); not constructed directly.
     """
     @property
     def index(self) -> builtins.int: ...
@@ -163,10 +175,12 @@ class Element:
 @typing.final
 class ElementField:
     r"""
-    Python wrapper for [`ElementField`].
+    A field of per-element values (e.g. material properties), one block per
+    finite-element zone.
     
-    Owns the `ElementField` struct directly — no longer stored in the
-    global store. Identity is the Python object identity.
+    Build with `ElementField(fes, components)` or `material_field(model, ...)`;
+    index it (`field[i]`) to reach a `SubElementField`, compose zones
+    with `+`.
     """
     def __new__(cls, fespace: FiniteElementSpace, components: typing.Sequence[builtins.str]) -> ElementField:
         r"""
@@ -204,10 +218,12 @@ class ElementField:
 @typing.final
 class FiniteElementSpace:
     r"""
-    Python wrapper for [`FiniteElementSpace`].
+    The finite-element discretization of a mesh: one subspace per submesh,
+    each carrying an interpolation and a quadrature rule.
     
-    Owns the `FiniteElementSpace` struct directly — no longer stored
-    in the global store. Identity is the Python object identity.
+    Build from a `Mesh` with `FiniteElementSpace(mesh)` (or
+    `.with_choices(...)` per submesh); index it (`fes[i]`) to reach a
+    `SubFiniteElementSpace`, compose several with `+`.
     """
     def __new__(cls, mesh: Mesh, interpolation: builtins.str = 'LAGRANGE1', quadrature: builtins.str = 'GAUSS') -> FiniteElementSpace:
         r"""
@@ -263,10 +279,11 @@ class FiniteElementSpace:
 @typing.final
 class Matrix:
     r"""
-    Python wrapper for the aggregate [`Matrix`].
+    A global finite-element matrix, assembled from rectangular blocks
+    (`SubMatrix`).
     
-    Owns the `Matrix` struct directly — no longer stored in the global
-    store. Identity is the Python object identity itself.
+    Build blocks with `Matrix.block(...)`, compose them with `+`, then call
+    `finalize()` before solving. Index it (`matrix[i]`) to reach a block.
     """
     @property
     def symmetric(self) -> builtins.bool: ...
@@ -330,11 +347,11 @@ class Matrix:
 @typing.final
 class Mesh:
     r"""
-    Python wrapper for [`Mesh`].
+    A geometric mesh: a collection of submeshes, each holding the cells of a
+    single element type.
     
-    Owns the `Mesh` struct directly — `Mesh` is no longer kept in the
-    global store. Identity is the Python object identity itself
-    (two Python references to the same `PyMesh` see the same submeshes).
+    Build with `Mesh(config, element_type)` for one zone, compose several
+    with `+`; index it (`mesh[i]`) to reach a `SubMesh`.
     """
     def __new__(cls, config: Configuration, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
@@ -383,10 +400,11 @@ class Mesh:
 @typing.final
 class Model:
     r"""
-    Python wrapper for [`Model`].
+    A physics problem: a collection of sub-models (heat conduction,
+    Dirichlet BCs, ...) over finite-element spaces.
     
-    Owns the `Model` struct directly — no longer stored in the global
-    store. Identity is the Python object identity itself.
+    Build sub-models with `Model.heat_conduction(fes)` / `Model.dirichlet(...)`
+    and compose them with `+`; assemble with `stiffness` / `mass`.
     """
     def __new__(cls) -> Model: ...
     @classmethod
@@ -437,7 +455,11 @@ class Model:
 @typing.final
 class Node:
     r"""
-    Python wrapper for [`Node`].
+    A node of a `Configuration`: a stable identifier that carries the
+    configuration it belongs to (and therefore its coordinates).
+    
+    Created via `Configuration.add_node([x, y, ...])`; passed wherever an
+    API needs a node.
     """
     @property
     def id(self) -> builtins.int: ...
@@ -449,7 +471,11 @@ class Node:
 @typing.final
 class NodeField:
     r"""
-    Python wrapper for [`NodeField`].
+    A field of values carried by mesh nodes — one scalar per
+    `(node, component)`.
+    
+    Index it as `field[node, "X"]`. Build one with `coordinates(mesh)`, or
+    derive it with `restrict` / `merge`; add fields or scalars with `+`.
     """
     def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str]) -> NodeField:
         r"""
@@ -497,7 +523,10 @@ class NodeField:
 @typing.final
 class SubElementField:
     r"""
-    Python wrapper for [`SubElementField`].
+    A **view** into one zone of an `ElementField`, obtained by indexing
+    (`element_field[i]`) — never constructed directly. Build at the parent
+    level instead: `ElementField(fes, components)` or
+    `material_field(model, ...)`, composed with `+`.
     """
     def cell_count(self) -> builtins.int: ...
     def gauss_count(self) -> builtins.int: ...
@@ -534,7 +563,11 @@ class SubElementField:
 @typing.final
 class SubFiniteElementSpace:
     r"""
-    Python wrapper for [`SubFiniteElementSpace`].
+    One subspace of a `FiniteElementSpace`: the finite elements over a
+    single submesh, with their interpolation and quadrature.
+    
+    A read-only view obtained by indexing the parent (`fes[i]`); index it
+    further (`fes[i][j]`) to reach an `Element`. Not constructed directly.
     """
     @property
     def element_type(self) -> builtins.str: ...
@@ -610,7 +643,9 @@ class SubFiniteElementSpace:
 @typing.final
 class SubMatrix:
     r"""
-    Python wrapper for [`SubMatrix`] — one COO block of the global matrix.
+    One block (a COO sub-matrix) of a global `Matrix`, viewed by indexing
+    (`matrix[i]`) — never constructed directly. Build a block at the parent
+    level with `Matrix.block(...)` (a unit `Matrix`), composed with `+`.
     """
     @property
     def symmetric(self) -> builtins.bool: ...
@@ -648,7 +683,10 @@ class SubMatrix:
 @typing.final
 class SubMesh:
     r"""
-    Python wrapper for [`SubMesh`].
+    A **view** into one submesh of a `Mesh` — the cells of a single element
+    type. Obtained by indexing (`mesh[i]`); never constructed directly.
+    Build at the parent level instead: `Mesh(config, element_type)` for a
+    single zone, composed with `+` for several.
     """
     @property
     def element_type(self) -> builtins.str: ...
@@ -701,7 +739,10 @@ class SubMesh:
 @typing.final
 class SubModel:
     r"""
-    Python wrapper for [`SubModel`].
+    A **view** into one sub-model of a `Model`, obtained by indexing
+    (`model[i]`) — never constructed directly. Build physics at the parent
+    level instead: `Model.heat_conduction(fes)` or `Model.dirichlet(...)`,
+    composed with `+`.
     """
     def primal_vars(self) -> builtins.list[builtins.str]: ...
     def dual_vars(self) -> builtins.list[builtins.str]: ...
@@ -719,7 +760,11 @@ class SubModel:
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
 
-def circle_seg2(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int) -> Mesh: ...
+def circle_seg2(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int) -> Mesh:
+    r"""
+    Build a closed circle of `n_elems` SEG2 elements, centred on `center`
+    in the plane defined by `normal`, with the given `radius`.
+    """
 
 def consolidate(mesh: Mesh) -> Mesh:
     r"""
@@ -739,13 +784,28 @@ def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins
     nodes of the mesh, in order of first appearance.
     """
 
-def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh: ...
+def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
+    r"""
+    Extrude `mesh` by `n_layers` layers along `direction` (the total
+    displacement vector). SEG2 → QUA4, QUA4 → HEX8.
+    """
 
-def fill_surface(contour: Mesh, element_type: builtins.str, max_edge_length: typing.Optional[builtins.float] = None, min_angle_deg: typing.Optional[builtins.float] = None) -> Mesh: ...
+def fill_surface(contour: Mesh, element_type: builtins.str, max_edge_length: typing.Optional[builtins.float] = None, min_angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Fill the interior of a closed SEG2 `contour` with `element_type` cells
+    (triangulation). `max_edge_length` / `min_angle_deg` optionally refine
+    the result.
+    """
 
-def from_live_nodes(config: Configuration) -> Mesh: ...
+def from_live_nodes(config: Configuration) -> Mesh:
+    r"""
+    Build a points (POI1) mesh holding every live node of `config`.
+    """
 
-def line_seg2(a: Node, b: Node, n_elems: builtins.int) -> Mesh: ...
+def line_seg2(a: Node, b: Node, n_elems: builtins.int) -> Mesh:
+    r"""
+    Build a line of `n_elems` SEG2 elements from node `a` to node `b`.
+    """
 
 def mass(model: Model) -> Matrix:
     r"""
@@ -791,15 +851,17 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
 
 def set_swap_dir(path: builtins.str | os.PathLike | pathlib.Path) -> None:
     r"""
-    Set the swap directory (Python binding of [`store::set_swap_dir`]).
+    Set the directory used to swap large objects to disk. If never set, a
+    per-process subdirectory of the system temp dir is used.
     """
 
 def solve(matrix: Matrix, rhs: NodeField) -> NodeField:
     r"""
-    `pyrucast.solve(matrix, rhs) -> NodeField`
+    Solve the linear system `A·x = b` for `x` (dense LU).
     
-    Dense LU solver. See [`crate::ops::solver::lu::solve`] for the semantics
-    of the rhs and of the returned NodeField.
+    `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
+    as a `NodeField`. Returns the solution `x` as a `NodeField` over the
+    same support.
     """
 
 def stiffness(model: Model, materials: ElementField) -> Matrix:
@@ -822,10 +884,14 @@ def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequen
 
 def swap_dir() -> pathlib.Path:
     r"""
-    Return the effective swap directory (Python binding of [`store::swap_dir`]).
+    Return the effective swap directory (creating it if necessary).
     """
 
-def sweep_qua4(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh: ...
+def sweep_qua4(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
+    r"""
+    Sweep two SEG2 line meshes into a QUA4 mesh, building `n_layers` layers
+    of quads between `mesh_a` and `mesh_b`.
+    """
 
 def to_poi1(mesh: Mesh) -> Mesh:
     r"""

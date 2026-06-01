@@ -10,17 +10,15 @@ use pyo3::prelude::*;
 
 // ─── PySubMatrix ───────────────────────────────────────────────────────────
 
-/// Python wrapper for [`SubMatrix`] — one COO block of the global matrix.
+/// One block (a COO sub-matrix) of a global `Matrix`, viewed by indexing
+/// (`matrix[i]`) — never constructed directly. Build a block at the parent
+/// level with `Matrix.block(...)` (a unit `Matrix`), composed with `+`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubMatrix")]
 pub struct PySubMatrix {
     pub(crate) handle: Handle<SubMatrix>,
 }
 
-/// `SubMatrix` is a **view** into a `Matrix` block, obtained by indexing
-/// (`matrix[i]`) — it is never constructed directly from Python. Build a
-/// block at the parent level with `Matrix.block(...)` (a unit `Matrix`),
-/// composed with `+` (see `CONVENTIONS.md`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubMatrix {
@@ -120,10 +118,11 @@ impl PySubMatrix {
 
 // ─── PyMatrix (aggregate) ──────────────────────────────────────────────────
 
-/// Python wrapper for the aggregate [`Matrix`].
+/// A global finite-element matrix, assembled from rectangular blocks
+/// (`SubMatrix`).
 ///
-/// Owns the `Matrix` struct directly — no longer stored in the global
-/// store. Identity is the Python object identity itself.
+/// Build blocks with `Matrix.block(...)`, compose them with `+`, then call
+/// `finalize()` before solving. Index it (`matrix[i]`) to reach a block.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Matrix")]
 pub struct PyMatrix {

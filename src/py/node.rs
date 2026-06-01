@@ -5,7 +5,11 @@ use crate::containers::mesh::Node;
 use crate::store::Handle;
 use pyo3::prelude::*;
 
-/// Python wrapper for [`Node`].
+/// A node of a `Configuration`: a stable identifier that carries the
+/// configuration it belongs to (and therefore its coordinates).
+///
+/// Created via `Configuration.add_node([x, y, ...])`; passed wherever an
+/// API needs a node.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Node")]
 pub struct PyNode {

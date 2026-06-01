@@ -21,7 +21,11 @@ fn parse_quadrature(s: &str) -> PyResult<QuadratureRule> {
         .ok_or_else(|| PyValueError::new_err(format!("unknown quadrature rule: {s}")))
 }
 
-/// Python wrapper for [`SubFiniteElementSpace`].
+/// One subspace of a `FiniteElementSpace`: the finite elements over a
+/// single submesh, with their interpolation and quadrature.
+///
+/// A read-only view obtained by indexing the parent (`fes[i]`); index it
+/// further (`fes[i][j]`) to reach an `Element`. Not constructed directly.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubFiniteElementSpace")]
 pub struct PySubFiniteElementSpace {
@@ -159,10 +163,12 @@ impl PySubFiniteElementSpace {
     }
 }
 
-/// Python wrapper for [`FiniteElementSpace`].
+/// The finite-element discretization of a mesh: one subspace per submesh,
+/// each carrying an interpolation and a quadrature rule.
 ///
-/// Owns the `FiniteElementSpace` struct directly — no longer stored
-/// in the global store. Identity is the Python object identity.
+/// Build from a `Mesh` with `FiniteElementSpace(mesh)` (or
+/// `.with_choices(...)` per submesh); index it (`fes[i]`) to reach a
+/// `SubFiniteElementSpace`, compose several with `+`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "FiniteElementSpace")]
 pub struct PyFiniteElementSpace {

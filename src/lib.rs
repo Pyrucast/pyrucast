@@ -51,7 +51,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg(feature = "python-api")]
 use pyo3::prelude::*;
 
-/// Set the swap directory (Python binding of [`store::set_swap_dir`]).
+/// Set the directory used to swap large objects to disk. If never set, a
+/// per-process subdirectory of the system temp dir is used.
 #[cfg(feature = "python-api")]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -59,7 +60,7 @@ fn set_swap_dir(path: std::path::PathBuf) {
     store::set_swap_dir(path);
 }
 
-/// Return the effective swap directory (Python binding of [`store::swap_dir`]).
+/// Return the effective swap directory (creating it if necessary).
 #[cfg(feature = "python-api")]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

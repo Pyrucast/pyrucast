@@ -9,10 +9,11 @@ use crate::py::node_field::PyNodeField;
 use crate::store::{insert, with};
 use pyo3::prelude::*;
 
-/// `pyrucast.solve(matrix, rhs) -> NodeField`
+/// Solve the linear system `A·x = b` for `x` (dense LU).
 ///
-/// Dense LU solver. See [`crate::ops::solver::lu::solve`] for the semantics
-/// of the rhs and of the returned NodeField.
+/// `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
+/// as a `NodeField`. Returns the solution `x` as a `NodeField` over the
+/// same support.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn solve(matrix: PyRef<PyMatrix>, rhs: PyRef<PyNodeField>) -> PyResult<PyNodeField> {

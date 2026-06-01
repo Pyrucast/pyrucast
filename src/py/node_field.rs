@@ -6,7 +6,11 @@ use crate::py::node::PyNode;
 use crate::store::{insert, with, with_mut, Handle};
 use pyo3::prelude::*;
 
-/// Python wrapper for [`NodeField`].
+/// A field of values carried by mesh nodes — one scalar per
+/// `(node, component)`.
+///
+/// Index it as `field[node, "X"]`. Build one with `coordinates(mesh)`, or
+/// derive it with `restrict` / `merge`; add fields or scalars with `+`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "NodeField")]
 pub struct PyNodeField {

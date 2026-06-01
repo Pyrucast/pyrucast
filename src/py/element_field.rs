@@ -7,17 +7,16 @@ use crate::store::{insert, with, Handle};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-/// Python wrapper for [`SubElementField`].
+/// A **view** into one zone of an `ElementField`, obtained by indexing
+/// (`element_field[i]`) — never constructed directly. Build at the parent
+/// level instead: `ElementField(fes, components)` or
+/// `material_field(model, ...)`, composed with `+`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubElementField")]
 pub struct PySubElementField {
     pub(crate) handle: Handle<SubElementField>,
 }
 
-/// `SubElementField` is a **view** into an `ElementField`, obtained by
-/// indexing (`element_field[i]`) — it is never constructed directly from
-/// Python. Build at the parent level instead: `ElementField(fes, comps)`,
-/// `material_field(model, ...)`, composed with `+` (see `CONVENTIONS.md`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubElementField {
@@ -159,10 +158,12 @@ impl PySubElementField {
     }
 }
 
-/// Python wrapper for [`ElementField`].
+/// A field of per-element values (e.g. material properties), one block per
+/// finite-element zone.
 ///
-/// Owns the `ElementField` struct directly — no longer stored in the
-/// global store. Identity is the Python object identity.
+/// Build with `ElementField(fes, components)` or `material_field(model, ...)`;
+/// index it (`field[i]`) to reach a `SubElementField`, compose zones
+/// with `+`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "ElementField")]
 pub struct PyElementField {

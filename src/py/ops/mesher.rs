@@ -11,6 +11,7 @@ use crate::py::node::PyNode;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+/// Build a points (POI1) mesh holding every live node of `config`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn from_live_nodes(config: PyRef<PyConfiguration>) -> PyResult<PyMesh> {
@@ -40,6 +41,7 @@ pub fn consolidate(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
+/// Build a line of `n_elems` SEG2 elements from node `a` to node `b`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn line_seg2(a: PyRef<PyNode>, b: PyRef<PyNode>, n_elems: usize) -> PyResult<PyMesh> {
@@ -47,6 +49,8 @@ pub fn line_seg2(a: PyRef<PyNode>, b: PyRef<PyNode>, n_elems: usize) -> PyResult
     Ok(PyMesh { inner: mesh })
 }
 
+/// Build a closed circle of `n_elems` SEG2 elements, centred on `center`
+/// in the plane defined by `normal`, with the given `radius`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn circle_seg2(
@@ -59,6 +63,8 @@ pub fn circle_seg2(
     Ok(PyMesh { inner: mesh })
 }
 
+/// Sweep two SEG2 line meshes into a QUA4 mesh, building `n_layers` layers
+/// of quads between `mesh_a` and `mesh_b`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn sweep_qua4(mesh_a: PyRef<PyMesh>, mesh_b: PyRef<PyMesh>, n_layers: usize) -> PyResult<PyMesh> {
@@ -66,6 +72,8 @@ pub fn sweep_qua4(mesh_a: PyRef<PyMesh>, mesh_b: PyRef<PyMesh>, n_layers: usize)
     Ok(PyMesh { inner: mesh })
 }
 
+/// Extrude `mesh` by `n_layers` layers along `direction` (the total
+/// displacement vector). SEG2 → QUA4, QUA4 → HEX8.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn extrude(mesh: PyRef<PyMesh>, direction: Vec<f64>, n_layers: usize) -> PyResult<PyMesh> {
@@ -73,6 +81,9 @@ pub fn extrude(mesh: PyRef<PyMesh>, direction: Vec<f64>, n_layers: usize) -> PyR
     Ok(PyMesh { inner: result })
 }
 
+/// Fill the interior of a closed SEG2 `contour` with `element_type` cells
+/// (triangulation). `max_edge_length` / `min_angle_deg` optionally refine
+/// the result.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (contour, element_type, max_edge_length=None, min_angle_deg=None))]

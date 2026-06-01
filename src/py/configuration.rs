@@ -5,7 +5,12 @@ use crate::py::node::PyNode;
 use crate::store::{insert, with, with_mut, Handle};
 use pyo3::prelude::*;
 
-/// Python wrapper for [`Configuration`].
+/// The registry of live nodes and their coordinates, in a fixed spatial
+/// dimension.
+///
+/// Create one with `Configuration(dim)`, then add nodes with
+/// `add_node([x, y, ...])`. Every mesh, node and field is attached to a
+/// `Configuration`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Configuration")]
 pub struct PyConfiguration {
@@ -40,13 +45,13 @@ impl PyConfiguration {
         Ok(with(&self.handle, |c| c.is_alive(NodeId(id)))?)
     }
 
-    /// Add a node and return a [`Node`] (refcount = 1).
+    /// Add a node at `coords` and return it as a `Node` (refcount = 1).
     fn add_node(&self, coords: Vec<f64>) -> PyResult<PyNode> {
         let id = with_mut(&self.handle, |c| c.add_node(&coords))??;
         Ok(PyNode::from_raw(self.handle.clone(), id))
     }
 
-    /// Return an additional [`Node`] for an existing id (refcount += 1).
+    /// Return an additional `Node` for an existing id (refcount += 1).
     fn acquire(&self, id: u32) -> PyResult<PyNode> {
         with_mut(&self.handle, |c| c.incref(NodeId(id)))??;
         Ok(PyNode::from_raw(self.handle.clone(), NodeId(id)))

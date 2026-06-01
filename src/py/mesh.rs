@@ -25,17 +25,16 @@ pub(crate) fn submesh_handle(obj: &Bound<'_, PyAny>) -> PyResult<Handle<SubMesh>
     }
 }
 
-/// Python wrapper for [`SubMesh`].
+/// A **view** into one submesh of a `Mesh` — the cells of a single element
+/// type. Obtained by indexing (`mesh[i]`); never constructed directly.
+/// Build at the parent level instead: `Mesh(config, element_type)` for a
+/// single zone, composed with `+` for several.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubMesh")]
 pub struct PySubMesh {
     pub(crate) handle: Handle<SubMesh>,
 }
 
-/// `SubMesh` is a **view** into a `Mesh`, obtained by indexing
-/// (`mesh[i]`) — it is never constructed directly from Python. Build at
-/// the parent level instead: `Mesh(config, element_type)` for a single
-/// zone, composed with `+` for several (see `CONVENTIONS.md`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubMesh {
@@ -159,11 +158,11 @@ impl PySubMesh {
     }
 }
 
-/// Python wrapper for [`Mesh`].
+/// A geometric mesh: a collection of submeshes, each holding the cells of a
+/// single element type.
 ///
-/// Owns the `Mesh` struct directly — `Mesh` is no longer kept in the
-/// global store. Identity is the Python object identity itself
-/// (two Python references to the same `PyMesh` see the same submeshes).
+/// Build with `Mesh(config, element_type)` for one zone, compose several
+/// with `+`; index it (`mesh[i]`) to reach a `SubMesh`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Mesh")]
 pub struct PyMesh {

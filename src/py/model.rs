@@ -9,17 +9,16 @@ use crate::py::mesh::PyMesh;
 use crate::store::{with, Handle};
 use pyo3::prelude::*;
 
-/// Python wrapper for [`SubModel`].
+/// A **view** into one sub-model of a `Model`, obtained by indexing
+/// (`model[i]`) — never constructed directly. Build physics at the parent
+/// level instead: `Model.heat_conduction(fes)` or `Model.dirichlet(...)`,
+/// composed with `+`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubModel")]
 pub struct PySubModel {
     pub(crate) handle: Handle<SubModel>,
 }
 
-/// `SubModel` is a **view** into a `Model`, obtained by indexing
-/// (`model[i]`) — it is never constructed directly from Python. Build
-/// physics at the parent level instead: `Model.heat_conduction(fes)`,
-/// `Model.dirichlet(...)`, composed with `+` (see `CONVENTIONS.md`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubModel {
@@ -57,10 +56,11 @@ impl PySubModel {
     }
 }
 
-/// Python wrapper for [`Model`].
+/// A physics problem: a collection of sub-models (heat conduction,
+/// Dirichlet BCs, ...) over finite-element spaces.
 ///
-/// Owns the `Model` struct directly — no longer stored in the global
-/// store. Identity is the Python object identity itself.
+/// Build sub-models with `Model.heat_conduction(fes)` / `Model.dirichlet(...)`
+/// and compose them with `+`; assemble with `stiffness` / `mass`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Model")]
 pub struct PyModel {
