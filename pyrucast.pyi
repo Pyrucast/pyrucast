@@ -433,16 +433,6 @@ class SubElementField:
     r"""
     Python wrapper for [`SubElementField`].
     """
-    def __new__(cls, fespace: SubFiniteElementSpace, components: typing.Sequence[builtins.str]) -> SubElementField:
-        r"""
-        `SubElementField(subfespace, components)` — zero-initialized
-        sub-field on a single [`SubFiniteElementSpace`].
-        """
-    @classmethod
-    def from_uniform_per_component(cls, fespace: SubFiniteElementSpace, components: typing.Sequence[builtins.str], values_per_component: typing.Sequence[builtins.float]) -> SubElementField:
-        r"""
-        Alternate constructor: uniform value per component.
-        """
     def cell_count(self) -> builtins.int: ...
     def gauss_count(self) -> builtins.int: ...
     def component_count(self) -> builtins.int: ...

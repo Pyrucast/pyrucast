@@ -2,7 +2,7 @@
 //! [`crate::containers::element_field::ElementField`].
 
 use crate::containers::element_field::{ElementField, SubElementField};
-use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
+use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::store::{insert, with, Handle};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -14,37 +14,13 @@ pub struct PySubElementField {
     pub(crate) handle: Handle<SubElementField>,
 }
 
+/// `SubElementField` is a **view** into an `ElementField`, obtained by
+/// indexing (`element_field[i]`) — it is never constructed directly from
+/// Python. Build at the parent level instead: `ElementField(fes, comps)`,
+/// `material_field(model, ...)`, composed with `+` (see `CONVENTIONS.md`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubElementField {
-    /// `SubElementField(subfespace, components)` — zero-initialized
-    /// sub-field on a single [`SubFiniteElementSpace`].
-    #[new]
-    fn py_new(fespace: PyRef<PySubFiniteElementSpace>, components: Vec<String>) -> PyResult<Self> {
-        let field = SubElementField::new(fespace.handle.clone(), components)?;
-        Ok(Self {
-            handle: insert(field),
-        })
-    }
-
-    /// Alternate constructor: uniform value per component.
-    #[classmethod]
-    fn from_uniform_per_component(
-        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        fespace: PyRef<PySubFiniteElementSpace>,
-        components: Vec<String>,
-        values_per_component: Vec<f64>,
-    ) -> PyResult<Self> {
-        let field = SubElementField::from_uniform_per_component(
-            fespace.handle.clone(),
-            components,
-            &values_per_component,
-        )?;
-        Ok(Self {
-            handle: insert(field),
-        })
-    }
-
     fn cell_count(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |f| f.cell_count())?)
     }
