@@ -83,11 +83,11 @@ c = pyrucast.Configuration(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
-sm = pyrucast.SubMesh(c, "POI1")
-sm.add_cell([a.id])
-sm.add_cell([b.id])
+mesh = pyrucast.Mesh(c, "POI1")
+mesh.add_cell([a])
+mesh.add_cell([b])
 
-u = pyrucast.NodeField(sm, ["UX", "UY"])
+u = pyrucast.NodeField(mesh, ["UX", "UY"])
 u.set(0, 0, 1.5)
 u.set(0, 1, -0.25)
 

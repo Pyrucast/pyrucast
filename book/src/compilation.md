@@ -63,12 +63,9 @@ c = pyrucast.Configuration(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
-sm = pyrucast.SubMesh(c, "POI1")     # sous-maillage = liste de nœuds
-sm.add_cell([a.id])
-sm.add_cell([b.id])
-
-mesh = pyrucast.Mesh(c)
-mesh.add_submesh(sm)
+mesh = pyrucast.Mesh(c, "POI1")      # un sous-maillage = liste de nœuds
+mesh.add_cell([a])
+mesh.add_cell([b])
 
 print(c)
 print(mesh)

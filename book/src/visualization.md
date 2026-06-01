@@ -93,11 +93,11 @@ a = cfg.add_node([0.0, 0.0, 0.0])
 b = cfg.add_node([1.0, 0.0, 0.0])
 c = cfg.add_node([0.0, 1.0, 0.0])
 
-sm = pyrucast.SubMesh(cfg, "TRI3")
-sm.add_cell([a.id, b.id, c.id])
+mesh = pyrucast.Mesh(cfg, "TRI3")
+mesh.add_cell([a, b, c])
 
 # (yaw, pitch, scale) ; save=None ouvre la fenêtre interactive.
-sm.plot(view=(45.0, 35.264, 1.0), save="triangle.svg")
+mesh.plot(view=(45.0, 35.264, 1.0), save="triangle.svg")
 ```
 
 ## Couleur de face par `SubMesh`
@@ -119,7 +119,7 @@ assert_eq!(sm.face_color(), RgbColor::new(220, 60, 60));
 Côté Python :
 
 ```python
-sm = pyrucast.SubMesh(cfg, "TRI3")
+sm = pyrucast.Mesh(cfg, "TRI3")[0]   # vue du sous-maillage unique
 sm.face_color = (220, 60, 60)
 assert sm.face_color == (220, 60, 60)
 ```

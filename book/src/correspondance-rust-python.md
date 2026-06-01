@@ -26,16 +26,16 @@ Le nom de la classe Python est identique au nom de la structure Rust.
 |---|---|---|---|
 | `containers::mesh::configuration` | `Configuration` | `pyrucast.Configuration` | [Configuration](configuration.md) |
 | `containers::mesh::node` | `Node` | `pyrucast.Node` | [Configuration](configuration.md) |
-| `containers::mesh` | `SubMesh` | `pyrucast.SubMesh` | [Maillage](mesh.md) |
+| `containers::mesh` | `SubMesh` | `pyrucast.SubMesh` *(vue, via `mesh[i]`)* | [Maillage](mesh.md) |
 | `containers::mesh` | `Mesh` | `pyrucast.Mesh` | [Maillage](mesh.md) |
 | `containers::mesh::cell` | `Cell` | `pyrucast.Cell` | [Maillage](mesh.md) |
 | `containers::finite_element_space` | `SubFiniteElementSpace` | `pyrucast.SubFiniteElementSpace` | [Espace EF](fe-space.md) |
 | `containers::finite_element_space` | `FiniteElementSpace` | `pyrucast.FiniteElementSpace` | [Espace EF](fe-space.md) |
 | `containers::finite_element_space::element` | `Element` | `pyrucast.Element` | [Espace EF](fe-space.md) |
 | `containers::node_field` | `NodeField` | `pyrucast.NodeField` | [Champ aux nœuds](node-field.md) |
-| `containers::element_field` | `SubElementField` | `pyrucast.SubElementField` | [Champ aux points de Gauss](element-field.md) |
+| `containers::element_field` | `SubElementField` | `pyrucast.SubElementField` *(vue, via `element_field[i]`)* | [Champ aux points de Gauss](element-field.md) |
 | `containers::element_field` | `ElementField` | `pyrucast.ElementField` | [Champ aux points de Gauss](element-field.md) |
-| `containers::matrix` | `SubMatrix` | `pyrucast.SubMatrix` | [Matrice creuse](matrix.md) |
+| `containers::matrix` | `SubMatrix` | `pyrucast.SubMatrix` *(vue, via `matrix[i]`)* | [Matrice creuse](matrix.md) |
 | `containers::matrix` | `Matrix` | `pyrucast.Matrix` | [Matrice creuse](matrix.md) |
 | `containers::model` | `SubModel` | `pyrucast.SubModel` *(vue, via `model[i]`)* | [Modèle physique](model.md) |
 | `containers::model` | `Model` | `pyrucast.Model` | [Modèle physique](model.md) |
@@ -43,6 +43,15 @@ Le nom de la classe Python est identique au nom de la structure Rust.
 Quelques types Rust **ne sont pas** exposés en classes Python : ce sont des
 détails d'implémentation (`Physics`, l'énum des physiques sous `SubModel` ;
 `DofOrdering`, l'ordonnancement des DOFs d'une `SubMatrix`).
+
+Les sous-objets `Sub*` (`SubMesh`, `SubFiniteElementSpace`, `SubElementField`,
+`SubMatrix`, `SubModel`) ne se **construisent pas** directement côté Python :
+ce sont des **vues** obtenues par indexation de leur parent (`parent[i]`). On
+construit toujours au niveau parent — `Mesh(config, type)`,
+`FiniteElementSpace(mesh)`, `ElementField(fes, comps)`,
+`Model.heat_conduction(fes)`, `Matrix.block(...)` — et on compose plusieurs
+zones avec `+` (merge). Voir la règle « Agrégats : un ou plusieurs » de
+`CONVENTIONS.md`.
 
 ## Fonctions ↔ fonctions
 

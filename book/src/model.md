@@ -104,7 +104,7 @@ Cette uniformité simplifie tout : le solveur reçoit une seule `Matrix` + un se
 use pyrucast::containers::mesh::configuration::Configuration;
 use pyrucast::containers::mesh::element_type::ElementType;
 use pyrucast::containers::mesh::node::Node;
-use pyrucast::containers::mesh::Mesh;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::model::Model;
 use pyrucast::ops::{assemble, build};
@@ -114,7 +114,7 @@ use pyrucast::store::insert;
 let cfg = insert(Configuration::new(1).unwrap());
 let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
 let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-let mut mesh = Mesh::with_element_type(cfg.clone(), ElementType::SEG2);
+let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
 mesh.add_cell(&[a.id(), b.id()]).unwrap();
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
@@ -142,7 +142,7 @@ c = pyrucast.Configuration(dim=1)
 a = c.add_node([0.0])
 b = c.add_node([1.0])
 mesh = pyrucast.Mesh(c, "SEG2")
-mesh.add_cell([a.id, b.id])
+mesh.add_cell([a, b])
 fes = pyrucast.FiniteElementSpace(mesh)
 
 # Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
@@ -179,34 +179,35 @@ c = pyrucast.Configuration(dim=1)
 nodes = [c.add_node([i / 4.0]) for i in range(5)]
 mesh = pyrucast.Mesh(c, "SEG2")
 for i in range(4):
-    mesh.add_cell([nodes[i].id, nodes[i + 1].id])
+    mesh.add_cell([nodes[i], nodes[i + 1]])
 fes = pyrucast.FiniteElementSpace(mesh)
 
 # 2) Modèle : conduction + Dirichlet aux deux bouts.
 # Chaque physique est un Model au niveau parent ; on les compose par `+`.
 # Un Model unitaire se réindexe (`left[0]`) pour atteindre la vue du
-# sous-modèle (p. ex. ses nœuds-multiplicateurs).
+# sous-modèle (ici son maillage de nœuds-multiplicateurs).
 left = pyrucast.Model.dirichlet("T", "q", [nodes[0]])
 right = pyrucast.Model.dirichlet("T", "q", [nodes[-1]])
-mult_left = left[0].multiplier_nodes()[0]
-mult_right = right[0].multiplier_nodes()[0]
+mult_left = left[0].multiplier_mesh().node(0, 0, 0)
+mult_right = right[0].multiplier_mesh().node(0, 0, 0)
 model = pyrucast.Model.heat_conduction(fes) + left + right
 
 # 3) Matériau k = 1 (appliqué à la conduction, Dirichlet ignoré)
 materials = pyrucast.material_field(model, [("k", 1.0)])
 
-# 4) Chargement : valeurs imposées aux nœuds-multiplicateurs
-rhs_sm = pyrucast.SubMesh(c, "POI1")
-rhs_sm.add_cell([mult_left])
-rhs_sm.add_cell([mult_right])
-rhs = pyrucast.NodeField(rhs_sm, ["T"])
+# 4) Chargement : valeurs imposées aux nœuds-multiplicateurs.
+# NodeField accepte un Mesh unitaire comme support (coercition parent→sub).
+rhs_mesh = pyrucast.Mesh(c, "POI1")
+rhs_mesh.add_cell([mult_left])
+rhs_mesh.add_cell([mult_right])
+rhs = pyrucast.NodeField(rhs_mesh, ["T"])
 rhs.set_value(mult_left, "T", 0.0)
 rhs.set_value(mult_right, "T", 1.0)
 
 # 5) Assemblage + résolution
 K = pyrucast.stiffness(model, materials)
 solution = pyrucast.solve(K, rhs)
-assert abs(solution.value(nodes[2].id, "T") - 0.5) < 1e-10  # T au milieu = 0.5
+assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10  # T au milieu = 0.5
 assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux à gauche
 ```
 

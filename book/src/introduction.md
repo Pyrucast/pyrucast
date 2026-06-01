@@ -83,11 +83,8 @@ c = pyrucast.Configuration(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
-sm = pyrucast.SubMesh(c, "SEG2")
-sm.add_cell([a.id, b.id])
-
-mesh = pyrucast.Mesh(c)
-mesh.add_submesh(sm)
+mesh = pyrucast.Mesh(c, "SEG2")
+mesh.add_cell([a, b])
 print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
 ```
 

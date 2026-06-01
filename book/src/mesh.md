@@ -68,11 +68,8 @@ a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 n3 = c.add_node([0.5, 1.0])
 
-sm_tri = pyrucast.SubMesh(c, "TRI3")
-sm_tri.add_cell([a.id, b.id, n3.id])
-
-mesh = pyrucast.Mesh(c)
-mesh.add_submesh(sm_tri)
+mesh = pyrucast.Mesh(c, "TRI3")
+mesh.add_cell([a, b, n3])
 print(mesh)               # Mesh: 1 submesh(es), 1 cell(s) total
 ```
 

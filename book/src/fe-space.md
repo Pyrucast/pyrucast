@@ -228,7 +228,7 @@ Constructeur principal — Lagrange-1 partout, quadrature de Gauss par défaut :
 use pyrucast::mesh::configuration::Configuration;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::finite_element_space::FiniteElementSpace;
-use pyrucast::mesh::Mesh;
+use pyrucast::mesh::{Mesh, SubMesh};
 use pyrucast::mesh::node::Node;
 use pyrucast::store::{insert, with};
 
@@ -237,7 +237,7 @@ let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
 let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
 let c = Node::create_in(cfg.clone(), &[0.0, 2.0]).unwrap();
 
-let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
 mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();

@@ -61,7 +61,7 @@ use pyrucast::mesh::configuration::Configuration;
 use pyrucast::containers::element_field::ElementField;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::finite_element_space::FiniteElementSpace;
-use pyrucast::mesh::Mesh;
+use pyrucast::mesh::{Mesh, SubMesh};
 use pyrucast::mesh::node::Node;
 use pyrucast::store::{insert, with};
 
@@ -69,7 +69,7 @@ let cfg = insert(Configuration::new(2).unwrap());
 let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
 let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
 let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-let mut mesh = Mesh::with_element_type(cfg, ElementType::TRI3);
+let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
 mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 let sub = fes.subspace(0).unwrap();
