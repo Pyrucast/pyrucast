@@ -178,6 +178,13 @@ class ElementField:
         r"""
         Explicit `components` list per subspace.
         """
+    def __add__(self, other: ElementField) -> ElementField:
+        r"""
+        `field_a + field_b` — merge two element fields into a fresh one
+        (union of sub-fields, first-seen order). Sub-field handles are
+        **shared** (refcount bump), not deep-copied. Mirrors `Model.__add__`
+        for composing per-zone materials built separately.
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, idx: builtins.int) -> SubElementField: ...
     def subfield_count(self) -> builtins.int: ...
@@ -376,7 +383,13 @@ class NodeField:
     r"""
     Python wrapper for [`NodeField`].
     """
-    def __new__(cls, submesh: SubMesh, components: typing.Sequence[builtins.str]) -> NodeField: ...
+    def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str]) -> NodeField:
+        r"""
+        `NodeField(support, components)` — zero-initialized field over the
+        POI1 nodes of `support`. `support` may be a `SubMesh` or a
+        **unitary** `Mesh` (the parent→sub coercion: a one-submesh mesh is
+        accepted directly, so callers rarely need `mesh[0]`).
+        """
     def node_count(self) -> builtins.int: ...
     def component_count(self) -> builtins.int: ...
     def components(self) -> builtins.list[builtins.str]: ...

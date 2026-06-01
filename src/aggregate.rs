@@ -88,6 +88,25 @@ pub trait Aggregate: Default {
         self.items().is_empty()
     }
 
+    /// The sole sub-handle of a **unitary** aggregate (exactly one sub).
+    ///
+    /// This is the parent→sub coercion primitive (see `CONVENTIONS.md`,
+    /// « Agrégats : un ou plusieurs ») used at the few boundaries that
+    /// genuinely need a single sub — e.g. a `NodeField` support accepting
+    /// a unitary `Mesh`. Errors with a clear message if the aggregate holds
+    /// zero or more than one sub.
+    fn unit(&self) -> Result<Handle<Self::Sub>> {
+        match self.items() {
+            [h] => Ok(h.clone()),
+            items => Err(PyrucastError::Message(format!(
+                "expected a unitary {} (exactly one {}), found {}",
+                Self::type_name(),
+                Self::sub_display_name(),
+                items.len(),
+            ))),
+        }
+    }
+
     /// Clone of the `i`-th handle. Explicit error if `i` is out of bounds.
     fn get(&self, i: usize) -> Result<Handle<Self::Sub>> {
         self.items().get(i).cloned().ok_or_else(|| {
@@ -493,6 +512,17 @@ mod tests {
         let msg = format!("{}", err);
         assert!(msg.contains("out of bounds"));
         assert!(msg.contains("len=0"));
+    }
+
+    #[test]
+    fn unit_returns_sole_handle_or_errors() {
+        let mut b = Bag::default();
+        assert!(b.unit().is_err()); // empty → error
+        b.push(insert(Item(7)));
+        let h = b.unit().unwrap();
+        with(&h, |it| assert_eq!(it.0, 7)).unwrap();
+        b.push(insert(Item(8)));
+        assert!(b.unit().is_err()); // two → error
     }
 
     #[test]

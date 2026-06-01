@@ -218,6 +218,15 @@ impl PyElementField {
         Ok(Self { inner: ef })
     }
 
+    /// `field_a + field_b` — merge two element fields into a fresh one
+    /// (union of sub-fields, first-seen order). Sub-field handles are
+    /// **shared** (refcount bump), not deep-copied. Mirrors `Model.__add__`
+    /// for composing per-zone materials built separately.
+    fn __add__(&self, other: PyRef<PyElementField>) -> PyResult<PyElementField> {
+        let inner = crate::aggregate::Aggregate::merge(&self.inner, &other.inner)?;
+        Ok(PyElementField { inner })
+    }
+
 }
 
 crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField", subfield);
