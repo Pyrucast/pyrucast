@@ -9,10 +9,10 @@ def _poi1_with(n_nodes, dim=2):
     c = pyrucast.Configuration(dim)
     coords = [0.0] * dim
     nodes = [c.add_node([float(i)] + coords[1:]) for i in range(n_nodes)]
-    sm = pyrucast.SubMesh(c, "POI1")
+    mesh = pyrucast.Mesh(c, "POI1")
     for n in nodes:
-        sm.add_cell([n])
-    return c, nodes, sm
+        mesh.add_cell([n])
+    return c, nodes, mesh
 
 
 def test_from_poi1_zero_initialized():
@@ -27,13 +27,13 @@ def test_from_poi1_zero_initialized():
 
 def test_from_poi1_rejects_non_poi1():
     c = pyrucast.Configuration(2)
-    sm = pyrucast.SubMesh(c, "SEG2")
+    sm = pyrucast.Mesh(c, "SEG2")
     try:
         pyrucast.NodeField(sm, ["X"])
     except RuntimeError:
         pass
     else:
-        raise AssertionError("expected RuntimeError for non-POI1 SubMesh")
+        raise AssertionError("expected RuntimeError for non-POI1 support")
 
 
 def test_from_poi1_rejects_empty_components():
@@ -93,7 +93,7 @@ def test_field_protects_nodes_from_gc():
     c = pyrucast.Configuration(1)
     a = c.add_node([0.0])
     nid = a.id
-    sm = pyrucast.SubMesh(c, "POI1")
+    sm = pyrucast.Mesh(c, "POI1")
     sm.add_cell([a])
     field = pyrucast.NodeField(sm, ["T"])
 
@@ -239,10 +239,10 @@ def test_merge_compatible_and_conflict():
     n0 = c.add_node([0.0])
     n1 = c.add_node([1.0])
     n2 = c.add_node([2.0])
-    sm_a = pyrucast.SubMesh(c, "POI1")
+    sm_a = pyrucast.Mesh(c, "POI1")
     sm_a.add_cell([n0])
     sm_a.add_cell([n1])
-    sm_b = pyrucast.SubMesh(c, "POI1")
+    sm_b = pyrucast.Mesh(c, "POI1")
     sm_b.add_cell([n1])
     sm_b.add_cell([n2])
     a = pyrucast.NodeField(sm_a, ["T"])

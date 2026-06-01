@@ -251,7 +251,24 @@ class Matrix:
     def symmetric(self) -> builtins.bool: ...
     def __new__(cls) -> Matrix:
         r"""
-        `Matrix()` — empty aggregate. Populate via `add_sub_matrix`.
+        `Matrix()` — empty aggregate. Populate via `add_sub_matrix`, or
+        build blocks with `Matrix.block(...)` and compose them with `+`.
+        """
+    @classmethod
+    def block(cls, row_support: typing.Any, col_support: typing.Any, dual_vars: typing.Sequence[builtins.str], primal_vars: typing.Sequence[builtins.str], ordering: builtins.str = 'nodes_then_vars', symmetric: builtins.bool = False) -> Matrix:
+        r"""
+        `Matrix.block(row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=False)`
+        — a single-block `Matrix` (unit aggregate). `row_support` /
+        `col_support` may each be a `SubMesh` view or a **unitary** `Mesh`.
+        `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
+        Fill entries via the block view (`block[0].add_entry(...)`) and
+        compose several blocks with `+`, then `finalize()`.
+        """
+    def __add__(self, other: Matrix) -> Matrix:
+        r"""
+        `matrix_a + matrix_b` — merge two matrices into a fresh aggregate
+        (union of blocks, first-seen order). Block handles are **shared**
+        (refcount bump). Call `finalize()` on the result before solving.
         """
     def add_sub_matrix(self, sub: SubMatrix) -> None: ...
     def finalize(self) -> None:
@@ -261,6 +278,12 @@ class Matrix:
         """
     def sub_matrix_count(self) -> builtins.int: ...
     def sub_matrix(self, i: builtins.int) -> SubMatrix: ...
+    def __getitem__(self, idx: builtins.int) -> SubMatrix:
+        r"""
+        `matrix[i]` → `SubMatrix` view on block `i` (negative indices
+        supported; `IndexError` out of range), so `for block in matrix:`
+        works and blocks are reachable as views.
+        """
     def __len__(self) -> builtins.int: ...
     def n_rows(self) -> builtins.int: ...
     def n_cols(self) -> builtins.int: ...
@@ -548,12 +571,6 @@ class SubMatrix:
     """
     @property
     def symmetric(self) -> builtins.bool: ...
-    def __new__(cls, row_mesh: SubMesh, col_mesh: SubMesh, dual_vars: typing.Sequence[builtins.str], primal_vars: typing.Sequence[builtins.str], ordering: builtins.str = 'nodes_then_vars', symmetric: builtins.bool = False) -> SubMatrix:
-        r"""
-        `SubMatrix(row_mesh, col_mesh, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=False)`.
-        
-        `ordering` is either `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
-        """
     def add_entry(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str, value: builtins.float) -> None: ...
     def get(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str) -> builtins.float: ...
     def n_rows(self) -> builtins.int: ...
@@ -602,7 +619,6 @@ class SubMesh:
         r"""
         Set the face colour from an `(r, g, b)` tuple of bytes.
         """
-    def __new__(cls, config: Configuration, element_type: builtins.str) -> SubMesh: ...
     def add_cell(self, nodes: typing.Sequence[Node]) -> builtins.int: ...
     def cell_count(self) -> builtins.int: ...
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None) -> None:

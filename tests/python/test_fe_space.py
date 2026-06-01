@@ -15,13 +15,11 @@ def test_lagrange1_constructor_one_to_one_with_submeshes():
     n2 = c.add_node([0.0, 1.0])
     n3 = c.add_node([1.0, 1.0])
 
-    mesh = pyrucast.Mesh(c)
-    sm_tri = pyrucast.SubMesh(c, "TRI3")
-    sm_tri.add_cell([n0, n1, n2])
-    sm_qua = pyrucast.SubMesh(c, "QUA4")
-    sm_qua.add_cell([n0, n1, n3, n2])
-    mesh.add_sub(sm_tri)
-    mesh.add_sub(sm_qua)
+    tri = pyrucast.Mesh(c, "TRI3")
+    tri.add_cell([n0, n1, n2])
+    qua = pyrucast.Mesh(c, "QUA4")
+    qua.add_cell([n0, n1, n3, n2])
+    mesh = tri + qua
 
     fes = pyrucast.FiniteElementSpace(mesh)
     assert len(fes) == 2

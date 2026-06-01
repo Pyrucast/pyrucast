@@ -4,20 +4,24 @@ import pyrucast
 
 
 def _poi1(c, ids):
-    """Build a POI1 SubMesh in `c` over the given node ids."""
-    sm = pyrucast.SubMesh(c, "POI1")
+    """Build a unit POI1 Mesh in `c` over the given node ids (used as a
+    block support — Matrix.block accepts a unitary Mesh)."""
+    mesh = pyrucast.Mesh(c, "POI1")
     for nid in ids:
-        sm.add_cell([nid])
-    return sm
+        mesh.add_cell([nid])
+    return mesh
 
 
 def _make_block(c, row_ids, col_ids, dual_vars, primal_vars, symmetric=False):
-    return pyrucast.SubMatrix(
+    """A single COO block, returned as the `SubMatrix` view of a unit
+    `Matrix` (SubMatrix is no longer constructed directly — see
+    CONVENTIONS.md). The view supports `add_entry` / `get` / `n_rows`."""
+    return pyrucast.Matrix.block(
         _poi1(c, row_ids), _poi1(c, col_ids),
         dual_vars, primal_vars,
         ordering="nodes_then_vars",
         symmetric=symmetric,
-    )
+    )[0]
 
 
 # ─── SubMatrix — construction ───────────────────────────────────────────────
@@ -198,6 +202,32 @@ def test_matrix_aggregates_two_blocks():
     assert k.get(b, "q", b, "T") == 2.0
     assert k.dense() == [2.0, -1.0, -1.0, 2.0]
     assert k.mul_dense([1.0, 1.0]) == [1.0, 1.0]
+
+
+def test_matrix_compose_blocks_with_plus():
+    """`Matrix.block(...) + Matrix.block(...)` composes blocks the
+    parent-level way; entries are filled through the block view `[0]`."""
+    c = pyrucast.Configuration(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    ba = pyrucast.Matrix.block(
+        _poi1(c, [a]), _poi1(c, [a, b]), ["q"], ["T"], symmetric=True
+    )
+    ba[0].add_entry(a, "q", a, "T", 2.0)
+    ba[0].add_entry(a, "q", b, "T", -1.0)
+    bb = pyrucast.Matrix.block(
+        _poi1(c, [b]), _poi1(c, [a, b]), ["q"], ["T"], symmetric=True
+    )
+    bb[0].add_entry(b, "q", a, "T", -1.0)
+    bb[0].add_entry(b, "q", b, "T", 2.0)
+
+    k = ba + bb
+    k.finalize()
+    assert k.sub_matrix_count() == 2
+    assert k.n_rows() == 2
+    assert k.n_cols() == 2
+    assert k.symmetric is True
+    assert k.dense() == [2.0, -1.0, -1.0, 2.0]
 
 
 def test_matrix_get_sums_across_blocks():

@@ -3,7 +3,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
-use crate::py::mesh::PySubMesh;
+use crate::py::mesh::submesh_handle;
 use crate::py::node::PyNode;
 use crate::store::{insert, with, Handle};
 use pyo3::prelude::*;
@@ -17,40 +17,13 @@ pub struct PySubMatrix {
     pub(crate) handle: Handle<SubMatrix>,
 }
 
+/// `SubMatrix` is a **view** into a `Matrix` block, obtained by indexing
+/// (`matrix[i]`) — it is never constructed directly from Python. Build a
+/// block at the parent level with `Matrix.block(...)` (a unit `Matrix`),
+/// composed with `+` (see `CONVENTIONS.md`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubMatrix {
-    /// `SubMatrix(row_mesh, col_mesh, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=False)`.
-    ///
-    /// `ordering` is either `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
-    #[new]
-    #[pyo3(signature = (row_mesh, col_mesh, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=false))]
-    fn py_new(
-        row_mesh: PyRef<'_, PySubMesh>,
-        col_mesh: PyRef<'_, PySubMesh>,
-        dual_vars: Vec<String>,
-        primal_vars: Vec<String>,
-        ordering: &str,
-        symmetric: bool,
-    ) -> PyResult<Self> {
-        let ord = match ordering {
-            "nodes_then_vars" => DofOrdering::NodesThenVars,
-            "vars_then_nodes" => DofOrdering::VarsThenNodes,
-            other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "unknown ordering '{other}'; expected 'nodes_then_vars' or 'vars_then_nodes'"
-            ))),
-        };
-        let sub = SubMatrix::new(
-            row_mesh.handle.clone(),
-            col_mesh.handle.clone(),
-            dual_vars,
-            primal_vars,
-            ord,
-            symmetric,
-        ).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        Ok(Self { handle: insert(sub) })
-    }
-
     fn add_entry(
         &self,
         row_node: PyRef<'_, PyNode>,
@@ -160,10 +133,52 @@ pub struct PyMatrix {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyMatrix {
-    /// `Matrix()` — empty aggregate. Populate via `add_sub_matrix`.
+    /// `Matrix()` — empty aggregate. Populate via `add_sub_matrix`, or
+    /// build blocks with `Matrix.block(...)` and compose them with `+`.
     #[new]
     fn py_new() -> PyResult<Self> {
         Ok(Self { inner: Matrix::empty() })
+    }
+
+    /// `Matrix.block(row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=False)`
+    /// — a single-block `Matrix` (unit aggregate). `row_support` /
+    /// `col_support` may each be a `SubMesh` view or a **unitary** `Mesh`.
+    /// `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
+    /// Fill entries via the block view (`block[0].add_entry(...)`) and
+    /// compose several blocks with `+`, then `finalize()`.
+    #[classmethod]
+    #[pyo3(signature = (row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=false))]
+    fn block(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        row_support: &Bound<'_, PyAny>,
+        col_support: &Bound<'_, PyAny>,
+        dual_vars: Vec<String>,
+        primal_vars: Vec<String>,
+        ordering: &str,
+        symmetric: bool,
+    ) -> PyResult<Self> {
+        let ord = match ordering {
+            "nodes_then_vars" => DofOrdering::NodesThenVars,
+            "vars_then_nodes" => DofOrdering::VarsThenNodes,
+            other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "unknown ordering '{other}'; expected 'nodes_then_vars' or 'vars_then_nodes'"
+            ))),
+        };
+        let row = submesh_handle(row_support)?;
+        let col = submesh_handle(col_support)?;
+        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetric)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        let mut m = Matrix::empty();
+        m.add_sub(insert(sub))?;
+        Ok(Self { inner: m })
+    }
+
+    /// `matrix_a + matrix_b` — merge two matrices into a fresh aggregate
+    /// (union of blocks, first-seen order). Block handles are **shared**
+    /// (refcount bump). Call `finalize()` on the result before solving.
+    fn __add__(&self, other: PyRef<PyMatrix>) -> PyResult<PyMatrix> {
+        let inner = self.inner.merge(&other.inner)?;
+        Ok(PyMatrix { inner })
     }
 
     fn add_sub_matrix(&mut self, sub: PyRef<'_, PySubMatrix>) -> PyResult<()> {
@@ -183,6 +198,20 @@ impl PyMatrix {
     }
 
     fn sub_matrix(&self, i: usize) -> PyResult<PySubMatrix> {
+        let h = Aggregate::get(&self.inner, i)?;
+        Ok(PySubMatrix { handle: h })
+    }
+
+    /// `matrix[i]` → `SubMatrix` view on block `i` (negative indices
+    /// supported; `IndexError` out of range), so `for block in matrix:`
+    /// works and blocks are reachable as views.
+    fn __getitem__(&self, idx: isize) -> PyResult<PySubMatrix> {
+        let n = self.inner.len();
+        let i = crate::aggregate::normalize_index(idx, n).ok_or_else(|| {
+            pyo3::exceptions::PyIndexError::new_err(format!(
+                "Matrix index {idx} out of range (len={n})"
+            ))
+        })?;
         let h = Aggregate::get(&self.inner, i)?;
         Ok(PySubMatrix { handle: h })
     }

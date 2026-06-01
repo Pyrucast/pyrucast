@@ -9,7 +9,7 @@ def test_submesh_poi1_is_node_list():
     c = pyrucast.Configuration(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
-    sm = pyrucast.SubMesh(c, "POI1")
+    sm = pyrucast.Mesh(c, "POI1")[0]
     sm.add_cell([a])
     sm.add_cell([b])
     assert sm.cell_count() == 2
@@ -19,7 +19,7 @@ def test_submesh_poi1_is_node_list():
 def test_submesh_tri3_invalid_arity():
     c = pyrucast.Configuration(2)
     a = c.add_node([0.0, 0.0])
-    sm = pyrucast.SubMesh(c, "TRI3")
+    sm = pyrucast.Mesh(c, "TRI3")[0]
     try:
         sm.add_cell([a])
     except RuntimeError:
@@ -35,7 +35,7 @@ def test_submesh_protects_nodes_from_gc():
     cc = c.add_node([0.5, 1.0])
     ids = (a.id, b.id, cc.id)
 
-    sm = pyrucast.SubMesh(c, "TRI3")
+    sm = pyrucast.Mesh(c, "TRI3")[0]
     sm.add_cell([a, b, cc])
     # The 3 Python Nodes AND the SubMesh each reference every node ⇒ refcount = 2.
     for i in ids:
@@ -62,7 +62,7 @@ def test_submesh_protects_nodes_from_gc():
 def test_unknown_element_type():
     c = pyrucast.Configuration(2)
     try:
-        pyrucast.SubMesh(c, "BOGUS")
+        pyrucast.Mesh(c, "BOGUS")
     except ValueError:
         pass
     else:
@@ -75,16 +75,14 @@ def test_mesh_aggregates_submeshes():
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
 
-    sm_pts = pyrucast.SubMesh(c, "POI1")
-    sm_pts.add_cell([a])
-    sm_pts.add_cell([b])
+    pts = pyrucast.Mesh(c, "POI1")
+    pts.add_cell([a])
+    pts.add_cell([b])
 
-    sm_tri = pyrucast.SubMesh(c, "TRI3")
-    sm_tri.add_cell([a, b, cc])
+    tri = pyrucast.Mesh(c, "TRI3")
+    tri.add_cell([a, b, cc])
 
-    mesh = pyrucast.Mesh(c)
-    mesh.add_sub(sm_pts)
-    mesh.add_sub(sm_tri)
+    mesh = pts + tri
     assert mesh.submesh_count() == 2
     assert mesh.cell_count() == 3  # 2 POI1 + 1 TRI3
 
@@ -97,7 +95,7 @@ def test_submesh_cell_indexing_and_iteration():
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
 
-    sm = pyrucast.SubMesh(c, "TRI3")
+    sm = pyrucast.Mesh(c, "TRI3")[0]
     sm.add_cell([a, b, cc])
 
     assert len(sm) == 1
@@ -129,15 +127,13 @@ def test_mesh_indexing_and_iteration():
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
 
-    sm_pts = pyrucast.SubMesh(c, "POI1")
-    sm_pts.add_cell([a])
+    pts = pyrucast.Mesh(c, "POI1")
+    pts.add_cell([a])
 
-    sm_tri = pyrucast.SubMesh(c, "TRI3")
-    sm_tri.add_cell([a, b, cc])
+    tri = pyrucast.Mesh(c, "TRI3")
+    tri.add_cell([a, b, cc])
 
-    mesh = pyrucast.Mesh(c)
-    mesh.add_sub(sm_pts)
-    mesh.add_sub(sm_tri)
+    mesh = pts + tri
 
     assert len(mesh) == 2
     assert [sm.element_type for sm in mesh] == ["POI1", "TRI3"]
@@ -154,15 +150,13 @@ def test_mesh_indexing_and_iteration():
         raise AssertionError("expected IndexError on out-of-range index")
 
 
-def test_mesh_rejects_submesh_from_other_configuration():
+def test_mesh_rejects_merge_from_other_configuration():
     c1 = pyrucast.Configuration(2)
     c2 = pyrucast.Configuration(2)
-    sm1 = pyrucast.SubMesh(c1, "POI1")
-    sm2 = pyrucast.SubMesh(c2, "POI1")
-    mesh = pyrucast.Mesh(c1, "POI1")
-    mesh.add_sub(sm1)  # same config — ok
+    m1 = pyrucast.Mesh(c1, "POI1")
+    m2 = pyrucast.Mesh(c2, "POI1")  # different config
     try:
-        mesh.add_sub(sm2)  # different config — must fail
+        _ = m1 + m2  # merge across Configurations — must fail
     except RuntimeError:
         pass
     else:
@@ -416,13 +410,11 @@ def test_to_poi1_preserves_submesh_count():
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
 
-    pts = pyrucast.SubMesh(c, "POI1")
+    pts = pyrucast.Mesh(c, "POI1")
     pts.add_cell([a])
-    tri = pyrucast.SubMesh(c, "TRI3")
+    tri = pyrucast.Mesh(c, "TRI3")
     tri.add_cell([a, b, cc])
-    mesh = pyrucast.Mesh(c)
-    mesh.add_sub(pts)
-    mesh.add_sub(tri)
+    mesh = pts + tri
 
     poi = pyrucast.to_poi1(mesh)
     assert poi.submesh_count() == 2
@@ -432,7 +424,7 @@ def test_to_poi1_preserves_submesh_count():
 
 def test_repr_str_submesh_and_mesh():
     c = pyrucast.Configuration(1)
-    sm = pyrucast.SubMesh(c, "SEG2")
+    sm = pyrucast.Mesh(c, "SEG2")[0]
     assert "SubMesh" in repr(sm)
     assert "SEG2" in str(sm)
     mesh = pyrucast.Mesh(c)

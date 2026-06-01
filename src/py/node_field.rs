@@ -1,28 +1,10 @@
 //! Python wrapper for [`crate::containers::node_field::NodeField`].
 
-use crate::aggregate::Aggregate;
-use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::NodeField;
-use crate::py::mesh::{PyMesh, PySubMesh};
+use crate::py::mesh::{submesh_handle, PyMesh, PySubMesh};
 use crate::py::node::PyNode;
 use crate::store::{insert, with, with_mut, Handle};
-use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
-
-/// Resolve a `NodeField` support from either a `SubMesh` or a **unitary**
-/// `Mesh` (parent→sub coercion — see `CONVENTIONS.md`). A multi-submesh
-/// `Mesh` is rejected with a clear error.
-fn support_submesh_handle(support: &Bound<'_, PyAny>) -> PyResult<Handle<SubMesh>> {
-    if let Ok(sm) = support.extract::<PyRef<PySubMesh>>() {
-        Ok(sm.handle.clone())
-    } else if let Ok(mesh) = support.extract::<PyRef<PyMesh>>() {
-        Ok(mesh.inner.unit()?)
-    } else {
-        Err(PyTypeError::new_err(
-            "NodeField support must be a SubMesh or a unitary Mesh",
-        ))
-    }
-}
 
 /// Python wrapper for [`NodeField`].
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
@@ -40,7 +22,7 @@ impl PyNodeField {
     /// accepted directly, so callers rarely need `mesh[0]`).
     #[new]
     fn py_new(support: &Bound<'_, PyAny>, components: Vec<String>) -> PyResult<Self> {
-        let sm_handle = support_submesh_handle(support)?;
+        let sm_handle = submesh_handle(support)?;
         let nf = NodeField::from_poi1(&sm_handle, components)?;
         Ok(Self {
             handle: insert(nf),

@@ -6,9 +6,24 @@ use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::py::configuration::PyConfiguration;
 use crate::py::node::PyNode;
-use crate::store::{insert, with, with_mut, Handle};
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use crate::store::{with, with_mut, Handle};
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+
+/// Resolve a `Handle<SubMesh>` from either a `SubMesh` view or a
+/// **unitary** `Mesh` (the parent→sub coercion — see `CONVENTIONS.md`,
+/// « Agrégats : un ou plusieurs »). Used wherever an API takes a single
+/// submesh support (`NodeField`, `Matrix.block`, …). A multi-submesh
+/// `Mesh` is rejected with a clear error.
+pub(crate) fn submesh_handle(obj: &Bound<'_, PyAny>) -> PyResult<Handle<SubMesh>> {
+    if let Ok(sm) = obj.extract::<PyRef<PySubMesh>>() {
+        Ok(sm.handle.clone())
+    } else if let Ok(mesh) = obj.extract::<PyRef<PyMesh>>() {
+        Ok(mesh.inner.unit()?)
+    } else {
+        Err(PyTypeError::new_err("expected a SubMesh or a unitary Mesh"))
+    }
+}
 
 /// Python wrapper for [`SubMesh`].
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
@@ -17,19 +32,13 @@ pub struct PySubMesh {
     pub(crate) handle: Handle<SubMesh>,
 }
 
+/// `SubMesh` is a **view** into a `Mesh`, obtained by indexing
+/// (`mesh[i]`) — it is never constructed directly from Python. Build at
+/// the parent level instead: `Mesh(config, element_type)` for a single
+/// zone, composed with `+` for several (see `CONVENTIONS.md`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubMesh {
-    #[new]
-    fn py_new(config: PyRef<PyConfiguration>, element_type: &str) -> PyResult<Self> {
-        let et = ElementType::from_name(element_type).ok_or_else(|| {
-            PyValueError::new_err(format!("unknown element type: {element_type}"))
-        })?;
-        let cfg_handle = config.handle.clone();
-        let sm = SubMesh::new(cfg_handle, et);
-        Ok(Self { handle: insert(sm) })
-    }
-
     #[getter]
     fn element_type(&self) -> PyResult<String> {
         Ok(with(&self.handle, |s| s.element_type().name().to_string())?)

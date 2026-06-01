@@ -16,13 +16,11 @@ def _two_zone_model():
     """
     c = pyrucast.Configuration(1)
     nodes = [c.add_node([i * 1.0]) for i in range(3)]
-    mesh = pyrucast.Mesh(c)
-    sm_a = pyrucast.SubMesh(c, "SEG2")
-    sm_a.add_cell([nodes[0], nodes[1]])
-    sm_b = pyrucast.SubMesh(c, "SEG2")
-    sm_b.add_cell([nodes[1], nodes[2]])
-    mesh.add_sub(sm_a)
-    mesh.add_sub(sm_b)
+    zone_a = pyrucast.Mesh(c, "SEG2")
+    zone_a.add_cell([nodes[0], nodes[1]])
+    zone_b = pyrucast.Mesh(c, "SEG2")
+    zone_b.add_cell([nodes[1], nodes[2]])
+    mesh = zone_a + zone_b
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet(

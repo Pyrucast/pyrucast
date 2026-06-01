@@ -1,7 +1,7 @@
 """Python tests for the visualization layer (feature `viz`).
 
 Skipped when pyrucast was built without the `viz` feature (i.e. when
-`SubMesh.plot` is not present on the compiled module).
+`Mesh.plot` is not present on the compiled module).
 """
 
 import os
@@ -12,7 +12,7 @@ import pytest
 import pyrucast
 
 
-_HAS_VIZ = hasattr(pyrucast.SubMesh(pyrucast.Configuration(2), "TRI3"), "plot")
+_HAS_VIZ = hasattr(pyrucast.Mesh(pyrucast.Configuration(2), "TRI3"), "plot")
 pytestmark = pytest.mark.skipif(not _HAS_VIZ, reason="pyrucast built without viz feature")
 
 
@@ -22,20 +22,20 @@ def _make_two_triangles():
     b = c.add_node([1.0, 0.0, 0.0])
     cc = c.add_node([1.0, 1.0, 0.0])
     d = c.add_node([0.0, 1.0, 0.5])
-    sm = pyrucast.SubMesh(c, "TRI3")
+    sm = pyrucast.Mesh(c, "TRI3")[0]
     sm.add_cell([a, b, cc])
     sm.add_cell([a, cc, d])
     return c, sm
 
 
 def test_face_color_default():
-    sm = pyrucast.SubMesh(pyrucast.Configuration(2), "TRI3")
+    sm = pyrucast.Mesh(pyrucast.Configuration(2), "TRI3")[0]
     r, g, b = sm.face_color
     assert (r, g, b) == (180, 200, 230)
 
 
 def test_face_color_roundtrip():
-    sm = pyrucast.SubMesh(pyrucast.Configuration(2), "TRI3")
+    sm = pyrucast.Mesh(pyrucast.Configuration(2), "TRI3")[0]
     sm.face_color = (10, 200, 30)
     assert sm.face_color == (10, 200, 30)
 
@@ -110,7 +110,7 @@ def test_plot_unsupported_extension(tmp_path):
 def test_plot_every_element_type(tmp_path, element_type, coords, connectivity):
     c = pyrucast.Configuration(3)
     nodes = [c.add_node(p) for p in coords]
-    sm = pyrucast.SubMesh(c, element_type)
+    sm = pyrucast.Mesh(c, element_type)[0]
     sm.add_cell([nodes[i] for i in connectivity])
     path = tmp_path / f"{element_type.lower()}.png"
     sm.plot(save=str(path))
@@ -125,17 +125,15 @@ def test_mesh_plot_uses_each_submesh_color(tmp_path):
     d = c.add_node([2.0, 0.0, 0.0])
     e = c.add_node([2.0, 1.0, 0.0])
 
-    sm_red = pyrucast.SubMesh(c, "TRI3")
-    sm_red.add_cell([a, b, cc])
-    sm_red.face_color = (220, 60, 60)
+    red = pyrucast.Mesh(c, "TRI3")
+    red.add_cell([a, b, cc])
+    red[0].face_color = (220, 60, 60)
 
-    sm_blue = pyrucast.SubMesh(c, "TRI3")
-    sm_blue.add_cell([b, d, e])
-    sm_blue.face_color = (60, 60, 220)
+    blue = pyrucast.Mesh(c, "TRI3")
+    blue.add_cell([b, d, e])
+    blue[0].face_color = (60, 60, 220)
 
-    mesh = pyrucast.Mesh(c)
-    mesh.add_sub(sm_red)
-    mesh.add_sub(sm_blue)
+    mesh = red + blue
 
     path = tmp_path / "mesh.svg"
     mesh.plot(save=str(path))
@@ -149,7 +147,7 @@ def test_mesh_plot_uses_each_submesh_color(tmp_path):
 
 def _build_field_on_nodes(c, nodes, components, values_per_component):
     """Helper: build a POI1 NodeField on `nodes` and fill values."""
-    poi1 = pyrucast.SubMesh(c, "POI1")
+    poi1 = pyrucast.Mesh(c, "POI1")
     for n in nodes:
         poi1.add_cell([n])
     nf = pyrucast.NodeField(poi1, list(components))
@@ -164,10 +162,8 @@ def test_mesh_plot_with_field_writes_overlay_label(tmp_path):
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])
-    tri = pyrucast.SubMesh(c, "TRI3")
-    tri.add_cell([a, b, cc])
-    mesh = pyrucast.Mesh(c)
-    mesh.add_sub(tri)
+    mesh = pyrucast.Mesh(c, "TRI3")
+    mesh.add_cell([a, b, cc])
 
     nf = _build_field_on_nodes(c, [a, b, cc], ["T"], [[0.0, 1.0, 2.0]])
 
@@ -184,7 +180,7 @@ def test_submesh_plot_with_field_explicit_component(tmp_path):
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])
-    tri = pyrucast.SubMesh(c, "TRI3")
+    tri = pyrucast.Mesh(c, "TRI3")[0]
     tri.add_cell([a, b, cc])
 
     nf = _build_field_on_nodes(
@@ -202,7 +198,7 @@ def test_plot_with_field_unknown_component_errors(tmp_path):
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])
-    tri = pyrucast.SubMesh(c, "TRI3")
+    tri = pyrucast.Mesh(c, "TRI3")[0]
     tri.add_cell([a, b, cc])
     nf = _build_field_on_nodes(c, [a, b, cc], ["T"], [[0.0, 1.0, 2.0]])
     path = tmp_path / "nope.svg"

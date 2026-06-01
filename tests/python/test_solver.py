@@ -27,10 +27,10 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     model = pyrucast.Model.heat_conduction(fes) + left + right
 
     # Load: imposed values at the multiplier nodes.
-    rhs_sm = pyrucast.SubMesh(c, "POI1")
-    rhs_sm.add_cell([mult_left])
-    rhs_sm.add_cell([mult_right])
-    rhs = pyrucast.NodeField(rhs_sm, ["T"])
+    rhs_mesh = pyrucast.Mesh(c, "POI1")
+    rhs_mesh.add_cell([mult_left])
+    rhs_mesh.add_cell([mult_right])
+    rhs = pyrucast.NodeField(rhs_mesh, ["T"])
     rhs.set_value(mult_left, "T", 0.0)
     rhs.set_value(mult_right, "T", 1.0)
 
@@ -63,9 +63,9 @@ def test_solver_singular_matrix_errors():
     model = pyrucast.Model.heat_conduction(fes)
     K = pyrucast.stiffness(model, materials)
 
-    rhs_sm = pyrucast.SubMesh(c, "POI1")
-    rhs_sm.add_cell([a])
-    rhs = pyrucast.NodeField(rhs_sm, ["q"])
+    rhs_mesh = pyrucast.Mesh(c, "POI1")
+    rhs_mesh.add_cell([a])
+    rhs = pyrucast.NodeField(rhs_mesh, ["q"])
 
     try:
         pyrucast.solve(K, rhs)
@@ -97,10 +97,10 @@ def test_solver_with_nonzero_neumann():
     # Build a load NodeField with both components:
     #   "T" at mult_left  → 5.0 (imposed value)
     #   "q" at nodes[-1]  → 1.0 (Neumann source on the boundary row)
-    load_sm = pyrucast.SubMesh(c, "POI1")
-    load_sm.add_cell([nodes[-1]])
-    load_sm.add_cell([mult_left])
-    rhs = pyrucast.NodeField(load_sm, ["T", "q"])
+    load_mesh = pyrucast.Mesh(c, "POI1")
+    load_mesh.add_cell([nodes[-1]])
+    load_mesh.add_cell([mult_left])
+    rhs = pyrucast.NodeField(load_mesh, ["T", "q"])
     rhs.set_value(mult_left, "T", 5.0)
     rhs.set_value(nodes[-1], "q", 1.0)
 
