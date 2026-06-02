@@ -360,6 +360,30 @@ impl fmt::Display for Configuration {
     }
 }
 
+impl crate::dump::Dump for Configuration {
+    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+        use crate::dump::{fmt_float, table};
+        let dim = self.dim as usize;
+        const AXES: [&str; 3] = ["x", "y", "z"];
+        let mut headers = vec!["node".to_string()];
+        headers.extend((0..dim).map(|i| AXES.get(i).copied().unwrap_or("?").to_string()));
+        headers.push("refs".to_string());
+        let rows: Vec<Vec<String>> = self
+            .iter_live()
+            .map(|id| {
+                let mut row = vec![id.to_string()];
+                match self.coord(id) {
+                    Ok(c) => row.extend(c.iter().map(|v| fmt_float(*v, opts.precision))),
+                    Err(_) => row.extend((0..dim).map(|_| "?".to_string())),
+                }
+                row.push(self.refcount(id).to_string());
+                row
+            })
+            .collect();
+        format!("{self}\n{}", table(&headers, &rows, opts))
+    }
+}
+
 // ─── Unit tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]

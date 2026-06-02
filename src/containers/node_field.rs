@@ -431,22 +431,11 @@ impl NodeField {
 
 impl fmt::Debug for NodeField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ncomp = self.components.len();
-        // Per-node values, each slice in `components` order.
-        let values: Vec<(NodeId, &[f64])> = if ncomp > 0 {
-            self.nodes
-                .iter()
-                .enumerate()
-                .map(|(i, &nid)| (nid, &self.values[i * ncomp..(i + 1) * ncomp]))
-                .collect()
-        } else {
-            Vec::new()
-        };
+        // Bounded structure only — the per-node values live in `dump()`.
         f.debug_struct("NodeField")
             .field("support", &self.support)
             .field("node_count", &self.nodes.len())
             .field("components", &self.components)
-            .field("values", &values)
             .finish()
     }
 }
@@ -460,6 +449,30 @@ impl fmt::Display for NodeField {
             self.components.len(),
             self.components.join(", ")
         )
+    }
+}
+
+impl crate::dump::Dump for NodeField {
+    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+        use crate::dump::{fmt_float, table};
+        let ncomp = self.components.len();
+        let mut headers = Vec::with_capacity(ncomp + 1);
+        headers.push("node".to_string());
+        headers.extend(self.components.iter().cloned());
+        let rows: Vec<Vec<String>> = self
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(i, nid)| {
+                let mut row = Vec::with_capacity(ncomp + 1);
+                row.push(nid.to_string());
+                for c in 0..ncomp {
+                    row.push(fmt_float(self.values[i * ncomp + c], opts.precision));
+                }
+                row
+            })
+            .collect();
+        format!("{self}\n{}", table(&headers, &rows, opts))
     }
 }
 
@@ -846,6 +859,24 @@ mod tests {
         assert!(f.value(nodes[0].id(), "UZ").is_err());
         assert!(f.set_value(NodeId(999), "UX", 1.0).is_err());
         assert!(f.set_value(nodes[0].id(), "UZ", 1.0).is_err());
+    }
+
+    #[test]
+    fn dump_renders_value_table_and_debug_is_bounded() {
+        use crate::dump::Dump;
+        let (_cfg, nodes, sm) = make_poi1_with(2);
+        let mut f = NodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
+        f.set_value(nodes[0].id(), "UX", 1.25).unwrap();
+
+        let dumped = f.dump();
+        assert!(dumped.contains("UX") && dumped.contains("UY"), "headers:\n{dumped}");
+        assert!(dumped.contains("1.250"), "value at default precision:\n{dumped}");
+        assert_eq!(dumped.lines().count(), 4, "summary + header + 2 rows:\n{dumped}");
+
+        // Debug must stay bounded: structure, never the value buffer.
+        let dbg = format!("{f:?}");
+        assert!(dbg.contains("node_count"), "{dbg}");
+        assert!(!dbg.contains("1.25"), "Debug must not leak values: {dbg}");
     }
 
     // ── &a + &b (field addition) ───────────────────────────────────────────
