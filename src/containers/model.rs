@@ -434,6 +434,36 @@ impl fmt::Display for SubModel {
     }
 }
 
+impl crate::dump::Dump for SubModel {
+    fn dump_with(&self, _opts: &crate::dump::DumpOptions) -> String {
+        let primal = self.physics.primal_vars().join(", ");
+        let dual = self.physics.dual_vars().join(", ");
+        match &self.physics {
+            Physics::HeatConduction { support, .. } => {
+                let n = with(support, |s| s.cell_count()).unwrap_or(0);
+                format!(
+                    "SubModel<HeatConduction>\n  primal var(s): {primal}\n  \
+                     dual var(s):   {dual}\n  support: {n} node(s)"
+                )
+            }
+            Physics::Dirichlet {
+                primal_var,
+                primal_dual,
+                constrained_support,
+                multiplier_support,
+            } => {
+                let nc = with(constrained_support, |s| s.cell_count()).unwrap_or(0);
+                let nm = with(multiplier_support, |s| s.cell_count()).unwrap_or(0);
+                format!(
+                    "SubModel<Dirichlet({primal_var})>\n  primal var(s): {primal} (multipliers)\n  \
+                     dual var(s):   {dual}\n  targets primary dual: {primal_dual}\n  \
+                     constrained: {nc} node(s)\n  multipliers: {nm} node(s)"
+                )
+            }
+        }
+    }
+}
+
 // ─── Model ─────────────────────────────────────────────────────────────────
 
 /// Aggregate of sub-models. Produces matrices on explicit demand.

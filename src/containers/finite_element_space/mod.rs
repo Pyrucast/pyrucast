@@ -366,6 +366,28 @@ impl fmt::Display for SubFiniteElementSpace {
     }
 }
 
+impl crate::dump::Dump for SubFiniteElementSpace {
+    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+        use crate::dump::{fmt_float, table};
+        let ng = self.gauss_count();
+        let ref_dim = if ng > 0 { self.gauss_xi.len() / ng } else { 0 };
+        let mut headers = vec!["g".to_string()];
+        headers.extend((0..ref_dim).map(|i| format!("ξ{i}")));
+        headers.push("weight".to_string());
+        let rows: Vec<Vec<String>> = (0..ng)
+            .map(|g| {
+                let mut row = vec![g.to_string()];
+                for j in 0..ref_dim {
+                    row.push(fmt_float(self.gauss_xi[g * ref_dim + j], opts.precision));
+                }
+                row.push(fmt_float(self.gauss_w[g], opts.precision));
+                row
+            })
+            .collect();
+        format!("{self}\n{}", table(&headers, &rows, opts))
+    }
+}
+
 // ─── FiniteElementSpace ────────────────────────────────────────────────────
 
 /// Finite-element space attached to a [`Mesh`] — one [`SubFiniteElementSpace`] per

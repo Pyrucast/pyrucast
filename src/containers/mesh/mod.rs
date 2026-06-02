@@ -255,20 +255,12 @@ impl Drop for SubMesh {
 
 impl fmt::Debug for SubMesh {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let npc = self.element_type.nodes_per_cell();
-        // Connectivity grouped per cell: cell `i` → its node ids, in
-        // submesh order. `npc == 0` cannot happen for a real element type
-        // but the guard keeps `chunks` from panicking.
-        let cells: Vec<&[NodeId]> = if npc > 0 {
-            self.connectivity.chunks(npc).collect()
-        } else {
-            Vec::new()
-        };
+        // Bounded structure only — the per-cell connectivity lives in `dump()`.
         f.debug_struct("SubMesh")
             .field("element_type", &self.element_type)
             .field("configuration", &self.config)
             .field("cell_count", &self.cell_count())
-            .field("cells", &cells)
+            .field("face_color", &self.face_color)
             .finish()
     }
 }
@@ -281,6 +273,29 @@ impl fmt::Display for SubMesh {
             self.element_type,
             self.cell_count()
         )
+    }
+}
+
+impl crate::dump::Dump for SubMesh {
+    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+        use crate::dump::table;
+        let npc = self.element_type.nodes_per_cell();
+        let mut headers = vec!["cell".to_string()];
+        headers.extend((0..npc).map(|i| format!("n{i}")));
+        let rows: Vec<Vec<String>> = if npc > 0 {
+            self.connectivity
+                .chunks(npc)
+                .enumerate()
+                .map(|(i, chunk)| {
+                    let mut row = vec![i.to_string()];
+                    row.extend(chunk.iter().map(|nid| nid.to_string()));
+                    row
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        format!("{self}\n{}", table(&headers, &rows, opts))
     }
 }
 

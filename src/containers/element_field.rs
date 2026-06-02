@@ -397,26 +397,12 @@ impl Clone for SubElementField {
 
 impl fmt::Debug for SubElementField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ncomp = self.components.len();
-        // Per-(cell, gauss) values, each slice in `components` order.
-        let values: Vec<((usize, usize), &[f64])> = if ncomp > 0 {
-            let mut v = Vec::with_capacity(self.n_cells * self.n_gauss);
-            for cell in 0..self.n_cells {
-                for g in 0..self.n_gauss {
-                    let base = (cell * self.n_gauss + g) * ncomp;
-                    v.push(((cell, g), &self.values[base..base + ncomp]));
-                }
-            }
-            v
-        } else {
-            Vec::new()
-        };
+        // Bounded structure only — the per-(cell, gauss) values live in `dump()`.
         f.debug_struct("SubElementField")
             .field("fespace", &self.fespace)
             .field("cell_count", &self.n_cells)
             .field("gauss_count", &self.n_gauss)
             .field("components", &self.components)
-            .field("values", &values)
             .finish()
     }
 }
@@ -431,6 +417,27 @@ impl fmt::Display for SubElementField {
             self.components.len(),
             self.components.join(", ")
         )
+    }
+}
+
+impl crate::dump::Dump for SubElementField {
+    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+        use crate::dump::{fmt_float, table};
+        let ncomp = self.components.len();
+        let mut headers = vec!["cell".to_string(), "gauss".to_string()];
+        headers.extend(self.components.iter().cloned());
+        let mut rows = Vec::with_capacity(self.n_cells * self.n_gauss);
+        for cell in 0..self.n_cells {
+            for g in 0..self.n_gauss {
+                let base = (cell * self.n_gauss + g) * ncomp;
+                let mut row = vec![cell.to_string(), g.to_string()];
+                for c in 0..ncomp {
+                    row.push(fmt_float(self.values[base + c], opts.precision));
+                }
+                rows.push(row);
+            }
+        }
+        format!("{self}\n{}", table(&headers, &rows, opts))
     }
 }
 
