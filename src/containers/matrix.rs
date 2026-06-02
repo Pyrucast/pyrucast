@@ -446,6 +446,23 @@ impl fmt::Display for SubMatrix {
     }
 }
 
+/// Format a DOF `(node, var)` pair as the grid label `(node,var)`.
+fn dof_label((n, v): &NamedDof) -> String {
+    format!("({n},{v})")
+}
+
+impl crate::dump::Dump for SubMatrix {
+    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+        let row_labels: Vec<String> = self.row_dofs().iter().map(dof_label).collect();
+        let col_labels: Vec<String> = self.col_dofs().iter().map(dof_label).collect();
+        let data = self.dense();
+        format!(
+            "{self}\n{}",
+            crate::dump::labeled_grid(&row_labels, &col_labels, &data, opts)
+        )
+    }
+}
+
 // ─── CooMatrix serde ───────────────────────────────────────────────────────
 
 mod coo_serde {
@@ -731,6 +748,37 @@ impl Matrix {
     }
 }
 
+impl crate::dump::Dump for Matrix {
+    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+        // Build the global labelled grid on the fly — `collect_*_dofs` and
+        // `build_coo` take `&self`, so no `finalize()` (which needs `&mut`)
+        // is required: a matrix dumps the same content whether assembled or
+        // not.
+        let grid = (|| -> Result<String> {
+            let row_dofs = self.collect_row_dofs()?;
+            let col_dofs = self.collect_col_dofs()?;
+            let coo = self.build_coo(&row_dofs, &col_dofs)?;
+            let nc = col_dofs.len();
+            let mut data = vec![0.0f64; row_dofs.len() * nc];
+            for ((&r, &c), &v) in coo
+                .row_indices()
+                .iter()
+                .zip(coo.col_indices())
+                .zip(coo.values())
+            {
+                data[r * nc + c] += v;
+            }
+            let row_labels: Vec<String> = row_dofs.iter().map(dof_label).collect();
+            let col_labels: Vec<String> = col_dofs.iter().map(dof_label).collect();
+            Ok(crate::dump::labeled_grid(&row_labels, &col_labels, &data, opts))
+        })();
+        match grid {
+            Ok(g) => format!("{self}\n{g}"),
+            Err(e) => format!("{self}\n<{e}>"),
+        }
+    }
+}
+
 // ─── Unit tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -844,6 +892,31 @@ mod tests {
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
         m.add_entry(b, "q", b, "T",  2.0).unwrap();
         assert_eq!(m.dense(), vec![2.0, -1.0, -1.0, 2.0]);
+    }
+
+    #[test]
+    fn dump_labels_grid_with_dofs() {
+        use crate::dump::Dump;
+        let (_cfg, nodes, sup) = make_poi1(2);
+        let (a, b) = (nodes[0].id(), nodes[1].id());
+        let mut m = SubMatrix::new(
+            sup.clone(), sup,
+            vec!["q".into()], vec!["T".into()],
+            DofOrdering::NodesThenVars, false,
+        ).unwrap();
+        m.add_entry(a, "q", a, "T",  2.0).unwrap();
+        m.add_entry(a, "q", b, "T", -1.0).unwrap();
+        m.add_entry(b, "q", a, "T", -1.0).unwrap();
+        m.add_entry(b, "q", b, "T",  2.0).unwrap();
+
+        let s = m.dump();
+        let mut lines = s.lines();
+        assert_eq!(lines.next().unwrap(), "SubMatrix: 2 row(s) × 2 col(s), 4 entries");
+        // In-line DOF labels on both axes + values at default precision.
+        assert!(s.contains(&format!("({a},q)")), "row label:\n{s}");
+        assert!(s.contains(&format!("({a},T)")), "col label:\n{s}");
+        assert!(s.contains("2.000") && s.contains("-1.000"), "values:\n{s}");
+        assert_eq!(s.lines().count(), 4, "summary + header + 2 rows:\n{s}");
     }
 
     #[test]
