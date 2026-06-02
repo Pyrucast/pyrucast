@@ -72,6 +72,12 @@ impl fmt::Display for NodeId {
     }
 }
 
+impl crate::dump::Dump for NodeId {
+    fn dump_with(&self, _opts: &crate::dump::DumpOptions) -> String {
+        self.to_string()
+    }
+}
+
 /// Sets of node coordinates with stable identity, multi-set support,
 /// optional solver permutation, and a garbage collector for unreferenced
 /// nodes.

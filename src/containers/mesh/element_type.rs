@@ -115,6 +115,17 @@ impl fmt::Display for ElementType {
     }
 }
 
+impl crate::dump::Dump for ElementType {
+    fn dump_with(&self, _opts: &crate::dump::DumpOptions) -> String {
+        format!(
+            "{}: {} node(s)/cell, topo dim {}",
+            self.name(),
+            self.nodes_per_cell(),
+            self.topological_dim()
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

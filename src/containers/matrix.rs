@@ -114,6 +114,12 @@ impl DofOrdering {
     }
 }
 
+impl crate::dump::Dump for DofOrdering {
+    fn dump_with(&self, _opts: &crate::dump::DumpOptions) -> String {
+        format!("{self:?}")
+    }
+}
+
 // ─── SubMatrix ─────────────────────────────────────────────────────────────
 
 /// One sparse COO block whose DOF layout is fully described by two POI1
