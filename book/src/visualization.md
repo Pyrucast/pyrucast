@@ -128,34 +128,59 @@ Quand on appelle `Mesh::plot`, chaque sous-maillage est rendu avec **sa propre**
 
 ## Coloration par un `NodeField`
 
-`plot` accepte un argument optionnel `field` (un [`NodeField`](node-field.md)) qui **remplace la couleur uniforme par cellule** par une couleur tirée d'une colormap appliquée aux valeurs du champ.
+`plot` accepte un argument optionnel `field` (un [`NodeField`](node-field.md)) qui **remplace la couleur uniforme par cellule** par une couleur tirée d'une *colormap* appliquée aux valeurs du champ.
 
 - **Valeur par cellule** = moyenne des valeurs du champ aux nœuds de la cellule (les nœuds absents du support ne contribuent pas).
-- **Colormap** : « jet-lite » bleu → vert → rouge, échelle linéaire entre le minimum et le maximum **observés** sur le maillage rendu.
-- **Composante par défaut** : la première composante du champ. On peut en sélectionner une autre via `component="<nom>"`.
-- **Étiquette** : un petit bandeau est dessiné en haut de l'image avec le nom de la composante affichée et l'intervalle `[min, max]`.
+- **Composante affichée** : la première composante du champ par défaut ; on en choisit une autre via `component="<nom>"`.
+- **Échelle** : linéaire entre le minimum et le maximum **observés** sur le maillage rendu, sauf si on fixe les bornes (voir [Bornes](#bornes-de-léchelle-vmin--vmax)).
+- **Colorbar** : une barre verticale graduée est dessinée sur le bord droit de l'image (bas = borne basse, haut = borne haute), avec le même dégradé que les cellules.
+- **Bandeau** : en haut de l'image, le nom de la composante affichée et l'intervalle `[min, max]`.
 
-Côté Rust :
+### Échelles de couleur (`cmap`)
+
+Cinq colormaps sont disponibles, sélectionnées par leur nom (insensible à la casse). Un nom inconnu lève une erreur listant les noms acceptés.
+
+| `cmap` | Dégradé | Usage |
+|---|---|---|
+| `"viridis"` *(défaut)* | violet → bleu → vert → jaune | usage général ; perceptuellement uniforme, lisible en niveaux de gris et pour les daltoniens |
+| `"coolwarm"` | bleu → blanc → rouge | données signées centrées sur 0 (le blanc marque le milieu de l'échelle) |
+| `"hot"` | noir → rouge → jaune → blanc | rendu thermique |
+| `"gray"` | noir → blanc | impression N&B, superposition |
+| `"jet"` | bleu → vert → rouge | ancien défaut, conservé |
+
+### Bornes de l'échelle (`vmin` / `vmax`)
+
+Par défaut l'échelle couvre le min/max des valeurs **par cellule**. On peut fixer l'une ou l'autre borne (ou les deux) — celle laissée à `None` continue de suivre les données. Utile pour **comparer plusieurs figures** sur une échelle commune, ou pour centrer une colormap divergente (`vmin = -vmax` avec `"coolwarm"`).
+
+Côté Rust, l'argument `scale` (`ColorScale`) regroupe colormap et bornes :
 
 ```rust,ignore
 use pyrucast::containers::node_field::NodeField;
+use pyrucast::viz::{Colormap, ColorScale};
 
 // Champ déplacement à 2 composantes "UX" / "UY" sur un POI1.
 let mut u = NodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();
 // ... remplissage ...
 
-mesh.plot_with_field(None, Some(std::path::Path::new("ux.svg")), &u, None).unwrap();
-// Composante explicite :
-mesh.plot_with_field(None, Some(std::path::Path::new("uy.svg")), &u, Some("UY")).unwrap();
+// Échelle auto, colormap par défaut (viridis), première composante.
+mesh.plot_with_field(None, Some(std::path::Path::new("ux.svg")), &u, None, ColorScale::default()).unwrap();
+
+// Composante "UY", colormap coolwarm, bornes fixées à [-1, 1].
+let scale = ColorScale { cmap: Colormap::CoolWarm, vmin: Some(-1.0), vmax: Some(1.0) };
+mesh.plot_with_field(None, Some(std::path::Path::new("uy.svg")), &u, Some("UY"), scale).unwrap();
 ```
 
-Côté Python :
+Côté Python, `cmap`, `vmin` et `vmax` sont des arguments nommés de `plot` :
 
 ```python
-# Composante par défaut (la première).
+# Composante par défaut, viridis, échelle auto.
 mesh.plot(save="t.svg", field=t_field)
-# Composante explicite :
-mesh.plot(save="uy.svg", field=u_field, component="UY")
+
+# Composante "UY", colormap "coolwarm", bornes fixées.
+mesh.plot(save="uy.svg", field=u_field, component="UY", cmap="coolwarm", vmin=-1.0, vmax=1.0)
+
+# Plafond seul fixé : le plancher suit le minimum des données.
+mesh.plot(save="t.svg", field=t_field, vmax=100.0)
 ```
 
 ### Bouton de sélection dans la fenêtre interactive
