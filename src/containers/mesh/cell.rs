@@ -112,6 +112,43 @@ impl fmt::Display for Cell {
     }
 }
 
+impl crate::dump::Dump for Cell {
+    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+        use crate::dump::{fmt_float, table};
+        let header = match self.element_type() {
+            Ok(et) => format!("Cell<{et}> #{}", self.idx),
+            Err(_) => format!("Cell #{}", self.idx),
+        };
+        // Per-node coordinate table (one lock on the Configuration).
+        let body = (|| -> Result<String> {
+            let cfg = with(&self.sm, |s| s.configuration())?;
+            let ids = self.node_ids()?;
+            with(&cfg, |c| -> Result<String> {
+                let mut rows: Vec<Vec<String>> = Vec::with_capacity(ids.len());
+                let mut dim = 0usize;
+                for &id in &ids {
+                    let coord = c.coord(id)?;
+                    dim = dim.max(coord.len());
+                    let mut row = vec![id.to_string()];
+                    row.extend(coord.iter().map(|v| fmt_float(*v, opts.precision)));
+                    rows.push(row);
+                }
+                for row in &mut rows {
+                    row.resize(1 + dim, String::new());
+                }
+                const AXES: [&str; 3] = ["x", "y", "z"];
+                let mut headers = vec!["node".to_string()];
+                headers.extend((0..dim).map(|i| AXES.get(i).copied().unwrap_or("?").to_string()));
+                Ok(table(&headers, &rows, opts))
+            })?
+        })();
+        match body {
+            Ok(t) => format!("{header}\n{t}"),
+            Err(e) => format!("{header}\n<{e}>"),
+        }
+    }
+}
+
 /// Iterator over the cells of a single submesh.
 #[derive(Clone)]
 pub struct CellIter {
@@ -184,6 +221,26 @@ mod tests {
         let cfg = insert(Configuration::new(2).unwrap());
         let sm = insert(SubMesh::new(cfg, ElementType::TRI3));
         assert!(Cell::new(sm, 0).is_err());
+    }
+
+    #[test]
+    fn cell_dump_renders_coordinate_table() {
+        use crate::dump::Dump;
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+        sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let cell = Cell::new(insert(sm), 0).unwrap();
+
+        let s = cell.dump();
+        assert!(s.starts_with("Cell<TRI3> #0"), "header:\n{s}");
+        assert!(s.contains("node"), "table header:\n{s}");
+        assert!(s.contains('x') && s.contains('y'), "axis labels:\n{s}");
+        // One row per node + coordinates at default precision (3).
+        assert!(s.contains("0.000"), "coords:\n{s}");
+        assert_eq!(s.lines().count(), 5, "header + table header + 3 rows:\n{s}");
     }
 
     #[test]

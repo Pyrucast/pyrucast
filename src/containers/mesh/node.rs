@@ -128,6 +128,21 @@ impl fmt::Display for Node {
     }
 }
 
+impl crate::dump::Dump for Node {
+    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+        match self.coord() {
+            Ok(c) => {
+                let coords: Vec<String> = c
+                    .iter()
+                    .map(|v| crate::dump::fmt_float(*v, opts.precision))
+                    .collect();
+                format!("Node #{} @ ({})", self.id, coords.join(", "))
+            }
+            Err(e) => format!("Node #{} <{e}>", self.id),
+        }
+    }
+}
+
 // ─── Unit tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
