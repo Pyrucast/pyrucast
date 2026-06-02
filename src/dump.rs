@@ -1,0 +1,240 @@
+//! Third display level: **content**.
+//!
+//! The crate exposes three, layered display levels (see the crate root doc):
+//!
+//! | Level     | Python     | Role                                            | Bound        |
+//! |-----------|------------|-------------------------------------------------|--------------|
+//! | `Display` | `__str__`  | one line: identity + key dimensions             | O(1)         |
+//! | `Debug`   | `__repr__` | structure: counts, dimensions, names, handles   | bounded      |
+//! | [`Dump`]  | `dump(…)`  | **full content**: grids, value tables, topology | [`DumpOptions`] |
+//!
+//! `Display`/`Debug` never print bulk content; [`Dump::dump`] does, but stays
+//! bounded by [`DumpOptions`] (precision + row/column elision).
+//!
+//! # Example
+//!
+//! ```
+//! use pyrucast::dump::{Dump, DumpOptions};
+//!
+//! struct Pair(f64, f64);
+//! impl Dump for Pair {
+//!     fn dump_with(&self, o: &DumpOptions) -> String {
+//!         format!("({:.*}, {:.*})", o.precision, self.0, o.precision, self.1)
+//!     }
+//! }
+//! assert_eq!(Pair(1.5, 2.0).dump(), "(1.500, 2.000)");
+//! ```
+
+/// Knobs controlling how much content [`Dump::dump_with`] emits.
+///
+/// Defaults: `precision = 3`, `max_rows = 20`, `max_cols = 12`. Beyond the row
+/// / column caps the renderers elide and append a `… (N de plus)` marker, so a
+/// dump never grows without bound on a large object.
+#[derive(Clone, Copy, Debug)]
+pub struct DumpOptions {
+    /// Digits after the decimal point for floating-point values.
+    pub precision: usize,
+    /// Maximum number of data rows rendered before eliding the rest.
+    pub max_rows: usize,
+    /// Maximum number of value columns (column 0, the label column, is always
+    /// kept) rendered before eliding the rest.
+    pub max_cols: usize,
+}
+
+impl Default for DumpOptions {
+    fn default() -> Self {
+        Self { precision: 3, max_rows: 20, max_cols: 12 }
+    }
+}
+
+/// Human-readable, bounded dump of an object's **full content**.
+///
+/// Implementors render the actual numbers / topology (matrix grids, field
+/// value tables, mesh connectivity). The output is meant to be `print`-ed or
+/// asserted on, never parsed — use the typed accessors (`entries`, `value`, …)
+/// for programmatic access.
+pub trait Dump {
+    /// Dump with default [`DumpOptions`].
+    fn dump(&self) -> String {
+        self.dump_with(&DumpOptions::default())
+    }
+
+    /// Dump honouring the supplied [`DumpOptions`].
+    fn dump_with(&self, opts: &DumpOptions) -> String;
+}
+
+// ─── Shared formatting helpers ──────────────────────────────────────────────
+
+/// Format a float with `precision` digits after the point.
+pub fn fmt_float(v: f64, precision: usize) -> String {
+    format!("{:.*}", precision, v)
+}
+
+/// Render a right-aligned text table with row/column elision.
+///
+/// `headers` is the full header row; each entry of `rows` must have the same
+/// length as `headers`. Column 0 is treated as a **label column** and is always
+/// kept; the remaining columns are capped at `opts.max_cols`. Rows are capped at
+/// `opts.max_rows`. Truncation appends `⋮` cue rows/columns and a trailing
+/// `… (N de plus)` note.
+pub fn table(headers: &[String], rows: &[Vec<String>], opts: &DumpOptions) -> String {
+    let ncol = headers.len();
+    if ncol == 0 {
+        return String::new();
+    }
+
+    // Column selection: keep col 0 (labels), cap value columns at max_cols.
+    let value_cols = ncol - 1;
+    let shown_value_cols = value_cols.min(opts.max_cols);
+    let col_truncated = value_cols > shown_value_cols;
+    let shown_cols = 1 + shown_value_cols;
+
+    // Row selection.
+    let shown_rows = rows.len().min(opts.max_rows);
+    let row_truncated = rows.len() > shown_rows;
+
+    // Assemble the visible string grid (header + data + optional cue row).
+    let mut grid: Vec<Vec<String>> = Vec::with_capacity(shown_rows + 2);
+    let build_line = |src: &[String]| -> Vec<String> {
+        let mut line: Vec<String> = src[..shown_cols].to_vec();
+        if col_truncated {
+            line.push("…".to_string());
+        }
+        line
+    };
+    grid.push(build_line(headers));
+    for r in &rows[..shown_rows] {
+        grid.push(build_line(r));
+    }
+    if row_truncated {
+        let n = if col_truncated { shown_cols + 1 } else { shown_cols };
+        grid.push(vec!["⋮".to_string(); n]);
+    }
+
+    // Per-column widths (char count: our labels are ASCII + a few 1-char glyphs).
+    let cols = grid[0].len();
+    let mut widths = vec![0usize; cols];
+    for line in &grid {
+        for (i, cell) in line.iter().enumerate() {
+            widths[i] = widths[i].max(cell.chars().count());
+        }
+    }
+
+    // Render right-aligned, two-space column separator.
+    let mut out = String::new();
+    for line in &grid {
+        for (i, cell) in line.iter().enumerate() {
+            if i > 0 {
+                out.push_str("  ");
+            }
+            for _ in 0..widths[i] - cell.chars().count() {
+                out.push(' ');
+            }
+            out.push_str(cell);
+        }
+        out.push('\n');
+    }
+
+    if row_truncated {
+        out.push_str(&format!("… ({} ligne(s) de plus)\n", rows.len() - shown_rows));
+    }
+    if col_truncated {
+        out.push_str(&format!(
+            "… ({} colonne(s) de plus)\n",
+            value_cols - shown_value_cols
+        ));
+    }
+    out
+}
+
+/// Render a labeled dense grid (`data` row-major, `row_labels.len()` ×
+/// `col_labels.len()`) with in-line labels and elision.
+///
+/// Used for matrix dumps: row/column DOF labels sit directly on the grid.
+pub fn labeled_grid(
+    row_labels: &[String],
+    col_labels: &[String],
+    data: &[f64],
+    opts: &DumpOptions,
+) -> String {
+    let nc = col_labels.len();
+    let mut headers = Vec::with_capacity(nc + 1);
+    headers.push(String::new()); // empty top-left corner
+    headers.extend(col_labels.iter().cloned());
+
+    let rows: Vec<Vec<String>> = row_labels
+        .iter()
+        .enumerate()
+        .map(|(i, rl)| {
+            let mut line = Vec::with_capacity(nc + 1);
+            line.push(rl.clone());
+            for j in 0..nc {
+                line.push(fmt_float(data[i * nc + j], opts.precision));
+            }
+            line
+        })
+        .collect();
+
+    table(&headers, &rows, opts)
+}
+
+// ─── Tests ──────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn small_labeled_grid_aligns() {
+        let rows = vec!["(n1,q)".into(), "(n2,q)".into()];
+        let cols = vec!["(n1,T)".into(), "(n2,T)".into()];
+        let data = vec![2.0, -1.0, -1.0, 2.0];
+        let s = labeled_grid(&rows, &cols, &data, &DumpOptions::default());
+        let expected = concat!(
+            "        (n1,T)  (n2,T)\n",
+            "(n1,q)   2.000  -1.000\n",
+            "(n2,q)  -1.000   2.000\n",
+        );
+        assert_eq!(s, expected);
+    }
+
+    #[test]
+    fn row_elision_marks_overflow() {
+        let headers = vec!["node".into(), "T".into()];
+        let rows: Vec<Vec<String>> =
+            (0..5).map(|i| vec![i.to_string(), format!("{i}.0")]).collect();
+        let opts = DumpOptions { precision: 1, max_rows: 2, max_cols: 12 };
+        let s = table(&headers, &rows, &opts);
+        assert!(s.contains("⋮"), "expected an elision cue row:\n{s}");
+        assert!(s.contains("3 ligne(s) de plus"), "expected a row note:\n{s}");
+    }
+
+    #[test]
+    fn col_elision_keeps_label_column() {
+        // 1 label column + 4 value columns, capped at 2.
+        let headers: Vec<String> =
+            std::iter::once("node".to_string()).chain((0..4).map(|c| format!("c{c}"))).collect();
+        let rows = vec![vec![
+            "n0".into(),
+            "1".into(),
+            "2".into(),
+            "3".into(),
+            "4".into(),
+        ]];
+        let opts = DumpOptions { precision: 1, max_rows: 20, max_cols: 2 };
+        let s = table(&headers, &rows, &opts);
+        assert!(s.contains("node"), "label column must survive:\n{s}");
+        assert!(s.contains("2 colonne(s) de plus"), "expected a column note:\n{s}");
+    }
+
+    #[test]
+    fn default_dump_uses_default_options() {
+        struct One;
+        impl Dump for One {
+            fn dump_with(&self, o: &DumpOptions) -> String {
+                fmt_float(1.0, o.precision)
+            }
+        }
+        assert_eq!(One.dump(), "1.000");
+    }
+}

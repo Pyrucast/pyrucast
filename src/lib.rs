@@ -9,9 +9,10 @@
 //! - Every serializable object uses the [`persist::Persist`] trait
 //!   (shared backbone of disk swap and file save/load, portable between
 //!   Linux and Windows).
-//! - Every object implements `Debug` (structure) and `Display`
-//!   (cast3m-style summary); both are wired to Python's `__repr__` and
-//!   `__str__` respectively.
+//! - Display comes in three layered levels, all wired to Python:
+//!   `Display`/`__str__` (one-line summary), `Debug`/`__repr__` (bounded
+//!   structure — never bulk content), and [`dump::Dump`]/`dump(…)` (full
+//!   content: matrix grids, value tables, connectivity). See [`dump`].
 //!
 //! # Example
 //!
@@ -31,6 +32,7 @@
 
 pub mod aggregate;
 pub mod containers;
+pub mod dump;
 pub mod error;
 pub mod models;
 pub mod ops;
