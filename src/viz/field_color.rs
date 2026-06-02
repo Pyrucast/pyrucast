@@ -23,34 +23,117 @@ use crate::viz::View;
 use plotters::coord::Shift;
 use plotters::prelude::*;
 
-/// "Jet-lite" colormap, `t ∈ [0, 1]`:
-/// `t = 0` → pure blue, `t = 0.5` → pure green, `t = 1` → pure red.
+/// A selectable colour scale for field plots.
 ///
-/// `value` is mapped via `t = (value - vmin) / (vmax - vmin)` and
+/// Each variant maps a normalized position `t ∈ [0, 1]` to an RGB
+/// colour. `Viridis` is the default: perceptually uniform and readable
+/// in greyscale / for colour-vision deficiencies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Colormap {
+    /// Perceptually uniform purple → blue → green → yellow.
+    #[default]
+    Viridis,
+    /// Legacy blue → green → red ("jet-lite").
+    Jet,
+    /// Diverging blue → white → red; the midpoint of the scale is white,
+    /// best for signed data centred on zero.
+    CoolWarm,
+    /// Thermal black → red → yellow → white.
+    Hot,
+    /// Greyscale black → white.
+    Gray,
+}
+
+// Anchor tables: `(t, r, g, b)` control points, linearly interpolated by
+// [`interp`]. `t` must be ascending, start at 0.0 and end at 1.0.
+#[rustfmt::skip]
+const VIRIDIS: &[(f64, u8, u8, u8)] = &[
+    (0.0,  68,   1,  84), (0.1,  72,  35, 116), (0.2,  64,  67, 135),
+    (0.3,  52,  94, 141), (0.4,  41, 120, 142), (0.5,  32, 144, 140),
+    (0.6,  34, 167, 132), (0.7,  68, 190, 112), (0.8, 121, 209,  81),
+    (0.9, 189, 222,  38), (1.0, 253, 231,  37),
+];
+#[rustfmt::skip]
+const COOLWARM: &[(f64, u8, u8, u8)] = &[
+    (0.0, 59, 76, 192), (0.5, 242, 242, 242), (1.0, 180, 4, 38),
+];
+#[rustfmt::skip]
+const HOT: &[(f64, u8, u8, u8)] = &[
+    (0.0, 0, 0, 0), (0.365, 255, 0, 0), (0.746, 255, 255, 0), (1.0, 255, 255, 255),
+];
+
+/// Piecewise-linear interpolation of an ascending anchor table at `t`.
+fn interp(anchors: &[(f64, u8, u8, u8)], t: f64) -> RgbColor {
+    let t = t.clamp(0.0, 1.0);
+    for w in anchors.windows(2) {
+        let (t0, r0, g0, b0) = w[0];
+        let (t1, r1, g1, b1) = w[1];
+        if t <= t1 {
+            let f = if t1 > t0 { (t - t0) / (t1 - t0) } else { 0.0 };
+            let lerp = |a: u8, b: u8| (a as f64 + f * (b as f64 - a as f64)).round() as u8;
+            return RgbColor::new(lerp(r0, r1), lerp(g0, g1), lerp(b0, b1));
+        }
+    }
+    let last = anchors[anchors.len() - 1];
+    RgbColor::new(last.1, last.2, last.3)
+}
+
+impl Colormap {
+    /// Parse a user-facing name (case-insensitive, common aliases
+    /// accepted). Returns `None` for an unknown name.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "viridis" => Some(Self::Viridis),
+            "jet" | "jet-lite" | "jetlite" => Some(Self::Jet),
+            "coolwarm" | "cool-warm" | "cool_warm" | "rdbu" => Some(Self::CoolWarm),
+            "hot" => Some(Self::Hot),
+            "gray" | "grey" | "grayscale" | "greyscale" => Some(Self::Gray),
+            _ => None,
+        }
+    }
+
+    /// Canonical names accepted by [`Colormap::from_name`], for help and
+    /// error messages.
+    pub fn names() -> &'static [&'static str] {
+        &["viridis", "jet", "coolwarm", "hot", "gray"]
+    }
+
+    /// Sample the colormap at `t ∈ [0, 1]` (clamped outside the range).
+    pub fn sample(self, t: f64) -> RgbColor {
+        let t = t.clamp(0.0, 1.0);
+        match self {
+            Colormap::Viridis => interp(VIRIDIS, t),
+            Colormap::CoolWarm => interp(COOLWARM, t),
+            Colormap::Hot => interp(HOT, t),
+            Colormap::Gray => {
+                let v = (t * 255.0).round() as u8;
+                RgbColor::new(v, v, v)
+            }
+            Colormap::Jet => {
+                let (r, g, b) = if t < 0.5 {
+                    (0.0, 2.0 * t, 1.0 - 2.0 * t)
+                } else {
+                    (2.0 * t - 1.0, 2.0 - 2.0 * t, 0.0)
+                };
+                let to_u8 = |x: f64| (x * 255.0).round().clamp(0.0, 255.0) as u8;
+                RgbColor::new(to_u8(r), to_u8(g), to_u8(b))
+            }
+        }
+    }
+}
+
+/// Map `value` to a colour under `cmap`.
+///
+/// `value` is normalized via `t = (value - vmin) / (vmax - vmin)` and
 /// clamped to `[0, 1]`. When `vmax ≤ vmin` (degenerate range) the
-/// function returns the middle of the gradient (green).
-pub fn colormap(value: f64, vmin: f64, vmax: f64) -> RgbColor {
+/// midpoint of the gradient (`t = 0.5`) is returned.
+pub fn colormap(cmap: Colormap, value: f64, vmin: f64, vmax: f64) -> RgbColor {
     let t = if vmax > vmin {
         ((value - vmin) / (vmax - vmin)).clamp(0.0, 1.0)
     } else {
         0.5
     };
-    let (r, g, b) = if t < 0.5 {
-        (0.0, 2.0 * t, 1.0 - 2.0 * t)
-    } else {
-        (2.0 * t - 1.0, 2.0 - 2.0 * t, 0.0)
-    };
-    let to_u8 = |x: f64| -> u8 {
-        let v = (x * 255.0).round();
-        if v < 0.0 {
-            0
-        } else if v > 255.0 {
-            255
-        } else {
-            v as u8
-        }
-    };
-    RgbColor::new(to_u8(r), to_u8(g), to_u8(b))
+    cmap.sample(t)
 }
 
 /// Mean of the field's `component` over the supplied node ids.
@@ -121,8 +204,8 @@ pub(crate) fn value_range<'a, I: IntoIterator<Item = &'a [f64]>>(values: I) -> (
 }
 
 /// Build per-cell colours for one submesh from its per-cell values.
-fn colors_from_values(values: &[f64], vmin: f64, vmax: f64) -> Vec<RgbColor> {
-    values.iter().map(|&v| colormap(v, vmin, vmax)).collect()
+fn colors_from_values(values: &[f64], cmap: Colormap, vmin: f64, vmax: f64) -> Vec<RgbColor> {
+    values.iter().map(|&v| colormap(cmap, v, vmin, vmax)).collect()
 }
 
 /// Compute the per-cell values of every submesh of a mesh, and the
@@ -197,16 +280,17 @@ impl<'a> Drawable for MeshFieldView<'a> {
         let (per_sub, dmin, dmax) =
             mesh_cell_values(self.mesh, self.field, self.component)?;
         let (vmin, vmax) = self.scale.resolve(dmin, dmax);
+        let cmap = self.scale.cmap;
         let mut all_prims: Vec<Primitive> = Vec::new();
         for (i, values) in per_sub.iter().enumerate() {
             let sm = self.mesh.submesh(i)?;
-            let colors = colors_from_values(values, vmin, vmax);
+            let colors = colors_from_values(values, cmap, vmin, vmax);
             let prims = with(&sm, |s| submesh_primitives_with_colors(s, &colors))??;
             all_prims.extend(prims);
         }
         render_primitives(area, view, &all_prims)?;
         super::overlay::draw_field_overlay(area, self.component, vmin, vmax)?;
-        super::overlay::draw_colorbar(area, vmin, vmax)?;
+        super::overlay::draw_colorbar(area, cmap, vmin, vmax)?;
         Ok(())
     }
 }
@@ -238,11 +322,12 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
         let values = submesh_cell_values(self.submesh, self.field, self.component)?;
         let (dmin, dmax) = value_range([values.as_slice()]);
         let (vmin, vmax) = self.scale.resolve(dmin, dmax);
-        let colors = colors_from_values(&values, vmin, vmax);
+        let cmap = self.scale.cmap;
+        let colors = colors_from_values(&values, cmap, vmin, vmax);
         let prims = submesh_primitives_with_colors(self.submesh, &colors)?;
         render_primitives(area, view, &prims)?;
         super::overlay::draw_field_overlay(area, self.component, vmin, vmax)?;
-        super::overlay::draw_colorbar(area, vmin, vmax)?;
+        super::overlay::draw_colorbar(area, cmap, vmin, vmax)?;
         Ok(())
     }
 }
@@ -258,25 +343,51 @@ mod tests {
 
     #[test]
     fn colormap_endpoints() {
-        let c0 = colormap(0.0, 0.0, 1.0);
+        let c0 = colormap(Colormap::Jet, 0.0, 0.0, 1.0);
         assert_eq!(c0, RgbColor::new(0, 0, 255));
-        let c1 = colormap(1.0, 0.0, 1.0);
+        let c1 = colormap(Colormap::Jet, 1.0, 0.0, 1.0);
         assert_eq!(c1, RgbColor::new(255, 0, 0));
-        let c_mid = colormap(0.5, 0.0, 1.0);
+        let c_mid = colormap(Colormap::Jet, 0.5, 0.0, 1.0);
         assert_eq!(c_mid, RgbColor::new(0, 255, 0));
     }
 
     #[test]
     fn colormap_clamps_out_of_range() {
-        let lo = colormap(-99.0, 0.0, 1.0);
-        let hi = colormap(99.0, 0.0, 1.0);
+        let lo = colormap(Colormap::Jet, -99.0, 0.0, 1.0);
+        let hi = colormap(Colormap::Jet, 99.0, 0.0, 1.0);
         assert_eq!(lo, RgbColor::new(0, 0, 255));
         assert_eq!(hi, RgbColor::new(255, 0, 0));
     }
 
     #[test]
-    fn colormap_degenerate_range_returns_green() {
-        assert_eq!(colormap(7.0, 7.0, 7.0), RgbColor::new(0, 255, 0));
+    fn colormap_degenerate_range_returns_midpoint() {
+        // Jet midpoint is green; the degenerate range falls back to t=0.5.
+        assert_eq!(colormap(Colormap::Jet, 7.0, 7.0, 7.0), RgbColor::new(0, 255, 0));
+    }
+
+    #[test]
+    fn colormap_endpoints_for_each_scale() {
+        // Anchor tables / formulas must hit their declared endpoints.
+        assert_eq!(Colormap::Viridis.sample(0.0), RgbColor::new(68, 1, 84));
+        assert_eq!(Colormap::Viridis.sample(1.0), RgbColor::new(253, 231, 37));
+        assert_eq!(Colormap::CoolWarm.sample(0.0), RgbColor::new(59, 76, 192));
+        assert_eq!(Colormap::CoolWarm.sample(0.5), RgbColor::new(242, 242, 242));
+        assert_eq!(Colormap::CoolWarm.sample(1.0), RgbColor::new(180, 4, 38));
+        assert_eq!(Colormap::Hot.sample(0.0), RgbColor::new(0, 0, 0));
+        assert_eq!(Colormap::Hot.sample(1.0), RgbColor::new(255, 255, 255));
+        assert_eq!(Colormap::Gray.sample(0.0), RgbColor::new(0, 0, 0));
+        assert_eq!(Colormap::Gray.sample(1.0), RgbColor::new(255, 255, 255));
+        assert_eq!(Colormap::Gray.sample(0.5), RgbColor::new(128, 128, 128));
+    }
+
+    #[test]
+    fn colormap_from_name_and_default() {
+        assert_eq!(Colormap::from_name("Viridis"), Some(Colormap::Viridis));
+        assert_eq!(Colormap::from_name("  JET "), Some(Colormap::Jet));
+        assert_eq!(Colormap::from_name("coolwarm"), Some(Colormap::CoolWarm));
+        assert_eq!(Colormap::from_name("grey"), Some(Colormap::Gray));
+        assert_eq!(Colormap::from_name("nope"), None);
+        assert_eq!(Colormap::default(), Colormap::Viridis);
     }
 
     #[test]

@@ -51,6 +51,8 @@ use crate::error::{PyrucastError, Result};
 use crate::viz::drawable::Drawable;
 use std::path::Path;
 
+pub use field_color::Colormap;
+
 // ─── Point of view ──────────────────────────────────────────────────────────
 
 /// User-facing camera descriptor.
@@ -138,9 +140,11 @@ impl Default for View {
 /// end", so the two bounds can be pinned independently — pass only
 /// `vmax` to clamp the top of the scale and let the bottom follow the
 /// data, matching the `vmin` / `vmax` convention of common plotting
-/// libraries.
+/// libraries. `cmap` chooses the colour gradient (default
+/// [`Colormap::Viridis`]).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ColorScale {
+    pub cmap: Colormap,
     pub vmin: Option<f64>,
     pub vmax: Option<f64>,
 }

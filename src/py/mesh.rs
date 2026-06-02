@@ -10,6 +10,22 @@ use crate::store::{with, with_mut, Handle};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
+/// Parse an optional `cmap` name into a [`crate::viz::Colormap`].
+/// `None` ⇒ the default (Viridis); an unknown name is a `ValueError`
+/// that lists the accepted names.
+#[cfg(feature = "viz")]
+fn parse_cmap(name: Option<String>) -> PyResult<crate::viz::Colormap> {
+    match name {
+        None => Ok(crate::viz::Colormap::default()),
+        Some(n) => crate::viz::Colormap::from_name(&n).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "unknown colormap {n:?} (available: {:?})",
+                crate::viz::Colormap::names()
+            ))
+        }),
+    }
+}
+
 /// Resolve a `Handle<SubMesh>` from either a `SubMesh` view or a
 /// **unitary** `Mesh` (the parent→sub coercion — see `CONVENTIONS.md`,
 /// « Agrégats : un ou plusieurs »). Used wherever an API takes a single
@@ -90,8 +106,10 @@ impl PySubMesh {
     /// - `vmin` / `vmax`: pin the bottom / top of the colour scale (and
     ///   of the colorbar drawn on the right). Either may be left `None`
     ///   to track the data's own min / max for that bound.
+    /// - `cmap`: colour scale name — `"viridis"` (default), `"jet"`,
+    ///   `"coolwarm"`, `"hot"` or `"gray"`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None))]
     fn plot(
         &self,
         view: Option<(f64, f64, f64)>,
@@ -101,6 +119,7 @@ impl PySubMesh {
         component: Option<String>,
         vmin: Option<f64>,
         vmax: Option<f64>,
+        cmap: Option<String>,
     ) -> PyResult<()> {
         let mut view = view
             .map(|(yaw, pitch, scale)| crate::viz::View {
@@ -112,7 +131,11 @@ impl PySubMesh {
             })
             .unwrap_or_else(crate::viz::View::default);
         view.show_axes = show_axes;
-        let scale = crate::viz::ColorScale { vmin, vmax };
+        let scale = crate::viz::ColorScale {
+            cmap: parse_cmap(cmap)?,
+            vmin,
+            vmax,
+        };
         let save_ref = save.as_deref();
         match field {
             Some(f) => {
@@ -231,7 +254,7 @@ impl PyMesh {
     /// `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
     /// `field` and `component`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None))]
     fn plot(
         &self,
         view: Option<(f64, f64, f64)>,
@@ -241,6 +264,7 @@ impl PyMesh {
         component: Option<String>,
         vmin: Option<f64>,
         vmax: Option<f64>,
+        cmap: Option<String>,
     ) -> PyResult<()> {
         let mut view = view
             .map(|(yaw, pitch, scale)| crate::viz::View {
@@ -252,7 +276,11 @@ impl PyMesh {
             })
             .unwrap_or_else(crate::viz::View::default);
         view.show_axes = show_axes;
-        let scale = crate::viz::ColorScale { vmin, vmax };
+        let scale = crate::viz::ColorScale {
+            cmap: parse_cmap(cmap)?,
+            vmin,
+            vmax,
+        };
         let save_ref = save.as_deref();
         match field {
             Some(f) => {

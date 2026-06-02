@@ -80,13 +80,14 @@ where
     Ok(())
 }
 
-/// Draw a vertical colorbar on the right edge of `area`: a blue → green
-/// → red gradient (same colormap as the cells) annotated with evenly
-/// spaced value ticks. `vmin` maps to the bottom, `vmax` to the top.
+/// Draw a vertical colorbar on the right edge of `area`: the `cmap`
+/// gradient (same one painting the cells) annotated with evenly spaced
+/// value ticks. `vmin` maps to the bottom, `vmax` to the top.
 ///
 /// No-op on a canvas too small to host the bar with its labels.
 pub(crate) fn draw_colorbar<DB: DrawingBackend>(
     area: &DrawingArea<DB, Shift>,
+    cmap: crate::viz::Colormap,
     vmin: f64,
     vmax: f64,
 ) -> Result<()>
@@ -104,12 +105,12 @@ where
     }
 
     // Gradient: one filled row per pixel. `colormap` with the same
-    // `(vmin, vmax)` as the cells keeps the bar and the mesh consistent,
-    // including the degenerate (vmax ≤ vmin) → solid green case.
+    // `cmap` / `(vmin, vmax)` as the cells keeps the bar and the mesh
+    // consistent, including the degenerate (vmax ≤ vmin) → midpoint case.
     for py in 0..bar_h {
         let t = 1.0 - py as f64 / (bar_h - 1) as f64; // 1 at top, 0 at bottom
         let value = vmin + t * (vmax - vmin);
-        let c = crate::viz::field_color::colormap(value, vmin, vmax);
+        let c = crate::viz::field_color::colormap(cmap, value, vmin, vmax);
         let style = ShapeStyle::from(&RGBColor(c.r, c.g, c.b)).filled();
         let y = bar_top + py;
         // 1-px-tall row: a zero-height rectangle (y..y) fills nothing,
@@ -195,7 +196,7 @@ mod tests {
             let backend = SVGBackend::with_string(&mut buf, (400, 300));
             let area = backend.into_drawing_area();
             area.fill(&WHITE).unwrap();
-            draw_colorbar(&area, 0.0, 2.0).unwrap();
+            draw_colorbar(&area, crate::viz::Colormap::Viridis, 0.0, 2.0).unwrap();
             area.present().unwrap();
         }
         // 5 evenly spaced ticks over [0, 2]: endpoints and midpoint.
@@ -212,7 +213,7 @@ mod tests {
             let backend = SVGBackend::with_string(&mut buf, (20, 20));
             let area = backend.into_drawing_area();
             area.fill(&WHITE).unwrap();
-            draw_colorbar(&area, 0.0, 1.0).unwrap();
+            draw_colorbar(&area, crate::viz::Colormap::Viridis, 0.0, 1.0).unwrap();
             area.present().unwrap();
         }
     }

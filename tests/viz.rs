@@ -282,6 +282,7 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
         ColorScale {
             vmin: Some(-10.0),
             vmax: Some(10.0),
+            ..Default::default()
         },
     )
     .unwrap();
