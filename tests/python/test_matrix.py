@@ -283,3 +283,45 @@ def test_matrix_repr_and_str():
     assert "Matrix" in s
     assert "1 row" in s
     assert "symmetric" in s
+
+
+# ─── dump() — third display level ───────────────────────────────────────────
+
+
+def test_sub_matrix_dump_labels_grid():
+    c = pyrucast.Configuration(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    block = _make_block(c, [a, b], [a, b], ["q"], ["T"])
+    block.add_entry(a, "q", a, "T", 2.0)
+    block.add_entry(a, "q", b, "T", -1.0)
+    block.add_entry(b, "q", b, "T", 2.0)
+
+    s = block.dump()
+    assert s.splitlines()[0].startswith("SubMatrix")
+    # In-line DOF labels on both axes + values at default precision (3).
+    assert f"({a.id},q)" in s
+    assert f"({a.id},T)" in s
+    assert "2.000" in s and "-1.000" in s
+    # precision is honoured.
+    assert "2.0 " in block.dump(precision=1) + " "
+
+
+def test_matrix_dump_global_grid_and_elision():
+    c = pyrucast.Configuration(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    block_a = _make_block(c, [a], [a, b], ["q"], ["T"], symmetric=True)
+    block_a.add_entry(a, "q", a, "T", 2.0)
+    block_b = _make_block(c, [b], [a, b], ["q"], ["T"], symmetric=True)
+    block_b.add_entry(b, "q", b, "T", 2.0)
+    k = pyrucast.Matrix()
+    k.add_sub_matrix(block_a)
+    k.add_sub_matrix(block_b)
+
+    # Global labelled grid, built without finalize().
+    s = k.dump()
+    assert s.splitlines()[0].startswith("Matrix")
+    assert f"({a.id},T)" in s
+    # max_rows elides the grid and notes the overflow.
+    assert "de plus" in k.dump(max_rows=1)
