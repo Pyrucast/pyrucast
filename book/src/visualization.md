@@ -192,17 +192,23 @@ En mode interactif (`viz-interactive`), un **bouton cliquable** apparaît au som
 
 La caméra (rotation à la souris, molette, axes affichés via `A`) continue de fonctionner exactement comme en plot classique ; seul un clic *sur* le bouton est intercepté, les clics ailleurs lancent une rotation comme d'habitude.
 
-## État actuel du support
+## Types d'éléments rendus
 
-Pour cette première itération, **seuls les éléments `TRI3` sont rendus** :
+**Tous les types d'éléments sont rendus**, chacun converti en une primitive géométrique :
 
-- `SubMesh::plot` sur autre chose que `TRI3` lève une erreur explicite ;
-- `Mesh::plot` parcourt tous ses sous-maillages et **ignore silencieusement** ceux qui ne sont pas encore supportés (en pratique : on dessine les `TRI3`, on laisse les autres invisibles).
+| Type | Primitive | Rendu |
+|---|---|---|
+| `POI1` | point | un point coloré |
+| `SEG2` | segment | une arête |
+| `TRI3` | face | triangle plein + contour noir |
+| `QUA4` | face | quadrangle plein + contour noir |
+| `TET4` | 4 faces | les 4 facettes triangulaires du volume |
+| `HEX8` | 6 faces | les 6 facettes quadrangulaires du volume |
 
-Les autres types (`SEG2`, `QUA4`, `TET4`, `HEX8`) seront ajoutés ensuite, sans changement d'API : l'ajout consistera à étendre l'implémentation interne dans `src/viz/mesh_draw.rs`.
+`Mesh::plot` parcourt tous ses sous-maillages et dessine chacun selon son type. L'ajout d'un éventuel nouveau type d'élément se fera sans changement d'API, en étendant le `match` de `submesh_primitives` dans `src/viz/mesh_draw.rs`.
 
 ## Notes techniques
 
 - Le rendu utilise l'algorithme du **peintre** : projection 3D → 2D, tri des triangles par profondeur moyenne (du plus lointain au plus proche), puis dessin des facettes pleines suivies des arêtes noires en superposition. Coût : `O(n log n)` à chaque rafraîchissement, raisonnable jusqu'à quelques milliers de cellules. Pour des maillages industriels, prévoir un export `.vtu` vers ParaView.
 - L'export reste **portable Linux ↔ Windows** : tout le rendu se fait en CPU, sans pilote GPU. Le binaire `viz-interactive` nécessite en revanche un serveur d'affichage (X11, Wayland ou Windows) à l'exécution — ce qui est attendu pour une fenêtre interactive.
-- Le mode interactif est confiné à `src/viz/window.rs` (≈ 150 lignes) ; il est entièrement encapsulé derrière la feature `viz-interactive` et ne s'invite pas dans la couche de calcul.
+- Le mode interactif est confiné à `src/viz/window.rs` ; il est entièrement encapsulé derrière la feature `viz-interactive` et ne s'invite pas dans la couche de calcul.
