@@ -74,6 +74,11 @@ class Cell:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): values / topology, beyond
+        `repr`'s bounded structure.
+        """
 
 @typing.final
 class Configuration:
@@ -162,6 +167,11 @@ class Configuration:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): values / topology, beyond
+        `repr`'s bounded structure.
+        """
 
 @typing.final
 class Element:
@@ -238,6 +248,11 @@ class Element:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): values / topology, beyond
+        `repr`'s bounded structure.
+        """
 
 @typing.final
 class ElementField:
@@ -275,6 +290,11 @@ class ElementField:
     def add_subfield(self, sub: SubElementField) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): every sub-object's
+        values/topology, beyond `repr`'s bounded structure.
+        """
     def __add__(self, other: ElementField) -> ElementField:
         r"""
         `a + b` — merge two aggregates of this type into a fresh
@@ -336,6 +356,11 @@ class FiniteElementSpace:
     def add_subspace(self, sub: SubFiniteElementSpace) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): every sub-object's
+        values/topology, beyond `repr`'s bounded structure.
+        """
     def __add__(self, other: FiniteElementSpace) -> FiniteElementSpace:
         r"""
         `a + b` — merge two aggregates of this type into a fresh
@@ -434,6 +459,11 @@ class Matrix:
     def add_sub_matrix(self, sub: SubMatrix) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): every sub-object's
+        values/topology, beyond `repr`'s bounded structure.
+        """
     def __add__(self, other: Matrix) -> Matrix:
         r"""
         `a + b` — merge two aggregates of this type into a fresh
@@ -499,6 +529,11 @@ class Mesh:
     def add_submesh(self, sub: SubMesh) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): every sub-object's
+        values/topology, beyond `repr`'s bounded structure.
+        """
     def __add__(self, other: Mesh) -> Mesh:
         r"""
         `a + b` — merge two aggregates of this type into a fresh
@@ -563,6 +598,11 @@ class Model:
     def add_sub_model(self, sub: SubModel) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): every sub-object's
+        values/topology, beyond `repr`'s bounded structure.
+        """
     def __add__(self, other: Model) -> Model:
         r"""
         `a + b` — merge two aggregates of this type into a fresh
@@ -594,6 +634,11 @@ class Node:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): values / topology, beyond
+        `repr`'s bounded structure.
+        """
 
 @typing.final
 class NodeField:
@@ -697,6 +742,11 @@ class NodeField:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): values / topology, beyond
+        `repr`'s bounded structure.
+        """
 
 @typing.final
 class SubElementField:
@@ -785,6 +835,11 @@ class SubElementField:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): values / topology, beyond
+        `repr`'s bounded structure.
+        """
 
 @typing.final
 class SubFiniteElementSpace:
@@ -889,6 +944,11 @@ class SubFiniteElementSpace:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): values / topology, beyond
+        `repr`'s bounded structure.
+        """
 
 @typing.final
 class SubMatrix:
@@ -951,6 +1011,11 @@ class SubMatrix:
     def __len__(self) -> builtins.int: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): values / topology, beyond
+        `repr`'s bounded structure.
+        """
 
 @typing.final
 class SubMesh:
@@ -1018,6 +1083,11 @@ class SubMesh:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): values / topology, beyond
+        `repr`'s bounded structure.
+        """
 
 @typing.final
 class SubModel:
@@ -1048,6 +1118,11 @@ class SubModel:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+        r"""
+        Full content (third display level): values / topology, beyond
+        `repr`'s bounded structure.
+        """
 
 def circle_seg2(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int) -> Mesh:
     r"""

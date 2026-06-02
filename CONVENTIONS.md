@@ -212,6 +212,34 @@ la coercition parent→sub unitaire qui l'accompagne) — l'exception décrite
 plus haut. La règle s'applique uniformément aux quatre agrégats et a vocation
 à être portée par les macros `impl_aggregate!` / `impl_aggregate_pymethods!`.
 
+## Trois niveaux d'affichage
+
+Tout objet expose trois niveaux d'affichage, en couches, tous reliés à Python.
+Chaque niveau a un rôle distinct et **ne déborde jamais** sur le suivant :
+
+| Niveau | Rust | Python | Rôle | Borne |
+|---|---|---|---|---|
+| résumé | `Display` | `__str__` | une ligne : identité + dimensions clés | O(1), jamais de contenu |
+| structure | `Debug` | `__repr__` | compteurs, dimensions, noms, handles, métadonnées (`{:#?}` indenté) | borné, jamais de contenu en masse |
+| contenu | `dump::Dump` | `dump(precision=3, max_rows=20, max_cols=12)` | contenu complet : grilles de matrices, tables de valeurs, connectivité | borné par `DumpOptions` (élision `… (N de plus)`) |
+
+Règles :
+
+- `Display`/`Debug` ne déversent **jamais** le contenu en masse (valeurs,
+  connectivité, grille). Un `repr` reste borné quelle que soit la taille de
+  l'objet.
+- `dump()` retourne une `String` (composable avec `print`/`logging`/asserts),
+  n'imprime pas, et borne sa sortie via `DumpOptions`.
+- Les matrices se dumpent en **grille dense labellisée** : les DOF `(node, var)`
+  étiquettent directement lignes et colonnes.
+- Les agrégats génériques (`Mesh`, `FiniteElementSpace`, `Model`,
+  `ElementField`) dumpent le résumé puis le `dump` indenté de chaque
+  sous-objet ; `Matrix` dumpe une seule grille globale.
+
+Côté implémentation : trait + helpers partagés dans `src/dump.rs` ; macro
+`impl_aggregate_dump!` pour les agrégats génériques ; `impl_dump_pymethod!`
+pour le câblage Python des wrappers non-agrégats.
+
 ## Table de projection (état cible)
 
 Côté Python, toutes les fonctions des thèmes ci-dessous sont **à plat**
