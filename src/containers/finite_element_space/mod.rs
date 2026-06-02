@@ -403,6 +403,7 @@ pub struct FiniteElementSpace {
 }
 
 crate::impl_aggregate!(FiniteElementSpace, SubFiniteElementSpace, subspace, "subspace(s)");
+crate::impl_aggregate_dump!(FiniteElementSpace);
 
 impl FiniteElementSpace {
     /// Build a `FiniteElementSpace` by attaching the supplied

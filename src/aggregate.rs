@@ -473,6 +473,44 @@ macro_rules! impl_aggregate_std_traits {
     };
 }
 
+// ─── Aggregate Dump macro ────────────────────────────────────────────────────
+
+/// Derive [`crate::dump::Dump`] for an [`Aggregate`] whose `Sub` is itself
+/// `Dump`: the one-line `Display` summary, then each sub-object's full `dump`
+/// indented under a `── [i] ──` marker.
+///
+/// Kept separate from [`impl_aggregate_std_traits`] so aggregates with a
+/// non-generic content layout (e.g. `Matrix`, dumped as a single global grid)
+/// can hand-write their own `Dump` instead.
+///
+/// # Usage
+/// ```ignore
+/// impl_aggregate_dump!(Mesh);
+/// ```
+#[macro_export]
+macro_rules! impl_aggregate_dump {
+    ($T:ty) => {
+        impl $crate::dump::Dump for $T {
+            fn dump_with(&self, opts: &$crate::dump::DumpOptions) -> String {
+                let mut out = format!("{self}\n");
+                for (i, h) in $crate::aggregate::Aggregate::items(self).iter().enumerate() {
+                    let body = $crate::store::with(h, |s| {
+                        $crate::dump::Dump::dump_with(s, opts)
+                    })
+                    .unwrap_or_else(|e| format!("<{e}>"));
+                    out.push_str(&format!("── [{i}] ──\n"));
+                    for line in body.lines() {
+                        out.push_str("  ");
+                        out.push_str(line);
+                        out.push('\n');
+                    }
+                }
+                out
+            }
+        }
+    };
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 

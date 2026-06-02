@@ -325,6 +325,8 @@ crate::impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
     }
 });
 
+crate::impl_aggregate_dump!(Mesh);
+
 impl Mesh {
     /// Total cells in the mesh (sum across submeshes).
     pub fn cell_count(&self) -> Result<usize> {

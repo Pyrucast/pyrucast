@@ -544,6 +544,7 @@ pub struct ElementField {
 }
 
 crate::impl_aggregate!(ElementField, SubElementField, subfield, "subfield(s)");
+crate::impl_aggregate_dump!(ElementField);
 
 impl ElementField {
     /// Build an `ElementField` on `fespace` with the **same** `components`

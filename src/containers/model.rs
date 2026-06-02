@@ -479,6 +479,7 @@ pub struct Model {
 }
 
 crate::impl_aggregate!(Model, SubModel, sub_model, "sub-model(s)");
+crate::impl_aggregate_dump!(Model);
 
 impl Model {
     /// Heat-conduction `Model` spanning **every** subspace of `fes` — one
