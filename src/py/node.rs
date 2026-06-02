@@ -63,3 +63,5 @@ impl PyNode {
         Ok(format!("{}", self.node))
     }
 }
+
+crate::impl_dump_pymethod!(value PyNode, node);

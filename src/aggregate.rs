@@ -321,6 +321,21 @@ macro_rules! impl_aggregate_pymethods {
                     Ok(format!("{}", self.inner))
                 }
 
+                /// Full content (third display level): every sub-object's
+                /// values/topology, beyond `repr`'s bounded structure.
+                #[pyo3(signature = (precision=3, max_rows=20, max_cols=12))]
+                fn dump(
+                    &self,
+                    precision: usize,
+                    max_rows: usize,
+                    max_cols: usize,
+                ) -> pyo3::PyResult<String> {
+                    Ok($crate::dump::Dump::dump_with(
+                        &self.inner,
+                        &$crate::dump::DumpOptions { precision, max_rows, max_cols },
+                    ))
+                }
+
                 /// `a + b` — merge two aggregates of this type into a fresh
                 /// one (union of sub-objects, first-seen order). Sub-handles
                 /// are **shared** (refcount bump), not deep-copied.
@@ -329,6 +344,59 @@ macro_rules! impl_aggregate_pymethods {
                         $crate::aggregate::Aggregate::merge(&self.inner, &other.inner)?;
                     Ok($T { inner })
                 }
+            }
+        }
+    };
+}
+
+// ─── Python dump method (non-aggregate wrappers) ────────────────────────────
+
+/// Define the `dump(precision, max_rows, max_cols) -> str` pymethod on a
+/// `pyclass` wrapper whose payload implements [`crate::dump::Dump`].
+///
+/// Two forms depending on how the wrapper holds its payload:
+/// * `handle $PyT, $field` — `$field: Handle<Sub>`, resolved through the store;
+/// * `value  $PyT, $field` — `$field` is an owned value (e.g. a view).
+///
+/// Aggregate wrappers get `dump` from [`impl_aggregate_pymethods`] instead.
+#[cfg(feature = "python-api")]
+#[macro_export]
+macro_rules! impl_dump_pymethod {
+    (handle $PyT:ty, $field:ident) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pyo3::pymethods]
+        impl $PyT {
+            /// Full content (third display level): values / topology, beyond
+            /// `repr`'s bounded structure.
+            #[pyo3(signature = (precision=3, max_rows=20, max_cols=12))]
+            fn dump(
+                &self,
+                precision: usize,
+                max_rows: usize,
+                max_cols: usize,
+            ) -> pyo3::PyResult<String> {
+                let opts = $crate::dump::DumpOptions { precision, max_rows, max_cols };
+                Ok($crate::store::with(&self.$field, |x| {
+                    $crate::dump::Dump::dump_with(x, &opts)
+                })?)
+            }
+        }
+    };
+    (value $PyT:ty, $field:ident) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pyo3::pymethods]
+        impl $PyT {
+            /// Full content (third display level): values / topology, beyond
+            /// `repr`'s bounded structure.
+            #[pyo3(signature = (precision=3, max_rows=20, max_cols=12))]
+            fn dump(
+                &self,
+                precision: usize,
+                max_rows: usize,
+                max_cols: usize,
+            ) -> pyo3::PyResult<String> {
+                let opts = $crate::dump::DumpOptions { precision, max_rows, max_cols };
+                Ok($crate::dump::Dump::dump_with(&self.$field, &opts))
             }
         }
     };

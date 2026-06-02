@@ -132,3 +132,5 @@ impl PyConfiguration {
         Ok(with(&self.handle, |c| format!("{}", c))?)
     }
 }
+
+crate::impl_dump_pymethod!(handle PyConfiguration, handle);

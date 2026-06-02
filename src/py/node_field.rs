@@ -198,3 +198,5 @@ impl PyNodeField {
         Ok(with(&self.handle, |f| format!("{}", f))?)
     }
 }
+
+crate::impl_dump_pymethod!(handle PyNodeField, handle);

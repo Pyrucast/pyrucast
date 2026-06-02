@@ -75,3 +75,5 @@ impl PyCell {
         Ok(format!("{}", self.inner))
     }
 }
+
+crate::impl_dump_pymethod!(value PyCell, inner);

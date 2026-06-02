@@ -107,3 +107,5 @@ impl PyElement {
         Ok(format!("{}", self.inner))
     }
 }
+
+crate::impl_dump_pymethod!(value PyElement, inner);

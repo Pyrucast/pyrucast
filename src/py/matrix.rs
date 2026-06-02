@@ -268,3 +268,4 @@ impl PyMatrix {
 }
 
 crate::impl_aggregate_pymethods!(PyMatrix, PySubMatrix, "Matrix", sub_matrix);
+crate::impl_dump_pymethod!(handle PySubMatrix, handle);
