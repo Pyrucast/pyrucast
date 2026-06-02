@@ -165,13 +165,13 @@ impl fmt::Display for Element {
 }
 
 impl crate::dump::Dump for Element {
-    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         match self.cell() {
             Ok(cell) => format!(
                 "Element #{} ({} Gauss point(s))\n{}",
                 self.idx,
                 self.gauss_count(),
-                crate::dump::Dump::dump_with(&cell, opts)
+                crate::dump::Dump::render(&cell, opts)
             ),
             Err(e) => format!("Element #{} <{e}>", self.idx),
         }

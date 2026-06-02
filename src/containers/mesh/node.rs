@@ -129,7 +129,7 @@ impl fmt::Display for Node {
 }
 
 impl crate::dump::Dump for Node {
-    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         match self.coord() {
             Ok(c) => {
                 let coords: Vec<String> = c

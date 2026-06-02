@@ -321,19 +321,22 @@ macro_rules! impl_aggregate_pymethods {
                     Ok(format!("{}", self.inner))
                 }
 
-                /// Full content (third display level): every sub-object's
-                /// values/topology, beyond `repr`'s bounded structure.
+                /// Print the full content (third display level) to stdout:
+                /// every sub-object's values/topology, beyond `repr`'s bounded
+                /// structure. Returns nothing.
                 #[pyo3(signature = (precision=3, max_rows=20, max_cols=12))]
                 fn dump(
                     &self,
+                    py: pyo3::Python<'_>,
                     precision: usize,
                     max_rows: usize,
                     max_cols: usize,
-                ) -> pyo3::PyResult<String> {
-                    Ok($crate::dump::Dump::dump_with(
+                ) -> pyo3::PyResult<()> {
+                    let text = $crate::dump::Dump::render(
                         &self.inner,
                         &$crate::dump::DumpOptions { precision, max_rows, max_cols },
-                    ))
+                    );
+                    $crate::dump::py_print(py, &text)
                 }
 
                 /// `a + b` — merge two aggregates of this type into a fresh
@@ -366,19 +369,21 @@ macro_rules! impl_dump_pymethod {
         #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
         #[pyo3::pymethods]
         impl $PyT {
-            /// Full content (third display level): values / topology, beyond
-            /// `repr`'s bounded structure.
+            /// Print the full content (third display level) to stdout: values /
+            /// topology, beyond `repr`'s bounded structure. Returns nothing.
             #[pyo3(signature = (precision=3, max_rows=20, max_cols=12))]
             fn dump(
                 &self,
+                py: pyo3::Python<'_>,
                 precision: usize,
                 max_rows: usize,
                 max_cols: usize,
-            ) -> pyo3::PyResult<String> {
+            ) -> pyo3::PyResult<()> {
                 let opts = $crate::dump::DumpOptions { precision, max_rows, max_cols };
-                Ok($crate::store::with(&self.$field, |x| {
-                    $crate::dump::Dump::dump_with(x, &opts)
-                })?)
+                let text = $crate::store::with(&self.$field, |x| {
+                    $crate::dump::Dump::render(x, &opts)
+                })?;
+                $crate::dump::py_print(py, &text)
             }
         }
     };
@@ -386,17 +391,19 @@ macro_rules! impl_dump_pymethod {
         #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
         #[pyo3::pymethods]
         impl $PyT {
-            /// Full content (third display level): values / topology, beyond
-            /// `repr`'s bounded structure.
+            /// Print the full content (third display level) to stdout: values /
+            /// topology, beyond `repr`'s bounded structure. Returns nothing.
             #[pyo3(signature = (precision=3, max_rows=20, max_cols=12))]
             fn dump(
                 &self,
+                py: pyo3::Python<'_>,
                 precision: usize,
                 max_rows: usize,
                 max_cols: usize,
-            ) -> pyo3::PyResult<String> {
+            ) -> pyo3::PyResult<()> {
                 let opts = $crate::dump::DumpOptions { precision, max_rows, max_cols };
-                Ok($crate::dump::Dump::dump_with(&self.$field, &opts))
+                let text = $crate::dump::Dump::render(&self.$field, &opts);
+                $crate::dump::py_print(py, &text)
             }
         }
     };
@@ -559,11 +566,11 @@ macro_rules! impl_aggregate_std_traits {
 macro_rules! impl_aggregate_dump {
     ($T:ty) => {
         impl $crate::dump::Dump for $T {
-            fn dump_with(&self, opts: &$crate::dump::DumpOptions) -> String {
+            fn render(&self, opts: &$crate::dump::DumpOptions) -> String {
                 let mut out = format!("{self}\n");
                 for (i, h) in $crate::aggregate::Aggregate::items(self).iter().enumerate() {
                     let body = $crate::store::with(h, |s| {
-                        $crate::dump::Dump::dump_with(s, opts)
+                        $crate::dump::Dump::render(s, opts)
                     })
                     .unwrap_or_else(|e| format!("<{e}>"));
                     out.push_str(&format!("── [{i}] ──\n"));

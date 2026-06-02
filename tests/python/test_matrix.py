@@ -288,7 +288,7 @@ def test_matrix_repr_and_str():
 # ─── dump() — third display level ───────────────────────────────────────────
 
 
-def test_sub_matrix_dump_labels_grid():
+def test_sub_matrix_dump_prints_labeled_grid(capsys):
     c = pyrucast.Configuration(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
@@ -297,17 +297,21 @@ def test_sub_matrix_dump_labels_grid():
     block.add_entry(a, "q", b, "T", -1.0)
     block.add_entry(b, "q", b, "T", 2.0)
 
-    s = block.dump()
+    # dump() prints to stdout and returns nothing.
+    assert block.dump() is None
+    s = capsys.readouterr().out
     assert s.splitlines()[0].startswith("SubMatrix")
     # In-line DOF labels on both axes + values at default precision (3).
     assert f"({a.id},q)" in s
     assert f"({a.id},T)" in s
     assert "2.000" in s and "-1.000" in s
+
     # precision is honoured.
-    assert "2.0 " in block.dump(precision=1) + " "
+    block.dump(precision=1)
+    assert "2.0" in capsys.readouterr().out
 
 
-def test_matrix_dump_global_grid_and_elision():
+def test_matrix_dump_prints_global_grid_and_elides(capsys):
     c = pyrucast.Configuration(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
@@ -319,9 +323,11 @@ def test_matrix_dump_global_grid_and_elision():
     k.add_sub_matrix(block_a)
     k.add_sub_matrix(block_b)
 
-    # Global labelled grid, built without finalize().
-    s = k.dump()
+    # Global labelled grid, built without finalize(), printed to stdout.
+    k.dump()
+    s = capsys.readouterr().out
     assert s.splitlines()[0].startswith("Matrix")
     assert f"({a.id},T)" in s
     # max_rows elides the grid and notes the overflow.
-    assert "de plus" in k.dump(max_rows=1)
+    k.dump(max_rows=1)
+    assert "de plus" in capsys.readouterr().out

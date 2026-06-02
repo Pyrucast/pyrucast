@@ -228,15 +228,19 @@ Règles :
 - `Display`/`Debug` ne déversent **jamais** le contenu en masse (valeurs,
   connectivité, grille). Un `repr` reste borné quelle que soit la taille de
   l'objet.
-- `dump()` retourne une `String` (composable avec `print`/`logging`/asserts),
-  n'imprime pas, et borne sa sortie via `DumpOptions`.
+- `dump()` **imprime directement au terminal** et ne renvoie rien (`()` en
+  Rust, `None` en Python). Côté Python l'impression passe par le `print` de
+  Python (respecte `sys.stdout`, redirections, capture des tests). Le cœur
+  `Dump::render(&self, opts) -> String` produit la chaîne (composition des
+  agrégats) ; il n'est pas exposé à Python.
 - Les matrices se dumpent en **grille dense labellisée** : les DOF `(node, var)`
   étiquettent directement lignes et colonnes.
 - Les agrégats génériques (`Mesh`, `FiniteElementSpace`, `Model`,
   `ElementField`) dumpent le résumé puis le `dump` indenté de chaque
   sous-objet ; `Matrix` dumpe une seule grille globale.
 
-Côté implémentation : trait + helpers partagés dans `src/dump.rs` ; macro
+Côté implémentation : trait + helpers partagés dans `src/dump.rs` (chaque type
+implémente `render`, `dump` est fourni par défaut) ; macro
 `impl_aggregate_dump!` pour les agrégats génériques ; `impl_dump_pymethod!`
 pour le câblage Python des wrappers non-agrégats.
 

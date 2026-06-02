@@ -8,8 +8,10 @@
 //! | `Debug`   | `__repr__` | structure: counts, dimensions, names, handles   | bounded      |
 //! | [`Dump`]  | `dump(…)`  | **full content**: grids, value tables, topology | [`DumpOptions`] |
 //!
-//! `Display`/`Debug` never print bulk content; [`Dump::dump`] does, but stays
-//! bounded by [`DumpOptions`] (precision + row/column elision).
+//! `Display`/`Debug` never print bulk content; [`Dump::dump`] does (straight to
+//! stdout), but stays bounded by [`DumpOptions`] (precision + row/column
+//! elision). Implementors provide [`Dump::render`] (the String core, used for
+//! composition); [`Dump::dump`] prints it.
 //!
 //! # Example
 //!
@@ -18,14 +20,15 @@
 //!
 //! struct Pair(f64, f64);
 //! impl Dump for Pair {
-//!     fn dump_with(&self, o: &DumpOptions) -> String {
+//!     fn render(&self, o: &DumpOptions) -> String {
 //!         format!("({:.*}, {:.*})", o.precision, self.0, o.precision, self.1)
 //!     }
 //! }
-//! assert_eq!(Pair(1.5, 2.0).dump(), "(1.500, 2.000)");
+//! assert_eq!(Pair(1.5, 2.0).render(&DumpOptions::default()), "(1.500, 2.000)");
+//! Pair(1.5, 2.0).dump(); // prints "(1.500, 2.000)" to stdout
 //! ```
 
-/// Knobs controlling how much content [`Dump::dump_with`] emits.
+/// Knobs controlling how much content [`Dump::render`] emits.
 ///
 /// Defaults: `precision = 3`, `max_rows = 20`, `max_cols = 12`. Beyond the row
 /// / column caps the renderers elide and append a `… (N de plus)` marker, so a
@@ -49,18 +52,39 @@ impl Default for DumpOptions {
 
 /// Human-readable, bounded dump of an object's **full content**.
 ///
-/// Implementors render the actual numbers / topology (matrix grids, field
-/// value tables, mesh connectivity). The output is meant to be `print`-ed or
-/// asserted on, never parsed — use the typed accessors (`entries`, `value`, …)
-/// for programmatic access.
+/// Implementors provide [`render`](Dump::render) — the actual numbers /
+/// topology (matrix grids, field value tables, mesh connectivity) as a
+/// `String`. The user-facing [`dump`](Dump::dump) prints that string straight
+/// to stdout (it returns nothing): the content is meant to be *looked at* in a
+/// terminal, not parsed — use the typed accessors (`entries`, `value`, …) for
+/// programmatic access.
 pub trait Dump {
-    /// Dump with default [`DumpOptions`].
-    fn dump(&self) -> String {
-        self.dump_with(&DumpOptions::default())
+    /// Render the full content as a `String`. This is the composition core
+    /// (aggregates concatenate their sub-objects' renders); end users normally
+    /// call [`dump`](Dump::dump) instead.
+    fn render(&self, opts: &DumpOptions) -> String;
+
+    /// Print the full content to stdout (default [`DumpOptions`]).
+    fn dump(&self) {
+        self.dump_with(&DumpOptions::default());
     }
 
-    /// Dump honouring the supplied [`DumpOptions`].
-    fn dump_with(&self, opts: &DumpOptions) -> String;
+    /// Print the full content to stdout, honouring the supplied options.
+    fn dump_with(&self, opts: &DumpOptions) {
+        println!("{}", self.render(opts));
+    }
+}
+
+/// Print `text` through Python's built-in `print` (so it honours
+/// `sys.stdout`, redirection, and is captured by test harnesses), then return.
+///
+/// Used by the `dump` pymethods, which print to the terminal rather than
+/// returning a string.
+#[cfg(feature = "python-api")]
+pub fn py_print(py: pyo3::Python<'_>, text: &str) -> pyo3::PyResult<()> {
+    use pyo3::types::PyAnyMethods;
+    py.import("builtins")?.call_method1("print", (text,))?;
+    Ok(())
 }
 
 // ─── Shared formatting helpers ──────────────────────────────────────────────
@@ -228,13 +252,13 @@ mod tests {
     }
 
     #[test]
-    fn default_dump_uses_default_options() {
+    fn default_render_uses_default_options() {
         struct One;
         impl Dump for One {
-            fn dump_with(&self, o: &DumpOptions) -> String {
+            fn render(&self, o: &DumpOptions) -> String {
                 fmt_float(1.0, o.precision)
             }
         }
-        assert_eq!(One.dump(), "1.000");
+        assert_eq!(One.render(&DumpOptions::default()), "1.000");
     }
 }

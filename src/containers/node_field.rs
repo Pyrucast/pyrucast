@@ -453,7 +453,7 @@ impl fmt::Display for NodeField {
 }
 
 impl crate::dump::Dump for NodeField {
-    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         use crate::dump::{fmt_float, table};
         let ncomp = self.components.len();
         let mut headers = Vec::with_capacity(ncomp + 1);
@@ -863,12 +863,12 @@ mod tests {
 
     #[test]
     fn dump_renders_value_table_and_debug_is_bounded() {
-        use crate::dump::Dump;
+        use crate::dump::{Dump, DumpOptions};
         let (_cfg, nodes, sm) = make_poi1_with(2);
         let mut f = NodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
         f.set_value(nodes[0].id(), "UX", 1.25).unwrap();
 
-        let dumped = f.dump();
+        let dumped = f.render(&DumpOptions::default());
         assert!(dumped.contains("UX") && dumped.contains("UY"), "headers:\n{dumped}");
         assert!(dumped.contains("1.250"), "value at default precision:\n{dumped}");
         assert_eq!(dumped.lines().count(), 4, "summary + header + 2 rows:\n{dumped}");

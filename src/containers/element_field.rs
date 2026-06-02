@@ -421,7 +421,7 @@ impl fmt::Display for SubElementField {
 }
 
 impl crate::dump::Dump for SubElementField {
-    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         use crate::dump::{fmt_float, table};
         let ncomp = self.components.len();
         let mut headers = vec!["cell".to_string(), "gauss".to_string()];

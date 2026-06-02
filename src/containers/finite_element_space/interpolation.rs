@@ -213,7 +213,7 @@ impl fmt::Display for Interpolation {
 }
 
 impl crate::dump::Dump for Interpolation {
-    fn dump_with(&self, _opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, _opts: &crate::dump::DumpOptions) -> String {
         self.to_string()
     }
 }

@@ -113,7 +113,7 @@ impl fmt::Display for Cell {
 }
 
 impl crate::dump::Dump for Cell {
-    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         use crate::dump::{fmt_float, table};
         let header = match self.element_type() {
             Ok(et) => format!("Cell<{et}> #{}", self.idx),
@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn cell_dump_renders_coordinate_table() {
-        use crate::dump::Dump;
+        use crate::dump::{Dump, DumpOptions};
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
@@ -234,7 +234,7 @@ mod tests {
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let cell = Cell::new(insert(sm), 0).unwrap();
 
-        let s = cell.dump();
+        let s = cell.render(&DumpOptions::default());
         assert!(s.starts_with("Cell<TRI3> #0"), "header:\n{s}");
         assert!(s.contains("node"), "table header:\n{s}");
         assert!(s.contains('x') && s.contains('y'), "axis labels:\n{s}");

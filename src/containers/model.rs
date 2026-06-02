@@ -435,7 +435,7 @@ impl fmt::Display for SubModel {
 }
 
 impl crate::dump::Dump for SubModel {
-    fn dump_with(&self, _opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, _opts: &crate::dump::DumpOptions) -> String {
         let primal = self.physics.primal_vars().join(", ");
         let dual = self.physics.dual_vars().join(", ");
         match &self.physics {

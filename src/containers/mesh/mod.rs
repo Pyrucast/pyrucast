@@ -277,7 +277,7 @@ impl fmt::Display for SubMesh {
 }
 
 impl crate::dump::Dump for SubMesh {
-    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         use crate::dump::table;
         let npc = self.element_type.nodes_per_cell();
         let mut headers = vec!["cell".to_string()];

@@ -171,7 +171,7 @@ impl fmt::Display for QuadratureRule {
 }
 
 impl crate::dump::Dump for QuadratureRule {
-    fn dump_with(&self, _opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, _opts: &crate::dump::DumpOptions) -> String {
         self.to_string()
     }
 }

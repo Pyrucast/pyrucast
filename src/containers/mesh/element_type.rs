@@ -116,7 +116,7 @@ impl fmt::Display for ElementType {
 }
 
 impl crate::dump::Dump for ElementType {
-    fn dump_with(&self, _opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, _opts: &crate::dump::DumpOptions) -> String {
         format!(
             "{}: {} node(s)/cell, topo dim {}",
             self.name(),

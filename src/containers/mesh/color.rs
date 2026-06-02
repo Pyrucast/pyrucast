@@ -59,7 +59,7 @@ impl fmt::Display for RgbColor {
 }
 
 impl crate::dump::Dump for RgbColor {
-    fn dump_with(&self, _opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, _opts: &crate::dump::DumpOptions) -> String {
         format!("{self} (r={}, g={}, b={})", self.r, self.g, self.b)
     }
 }

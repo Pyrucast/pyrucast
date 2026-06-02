@@ -367,7 +367,7 @@ impl fmt::Display for SubFiniteElementSpace {
 }
 
 impl crate::dump::Dump for SubFiniteElementSpace {
-    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         use crate::dump::{fmt_float, table};
         let ng = self.gauss_count();
         let ref_dim = if ng > 0 { self.gauss_xi.len() / ng } else { 0 };

@@ -74,10 +74,10 @@ class Cell:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): values / topology, beyond
-        `repr`'s bounded structure.
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
         """
 
 @typing.final
@@ -167,10 +167,10 @@ class Configuration:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): values / topology, beyond
-        `repr`'s bounded structure.
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
         """
 
 @typing.final
@@ -248,10 +248,10 @@ class Element:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): values / topology, beyond
-        `repr`'s bounded structure.
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
         """
 
 @typing.final
@@ -290,10 +290,11 @@ class ElementField:
     def add_subfield(self, sub: SubElementField) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): every sub-object's
-        values/topology, beyond `repr`'s bounded structure.
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
     def __add__(self, other: ElementField) -> ElementField:
         r"""
@@ -356,10 +357,11 @@ class FiniteElementSpace:
     def add_subspace(self, sub: SubFiniteElementSpace) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): every sub-object's
-        values/topology, beyond `repr`'s bounded structure.
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
     def __add__(self, other: FiniteElementSpace) -> FiniteElementSpace:
         r"""
@@ -459,10 +461,11 @@ class Matrix:
     def add_sub_matrix(self, sub: SubMatrix) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): every sub-object's
-        values/topology, beyond `repr`'s bounded structure.
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
     def __add__(self, other: Matrix) -> Matrix:
         r"""
@@ -529,10 +532,11 @@ class Mesh:
     def add_submesh(self, sub: SubMesh) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): every sub-object's
-        values/topology, beyond `repr`'s bounded structure.
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
     def __add__(self, other: Mesh) -> Mesh:
         r"""
@@ -598,10 +602,11 @@ class Model:
     def add_sub_model(self, sub: SubModel) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): every sub-object's
-        values/topology, beyond `repr`'s bounded structure.
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
     def __add__(self, other: Model) -> Model:
         r"""
@@ -634,10 +639,10 @@ class Node:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): values / topology, beyond
-        `repr`'s bounded structure.
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
         """
 
 @typing.final
@@ -742,10 +747,10 @@ class NodeField:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): values / topology, beyond
-        `repr`'s bounded structure.
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
         """
 
 @typing.final
@@ -835,10 +840,10 @@ class SubElementField:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): values / topology, beyond
-        `repr`'s bounded structure.
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
         """
 
 @typing.final
@@ -944,10 +949,10 @@ class SubFiniteElementSpace:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): values / topology, beyond
-        `repr`'s bounded structure.
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
         """
 
 @typing.final
@@ -1011,10 +1016,10 @@ class SubMatrix:
     def __len__(self) -> builtins.int: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): values / topology, beyond
-        `repr`'s bounded structure.
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
         """
 
 @typing.final
@@ -1083,10 +1088,10 @@ class SubMesh:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): values / topology, beyond
-        `repr`'s bounded structure.
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
         """
 
 @typing.final
@@ -1118,10 +1123,10 @@ class SubModel:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> builtins.str:
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Full content (third display level): values / topology, beyond
-        `repr`'s bounded structure.
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
         """
 
 def circle_seg2(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int) -> Mesh:

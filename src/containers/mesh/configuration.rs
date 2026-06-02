@@ -73,7 +73,7 @@ impl fmt::Display for NodeId {
 }
 
 impl crate::dump::Dump for NodeId {
-    fn dump_with(&self, _opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, _opts: &crate::dump::DumpOptions) -> String {
         self.to_string()
     }
 }
@@ -361,7 +361,7 @@ impl fmt::Display for Configuration {
 }
 
 impl crate::dump::Dump for Configuration {
-    fn dump_with(&self, opts: &crate::dump::DumpOptions) -> String {
+    fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         use crate::dump::{fmt_float, table};
         let dim = self.dim as usize;
         const AXES: [&str; 3] = ["x", "y", "z"];
