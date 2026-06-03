@@ -1,21 +1,23 @@
-//! Per-physics implementations of `SubModel` variants.
+//! Per-physics implementations of [`crate::containers::model::SubModel`]
+//! variants.
 //!
 //! Each file here owns the **specifics** of one physics: a struct holding
-//! its supports (FE spaces, materials, node sets) plus an
-//! [`impl PhysicsKind`] carrying *all* of its behaviour — variable names,
-//! material contract, local assembly, and rendering. The
-//! [`crate::containers::model::Physics`] enum exists **only** for storage
+//! its supports (FE spaces, materials, node sets) plus an [`impl Physics`]
+//! carrying *all* of its behaviour — variable names, material contract,
+//! local assembly, and rendering. The
+//! [`crate::containers::model::SubModel`] enum exists **only** for storage
 //! and serialization; it dispatches every call through
-//! [`Physics::as_kind`](crate::containers::model::Physics::as_kind) so no
-//! generic code (`SubModel`, the assembler, `Dump`, …) ever needs a
-//! per-variant `match`.
+//! [`SubModel::as_physics`](crate::containers::model::SubModel::as_physics)
+//! so no generic code (the assembler, `Dump`, …) ever needs a per-variant
+//! `match`.
 //!
 //! # Adding a new physics
 //!
-//! 1. add `models/<name>.rs` with a struct + `impl PhysicsKind` (and a
+//! 1. add `models/<name>.rs` with a struct + `impl Physics` (and a
 //!    `new(...)` constructor doing any build-time work);
-//! 2. add one variant to [`crate::containers::model::Physics`];
-//! 3. add one arm to [`Physics::as_kind`](crate::containers::model::Physics::as_kind);
+//! 2. add one variant to [`crate::containers::model::SubModel`];
+//! 3. add one arm to
+//!    [`SubModel::as_physics`](crate::containers::model::SubModel::as_physics);
 //! 4. expose it via `Model::<name>` (Rust) and a `#[classmethod]` (Python).
 //!
 //! Everything else is generic. See the book chapter *« Ajouter une
@@ -35,13 +37,13 @@ pub mod heat_conduction;
 /// The behaviour contract of one physics, co-located with its data struct.
 ///
 /// Generic code calls these through
-/// [`Physics::as_kind`](crate::containers::model::Physics::as_kind); the
-/// `Physics` enum itself carries no logic. Most methods have sensible
-/// defaults so a physics overrides only what is specific to it (a plain
-/// volumetric physics typically implements just `primal_vars`,
-/// `dual_vars`, `material_*`, `build_stiffness_blocks`, `label` and
-/// `render`).
-pub trait PhysicsKind {
+/// [`SubModel::as_physics`](crate::containers::model::SubModel::as_physics);
+/// the [`SubModel`](crate::containers::model::SubModel) enum itself carries
+/// no logic. Most methods have sensible defaults so a physics overrides
+/// only what is specific to it (a plain volumetric physics typically
+/// implements just `primal_vars`, `dual_vars`, `material_*`,
+/// `build_stiffness_blocks`, `label` and `render`).
+pub trait Physics {
     /// Primal variable names introduced by this physics (column labels).
     fn primal_vars(&self) -> Vec<String>;
 

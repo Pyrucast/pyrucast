@@ -4,9 +4,10 @@
 //! The model layer is the **physics-aware** counterpart of the
 //! geometry layer (`Mesh`, `SubMesh`) and the interpolation layer
 //! (`FiniteElementSpace`, `SubFiniteElementSpace`). A [`Model`] is an aggregate of
-//! [`SubModel`]s, each binding **one or more FE spaces** to a
-//! [`Physics`] (the actual law). The Model is a pure orchestrator: it
-//! enumerates the DOFs of its sub-models, dimensions a
+//! [`SubModel`]s; each [`SubModel`] is one physics instance (a variant of
+//! the enum) that owns its supports and dispatches its behaviour through
+//! the [`Physics`] trait. The Model is a pure orchestrator: it enumerates
+//! the DOFs of its sub-models, dimensions a
 //! [`crate::containers::matrix::Matrix`], and
 //! loops over the sub-models to accumulate the contributions.
 //!
@@ -22,13 +23,13 @@
 //! ├── stiffness(model, materials) -> Matrix   # rows: dual × cols: primal
 //! └── mass(model)                 -> Matrix   # same DOF layout, may be empty
 //!
-//! SubModel
-//! └── physics: Physics
-//!
-//! Physics  (enum à variantes spécialisées)
-//! ├── HeatConduction { fespace, material }
-//! ├── Dirichlet     { ... }            # constraint = Lagrange multiplier
+//! SubModel  (enum : stockage + sérialisation ; dispatch via as_physics())
+//! ├── HeatConduction(HeatConduction)
+//! ├── Dirichlet(Dirichlet)             # constraint = Lagrange multiplier
 //! └── ...
+//!
+//! Physics  (trait : tout le comportement, co-localisé par physique)
+//! └── primal_vars / dual_vars / material_* / build_*_blocks / render / ...
 //! ```
 //!
 //! The model layer is purely matrix-producing. Loads (right-hand side
@@ -39,7 +40,7 @@
 //!
 //! # Lagrange multipliers and DOF identification
 //!
-//! `Physics::Dirichlet` introduces new DOFs of two kinds, both living
+//! `SubModel::Dirichlet` introduces new DOFs of two kinds, both living
 //! on **multiplier nodes** that the sub-model creates on the fly in the
 //! [`crate::containers::mesh::Configuration`]:
 //!
@@ -66,7 +67,7 @@
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
-//! use pyrucast::containers::model::{Model, Physics, SubModel};
+//! use pyrucast::containers::model::{Model, SubModel};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::ops::assemble;
 //! use pyrucast::store::{insert, with};
@@ -110,26 +111,26 @@ use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteEleme
 use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::Mesh;
 use crate::aggregate::Aggregate;
-use crate::models::{dirichlet, heat_conduction, PhysicsKind};
+use crate::models::{dirichlet, heat_conduction, Physics};
 use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-// ─── Physics ───────────────────────────────────────────────────────────────
+// ─── SubModel ──────────────────────────────────────────────────────────────
 
-/// One physical law instance, bound to its supports (FE spaces, materials,
-/// node sets).
+/// One physics instance, bound to its supports (FE spaces, materials, node
+/// sets). A [`Model`] is a `Vec<Handle<SubModel>>`.
 ///
 /// This enum is a **pure storage + dispatch** shell: it derives
 /// `Serialize`/`Deserialize` (so models persist through the `bincode`
 /// backbone), and forwards every behavioural call to the variant's
-/// [`PhysicsKind`] implementation through [`Physics::as_kind`]. All physics
+/// [`Physics`] implementation through [`SubModel::as_physics`]. All physics
 /// logic lives in the per-variant structs under [`crate::models`].
 ///
 /// Adding a physics means adding **one variant here** and **one arm to
-/// [`Physics::as_kind`]** — no other site in this file changes.
-#[derive(Clone, Serialize, Deserialize)]
-pub enum Physics {
+/// [`SubModel::as_physics`]** — no other site in this file changes.
+#[derive(Serialize, Deserialize)]
+pub enum SubModel {
     /// Linear heat conduction — see [`heat_conduction::HeatConduction`].
     HeatConduction(heat_conduction::HeatConduction),
     /// Dirichlet constraint via Lagrange multipliers — see
@@ -137,31 +138,16 @@ pub enum Physics {
     Dirichlet(dirichlet::Dirichlet),
 }
 
-impl Physics {
-    /// Borrow the variant as its [`PhysicsKind`] behaviour. This is the
+impl SubModel {
+    /// Borrow the variant as its [`Physics`] behaviour. This is the
     /// **only** per-variant `match` in the model layer; every generic
     /// method (variable names, material contract, assembly, rendering)
     /// dispatches through it.
-    pub fn as_kind(&self) -> &dyn PhysicsKind {
+    pub fn as_physics(&self) -> &dyn Physics {
         match self {
-            Physics::HeatConduction(p) => p,
-            Physics::Dirichlet(p) => p,
+            SubModel::HeatConduction(p) => p,
+            SubModel::Dirichlet(p) => p,
         }
-    }
-}
-
-// ─── SubModel ──────────────────────────────────────────────────────────────
-
-/// One physics + its support binding. A [`Model`] is a `Vec<Handle<SubModel>>`.
-#[derive(Serialize, Deserialize)]
-pub struct SubModel {
-    physics: Physics,
-}
-
-impl SubModel {
-    /// Wrap an existing `Physics` instance into a `SubModel`.
-    pub fn new(physics: Physics) -> Self {
-        Self { physics }
     }
 
     /// Heat-conduction sub-model on an FE subspace.
@@ -171,9 +157,9 @@ impl SubModel {
     /// the model immutable and material-independent. See
     /// [`heat_conduction::HeatConduction::new`] for the support it builds.
     pub fn heat_conduction(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        Ok(Self {
-            physics: Physics::HeatConduction(heat_conduction::HeatConduction::new(fespace)?),
-        })
+        Ok(SubModel::HeatConduction(
+            heat_conduction::HeatConduction::new(fespace)?,
+        ))
     }
 
     /// Dirichlet sub-model: enforce `<primal_var> = u_d` on each
@@ -189,18 +175,11 @@ impl SubModel {
         primal_dual: String,
         constrained_nodes: &[Node],
     ) -> Result<Self> {
-        Ok(Self {
-            physics: Physics::Dirichlet(dirichlet::Dirichlet::new(
-                primal_var,
-                primal_dual,
-                constrained_nodes,
-            )?),
-        })
-    }
-
-    /// The physics carried by this sub-model.
-    pub fn physics(&self) -> &Physics {
-        &self.physics
+        Ok(SubModel::Dirichlet(dirichlet::Dirichlet::new(
+            primal_var,
+            primal_dual,
+            constrained_nodes,
+        )?))
     }
 
     /// Multiplier node ids introduced by this sub-model. Non-empty only
@@ -211,7 +190,7 @@ impl SubModel {
     /// the multiplier node's `<primal_var>` component of the load
     /// `NodeField`.
     pub fn multiplier_nodes(&self) -> Result<Vec<NodeId>> {
-        match self.physics.as_kind().multiplier_support() {
+        match self.as_physics().multiplier_support() {
             Some(support) => with(support, |s| s.connectivity().to_vec()),
             None => Ok(Vec::new()),
         }
@@ -225,7 +204,7 @@ impl SubModel {
     /// submesh to impose the constrained values.
     pub fn multiplier_mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
-        if let Some(support) = self.physics.as_kind().multiplier_support() {
+        if let Some(support) = self.as_physics().multiplier_support() {
             mesh.add_sub(support.clone())?;
         }
         Ok(mesh)
@@ -234,56 +213,56 @@ impl SubModel {
     /// FE subspace on which this sub-model expects its material data, or
     /// `None` if this physics doesn't need material data (e.g. `Dirichlet`).
     pub fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        self.physics.as_kind().material_fespace()
+        self.as_physics().material_fespace()
     }
 
     /// Material component names this sub-model expects, or `None` if it
     /// doesn't need material data. Thin pass-through of
-    /// [`PhysicsKind::material_components`].
+    /// [`Physics::material_components`].
     pub fn material_components(&self) -> Option<&'static [&'static str]> {
-        self.physics.as_kind().material_components()
+        self.as_physics().material_components()
     }
 
     /// Primal variable names introduced by this sub-model.
     pub fn primal_vars(&self) -> Vec<String> {
-        self.physics.as_kind().primal_vars()
+        self.as_physics().primal_vars()
     }
 
     /// Dual variable names introduced by this sub-model.
     pub fn dual_vars(&self) -> Vec<String> {
-        self.physics.as_kind().dual_vars()
+        self.as_physics().dual_vars()
     }
 
     /// Build and fill the stiffness [`SubMatrix`] block(s) for this
     /// sub-model. Pure dispatch to the physics's
-    /// [`PhysicsKind::build_stiffness_blocks`]; the caller
+    /// [`Physics::build_stiffness_blocks`]; the caller
     /// ([`crate::ops::assemble::stiffness`]) supplies `material` iff the
     /// physics declares a [`material_fespace`](Self::material_fespace).
     pub(crate) fn build_stiffness_blocks(
         &self,
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
-        self.physics.as_kind().build_stiffness_blocks(material)
+        self.as_physics().build_stiffness_blocks(material)
     }
 }
 
 impl fmt::Debug for SubModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SubModel")
-            .field("physics", &self.physics.as_kind().label())
+            .field("physics", &self.as_physics().label())
             .finish()
     }
 }
 
 impl fmt::Display for SubModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.physics.as_kind().display())
+        write!(f, "{}", self.as_physics().display())
     }
 }
 
 impl crate::dump::Dump for SubModel {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
-        self.physics.as_kind().render(opts)
+        self.as_physics().render(opts)
     }
 }
 
@@ -306,7 +285,7 @@ crate::impl_aggregate_dump!(Model);
 
 impl Model {
     /// Heat-conduction `Model` spanning **every** subspace of `fes` — one
-    /// [`Physics::HeatConduction`] sub-model per [`SubFiniteElementSpace`].
+    /// [`SubModel::HeatConduction`] sub-model per [`SubFiniteElementSpace`].
     ///
     /// This is the parent-level named constructor (see `CONVENTIONS.md`):
     /// it consumes the FE-space *parent* and returns a `Model`, so the

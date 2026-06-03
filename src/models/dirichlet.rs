@@ -13,7 +13,7 @@ use crate::containers::mesh::{ElementType, Node, NodeId};
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::PhysicsKind;
+use crate::models::Physics;
 use crate::store::{insert, with, with_mut, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -24,10 +24,9 @@ pub fn multiplier_name(primal_var: &str) -> String {
 
 /// Materials needed to instantiate the Dirichlet variant.
 ///
-/// `build` returns this bundle and the [`crate::containers::model::Physics::Dirichlet`]
-/// variant simply moves its fields in. The node sequences are recoverable
-/// at any time by reading the POI1 supports' connectivity (size immutable
-/// on insert into the store).
+/// [`Dirichlet::new`] returns this bundle's fields moved into the struct.
+/// The node sequences are recoverable at any time by reading the POI1
+/// supports' connectivity (size immutable on insert into the store).
 pub struct Built {
     pub constrained_support: Handle<SubMesh>,
     pub multiplier_support: Handle<SubMesh>,
@@ -136,7 +135,7 @@ impl Dirichlet {
     }
 }
 
-impl PhysicsKind for Dirichlet {
+impl Physics for Dirichlet {
     fn primal_vars(&self) -> Vec<String> {
         vec![multiplier_name(&self.primal_var)]
     }

@@ -12,7 +12,7 @@ use crate::containers::mesh::{ElementType, NodeId};
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::PhysicsKind;
+use crate::models::Physics;
 use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +23,7 @@ pub const DUAL_VAR: &str = "q";
 /// Required component on the material `SubElementField` (isotropic
 /// conductivity).
 pub const MATERIAL_COMPONENT: &str = "k";
-/// Material contract returned by [`PhysicsKind::material_components`].
+/// Material contract returned by [`Physics::material_components`].
 const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
 
 /// Linear heat conduction.
@@ -66,7 +66,7 @@ impl HeatConduction {
     }
 }
 
-impl PhysicsKind for HeatConduction {
+impl Physics for HeatConduction {
     fn primal_vars(&self) -> Vec<String> {
         vec![PRIMAL_VAR.to_string()]
     }
