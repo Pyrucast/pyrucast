@@ -1,6 +1,6 @@
 //! Finite-element space — interpolation + quadrature layer on top of a mesh.
 //!
-//! Hierarchy mirroring [`crate::mesh`]:
+//! Hierarchy mirroring [`crate::containers::mesh`]:
 //!
 //! - [`SubFiniteElementSpace`] — one [`crate::containers::finite_element_space::Interpolation`] and one
 //!   [`crate::containers::finite_element_space::QuadratureRule`] applied to a single

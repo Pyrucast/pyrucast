@@ -1,7 +1,7 @@
 //! ElementField — multi-component values per `(cell, Gauss point)` on a
 //! [`crate::containers::finite_element_space::FiniteElementSpace`].
 //!
-//! Hierarchy mirroring [`crate::finite_element_space`]:
+//! Hierarchy mirroring [`crate::containers::finite_element_space`]:
 //!
 //! - [`SubElementField`] — multi-component values per `(cell, Gauss point)`
 //!   on a single [`crate::containers::finite_element_space::SubFiniteElementSpace`]. Where

@@ -1,12 +1,13 @@
 //! Physical model — orchestrator of sub-models that assemble into a
-//! [`Matrix`].
+//! [`crate::containers::matrix::Matrix`].
 //!
 //! The model layer is the **physics-aware** counterpart of the
 //! geometry layer (`Mesh`, `SubMesh`) and the interpolation layer
 //! (`FiniteElementSpace`, `SubFiniteElementSpace`). A [`Model`] is an aggregate of
 //! [`SubModel`]s, each binding **one or more FE spaces** to a
 //! [`Physics`] (the actual law). The Model is a pure orchestrator: it
-//! enumerates the DOFs of its sub-models, dimensions a [`Matrix`], and
+//! enumerates the DOFs of its sub-models, dimensions a
+//! [`crate::containers::matrix::Matrix`], and
 //! loops over the sub-models to accumulate the contributions.
 //!
 //! # Architecture
@@ -40,7 +41,7 @@
 //!
 //! `Physics::Dirichlet` introduces new DOFs of two kinds, both living
 //! on **multiplier nodes** that the sub-model creates on the fly in the
-//! [`Configuration`]:
+//! [`crate::containers::mesh::Configuration`]:
 //!
 //! - the **primal** of the constraint sub-model is `lambda_<var>` at the
 //!   multiplier nodes — the Lagrange multiplier itself, an unknown of
@@ -121,8 +122,8 @@ use std::fmt;
 /// node sets).
 ///
 /// New physics are added by extending this enum. Each variant must be
-/// supported by the assembly dispatch in [`Model::stiffness`] /
-/// [`Model::mass`].
+/// supported by the assembly dispatch in [`crate::ops::assemble::stiffness`] /
+/// [`crate::ops::assemble::mass`].
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Physics {
     /// Linear heat conduction.
@@ -196,7 +197,7 @@ impl Physics {
     /// material data (e.g. `Dirichlet`).
     ///
     /// The list is the **contract** between the physics and any material
-    /// provider: [`SubModel::build_material_field`] uses it to know what
+    /// provider: [`mod@crate::ops::build::material_field`] uses it to know what
     /// to create, and [`crate::ops::assemble::stiffness`] uses it to
     /// validate the supplied material early, before the per-cell loop.
     pub fn material_components(&self) -> Option<&'static [&'static str]> {

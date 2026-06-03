@@ -6,8 +6,8 @@
 //! Internal helpers:
 //! - [`triangulation`] — 2-D primitives (ear clipping, CDT,
 //!   polygon-with-holes pipeline).
-//! - [`sweep`] — extrusion and SEG2→QUA4 kernel used by [`sweep_qua4`]
-//!   and [`extrude`].
+//! - [`sweep`] — extrusion and SEG2→QUA4 kernel used by [`sweep_qua4()`]
+//!   and [`extrude()`].
 
 pub mod circle_seg2;
 pub mod consolidate;

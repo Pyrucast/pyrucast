@@ -71,7 +71,7 @@ pub trait Aggregate: Default {
 
     /// Merge `self` and `other` into a fresh aggregate.
     ///
-    /// Delegates to [`try_extend_from`] so domain constraints (e.g.
+    /// Delegates to [`Aggregate::try_extend_from`] so domain constraints (e.g.
     /// `Configuration` compatibility for `Mesh`) are enforced.
     fn merge(&self, other: &Self) -> Result<Self> where Self: Sized {
         let mut result = Self::default();
@@ -148,7 +148,7 @@ pub trait Aggregate: Default {
     /// The default is a no-op.
     fn post_push(&mut self) {}
 
-    /// Check compatibility (via [`check_push`]) then append a single handle.
+    /// Check compatibility (via [`Aggregate::check_push`]) then append a single handle.
     fn add_sub(&mut self, h: Handle<Self::Sub>) -> crate::error::Result<()> {
         self.check_push(&h)?;
         self.push(h);
@@ -156,7 +156,7 @@ pub trait Aggregate: Default {
         Ok(())
     }
 
-    /// Check compatibility (via [`check_push`] on the first item of `other`)
+    /// Check compatibility (via [`Aggregate::check_push`] on the first item of `other`)
     /// then append all handles from `other` into `self`.
     fn try_extend_from(&mut self, other: &Self) -> crate::error::Result<()> {
         if let Some(h) = other.items().first() {
@@ -431,7 +431,7 @@ macro_rules! impl_dump_pymethod {
 /// `display_extra`, …).
 ///
 /// # Usage
-/// ```ignore
+/// ```text
 /// impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
 ///     fn check_push(&self, h: &Handle<SubMesh>) -> Result<()> { … }
 ///     fn display_extra(&self) -> Option<String> { … }

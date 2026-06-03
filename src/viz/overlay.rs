@@ -36,6 +36,7 @@ pub(crate) fn button_rect(area_width: u32) -> (i32, i32, i32, i32) {
 }
 
 /// Is the pixel `(px, py)` inside the button on a canvas of size `(w, h)`?
+#[cfg(any(test, feature = "viz-interactive"))]
 pub(crate) fn click_hits_button(px: f64, py: f64, area_width: u32) -> bool {
     let (bx, by, bw, bh) = button_rect(area_width);
     let inside_x = px >= bx as f64 && px <= (bx + bw) as f64;

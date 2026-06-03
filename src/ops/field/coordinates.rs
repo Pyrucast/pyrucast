@@ -24,7 +24,7 @@ fn axis_index(name: &str) -> Option<usize> {
 /// `["X", "Y", "Z"]` in 3-D.
 ///
 /// If `mesh` is already entirely POI1 its nodes are read directly;
-/// otherwise it is first converted with [`crate::ops::mesher::to_poi1`].
+/// otherwise it is first converted with [`crate::ops::mesher::to_poi1()`].
 /// Either way the field support is the **unique** nodes of `mesh`, in
 /// order of first appearance.
 ///

@@ -26,8 +26,8 @@
 //!
 //! These conventions are compatible with the orientations already enforced
 //! elsewhere in the codebase (CCW filling in
-//! [`crate::ops::mesher::fill_surface`], HEX8 node ordering in
-//! [`crate::ops::mesher::extrude`]).
+//! [`crate::ops::mesher::fill_surface()`], HEX8 node ordering in
+//! [`crate::ops::mesher::extrude()`]).
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
