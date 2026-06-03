@@ -176,6 +176,40 @@ def test_coordinates_rejects_axis_beyond_dimension():
         raise AssertionError("expected RuntimeError for Z on a 2-D mesh")
 
 
+def test_set_coordinates_writes_positions():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 1.0])
+    mesh = pyrucast.Mesh(c, "POI1")
+    mesh.unit().add_cell([a])
+    mesh.unit().add_cell([b])
+
+    # Read current positions into a field, move node a, write it all back.
+    f = pyrucast.coordinates(mesh)  # components X, Y
+    f[a, "X"] = 10.0
+    f[a, "Y"] = 20.0
+    pyrucast.set_coordinates(f)  # default components ["X", "Y"]
+    assert a.coord() == [10.0, 20.0]
+    assert b.coord() == [1.0, 1.0]
+
+
+def test_displace_adds_displacement():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 1.0])
+    mesh = pyrucast.Mesh(c, "POI1")
+    mesh.unit().add_cell([a])
+    mesh.unit().add_cell([b])
+
+    d = pyrucast.NodeField(mesh, ["ux", "uy"])
+    d[a, "ux"] = 5.0
+    d[a, "uy"] = -1.0
+    d[b, "ux"] = 2.0
+    pyrucast.displace(d)  # default components ["ux", "uy"]
+    assert a.coord() == [5.0, -1.0]
+    assert b.coord() == [3.0, 1.0]
+
+
 def test_repr_str_node_field():
     c, _nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["UX", "UY"])

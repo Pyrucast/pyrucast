@@ -64,6 +64,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | Rust (`ops::mesher::…`) | Python (`pyrucast.…`) |
 |---|---|
 | `from_live_nodes(config: Handle<Configuration>) -> Mesh` | `from_live_nodes(config) -> Mesh` |
+| `SubMesh::poi1_from_nodes(nodes: &[Node]) -> SubMesh` | `poi1_from_nodes(nodes) -> Mesh` |
 | `line_seg2(a: &Node, b: &Node, n_elems: usize) -> Mesh` | `line_seg2(a, b, n_elems) -> Mesh` |
 | `circle_seg2(center: &Node, normal: &[f64], radius: f64, n_elems: usize) -> Mesh` | `circle_seg2(center, normal, radius, n_elems) -> Mesh` |
 | `sweep_qua4(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_qua4(mesh_a, mesh_b, n_layers) -> Mesh` |
@@ -77,6 +78,8 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | Rust (`ops::field::…`) | Python (`pyrucast.…`) |
 |---|---|
 | `coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `coordinates(mesh, components=None) -> NodeField` |
+| `set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> ()` | `set_coordinates(field, components=None) -> None` |
+| `displace(field: &NodeField, components: Option<Vec<String>>) -> ()` | `displace(field, components=None) -> None` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 

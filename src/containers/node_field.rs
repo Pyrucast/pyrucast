@@ -142,6 +142,11 @@ impl NodeField {
         &self.components
     }
 
+    /// Node ids this field is defined on, in support order.
+    pub(crate) fn nodes(&self) -> &[NodeId] {
+        &self.nodes
+    }
+
     /// Handle to the owning `Configuration` (derived from the support).
     pub fn configuration(&self) -> Handle<Configuration> {
         with(&self.support, |sm| sm.configuration())

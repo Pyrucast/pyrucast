@@ -94,6 +94,8 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesher::to_poi1, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::consolidate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::coordinates, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::set_coordinates, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::displace, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::restrict, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::merge, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::stiffness, m)?)?;

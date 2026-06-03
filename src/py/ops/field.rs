@@ -29,6 +29,38 @@ pub fn coordinates(
     })
 }
 
+/// Set node coordinates from `field` (absolute): for every node, the
+/// active-set coordinate on axis `a` becomes `field.value(node,
+/// components[a])`. `components` lists one component name per spatial axis,
+/// in axis order; `None` → `["X", "Y", "Z"][:dim]`. Mutates the field's
+/// `Configuration` in place.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (field, components=None))]
+pub fn set_coordinates(
+    field: PyRef<PyNodeField>,
+    components: Option<Vec<String>>,
+) -> PyResult<()> {
+    with(&field.handle, |nf| {
+        crate::ops::field::set_coordinates(nf, components)
+    })??;
+    Ok(())
+}
+
+/// Displace nodes by `field` (incremental): `coord[a] += field.value(node,
+/// components[a])` on the active coordinate set. `components` lists one
+/// displacement-component name per spatial axis, in axis order; `None` →
+/// `["ux", "uy", "uz"][:dim]`. Mutates the field's `Configuration` in place.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (field, components=None))]
+pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> PyResult<()> {
+    with(&field.handle, |nf| {
+        crate::ops::field::displace(nf, components)
+    })??;
+    Ok(())
+}
+
 /// Restrict `field` to the nodes used by `mesh`.
 ///
 /// Returns a new `NodeField` with the same components, supported on the

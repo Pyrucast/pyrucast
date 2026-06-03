@@ -24,6 +24,7 @@ __all__ = [
     "circle_seg2",
     "consolidate",
     "coordinates",
+    "displace",
     "extrude",
     "fill_surface",
     "from_live_nodes",
@@ -34,6 +35,7 @@ __all__ = [
     "merge",
     "poi1_from_nodes",
     "restrict",
+    "set_coordinates",
     "set_swap_dir",
     "solve",
     "stiffness",
@@ -1153,6 +1155,14 @@ def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins
     nodes of the mesh, in order of first appearance.
     """
 
+def displace(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
+    r"""
+    Displace nodes by `field` (incremental): `coord[a] += field.value(node,
+    components[a])` on the active coordinate set. `components` lists one
+    displacement-component name per spatial axis, in axis order; `None` →
+    `["ux", "uy", "uz"][:dim]`. Mutates the field's `Configuration` in place.
+    """
+
 def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
     r"""
     Extrude `mesh` by `n_layers` layers along `direction` (the total
@@ -1225,6 +1235,15 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     unique nodes of `mesh` (order of first appearance). Nodes of `mesh`
     absent from `field` are assigned `0.0`. Errors if `mesh` and `field`
     are attached to different `Configuration`s.
+    """
+
+def set_coordinates(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
+    r"""
+    Set node coordinates from `field` (absolute): for every node, the
+    active-set coordinate on axis `a` becomes `field.value(node,
+    components[a])`. `components` lists one component name per spatial axis,
+    in axis order; `None` → `["X", "Y", "Z"][:dim]`. Mutates the field's
+    `Configuration` in place.
     """
 
 def set_swap_dir(path: builtins.str | os.PathLike | pathlib.Path) -> None:
