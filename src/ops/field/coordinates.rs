@@ -77,11 +77,7 @@ pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeF
     };
 
     // Build a single POI1 support holding those nodes, then the field.
-    let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-    for &nid in &nodes {
-        sm.add_cell(&[nid])?;
-    }
-    let support = insert(sm);
+    let support = insert(SubMesh::poi1_from_nodes(cfg.clone(), &nodes)?);
     let mut field = NodeField::from_poi1(&support, components)?;
 
     // Read all coordinates under a single Configuration lock, then fill.

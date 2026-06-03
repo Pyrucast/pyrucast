@@ -1,15 +1,14 @@
 use crate::aggregate::Aggregate;
 use crate::error::Result;
-use crate::containers::mesh::NodeId;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::{Mesh, SubMesh};
+use crate::containers::mesh::Mesh;
 use crate::store::{insert, with};
 
 /// Convert a mesh to POI1, **submesh by submesh**.
 ///
 /// The result has the **same number of submeshes** as `mesh`; each output
 /// submesh is a POI1 submesh holding the de-duplicated list of nodes used
-/// by the corresponding input submesh, in order of first appearance. A
+/// by the corresponding input submesh, in order of first appearance (see
+/// [`SubMesh::to_poi1`](crate::containers::mesh::SubMesh::to_poi1)). A
 /// POI1 input submesh is therefore copied node-for-node; an empty input
 /// submesh yields an empty POI1 submesh (so the count is preserved).
 ///
@@ -18,16 +17,7 @@ use crate::store::{insert, with};
 pub fn to_poi1(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_handle in mesh {
-        let (cfg, connectivity) =
-            with(sm_handle, |s| (s.configuration(), s.connectivity().to_vec()))?;
-        let mut poi = SubMesh::new(cfg, ElementType::POI1);
-        let mut seen: Vec<NodeId> = Vec::new();
-        for nid in connectivity {
-            if !seen.contains(&nid) {
-                seen.push(nid);
-                poi.add_cell(&[nid])?;
-            }
-        }
+        let poi = with(sm_handle, |s| s.to_poi1())??;
         result.add_sub(insert(poi))?;
     }
     Ok(result)
@@ -40,7 +30,7 @@ mod tests {
     use crate::containers::mesh::Configuration;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
-    use crate::containers::mesh::Mesh;
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::store::{insert, with};
 
     #[test]

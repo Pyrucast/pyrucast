@@ -196,6 +196,37 @@ impl SubMesh {
         self.config.clone()
     }
 
+    /// Build a POI1 submesh with **one cell per node** in `nodes`, in the
+    /// given order. Each node is increfed; on failure the partial submesh's
+    /// `Drop` rolls back the increfs already done. The caller is responsible
+    /// for any de-duplication (see [`SubMesh::to_poi1`] for the deduped
+    /// variant).
+    pub fn poi1_from_nodes(config: Handle<Configuration>, nodes: &[NodeId]) -> Result<SubMesh> {
+        let mut sm = SubMesh::new(config, ElementType::POI1);
+        for &nid in nodes {
+            sm.add_cell(&[nid])?;
+        }
+        Ok(sm)
+    }
+
+    /// Build a fresh POI1 submesh holding this submesh's nodes,
+    /// **de-duplicated in order of first appearance** (one POI1 cell per
+    /// unique node). Each referenced node is increfed afresh by the new
+    /// submesh; `self` is left untouched.
+    ///
+    /// Shared building block: [`crate::ops::mesher::to_poi1()`] applies it
+    /// submesh-by-submesh, and the physics that need a stable node support
+    /// (e.g. heat conduction) use it directly.
+    pub fn to_poi1(&self) -> Result<SubMesh> {
+        let mut seen: Vec<NodeId> = Vec::new();
+        for &nid in &self.connectivity {
+            if !seen.contains(&nid) {
+                seen.push(nid);
+            }
+        }
+        SubMesh::poi1_from_nodes(self.config.clone(), &seen)
+    }
+
     /// Visualize this submesh.
     ///
     /// - `view = None` ⇒ [`crate::viz::View::default`] (isometric).

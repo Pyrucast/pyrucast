@@ -75,7 +75,6 @@
 //! ```
 
 use crate::containers::mesh::NodeId;
-use crate::containers::mesh::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::containers::matrix::Matrix;
 use crate::containers::mesh::SubMesh;
@@ -150,11 +149,7 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
     // POI1 submesh over the col nodes — provides the support of the
     // resulting NodeField. The submesh and the field both end up in the
     // store; they cascade-decref the nodes correctly when dropped.
-    let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-    for nid in &unique_nodes {
-        sm.add_cell(&[*nid])?;
-    }
-    let sm_h = insert(sm);
+    let sm_h = insert(SubMesh::poi1_from_nodes(cfg.clone(), &unique_nodes)?);
 
     let mut result = NodeField::from_poi1(&sm_h, unique_components)?;
     for (i, (node_id, field_name)) in col_dofs.iter().enumerate() {
@@ -170,6 +165,7 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::ElementType;
     use crate::containers::element_field::SubElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
@@ -295,8 +291,6 @@ mod tests {
     #[test]
     fn rectangular_matrix_yields_error() {
         use crate::containers::matrix::{DofOrdering, SubMatrix};
-        use crate::containers::mesh::ElementType;
-        use crate::containers::mesh::SubMesh;
         // 2-row support, 1-col support → 2×1 rectangular block.
         let cfg = insert(Configuration::new(1).unwrap());
         let r0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();

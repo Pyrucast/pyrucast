@@ -8,7 +8,7 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::{ElementType, NodeId};
+use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
@@ -47,22 +47,8 @@ impl HeatConduction {
     /// row/col support of every assembled block).
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         let submesh = with(&fespace, |s| s.submesh())?;
-        let (cfg, flat_conn) =
-            with(&submesh, |s| (s.configuration(), s.connectivity().to_vec()))?;
-        let mut unique_nodes: Vec<NodeId> = Vec::new();
-        for &nid in &flat_conn {
-            if !unique_nodes.contains(&nid) {
-                unique_nodes.push(nid);
-            }
-        }
-        let mut poi1 = SubMesh::new(cfg, ElementType::POI1);
-        for &nid in &unique_nodes {
-            poi1.add_cell(&[nid])?;
-        }
-        Ok(Self {
-            fespace,
-            support: insert(poi1),
-        })
+        let support = insert(with(&submesh, |s| s.to_poi1())??);
+        Ok(Self { fespace, support })
     }
 }
 

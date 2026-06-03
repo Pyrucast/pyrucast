@@ -229,11 +229,7 @@ impl NodeField {
     /// assert_eq!(m.node(0, 1, 0).unwrap().id(), b.id());
     /// ```
     pub fn support_submesh(&self) -> Result<SubMesh> {
-        let mut sm = SubMesh::new(self.configuration(), ElementType::POI1);
-        for &nid in &self.nodes {
-            sm.add_cell(&[nid])?;
-        }
-        Ok(sm)
+        SubMesh::poi1_from_nodes(self.configuration(), &self.nodes)
     }
 
     /// Build a [`Mesh`] with a single POI1 submesh mirroring the support of
@@ -271,10 +267,7 @@ impl NodeField {
     ) -> Result<Self> {
         let n_nodes = nodes.len();
         let n_comp = components.len();
-        let mut sm = SubMesh::new(cfg, ElementType::POI1);
-        for &nid in &nodes {
-            sm.add_cell(&[nid])?;
-        }
+        let sm = SubMesh::poi1_from_nodes(cfg, &nodes)?;
         Ok(NodeField {
             support: insert(sm),
             nodes,

@@ -45,13 +45,10 @@ pub fn build(constrained_nodes: &[Node]) -> Result<Built> {
         .configuration();
 
     // POI1 SubMesh that owns the per-node refcounts on the constrained
-    // nodes. `add_cell` increfs each; if any fails, the partial SubMesh's
-    // `Drop` rolls back via `?`.
-    let mut constrained_sm = SubMesh::new(config.clone(), ElementType::POI1);
-    for n in constrained_nodes {
-        constrained_sm.add_cell(&[n.id()])?;
-    }
-    let constrained_support = insert(constrained_sm);
+    // nodes. `poi1_from_nodes` increfs each (and rolls back on failure).
+    let constrained_ids: Vec<NodeId> = constrained_nodes.iter().map(|n| n.id()).collect();
+    let constrained_support =
+        insert(SubMesh::poi1_from_nodes(config.clone(), &constrained_ids)?);
 
     // Create the multiplier nodes at the same coordinates as the
     // constrained ones, then hand each multiplier's initial refcount
