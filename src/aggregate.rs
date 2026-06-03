@@ -339,14 +339,58 @@ macro_rules! impl_aggregate_pymethods {
                     $crate::dump::py_print(py, &text)
                 }
 
-                /// `a + b` — merge two aggregates of this type into a fresh
-                /// one (union of sub-objects, first-seen order). Sub-handles
-                /// are **shared** (refcount bump), not deep-copied.
-                fn __add__(&self, other: pyo3::PyRef<'_, $T>) -> pyo3::PyResult<$T> {
-                    let inner =
-                        $crate::aggregate::Aggregate::merge(&self.inner, &other.inner)?;
-                    Ok($T { inner })
+                /// `a + b` — grow this aggregate. `other` may be another
+                /// aggregate of the same type (merge, union of sub-objects,
+                /// first-seen order) or a single sub-object (append). In both
+                /// cases sub-handles are **shared** (refcount bump), not
+                /// deep-copied. Returns `NotImplemented` for any other type so
+                /// Python can fall back to the right-hand operand's `__radd__`.
+                fn __add__(
+                    &self,
+                    py: pyo3::Python<'_>,
+                    other: &pyo3::Bound<'_, pyo3::PyAny>,
+                ) -> pyo3::PyResult<pyo3::Py<pyo3::PyAny>> {
+                    if let Ok(o) = other.extract::<pyo3::PyRef<'_, $T>>() {
+                        let inner = (&self.inner + &o.inner)?;
+                        return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
+                    }
+                    if let Ok(s) = other.extract::<pyo3::PyRef<'_, $Sub>>() {
+                        let inner = (&self.inner + &s.handle)?;
+                        return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
+                    }
+                    Ok(py.NotImplemented())
                 }
+            }
+        }
+    };
+}
+
+/// Add `sub + sub → aggregate` to a sub-object pyclass (`$Sub`, holding a
+/// `handle` field) producing the aggregate pyclass `$T` (holding `inner`).
+///
+/// Opt-in (a separate macro) because some sub-objects already use `+` for a
+/// different meaning — e.g. `SubElementField + scalar` is element-wise
+/// arithmetic, so it is **not** given this overload.
+#[cfg(feature = "python-api")]
+#[macro_export]
+macro_rules! impl_aggregate_sub_add {
+    ($Sub:ident, $T:ident) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pyo3::pymethods]
+        impl $Sub {
+            /// `sub + sub` → a fresh aggregate holding both sub-objects
+            /// (first-seen order). Sub-handles are shared (refcount bump).
+            /// Returns `NotImplemented` for any other right-hand type.
+            fn __add__(
+                &self,
+                py: pyo3::Python<'_>,
+                other: &pyo3::Bound<'_, pyo3::PyAny>,
+            ) -> pyo3::PyResult<pyo3::Py<pyo3::PyAny>> {
+                if let Ok(o) = other.extract::<pyo3::PyRef<'_, $Sub>>() {
+                    let inner = (&self.handle + &o.handle)?;
+                    return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
+                }
+                Ok(py.NotImplemented())
             }
         }
     };
@@ -543,6 +587,38 @@ macro_rules! impl_aggregate_std_traits {
             type Output = $crate::error::Result<$T>;
             fn add(self, rhs: &$T) -> Self::Output {
                 $crate::aggregate::Aggregate::merge(self, rhs)
+            }
+        }
+
+        // `aggregate + sub` → a fresh aggregate with `sub` appended.
+        impl std::ops::Add<&$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>>
+            for &$T
+        {
+            type Output = $crate::error::Result<$T>;
+            fn add(
+                self,
+                rhs: &$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
+            ) -> Self::Output {
+                let mut out = <$T as ::std::default::Default>::default();
+                $crate::aggregate::Aggregate::try_extend_from(&mut out, self)?;
+                $crate::aggregate::Aggregate::add_sub(&mut out, rhs.clone())?;
+                Ok(out)
+            }
+        }
+
+        // `sub + sub` → a fresh aggregate of the two subs (first-seen order).
+        impl std::ops::Add<&$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>>
+            for &$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>
+        {
+            type Output = $crate::error::Result<$T>;
+            fn add(
+                self,
+                rhs: &$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
+            ) -> Self::Output {
+                let mut out = <$T as ::std::default::Default>::default();
+                $crate::aggregate::Aggregate::add_sub(&mut out, self.clone())?;
+                $crate::aggregate::Aggregate::add_sub(&mut out, rhs.clone())?;
+                Ok(out)
             }
         }
     };

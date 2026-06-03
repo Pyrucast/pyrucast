@@ -35,6 +35,52 @@ def test_poi1_from_nodes_empty_raises():
         raise AssertionError("expected RuntimeError for empty node list")
 
 
+def test_aggregate_plus_sub_and_sub_plus_sub():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    s1 = pyrucast.poi1_from_nodes([a])[0]  # a PySubMesh
+    s2 = pyrucast.poi1_from_nodes([b])[0]
+
+    # sub + sub → Mesh
+    m = s1 + s2
+    assert m.submesh_count() == 2
+
+    # mesh + sub → Mesh
+    s3 = pyrucast.poi1_from_nodes([a])[0]
+    m2 = m + s3
+    assert m2.submesh_count() == 3
+
+
+def test_node_plus_node_and_mesh_plus_node():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    d = c.add_node([2.0, 0.0])
+
+    m = a + b  # node + node → unitary POI1 Mesh
+    assert m.element_types() == ["POI1"]
+    assert m.cell_count() == 2
+
+    m2 = m + d  # mesh + node → unitary POI1 Mesh (via Node.__radd__)
+    assert m2.cell_count() == 3
+
+
+def test_mesh_plus_node_rejects_non_poi1():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.5, 1.0])
+    tri = pyrucast.Mesh(c, "TRI3")
+    tri.unit().add_cell([a, b, cc])
+    try:
+        _ = tri + a  # not a unitary POI1 mesh
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for non-POI1 mesh + node")
+
+
 def test_submesh_tri3_invalid_arity():
     c = pyrucast.Configuration(2)
     a = c.add_node([0.0, 0.0])

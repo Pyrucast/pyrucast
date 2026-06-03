@@ -156,13 +156,26 @@ structurelle) et `__str__` (← `Display`, vue résumée façon cast3m) — voir
 | `Matrix` | nombre de sous-matrices | — (pas de `[i]`) | `Aggregate` (macro pour `len`) |
 | `SubMatrix` | nombre d'entrées | — | méthode `entry_count` |
 
-### Fusion
+### Opérateur `+`
 
-| Classe | Opérateur Python | Sémantique | Trait Rust |
-|---|---|---|---|
-| `Mesh` | `a + b` | concaténation des sous-maillages (= `merge`) | `Aggregate::merge` / `Add<&Mesh>` |
+Disponible côté **Rust** (trait `Add`, renvoie `Result<…>`) **et Python**
+(`__add__`). Les sous-objets sont **partagés** (refcount), jamais copiés ;
+les contraintes de domaine (même `Configuration` pour `Mesh`, etc.) restent
+vérifiées.
 
-> Côté Rust, **tous** les agrégats (`Mesh`, `FiniteElementSpace`,
-> `ElementField`, `Matrix`, `Model`) ont `&a + &b` (fusion) via le trait
-> `Aggregate`. Seul `Mesh` l'expose pour l'instant comme `__add__` en
-> Python.
+| Opération | Résultat | Sémantique |
+|---|---|---|
+| `agrégat + agrégat` | agrégat | fusion (union des sous-objets, ordre de 1ʳᵉ apparition) |
+| `agrégat + sub` | agrégat | ajoute un sous-objet |
+| `sub + sub` | agrégat | agrégat des deux sous-objets |
+| `Node + Node` | `Mesh` | maillage POI1 unitaire sur les deux nœuds |
+| `Mesh + Node` | `Mesh` | ajoute un point (erreur si le `Mesh` n'est pas unitaire POI1) |
+
+Vaut pour les 5 agrégats (`Mesh`, `FiniteElementSpace`, `ElementField`,
+`Matrix`, `Model`).
+
+> **Exception arithmétique** : `SubElementField + scalaire` (et
+> `NodeField + …`) sont l'**arithmétique de champ** (élément par élément).
+> `SubElementField` n'a donc **pas** l'overload Python `sub + sub → agrégat`
+> (le `+` y est déjà pris) ; en Rust il existe quand même, car il porte sur
+> `Handle<SubElementField>`, distinct de la valeur.

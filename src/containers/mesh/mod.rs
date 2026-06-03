@@ -382,6 +382,41 @@ crate::impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
 
 crate::impl_aggregate_dump!(Mesh);
 
+// ─── Building POI1 point meshes with `+` ─────────────────────────────────────
+//
+// `Node + Node` and (unitary POI1) `Mesh + Node` both yield a fresh unitary
+// POI1 `Mesh` — a points mesh grown one node at a time. See also
+// [`SubMesh::poi1_from_nodes`].
+
+/// `node_a + node_b` → a unitary POI1 [`Mesh`] over both nodes.
+impl std::ops::Add<&Node> for &Node {
+    type Output = Result<Mesh>;
+    fn add(self, rhs: &Node) -> Self::Output {
+        let sm = SubMesh::poi1_from_nodes(&[self.clone(), rhs.clone()])?;
+        Ok(Mesh::from_submesh(sm))
+    }
+}
+
+/// `mesh + node` → a unitary POI1 [`Mesh`] holding the mesh's points plus
+/// `node`. Errors unless `mesh` is **unitary and POI1** (exactly one POI1
+/// submesh).
+impl std::ops::Add<&Node> for &Mesh {
+    type Output = Result<Mesh>;
+    fn add(self, rhs: &Node) -> Self::Output {
+        let sub = self.unit()?;
+        let (et, cfg, mut ids) = with(&sub, |s| {
+            (s.element_type(), s.configuration(), s.connectivity().to_vec())
+        })?;
+        if et != ElementType::POI1 {
+            return Err(PyrucastError::Message(
+                "Mesh + Node: expected a unitary POI1 mesh".into(),
+            ));
+        }
+        ids.push(rhs.id());
+        Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(cfg, &ids)?))
+    }
+}
+
 impl Mesh {
     /// Total cells in the mesh (sum across submeshes).
     pub fn cell_count(&self) -> Result<usize> {
@@ -736,5 +771,50 @@ mod tests {
         let mesh = Mesh::empty();
         assert!(format!("{:?}", mesh).contains("Mesh"));
         assert!(format!("{}", mesh).contains("submesh"));
+    }
+
+    #[test]
+    fn aggregate_add_sub_and_sub_add_sub() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let s1 = insert(SubMesh::poi1_from_nodes(&[a.clone()]).unwrap());
+        let s2 = insert(SubMesh::poi1_from_nodes(&[b.clone()]).unwrap());
+
+        // sub + sub → Mesh
+        let m = (&s1 + &s2).unwrap();
+        assert_eq!(m.submesh_count(), 2);
+
+        // aggregate + sub → Mesh
+        let s3 = insert(SubMesh::poi1_from_nodes(&[a.clone()]).unwrap());
+        let m2 = (&m + &s3).unwrap();
+        assert_eq!(m2.submesh_count(), 3);
+    }
+
+    #[test]
+    fn node_add_node_and_mesh_add_node() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
+
+        let m = (&a + &b).unwrap();
+        assert_eq!(m.submesh_count(), 1);
+        assert_eq!(with(&m.unit().unwrap(), |s| s.cell_count()).unwrap(), 2);
+
+        let m2 = (&m + &c).unwrap();
+        assert_eq!(with(&m2.unit().unwrap(), |s| s.cell_count()).unwrap(), 3);
+    }
+
+    #[test]
+    fn mesh_add_node_rejects_non_unitary_poi1() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let mut tri = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
+        tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        // Non-POI1 → error.
+        assert!((&tri + &a).is_err());
     }
 }

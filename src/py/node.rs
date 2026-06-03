@@ -2,6 +2,7 @@
 
 use crate::containers::mesh::{Configuration, NodeId};
 use crate::containers::mesh::Node;
+use crate::py::mesh::PyMesh;
 use crate::store::Handle;
 use pyo3::prelude::*;
 
@@ -53,6 +54,27 @@ impl PyNode {
     fn set_coord(&self, coords: Vec<f64>) -> PyResult<()> {
         self.node.set_coord(&coords)?;
         Ok(())
+    }
+
+    /// `node + node` → a unitary POI1 `Mesh` over both nodes. Returns
+    /// `NotImplemented` for any other right-hand type.
+    fn __add__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        if let Ok(o) = other.extract::<PyRef<'_, PyNode>>() {
+            let mesh = (self.as_node() + o.as_node())?;
+            return Ok(Py::new(py, PyMesh { inner: mesh })?.into_any());
+        }
+        Ok(py.NotImplemented())
+    }
+
+    /// Right-hand `mesh + node`: append this node to a **unitary POI1**
+    /// `Mesh`, yielding a new one. Reached when the left operand's `__add__`
+    /// returns `NotImplemented` (a `Mesh` doesn't know how to add a `Node`).
+    fn __radd__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        if let Ok(m) = other.extract::<PyRef<'_, PyMesh>>() {
+            let mesh = (&m.inner + self.as_node())?;
+            return Ok(Py::new(py, PyMesh { inner: mesh })?.into_any());
+        }
+        Ok(py.NotImplemented())
     }
 
     fn __repr__(&self) -> PyResult<String> {
