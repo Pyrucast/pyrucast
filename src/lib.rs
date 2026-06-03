@@ -85,6 +85,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(swap_dir, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::from_live_nodes, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::poi1_from_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::line_seg2, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::circle_seg2, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::sweep_qua4, m)?)?;

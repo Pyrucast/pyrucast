@@ -6,7 +6,7 @@ use crate::store::{with, Handle};
 /// Create a POI1 mesh containing all live nodes of `config`.
 pub fn from_live_nodes(config: Handle<Configuration>) -> Result<Mesh> {
     let node_ids: Vec<_> = with(&config, |c| c.iter_live().collect())?;
-    Ok(Mesh::from_submesh(SubMesh::poi1_from_nodes(config, &node_ids)?))
+    Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(config, &node_ids)?))
 }
 
 #[cfg(test)]

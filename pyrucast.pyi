@@ -32,6 +32,7 @@ __all__ = [
     "material_field",
     "material_field_per_sub_model",
     "merge",
+    "poi1_from_nodes",
     "restrict",
     "set_swap_dir",
     "solve",
@@ -1206,6 +1207,15 @@ def merge(a: NodeField, b: NodeField) -> NodeField:
     Keeps each field's value where only one is defined, `0.0` where
     neither is. Errors if the two fields hold different values at the same
     `(node, component)` pair, or are attached to different `Configuration`s.
+    """
+
+def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
+    r"""
+    Build a points (POI1) mesh with one point per node in `nodes`.
+    
+    The Configuration is taken from the nodes themselves (every `Node`
+    carries its own), so no Configuration argument is needed. Returns a
+    Mesh with a single POI1 submesh; raises if `nodes` is empty.
     """
 
 def restrict(field: NodeField, mesh: Mesh) -> NodeField:

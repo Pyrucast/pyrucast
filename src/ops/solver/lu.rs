@@ -149,7 +149,7 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
     // POI1 submesh over the col nodes — provides the support of the
     // resulting NodeField. The submesh and the field both end up in the
     // store; they cascade-decref the nodes correctly when dropped.
-    let sm_h = insert(SubMesh::poi1_from_nodes(cfg.clone(), &unique_nodes)?);
+    let sm_h = insert(SubMesh::poi1_from_node_ids(cfg.clone(), &unique_nodes)?);
 
     let mut result = NodeField::from_poi1(&sm_h, unique_components)?;
     for (i, (node_id, field_name)) in col_dofs.iter().enumerate() {

@@ -5,6 +5,7 @@
 //! `py/ops/` convention (operations live with operations).
 
 use crate::containers::mesh::ElementType;
+use crate::containers::mesh::{Mesh, Node, SubMesh};
 use crate::py::configuration::PyConfiguration;
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
@@ -17,6 +18,21 @@ use pyo3::prelude::*;
 pub fn from_live_nodes(config: PyRef<PyConfiguration>) -> PyResult<PyMesh> {
     let mesh = crate::ops::mesher::from_live_nodes(config.handle.clone())?;
     Ok(PyMesh { inner: mesh })
+}
+
+/// Build a points (POI1) mesh with one point per node in `nodes`.
+///
+/// The Configuration is taken from the nodes themselves (every `Node`
+/// carries its own), so no Configuration argument is needed. Returns a
+/// Mesh with a single POI1 submesh; raises if `nodes` is empty.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn poi1_from_nodes(nodes: Vec<PyRef<PyNode>>) -> PyResult<PyMesh> {
+    let ns: Vec<Node> = nodes.iter().map(|n| n.as_node().clone()).collect();
+    let sm = SubMesh::poi1_from_nodes(&ns)?;
+    Ok(PyMesh {
+        inner: Mesh::from_submesh(sm),
+    })
 }
 
 /// Convert a mesh to POI1, submesh by submesh.

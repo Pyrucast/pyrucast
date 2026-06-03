@@ -16,6 +16,25 @@ def test_submesh_poi1_is_node_list():
     assert sm.element_type == "POI1"
 
 
+def test_poi1_from_nodes_builds_points_mesh():
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    # Node-based: the Configuration is taken from the nodes themselves.
+    m = pyrucast.poi1_from_nodes([a, b])
+    assert m.element_types() == ["POI1"]
+    assert m.cell_count() == 2
+
+
+def test_poi1_from_nodes_empty_raises():
+    try:
+        pyrucast.poi1_from_nodes([])
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for empty node list")
+
+
 def test_submesh_tri3_invalid_arity():
     c = pyrucast.Configuration(2)
     a = c.add_node([0.0, 0.0])

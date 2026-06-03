@@ -196,12 +196,36 @@ impl SubMesh {
         self.config.clone()
     }
 
-    /// Build a POI1 submesh with **one cell per node** in `nodes`, in the
+    /// Build a POI1 submesh with **one cell per [`Node`]**, in the given
+    /// order. The [`Configuration`] is taken from the nodes themselves
+    /// (every [`Node`] carries its own — project convention). Errors if
+    /// `nodes` is empty (no Configuration to attach to).
+    ///
+    /// Lower-level form when you already hold the ids and the config:
+    /// [`SubMesh::poi1_from_node_ids`].
+    pub fn poi1_from_nodes(nodes: &[Node]) -> Result<SubMesh> {
+        let config = nodes
+            .first()
+            .ok_or_else(|| {
+                PyrucastError::Message(
+                    "SubMesh::poi1_from_nodes: nodes must not be empty".into(),
+                )
+            })?
+            .configuration();
+        let ids: Vec<NodeId> = nodes.iter().map(|n| n.id()).collect();
+        SubMesh::poi1_from_node_ids(config, &ids)
+    }
+
+    /// Build a POI1 submesh with **one cell per node id** in `nodes`, in the
     /// given order. Each node is increfed; on failure the partial submesh's
     /// `Drop` rolls back the increfs already done. The caller is responsible
     /// for any de-duplication (see [`SubMesh::to_poi1`] for the deduped
-    /// variant).
-    pub fn poi1_from_nodes(config: Handle<Configuration>, nodes: &[NodeId]) -> Result<SubMesh> {
+    /// variant) and supplies the owning `config` explicitly. When you have
+    /// [`Node`] objects, prefer [`SubMesh::poi1_from_nodes`].
+    pub fn poi1_from_node_ids(
+        config: Handle<Configuration>,
+        nodes: &[NodeId],
+    ) -> Result<SubMesh> {
         let mut sm = SubMesh::new(config, ElementType::POI1);
         for &nid in nodes {
             sm.add_cell(&[nid])?;
@@ -224,7 +248,7 @@ impl SubMesh {
                 seen.push(nid);
             }
         }
-        SubMesh::poi1_from_nodes(self.config.clone(), &seen)
+        SubMesh::poi1_from_node_ids(self.config.clone(), &seen)
     }
 
     /// Visualize this submesh.
@@ -500,6 +524,27 @@ mod tests {
         assert_eq!(sm.cell_count(), 2);
         assert_eq!(sm.connectivity()[0], a.id());
         assert_eq!(sm.connectivity()[1], b.id());
+    }
+
+    #[test]
+    fn poi1_from_nodes_derives_config_and_builds() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+
+        // Node-based form: Configuration is taken from the nodes themselves.
+        let sm = SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+        assert_eq!(sm.element_type(), ElementType::POI1);
+        assert_eq!(sm.cell_count(), 2);
+        assert_eq!(sm.connectivity(), &[a.id(), b.id()]);
+        // Matches the id-based form on the same nodes.
+        let sm2 = SubMesh::poi1_from_node_ids(cfg.clone(), &[a.id(), b.id()]).unwrap();
+        assert_eq!(sm.connectivity(), sm2.connectivity());
+    }
+
+    #[test]
+    fn poi1_from_nodes_empty_is_error() {
+        assert!(SubMesh::poi1_from_nodes(&[]).is_err());
     }
 
     #[test]
