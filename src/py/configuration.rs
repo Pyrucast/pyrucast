@@ -46,6 +46,10 @@ impl PyConfiguration {
     }
 
     /// Whether node `id` is still live (not garbage-collected).
+    ///
+    /// Takes a **raw id**, not a `Node`, on purpose: a `Node` holds a
+    /// refcount, so it could never be observed dead. This is the API for
+    /// inspecting nodes you may no longer hold (post-GC checks).
     fn is_alive(&self, id: u32) -> PyResult<bool> {
         Ok(with(&self.handle, |c| c.is_alive(NodeId(id)))?)
     }
@@ -63,6 +67,9 @@ impl PyConfiguration {
     }
 
     /// Reference count of node `id` (how many holders keep it alive).
+    ///
+    /// Takes a **raw id** (see [`Self::is_alive`]): observing a refcount of
+    /// 0 is impossible while holding the `Node` that would carry it.
     fn refcount(&self, id: u32) -> PyResult<u32> {
         Ok(with(&self.handle, |c| c.refcount(NodeId(id)))?)
     }
@@ -72,17 +79,9 @@ impl PyConfiguration {
         Ok(with_mut(&self.handle, |c| c.gc())?)
     }
 
-    /// Coordinates of node `id` in the active coordinate set.
-    fn coord(&self, id: u32) -> PyResult<Vec<f64>> {
-        let v = with(&self.handle, |c| c.coord(NodeId(id)).map(|s| s.to_vec()))??;
-        Ok(v)
-    }
-
-    /// Overwrite the coordinates of node `id` in the active set.
-    fn set_coord(&self, id: u32, coords: Vec<f64>) -> PyResult<()> {
-        with_mut(&self.handle, |c| c.set_coord(NodeId(id), &coords))??;
-        Ok(())
-    }
+    // Per-node coordinate access lives on `Node` (`node.coord()` /
+    // `node.set_coord(...)`): a Node carries its Configuration, so the
+    // (config, id) pair is never needed here.
 
     /// Add a named alternative coordinate set (same nodes, new coordinates);
     /// returns its index.

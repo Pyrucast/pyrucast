@@ -366,7 +366,7 @@ print(sub.det_jacobian(0, 0))                 # |J| initial
 
 # Déplacement d'un nœud → toutes les évaluations à venir voient les
 # nouvelles coordonnées.
-c.set_coord(n1.id, [4.0, 0.0])
+n1.set_coord([4.0, 0.0])
 print(sub.det_jacobian(0, 0))                 # |J| recalculé
 ```
 

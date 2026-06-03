@@ -339,7 +339,7 @@ def test_jacobian_reflects_mesh_displacement():
     assert abs(sub.det_jacobian(0, 0) - 0.5) < 1e-12
 
     # Move b from x=1 to x=4: length now 4, |J| = 2.
-    c.set_coord(b.id, [4.0, 0.0])
+    b.set_coord([4.0, 0.0])
     assert abs(sub.det_jacobian(0, 0) - 2.0) < 1e-12
 
 

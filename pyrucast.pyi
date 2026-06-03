@@ -116,6 +116,10 @@ class Configuration:
     def is_alive(self, id: builtins.int) -> builtins.bool:
         r"""
         Whether node `id` is still live (not garbage-collected).
+        
+        Takes a **raw id**, not a `Node`, on purpose: a `Node` holds a
+        refcount, so it could never be observed dead. This is the API for
+        inspecting nodes you may no longer hold (post-GC checks).
         """
     def add_node(self, coords: typing.Sequence[builtins.float]) -> Node:
         r"""
@@ -128,18 +132,13 @@ class Configuration:
     def refcount(self, id: builtins.int) -> builtins.int:
         r"""
         Reference count of node `id` (how many holders keep it alive).
+        
+        Takes a **raw id** (see [`Self::is_alive`]): observing a refcount of
+        0 is impossible while holding the `Node` that would carry it.
         """
     def gc(self) -> builtins.int:
         r"""
         Run the garbage collector; return the number of collected nodes.
-        """
-    def coord(self, id: builtins.int) -> builtins.list[builtins.float]:
-        r"""
-        Coordinates of node `id` in the active coordinate set.
-        """
-    def set_coord(self, id: builtins.int, coords: typing.Sequence[builtins.float]) -> None:
-        r"""
-        Overwrite the coordinates of node `id` in the active set.
         """
     def add_coord_set(self, name: builtins.str) -> builtins.int:
         r"""

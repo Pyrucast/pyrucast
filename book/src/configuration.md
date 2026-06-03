@@ -68,7 +68,7 @@ Les deux niveaux sont indépendants :
 
 ## Plusieurs jeux de coordonnées
 
-Utile pour basculer entre référence / déformée / prédite. Le jeu actif est désigné par index ; `coord(id)` lit le jeu actif. `add_coord_set(name)` clone le jeu actif sous un nouveau nom.
+Utile pour basculer entre référence / déformée / prédite. Le jeu actif est désigné par index ; lire les coordonnées d'un nœud (`node.coord()` en Python, `Configuration::coord` côté Rust) renvoie celles du jeu actif. `add_coord_set(name)` clone le jeu actif sous un nouveau nom.
 
 Rust :
 
@@ -92,13 +92,13 @@ print(c.set_names())  # ['default', 'deformed']
 
 # Basculer sur le jeu déformé et modifier les coordonnées.
 c.switch_to(s2)
-c.set_coord(n.id, [0.1, 0.05])
+n.set_coord([0.1, 0.05])
 
 # Les coordonnées lues dépendent du jeu actif.
 c.switch_to(0)
-print(c.coord(n.id))  # [0.0, 0.0]  — jeu de référence
+print(n.coord())  # [0.0, 0.0]  — jeu de référence
 c.switch_to(s2)
-print(c.coord(n.id))  # [0.1, 0.05] — jeu déformé
+print(n.coord())  # [0.1, 0.05] — jeu déformé
 print(c.active_set)   # 1
 ```
 
