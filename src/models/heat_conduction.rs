@@ -5,12 +5,16 @@
 //! rows). The conductivity is read from a [`SubElementField`] component
 //! named [`MATERIAL_COMPONENT`].
 
-use crate::containers::mesh::NodeId;
 use crate::containers::element_field::SubElementField;
-use crate::error::Result;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::matrix::SubMatrix;
-use crate::store::{with, Handle};
+use crate::containers::matrix::{DofOrdering, SubMatrix};
+use crate::containers::mesh::{ElementType, NodeId};
+use crate::containers::mesh::SubMesh;
+use crate::dump::DumpOptions;
+use crate::error::Result;
+use crate::models::PhysicsKind;
+use crate::store::{insert, with, Handle};
+use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature).
 pub const PRIMAL_VAR: &str = "T";
@@ -19,6 +23,97 @@ pub const DUAL_VAR: &str = "q";
 /// Required component on the material `SubElementField` (isotropic
 /// conductivity).
 pub const MATERIAL_COMPONENT: &str = "k";
+/// Material contract returned by [`PhysicsKind::material_components`].
+const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
+
+/// Linear heat conduction.
+///
+/// - primal variable: `"T"` (temperature, columns).
+/// - dual variable:   `"q"` (heat flux row labels).
+/// - Material data (conductivity `"k"`, …) is **not** stored here; it is
+///   supplied at assembly time via [`crate::ops::assemble::stiffness`].
+#[derive(Clone, Serialize, Deserialize)]
+pub struct HeatConduction {
+    pub(crate) fespace: Handle<SubFiniteElementSpace>,
+    /// POI1 SubMesh covering the unique nodes of `fespace`'s submesh,
+    /// built once at construction. Reused as the row/col support of every
+    /// assembled stiffness block — no per-assembly rebuild.
+    pub(crate) support: Handle<SubMesh>,
+}
+
+impl HeatConduction {
+    /// Heat-conduction physics on an FE subspace. Builds the stable POI1
+    /// [`SubMesh`] covering the subspace's unique nodes (reused as the
+    /// row/col support of every assembled block).
+    pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        let submesh = with(&fespace, |s| s.submesh())?;
+        let (cfg, flat_conn) =
+            with(&submesh, |s| (s.configuration(), s.connectivity().to_vec()))?;
+        let mut unique_nodes: Vec<NodeId> = Vec::new();
+        for &nid in &flat_conn {
+            if !unique_nodes.contains(&nid) {
+                unique_nodes.push(nid);
+            }
+        }
+        let mut poi1 = SubMesh::new(cfg, ElementType::POI1);
+        for &nid in &unique_nodes {
+            poi1.add_cell(&[nid])?;
+        }
+        Ok(Self {
+            fespace,
+            support: insert(poi1),
+        })
+    }
+}
+
+impl PhysicsKind for HeatConduction {
+    fn primal_vars(&self) -> Vec<String> {
+        vec![PRIMAL_VAR.to_string()]
+    }
+
+    fn dual_vars(&self) -> Vec<String> {
+        vec![DUAL_VAR.to_string()]
+    }
+
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        Some(MATERIAL_COMPONENTS)
+    }
+
+    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
+        Some(self.fespace.clone())
+    }
+
+    fn build_stiffness_blocks(
+        &self,
+        material: Option<&Handle<SubElementField>>,
+    ) -> Result<Vec<SubMatrix>> {
+        let mat = material.expect("HeatConduction requires a material field");
+        let mut block = SubMatrix::new(
+            self.support.clone(),
+            self.support.clone(),
+            vec![DUAL_VAR.to_string()],
+            vec![PRIMAL_VAR.to_string()],
+            DofOrdering::NodesThenVars,
+            true,
+        )?;
+        assemble_stiffness(&self.fespace, mat, &mut block)?;
+        Ok(vec![block])
+    }
+
+    fn label(&self) -> &'static str {
+        "HeatConduction"
+    }
+
+    fn render(&self, _opts: &DumpOptions) -> String {
+        let primal = self.primal_vars().join(", ");
+        let dual = self.dual_vars().join(", ");
+        let n = with(&self.support, |s| s.cell_count()).unwrap_or(0);
+        format!(
+            "SubModel<HeatConduction>\n  primal var(s): {primal}\n  \
+             dual var(s):   {dual}\n  support: {n} node(s)"
+        )
+    }
+}
 
 /// Assemble the heat-conduction stiffness contribution.
 ///

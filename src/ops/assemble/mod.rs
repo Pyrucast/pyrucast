@@ -26,7 +26,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::Matrix;
-use crate::containers::model::{Model, Physics};
+use crate::containers::model::Model;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, with, Handle};
 
@@ -44,16 +44,17 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     let mut k = Matrix::empty();
     for sub_h in model {
         let blocks = with(sub_h, |sub| -> Result<_> {
-            let material = match sub.physics() {
-                Physics::HeatConduction { fespace, .. } => {
-                    let m = find_material_for_fespace(materials, fespace)?;
-                    let required = sub.material_components().expect(
-                        "HeatConduction always declares its material components",
-                    );
-                    validate_material(&m, required)?;
+            // Generic over the physics: a sub-model needs material data iff
+            // it declares a material FE subspace. No per-variant match.
+            let material = match sub.material_fespace() {
+                Some(fespace) => {
+                    let m = find_material_for_fespace(materials, &fespace)?;
+                    if let Some(required) = sub.material_components() {
+                        validate_material(&m, required)?;
+                    }
                     Some(m)
                 }
-                Physics::Dirichlet { .. } => None,
+                None => None,
             };
             sub.build_stiffness_blocks(material.as_ref())
         })??;

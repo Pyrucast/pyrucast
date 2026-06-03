@@ -1,144 +1,99 @@
 # Ajouter une physique
 
 Ce chapitre liste **tous les points de code à toucher** pour ajouter une
-nouvelle physique, puis évalue la **viabilité de l'architecture** quand le
-nombre de physiques se compte en dizaines.
+nouvelle physique. L'architecture est conçue pour que ce coût soit **O(1)
+fichier**, indépendant du nombre de physiques déjà présentes — voir
+*[Pourquoi ça passe l'échelle](#pourquoi-ça-passe-léchelle)* en fin de
+chapitre.
 
-Le point d'entrée central est l'enum [`Physics`] dans
-`src/containers/model.rs` : tout le reste en découle. Le résumé canonique
-est déjà dans `src/models/mod.rs` :
+## Le principe en une phrase
 
-> *Étendre `Physics` avec une variante, ajouter `models/<nom>.rs` avec ses
-> fonctions `build` + assemblage, et câbler le dispatch dans `SubModel`.*
+L'enum [`Physics`](model.md) ne sert qu'au **stockage** et à la
+**sérialisation** ; **tout le comportement** vit dans une struct par
+physique (sous `src/models/`) qui implémente le trait `PhysicsKind`. Un
+unique point de dispatch, `Physics::as_kind()`, relie les deux. Le code
+générique (`SubModel`, l'assembleur, `Dump`) ne fait **jamais** de `match`
+par variante.
 
-## 1. Le code de la physique
+```text
+SubModel ── physics: Physics
+                       │
+        Physics  (enum : stockage + sérialisation bincode)
+        ├── HeatConduction(HeatConduction)
+        ├── Dirichlet(Dirichlet)
+        └── as_kind(&self) -> &dyn PhysicsKind   ← l'unique match
 
-**Nouveau fichier `src/models/<ma_physique>.rs`** — à calquer sur
-`models/heat_conduction.rs` (cas simple, 1 bloc) ou `models/dirichlet.rs`
-(Lagrange, 2 blocs + nœuds créés à la volée). Il contient :
+        PhysicsKind  (trait : tout le comportement)
+        ├── primal_vars / dual_vars
+        ├── material_components / material_fespace   (défaut : None)
+        ├── multiplier_support                       (défaut : None)
+        ├── build_stiffness_blocks
+        ├── build_mass_blocks                        (défaut : vide)
+        └── label / display / render
+```
 
-- les constantes de noms (`PRIMAL_VAR`, `DUAL_VAR`, `MATERIAL_COMPONENT`…) ;
-- une éventuelle fonction `build(...)` si la construction fait plus que
-  ranger ses arguments ;
-- la/les fonction(s) d'assemblage (`assemble_stiffness` / `assemble_blocks`).
+## Les étapes
 
-**`src/models/mod.rs`** — déclarer `pub mod <ma_physique>;`.
+Ajouter une physique se réduit à **quatre** gestes :
 
-## 2. Le dispatch central — `src/containers/model.rs`
+1. **`src/models/<ma_physique>.rs`** (nouveau) — une struct portant ses
+   supports + un `impl PhysicsKind` + un constructeur `new(...)` faisant le
+   travail de construction (calque sur `heat_conduction.rs`, cas simple à
+   1 bloc, ou `dirichlet.rs`, cas Lagrange à 2 blocs + nœuds créés à la
+   volée). La struct dérive `Clone, Serialize, Deserialize`.
+2. **`src/models/mod.rs`** — `pub mod <ma_physique>;`.
+3. **`src/containers/model.rs`** — **une** variante dans `enum Physics` et
+   **une** ligne dans `Physics::as_kind()`. Plus le constructeur public
+   `Model::<ma_physique>(...)` (l'API parent).
+4. **`src/py/model.rs`** — un `#[classmethod]` `PyModel::<ma_physique>(...)`.
+   Étant dans `#[pymethods]`, aucun enregistrement n'est nécessaire.
 
-C'est ici que se trouve l'essentiel du câblage. Chaque `match` sur `Physics`
-doit recevoir un bras :
+Tout le reste est générique et **ne change pas**.
 
-| Endroit | Rôle |
-|---|---|
-| variante de `enum Physics` | déclarer la variante + ses supports |
-| `Physics::primal_vars` | noms des colonnes |
-| `Physics::dual_vars` | noms des lignes |
-| `Physics::material_components` | composants matériau requis (ou `None`) |
-| `SubModel::<ma_physique>(...)` | constructeur sub-modèle |
-| `SubModel::material_fespace` | FE subspace du matériau (ou `None`) |
-| **`SubModel::build_stiffness_blocks`** | **le vrai dispatch d'assemblage** |
-| `impl Debug for SubModel` | étiquette de debug |
-| `impl Display for SubModel` | rendu une ligne |
-| `impl Dump for SubModel` | rendu détaillé |
-| `Model::<ma_physique>(...)` | constructeur parent (l'API publique) |
+## Le trait `PhysicsKind`
 
-Si la physique est de type Lagrange (crée des nœuds multiplicateurs comme
-Dirichlet), ajouter aussi un bras à `multiplier_nodes` et `multiplier_mesh`.
-
-## 3. Assemblage — `src/ops/assemble/mod.rs`
-
-- `stiffness()` : bras du `match sub.physics()` qui sélectionne/valide le
-  matériau.
-- `mass()` : aujourd'hui un *stub* renvoyant une matrice vide. **Seulement
-  si la physique a un terme de masse**, prévoir un `build_mass_blocks`
-  parallèle à `build_stiffness_blocks` et le brancher ici.
-
-## 4. Couche Python (PyO3)
-
-- **`src/py/model.rs`** : ajouter le `#[classmethod]`
-  `PyModel::<ma_physique>(...)` (modèles : `heat_conduction` / `dirichlet`).
-  Étant dans `#[pymethods]`, **aucun enregistrement** n'est nécessaire.
-  Ajouter des accesseurs sur `PySubModel` seulement si la physique en
-  expose (ex. `multiplier_mesh`).
-
-## 5. Ce qui est générique (rien à toucher en principe)
-
-- `src/ops/build/material_field.rs` et son wrapper `src/py/ops/build.rs` :
-  pilotés par `material_fespace()` / `material_components()`, donc
-  automatiques.
-- `src/py/ops/assemble.rs` : `stiffness`/`mass` délèguent à `model.inner`,
-  génériques.
-
-## 6. Pour finir
-
-Régénérer le stub `pyrucast.pyi` via le binaire `src/bin/stub_gen.rs`, puis
-**builder + tester avant de commiter** (`PYO3_PYTHON=/usr/bin/python3.13`).
-
----
-
-## Viabilité à l'échelle (dizaines de physiques)
-
-**Verdict : le *modèle de données* (enum) est le bon choix, mais les ~12
-`match` parallèles ne passeront pas l'échelle en l'état. Un refactor ciblé,
-sans changer le format de persistance, supprime le problème.**
-
-### Pourquoi garder l'enum (et pas `Box<dyn Trait>`)
-
-La persistance utilise **`bincode`** sur des `Serialize/Deserialize`
-*dérivés* (`src/persist.rs`). `bincode` est un format **non
-auto-descriptif**. Conséquence dure :
-
-- un `enum Physics` se sérialise nativement (indice de variante + payload) :
-  zéro code manuel, robuste ;
-- un `Box<dyn PhysicsKind>` imposerait `typetag` (ou un ser/de manuel).
-  **`typetag` ne supporte pas les formats non auto-descriptifs comme
-  `bincode`.** On perdrait donc la persistance, ou il faudrait réécrire
-  `ser/de` à la main.
-
-L'enum donne aussi l'**exhaustivité** : le compilateur refuse d'oublier un
-cas. Avec des dizaines de physiques, c'est une assurance correctness — mais
-c'est aussi la source de la douleur ci-dessous.
-
-### Le vrai problème : la chirurgie en fusil à pompe
-
-Ajouter la physique n°30 force aujourd'hui à éditer ~12 endroits dispersés
-(§2 + §3 + §4). C'est le *smell* « shotgun surgery » : le code d'**une**
-physique est éclaté dans dix `match` au lieu d'être co-localisé.
-
-### Le refactor recommandé : enum pour le stockage, trait pour le comportement
-
-Garder l'enum **uniquement** pour les données + la sérialisation, et faire
-transiter **tout le comportement** par un trait, via un seul point de
-dispatch :
+Défini dans `src/models/mod.rs`. La plupart des méthodes ont une valeur par
+défaut : une physique volumique typique n'implémente que `primal_vars`,
+`dual_vars`, `material_*`, `build_stiffness_blocks`, `label` et `render`.
 
 ```rust,ignore
-// Chaque physique : sa propre struct, porte ses données, implémente le trait.
-trait PhysicsKind {
+pub trait PhysicsKind {
     fn primal_vars(&self) -> Vec<String>;
     fn dual_vars(&self) -> Vec<String>;
-    fn material_components(&self) -> Option<&'static [&'static str]>;
-    fn build_stiffness_blocks(&self, m: Option<&Handle<SubElementField>>)
-        -> Result<Vec<SubMatrix>>;
-    // valeurs par défaut : la plupart des physiques n'ont rien à redéfinir
-    fn build_mass_blocks(&self, _m: Option<&Handle<SubElementField>>)
-        -> Result<Vec<SubMatrix>> { Ok(vec![]) }
+    fn material_components(&self) -> Option<&'static [&'static str]> { None }
     fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> { None }
     fn multiplier_support(&self) -> Option<&Handle<SubMesh>> { None }
+    fn build_stiffness_blocks(&self, material: Option<&Handle<SubElementField>>)
+        -> Result<Vec<SubMatrix>>;
+    fn build_mass_blocks(&self, _material: Option<&Handle<SubElementField>>)
+        -> Result<Vec<SubMatrix>> { Ok(Vec::new()) }
     fn label(&self) -> &'static str;
+    fn display(&self) -> String { format!("SubModel<{}>", self.label()) }
     fn render(&self, opts: &DumpOptions) -> String;
 }
+```
 
-// Enum conservé SEULEMENT pour la sérialisation + un dispatch unique.
-#[derive(Serialize, Deserialize)]
-enum Physics {
-    HeatConduction(HeatConduction),
-    Dirichlet(Dirichlet),
+Conséquences pratiques :
+
+- **Matériau** : déclarer `material_fespace()` + `material_components()`
+  suffit ; l'assembleur (`src/ops/assemble/mod.rs`) sélectionne et valide le
+  `SubElementField` automatiquement, sans connaître la physique.
+- **Multiplicateurs de Lagrange** : redéfinir `multiplier_support()` suffit ;
+  `SubModel::multiplier_nodes()` et `multiplier_mesh()` en découlent.
+- **Terme de masse** : redéfinir `build_mass_blocks()` (sinon : pas de masse).
+
+## Le dispatch — `src/containers/model.rs`
+
+```rust,ignore
+#[derive(Clone, Serialize, Deserialize)]
+pub enum Physics {
+    HeatConduction(heat_conduction::HeatConduction),
+    Dirichlet(dirichlet::Dirichlet),
     // … une ligne par physique
 }
 
 impl Physics {
-    fn as_kind(&self) -> &dyn PhysicsKind {
+    pub fn as_kind(&self) -> &dyn PhysicsKind {
         match self {
             Physics::HeatConduction(p) => p,
             Physics::Dirichlet(p) => p,
@@ -148,29 +103,62 @@ impl Physics {
 }
 ```
 
-Désormais, **toutes** les méthodes génériques (`primal_vars`, `dual_vars`,
-`material_components`, `Debug`, `Display`, `Dump`, le dispatch de
-`build_stiffness_blocks`, l'assemblage dans `ops/assemble`) appellent
-`self.physics.as_kind()` et **ne sont plus jamais touchées** quand on ajoute
-une physique.
+`SubModel`, `Debug`, `Display`, `Dump` et l'assembleur appellent tous
+`self.physics.as_kind().<méthode>()` — ils sont écrits une fois pour toutes.
 
-Ajouter une physique se réduit alors à :
+## Ce qui est générique (rien à toucher)
 
-1. un nouveau fichier `models/<nom>.rs` (struct + `impl PhysicsKind`) ;
-2. **une** variante dans `enum Physics` ;
-3. **une** ligne dans `as_kind()` ;
-4. le constructeur parent `Model::<nom>` + son `#[classmethod]` Python.
+- `src/ops/assemble/mod.rs` : `stiffness()` pilote le matériau via
+  `material_fespace()` / `material_components()` ; `mass()` via
+  `build_mass_blocks()`. Aucun `match` par variante.
+- `src/ops/build/material_field.rs` et son wrapper `src/py/ops/build.rs`.
+- `src/py/ops/assemble.rs` : `stiffness` / `mass` délèguent à `model.inner`.
 
-Les points 2 et 3 peuvent même être générés par une macro
-(`physics_enum! { HeatConduction, Dirichlet, … }`) pour ne laisser qu'**une
-seule** déclaration. On passe de ~12 points d'édition à 1–2, **sans rien
-changer au format `bincode`** ni perdre l'exhaustivité.
+## Pour finir
+
+Régénérer le stub `pyrucast.pyi` via `src/bin/stub_gen.rs`, puis **builder
++ tester avant de commiter** (`PYO3_PYTHON=/usr/bin/python3.13`, ou
+`scripts/check.sh` pour la passe complète).
+
+---
+
+## Pourquoi ça passe l'échelle
+
+Avec des dizaines de physiques, deux propriétés comptent : le **coût
+d'ajout** et la **persistance**.
+
+### Coût d'ajout : O(1) fichier
+
+Le comportement d'une physique est **co-localisé** dans son fichier (struct
++ `impl PhysicsKind`). Ajouter la physique n°30 ne touche que 4 endroits
+(§ Les étapes), dont 2 sont des lignes uniques dans `model.rs`. Aucune des
+méthodes génériques n'est modifiée. C'est l'inverse du *« shotgun
+surgery »* qu'imposerait un enum où chaque méthode ferait son propre
+`match` : là, ajouter une physique forcerait à éditer une dizaine de sites.
+
+> Les deux lignes (variante + bras de `as_kind`) pourraient même être
+> générées par une macro `physics_enum! { HeatConduction, Dirichlet, … }`
+> pour ne laisser qu'une seule déclaration.
+
+### Pourquoi garder l'enum (et pas `Box<dyn PhysicsKind>`)
+
+La persistance utilise **`bincode`** sur des `Serialize/Deserialize`
+*dérivés* (`src/persist.rs`), un format **non auto-descriptif**. Or :
+
+- un `enum Physics` se sérialise nativement (indice de variante + payload),
+  zéro code manuel ;
+- un `Box<dyn PhysicsKind>` imposerait `typetag`, qui **ne supporte pas**
+  les formats non auto-descriptifs comme `bincode`. On perdrait la
+  persistance.
+
+L'enum donne aussi l'**exhaustivité** : le compilateur refuse d'oublier un
+cas dans `as_kind()`. On obtient donc le meilleur des deux mondes —
+sérialisation triviale et exhaustivité de l'enum, comportement co-localisé
+et coût d'ajout constant du trait.
 
 ### Bilan
 
-- Format de persistance : **inchangé** (toujours enum + `bincode`).
-- Coût d'ajout d'une physique : **O(1) fichier**, ~2 lignes de câblage.
-- Comportement co-localisé : tout le code d'une physique vit dans son
-  fichier.
-- À faire tant que le nombre de variantes est petit : plus le refactor
-  tarde, plus il y a de `match` à migrer.
+- Format de persistance : enum + `bincode`, **stable**.
+- Coût d'ajout : **O(1) fichier**, ~2 lignes de câblage.
+- Comportement : **co-localisé** par physique.
+- Le seul `match` par variante du module modèle est `as_kind()`.

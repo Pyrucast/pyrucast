@@ -23,11 +23,22 @@ ops::assemble (opérateurs, pas des méthodes de Model)
 SubModel
 └── physics: Physics                  # un SubModel = une physique
 
-Physics  (énum à variantes spécialisées)
-├── HeatConduction { fespace, material }
-├── Dirichlet      { config, primal_var, primal_dual, constrained_nodes, multiplier_nodes }
-└── …  ajouter une physique = ajouter une variante + son match-arm
+Physics  (énum de stockage + dispatch — AUCUNE logique)
+├── HeatConduction(HeatConduction)    # chaque variante enveloppe une struct…
+├── Dirichlet(Dirichlet)             # …qui porte ses données + impl PhysicsKind
+└── as_kind(&self) -> &dyn PhysicsKind   # l'unique match du module modèle
+
+PhysicsKind  (trait — TOUT le comportement, co-localisé par physique)
+├── primal_vars / dual_vars / material_components / material_fespace
+├── build_stiffness_blocks / build_mass_blocks
+└── label / display / render
 ```
+
+L'enum `Physics` ne sert qu'au **stockage** et à la **sérialisation**
+(`bincode`) ; il délègue chaque appel à l'`impl PhysicsKind` de la variante
+via `as_kind()`. Tout le code générique (`SubModel`, l'assembleur, `Dump`)
+passe par ce seul point — ajouter une physique ne touche donc aucun de ces
+sites. Voir le chapitre [Ajouter une physique](ajouter-une-physique.md).
 
 Le `Model` est **purement orchestrateur** : il énumère les DOFs, dimensionne la `Matrix`, boucle sur les sub-models et accumule. Aucune logique physique ne vit chez lui.
 
@@ -63,7 +74,7 @@ Cette séparation a deux mérites :
 
 ## Variantes de `Physics` implémentées en v0
 
-### `HeatConduction { fespace, material }`
+### `HeatConduction` (`models/heat_conduction.rs`)
 
 Conduction thermique linéaire. La forme variationnelle Galerkine donne, pour chaque cellule :
 
@@ -78,7 +89,7 @@ K_{ij}^{(\text{loc})} = \int_K k(x)\, \nabla N_i \cdot \nabla N_j\, dx
 
 Le bloc local de la cellule est écrit dans la matrice globale aux positions `row = (NodeID_i, "q")`, `col = (NodeID_j, "T")`. Pour un SEG2 de longueur \\(L\\) avec \\(k\\) uniforme, on retrouve la matrice analytique \\((k/L)\,[[1, -1], [-1, 1]]\\).
 
-### `Dirichlet { config, primal_var, primal_dual, constrained_nodes, multiplier_nodes }`
+### `Dirichlet` (`models/dirichlet.rs`)
 
 Condition de Dirichlet `u(n) = u_d` enforcée par multiplicateurs de Lagrange. À la construction :
 
@@ -214,6 +225,6 @@ assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux à gauch
 ## Limitations actuelles
 
 - **Mass non assemblée** : `assemble::mass(model)` retourne une matrice vide en v0. L'intégrande `∫ ρc_p · N_i N_j dx` (et son équivalent pour les autres physiques) est additif et sera ajouté quand le besoin transient se présentera.
-- **Une seule physique « réelle »** : `HeatConduction`. `LinearElasticity`, `Timoshenko`, `Periodic`, etc. viendront comme nouvelles variantes de `Physics`, chacune avec son match-arm dans l'assemblage. Le pattern est borné et lisible.
+- **Une seule physique « réelle »** : `HeatConduction`. `LinearElasticity`, `Timoshenko`, `Periodic`, etc. viendront comme nouvelles structs implémentant `PhysicsKind` (une variante d'enum + un bras de `as_kind`, rien d'autre — cf. [Ajouter une physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier, indépendant du nombre de physiques existantes.
 - **Pas de check de cohérence pré-assemblage** : la consistance (matériau définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre sub-models, etc.) est vérifiée au moment de `assemble::stiffness` / `assemble::mass`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose problème, un check eager est facile à ajouter.
 - **Solveur dense seulement** : le `solve` fourni est un harnais de test (LU dense via `nalgebra`). Pour les vrais problèmes Phase 3 introduira un trait `LinearSolver` enfichable (itératifs, direct creux, factorisation Cholesky pour les cas symétriques détectés via le drapeau de la `Matrix`).

@@ -107,11 +107,10 @@ use crate::containers::mesh::{Node, NodeId};
 use crate::containers::element_field::SubElementField;
 use crate::error::Result;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::{Mesh, SubMesh};
+use crate::containers::matrix::SubMatrix;
+use crate::containers::mesh::Mesh;
 use crate::aggregate::Aggregate;
-use crate::models::{dirichlet, heat_conduction};
+use crate::models::{dirichlet, heat_conduction, PhysicsKind};
 use crate::store::{insert, with, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -121,90 +120,32 @@ use std::fmt;
 /// One physical law instance, bound to its supports (FE spaces, materials,
 /// node sets).
 ///
-/// New physics are added by extending this enum. Each variant must be
-/// supported by the assembly dispatch in [`crate::ops::assemble::stiffness`] /
-/// [`crate::ops::assemble::mass`].
+/// This enum is a **pure storage + dispatch** shell: it derives
+/// `Serialize`/`Deserialize` (so models persist through the `bincode`
+/// backbone), and forwards every behavioural call to the variant's
+/// [`PhysicsKind`] implementation through [`Physics::as_kind`]. All physics
+/// logic lives in the per-variant structs under [`crate::models`].
+///
+/// Adding a physics means adding **one variant here** and **one arm to
+/// [`Physics::as_kind`]** — no other site in this file changes.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Physics {
-    /// Linear heat conduction.
-    ///
-    /// - primal variable: `"T"` (temperature, columns).
-    /// - dual variable:   `"q"` (heat flux row labels).
-    /// - Material data (conductivity `"k"`, …) is **not** stored here;
-    ///   it is supplied at assembly time via [`crate::ops::assemble::stiffness`].
-    HeatConduction {
-        fespace: Handle<SubFiniteElementSpace>,
-        /// POI1 SubMesh covering the unique nodes of `fespace`'s submesh,
-        /// built once at construction. Reused as the row/col support of
-        /// every assembled stiffness block — no per-assembly rebuild.
-        support: Handle<SubMesh>,
-    },
-
-    /// Dirichlet constraint imposed via Lagrange multipliers.
-    ///
-    /// Conceptually: for each constrained primary node `n`, the system
-    /// is augmented with one multiplier `λ_n` (a new node introduced
-    /// on the fly at the same coordinates as `n`) and a pair of unit
-    /// entries enforcing `u_n = u_d_n`. The imposed value `u_d_n` is
-    /// **not** part of this enum: the user supplies it through the
-    /// load `NodeField` at the multiplier node's `<var>` component.
-    ///
-    /// - primal variable: `"lambda_<primal_var>"` (multiplier DOFs,
-    ///   added to the global column set on `multiplier_nodes`).
-    /// - dual variable:   `<primal_var>` itself (constraint equation
-    ///   row labels, added to the global row set on
-    ///   `multiplier_nodes`).
-    /// - `primal_dual` is the dual variable name of the **primary
-    ///   physics** that this constraint targets (`"q"` for heat
-    ///   conduction, `"f_x"` for elasticity in `x`, …): it tells the
-    ///   constraint where in the row index to write the `Cᵀ` block.
-    Dirichlet {
-        primal_var: String,
-        primal_dual: String,
-        /// POI1 SubMesh holding the per-node refcounts on the constrained
-        /// nodes. Connectivity is the constrained-node sequence (immutable
-        /// once inserted into the store).
-        constrained_support: Handle<SubMesh>,
-        /// POI1 SubMesh owning the multiplier nodes (one cell per
-        /// multiplier, in the same order as the constrained nodes). The
-        /// SubMesh holds the only refcount on each multiplier; its
-        /// `Drop` collects them.
-        multiplier_support: Handle<SubMesh>,
-    },
+    /// Linear heat conduction — see [`heat_conduction::HeatConduction`].
+    HeatConduction(heat_conduction::HeatConduction),
+    /// Dirichlet constraint via Lagrange multipliers — see
+    /// [`dirichlet::Dirichlet`].
+    Dirichlet(dirichlet::Dirichlet),
 }
 
 impl Physics {
-    /// Primal variable names introduced by this physics (column labels of
-    /// the Matrix block contributed by this physics).
-    pub fn primal_vars(&self) -> Vec<String> {
+    /// Borrow the variant as its [`PhysicsKind`] behaviour. This is the
+    /// **only** per-variant `match` in the model layer; every generic
+    /// method (variable names, material contract, assembly, rendering)
+    /// dispatches through it.
+    pub fn as_kind(&self) -> &dyn PhysicsKind {
         match self {
-            Physics::HeatConduction { .. } => vec![heat_conduction::PRIMAL_VAR.to_string()],
-            Physics::Dirichlet { primal_var, .. } => vec![dirichlet::multiplier_name(primal_var)],
-        }
-    }
-
-    /// Dual variable names introduced by this physics (row labels of the
-    /// Matrix block contributed by this physics).
-    pub fn dual_vars(&self) -> Vec<String> {
-        match self {
-            Physics::HeatConduction { .. } => vec![heat_conduction::DUAL_VAR.to_string()],
-            Physics::Dirichlet { primal_var, .. } => vec![primal_var.clone()],
-        }
-    }
-
-    /// Names of the material components this physics expects in its
-    /// material [`SubElementField`], or `None` if it doesn't need any
-    /// material data (e.g. `Dirichlet`).
-    ///
-    /// The list is the **contract** between the physics and any material
-    /// provider: [`mod@crate::ops::build::material_field`] uses it to know what
-    /// to create, and [`crate::ops::assemble::stiffness`] uses it to
-    /// validate the supplied material early, before the per-cell loop.
-    pub fn material_components(&self) -> Option<&'static [&'static str]> {
-        const HC_COMPS: &[&str] = &[heat_conduction::MATERIAL_COMPONENT];
-        match self {
-            Physics::HeatConduction { .. } => Some(HC_COMPS),
-            Physics::Dirichlet { .. } => None,
+            Physics::HeatConduction(p) => p,
+            Physics::Dirichlet(p) => p,
         }
     }
 }
@@ -227,29 +168,11 @@ impl SubModel {
     ///
     /// Material data (conductivity `"k"`, …) is supplied separately at
     /// assembly time via [`crate::ops::assemble::stiffness`], keeping
-    /// the model immutable and material-independent.
-    ///
-    /// A stable POI1 [`SubMesh`] covering the unique nodes of the FE
-    /// subspace is built once and stored — reused as the row/col support
-    /// of every assembled stiffness block.
+    /// the model immutable and material-independent. See
+    /// [`heat_conduction::HeatConduction::new`] for the support it builds.
     pub fn heat_conduction(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        let submesh = with(&fespace, |s| s.submesh())?;
-        let (cfg, flat_conn) = with(&submesh, |s| {
-            (s.configuration(), s.connectivity().to_vec())
-        })?;
-        let mut unique_nodes: Vec<NodeId> = Vec::new();
-        for &nid in &flat_conn {
-            if !unique_nodes.contains(&nid) {
-                unique_nodes.push(nid);
-            }
-        }
-        let mut poi1 = SubMesh::new(cfg, ElementType::POI1);
-        for &nid in &unique_nodes {
-            poi1.add_cell(&[nid])?;
-        }
-        let support = insert(poi1);
         Ok(Self {
-            physics: Physics::HeatConduction { fespace, support },
+            physics: Physics::HeatConduction(heat_conduction::HeatConduction::new(fespace)?),
         })
     }
 
@@ -259,25 +182,19 @@ impl SubModel {
     ///
     /// `primal_dual` is the dual variable name of the primary physics
     /// whose primal is being constrained (e.g. `"q"` for heat
-    /// conduction, `"f_x"` for elasticity in `x`).
-    ///
-    /// One new node per constraint is added to the `Configuration` at
-    /// the same coordinates as the constrained node — these are the
-    /// multiplier nodes that carry the `lambda_<primal_var>` and
-    /// `<primal_var>` DOFs of the constraint sub-model.
+    /// conduction, `"f_x"` for elasticity in `x`). See
+    /// [`dirichlet::Dirichlet::new`].
     pub fn dirichlet(
         primal_var: String,
         primal_dual: String,
         constrained_nodes: &[Node],
     ) -> Result<Self> {
-        let built = dirichlet::build(constrained_nodes)?;
         Ok(Self {
-            physics: Physics::Dirichlet {
+            physics: Physics::Dirichlet(dirichlet::Dirichlet::new(
                 primal_var,
                 primal_dual,
-                constrained_support: built.constrained_support,
-                multiplier_support: built.multiplier_support,
-            },
+                constrained_nodes,
+            )?),
         })
     }
 
@@ -294,11 +211,9 @@ impl SubModel {
     /// the multiplier node's `<primal_var>` component of the load
     /// `NodeField`.
     pub fn multiplier_nodes(&self) -> Result<Vec<NodeId>> {
-        match &self.physics {
-            Physics::Dirichlet { multiplier_support, .. } => {
-                with(multiplier_support, |s| s.connectivity().to_vec())
-            }
-            _ => Ok(Vec::new()),
+        match self.physics.as_kind().multiplier_support() {
+            Some(support) => with(support, |s| s.connectivity().to_vec()),
+            None => Ok(Vec::new()),
         }
     }
 
@@ -310,8 +225,8 @@ impl SubModel {
     /// submesh to impose the constrained values.
     pub fn multiplier_mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
-        if let Physics::Dirichlet { multiplier_support, .. } = &self.physics {
-            mesh.add_sub(multiplier_support.clone())?;
+        if let Some(support) = self.physics.as_kind().multiplier_support() {
+            mesh.add_sub(support.clone())?;
         }
         Ok(mesh)
     }
@@ -319,149 +234,56 @@ impl SubModel {
     /// FE subspace on which this sub-model expects its material data, or
     /// `None` if this physics doesn't need material data (e.g. `Dirichlet`).
     pub fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        match &self.physics {
-            Physics::HeatConduction { fespace, .. } => Some(fespace.clone()),
-            Physics::Dirichlet { .. } => None,
-        }
+        self.physics.as_kind().material_fespace()
     }
 
     /// Material component names this sub-model expects, or `None` if it
     /// doesn't need material data. Thin pass-through of
-    /// [`Physics::material_components`].
+    /// [`PhysicsKind::material_components`].
     pub fn material_components(&self) -> Option<&'static [&'static str]> {
-        self.physics.material_components()
+        self.physics.as_kind().material_components()
     }
 
     /// Primal variable names introduced by this sub-model.
     pub fn primal_vars(&self) -> Vec<String> {
-        self.physics.primal_vars()
+        self.physics.as_kind().primal_vars()
     }
 
     /// Dual variable names introduced by this sub-model.
     pub fn dual_vars(&self) -> Vec<String> {
-        self.physics.dual_vars()
+        self.physics.as_kind().dual_vars()
     }
 
-    /// Build and fill the stiffness [`SubMatrix`] block(s) for this sub-model.
-    ///
-    /// - `HeatConduction` → 1 block (square, symmetric). `material` must be
-    ///   `Some(_)` — the caller ([`crate::ops::assemble::stiffness`]) always
-    ///   provides it.
-    /// - `Dirichlet`      → 2 blocks: the C block and the Cᵀ block.
-    ///   `material` is ignored.
+    /// Build and fill the stiffness [`SubMatrix`] block(s) for this
+    /// sub-model. Pure dispatch to the physics's
+    /// [`PhysicsKind::build_stiffness_blocks`]; the caller
+    /// ([`crate::ops::assemble::stiffness`]) supplies `material` iff the
+    /// physics declares a [`material_fespace`](Self::material_fespace).
     pub(crate) fn build_stiffness_blocks(
         &self,
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
-        match &self.physics {
-            Physics::HeatConduction { fespace, support } => {
-                let mat = material.expect("HeatConduction requires a material field");
-                let mut block = SubMatrix::new(
-                    support.clone(), support.clone(),
-                    vec![heat_conduction::DUAL_VAR.to_string()],
-                    vec![heat_conduction::PRIMAL_VAR.to_string()],
-                    DofOrdering::NodesThenVars, true,
-                )?;
-                heat_conduction::assemble_stiffness(fespace, mat, &mut block)?;
-                Ok(vec![block])
-            }
-            Physics::Dirichlet {
-                primal_var, primal_dual,
-                constrained_support, multiplier_support,
-            } => {
-                let _ = material;
-                let constrained_nodes: Vec<NodeId> =
-                    with(constrained_support, |s| s.connectivity().to_vec())?;
-                let multiplier_nodes: Vec<NodeId> =
-                    with(multiplier_support, |s| s.connectivity().to_vec())?;
-                let lambda_name = dirichlet::multiplier_name(primal_var);
-                // C block: rows = multiplier × primal_var, cols = constrained × primal_var
-                let mut c_block = SubMatrix::new(
-                    multiplier_support.clone(), constrained_support.clone(),
-                    vec![primal_var.clone()],
-                    vec![primal_var.clone()],
-                    DofOrdering::NodesThenVars, true,
-                )?;
-                // Cᵀ block: rows = constrained × primal_dual, cols = multiplier × lambda
-                let mut ct_block = SubMatrix::new(
-                    constrained_support.clone(), multiplier_support.clone(),
-                    vec![primal_dual.clone()],
-                    vec![lambda_name],
-                    DofOrdering::NodesThenVars, true,
-                )?;
-                dirichlet::assemble_blocks(
-                    &constrained_nodes, &multiplier_nodes,
-                    primal_var, primal_dual,
-                    &mut c_block, &mut ct_block,
-                )?;
-                Ok(vec![c_block, ct_block])
-            }
-        }
+        self.physics.as_kind().build_stiffness_blocks(material)
     }
 }
 
 impl fmt::Debug for SubModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SubModel")
-            .field(
-                "physics",
-                &match &self.physics {
-                    Physics::HeatConduction { .. } => "HeatConduction",
-                    Physics::Dirichlet { .. }    => "Dirichlet",
-                },
-            )
+            .field("physics", &self.physics.as_kind().label())
             .finish()
     }
 }
 
 impl fmt::Display for SubModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.physics {
-            Physics::HeatConduction { .. } => write!(f, "SubModel<HeatConduction>"),
-            Physics::Dirichlet {
-                primal_var,
-                constrained_support,
-                ..
-            } => {
-                let n = with(constrained_support, |s| s.cell_count())
-                    .unwrap_or(0);
-                write!(
-                    f,
-                    "SubModel<Dirichlet({})>: {} constrained node(s)",
-                    primal_var, n
-                )
-            }
-        }
+        write!(f, "{}", self.physics.as_kind().display())
     }
 }
 
 impl crate::dump::Dump for SubModel {
-    fn render(&self, _opts: &crate::dump::DumpOptions) -> String {
-        let primal = self.physics.primal_vars().join(", ");
-        let dual = self.physics.dual_vars().join(", ");
-        match &self.physics {
-            Physics::HeatConduction { support, .. } => {
-                let n = with(support, |s| s.cell_count()).unwrap_or(0);
-                format!(
-                    "SubModel<HeatConduction>\n  primal var(s): {primal}\n  \
-                     dual var(s):   {dual}\n  support: {n} node(s)"
-                )
-            }
-            Physics::Dirichlet {
-                primal_var,
-                primal_dual,
-                constrained_support,
-                multiplier_support,
-            } => {
-                let nc = with(constrained_support, |s| s.cell_count()).unwrap_or(0);
-                let nm = with(multiplier_support, |s| s.cell_count()).unwrap_or(0);
-                format!(
-                    "SubModel<Dirichlet({primal_var})>\n  primal var(s): {primal} (multipliers)\n  \
-                     dual var(s):   {dual}\n  targets primary dual: {primal_dual}\n  \
-                     constrained: {nc} node(s)\n  multipliers: {nm} node(s)"
-                )
-            }
-        }
+    fn render(&self, opts: &crate::dump::DumpOptions) -> String {
+        self.physics.as_kind().render(opts)
     }
 }
 
@@ -562,6 +384,7 @@ mod tests {
     use crate::aggregate::Aggregate;
     use crate::containers::mesh::Configuration;
     use crate::containers::mesh::ElementType;
+    use crate::containers::mesh::SubMesh;
     use crate::containers::element_field::ElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
