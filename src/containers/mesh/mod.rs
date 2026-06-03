@@ -472,7 +472,7 @@ impl Mesh {
 
     /// Node at position `node_idx` in cell `cell_idx` of submesh `submesh_idx`.
     pub fn node(&self, submesh_idx: usize, cell_idx: usize, node_idx: usize) -> Result<Node> {
-        let sm = self.submesh(submesh_idx)?;
+        let sm = self.get(submesh_idx)?;
         let nid: NodeId = with(&sm, |s| {
             let npc = s.element_type.nodes_per_cell();
             let n = s.cell_count();
@@ -498,13 +498,13 @@ impl Mesh {
 
     /// Return a `Cell` view on cell `cell_idx` of submesh `submesh_idx`.
     pub fn cell(&self, submesh_idx: usize, cell_idx: usize) -> Result<Cell> {
-        let sm = self.submesh(submesh_idx)?;
+        let sm = self.get(submesh_idx)?;
         Cell::new(sm, cell_idx)
     }
 
     /// Iterator over every cell of submesh `submesh_idx`.
     pub fn cells(&self, submesh_idx: usize) -> Result<CellIter> {
-        let sm = self.submesh(submesh_idx)?;
+        let sm = self.get(submesh_idx)?;
         let end = with(&sm, |s| s.cell_count())?;
         Ok(CellIter::new(sm, end))
     }
@@ -667,7 +667,7 @@ mod tests {
         let mut mesh = Mesh::empty();
         mesh.add_sub(sm_pts).unwrap();
         mesh.add_sub(sm_tri).unwrap();
-        assert_eq!(mesh.submesh_count(), 2);
+        assert_eq!(mesh.len(), 2);
         assert_eq!(mesh.cell_count().unwrap(), 3); // 2 points + 1 triangle
     }
 
@@ -755,7 +755,7 @@ mod tests {
         m2.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         let merged = (&m1 + &m2).unwrap();
-        assert_eq!(merged.submesh_count(), 2);
+        assert_eq!(merged.len(), 2);
         assert_eq!(merged.cell_count().unwrap(), 3); // 2 POI1 + 1 TRI3
     }
 
@@ -783,12 +783,12 @@ mod tests {
 
         // sub + sub → Mesh
         let m = (&s1 + &s2).unwrap();
-        assert_eq!(m.submesh_count(), 2);
+        assert_eq!(m.len(), 2);
 
         // aggregate + sub → Mesh
         let s3 = insert(SubMesh::poi1_from_nodes(&[a.clone()]).unwrap());
         let m2 = (&m + &s3).unwrap();
-        assert_eq!(m2.submesh_count(), 3);
+        assert_eq!(m2.len(), 3);
     }
 
     #[test]
@@ -799,7 +799,7 @@ mod tests {
         let c = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
 
         let m = (&a + &b).unwrap();
-        assert_eq!(m.submesh_count(), 1);
+        assert_eq!(m.len(), 1);
         assert_eq!(with(&m.unit().unwrap(), |s| s.cell_count()).unwrap(), 2);
 
         let m2 = (&m + &c).unwrap();

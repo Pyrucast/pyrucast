@@ -284,15 +284,6 @@ macro_rules! impl_aggregate_pymethods {
                     Ok($Sub { handle: h })
                 }
 
-                fn [<$sub _count>](&self) -> pyo3::PyResult<usize> {
-                    Ok($crate::aggregate::Aggregate::len(&self.inner))
-                }
-
-                fn $sub(&self, i: usize) -> pyo3::PyResult<$Sub> {
-                    let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
-                    Ok($Sub { handle: h })
-                }
-
                 /// The sole sub-object **view** of a unitary aggregate
                 /// (exactly one sub), else a clear error. Use it where the
                 /// single-zone case needs a sub method: `parent.unit().m(...)`.
@@ -304,11 +295,6 @@ macro_rules! impl_aggregate_pymethods {
                 }
 
                 fn add_sub(&mut self, sub: pyo3::PyRef<'_, $Sub>) -> pyo3::PyResult<()> {
-                    $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
-                    Ok(())
-                }
-
-                fn [<add_ $sub>](&mut self, sub: pyo3::PyRef<'_, $Sub>) -> pyo3::PyResult<()> {
                     $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
                     Ok(())
                 }
@@ -463,12 +449,11 @@ macro_rules! impl_dump_pymethod {
 /// The struct `$T` **must** have a field named `subs: Vec<Handle<$Sub>>`.
 /// The name `subs` is hardcoded by this macro.
 ///
-/// # Derived names
-///
-/// `$sub` is given once; `paste!` derives:
-/// * `$sub(i)`             — indexed accessor
-/// * `{$sub}_count()`     — length alias
-/// * `add_{$sub}(h)`      — checked push
+/// Access goes through the [`Aggregate`] trait (generic, no per-type
+/// aliases): `len()`, `is_empty()`, `get(i)`, `add_sub(h)`, `iter()`,
+/// `unit()`, plus `Index`/`IntoIterator`/`Add` from
+/// [`crate::impl_aggregate_std_traits`]. The `$sub` snake-name is still passed (it
+/// names the sub in docs/call sites) but no longer generates methods.
 ///
 /// An optional trailing `{ … }` block is forwarded verbatim into the
 /// `impl Aggregate` body to override default methods (`check_push`,
@@ -500,23 +485,6 @@ macro_rules! impl_aggregate {
                 fn type_name() -> &'static str { stringify!($T) }
                 fn sub_display_name() -> &'static str { $name }
                 $($override)*
-            }
-
-            impl $T {
-                pub fn [<$sub _count>](&self) -> usize {
-                    $crate::aggregate::Aggregate::len(self)
-                }
-                pub fn $sub(&self, i: usize)
-                    -> $crate::error::Result<$crate::store::Handle<$Sub>>
-                {
-                    $crate::aggregate::Aggregate::get(self, i)
-                }
-                pub fn [<add_ $sub>](
-                    &mut self,
-                    h: $crate::store::Handle<$Sub>,
-                ) -> $crate::error::Result<()> {
-                    $crate::aggregate::Aggregate::add_sub(self, h)
-                }
             }
 
             $crate::impl_aggregate_std_traits!($T);
@@ -630,7 +598,7 @@ macro_rules! impl_aggregate_std_traits {
 /// `Dump`: the one-line `Display` summary, then each sub-object's full `dump`
 /// indented under a `── [i] ──` marker.
 ///
-/// Kept separate from [`impl_aggregate_std_traits`] so aggregates with a
+/// Kept separate from [`crate::impl_aggregate_std_traits`] so aggregates with a
 /// non-generic content layout (e.g. `Matrix`, dumped as a single global grid)
 /// can hand-write their own `Dump` instead.
 ///

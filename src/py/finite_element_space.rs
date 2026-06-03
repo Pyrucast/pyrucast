@@ -1,6 +1,7 @@
 //! Python wrappers for [`crate::containers::finite_element_space::SubFiniteElementSpace`] and
 //! [`crate::containers::finite_element_space::FiniteElementSpace`].
 
+use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
 use crate::containers::finite_element_space::{Element, FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::finite_element_space::Interpolation;
@@ -200,7 +201,7 @@ impl PyFiniteElementSpace {
     ) -> PyResult<Self> {
         let interp = parse_interpolation(interpolation)?;
         let quad = parse_quadrature(quadrature)?;
-        let n_sub = mesh.inner.submesh_count();
+        let n_sub = mesh.inner.len();
         let choices: Vec<(Interpolation, QuadratureRule)> =
             (0..n_sub).map(|_| (interp, quad)).collect();
         let fes = FiniteElementSpace::with(&mesh.inner, &choices)?;

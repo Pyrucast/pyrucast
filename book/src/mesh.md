@@ -54,7 +54,7 @@ sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
 let sm_handle = insert(sm);
 let mut mesh = Mesh::new(cfg.clone());
-mesh.add_submesh(sm_handle).unwrap();
+mesh.add_sub(sm_handle).unwrap();
 assert_eq!(mesh.cell_count().unwrap(), 1);
 ```
 

@@ -1,3 +1,4 @@
+use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::ElementType;
@@ -49,7 +50,7 @@ pub fn fill_surface(
             element_type
         )));
     }
-    let n_sub = contour.submesh_count();
+    let n_sub = contour.len();
     if n_sub == 0 {
         return Err(PyrucastError::Message(
             "fill_surface: contour must contain at least one SEG2 submesh".into(),
@@ -67,7 +68,7 @@ pub fn fill_surface(
     // 1. Validate each submesh and extract its ordered closed chain of node ids.
     let mut chains: Vec<Vec<NodeId>> = Vec::with_capacity(n_sub);
     for sm_idx in 0..n_sub {
-        let sm = contour.submesh(sm_idx)?;
+        let sm = contour.get(sm_idx)?;
         let (et, n_elems, conn) = with(&sm, |s| {
             (s.element_type(), s.cell_count(), s.connectivity().to_vec())
         })?;
@@ -581,7 +582,7 @@ mod tests {
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
         let combined = (&outer + &hole).unwrap();
-        assert_eq!(combined.submesh_count(), 2);
+        assert_eq!(combined.len(), 2);
 
         let tri = fill_surface(&combined, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
@@ -641,7 +642,7 @@ mod tests {
             &[(4.0, 2.0), (5.0, 2.0), (5.0, 3.0), (4.0, 3.0)],
         );
         let combined = (&(&outer + &h1).unwrap() + &h2).unwrap();
-        assert_eq!(combined.submesh_count(), 3);
+        assert_eq!(combined.len(), 3);
         let tri = fill_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
         let mut total = 0.0;

@@ -220,6 +220,7 @@ impl ExactSizeIterator for ElementIter {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::Aggregate;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::mesh::Configuration;
@@ -269,7 +270,7 @@ mod tests {
     #[test]
     fn element_new_out_of_range_errors() {
         let (_cfg, _nodes, fes) = seg2_fes();
-        let sub = fes.subspace(0).unwrap();
+        let sub = fes.get(0).unwrap();
         assert!(Element::new(sub, 5).is_err());
     }
 

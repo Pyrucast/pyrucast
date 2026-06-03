@@ -29,18 +29,18 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
             "sweep_qua4: n_layers must be ≥ 1".into(),
         ));
     }
-    if mesh_a.submesh_count() != 1 {
+    if mesh_a.len() != 1 {
         return Err(PyrucastError::Message(
             "sweep_qua4: mesh_a must have exactly one submesh".into(),
         ));
     }
-    if mesh_b.submesh_count() != 1 {
+    if mesh_b.len() != 1 {
         return Err(PyrucastError::Message(
             "sweep_qua4: mesh_b must have exactly one submesh".into(),
         ));
     }
-    let sm_a = mesh_a.submesh(0)?;
-    let sm_b = mesh_b.submesh(0)?;
+    let sm_a = mesh_a.get(0)?;
+    let sm_b = mesh_b.get(0)?;
     let cfg_a = with(&sm_a, |s| s.configuration())?;
     let cfg_b = with(&sm_b, |s| s.configuration())?;
     if cfg_a.index() != cfg_b.index() || cfg_a.generation() != cfg_b.generation() {

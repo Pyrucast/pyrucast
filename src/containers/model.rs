@@ -79,7 +79,7 @@
 //! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
 //! mesh.add_cell(&[a.id(), b.id()]).unwrap();
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-//! let sub = fes.subspace(0).unwrap();
+//! let sub = fes.get(0).unwrap();
 //!
 //! // Conductivity k = 1, uniform — passed at assembly time, not stored in the model.
 //! let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
@@ -383,7 +383,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
+        let sub = fes.get(0).unwrap();
 
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", k).unwrap();
@@ -458,7 +458,7 @@ mod tests {
         mesh.add_cell(&[n0.id(), n1.id()]).unwrap();
         mesh.add_cell(&[n1.id(), n2.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
+        let sub = fes.get(0).unwrap();
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mut materials = ElementField::empty();
@@ -568,7 +568,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
+        let sub = fes.get(0).unwrap();
         let mat = SubElementField::new(sub.clone(), vec!["rho_cp".into()]).unwrap();
         let mut materials = ElementField::empty();
         materials.add_sub(insert(mat)).unwrap();
@@ -617,15 +617,15 @@ mod tests {
 
         // One HeatConduction sub-model per subspace.
         let hc = Model::heat_conduction(&fes).unwrap();
-        assert_eq!(hc.sub_model_count(), 2);
+        assert_eq!(hc.len(), 2);
         assert_eq!(hc.primal_vars().unwrap(), vec!["T".to_string()]);
         assert_eq!(hc.dual_vars().unwrap(), vec!["q".to_string()]);
 
         // Compose with a Dirichlet model via `+` (merge).
         let dir = Model::dirichlet("T".into(), "q".into(), std::slice::from_ref(&n0)).unwrap();
-        assert_eq!(dir.sub_model_count(), 1);
+        assert_eq!(dir.len(), 1);
         let full = (&hc + &dir).unwrap();
-        assert_eq!(full.sub_model_count(), 3);
+        assert_eq!(full.len(), 3);
         assert_eq!(
             full.primal_vars().unwrap(),
             vec!["T".to_string(), "lambda_T".to_string()]
@@ -642,7 +642,7 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let model = Model::heat_conduction(&fes).unwrap();
-        assert_eq!(model.sub_model_count(), 1);
+        assert_eq!(model.len(), 1);
     }
 
     #[test]
@@ -683,8 +683,8 @@ mod tests {
         mesh.add_sub(sm_b).unwrap();
 
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub_a = fes.subspace(0).unwrap();
-        let sub_b = fes.subspace(1).unwrap();
+        let sub_a = fes.get(0).unwrap();
+        let sub_b = fes.get(1).unwrap();
 
         // Different conductivities on each zone.
         let k_a = 1.0;
@@ -730,7 +730,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
+        let sub = fes.get(0).unwrap();
         let hc = SubModel::heat_conduction(sub).unwrap();
         assert_eq!(hc.material_components(), Some(&["k"][..]));
 
@@ -748,7 +748,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
+        let sub = fes.get(0).unwrap();
 
         // Empty ElementField — no SubElementField matches anything.
         let materials = ElementField::empty();

@@ -241,7 +241,7 @@ let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
 mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-let sub = fes.subspace(0).unwrap();
+let sub = fes.get(0).unwrap();
 with(&sub, |s| {
     assert_eq!(s.gauss_count(), 3);
     // Le triangle (0,0), (2,0), (0,2) a |J| = 4 partout :
@@ -323,7 +323,7 @@ mesh.unit().add_cell([n0, n1, n2])
 # Constructeur par défaut : Lagrange1 + Gauss partout.
 fes = pyrucast.FiniteElementSpace(mesh)
 assert len(fes) == 1                          # 1 sous-espace = 1 sous-maillage
-sub = fes[0]                                  # ou fes.subspace(0)
+sub = fes[0]                                  # vue typée du sous-espace 0
 assert sub.element_type == "TRI3"
 assert sub.interpolation == "LAGRANGE1"
 assert sub.quadrature == "GAUSS"

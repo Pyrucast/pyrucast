@@ -26,6 +26,7 @@
 //! # Example
 //!
 //! ```
+//! use pyrucast::aggregate::Aggregate;
 //! use pyrucast::containers::mesh::Configuration;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -42,7 +43,7 @@
 //! mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 //!
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-//! let sub = fes.subspace(0).unwrap();
+//! let sub = fes.get(0).unwrap();
 //! with(&sub, |s| {
 //!     assert_eq!(s.gauss_count(), 3);
 //!     // |J| of a triangle with vertices (0,0), (2,0), (0,2): the mapping
@@ -63,6 +64,7 @@ pub use element::{Element, ElementIter};
 pub use interpolation::Interpolation;
 pub use quadrature::QuadratureRule;
 
+use crate::aggregate::Aggregate;
 use crate::containers::mesh::{Configuration, NodeId};
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::ElementType;
@@ -410,13 +412,13 @@ impl FiniteElementSpace {
     /// `(interpolation, quadrature)` pair to each submesh of `mesh`, in
     /// order.
     ///
-    /// `choices.len()` must equal `mesh.submesh_count()`. The mesh must
+    /// `choices.len()` must equal `mesh.len()`. The mesh must
     /// have at least one submesh and none of them may be POI1.
     pub fn with(
         mesh: &Mesh,
         choices: &[(Interpolation, QuadratureRule)],
     ) -> Result<Self> {
-        let n_sub = mesh.submesh_count();
+        let n_sub = mesh.len();
         if n_sub == 0 {
             return Err(PyrucastError::Message(
                 "FiniteElementSpace: mesh has no submesh".into(),
@@ -431,7 +433,7 @@ impl FiniteElementSpace {
         }
         let mut subs = Vec::with_capacity(n_sub);
         for (i, &(interp, quad)) in choices.iter().enumerate() {
-            let sm = mesh.submesh(i)?;
+            let sm = mesh.get(i)?;
             let sub = SubFiniteElementSpace::new(sm, interp, quad)?;
             subs.push(insert(sub));
         }
@@ -441,7 +443,7 @@ impl FiniteElementSpace {
     /// Build a `FiniteElementSpace` using the same `interpolation` for
     /// every submesh, with the default Gauss quadrature.
     pub fn new(mesh: &Mesh, interpolation: Interpolation) -> Result<Self> {
-        let n_sub = mesh.submesh_count();
+        let n_sub = mesh.len();
         let choices: Vec<_> = (0..n_sub)
             .map(|_| (interpolation, QuadratureRule::Gauss))
             .collect();
@@ -456,13 +458,13 @@ impl FiniteElementSpace {
 
     /// Element view on cell `cell_idx` of subspace `subspace_idx`.
     pub fn element(&self, subspace_idx: usize, cell_idx: usize) -> Result<Element> {
-        let sub = self.subspace(subspace_idx)?;
+        let sub = self.get(subspace_idx)?;
         Element::new(sub, cell_idx)
     }
 
     /// Iterator over every element of subspace `subspace_idx`.
     pub fn elements(&self, subspace_idx: usize) -> Result<ElementIter> {
-        let sub = self.subspace(subspace_idx)?;
+        let sub = self.get(subspace_idx)?;
         let n = with(&sub, |s| s.cell_count())??;
         Ok(ElementIter::new(sub, n))
     }
@@ -872,13 +874,13 @@ mod tests {
         mesh.add_sub(sm_qua).unwrap();
 
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        assert_eq!(fes.subspace_count(), 2);
-        with(&fes.subspace(0).unwrap(), |s| {
+        assert_eq!(fes.len(), 2);
+        with(&fes.get(0).unwrap(), |s| {
             assert_eq!(s.element_type().unwrap(), ElementType::TRI3);
             assert_eq!(s.gauss_count(), 3);
         })
         .unwrap();
-        with(&fes.subspace(1).unwrap(), |s| {
+        with(&fes.get(1).unwrap(), |s| {
             assert_eq!(s.element_type().unwrap(), ElementType::QUA4);
             assert_eq!(s.gauss_count(), 4);
         })
@@ -891,7 +893,7 @@ mod tests {
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let mesh = crate::ops::mesher::from_live_nodes(cfg).unwrap();
         // from_live_nodes builds a POI1 mesh.
-        assert!(mesh.submesh_count() >= 1);
+        assert!(mesh.len() >= 1);
         let _ = a; // keep alive
         assert!(FiniteElementSpace::lagrange1(&mesh).is_err());
     }
@@ -936,7 +938,7 @@ mod tests {
         let d = format!("{:?}", fes);
         assert!(d.contains("FiniteElementSpace"));
 
-        with(&fes.subspace(0).unwrap(), |sub| {
+        with(&fes.get(0).unwrap(), |sub| {
             let s = format!("{}", sub);
             assert!(s.contains("SubFiniteElementSpace"));
             assert!(s.contains("TRI3"));

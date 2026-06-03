@@ -215,10 +215,10 @@ fn mesh_cell_values(
     field: &NodeField,
     component: &str,
 ) -> Result<(Vec<Vec<f64>>, f64, f64)> {
-    let n_sub = mesh.submesh_count();
+    let n_sub = mesh.len();
     let mut per_sub: Vec<Vec<f64>> = Vec::with_capacity(n_sub);
     for i in 0..n_sub {
-        let sm = mesh.submesh(i)?;
+        let sm = mesh.get(i)?;
         let vals = with(&sm, |s| submesh_cell_values(s, field, component))??;
         per_sub.push(vals);
     }
@@ -283,7 +283,7 @@ impl<'a> Drawable for MeshFieldView<'a> {
         let cmap = self.scale.cmap;
         let mut all_prims: Vec<Primitive> = Vec::new();
         for (i, values) in per_sub.iter().enumerate() {
-            let sm = self.mesh.submesh(i)?;
+            let sm = self.mesh.get(i)?;
             let colors = colors_from_values(values, cmap, vmin, vmax);
             let prims = with(&sm, |s| submesh_primitives_with_colors(s, &colors))??;
             all_prims.extend(prims);

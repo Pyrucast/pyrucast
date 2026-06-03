@@ -220,7 +220,7 @@ fn mesh_composed_of_multiple_submeshes() -> Result<()> {
         mesh
     };
 
-    assert_eq!(mesh.submesh_count(), 2);
+    assert_eq!(mesh.len(), 2);
     let total = mesh.cell_count()?;
     assert_eq!(total, 4); // 3 points + 1 triangle
     Ok(())

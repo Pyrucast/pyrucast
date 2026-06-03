@@ -44,12 +44,12 @@ def test_aggregate_plus_sub_and_sub_plus_sub():
 
     # sub + sub → Mesh
     m = s1 + s2
-    assert m.submesh_count() == 2
+    assert len(m) == 2
 
     # mesh + sub → Mesh
     s3 = pyrucast.poi1_from_nodes([a])[0]
     m2 = m + s3
-    assert m2.submesh_count() == 3
+    assert len(m2) == 3
 
 
 def test_node_plus_node_and_mesh_plus_node():
@@ -148,7 +148,7 @@ def test_mesh_aggregates_submeshes():
     tri.unit().add_cell([a, b, cc])
 
     mesh = pts + tri
-    assert mesh.submesh_count() == 2
+    assert len(mesh) == 2
     assert mesh.cell_count() == 3  # 2 POI1 + 1 TRI3
 
 
@@ -299,7 +299,7 @@ def test_fill_surface_with_one_hole_2d():
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
     combined = outer + hole
-    assert combined.submesh_count() == 2
+    assert len(combined) == 2
 
     tri = pyrucast.fill_surface(combined, "TRI3")
     n_cells = tri.cell_count()
@@ -462,7 +462,7 @@ def test_to_poi1_converts_each_submesh_to_node_list():
     tri.unit().add_cell([b, d, cc])
 
     poi = pyrucast.to_poi1(tri)
-    assert poi.submesh_count() == 1
+    assert len(poi) == 1
     assert poi.element_types() == ["POI1"]
     assert poi.cell_count() == 4  # 6 connectivity entries, deduplicated
     ids = [poi.node(0, i, 0).id for i in range(4)]
@@ -482,7 +482,7 @@ def test_to_poi1_preserves_submesh_count():
     mesh = pts + tri
 
     poi = pyrucast.to_poi1(mesh)
-    assert poi.submesh_count() == 2
+    assert len(poi) == 2
     assert poi.element_types() == ["POI1", "POI1"]
     assert poi.cell_counts() == [1, 3]
 

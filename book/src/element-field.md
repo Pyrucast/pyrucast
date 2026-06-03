@@ -72,7 +72,7 @@ let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
 let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
 mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-let sub = fes.subspace(0).unwrap();
+let sub = fes.get(0).unwrap();
 
 // Élasticité linéaire 2-D : deux propriétés matériau.
 let mut mat = ElementField::new(sub, vec!["E".into(), "nu".into()]).unwrap();

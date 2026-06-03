@@ -47,7 +47,7 @@ mod tests {
         tri.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
 
         let poi = to_poi1(&tri).unwrap();
-        assert_eq!(poi.submesh_count(), 1);
+        assert_eq!(poi.len(), 1);
         assert_eq!(poi.element_types().unwrap(), vec![ElementType::POI1]);
         // 6 connectivity entries but only 4 unique nodes.
         assert_eq!(poi.cell_count().unwrap(), 4);
@@ -81,7 +81,7 @@ mod tests {
         .unwrap();
 
         let poi = to_poi1(&mesh).unwrap();
-        assert_eq!(poi.submesh_count(), 2, "same number of submeshes");
+        assert_eq!(poi.len(), 2, "same number of submeshes");
         assert_eq!(
             poi.element_types().unwrap(),
             vec![ElementType::POI1, ElementType::POI1]
@@ -106,6 +106,6 @@ mod tests {
     #[test]
     fn empty_mesh_gives_empty_mesh() {
         let poi = to_poi1(&Mesh::empty()).unwrap();
-        assert_eq!(poi.submesh_count(), 0);
+        assert_eq!(poi.len(), 0);
     }
 }

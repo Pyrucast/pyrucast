@@ -189,12 +189,12 @@ def test_matrix_aggregates_two_blocks():
     block_b.add_entry(b, "q", b, "T", 2.0)
 
     k = pyrucast.Matrix()
-    k.add_sub_matrix(block_a)
-    k.add_sub_matrix(block_b)
+    k.add_sub(block_a)
+    k.add_sub(block_b)
     k.finalize()
 
     assert len(k) == 2
-    assert k.sub_matrix_count() == 2
+    assert len(k) == 2
     assert k.n_rows() == 2
     assert k.n_cols() == 2
     assert k.symmetric is True
@@ -223,7 +223,7 @@ def test_matrix_compose_blocks_with_plus():
 
     k = ba + bb
     k.finalize()
-    assert k.sub_matrix_count() == 2
+    assert len(k) == 2
     assert k.n_rows() == 2
     assert k.n_cols() == 2
     assert k.symmetric is True
@@ -238,8 +238,8 @@ def test_matrix_get_sums_across_blocks():
     block_b = _make_block(c, [a], [a], ["q"], ["T"])
     block_b.add_entry(a, "q", a, "T", 0.5)
     k = pyrucast.Matrix()
-    k.add_sub_matrix(block_a)
-    k.add_sub_matrix(block_b)
+    k.add_sub(block_a)
+    k.add_sub(block_b)
     assert k.get(a, "q", a, "T") == 2.5
 
 
@@ -249,8 +249,8 @@ def test_matrix_symmetric_is_and_of_blocks():
     block_a = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
     block_b = _make_block(c, [a], [a], ["q"], ["T"], symmetric=False)
     k = pyrucast.Matrix()
-    k.add_sub_matrix(block_a)
-    k.add_sub_matrix(block_b)
+    k.add_sub(block_a)
+    k.add_sub(block_b)
     assert k.symmetric is False
 
 
@@ -263,8 +263,8 @@ def test_matrix_entries_concatenates_blocks():
     block_b = _make_block(c, [b], [b], ["q"], ["T"])
     block_b.add_entry(b, "q", b, "T", 2.0)
     k = pyrucast.Matrix()
-    k.add_sub_matrix(block_a)
-    k.add_sub_matrix(block_b)
+    k.add_sub(block_a)
+    k.add_sub(block_b)
     entries = k.entries()
     assert len(entries) == 2
     assert entries[0] == (a.id, "q", a.id, "T", 1.0)
@@ -277,7 +277,7 @@ def test_matrix_repr_and_str():
     block_a = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
     block_a.add_entry(a, "q", a, "T", 2.0)
     k = pyrucast.Matrix()
-    k.add_sub_matrix(block_a)
+    k.add_sub(block_a)
     assert "Matrix" in repr(k)
     s = str(k)
     assert "Matrix" in s
@@ -320,8 +320,8 @@ def test_matrix_dump_prints_global_grid_and_elides(capsys):
     block_b = _make_block(c, [b], [a, b], ["q"], ["T"], symmetric=True)
     block_b.add_entry(b, "q", b, "T", 2.0)
     k = pyrucast.Matrix()
-    k.add_sub_matrix(block_a)
-    k.add_sub_matrix(block_b)
+    k.add_sub(block_a)
+    k.add_sub(block_b)
 
     # Global labelled grid, built without finalize(), printed to stdout.
     k.dump()

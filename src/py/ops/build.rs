@@ -50,7 +50,7 @@ pub fn material_field(
 
 /// Build a material `ElementField` where each sub-model gets its own
 /// `(component, value)` list. The outer list length must equal
-/// `model.sub_model_count()`. An empty inner list **skips** the matching
+/// `model.len()`. An empty inner list **skips** the matching
 /// sub-model (typical for Dirichlet).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

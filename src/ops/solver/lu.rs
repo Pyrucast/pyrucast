@@ -41,7 +41,7 @@
 //! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
 //! mesh.add_cell(&[a.id(), b.id()]).unwrap();
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-//! let sub = fes.subspace(0).unwrap();
+//! let sub = fes.get(0).unwrap();
 //! let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
 //! mat.set_uniform("k", 1.0).unwrap();
 //! let mut materials = ElementField::empty();
@@ -193,7 +193,7 @@ mod tests {
             mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
         }
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
+        let sub = fes.get(0).unwrap();
 
         // k = 1 uniform.
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
@@ -267,7 +267,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.subspace(0).unwrap();
+        let sub = fes.get(0).unwrap();
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mut materials = crate::containers::element_field::ElementField::empty();

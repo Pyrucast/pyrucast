@@ -51,6 +51,7 @@
 //! # Example
 //!
 //! ```
+//! use pyrucast::aggregate::Aggregate;
 //! use pyrucast::containers::mesh::Configuration;
 //! use pyrucast::containers::element_field::ElementField;
 //! use pyrucast::containers::mesh::ElementType;
@@ -70,9 +71,9 @@
 //!
 //! // Linear elasticity 2D — two material properties (E, nu) on every subspace.
 //! let mat = ElementField::new(&fes, vec!["E".into(), "nu".into()]).unwrap();
-//! assert_eq!(mat.subfield_count(), 1);
+//! assert_eq!(mat.len(), 1);
 //!
-//! let sub0 = mat.subfield(0).unwrap();
+//! let sub0 = mat.get(0).unwrap();
 //! with_mut(&sub0, |s| {
 //!     s.set_uniform("E", 210e9).unwrap();
 //!     s.set_uniform("nu", 0.3).unwrap();
@@ -88,6 +89,7 @@
 //! .unwrap();
 //! ```
 
+use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::store::{insert, with, Handle};
@@ -552,7 +554,7 @@ impl ElementField {
     ///
     /// `fespace` must have at least one subspace.
     pub fn new(fespace: &FiniteElementSpace, components: Vec<String>) -> Result<Self> {
-        let n_sub = fespace.subspace_count();
+        let n_sub = fespace.len();
         if n_sub == 0 {
             return Err(PyrucastError::Message(
                 "ElementField: FE space has no subspace".into(),
@@ -561,7 +563,7 @@ impl ElementField {
         check_components(&components)?;
         let mut subs = Vec::with_capacity(n_sub);
         for i in 0..n_sub {
-            let sub = fespace.subspace(i)?;
+            let sub = fespace.get(i)?;
             let sf = SubElementField::new(sub, components.clone())?;
             subs.push(insert(sf));
         }
@@ -570,12 +572,12 @@ impl ElementField {
 
     /// Build an `ElementField` with an explicit `components` list per
     /// subspace. `components_per_subspace.len()` must equal
-    /// `fespace.subspace_count()`.
+    /// `fespace.len()`.
     pub fn with(
         fespace: &FiniteElementSpace,
         components_per_subspace: &[Vec<String>],
     ) -> Result<Self> {
-        let n_sub = fespace.subspace_count();
+        let n_sub = fespace.len();
         if n_sub == 0 {
             return Err(PyrucastError::Message(
                 "ElementField: FE space has no subspace".into(),
@@ -590,7 +592,7 @@ impl ElementField {
         }
         let mut subs = Vec::with_capacity(n_sub);
         for (i, comps) in components_per_subspace.iter().enumerate() {
-            let sub = fespace.subspace(i)?;
+            let sub = fespace.get(i)?;
             let sf = SubElementField::new(sub, comps.clone())?;
             subs.push(insert(sf));
         }
@@ -879,10 +881,10 @@ mod tests {
         let mesh = make_mesh_with_tri_and_qua();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let ef = ElementField::new(&fes, vec!["E".into(), "nu".into()]).unwrap();
-        assert_eq!(ef.subfield_count(), 2);
+        assert_eq!(ef.len(), 2);
 
         // TRI3: 1 cell × 3 gauss × 2 components
-        with(&ef.subfield(0).unwrap(), |s| {
+        with(&ef.get(0).unwrap(), |s| {
             assert_eq!(s.cell_count(), 1);
             assert_eq!(s.gauss_count(), 3);
             assert_eq!(s.component_count(), 2);
@@ -891,7 +893,7 @@ mod tests {
         .unwrap();
 
         // QUA4: 1 cell × 4 gauss × 2 components
-        with(&ef.subfield(1).unwrap(), |s| {
+        with(&ef.get(1).unwrap(), |s| {
             assert_eq!(s.cell_count(), 1);
             assert_eq!(s.gauss_count(), 4);
             assert_eq!(s.component_count(), 2);
@@ -905,12 +907,12 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let comps = vec![vec!["k".into()], vec!["E".into(), "nu".into()]];
         let ef = ElementField::with(&fes, &comps).unwrap();
-        assert_eq!(ef.subfield_count(), 2);
-        with(&ef.subfield(0).unwrap(), |s| {
+        assert_eq!(ef.len(), 2);
+        with(&ef.get(0).unwrap(), |s| {
             assert_eq!(s.components(), &["k"]);
         })
         .unwrap();
-        with(&ef.subfield(1).unwrap(), |s| {
+        with(&ef.get(1).unwrap(), |s| {
             assert_eq!(s.components(), &["E", "nu"]);
         })
         .unwrap();
@@ -940,7 +942,7 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();
-        assert!(ef.subfield(5).is_err());
+        assert!(ef.get(5).is_err());
     }
 
     #[test]
@@ -963,13 +965,13 @@ mod tests {
         let mesh = make_mesh_with_tri_and_qua();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();
-        with_mut(&ef.subfield(0).unwrap(), |s| s.set_uniform("k", 1.5).unwrap()).unwrap();
-        with_mut(&ef.subfield(1).unwrap(), |s| s.set_uniform("k", 2.5).unwrap()).unwrap();
-        with(&ef.subfield(0).unwrap(), |s| {
+        with_mut(&ef.get(0).unwrap(), |s| s.set_uniform("k", 1.5).unwrap()).unwrap();
+        with_mut(&ef.get(1).unwrap(), |s| s.set_uniform("k", 2.5).unwrap()).unwrap();
+        with(&ef.get(0).unwrap(), |s| {
             assert_eq!(s.value(0, 0, "k").unwrap(), 1.5);
         })
         .unwrap();
-        with(&ef.subfield(1).unwrap(), |s| {
+        with(&ef.get(1).unwrap(), |s| {
             assert_eq!(s.value(0, 0, "k").unwrap(), 2.5);
         })
         .unwrap();

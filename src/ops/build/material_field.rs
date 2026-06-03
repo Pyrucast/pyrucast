@@ -68,13 +68,13 @@ pub fn material_field(
 /// Build a material [`ElementField`] with a **per-sub-model** uniform
 /// `(component, value)` list.
 ///
-/// `per_sub_model.len()` must equal `model.sub_model_count()`. An empty
+/// `per_sub_model.len()` must equal `model.len()`. An empty
 /// slot (`&[]`) skips that sub-model — typical for `Dirichlet`.
 pub fn material_field_per_sub_model(
     model: &Model,
     per_sub_model: &[&[(&str, f64)]],
 ) -> Result<ElementField> {
-    let n = model.sub_model_count();
+    let n = model.len();
     if per_sub_model.len() != n {
         return Err(PyrucastError::Message(format!(
             "material_field_per_sub_model: {} list(s) supplied for {} sub-model(s)",
@@ -120,7 +120,7 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.subspace(0).unwrap()).unwrap()))
+            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
             .unwrap();
         if dirichlet_at_left {
             model
@@ -140,7 +140,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let hc = SubModel::heat_conduction(fes.subspace(0).unwrap()).unwrap();
+        let hc = SubModel::heat_conduction(fes.get(0).unwrap()).unwrap();
         (cfg, hc)
     }
 
@@ -229,7 +229,7 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.subspace(0).unwrap()).unwrap()))
+            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
             .unwrap();
         model
             .add_sub(insert(
@@ -237,7 +237,7 @@ mod tests {
             ))
             .unwrap();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.subspace(1).unwrap()).unwrap()))
+            .add_sub(insert(SubModel::heat_conduction(fes.get(1).unwrap()).unwrap()))
             .unwrap();
 
         // Slot lengths must match sub_model_count (3): HC, Dirichlet (skip), HC.

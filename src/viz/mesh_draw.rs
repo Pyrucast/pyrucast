@@ -436,8 +436,8 @@ impl Drawable for SubMesh {
 impl Drawable for Mesh {
     fn bbox(&self) -> Result<Bbox3> {
         let mut b = Bbox3::empty();
-        for i in 0..self.submesh_count() {
-            let sm = self.submesh(i)?;
+        for i in 0..self.len() {
+            let sm = self.get(i)?;
             let smb = with(&sm, |s| s.bbox())??;
             if !smb.is_empty() {
                 b.extend(smb.min);
@@ -456,8 +456,8 @@ impl Drawable for Mesh {
         DB::ErrorType: 'static,
     {
         let mut all = Vec::new();
-        for i in 0..self.submesh_count() {
-            let sm = self.submesh(i)?;
+        for i in 0..self.len() {
+            let sm = self.get(i)?;
             let mut prims = with(&sm, |s| submesh_primitives(s))??;
             all.append(&mut prims);
         }

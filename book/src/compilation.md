@@ -93,7 +93,7 @@ fn main() {
 
     let sm_h = insert(sm);
     let mut mesh = Mesh::new(cfg);
-    mesh.add_submesh(sm_h).unwrap();
+    mesh.add_sub(sm_h).unwrap();
 
     println!("{}", mesh); // Mesh: 1 submesh(es), 2 cell(s) total
 }
