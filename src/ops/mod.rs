@@ -16,6 +16,9 @@
 //!   [`crate::containers::node_field::NodeField`] from a `Model`. The per-physics
 //!   integrands live under [`crate::models`]; this layer wires them
 //!   together.
+//! - [`behavior`]: integrate the constitutive law of a `Model` (Cast3m
+//!   `COMP`) — the exact, possibly non-linear counterpart of the
+//!   `assemble::stiffness` linearization.
 //! - [`solver`]: solve `A · x = b` (currently a single dense LU
 //!   back-end in [`solver::lu`]; sparse direct and iterative
 //!   back-ends will live alongside it).
@@ -24,6 +27,7 @@
 //! day one; legacy code migrates opportunistically.
 
 pub mod assemble;
+pub mod behavior;
 pub mod build;
 pub mod field;
 pub mod geom;
