@@ -570,25 +570,31 @@ impl ElementField {
         Ok(Self { subs })
     }
 
-    /// The [`SubElementField`] whose FE subspace handle matches `fespace`,
-    /// or `None` if no sub-field in the aggregate lives on it.
+    /// The [`SubElementField`] whose FE subspace handle matches `fespace`.
     ///
     /// The per-zone field-matching primitive shared by the assembly and
-    /// behaviour operators (each wraps it with its own « not found » error).
+    /// behaviour operators. Errors if no sub-field of the aggregate lives on
+    /// `fespace` (a missing per-zone material / deformation is always a
+    /// caller error, never a silent skip).
     pub(crate) fn sub_for_fespace(
         &self,
         fespace: &Handle<SubFiniteElementSpace>,
-    ) -> Result<Option<Handle<SubElementField>>> {
+    ) -> Result<Handle<SubElementField>> {
         for h in self {
             let matches = with(h, |s| {
                 let f = s.fespace();
                 f.index() == fespace.index() && f.generation() == fespace.generation()
             })?;
             if matches {
-                return Ok(Some(h.clone()));
+                return Ok(h.clone());
             }
         }
-        Ok(None)
+        Err(PyrucastError::Message(format!(
+            "no SubElementField in this ElementField matches the \
+             SubFiniteElementSpace at slot {} (generation {})",
+            fespace.index(),
+            fespace.generation()
+        )))
     }
 
     /// Build an `ElementField` with an explicit `components` list per

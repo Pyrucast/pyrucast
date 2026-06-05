@@ -24,7 +24,6 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
-use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::Matrix;
 use crate::containers::model::Model;
 use crate::error::{PyrucastError, Result};
@@ -48,7 +47,7 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
             // it declares a material FE subspace. No per-variant match.
             let material = match sub.material_fespace() {
                 Some(fespace) => {
-                    let m = find_material_for_fespace(materials, &fespace)?;
+                    let m = materials.sub_for_fespace(&fespace)?;
                     if let Some(required) = sub.material_components() {
                         validate_material(&m, required)?;
                     }
@@ -78,22 +77,6 @@ pub fn mass(model: &Model) -> Result<Matrix> {
     let mut m = Matrix::empty();
     m.finalize()?;
     Ok(m)
-}
-
-/// Find the [`SubElementField`] in `materials` whose FE subspace handle
-/// matches `fespace`. Errors if no match is found.
-fn find_material_for_fespace(
-    materials: &ElementField,
-    fespace: &Handle<SubFiniteElementSpace>,
-) -> Result<Handle<SubElementField>> {
-    materials.sub_for_fespace(fespace)?.ok_or_else(|| {
-        PyrucastError::Message(format!(
-            "assemble::stiffness: no SubElementField in the materials aggregate matches \
-             the SubFiniteElementSpace at slot {} (generation {})",
-            fespace.index(),
-            fespace.generation()
-        ))
-    })
 }
 
 /// Ensure `material` carries every component declared as required by

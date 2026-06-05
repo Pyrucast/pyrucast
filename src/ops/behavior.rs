@@ -26,10 +26,9 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
-use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::store::{insert, with, Handle};
 
 /// Compute the deformation field of `model` from a nodal `solution`.
@@ -81,9 +80,9 @@ pub fn integrate(
 
         // Pair the per-zone fields by FE subspace (locks SubElementField,
         // outside the sub-model lock).
-        let input = find_subfield_for_fespace(deformation, &beh_fespace, "deformation")?;
+        let input = deformation.sub_for_fespace(&beh_fespace)?;
         let material = match mat_fespace {
-            Some(fe) => Some(find_subfield_for_fespace(materials, &fe, "materials")?),
+            Some(fe) => Some(materials.sub_for_fespace(&fe)?),
             None => None,
         };
 
@@ -92,24 +91,6 @@ pub fn integrate(
         out.add_sub(insert(state))?;
     }
     Ok(out)
-}
-
-/// Find the [`SubElementField`] of `field` whose FE subspace handle matches
-/// `fespace`. `what` names the aggregate for the error message.
-fn find_subfield_for_fespace(
-    field: &ElementField,
-    fespace: &Handle<SubFiniteElementSpace>,
-    what: &str,
-) -> Result<Handle<SubElementField>> {
-    field.sub_for_fespace(fespace)?.ok_or_else(|| {
-        PyrucastError::Message(format!(
-            "behavior: no SubElementField in the {} aggregate matches the \
-             SubFiniteElementSpace at slot {} (generation {})",
-            what,
-            fespace.index(),
-            fespace.generation()
-        ))
-    })
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
