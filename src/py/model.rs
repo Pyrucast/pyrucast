@@ -49,6 +49,13 @@ impl PySubModel {
         })?)
     }
 
+    /// Whether this sub-model carries a constitutive behaviour that can be
+    /// integrated with `deformation` / `integrate_behavior` (`True` for
+    /// volumetric physics, `False` for constraints like Dirichlet).
+    fn has_behavior(&self) -> PyResult<bool> {
+        Ok(with(&self.handle, |s| s.has_behavior())?)
+    }
+
     fn __repr__(&self) -> PyResult<String> {
         Ok(with(&self.handle, |s| format!("{:?}", s))?)
     }

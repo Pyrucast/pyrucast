@@ -7,6 +7,7 @@
 //! the *verbs*, those the *nouns*.
 
 pub mod assemble;
+pub mod behavior;
 pub mod build;
 pub mod field;
 pub mod mesher;

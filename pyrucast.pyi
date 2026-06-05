@@ -24,10 +24,12 @@ __all__ = [
     "circle_seg2",
     "consolidate",
     "coordinates",
+    "deformation",
     "displace",
     "extrude",
     "fill_surface",
     "from_live_nodes",
+    "integrate_behavior",
     "line_seg2",
     "mass",
     "material_field",
@@ -1152,6 +1154,12 @@ class SubModel:
         Names of the material components this sub-model expects, or
         `None` for physics that don't need material data (Dirichlet, …).
         """
+    def has_behavior(self) -> builtins.bool:
+        r"""
+        Whether this sub-model carries a constitutive behaviour that can be
+        integrated with `deformation` / `integrate_behavior` (`True` for
+        volumetric physics, `False` for constraints like Dirichlet).
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def __add__(self, other: typing.Any) -> typing.Any:
@@ -1190,6 +1198,16 @@ def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins
     nodes of the mesh, in order of first appearance.
     """
 
+def deformation(model: Model, solution: NodeField) -> ElementField:
+    r"""
+    Compute the deformation field of `model` from a nodal `solution`.
+    
+    Returns one `SubElementField` per behaviour-bearing sub-model (in model
+    order), each on its own FE subspace, carrying the deformation components
+    of its physics (`grad_T_x`, … for heat conduction). Constraint
+    sub-models (Dirichlet, …) are skipped.
+    """
+
 def displace(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
     r"""
     Displace nodes by `field` (incremental): `coord[a] += field.value(node,
@@ -1214,6 +1232,19 @@ def fill_surface(contour: Mesh, element_type: builtins.str, max_edge_length: typ
 def from_live_nodes(config: Configuration) -> Mesh:
     r"""
     Build a points (POI1) mesh holding every live node of `config`.
+    """
+
+def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField) -> ElementField:
+    r"""
+    Integrate the constitutive law of `model` (Cast3m `COMP`).
+    
+    `deformation` is the behaviour-input field (typically from
+    `deformation(model, solution)`); `materials` supplies the per-zone
+    material data. Returns the material-state field (dual flux/stress +
+    updated internal variables) of every behaviour-bearing sub-model.
+    
+    For a linear law the result is consistent with the assembled stiffness
+    (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
     """
 
 def line_seg2(a: Node, b: Node, n_elems: builtins.int) -> Mesh:
