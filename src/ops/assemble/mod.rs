@@ -86,21 +86,14 @@ fn find_material_for_fespace(
     materials: &ElementField,
     fespace: &Handle<SubFiniteElementSpace>,
 ) -> Result<Handle<SubElementField>> {
-    for sub_h in materials {
-        let matches = with(sub_h, |s| {
-            let f = s.fespace();
-            f.index() == fespace.index() && f.generation() == fespace.generation()
-        })?;
-        if matches {
-            return Ok(sub_h.clone());
-        }
-    }
-    Err(PyrucastError::Message(format!(
-        "assemble::stiffness: no SubElementField in the materials aggregate matches \
-         the SubFiniteElementSpace at slot {} (generation {})",
-        fespace.index(),
-        fespace.generation()
-    )))
+    materials.sub_for_fespace(fespace)?.ok_or_else(|| {
+        PyrucastError::Message(format!(
+            "assemble::stiffness: no SubElementField in the materials aggregate matches \
+             the SubFiniteElementSpace at slot {} (generation {})",
+            fespace.index(),
+            fespace.generation()
+        ))
+    })
 }
 
 /// Ensure `material` carries every component declared as required by

@@ -101,22 +101,15 @@ fn find_subfield_for_fespace(
     fespace: &Handle<SubFiniteElementSpace>,
     what: &str,
 ) -> Result<Handle<SubElementField>> {
-    for h in field {
-        let matches = with(h, |s| {
-            let f = s.fespace();
-            f.index() == fespace.index() && f.generation() == fespace.generation()
-        })?;
-        if matches {
-            return Ok(h.clone());
-        }
-    }
-    Err(PyrucastError::Message(format!(
-        "behavior: no SubElementField in the {} aggregate matches the \
-         SubFiniteElementSpace at slot {} (generation {})",
-        what,
-        fespace.index(),
-        fespace.generation()
-    )))
+    field.sub_for_fespace(fespace)?.ok_or_else(|| {
+        PyrucastError::Message(format!(
+            "behavior: no SubElementField in the {} aggregate matches the \
+             SubFiniteElementSpace at slot {} (generation {})",
+            what,
+            fespace.index(),
+            fespace.generation()
+        ))
+    })
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────

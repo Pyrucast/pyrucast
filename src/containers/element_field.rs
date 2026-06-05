@@ -570,6 +570,27 @@ impl ElementField {
         Ok(Self { subs })
     }
 
+    /// The [`SubElementField`] whose FE subspace handle matches `fespace`,
+    /// or `None` if no sub-field in the aggregate lives on it.
+    ///
+    /// The per-zone field-matching primitive shared by the assembly and
+    /// behaviour operators (each wraps it with its own « not found » error).
+    pub(crate) fn sub_for_fespace(
+        &self,
+        fespace: &Handle<SubFiniteElementSpace>,
+    ) -> Result<Option<Handle<SubElementField>>> {
+        for h in self {
+            let matches = with(h, |s| {
+                let f = s.fespace();
+                f.index() == fespace.index() && f.generation() == fespace.generation()
+            })?;
+            if matches {
+                return Ok(Some(h.clone()));
+            }
+        }
+        Ok(None)
+    }
+
     /// Build an `ElementField` with an explicit `components` list per
     /// subspace. `components_per_subspace.len()` must equal
     /// `fespace.len()`.
