@@ -4,6 +4,8 @@
 //! mirroring `src/ops/field/` — rather than on the `NodeField` class, per
 //! the `py/ops/` convention (operations live with operations).
 
+use crate::py::element_field::PyElementField;
+use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::py::node_field::PyNodeField;
 use crate::store::{insert, with};
@@ -91,4 +93,37 @@ pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeFie
     Ok(PyNodeField {
         handle: insert(result),
     })
+}
+
+/// Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
+///
+/// Geometric and physics-agnostic: each component of `field` is
+/// differentiated w.r.t. every spatial axis, giving an `ElementField` with
+/// one component `grad_<name>_<axis>` per (input component, axis) pair
+/// (`grad_T_x`, …). Feed the result to `integrate_behavior`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn gradient(
+    field: PyRef<PyNodeField>,
+    fespace: PyRef<PyFiniteElementSpace>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::field::gradient(&field.handle, &fespace.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// Linearized (small-strain) deformation `ε = ½(∇u + ∇uᵀ)` of a displacement
+/// field `u` at the Gauss points of `fespace`.
+///
+/// `u` must carry exactly `space_dim` components, taken in order as the
+/// displacement along x, y, z. Returns the symmetric strain tensor
+/// (`eps_xx`, `eps_xy`, … in tensor convention). The only deformation
+/// measure for now; non-linear ones will share this shape.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn deformation(
+    u: PyRef<PyNodeField>,
+    fespace: PyRef<PyFiniteElementSpace>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::field::deformation(&u.handle, &fespace.inner)?;
+    Ok(PyElementField { inner: ef })
 }

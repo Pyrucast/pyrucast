@@ -98,9 +98,10 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::field::displace, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::restrict, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::merge, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::gradient, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::deformation, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::stiffness, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::mass, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::behavior::deformation, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::behavior::integrate_behavior, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::build::sub_material_field, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::build::material_field, m)?)?;

@@ -1,18 +1,19 @@
-"""Python tests for behaviour integration (Cast3m `COMP`).
+"""Python tests for COMP — the geometric producers (`gradient`,
+`deformation`) feeding `integrate_behavior`.
 
-`deformation` applies each physics's differential operator to a nodal
-solution (∇T for heat conduction); `integrate_behavior` runs the
-constitutive law (weak-form flux = k·∇T). For a linear law the result is
-exactly what the assembled stiffness encodes.
+`gradient` / `deformation` depend only on the FE space (no model); the user
+calls one of them to get a per-element field and hands it to
+`integrate_behavior`, which runs the constitutive law. For a linear law the
+weak-form flux `k·∇T` is exactly what the assembled stiffness encodes.
 """
 
 import pyrucast
 
 
-def _solved_ramp(n_elems=4, k=2.0):
-    """Solve heat conduction on [0, 1] with T(0)=0, T(1)=1 (so T(x)=x),
-    conductivity `k`. Returns (model, fes, materials, solution)."""
-    h = 1.0 / n_elems
+def _heat_setup(n_elems=4, length=1.0, k=2.0):
+    """Heat-conduction model on [0, length] (n SEG2), conductivity `k`, and a
+    nodal temperature field `T(x) = x`. Returns (model, fes, materials, t)."""
+    h = length / n_elems
     c = pyrucast.Configuration(1)
     nodes = [c.add_node([i * h]) for i in range(n_elems + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -21,65 +22,89 @@ def _solved_ramp(n_elems=4, k=2.0):
     fes = pyrucast.FiniteElementSpace(mesh)
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", k)
+    model = pyrucast.Model.heat_conduction(fes)
 
-    left = pyrucast.Model.dirichlet("T", "q", [nodes[0]])
-    right = pyrucast.Model.dirichlet("T", "q", [nodes[-1]])
-    ml = left[0].multiplier_mesh().node(0, 0, 0)
-    mr = right[0].multiplier_mesh().node(0, 0, 0)
-    model = pyrucast.Model.heat_conduction(fes) + left + right
-
-    rhs_mesh = pyrucast.Mesh(c, "POI1")
-    rhs_mesh.unit().add_cell([ml])
-    rhs_mesh.unit().add_cell([mr])
-    rhs = pyrucast.NodeField(rhs_mesh, ["T"])
-    rhs.set_value(ml, "T", 0.0)
-    rhs.set_value(mr, "T", 1.0)
-
-    solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
-    return model, fes, materials, solution
+    # Nodal temperature T(x) = x over a POI1 support of all nodes.
+    t_mesh = pyrucast.Mesh(c, "POI1")
+    for n in nodes:
+        t_mesh.unit().add_cell([n])
+    t = pyrucast.NodeField(t_mesh, ["T"])
+    for i, n in enumerate(nodes):
+        t.set_value(n, "T", i * h)  # T = x
+    return model, fes, materials, t
 
 
-def test_has_behavior_true_for_hc_false_for_dirichlet():
-    model, *_ = _solved_ramp()
-    # Model.heat_conduction(fes) → one HC sub-model, then two Dirichlet.
-    assert model[0].has_behavior() is True
-    assert model[1].has_behavior() is False
-    assert model[2].has_behavior() is False
-
-
-def test_deformation_is_constant_gradient():
-    model, _fes, _materials, solution = _solved_ramp()
-    defo = pyrucast.deformation(model, solution)
-    assert len(defo) == 1, "only the HC sub-model carries a behaviour"
-    sub = defo[0]
+def test_gradient_of_linear_temperature():
+    _model, fes, _materials, t = _heat_setup(length=1.0)
+    grad = pyrucast.gradient(t, fes)
+    assert len(grad) == 1
+    sub = grad[0]
     assert sub.components() == ["grad_T_x"]
-    for g in range(sub.gauss_count()):
-        # T(x) = x ⇒ ∇T = 1 everywhere.
-        assert abs(sub.value(0, g, "grad_T_x") - 1.0) < 1e-10
+    for cell in range(sub.cell_count()):
+        for g in range(sub.gauss_count()):
+            assert abs(sub.value(cell, g, "grad_T_x") - 1.0) < 1e-10  # ∇(x) = 1
 
 
 def test_integrate_behavior_returns_weak_form_flux():
     k = 2.0
-    model, _fes, materials, solution = _solved_ramp(k=k)
-    defo = pyrucast.deformation(model, solution)
-    state = pyrucast.integrate_behavior(model, defo, materials)
+    model, fes, materials, t = _heat_setup(k=k)
+    grad = pyrucast.gradient(t, fes)
+    state = pyrucast.integrate_behavior(model, grad, materials)
     assert len(state) == 1
     sub = state[0]
     assert sub.components() == ["flux_x"]
     for cell in range(sub.cell_count()):
         for g in range(sub.gauss_count()):
-            # weak-form flux = k·∇T = 2·1 = 2.
-            assert abs(sub.value(cell, g, "flux_x") - k) < 1e-10
+            assert abs(sub.value(cell, g, "flux_x") - k) < 1e-10  # k·∇T = k·1
+
+
+def test_has_behavior_true_for_hc_false_for_dirichlet():
+    c = pyrucast.Configuration(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    mesh = pyrucast.Mesh(c, "SEG2")
+    mesh.unit().add_cell([a, b])
+    fes = pyrucast.FiniteElementSpace(mesh)
+    model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet("T", "q", [a])
+    assert model[0].has_behavior() is True
+    assert model[1].has_behavior() is False
 
 
 def test_integrate_behavior_missing_material_errors():
-    model, fes, _materials, solution = _solved_ramp()
-    defo = pyrucast.deformation(model, solution)
+    model, fes, _materials, t = _heat_setup()
+    grad = pyrucast.gradient(t, fes)
     # Material field on the right subspace but lacking the "k" component.
     bad = pyrucast.ElementField(fes, ["unused"])
     try:
-        pyrucast.integrate_behavior(model, defo, bad)
+        pyrucast.integrate_behavior(model, grad, bad)
     except RuntimeError:
         pass
     else:
         raise AssertionError("expected RuntimeError when material lacks 'k'")
+
+
+def test_deformation_linearized_strain_2d():
+    """u_x = 2x + 0.5y, u_y = 0.1x + 3y on a TRI3 ⇒ ε_xx=2, ε_yy=3, ε_xy=0.3."""
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.0, 1.0])
+    mesh = pyrucast.Mesh(c, "TRI3")
+    mesh.unit().add_cell([a, b, cc])
+    fes = pyrucast.FiniteElementSpace(mesh)
+
+    u_mesh = pyrucast.Mesh(c, "POI1")
+    for n in (a, b, cc):
+        u_mesh.unit().add_cell([n])
+    u = pyrucast.NodeField(u_mesh, ["u_x", "u_y"])
+    for n, x, y in [(a, 0.0, 0.0), (b, 1.0, 0.0), (cc, 0.0, 1.0)]:
+        u.set_value(n, "u_x", 2.0 * x + 0.5 * y)
+        u.set_value(n, "u_y", 0.1 * x + 3.0 * y)
+
+    strain = pyrucast.deformation(u, fes)
+    sub = strain[0]
+    assert sub.components() == ["eps_xx", "eps_xy", "eps_yy"]
+    for g in range(sub.gauss_count()):
+        assert abs(sub.value(0, g, "eps_xx") - 2.0) < 1e-10
+        assert abs(sub.value(0, g, "eps_yy") - 3.0) < 1e-10
+        assert abs(sub.value(0, g, "eps_xy") - 0.3) < 1e-10

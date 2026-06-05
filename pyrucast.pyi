@@ -29,6 +29,7 @@ __all__ = [
     "extrude",
     "fill_surface",
     "from_live_nodes",
+    "gradient",
     "integrate_behavior",
     "line_seg2",
     "mass",
@@ -1198,14 +1199,15 @@ def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins
     nodes of the mesh, in order of first appearance.
     """
 
-def deformation(model: Model, solution: NodeField) -> ElementField:
+def deformation(u: NodeField, fespace: FiniteElementSpace) -> ElementField:
     r"""
-    Compute the deformation field of `model` from a nodal `solution`.
+    Linearized (small-strain) deformation `ε = ½(∇u + ∇uᵀ)` of a displacement
+    field `u` at the Gauss points of `fespace`.
     
-    Returns one `SubElementField` per behaviour-bearing sub-model (in model
-    order), each on its own FE subspace, carrying the deformation components
-    of its physics (`grad_T_x`, … for heat conduction). Constraint
-    sub-models (Dirichlet, …) are skipped.
+    `u` must carry exactly `space_dim` components, taken in order as the
+    displacement along x, y, z. Returns the symmetric strain tensor
+    (`eps_xx`, `eps_xy`, … in tensor convention). The only deformation
+    measure for now; non-linear ones will share this shape.
     """
 
 def displace(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
@@ -1234,14 +1236,25 @@ def from_live_nodes(config: Configuration) -> Mesh:
     Build a points (POI1) mesh holding every live node of `config`.
     """
 
+def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
+    r"""
+    Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
+    
+    Geometric and physics-agnostic: each component of `field` is
+    differentiated w.r.t. every spatial axis, giving an `ElementField` with
+    one component `grad_<name>_<axis>` per (input component, axis) pair
+    (`grad_T_x`, …). Feed the result to `integrate_behavior`.
+    """
+
 def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField) -> ElementField:
     r"""
     Integrate the constitutive law of `model` (Cast3m `COMP`).
     
-    `deformation` is the behaviour-input field (typically from
-    `deformation(model, solution)`); `materials` supplies the per-zone
-    material data. Returns the material-state field (dual flux/stress +
-    updated internal variables) of every behaviour-bearing sub-model.
+    `deformation` is the behaviour-input field (from `gradient(field,
+    fespace)` or `deformation(u, fespace)`); `materials` supplies the
+    per-zone material data. Returns the material-state field (dual
+    flux/stress + updated internal variables) of every behaviour-bearing
+    sub-model.
     
     For a linear law the result is consistent with the assembled stiffness
     (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.

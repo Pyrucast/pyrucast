@@ -106,7 +106,6 @@
 
 use crate::containers::mesh::{Node, NodeId};
 use crate::containers::element_field::SubElementField;
-use crate::containers::node_field::NodeField;
 use crate::error::Result;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::matrix::SubMatrix;
@@ -247,9 +246,9 @@ impl SubModel {
     }
 
     /// Whether this sub-model carries a constitutive behaviour that can be
-    /// integrated ([`compute_deformation`](Self::compute_deformation) +
-    /// [`integrate_behavior`](Self::integrate_behavior)). `true` for
-    /// volumetric physics, `false` for constraints (`Dirichlet`).
+    /// integrated via [`integrate_behavior`](Self::integrate_behavior) from a
+    /// deformation field. `true` for volumetric physics, `false` for
+    /// constraints (`Dirichlet`).
     pub fn has_behavior(&self) -> bool {
         self.as_physics().behavior_fespace().is_some()
     }
@@ -262,19 +261,10 @@ impl SubModel {
         self.as_physics().behavior_fespace()
     }
 
-    /// Compute this sub-model's deformation field (`∇T`, `ε`, …) at the
-    /// Gauss points from a nodal `solution`. Errors for sub-models with no
-    /// behaviour (`Dirichlet`).
-    pub fn compute_deformation(
-        &self,
-        solution: &Handle<NodeField>,
-    ) -> Result<SubElementField> {
-        self.as_physics().compute_deformation(solution)
-    }
-
     /// Integrate this sub-model's constitutive law (Cast3m `COMP`). The
     /// caller ([`crate::ops::behavior::integrate`]) supplies the matching
-    /// per-zone deformation `input` and `material`.
+    /// per-zone deformation `input` (from [`crate::ops::field::gradient`] /
+    /// [`crate::ops::field::deformation`]) and `material`.
     pub(crate) fn integrate_behavior(
         &self,
         input: &Handle<SubElementField>,

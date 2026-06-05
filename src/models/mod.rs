@@ -27,7 +27,6 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::SubMesh;
-use crate::containers::node_field::NodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::store::Handle;
@@ -92,46 +91,27 @@ pub trait Physics {
     /// (constraints such as `Dirichlet`).
     ///
     /// When `Some(_)`, the physics must implement
-    /// [`compute_deformation`](Self::compute_deformation) and
-    /// [`integrate_behavior`](Self::integrate_behavior); the operators in
-    /// [`crate::ops::behavior`] use this handle to pair the per-zone
-    /// deformation field with its sub-model. For a plain volumetric physics
-    /// it is the same FE subspace as
-    /// [`material_fespace`](Self::material_fespace).
+    /// [`integrate_behavior`](Self::integrate_behavior); its deformation
+    /// input is produced geometrically by [`crate::ops::field::gradient`] /
+    /// [`crate::ops::field::deformation`], and [`crate::ops::behavior`] uses
+    /// this handle to pair the per-zone deformation field with its
+    /// sub-model. For a plain volumetric physics it is the same FE subspace
+    /// as [`material_fespace`](Self::material_fespace).
     fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
         None
-    }
-
-    /// Compute the deformation measure at every Gauss point from a nodal
-    /// `solution`, as a per-`(cell, Gauss)` [`SubElementField`].
-    ///
-    /// This is the physics-specific differential operator applied to the
-    /// primal field — the temperature gradient `∇T` for heat conduction,
-    /// the symmetric displacement gradient `ε` for elasticity, … Its output
-    /// is the *deformation* part of the input expected by
-    /// [`integrate_behavior`](Self::integrate_behavior).
-    ///
-    /// Default: errors — a physics with no behaviour
-    /// ([`behavior_fespace`](Self::behavior_fespace) is `None`).
-    fn compute_deformation(
-        &self,
-        _solution: &Handle<NodeField>,
-    ) -> Result<SubElementField> {
-        Err(PyrucastError::Message(format!(
-            "{}: no behaviour — compute_deformation is undefined",
-            self.label()
-        )))
     }
 
     /// Integrate the constitutive law point-by-point (Cast3m `COMP` —
     /// « intégrer le comportement »).
     ///
     /// `input` carries, at every `(cell, Gauss)` point, the deformation
-    /// measure produced by
-    /// [`compute_deformation`](Self::compute_deformation) followed by the
-    /// input internal-state variables (`VAR0`). `material` is `Some(_)` iff
-    /// this physics declares a [`material_fespace`](Self::material_fespace)
-    /// (the operator guarantees it).
+    /// measure (the temperature gradient `∇T` for heat conduction, the
+    /// strain `ε` for elasticity, …) produced by a *geometric* operator —
+    /// [`crate::ops::field::gradient`] / [`crate::ops::field::deformation`],
+    /// independent of any model — followed by the input internal-state
+    /// variables (`VAR0`). `material` is `Some(_)` iff this physics declares
+    /// a [`material_fespace`](Self::material_fespace) (the operator
+    /// guarantees it).
     ///
     /// Returns the **material-state** field: the dual flux/stress followed
     /// by the updated internal-state variables (`VAR1`). Where
