@@ -62,7 +62,7 @@ Le `Model` ne porte **aucune** logique de second membre. L'utilisateur :
 
 1. lit `model.dual_vars()` pour connaître les noms de composantes du vecteur force ;
 2. construit un `NodeField` avec ces composantes (forces de Neumann, sources de chaleur, valeurs imposées de Dirichlet aux nœuds-multiplicateurs, …) ;
-3. additionne plusieurs `NodeField` quand il y a plusieurs sources ;
+3. compose plusieurs sources avec `+` (union structurelle des zones) ou `merge` (fusion vérifiée) ;
 4. passe `Matrix + NodeField` au solveur.
 
 Cette séparation a deux mérites :
@@ -204,13 +204,14 @@ model = pyrucast.Model.heat_conduction(fes) + left + right
 materials = pyrucast.material_field(model, [("k", 1.0)])
 
 # 4) Chargement : valeurs imposées aux nœuds-multiplicateurs.
-# NodeField accepte un Mesh unitaire comme support (coercition parent→sub).
+# NodeField accepte un Mesh comme support (une zone par submesh) ;
+# l'écriture passe par la zone (rhs[0]), la lecture par l'agrégat.
 rhs_mesh = pyrucast.Mesh(c, "POI1")
 rhs_mesh.unit().add_cell([mult_left])
 rhs_mesh.unit().add_cell([mult_right])
 rhs = pyrucast.NodeField(rhs_mesh, ["T"])
-rhs.set_value(mult_left, "T", 0.0)
-rhs.set_value(mult_right, "T", 1.0)
+rhs[0].set_value(mult_left, "T", 0.0)
+rhs[0].set_value(mult_right, "T", 1.0)
 
 # 5) Assemblage + résolution
 K = pyrucast.stiffness(model, materials)

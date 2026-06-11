@@ -32,6 +32,7 @@ Le nom de la classe Python est identique au nom de la structure Rust.
 | `containers::finite_element_space` | `SubFiniteElementSpace` | `pyrucast.SubFiniteElementSpace` | [Espace EF](fe-space.md) |
 | `containers::finite_element_space` | `FiniteElementSpace` | `pyrucast.FiniteElementSpace` | [Espace EF](fe-space.md) |
 | `containers::finite_element_space::element` | `Element` | `pyrucast.Element` | [Espace EF](fe-space.md) |
+| `containers::node_field` | `SubNodeField` | `pyrucast.SubNodeField` *(vue, via `node_field[i]`)* | [Champ aux nœuds](node-field.md) |
 | `containers::node_field` | `NodeField` | `pyrucast.NodeField` | [Champ aux nœuds](node-field.md) |
 | `containers::element_field` | `SubElementField` | `pyrucast.SubElementField` *(vue, via `element_field[i]`)* | [Champ aux points de Gauss](element-field.md) |
 | `containers::element_field` | `ElementField` | `pyrucast.ElementField` | [Champ aux points de Gauss](element-field.md) |
@@ -71,7 +72,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Mesh` | `extrude(mesh, direction, n_layers) -> Mesh` |
 | `fill_surface(contour: &Mesh, et: ElementType, refinement: Option<…>) -> Mesh` | `fill_surface(contour, element_type, max_edge_length=None, min_angle_deg=None) -> Mesh` |
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
-| `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` |
+| `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` (dispatch par type, partagé avec `NodeField`) |
 
 ### `ops::field` — opérateurs sur les champs aux nœuds
 
@@ -82,9 +83,11 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `displace(field: &NodeField, components: Option<Vec<String>>) -> ()` | `displace(field, components=None) -> None` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
+| `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` (dispatch par type, partagé avec `Mesh`) |
 
-> L'addition champ + champ et champ + scalaire passe par l'**opérateur**
-> `+` (Rust `impl Add` → Python `__add__`), pas par une fonction `ops`.
+> La composition de zones et l'arithmétique champ + scalaire passent par
+> l'**opérateur** `+` (Rust `impl Add` → Python `__add__`), pas par une
+> fonction `ops`.
 
 ### `ops::build` — construction de champs matériau
 
@@ -127,19 +130,20 @@ structurelle) et `__str__` (← `Display`, vue résumée façon cast3m) — voir
 
 | Classe | Opérateurs Python | Sémantique | Trait Rust |
 |---|---|---|---|
-| `NodeField` | `f + s`, `f - s`, `f * s`, `f / s` | composante par composante avec un scalaire `s` | `Add`/`Sub`/`Mul`/`Div<f64>` |
-| `NodeField` | `a + b` | addition de deux champs (union des supports) | `Add<&NodeField>` |
+| `SubNodeField` | `f + s`, `f - s`, `f * s`, `f / s` | composante par composante avec un scalaire `s` | `Add`/`Sub`/`Mul`/`Div<f64>` |
+| `NodeField` | `a + b` | merge **structurel** des zones (handles partagés), comme tout agrégat | `Add<&NodeField>` via la grammaire `Aggregate` |
 | `SubElementField` | `f + s`, `f - s`, `f * s`, `f / s` | scalaire, composante par composante | `Add`/`Sub`/`Mul`/`Div<f64>` |
 
-> `f + s` et `a + b` renvoient un **nouveau** champ ; `+= ` n'est pas
-> surchargé. Côté Python, `NodeField.__add__` accepte un `float` **ou** un
-> `NodeField`.
+> `f + s` renvoie un **nouveau** champ ; `+= ` n'est pas surchargé.
+> L'arithmétique scalaire vit au niveau **zone** (`SubNodeField`,
+> `SubElementField`) ; le `+` des agrégats est toujours la composition de
+> zones. Pour fusionner des valeurs avec vérification : `merge(a, b)`.
 
 ### Indexation par clé
 
 | Classe | Opérateurs Python | Clé | Backing Rust |
 |---|---|---|---|
-| `NodeField` | `f[nid, "c"]`, `f[nid, "c"] = v` | `(NodeId, composante)` | `Index`/`IndexMut<(NodeId, &str)>` |
+| `SubNodeField` | `f[nid, "c"]`, `f[nid, "c"] = v` | `(NodeId, composante)` | `Index`/`IndexMut<(NodeId, &str)>` |
 | `SubElementField` | `f[cell, g, "c"]`, `f[cell, g, "c"] = v` | `(maille, point de Gauss, composante)` | méthodes `value` / `set_value` (pas de trait `Index`) |
 
 ### Protocole séquence — `len(x)`, `x[i]`, `for _ in x`

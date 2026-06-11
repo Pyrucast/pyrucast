@@ -1,53 +1,90 @@
-# Champ aux nœuds (`NodeField`)
+# Champ aux nœuds (`NodeField` / `SubNodeField`)
 
-Un **`NodeField`** porte une ou plusieurs valeurs **par nœud**, sur un support défini par un sous-maillage POI1 (cf. [Maillage](mesh.md)). C'est le premier objet « non géométrique » de pyrucast et le premier qui exerce le ramasse-miettes sur des nœuds qui n'auraient plus de `Node` utilisateur.
+Un champ aux nœuds porte une ou plusieurs valeurs **par nœud**. Il suit la
+même grammaire d'agrégat que tous les conteneurs de pyrucast (cf.
+[Conventions](conventions.md)) :
 
-## Support : un sous-maillage POI1
+- **`SubNodeField`** — les valeurs d'**une zone** : un bloc multi-composantes
+  sur les nœuds d'un sous-maillage POI1 (cf. [Maillage](mesh.md)) ;
+- **`NodeField`** — l'**agrégat** : une liste de `SubNodeField`, un par zone,
+  avec éventuellement des **composantes différentes d'une zone à l'autre**.
 
-Un `SubMesh` POI1 est, par construction, **exactement une liste de nœuds** (un nœud par cellule). On l'utilise comme **sélecteur de support** pour le champ : seuls les nœuds présents dans la POI1 reçoivent une valeur.
+C'est le miroir exact de `ElementField` / `SubElementField` côté valeurs aux
+nœuds. L'intérêt de l'agrégat : un champ multiphysique (par exemple `T` sur
+tout le domaine, `UX`/`UY` sur la zone solide seulement) se représente sans
+inventer de `0.0` pour les couples `(nœud, composante)` qu'aucune zone ne
+définit — rien n'est densifié.
 
-Le support est **figé à la construction** : le `NodeField` capture la liste de `NodeId` au moment de sa création et ne suit pas les évolutions ultérieures de la POI1 originelle. Cela rend les semantiques de cohérence triviales (la longueur du tableau de valeurs ne change jamais) et évite tout couplage subtil entre l'objet POI1 et le champ.
+## Support : un sous-maillage POI1 par zone
+
+Un `SubMesh` POI1 est, par construction, **exactement une liste de nœuds**
+(un nœud par cellule). Chaque `SubNodeField` s'appuie sur un support POI1 :
+
+- construit depuis un SubMesh POI1, le champ **partage le handle** du
+  support tel quel (aucun refcount par nœud supplémentaire : le SubMesh est
+  l'unique propriétaire des increfs, garder son handle suffit à garder les
+  nœuds en vie) ;
+- construit depuis un SubMesh d'un autre type d'élément, le champ
+  matérialise un support POI1 frais sur les **nœuds distincts** de la zone
+  (ordre de première apparition dans la connectivité).
+
+La liste de nœuds est **figée à la construction** (la connectivité d'un
+SubMesh est gelée par convention de projet) : la taille du buffer de
+valeurs ne change jamais.
 
 ```text
-   SubMesh POI1            NodeField
-   ────────────            ─────────
-   cell 0 → NodeId(3)      values[0 * ncomp .. ]
-   cell 1 → NodeId(7)      values[1 * ncomp .. ]
-   cell 2 → NodeId(12)     values[2 * ncomp .. ]
-   …                       …
+   NodeField (agrégat)
+   ├── SubNodeField zone 0 ── support POI1 ── values[i × ncomp + c]
+   ├── SubNodeField zone 1 ── support POI1 ── values[...]
+   └── …
 ```
 
 ## Composantes nommées
 
-Chaque champ porte un ou plusieurs **noms de composantes** (`"UX"`, `"UY"`, `"T"`, `"P"`, …). Les valeurs sont rangées en **row-major** : la composante `c` du nœud `i` se trouve à l'indice `i × ncomp + c` dans le buffer plat interne.
+Chaque zone porte ses **noms de composantes** (`"UX"`, `"UY"`, `"T"`, …),
+rangés en **row-major** : la composante `c` du nœud `i` est à l'indice
+`i × ncomp + c`. Au moins une composante par zone, noms uniques, valeurs
+initialisées à `0.0`. Au niveau agrégat, `components()` renvoie l'**union**
+des composantes des zones (ordre de première apparition).
 
-- Au moins une composante est requise à la construction.
-- Les noms doivent être uniques au sein d'un même champ.
-- À la construction, **toutes les valeurs valent `0.0`**.
+Les caractéristiques communes à tous les champs (composantes, `min`,
+`max`) sont portées par les traits Rust `SubField` (niveau zone) et
+`Field` (niveau agrégat, replié sur les zones) — partagés avec
+`ElementField`.
 
-## Refcount sur les nœuds
+## Nœuds d'interface : duplication, lecture, cohérence
 
-À la création, le `NodeField` incrémente le refcount **interne** de chaque nœud de son support dans la `Configuration` (cf. [Configuration](configuration.md)). Son `Drop` les décrémente. Tant qu'un `NodeField` référence un nœud, le GC le protège — même si tous les `Node` utilisateurs et le `SubMesh` source ont disparu :
+Un nœud partagé par plusieurs zones (nœud d'interface) est stocké **une
+fois par zone**. Trois règles régissent cette duplication :
 
-```text
-   Configuration             ◀── refcount par NodeId
-        │
-        ├── Node(s) utilisateur(s)        ── chacun +1
-        ├── SubMesh(s) référençant ce nœud ── chacun +1 par cellule incidente
-        └── NodeField(s) sur ce support    ── chacun +1 par nœud
-```
+- **lecture agrégat** (`field.value(nœud, comp)`) : la **première zone**
+  définissant le couple gagne — aucune vérification au fil de l'eau ;
+- **écriture** : il n'y a **pas** d'écriture au niveau agrégat ; toute
+  mutation passe par les zones (`field[i]`), exactement comme
+  `ElementField` ;
+- **cohérence à la demande** : `field.check()` vérifie que toutes les
+  zones stockant un même couple `(nœud, composante)` portent la **même**
+  valeur (comparaison exacte) ; `consolidate(field)` fait cette
+  vérification puis **fusionne au plus juste** — les zones de même jeu de
+  composantes deviennent une seule zone sur l'union de leurs nœuds (les
+  nœuds d'interface ne sont plus stockés qu'une fois), les jeux distincts
+  restent séparés.
 
-En cas d'échec partiel pendant la construction (par exemple un nœud collecté entre la lecture du SubMesh et l'incref du champ — peu probable car le SubMesh tient déjà un incref), les incréments déjà effectués sont **annulés** (rollback transactionnel).
+## Composition : `+` structurel
+
+Comme pour tous les agrégats, `a + b` **compose les zones** (handles
+partagés, pas de copie) — ce n'est pas une addition de valeurs.
+L'arithmétique scalaire (`f + 2.0`, `f * 0.5`, …) vit au niveau zone
+(`SubNodeField`). Pour fusionner deux champs en vérifiant les valeurs :
+`merge(a, b)` ≡ `consolidate(a + b)`.
 
 ## API Rust
 
 ```rust,ignore
-use pyrucast::mesh::configuration::Configuration;
-use pyrucast::mesh::element_type::ElementType;
-use pyrucast::mesh::SubMesh;
-use pyrucast::mesh::node::Node;
+use pyrucast::aggregate::Aggregate;
+use pyrucast::containers::mesh::{Configuration, ElementType, Node, SubMesh, Mesh};
 use pyrucast::containers::node_field::NodeField;
-use pyrucast::store::{insert, with};
+use pyrucast::store::{insert, with, with_mut};
 
 let cfg = insert(Configuration::new(2).unwrap());
 let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -61,17 +98,18 @@ let sm = {
     insert(sm)
 };
 
-// Champ de déplacement 2D : composantes UX, UY.
-let mut u = NodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
-u.set(0, 0, 1.5).unwrap();
-u.set(0, 1, -0.25).unwrap();
-assert_eq!(u.get(0, 0).unwrap(), 1.5);
-assert_eq!(u.get(1, 0).unwrap(), 0.0);   // valeur par défaut
+// Champ de déplacement 2D mono-zone : composantes UX, UY.
+let u = NodeField::from_submesh(&sm, vec!["UX".into(), "UY".into()]).unwrap();
 
-// Accès par NodeId + nom de composante.
-let ci_ux = u.component_index("UX").unwrap();
-u.set_by_node(b.id(), ci_ux, 9.0).unwrap();
-assert_eq!(u.get_by_node(b.id(), ci_ux).unwrap(), 9.0);
+// Écriture : via la zone. Lecture : via l'agrégat (ou la zone).
+with_mut(&u.get(0).unwrap(), |z| z.set_value(a.id(), "UX", 1.5)).unwrap().unwrap();
+assert_eq!(u.value(a.id(), "UX").unwrap(), 1.5);
+assert_eq!(u.value(b.id(), "UX").unwrap(), 0.0);   // valeur par défaut
+
+// Depuis un maillage multi-zones : un SubNodeField par submesh.
+let field = NodeField::new(&mesh, vec!["T".into()]).unwrap();
+assert_eq!(field.len(), mesh.len());
+field.check().unwrap();   // zones cohérentes aux interfaces
 ```
 
 ## API Python
@@ -87,37 +125,48 @@ mesh = pyrucast.Mesh(c, "POI1")
 mesh.unit().add_cell([a])
 mesh.unit().add_cell([b])
 
+# Un SubNodeField par submesh du support (Mesh ou SubMesh).
 u = pyrucast.NodeField(mesh, ["UX", "UY"])
-u.set(0, 0, 1.5)
-u.set(0, 1, -0.25)
+print(u)                      # NodeField: 1 subfield(s)
+print(u.unit())               # SubNodeField: 2 node(s), 2 component(s) [UX, UY]
 
-print(u)                      # NodeField: 2 node(s), 2 component(s) [UX, UY]
-print(u.node_values(0))       # [1.5, -0.25]
-print(u.node_values(1))       # [0.0, 0.0]
+# Écriture via la zone, lecture via l'agrégat.
+u[0][a, "UX"] = 1.5
+print(u.value(a, "UX"))       # 1.5
+print(u.min("UX"), u.max("UX"))   # 0.0 1.5
 
-# Accès par NodeId + nom de composante.
-ci = u.component_index("UX")
-u.set_by_node(b.id, ci, 9.0)
-print(u.get_by_node(b.id, ci))   # 9.0
+# Composantes par zone (multiphysique) :
+f = pyrucast.NodeField.with_components_per_submesh(two_zone_mesh, [["T"], ["UX", "UY"]])
+print(f.components())         # ['T', 'UX', 'UY']
+f.check()                     # cohérence des interfaces (lève sinon)
+g = pyrucast.consolidate(f)   # fusion au plus juste
 ```
 
-## Sûreté du swap
+## Refcount et sûreté du swap
 
-Comme `SubMesh` et `Mesh`, `NodeField` porte un effet de bord dans son `Drop` (décrément du refcount des nœuds du support). Le store traite son swap correctement :
+Le champ ne fait **aucune** comptabilité par nœud : il garde un clone du
+`Handle<SubMesh>` de son support, et c'est le SubMesh qui possède les
+increfs par nœud dans la `Configuration` (cf.
+[Configuration](configuration.md)). Tant qu'une zone du champ est vivante,
+son support l'est aussi, donc ses nœuds aussi — même si tous les `Node`
+utilisateurs ont disparu.
 
-- `swap_out` n'exécute **pas** le `Drop` de la valeur évincée (`std::mem::forget` interne) — le champ est logiquement vivant, juste relocalisé.
-- Le `Drop` final s'exécute après rechargement depuis le disque si nécessaire. Comme la liste `nodes: Vec<NodeId>` est sérialisée avec le reste, le décrément exact est rejoué une seule fois sur la durée de vie de l'objet.
+Côté swap disque, l'effet de bord au `Drop` (décrément du refcount du
+SubMesh dans le store) suit le mécanisme général du
+[Modèle mémoire](memory-model.md) : `swap_out` n'exécute pas le `Drop` de
+la valeur évincée, le `Drop` final est rejoué une seule fois.
 
-Voir le chapitre [Modèle mémoire](memory-model.md) pour le mécanisme général.
+## Opérateurs consommant un champ
 
-## Pourquoi un snapshot du support plutôt qu'un lien vivant ?
+Toutes les opérations de `ops::field` et le solveur consomment l'agrégat
+et résolvent les nœuds **à travers les zones** (règle premier-trouvé) :
 
-Plusieurs options ont été examinées au moment du design :
-
-| Option | Coût | Pourquoi pas |
-|---|---|---|
-| Snapshot (`Vec<NodeId>` propre) — **retenu** | +1 `Vec<NodeId>` par champ | Sémantique simple, indépendance vis-à-vis des évolutions du SubMesh, refcount transactionnel par champ. |
-| `Handle<SubMesh>` vivant + indexation à la volée | Lecture indirecte à chaque accès | Couplage temporel difficile à maintenir : un `add_cell` ultérieur sur le SubMesh laisserait le champ dans un état incohérent (taille du `Vec<f64>` ≠ nombre de cellules). |
-| `SubMesh` figé après création d'un champ | Drapeau « frozen » + erreurs à l'ajout | Restreint l'API du SubMesh, surcharge le modèle conceptuel. |
-
-L'option retenue rend les invariants locaux au champ et autorise le SubMesh à continuer d'évoluer indépendamment.
+| Opération | Particularité multi-zones |
+|---|---|
+| `coordinates(mesh)` | un `SubNodeField` par submesh, interfaces cohérentes par construction |
+| `set_coordinates(f)` / `displace(f)` | chaque nœud distinct traité **une seule fois** (un nœud d'interface n'est pas déplacé deux fois) |
+| `gradient(f, fes)` / `deformation(u, fes)` | lookups par nœud × Gauss via un snapshot des zones |
+| `solve(matrix, rhs)` | second membre lu par DOF (absent ⇒ `0.0`) ; solution mono-zone sur les nœuds colonnes |
+| `restrict(f, mesh)` | une zone par submesh cible, `0.0` pour les nœuds non couverts |
+| `merge(a, b)` | union structurelle consolidée (conflit de valeur ⇒ erreur) |
+| `consolidate(f)` | fusion par jeu de composantes après vérification de cohérence |
