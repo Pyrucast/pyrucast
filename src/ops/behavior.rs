@@ -76,10 +76,9 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
     use crate::containers::model::SubModel;
-    use crate::containers::node_field::SubNodeField;
+    use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::ops::build::{material_field, material_field_per_sub_model};
     use crate::ops::field::gradient;
-    use crate::store::Handle;
 
     /// SEG2 of length `L`, HeatConduction model (+ optional Dirichlet on the
     /// left node), and the linear nodal solution `T(a)=0, T(b)=dt`. Returns
@@ -88,7 +87,7 @@ mod tests {
         length: f64,
         dt: f64,
         dirichlet: bool,
-    ) -> (Model, FiniteElementSpace, Handle<SubNodeField>) {
+    ) -> (Model, FiniteElementSpace, NodeField) {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[length]).unwrap();
@@ -112,7 +111,7 @@ mod tests {
         let mut sol = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
         sol.set_value(a.id(), "T", 0.0).unwrap();
         sol.set_value(b.id(), "T", dt).unwrap();
-        (model, fes, insert(sol))
+        (model, fes, NodeField::from_sub(sol))
     }
 
     /// Full chain `gradient → integrate`: COMP returns the weak-form flux
@@ -174,7 +173,7 @@ mod tests {
         sol.set_value(n0.id(), "T", 0.0).unwrap();
         sol.set_value(n1.id(), "T", 1.0).unwrap();
         sol.set_value(n2.id(), "T", 2.0).unwrap();
-        let sol = insert(sol);
+        let sol = NodeField::from_sub(sol);
 
         let def = gradient(&sol, &fes).unwrap();
         let materials =

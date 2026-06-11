@@ -111,8 +111,7 @@ pub fn gradient(
     field: PyRef<PyNodeField>,
     fespace: PyRef<PyFiniteElementSpace>,
 ) -> PyResult<PyElementField> {
-    let h = field.inner.unit()?;
-    let ef = crate::ops::field::gradient(&h, &fespace.inner)?;
+    let ef = crate::ops::field::gradient(&field.inner, &fespace.inner)?;
     Ok(PyElementField { inner: ef })
 }
 
@@ -129,7 +128,6 @@ pub fn deformation(
     u: PyRef<PyNodeField>,
     fespace: PyRef<PyFiniteElementSpace>,
 ) -> PyResult<PyElementField> {
-    let h = u.inner.unit()?;
-    let ef = crate::ops::field::deformation(&h, &fespace.inner)?;
+    let ef = crate::ops::field::deformation(&u.inner, &fespace.inner)?;
     Ok(PyElementField { inner: ef })
 }

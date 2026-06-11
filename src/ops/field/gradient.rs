@@ -7,9 +7,10 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::field::Field;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::mesh::NodeId;
-use crate::containers::node_field::SubNodeField;
+use crate::containers::node_field::{FieldSnapshot, NodeField};
 use crate::error::Result;
 use crate::store::{insert, with, Handle};
 
@@ -37,9 +38,12 @@ impl Gradients {
 
 /// Compute `∂(component)/∂x_axis` for each of `components` of `field` at
 /// every Gauss point of `fespace` (one FE subspace). `∇f = Σ_i f_i ∇N_i`.
+/// `field` is a zone snapshot: node lookups resolve across the zones
+/// (first zone defining the pair wins) and error if a cell node lacks one
+/// of `components`.
 pub(crate) fn subspace_gradients(
     fespace: &Handle<SubFiniteElementSpace>,
-    field: &Handle<SubNodeField>,
+    field: &FieldSnapshot,
     components: &[String],
 ) -> Result<Gradients> {
     // Snapshot the reference/geometry data in one critical section
@@ -72,25 +76,22 @@ pub(crate) fn subspace_gradients(
 
     let n_comp = components.len();
     let mut values = vec![0.0; snap.n_cells * snap.n_g * n_comp * snap.space_dim];
-    with(field, |f| -> Result<()> {
-        for cell in 0..snap.n_cells {
-            let ids = &snap.conn[cell * snap.n_nodes..(cell + 1) * snap.n_nodes];
-            for g in 0..snap.n_g {
-                for (ci, comp) in components.iter().enumerate() {
-                    for a in 0..snap.space_dim {
-                        let mut grad = 0.0;
-                        for i in 0..snap.n_nodes {
-                            grad += f.value(ids[i], comp)?
-                                * snap.dn_dx[cell][g][i * snap.space_dim + a];
-                        }
-                        let idx = ((cell * snap.n_g + g) * n_comp + ci) * snap.space_dim + a;
-                        values[idx] = grad;
+    for cell in 0..snap.n_cells {
+        let ids = &snap.conn[cell * snap.n_nodes..(cell + 1) * snap.n_nodes];
+        for g in 0..snap.n_g {
+            for (ci, comp) in components.iter().enumerate() {
+                for a in 0..snap.space_dim {
+                    let mut grad = 0.0;
+                    for i in 0..snap.n_nodes {
+                        grad += field.value(ids[i], comp)?
+                            * snap.dn_dx[cell][g][i * snap.space_dim + a];
                     }
+                    let idx = ((cell * snap.n_g + g) * n_comp + ci) * snap.space_dim + a;
+                    values[idx] = grad;
                 }
             }
         }
-        Ok(())
-    })??;
+    }
 
     Ok(Gradients {
         fespace: fespace.clone(),
@@ -111,11 +112,12 @@ pub(crate) fn subspace_gradients(
 /// order component-major then axis (`grad_T_x`, …). Feed the result to
 /// [`crate::ops::behavior::integrate`] as the deformation input of a physics
 /// whose behaviour consumes a gradient (heat conduction).
-pub fn gradient(field: &Handle<SubNodeField>, fespace: &FiniteElementSpace) -> Result<ElementField> {
-    let components: Vec<String> = with(field, |f| f.components().to_vec())?;
+pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
+    let components = Field::components(field)?;
+    let snapshot = field.snapshot()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        let g = subspace_gradients(sub, field, &components)?;
+        let g = subspace_gradients(sub, &snapshot, &components)?;
         out.add_sub(insert(gradients_to_field(&g, &components)?))?;
     }
     Ok(out)
@@ -150,6 +152,7 @@ fn gradients_to_field(g: &Gradients, components: &[String]) -> Result<SubElement
 mod tests {
     use super::*;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::node_field::SubNodeField;
     use crate::store::insert;
 
     /// 1-D linear field `T(x) = x` on a single SEG2 ⇒ `∇T = 1`.
@@ -166,7 +169,7 @@ mod tests {
         let mut t = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
         t.set_value(a.id(), "T", 0.0).unwrap();
         t.set_value(b.id(), "T", 2.0).unwrap(); // T = x
-        let t = insert(t);
+        let t = NodeField::from_sub(t);
 
         let grad = gradient(&t, &fes).unwrap();
         assert_eq!(grad.len(), 1);
@@ -196,7 +199,7 @@ mod tests {
         f.set_value(a.id(), "f", 0.0).unwrap(); // 2·0 + 3·0
         f.set_value(b.id(), "f", 2.0).unwrap(); // 2·1 + 3·0
         f.set_value(c.id(), "f", 3.0).unwrap(); // 2·0 + 3·1
-        let f = insert(f);
+        let f = NodeField::from_sub(f);
 
         let grad = gradient(&f, &fes).unwrap();
         with(&grad.get(0).unwrap(), |s| {

@@ -9,11 +9,12 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::field::Field;
 use crate::containers::finite_element_space::FiniteElementSpace;
-use crate::containers::node_field::SubNodeField;
+use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::ops::field::gradient::{subspace_gradients, Gradients, AXES};
-use crate::store::{insert, with, Handle};
+use crate::store::insert;
 
 /// Linearized (small-strain) deformation `ε = ½(∇u + ∇uᵀ)` of a displacement
 /// field `u` at the Gauss points of every subspace of `fespace`.
@@ -23,11 +24,12 @@ use crate::store::{insert, with, Handle};
 /// **tensor** convention (`eps_xy = ½(∂u_x/∂y + ∂u_y/∂x)`, *not* engineering
 /// shear `γ`), with one component `eps_<ai><aj>` per independent entry
 /// `i ≤ j`, in order `eps_xx, eps_xy, …, eps_yy, …`.
-pub fn deformation(u: &Handle<SubNodeField>, fespace: &FiniteElementSpace) -> Result<ElementField> {
-    let components: Vec<String> = with(u, |f| f.components().to_vec())?;
+pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
+    let components = Field::components(u)?;
+    let snapshot = u.snapshot()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        let g = subspace_gradients(sub, u, &components)?;
+        let g = subspace_gradients(sub, &snapshot, &components)?;
         if g.n_comp != g.space_dim {
             return Err(PyrucastError::Message(format!(
                 "deformation: the displacement field carries {} component(s) but the FE \
@@ -71,7 +73,8 @@ fn strain_from_gradients(g: &Gradients) -> Result<SubElementField> {
 mod tests {
     use super::*;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
-    use crate::store::insert;
+    use crate::containers::node_field::SubNodeField;
+    use crate::store::{insert, with};
 
     /// Linear displacement `u_x = 2x + 0.5y`, `u_y = 0.1x + 3y` on a TRI3.
     /// ⇒ ε_xx = 2, ε_yy = 3, ε_xy = ½(0.5 + 0.1) = 0.3.
@@ -93,7 +96,7 @@ mod tests {
             u.set_value(n.id(), "u_x", 2.0 * x + 0.5 * y).unwrap();
             u.set_value(n.id(), "u_y", 0.1 * x + 3.0 * y).unwrap();
         }
-        let u = insert(u);
+        let u = NodeField::from_sub(u);
 
         let strain = deformation(&u, &fes).unwrap();
         with(&strain.get(0).unwrap(), |s| {
@@ -123,7 +126,9 @@ mod tests {
         // 2-D space but a single displacement component.
         let support =
             insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
-        let u = insert(SubNodeField::from_poi1(&support, vec!["u_x".into()]).unwrap());
+        let u = NodeField::from_sub(
+            SubNodeField::from_poi1(&support, vec!["u_x".into()]).unwrap(),
+        );
         let err = deformation(&u, &fes).unwrap_err();
         assert!(format!("{err}").contains("one displacement component per axis"));
     }

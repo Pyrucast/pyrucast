@@ -1,15 +1,16 @@
 //! Dense linear solver: `A · x = b`.
 //!
-//! This module bridges the abstract [`Matrix`] / [`SubNodeField`] objects
+//! This module bridges the abstract [`Matrix`] / [`NodeField`] objects
 //! and the dense linear algebra of [`nalgebra`]. It exposes a single
 //! free function — [`solve`] — that:
 //!
 //! 1. converts the assembled `Matrix` to a dense [`nalgebra::DMatrix`];
-//! 2. reads a right-hand-side vector out of the `SubNodeField`, one entry
-//!    per **row DOF** of the matrix (missing entries default to `0.0`);
+//! 2. reads a right-hand-side vector out of the `NodeField`, one entry
+//!    per **row DOF** of the matrix (zones resolved first-found; missing
+//!    entries default to `0.0`);
 //! 3. runs a standard LU factorization (`nalgebra::DMatrix::lu`);
-//! 4. wraps the solution back into a fresh `SubNodeField` indexed by the
-//!    **column DOFs** of the matrix.
+//! 4. wraps the solution back into a fresh single-zone `NodeField`
+//!    indexed by the **column DOFs** of the matrix.
 //!
 //! This is the minimal harness needed to validate the assembly of
 //! [`crate::containers::model::Model`] end-to-end (Poisson 1-D, etc.). A richer
@@ -29,7 +30,7 @@
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::model::{Model, SubModel};
 //! use pyrucast::containers::mesh::Node;
-//! use pyrucast::containers::node_field::SubNodeField;
+//! use pyrucast::containers::node_field::{NodeField, SubNodeField};
 //! use pyrucast::ops::assemble;
 //! use pyrucast::ops::solver::lu::solve;
 //! use pyrucast::store::insert;
@@ -66,6 +67,7 @@
 //! let mut rhs = SubNodeField::from_poi1(&load_sm_h, vec!["T".into()]).unwrap();
 //! rhs.set_value(mult_a, "T", 0.0).unwrap();
 //! rhs.set_value(mult_b, "T", 1.0).unwrap();
+//! let rhs = NodeField::from_sub(rhs);
 //!
 //! let k = assemble::stiffness(&model, &materials).unwrap();
 //! let solution = solve(&k, &rhs).unwrap();
@@ -78,7 +80,7 @@ use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::containers::matrix::Matrix;
 use crate::containers::mesh::SubMesh;
-use crate::containers::node_field::SubNodeField;
+use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::store::insert;
 use nalgebra::DVector;
 
@@ -86,14 +88,14 @@ use nalgebra::DVector;
 /// Solve `matrix · x = rhs` using dense LU factorization.
 ///
 /// `matrix` must be square (`n_rows == n_cols ≥ 1`). The `rhs`
-/// `SubNodeField` is read at every row DOF of the matrix; missing entries
-/// (component absent in `rhs.components()`, or node not in
-/// `rhs`'s support) default to `0.0`.
+/// `NodeField` is read at every row DOF of the matrix, through the
+/// aggregate (first zone defining the pair wins); missing entries
+/// (no zone defines that `(node, component)`) default to `0.0`.
 ///
-/// The returned `SubNodeField` lives on the column-DOF nodes of the
-/// matrix (a POI1 submesh built on the fly) and exposes one component
-/// per distinct column field name.
-pub fn solve(matrix: &Matrix, rhs: &SubNodeField) -> Result<SubNodeField> {
+/// The returned `NodeField` is a single zone living on the column-DOF
+/// nodes of the matrix (a POI1 submesh built on the fly), with one
+/// component per distinct column field name.
+pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
     let row_dofs = matrix.row_dofs()?;
     let col_dofs = matrix.col_dofs()?;
     if row_dofs.len() != col_dofs.len() {
@@ -110,14 +112,11 @@ pub fn solve(matrix: &Matrix, rhs: &SubNodeField) -> Result<SubNodeField> {
 
     // ── Step 1 — build the b vector ────────────────────────────────────
     let mut b = DVector::<f64>::zeros(n);
-    let rhs_components: Vec<String> = rhs.components().to_vec();
+    let rhs_snapshot = rhs.snapshot()?;
     for (i, (node_id, field_name)) in row_dofs.iter().enumerate() {
-        if rhs_components.iter().any(|c| c == field_name) {
-            // value() errors if `node_id` isn't in the rhs's support —
-            // we treat that as "no imposed value here", i.e. zero.
-            if let Ok(v) = rhs.value(*node_id, field_name) {
-                b[i] = v;
-            }
+        // "No zone defines this DOF" means "no imposed value here" — zero.
+        if let Some(v) = rhs_snapshot.value_opt(*node_id, field_name) {
+            b[i] = v;
         }
     }
 
@@ -128,8 +127,8 @@ pub fn solve(matrix: &Matrix, rhs: &SubNodeField) -> Result<SubNodeField> {
         PyrucastError::Message("solve: LU failed (matrix is singular)".into())
     })?;
 
-    // ── Step 3 — wrap the solution into a fresh SubNodeField ──────────────
-    let cfg = rhs.configuration();
+    // ── Step 3 — wrap the solution into a fresh single-zone NodeField ──
+    let cfg = rhs.configuration()?;
 
     // Unique col nodes in first-seen order.
     let mut unique_nodes: Vec<NodeId> = Vec::new();
@@ -155,7 +154,7 @@ pub fn solve(matrix: &Matrix, rhs: &SubNodeField) -> Result<SubNodeField> {
     for (i, (node_id, field_name)) in col_dofs.iter().enumerate() {
         result.set_value(*node_id, field_name, x[i])?;
     }
-    Ok(result)
+    Ok(NodeField::from_sub(result))
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
@@ -228,6 +227,7 @@ mod tests {
         let mut rhs = SubNodeField::from_poi1(&rhs_sm_h, vec!["T".into()]).unwrap();
         rhs.set_value(mult_left, "T", 0.0).unwrap();
         rhs.set_value(mult_right, "T", 1.0).unwrap();
+        let rhs = NodeField::from_sub(rhs);
 
         // Assemble + solve.
         let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
@@ -283,7 +283,8 @@ mod tests {
         let mut rhs_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[a.id()]).unwrap();
         let rhs_sm_h = insert(rhs_sm);
-        let rhs = SubNodeField::from_poi1(&rhs_sm_h, vec!["q".into()]).unwrap();
+        let rhs =
+            NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm_h, vec!["q".into()]).unwrap());
         // K is singular ⇒ solve must err.
         assert!(solve(&k, &rhs).is_err());
     }
@@ -316,7 +317,9 @@ mod tests {
         // Build a minimal rhs on the same cfg.
         let mut rhs_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[r0.id()]).unwrap();
-        let rhs = SubNodeField::from_poi1(&insert(rhs_sm), vec!["q".into()]).unwrap();
+        let rhs = NodeField::from_sub(
+            SubNodeField::from_poi1(&insert(rhs_sm), vec!["q".into()]).unwrap(),
+        );
         assert!(solve(&m, &rhs).is_err());
     }
 
@@ -327,7 +330,9 @@ mod tests {
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let mut sm = SubMesh::new(cfg, ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
-        let rhs = SubNodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap();
+        let rhs = NodeField::from_sub(
+            SubNodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap(),
+        );
         assert!(solve(&m, &rhs).is_err());
     }
 }

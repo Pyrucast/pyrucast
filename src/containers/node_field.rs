@@ -795,6 +795,17 @@ impl NodeField {
         Ok(self.node_ids()?.len())
     }
 
+    /// Lock-free snapshot of the zones, for operators doing many
+    /// per-node reads (gradient, solver, …): one store lock per sub at
+    /// construction, none afterwards.
+    pub(crate) fn snapshot(&self) -> Result<FieldSnapshot> {
+        let mut subs = Vec::with_capacity(self.len());
+        for h in self {
+            subs.push(with(h, |s| s.clone())?);
+        }
+        Ok(FieldSnapshot { subs })
+    }
+
     /// Verify zone coherence: every `(node, component)` stored by several
     /// subs must hold the **same** value (exact comparison) everywhere.
     ///
@@ -835,6 +846,32 @@ impl NodeField {
             }
         }
         Ok(())
+    }
+}
+
+/// Lock-free snapshot of a [`NodeField`]'s zones (see
+/// [`NodeField::snapshot`]). Reads mirror the aggregate: first zone
+/// defining `(node, component)` wins.
+pub(crate) struct FieldSnapshot {
+    subs: Vec<SubNodeField>,
+}
+
+impl FieldSnapshot {
+    /// Value at `(node, component)` — first zone wins; errors if absent.
+    pub(crate) fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
+        self.value_opt(nid, component).ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "no subfield defines (node {}, component {})",
+                nid, component
+            ))
+        })
+    }
+
+    /// Like [`FieldSnapshot::value`], `None` when absent.
+    pub(crate) fn value_opt(&self, nid: NodeId, component: &str) -> Option<f64> {
+        self.subs
+            .iter()
+            .find_map(|s| s.component_value_opt(nid, component))
     }
 }
 
