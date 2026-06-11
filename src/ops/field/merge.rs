@@ -1,4 +1,4 @@
-use crate::containers::node_field::NodeField;
+use crate::containers::node_field::SubNodeField;
 use crate::error::{PyrucastError, Result};
 
 /// Merge two node fields into one defined on the union of their supports.
@@ -11,10 +11,10 @@ use crate::error::{PyrucastError, Result};
 /// Errors if both fields hold a **different** value at the same
 /// `(node, component)` pair, or if they are attached to different
 /// `Configuration`s. Equal values at shared points are kept as-is.
-pub fn merge(a: &NodeField, b: &NodeField) -> Result<NodeField> {
+pub fn merge(a: &SubNodeField, b: &SubNodeField) -> Result<SubNodeField> {
     a.check_compatible(b)?;
     let (components, nodes) = a.union_layout(b);
-    let mut result = NodeField::new_with_nodes(a.configuration(), nodes.clone(), components.clone())?;
+    let mut result = SubNodeField::new_with_nodes(a.configuration(), nodes.clone(), components.clone())?;
     for (ni, &nid) in nodes.iter().enumerate() {
         for (ci, comp) in components.iter().enumerate() {
             let va = a.component_value_opt(nid, comp);
@@ -52,12 +52,12 @@ mod tests {
         cfg: &crate::store::Handle<Configuration>,
         nodes: &[&Node],
         components: Vec<String>,
-    ) -> NodeField {
+    ) -> SubNodeField {
         let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
         for nd in nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
-        NodeField::from_poi1(&insert(sm), components).unwrap()
+        SubNodeField::from_poi1(&insert(sm), components).unwrap()
     }
 
     #[test]

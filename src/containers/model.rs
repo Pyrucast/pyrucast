@@ -34,8 +34,8 @@
 //!
 //! The model layer is purely matrix-producing. Loads (right-hand side
 //! vectors) are entirely the user's responsibility: read
-//! `model.dual_vars()`, build a [`crate::containers::node_field::NodeField`] with
-//! the matching component names, and feed `Matrix + NodeField` to the
+//! `model.dual_vars()`, build a [`crate::containers::node_field::SubNodeField`] with
+//! the matching component names, and feed `Matrix + SubNodeField` to the
 //! solver.
 //!
 //! # Lagrange multipliers and DOF identification
@@ -164,7 +164,7 @@ impl SubModel {
 
     /// Dirichlet sub-model: enforce `<primal_var> = u_d` on each
     /// `constrained_node`, with `u_d` supplied later by the user
-    /// through the load `NodeField`.
+    /// through the load `SubNodeField`.
     ///
     /// `primal_dual` is the dual variable name of the primary physics
     /// whose primal is being constrained (e.g. `"q"` for heat
@@ -188,7 +188,7 @@ impl SubModel {
     ///
     /// Useful for the user who needs to write the imposed value `u_d` at
     /// the multiplier node's `<primal_var>` component of the load
-    /// `NodeField`.
+    /// `SubNodeField`.
     pub fn multiplier_nodes(&self) -> Result<Vec<NodeId>> {
         match self.as_physics().multiplier_support() {
             Some(support) => with(support, |s| s.connectivity().to_vec()),
@@ -200,7 +200,7 @@ impl SubModel {
     /// support submesh — zero-copy). Empty for non-Lagrange physics.
     ///
     /// This is the user-facing handle to the multiplier nodes: build a
-    /// load [`crate::containers::node_field::NodeField`] on its single
+    /// load [`crate::containers::node_field::SubNodeField`] on its single
     /// submesh to impose the constrained values.
     pub fn multiplier_mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
@@ -349,7 +349,7 @@ impl Model {
 
     /// Primal variable names — union over all sub-models, first-seen order.
     /// These are the **column labels** of the assembled matrices and the
-    /// component names of the solution `NodeField`.
+    /// component names of the solution `SubNodeField`.
     pub fn primal_vars(&self) -> Result<Vec<String>> {
         let mut all: Vec<String> = Vec::new();
         for h in self {
@@ -360,7 +360,7 @@ impl Model {
 
     /// Dual variable names — union over all sub-models, first-seen order.
     /// These are the **row labels** of the assembled matrices and the
-    /// component names of the load `NodeField`.
+    /// component names of the load `SubNodeField`.
     pub fn dual_vars(&self) -> Result<Vec<String>> {
         let mut all: Vec<String> = Vec::new();
         for h in self {

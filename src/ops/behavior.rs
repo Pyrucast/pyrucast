@@ -76,7 +76,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
     use crate::containers::model::SubModel;
-    use crate::containers::node_field::NodeField;
+    use crate::containers::node_field::SubNodeField;
     use crate::ops::build::{material_field, material_field_per_sub_model};
     use crate::ops::field::gradient;
     use crate::store::Handle;
@@ -88,7 +88,7 @@ mod tests {
         length: f64,
         dt: f64,
         dirichlet: bool,
-    ) -> (Model, FiniteElementSpace, Handle<NodeField>) {
+    ) -> (Model, FiniteElementSpace, Handle<SubNodeField>) {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[length]).unwrap();
@@ -109,7 +109,7 @@ mod tests {
         }
 
         let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
-        let mut sol = NodeField::from_poi1(&support, vec!["T".into()]).unwrap();
+        let mut sol = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
         sol.set_value(a.id(), "T", 0.0).unwrap();
         sol.set_value(b.id(), "T", dt).unwrap();
         (model, fes, insert(sol))
@@ -170,7 +170,7 @@ mod tests {
         // Linear ramp T = x ⇒ ∇T = 1 everywhere.
         let support =
             insert(SubMesh::poi1_from_nodes(&[n0.clone(), n1.clone(), n2.clone()]).unwrap());
-        let mut sol = NodeField::from_poi1(&support, vec!["T".into()]).unwrap();
+        let mut sol = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
         sol.set_value(n0.id(), "T", 0.0).unwrap();
         sol.set_value(n1.id(), "T", 1.0).unwrap();
         sol.set_value(n2.id(), "T", 2.0).unwrap();

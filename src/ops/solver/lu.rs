@@ -1,14 +1,14 @@
 //! Dense linear solver: `A · x = b`.
 //!
-//! This module bridges the abstract [`Matrix`] / [`NodeField`] objects
+//! This module bridges the abstract [`Matrix`] / [`SubNodeField`] objects
 //! and the dense linear algebra of [`nalgebra`]. It exposes a single
 //! free function — [`solve`] — that:
 //!
 //! 1. converts the assembled `Matrix` to a dense [`nalgebra::DMatrix`];
-//! 2. reads a right-hand-side vector out of the `NodeField`, one entry
+//! 2. reads a right-hand-side vector out of the `SubNodeField`, one entry
 //!    per **row DOF** of the matrix (missing entries default to `0.0`);
 //! 3. runs a standard LU factorization (`nalgebra::DMatrix::lu`);
-//! 4. wraps the solution back into a fresh `NodeField` indexed by the
+//! 4. wraps the solution back into a fresh `SubNodeField` indexed by the
 //!    **column DOFs** of the matrix.
 //!
 //! This is the minimal harness needed to validate the assembly of
@@ -29,7 +29,7 @@
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::model::{Model, SubModel};
 //! use pyrucast::containers::mesh::Node;
-//! use pyrucast::containers::node_field::NodeField;
+//! use pyrucast::containers::node_field::SubNodeField;
 //! use pyrucast::ops::assemble;
 //! use pyrucast::ops::solver::lu::solve;
 //! use pyrucast::store::insert;
@@ -63,7 +63,7 @@
 //! load_sm.add_cell(&[mult_a]).unwrap();
 //! load_sm.add_cell(&[mult_b]).unwrap();
 //! let load_sm_h = insert(load_sm);
-//! let mut rhs = NodeField::from_poi1(&load_sm_h, vec!["T".into()]).unwrap();
+//! let mut rhs = SubNodeField::from_poi1(&load_sm_h, vec!["T".into()]).unwrap();
 //! rhs.set_value(mult_a, "T", 0.0).unwrap();
 //! rhs.set_value(mult_b, "T", 1.0).unwrap();
 //!
@@ -78,7 +78,7 @@ use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::containers::matrix::Matrix;
 use crate::containers::mesh::SubMesh;
-use crate::containers::node_field::NodeField;
+use crate::containers::node_field::SubNodeField;
 use crate::store::insert;
 use nalgebra::DVector;
 
@@ -86,14 +86,14 @@ use nalgebra::DVector;
 /// Solve `matrix · x = rhs` using dense LU factorization.
 ///
 /// `matrix` must be square (`n_rows == n_cols ≥ 1`). The `rhs`
-/// `NodeField` is read at every row DOF of the matrix; missing entries
+/// `SubNodeField` is read at every row DOF of the matrix; missing entries
 /// (component absent in `rhs.components()`, or node not in
 /// `rhs`'s support) default to `0.0`.
 ///
-/// The returned `NodeField` lives on the column-DOF nodes of the
+/// The returned `SubNodeField` lives on the column-DOF nodes of the
 /// matrix (a POI1 submesh built on the fly) and exposes one component
 /// per distinct column field name.
-pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
+pub fn solve(matrix: &Matrix, rhs: &SubNodeField) -> Result<SubNodeField> {
     let row_dofs = matrix.row_dofs()?;
     let col_dofs = matrix.col_dofs()?;
     if row_dofs.len() != col_dofs.len() {
@@ -128,7 +128,7 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
         PyrucastError::Message("solve: LU failed (matrix is singular)".into())
     })?;
 
-    // ── Step 3 — wrap the solution into a fresh NodeField ──────────────
+    // ── Step 3 — wrap the solution into a fresh SubNodeField ──────────────
     let cfg = rhs.configuration();
 
     // Unique col nodes in first-seen order.
@@ -147,11 +147,11 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
     }
 
     // POI1 submesh over the col nodes — provides the support of the
-    // resulting NodeField. The submesh and the field both end up in the
+    // resulting SubNodeField. The submesh and the field both end up in the
     // store; they cascade-decref the nodes correctly when dropped.
     let sm_h = insert(SubMesh::poi1_from_node_ids(cfg.clone(), &unique_nodes)?);
 
-    let mut result = NodeField::from_poi1(&sm_h, unique_components)?;
+    let mut result = SubNodeField::from_poi1(&sm_h, unique_components)?;
     for (i, (node_id, field_name)) in col_dofs.iter().enumerate() {
         result.set_value(*node_id, field_name, x[i])?;
     }
@@ -225,7 +225,7 @@ mod tests {
         rhs_sm.add_cell(&[mult_left]).unwrap();
         rhs_sm.add_cell(&[mult_right]).unwrap();
         let rhs_sm_h = insert(rhs_sm);
-        let mut rhs = NodeField::from_poi1(&rhs_sm_h, vec!["T".into()]).unwrap();
+        let mut rhs = SubNodeField::from_poi1(&rhs_sm_h, vec!["T".into()]).unwrap();
         rhs.set_value(mult_left, "T", 0.0).unwrap();
         rhs.set_value(mult_right, "T", 1.0).unwrap();
 
@@ -279,11 +279,11 @@ mod tests {
         let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
 
         // Build a tiny non-empty rhs on a real node so we can find the
-        // Configuration of the result NodeField.
+        // Configuration of the result SubNodeField.
         let mut rhs_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[a.id()]).unwrap();
         let rhs_sm_h = insert(rhs_sm);
-        let rhs = NodeField::from_poi1(&rhs_sm_h, vec!["q".into()]).unwrap();
+        let rhs = SubNodeField::from_poi1(&rhs_sm_h, vec!["q".into()]).unwrap();
         // K is singular ⇒ solve must err.
         assert!(solve(&k, &rhs).is_err());
     }
@@ -316,7 +316,7 @@ mod tests {
         // Build a minimal rhs on the same cfg.
         let mut rhs_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[r0.id()]).unwrap();
-        let rhs = NodeField::from_poi1(&insert(rhs_sm), vec!["q".into()]).unwrap();
+        let rhs = SubNodeField::from_poi1(&insert(rhs_sm), vec!["q".into()]).unwrap();
         assert!(solve(&m, &rhs).is_err());
     }
 
@@ -327,7 +327,7 @@ mod tests {
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let mut sm = SubMesh::new(cfg, ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
-        let rhs = NodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap();
+        let rhs = SubNodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap();
         assert!(solve(&m, &rhs).is_err());
     }
 }

@@ -1,7 +1,7 @@
 //! Python wrappers for the field operations in [`crate::ops::field`].
 //!
 //! Free functions that build or transform a [`PyNodeField`]. Kept here —
-//! mirroring `src/ops/field/` — rather than on the `NodeField` class, per
+//! mirroring `src/ops/field/` — rather than on the `SubNodeField` class, per
 //! the `py/ops/` convention (operations live with operations).
 
 use crate::py::element_field::PyElementField;
@@ -11,7 +11,7 @@ use crate::py::node_field::PyNodeField;
 use crate::store::{insert, with};
 use pyo3::prelude::*;
 
-/// Build a `NodeField` carrying the coordinates of every node of `mesh`.
+/// Build a `SubNodeField` carrying the coordinates of every node of `mesh`.
 ///
 /// One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
 /// requests all the axes the mesh's `Configuration` has (`["X"]` in 1-D,
@@ -65,7 +65,7 @@ pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> P
 
 /// Restrict `field` to the nodes used by `mesh`.
 ///
-/// Returns a new `NodeField` with the same components, supported on the
+/// Returns a new `SubNodeField` with the same components, supported on the
 /// unique nodes of `mesh` (order of first appearance). Nodes of `mesh`
 /// absent from `field` are assigned `0.0`. Errors if `mesh` and `field`
 /// are attached to different `Configuration`s.
@@ -87,7 +87,7 @@ pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNo
 #[pyfunction]
 pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
     // The store mutex is per-type and non-reentrant: clone `b` out before
-    // locking `a` rather than nesting two `with::<NodeField>` calls.
+    // locking `a` rather than nesting two `with::<SubNodeField>` calls.
     let fb = with(&b.handle, |f| f.clone())?;
     let result = with(&a.handle, |fa| crate::ops::field::merge(fa, &fb))??;
     Ok(PyNodeField {

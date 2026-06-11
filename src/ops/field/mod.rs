@@ -1,5 +1,5 @@
 //! Field operators — derivations and transformations on
-//! [`crate::containers::node_field::NodeField`] / [`crate::containers::element_field::ElementField`].
+//! [`crate::containers::node_field::SubNodeField`] / [`crate::containers::element_field::ElementField`].
 //!
 //! [`gradient`] (`∇f` of a nodal field) and [`deformation`] (the linearized
 //! strain `ε` of a displacement field) are the purely geometric producers of

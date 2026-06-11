@@ -4,7 +4,7 @@
 //! algorithms for one logical container. The pattern is generally
 //! `Sub<Xxx>` (one piece, stored in the global store) + `Xxx`
 //! (an [`crate::aggregate::Aggregate`] of those sub-pieces). Standalone
-//! data types like [`matrix::Matrix`] and [`node_field::NodeField`] live
+//! data types like [`matrix::Matrix`] and [`node_field::SubNodeField`] live
 //! here too.
 //!
 //! Python wrappers for everything in this tree live under `crate::py`

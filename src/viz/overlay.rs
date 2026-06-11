@@ -1,6 +1,6 @@
 //! Field-coloured rendering overlay — the "current component" button.
 //!
-//! Drawn on top of the rendered scene whenever a `NodeField` is supplied
+//! Drawn on top of the rendered scene whenever a `SubNodeField` is supplied
 //! (file export AND interactive window). In the interactive window the
 //! same rectangle doubles as a **clickable button** that cycles through
 //! the field's components — click detection uses [`button_rect`] so the

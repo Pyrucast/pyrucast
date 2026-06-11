@@ -1,6 +1,6 @@
-//! NodeField — multi-component values on a POI1 submesh.
+//! SubNodeField — multi-component values on a POI1 submesh.
 //!
-//! A [`NodeField`] stores one or more named components per node of a
+//! A [`SubNodeField`] stores one or more named components per node of a
 //! support defined by a POI1 [`SubMesh`] (a list of nodes). The field
 //! holds a `Handle<SubMesh>` on its support: the SubMesh is the
 //! single owner of per-node refcounts in the [`Configuration`] (its
@@ -22,7 +22,7 @@
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::containers::mesh::Node;
-//! use pyrucast::containers::node_field::NodeField;
+//! use pyrucast::containers::node_field::SubNodeField;
 //! use pyrucast::store::{insert, with, with_mut};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
@@ -37,7 +37,7 @@
 //!     insert(sm)
 //! };
 //!
-//! let mut field = NodeField::from_poi1(
+//! let mut field = SubNodeField::from_poi1(
 //!     &sm_handle,
 //!     vec!["UX".into(), "UY".into()],
 //! ).unwrap();
@@ -60,14 +60,14 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Add, Div, Index, IndexMut, Mul, Sub};
 
-// ─── NodeField ──────────────────────────────────────────────────────────────
+// ─── SubNodeField ──────────────────────────────────────────────────────────────
 
 /// Multi-component values on a snapshot of a POI1 SubMesh's node list.
 ///
 /// Values are stored row-major: component `c` of node `i` is at index
 /// `i * component_count + c` in the internal flat buffer.
 #[derive(Serialize, Deserialize)]
-pub struct NodeField {
+pub struct SubNodeField {
     /// POI1 SubMesh owning the per-node refcounts. The field keeps a
     /// clone of this handle for its whole lifetime; that is the only
     /// thing keeping the support (and its nodes) alive.
@@ -80,8 +80,8 @@ pub struct NodeField {
     values: Vec<f64>,
 }
 
-impl NodeField {
-    /// Build a NodeField on the nodes of a POI1 [`SubMesh`]. The support
+impl SubNodeField {
+    /// Build a SubNodeField on the nodes of a POI1 [`SubMesh`]. The support
     /// is captured as a snapshot; subsequent changes to the SubMesh do
     /// not affect this field.
     ///
@@ -92,7 +92,7 @@ impl NodeField {
     pub fn from_poi1(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
         if components.is_empty() {
             return Err(PyrucastError::Message(
-                "NodeField requires at least one component".into(),
+                "SubNodeField requires at least one component".into(),
             ));
         }
         for i in 0..components.len() {
@@ -109,7 +109,7 @@ impl NodeField {
         let nodes: Vec<NodeId> = with(submesh, |sm| -> Result<_> {
             if sm.element_type() != ElementType::POI1 {
                 return Err(PyrucastError::Message(format!(
-                    "NodeField requires a POI1 SubMesh, got {}",
+                    "SubNodeField requires a POI1 SubMesh, got {}",
                     sm.element_type()
                 )));
             }
@@ -119,7 +119,7 @@ impl NodeField {
 
         let n_nodes = nodes.len();
         let n_comp = components.len();
-        Ok(NodeField {
+        Ok(SubNodeField {
             support: submesh.clone(),
             nodes,
             components,
@@ -150,7 +150,7 @@ impl NodeField {
     /// Handle to the owning `Configuration` (derived from the support).
     pub fn configuration(&self) -> Handle<Configuration> {
         with(&self.support, |sm| sm.configuration())
-            .expect("NodeField support handle is held by self → must be alive")
+            .expect("SubNodeField support handle is held by self → must be alive")
     }
 
     /// Handle to the POI1 SubMesh backing this field's support.
@@ -210,7 +210,7 @@ impl NodeField {
     /// use pyrucast::containers::mesh::ElementType;
     /// use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// use pyrucast::containers::mesh::Node;
-    /// use pyrucast::containers::node_field::NodeField;
+    /// use pyrucast::containers::node_field::SubNodeField;
     /// use pyrucast::store::{insert, with};
     ///
     /// let cfg = insert(Configuration::new(2).unwrap());
@@ -224,7 +224,7 @@ impl NodeField {
     ///     insert(sm)
     /// };
     ///
-    /// let field = NodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
+    /// let field = SubNodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
     /// let sm2 = field.support_submesh().unwrap();
     /// assert_eq!(sm2.cell_count(), 2);
     /// // Verify node order via Mesh::node (public API).
@@ -261,7 +261,7 @@ impl NodeField {
 
     // ── Constructeur interne ────────────────────────────────────────────────
 
-    /// Builds a NodeField from an explicit node list, with all values at 0.0.
+    /// Builds a SubNodeField from an explicit node list, with all values at 0.0.
     /// Materialises a fresh POI1 SubMesh holding the per-node refcounts:
     /// if any `add_cell` fails, the partial SubMesh's `Drop` rolls back
     /// the increfs already done.
@@ -273,7 +273,7 @@ impl NodeField {
         let n_nodes = nodes.len();
         let n_comp = components.len();
         let sm = SubMesh::poi1_from_node_ids(cfg, &nodes)?;
-        Ok(NodeField {
+        Ok(SubNodeField {
             support: insert(sm),
             nodes,
             components,
@@ -293,7 +293,7 @@ impl NodeField {
         self.component_value_opt(nid, comp).unwrap_or(0.0)
     }
 
-    pub(crate) fn check_compatible(&self, other: &NodeField) -> Result<()> {
+    pub(crate) fn check_compatible(&self, other: &SubNodeField) -> Result<()> {
         let a = self.configuration();
         let b = other.configuration();
         if a.index() != b.index() || a.generation() != b.generation() {
@@ -305,7 +305,7 @@ impl NodeField {
     }
 
     /// Returns (union_components, union_nodes): self's items first, then other's extras.
-    pub(crate) fn union_layout(&self, other: &NodeField) -> (Vec<String>, Vec<NodeId>) {
+    pub(crate) fn union_layout(&self, other: &SubNodeField) -> (Vec<String>, Vec<NodeId>) {
         let mut components = self.components.clone();
         for c in &other.components {
             if !components.iter().any(|x| x == c) {
@@ -427,7 +427,7 @@ impl NodeField {
     }
 }
 
-impl crate::containers::field::SubField for NodeField {
+impl crate::containers::field::SubField for SubNodeField {
     fn components(&self) -> &[String] {
         &self.components
     }
@@ -436,10 +436,10 @@ impl crate::containers::field::SubField for NodeField {
     }
 }
 
-impl fmt::Debug for NodeField {
+impl fmt::Debug for SubNodeField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Bounded structure only — the per-node values live in `dump()`.
-        f.debug_struct("NodeField")
+        f.debug_struct("SubNodeField")
             .field("support", &self.support)
             .field("node_count", &self.nodes.len())
             .field("components", &self.components)
@@ -447,11 +447,11 @@ impl fmt::Debug for NodeField {
     }
 }
 
-impl fmt::Display for NodeField {
+impl fmt::Display for SubNodeField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "NodeField: {} node(s), {} component(s) [{}]",
+            "SubNodeField: {} node(s), {} component(s) [{}]",
             self.nodes.len(),
             self.components.len(),
             self.components.join(", ")
@@ -459,7 +459,7 @@ impl fmt::Display for NodeField {
     }
 }
 
-impl crate::dump::Dump for NodeField {
+impl crate::dump::Dump for SubNodeField {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         use crate::dump::{fmt_float, table};
         let ncomp = self.components.len();
@@ -486,7 +486,7 @@ impl crate::dump::Dump for NodeField {
 // ─── Index ──────────────────────────────────────────────────────────────────
 
 /// `field[(nid, "UX")]` — panics if the node or component is absent.
-impl Index<(NodeId, &str)> for NodeField {
+impl Index<(NodeId, &str)> for SubNodeField {
     type Output = f64;
     fn index(&self, (nid, comp): (NodeId, &str)) -> &f64 {
         let ni = self
@@ -500,7 +500,7 @@ impl Index<(NodeId, &str)> for NodeField {
 }
 
 /// `field[(nid, "UX")] = v` — panics if the node or component is absent.
-impl IndexMut<(NodeId, &str)> for NodeField {
+impl IndexMut<(NodeId, &str)> for SubNodeField {
     fn index_mut(&mut self, (nid, comp): (NodeId, &str)) -> &mut f64 {
         let ni = self
             .index_of(nid)
@@ -515,12 +515,12 @@ impl IndexMut<(NodeId, &str)> for NodeField {
 
 // ─── Clone ──────────────────────────────────────────────────────────────────
 
-impl Clone for NodeField {
+impl Clone for SubNodeField {
     fn clone(&self) -> Self {
         // Cloning the support Handle bumps the SubMesh's store refcount;
         // per-node refcounts in the Configuration are already covered by
         // the shared SubMesh.
-        NodeField {
+        SubNodeField {
             support: self.support.clone(),
             nodes: self.nodes.clone(),
             components: self.components.clone(),
@@ -534,9 +534,9 @@ impl Clone for NodeField {
 // Consuming versions (modify in place, return self) are zero-copy.
 // Reference versions clone first.
 
-impl Add<f64> for NodeField {
-    type Output = NodeField;
-    fn add(mut self, rhs: f64) -> NodeField {
+impl Add<f64> for SubNodeField {
+    type Output = SubNodeField;
+    fn add(mut self, rhs: f64) -> SubNodeField {
         for v in &mut self.values {
             *v += rhs;
         }
@@ -544,9 +544,9 @@ impl Add<f64> for NodeField {
     }
 }
 
-impl Add<f64> for &NodeField {
-    type Output = NodeField;
-    fn add(self, rhs: f64) -> NodeField {
+impl Add<f64> for &SubNodeField {
+    type Output = SubNodeField;
+    fn add(self, rhs: f64) -> SubNodeField {
         let mut result = self.clone();
         for v in &mut result.values {
             *v += rhs;
@@ -555,9 +555,9 @@ impl Add<f64> for &NodeField {
     }
 }
 
-impl Sub<f64> for NodeField {
-    type Output = NodeField;
-    fn sub(mut self, rhs: f64) -> NodeField {
+impl Sub<f64> for SubNodeField {
+    type Output = SubNodeField;
+    fn sub(mut self, rhs: f64) -> SubNodeField {
         for v in &mut self.values {
             *v -= rhs;
         }
@@ -565,9 +565,9 @@ impl Sub<f64> for NodeField {
     }
 }
 
-impl Sub<f64> for &NodeField {
-    type Output = NodeField;
-    fn sub(self, rhs: f64) -> NodeField {
+impl Sub<f64> for &SubNodeField {
+    type Output = SubNodeField;
+    fn sub(self, rhs: f64) -> SubNodeField {
         let mut result = self.clone();
         for v in &mut result.values {
             *v -= rhs;
@@ -576,9 +576,9 @@ impl Sub<f64> for &NodeField {
     }
 }
 
-impl Mul<f64> for NodeField {
-    type Output = NodeField;
-    fn mul(mut self, rhs: f64) -> NodeField {
+impl Mul<f64> for SubNodeField {
+    type Output = SubNodeField;
+    fn mul(mut self, rhs: f64) -> SubNodeField {
         for v in &mut self.values {
             *v *= rhs;
         }
@@ -586,9 +586,9 @@ impl Mul<f64> for NodeField {
     }
 }
 
-impl Mul<f64> for &NodeField {
-    type Output = NodeField;
-    fn mul(self, rhs: f64) -> NodeField {
+impl Mul<f64> for &SubNodeField {
+    type Output = SubNodeField;
+    fn mul(self, rhs: f64) -> SubNodeField {
         let mut result = self.clone();
         for v in &mut result.values {
             *v *= rhs;
@@ -597,9 +597,9 @@ impl Mul<f64> for &NodeField {
     }
 }
 
-impl Div<f64> for NodeField {
-    type Output = NodeField;
-    fn div(mut self, rhs: f64) -> NodeField {
+impl Div<f64> for SubNodeField {
+    type Output = SubNodeField;
+    fn div(mut self, rhs: f64) -> SubNodeField {
         for v in &mut self.values {
             *v /= rhs;
         }
@@ -607,9 +607,9 @@ impl Div<f64> for NodeField {
     }
 }
 
-impl Div<f64> for &NodeField {
-    type Output = NodeField;
-    fn div(self, rhs: f64) -> NodeField {
+impl Div<f64> for &SubNodeField {
+    type Output = SubNodeField;
+    fn div(self, rhs: f64) -> SubNodeField {
         let mut result = self.clone();
         for v in &mut result.values {
             *v /= rhs;
@@ -625,13 +625,13 @@ impl Div<f64> for &NodeField {
 /// component list is the union of both fields' (self first), and similarly
 /// for nodes. Returns `Result` because the configuration check can fail —
 /// same convention as `&mesh1 + &mesh2`.
-impl Add<&NodeField> for &NodeField {
-    type Output = Result<NodeField>;
-    fn add(self, rhs: &NodeField) -> Result<NodeField> {
+impl Add<&SubNodeField> for &SubNodeField {
+    type Output = Result<SubNodeField>;
+    fn add(self, rhs: &SubNodeField) -> Result<SubNodeField> {
         self.check_compatible(rhs)?;
         let (components, nodes) = self.union_layout(rhs);
         let mut result =
-            NodeField::new_with_nodes(self.configuration(), nodes.clone(), components.clone())?;
+            SubNodeField::new_with_nodes(self.configuration(), nodes.clone(), components.clone())?;
         let ncomp = components.len();
         for (ni, &nid) in nodes.iter().enumerate() {
             for (ci, comp) in components.iter().enumerate() {
@@ -669,7 +669,7 @@ mod tests {
     #[test]
     fn from_poi1_zero_initialized() {
         let (_cfg, _nodes, sm) = make_poi1_with(3);
-        let f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         assert_eq!(f.node_count(), 3);
         assert_eq!(f.component_count(), 1);
         for i in 0..3 {
@@ -681,21 +681,21 @@ mod tests {
     fn from_poi1_rejects_non_poi1() {
         let cfg = insert(Configuration::new(2).unwrap());
         let sm = insert(SubMesh::new(cfg, ElementType::SEG2));
-        let err = NodeField::from_poi1(&sm, vec!["X".into()]).unwrap_err();
+        let err = SubNodeField::from_poi1(&sm, vec!["X".into()]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
     }
 
     #[test]
     fn from_poi1_rejects_empty_components() {
         let (_cfg, _nodes, sm) = make_poi1_with(1);
-        let err = NodeField::from_poi1(&sm, vec![]).unwrap_err();
+        let err = SubNodeField::from_poi1(&sm, vec![]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
     }
 
     #[test]
     fn from_poi1_rejects_duplicate_components() {
         let (_cfg, _nodes, sm) = make_poi1_with(1);
-        let err = NodeField::from_poi1(&sm, vec!["UX".into(), "UX".into()]).unwrap_err();
+        let err = SubNodeField::from_poi1(&sm, vec!["UX".into(), "UX".into()]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
     }
 
@@ -708,7 +708,7 @@ mod tests {
             assert_eq!(c.refcount(nodes[1].id()), 2);
         })
         .unwrap();
-        let f = NodeField::from_poi1(&sm, vec!["P".into()]).unwrap();
+        let f = SubNodeField::from_poi1(&sm, vec!["P".into()]).unwrap();
         // The field shares the SubMesh handle, so per-node refcounts
         // are unchanged.
         with(&cfg, |c| {
@@ -728,7 +728,7 @@ mod tests {
     fn get_set_multi_component() {
         let (_cfg, _nodes, sm) = make_poi1_with(2);
         let mut f =
-            NodeField::from_poi1(&sm, vec!["UX".into(), "UY".into(), "UZ".into()]).unwrap();
+            SubNodeField::from_poi1(&sm, vec!["UX".into(), "UY".into(), "UZ".into()]).unwrap();
         f.set(0, 0, 1.0).unwrap();
         f.set(0, 1, 2.0).unwrap();
         f.set(0, 2, 3.0).unwrap();
@@ -740,7 +740,7 @@ mod tests {
     #[test]
     fn get_set_by_node_and_component_name() {
         let (_cfg, nodes, sm) = make_poi1_with(2);
-        let mut f = NodeField::from_poi1(&sm, vec!["T".into(), "P".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["T".into(), "P".into()]).unwrap();
         let ci_p = f.component_index("P").unwrap();
         f.set_by_node(nodes[1].id(), ci_p, 42.0).unwrap();
         assert_eq!(f.get_by_node(nodes[1].id(), ci_p).unwrap(), 42.0);
@@ -749,7 +749,7 @@ mod tests {
     #[test]
     fn out_of_bounds_errors() {
         let (_cfg, _nodes, sm) = make_poi1_with(2);
-        let mut f = NodeField::from_poi1(&sm, vec!["X".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["X".into()]).unwrap();
         assert!(f.get(5, 0).is_err());
         assert!(f.get(0, 5).is_err());
         assert!(f.set(5, 0, 1.0).is_err());
@@ -759,7 +759,7 @@ mod tests {
     #[test]
     fn unknown_node_or_component_errors() {
         let (_cfg, _nodes, sm) = make_poi1_with(1);
-        let f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         assert!(f.get_by_node(NodeId(999), 0).is_err());
         assert_eq!(f.component_index("missing"), None);
     }
@@ -774,7 +774,7 @@ mod tests {
             sm.add_cell(&[nid]).unwrap();
             insert(sm)
         };
-        let field = NodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
+        let field = SubNodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
         // Drop the Node and the user's SubMesh handle; the field still
         // holds a clone of the SubMesh handle, which keeps the SubMesh
         // alive, which keeps the nodes alive.
@@ -790,7 +790,7 @@ mod tests {
     #[test]
     fn support_submesh_mirrors_field_nodes() {
         let (cfg, nodes, sm) = make_poi1_with(3);
-        let f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         // refcount before: Node + SubMesh = 2 each (the field shares
         // the user's SubMesh, no extra per-node incref).
         with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 2)).unwrap();
@@ -813,12 +813,12 @@ mod tests {
     #[test]
     fn debug_and_display() {
         let (_cfg, _nodes, sm) = make_poi1_with(2);
-        let f = NodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
+        let f = SubNodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
         let d = format!("{:?}", f);
-        assert!(d.contains("NodeField"));
+        assert!(d.contains("SubNodeField"));
         assert!(d.contains("UX"));
         let s = format!("{}", f);
-        assert!(s.contains("NodeField"));
+        assert!(s.contains("SubNodeField"));
         assert!(s.contains("2 node(s)"));
         assert!(s.contains("2 component(s)"));
         assert!(s.contains("UX, UY"));
@@ -829,7 +829,7 @@ mod tests {
     #[test]
     fn index_read_write() {
         let (_cfg, nodes, sm) = make_poi1_with(2);
-        let mut f = NodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
         f[(nodes[0].id(), "UX")] = 7.0;
         f[(nodes[1].id(), "UY")] = -3.0;
         assert_eq!(f[(nodes[0].id(), "UX")], 7.0);
@@ -841,7 +841,7 @@ mod tests {
     #[should_panic]
     fn index_unknown_node_panics() {
         let (_cfg, _nodes, sm) = make_poi1_with(1);
-        let f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         let _ = f[(NodeId(999), "T")];
     }
 
@@ -849,7 +849,7 @@ mod tests {
     #[should_panic]
     fn index_unknown_component_panics() {
         let (_cfg, nodes, sm) = make_poi1_with(1);
-        let f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         let _ = f[(nodes[0].id(), "X")];
     }
 
@@ -858,7 +858,7 @@ mod tests {
     #[test]
     fn value_and_set_value() {
         let (_cfg, nodes, sm) = make_poi1_with(2);
-        let mut f = NodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
         f.set_value(nodes[0].id(), "UY", 3.5).unwrap();
         assert_eq!(f.value(nodes[0].id(), "UY").unwrap(), 3.5);
         assert_eq!(f.value(nodes[1].id(), "UX").unwrap(), 0.0);
@@ -872,7 +872,7 @@ mod tests {
     fn dump_renders_value_table_and_debug_is_bounded() {
         use crate::dump::{Dump, DumpOptions};
         let (_cfg, nodes, sm) = make_poi1_with(2);
-        let mut f = NodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
         f.set_value(nodes[0].id(), "UX", 1.25).unwrap();
 
         let dumped = f.render(&DumpOptions::default());
@@ -891,8 +891,8 @@ mod tests {
     #[test]
     fn add_fields_same_support() {
         let (_cfg, _nodes, sm) = make_poi1_with(3);
-        let mut a = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
-        let mut b = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let mut a = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let mut b = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         a.set(0, 0, 1.0).unwrap();
         b.set(0, 0, 2.0).unwrap();
         b.set(1, 0, 5.0).unwrap();
@@ -905,8 +905,8 @@ mod tests {
     #[test]
     fn add_fields_disjoint_components() {
         let (_cfg, nodes, sm) = make_poi1_with(2);
-        let mut a = NodeField::from_poi1(&sm, vec!["UX".into()]).unwrap();
-        let mut b = NodeField::from_poi1(&sm, vec!["UY".into()]).unwrap();
+        let mut a = SubNodeField::from_poi1(&sm, vec!["UX".into()]).unwrap();
+        let mut b = SubNodeField::from_poi1(&sm, vec!["UY".into()]).unwrap();
         a.set(0, 0, 10.0).unwrap();
         b.set(0, 0, 20.0).unwrap();
         let c = (&a + &b).unwrap();
@@ -930,8 +930,8 @@ mod tests {
             sm.add_cell(&[nb.id()]).unwrap();
             insert(sm)
         };
-        let mut a = NodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
-        let mut b = NodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
+        let mut a = SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
+        let mut b = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
         a.set(0, 0, 3.0).unwrap();
         b.set(0, 0, 7.0).unwrap();
         let c = (&a + &b).unwrap();
@@ -951,7 +951,7 @@ mod tests {
                 sm.add_cell(&[n.id()]).unwrap();
                 insert(sm)
             };
-            NodeField::from_poi1(&sm, vec!["T".into()]).unwrap()
+            SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap()
         };
         let a = mk(&cfg1);
         let b = mk(&cfg2);
@@ -963,7 +963,7 @@ mod tests {
     #[test]
     fn component_scalar_ops() {
         let (_cfg, _nodes, sm) = make_poi1_with(2);
-        let mut f = NodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
         f.set(0, 0, 10.0).unwrap();
         f.set(1, 0, 20.0).unwrap();
         f.add_to_component("UX", 5.0).unwrap();
@@ -981,14 +981,14 @@ mod tests {
     #[test]
     fn div_to_component_zero_errors() {
         let (_cfg, _nodes, sm) = make_poi1_with(1);
-        let mut f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         assert!(f.div_to_component("T", 0.0).is_err());
     }
 
     #[test]
     fn component_scalar_unknown_component_errors() {
         let (_cfg, _nodes, sm) = make_poi1_with(1);
-        let mut f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         assert!(f.add_to_component("X", 1.0).is_err());
         assert!(f.sub_to_component("X", 1.0).is_err());
         assert!(f.mul_to_component("X", 1.0).is_err());
@@ -1000,7 +1000,7 @@ mod tests {
     #[test]
     fn clone_is_independent() {
         let (cfg, nodes, sm) = make_poi1_with(2);
-        let mut f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         f.set(0, 0, 42.0).unwrap();
         let g = f.clone();
         // Both fields share the same SubMesh handle, so per-node
@@ -1018,7 +1018,7 @@ mod tests {
     #[test]
     fn operator_add_f64() {
         let (_cfg, _nodes, sm) = make_poi1_with(2);
-        let mut f = NodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
         f.set(0, 0, 1.0).unwrap();
         f.set(1, 1, 3.0).unwrap();
         let g = &f + 10.0;
@@ -1032,7 +1032,7 @@ mod tests {
     #[test]
     fn operator_sub_mul_div_f64() {
         let (_cfg, _nodes, sm) = make_poi1_with(1);
-        let mut f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         f.set(0, 0, 12.0).unwrap();
         assert_eq!((f.clone() - 2.0).get(0, 0).unwrap(), 10.0);
         assert_eq!((f.clone() * 3.0).get(0, 0).unwrap(), 36.0);

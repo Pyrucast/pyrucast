@@ -201,7 +201,7 @@ fn mesh_renders_mixed_element_types() {
 
 #[test]
 fn mesh_plot_with_field_export_svg_contains_overlay_label() {
-    use pyrucast::containers::node_field::NodeField;
+    use pyrucast::containers::node_field::SubNodeField;
 
     let cfg = insert(Configuration::new(2).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -220,7 +220,7 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
     poi1.add_cell(&[b.id()]).unwrap();
     poi1.add_cell(&[c.id()]).unwrap();
     let poi1_h = insert(poi1);
-    let mut field = NodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
+    let mut field = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
     field.set_value(a.id(), "T", 0.0).unwrap();
     field.set_value(b.id(), "T", 1.0).unwrap();
     field.set_value(c.id(), "T", 2.0).unwrap();
@@ -247,7 +247,7 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
 
 #[test]
 fn plot_with_field_colorbar_uses_explicit_bounds() {
-    use pyrucast::containers::node_field::NodeField;
+    use pyrucast::containers::node_field::SubNodeField;
 
     let cfg = insert(Configuration::new(2).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -265,7 +265,7 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
     poi1.add_cell(&[b.id()]).unwrap();
     poi1.add_cell(&[c.id()]).unwrap();
     let poi1_h = insert(poi1);
-    let mut field = NodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
+    let mut field = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
     field.set_value(a.id(), "T", 0.0).unwrap();
     field.set_value(b.id(), "T", 1.0).unwrap();
     field.set_value(c.id(), "T", 2.0).unwrap();
@@ -297,7 +297,7 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
 
 #[test]
 fn plot_with_field_explicit_component_choice() {
-    use pyrucast::containers::node_field::NodeField;
+    use pyrucast::containers::node_field::SubNodeField;
 
     let cfg = insert(Configuration::new(2).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -313,7 +313,7 @@ fn plot_with_field_explicit_component_choice() {
     poi1.add_cell(&[b.id()]).unwrap();
     poi1.add_cell(&[c.id()]).unwrap();
     let poi1_h = insert(poi1);
-    let mut field = NodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();
+    let mut field = SubNodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();
     // Default component would be "UX"; ask explicitly for "UY".
     field.set_value(a.id(), "UY", 3.14).unwrap();
     field.set_value(b.id(), "UY", 2.71).unwrap();
@@ -338,14 +338,14 @@ fn plot_with_field_explicit_component_choice() {
 
 #[test]
 fn plot_with_field_unknown_component_errors() {
-    use pyrucast::containers::node_field::NodeField;
+    use pyrucast::containers::node_field::SubNodeField;
 
     let cfg = insert(Configuration::new(1).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
     let mut poi1 = SubMesh::new(cfg.clone(), ElementType::POI1);
     poi1.add_cell(&[a.id()]).unwrap();
     let poi1_h = insert(poi1);
-    let field = NodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
+    let field = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
 
     let mut tri = SubMesh::new(cfg.clone(), ElementType::SEG2);
     let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();

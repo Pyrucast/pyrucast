@@ -10,7 +10,7 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::finite_element_space::FiniteElementSpace;
-use crate::containers::node_field::NodeField;
+use crate::containers::node_field::SubNodeField;
 use crate::error::{PyrucastError, Result};
 use crate::ops::field::gradient::{subspace_gradients, Gradients, AXES};
 use crate::store::{insert, with, Handle};
@@ -23,7 +23,7 @@ use crate::store::{insert, with, Handle};
 /// **tensor** convention (`eps_xy = ½(∂u_x/∂y + ∂u_y/∂x)`, *not* engineering
 /// shear `γ`), with one component `eps_<ai><aj>` per independent entry
 /// `i ≤ j`, in order `eps_xx, eps_xy, …, eps_yy, …`.
-pub fn deformation(u: &Handle<NodeField>, fespace: &FiniteElementSpace) -> Result<ElementField> {
+pub fn deformation(u: &Handle<SubNodeField>, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components: Vec<String> = with(u, |f| f.components().to_vec())?;
     let mut out = ElementField::empty();
     for sub in fespace {
@@ -87,7 +87,7 @@ mod tests {
 
         let support =
             insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
-        let mut u = NodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
+        let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
         // u_x = 2x + 0.5y, u_y = 0.1x + 3y at the three nodes.
         for (n, x, y) in [(&a, 0.0, 0.0), (&b, 1.0, 0.0), (&c, 0.0, 1.0)] {
             u.set_value(n.id(), "u_x", 2.0 * x + 0.5 * y).unwrap();
@@ -123,7 +123,7 @@ mod tests {
         // 2-D space but a single displacement component.
         let support =
             insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
-        let u = insert(NodeField::from_poi1(&support, vec!["u_x".into()]).unwrap());
+        let u = insert(SubNodeField::from_poi1(&support, vec!["u_x".into()]).unwrap());
         let err = deformation(&u, &fes).unwrap_err();
         assert!(format!("{err}").contains("one displacement component per axis"));
     }

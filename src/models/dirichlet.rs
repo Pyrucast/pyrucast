@@ -4,7 +4,7 @@
 //! the same coordinates), owned by a dedicated POI1 [`SubMesh`] whose
 //! `Drop` releases the multipliers when the sub-model dies. Assembly
 //! writes the `C` / `Cᵀ` Lagrange block into the global matrix —
-//! enforces `u_n = u_d_n` once the user fills the load `NodeField` at
+//! enforces `u_n = u_d_n` once the user fills the load `SubNodeField` at
 //! `(multiplier_node, primal_var)`.
 
 use crate::containers::element_field::SubElementField;
@@ -86,7 +86,7 @@ pub fn build(constrained_nodes: &[Node]) -> Result<Built> {
 /// multiplier `λ_n` (a new node introduced on the fly at the same
 /// coordinates as `n`) and a pair of unit entries enforcing `u_n = u_d_n`.
 /// The imposed value `u_d_n` is **not** stored here: the user supplies it
-/// through the load `NodeField` at the multiplier node's `<var>` component.
+/// through the load `SubNodeField` at the multiplier node's `<var>` component.
 ///
 /// - primal variable: `"lambda_<primal_var>"` (multiplier DOFs, on
 ///   `multiplier_support`).

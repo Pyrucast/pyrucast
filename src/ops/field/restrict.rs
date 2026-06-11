@@ -1,19 +1,19 @@
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::Mesh;
-use crate::containers::node_field::NodeField;
+use crate::containers::node_field::SubNodeField;
 use crate::error::{PyrucastError, Result};
 use crate::store::with;
 
 /// Restrict `field` to the nodes used by `mesh`.
 ///
-/// Returns a new [`NodeField`] with the same components as `field`,
+/// Returns a new [`SubNodeField`] with the same components as `field`,
 /// supported on the **unique** nodes of `mesh` in order of first
 /// appearance. A node of `mesh` that `field` does not cover is assigned
 /// `0.0`; a node of `field` absent from `mesh` is dropped.
 ///
 /// Errors if `mesh` is attached to a different `Configuration` than
 /// `field`.
-pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
+pub fn restrict(field: &SubNodeField, mesh: &Mesh) -> Result<SubNodeField> {
     let mesh_cfg = mesh.configuration()?;
     let field_cfg = field.configuration();
     if mesh_cfg.index() != field_cfg.index() || mesh_cfg.generation() != field_cfg.generation() {
@@ -35,7 +35,7 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 
     let ncomp = field.component_count();
     let mut result =
-        NodeField::new_with_nodes(field_cfg, mesh_nodes.clone(), field.components().to_vec())?;
+        SubNodeField::new_with_nodes(field_cfg, mesh_nodes.clone(), field.components().to_vec())?;
     for (ni, &nid) in mesh_nodes.iter().enumerate() {
         if let Some(src_ni) = field.index_of(nid) {
             for ci in 0..ncomp {
@@ -59,7 +59,7 @@ mod tests {
     fn poi1_field(n: usize, components: Vec<String>) -> (
         crate::store::Handle<Configuration>,
         Vec<Node>,
-        NodeField,
+        SubNodeField,
     ) {
         let cfg = insert(Configuration::new(1).unwrap());
         let nodes: Vec<Node> = (0..n)
@@ -69,7 +69,7 @@ mod tests {
         for nd in &nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
-        let field = NodeField::from_poi1(&insert(sm), components).unwrap();
+        let field = SubNodeField::from_poi1(&insert(sm), components).unwrap();
         (cfg, nodes, field)
     }
 

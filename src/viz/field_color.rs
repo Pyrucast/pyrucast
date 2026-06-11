@@ -1,6 +1,6 @@
 //! Field-aware colouring for mesh visualization.
 //!
-//! Given a [`crate::containers::node_field::NodeField`] sampled at the nodes, paint
+//! Given a [`crate::containers::node_field::SubNodeField`] sampled at the nodes, paint
 //! each mesh cell with the colour the field value maps to under a
 //! standard "jet-lite" colormap (blue → green → red, no perceptual
 //! ordering pretensions — good enough for early-stage debugging).
@@ -14,7 +14,7 @@ use crate::containers::mesh::RgbColor;
 use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::containers::node_field::NodeField;
+use crate::containers::node_field::SubNodeField;
 use crate::store::with;
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
@@ -142,7 +142,7 @@ pub fn colormap(cmap: Colormap, value: f64, vmin: f64, vmax: f64) -> RgbColor {
 /// contribute to the mean nor to the denominator). If **no** node is
 /// in the support, returns `0.0`.
 pub(crate) fn nodes_mean(
-    field: &NodeField,
+    field: &SubNodeField,
     node_ids: &[NodeId],
     component: &str,
 ) -> f64 {
@@ -166,7 +166,7 @@ pub(crate) fn nodes_mean(
 /// Length of the returned vector = number of cells in the submesh.
 pub(crate) fn submesh_cell_values(
     sm: &SubMesh,
-    field: &NodeField,
+    field: &SubNodeField,
     component: &str,
 ) -> Result<Vec<f64>> {
     let conn = sm.connectivity();
@@ -212,7 +212,7 @@ fn colors_from_values(values: &[f64], cmap: Colormap, vmin: f64, vmax: f64) -> V
 /// global `(min, max)` range over all submeshes.
 fn mesh_cell_values(
     mesh: &Mesh,
-    field: &NodeField,
+    field: &SubNodeField,
     component: &str,
 ) -> Result<(Vec<Vec<f64>>, f64, f64)> {
     let n_sub = mesh.len();
@@ -232,7 +232,7 @@ fn mesh_cell_values(
 /// `requested` `None` → first component of the field (its declared
 /// primary component); `Some(name)` → check it exists.
 pub fn resolve_component<'a>(
-    field: &'a NodeField,
+    field: &'a SubNodeField,
     requested: Option<&'a str>,
 ) -> Result<&'a str> {
     match requested {
@@ -254,10 +254,10 @@ pub fn resolve_component<'a>(
 
 // ─── Drawable wrappers ─────────────────────────────────────────────────────
 
-/// `Drawable` over a [`Mesh`] coloured by a [`NodeField`]'s component.
+/// `Drawable` over a [`Mesh`] coloured by a [`SubNodeField`]'s component.
 pub struct MeshFieldView<'a> {
     pub mesh: &'a Mesh,
-    pub field: &'a NodeField,
+    pub field: &'a SubNodeField,
     pub component: &'a str,
     /// Caller override for the colour-scale bounds; defaults to the
     /// data's own range.
@@ -295,11 +295,11 @@ impl<'a> Drawable for MeshFieldView<'a> {
     }
 }
 
-/// `Drawable` over a single [`SubMesh`] coloured by a [`NodeField`]'s
+/// `Drawable` over a single [`SubMesh`] coloured by a [`SubNodeField`]'s
 /// component.
 pub struct SubMeshFieldView<'a> {
     pub submesh: &'a SubMesh,
-    pub field: &'a NodeField,
+    pub field: &'a SubNodeField,
     pub component: &'a str,
     /// Caller override for the colour-scale bounds; defaults to the
     /// data's own range.
@@ -400,13 +400,13 @@ mod tests {
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let sm_h = insert(sm);
 
-        // Build a POI1 NodeField with T values [1, 2, 3] on a, b, c.
+        // Build a POI1 SubNodeField with T values [1, 2, 3] on a, b, c.
         let mut poi1 = RawSubMesh::new(cfg.clone(), ElementType::POI1);
         for n in [&a, &b, &c] {
             poi1.add_cell(&[n.id()]).unwrap();
         }
         let poi1_h = insert(poi1);
-        let mut nf = NodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
+        let mut nf = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
         nf.set_value(a.id(), "T", 1.0).unwrap();
         nf.set_value(b.id(), "T", 2.0).unwrap();
         nf.set_value(c.id(), "T", 3.0).unwrap();
@@ -429,7 +429,7 @@ mod tests {
         let mut poi1 = RawSubMesh::new(cfg.clone(), ElementType::POI1);
         poi1.add_cell(&[a.id()]).unwrap();
         let poi1_h = insert(poi1);
-        let mut nf = NodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
+        let mut nf = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
         nf.set_value(a.id(), "T", 4.0).unwrap();
         // Two-node "cell": only `a` is in the field; mean = 4.0.
         let mean = nodes_mean(&nf, &[a.id(), b.id()], "T");

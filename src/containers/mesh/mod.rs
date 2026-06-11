@@ -271,7 +271,7 @@ impl SubMesh {
         crate::viz::render(self, view, save)
     }
 
-    /// Visualize this submesh coloured by a [`crate::containers::node_field::NodeField`]
+    /// Visualize this submesh coloured by a [`crate::containers::node_field::SubNodeField`]
     /// component.
     ///
     /// Per-cell colour is the mean of the field's component at the cell's
@@ -289,7 +289,7 @@ impl SubMesh {
         &self,
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
-        field: &crate::containers::node_field::NodeField,
+        field: &crate::containers::node_field::SubNodeField,
         component: Option<&str>,
         scale: crate::viz::ColorScale,
     ) -> Result<()> {
@@ -521,7 +521,7 @@ impl Mesh {
         crate::viz::render(self, view, save)
     }
 
-    /// Visualize this mesh coloured by a [`crate::containers::node_field::NodeField`]
+    /// Visualize this mesh coloured by a [`crate::containers::node_field::SubNodeField`]
     /// component. See [`SubMesh::plot_with_field`] for the meaning of
     /// `view`, `save`, `field` and `component`. In the interactive
     /// window the same component button is drawn over the whole mesh
@@ -531,7 +531,7 @@ impl Mesh {
         &self,
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
-        field: &crate::containers::node_field::NodeField,
+        field: &crate::containers::node_field::SubNodeField,
         component: Option<&str>,
         scale: crate::viz::ColorScale,
     ) -> Result<()> {

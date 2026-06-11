@@ -1,6 +1,6 @@
-//! Python wrapper for [`crate::containers::node_field::NodeField`].
+//! Python wrapper for [`crate::containers::node_field::SubNodeField`].
 
-use crate::containers::node_field::NodeField;
+use crate::containers::node_field::SubNodeField;
 use crate::py::mesh::{submesh_handle, PyMesh, PySubMesh};
 use crate::py::node::PyNode;
 use crate::store::{insert, with, with_mut, Handle};
@@ -14,20 +14,20 @@ use pyo3::prelude::*;
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "NodeField")]
 pub struct PyNodeField {
-    pub(crate) handle: Handle<NodeField>,
+    pub(crate) handle: Handle<SubNodeField>,
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyNodeField {
-    /// `NodeField(support, components)` — zero-initialized field over the
+    /// `SubNodeField(support, components)` — zero-initialized field over the
     /// POI1 nodes of `support`. `support` may be a `SubMesh` or a
     /// **unitary** `Mesh` (the parent→sub coercion: a one-submesh mesh is
     /// accepted directly, so callers rarely need `mesh[0]`).
     #[new]
     fn py_new(support: &Bound<'_, PyAny>, components: Vec<String>) -> PyResult<Self> {
         let sm_handle = submesh_handle(support)?;
-        let nf = NodeField::from_poi1(&sm_handle, components)?;
+        let nf = SubNodeField::from_poi1(&sm_handle, components)?;
         Ok(Self {
             handle: insert(nf),
         })
@@ -146,19 +146,19 @@ impl PyNodeField {
     }
 
     /// `field + x` — `x` may be a scalar (added to every value) or another
-    /// `NodeField` (component-wise addition over the union of supports).
+    /// `SubNodeField` (component-wise addition over the union of supports).
     fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
         let result = if let Ok(scalar) = rhs.extract::<f64>() {
             with(&self.handle, |f| f + scalar)?
         } else if let Ok(other) = rhs.extract::<PyRef<PyNodeField>>() {
             // The store mutex is per-type and non-reentrant, so we must not
-            // nest two `with::<NodeField>` calls. Clone the rhs out first,
+            // nest two `with::<SubNodeField>` calls. Clone the rhs out first,
             // then operate while holding only the lhs lock.
             let fb = with(&other.handle, |f| f.clone())?;
             with(&self.handle, |a| a + &fb)??
         } else {
             return Err(pyo3::exceptions::PyTypeError::new_err(
-                "NodeField + expects a float or a NodeField",
+                "SubNodeField + expects a float or a SubNodeField",
             ));
         };
         Ok(PyNodeField {

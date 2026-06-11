@@ -13,7 +13,7 @@
 //! - [`field`]: field-on-mesh operations (gradient, divergence,
 //!   interpolation, projection, restriction).
 //! - [`assemble`]: build a [`crate::containers::matrix::Matrix`] /
-//!   [`crate::containers::node_field::NodeField`] from a `Model`. The per-physics
+//!   [`crate::containers::node_field::SubNodeField`] from a `Model`. The per-physics
 //!   integrands live under [`crate::models`]; this layer wires them
 //!   together.
 //! - [`behavior`]: integrate the constitutive law of a `Model` (Cast3m

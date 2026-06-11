@@ -92,7 +92,7 @@ pub trait Aggregate: Default {
     ///
     /// This is the parent→sub coercion primitive (see `CONVENTIONS.md`,
     /// « Agrégats : un ou plusieurs ») used at the few boundaries that
-    /// genuinely need a single sub — e.g. a `NodeField` support accepting
+    /// genuinely need a single sub — e.g. a `SubNodeField` support accepting
     /// a unitary `Mesh`. Errors with a clear message if the aggregate holds
     /// zero or more than one sub.
     fn unit(&self) -> Result<Handle<Self::Sub>> {

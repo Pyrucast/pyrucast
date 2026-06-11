@@ -14,7 +14,7 @@
 //! ```
 //! use pyrucast::containers::field::SubField;
 //! use pyrucast::containers::mesh::{Configuration, ElementType, Node, SubMesh};
-//! use pyrucast::containers::node_field::NodeField;
+//! use pyrucast::containers::node_field::SubNodeField;
 //! use pyrucast::store::insert;
 //!
 //! let cfg = insert(Configuration::new(1).unwrap());
@@ -26,7 +26,7 @@
 //!     sm.add_cell(&[b.id()]).unwrap();
 //!     insert(sm)
 //! };
-//! let mut f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+//! let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
 //! f.set(0, 0, -3.0).unwrap();
 //! f.set(1, 0, 7.5).unwrap();
 //! assert_eq!(SubField::min(&f, "T").unwrap(), -3.0);
@@ -43,7 +43,7 @@ use crate::store::with;
 ///
 /// The contract is purely structural: named components plus a flat value
 /// buffer in which the component index varies fastest (stride =
-/// `component_count()`). Both `NodeField` (node-major) and
+/// `component_count()`). Both `SubNodeField` (node-major) and
 /// `SubElementField` (cell → gauss major) satisfy it.
 pub trait SubField {
     /// Component names, in order.
@@ -183,10 +183,10 @@ mod tests {
     use crate::containers::element_field::ElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
-    use crate::containers::node_field::NodeField;
+    use crate::containers::node_field::SubNodeField;
     use crate::store::{insert, with_mut, Handle};
 
-    fn make_node_field(values: &[f64]) -> NodeField {
+    fn make_node_field(values: &[f64]) -> SubNodeField {
         let cfg = insert(Configuration::new(1).unwrap());
         let nodes: Vec<Node> = (0..values.len())
             .map(|i| Node::create_in(cfg.clone(), &[i as f64]).unwrap())
@@ -198,7 +198,7 @@ mod tests {
             }
             insert(sm)
         };
-        let mut f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         for (i, &v) in values.iter().enumerate() {
             f.set(i, 0, v).unwrap();
         }
@@ -231,7 +231,7 @@ mod tests {
             sm.add_cell(&[b.id()]).unwrap();
             insert(sm)
         };
-        let mut f = NodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
         f.set(0, 0, 10.0).unwrap();
         f.set(0, 1, -10.0).unwrap();
         f.set(1, 0, 20.0).unwrap();
@@ -246,7 +246,7 @@ mod tests {
     fn subfield_min_on_empty_support_errors() {
         let cfg = insert(Configuration::new(1).unwrap());
         let sm: Handle<SubMesh> = insert(SubMesh::new(cfg, ElementType::POI1));
-        let f = NodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         assert!(SubField::min(&f, "T").is_err());
     }
 

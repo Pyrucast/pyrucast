@@ -5,7 +5,7 @@
 //!
 //! - [`SubElementField`] — multi-component values per `(cell, Gauss point)`
 //!   on a single [`crate::containers::finite_element_space::SubFiniteElementSpace`]. Where
-//!   [`crate::containers::node_field::NodeField`] stores values **at nodes**, a
+//!   [`crate::containers::node_field::SubNodeField`] stores values **at nodes**, a
 //!   `SubElementField` stores them **at the Gauss points of every cell**
 //!   of a finite-element subspace.
 //! - [`ElementField`] — aggregate of `SubElementField`, one per subspace

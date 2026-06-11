@@ -2,7 +2,7 @@ use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::containers::node_field::NodeField;
+use crate::containers::node_field::SubNodeField;
 use crate::store::{insert, with, with_mut};
 
 /// Map a coordinate-component name (`"X"`, `"Y"`, `"Z"`) to its axis index.
@@ -15,7 +15,7 @@ fn axis_index(name: &str) -> Option<usize> {
     }
 }
 
-/// Build a [`NodeField`] carrying the coordinates of every node of `mesh`.
+/// Build a [`SubNodeField`] carrying the coordinates of every node of `mesh`.
 ///
 /// The field has one component per requested axis (`"X"`, `"Y"`, `"Z"`),
 /// each holding that node's coordinate in the Configuration's active
@@ -31,7 +31,7 @@ fn axis_index(name: &str) -> Option<usize> {
 /// Errors if `mesh` has no submeshes, if a requested component is not one
 /// of `"X"` / `"Y"` / `"Z"`, or if it names an axis the Configuration does
 /// not have (e.g. `"Z"` on a 2-D mesh).
-pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeField> {
+pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<SubNodeField> {
     let cfg = mesh.configuration()?;
     let dim = with(&cfg, |c| c.dim())? as usize;
 
@@ -78,7 +78,7 @@ pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeF
 
     // Build a single POI1 support holding those nodes, then the field.
     let support = insert(SubMesh::poi1_from_node_ids(cfg.clone(), &nodes)?);
-    let mut field = NodeField::from_poi1(&support, components)?;
+    let mut field = SubNodeField::from_poi1(&support, components)?;
 
     // Read all coordinates under a single Configuration lock, then fill.
     let coords: Vec<Vec<f64>> = with(&cfg, |c| -> Result<Vec<Vec<f64>>> {
@@ -100,7 +100,7 @@ pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeF
 /// order. `None` falls back to `default[..dim]`. Errors if the count does
 /// not match `dim` or if a name is absent from `field`.
 fn resolve_axis_components(
-    field: &NodeField,
+    field: &SubNodeField,
     components: Option<Vec<String>>,
     dim: usize,
     default: &[&str],
@@ -135,7 +135,7 @@ fn resolve_axis_components(
 /// coordinate set. `components` lists one field-component name per spatial
 /// axis, in axis order; `None` → `["X", "Y", "Z"][..dim]` (symmetric with
 /// [`coordinates`]). In-place on the field's `Configuration`.
-pub fn set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
+pub fn set_coordinates(field: &SubNodeField, components: Option<Vec<String>>) -> Result<()> {
     let cfg = field.configuration();
     let dim = with(&cfg, |c| c.dim())? as usize;
     let comps = resolve_axis_components(field, components, dim, &["X", "Y", "Z"])?;
@@ -156,7 +156,7 @@ pub fn set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> Re
 /// set. `components` lists one displacement-component name per spatial
 /// axis, in axis order; `None` → `["ux", "uy", "uz"][..dim]`. In-place on
 /// the field's `Configuration`.
-pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
+pub fn displace(field: &SubNodeField, components: Option<Vec<String>>) -> Result<()> {
     let cfg = field.configuration();
     let dim = with(&cfg, |c| c.dim())? as usize;
     let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
@@ -312,7 +312,7 @@ mod tests {
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
         let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
-        let mut d = NodeField::from_poi1(&support, vec!["ux".into(), "uy".into()]).unwrap();
+        let mut d = SubNodeField::from_poi1(&support, vec!["ux".into(), "uy".into()]).unwrap();
         d.set_value(a.id(), "ux", 5.0).unwrap();
         d.set_value(a.id(), "uy", -1.0).unwrap();
         d.set_value(b.id(), "ux", 2.0).unwrap();

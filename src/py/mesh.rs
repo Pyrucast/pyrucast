@@ -29,7 +29,7 @@ fn parse_cmap(name: Option<String>) -> PyResult<crate::viz::Colormap> {
 /// Resolve a `Handle<SubMesh>` from either a `SubMesh` view or a
 /// **unitary** `Mesh` (the parent→sub coercion — see `CONVENTIONS.md`,
 /// « Agrégats : un ou plusieurs »). Used wherever an API takes a single
-/// submesh support (`NodeField`, `Matrix.block`, …). A multi-submesh
+/// submesh support (`SubNodeField`, `Matrix.block`, …). A multi-submesh
 /// `Mesh` is rejected with a clear error.
 pub(crate) fn submesh_handle(obj: &Bound<'_, PyAny>) -> PyResult<Handle<SubMesh>> {
     if let Ok(sm) = obj.extract::<PyRef<PySubMesh>>() {
@@ -96,7 +96,7 @@ impl PySubMesh {
     /// - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
     ///   corner (default `True`). In the interactive window, the key
     ///   `A` toggles it at runtime.
-    /// - `field`: optional `NodeField` whose values colour each cell
+    /// - `field`: optional `SubNodeField` whose values colour each cell
     ///   (per-cell value = mean over the cell's nodes of the chosen
     ///   component). Default `None` ⇒ uniform face colour.
     /// - `component`: component name to display when `field` is set
@@ -250,7 +250,7 @@ impl PyMesh {
     }
 
     /// Visualize this mesh (every submesh in its own colour, or
-    /// coloured by a `NodeField` if `field` is supplied). See
+    /// coloured by a `SubNodeField` if `field` is supplied). See
     /// `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
     /// `field` and `component`.
     #[cfg(feature = "viz")]

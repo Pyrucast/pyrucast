@@ -33,7 +33,7 @@ impl PySubModel {
     }
 
     /// POI1 `Mesh` of the multiplier nodes (Lagrange physics only — empty
-    /// otherwise). Build a load `NodeField` on `mesh[0]` to impose the
+    /// otherwise). Build a load `SubNodeField` on `mesh[0]` to impose the
     /// constrained values, or read the nodes via `mesh.node(0, i, 0)`.
     fn multiplier_mesh(&self) -> PyResult<PyMesh> {
         let mesh = with(&self.handle, |s| s.multiplier_mesh())??;

@@ -216,13 +216,13 @@ pub(crate) fn render<D: Drawable>(
     }
 }
 
-/// Render a [`crate::containers::mesh::Mesh`] coloured by a `NodeField` component.
+/// Render a [`crate::containers::mesh::Mesh`] coloured by a `SubNodeField` component.
 /// File export draws the supplied `component`; the interactive window
 /// adds a clickable button (top-centre) and a `Tab` keyboard shortcut
 /// to cycle through every component.
 pub(crate) fn render_mesh_with_field(
     mesh: &crate::containers::mesh::Mesh,
-    field: &crate::containers::node_field::NodeField,
+    field: &crate::containers::node_field::SubNodeField,
     component: Option<&str>,
     scale: ColorScale,
     view: Option<View>,
@@ -257,11 +257,11 @@ pub(crate) fn render_mesh_with_field(
     }
 }
 
-/// Render a [`crate::containers::mesh::SubMesh`] coloured by a `NodeField`
+/// Render a [`crate::containers::mesh::SubMesh`] coloured by a `SubNodeField`
 /// component. Same semantics as [`render_mesh_with_field`].
 pub(crate) fn render_submesh_with_field(
     submesh: &crate::containers::mesh::SubMesh,
-    field: &crate::containers::node_field::NodeField,
+    field: &crate::containers::node_field::SubNodeField,
     component: Option<&str>,
     scale: ColorScale,
     view: Option<View>,

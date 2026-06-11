@@ -9,7 +9,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::mesh::NodeId;
-use crate::containers::node_field::NodeField;
+use crate::containers::node_field::SubNodeField;
 use crate::error::Result;
 use crate::store::{insert, with, Handle};
 
@@ -39,7 +39,7 @@ impl Gradients {
 /// every Gauss point of `fespace` (one FE subspace). `∇f = Σ_i f_i ∇N_i`.
 pub(crate) fn subspace_gradients(
     fespace: &Handle<SubFiniteElementSpace>,
-    field: &Handle<NodeField>,
+    field: &Handle<SubNodeField>,
     components: &[String],
 ) -> Result<Gradients> {
     // Snapshot the reference/geometry data in one critical section
@@ -111,7 +111,7 @@ pub(crate) fn subspace_gradients(
 /// order component-major then axis (`grad_T_x`, …). Feed the result to
 /// [`crate::ops::behavior::integrate`] as the deformation input of a physics
 /// whose behaviour consumes a gradient (heat conduction).
-pub fn gradient(field: &Handle<NodeField>, fespace: &FiniteElementSpace) -> Result<ElementField> {
+pub fn gradient(field: &Handle<SubNodeField>, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components: Vec<String> = with(field, |f| f.components().to_vec())?;
     let mut out = ElementField::empty();
     for sub in fespace {
@@ -163,7 +163,7 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
         let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
-        let mut t = NodeField::from_poi1(&support, vec!["T".into()]).unwrap();
+        let mut t = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
         t.set_value(a.id(), "T", 0.0).unwrap();
         t.set_value(b.id(), "T", 2.0).unwrap(); // T = x
         let t = insert(t);
@@ -192,7 +192,7 @@ mod tests {
 
         let support =
             insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
-        let mut f = NodeField::from_poi1(&support, vec!["f".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&support, vec!["f".into()]).unwrap();
         f.set_value(a.id(), "f", 0.0).unwrap(); // 2·0 + 3·0
         f.set_value(b.id(), "f", 2.0).unwrap(); // 2·1 + 3·0
         f.set_value(c.id(), "f", 3.0).unwrap(); // 2·0 + 3·1

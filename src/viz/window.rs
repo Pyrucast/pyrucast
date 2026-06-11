@@ -313,12 +313,12 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
 // ─── Field-coloured rendering: interactive entry points ───────────────────
 
 /// Interactive Drawable that paints a mesh (or submesh) coloured by the
-/// **currently selected** component of a NodeField. Implements both
+/// **currently selected** component of a SubNodeField. Implements both
 /// [`Drawable`] (for the App's render loop) and [`FieldButton`] (so the
 /// App can cycle through components on click / Tab).
 struct FieldDrawable<'a> {
     source: FieldSource<'a>,
-    field: &'a crate::containers::node_field::NodeField,
+    field: &'a crate::containers::node_field::SubNodeField,
     components: Vec<String>,
     /// Caller override for the colorbar bounds.
     scale: crate::viz::ColorScale,
@@ -335,7 +335,7 @@ enum FieldSource<'a> {
 impl<'a> FieldDrawable<'a> {
     fn new(
         source: FieldSource<'a>,
-        field: &'a crate::containers::node_field::NodeField,
+        field: &'a crate::containers::node_field::SubNodeField,
         initial_component: &str,
         scale: crate::viz::ColorScale,
     ) -> Self {
@@ -405,11 +405,11 @@ impl<'a> FieldButton for FieldDrawable<'a> {
     }
 }
 
-/// Run the interactive viewer on a `Mesh` coloured by a `NodeField`
+/// Run the interactive viewer on a `Mesh` coloured by a `SubNodeField`
 /// component (with a button that cycles through components).
 pub(crate) fn run_interactive_mesh_field(
     mesh: &crate::containers::mesh::Mesh,
-    field: &crate::containers::node_field::NodeField,
+    field: &crate::containers::node_field::SubNodeField,
     initial_component: &str,
     scale: crate::viz::ColorScale,
     view: View,
@@ -439,11 +439,11 @@ pub(crate) fn run_interactive_mesh_field(
     })
 }
 
-/// Run the interactive viewer on a `SubMesh` coloured by a `NodeField`
+/// Run the interactive viewer on a `SubMesh` coloured by a `SubNodeField`
 /// component (same UX as [`run_interactive_mesh_field`]).
 pub(crate) fn run_interactive_submesh_field(
     submesh: &crate::containers::mesh::SubMesh,
-    field: &crate::containers::node_field::NodeField,
+    field: &crate::containers::node_field::SubNodeField,
     initial_component: &str,
     scale: crate::viz::ColorScale,
     view: View,
