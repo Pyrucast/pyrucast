@@ -18,13 +18,12 @@ use crate::py::node_field::PyNodeField;
 use crate::store::with;
 use pyo3::prelude::*;
 
-/// Build a `NodeField` carrying the coordinates of every node of `mesh`.
+/// Build a `NodeField` carrying the coordinates of every node of `mesh`
+/// — one `SubNodeField` per submesh, on the distinct nodes of its zone.
 ///
 /// One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
 /// requests all the axes the mesh's `Configuration` has (`["X"]` in 1-D,
-/// `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D). A non-POI1 mesh is
-/// converted to POI1 internally (see `to_poi1`); the support is the unique
-/// nodes of the mesh, in order of first appearance.
+/// `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, components=None))]
@@ -32,9 +31,8 @@ pub fn coordinates(
     mesh: PyRef<PyMesh>,
     components: Option<Vec<String>>,
 ) -> PyResult<PyNodeField> {
-    let field = crate::ops::field::coordinates(&mesh.inner, components)?;
     Ok(PyNodeField {
-        inner: NodeField::from_sub(field),
+        inner: crate::ops::field::coordinates(&mesh.inner, components)?,
     })
 }
 
@@ -50,8 +48,7 @@ pub fn set_coordinates(
     field: PyRef<PyNodeField>,
     components: Option<Vec<String>>,
 ) -> PyResult<()> {
-    let h = field.inner.unit()?;
-    with(&h, |nf| crate::ops::field::set_coordinates(nf, components))??;
+    crate::ops::field::set_coordinates(&field.inner, components)?;
     Ok(())
 }
 
@@ -63,8 +60,7 @@ pub fn set_coordinates(
 #[pyfunction]
 #[pyo3(signature = (field, components=None))]
 pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> PyResult<()> {
-    let h = field.inner.unit()?;
-    with(&h, |nf| crate::ops::field::displace(nf, components))??;
+    crate::ops::field::displace(&field.inner, components)?;
     Ok(())
 }
 

@@ -1,8 +1,9 @@
-use crate::error::{PyrucastError, Result};
+use crate::aggregate::Aggregate;
+use crate::containers::field::Field;
 use crate::containers::mesh::NodeId;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::{Mesh, SubMesh};
-use crate::containers::node_field::SubNodeField;
+use crate::containers::mesh::Mesh;
+use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::error::{PyrucastError, Result};
 use crate::store::{insert, with, with_mut};
 
 /// Map a coordinate-component name (`"X"`, `"Y"`, `"Z"`) to its axis index.
@@ -15,7 +16,10 @@ fn axis_index(name: &str) -> Option<usize> {
     }
 }
 
-/// Build a [`SubNodeField`] carrying the coordinates of every node of `mesh`.
+/// Build a [`NodeField`] carrying the coordinates of every node of `mesh`
+/// — one [`SubNodeField`] per submesh, supported on the distinct nodes of
+/// its zone (interface nodes are stored once per zone, with identical
+/// values by construction).
 ///
 /// The field has one component per requested axis (`"X"`, `"Y"`, `"Z"`),
 /// each holding that node's coordinate in the Configuration's active
@@ -23,15 +27,10 @@ fn axis_index(name: &str) -> Option<usize> {
 /// `Configuration` actually has: `["X"]` in 1-D, `["X", "Y"]` in 2-D,
 /// `["X", "Y", "Z"]` in 3-D.
 ///
-/// If `mesh` is already entirely POI1 its nodes are read directly;
-/// otherwise it is first converted with [`crate::ops::mesher::to_poi1()`].
-/// Either way the field support is the **unique** nodes of `mesh`, in
-/// order of first appearance.
-///
 /// Errors if `mesh` has no submeshes, if a requested component is not one
 /// of `"X"` / `"Y"` / `"Z"`, or if it names an axis the Configuration does
 /// not have (e.g. `"Z"` on a 2-D mesh).
-pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<SubNodeField> {
+pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeField> {
     let cfg = mesh.configuration()?;
     let dim = with(&cfg, |c| c.dim())? as usize;
 
@@ -64,43 +63,32 @@ pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<SubNo
         })
         .collect::<Result<_>>()?;
 
-    // Gather the unique node list. POI1 mesh ⇒ read it directly; otherwise
-    // convert to POI1 first (function 1), then read the conversion.
-    let all_poi1 = mesh
-        .element_types()?
-        .iter()
-        .all(|&et| et == ElementType::POI1);
-    let nodes = if all_poi1 {
-        unique_nodes(mesh)?
-    } else {
-        unique_nodes(&crate::ops::mesher::to_poi1(mesh)?)?
-    };
-
-    // Build a single POI1 support holding those nodes, then the field.
-    let support = insert(SubMesh::poi1_from_node_ids(cfg.clone(), &nodes)?);
-    let mut field = SubNodeField::from_poi1(&support, components)?;
-
-    // Read all coordinates under a single Configuration lock, then fill.
-    let coords: Vec<Vec<f64>> = with(&cfg, |c| -> Result<Vec<Vec<f64>>> {
-        nodes
-            .iter()
-            .map(|&nid| c.coord(nid).map(|s| s.to_vec()))
-            .collect()
-    })??;
-    for (ni, coord) in coords.iter().enumerate() {
-        for (ci, &axis) in axes.iter().enumerate() {
-            field.set(ni, ci, coord[axis])?;
+    let mut out = NodeField::default();
+    for sm in mesh {
+        let mut sub = SubNodeField::from_support(sm, components.clone())?;
+        // Read this zone's coordinates under a single Configuration lock.
+        let nodes: Vec<NodeId> = sub.nodes().to_vec();
+        let coords: Vec<Vec<f64>> = with(&cfg, |c| -> Result<Vec<Vec<f64>>> {
+            nodes
+                .iter()
+                .map(|&nid| c.coord(nid).map(|s| s.to_vec()))
+                .collect()
+        })??;
+        for (ni, coord) in coords.iter().enumerate() {
+            for (ci, &axis) in axes.iter().enumerate() {
+                sub.set(ni, ci, coord[axis])?;
+            }
         }
+        out.add_sub(insert(sub))?;
     }
-
-    Ok(field)
+    Ok(out)
 }
 
 /// Resolve the per-axis component names: one name per spatial axis, in axis
 /// order. `None` falls back to `default[..dim]`. Errors if the count does
-/// not match `dim` or if a name is absent from `field`.
+/// not match `dim` or if a name is absent from `field` (union of zones).
 fn resolve_axis_components(
-    field: &SubNodeField,
+    field: &NodeField,
     components: Option<Vec<String>>,
     dim: usize,
     default: &[&str],
@@ -118,7 +106,7 @@ fn resolve_axis_components(
             comps.len()
         )));
     }
-    let have = field.components();
+    let have = Field::components(field)?;
     for name in &comps {
         if !have.iter().any(|c| c == name) {
             return Err(PyrucastError::Message(format!(
@@ -130,71 +118,71 @@ fn resolve_axis_components(
     Ok(comps)
 }
 
-/// **Set** node coordinates from `field` (absolute): for every node `n` of
-/// the field, `coord[a] = field.value(n, components[a])` on the active
-/// coordinate set. `components` lists one field-component name per spatial
-/// axis, in axis order; `None` → `["X", "Y", "Z"][..dim]` (symmetric with
-/// [`coordinates`]). In-place on the field's `Configuration`.
-pub fn set_coordinates(field: &SubNodeField, components: Option<Vec<String>>) -> Result<()> {
-    let cfg = field.configuration();
+/// Per distinct node of `field`, the value of each of `comps` — read
+/// through the aggregate (first zone wins), so interface nodes appear
+/// exactly once. Errors if a node lacks one of the components.
+fn per_node_values(field: &NodeField, comps: &[String]) -> Result<Vec<(NodeId, Vec<f64>)>> {
+    let nodes = field.node_ids()?;
+    let mut out = Vec::with_capacity(nodes.len());
+    for nid in nodes {
+        let mut values = Vec::with_capacity(comps.len());
+        for name in comps {
+            values.push(field.value(nid, name)?);
+        }
+        out.push((nid, values));
+    }
+    Ok(out)
+}
+
+/// **Set** node coordinates from `field` (absolute): for every distinct
+/// node `n` of the field, `coord[a] = field.value(n, components[a])` on
+/// the active coordinate set. `components` lists one field-component name
+/// per spatial axis, in axis order; `None` → `["X", "Y", "Z"][..dim]`
+/// (symmetric with [`coordinates`]). In-place on the field's
+/// `Configuration`.
+pub fn set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
+    let cfg = field.configuration()?;
     let dim = with(&cfg, |c| c.dim())? as usize;
     let comps = resolve_axis_components(field, components, dim, &["X", "Y", "Z"])?;
+    let targets = per_node_values(field, &comps)?;
     with_mut(&cfg, |c| -> Result<()> {
-        for &nid in field.nodes() {
-            let mut coord = Vec::with_capacity(dim);
-            for name in &comps {
-                coord.push(field.value(nid, name)?);
-            }
-            c.set_coord(nid, &coord)?;
+        for (nid, coord) in &targets {
+            c.set_coord(*nid, coord)?;
         }
         Ok(())
     })?
 }
 
-/// **Displace** nodes by `field` (incremental): for every node `n`,
-/// `coord[a] += field.value(n, components[a])` on the active coordinate
-/// set. `components` lists one displacement-component name per spatial
-/// axis, in axis order; `None` → `["ux", "uy", "uz"][..dim]`. In-place on
-/// the field's `Configuration`.
-pub fn displace(field: &SubNodeField, components: Option<Vec<String>>) -> Result<()> {
-    let cfg = field.configuration();
+/// **Displace** nodes by `field` (incremental): for every distinct node
+/// `n`, `coord[a] += field.value(n, components[a])` on the active
+/// coordinate set — an interface node shared by several zones is displaced
+/// exactly once. `components` lists one displacement-component name per
+/// spatial axis, in axis order; `None` → `["ux", "uy", "uz"][..dim]`.
+/// In-place on the field's `Configuration`.
+pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
+    let cfg = field.configuration()?;
     let dim = with(&cfg, |c| c.dim())? as usize;
     let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
+    let increments = per_node_values(field, &comps)?;
     with_mut(&cfg, |c| -> Result<()> {
-        for &nid in field.nodes() {
-            let mut coord = c.coord(nid)?.to_vec();
-            for (a, name) in comps.iter().enumerate() {
-                coord[a] += field.value(nid, name)?;
+        for (nid, inc) in &increments {
+            let mut coord = c.coord(*nid)?.to_vec();
+            for (a, dv) in inc.iter().enumerate() {
+                coord[a] += dv;
             }
-            c.set_coord(nid, &coord)?;
+            c.set_coord(*nid, &coord)?;
         }
         Ok(())
     })?
-}
-
-/// Unique nodes used across every submesh of `mesh`, in order of first
-/// appearance.
-fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
-    let mut nodes: Vec<NodeId> = Vec::new();
-    for sm in mesh {
-        let conn = with(sm, |s| s.connectivity().to_vec())?;
-        for nid in conn {
-            if !nodes.contains(&nid) {
-                nodes.push(nid);
-            }
-        }
-    }
-    Ok(nodes)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::aggregate::Aggregate;
     use crate::containers::mesh::Configuration;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
-    use crate::containers::mesh::Mesh;
+    use crate::containers::mesh::SubMesh;
     use crate::store::insert;
 
     #[test]
@@ -207,8 +195,9 @@ mod tests {
         mesh.add_cell(&[b.id()]).unwrap();
 
         let f = coordinates(&mesh, None).unwrap();
-        assert_eq!(f.components(), &["X", "Y", "Z"]);
-        assert_eq!(f.node_count(), 2);
+        assert_eq!(f.len(), 1);
+        assert_eq!(Field::components(&f).unwrap(), vec!["X", "Y", "Z"]);
+        assert_eq!(f.node_count().unwrap(), 2);
         assert_eq!(f.value(a.id(), "X").unwrap(), 1.0);
         assert_eq!(f.value(a.id(), "Y").unwrap(), 2.0);
         assert_eq!(f.value(a.id(), "Z").unwrap(), 3.0);
@@ -216,24 +205,46 @@ mod tests {
     }
 
     #[test]
-    fn non_poi1_mesh_is_converted_and_deduplicated() {
+    fn non_poi1_mesh_uses_distinct_nodes() {
         let cfg = insert(Configuration::new(2).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
         let d = Node::create_in(cfg.clone(), &[1.5, 1.0]).unwrap();
 
-        // Two triangles sharing edge (b, c): 4 unique nodes.
+        // Two triangles sharing edge (b, c) in one submesh: 4 unique nodes.
         let mut tri = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         tri.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
 
         let f = coordinates(&tri, None).unwrap();
-        assert_eq!(f.components(), &["X", "Y"]);
-        assert_eq!(f.node_count(), 4, "shared nodes must appear once");
+        assert_eq!(f.len(), 1);
+        assert_eq!(f.node_count().unwrap(), 4, "shared nodes must appear once");
         assert_eq!(f.value(c.id(), "X").unwrap(), 0.5);
         assert_eq!(f.value(c.id(), "Y").unwrap(), 1.0);
         assert_eq!(f.value(d.id(), "X").unwrap(), 1.5);
+    }
+
+    #[test]
+    fn one_sub_per_submesh_with_coherent_interface() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let mut mesh = Mesh::empty();
+        for cell in [[n0.id(), n1.id(), n2.id()], [n1.id(), n3.id(), n2.id()]] {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&cell).unwrap();
+            mesh.add_sub(insert(sm)).unwrap();
+        }
+
+        let f = coordinates(&mesh, None).unwrap();
+        assert_eq!(f.len(), 2, "one sub-field per submesh");
+        assert_eq!(f.node_count().unwrap(), 4);
+        // Interface nodes are duplicated across zones with equal values.
+        f.check().unwrap();
+        assert_eq!(f.value(n1.id(), "X").unwrap(), 1.0);
     }
 
     #[test]
@@ -244,7 +255,7 @@ mod tests {
         mesh.add_cell(&[a.id()]).unwrap();
 
         let f = coordinates(&mesh, None).unwrap();
-        assert_eq!(f.components(), &["X", "Y"]);
+        assert_eq!(Field::components(&f).unwrap(), vec!["X", "Y"]);
     }
 
     #[test]
@@ -255,7 +266,7 @@ mod tests {
         mesh.add_cell(&[a.id()]).unwrap();
 
         let f = coordinates(&mesh, Some(vec!["X".into(), "Z".into()])).unwrap();
-        assert_eq!(f.components(), &["X", "Z"]);
+        assert_eq!(Field::components(&f).unwrap(), vec!["X", "Z"]);
         assert_eq!(f.value(a.id(), "X").unwrap(), 1.0);
         assert_eq!(f.value(a.id(), "Z").unwrap(), 3.0);
     }
@@ -294,9 +305,13 @@ mod tests {
         mesh.add_cell(&[b.id()]).unwrap();
 
         // Field of target positions (X/Y), round-tripped from the reader.
-        let mut f = coordinates(&mesh, None).unwrap();
-        f.set_value(a.id(), "X", 10.0).unwrap();
-        f.set_value(a.id(), "Y", 20.0).unwrap();
+        let f = coordinates(&mesh, None).unwrap();
+        with_mut(&f.get(0).unwrap(), |s| -> Result<()> {
+            s.set_value(a.id(), "X", 10.0)?;
+            s.set_value(a.id(), "Y", 20.0)
+        })
+        .unwrap()
+        .unwrap();
 
         set_coordinates(&f, None).unwrap();
         with(&cfg, |c| {
@@ -317,12 +332,34 @@ mod tests {
         d.set_value(a.id(), "uy", -1.0).unwrap();
         d.set_value(b.id(), "ux", 2.0).unwrap();
 
-        displace(&d, None).unwrap();
+        displace(&NodeField::from_sub(d), None).unwrap();
         with(&cfg, |c| {
             assert_eq!(c.coord(a.id()).unwrap(), &[5.0, -1.0]);
             assert_eq!(c.coord(b.id()).unwrap(), &[3.0, 1.0]);
         })
         .unwrap();
+    }
+
+    #[test]
+    fn displace_moves_interface_nodes_once() {
+        // Two zones sharing node `s`: the increment must apply once, not twice.
+        let cfg = insert(Configuration::new(1).unwrap());
+        let s = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::empty();
+        for _ in 0..2 {
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+            sm.add_cell(&[s.id()]).unwrap();
+            mesh.add_sub(insert(sm)).unwrap();
+        }
+        let f = NodeField::new(&mesh, vec!["ux".into()]).unwrap();
+        for i in 0..2 {
+            with_mut(&f.get(i).unwrap(), |sub| sub.set_value(s.id(), "ux", 0.5))
+                .unwrap()
+                .unwrap();
+        }
+
+        displace(&f, None).unwrap();
+        with(&cfg, |c| assert_eq!(c.coord(s.id()).unwrap(), &[1.5])).unwrap();
     }
 
     #[test]
