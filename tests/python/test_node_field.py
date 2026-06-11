@@ -448,3 +448,57 @@ def test_min_max_fold_across_zones():
     f[1].set_value(nodes[3], "T", 5.0)
     assert f.min("T") == -2.0
     assert f.max("T") == 5.0
+
+
+# ─── consolidate ─────────────────────────────────────────────────────────────
+
+
+def test_consolidate_fuses_same_component_zones():
+    c, nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, ["T"])
+    f[0].set_value(nodes[0], "T", 1.0)
+    f[0].set_value(nodes[1], "T", 2.0)
+    f[1].set_value(nodes[1], "T", 2.0)  # interface: same value
+    f[1].set_value(nodes[3], "T", 4.0)
+
+    g = pyrucast.consolidate(f)
+    assert len(g) == 1
+    assert g.node_count() == 4
+    assert g[0].node_count() == 4  # interface nodes stored once
+    assert g.value(nodes[1], "T") == 2.0
+    assert g.value(nodes[3], "T") == 4.0
+
+
+def test_consolidate_rejects_incoherent_field():
+    c, nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, ["T"])
+    f[0].set_value(nodes[1], "T", 1.0)
+    f[1].set_value(nodes[1], "T", 2.0)
+    try:
+        pyrucast.consolidate(f)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError on incoherent field")
+
+
+def test_consolidate_keeps_distinct_component_sets_separate():
+    c, nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField.with_components_per_submesh(mesh, [["T"], ["UX", "UY"]])
+    g = pyrucast.consolidate(f)
+    assert len(g) == 2
+    assert g.components() == ["T", "UX", "UY"]
+
+
+def test_consolidate_still_dispatches_on_mesh():
+    # The top-level consolidate dispatches on type: Mesh → mesher op.
+    c = pyrucast.Configuration(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    d = c.add_node([0.0, 1.0])
+    za = pyrucast.Mesh(c, "TRI3")
+    za.unit().add_cell([a, b, d])
+    zb = pyrucast.Mesh(c, "TRI3")
+    zb.unit().add_cell([a, b, d])  # duplicate cell in a second submesh
+    m = pyrucast.consolidate(za + zb)
+    assert len(m) == 1  # one submesh per element type, duplicates dropped

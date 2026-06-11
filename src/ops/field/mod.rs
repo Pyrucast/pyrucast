@@ -9,12 +9,14 @@
 //! data (on the field types) — this module is for operations that **cross
 //! containers** (mesh + field, fe_space + field).
 
+pub mod consolidate;
 pub mod coordinates;
 pub mod deformation;
 pub mod gradient;
 pub mod merge;
 pub mod restrict;
 
+pub use consolidate::consolidate;
 pub use coordinates::{coordinates, displace, set_coordinates};
 pub use deformation::deformation;
 pub use gradient::gradient;

@@ -47,15 +47,8 @@ pub fn to_poi1(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Fuse submeshes of the same element type into one and drop duplicate
-/// cells. Returns a new mesh with one submesh per element type, in
-/// first-seen order.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn consolidate(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
-    let result = crate::ops::mesher::consolidate(&mesh.inner)?;
-    Ok(PyMesh { inner: result })
-}
+// `consolidate(mesh)` is exposed by the type-dispatching top-level
+// wrapper in `crate::py::ops::consolidate` (shared with NodeField).
 
 /// Build a line of `n_elems` SEG2 elements from node `a` to node `b`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]

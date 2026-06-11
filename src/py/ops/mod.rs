@@ -12,3 +12,31 @@ pub mod build;
 pub mod field;
 pub mod mesher;
 pub mod solver;
+
+use crate::py::mesh::PyMesh;
+use crate::py::node_field::PyNodeField;
+use pyo3::exceptions::PyTypeError;
+use pyo3::prelude::*;
+
+/// Consolidate a container — fuse redundant sub-objects « au plus juste ».
+///
+/// Dispatches on the argument type (Python has a single top-level name
+/// for the two themed Rust ops):
+///
+/// - `Mesh` → `ops::mesher::consolidate`: fuse submeshes of the same
+///   element type, drop duplicate cells;
+/// - `NodeField` → `ops::field::consolidate`: fuse zones with the same
+///   component set, dedupe interface nodes after a coherence check.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn consolidate(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    if let Ok(mesh) = obj.extract::<PyRef<PyMesh>>() {
+        let result = crate::ops::mesher::consolidate(&mesh.inner)?;
+        return Ok(Py::new(py, PyMesh { inner: result })?.into_any());
+    }
+    if let Ok(field) = obj.extract::<PyRef<PyNodeField>>() {
+        let result = crate::ops::field::consolidate(&field.inner)?;
+        return Ok(Py::new(py, PyNodeField { inner: result })?.into_any());
+    }
+    Err(PyTypeError::new_err("expected a Mesh or a NodeField"))
+}

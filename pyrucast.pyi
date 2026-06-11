@@ -1281,11 +1281,17 @@ def circle_seg2(center: Node, normal: typing.Sequence[builtins.float], radius: b
     in the plane defined by `normal`, with the given `radius`.
     """
 
-def consolidate(mesh: Mesh) -> Mesh:
+def consolidate(obj: typing.Any) -> typing.Any:
     r"""
-    Fuse submeshes of the same element type into one and drop duplicate
-    cells. Returns a new mesh with one submesh per element type, in
-    first-seen order.
+    Consolidate a container — fuse redundant sub-objects « au plus juste ».
+    
+    Dispatches on the argument type (Python has a single top-level name
+    for the two themed Rust ops):
+    
+    - `Mesh` → `ops::mesher::consolidate`: fuse submeshes of the same
+      element type, drop duplicate cells;
+    - `NodeField` → `ops::field::consolidate`: fuse zones with the same
+      component set, dedupe interface nodes after a coherence check.
     """
 
 def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
