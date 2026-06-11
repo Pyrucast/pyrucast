@@ -317,3 +317,21 @@ def test_restrict_to_mesh_subset():
     assert r.node_count() == 2
     assert r.value(nodes[0], "T") == 1.0
     assert r.value(nodes[2], "T") == 3.0
+
+
+def test_min_max_per_component():
+    c, nodes, sm = _poi1_with(3)
+    f = pyrucast.NodeField(sm, ["U", "V"])
+    for i, n in enumerate(nodes):
+        f.set_value(n, "U", float(i + 1))      # 1, 2, 3
+        f.set_value(n, "V", -float(i + 1))     # -1, -2, -3
+    assert f.min("U") == 1.0
+    assert f.max("U") == 3.0
+    assert f.min("V") == -3.0
+    assert f.max("V") == -1.0
+    try:
+        f.min("missing")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for unknown component")

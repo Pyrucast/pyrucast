@@ -226,3 +226,24 @@ def test_repr_and_str():
     assert "3 gauss" in s
     assert "2 component(s)" in s
     assert "E, nu" in s
+
+
+def test_min_max_per_component():
+    c, mesh, fes = _tri3_subspace(n_cells=2)
+    ef = pyrucast.ElementField(fes, ["k"])
+    sub = ef[0]
+    sub.set_cell_uniform(0, "k", 2.0)
+    sub.set_cell_uniform(1, "k", -5.0)
+    # Sub-field level.
+    assert sub.min("k") == -5.0
+    assert sub.max("k") == 2.0
+    # Aggregate level: folds across the sub-fields.
+    assert ef.min("k") == -5.0
+    assert ef.max("k") == 2.0
+    assert ef.components() == ["k"]
+    try:
+        ef.min("missing")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for unknown component")

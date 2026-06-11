@@ -427,6 +427,15 @@ impl NodeField {
     }
 }
 
+impl crate::containers::field::SubField for NodeField {
+    fn components(&self) -> &[String] {
+        &self.components
+    }
+    fn values(&self) -> &[f64] {
+        &self.values
+    }
+}
+
 impl fmt::Debug for NodeField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Bounded structure only — the per-node values live in `dump()`.

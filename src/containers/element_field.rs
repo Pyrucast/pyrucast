@@ -362,6 +362,15 @@ impl SubElementField {
     }
 }
 
+impl crate::containers::field::SubField for SubElementField {
+    fn components(&self) -> &[String] {
+        &self.components
+    }
+    fn values(&self) -> &[f64] {
+        &self.values
+    }
+}
+
 fn check_components(components: &[String]) -> Result<()> {
     if components.is_empty() {
         return Err(PyrucastError::Message(

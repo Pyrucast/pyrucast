@@ -96,6 +96,18 @@ impl PySubElementField {
         Ok(())
     }
 
+    /// Smallest value of the named `component`.
+    fn min(&self, component: &str) -> PyResult<f64> {
+        use crate::containers::field::SubField;
+        Ok(with(&self.handle, |f| SubField::min(f, component))??)
+    }
+
+    /// Largest value of the named `component`.
+    fn max(&self, component: &str) -> PyResult<f64> {
+        use crate::containers::field::SubField;
+        Ok(with(&self.handle, |f| SubField::max(f, component))??)
+    }
+
     /// Add `scalar` to every value of `component` (in place).
     fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
         crate::store::with_mut(&self.handle, |f| f.add_to_component(component, scalar))??;
@@ -211,6 +223,23 @@ impl PyElementField {
         Ok(Self { inner: ef })
     }
 
+    /// Union of the sub-fields' component names, first-seen order.
+    fn components(&self) -> PyResult<Vec<String>> {
+        use crate::containers::field::Field;
+        Ok(Field::components(&self.inner)?)
+    }
+
+    /// Smallest value of `component` across the sub-fields defining it.
+    fn min(&self, component: &str) -> PyResult<f64> {
+        use crate::containers::field::Field;
+        Ok(Field::min(&self.inner, component)?)
+    }
+
+    /// Largest value of `component` across the sub-fields defining it.
+    fn max(&self, component: &str) -> PyResult<f64> {
+        use crate::containers::field::Field;
+        Ok(Field::max(&self.inner, component)?)
+    }
 }
 
 crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField", subfield);

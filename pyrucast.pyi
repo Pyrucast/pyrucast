@@ -279,6 +279,18 @@ class ElementField:
         r"""
         Explicit `components` list per subspace.
         """
+    def components(self) -> builtins.list[builtins.str]:
+        r"""
+        Union of the sub-fields' component names, first-seen order.
+        """
+    def min(self, component: builtins.str) -> builtins.float:
+        r"""
+        Smallest value of `component` across the sub-fields defining it.
+        """
+    def max(self, component: builtins.str) -> builtins.float:
+        r"""
+        Largest value of `component` across the sub-fields defining it.
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, idx: builtins.int) -> SubElementField: ...
     def unit(self) -> SubElementField:
@@ -729,6 +741,14 @@ class NodeField:
         r"""
         Set the value at `node` for the named `component`.
         """
+    def min(self, component: builtins.str) -> builtins.float:
+        r"""
+        Smallest value of the named `component`.
+        """
+    def max(self, component: builtins.str) -> builtins.float:
+        r"""
+        Largest value of the named `component`.
+        """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
         Add `scalar` to every value of `component` (in place).
@@ -824,6 +844,14 @@ class SubElementField:
     def set_cell_uniform(self, cell: builtins.int, component: builtins.str, value: builtins.float) -> None:
         r"""
         Set `component` to `value` at every point of `cell`.
+        """
+    def min(self, component: builtins.str) -> builtins.float:
+        r"""
+        Smallest value of the named `component`.
+        """
+    def max(self, component: builtins.str) -> builtins.float:
+        r"""
+        Largest value of the named `component`.
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
