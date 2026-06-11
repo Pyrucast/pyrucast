@@ -31,8 +31,8 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     rhs_mesh.unit().add_cell([mult_left])
     rhs_mesh.unit().add_cell([mult_right])
     rhs = pyrucast.NodeField(rhs_mesh, ["T"])
-    rhs.set_value(mult_left, "T", 0.0)
-    rhs.set_value(mult_right, "T", 1.0)
+    rhs[0].set_value(mult_left, "T", 0.0)
+    rhs[0].set_value(mult_right, "T", 1.0)
 
     K = pyrucast.stiffness(model, materials)
     solution = pyrucast.solve(K, rhs)
@@ -101,8 +101,8 @@ def test_solver_with_nonzero_neumann():
     load_mesh.unit().add_cell([nodes[-1]])
     load_mesh.unit().add_cell([mult_left])
     rhs = pyrucast.NodeField(load_mesh, ["T", "q"])
-    rhs.set_value(mult_left, "T", 5.0)
-    rhs.set_value(nodes[-1], "q", 1.0)
+    rhs[0].set_value(mult_left, "T", 5.0)
+    rhs[0].set_value(nodes[-1], "q", 1.0)
 
     K = pyrucast.stiffness(model, materials)
     solution = pyrucast.solve(K, rhs)

@@ -141,7 +141,7 @@ impl PySubMesh {
             Some(f) => {
                 let comp_ref = component.as_deref();
                 let sm_handle = self.handle.clone();
-                let field_handle = f.handle.clone();
+                let field_handle = f.inner.unit()?;
                 crate::store::with(&sm_handle, |s| {
                     crate::store::with(&field_handle, |fld| {
                         s.plot_with_field(Some(view), save_ref, fld, comp_ref, scale)
@@ -285,7 +285,7 @@ impl PyMesh {
         match field {
             Some(f) => {
                 let comp_ref = component.as_deref();
-                let field_handle = f.handle.clone();
+                let field_handle = f.inner.unit()?;
                 crate::store::with(&field_handle, |fld| {
                     self.inner.plot_with_field(Some(view), save_ref, fld, comp_ref, scale)
                 })??;

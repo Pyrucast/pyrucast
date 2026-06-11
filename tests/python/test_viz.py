@@ -153,7 +153,7 @@ def _build_field_on_nodes(c, nodes, components, values_per_component):
     nf = pyrucast.NodeField(poi1, list(components))
     for ci, comp in enumerate(components):
         for ni, n in enumerate(nodes):
-            nf.set_value(n, comp, values_per_component[ci][ni])
+            nf[0].set_value(n, comp, values_per_component[ci][ni])
     return nf
 
 

@@ -1,4 +1,14 @@
-//! SubNodeField — multi-component values on a POI1 submesh.
+//! Node fields — multi-component values carried by mesh nodes.
+//!
+//! Hierarchy mirroring [`crate::containers::element_field`]:
+//!
+//! - [`SubNodeField`] — multi-component values on the nodes of **one**
+//!   zone, supported by a POI1 [`SubMesh`];
+//! - [`NodeField`] — aggregate of `SubNodeField`, one per zone. A node
+//!   shared by several zones (an interface node) may be stored by several
+//!   subs; aggregate reads take the **first** sub defining
+//!   `(node, component)`, and coherence across duplicates is checked on
+//!   demand by [`NodeField::check`].
 //!
 //! A [`SubNodeField`] stores one or more named components per node of a
 //! support defined by a POI1 [`SubMesh`] (a list of nodes). The field
@@ -90,21 +100,7 @@ impl SubNodeField {
     /// - `components` is empty,
     /// - `components` contains duplicate names.
     pub fn from_poi1(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
-        if components.is_empty() {
-            return Err(PyrucastError::Message(
-                "SubNodeField requires at least one component".into(),
-            ));
-        }
-        for i in 0..components.len() {
-            for j in (i + 1)..components.len() {
-                if components[i] == components[j] {
-                    return Err(PyrucastError::Message(format!(
-                        "duplicate component name: {}",
-                        components[i]
-                    )));
-                }
-            }
-        }
+        check_components(&components)?;
 
         let nodes: Vec<NodeId> = with(submesh, |sm| -> Result<_> {
             if sm.element_type() != ElementType::POI1 {
@@ -125,6 +121,29 @@ impl SubNodeField {
             components,
             values: vec![0.0; n_nodes * n_comp],
         })
+    }
+
+    /// Build a SubNodeField on the distinct nodes of **any** [`SubMesh`]
+    /// (first-appearance order in the connectivity). A POI1 support is
+    /// shared as-is (same handle, no extra per-node refcounts); any other
+    /// element type gets a fresh POI1 support materialised from its
+    /// distinct nodes.
+    pub fn from_support(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
+        let element_type = with(submesh, |sm| sm.element_type())?;
+        if element_type == ElementType::POI1 {
+            return Self::from_poi1(submesh, components);
+        }
+        check_components(&components)?;
+        let (cfg, nodes) = with(submesh, |sm| {
+            let mut nodes: Vec<NodeId> = Vec::new();
+            for &nid in sm.connectivity() {
+                if !nodes.contains(&nid) {
+                    nodes.push(nid);
+                }
+            }
+            (sm.configuration(), nodes)
+        })?;
+        Self::new_with_nodes(cfg, nodes, components)
     }
 
     /// Number of nodes in the support.
@@ -287,10 +306,6 @@ impl SubNodeField {
         let ni = self.index_of(nid)?;
         let ci = self.component_index(comp)?;
         Some(self.values[ni * self.components.len() + ci])
-    }
-
-    fn get_or_default(&self, nid: NodeId, comp: &str) -> f64 {
-        self.component_value_opt(nid, comp).unwrap_or(0.0)
     }
 
     pub(crate) fn check_compatible(&self, other: &SubNodeField) -> Result<()> {
@@ -618,28 +633,208 @@ impl Div<f64> for &SubNodeField {
     }
 }
 
-/// Component-wise addition of two fields (`&a + &b`).
-///
-/// Missing nodes or components in either field are treated as `0.0`. Both
-/// fields must be attached to the same `Configuration`. The result's
-/// component list is the union of both fields' (self first), and similarly
-/// for nodes. Returns `Result` because the configuration check can fail —
-/// same convention as `&mesh1 + &mesh2`.
-impl Add<&SubNodeField> for &SubNodeField {
-    type Output = Result<SubNodeField>;
-    fn add(self, rhs: &SubNodeField) -> Result<SubNodeField> {
-        self.check_compatible(rhs)?;
-        let (components, nodes) = self.union_layout(rhs);
-        let mut result =
-            SubNodeField::new_with_nodes(self.configuration(), nodes.clone(), components.clone())?;
-        let ncomp = components.len();
-        for (ni, &nid) in nodes.iter().enumerate() {
-            for (ci, comp) in components.iter().enumerate() {
-                result.values[ni * ncomp + ci] =
-                    self.get_or_default(nid, comp) + rhs.get_or_default(nid, comp);
+fn check_components(components: &[String]) -> Result<()> {
+    if components.is_empty() {
+        return Err(PyrucastError::Message(
+            "SubNodeField requires at least one component".into(),
+        ));
+    }
+    for i in 0..components.len() {
+        for j in (i + 1)..components.len() {
+            if components[i] == components[j] {
+                return Err(PyrucastError::Message(format!(
+                    "duplicate component name: {}",
+                    components[i]
+                )));
             }
         }
-        Ok(result)
+    }
+    Ok(())
+}
+
+// ─── NodeField (aggregate) ──────────────────────────────────────────────────
+
+/// Aggregate of [`SubNodeField`] — one per zone.
+///
+/// Mirrors the Mesh/SubMesh and ElementField/SubElementField hierarchies:
+/// a `NodeField` is a list of sub-field handles with the uniform
+/// [`Aggregate`] grammar (`len`, indexing, iteration, `+` as structural
+/// merge). Components may differ from one zone to the next — nothing is
+/// densified.
+///
+/// A node shared by several zones (an interface node) may be stored by
+/// several subs. Aggregate reads ([`NodeField::value`]) take the **first**
+/// sub defining `(node, component)`; whether the duplicates agree is
+/// verified on demand by [`NodeField::check`]. Writes go through the subs
+/// (`with_mut` on `field.get(i)`), exactly like `ElementField`.
+#[derive(Serialize, Deserialize, Default)]
+pub struct NodeField {
+    subs: Vec<Handle<SubNodeField>>,
+}
+
+crate::impl_aggregate!(NodeField, SubNodeField, subfield, "subfield(s)", {
+    fn check_push(&self, h: &Handle<SubNodeField>) -> Result<()> {
+        if self.is_empty() {
+            return Ok(());
+        }
+        let a = self.configuration()?;
+        let b = with(h, |s| s.configuration())?;
+        if a.index() != b.index() || a.generation() != b.generation() {
+            Err(PyrucastError::Message("mismatched Configurations".into()))
+        } else {
+            Ok(())
+        }
+    }
+});
+crate::impl_aggregate_dump!(NodeField);
+
+impl NodeField {
+    /// One zero-initialized [`SubNodeField`] per submesh of `mesh`, all
+    /// sharing the same `components`. Each sub is supported on the
+    /// distinct nodes of its submesh — interface nodes shared by several
+    /// submeshes are therefore stored once **per zone**.
+    ///
+    /// `mesh` must have at least one submesh.
+    pub fn new(mesh: &Mesh, components: Vec<String>) -> Result<Self> {
+        if mesh.is_empty() {
+            return Err(PyrucastError::Message(
+                "NodeField: mesh has no submesh".into(),
+            ));
+        }
+        check_components(&components)?;
+        let mut field = Self::default();
+        for h in mesh {
+            let sub = SubNodeField::from_support(h, components.clone())?;
+            field.add_sub(insert(sub))?;
+        }
+        Ok(field)
+    }
+
+    /// Build a `NodeField` with an explicit `components` list per submesh.
+    /// `components_per_submesh.len()` must equal `mesh.len()`.
+    pub fn with(mesh: &Mesh, components_per_submesh: &[Vec<String>]) -> Result<Self> {
+        if mesh.is_empty() {
+            return Err(PyrucastError::Message(
+                "NodeField: mesh has no submesh".into(),
+            ));
+        }
+        if components_per_submesh.len() != mesh.len() {
+            return Err(PyrucastError::Message(format!(
+                "NodeField: {} component list(s) supplied for {} submesh(es)",
+                components_per_submesh.len(),
+                mesh.len()
+            )));
+        }
+        let mut field = Self::default();
+        for (h, comps) in mesh.iter().zip(components_per_submesh) {
+            let sub = SubNodeField::from_support(h, comps.clone())?;
+            field.add_sub(insert(sub))?;
+        }
+        Ok(field)
+    }
+
+    /// Single-zone `NodeField` over the distinct nodes of one [`SubMesh`].
+    pub fn from_submesh(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
+        let mut field = Self::default();
+        field.add_sub(insert(SubNodeField::from_support(submesh, components)?))?;
+        Ok(field)
+    }
+
+    /// Wrap a single [`SubNodeField`] into a unitary aggregate.
+    pub fn from_sub(sub: SubNodeField) -> Self {
+        let mut field = Self::default();
+        field.subs.push(insert(sub));
+        field
+    }
+
+    /// Handle to the owning `Configuration` (from the first sub).
+    /// Errors if the aggregate is empty.
+    pub fn configuration(&self) -> Result<Handle<Configuration>> {
+        let h = self.get(0)?;
+        with(&h, |s| s.configuration())
+    }
+
+    /// Value at `(node, component)` — the **first** sub defining both
+    /// wins. Errors if no sub does.
+    pub fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
+        self.value_opt(nid, component)?.ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "no subfield defines (node {}, component {})",
+                nid, component
+            ))
+        })
+    }
+
+    /// Like [`NodeField::value`], but `None` when no sub defines
+    /// `(node, component)`.
+    pub fn value_opt(&self, nid: NodeId, component: &str) -> Result<Option<f64>> {
+        for h in self {
+            if let Some(v) = with(h, |s| s.component_value_opt(nid, component))? {
+                return Ok(Some(v));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Distinct node ids across the subs, first-seen order.
+    pub fn node_ids(&self) -> Result<Vec<NodeId>> {
+        let mut out: Vec<NodeId> = Vec::new();
+        for h in self {
+            let nodes = with(h, |s| s.nodes().to_vec())?;
+            for nid in nodes {
+                if !out.contains(&nid) {
+                    out.push(nid);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Number of distinct nodes across the subs.
+    pub fn node_count(&self) -> Result<usize> {
+        Ok(self.node_ids()?.len())
+    }
+
+    /// Verify zone coherence: every `(node, component)` stored by several
+    /// subs must hold the **same** value (exact comparison) everywhere.
+    ///
+    /// Reads tolerate divergence (first sub wins); this is the on-demand
+    /// verification — call it before trusting a field assembled from
+    /// independently mutated zones. `ops::field::consolidate` runs the
+    /// same verification while deduplicating.
+    pub fn check(&self) -> Result<()> {
+        use crate::containers::field::SubField;
+        use std::collections::HashMap;
+        let mut seen: HashMap<(NodeId, String), f64> = HashMap::new();
+        for h in self {
+            // Snapshot one sub per lock — never nest with::<SubNodeField>.
+            let (nodes, comps, values) = with(h, |s| {
+                (s.nodes().to_vec(), s.components().to_vec(), s.values().to_vec())
+            })?;
+            let ncomp = comps.len();
+            for (ni, &nid) in nodes.iter().enumerate() {
+                for (ci, comp) in comps.iter().enumerate() {
+                    let v = values[ni * ncomp + ci];
+                    match seen.entry((nid, comp.clone())) {
+                        std::collections::hash_map::Entry::Occupied(e) => {
+                            if *e.get() != v {
+                                return Err(PyrucastError::Message(format!(
+                                    "incoherent NodeField: node {}, component {}: {} ≠ {}",
+                                    nid,
+                                    comp,
+                                    e.get(),
+                                    v
+                                )));
+                            }
+                        }
+                        std::collections::hash_map::Entry::Vacant(e) => {
+                            e.insert(v);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -886,76 +1081,126 @@ mod tests {
         assert!(!dbg.contains("1.25"), "Debug must not leak values: {dbg}");
     }
 
-    // ── &a + &b (field addition) ───────────────────────────────────────────
+    // ── NodeField (agrégat) ─────────────────────────────────────────────────
 
-    #[test]
-    fn add_fields_same_support() {
-        let (_cfg, _nodes, sm) = make_poi1_with(3);
-        let mut a = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
-        let mut b = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
-        a.set(0, 0, 1.0).unwrap();
-        b.set(0, 0, 2.0).unwrap();
-        b.set(1, 0, 5.0).unwrap();
-        let c = (&a + &b).unwrap();
-        assert_eq!(c.value(a.nodes[0], "T").unwrap(), 3.0);
-        assert_eq!(c.value(a.nodes[1], "T").unwrap(), 5.0);
-        assert_eq!(c.value(a.nodes[2], "T").unwrap(), 0.0);
-    }
-
-    #[test]
-    fn add_fields_disjoint_components() {
-        let (_cfg, nodes, sm) = make_poi1_with(2);
-        let mut a = SubNodeField::from_poi1(&sm, vec!["UX".into()]).unwrap();
-        let mut b = SubNodeField::from_poi1(&sm, vec!["UY".into()]).unwrap();
-        a.set(0, 0, 10.0).unwrap();
-        b.set(0, 0, 20.0).unwrap();
-        let c = (&a + &b).unwrap();
-        assert_eq!(c.components(), &["UX", "UY"]);
-        assert_eq!(c.value(nodes[0].id(), "UX").unwrap(), 10.0);
-        assert_eq!(c.value(nodes[0].id(), "UY").unwrap(), 20.0);
-    }
-
-    #[test]
-    fn add_fields_disjoint_nodes() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let na = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let nb = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+    /// Two TRI3 zones sharing an interface edge (nodes n1, n2).
+    fn make_two_zone_mesh() -> (Handle<Configuration>, Vec<Node>, Mesh) {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let mut mesh = Mesh::empty();
         let sm_a = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-            sm.add_cell(&[na.id()]).unwrap();
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
         let sm_b = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-            sm.add_cell(&[nb.id()]).unwrap();
+            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            sm.add_cell(&[n1.id(), n3.id(), n2.id()]).unwrap();
             insert(sm)
         };
-        let mut a = SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
-        let mut b = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
-        a.set(0, 0, 3.0).unwrap();
-        b.set(0, 0, 7.0).unwrap();
-        let c = (&a + &b).unwrap();
-        assert_eq!(c.node_count(), 2);
-        assert_eq!(c.value(na.id(), "T").unwrap(), 3.0);
-        assert_eq!(c.value(nb.id(), "T").unwrap(), 7.0);
+        mesh.add_sub(sm_a).unwrap();
+        mesh.add_sub(sm_b).unwrap();
+        (cfg, vec![n0, n1, n2, n3], mesh)
     }
 
     #[test]
-    fn add_fields_incompatible_cfg_errors() {
-        let cfg1 = insert(Configuration::new(1).unwrap());
+    fn nf_new_one_sub_per_submesh() {
+        let (_cfg, nodes, mesh) = make_two_zone_mesh();
+        let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
+        assert_eq!(f.len(), 2);
+        // 4 distinct nodes; interface nodes n1, n2 stored in both subs.
+        assert_eq!(f.node_count().unwrap(), 4);
+        with(&f.get(0).unwrap(), |s| assert_eq!(s.node_count(), 3)).unwrap();
+        with(&f.get(1).unwrap(), |s| assert_eq!(s.node_count(), 3)).unwrap();
+        // Zero-initialized everywhere.
+        assert_eq!(f.value(nodes[1].id(), "T").unwrap(), 0.0);
+    }
+
+    #[test]
+    fn nf_with_per_zone_components() {
+        let (_cfg, nodes, mesh) = make_two_zone_mesh();
+        let f = NodeField::with(&mesh, &[vec!["T".into()], vec!["UX".into(), "UY".into()]])
+            .unwrap();
+        use crate::containers::field::Field;
+        assert_eq!(Field::components(&f).unwrap(), vec!["T", "UX", "UY"]);
+        // T exists on zone 0 only: defined at n0, absent at n3.
+        assert_eq!(f.value(nodes[0].id(), "T").unwrap(), 0.0);
+        assert!(f.value(nodes[3].id(), "T").is_err());
+        assert_eq!(f.value_opt(nodes[3].id(), "T").unwrap(), None);
+    }
+
+    #[test]
+    fn nf_with_rejects_mismatched_length() {
+        let (_cfg, _nodes, mesh) = make_two_zone_mesh();
+        assert!(NodeField::with(&mesh, &[vec!["T".into()]]).is_err());
+    }
+
+    #[test]
+    fn nf_value_first_sub_wins() {
+        let (_cfg, nodes, mesh) = make_two_zone_mesh();
+        let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
+        let interface = nodes[1].id();
+        // Diverging interface values: reads pick sub 0, check() errors.
+        with_mut(&f.get(0).unwrap(), |s| s.set_value(interface, "T", 1.0)).unwrap().unwrap();
+        with_mut(&f.get(1).unwrap(), |s| s.set_value(interface, "T", 2.0)).unwrap().unwrap();
+        assert_eq!(f.value(interface, "T").unwrap(), 1.0);
+        assert!(f.check().is_err());
+        // Re-aligned values: check() passes.
+        with_mut(&f.get(1).unwrap(), |s| s.set_value(interface, "T", 1.0)).unwrap().unwrap();
+        f.check().unwrap();
+    }
+
+    #[test]
+    fn nf_check_ok_on_disjoint_components() {
+        let (_cfg, _nodes, mesh) = make_two_zone_mesh();
+        // Same interface nodes, but disjoint components: no duplicate pair.
+        let f = NodeField::with(&mesh, &[vec!["T".into()], vec!["P".into()]]).unwrap();
+        f.check().unwrap();
+    }
+
+    #[test]
+    fn nf_add_is_structural_merge() {
+        let (_cfg, _nodes, mesh) = make_two_zone_mesh();
+        let a = NodeField::from_submesh(&mesh.get(0).unwrap(), vec!["T".into()]).unwrap();
+        let b = NodeField::from_submesh(&mesh.get(1).unwrap(), vec!["P".into()]).unwrap();
+        let c = (&a + &b).unwrap();
+        assert_eq!(c.len(), 2);
+        // Sub-handles are shared, not copied.
+        assert_eq!(c.get(0).unwrap().index(), a.get(0).unwrap().index());
+    }
+
+    #[test]
+    fn nf_check_push_rejects_mismatched_cfg() {
+        let (_cfg, _nodes, mesh) = make_two_zone_mesh();
+        let mut f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
         let cfg2 = insert(Configuration::new(1).unwrap());
-        let mk = |cfg: &Handle<Configuration>| {
-            let n = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-            let sm = {
-                let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-                sm.add_cell(&[n.id()]).unwrap();
-                insert(sm)
-            };
-            SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap()
+        let n = Node::create_in(cfg2.clone(), &[0.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(cfg2, ElementType::POI1);
+            sm.add_cell(&[n.id()]).unwrap();
+            insert(sm)
         };
-        let a = mk(&cfg1);
-        let b = mk(&cfg2);
-        assert!((&a + &b).is_err());
+        let alien = insert(SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap());
+        assert!(f.add_sub(alien).is_err());
+    }
+
+    #[test]
+    fn nf_from_support_poi1_shares_handle() {
+        let (_cfg, _nodes, sm) = make_poi1_with(2);
+        let f = NodeField::from_submesh(&sm, vec!["T".into()]).unwrap();
+        let support = with(&f.get(0).unwrap(), |s| s.support()).unwrap();
+        assert_eq!(support.index(), sm.index());
+    }
+
+    #[test]
+    fn nf_new_rejects_empty_mesh_or_components() {
+        let (_cfg, _nodes, mesh) = make_two_zone_mesh();
+        assert!(NodeField::new(&Mesh::empty(), vec!["T".into()]).is_err());
+        assert!(NodeField::new(&mesh, vec![]).is_err());
+        assert!(NodeField::new(&mesh, vec!["T".into(), "T".into()]).is_err());
     }
 
     // ── Scalaires sur composante ──────────────────────────────────────────────

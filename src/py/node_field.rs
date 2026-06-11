@@ -1,38 +1,28 @@
-//! Python wrapper for [`crate::containers::node_field::SubNodeField`].
+//! Python wrappers for [`crate::containers::node_field::SubNodeField`] and
+//! [`crate::containers::node_field::NodeField`].
 
-use crate::containers::node_field::SubNodeField;
-use crate::py::mesh::{submesh_handle, PyMesh, PySubMesh};
+use crate::aggregate::Aggregate;
+use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::py::mesh::{PyMesh, PySubMesh};
 use crate::py::node::PyNode;
 use crate::store::{insert, with, with_mut, Handle};
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
-/// A field of values carried by mesh nodes — one scalar per
-/// `(node, component)`.
-///
-/// Index it as `field[node, "X"]`. Build one with `coordinates(mesh)`, or
-/// derive it with `restrict` / `merge`; add fields or scalars with `+`.
+// ─── SubNodeField (view) ────────────────────────────────────────────────────
+
+/// A **view** into one zone of a `NodeField`, obtained by indexing
+/// (`node_field[i]`) — never constructed directly. Build at the parent
+/// level instead: `NodeField(support, components)`, composed with `+`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(name = "NodeField")]
-pub struct PyNodeField {
+#[pyclass(name = "SubNodeField")]
+pub struct PySubNodeField {
     pub(crate) handle: Handle<SubNodeField>,
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
-impl PyNodeField {
-    /// `SubNodeField(support, components)` — zero-initialized field over the
-    /// POI1 nodes of `support`. `support` may be a `SubMesh` or a
-    /// **unitary** `Mesh` (the parent→sub coercion: a one-submesh mesh is
-    /// accepted directly, so callers rarely need `mesh[0]`).
-    #[new]
-    fn py_new(support: &Bound<'_, PyAny>, components: Vec<String>) -> PyResult<Self> {
-        let sm_handle = submesh_handle(support)?;
-        let nf = SubNodeField::from_poi1(&sm_handle, components)?;
-        Ok(Self {
-            handle: insert(nf),
-        })
-    }
-
+impl PySubNodeField {
     /// Number of nodes in the support.
     fn node_count(&self) -> PyResult<usize> {
         Ok(with(&self.handle, |f| f.node_count())?)
@@ -84,13 +74,13 @@ impl PyNodeField {
         Ok(with(&self.handle, |f| f.node_values(node_idx).map(|s| s.to_vec()))??)
     }
 
-    /// The POI1 `SubMesh` this field is supported on.
+    /// The POI1 `SubMesh` this sub-field is supported on.
     fn support_submesh(&self) -> PyResult<PySubMesh> {
         let sm = with(&self.handle, |f| f.support_submesh())??;
         Ok(PySubMesh { handle: insert(sm) })
     }
 
-    /// The POI1 `Mesh` this field is supported on.
+    /// The POI1 `Mesh` this sub-field is supported on.
     fn support_mesh(&self) -> PyResult<PyMesh> {
         let mesh = with(&self.handle, |f| f.support_mesh())??;
         Ok(PyMesh { inner: mesh })
@@ -145,56 +135,44 @@ impl PyNodeField {
         Ok(())
     }
 
-    /// `field + x` — `x` may be a scalar (added to every value) or another
-    /// `SubNodeField` (component-wise addition over the union of supports).
-    fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
-        let result = if let Ok(scalar) = rhs.extract::<f64>() {
-            with(&self.handle, |f| f + scalar)?
-        } else if let Ok(other) = rhs.extract::<PyRef<PyNodeField>>() {
-            // The store mutex is per-type and non-reentrant, so we must not
-            // nest two `with::<SubNodeField>` calls. Clone the rhs out first,
-            // then operate while holding only the lhs lock.
-            let fb = with(&other.handle, |f| f.clone())?;
-            with(&self.handle, |a| a + &fb)??
-        } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "SubNodeField + expects a float or a SubNodeField",
-            ));
-        };
-        Ok(PyNodeField {
+    // ── Scalar operators (return a new sub-field) ───────────────────────
+
+    fn __add__(&self, rhs: f64) -> PyResult<PySubNodeField> {
+        let result = with(&self.handle, |f| f + rhs)?;
+        Ok(PySubNodeField {
             handle: insert(result),
         })
     }
 
-    fn __sub__(&self, rhs: f64) -> PyResult<PyNodeField> {
+    fn __sub__(&self, rhs: f64) -> PyResult<PySubNodeField> {
         let result = with(&self.handle, |f| f - rhs)?;
-        Ok(PyNodeField {
+        Ok(PySubNodeField {
             handle: insert(result),
         })
     }
 
-    fn __mul__(&self, rhs: f64) -> PyResult<PyNodeField> {
+    fn __mul__(&self, rhs: f64) -> PyResult<PySubNodeField> {
         let result = with(&self.handle, |f| f * rhs)?;
-        Ok(PyNodeField {
+        Ok(PySubNodeField {
             handle: insert(result),
         })
     }
 
-    fn __truediv__(&self, rhs: f64) -> PyResult<PyNodeField> {
+    fn __truediv__(&self, rhs: f64) -> PyResult<PySubNodeField> {
         let result = with(&self.handle, |f| f / rhs)?;
-        Ok(PyNodeField {
+        Ok(PySubNodeField {
             handle: insert(result),
         })
     }
 
-    /// `field[node, "UX"]` — raises IndexError if absent.
+    /// `subfield[node, "UX"]` — raises if the node or component is absent.
     fn __getitem__(&self, key: (PyRef<'_, PyNode>, String)) -> PyResult<f64> {
         let (node, comp) = key;
         let nid = node.as_node().id();
         Ok(with(&self.handle, |f| f.value(nid, &comp))??)
     }
 
-    /// `field[node, "UX"] = v` — raises IndexError if absent.
+    /// `subfield[node, "UX"] = v` — raises if the node or component is absent.
     fn __setitem__(&self, key: (PyRef<'_, PyNode>, String), value: f64) -> PyResult<()> {
         let (node, comp) = key;
         let nid = node.as_node().id();
@@ -211,4 +189,100 @@ impl PyNodeField {
     }
 }
 
-crate::impl_dump_pymethod!(handle PyNodeField, handle);
+crate::impl_dump_pymethod!(handle PySubNodeField, handle);
+
+// ─── NodeField (aggregate) ──────────────────────────────────────────────────
+
+/// A field of values carried by mesh nodes — one `SubNodeField` block per
+/// zone, with possibly different components from one zone to the next.
+///
+/// Build with `NodeField(support, components)` where `support` is a `Mesh`
+/// (one sub-field per submesh) or a single `SubMesh`; index it
+/// (`field[i]`) to reach a `SubNodeField`, compose zones with `+`. Reads
+/// (`field.value(node, "T")`) take the first zone defining the pair;
+/// `field.check()` verifies that zones agree on shared interface nodes.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(name = "NodeField")]
+pub struct PyNodeField {
+    pub(crate) inner: NodeField,
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyNodeField {
+    /// `NodeField(support, components)` — zero-initialized field. With a
+    /// `Mesh` support: one `SubNodeField` per submesh, each on the
+    /// distinct nodes of its zone. With a `SubMesh`: a single zone.
+    #[new]
+    fn py_new(support: &Bound<'_, PyAny>, components: Vec<String>) -> PyResult<Self> {
+        let inner = if let Ok(mesh) = support.extract::<PyRef<PyMesh>>() {
+            NodeField::new(&mesh.inner, components)?
+        } else if let Ok(sm) = support.extract::<PyRef<PySubMesh>>() {
+            NodeField::from_submesh(&sm.handle, components)?
+        } else {
+            return Err(PyTypeError::new_err("expected a Mesh or a SubMesh"));
+        };
+        Ok(Self { inner })
+    }
+
+    /// Explicit `components` list per submesh of `mesh`.
+    #[classmethod]
+    fn with_components_per_submesh(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        mesh: PyRef<PyMesh>,
+        components_per_submesh: Vec<Vec<String>>,
+    ) -> PyResult<Self> {
+        let inner = NodeField::with(&mesh.inner, &components_per_submesh)?;
+        Ok(Self { inner })
+    }
+
+    /// Number of distinct nodes across the zones.
+    fn node_count(&self) -> PyResult<usize> {
+        Ok(self.inner.node_count()?)
+    }
+
+    /// Union of the zones' component names, first-seen order.
+    fn components(&self) -> PyResult<Vec<String>> {
+        use crate::containers::field::Field;
+        Ok(Field::components(&self.inner)?)
+    }
+
+    /// Value at `node` for the named `component` — the first zone
+    /// defining both wins. Raises if none does.
+    fn value(&self, node: PyRef<'_, PyNode>, component: &str) -> PyResult<f64> {
+        let nid = node.as_node().id();
+        Ok(self.inner.value(nid, component)?)
+    }
+
+    /// Verify zone coherence: every `(node, component)` stored by several
+    /// zones must hold the same value everywhere. Raises on the first
+    /// conflict.
+    fn check(&self) -> PyResult<()> {
+        Ok(self.inner.check()?)
+    }
+
+    /// Smallest value of `component` across the zones defining it.
+    fn min(&self, component: &str) -> PyResult<f64> {
+        use crate::containers::field::Field;
+        Ok(Field::min(&self.inner, component)?)
+    }
+
+    /// Largest value of `component` across the zones defining it.
+    fn max(&self, component: &str) -> PyResult<f64> {
+        use crate::containers::field::Field;
+        Ok(Field::max(&self.inner, component)?)
+    }
+
+    /// A `Mesh` mirroring this field's supports — the zones' POI1
+    /// support submeshes, shared (not copied).
+    fn support_mesh(&self) -> PyResult<PyMesh> {
+        let mut mesh = crate::containers::mesh::Mesh::empty();
+        for h in &self.inner {
+            let sm = with(h, |s| s.support())?;
+            mesh.add_sub(sm)?;
+        }
+        Ok(PyMesh { inner: mesh })
+    }
+}
+
+crate::impl_aggregate_pymethods!(PyNodeField, PySubNodeField, "NodeField", subfield);

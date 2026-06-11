@@ -21,6 +21,7 @@ __all__ = [
     "SubMatrix",
     "SubMesh",
     "SubModel",
+    "SubNodeField",
     "circle_seg2",
     "consolidate",
     "coordinates",
@@ -529,7 +530,7 @@ class Mesh:
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None) -> None:
         r"""
         Visualize this mesh (every submesh in its own colour, or
-        coloured by a `NodeField` if `field` is supplied). See
+        coloured by a `SubNodeField` if `field` is supplied). See
         `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
         `field` and `component`.
         """
@@ -676,117 +677,85 @@ class Node:
 @typing.final
 class NodeField:
     r"""
-    A field of values carried by mesh nodes — one scalar per
-    `(node, component)`.
+    A field of values carried by mesh nodes — one `SubNodeField` block per
+    zone, with possibly different components from one zone to the next.
     
-    Index it as `field[node, "X"]`. Build one with `coordinates(mesh)`, or
-    derive it with `restrict` / `merge`; add fields or scalars with `+`.
+    Build with `NodeField(support, components)` where `support` is a `Mesh`
+    (one sub-field per submesh) or a single `SubMesh`; index it
+    (`field[i]`) to reach a `SubNodeField`, compose zones with `+`. Reads
+    (`field.value(node, "T")`) take the first zone defining the pair;
+    `field.check()` verifies that zones agree on shared interface nodes.
     """
     def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str]) -> NodeField:
         r"""
-        `NodeField(support, components)` — zero-initialized field over the
-        POI1 nodes of `support`. `support` may be a `SubMesh` or a
-        **unitary** `Mesh` (the parent→sub coercion: a one-submesh mesh is
-        accepted directly, so callers rarely need `mesh[0]`).
+        `NodeField(support, components)` — zero-initialized field. With a
+        `Mesh` support: one `SubNodeField` per submesh, each on the
+        distinct nodes of its zone. With a `SubMesh`: a single zone.
+        """
+    @classmethod
+    def with_components_per_submesh(cls, mesh: Mesh, components_per_submesh: typing.Sequence[typing.Sequence[builtins.str]]) -> NodeField:
+        r"""
+        Explicit `components` list per submesh of `mesh`.
         """
     def node_count(self) -> builtins.int:
         r"""
-        Number of nodes in the support.
-        """
-    def component_count(self) -> builtins.int:
-        r"""
-        Number of components stored per node.
+        Number of distinct nodes across the zones.
         """
     def components(self) -> builtins.list[builtins.str]:
         r"""
-        Component names, in order.
-        """
-    def get(self, node_idx: builtins.int, comp_idx: builtins.int) -> builtins.float:
-        r"""
-        Value at node index `node_idx`, component index `comp_idx`.
-        """
-    def set(self, node_idx: builtins.int, comp_idx: builtins.int, value: builtins.float) -> None:
-        r"""
-        Set the value at node index `node_idx`, component index `comp_idx`.
-        """
-    def get_by_node(self, node: Node, comp_idx: builtins.int) -> builtins.float:
-        r"""
-        Value at `node`, component index `comp_idx`.
-        """
-    def set_by_node(self, node: Node, comp_idx: builtins.int, value: builtins.float) -> None:
-        r"""
-        Set the value at `node`, component index `comp_idx`.
-        """
-    def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
-        r"""
-        Index of component `name`, or `None` if unknown.
-        """
-    def node_values(self, node_idx: builtins.int) -> builtins.list[builtins.float]:
-        r"""
-        All component values at node index `node_idx`, in order.
-        """
-    def support_submesh(self) -> SubMesh:
-        r"""
-        The POI1 `SubMesh` this field is supported on.
-        """
-    def support_mesh(self) -> Mesh:
-        r"""
-        The POI1 `Mesh` this field is supported on.
+        Union of the zones' component names, first-seen order.
         """
     def value(self, node: Node, component: builtins.str) -> builtins.float:
         r"""
-        Value at `node` for the named `component`.
+        Value at `node` for the named `component` — the first zone
+        defining both wins. Raises if none does.
         """
-    def set_value(self, node: Node, component: builtins.str, value: builtins.float) -> None:
+    def check(self) -> None:
         r"""
-        Set the value at `node` for the named `component`.
+        Verify zone coherence: every `(node, component)` stored by several
+        zones must hold the same value everywhere. Raises on the first
+        conflict.
         """
     def min(self, component: builtins.str) -> builtins.float:
         r"""
-        Smallest value of the named `component`.
+        Smallest value of `component` across the zones defining it.
         """
     def max(self, component: builtins.str) -> builtins.float:
         r"""
-        Largest value of the named `component`.
+        Largest value of `component` across the zones defining it.
         """
-    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+    def support_mesh(self) -> Mesh:
         r"""
-        Add `scalar` to every value of `component` (in place).
+        A `Mesh` mirroring this field's supports — the zones' POI1
+        support submeshes, shared (not copied).
         """
-    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+    def __len__(self) -> builtins.int: ...
+    def __getitem__(self, idx: builtins.int) -> SubNodeField: ...
+    def unit(self) -> SubNodeField:
         r"""
-        Subtract `scalar` from every value of `component` (in place).
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
         """
-    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Multiply every value of `component` by `scalar` (in place).
-        """
-    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Divide every value of `component` by `scalar` (in place).
-        """
-    def __add__(self, rhs: typing.Any) -> NodeField:
-        r"""
-        `field + x` — `x` may be a scalar (added to every value) or another
-        `NodeField` (component-wise addition over the union of supports).
-        """
-    def __sub__(self, rhs: builtins.float) -> NodeField: ...
-    def __mul__(self, rhs: builtins.float) -> NodeField: ...
-    def __truediv__(self, rhs: builtins.float) -> NodeField: ...
-    def __getitem__(self, key: tuple[Node, builtins.str]) -> builtins.float:
-        r"""
-        `field[node, "UX"]` — raises IndexError if absent.
-        """
-    def __setitem__(self, key: tuple[Node, builtins.str], value: builtins.float) -> None:
-        r"""
-        `field[node, "UX"] = v` — raises IndexError if absent.
-        """
+    def add_sub(self, sub: SubNodeField) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
-        Print the full content (third display level) to stdout: values /
-        topology, beyond `repr`'s bounded structure. Returns nothing.
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
+    def __add__(self, other: typing.Any) -> typing.Any:
+        r"""
+        `a + b` — grow this aggregate. `other` may be another
+        aggregate of the same type (merge, union of sub-objects,
+        first-seen order) or a single sub-object (append). In both
+        cases sub-handles are **shared** (refcount bump), not
+        deep-copied. Returns `NotImplemented` for any other type so
+        Python can fall back to the right-hand operand's `__radd__`.
         """
 
 @typing.final
@@ -1119,7 +1088,7 @@ class SubMesh:
         - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
           corner (default `True`). In the interactive window, the key
           `A` toggles it at runtime.
-        - `field`: optional `NodeField` whose values colour each cell
+        - `field`: optional `SubNodeField` whose values colour each cell
           (per-cell value = mean over the cell's nodes of the chosen
           component). Default `None` ⇒ uniform face colour.
         - `component`: component name to display when `field` is set
@@ -1175,7 +1144,7 @@ class SubModel:
     def multiplier_mesh(self) -> Mesh:
         r"""
         POI1 `Mesh` of the multiplier nodes (Lagrange physics only — empty
-        otherwise). Build a load `NodeField` on `mesh[0]` to impose the
+        otherwise). Build a load `SubNodeField` on `mesh[0]` to impose the
         constrained values, or read the nodes via `mesh.node(0, i, 0)`.
         """
     def material_components(self) -> typing.Optional[builtins.list[builtins.str]]:
@@ -1197,6 +1166,109 @@ class SubModel:
         (first-seen order). Sub-handles are shared (refcount bump).
         Returns `NotImplemented` for any other right-hand type.
         """
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
+        """
+
+@typing.final
+class SubNodeField:
+    r"""
+    A **view** into one zone of a `NodeField`, obtained by indexing
+    (`node_field[i]`) — never constructed directly. Build at the parent
+    level instead: `NodeField(support, components)`, composed with `+`.
+    """
+    def node_count(self) -> builtins.int:
+        r"""
+        Number of nodes in the support.
+        """
+    def component_count(self) -> builtins.int:
+        r"""
+        Number of components stored per node.
+        """
+    def components(self) -> builtins.list[builtins.str]:
+        r"""
+        Component names, in order.
+        """
+    def get(self, node_idx: builtins.int, comp_idx: builtins.int) -> builtins.float:
+        r"""
+        Value at node index `node_idx`, component index `comp_idx`.
+        """
+    def set(self, node_idx: builtins.int, comp_idx: builtins.int, value: builtins.float) -> None:
+        r"""
+        Set the value at node index `node_idx`, component index `comp_idx`.
+        """
+    def get_by_node(self, node: Node, comp_idx: builtins.int) -> builtins.float:
+        r"""
+        Value at `node`, component index `comp_idx`.
+        """
+    def set_by_node(self, node: Node, comp_idx: builtins.int, value: builtins.float) -> None:
+        r"""
+        Set the value at `node`, component index `comp_idx`.
+        """
+    def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
+        r"""
+        Index of component `name`, or `None` if unknown.
+        """
+    def node_values(self, node_idx: builtins.int) -> builtins.list[builtins.float]:
+        r"""
+        All component values at node index `node_idx`, in order.
+        """
+    def support_submesh(self) -> SubMesh:
+        r"""
+        The POI1 `SubMesh` this sub-field is supported on.
+        """
+    def support_mesh(self) -> Mesh:
+        r"""
+        The POI1 `Mesh` this sub-field is supported on.
+        """
+    def value(self, node: Node, component: builtins.str) -> builtins.float:
+        r"""
+        Value at `node` for the named `component`.
+        """
+    def set_value(self, node: Node, component: builtins.str, value: builtins.float) -> None:
+        r"""
+        Set the value at `node` for the named `component`.
+        """
+    def min(self, component: builtins.str) -> builtins.float:
+        r"""
+        Smallest value of the named `component`.
+        """
+    def max(self, component: builtins.str) -> builtins.float:
+        r"""
+        Largest value of the named `component`.
+        """
+    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Add `scalar` to every value of `component` (in place).
+        """
+    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Subtract `scalar` from every value of `component` (in place).
+        """
+    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Multiply every value of `component` by `scalar` (in place).
+        """
+    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Divide every value of `component` by `scalar` (in place).
+        """
+    def __add__(self, rhs: builtins.float) -> SubNodeField: ...
+    def __sub__(self, rhs: builtins.float) -> SubNodeField: ...
+    def __mul__(self, rhs: builtins.float) -> SubNodeField: ...
+    def __truediv__(self, rhs: builtins.float) -> SubNodeField: ...
+    def __getitem__(self, key: tuple[Node, builtins.str]) -> builtins.float:
+        r"""
+        `subfield[node, "UX"]` — raises if the node or component is absent.
+        """
+    def __setitem__(self, key: tuple[Node, builtins.str], value: builtins.float) -> None:
+        r"""
+        `subfield[node, "UX"] = v` — raises if the node or component is absent.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
         Print the full content (third display level) to stdout: values /

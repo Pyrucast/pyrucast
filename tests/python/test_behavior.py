@@ -30,7 +30,7 @@ def _heat_setup(n_elems=4, length=1.0, k=2.0):
         t_mesh.unit().add_cell([n])
     t = pyrucast.NodeField(t_mesh, ["T"])
     for i, n in enumerate(nodes):
-        t.set_value(n, "T", i * h)  # T = x
+        t[0].set_value(n, "T", i * h)  # T = x
     return model, fes, materials, t
 
 
@@ -98,8 +98,8 @@ def test_deformation_linearized_strain_2d():
         u_mesh.unit().add_cell([n])
     u = pyrucast.NodeField(u_mesh, ["u_x", "u_y"])
     for n, x, y in [(a, 0.0, 0.0), (b, 1.0, 0.0), (cc, 0.0, 1.0)]:
-        u.set_value(n, "u_x", 2.0 * x + 0.5 * y)
-        u.set_value(n, "u_y", 0.1 * x + 3.0 * y)
+        u[0].set_value(n, "u_x", 2.0 * x + 0.5 * y)
+        u[0].set_value(n, "u_y", 0.1 * x + 3.0 * y)
 
     strain = pyrucast.deformation(u, fes)
     sub = strain[0]

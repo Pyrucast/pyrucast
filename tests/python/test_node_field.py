@@ -1,4 +1,4 @@
-"""Python tests for NodeField (Phase 2 step 3)."""
+"""Python tests for NodeField (aggregate) and SubNodeField (zone view)."""
 
 import gc as pygc
 
@@ -15,28 +15,49 @@ def _poi1_with(n_nodes, dim=2):
     return c, nodes, mesh
 
 
-def test_from_poi1_zero_initialized():
+def _two_zone_mesh():
+    """Two TRI3 zones sharing an interface edge (nodes n1, n2)."""
+    c = pyrucast.Configuration(2)
+    n0 = c.add_node([0.0, 0.0])
+    n1 = c.add_node([1.0, 0.0])
+    n2 = c.add_node([0.0, 1.0])
+    n3 = c.add_node([1.0, 1.0])
+    za = pyrucast.Mesh(c, "TRI3")
+    za.unit().add_cell([n0, n1, n2])
+    zb = pyrucast.Mesh(c, "TRI3")
+    zb.unit().add_cell([n1, n3, n2])
+    return c, [n0, n1, n2, n3], za + zb
+
+
+# ─── Construction ────────────────────────────────────────────────────────────
+
+
+def test_from_mesh_zero_initialized():
     c, _nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["T"])
+    assert len(f) == 1
     assert f.node_count() == 3
-    assert f.component_count() == 1
     assert f.components() == ["T"]
+    sub = f.unit()
+    assert sub.component_count() == 1
     for i in range(3):
-        assert f.get(i, 0) == 0.0
+        assert sub.get(i, 0) == 0.0
 
 
-def test_from_poi1_rejects_non_poi1():
+def test_non_poi1_support_uses_distinct_nodes():
+    # A non-POI1 mesh is accepted: each zone's sub-field is supported on
+    # the distinct nodes of its submesh.
     c = pyrucast.Configuration(2)
-    sm = pyrucast.Mesh(c, "SEG2")
-    try:
-        pyrucast.NodeField(sm, ["X"])
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("expected RuntimeError for non-POI1 support")
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    seg = pyrucast.Mesh(c, "SEG2")
+    seg.unit().add_cell([a, b])
+    f = pyrucast.NodeField(seg, ["T"])
+    assert f.node_count() == 2
+    assert f.value(a, "T") == 0.0
 
 
-def test_from_poi1_rejects_empty_components():
+def test_rejects_empty_components():
     c, _nodes, sm = _poi1_with(1)
     try:
         pyrucast.NodeField(sm, [])
@@ -46,7 +67,7 @@ def test_from_poi1_rejects_empty_components():
         raise AssertionError("expected RuntimeError for empty components")
 
 
-def test_from_poi1_rejects_duplicate_components():
+def test_rejects_duplicate_components():
     c, _nodes, sm = _poi1_with(1)
     try:
         pyrucast.NodeField(sm, ["UX", "UX"])
@@ -56,37 +77,99 @@ def test_from_poi1_rejects_duplicate_components():
         raise AssertionError("expected RuntimeError for duplicate components")
 
 
+def test_one_sub_per_submesh():
+    c, nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, ["T"])
+    assert len(f) == 2
+    # 4 distinct nodes; the interface nodes are stored once per zone.
+    assert f.node_count() == 4
+    assert f[0].node_count() == 3
+    assert f[1].node_count() == 3
+
+
+def test_components_per_submesh():
+    c, nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField.with_components_per_submesh(mesh, [["T"], ["UX", "UY"]])
+    assert f.components() == ["T", "UX", "UY"]
+    # T lives on zone 0 only: defined at n0, absent at n3.
+    assert f.value(nodes[0], "T") == 0.0
+    try:
+        f.value(nodes[3], "T")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for (n3, T)")
+
+
+# ─── Zone view (SubNodeField) ────────────────────────────────────────────────
+
+
 def test_get_set_multi_component():
     c, _nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["UX", "UY", "UZ"])
-    f.set(0, 0, 1.0)
-    f.set(0, 1, 2.0)
-    f.set(0, 2, 3.0)
-    f.set(1, 1, -7.0)
-    assert f.node_values(0) == [1.0, 2.0, 3.0]
-    assert f.node_values(1) == [0.0, -7.0, 0.0]
+    sub = f.unit()
+    sub.set(0, 0, 1.0)
+    sub.set(0, 1, 2.0)
+    sub.set(0, 2, 3.0)
+    sub.set(1, 1, -7.0)
+    assert sub.node_values(0) == [1.0, 2.0, 3.0]
+    assert sub.node_values(1) == [0.0, -7.0, 0.0]
 
 
 def test_by_node_id_access():
     c, nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["T", "P"])
-    ci_p = f.component_index("P")
+    sub = f.unit()
+    ci_p = sub.component_index("P")
     assert ci_p == 1
-    f.set_by_node(nodes[1], ci_p, 42.0)
-    assert f.get_by_node(nodes[1], ci_p) == 42.0
+    sub.set_by_node(nodes[1], ci_p, 42.0)
+    assert sub.get_by_node(nodes[1], ci_p) == 42.0
 
 
 def test_unknown_node_or_component():
     c, _nodes, sm = _poi1_with(1)
     f = pyrucast.NodeField(sm, ["T"])
-    assert f.component_index("missing") is None
+    sub = f.unit()
+    assert sub.component_index("missing") is None
     other = c.add_node([99.0, 99.0])  # alive in the config but not in the field's support
     try:
-        f.get_by_node(other, 0)
+        sub.get_by_node(other, 0)
     except RuntimeError:
         pass
     else:
         raise AssertionError("expected RuntimeError for unknown NodeId")
+
+
+def test_subfield_getitem_setitem():
+    c, nodes, sm = _poi1_with(2)
+    f = pyrucast.NodeField(sm, ["UX", "UY"])
+    f[0][nodes[0], "UX"] = 7.0
+    f[0][nodes[1], "UY"] = -3.0
+    assert f[0][nodes[0], "UX"] == 7.0
+    assert f[0][nodes[1], "UY"] == -3.0
+    assert f[0][nodes[0], "UY"] == 0.0
+
+
+# ─── Aggregate reads, coherence ──────────────────────────────────────────────
+
+
+def test_value_first_zone_wins_and_check():
+    c, nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, ["T"])
+    interface = nodes[1]
+    # Diverging values at the interface: reads pick zone 0, check() raises.
+    f[0].set_value(interface, "T", 1.0)
+    f[1].set_value(interface, "T", 2.0)
+    assert f.value(interface, "T") == 1.0
+    try:
+        f.check()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError from check() on conflict")
+    # Re-aligned values: check() passes.
+    f[1].set_value(interface, "T", 1.0)
+    f.check()
 
 
 def test_field_protects_nodes_from_gc():
@@ -97,7 +180,7 @@ def test_field_protects_nodes_from_gc():
     sm.unit().add_cell([a])
     field = pyrucast.NodeField(sm, ["T"])
 
-    # NodeField shares the SubMesh handle, so per-node refcounts are
+    # The sub-field shares the SubMesh handle, so per-node refcounts are
     # only Node + SubMesh = 2 (the field adds no per-node incref).
     assert c.refcount(nid) == 2
 
@@ -116,6 +199,9 @@ def test_field_protects_nodes_from_gc():
     assert not c.is_alive(nid)
 
 
+# ─── coordinates / set_coordinates / displace ────────────────────────────────
+
+
 def test_coordinates_poi1_mesh_xyz():
     c = pyrucast.Configuration(3)
     a = c.add_node([1.0, 2.0, 3.0])
@@ -127,10 +213,10 @@ def test_coordinates_poi1_mesh_xyz():
     f = pyrucast.coordinates(mesh)
     assert f.components() == ["X", "Y", "Z"]
     assert f.node_count() == 2
-    assert f[a, "X"] == 1.0
-    assert f[a, "Y"] == 2.0
-    assert f[a, "Z"] == 3.0
-    assert f[b, "Z"] == 6.0
+    assert f.value(a, "X") == 1.0
+    assert f.value(a, "Y") == 2.0
+    assert f.value(a, "Z") == 3.0
+    assert f.value(b, "Z") == 6.0
 
 
 def test_coordinates_converts_non_poi1_and_deduplicates():
@@ -147,8 +233,8 @@ def test_coordinates_converts_non_poi1_and_deduplicates():
     f = pyrucast.coordinates(tri)
     assert f.components() == ["X", "Y"]  # 2-D ⇒ X, Y only
     assert f.node_count() == 4  # shared nodes appear once
-    assert f[cc, "X"] == 0.5
-    assert f[d, "X"] == 1.5
+    assert f.value(cc, "X") == 0.5
+    assert f.value(d, "X") == 1.5
 
 
 def test_coordinates_component_subset():
@@ -159,8 +245,8 @@ def test_coordinates_component_subset():
 
     f = pyrucast.coordinates(mesh, ["X", "Z"])
     assert f.components() == ["X", "Z"]
-    assert f[a, "X"] == 1.0
-    assert f[a, "Z"] == 3.0
+    assert f.value(a, "X") == 1.0
+    assert f.value(a, "Z") == 3.0
 
 
 def test_coordinates_rejects_axis_beyond_dimension():
@@ -186,8 +272,8 @@ def test_set_coordinates_writes_positions():
 
     # Read current positions into a field, move node a, write it all back.
     f = pyrucast.coordinates(mesh)  # components X, Y
-    f[a, "X"] = 10.0
-    f[a, "Y"] = 20.0
+    f[0][a, "X"] = 10.0
+    f[0][a, "Y"] = 20.0
     pyrucast.set_coordinates(f)  # default components ["X", "Y"]
     assert a.coord() == [10.0, 20.0]
     assert b.coord() == [1.0, 1.0]
@@ -202,9 +288,9 @@ def test_displace_adds_displacement():
     mesh.unit().add_cell([b])
 
     d = pyrucast.NodeField(mesh, ["ux", "uy"])
-    d[a, "ux"] = 5.0
-    d[a, "uy"] = -1.0
-    d[b, "ux"] = 2.0
+    d[0][a, "ux"] = 5.0
+    d[0][a, "uy"] = -1.0
+    d[0][b, "ux"] = 2.0
     pyrucast.displace(d)  # default components ["ux", "uy"]
     assert a.coord() == [5.0, -1.0]
     assert b.coord() == [3.0, 1.0]
@@ -214,46 +300,56 @@ def test_repr_str_node_field():
     c, _nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["UX", "UY"])
     assert "NodeField" in repr(f)
-    s = str(f)
+    assert "1 subfield(s)" in str(f)
+    s = str(f.unit())
     assert "3 node(s)" in s
     assert "2 component(s)" in s
     assert "UX, UY" in s
 
 
+# ─── Operators ───────────────────────────────────────────────────────────────
 
 
-# ─── Field arithmetic & combination (module operators) ──────────────────────
-
-
-def test_add_scalar():
+def test_subfield_add_scalar():
     c, nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["T"])
-    f.set_value(nodes[0], "T", 1.0)
-    f.set_value(nodes[1], "T", 2.0)
-    g = f + 10.0
+    f[0].set_value(nodes[0], "T", 1.0)
+    f[0].set_value(nodes[1], "T", 2.0)
+    g = f[0] + 10.0
     assert g.value(nodes[0], "T") == 11.0
     assert g.value(nodes[1], "T") == 12.0
+    # The original is untouched.
+    assert f.value(nodes[0], "T") == 1.0
 
 
-def test_add_field_plus_field():
-    # Regression: `a + b` previously deadlocked (nested per-type store lock).
-    c, nodes, sm = _poi1_with(2)
-    a = pyrucast.NodeField(sm, ["T"])
-    b = pyrucast.NodeField(sm, ["T"])
-    a.set_value(nodes[0], "T", 1.0)
-    b.set_value(nodes[0], "T", 10.0)
-    b.set_value(nodes[1], "T", 5.0)
-    c2 = a + b
-    assert c2.value(nodes[0], "T") == 11.0
-    assert c2.value(nodes[1], "T") == 5.0
+def test_add_is_structural_merge():
+    # `a + b` composes zones (shared handles) — it does NOT add values.
+    c, nodes, mesh = _two_zone_mesh()
+    a = pyrucast.NodeField(mesh[0], ["T"])
+    b = pyrucast.NodeField(mesh[1], ["P"])
+    a[0].set_value(nodes[0], "T", 1.0)
+    f = a + b
+    assert len(f) == 2
+    assert f.components() == ["T", "P"]
+    assert f.value(nodes[0], "T") == 1.0
+    assert f.value(nodes[3], "P") == 0.0
+
+
+def test_add_aggregate_plus_subfield():
+    c, nodes, mesh = _two_zone_mesh()
+    a = pyrucast.NodeField(mesh[0], ["T"])
+    b = pyrucast.NodeField(mesh[1], ["T"])
+    f = a + b[0]
+    assert len(f) == 2
 
 
 def test_add_field_to_itself_does_not_deadlock():
-    # Same handle on both sides must not re-lock the store mutex.
+    # Regression: same handle on both sides must not re-lock the store mutex.
     c, nodes, sm = _poi1_with(1)
     a = pyrucast.NodeField(sm, ["T"])
-    a.set_value(nodes[0], "T", 3.0)
-    assert (a + a).value(nodes[0], "T") == 6.0
+    f = a + a
+    assert len(f) == 2
+    f.check()  # identical duplicated zone: coherent
 
 
 def test_add_rejects_bad_operand():
@@ -265,6 +361,9 @@ def test_add_rejects_bad_operand():
         pass
     else:
         raise AssertionError("expected TypeError for str operand")
+
+
+# ─── merge / restrict ────────────────────────────────────────────────────────
 
 
 def test_merge_compatible_and_conflict():
@@ -281,10 +380,10 @@ def test_merge_compatible_and_conflict():
     sm_b.unit().add_cell([n2])
     a = pyrucast.NodeField(sm_a, ["T"])
     b = pyrucast.NodeField(sm_b, ["T"])
-    a.set_value(n0, "T", 5.0)
-    a.set_value(n1, "T", 3.0)
-    b.set_value(n1, "T", 3.0)  # same value at the shared node → compatible
-    b.set_value(n2, "T", 9.0)
+    a[0].set_value(n0, "T", 5.0)
+    a[0].set_value(n1, "T", 3.0)
+    b[0].set_value(n1, "T", 3.0)  # same value at the shared node → compatible
+    b[0].set_value(n2, "T", 9.0)
 
     m = pyrucast.merge(a, b)
     assert m.node_count() == 3
@@ -293,7 +392,7 @@ def test_merge_compatible_and_conflict():
     assert m.value(n2, "T") == 9.0
 
     # Conflicting value at the shared node → error.
-    b.set_value(n1, "T", 7.0)
+    b[0].set_value(n1, "T", 7.0)
     try:
         pyrucast.merge(a, b)
     except RuntimeError:
@@ -306,7 +405,7 @@ def test_restrict_to_mesh_subset():
     c, nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["T"])
     for i, n in enumerate(nodes):
-        f.set_value(n, "T", float(i + 1))
+        f[0].set_value(n, "T", float(i + 1))
 
     # Mesh covering only nodes[0] and nodes[2].
     mesh = pyrucast.Mesh(c, "POI1")
@@ -319,12 +418,17 @@ def test_restrict_to_mesh_subset():
     assert r.value(nodes[2], "T") == 3.0
 
 
+# ─── min / max ───────────────────────────────────────────────────────────────
+
+
 def test_min_max_per_component():
     c, nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["U", "V"])
     for i, n in enumerate(nodes):
-        f.set_value(n, "U", float(i + 1))      # 1, 2, 3
-        f.set_value(n, "V", -float(i + 1))     # -1, -2, -3
+        f[0].set_value(n, "U", float(i + 1))      # 1, 2, 3
+        f[0].set_value(n, "V", -float(i + 1))     # -1, -2, -3
+    # Zone view and aggregate agree on a single-zone field.
+    assert f[0].min("U") == 1.0
     assert f.min("U") == 1.0
     assert f.max("U") == 3.0
     assert f.min("V") == -3.0
@@ -335,3 +439,12 @@ def test_min_max_per_component():
         pass
     else:
         raise AssertionError("expected RuntimeError for unknown component")
+
+
+def test_min_max_fold_across_zones():
+    c, nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, ["T"])
+    f[0].set_value(nodes[0], "T", -2.0)
+    f[1].set_value(nodes[3], "T", 5.0)
+    assert f.min("T") == -2.0
+    assert f.max("T") == 5.0
