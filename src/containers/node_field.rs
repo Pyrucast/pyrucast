@@ -308,34 +308,6 @@ impl SubNodeField {
         Some(self.values[ni * self.components.len() + ci])
     }
 
-    pub(crate) fn check_compatible(&self, other: &SubNodeField) -> Result<()> {
-        let a = self.configuration();
-        let b = other.configuration();
-        if a.index() != b.index() || a.generation() != b.generation() {
-            return Err(PyrucastError::Message(
-                "fields are not attached to the same Configuration".into(),
-            ));
-        }
-        Ok(())
-    }
-
-    /// Returns (union_components, union_nodes): self's items first, then other's extras.
-    pub(crate) fn union_layout(&self, other: &SubNodeField) -> (Vec<String>, Vec<NodeId>) {
-        let mut components = self.components.clone();
-        for c in &other.components {
-            if !components.iter().any(|x| x == c) {
-                components.push(c.clone());
-            }
-        }
-        let mut nodes = self.nodes.clone();
-        for &nid in &other.nodes {
-            if !nodes.contains(&nid) {
-                nodes.push(nid);
-            }
-        }
-        (components, nodes)
-    }
-
     // ── Accès idiomatique ───────────────────────────────────────────────────
 
     /// Read a value by `(NodeId, component name)`.

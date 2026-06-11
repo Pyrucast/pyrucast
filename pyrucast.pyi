@@ -1296,13 +1296,12 @@ def consolidate(obj: typing.Any) -> typing.Any:
 
 def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
     r"""
-    Build a `NodeField` carrying the coordinates of every node of `mesh`.
+    Build a `NodeField` carrying the coordinates of every node of `mesh`
+    — one `SubNodeField` per submesh, on the distinct nodes of its zone.
     
     One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
     requests all the axes the mesh's `Configuration` has (`["X"]` in 1-D,
-    `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D). A non-POI1 mesh is
-    converted to POI1 internally (see `to_poi1`); the support is the unique
-    nodes of the mesh, in order of first appearance.
+    `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
     """
 
 def deformation(u: NodeField, fespace: FiniteElementSpace) -> ElementField:
@@ -1396,10 +1395,11 @@ def material_field_per_sub_model(model: Model, components_and_values_per_sub_mod
 
 def merge(a: NodeField, b: NodeField) -> NodeField:
     r"""
-    Merge two node fields over the union of their supports.
+    Merge two node fields « au plus juste »: structural union of their
+    zones, consolidated — zones sharing a component set are fused, the
+    others stay separate (nothing is densified).
     
-    Keeps each field's value where only one is defined, `0.0` where
-    neither is. Errors if the two fields hold different values at the same
+    Errors if the two fields hold different values at the same
     `(node, component)` pair, or are attached to different `Configuration`s.
     """
 
@@ -1416,10 +1416,10 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     r"""
     Restrict `field` to the nodes used by `mesh`.
     
-    Returns a new `NodeField` with the same components, supported on the
-    unique nodes of `mesh` (order of first appearance). Nodes of `mesh`
-    absent from `field` are assigned `0.0`. Errors if `mesh` and `field`
-    are attached to different `Configuration`s.
+    Returns a new `NodeField` with one zone per submesh of `mesh`,
+    carrying the union of `field`'s components. Nodes of `mesh` absent
+    from `field` are assigned `0.0`. Errors if `mesh` and `field` are
+    attached to different `Configuration`s.
     """
 
 def set_coordinates(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
@@ -1442,8 +1442,9 @@ def solve(matrix: Matrix, rhs: NodeField) -> NodeField:
     Solve the linear system `A·x = b` for `x` (dense LU).
     
     `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
-    as a `NodeField`. Returns the solution `x` as a `NodeField` over the
-    same support.
+    as a `NodeField` (read through the aggregate, zones resolved per DOF).
+    Returns the solution `x` as a single-zone `NodeField` over the
+    column-DOF nodes.
     """
 
 def stiffness(model: Model, materials: ElementField) -> Matrix:

@@ -66,36 +66,29 @@ pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> P
 
 /// Restrict `field` to the nodes used by `mesh`.
 ///
-/// Returns a new `NodeField` with the same components, supported on the
-/// unique nodes of `mesh` (order of first appearance). Nodes of `mesh`
-/// absent from `field` are assigned `0.0`. Errors if `mesh` and `field`
-/// are attached to different `Configuration`s.
+/// Returns a new `NodeField` with one zone per submesh of `mesh`,
+/// carrying the union of `field`'s components. Nodes of `mesh` absent
+/// from `field` are assigned `0.0`. Errors if `mesh` and `field` are
+/// attached to different `Configuration`s.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
-    let h = field.inner.unit()?;
-    let result = with(&h, |nf| crate::ops::field::restrict(nf, &mesh.inner))??;
     Ok(PyNodeField {
-        inner: NodeField::from_sub(result),
+        inner: crate::ops::field::restrict(&field.inner, &mesh.inner)?,
     })
 }
 
-/// Merge two node fields over the union of their supports.
+/// Merge two node fields « au plus juste »: structural union of their
+/// zones, consolidated — zones sharing a component set are fused, the
+/// others stay separate (nothing is densified).
 ///
-/// Keeps each field's value where only one is defined, `0.0` where
-/// neither is. Errors if the two fields hold different values at the same
+/// Errors if the two fields hold different values at the same
 /// `(node, component)` pair, or are attached to different `Configuration`s.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
-    let ha = a.inner.unit()?;
-    let hb = b.inner.unit()?;
-    // The store mutex is per-type and non-reentrant: clone `b` out before
-    // locking `a` rather than nesting two `with::<SubNodeField>` calls.
-    let fb = with(&hb, |f| f.clone())?;
-    let result = with(&ha, |fa| crate::ops::field::merge(fa, &fb))??;
     Ok(PyNodeField {
-        inner: NodeField::from_sub(result),
+        inner: crate::ops::field::merge(&a.inner, &b.inner)?,
     })
 }
 
