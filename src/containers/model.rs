@@ -67,6 +67,7 @@
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
+//! use pyrucast::containers::field::SubField;
 //! use pyrucast::containers::model::{Model, SubModel};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::ops::assemble;
@@ -388,6 +389,7 @@ fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::containers::field::SubField;
     use crate::aggregate::Aggregate;
     use crate::containers::mesh::Configuration;
     use crate::containers::mesh::ElementType;

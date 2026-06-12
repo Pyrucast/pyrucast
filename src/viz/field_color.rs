@@ -19,6 +19,7 @@
 //! Flat rendering (one colour per cell) uses the arithmetic mean of
 //! those per-cell nodal values.
 
+use crate::containers::field::SubField;
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementFieldView, SubElementField};
 use crate::containers::mesh::RgbColor;

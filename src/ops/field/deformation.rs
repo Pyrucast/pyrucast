@@ -72,6 +72,7 @@ fn strain_from_gradients(g: &Gradients) -> Result<SubElementField> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::containers::field::SubField;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::store::{insert, read};

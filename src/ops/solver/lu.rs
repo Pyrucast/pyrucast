@@ -22,6 +22,7 @@
 //! # Example
 //!
 //! ```
+//! use pyrucast::containers::field::SubField;
 //! use pyrucast::aggregate::Aggregate;
 //! use pyrucast::containers::mesh::Configuration;
 //! use pyrucast::containers::element_field::{ElementField, SubElementField};
@@ -163,6 +164,7 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::containers::field::SubField;
     use crate::aggregate::Aggregate;
     use crate::containers::mesh::Configuration;
     use crate::containers::mesh::ElementType;

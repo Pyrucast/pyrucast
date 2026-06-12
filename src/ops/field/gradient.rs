@@ -133,6 +133,7 @@ fn gradients_to_field(g: &Gradients, components: &[String]) -> Result<SubElement
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::containers::field::SubField;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::store::{insert, read};

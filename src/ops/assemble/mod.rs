@@ -22,6 +22,7 @@
 //! covering only some of the FE subspaces is therefore valid as long as
 //! every material-hungry sub-model finds its match.
 
+use crate::containers::field::SubField;
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::matrix::Matrix;

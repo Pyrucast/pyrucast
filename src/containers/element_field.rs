@@ -52,6 +52,7 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
+//! use pyrucast::containers::field::SubField;
 //! use pyrucast::containers::mesh::Configuration;
 //! use pyrucast::containers::element_field::ElementField;
 //! use pyrucast::containers::mesh::ElementType;
@@ -154,9 +155,10 @@ impl SubElementField {
                 components.len()
             )));
         }
+        let names = components.clone();
         let mut field = Self::new(fespace, components)?;
-        for (c, &v) in values_per_component.iter().enumerate() {
-            field.fill_component(c, v);
+        for (name, &v) in names.iter().zip(values_per_component) {
+            field.set_uniform(name, v)?;
         }
         Ok(field)
     }
@@ -178,20 +180,8 @@ impl SubElementField {
         self.n_gauss
     }
 
-    /// Number of components.
-    pub fn component_count(&self) -> usize {
-        self.components.len()
-    }
-
-    /// Component names, in order.
-    pub fn components(&self) -> &[String] {
-        &self.components
-    }
-
-    /// Index of a named component, or `None` if absent.
-    pub fn component_index(&self, name: &str) -> Option<usize> {
-        self.components.iter().position(|c| c == name)
-    }
+    // `components`, `component_count`, `component_index`, … come from
+    // the [`crate::containers::field::SubField`] trait.
 
     // ── Value access by indices ─────────────────────────────────────────────
 
@@ -240,14 +230,8 @@ impl SubElementField {
 
     // ── Bulk fillers ────────────────────────────────────────────────────────
 
-    /// Set every `(cell, gauss)` entry of one component to the same value.
-    ///
-    /// Convenience for constant-per-domain material properties.
-    pub fn set_uniform(&mut self, component: &str, value: f64) -> Result<()> {
-        let c = self.component_index_or_err(component)?;
-        self.fill_component(c, value);
-        Ok(())
-    }
+    // `set_uniform` (constant-per-domain material properties) comes from
+    // the [`crate::containers::field::SubField`] trait.
 
     /// Set every Gauss point of a given cell to the same value for one
     /// component (cell-piecewise-constant material).
@@ -265,13 +249,6 @@ impl SubElementField {
     // the [`crate::containers::field::SubField`] trait.
 
     // ── Internals ───────────────────────────────────────────────────────────
-
-    fn fill_component(&mut self, comp: usize, value: f64) {
-        let n_comp = self.components.len();
-        for i in 0..self.n_cells * self.n_gauss {
-            self.values[i * n_comp + comp] = value;
-        }
-    }
 
     fn linear_index(&self, cell: usize, gauss: usize, comp: usize) -> Result<usize> {
         self.check_cell(cell)?;

@@ -62,8 +62,9 @@ use pyrucast::containers::element_field::ElementField;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::finite_element_space::FiniteElementSpace;
 use pyrucast::mesh::{Mesh, SubMesh};
+use pyrucast::containers::field::SubField;
 use pyrucast::mesh::node::Node;
-use pyrucast::store::{insert, with};
+use pyrucast::store::insert;
 
 let cfg = insert(Configuration::new(2).unwrap());
 let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();

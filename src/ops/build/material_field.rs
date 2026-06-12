@@ -99,6 +99,7 @@ pub fn material_field_per_sub_model(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::matrix::Matrix;
     use crate::containers::mesh::{Configuration, NodeId};

@@ -59,6 +59,7 @@
 //! ```
 
 use crate::aggregate::Aggregate;
+use crate::containers::field::SubField;
 use crate::containers::mesh::{Configuration, NodeId};
 use crate::containers::mesh::ElementType;
 use crate::error::{PyrucastError, Result};
@@ -68,7 +69,7 @@ use crate::store::{insert, read, Handle};
 use crate::store::write;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::ops::{Add, Div, Index, IndexMut, Mul, Sub};
+use std::ops::{Index, IndexMut};
 
 // ─── SubNodeField ──────────────────────────────────────────────────────────────
 
@@ -153,15 +154,8 @@ impl SubNodeField {
         self.nodes.len()
     }
 
-    /// Number of components.
-    pub fn component_count(&self) -> usize {
-        self.components.len()
-    }
-
-    /// Component names, in order.
-    pub fn components(&self) -> &[String] {
-        &self.components
-    }
+    // `components`, `component_count`, `component_index`, … come from
+    // the [`crate::containers::field::SubField`] trait.
 
     /// Node ids this field is defined on, in support order.
     pub(crate) fn nodes(&self) -> &[NodeId] {
@@ -215,10 +209,6 @@ impl SubNodeField {
         self.nodes.iter().position(|&n| n == nid)
     }
 
-    /// Index of a named component, or `None` if absent.
-    pub fn component_index(&self, name: &str) -> Option<usize> {
-        self.components.iter().position(|c| c == name)
-    }
 
     /// Build a new POI1 [`SubMesh`] whose cells are exactly the support nodes
     /// of this field, in the same order. Each node is increfed by the new
@@ -318,9 +308,7 @@ impl SubNodeField {
         let ni = self.index_of(nid).ok_or_else(|| {
             PyrucastError::Message(format!("node {} not in field support", nid))
         })?;
-        let ci = self.component_index(component).ok_or_else(|| {
-            PyrucastError::Message(format!("unknown component: {}", component))
-        })?;
+        let ci = self.component_index_or_err(component)?;
         Ok(self.values[ni * self.components.len() + ci])
     }
 
@@ -329,9 +317,7 @@ impl SubNodeField {
         let ni = self.index_of(nid).ok_or_else(|| {
             PyrucastError::Message(format!("node {} not in field support", nid))
         })?;
-        let ci = self.component_index(component).ok_or_else(|| {
-            PyrucastError::Message(format!("unknown component: {}", component))
-        })?;
+        let ci = self.component_index_or_err(component)?;
         let ncomp = self.components.len();
         self.values[ni * ncomp + ci] = value;
         Ok(())
@@ -473,90 +459,7 @@ impl Clone for SubNodeField {
 // Consuming versions (modify in place, return self) are zero-copy.
 // Reference versions clone first.
 
-impl Add<f64> for SubNodeField {
-    type Output = SubNodeField;
-    fn add(mut self, rhs: f64) -> SubNodeField {
-        for v in &mut self.values {
-            *v += rhs;
-        }
-        self
-    }
-}
-
-impl Add<f64> for &SubNodeField {
-    type Output = SubNodeField;
-    fn add(self, rhs: f64) -> SubNodeField {
-        let mut result = self.clone();
-        for v in &mut result.values {
-            *v += rhs;
-        }
-        result
-    }
-}
-
-impl Sub<f64> for SubNodeField {
-    type Output = SubNodeField;
-    fn sub(mut self, rhs: f64) -> SubNodeField {
-        for v in &mut self.values {
-            *v -= rhs;
-        }
-        self
-    }
-}
-
-impl Sub<f64> for &SubNodeField {
-    type Output = SubNodeField;
-    fn sub(self, rhs: f64) -> SubNodeField {
-        let mut result = self.clone();
-        for v in &mut result.values {
-            *v -= rhs;
-        }
-        result
-    }
-}
-
-impl Mul<f64> for SubNodeField {
-    type Output = SubNodeField;
-    fn mul(mut self, rhs: f64) -> SubNodeField {
-        for v in &mut self.values {
-            *v *= rhs;
-        }
-        self
-    }
-}
-
-impl Mul<f64> for &SubNodeField {
-    type Output = SubNodeField;
-    fn mul(self, rhs: f64) -> SubNodeField {
-        let mut result = self.clone();
-        for v in &mut result.values {
-            *v *= rhs;
-        }
-        result
-    }
-}
-
-impl Div<f64> for SubNodeField {
-    type Output = SubNodeField;
-    fn div(mut self, rhs: f64) -> SubNodeField {
-        for v in &mut self.values {
-            *v /= rhs;
-        }
-        self
-    }
-}
-
-impl Div<f64> for &SubNodeField {
-    type Output = SubNodeField;
-    fn div(self, rhs: f64) -> SubNodeField {
-        let mut result = self.clone();
-        for v in &mut result.values {
-            *v /= rhs;
-        }
-        result
-    }
-}
-
+crate::impl_subfield_scalar_ops!(SubNodeField);
 
 // ─── NodeField (aggregate) ──────────────────────────────────────────────────
 
@@ -788,7 +691,6 @@ impl NodeFieldView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::field::SubField;
     use crate::containers::mesh::Node;
     use crate::store::insert;
 

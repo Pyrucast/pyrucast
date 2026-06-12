@@ -142,6 +142,11 @@ pub trait SubField {
         self.map_component(component, |v| v / scalar)
     }
 
+    /// Set every entry of the named component to `value`.
+    fn set_uniform(&mut self, component: &str, value: f64) -> Result<()> {
+        self.map_component(component, |_| value)
+    }
+
     /// Apply `f` to every entry of the named component (stride =
     /// component count, offset = component index).
     fn map_component(&mut self, component: &str, f: impl Fn(f64) -> f64) -> Result<()> {
@@ -192,6 +197,48 @@ fn fold_component<S: SubField + ?Sized>(
                 op_name, component
             ))
         })
+}
+
+// ─── Scalar-operator macro ──────────────────────────────────────────────────
+
+/// Generate `Add/Sub/Mul/Div<f64>` for a [`SubField`] container: the
+/// consuming versions mutate every value in place and return `self`
+/// (zero-copy); the reference versions clone first.
+///
+/// # Usage
+/// ```ignore
+/// impl_subfield_scalar_ops!(SubNodeField);
+/// ```
+#[macro_export]
+macro_rules! impl_subfield_scalar_ops {
+    ($T:ty) => {
+        $crate::__subfield_scalar_op!($T, Add, add, +);
+        $crate::__subfield_scalar_op!($T, Sub, sub, -);
+        $crate::__subfield_scalar_op!($T, Mul, mul, *);
+        $crate::__subfield_scalar_op!($T, Div, div, /);
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __subfield_scalar_op {
+    ($T:ty, $Trait:ident, $method:ident, $op:tt) => {
+        impl std::ops::$Trait<f64> for $T {
+            type Output = $T;
+            fn $method(mut self, rhs: f64) -> $T {
+                for v in $crate::containers::field::SubField::values_mut(&mut self) {
+                    *v = *v $op rhs;
+                }
+                self
+            }
+        }
+        impl std::ops::$Trait<f64> for &$T {
+            type Output = $T;
+            fn $method(self, rhs: f64) -> $T {
+                std::ops::$Trait::$method(self.clone(), rhs)
+            }
+        }
+    };
 }
 
 // ─── Field (aggregate level) ────────────────────────────────────────────────
