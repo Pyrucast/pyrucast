@@ -324,17 +324,16 @@ fn plot_with_field_explicit_component_choice() {
 
     let dir = tmpdir();
     let path = dir.join("submesh_uy.svg");
-    pyrucast::store::with(&tri_h, |s| {
-        s.plot_with_field(
+    pyrucast::store::read(&tri_h)
+        .unwrap()
+        .plot_with_field(
             Some(View::front()),
             Some(&path),
             &field,
             Some("UY"),
             ColorScale::default(),
         )
-    })
-    .unwrap()
-    .unwrap();
+        .unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.contains("[UY]"));
 }
@@ -367,10 +366,9 @@ fn plot_with_field_unknown_component_errors() {
 fn face_color_roundtrip_on_submesh() {
     let cfg = insert(Configuration::new(2).unwrap());
     let sm_handle = insert(SubMesh::new(cfg, ElementType::TRI3));
-    pyrucast::store::with_mut(&sm_handle, |s| {
-        s.set_face_color(RgbColor::new(1, 2, 3));
-    })
-    .unwrap();
-    let c = pyrucast::store::with(&sm_handle, |s| s.face_color()).unwrap();
+    pyrucast::store::write(&sm_handle)
+        .unwrap()
+        .set_face_color(RgbColor::new(1, 2, 3));
+    let c = pyrucast::store::read(&sm_handle).unwrap().face_color();
     assert_eq!(c, RgbColor::new(1, 2, 3));
 }

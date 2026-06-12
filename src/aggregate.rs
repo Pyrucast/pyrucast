@@ -12,7 +12,7 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::store::{insert, with, Handle};
+//! use pyrucast::store::{insert, read, Handle};
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! struct Item(u32);
@@ -32,7 +32,7 @@
 //! b.push(insert(Item(42)));
 //! assert_eq!(b.len(), 1);
 //! let h = b.get(0).unwrap();
-//! with(&h, |it| assert_eq!(it.0, 42)).unwrap();
+//! assert_eq!(read(&h).unwrap().0, 42);
 //! ```
 
 use crate::error::{PyrucastError, Result};
@@ -201,14 +201,14 @@ struct DebugItem<'a, S: Persist + Any + Send + Sync>(&'a Handle<S>);
 
 impl<S: Persist + Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItem<'_, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match crate::store::with(self.0, |s| {
-            if f.alternate() {
-                write!(f, "{:#?}", s)
-            } else {
-                write!(f, "{:?}", s)
+        match crate::store::read(self.0) {
+            Ok(s) => {
+                if f.alternate() {
+                    write!(f, "{:#?}", &*s)
+                } else {
+                    write!(f, "{:?}", &*s)
+                }
             }
-        }) {
-            Ok(res) => res,
             // Unresolvable handle: fall back to its idx/gen identity.
             Err(_) => std::fmt::Debug::fmt(self.0, f),
         }
@@ -410,9 +410,8 @@ macro_rules! impl_dump_pymethod {
                 max_cols: usize,
             ) -> pyo3::PyResult<()> {
                 let opts = $crate::dump::DumpOptions { precision, max_rows, max_cols };
-                let text = $crate::store::with(&self.$field, |x| {
-                    $crate::dump::Dump::render(x, &opts)
-                })?;
+                let text =
+                    $crate::dump::Dump::render(&*$crate::store::read(&self.$field)?, &opts);
                 $crate::dump::py_print(py, &text)
             }
         }
@@ -613,10 +612,9 @@ macro_rules! impl_aggregate_dump {
             fn render(&self, opts: &$crate::dump::DumpOptions) -> String {
                 let mut out = format!("{self}\n");
                 for (i, h) in $crate::aggregate::Aggregate::items(self).iter().enumerate() {
-                    let body = $crate::store::with(h, |s| {
-                        $crate::dump::Dump::render(s, opts)
-                    })
-                    .unwrap_or_else(|e| format!("<{e}>"));
+                    let body = $crate::store::read(h)
+                        .map(|s| $crate::dump::Dump::render(&*s, opts))
+                        .unwrap_or_else(|e| format!("<{e}>"));
                     out.push_str(&format!("── [{i}] ──\n"));
                     for line in body.lines() {
                         out.push_str("  ");
@@ -636,7 +634,7 @@ macro_rules! impl_aggregate_dump {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::{insert, with, Handle};
+    use crate::store::{insert, read, Handle};
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize)]
@@ -669,7 +667,7 @@ mod tests {
         b.push(insert(Item(3)));
         assert_eq!(b.len(), 3);
         let h = b.get(1).unwrap();
-        with(&h, |it| assert_eq!(it.0, 2)).unwrap();
+        assert_eq!(read(&h).unwrap().0, 2);
     }
 
     #[test]
@@ -677,7 +675,7 @@ mod tests {
         let mut b = Bag::default();
         b.push(insert(Item(10)));
         b.push(insert(Item(20)));
-        let collected: Vec<u32> = b.iter().map(|h| with(h, |it| it.0).unwrap()).collect();
+        let collected: Vec<u32> = b.iter().map(|h| read(h).unwrap().0).collect();
         assert_eq!(collected, vec![10, 20]);
     }
 
@@ -696,7 +694,7 @@ mod tests {
         assert!(b.unit().is_err()); // empty → error
         b.push(insert(Item(7)));
         let h = b.unit().unwrap();
-        with(&h, |it| assert_eq!(it.0, 7)).unwrap();
+        assert_eq!(read(&h).unwrap().0, 7);
         b.push(insert(Item(8)));
         assert!(b.unit().is_err()); // two → error
     }

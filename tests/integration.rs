@@ -7,7 +7,7 @@ use pyrucast::containers::mesh::element_type::ElementType;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::mesh::node::Node;
 use pyrucast::persist::Persist;
-use pyrucast::store::{compact, insert, live_count, swap_out, with, with_mut};
+use pyrucast::store::{compact, insert, live_count, read, swap_out, write};
 use pyrucast::{PyrucastError, Result};
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
@@ -52,16 +52,17 @@ fn full_store_cycle_via_public_api() -> Result<()> {
         values: vec![1.0, 2.0, 3.0],
         name: "alpha".into(),
     });
-    with(&h, |e| {
+    {
+        let e = read(&h)?;
         assert_eq!(e.values, vec![1.0, 2.0, 3.0]);
         assert_eq!(e.name, "alpha");
-    })?;
+    }
 
-    with_mut(&h, |e| e.values.push(4.0))?;
-    with(&h, |e| assert_eq!(e.values.len(), 4))?;
+    write(&h)?.values.push(4.0);
+    assert_eq!(read(&h)?.values.len(), 4);
 
     swap_out(&h)?;
-    with(&h, |e| assert_eq!(e.name, "alpha"))?;
+    assert_eq!(read(&h)?.name, "alpha");
 
     drop(h);
     assert_eq!(live_count::<IntegrationSample>(), 0);
@@ -74,29 +75,32 @@ fn full_store_cycle_via_public_api() -> Result<()> {
 #[test]
 fn configuration_cycle_via_store() -> Result<()> {
     let h = insert(Configuration::new(2)?);
-    let a: NodeId = with_mut(&h, |c| c.add_node(&[0.0, 0.0]))??;
-    let b: NodeId = with_mut(&h, |c| c.add_node(&[1.0, 0.0]))??;
+    let a: NodeId = write(&h)?.add_node(&[0.0, 0.0])?;
+    let b: NodeId = write(&h)?.add_node(&[1.0, 0.0])?;
 
-    with(&h, |c| {
+    {
+        let c = read(&h)?;
         assert_eq!(c.node_count(), 2);
         assert!(c.is_alive(a));
         assert!(c.is_alive(b));
-    })?;
+    }
 
     // Initial refcount = 1 ⇒ gc collects nothing.
-    with_mut(&h, |c| assert_eq!(c.gc(), 0))?;
+    assert_eq!(write(&h)?.gc(), 0);
 
     // decrefs + gc collects both.
-    with_mut(&h, |c| {
+    {
+        let mut c = write(&h)?;
         c.decref(a).unwrap();
         c.decref(b).unwrap();
         assert_eq!(c.gc(), 2);
-    })?;
+    }
 
-    with(&h, |c| {
+    {
+        let c = read(&h)?;
         assert!(!c.is_alive(a));
         assert!(!c.is_alive(b));
-    })?;
+    }
     Ok(())
 }
 
@@ -109,12 +113,12 @@ fn node_protects_from_gc() -> Result<()> {
 
     // Cloning shares the id and doubles the refcount.
     let m = n.clone();
-    with(&h, |c| assert_eq!(c.refcount(id), 2))?;
+    assert_eq!(read(&h)?.refcount(id), 2);
     drop(n);
-    with(&h, |c| assert_eq!(c.refcount(id), 1))?;
-    with_mut(&h, |c| assert_eq!(c.gc(), 0))?;
+    assert_eq!(read(&h)?.refcount(id), 1);
+    assert_eq!(write(&h)?.gc(), 0);
     drop(m);
-    with_mut(&h, |c| assert_eq!(c.gc(), 1))?;
+    assert_eq!(write(&h)?.gc(), 1);
     Ok(())
 }
 
@@ -134,28 +138,30 @@ fn submesh_protects_nodes_via_refcount() -> Result<()> {
     };
 
     // Nodes AND SubMesh each hold one ref ⇒ refcount = 2.
-    with(&cfg, |c| {
+    {
+        let c = read(&cfg)?;
         assert_eq!(c.refcount(a.id()), 2);
         assert_eq!(c.refcount(b.id()), 2);
         assert_eq!(c.refcount(cc.id()), 2);
-    })?;
+    }
 
     // Drop the user Nodes: only the SubMesh keeps referencing.
     let (ida, idb, idc) = (a.id(), b.id(), cc.id());
     drop(a);
     drop(b);
     drop(cc);
-    with(&cfg, |c| {
+    {
+        let c = read(&cfg)?;
         assert_eq!(c.refcount(ida), 1);
         assert_eq!(c.refcount(idb), 1);
         assert_eq!(c.refcount(idc), 1);
-    })?;
+    }
     // gc must still collect nothing.
-    with_mut(&cfg, |c| assert_eq!(c.gc(), 0))?;
+    assert_eq!(write(&cfg)?.gc(), 0);
 
     // Drop the SubMesh ⇒ all nodes drop to 0 ⇒ gc collects.
     drop(sm_handle);
-    with_mut(&cfg, |c| assert_eq!(c.gc(), 3))?;
+    assert_eq!(write(&cfg)?.gc(), 3);
     Ok(())
 }
 

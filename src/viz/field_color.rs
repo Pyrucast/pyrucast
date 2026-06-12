@@ -16,7 +16,7 @@ use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::FieldSnapshot;
-use crate::store::with;
+use crate::store::read;
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
 use crate::viz::mesh_draw::{render_primitives, submesh_primitives_with_colors, Primitive};
@@ -220,7 +220,7 @@ fn mesh_cell_values(
     let mut per_sub: Vec<Vec<f64>> = Vec::with_capacity(n_sub);
     for i in 0..n_sub {
         let sm = mesh.get(i)?;
-        let vals = with(&sm, |s| submesh_cell_values(s, field, component))??;
+        let vals = submesh_cell_values(&*read(&sm)?, field, component)?;
         per_sub.push(vals);
     }
     let slices: Vec<&[f64]> = per_sub.iter().map(|v| v.as_slice()).collect();
@@ -287,7 +287,7 @@ impl<'a> Drawable for MeshFieldView<'a> {
         for (i, values) in per_sub.iter().enumerate() {
             let sm = self.mesh.get(i)?;
             let colors = colors_from_values(values, cmap, vmin, vmax);
-            let prims = with(&sm, |s| submesh_primitives_with_colors(s, &colors))??;
+            let prims = submesh_primitives_with_colors(&*read(&sm)?, &colors)?;
             all_prims.extend(prims);
         }
         render_primitives(area, view, &all_prims)?;
@@ -416,11 +416,7 @@ mod tests {
         nf.set_value(c.id(), "T", 3.0).unwrap();
         let snap = NodeField::from_sub(nf).snapshot().unwrap();
 
-        let values = crate::store::with(&sm_h, |s| {
-            submesh_cell_values(s, &snap, "T")
-        })
-        .unwrap()
-        .unwrap();
+        let values = submesh_cell_values(&*read(&sm_h).unwrap(), &snap, "T").unwrap();
         assert_eq!(values.len(), 1);
         assert!((values[0] - 2.0).abs() < 1e-12); // (1 + 2 + 3) / 3
     }

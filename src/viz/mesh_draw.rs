@@ -19,7 +19,7 @@ use crate::containers::mesh::{Configuration, NodeId};
 use crate::containers::mesh::ElementType;
 use crate::error::Result;
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::store::{with, Handle};
+use crate::store::{read, Handle};
 use crate::viz::camera::{Bbox3, Projector};
 use crate::viz::drawable::{pl_err, Drawable};
 use crate::viz::View;
@@ -42,12 +42,11 @@ fn read_points(
     config: &Handle<Configuration>,
     connectivity: &[NodeId],
 ) -> Result<Vec<Point3>> {
-    with(config, |c| -> Result<Vec<Point3>> {
-        connectivity
-            .iter()
-            .map(|&nid| c.coord(nid).map(pad3))
-            .collect()
-    })?
+    let c = read(config)?;
+    connectivity
+        .iter()
+        .map(|&nid| c.coord(nid).map(pad3))
+        .collect()
 }
 
 /// Geometric primitive emitted by a submesh and consumed by the painter.
@@ -439,7 +438,7 @@ impl Drawable for Mesh {
         let mut b = Bbox3::empty();
         for i in 0..self.len() {
             let sm = self.get(i)?;
-            let smb = with(&sm, |s| s.bbox())??;
+            let smb = read(&sm)?.bbox()?;
             if !smb.is_empty() {
                 b.extend(smb.min);
                 b.extend(smb.max);
@@ -459,7 +458,7 @@ impl Drawable for Mesh {
         let mut all = Vec::new();
         for i in 0..self.len() {
             let sm = self.get(i)?;
-            let mut prims = with(&sm, |s| submesh_primitives(s))??;
+            let mut prims = submesh_primitives(&*read(&sm)?)?;
             all.append(&mut prims);
         }
         render_primitives(area, view, &all)

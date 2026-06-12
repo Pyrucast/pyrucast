@@ -456,30 +456,6 @@ pub fn write<T: Persist + Any + Send + Sync>(h: &Handle<T>) -> Result<WriteGuard
     })
 }
 
-/// Read access through a closure.
-///
-/// Transitional sugar over [`read`] — prefer `read(h)?` in new code;
-/// this function will be removed once existing call sites are migrated.
-pub fn with<T: Persist + Any + Send + Sync, R>(
-    h: &Handle<T>,
-    f: impl FnOnce(&T) -> R,
-) -> Result<R> {
-    let g = read(h)?;
-    Ok(f(&g))
-}
-
-/// Write access through a closure.
-///
-/// Transitional sugar over [`write`] — prefer `write(h)?` in new code;
-/// this function will be removed once existing call sites are migrated.
-pub fn with_mut<T: Persist + Any + Send + Sync, R>(
-    h: &Handle<T>,
-    f: impl FnOnce(&mut T) -> R,
-) -> Result<R> {
-    let mut g = write(h)?;
-    Ok(f(&mut g))
-}
-
 /// Evict the slot to disk (freeing its RAM). The slot stays valid; the
 /// next [`read`] / [`write`] will reload.
 ///
