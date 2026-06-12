@@ -1,26 +1,36 @@
 //! Field-aware colouring for mesh visualization.
 //!
-//! Given a [`crate::containers::node_field::NodeField`] sampled at the
-//! nodes (consumed as a lock-free zone snapshot, first zone defining a
-//! `(node, component)` pair wins), paint each mesh cell with the colour
-//! the field value maps to under a standard colormap.
+//! Paints each mesh cell with the colour its field value maps to under a
+//! standard colormap. Two field kinds are accepted uniformly through
+//! [`FieldData`]:
 //!
-//! Per-cell value = arithmetic mean of the field at the cell's nodes,
-//! restricted to nodes that are in the field's support. Nodes absent
-//! from the field do not contribute; a cell with no node in the
-//! support gets value `0.0`.
+//! - **node fields** ([`crate::containers::node_field::NodeField`]) —
+//!   values live at the nodes; the per-cell nodal values are read
+//!   directly (first zone defining a `(node, component)` pair wins);
+//! - **element fields** ([`crate::containers::element_field::ElementField`])
+//!   — values live at the Gauss points; the per-cell nodal values come
+//!   from a least-squares fit of the Lagrange interpolant to the cell's
+//!   Gauss values, **local to that cell**. No averaging ever happens
+//!   across neighbouring elements: inter-element discontinuities are
+//!   physical and must stay visible. With fewer Gauss points than nodes
+//!   (e.g. a single point) the fit degenerates to the Gauss mean —
+//!   a constant colour over the element.
+//!
+//! Flat rendering (one colour per cell) uses the arithmetic mean of
+//! those per-cell nodal values.
 
 use crate::aggregate::Aggregate;
+use crate::containers::element_field::{ElementFieldView, SubElementField};
 use crate::containers::mesh::RgbColor;
-use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeFieldView;
-use crate::store::read;
+use crate::store::{read, Handle};
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
 use crate::viz::mesh_draw::{render_primitives, submesh_primitives_with_colors, Primitive};
 use crate::viz::View;
+use nalgebra as na;
 use plotters::coord::Shift;
 use plotters::prelude::*;
 
@@ -137,37 +147,170 @@ pub fn colormap(cmap: Colormap, value: f64, vmin: f64, vmax: f64) -> RgbColor {
     cmap.sample(t)
 }
 
-/// Mean of the field's `component` over the supplied node ids.
-///
-/// Nodes not in the field's support are simply ignored (they do not
-/// contribute to the mean nor to the denominator). If **no** node is
-/// in the support, returns `0.0`.
-pub(crate) fn nodes_mean(
-    field: &NodeFieldView,
-    node_ids: &[NodeId],
-    component: &str,
-) -> f64 {
-    let mut sum = 0.0;
-    let mut count = 0usize;
-    for &nid in node_ids {
-        if let Some(v) = field.value_opt(nid, component) {
-            sum += v;
-            count += 1;
+// ─── Uniform field source ───────────────────────────────────────────────────
+
+/// The two field kinds the viz layer colours by, behind one interface.
+/// Holds the zero-copy views (owned read guards on every zone).
+pub(crate) enum FieldData {
+    Node(NodeFieldView),
+    Element(ElementFieldView),
+}
+
+impl FieldData {
+    /// Union of the zones' component names, first-seen order.
+    pub(crate) fn components(&self) -> &[String] {
+        match self {
+            FieldData::Node(v) => v.components(),
+            FieldData::Element(v) => v.components(),
         }
     }
-    if count == 0 {
-        0.0
-    } else {
-        sum / count as f64
+
+    /// Drawing context specialised for one submesh: resolves the
+    /// Element zone (and its fit operator) once per submesh.
+    pub(crate) fn for_submesh(&self, sm: &Handle<SubMesh>) -> Result<SubmeshFieldCtx<'_>> {
+        match self {
+            FieldData::Node(v) => Ok(SubmeshFieldCtx::Node(v)),
+            FieldData::Element(v) => {
+                let zone = v.zone_for_submesh(sm)?.ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "no ElementField zone lives on submesh #{} — the field's \
+                         FE space does not cover this (sub)mesh",
+                        sm.index()
+                    ))
+                })?;
+                let fit = FitOperator::for_zone(zone)?;
+                Ok(SubmeshFieldCtx::Element { zone, fit })
+            }
+        }
     }
 }
 
-/// Per-cell field value for a `SubMesh`.
+/// Field context specialised for one submesh (see [`FieldData::for_submesh`]).
+pub(crate) enum SubmeshFieldCtx<'a> {
+    Node(&'a NodeFieldView),
+    Element {
+        zone: &'a SubElementField,
+        fit: FitOperator,
+    },
+}
+
+impl SubmeshFieldCtx<'_> {
+    /// Nodal values of `component` **for drawing cell `cell`** of `sm`
+    /// (length = nodes-per-cell, in connectivity order).
+    ///
+    /// - Node field: direct lookup; a node missing from the support takes
+    ///   the mean of the present ones (all missing → zeros), so the flat
+    ///   per-cell mean matches the historical behaviour exactly.
+    /// - Element field: least-squares fit local to the cell (see
+    ///   [`FitOperator`]) — values are private to this cell's rendering.
+    pub(crate) fn cell_node_values(
+        &self,
+        sm: &SubMesh,
+        cell: usize,
+        component: &str,
+    ) -> Result<Vec<f64>> {
+        match self {
+            SubmeshFieldCtx::Node(view) => {
+                let npc = sm.element_type().nodes_per_cell();
+                let conn = sm.connectivity();
+                let ids = &conn[cell * npc..(cell + 1) * npc];
+                let raw: Vec<Option<f64>> = ids
+                    .iter()
+                    .map(|&nid| view.value_opt(nid, component))
+                    .collect();
+                let present: Vec<f64> = raw.iter().filter_map(|v| *v).collect();
+                let fill = if present.is_empty() {
+                    0.0
+                } else {
+                    present.iter().sum::<f64>() / present.len() as f64
+                };
+                Ok(raw.into_iter().map(|v| v.unwrap_or(fill)).collect())
+            }
+            SubmeshFieldCtx::Element { zone, fit } => {
+                let ci = zone.component_index(component).ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "ElementField zone has no component named \"{component}\""
+                    ))
+                })?;
+                let mut gauss = Vec::with_capacity(zone.gauss_count());
+                for g in 0..zone.gauss_count() {
+                    gauss.push(zone.get(cell, g, ci)?);
+                }
+                Ok(fit.nodal_values(&gauss))
+            }
+        }
+    }
+}
+
+/// Per-zone least-squares operator mapping a cell's `n_g` Gauss values to
+/// `npc` nodal values **for drawing that cell only** — never averaged with
+/// neighbouring cells, so inter-element discontinuities stay visible.
 ///
-/// Length of the returned vector = number of cells in the submesh.
+/// Solves `min Σ_g w_g (Σ_i N_i(ξ_g)·v_i − f_g)²`: with `A[g,i] = N_i(ξ_g)`
+/// and `W = diag(w_g)`, the normal equations are `(AᵀWA) v = AᵀW f`. The
+/// `npc×npc` factorization is shared by every cell of the zone (`A` only
+/// depends on the FE subspace).
+pub(crate) struct FitOperator {
+    /// `Some((lu(AᵀWA), AᵀW))`, or `None` when under-determined
+    /// (`n_g < npc`, e.g. one Gauss point) / singular → every nodal value
+    /// falls back to the mean of the Gauss values (constant per cell).
+    op: Option<(na::LU<f64, na::Dyn, na::Dyn>, na::DMatrix<f64>)>,
+    npc: usize,
+}
+
+impl FitOperator {
+    fn for_zone(zone: &SubElementField) -> Result<Self> {
+        let fespace = zone.fespace();
+        let s = read(&fespace)?;
+        let npc = s.nodes_per_cell()?;
+        let n_g = s.gauss_count();
+        if n_g < npc {
+            return Ok(Self { op: None, npc });
+        }
+        let mut a = na::DMatrix::zeros(n_g, npc);
+        let mut atw = na::DMatrix::zeros(npc, n_g);
+        for g in 0..n_g {
+            let row = s.n_at_g(g)?;
+            let w = s.gauss_weight(g)?;
+            for i in 0..npc {
+                a[(g, i)] = row[i];
+                atw[(i, g)] = row[i] * w;
+            }
+        }
+        let k = &atw * &a;
+        let lu = k.lu();
+        if !lu.is_invertible() {
+            return Ok(Self { op: None, npc });
+        }
+        Ok(Self {
+            op: Some((lu, atw)),
+            npc,
+        })
+    }
+
+    /// Nodal values for one cell from its Gauss values.
+    fn nodal_values(&self, gauss_values: &[f64]) -> Vec<f64> {
+        let mean = if gauss_values.is_empty() {
+            0.0
+        } else {
+            gauss_values.iter().sum::<f64>() / gauss_values.len() as f64
+        };
+        if let Some((lu, atw)) = &self.op {
+            let f = na::DVector::from_column_slice(gauss_values);
+            let b = atw * f;
+            if let Some(v) = lu.solve(&b) {
+                return v.iter().copied().collect();
+            }
+        }
+        vec![mean; self.npc]
+    }
+}
+
+/// Per-cell (flat) field value for a `SubMesh`: the mean of the cell's
+/// nodal values. Length of the returned vector = number of cells.
 pub(crate) fn submesh_cell_values(
+    ctx: &SubmeshFieldCtx<'_>,
     sm: &SubMesh,
-    field: &NodeFieldView,
     component: &str,
 ) -> Result<Vec<f64>> {
     let conn = sm.connectivity();
@@ -177,9 +320,9 @@ pub(crate) fn submesh_cell_values(
     }
     let n_cells = conn.len() / npc;
     let mut out = Vec::with_capacity(n_cells);
-    for i in 0..n_cells {
-        let ids = &conn[i * npc..(i + 1) * npc];
-        out.push(nodes_mean(field, ids, component));
+    for cell in 0..n_cells {
+        let nodal = ctx.cell_node_values(sm, cell, component)?;
+        out.push(nodal.iter().sum::<f64>() / nodal.len() as f64);
     }
     Ok(out)
 }
@@ -213,14 +356,15 @@ fn colors_from_values(values: &[f64], cmap: Colormap, vmin: f64, vmax: f64) -> V
 /// global `(min, max)` range over all submeshes.
 fn mesh_cell_values(
     mesh: &Mesh,
-    field: &NodeFieldView,
+    field: &FieldData,
     component: &str,
 ) -> Result<(Vec<Vec<f64>>, f64, f64)> {
     let n_sub = mesh.len();
     let mut per_sub: Vec<Vec<f64>> = Vec::with_capacity(n_sub);
     for i in 0..n_sub {
         let sm = mesh.get(i)?;
-        let vals = submesh_cell_values(&*read(&sm)?, field, component)?;
+        let ctx = field.for_submesh(&sm)?;
+        let vals = submesh_cell_values(&ctx, &*read(&sm)?, component)?;
         per_sub.push(vals);
     }
     let slices: Vec<&[f64]> = per_sub.iter().map(|v| v.as_slice()).collect();
@@ -233,7 +377,7 @@ fn mesh_cell_values(
 /// `requested` `None` → first component of the field (its declared
 /// primary component); `Some(name)` → check it exists.
 pub(crate) fn resolve_component<'a>(
-    field: &'a NodeFieldView,
+    field: &'a FieldData,
     requested: Option<&'a str>,
 ) -> Result<&'a str> {
     match requested {
@@ -255,11 +399,11 @@ pub(crate) fn resolve_component<'a>(
 
 // ─── Drawable wrappers ─────────────────────────────────────────────────────
 
-/// `Drawable` over a [`Mesh`] coloured by a node field's component
-/// (zone snapshot of a [`crate::containers::node_field::NodeField`]).
+/// `Drawable` over a [`Mesh`] coloured by a field component
+/// (node field or element field, see [`FieldData`]).
 pub(crate) struct MeshFieldView<'a> {
     pub(crate) mesh: &'a Mesh,
-    pub(crate) field: &'a NodeFieldView,
+    pub(crate) field: &'a FieldData,
     pub component: &'a str,
     /// Caller override for the colour-scale bounds; defaults to the
     /// data's own range.
@@ -297,12 +441,11 @@ impl<'a> Drawable for MeshFieldView<'a> {
     }
 }
 
-/// `Drawable` over a single [`SubMesh`] coloured by a node field's
-/// component (zone snapshot of a
-/// [`crate::containers::node_field::NodeField`]).
+/// `Drawable` over a single [`SubMesh`] (by handle, so element-field
+/// zones can be matched by identity) coloured by a field component.
 pub(crate) struct SubMeshFieldView<'a> {
-    pub(crate) submesh: &'a SubMesh,
-    pub(crate) field: &'a NodeFieldView,
+    pub(crate) submesh: &'a Handle<SubMesh>,
+    pub(crate) field: &'a FieldData,
     pub component: &'a str,
     /// Caller override for the colour-scale bounds; defaults to the
     /// data's own range.
@@ -311,7 +454,7 @@ pub(crate) struct SubMeshFieldView<'a> {
 
 impl<'a> Drawable for SubMeshFieldView<'a> {
     fn bbox(&self) -> Result<Bbox3> {
-        self.submesh.bbox()
+        read(self.submesh)?.bbox()
     }
 
     fn draw_on<DB: DrawingBackend>(
@@ -322,12 +465,14 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
     where
         DB::ErrorType: 'static,
     {
-        let values = submesh_cell_values(self.submesh, self.field, self.component)?;
+        let ctx = self.field.for_submesh(self.submesh)?;
+        let sm = read(self.submesh)?;
+        let values = submesh_cell_values(&ctx, &sm, self.component)?;
         let (dmin, dmax) = value_range([values.as_slice()]);
         let (vmin, vmax) = self.scale.resolve(dmin, dmax);
         let cmap = self.scale.cmap;
         let colors = colors_from_values(&values, cmap, vmin, vmax);
-        let prims = submesh_primitives_with_colors(self.submesh, &colors)?;
+        let prims = submesh_primitives_with_colors(&sm, &colors)?;
         render_primitives(area, view, &prims)?;
         super::overlay::draw_field_overlay(area, self.component, vmin, vmax)?;
         super::overlay::draw_colorbar(area, cmap, vmin, vmax)?;
@@ -416,13 +561,15 @@ mod tests {
         nf.set_value(c.id(), "T", 3.0).unwrap();
         let view = NodeField::from_sub(nf).view().unwrap();
 
-        let values = submesh_cell_values(&*read(&sm_h).unwrap(), &view, "T").unwrap();
+        let data = FieldData::Node(view);
+        let ctx = data.for_submesh(&sm_h).unwrap();
+        let values = submesh_cell_values(&ctx, &*read(&sm_h).unwrap(), "T").unwrap();
         assert_eq!(values.len(), 1);
         assert!((values[0] - 2.0).abs() < 1e-12); // (1 + 2 + 3) / 3
     }
 
     #[test]
-    fn nodes_mean_ignores_nodes_outside_field_support() {
+    fn cell_values_ignore_nodes_outside_field_support() {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
@@ -433,9 +580,15 @@ mod tests {
         let mut nf = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
         nf.set_value(a.id(), "T", 4.0).unwrap();
         let view = NodeField::from_sub(nf).view().unwrap();
-        // Two-node "cell": only `a` is in the field; mean = 4.0.
-        let mean = nodes_mean(&view, &[a.id(), b.id()], "T");
-        assert!((mean - 4.0).abs() < 1e-12);
+        // SEG2 cell [a, b]: only `a` is in the field; missing node takes
+        // the mean of the present ones → flat value 4.0.
+        let mut seg = RawSubMesh::new(cfg.clone(), ElementType::SEG2);
+        seg.add_cell(&[a.id(), b.id()]).unwrap();
+        let seg_h = insert(seg);
+        let data = FieldData::Node(view);
+        let ctx = data.for_submesh(&seg_h).unwrap();
+        let values = submesh_cell_values(&ctx, &*read(&seg_h).unwrap(), "T").unwrap();
+        assert!((values[0] - 4.0).abs() < 1e-12);
     }
 
     #[test]
@@ -444,5 +597,107 @@ mod tests {
         let v = vec![3.0, 3.0, 3.0];
         let (mn, mx) = value_range([v.as_slice()]);
         assert_eq!((mn, mx), (3.0, 3.0));
+    }
+
+    // ─── ElementField (Gauss values → per-element nodal values) ─────────
+
+    use crate::containers::element_field::ElementField;
+    use crate::containers::finite_element_space::FiniteElementSpace;
+
+    /// Two TRI3 sharing the edge (b, c).
+    fn two_tri_mesh_and_fespace() -> (Mesh, FiniteElementSpace) {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let d = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let mut sm = RawSubMesh::new(cfg, ElementType::TRI3);
+        sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        sm.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
+        let mesh = Mesh::from_submesh(sm);
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        (mesh, fes)
+    }
+
+    /// TRI3 (3 Gauss points = 3 nodes): Gauss values sampled from a
+    /// nodal interpolant must be fitted back to those nodal values
+    /// exactly.
+    #[test]
+    fn element_fit_reproduces_interpolated_nodal_values() {
+        let (mesh, fes) = two_tri_mesh_and_fespace();
+        let ef = ElementField::new(&fes, vec!["q".into()]).unwrap();
+        let target = [1.0, 2.0, 4.0]; // nodal values of cell 0
+        {
+            let fespace = fes.get(0).unwrap();
+            let s = read(&fespace).unwrap();
+            let mut zone = crate::store::write(&ef.get(0).unwrap()).unwrap();
+            for g in 0..s.gauss_count() {
+                let n = s.n_at_g(g).unwrap();
+                let f: f64 = (0..3).map(|i| n[i] * target[i]).sum();
+                zone.set(0, g, 0, f).unwrap();
+            }
+        }
+        let data = FieldData::Element(ef.view().unwrap());
+        let sm = mesh.get(0).unwrap();
+        let ctx = data.for_submesh(&sm).unwrap();
+        let nodal = ctx.cell_node_values(&read(&sm).unwrap(), 0, "q").unwrap();
+        for (v, t) in nodal.iter().zip(target) {
+            assert!((v - t).abs() < 1e-10, "fit {nodal:?} ≠ target {target:?}");
+        }
+    }
+
+    /// Under-determined fit (fewer Gauss points than nodes) falls back
+    /// to the Gauss mean — constant per element.
+    #[test]
+    fn element_fit_underdetermined_falls_back_to_gauss_mean() {
+        let fit = FitOperator { op: None, npc: 3 };
+        let nodal = fit.nodal_values(&[2.0, 4.0]);
+        assert_eq!(nodal, vec![3.0, 3.0, 3.0]);
+    }
+
+    /// Two neighbouring elements with different Gauss values keep their
+    /// own nodal values on the shared edge — the discontinuity is
+    /// preserved (no cross-element averaging).
+    #[test]
+    fn element_values_stay_discontinuous_across_elements() {
+        let (mesh, fes) = two_tri_mesh_and_fespace();
+        let ef = ElementField::new(&fes, vec!["q".into()]).unwrap();
+        {
+            let mut zone = crate::store::write(&ef.get(0).unwrap()).unwrap();
+            zone.set_cell_uniform(0, "q", 1.0).unwrap();
+            zone.set_cell_uniform(1, "q", 5.0).unwrap();
+        }
+        let data = FieldData::Element(ef.view().unwrap());
+        let sm = mesh.get(0).unwrap();
+        let ctx = data.for_submesh(&sm).unwrap();
+        let guard = read(&sm).unwrap();
+        let n0 = ctx.cell_node_values(&guard, 0, "q").unwrap();
+        let n1 = ctx.cell_node_values(&guard, 1, "q").unwrap();
+        // Constant Gauss values fit to the same constant nodal values;
+        // the shared edge nodes (b, c) carry 1.0 on one side and 5.0 on
+        // the other — per-element values, never averaged.
+        for v in &n0 {
+            assert!((v - 1.0).abs() < 1e-10);
+        }
+        for v in &n1 {
+            assert!((v - 5.0).abs() < 1e-10);
+        }
+    }
+
+    /// A submesh not covered by any zone of the ElementField errors
+    /// explicitly.
+    #[test]
+    fn element_field_missing_zone_errors() {
+        let (mesh, fes) = two_tri_mesh_and_fespace();
+        let ef = ElementField::new(&fes, vec!["q".into()]).unwrap();
+        // A second, unrelated submesh.
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let mut poi1 = RawSubMesh::new(cfg, ElementType::POI1);
+        poi1.add_cell(&[a.id()]).unwrap();
+        let other = insert(poi1);
+        let data = FieldData::Element(ef.view().unwrap());
+        assert!(data.for_submesh(&mesh.get(0).unwrap()).is_ok());
+        assert!(data.for_submesh(&other).is_err());
     }
 }

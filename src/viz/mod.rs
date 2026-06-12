@@ -216,27 +216,44 @@ pub(crate) fn render<D: Drawable>(
     }
 }
 
-/// Render a [`crate::containers::mesh::Mesh`] coloured by a `NodeField`
-/// component (zones resolved first-found, via one zero-copy view).
+/// A field to colour a plot by — the **uniform** entry point of the viz
+/// layer: node fields and element fields are accepted interchangeably.
+pub enum FieldArg<'a> {
+    Node(&'a crate::containers::node_field::NodeField),
+    Element(&'a crate::containers::element_field::ElementField),
+}
+
+impl FieldArg<'_> {
+    /// Take the zero-copy views (read guards on every zone).
+    fn data(&self) -> Result<field_color::FieldData> {
+        Ok(match self {
+            FieldArg::Node(f) => field_color::FieldData::Node(f.view()?),
+            FieldArg::Element(f) => field_color::FieldData::Element(f.view()?),
+        })
+    }
+}
+
+/// Render a [`crate::containers::mesh::Mesh`] coloured by a field
+/// component (node or element field, see [`FieldArg`]).
 /// File export draws the supplied `component`; the interactive window
 /// adds a clickable button (top-centre) and a `Tab` keyboard shortcut
 /// to cycle through every component (union of the zones').
 pub(crate) fn render_mesh_with_field(
     mesh: &crate::containers::mesh::Mesh,
-    field: &crate::containers::node_field::NodeField,
+    field: FieldArg<'_>,
     component: Option<&str>,
     scale: ColorScale,
     view: Option<View>,
     save: Option<&Path>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
-    let fview = field.view()?;
-    let resolved = field_color::resolve_component(&fview, component)?;
+    let data = field.data()?;
+    let resolved = field_color::resolve_component(&data, component)?;
     match save {
         Some(path) => {
             let drawable = field_color::MeshFieldView {
                 mesh,
-                field: &fview,
+                field: &data,
                 component: resolved,
                 scale,
             };
@@ -245,7 +262,7 @@ pub(crate) fn render_mesh_with_field(
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_mesh_field(mesh, &fview, resolved, scale, view)
+                window::run_interactive_mesh_field(mesh, &data, resolved, scale, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {
@@ -259,24 +276,25 @@ pub(crate) fn render_mesh_with_field(
     }
 }
 
-/// Render a [`crate::containers::mesh::SubMesh`] coloured by a `NodeField`
+/// Render a [`crate::containers::mesh::SubMesh`] (by handle, so
+/// element-field zones can be matched by identity) coloured by a field
 /// component. Same semantics as [`render_mesh_with_field`].
-pub(crate) fn render_submesh_with_field(
-    submesh: &crate::containers::mesh::SubMesh,
-    field: &crate::containers::node_field::NodeField,
+pub fn render_submesh_with_field(
+    submesh: &crate::store::Handle<crate::containers::mesh::SubMesh>,
+    field: FieldArg<'_>,
     component: Option<&str>,
     scale: ColorScale,
     view: Option<View>,
     save: Option<&Path>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
-    let fview = field.view()?;
-    let resolved = field_color::resolve_component(&fview, component)?;
+    let data = field.data()?;
+    let resolved = field_color::resolve_component(&data, component)?;
     match save {
         Some(path) => {
             let drawable = field_color::SubMeshFieldView {
                 submesh,
-                field: &fview,
+                field: &data,
                 component: resolved,
                 scale,
             };
@@ -285,7 +303,7 @@ pub(crate) fn render_submesh_with_field(
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_submesh_field(submesh, &fview, resolved, scale, view)
+                window::run_interactive_submesh_field(submesh, &data, resolved, scale, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {

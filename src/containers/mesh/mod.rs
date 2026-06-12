@@ -270,30 +270,6 @@ impl SubMesh {
         crate::viz::render(self, view, save)
     }
 
-    /// Visualize this submesh coloured by a [`crate::containers::node_field::NodeField`]
-    /// component.
-    ///
-    /// Per-cell colour is the mean of the field's component at the cell's
-    /// nodes, mapped through a blue → green → red colormap. Nodes
-    /// absent from the field's support are ignored in the mean.
-    /// `component = None` selects the field's first component.
-    ///
-    /// The interactive window draws a clickable button at the top
-    /// showing the current component and value range; clicking it (or
-    /// pressing `Tab`) cycles through the field's components. A colorbar
-    /// is drawn on the right edge; `scale` pins its bounds (default:
-    /// the data's own min/max).
-    #[cfg(feature = "viz")]
-    pub fn plot_with_field(
-        &self,
-        view: Option<crate::viz::View>,
-        save: Option<&std::path::Path>,
-        field: &crate::containers::node_field::NodeField,
-        component: Option<&str>,
-        scale: crate::viz::ColorScale,
-    ) -> Result<()> {
-        crate::viz::render_submesh_with_field(self, field, component, scale, view, save)
-    }
 }
 
 impl Drop for SubMesh {
@@ -523,17 +499,30 @@ impl Mesh {
         crate::viz::render(self, view, save)
     }
 
-    /// Visualize this mesh coloured by a [`crate::containers::node_field::NodeField`]
-    /// component. See [`SubMesh::plot_with_field`] for the meaning of
-    /// `view`, `save`, `field` and `component`. In the interactive
-    /// window the same component button is drawn over the whole mesh
-    /// and cycles through every component of `field`.
+    /// Visualize this mesh coloured by a field component — a
+    /// [`crate::containers::node_field::NodeField`] **or** an
+    /// [`crate::containers::element_field::ElementField`], uniformly via
+    /// [`crate::viz::FieldArg`].
+    ///
+    /// Per-cell colour comes from the cell's nodal values (read directly
+    /// for a node field; fitted per element from the Gauss values for an
+    /// element field — inter-element discontinuities stay visible).
+    /// `component = None` selects the field's first component.
+    ///
+    /// The interactive window draws a clickable button at the top
+    /// showing the current component and value range; clicking it (or
+    /// pressing `Tab`) cycles through the field's components. A colorbar
+    /// is drawn on the right edge; `scale` pins its bounds (default:
+    /// the data's own min/max).
+    ///
+    /// For a single submesh, use
+    /// [`crate::viz::render_submesh_with_field`] with the submesh handle.
     #[cfg(feature = "viz")]
     pub fn plot_with_field(
         &self,
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
-        field: &crate::containers::node_field::NodeField,
+        field: crate::viz::FieldArg<'_>,
         component: Option<&str>,
         scale: crate::viz::ColorScale,
     ) -> Result<()> {

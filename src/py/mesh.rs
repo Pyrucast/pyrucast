@@ -10,6 +10,23 @@ use crate::store::{read, write, Handle};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
+/// Borrow a Python `NodeField` or `ElementField` as a [`crate::viz::FieldArg`].
+#[cfg(feature = "viz")]
+fn with_field_arg<R>(
+    obj: &Bound<'_, PyAny>,
+    f: impl FnOnce(crate::viz::FieldArg<'_>) -> PyResult<R>,
+) -> PyResult<R> {
+    if let Ok(nf) = obj.extract::<PyRef<crate::py::node_field::PyNodeField>>() {
+        f(crate::viz::FieldArg::Node(&nf.inner))
+    } else if let Ok(ef) = obj.extract::<PyRef<crate::py::element_field::PyElementField>>() {
+        f(crate::viz::FieldArg::Element(&ef.inner))
+    } else {
+        Err(PyTypeError::new_err(
+            "field must be a NodeField or an ElementField",
+        ))
+    }
+}
+
 /// Parse an optional `cmap` name into a [`crate::viz::Colormap`].
 /// `None` ⇒ the default (Viridis); an unknown name is a `ValueError`
 /// that lists the accepted names.
@@ -95,9 +112,13 @@ impl PySubMesh {
     /// - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
     ///   corner (default `True`). In the interactive window, the key
     ///   `A` toggles it at runtime.
-    /// - `field`: optional `NodeField` whose values colour each cell
-    ///   (per-cell value = mean over the cell's nodes of the chosen
-    ///   component). Default `None` ⇒ uniform face colour.
+    /// - `field`: optional `NodeField` **or** `ElementField` whose values
+    ///   colour each cell. Node field: per-cell nodal values read
+    ///   directly. Element field: nodal values fitted per element from
+    ///   the Gauss values (least squares local to the cell — the
+    ///   discontinuities between elements stay visible; with a single
+    ///   Gauss point the colour is constant per element).
+    ///   Default `None` ⇒ uniform face colour.
     /// - `component`: component name to display when `field` is set
     ///   (defaults to the field's first component). In the
     ///   interactive window, click the top button or press `Tab` to
@@ -114,7 +135,7 @@ impl PySubMesh {
         view: Option<(f64, f64, f64)>,
         save: Option<std::path::PathBuf>,
         show_axes: bool,
-        field: Option<PyRef<crate::py::node_field::PyNodeField>>,
+        field: Option<Bound<'_, PyAny>>,
         component: Option<String>,
         vmin: Option<f64>,
         vmax: Option<f64>,
@@ -139,9 +160,17 @@ impl PySubMesh {
         match field {
             Some(f) => {
                 let comp_ref = component.as_deref();
-                let sm_handle = self.handle.clone();
-                crate::store::read(&sm_handle)?
-                    .plot_with_field(Some(view), save_ref, &f.inner, comp_ref, scale)?;
+                with_field_arg(&f, |arg| {
+                    crate::viz::render_submesh_with_field(
+                        &self.handle,
+                        arg,
+                        comp_ref,
+                        scale,
+                        Some(view),
+                        save_ref,
+                    )?;
+                    Ok(())
+                })?;
             }
             None => {
                 read(&self.handle)?.plot(Some(view), save_ref)?;
@@ -245,7 +274,8 @@ impl PyMesh {
     }
 
     /// Visualize this mesh (every submesh in its own colour, or
-    /// coloured by a `NodeField` if `field` is supplied). See
+    /// coloured by a `NodeField` / `ElementField` if `field` is
+    /// supplied). See
     /// `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
     /// `field` and `component`.
     #[cfg(feature = "viz")]
@@ -255,7 +285,7 @@ impl PyMesh {
         view: Option<(f64, f64, f64)>,
         save: Option<std::path::PathBuf>,
         show_axes: bool,
-        field: Option<PyRef<crate::py::node_field::PyNodeField>>,
+        field: Option<Bound<'_, PyAny>>,
         component: Option<String>,
         vmin: Option<f64>,
         vmax: Option<f64>,
@@ -280,8 +310,11 @@ impl PyMesh {
         match field {
             Some(f) => {
                 let comp_ref = component.as_deref();
-                self.inner
-                    .plot_with_field(Some(view), save_ref, &f.inner, comp_ref, scale)?;
+                with_field_arg(&f, |arg| {
+                    self.inner
+                        .plot_with_field(Some(view), save_ref, arg, comp_ref, scale)?;
+                    Ok(())
+                })?;
             }
             None => {
                 self.inner.plot(Some(view), save_ref)?;

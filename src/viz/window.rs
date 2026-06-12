@@ -313,12 +313,13 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
 // ─── Field-coloured rendering: interactive entry points ───────────────────
 
 /// Interactive Drawable that paints a mesh (or submesh) coloured by the
-/// **currently selected** component of a node field (zone snapshot of a `NodeField`). Implements both
+/// **currently selected** component of a field (node or element field,
+/// see [`crate::viz::field_color::FieldData`]). Implements both
 /// [`Drawable`] (for the App's render loop) and [`FieldButton`] (so the
 /// App can cycle through components on click / Tab).
 struct FieldDrawable<'a> {
-    source: FieldSource<'a>,
-    field: &'a crate::containers::node_field::NodeFieldView,
+    source: GeomSource<'a>,
+    field: &'a crate::viz::field_color::FieldData,
     components: Vec<String>,
     /// Caller override for the colorbar bounds.
     scale: crate::viz::ColorScale,
@@ -327,15 +328,15 @@ struct FieldDrawable<'a> {
     selected: Cell<usize>,
 }
 
-enum FieldSource<'a> {
+enum GeomSource<'a> {
     Mesh(&'a crate::containers::mesh::Mesh),
-    SubMesh(&'a crate::containers::mesh::SubMesh),
+    SubMesh(&'a crate::store::Handle<crate::containers::mesh::SubMesh>),
 }
 
 impl<'a> FieldDrawable<'a> {
     fn new(
-        source: FieldSource<'a>,
-        field: &'a crate::containers::node_field::NodeFieldView,
+        source: GeomSource<'a>,
+        field: &'a crate::viz::field_color::FieldData,
         initial_component: &str,
         scale: crate::viz::ColorScale,
     ) -> Self {
@@ -361,8 +362,8 @@ impl<'a> FieldDrawable<'a> {
 impl<'a> Drawable for FieldDrawable<'a> {
     fn bbox(&self) -> Result<Bbox3> {
         match &self.source {
-            FieldSource::Mesh(m) => m.bbox(),
-            FieldSource::SubMesh(sm) => sm.bbox(),
+            GeomSource::Mesh(m) => m.bbox(),
+            GeomSource::SubMesh(sm) => crate::store::read(sm)?.bbox(),
         }
     }
 
@@ -376,14 +377,14 @@ impl<'a> Drawable for FieldDrawable<'a> {
     {
         let component = self.current_component();
         match &self.source {
-            FieldSource::Mesh(m) => crate::viz::field_color::MeshFieldView {
+            GeomSource::Mesh(m) => crate::viz::field_color::MeshFieldView {
                 mesh: m,
                 field: self.field,
                 component,
                 scale: self.scale,
             }
             .draw_on(area, view),
-            FieldSource::SubMesh(sm) => crate::viz::field_color::SubMeshFieldView {
+            GeomSource::SubMesh(sm) => crate::viz::field_color::SubMeshFieldView {
                 submesh: sm,
                 field: self.field,
                 component,
@@ -409,12 +410,12 @@ impl<'a> FieldButton for FieldDrawable<'a> {
 /// component (with a button that cycles through components).
 pub(crate) fn run_interactive_mesh_field(
     mesh: &crate::containers::mesh::Mesh,
-    field: &crate::containers::node_field::NodeFieldView,
+    field: &crate::viz::field_color::FieldData,
     initial_component: &str,
     scale: crate::viz::ColorScale,
     view: View,
 ) -> Result<()> {
-    let drawable = FieldDrawable::new(FieldSource::Mesh(mesh), field, initial_component, scale);
+    let drawable = FieldDrawable::new(GeomSource::Mesh(mesh), field, initial_component, scale);
     let bbox = drawable.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();
@@ -442,13 +443,14 @@ pub(crate) fn run_interactive_mesh_field(
 /// Run the interactive viewer on a `SubMesh` coloured by a node-field
 /// component (same UX as [`run_interactive_mesh_field`]).
 pub(crate) fn run_interactive_submesh_field(
-    submesh: &crate::containers::mesh::SubMesh,
-    field: &crate::containers::node_field::NodeFieldView,
+    submesh: &crate::store::Handle<crate::containers::mesh::SubMesh>,
+    field: &crate::viz::field_color::FieldData,
     initial_component: &str,
     scale: crate::viz::ColorScale,
     view: View,
 ) -> Result<()> {
-    let drawable = FieldDrawable::new(FieldSource::SubMesh(submesh), field, initial_component, scale);
+    let drawable =
+        FieldDrawable::new(GeomSource::SubMesh(submesh), field, initial_component, scale);
     let bbox = drawable.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();

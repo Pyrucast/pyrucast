@@ -231,7 +231,7 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
     mesh.plot_with_field(
         Some(View::front()),
         Some(&path),
-        &field,
+        pyrucast::viz::FieldArg::Node(&field),
         None,
         ColorScale::default(),
     )
@@ -279,7 +279,7 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
     mesh.plot_with_field(
         Some(View::front()),
         Some(&path),
-        &field,
+        pyrucast::viz::FieldArg::Node(&field),
         None,
         ColorScale {
             vmin: Some(-10.0),
@@ -324,16 +324,15 @@ fn plot_with_field_explicit_component_choice() {
 
     let dir = tmpdir();
     let path = dir.join("submesh_uy.svg");
-    pyrucast::store::read(&tri_h)
-        .unwrap()
-        .plot_with_field(
-            Some(View::front()),
-            Some(&path),
-            &field,
-            Some("UY"),
-            ColorScale::default(),
-        )
-        .unwrap();
+    pyrucast::viz::render_submesh_with_field(
+        &tri_h,
+        pyrucast::viz::FieldArg::Node(&field),
+        Some("UY"),
+        ColorScale::default(),
+        Some(View::front()),
+        Some(&path),
+    )
+    .unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.contains("[UY]"));
 }
@@ -353,11 +352,18 @@ fn plot_with_field_unknown_component_errors() {
     let mut tri = SubMesh::new(cfg.clone(), ElementType::SEG2);
     let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
     tri.add_cell(&[a.id(), b.id()]).unwrap();
+    let tri_h = insert(tri);
     let dir = tmpdir();
     let path = dir.join("nope.svg");
-    let err = tri
-        .plot_with_field(None, Some(&path), &field, Some("UNKNOWN"), ColorScale::default())
-        .unwrap_err();
+    let err = pyrucast::viz::render_submesh_with_field(
+        &tri_h,
+        pyrucast::viz::FieldArg::Node(&field),
+        Some("UNKNOWN"),
+        ColorScale::default(),
+        None,
+        Some(&path),
+    )
+    .unwrap_err();
     let msg = format!("{err}");
     assert!(msg.contains("UNKNOWN"), "error should mention the bad name");
 }
@@ -371,4 +377,47 @@ fn face_color_roundtrip_on_submesh() {
         .set_face_color(RgbColor::new(1, 2, 3));
     let c = pyrucast::store::read(&sm_handle).unwrap().face_color();
     assert_eq!(c, RgbColor::new(1, 2, 3));
+}
+
+#[test]
+fn plot_mesh_with_element_field_writes_svg() {
+    use pyrucast::containers::element_field::ElementField;
+    use pyrucast::containers::finite_element_space::FiniteElementSpace;
+
+    let cfg = insert(Configuration::new(2).unwrap());
+    let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+    let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+    let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+    let d = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+    let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+    sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+    sm.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
+    let mesh = Mesh::from_submesh(sm);
+    let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+
+    // Discontinuous Gauss-point field: 1.0 on cell 0, 5.0 on cell 1.
+    let ef = ElementField::new(&fes, vec!["flux".into()]).unwrap();
+    {
+        let mut zone = pyrucast::store::write(&ef.get(0).unwrap()).unwrap();
+        zone.set_cell_uniform(0, "flux", 1.0).unwrap();
+        zone.set_cell_uniform(1, "flux", 5.0).unwrap();
+    }
+
+    let dir = tmpdir();
+    let path = dir.join("mesh_element_field.svg");
+    mesh.plot_with_field(
+        Some(View::front()),
+        Some(&path),
+        pyrucast::viz::FieldArg::Element(&ef),
+        None,
+        ColorScale::default(),
+    )
+    .unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("[flux]"), "overlay label not present in SVG");
+    assert!(
+        text.contains("min=") && text.contains("max="),
+        "value range not present in SVG"
+    );
 }
