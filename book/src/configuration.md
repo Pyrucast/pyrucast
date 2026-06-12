@@ -12,16 +12,16 @@ Chaque nœud créé reçoit un identifiant interne **stable** (`NodeId`), unique
 
 ```rust,ignore
 use pyrucast::mesh::configuration::Configuration;
-use pyrucast::store::{insert, with_mut};
+use pyrucast::store::{insert, write};
 
 let cfg = insert(Configuration::new(2).unwrap());
 // add_node initialise refcount = 1 ; sans décrément, le nœud est protégé.
-let id = with_mut(&cfg, |c| c.add_node(&[0.0, 0.0])).unwrap().unwrap();
-with_mut(&cfg, |c| assert_eq!(c.gc(), 0)).unwrap();
+let id = write(&cfg).unwrap().add_node(&[0.0, 0.0]).unwrap();
+assert_eq!(write(&cfg).unwrap().gc(), 0);
 
 // Après décrément, gc ramasse.
-with_mut(&cfg, |c| c.decref(id)).unwrap().unwrap();
-with_mut(&cfg, |c| assert_eq!(c.gc(), 1)).unwrap();
+write(&cfg).unwrap().decref(id).unwrap();
+assert_eq!(write(&cfg).unwrap().gc(), 1);
 ```
 
 ## `Node` : interface RAII
@@ -34,14 +34,14 @@ Le `Node` est l'**accesseur utilisateur** d'un nœud. Il porte un handle vers la
 ```rust,ignore
 use pyrucast::mesh::configuration::Configuration;
 use pyrucast::mesh::node::Node;
-use pyrucast::store::{insert, with_mut};
+use pyrucast::store::{insert, write};
 
 let cfg = insert(Configuration::new(2).unwrap());
 let n = Node::create_in(cfg.clone(), &[1.0, 2.0]).unwrap();
 let m = n.clone();       // refcount = 2
 drop(n);                 // refcount = 1
 drop(m);                 // refcount = 0
-with_mut(&cfg, |c| c.gc()).unwrap();  // collecte
+write(&cfg).unwrap().gc();  // collecte
 ```
 
 Le code interne peut toujours manipuler directement les `NodeId` sans passer par `Node`, mais perd alors la protection automatique du GC : il doit appeler manuellement `Configuration::incref` / `Configuration::decref` (utilisé par les maillages et les champs à venir).
@@ -73,8 +73,8 @@ Utile pour basculer entre référence / déformée / prédite. Le jeu actif est 
 Rust :
 
 ```rust,ignore
-let s2 = with_mut(&cfg, |c| c.add_coord_set("deformed")).unwrap();
-with_mut(&cfg, |c| c.switch_to(s2)).unwrap().unwrap();
+let s2 = write(&cfg).unwrap().add_coord_set("deformed");
+write(&cfg).unwrap().switch_to(s2).unwrap();
 // les `set_coord` suivants modifient désormais le jeu "deformed".
 ```
 
@@ -123,23 +123,21 @@ Rust :
 
 ```rust,ignore
 use pyrucast::mesh::configuration::Configuration;
-use pyrucast::store::{insert, with, with_mut};
+use pyrucast::store::{insert, read, write};
 
 let cfg = insert(Configuration::new(2).unwrap());
 // Trois nœuds créés ; ids = 0, 1, 2.
-with_mut(&cfg, |c| { c.add_node(&[0.0, 0.0]).unwrap(); }).unwrap();
-with_mut(&cfg, |c| { c.add_node(&[1.0, 0.0]).unwrap(); }).unwrap();
-with_mut(&cfg, |c| { c.add_node(&[0.5, 1.0]).unwrap(); }).unwrap();
+write(&cfg).unwrap().add_node(&[0.0, 0.0]).unwrap();
+write(&cfg).unwrap().add_node(&[1.0, 0.0]).unwrap();
+write(&cfg).unwrap().add_node(&[0.5, 1.0]).unwrap();
 
 // Permutation manuelle (Cuthill–McKee automatique en Phase 4).
-with_mut(&cfg, |c| c.set_permutation(vec![2, 0, 1])).unwrap().unwrap();
-with(&cfg, |c| {
-    // permutation[0] = 2 : le nœud d'id 0 est en position solveur 2.
-    println!("{:?}", c.permutation());
-}).unwrap();
+write(&cfg).unwrap().set_permutation(vec![2, 0, 1]).unwrap();
+// permutation[0] = 2 : le nœud d'id 0 est en position solveur 2.
+println!("{:?}", read(&cfg).unwrap().permutation());
 
 // Retour à l'identité.
-with_mut(&cfg, |c| c.clear_permutation()).unwrap();
+write(&cfg).unwrap().clear_permutation();
 ```
 
 Python :

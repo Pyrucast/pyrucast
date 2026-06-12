@@ -84,7 +84,7 @@ L'arithmétique scalaire (`f + 2.0`, `f * 0.5`, …) vit au niveau zone
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::mesh::{Configuration, ElementType, Node, SubMesh, Mesh};
 use pyrucast::containers::node_field::NodeField;
-use pyrucast::store::{insert, with, with_mut};
+use pyrucast::store::{insert, write};
 
 let cfg = insert(Configuration::new(2).unwrap());
 let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -102,7 +102,7 @@ let sm = {
 let u = NodeField::from_submesh(&sm, vec!["UX".into(), "UY".into()]).unwrap();
 
 // Écriture : via la zone. Lecture : via l'agrégat (ou la zone).
-with_mut(&u.get(0).unwrap(), |z| z.set_value(a.id(), "UX", 1.5)).unwrap().unwrap();
+write(&u.get(0).unwrap()).unwrap().set_value(a.id(), "UX", 1.5).unwrap();
 assert_eq!(u.value(a.id(), "UX").unwrap(), 1.5);
 assert_eq!(u.value(b.id(), "UX").unwrap(), 0.0);   // valeur par défaut
 

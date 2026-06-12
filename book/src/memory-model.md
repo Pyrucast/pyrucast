@@ -21,24 +21,30 @@ Ce chapitre décrit comment pyrucast gère la mémoire : principes directeurs, i
 Imaginez une **bibliothèque municipale** où chaque rayon est dédié à un type d'ouvrage : un rayon pour les `Configuration`, un autre pour les `SubMesh`, un autre pour les `NodeField`, etc. Chaque rayon est une **étagère numérotée** : la case 0, la case 1, la case 2…
 
 - Quand vous déposez un livre, la bibliothécaire vous remet un **ticket** : « rayon Configuration, case n°7, *édition 3* ». Ce ticket, c'est un `Handle`.
-- Pour relire votre livre, vous présentez le ticket à la bibliothécaire : elle vérifie la case et l'édition (anti-falsification), puis vous laisse consulter le livre **sur place**, à un guichet, jamais en l'emportant chez vous.
+- Pour relire votre livre, vous présentez le ticket à la bibliothécaire : elle vérifie la case et l'édition (anti-falsification) — une formalité d'un instant — puis vous installe à un **pupitre de lecture** attaché à cette case : vous consultez le livre **sur place**, sans l'emporter. Ce pupitre, c'est un *guard*. Plusieurs lecteurs peuvent partager le même livre en même temps ; pour **annoter** le livre en revanche, il faut le pupitre exclusif — on attend que les lecteurs aient fini.
+- Pendant que vous lisez la case n°7, le reste du rayon est entièrement libre : chaque case a son propre pupitre, la bibliothécaire ne bloque jamais le rayon entier.
 - Quand votre ticket disparaît (et tous ses duplicatas), le livre est jeté et la case redevient libre. Mais la prochaine personne qui dépose un livre dans cette case repartira avec un ticket portant l'**édition 4** — votre vieux ticket édition 3 ne marchera plus, même si la case est la même.
 
 Tout pyrucast tient dans cette image. Les sections suivantes en déroulent les morceaux.
 
 ### Le store : un grand tableau par type
 
-Chaque type d'objet (`Configuration`, `SubMesh`, …) possède **son propre store** : un `Vec<Slot<T>>` global au processus, créé à la demande lors du premier `insert::<T>(...)`. Tous les stores sont enregistrés dans une **table globale** indexée par `TypeId`, ce qui permet à `insert::<T>` de retrouver le bon `Vec` à l'exécution. Le code utilisateur n'a pas besoin de connaître cette table : il ne voit que les fonctions `insert`, `with`, `with_mut`, `swap_out`, `compact`.
+Chaque type d'objet (`Configuration`, `SubMesh`, …) possède **son propre store** : un `Vec<Slot<T>>` global au processus, créé à la demande lors du premier `insert::<T>(...)`. Tous les stores sont enregistrés dans une **table globale** indexée par `TypeId`, ce qui permet à `insert::<T>` de retrouver le bon `Vec` à l'exécution. Le code utilisateur n'a pas besoin de connaître cette table : il ne voit que les fonctions `insert`, `read`, `write`, `swap_out`, `compact`.
 
-Un `Slot<T>` contient trois informations :
+Un `Slot<T>` se compose d'une **cellule partagée** (le casier proprement dit) et d'un compteur d'édition :
 
 ```rust,ignore
+struct SlotCell<T> {
+    lock: Arc<RwLock<SlotState<T>>>,  // le contenu, derrière SON verrou
+    refcount: AtomicU32,              // nombre de Handle vivants
+}
 struct Slot<T> {
-    state: SlotState<T>,  // Resident(value) | OnDisk(path) | Free
-    gen: u32,             // génération courante du slot
-    refcount: u32,        // nombre de Handle vivants pointant sur ce slot
+    cell: Arc<SlotCell<T>>,           // boîte partagée (voir « Arc » plus bas)
+    gen: u32,                         // génération courante du slot
 }
 ```
+
+`SlotState<T>` vaut `Resident(value)` (l'objet est en RAM), `OnDisk(path)` (évincé sur disque) ou `Free` (case vide).
 
 Visuellement, le store ressemble à ceci :
 
@@ -46,13 +52,15 @@ Visuellement, le store ressemble à ceci :
    store<Configuration> :
    ┌─────┬─────┬─────┬─────┬─────┐
    │ #0  │ #1  │ #2  │ #3  │ #4  │ ← indices de slot
-   │Res  │Free │Res  │OnDsk│Res  │ ← état
+   │Res  │Free │Res  │OnDsk│Res  │ ← état (dans le RwLock de chaque cellule)
    │gen=1│gen=2│gen=1│gen=1│gen=3│ ← génération
-   │rc=2 │     │rc=1 │rc=1 │rc=4 │ ← refcount
+   │rc=2 │rc=0 │rc=1 │rc=1 │rc=4 │ ← refcount (atomique, dans la cellule)
    └─────┴─────┴─────┴─────┴─────┘
                   ↑
             free-list : [1]   ← cases libres prêtes à être recyclées
 ```
+
+Le mutex du store ne protège plus que ce `Vec` lui-même (résolution d'un ticket en cellule, insertion, recyclage) : il n'est tenu que quelques instants, jamais pendant qu'on lit ou modifie un objet. **Le verrouillage des données est par objet**, via le `RwLock` de chaque cellule.
 
 ### Le `Handle` : votre ticket d'accès
 
@@ -62,15 +70,15 @@ Visuellement, le store ressemble à ceci :
 pub struct Handle<T> {
     idx: u32,   // numéro de case
     gen: u32,   // édition au moment de la remise du ticket
-    _t: PhantomData<T>,  // marqueur de type (zéro octet)
+    cell: OnceLock<Arc<SlotCell<T>>>,  // cache vers la cellule (ignoré par serde)
 }
 ```
 
 Trois choses à retenir sur le handle :
 
-1. **C'est juste deux `u32`** (8 octets). Pas de pointeur, pas d'allocation. Vous pouvez le copier (`.clone()`), le mettre dans une struct, le sérialiser.
-2. **`Clone` n'allocate rien non plus** : il incrémente le `refcount` du slot puis renvoie une copie de `(idx, gen)`. Tous les clones pointent **sur la même case** du store.
-3. **`Drop` décrémente le `refcount`**. Quand le compteur tombe à 0, la case est rendue à la free-list et la valeur est détruite. Tout cela est automatique : aucune fonction `remove()` à appeler.
+1. **L'identité, c'est `(idx, gen)`** — deux `u32`. C'est tout ce qui est sérialisé ; le champ `cell` n'est qu'un raccourci résolu paresseusement (un handle fraîchement désérialisé démarre avec un cache vide, rempli au premier accès).
+2. **`Clone` est un incrément atomique** : `refcount += 1` sur la cellule, sans prendre aucun verrou. Tous les clones pointent **sur la même case** du store. On peut donc cloner un handle même pendant qu'un guard est ouvert sur l'objet.
+3. **`Drop` décrémente le `refcount`**. Quand le compteur tombe à 0, la case est rendue à la free-list et la valeur est détruite (hors de tout verrou — ses effets de bord `Drop` touchent d'autres stores). Tout cela est automatique : aucune fonction `remove()` à appeler.
 
 ```rust,ignore
 let h1 = insert(MaStruct(42));   // case n°7, refcount = 1
@@ -104,61 +112,66 @@ Une question naturelle : pourquoi ne pas simplement passer une référence Rust 
 
 1. **Indépendance identité / placement.** Le store doit pouvoir **déplacer un objet** (vers le disque par swap, plus tard vers une autre case par compactage déplaçant). Une `&Configuration` interdit ce déplacement (le borrow-checker fige l'adresse). Un `Handle` désigne l'identité ; le store gère l'emplacement physique.
 2. **Sérialisation.** Un `&Configuration` n'est pas sérialisable. Un `Handle` est juste `(u32, u32)` : on peut le stocker dans un autre objet, le sauvegarder sur disque, et le relire — le pointage logique survit au round-trip. Combiné au swap Drop-safe, un `SubMesh` qui contient un `Handle<Configuration>` traverse le disque sans casser le graphe d'objets.
-3. **API uniforme côté Python.** PyO3 a besoin d'objets `Clone + Send + 'static` côté Rust pour les exposer en classes Python. `Handle<T>` coche ces cases ; `&Configuration` non.
+3. **API uniforme côté Python.** PyO3 a besoin d'objets `Clone + Send + Sync + 'static` côté Rust pour les exposer en classes Python. `Handle<T>` coche ces cases ; `&Configuration` non.
 
-### Accès via `with` / `with_mut` : pourquoi des closures ?
+### Accès via `read` / `write` : les guards
 
-Avec un `Handle`, le code utilisateur ne peut pas écrire `handle.dim` directement. Il doit passer par :
+Avec un `Handle`, le code utilisateur ne peut pas écrire `handle.dim` directement. Il passe par un **guard** :
 
 ```rust,ignore
-with(&handle, |cfg: &Configuration| {
-    println!("dim = {}", cfg.dim());
-}).unwrap();
+let cfg = read(&handle)?;            // verrou lecture sur CET objet seul
+println!("dim = {}", cfg.dim());     // cfg se comporte comme un &Configuration
+drop(cfg);                           // (ou fin de scope) → verrou relâché
 
-with_mut(&handle, |cfg: &mut Configuration| {
-    cfg.add_node(&[0.0, 0.0]).unwrap();
-}).unwrap();
+write(&handle)?.add_node(&[0.0, 0.0])?;   // verrou écriture, le temps de l'appel
 ```
 
-Pourquoi ce pattern (la « closure scoped ») plutôt qu'un `.get()` qui renverrait une référence ? Deux raisons techniques qui se renforcent.
+Un guard est un objet temporaire qui prouve que vous détenez le verrou. Il se comporte comme une référence vers la donnée (via `Deref`), et **le verrou est relâché automatiquement à sa destruction** (fin de scope) — c'est du RAII, impossible d'oublier de déverrouiller. Le borrow-checker s'applique normalement à travers le guard : pas de mutation pendant une lecture, exclusion `read`/`write` à l'exécution via le `RwLock`.
 
-**1. Le mutex doit être tenu pendant tout l'accès.**
+Que se passe-t-il exactement sur un `read(&h)` ?
 
-Chaque store interne est protégé par un `Mutex` (un seul, partagé pour tous les slots du même type `T`). Pour accéder à la valeur, il faut **verrouiller** ce mutex. Si `get()` renvoyait une référence `&Configuration`, deux scénarios mauvais s'ouvriraient :
+```text
+Handle { idx: 7, gen: 3 }                     ← votre ticket
+        │
+        ▼  (1) mutex du store, un instant :
+store<T> :  [#0] [#1] ... [#7 {gen: 3 ✓, Arc ──┐}]
+        │   (2) clone de l'Arc, mutex relâché  │
+        ▼                                      ▼
+            Cellule partagée : SlotCell { lock: RwLock(Resident(données)),
+        (3) verrou lecture ─────────┘           refcount: 2 }
+        ▼
+   ReadGuard ── se comporte comme l'objet, lit les données EN PLACE
+```
 
-- soit le mutex est relâché juste après — et la référence retournée pointe sur des données qui peuvent être modifiées sous nos pieds (data race) ;
-- soit le mutex reste verrouillé tant que la référence existe — mais on ne sait plus garantir quand elle disparaît, et un oubli gèle tout le store.
+1. Sous le mutex du store, on vérifie que la case 7 est bien en génération 3 et on clone l'`Arc` de la cellule ; le mutex est relâché aussitôt. **`Arc`** (*Atomically Reference Counted*) est une boîte partagée à tickets de propriété : la cloner ne copie pas le contenu, ça crée un second ticket sur la même boîte, qui ne sera libérée qu'au dernier ticket rendu. Grâce à ce ticket, la cellule ne peut pas être désallouée sous vos pieds, quoi qu'il arrive au store pendant votre lecture.
+2. On prend le verrou **de cette cellule seulement** — `RwLock` : N lecteurs simultanés, OU 1 écrivain exclusif (la règle du borrow-checker, vérifiée à l'exécution entre threads). Si l'objet était `OnDisk`, il est rechargé au passage.
+3. Le `ReadGuard` rendu est **possédé** (`'static`) : il détient son propre Arc et un clone du `Handle`, donc il peut être retourné par une fonction, rangé dans une struct (c'est le mécanisme de `FieldView`, la vue zéro-copie des champs), et il maintient le slot en vie même si vous droppez votre handle entre-temps.
 
-L'API par closure résout les deux : `with` verrouille, exécute votre closure, puis déverrouille **forcément** à la sortie du scope. Pas de fuite possible.
+C'est ce caractère « possédé » qui permet aux opérateurs (gradient, solveur, viz) de lire les données **en place** dans le store pendant toute leur boucle, au lieu d'en faire des copies.
 
-**2. Le borrow-checker fait son travail à l'intérieur.**
+### Concurrence : un verrou par objet
 
-À l'intérieur de la closure, vous manipulez un vrai `&T` (ou `&mut T`). Le borrow-checker Rust s'applique normalement : pas de mutation pendant une lecture, exclusion mutuelle automatique entre `with` et `with_mut`, etc. La closure est juste un **scope explicite** qui dit au compilateur : « la référence ne s'échappe pas d'ici ».
+Le mutex du store n'arbitre que l'annuaire (`idx/gen` → cellule, insertion, recyclage) — tenu quelques nanosecondes. Toute la concurrence sur les **données** passe par le `RwLock` de chaque cellule :
 
-Conséquence pratique : à l'intérieur d'une `with` / `with_mut`, votre code Rust ressemble à n'importe quel autre code Rust idiomatique. Toute la cuisine (verrou, rechargement depuis disque si swap, validation de génération) est faite **avant** d'appeler votre closure et **après** son retour.
+- deux threads qui manipulent **des objets différents** — même du même type — ne se gênent jamais ;
+- plusieurs threads peuvent **lire le même objet** simultanément ;
+- un écrivain est exclusif sur **son** objet, et seulement le sien.
 
-### Concurrence : un mutex par type, indépendants
+C'est la granularité qui prépare le parallélisme interne aux opérateurs (plusieurs threads lisant le même maillage pendant l'assemblage).
 
-Le registre global associe un `Mutex<StoreInner<T>>` à chaque `TypeId`. Conséquence directe :
-
-- deux threads qui manipulent **des types différents** (un sur `Configuration`, l'autre sur `SubMesh`) ne se gênent pas ;
-- deux threads qui manipulent **le même type** sont sérialisés par le mutex de ce type.
-
-Granularité grossière, mais cohérente avec le profil FE : on construit les objets, puis on les utilise — peu de contention en pratique. Si elle devient un problème, le mutex par type pourra évoluer en `RwLock` ou en sharding (un mutex par groupe de slots) sans changer l'API publique.
-
-**Une seule règle à respecter** : **ne pas réentrer sur le même type `T` à l'intérieur d'une closure passée à `with` / `with_mut`**. Le mutex n'est pas réentrant ; appeler `insert::<T>(...)` ou `with::<T>(...)` depuis une closure qui détient déjà le verrou de `T` provoque un interblocage. C'est la seule contrainte d'usage du store ; les opérations sur des types différents sont libres.
+**Une seule règle à respecter** : **ne pas demander un second guard sur un objet dont on tient déjà un guard en écriture** (ni `write` un objet qu'on est en train de lire dans le même thread) — le verrou d'un slot n'est pas réentrant. Les objets distincts, eux, se verrouillent librement, y compris imbriqués.
 
 ### API par fonctions de module
 
 Rust :
 
 ```rust,ignore
-use pyrucast::store::{insert, with, with_mut, swap_out, compact};
+use pyrucast::store::{insert, read, write, swap_out, compact};
 
 let h = insert(mon_objet);              // dépose dans le store, renvoie un handle
-with(&h, |o| { /* lecture */ }).unwrap();
-with_mut(&h, |o| { /* écriture */ }).unwrap();
-swap_out(&h).unwrap();                  // évince sur disque, libère la RAM
+let v = read(&h)?.valeur();             // guard lecture le temps de l'expression
+write(&h)?.modifie();                   // guard écriture, pareil
+swap_out(&h)?;                          // évince sur disque, libère la RAM
 compact::<MonObjet>();                  // rétrécit la mémoire en queue de Vec
 ```
 
@@ -184,7 +197,7 @@ print(pyrucast.swap_dir())  # /data/pyrucast_swap
         ┌─────────────────────┐
         │      Resident       │  ◀──┐
         │   (valeur en RAM)   │     │  rechargement automatique
-        └──────┬──────────────┘     │  au prochain with / with_mut
+        └──────┬──────────────┘     │  au prochain read / write
    swap_out()  │                    │
                ▼                    │
         ┌─────────────────────┐     │
@@ -234,15 +247,15 @@ Trois mécanismes coopèrent pour éviter que le `Vec` interne ne gonfle indéfi
 
    Le slot `Free` au milieu reste : `compact` **ne déplace pas** les slots vivants, pour ne pas invalider les handles existants. Conséquence : la fragmentation **interne** (trous au milieu du `Vec`) n'est pas résolue par cette opération — voir la table des évolutions plus bas (approche A).
 
-3. **Le swap disque**. Quand la RAM devient un sujet plus pressant que le nombre de slots, `swap_out(&h)` sérialise la valeur vers un fichier (via `Persist`) et passe le slot dans l'état `OnDisk`. Le slot reste compté et adressable ; seule la valeur quitte la RAM. Le prochain `with` / `with_mut` la recharge automatiquement.
+3. **Le swap disque**. Quand la RAM devient un sujet plus pressant que le nombre de slots, `swap_out(&h)` sérialise la valeur vers un fichier (via `Persist`) et passe le slot dans l'état `OnDisk`. Le slot reste compté et adressable ; seule la valeur quitte la RAM. Le prochain `read` / `write` la recharge automatiquement.
 
 Ces trois leviers se complètent : la free-list évite la croissance, `compact` rend la mémoire en queue, le swap déleste la RAM quand la queue est encombrée mais pas libérable.
 
 ### Concurrence : ce que le compilateur garantit
 
-Le store interne de chaque type `T` est protégé par un `Mutex`. Au-delà de ce verrou, **toute la sûreté à l'intérieur d'une closure** est celle du borrow-checker Rust standard : pas de mutation pendant qu'une lecture est active, pas de référence qui s'échappe du scope, pas de data race entre threads sur le même slot. Le store n'invente aucune règle nouvelle — il fournit juste un **point d'entrée verrouillé** vers une référence Rust classique.
+À travers un guard, **toute la sûreté est celle du borrow-checker Rust standard** : pas de mutation pendant qu'une lecture est active (le `RwLock` l'arbitre entre threads), pas de data race sur un slot. Le store n'invente aucune règle nouvelle — il fournit juste un **point d'entrée verrouillé** vers une référence Rust classique.
 
-Les opérations sur des **types différents** sont indépendantes (un mutex par `TypeId`). Une seule contrainte d'usage : **ne pas appeler `insert`/`with`/`with_mut`/`swap_out`/`compact` sur le même type `T` à l'intérieur d'une closure passée à `with` / `with_mut`** — la rentrance sur le même mutex provoquerait un interblocage. Cette contrainte n'est pas vérifiée à la compilation ; elle se respecte par construction (les fonctions internes du store évitent soigneusement cette rentrance).
+Une seule contrainte d'usage, non vérifiée à la compilation : **ne pas demander un second guard sur un objet pendant qu'on tient un guard en écriture sur ce même objet** (ni `write` un objet qu'on lit déjà dans le même thread) — le verrou du slot n'est pas réentrant. Les objets distincts — y compris du même type — se verrouillent librement et de façon imbriquée ; `insert`, `swap_out` et `compact` ne tiennent jamais de verrou de slot en même temps que celui du store.
 
 ### Pourquoi pas d'ownership Rust direct ?
 

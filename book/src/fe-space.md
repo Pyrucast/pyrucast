@@ -230,7 +230,7 @@ use pyrucast::mesh::element_type::ElementType;
 use pyrucast::finite_element_space::FiniteElementSpace;
 use pyrucast::mesh::{Mesh, SubMesh};
 use pyrucast::mesh::node::Node;
-use pyrucast::store::{insert, with};
+use pyrucast::store::{insert, read};
 
 let cfg = insert(Configuration::new(2).unwrap());
 let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -242,15 +242,14 @@ mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 let sub = fes.get(0).unwrap();
-with(&sub, |s| {
-    assert_eq!(s.gauss_count(), 3);
-    // Le triangle (0,0), (2,0), (0,2) a |J| = 4 partout :
-    // mapping affine, det(J) = 4 = 2 × aire physique du triangle (1/2 × 2 × 2).
-    for g in 0..s.gauss_count() {
-        let dj = s.det_jacobian(0, g).unwrap();
-        assert!((dj - 4.0).abs() < 1e-12);
-    }
-}).unwrap();
+let s = read(&sub).unwrap();
+assert_eq!(s.gauss_count(), 3);
+// Le triangle (0,0), (2,0), (0,2) a |J| = 4 partout :
+// mapping affine, det(J) = 4 = 2 × aire physique du triangle (1/2 × 2 × 2).
+for g in 0..s.gauss_count() {
+    let dj = s.det_jacobian(0, g).unwrap();
+    assert!((dj - 4.0).abs() < 1e-12);
+}
 ```
 
 Constructeur explicite — utile pour mélanger les interpolations / quadratures par sous-maillage :
@@ -271,18 +270,17 @@ let fes = FiniteElementSpace::with(
 Évaluation des grandeurs sur une cellule :
 
 ```rust,ignore
-with(&sub, |s| {
-    for cell_idx in 0..s.cell_count().unwrap() {
-        for g in 0..s.gauss_count() {
-            let n  = s.n_at_g(g).unwrap();          // N_i(ξ_g)
-            let dn = s.dn_at_g(g).unwrap();         // ∂N_i/∂ξ_k(ξ_g)
-            let jac     = s.jacobian(cell_idx, g).unwrap();
-            let det_j   = s.det_jacobian(cell_idx, g).unwrap();
-            let dn_dx   = s.dn_dx(cell_idx, g).unwrap();
-            // … utiliser ces buffers dans l'assemblage matrice-élémentaire …
-        }
+let s = read(&sub).unwrap();
+for cell_idx in 0..s.cell_count().unwrap() {
+    for g in 0..s.gauss_count() {
+        let n  = s.n_at_g(g).unwrap();          // N_i(ξ_g)
+        let dn = s.dn_at_g(g).unwrap();         // ∂N_i/∂ξ_k(ξ_g)
+        let jac     = s.jacobian(cell_idx, g).unwrap();
+        let det_j   = s.det_jacobian(cell_idx, g).unwrap();
+        let dn_dx   = s.dn_dx(cell_idx, g).unwrap();
+        // … utiliser ces buffers dans l'assemblage matrice-élémentaire …
     }
-}).unwrap();
+}
 ```
 
 ## Déplacement de maillage : exemple
@@ -290,15 +288,15 @@ with(&sub, |s| {
 Après modification des coordonnées dans la `Configuration`, les évaluations à la volée reflètent automatiquement le nouvel état :
 
 ```rust,ignore
-use pyrucast::store::with_mut;
+use pyrucast::store::{read, write};
 
 // SEG2 initial : nœuds en x=0 et x=1 → |J| = 0.5 (longueur 1 sur [-1,+1]).
-let dj_before = with(&sub, |s| s.det_jacobian(0, 0)).unwrap().unwrap();
+let dj_before = read(&sub).unwrap().det_jacobian(0, 0).unwrap();
 assert!((dj_before - 0.5).abs() < 1e-12);
 
 // Étirement : on déplace le second nœud en x=4 → |J| = 2.0 (longueur 4 sur [-1,+1]).
-with_mut(&cfg, |c| c.set_coord(b.id(), &[4.0, 0.0])).unwrap().unwrap();
-let dj_after = with(&sub, |s| s.det_jacobian(0, 0)).unwrap().unwrap();
+write(&cfg).unwrap().set_coord(b.id(), &[4.0, 0.0]).unwrap();
+let dj_after = read(&sub).unwrap().det_jacobian(0, 0).unwrap();
 assert!((dj_after - 2.0).abs() < 1e-12);
 ```
 

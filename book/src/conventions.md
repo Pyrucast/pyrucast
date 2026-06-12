@@ -78,13 +78,12 @@ Rust :
 
 ```rust,ignore
 use pyrucast::mesh::configuration::Configuration;
-use pyrucast::store::{insert, with};
+use pyrucast::store::{insert, read};
 
 let cfg = insert(Configuration::new(2).unwrap());
-with(&cfg, |c| {
-    println!("{:?}", c);  // vue structurelle (Debug)
-    println!("{}", c);    // vue résumée (Display)
-}).unwrap();
+let c = read(&cfg).unwrap();
+println!("{:?}", &*c);  // vue structurelle (Debug)
+println!("{}", &*c);    // vue résumée (Display)
 ```
 
 Python :
