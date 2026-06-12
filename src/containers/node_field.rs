@@ -33,7 +33,7 @@
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::containers::node_field::SubNodeField;
-//! use pyrucast::store::{insert, with, with_mut};
+//! use pyrucast::store::insert;
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
 //! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -63,9 +63,9 @@ use crate::containers::mesh::{Configuration, NodeId};
 use crate::containers::mesh::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::store::{insert, with, Handle};
+use crate::store::{insert, read, Handle};
 #[cfg(test)]
-use crate::store::with_mut;
+use crate::store::write;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Add, Div, Index, IndexMut, Mul, Sub};
@@ -102,7 +102,8 @@ impl SubNodeField {
     pub fn from_poi1(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
         check_components(&components)?;
 
-        let nodes: Vec<NodeId> = with(submesh, |sm| -> Result<_> {
+        let nodes: Vec<NodeId> = {
+            let sm = read(submesh)?;
             if sm.element_type() != ElementType::POI1 {
                 return Err(PyrucastError::Message(format!(
                     "SubNodeField requires a POI1 SubMesh, got {}",
@@ -110,8 +111,8 @@ impl SubNodeField {
                 )));
             }
             // POI1: connectivity is exactly the node list (1 node per cell).
-            Ok(sm.connectivity().to_vec())
-        })??;
+            sm.connectivity().to_vec()
+        };
 
         let n_nodes = nodes.len();
         let n_comp = components.len();
@@ -129,12 +130,13 @@ impl SubNodeField {
     /// element type gets a fresh POI1 support materialised from its
     /// distinct nodes.
     pub fn from_support(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
-        let element_type = with(submesh, |sm| sm.element_type())?;
+        let element_type = read(submesh)?.element_type();
         if element_type == ElementType::POI1 {
             return Self::from_poi1(submesh, components);
         }
         check_components(&components)?;
-        let (cfg, nodes) = with(submesh, |sm| {
+        let (cfg, nodes) = {
+            let sm = read(submesh)?;
             let mut nodes: Vec<NodeId> = Vec::new();
             for &nid in sm.connectivity() {
                 if !nodes.contains(&nid) {
@@ -142,7 +144,7 @@ impl SubNodeField {
                 }
             }
             (sm.configuration(), nodes)
-        })?;
+        };
         Self::new_with_nodes(cfg, nodes, components)
     }
 
@@ -168,8 +170,9 @@ impl SubNodeField {
 
     /// Handle to the owning `Configuration` (derived from the support).
     pub fn configuration(&self) -> Handle<Configuration> {
-        with(&self.support, |sm| sm.configuration())
+        read(&self.support)
             .expect("SubNodeField support handle is held by self → must be alive")
+            .configuration()
     }
 
     /// Handle to the POI1 SubMesh backing this field's support.
@@ -230,7 +233,7 @@ impl SubNodeField {
     /// use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// use pyrucast::containers::mesh::Node;
     /// use pyrucast::containers::node_field::SubNodeField;
-    /// use pyrucast::store::{insert, with};
+    /// use pyrucast::store::insert;
     ///
     /// let cfg = insert(Configuration::new(2).unwrap());
     /// let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -650,7 +653,7 @@ crate::impl_aggregate!(NodeField, SubNodeField, subfield, "subfield(s)", {
             return Ok(());
         }
         let a = self.configuration()?;
-        let b = with(h, |s| s.configuration())?;
+        let b = read(h)?.configuration();
         if a.index() != b.index() || a.generation() != b.generation() {
             Err(PyrucastError::Message("mismatched Configurations".into()))
         } else {
@@ -723,7 +726,7 @@ impl NodeField {
     /// Errors if the aggregate is empty.
     pub fn configuration(&self) -> Result<Handle<Configuration>> {
         let h = self.get(0)?;
-        with(&h, |s| s.configuration())
+        Ok(read(&h)?.configuration())
     }
 
     /// Value at `(node, component)` — the **first** sub defining both
@@ -741,7 +744,7 @@ impl NodeField {
     /// `(node, component)`.
     pub fn value_opt(&self, nid: NodeId, component: &str) -> Result<Option<f64>> {
         for h in self {
-            if let Some(v) = with(h, |s| s.component_value_opt(nid, component))? {
+            if let Some(v) = read(h)?.component_value_opt(nid, component) {
                 return Ok(Some(v));
             }
         }
@@ -752,8 +755,8 @@ impl NodeField {
     pub fn node_ids(&self) -> Result<Vec<NodeId>> {
         let mut out: Vec<NodeId> = Vec::new();
         for h in self {
-            let nodes = with(h, |s| s.nodes().to_vec())?;
-            for nid in nodes {
+            let s = read(h)?;
+            for &nid in s.nodes() {
                 if !out.contains(&nid) {
                     out.push(nid);
                 }
@@ -780,11 +783,12 @@ impl NodeField {
         let components = crate::containers::field::Field::components(self)?;
         let mut zones = Vec::with_capacity(self.len());
         for h in self {
-            zones.push(with(h, |s| ZoneSnapshot {
+            let s = read(h)?;
+            zones.push(ZoneSnapshot {
                 nodes: s.nodes().to_vec(),
-                components: s.components().to_vec(),
+                components: SubField::components(&*s).to_vec(),
                 values: s.values().to_vec(),
-            })?);
+            });
         }
         Ok(FieldSnapshot { zones, components })
     }
@@ -801,10 +805,8 @@ impl NodeField {
         use std::collections::HashMap;
         let mut seen: HashMap<(NodeId, String), f64> = HashMap::new();
         for h in self {
-            // Snapshot one sub per lock — never nest with::<SubNodeField>.
-            let (nodes, comps, values) = with(h, |s| {
-                (s.nodes().to_vec(), s.components().to_vec(), s.values().to_vec())
-            })?;
+            let s = read(h)?;
+            let (nodes, comps, values) = (s.nodes(), SubField::components(&*s), s.values());
             let ncomp = comps.len();
             for (ni, &nid) in nodes.iter().enumerate() {
                 for (ci, comp) in comps.iter().enumerate() {
@@ -944,25 +946,25 @@ mod tests {
     fn shares_support_refcounts() {
         let (cfg, nodes, sm) = make_poi1_with(2);
         // Each node has refcount = 2 (Node + SubMesh).
-        with(&cfg, |c| {
+        {
+            let c = read(&cfg).unwrap();
             assert_eq!(c.refcount(nodes[0].id()), 2);
             assert_eq!(c.refcount(nodes[1].id()), 2);
-        })
-        .unwrap();
+        }
         let f = SubNodeField::from_poi1(&sm, vec!["P".into()]).unwrap();
         // The field shares the SubMesh handle, so per-node refcounts
         // are unchanged.
-        with(&cfg, |c| {
+        {
+            let c = read(&cfg).unwrap();
             assert_eq!(c.refcount(nodes[0].id()), 2);
             assert_eq!(c.refcount(nodes[1].id()), 2);
-        })
-        .unwrap();
+        }
         drop(f);
-        with(&cfg, |c| {
+        {
+            let c = read(&cfg).unwrap();
             assert_eq!(c.refcount(nodes[0].id()), 2);
             assert_eq!(c.refcount(nodes[1].id()), 2);
-        })
-        .unwrap();
+        }
     }
 
     #[test]
@@ -1021,11 +1023,11 @@ mod tests {
         // alive, which keeps the nodes alive.
         drop(n);
         drop(sm_handle);
-        with_mut(&cfg, |c| assert_eq!(c.gc(), 0)).unwrap();
-        with(&cfg, |c| assert!(c.is_alive(nid))).unwrap();
+        assert_eq!(write(&cfg).unwrap().gc(), 0);
+        assert!(read(&cfg).unwrap().is_alive(nid));
         drop(field);
-        with_mut(&cfg, |c| assert_eq!(c.gc(), 1)).unwrap();
-        with(&cfg, |c| assert!(!c.is_alive(nid))).unwrap();
+        assert_eq!(write(&cfg).unwrap().gc(), 1);
+        assert!(!read(&cfg).unwrap().is_alive(nid));
     }
 
     #[test]
@@ -1034,11 +1036,11 @@ mod tests {
         let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         // refcount before: Node + SubMesh = 2 each (the field shares
         // the user's SubMesh, no extra per-node incref).
-        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 2)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(nodes[0].id()), 2);
 
         let sm2 = f.support_submesh().unwrap();
         // the freshly built SubMesh adds one incref each → 3
-        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 3)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(nodes[0].id()), 3);
 
         assert_eq!(sm2.cell_count(), 3);
         let conn = sm2.connectivity();
@@ -1048,7 +1050,7 @@ mod tests {
 
         drop(sm2);
         // back to 2
-        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 2)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(nodes[0].id()), 2);
     }
 
     #[test]
@@ -1159,8 +1161,8 @@ mod tests {
         assert_eq!(f.len(), 2);
         // 4 distinct nodes; interface nodes n1, n2 stored in both subs.
         assert_eq!(f.node_count().unwrap(), 4);
-        with(&f.get(0).unwrap(), |s| assert_eq!(s.node_count(), 3)).unwrap();
-        with(&f.get(1).unwrap(), |s| assert_eq!(s.node_count(), 3)).unwrap();
+        assert_eq!(read(&f.get(0).unwrap()).unwrap().node_count(), 3);
+        assert_eq!(read(&f.get(1).unwrap()).unwrap().node_count(), 3);
         // Zero-initialized everywhere.
         assert_eq!(f.value(nodes[1].id(), "T").unwrap(), 0.0);
     }
@@ -1190,12 +1192,12 @@ mod tests {
         let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
         let interface = nodes[1].id();
         // Diverging interface values: reads pick sub 0, check() errors.
-        with_mut(&f.get(0).unwrap(), |s| s.set_value(interface, "T", 1.0)).unwrap().unwrap();
-        with_mut(&f.get(1).unwrap(), |s| s.set_value(interface, "T", 2.0)).unwrap().unwrap();
+        write(&f.get(0).unwrap()).unwrap().set_value(interface, "T", 1.0).unwrap();
+        write(&f.get(1).unwrap()).unwrap().set_value(interface, "T", 2.0).unwrap();
         assert_eq!(f.value(interface, "T").unwrap(), 1.0);
         assert!(f.check().is_err());
         // Re-aligned values: check() passes.
-        with_mut(&f.get(1).unwrap(), |s| s.set_value(interface, "T", 1.0)).unwrap().unwrap();
+        write(&f.get(1).unwrap()).unwrap().set_value(interface, "T", 1.0).unwrap();
         f.check().unwrap();
     }
 
@@ -1237,7 +1239,7 @@ mod tests {
     fn nf_from_support_poi1_shares_handle() {
         let (_cfg, _nodes, sm) = make_poi1_with(2);
         let f = NodeField::from_submesh(&sm, vec!["T".into()]).unwrap();
-        let support = with(&f.get(0).unwrap(), |s| s.support()).unwrap();
+        let support = read(&f.get(0).unwrap()).unwrap().support();
         assert_eq!(support.index(), sm.index());
     }
 
@@ -1296,12 +1298,12 @@ mod tests {
         let g = f.clone();
         // Both fields share the same SubMesh handle, so per-node
         // refcounts in the Configuration stay at 2 (Node + SubMesh).
-        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 2)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(nodes[0].id()), 2);
         // Mutation of f does not affect g (values are independent).
         f.set(0, 0, 99.0).unwrap();
         assert_eq!(g.get(0, 0).unwrap(), 42.0);
         drop(g);
-        with(&cfg, |c| assert_eq!(c.refcount(nodes[0].id()), 2)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(nodes[0].id()), 2);
     }
 
     // ── Opérateurs +,-,*,/ avec f64 ─────────────────────────────────────────

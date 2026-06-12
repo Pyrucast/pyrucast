@@ -39,7 +39,7 @@ use crate::containers::mesh::NodeId;
 use crate::containers::mesh::Cell;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::error::{PyrucastError, Result};
-use crate::store::{with, Handle};
+use crate::store::{read, Handle};
 
 /// Lightweight view on a single element of a [`SubFiniteElementSpace`].
 #[derive(Clone)]
@@ -51,7 +51,7 @@ pub struct Element {
 impl Element {
     /// Build an element view. Errors if `idx ≥ cell_count()`.
     pub fn new(fespace: Handle<SubFiniteElementSpace>, idx: usize) -> Result<Self> {
-        let n = with(&fespace, |s| s.cell_count())??;
+        let n = read(&fespace)?.cell_count()?;
         if idx >= n {
             return Err(PyrucastError::Message(format!(
                 "element index {idx} out of range (cell_count={n})"
@@ -72,7 +72,7 @@ impl Element {
 
     /// Underlying [`Cell`] view in the parent submesh.
     pub fn cell(&self) -> Result<Cell> {
-        let sm = with(&self.fespace, |s| s.submesh())?;
+        let sm = read(&self.fespace)?.submesh();
         Cell::new(sm, self.idx)
     }
 
@@ -80,23 +80,23 @@ impl Element {
 
     /// Number of nodes per element (= element type's nodes_per_cell).
     pub fn nodes_per_cell(&self) -> Result<usize> {
-        with(&self.fespace, |s| s.nodes_per_cell())?
+        read(&self.fespace)?.nodes_per_cell()
     }
 
     /// Geometric (physical) dimension of the underlying `Configuration`.
     pub fn space_dim(&self) -> Result<usize> {
-        with(&self.fespace, |s| s.space_dim())
+        Ok(read(&self.fespace)?.space_dim())
     }
 
     /// Reference dimension (= topological dim of the element type).
     pub fn ref_dim(&self) -> Result<usize> {
-        with(&self.fespace, |s| s.ref_dim())?
+        read(&self.fespace)?.ref_dim()
     }
 
     /// Number of Gauss points per element.
     pub fn gauss_count(&self) -> usize {
-        // Static across the fespace; cheap to look up via a `with`.
-        with(&self.fespace, |s| s.gauss_count()).unwrap_or(0)
+        // Static across the fespace; cheap to look up under the guard.
+        read(&self.fespace).map(|s| s.gauss_count()).unwrap_or(0)
     }
 
     /// Connectivity (node ids) of this element.
@@ -108,41 +108,41 @@ impl Element {
 
     /// Reference coordinates of the `g`-th Gauss point.
     pub fn gauss_xi(&self, g: usize) -> Result<Vec<f64>> {
-        with(&self.fespace, |s| Ok(s.gauss_xi(g)?.to_vec()))?
+        Ok(read(&self.fespace)?.gauss_xi(g)?.to_vec())
     }
 
     /// Weight of the `g`-th Gauss point.
     pub fn gauss_weight(&self, g: usize) -> Result<f64> {
-        with(&self.fespace, |s| s.gauss_weight(g))?
+        read(&self.fespace)?.gauss_weight(g)
     }
 
     /// `N_i(ξ_g)` for all nodes `i` at the `g`-th Gauss point.
     pub fn n_at_g(&self, g: usize) -> Result<Vec<f64>> {
-        with(&self.fespace, |s| Ok(s.n_at_g(g)?.to_vec()))?
+        Ok(read(&self.fespace)?.n_at_g(g)?.to_vec())
     }
 
     /// `∂N_i/∂ξ_j(ξ_g)` for all nodes at the `g`-th Gauss point
     /// (flat row-major `[i * ref_dim + j]`).
     pub fn dn_at_g(&self, g: usize) -> Result<Vec<f64>> {
-        with(&self.fespace, |s| Ok(s.dn_at_g(g)?.to_vec()))?
+        Ok(read(&self.fespace)?.dn_at_g(g)?.to_vec())
     }
 
     // ── Physical quantities (cell-specific, on-the-fly) ─────────────────
 
     /// Jacobian `J = ∂x/∂ξ` at the `g`-th Gauss point of this element.
     pub fn jacobian(&self, g: usize) -> Result<Vec<f64>> {
-        with(&self.fespace, |s| s.jacobian(self.idx, g))?
+        read(&self.fespace)?.jacobian(self.idx, g)
     }
 
     /// `|J|` (measure scaling factor) at the `g`-th Gauss point.
     pub fn det_jacobian(&self, g: usize) -> Result<f64> {
-        with(&self.fespace, |s| s.det_jacobian(self.idx, g))?
+        read(&self.fespace)?.det_jacobian(self.idx, g)
     }
 
     /// Physical derivatives `∂N_i/∂x_a` at the `g`-th Gauss point
     /// (flat row-major `[i * space_dim + a]`).
     pub fn dn_dx(&self, g: usize) -> Result<Vec<f64>> {
-        with(&self.fespace, |s| s.dn_dx(self.idx, g))?
+        read(&self.fespace)?.dn_dx(self.idx, g)
     }
 }
 

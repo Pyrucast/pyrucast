@@ -20,7 +20,7 @@
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::containers::mesh::Node;
-//! use pyrucast::store::{insert, with, with_mut};
+//! use pyrucast::store::{insert, read};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
 //! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -32,9 +32,9 @@
 //! assert_eq!(sm.cell_count(), 1);
 //!
 //! // The SubMesh holds refs on the 3 nodes, in addition to the `Node`s.
-//! with(&cfg, |c| assert_eq!(c.refcount(a.id()), 2)).unwrap();
+//! assert_eq!(read(&cfg).unwrap().refcount(a.id()), 2);
 //! drop(sm);  // decrements the referenced nodes
-//! with(&cfg, |c| assert_eq!(c.refcount(a.id()), 1)).unwrap();
+//! assert_eq!(read(&cfg).unwrap().refcount(a.id()), 1);
 //! ```
 
 pub mod cell;
@@ -56,7 +56,7 @@ pub use point::{Point2, Point3, Vector2, Vector3};
 
 use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, with, with_mut, Handle};
+use crate::store::{insert, read, write, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -118,7 +118,8 @@ impl SubMesh {
                 nodes.len()
             )));
         }
-        let result: Result<()> = with_mut(&self.config, |c| {
+        {
+            let mut c = write(&self.config)?;
             let mut acquired = 0usize;
             for &n in nodes {
                 if let Err(e) = c.incref(n) {
@@ -130,9 +131,7 @@ impl SubMesh {
                 }
                 acquired += 1;
             }
-            Ok(())
-        })?;
-        result?;
+        }
         let idx = self.connectivity.len() / npc;
         self.connectivity.extend_from_slice(nodes);
         Ok(idx)
@@ -160,7 +159,8 @@ impl SubMesh {
                 nodes.len()
             )));
         }
-        with(&self.config, |c| -> Result<()> {
+        {
+            let c = read(&self.config)?;
             for &n in nodes {
                 if !c.is_alive(n) {
                     return Err(PyrucastError::Message(format!(
@@ -169,8 +169,7 @@ impl SubMesh {
                     )));
                 }
             }
-            Ok(())
-        })??;
+        }
         let idx = self.connectivity.len() / npc;
         self.connectivity.extend_from_slice(nodes);
         Ok(idx)
@@ -300,11 +299,11 @@ impl SubMesh {
 impl Drop for SubMesh {
     fn drop(&mut self) {
         // One lock acquisition for all decrefs.
-        let _ = with_mut(&self.config, |c| {
+        if let Ok(mut c) = write(&self.config) {
             for &n in &self.connectivity {
                 let _ = c.decref(n);
             }
-        });
+        }
     }
 }
 
@@ -371,7 +370,7 @@ crate::impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
     fn check_push(&self, h: &Handle<SubMesh>) -> Result<()> {
         if self.is_empty() { return Ok(()); }
         let a = self.configuration()?;
-        let b = with(h, |s| s.configuration())?;
+        let b = read(h)?.configuration();
         if a.index() != b.index() || a.generation() != b.generation() {
             Err(PyrucastError::Message("mismatched Configurations".into()))
         } else {
@@ -404,9 +403,10 @@ impl std::ops::Add<&Node> for &Mesh {
     type Output = Result<Mesh>;
     fn add(self, rhs: &Node) -> Self::Output {
         let sub = self.unit()?;
-        let (et, cfg, mut ids) = with(&sub, |s| {
+        let (et, cfg, mut ids) = {
+            let s = read(&sub)?;
             (s.element_type(), s.configuration(), s.connectivity().to_vec())
-        })?;
+        };
         if et != ElementType::POI1 {
             return Err(PyrucastError::Message(
                 "Mesh + Node: expected a unitary POI1 mesh".into(),
@@ -422,7 +422,7 @@ impl Mesh {
     pub fn cell_count(&self) -> Result<usize> {
         let mut total = 0usize;
         for sm in self {
-            total += with(sm, |s| s.cell_count())?;
+            total += read(sm)?.cell_count();
         }
         Ok(total)
     }
@@ -434,7 +434,7 @@ impl Mesh {
         let sm = self.items().first().ok_or_else(|| {
             PyrucastError::Message("configuration: mesh has no submeshes".into())
         })?;
-        with(sm, |s| s.configuration())
+        Ok(read(sm)?.configuration())
     }
 
     /// Create a mesh wrapping a single `SubMesh`. Config-free at the Mesh
@@ -453,27 +453,28 @@ impl Mesh {
                 "add_cell: mesh must have exactly one submesh".into(),
             ));
         }
-        with_mut(&self.subs[0], |s| s.add_cell(nodes))?
+        write(&self.subs[0])?.add_cell(nodes)
     }
 
     /// Element type of each submesh, in order.
     pub fn element_types(&self) -> Result<Vec<ElementType>> {
         self.iter()
-            .map(|sm| with(sm, |s| s.element_type()))
+            .map(|sm| Ok(read(sm)?.element_type()))
             .collect()
     }
 
     /// Cell count of each submesh, in order.
     pub fn cell_counts(&self) -> Result<Vec<usize>> {
         self.iter()
-            .map(|sm| with(sm, |s| s.cell_count()))
+            .map(|sm| Ok(read(sm)?.cell_count()))
             .collect()
     }
 
     /// Node at position `node_idx` in cell `cell_idx` of submesh `submesh_idx`.
     pub fn node(&self, submesh_idx: usize, cell_idx: usize, node_idx: usize) -> Result<Node> {
         let sm = self.get(submesh_idx)?;
-        let nid: NodeId = with(&sm, |s| {
+        let (nid, cfg) = {
+            let s = read(&sm)?;
             let npc = s.element_type.nodes_per_cell();
             let n = s.cell_count();
             if cell_idx >= n {
@@ -482,7 +483,8 @@ impl Mesh {
                     cell_idx, n
                 )));
             }
-            s.connectivity()
+            let nid = s
+                .connectivity()
                 .get(cell_idx * npc + node_idx)
                 .copied()
                 .ok_or_else(|| {
@@ -490,9 +492,9 @@ impl Mesh {
                         "node: node index {} ≥ nodes_per_cell {}",
                         node_idx, npc
                     ))
-                })
-        })??;
-        let cfg = with(&sm, |s| s.configuration())?;
+                })?;
+            (nid, s.configuration())
+        };
         Node::acquire(cfg, nid)
     }
 
@@ -505,7 +507,7 @@ impl Mesh {
     /// Iterator over every cell of submesh `submesh_idx`.
     pub fn cells(&self, submesh_idx: usize) -> Result<CellIter> {
         let sm = self.get(submesh_idx)?;
-        let end = with(&sm, |s| s.cell_count())?;
+        let end = read(&sm)?.cell_count();
         Ok(CellIter::new(sm, end))
     }
 
@@ -545,7 +547,7 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::{insert, with};
+    use crate::store::insert;
 
     #[test]
     fn submesh_poi1_is_node_list() {
@@ -592,19 +594,19 @@ mod tests {
         let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         // SubMesh increfed each of the 3 nodes, in addition to the Nodes.
-        with(&cfg, |cf| {
+        {
+            let cf = read(&cfg).unwrap();
             assert_eq!(cf.refcount(a.id()), 2);
             assert_eq!(cf.refcount(b.id()), 2);
             assert_eq!(cf.refcount(c.id()), 2);
-        })
-        .unwrap();
+        }
         drop(sm);
-        with(&cfg, |cf| {
+        {
+            let cf = read(&cfg).unwrap();
             assert_eq!(cf.refcount(a.id()), 1);
             assert_eq!(cf.refcount(b.id()), 1);
             assert_eq!(cf.refcount(c.id()), 1);
-        })
-        .unwrap();
+        }
     }
 
     #[test]
@@ -616,7 +618,7 @@ mod tests {
         let err = sm.add_cell(&[a.id()]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
         // No increment should have survived the failure.
-        with(&cfg, |cf| assert_eq!(cf.refcount(a.id()), 1)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(a.id()), 1);
     }
 
     #[test]
@@ -624,24 +626,24 @@ mod tests {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let dead_id = with_mut(&cfg, |c| c.add_node(&[2.0])).unwrap().unwrap();
+        let dead_id = write(&cfg).unwrap().add_node(&[2.0]).unwrap();
         // dead_id starts at refcount=1; decrement then collect.
-        with_mut(&cfg, |c| {
+        {
+            let mut c = write(&cfg).unwrap();
             c.decref(dead_id).unwrap();
             assert_eq!(c.gc(), 1);
-        })
-        .unwrap();
+        }
 
         let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
         // a (live), b (live), dead_id (collected) → add_cell fails after
         // increfing a and b. The rollback must undo those increfs.
         let err = sm.add_cell(&[a.id(), b.id(), dead_id]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
-        with(&cfg, |cf| {
+        {
+            let cf = read(&cfg).unwrap();
             assert_eq!(cf.refcount(a.id()), 1, "a must be rolled back");
             assert_eq!(cf.refcount(b.id()), 1, "b must be rolled back");
-        })
-        .unwrap();
+        }
         assert_eq!(sm.cell_count(), 0);
     }
 
@@ -711,14 +713,14 @@ mod tests {
         };
         m.add_sub(sm_tri).unwrap();
 
-        let et0 = with(&m[0], |s| s.element_type()).unwrap();
-        let et1 = with(&m[1], |s| s.element_type()).unwrap();
+        let et0 = read(&m[0]).unwrap().element_type();
+        let et1 = read(&m[1]).unwrap().element_type();
         assert_eq!(et0, ElementType::POI1);
         assert_eq!(et1, ElementType::TRI3);
 
         let types: Vec<ElementType> = (&m)
             .into_iter()
-            .map(|h| with(h, |s| s.element_type()).unwrap())
+            .map(|h| read(h).unwrap().element_type())
             .collect();
         assert_eq!(types, vec![ElementType::POI1, ElementType::TRI3]);
     }
@@ -800,10 +802,10 @@ mod tests {
 
         let m = (&a + &b).unwrap();
         assert_eq!(m.len(), 1);
-        assert_eq!(with(&m.unit().unwrap(), |s| s.cell_count()).unwrap(), 2);
+        assert_eq!(read(&m.unit().unwrap()).unwrap().cell_count(), 2);
 
         let m2 = (&m + &c).unwrap();
-        assert_eq!(with(&m2.unit().unwrap(), |s| s.cell_count()).unwrap(), 3);
+        assert_eq!(read(&m2.unit().unwrap()).unwrap().cell_count(), 3);
     }
 
     #[test]

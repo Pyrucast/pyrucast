@@ -74,7 +74,7 @@
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::error::{PyrucastError, Result};
-use crate::store::{with, Handle};
+use crate::store::{read, Handle};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use serde::{Deserialize, Serialize};
@@ -166,9 +166,9 @@ impl SubMatrix {
         symmetric: bool,
     ) -> Result<Self> {
         let row_nodes: Vec<NodeId> =
-            with(&row_support, |sm| sm.connectivity().to_vec())?;
+            read(&row_support)?.connectivity().to_vec();
         let col_nodes: Vec<NodeId> =
-            with(&col_support, |sm| sm.connectivity().to_vec())?;
+            read(&col_support)?.connectivity().to_vec();
         let nrows = row_nodes.len() * dual_vars.len();
         let ncols = col_nodes.len() * primal_vars.len();
         Ok(Self {
@@ -574,7 +574,7 @@ impl Matrix {
     fn collect_row_dofs(&self) -> Result<Vec<NamedDof>> {
         let mut out: Vec<NamedDof> = Vec::new();
         for h in self {
-            for pair in with(h, |s| s.row_dofs())? {
+            for pair in read(h)?.row_dofs() {
                 if !out.contains(&pair) { out.push(pair); }
             }
         }
@@ -584,7 +584,7 @@ impl Matrix {
     fn collect_col_dofs(&self) -> Result<Vec<NamedDof>> {
         let mut out: Vec<NamedDof> = Vec::new();
         for h in self {
-            for pair in with(h, |s| s.col_dofs())? {
+            for pair in read(h)?.col_dofs() {
                 if !out.contains(&pair) { out.push(pair); }
             }
         }
@@ -594,7 +594,7 @@ impl Matrix {
     fn build_coo(&self, row_dofs: &[NamedDof], col_dofs: &[NamedDof]) -> Result<CooMatrix<f64>> {
         let mut coo = CooMatrix::<f64>::new(row_dofs.len(), col_dofs.len());
         for h in self {
-            for (rn, rf, cn, cf, v) in with(h, |s| s.iter_entries())? {
+            for (rn, rf, cn, cf, v) in read(h)?.iter_entries() {
                 let i = row_dofs.iter().position(|(n, nm)| *n == rn && nm == &rf)
                     .expect("row dof must be in union");
                 let j = col_dofs.iter().position(|(n, nm)| *n == cn && nm == &cf)
@@ -611,7 +611,7 @@ impl Matrix {
     /// empty aggregate.
     pub fn symmetric(&self) -> Result<bool> {
         for h in self {
-            if !with(h, |s| s.symmetric())? {
+            if !read(h)?.symmetric() {
                 return Ok(false);
             }
         }
@@ -640,7 +640,7 @@ impl Matrix {
     pub fn field_names(&self) -> Result<Vec<String>> {
         let mut out: Vec<String> = Vec::new();
         for h in self {
-            for name in with(h, |s| s.field_names())? {
+            for name in read(h)?.field_names() {
                 if !out.contains(&name) { out.push(name); }
             }
         }
@@ -660,7 +660,7 @@ impl Matrix {
     /// Total COO entries stored across all blocks (counting duplicates).
     pub fn entry_count(&self) -> Result<usize> {
         let mut total = 0usize;
-        for h in self { total += with(h, |s| s.entry_count())?; }
+        for h in self { total += read(h)?.entry_count(); }
         Ok(total)
     }
 
@@ -674,7 +674,7 @@ impl Matrix {
     ) -> Result<f64> {
         let mut total = 0.0;
         for h in self {
-            total += with(h, |s| s.get(row_node, row_field, col_node, col_field))?;
+            total += read(h)?.get(row_node, row_field, col_node, col_field);
         }
         Ok(total)
     }
@@ -683,7 +683,7 @@ impl Matrix {
     pub fn iter_entries(&self) -> Result<Vec<(NodeId, String, NodeId, String, f64)>> {
         let mut out = Vec::new();
         for h in self {
-            out.extend(with(h, |s| s.iter_entries())?);
+            out.extend(read(h)?.iter_entries());
         }
         Ok(out)
     }
@@ -1221,7 +1221,7 @@ mod tests {
         let (na0, na1) = (nodes_a[0].id(), nodes_a[1].id());
         // row block a: only node na0 as row
         let mut row_a = SubMesh::new(
-            with(&sup_a, |s| s.configuration()).unwrap(),
+            read(&sup_a).unwrap().configuration(),
             ElementType::POI1,
         );
         row_a.add_cell(&[na0]).unwrap();
@@ -1234,7 +1234,7 @@ mod tests {
         a.add_entry(na0, "q", na1, "T", -1.0).unwrap();
 
         let mut row_b = SubMesh::new(
-            with(&sup_a, |s| s.configuration()).unwrap(),
+            read(&sup_a).unwrap().configuration(),
             ElementType::POI1,
         );
         row_b.add_cell(&[na1]).unwrap();

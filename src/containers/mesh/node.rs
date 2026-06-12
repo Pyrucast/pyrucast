@@ -17,25 +17,25 @@
 //! ```
 //! use pyrucast::containers::mesh::Configuration;
 //! use pyrucast::containers::mesh::Node;
-//! use pyrucast::store::{insert, with, with_mut};
+//! use pyrucast::store::{insert, read, write};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
 //! let n = Node::create_in(cfg.clone(), &[1.0, 2.0]).unwrap();
 //! assert_eq!(n.coord().unwrap(), vec![1.0, 2.0]);
 //!
 //! // The GC does not touch a node that a live Node still references.
-//! with_mut(&cfg, |c| assert_eq!(c.gc(), 0)).unwrap();
+//! assert_eq!(write(&cfg).unwrap().gc(), 0);
 //!
 //! let id = n.id();
 //! drop(n);
 //! // Now the refcount is 0; gc collects.
-//! with_mut(&cfg, |c| assert_eq!(c.gc(), 1)).unwrap();
-//! with(&cfg, |c| assert!(!c.is_alive(id))).unwrap();
+//! assert_eq!(write(&cfg).unwrap().gc(), 1);
+//! assert!(!read(&cfg).unwrap().is_alive(id));
 //! ```
 
 use crate::containers::mesh::{Configuration, NodeId};
 use crate::error::Result;
-use crate::store::{with, with_mut, Handle};
+use crate::store::{read, write, Handle};
 use std::fmt;
 
 /// RAII accessor to a node of a `Configuration`.
@@ -49,13 +49,13 @@ impl Node {
     /// referencing it (refcount = 1).
     pub fn create_in(cfg: Handle<Configuration>, coords: &[f64]) -> Result<Self> {
         // `add_node` initializes refcount = 1; this Node takes that unit.
-        let id = with_mut(&cfg, |c| c.add_node(coords))??;
+        let id = write(&cfg)?.add_node(coords)?;
         Ok(Self { handle: cfg, id })
     }
 
     /// Build an additional `Node` for an existing id (refcount += 1).
     pub fn acquire(cfg: Handle<Configuration>, id: NodeId) -> Result<Self> {
-        with_mut(&cfg, |c| c.incref(id))??;
+        write(&cfg)?.incref(id)?;
         Ok(Self { handle: cfg, id })
     }
 
@@ -79,20 +79,21 @@ impl Node {
 
     /// Coordinates (copied) in the `Configuration`'s active set.
     pub fn coord(&self) -> Result<Vec<f64>> {
-        let v = with(&self.handle, |c| c.coord(self.id).map(|s| s.to_vec()))??;
-        Ok(v)
+        Ok(read(&self.handle)?.coord(self.id)?.to_vec())
     }
 
     /// Set the coordinates of the node in the active set.
     pub fn set_coord(&self, coords: &[f64]) -> Result<()> {
-        with_mut(&self.handle, |c| c.set_coord(self.id, coords))??;
+        write(&self.handle)?.set_coord(self.id, coords)?;
         Ok(())
     }
 }
 
 impl Clone for Node {
     fn clone(&self) -> Self {
-        let _ = with_mut(&self.handle, |c| c.incref(self.id));
+        if let Ok(mut c) = write(&self.handle) {
+            let _ = c.incref(self.id);
+        }
         Self {
             handle: self.handle.clone(),
             id: self.id,
@@ -102,7 +103,9 @@ impl Clone for Node {
 
 impl Drop for Node {
     fn drop(&mut self) {
-        let _ = with_mut(&self.handle, |c| c.decref(self.id));
+        if let Ok(mut c) = write(&self.handle) {
+            let _ = c.decref(self.id);
+        }
     }
 }
 
@@ -155,11 +158,11 @@ mod tests {
         let cfg = insert(Configuration::new(2).unwrap());
         let n = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
         let id = n.id();
-        with_mut(&cfg, |c| assert_eq!(c.gc(), 0)).unwrap();
-        with(&cfg, |c| assert!(c.is_alive(id))).unwrap();
+        assert_eq!(write(&cfg).unwrap().gc(), 0);
+        assert!(read(&cfg).unwrap().is_alive(id));
         drop(n);
-        with_mut(&cfg, |c| assert_eq!(c.gc(), 1)).unwrap();
-        with(&cfg, |c| assert!(!c.is_alive(id))).unwrap();
+        assert_eq!(write(&cfg).unwrap().gc(), 1);
+        assert!(!read(&cfg).unwrap().is_alive(id));
     }
 
     #[test]
@@ -168,11 +171,11 @@ mod tests {
         let n = Node::create_in(cfg.clone(), &[1.0]).unwrap();
         let id = n.id();
         let m = n.clone();
-        with(&cfg, |c| assert_eq!(c.refcount(id), 2)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(id), 2);
         drop(n);
-        with(&cfg, |c| assert_eq!(c.refcount(id), 1)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(id), 1);
         drop(m);
-        with(&cfg, |c| assert_eq!(c.refcount(id), 0)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(id), 0);
     }
 
     #[test]
@@ -182,10 +185,10 @@ mod tests {
         let id = n.id();
         let m = Node::acquire(cfg.clone(), id).unwrap();
         assert_eq!(n.id(), m.id());
-        with(&cfg, |c| assert_eq!(c.refcount(id), 2)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(id), 2);
         drop(n);
         drop(m);
-        with(&cfg, |c| assert_eq!(c.refcount(id), 0)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(id), 0);
     }
 
     #[test]

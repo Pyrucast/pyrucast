@@ -42,14 +42,16 @@
 //!
 //! ```
 //! use pyrucast::containers::mesh::{Configuration, NodeId};
-//! use pyrucast::store::{insert, with, with_mut};
+//! use pyrucast::store::{insert, write};
 //!
 //! let h = insert(Configuration::new(2).unwrap());
-//! let a: NodeId = with_mut(&h, |c| c.add_node(&[0.0, 0.0])).unwrap().unwrap();
+//! let a: NodeId = write(&h).unwrap().add_node(&[0.0, 0.0]).unwrap();
 //! // add_node initializes refcount = 1: without decref, the node is protected.
-//! with_mut(&h, |c| { assert_eq!(c.gc(), 0); }).unwrap();
+//! assert_eq!(write(&h).unwrap().gc(), 0);
 //! // After decref, refcount drops to 0 and gc collects it.
-//! with_mut(&h, |c| { c.decref(a).unwrap(); assert_eq!(c.gc(), 1); }).unwrap();
+//! let mut c = write(&h).unwrap();
+//! c.decref(a).unwrap();
+//! assert_eq!(c.gc(), 1);
 //! ```
 
 use crate::error::{PyrucastError, Result};

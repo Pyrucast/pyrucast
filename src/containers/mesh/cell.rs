@@ -37,7 +37,7 @@ use crate::containers::mesh::ElementType;
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::SubMesh;
 use crate::containers::mesh::Node;
-use crate::store::{with, Handle};
+use crate::store::{read, Handle};
 
 /// Lightweight view on a single cell of a `SubMesh`.
 #[derive(Clone)]
@@ -50,7 +50,7 @@ impl Cell {
     /// Build a cell view. Errors if `idx` is past the submesh's
     /// `cell_count`.
     pub fn new(sm: Handle<SubMesh>, idx: usize) -> Result<Self> {
-        let n = with(&sm, |s| s.cell_count())?;
+        let n = read(&sm)?.cell_count();
         if idx >= n {
             return Err(PyrucastError::Message(format!(
                 "cell index {idx} out of range (cell_count={n})"
@@ -66,27 +66,26 @@ impl Cell {
 
     /// Element type of this cell (same as the parent submesh).
     pub fn element_type(&self) -> Result<ElementType> {
-        with(&self.sm, |s| s.element_type())
+        Ok(read(&self.sm)?.element_type())
     }
 
     /// Number of nodes that make up this cell (= `element_type().nodes_per_cell()`).
     pub fn nodes_per_cell(&self) -> Result<usize> {
-        with(&self.sm, |s| s.element_type().nodes_per_cell())
+        Ok(read(&self.sm)?.element_type().nodes_per_cell())
     }
 
     /// Raw connectivity (node ids) of this cell, in submesh order.
     pub fn node_ids(&self) -> Result<Vec<NodeId>> {
-        with(&self.sm, |s| {
-            let npc = s.element_type().nodes_per_cell();
-            s.connectivity()[self.idx * npc..(self.idx + 1) * npc].to_vec()
-        })
+        let s = read(&self.sm)?;
+        let npc = s.element_type().nodes_per_cell();
+        Ok(s.connectivity()[self.idx * npc..(self.idx + 1) * npc].to_vec())
     }
 
     /// Materialise the cell's nodes as a `Vec<Node>`. Each `Node`
     /// increments the node's refcount in the owning `Configuration`,
     /// matching the behaviour of `Configuration::add_node`.
     pub fn nodes(&self) -> Result<Vec<Node>> {
-        let cfg = with(&self.sm, |s| s.configuration())?;
+        let cfg = read(&self.sm)?.configuration();
         let ids = self.node_ids()?;
         ids.into_iter()
             .map(|id| Node::acquire(cfg.clone(), id))
@@ -121,26 +120,25 @@ impl crate::dump::Dump for Cell {
         };
         // Per-node coordinate table (one lock on the Configuration).
         let body = (|| -> Result<String> {
-            let cfg = with(&self.sm, |s| s.configuration())?;
+            let cfg = read(&self.sm)?.configuration();
             let ids = self.node_ids()?;
-            with(&cfg, |c| -> Result<String> {
-                let mut rows: Vec<Vec<String>> = Vec::with_capacity(ids.len());
-                let mut dim = 0usize;
-                for &id in &ids {
-                    let coord = c.coord(id)?;
-                    dim = dim.max(coord.len());
-                    let mut row = vec![id.to_string()];
-                    row.extend(coord.iter().map(|v| fmt_float(*v, opts.precision)));
-                    rows.push(row);
-                }
-                for row in &mut rows {
-                    row.resize(1 + dim, String::new());
-                }
-                const AXES: [&str; 3] = ["x", "y", "z"];
-                let mut headers = vec!["node".to_string()];
-                headers.extend((0..dim).map(|i| AXES.get(i).copied().unwrap_or("?").to_string()));
-                Ok(table(&headers, &rows, opts))
-            })?
+            let c = read(&cfg)?;
+            let mut rows: Vec<Vec<String>> = Vec::with_capacity(ids.len());
+            let mut dim = 0usize;
+            for &id in &ids {
+                let coord = c.coord(id)?;
+                dim = dim.max(coord.len());
+                let mut row = vec![id.to_string()];
+                row.extend(coord.iter().map(|v| fmt_float(*v, opts.precision)));
+                rows.push(row);
+            }
+            for row in &mut rows {
+                row.resize(1 + dim, String::new());
+            }
+            const AXES: [&str; 3] = ["x", "y", "z"];
+            let mut headers = vec!["node".to_string()];
+            headers.extend((0..dim).map(|i| AXES.get(i).copied().unwrap_or("?").to_string()));
+            Ok(table(&headers, &rows, opts))
         })();
         match body {
             Ok(t) => format!("{header}\n{t}"),

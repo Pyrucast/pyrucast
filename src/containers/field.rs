@@ -35,7 +35,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
-use crate::store::with;
+use crate::store::read;
 
 // ─── SubField ───────────────────────────────────────────────────────────────
 
@@ -119,10 +119,10 @@ where
     fn components(&self) -> Result<Vec<String>> {
         let mut out: Vec<String> = Vec::new();
         for h in self.iter() {
-            let comps = with(h, |s| s.components().to_vec())?;
-            for c in comps {
-                if !out.contains(&c) {
-                    out.push(c);
+            let s = read(h)?;
+            for c in s.components() {
+                if !out.contains(c) {
+                    out.push(c.clone());
                 }
             }
         }
@@ -154,12 +154,12 @@ where
 {
     let mut acc: Option<f64> = None;
     for h in agg.iter() {
-        let sub_val = with(h, |s| -> Result<Option<f64>> {
-            if s.component_index(component).is_none() {
-                return Ok(None);
-            }
-            fold_component(s, component, op_name, op).map(Some)
-        })??;
+        let s = read(h)?;
+        let sub_val = if s.component_index(component).is_none() {
+            None
+        } else {
+            Some(fold_component(&*s, component, op_name, op)?)
+        };
         if let Some(v) = sub_val {
             acc = Some(match acc {
                 Some(a) => op(a, v),
@@ -184,7 +184,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
     use crate::containers::node_field::SubNodeField;
-    use crate::store::{insert, with_mut, Handle};
+    use crate::store::{insert, write, Handle};
 
     fn make_node_field(values: &[f64]) -> SubNodeField {
         let cfg = insert(Configuration::new(1).unwrap());
@@ -282,12 +282,15 @@ mod tests {
     #[test]
     fn field_min_max_fold_across_subs() {
         let ef = make_two_zone_element_field();
-        with_mut(&ef.get(0).unwrap(), |s| s.set_uniform("k", 3.0).unwrap()).unwrap();
-        with_mut(&ef.get(1).unwrap(), |s| {
+        write(&ef.get(0).unwrap())
+            .unwrap()
+            .set_uniform("k", 3.0)
+            .unwrap();
+        {
+            let mut s = write(&ef.get(1).unwrap()).unwrap();
             s.set_uniform("k", -2.0).unwrap();
             s.set_uniform("E", 210e9).unwrap();
-        })
-        .unwrap();
+        }
         assert_eq!(Field::min(&ef, "k").unwrap(), -2.0);
         assert_eq!(Field::max(&ef, "k").unwrap(), 3.0);
         // E exists on the second zone only: folded over that zone alone.

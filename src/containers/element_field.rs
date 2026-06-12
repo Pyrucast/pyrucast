@@ -58,7 +58,7 @@
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::mesh::Node;
-//! use pyrucast::store::{insert, with, with_mut};
+//! use pyrucast::store::{insert, read, write};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
 //! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -74,25 +74,23 @@
 //! assert_eq!(mat.len(), 1);
 //!
 //! let sub0 = mat.get(0).unwrap();
-//! with_mut(&sub0, |s| {
+//! {
+//!     let mut s = write(&sub0).unwrap();
 //!     s.set_uniform("E", 210e9).unwrap();
 //!     s.set_uniform("nu", 0.3).unwrap();
-//! })
-//! .unwrap();
+//! }
 //!
-//! with(&sub0, |s| {
-//!     assert_eq!(s.cell_count(), 1);
-//!     assert_eq!(s.gauss_count(), 3);   // TRI3 Hammer
-//!     assert_eq!(s.component_count(), 2);
-//!     assert_eq!(s.value(0, 0, "E").unwrap(), 210e9);
-//! })
-//! .unwrap();
+//! let s = read(&sub0).unwrap();
+//! assert_eq!(s.cell_count(), 1);
+//! assert_eq!(s.gauss_count(), 3);   // TRI3 Hammer
+//! assert_eq!(s.component_count(), 2);
+//! assert_eq!(s.value(0, 0, "E").unwrap(), 210e9);
 //! ```
 
 use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::store::{insert, with, Handle};
+use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
@@ -125,9 +123,10 @@ impl SubElementField {
     /// - `components` contains a duplicate name.
     pub fn new(fespace: Handle<SubFiniteElementSpace>, components: Vec<String>) -> Result<Self> {
         check_components(&components)?;
-        let (n_cells, n_gauss) = with(&fespace, |s| -> Result<_> {
-            Ok((s.cell_count()?, s.gauss_count()))
-        })??;
+        let (n_cells, n_gauss) = {
+            let s = read(&fespace)?;
+            (s.cell_count()?, s.gauss_count())
+        };
         let n_comp = components.len();
         let values = vec![0.0; n_cells * n_gauss * n_comp];
         Ok(Self {
@@ -590,10 +589,10 @@ impl ElementField {
         fespace: &Handle<SubFiniteElementSpace>,
     ) -> Result<Handle<SubElementField>> {
         for h in self {
-            let matches = with(h, |s| {
-                let f = s.fespace();
+            let matches = {
+                let f = read(h)?.fespace();
                 f.index() == fespace.index() && f.generation() == fespace.generation()
-            })?;
+            };
             if matches {
                 return Ok(h.clone());
             }
@@ -649,7 +648,7 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::mesh::Node;
     use crate::containers::finite_element_space::QuadratureRule;
-    use crate::store::{insert, with, with_mut};
+    use crate::store::{insert, read, write};
 
     fn make_tri3_subfespace() -> Handle<SubFiniteElementSpace> {
         let cfg = insert(Configuration::new(2).unwrap());
@@ -920,21 +919,21 @@ mod tests {
         assert_eq!(ef.len(), 2);
 
         // TRI3: 1 cell × 3 gauss × 2 components
-        with(&ef.get(0).unwrap(), |s| {
+        {
+            let s = read(&ef.get(0).unwrap()).unwrap();
             assert_eq!(s.cell_count(), 1);
             assert_eq!(s.gauss_count(), 3);
             assert_eq!(s.component_count(), 2);
             assert_eq!(s.components(), &["E", "nu"]);
-        })
-        .unwrap();
+        }
 
         // QUA4: 1 cell × 4 gauss × 2 components
-        with(&ef.get(1).unwrap(), |s| {
+        {
+            let s = read(&ef.get(1).unwrap()).unwrap();
             assert_eq!(s.cell_count(), 1);
             assert_eq!(s.gauss_count(), 4);
             assert_eq!(s.component_count(), 2);
-        })
-        .unwrap();
+        }
     }
 
     #[test]
@@ -944,14 +943,11 @@ mod tests {
         let comps = vec![vec!["k".into()], vec!["E".into(), "nu".into()]];
         let ef = ElementField::with(&fes, &comps).unwrap();
         assert_eq!(ef.len(), 2);
-        with(&ef.get(0).unwrap(), |s| {
-            assert_eq!(s.components(), &["k"]);
-        })
-        .unwrap();
-        with(&ef.get(1).unwrap(), |s| {
-            assert_eq!(s.components(), &["E", "nu"]);
-        })
-        .unwrap();
+        assert_eq!(read(&ef.get(0).unwrap()).unwrap().components(), &["k"]);
+        assert_eq!(
+            read(&ef.get(1).unwrap()).unwrap().components(),
+            &["E", "nu"]
+        );
     }
 
     #[test]
@@ -989,7 +985,7 @@ mod tests {
         // Iteration walks all subfields in order.
         let counts: Vec<usize> = ef
             .into_iter()
-            .map(|h| with(h, |s| s.gauss_count()).unwrap())
+            .map(|h| read(h).unwrap().gauss_count())
             .collect();
         assert_eq!(counts, vec![3, 4]);
         // Indexing matches subfield().
@@ -1001,16 +997,16 @@ mod tests {
         let mesh = make_mesh_with_tri_and_qua();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();
-        with_mut(&ef.get(0).unwrap(), |s| s.set_uniform("k", 1.5).unwrap()).unwrap();
-        with_mut(&ef.get(1).unwrap(), |s| s.set_uniform("k", 2.5).unwrap()).unwrap();
-        with(&ef.get(0).unwrap(), |s| {
-            assert_eq!(s.value(0, 0, "k").unwrap(), 1.5);
-        })
-        .unwrap();
-        with(&ef.get(1).unwrap(), |s| {
-            assert_eq!(s.value(0, 0, "k").unwrap(), 2.5);
-        })
-        .unwrap();
+        write(&ef.get(0).unwrap()).unwrap().set_uniform("k", 1.5).unwrap();
+        write(&ef.get(1).unwrap()).unwrap().set_uniform("k", 2.5).unwrap();
+        assert_eq!(
+            read(&ef.get(0).unwrap()).unwrap().value(0, 0, "k").unwrap(),
+            1.5
+        );
+        assert_eq!(
+            read(&ef.get(1).unwrap()).unwrap().value(0, 0, "k").unwrap(),
+            2.5
+        );
     }
 
     #[test]

@@ -32,7 +32,7 @@
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::mesh::Node;
-//! use pyrucast::store::{insert, with};
+//! use pyrucast::store::{insert, read};
 //!
 //! let cfg = insert(Configuration::new(2).unwrap());
 //! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -44,16 +44,14 @@
 //!
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //! let sub = fes.get(0).unwrap();
-//! with(&sub, |s| {
-//!     assert_eq!(s.gauss_count(), 3);
-//!     // |J| of a triangle with vertices (0,0), (2,0), (0,2): the mapping
-//!     // is linear, |J| = 4 (twice the area, since ref triangle has area 1/2).
-//!     for g in 0..s.gauss_count() {
-//!         let dj = s.det_jacobian(0, g).unwrap();
-//!         assert!((dj - 4.0).abs() < 1e-12);
-//!     }
-//! })
-//! .unwrap();
+//! let s = read(&sub).unwrap();
+//! assert_eq!(s.gauss_count(), 3);
+//! // |J| of a triangle with vertices (0,0), (2,0), (0,2): the mapping
+//! // is linear, |J| = 4 (twice the area, since ref triangle has area 1/2).
+//! for g in 0..s.gauss_count() {
+//!     let dj = s.det_jacobian(0, g).unwrap();
+//!     assert!((dj - 4.0).abs() < 1e-12);
+//! }
 //! ```
 
 pub mod element;
@@ -69,7 +67,7 @@ use crate::containers::mesh::{Configuration, NodeId};
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::store::{insert, with, Handle};
+use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -114,7 +112,10 @@ impl SubFiniteElementSpace {
         interpolation: Interpolation,
         quadrature: QuadratureRule,
     ) -> Result<Self> {
-        let (et, cfg) = with(&submesh, |s| (s.element_type(), s.configuration()))?;
+        let (et, cfg) = {
+            let s = read(&submesh)?;
+            (s.element_type(), s.configuration())
+        };
         if et == ElementType::POI1 {
             return Err(PyrucastError::Message(
                 "SubFiniteElementSpace: POI1 submesh is not supported (no reference frame)".into(),
@@ -132,7 +133,7 @@ impl SubFiniteElementSpace {
                 quadrature, et
             )));
         }
-        let space_dim = with(&cfg, |c| c.dim())? as usize;
+        let space_dim = read(&cfg)?.dim() as usize;
         let ref_dim = et.topological_dim();
         if space_dim < ref_dim {
             return Err(PyrucastError::Message(format!(
@@ -174,7 +175,7 @@ impl SubFiniteElementSpace {
 
     /// Handle to the owning `Configuration` (internal clone).
     pub fn configuration(&self) -> Result<Handle<Configuration>> {
-        with(&self.submesh, |s| s.configuration())
+        Ok(read(&self.submesh)?.configuration())
     }
 
     /// Interpolation in use.
@@ -189,7 +190,7 @@ impl SubFiniteElementSpace {
 
     /// Element type of the submesh.
     pub fn element_type(&self) -> Result<ElementType> {
-        with(&self.submesh, |s| s.element_type())
+        Ok(read(&self.submesh)?.element_type())
     }
 
     /// Reference dimension (= topological dim of the element type).
@@ -209,7 +210,7 @@ impl SubFiniteElementSpace {
 
     /// Number of cells in the underlying submesh.
     pub fn cell_count(&self) -> Result<usize> {
-        with(&self.submesh, |s| s.cell_count())
+        Ok(read(&self.submesh)?.cell_count())
     }
 
     /// Number of Gauss points per cell.
@@ -304,26 +305,24 @@ impl SubFiniteElementSpace {
     /// `[n_nodes × space_dim]`, row-major (`[i * space_dim + a]`).
     fn cell_node_coords(&self, cell_idx: usize) -> Result<Vec<f64>> {
         let n_nodes = self.nodes_per_cell()?;
-        let (cfg, ids): (Handle<Configuration>, Vec<NodeId>) =
-            with(&self.submesh, |s| -> Result<_> {
-                let total = s.cell_count();
-                if cell_idx >= total {
-                    return Err(PyrucastError::Message(format!(
-                        "SubFiniteElementSpace: cell index {} ≥ cell_count {}",
-                        cell_idx, total
-                    )));
-                }
-                let conn = s.connectivity();
-                let ids = conn[cell_idx * n_nodes..(cell_idx + 1) * n_nodes].to_vec();
-                Ok((s.configuration(), ids))
-            })??;
-        let mut out = Vec::with_capacity(n_nodes * self.space_dim);
-        with(&cfg, |c| -> Result<()> {
-            for id in ids {
-                out.extend_from_slice(c.coord(id)?);
+        let (cfg, ids): (Handle<Configuration>, Vec<NodeId>) = {
+            let s = read(&self.submesh)?;
+            let total = s.cell_count();
+            if cell_idx >= total {
+                return Err(PyrucastError::Message(format!(
+                    "SubFiniteElementSpace: cell index {} ≥ cell_count {}",
+                    cell_idx, total
+                )));
             }
-            Ok(())
-        })??;
+            let conn = s.connectivity();
+            let ids = conn[cell_idx * n_nodes..(cell_idx + 1) * n_nodes].to_vec();
+            (s.configuration(), ids)
+        };
+        let mut out = Vec::with_capacity(n_nodes * self.space_dim);
+        let c = read(&cfg)?;
+        for id in ids {
+            out.extend_from_slice(c.coord(id)?);
+        }
         Ok(out)
     }
 
@@ -465,7 +464,7 @@ impl FiniteElementSpace {
     /// Iterator over every element of subspace `subspace_idx`.
     pub fn elements(&self, subspace_idx: usize) -> Result<ElementIter> {
         let sub = self.get(subspace_idx)?;
-        let n = with(&sub, |s| s.cell_count())??;
+        let n = read(&sub)?.cell_count()?;
         Ok(ElementIter::new(sub, n))
     }
 }
@@ -614,7 +613,7 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::containers::mesh::Node;
-    use crate::store::{insert, with};
+    use crate::store::{insert, read, write};
 
     fn cfg2d() -> Handle<Configuration> {
         insert(Configuration::new(2).unwrap())
@@ -843,7 +842,7 @@ mod tests {
         assert!((dj_before - 0.5).abs() < 1e-12);
 
         // Stretch the SEG2 to length 4 (move node b from x=1 to x=4).
-        crate::store::with_mut(&cfg, |c| c.set_coord(b.id(), &[4.0, 0.0])).unwrap().unwrap();
+        write(&cfg).unwrap().set_coord(b.id(), &[4.0, 0.0]).unwrap();
 
         let dj_after = sub.det_jacobian(0, 0).unwrap();
         assert!((dj_after - 2.0).abs() < 1e-12);
@@ -875,16 +874,16 @@ mod tests {
 
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         assert_eq!(fes.len(), 2);
-        with(&fes.get(0).unwrap(), |s| {
+        {
+            let s = read(&fes.get(0).unwrap()).unwrap();
             assert_eq!(s.element_type().unwrap(), ElementType::TRI3);
             assert_eq!(s.gauss_count(), 3);
-        })
-        .unwrap();
-        with(&fes.get(1).unwrap(), |s| {
+        }
+        {
+            let s = read(&fes.get(1).unwrap()).unwrap();
             assert_eq!(s.element_type().unwrap(), ElementType::QUA4);
             assert_eq!(s.gauss_count(), 4);
-        })
-        .unwrap();
+        }
     }
 
     #[test]
@@ -938,13 +937,13 @@ mod tests {
         let d = format!("{:?}", fes);
         assert!(d.contains("FiniteElementSpace"));
 
-        with(&fes.get(0).unwrap(), |sub| {
-            let s = format!("{}", sub);
+        {
+            let sub = read(&fes.get(0).unwrap()).unwrap();
+            let s = format!("{}", &*sub);
             assert!(s.contains("SubFiniteElementSpace"));
             assert!(s.contains("TRI3"));
             assert!(s.contains("LAGRANGE1"));
             assert!(s.contains("GAUSS"));
-        })
-        .unwrap();
+        }
     }
 }

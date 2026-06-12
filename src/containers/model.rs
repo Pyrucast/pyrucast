@@ -70,7 +70,7 @@
 //! use pyrucast::containers::model::{Model, SubModel};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::ops::assemble;
-//! use pyrucast::store::{insert, with};
+//! use pyrucast::store::insert;
 //!
 //! // 1-D Configuration with two nodes spanning [0, 1].
 //! let cfg = insert(Configuration::new(1).unwrap());
@@ -112,7 +112,7 @@ use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::Mesh;
 use crate::aggregate::Aggregate;
 use crate::models::{dirichlet, heat_conduction, Physics};
-use crate::store::{insert, with, Handle};
+use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -191,7 +191,7 @@ impl SubModel {
     /// `SubNodeField`.
     pub fn multiplier_nodes(&self) -> Result<Vec<NodeId>> {
         match self.as_physics().multiplier_support() {
-            Some(support) => with(support, |s| s.connectivity().to_vec()),
+            Some(support) => Ok(read(support)?.connectivity().to_vec()),
             None => Ok(Vec::new()),
         }
     }
@@ -353,7 +353,7 @@ impl Model {
     pub fn primal_vars(&self) -> Result<Vec<String>> {
         let mut all: Vec<String> = Vec::new();
         for h in self {
-            all.extend(with(h, |s| s.primal_vars())?);
+            all.extend(read(h)?.primal_vars());
         }
         Ok(union_names(all))
     }
@@ -364,7 +364,7 @@ impl Model {
     pub fn dual_vars(&self) -> Result<Vec<String>> {
         let mut all: Vec<String> = Vec::new();
         for h in self {
-            all.extend(with(h, |s| s.dual_vars())?);
+            all.extend(read(h)?.dual_vars());
         }
         Ok(union_names(all))
     }
@@ -397,7 +397,7 @@ mod tests {
     use crate::containers::mesh::Mesh;
     use crate::containers::mesh::Node;
     use crate::ops::assemble;
-    use crate::store::{insert, with_mut};
+    use crate::store::{insert, write};
 
     /// Returns `(cfg, a_id, b_id, model, materials)`.
     fn build_seg2_heat_model(
@@ -521,7 +521,7 @@ mod tests {
         let (cfg, a_id, _b_id, model, materials) = build_seg2_heat_model(1.0, 1.0, true);
 
         // The Configuration grew by one node (the multiplier).
-        let n_nodes = with(&cfg, |c| c.node_count()).unwrap();
+        let n_nodes = read(&cfg).unwrap().node_count();
         assert_eq!(n_nodes, 3);
 
         let k = assemble::stiffness(&model, &materials).unwrap();
@@ -560,7 +560,7 @@ mod tests {
         let a_id = a.id();
 
         // Before adding the sub-model: the Node holds 1 ref.
-        with(&cfg, |c| assert_eq!(c.refcount(a_id), 1)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(a_id), 1);
 
         let sub = SubModel::dirichlet(
             "T".into(),
@@ -570,16 +570,16 @@ mod tests {
         .unwrap();
 
         // After: the Node + the SubModel each hold 1 ref ⇒ 2.
-        with(&cfg, |c| assert_eq!(c.refcount(a_id), 2)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(a_id), 2);
         // The multiplier node has refcount 1 (owned by the sub-model).
         let mult_id = sub.multiplier_nodes().unwrap()[0];
-        with(&cfg, |c| assert_eq!(c.refcount(mult_id), 1)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(mult_id), 1);
 
         drop(sub);
         // Now back to 1 (only the Node remains).
-        with(&cfg, |c| assert_eq!(c.refcount(a_id), 1)).unwrap();
+        assert_eq!(read(&cfg).unwrap().refcount(a_id), 1);
         // And the multiplier is collectable.
-        with_mut(&cfg, |c| assert_eq!(c.gc(), 1)).unwrap();
+        assert_eq!(write(&cfg).unwrap().gc(), 1);
     }
 
     #[test]
