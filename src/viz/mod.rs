@@ -49,6 +49,7 @@ pub mod subdivide;
 pub mod window;
 
 use crate::error::{PyrucastError, Result};
+use crate::containers::field::Field as _;
 use crate::viz::drawable::Drawable;
 use std::path::Path;
 

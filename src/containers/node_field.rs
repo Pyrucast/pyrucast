@@ -100,7 +100,7 @@ impl SubNodeField {
     /// - `components` is empty,
     /// - `components` contains duplicate names.
     pub fn from_poi1(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
-        check_components(&components)?;
+        crate::containers::field::check_components("SubNodeField", &components)?;
 
         let nodes: Vec<NodeId> = {
             let sm = read(submesh)?;
@@ -134,7 +134,7 @@ impl SubNodeField {
         if element_type == ElementType::POI1 {
             return Self::from_poi1(submesh, components);
         }
-        check_components(&components)?;
+        crate::containers::field::check_components("SubNodeField", &components)?;
         let (cfg, nodes) = {
             let sm = read(submesh)?;
             let mut nodes: Vec<NodeId> = Vec::new();
@@ -337,62 +337,8 @@ impl SubNodeField {
         Ok(())
     }
 
-    // ── Opérations scalaires sur une composante ─────────────────────────────
-
-    /// Add `scalar` to every node's value for the named component.
-    pub fn add_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
-        let ci = self.component_index(component).ok_or_else(|| {
-            PyrucastError::Message(format!("unknown component: {}", component))
-        })?;
-        let ncomp = self.components.len();
-        for i in 0..self.nodes.len() {
-            self.values[i * ncomp + ci] += scalar;
-        }
-        Ok(())
-    }
-
-    /// Subtract `scalar` from every node's value for the named component.
-    pub fn sub_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
-        let ci = self.component_index(component).ok_or_else(|| {
-            PyrucastError::Message(format!("unknown component: {}", component))
-        })?;
-        let ncomp = self.components.len();
-        for i in 0..self.nodes.len() {
-            self.values[i * ncomp + ci] -= scalar;
-        }
-        Ok(())
-    }
-
-    /// Multiply every node's value for the named component by `scalar`.
-    pub fn mul_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
-        let ci = self.component_index(component).ok_or_else(|| {
-            PyrucastError::Message(format!("unknown component: {}", component))
-        })?;
-        let ncomp = self.components.len();
-        for i in 0..self.nodes.len() {
-            self.values[i * ncomp + ci] *= scalar;
-        }
-        Ok(())
-    }
-
-    /// Divide every node's value for the named component by `scalar`.
-    ///
-    /// Returns an error if `scalar` is zero.
-    pub fn div_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
-        if scalar == 0.0 {
-            return Err(PyrucastError::Message(
-                "div_to_component: division by zero".into(),
-            ));
-        }
-        let ci = self.component_index(component).ok_or_else(|| {
-            PyrucastError::Message(format!("unknown component: {}", component))
-        })?;
-        let ncomp = self.components.len();
-        for i in 0..self.nodes.len() {
-            self.values[i * ncomp + ci] /= scalar;
-        }
-        Ok(())
-    }
+    // Scalar per-component operations (`add_to_component`, …) come from
+    // the [`crate::containers::field::SubField`] trait.
 
     // ── Réduction sur maillage ──────────────────────────────────────────────
 
@@ -423,6 +369,9 @@ impl crate::containers::field::SubField for SubNodeField {
     }
     fn values(&self) -> &[f64] {
         &self.values
+    }
+    fn values_mut(&mut self) -> &mut [f64] {
+        &mut self.values
     }
 }
 
@@ -608,24 +557,6 @@ impl Div<f64> for &SubNodeField {
     }
 }
 
-fn check_components(components: &[String]) -> Result<()> {
-    if components.is_empty() {
-        return Err(PyrucastError::Message(
-            "SubNodeField requires at least one component".into(),
-        ));
-    }
-    for i in 0..components.len() {
-        for j in (i + 1)..components.len() {
-            if components[i] == components[j] {
-                return Err(PyrucastError::Message(format!(
-                    "duplicate component name: {}",
-                    components[i]
-                )));
-            }
-        }
-    }
-    Ok(())
-}
 
 // ─── NodeField (aggregate) ──────────────────────────────────────────────────
 
@@ -676,7 +607,7 @@ impl NodeField {
                 "NodeField: mesh has no submesh".into(),
             ));
         }
-        check_components(&components)?;
+        crate::containers::field::check_components("SubNodeField", &components)?;
         let mut field = Self::default();
         for h in mesh {
             let sub = SubNodeField::from_support(h, components.clone())?;
@@ -770,21 +701,6 @@ impl NodeField {
         Ok(self.node_ids()?.len())
     }
 
-    /// Zero-copy view of the zones, for operators doing many per-node
-    /// reads (gradient, solver, viz, …): one read guard per sub, data
-    /// read **in place** in the store for the lifetime of the view.
-    ///
-    /// Holding the view keeps a shared lock on every sub: concurrent
-    /// reads are free, writes to the subs wait until the view is dropped.
-    pub(crate) fn view(&self) -> Result<NodeFieldView> {
-        let components = crate::containers::field::Field::components(self)?;
-        let zones = self
-            .iter()
-            .map(crate::store::read)
-            .collect::<Result<Vec<_>>>()?;
-        Ok(NodeFieldView { zones, components })
-    }
-
     /// Visualize this field alone, as a **coloured point cloud** over
     /// its support nodes — the POI1 support carries no connectivity, so
     /// no surface can be drawn; use `Mesh::plot_with_field` with the
@@ -842,25 +758,13 @@ impl NodeField {
     }
 }
 
-/// Zero-copy view of a [`NodeField`]'s zones (see [`NodeField::view`]):
-/// one owned read guard per [`SubNodeField`], values read **in place**
-/// in the store. Reads mirror the aggregate: first zone defining
-/// `(node, component)` wins.
-pub(crate) struct NodeFieldView {
-    zones: Vec<crate::store::ReadGuard<SubNodeField>>,
-    /// Union of the zones' component names, first-seen order.
-    // Consumed by viz (feature-gated) — suppress false dead-code warning.
-    #[allow(dead_code)]
-    components: Vec<String>,
-}
+/// Zero-copy view of a [`NodeField`]'s zones — the
+/// [`crate::containers::field::FieldView`] aggregate view specialised
+/// to node fields (built by `Field::view`). Reads mirror the
+/// aggregate: first zone defining `(node, component)` wins.
+pub(crate) type NodeFieldView = crate::containers::field::FieldView<SubNodeField>;
 
 impl NodeFieldView {
-    /// Union of the zones' component names, first-seen order.
-    #[allow(dead_code)]
-    pub(crate) fn components(&self) -> &[String] {
-        &self.components
-    }
-
     /// Value at `(node, component)` — first zone wins; errors if absent.
     pub(crate) fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
         self.value_opt(nid, component).ok_or_else(|| {
@@ -884,6 +788,7 @@ impl NodeFieldView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::containers::field::SubField;
     use crate::containers::mesh::Node;
     use crate::store::insert;
 

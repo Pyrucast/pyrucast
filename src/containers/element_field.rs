@@ -88,6 +88,7 @@
 //! ```
 
 use crate::aggregate::Aggregate;
+use crate::containers::field::SubField;
 use crate::error::{PyrucastError, Result};
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::store::{insert, read, Handle};
@@ -122,7 +123,7 @@ impl SubElementField {
     /// - `components` is empty;
     /// - `components` contains a duplicate name.
     pub fn new(fespace: Handle<SubFiniteElementSpace>, components: Vec<String>) -> Result<Self> {
-        check_components(&components)?;
+        crate::containers::field::check_components("SubElementField", &components)?;
         let (n_cells, n_gauss) = {
             let s = read(&fespace)?;
             (s.cell_count()?, s.gauss_count())
@@ -260,52 +261,8 @@ impl SubElementField {
         Ok(())
     }
 
-    // ── Scalar operations on a single component ─────────────────────────────
-
-    /// Add `scalar` to every entry of `component`.
-    pub fn add_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
-        let c = self.component_index_or_err(component)?;
-        let n_comp = self.components.len();
-        for i in 0..self.n_cells * self.n_gauss {
-            self.values[i * n_comp + c] += scalar;
-        }
-        Ok(())
-    }
-
-    /// Subtract `scalar` from every entry of `component`.
-    pub fn sub_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
-        let c = self.component_index_or_err(component)?;
-        let n_comp = self.components.len();
-        for i in 0..self.n_cells * self.n_gauss {
-            self.values[i * n_comp + c] -= scalar;
-        }
-        Ok(())
-    }
-
-    /// Multiply every entry of `component` by `scalar`.
-    pub fn mul_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
-        let c = self.component_index_or_err(component)?;
-        let n_comp = self.components.len();
-        for i in 0..self.n_cells * self.n_gauss {
-            self.values[i * n_comp + c] *= scalar;
-        }
-        Ok(())
-    }
-
-    /// Divide every entry of `component` by `scalar` (errors on zero).
-    pub fn div_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
-        if scalar == 0.0 {
-            return Err(PyrucastError::Message(
-                "div_to_component: division by zero".into(),
-            ));
-        }
-        let c = self.component_index_or_err(component)?;
-        let n_comp = self.components.len();
-        for i in 0..self.n_cells * self.n_gauss {
-            self.values[i * n_comp + c] /= scalar;
-        }
-        Ok(())
-    }
+    // Scalar per-component operations (`add_to_component`, …) come from
+    // the [`crate::containers::field::SubField`] trait.
 
     // ── Internals ───────────────────────────────────────────────────────────
 
@@ -355,10 +312,6 @@ impl SubElementField {
         Ok(())
     }
 
-    fn component_index_or_err(&self, component: &str) -> Result<usize> {
-        self.component_index(component)
-            .ok_or_else(|| PyrucastError::Message(format!("unknown component: {}", component)))
-    }
 }
 
 impl crate::containers::field::SubField for SubElementField {
@@ -368,26 +321,11 @@ impl crate::containers::field::SubField for SubElementField {
     fn values(&self) -> &[f64] {
         &self.values
     }
+    fn values_mut(&mut self) -> &mut [f64] {
+        &mut self.values
+    }
 }
 
-fn check_components(components: &[String]) -> Result<()> {
-    if components.is_empty() {
-        return Err(PyrucastError::Message(
-            "SubElementField requires at least one component".into(),
-        ));
-    }
-    for i in 0..components.len() {
-        for j in (i + 1)..components.len() {
-            if components[i] == components[j] {
-                return Err(PyrucastError::Message(format!(
-                    "duplicate component name: {}",
-                    components[i]
-                )));
-            }
-        }
-    }
-    Ok(())
-}
 
 // ─── Clone ─────────────────────────────────────────────────────────────────
 
@@ -568,7 +506,7 @@ impl ElementField {
                 "ElementField: FE space has no subspace".into(),
             ));
         }
-        check_components(&components)?;
+        crate::containers::field::check_components("SubElementField", &components)?;
         let mut subs = Vec::with_capacity(n_sub);
         for i in 0..n_sub {
             let sub = fespace.get(i)?;
@@ -665,44 +603,20 @@ impl ElementField {
         )
     }
 
-    /// Zero-copy view of the zones, mirroring
-    /// [`NodeField::view`](crate::containers::node_field::NodeField):
-    /// one owned read guard per [`SubElementField`], values read **in
-    /// place** in the store for the lifetime of the view.
-    // Consumed by the viz layer (feature-gated).
-    #[allow(dead_code)]
-    pub(crate) fn view(&self) -> Result<ElementFieldView> {
-        let components = crate::containers::field::Field::components(self)?;
-        let zones = self
-            .iter()
-            .map(crate::store::read)
-            .collect::<Result<Vec<_>>>()?;
-        Ok(ElementFieldView { zones, components })
-    }
 }
 
-/// Zero-copy view of an [`ElementField`]'s zones (see
-/// [`ElementField::view`]) — the Gauss-point counterpart of
-/// [`crate::containers::node_field::NodeFieldView`]. A zone is resolved
+/// Zero-copy view of an [`ElementField`]'s zones — the
+/// [`crate::containers::field::FieldView`] aggregate view specialised
+/// to Gauss-point fields (built by `Field::view`). A zone is resolved
 /// from its support submesh by handle identity (idx + generation),
 /// the reciprocal of [`ElementField::sub_for_fespace`].
-// Consumed by the viz layer (feature-gated).
-#[allow(dead_code)]
-pub(crate) struct ElementFieldView {
-    zones: Vec<crate::store::ReadGuard<SubElementField>>,
-    /// Union of the zones' component names, first-seen order.
-    components: Vec<String>,
-}
+pub(crate) type ElementFieldView = crate::containers::field::FieldView<SubElementField>;
 
-#[allow(dead_code)]
 impl ElementFieldView {
-    /// Union of the zones' component names, first-seen order.
-    pub(crate) fn components(&self) -> &[String] {
-        &self.components
-    }
-
     /// The zone supported on `submesh` (matched through the zone's FE
     /// subspace), or `None` if no zone lives on it.
+    // Consumed by the viz layer (feature-gated).
+    #[allow(dead_code)]
     pub(crate) fn zone_for_submesh(
         &self,
         submesh: &Handle<crate::containers::mesh::SubMesh>,

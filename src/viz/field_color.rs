@@ -685,6 +685,7 @@ impl<'a> Drawable for NodeFieldPointsView<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::containers::field::Field;
     use crate::containers::mesh::Configuration;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::SubMesh as RawSubMesh;

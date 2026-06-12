@@ -35,7 +35,50 @@
 
 use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
-use crate::store::read;
+use crate::persist::Persist;
+use crate::store::{read, ReadGuard};
+use std::any::Any;
+
+/// Validate a component-name list: non-empty, no duplicate names.
+/// `kind` names the container in the error message.
+pub(crate) fn check_components(kind: &str, components: &[String]) -> Result<()> {
+    if components.is_empty() {
+        return Err(PyrucastError::Message(format!(
+            "{kind} requires at least one component"
+        )));
+    }
+    for i in 0..components.len() {
+        for j in (i + 1)..components.len() {
+            if components[i] == components[j] {
+                return Err(PyrucastError::Message(format!(
+                    "duplicate component name: {}",
+                    components[i]
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Zero-copy view of a field aggregate's zones: one owned read guard
+/// per sub-field plus the union of the component names, built by
+/// [`Field::view`]. Holding the view keeps a shared lock on every sub:
+/// concurrent reads are free, writes wait until the view is dropped.
+///
+/// The kind-specific reading methods live next to each concrete sub
+/// type, on the [`crate::containers::node_field::NodeFieldView`] and
+/// [`crate::containers::element_field::ElementFieldView`] aliases.
+pub struct FieldView<S: Persist + Any + Send + Sync> {
+    pub(crate) zones: Vec<ReadGuard<S>>,
+    components: Vec<String>,
+}
+
+impl<S: Persist + Any + Send + Sync> FieldView<S> {
+    /// Union of the zones' component names, first-seen order.
+    pub fn components(&self) -> &[String] {
+        &self.components
+    }
+}
 
 // ─── SubField ───────────────────────────────────────────────────────────────
 
@@ -60,6 +103,54 @@ pub trait SubField {
     /// Index of a named component, or `None` if absent.
     fn component_index(&self, name: &str) -> Option<usize> {
         self.components().iter().position(|c| c == name)
+    }
+
+    /// Index of a named component, or an error naming it.
+    fn component_index_or_err(&self, name: &str) -> Result<usize> {
+        self.component_index(name).ok_or_else(|| {
+            PyrucastError::Message(format!("unknown component: {}", name))
+        })
+    }
+
+    /// Flat value buffer, mutable (same layout as [`SubField::values`]).
+    fn values_mut(&mut self) -> &mut [f64];
+
+    /// Add `scalar` to every entry of the named component.
+    fn add_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
+        self.map_component(component, |v| v + scalar)
+    }
+
+    /// Subtract `scalar` from every entry of the named component.
+    fn sub_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
+        self.map_component(component, |v| v - scalar)
+    }
+
+    /// Multiply every entry of the named component by `scalar`.
+    fn mul_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
+        self.map_component(component, |v| v * scalar)
+    }
+
+    /// Divide every entry of the named component by `scalar`.
+    ///
+    /// Returns an error if `scalar` is zero.
+    fn div_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
+        if scalar == 0.0 {
+            return Err(PyrucastError::Message(
+                "div_to_component: division by zero".into(),
+            ));
+        }
+        self.map_component(component, |v| v / scalar)
+    }
+
+    /// Apply `f` to every entry of the named component (stride =
+    /// component count, offset = component index).
+    fn map_component(&mut self, component: &str, f: impl Fn(f64) -> f64) -> Result<()> {
+        let ci = self.component_index_or_err(component)?;
+        let ncomp = self.component_count();
+        for v in self.values_mut()[ci..].iter_mut().step_by(ncomp) {
+            *v = f(*v);
+        }
+        Ok(())
     }
 
     /// Smallest value of the named component.
@@ -141,6 +232,16 @@ where
     /// Errors if no sub defines the component.
     fn max(&self, component: &str) -> Result<f64> {
         fold_subs(self, component, "max", f64::max)
+    }
+
+    /// Zero-copy view of the zones, for operators doing many reads
+    /// (gradient, solver, viz, …): one read guard per sub, data read
+    /// **in place** in the store for the lifetime of the view.
+    fn view(&self) -> Result<FieldView<Self::Sub>> {
+        Ok(FieldView {
+            components: self.components()?,
+            zones: self.iter().map(read).collect::<Result<_>>()?,
+        })
     }
 }
 

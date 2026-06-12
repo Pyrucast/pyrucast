@@ -77,6 +77,7 @@
 //! ```
 
 use crate::containers::mesh::NodeId;
+use crate::containers::field::Field;
 use crate::error::{PyrucastError, Result};
 use crate::containers::matrix::Matrix;
 use crate::containers::mesh::SubMesh;

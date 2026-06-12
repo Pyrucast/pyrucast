@@ -1,6 +1,7 @@
 //! Python wrappers for [`crate::containers::node_field::SubNodeField`] and
 //! [`crate::containers::node_field::NodeField`].
 
+use crate::containers::field::SubField;
 use crate::aggregate::Aggregate;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::py::mesh::{PyMesh, PySubMesh};

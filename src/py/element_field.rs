@@ -1,6 +1,7 @@
 //! Python wrappers for [`crate::containers::element_field::SubElementField`] and
 //! [`crate::containers::element_field::ElementField`].
 
+use crate::containers::field::SubField;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::store::{insert, read, write, Handle};
