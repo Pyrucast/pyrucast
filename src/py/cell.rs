@@ -3,7 +3,7 @@
 use crate::containers::mesh::Cell;
 use crate::containers::mesh::Node;
 use crate::py::node::PyNode;
-use crate::store::with;
+use crate::store::read;
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 
@@ -62,7 +62,7 @@ impl PyCell {
         }
         let ids = self.inner.node_ids()?;
         let id = ids[normalized as usize];
-        let cfg = with(&self.inner.sm, |s| s.configuration())?;
+        let cfg = read(&self.inner.sm)?.configuration();
         let node = Node::acquire(cfg, id)?;
         Ok(PyNode::from_node(node))
     }

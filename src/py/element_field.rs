@@ -3,7 +3,7 @@
 
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::py::finite_element_space::PyFiniteElementSpace;
-use crate::store::{insert, with, Handle};
+use crate::store::{insert, read, write, Handle};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -22,43 +22,43 @@ pub struct PySubElementField {
 impl PySubElementField {
     /// Number of cells (elements) this field covers.
     fn cell_count(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |f| f.cell_count())?)
+        Ok(read(&self.handle)?.cell_count())
     }
 
     /// Number of Gauss points per cell.
     fn gauss_count(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |f| f.gauss_count())?)
+        Ok(read(&self.handle)?.gauss_count())
     }
 
     /// Number of components stored per point.
     fn component_count(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |f| f.component_count())?)
+        Ok(read(&self.handle)?.component_count())
     }
 
     /// Component names, in order.
     fn components(&self) -> PyResult<Vec<String>> {
-        Ok(with(&self.handle, |f| f.components().to_vec())?)
+        Ok(read(&self.handle)?.components().to_vec())
     }
 
     /// Index of component `name`, or `None` if unknown.
     fn component_index(&self, name: &str) -> PyResult<Option<usize>> {
-        Ok(with(&self.handle, |f| f.component_index(name))?)
+        Ok(read(&self.handle)?.component_index(name))
     }
 
     /// Value at `(cell, gauss)` for component index `comp`.
     fn get(&self, cell: usize, gauss: usize, comp: usize) -> PyResult<f64> {
-        Ok(with(&self.handle, |f| f.get(cell, gauss, comp))??)
+        Ok(read(&self.handle)?.get(cell, gauss, comp)?)
     }
 
     /// Set the value at `(cell, gauss)` for component index `comp`.
     fn set(&self, cell: usize, gauss: usize, comp: usize, value: f64) -> PyResult<()> {
-        crate::store::with_mut(&self.handle, |f| f.set(cell, gauss, comp, value))??;
+        write(&self.handle)?.set(cell, gauss, comp, value)?;
         Ok(())
     }
 
     /// Value at `(cell, gauss)` for the named `component`.
     fn value(&self, cell: usize, gauss: usize, component: &str) -> PyResult<f64> {
-        Ok(with(&self.handle, |f| f.value(cell, gauss, component))??)
+        Ok(read(&self.handle)?.value(cell, gauss, component)?)
     }
 
     /// Set the value at `(cell, gauss)` for the named `component`.
@@ -69,94 +69,88 @@ impl PySubElementField {
         component: &str,
         value: f64,
     ) -> PyResult<()> {
-        crate::store::with_mut(&self.handle, |f| {
-            f.set_value(cell, gauss, component, value)
-        })??;
+        write(&self.handle)?.set_value(cell, gauss, component, value)?;
         Ok(())
     }
 
     /// All component values at `(cell, gauss)`, in component order.
     fn point_values(&self, cell: usize, gauss: usize) -> PyResult<Vec<f64>> {
-        Ok(with(&self.handle, |f| {
-            f.point_values(cell, gauss).map(|s| s.to_vec())
-        })??)
+        Ok(read(&self.handle)?.point_values(cell, gauss)?.to_vec())
     }
 
     /// Set `component` to `value` at every point.
     fn set_uniform(&self, component: &str, value: f64) -> PyResult<()> {
-        crate::store::with_mut(&self.handle, |f| f.set_uniform(component, value))??;
+        write(&self.handle)?.set_uniform(component, value)?;
         Ok(())
     }
 
     /// Set `component` to `value` at every point of `cell`.
     fn set_cell_uniform(&self, cell: usize, component: &str, value: f64) -> PyResult<()> {
-        crate::store::with_mut(&self.handle, |f| {
-            f.set_cell_uniform(cell, component, value)
-        })??;
+        write(&self.handle)?.set_cell_uniform(cell, component, value)?;
         Ok(())
     }
 
     /// Smallest value of the named `component`.
     fn min(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::SubField;
-        Ok(with(&self.handle, |f| SubField::min(f, component))??)
+        Ok(SubField::min(&*read(&self.handle)?, component)?)
     }
 
     /// Largest value of the named `component`.
     fn max(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::SubField;
-        Ok(with(&self.handle, |f| SubField::max(f, component))??)
+        Ok(SubField::max(&*read(&self.handle)?, component)?)
     }
 
     /// Add `scalar` to every value of `component` (in place).
     fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        crate::store::with_mut(&self.handle, |f| f.add_to_component(component, scalar))??;
+        write(&self.handle)?.add_to_component(component, scalar)?;
         Ok(())
     }
 
     /// Subtract `scalar` from every value of `component` (in place).
     fn sub_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        crate::store::with_mut(&self.handle, |f| f.sub_to_component(component, scalar))??;
+        write(&self.handle)?.sub_to_component(component, scalar)?;
         Ok(())
     }
 
     /// Multiply every value of `component` by `scalar` (in place).
     fn mul_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        crate::store::with_mut(&self.handle, |f| f.mul_to_component(component, scalar))??;
+        write(&self.handle)?.mul_to_component(component, scalar)?;
         Ok(())
     }
 
     /// Divide every value of `component` by `scalar` (in place).
     fn div_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        crate::store::with_mut(&self.handle, |f| f.div_to_component(component, scalar))??;
+        write(&self.handle)?.div_to_component(component, scalar)?;
         Ok(())
     }
 
     // ── Scalar operators (return a new sub-field) ───────────────────────
 
     fn __add__(&self, rhs: f64) -> PyResult<PySubElementField> {
-        let res = with(&self.handle, |f| f + rhs)?;
+        let res = &*read(&self.handle)? + rhs;
         Ok(PySubElementField {
             handle: insert(res),
         })
     }
 
     fn __sub__(&self, rhs: f64) -> PyResult<PySubElementField> {
-        let res = with(&self.handle, |f| f - rhs)?;
+        let res = &*read(&self.handle)? - rhs;
         Ok(PySubElementField {
             handle: insert(res),
         })
     }
 
     fn __mul__(&self, rhs: f64) -> PyResult<PySubElementField> {
-        let res = with(&self.handle, |f| f * rhs)?;
+        let res = &*read(&self.handle)? * rhs;
         Ok(PySubElementField {
             handle: insert(res),
         })
     }
 
     fn __truediv__(&self, rhs: f64) -> PyResult<PySubElementField> {
-        let res = with(&self.handle, |f| f / rhs)?;
+        let res = &*read(&self.handle)? / rhs;
         Ok(PySubElementField {
             handle: insert(res),
         })
@@ -166,23 +160,24 @@ impl PySubElementField {
     /// is unknown.
     fn __getitem__(&self, key: (usize, usize, String)) -> PyResult<f64> {
         let (cell, gauss, comp) = key;
-        with(&self.handle, |f| f.value(cell, gauss, &comp))?
+        read(&self.handle)?
+            .value(cell, gauss, &comp)
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
     /// `field[cell, gauss, "name"] = value`.
     fn __setitem__(&self, key: (usize, usize, String), value: f64) -> PyResult<()> {
         let (cell, gauss, comp) = key;
-        crate::store::with_mut(&self.handle, |f| f.set_value(cell, gauss, &comp, value))??;
+        write(&self.handle)?.set_value(cell, gauss, &comp, value)?;
         Ok(())
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |f| format!("{:?}", f))?)
+        Ok(format!("{:?}", &*read(&self.handle)?))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |f| format!("{}", f))?)
+        Ok(format!("{}", &*read(&self.handle)?))
     }
 }
 

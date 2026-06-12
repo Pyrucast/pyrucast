@@ -6,7 +6,7 @@ use crate::containers::model::{Model, SubModel};
 use crate::py::node::PyNode;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
-use crate::store::{with, Handle};
+use crate::store::{read, Handle};
 use pyo3::prelude::*;
 
 /// A **view** into one sub-model of a `Model`, obtained by indexing
@@ -24,44 +24,43 @@ pub struct PySubModel {
 impl PySubModel {
     /// Names of the primal (primary) variables of this sub-model.
     fn primal_vars(&self) -> PyResult<Vec<String>> {
-        Ok(with(&self.handle, |s| s.primal_vars())?)
+        Ok(read(&self.handle)?.primal_vars())
     }
 
     /// Names of the dual variables of this sub-model.
     fn dual_vars(&self) -> PyResult<Vec<String>> {
-        Ok(with(&self.handle, |s| s.dual_vars())?)
+        Ok(read(&self.handle)?.dual_vars())
     }
 
     /// POI1 `Mesh` of the multiplier nodes (Lagrange physics only — empty
     /// otherwise). Build a load `SubNodeField` on `mesh[0]` to impose the
     /// constrained values, or read the nodes via `mesh.node(0, i, 0)`.
     fn multiplier_mesh(&self) -> PyResult<PyMesh> {
-        let mesh = with(&self.handle, |s| s.multiplier_mesh())??;
+        let mesh = read(&self.handle)?.multiplier_mesh()?;
         Ok(PyMesh { inner: mesh })
     }
 
     /// Names of the material components this sub-model expects, or
     /// `None` for physics that don't need material data (Dirichlet, …).
     fn material_components(&self) -> PyResult<Option<Vec<String>>> {
-        Ok(with(&self.handle, |s| {
-            s.material_components()
-                .map(|c| c.iter().map(|s| s.to_string()).collect())
-        })?)
+        Ok(read(&self.handle)?
+            .material_components()
+            .map(|c| c.iter().map(|s| s.to_string()).collect()))
     }
 
     /// Whether this sub-model carries a constitutive behaviour that can be
     /// integrated with `deformation` / `integrate_behavior` (`True` for
     /// volumetric physics, `False` for constraints like Dirichlet).
     fn has_behavior(&self) -> PyResult<bool> {
-        Ok(with(&self.handle, |s| s.has_behavior())?)
+        Ok(read(&self.handle)?.has_behavior())
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |s| format!("{:?}", s))?)
+        Ok(format!("{:?}", &*read(&self.handle)?))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |s| format!("{}", s))?)
+        Ok(format!("{}", &*read(&self.handle)?))
     }
 }
 

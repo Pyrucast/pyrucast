@@ -6,7 +6,7 @@
 
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::model::{PyModel, PySubModel};
-use crate::store::{insert, with};
+use crate::store::{insert, read};
 use pyo3::prelude::*;
 
 /// Build the material `SubElementField` of one sub-model.
@@ -25,9 +25,7 @@ pub fn sub_material_field(
         .iter()
         .map(|(c, v)| (c.as_str(), *v))
         .collect();
-    let sub = with(&sub_model.handle, |s| {
-        crate::ops::build::sub_material_field(s, &pairs)
-    })??;
+    let sub = crate::ops::build::sub_material_field(&*read(&sub_model.handle)?, &pairs)?;
     Ok(PySubElementField { handle: insert(sub) })
 }
 

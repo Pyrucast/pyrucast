@@ -5,7 +5,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::py::mesh::{PyMesh, PySubMesh};
 use crate::py::node::PyNode;
-use crate::store::{insert, with, with_mut, Handle};
+use crate::store::{insert, read, write, Handle};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
@@ -25,141 +25,139 @@ pub struct PySubNodeField {
 impl PySubNodeField {
     /// Number of nodes in the support.
     fn node_count(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |f| f.node_count())?)
+        Ok(read(&self.handle)?.node_count())
     }
 
     /// Number of components stored per node.
     fn component_count(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |f| f.component_count())?)
+        Ok(read(&self.handle)?.component_count())
     }
 
     /// Component names, in order.
     fn components(&self) -> PyResult<Vec<String>> {
-        Ok(with(&self.handle, |f| f.components().to_vec())?)
+        Ok(read(&self.handle)?.components().to_vec())
     }
 
     /// Value at node index `node_idx`, component index `comp_idx`.
     fn get(&self, node_idx: usize, comp_idx: usize) -> PyResult<f64> {
-        Ok(with(&self.handle, |f| f.get(node_idx, comp_idx))??)
+        Ok(read(&self.handle)?.get(node_idx, comp_idx)?)
     }
 
     /// Set the value at node index `node_idx`, component index `comp_idx`.
     fn set(&self, node_idx: usize, comp_idx: usize, value: f64) -> PyResult<()> {
-        with_mut(&self.handle, |f| f.set(node_idx, comp_idx, value))??;
+        write(&self.handle)?.set(node_idx, comp_idx, value)?;
         Ok(())
     }
 
     /// Value at `node`, component index `comp_idx`.
     fn get_by_node(&self, node: PyRef<'_, PyNode>, comp_idx: usize) -> PyResult<f64> {
         let nid = node.as_node().id();
-        Ok(with(&self.handle, |f| f.get_by_node(nid, comp_idx))??)
+        Ok(read(&self.handle)?.get_by_node(nid, comp_idx)?)
     }
 
     /// Set the value at `node`, component index `comp_idx`.
     fn set_by_node(&self, node: PyRef<'_, PyNode>, comp_idx: usize, value: f64) -> PyResult<()> {
         let nid = node.as_node().id();
-        with_mut(&self.handle, |f| {
-            f.set_by_node(nid, comp_idx, value)
-        })??;
+        write(&self.handle)?.set_by_node(nid, comp_idx, value)?;
         Ok(())
     }
 
     /// Index of component `name`, or `None` if unknown.
     fn component_index(&self, name: &str) -> PyResult<Option<usize>> {
-        Ok(with(&self.handle, |f| f.component_index(name))?)
+        Ok(read(&self.handle)?.component_index(name))
     }
 
     /// All component values at node index `node_idx`, in order.
     fn node_values(&self, node_idx: usize) -> PyResult<Vec<f64>> {
-        Ok(with(&self.handle, |f| f.node_values(node_idx).map(|s| s.to_vec()))??)
+        Ok(read(&self.handle)?.node_values(node_idx)?.to_vec())
     }
 
     /// The POI1 `SubMesh` this sub-field is supported on.
     fn support_submesh(&self) -> PyResult<PySubMesh> {
-        let sm = with(&self.handle, |f| f.support_submesh())??;
+        let sm = read(&self.handle)?.support_submesh()?;
         Ok(PySubMesh { handle: insert(sm) })
     }
 
     /// The POI1 `Mesh` this sub-field is supported on.
     fn support_mesh(&self) -> PyResult<PyMesh> {
-        let mesh = with(&self.handle, |f| f.support_mesh())??;
+        let mesh = read(&self.handle)?.support_mesh()?;
         Ok(PyMesh { inner: mesh })
     }
 
     /// Value at `node` for the named `component`.
     fn value(&self, node: PyRef<'_, PyNode>, component: &str) -> PyResult<f64> {
         let nid = node.as_node().id();
-        Ok(with(&self.handle, |f| f.value(nid, component))??)
+        Ok(read(&self.handle)?.value(nid, component)?)
     }
 
     /// Set the value at `node` for the named `component`.
     fn set_value(&self, node: PyRef<'_, PyNode>, component: &str, value: f64) -> PyResult<()> {
         let nid = node.as_node().id();
-        with_mut(&self.handle, |f| f.set_value(nid, component, value))??;
+        write(&self.handle)?.set_value(nid, component, value)?;
         Ok(())
     }
 
     /// Smallest value of the named `component`.
     fn min(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::SubField;
-        Ok(with(&self.handle, |f| SubField::min(f, component))??)
+        Ok(SubField::min(&*read(&self.handle)?, component)?)
     }
 
     /// Largest value of the named `component`.
     fn max(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::SubField;
-        Ok(with(&self.handle, |f| SubField::max(f, component))??)
+        Ok(SubField::max(&*read(&self.handle)?, component)?)
     }
 
     /// Add `scalar` to every value of `component` (in place).
     fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        with_mut(&self.handle, |f| f.add_to_component(component, scalar))??;
+        write(&self.handle)?.add_to_component(component, scalar)?;
         Ok(())
     }
 
     /// Subtract `scalar` from every value of `component` (in place).
     fn sub_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        with_mut(&self.handle, |f| f.sub_to_component(component, scalar))??;
+        write(&self.handle)?.sub_to_component(component, scalar)?;
         Ok(())
     }
 
     /// Multiply every value of `component` by `scalar` (in place).
     fn mul_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        with_mut(&self.handle, |f| f.mul_to_component(component, scalar))??;
+        write(&self.handle)?.mul_to_component(component, scalar)?;
         Ok(())
     }
 
     /// Divide every value of `component` by `scalar` (in place).
     fn div_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        with_mut(&self.handle, |f| f.div_to_component(component, scalar))??;
+        write(&self.handle)?.div_to_component(component, scalar)?;
         Ok(())
     }
 
     // ── Scalar operators (return a new sub-field) ───────────────────────
 
     fn __add__(&self, rhs: f64) -> PyResult<PySubNodeField> {
-        let result = with(&self.handle, |f| f + rhs)?;
+        let result = &*read(&self.handle)? + rhs;
         Ok(PySubNodeField {
             handle: insert(result),
         })
     }
 
     fn __sub__(&self, rhs: f64) -> PyResult<PySubNodeField> {
-        let result = with(&self.handle, |f| f - rhs)?;
+        let result = &*read(&self.handle)? - rhs;
         Ok(PySubNodeField {
             handle: insert(result),
         })
     }
 
     fn __mul__(&self, rhs: f64) -> PyResult<PySubNodeField> {
-        let result = with(&self.handle, |f| f * rhs)?;
+        let result = &*read(&self.handle)? * rhs;
         Ok(PySubNodeField {
             handle: insert(result),
         })
     }
 
     fn __truediv__(&self, rhs: f64) -> PyResult<PySubNodeField> {
-        let result = with(&self.handle, |f| f / rhs)?;
+        let result = &*read(&self.handle)? / rhs;
         Ok(PySubNodeField {
             handle: insert(result),
         })
@@ -169,23 +167,23 @@ impl PySubNodeField {
     fn __getitem__(&self, key: (PyRef<'_, PyNode>, String)) -> PyResult<f64> {
         let (node, comp) = key;
         let nid = node.as_node().id();
-        Ok(with(&self.handle, |f| f.value(nid, &comp))??)
+        Ok(read(&self.handle)?.value(nid, &comp)?)
     }
 
     /// `subfield[node, "UX"] = v` — raises if the node or component is absent.
     fn __setitem__(&self, key: (PyRef<'_, PyNode>, String), value: f64) -> PyResult<()> {
         let (node, comp) = key;
         let nid = node.as_node().id();
-        with_mut(&self.handle, |f| f.set_value(nid, &comp, value))??;
+        write(&self.handle)?.set_value(nid, &comp, value)?;
         Ok(())
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |f| format!("{:?}", f))?)
+        Ok(format!("{:?}", &*read(&self.handle)?))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |f| format!("{}", f))?)
+        Ok(format!("{}", &*read(&self.handle)?))
     }
 }
 
@@ -278,7 +276,7 @@ impl PyNodeField {
     fn support_mesh(&self) -> PyResult<PyMesh> {
         let mut mesh = crate::containers::mesh::Mesh::empty();
         for h in &self.inner {
-            let sm = with(h, |s| s.support())?;
+            let sm = read(h)?.support();
             mesh.add_sub(sm)?;
         }
         Ok(PyMesh { inner: mesh })

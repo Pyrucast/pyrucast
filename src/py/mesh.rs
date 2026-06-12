@@ -6,7 +6,7 @@ use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::py::configuration::PyConfiguration;
 use crate::py::node::PyNode;
-use crate::store::{with, with_mut, Handle};
+use crate::store::{read, write, Handle};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
@@ -57,34 +57,33 @@ impl PySubMesh {
     /// Element type name of this submesh (e.g. `"TRI3"`).
     #[getter]
     fn element_type(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |s| s.element_type().name().to_string())?)
+        Ok(read(&self.handle)?.element_type().name().to_string())
     }
 
     /// Append a cell from its list of nodes; returns the new cell's index.
     fn add_cell(&self, nodes: Vec<PyRef<'_, PyNode>>) -> PyResult<usize> {
         let nodes_typed: Vec<NodeId> = nodes.iter().map(|n| n.as_node().id()).collect();
-        let idx = with_mut(&self.handle, move |s| s.add_cell(&nodes_typed))??;
+        let idx = write(&self.handle)?.add_cell(&nodes_typed)?;
         Ok(idx)
     }
 
     /// Number of cells in this submesh.
     fn cell_count(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |s| s.cell_count())?)
+        Ok(read(&self.handle)?.cell_count())
     }
 
     /// Face colour as an `(r, g, b)` tuple of bytes.
     #[getter]
     fn face_color(&self) -> PyResult<(u8, u8, u8)> {
-        let c = with(&self.handle, |s| s.face_color())?;
+        let c = read(&self.handle)?.face_color();
         Ok((c.r, c.g, c.b))
     }
 
     /// Set the face colour from an `(r, g, b)` tuple of bytes.
     #[setter]
     fn set_face_color(&self, rgb: (u8, u8, u8)) -> PyResult<()> {
-        with_mut(&self.handle, |s| {
-            s.set_face_color(crate::containers::mesh::RgbColor::new(rgb.0, rgb.1, rgb.2))
-        })?;
+        write(&self.handle)?
+            .set_face_color(crate::containers::mesh::RgbColor::new(rgb.0, rgb.1, rgb.2));
         Ok(())
     }
 
@@ -141,12 +140,11 @@ impl PySubMesh {
             Some(f) => {
                 let comp_ref = component.as_deref();
                 let sm_handle = self.handle.clone();
-                crate::store::with(&sm_handle, |s| {
-                    s.plot_with_field(Some(view), save_ref, &f.inner, comp_ref, scale)
-                })??;
+                crate::store::read(&sm_handle)?
+                    .plot_with_field(Some(view), save_ref, &f.inner, comp_ref, scale)?;
             }
             None => {
-                with(&self.handle, |s| s.plot(Some(view), save_ref))??;
+                read(&self.handle)?.plot(Some(view), save_ref)?;
             }
         }
         Ok(())
@@ -154,14 +152,14 @@ impl PySubMesh {
 
     /// `len(submesh)` → number of cells.
     fn __len__(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |s| s.cell_count())?)
+        Ok(read(&self.handle)?.cell_count())
     }
 
     /// `submesh[i]` → `Cell` view on cell i. Supports negative
     /// indices and raises `IndexError` out of range so
     /// `for cell in submesh:` works.
     fn __getitem__(&self, idx: isize) -> PyResult<crate::py::cell::PyCell> {
-        let n = with(&self.handle, |s| s.cell_count())? as isize;
+        let n = read(&self.handle)?.cell_count() as isize;
         let normalized = if idx < 0 { n + idx } else { idx };
         if normalized < 0 || normalized >= n {
             return Err(PyIndexError::new_err(format!(
@@ -173,11 +171,11 @@ impl PySubMesh {
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |s| format!("{:?}", s))?)
+        Ok(format!("{:?}", &*read(&self.handle)?))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |s| format!("{}", s))?)
+        Ok(format!("{}", &*read(&self.handle)?))
     }
 }
 

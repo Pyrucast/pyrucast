@@ -5,7 +5,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
 use crate::py::mesh::submesh_handle;
 use crate::py::node::PyNode;
-use crate::store::{insert, with, Handle};
+use crate::store::{insert, read, write, Handle};
 use pyo3::prelude::*;
 
 // ─── PySubMatrix ───────────────────────────────────────────────────────────
@@ -33,9 +33,7 @@ impl PySubMatrix {
         value: f64,
     ) -> PyResult<()> {
         let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
-        crate::store::with_mut(&self.handle, |m| {
-            m.add_entry(rn, row_field, cn, col_field, value)
-        })??;
+        write(&self.handle)?.add_entry(rn, row_field, cn, col_field, value)?;
         Ok(())
     }
 
@@ -48,79 +46,83 @@ impl PySubMatrix {
         col_field: &str,
     ) -> PyResult<f64> {
         let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
-        Ok(with(&self.handle, |m| {
-            m.get(rn, row_field, cn, col_field)
-        })?)
+        Ok(read(&self.handle)?.get(rn, row_field, cn, col_field))
     }
 
     /// Number of rows of this block.
     fn n_rows(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |m| m.n_rows())?)
+        Ok(read(&self.handle)?.n_rows())
     }
 
     /// Number of columns of this block.
     fn n_cols(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |m| m.n_cols())?)
+        Ok(read(&self.handle)?.n_cols())
     }
 
     /// Number of stored COO entries.
     fn entry_count(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |m| m.entry_count())?)
+        Ok(read(&self.handle)?.entry_count())
     }
 
     /// Whether this block is declared symmetric.
     #[getter]
     fn symmetric(&self) -> PyResult<bool> {
-        Ok(with(&self.handle, |m| m.symmetric())?)
+        Ok(read(&self.handle)?.symmetric())
     }
 
     /// Variable (field) names this block addresses.
     fn field_names(&self) -> PyResult<Vec<String>> {
-        Ok(with(&self.handle, |m| m.field_names())?)
+        Ok(read(&self.handle)?.field_names())
     }
 
     /// `(node_id, field_name)` tuples for each row, in order.
     fn row_dofs(&self) -> PyResult<Vec<(u32, String)>> {
-        Ok(with(&self.handle, |m| {
-            m.row_dofs().into_iter().map(|(nid, name)| (nid.0, name)).collect()
-        })?)
+        Ok(read(&self.handle)?
+            .row_dofs()
+            .into_iter()
+            .map(|(nid, name)| (nid.0, name))
+            .collect())
     }
 
     /// `(node_id, field_name)` tuples for each column, in order.
     fn col_dofs(&self) -> PyResult<Vec<(u32, String)>> {
-        Ok(with(&self.handle, |m| {
-            m.col_dofs().into_iter().map(|(nid, name)| (nid.0, name)).collect()
-        })?)
+        Ok(read(&self.handle)?
+            .col_dofs()
+            .into_iter()
+            .map(|(nid, name)| (nid.0, name))
+            .collect())
     }
 
     /// Dense row-major buffer, length `n_rows × n_cols`.
     fn dense(&self) -> PyResult<Vec<f64>> {
-        Ok(with(&self.handle, |m| m.dense())?)
+        Ok(read(&self.handle)?.dense())
     }
 
     /// `y = A · x` (dense).
     fn mul_dense(&self, x: Vec<f64>) -> PyResult<Vec<f64>> {
-        Ok(with(&self.handle, |m| m.mul_dense(&x))??)
+        Ok(read(&self.handle)?.mul_dense(&x)?)
     }
 
     /// List of `(row_node, row_field, col_node, col_field, value)`
     /// tuples, in insertion order.
     fn entries(&self) -> PyResult<Vec<(u32, String, u32, String, f64)>> {
-        Ok(with(&self.handle, |m| {
-            m.iter_entries().into_iter().map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v)).collect()
-        })?)
+        Ok(read(&self.handle)?
+            .iter_entries()
+            .into_iter()
+            .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
+            .collect())
     }
 
     fn __len__(&self) -> PyResult<usize> {
-        Ok(with(&self.handle, |m| m.entry_count())?)
+        Ok(read(&self.handle)?.entry_count())
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |m| format!("{:?}", m))?)
+        Ok(format!("{:?}", &*read(&self.handle)?))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(with(&self.handle, |m| format!("{}", m))?)
+        Ok(format!("{}", &*read(&self.handle)?))
     }
 }
 
