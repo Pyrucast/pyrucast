@@ -785,6 +785,22 @@ impl NodeField {
         Ok(NodeFieldView { zones, components })
     }
 
+    /// Visualize this field alone, as a **coloured point cloud** over
+    /// its support nodes — the POI1 support carries no connectivity, so
+    /// no surface can be drawn; use `Mesh::plot_with_field` with the
+    /// original mesh for surfaces. `component = None` selects the first
+    /// component.
+    #[cfg(feature = "viz")]
+    pub fn plot(
+        &self,
+        view: Option<crate::viz::View>,
+        save: Option<&std::path::Path>,
+        component: Option<&str>,
+        scale: crate::viz::ColorScale,
+    ) -> Result<()> {
+        crate::viz::render_node_field_points(self, component, scale, view, save)
+    }
+
     /// Verify zone coherence: every `(node, component)` stored by several
     /// subs must hold the **same** value (exact comparison) everywhere.
     ///

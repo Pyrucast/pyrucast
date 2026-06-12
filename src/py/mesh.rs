@@ -31,7 +31,7 @@ fn with_field_arg<R>(
 /// `None` ⇒ the default (Viridis); an unknown name is a `ValueError`
 /// that lists the accepted names.
 #[cfg(feature = "viz")]
-fn parse_cmap(name: Option<String>) -> PyResult<crate::viz::Colormap> {
+pub(crate) fn parse_cmap(name: Option<String>) -> PyResult<crate::viz::Colormap> {
     match name {
         None => Ok(crate::viz::Colormap::default()),
         Some(n) => crate::viz::Colormap::from_name(&n).ok_or_else(|| {

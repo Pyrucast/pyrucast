@@ -271,6 +271,46 @@ impl PyNodeField {
         Ok(Field::max(&self.inner, component)?)
     }
 
+    /// Visualize this field alone, as a **coloured point cloud** over
+    /// its support nodes — the POI1 support has no connectivity, so no
+    /// surface can be drawn here; use `mesh.plot(field=...)` with the
+    /// original mesh for surfaces.
+    ///
+    /// Same `view` / `save` / `show_axes` / `component` / `vmin` /
+    /// `vmax` / `cmap` semantics as `Mesh.plot`.
+    #[cfg(feature = "viz")]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, component=None, vmin=None, vmax=None, cmap=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn plot(
+        &self,
+        view: Option<(f64, f64, f64)>,
+        save: Option<std::path::PathBuf>,
+        show_axes: bool,
+        component: Option<String>,
+        vmin: Option<f64>,
+        vmax: Option<f64>,
+        cmap: Option<String>,
+    ) -> PyResult<()> {
+        let mut view = view
+            .map(|(yaw, pitch, scale)| crate::viz::View {
+                yaw,
+                pitch,
+                scale,
+                target: None,
+                show_axes,
+            })
+            .unwrap_or_else(crate::viz::View::default);
+        view.show_axes = show_axes;
+        let scale = crate::viz::ColorScale {
+            cmap: crate::py::mesh::parse_cmap(cmap)?,
+            vmin,
+            vmax,
+        };
+        self.inner
+            .plot(Some(view), save.as_deref(), component.as_deref(), scale)?;
+        Ok(())
+    }
+
     /// A `Mesh` mirroring this field's supports — the zones' POI1
     /// support submeshes, shared (not copied).
     fn support_mesh(&self) -> PyResult<PyMesh> {

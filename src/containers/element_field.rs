@@ -634,6 +634,37 @@ impl ElementField {
         Ok(Self { subs })
     }
 
+    /// Visualize this field on its own support: each zone knows its
+    /// submesh through its FE subspace, so the mesh is reconstructed
+    /// (shared, not copied) and coloured by `component` — per-element
+    /// nodal fit of the Gauss values, discontinuities preserved.
+    /// `smooth` is the subdivision level (`0` = flat per cell).
+    #[cfg(feature = "viz")]
+    pub fn plot(
+        &self,
+        view: Option<crate::viz::View>,
+        save: Option<&std::path::Path>,
+        component: Option<&str>,
+        scale: crate::viz::ColorScale,
+        smooth: usize,
+    ) -> Result<()> {
+        let mut mesh = crate::containers::mesh::Mesh::empty();
+        for h in self {
+            let fespace = read(h)?.fespace();
+            let sm = read(&fespace)?.submesh();
+            mesh.add_sub(sm)?;
+        }
+        crate::viz::render_mesh_with_field(
+            &mesh,
+            crate::viz::FieldArg::Element(self),
+            component,
+            scale,
+            smooth,
+            view,
+            save,
+        )
+    }
+
     /// Zero-copy view of the zones, mirroring
     /// [`NodeField::view`](crate::containers::node_field::NodeField):
     /// one owned read guard per [`SubElementField`], values read **in

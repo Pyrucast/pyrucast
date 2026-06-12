@@ -426,3 +426,56 @@ fn plot_mesh_with_element_field_writes_svg() {
         "value range not present in SVG"
     );
 }
+
+#[test]
+fn node_field_standalone_plot_is_point_cloud() {
+    use pyrucast::containers::node_field::{NodeField, SubNodeField};
+
+    let cfg = insert(Configuration::new(2).unwrap());
+    let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+    let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+    let mut poi1 = SubMesh::new(cfg.clone(), ElementType::POI1);
+    poi1.add_cell(&[a.id()]).unwrap();
+    poi1.add_cell(&[b.id()]).unwrap();
+    let poi1_h = insert(poi1);
+    let mut f = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
+    f.set_value(a.id(), "T", 1.0).unwrap();
+    f.set_value(b.id(), "T", 2.0).unwrap();
+    let f = NodeField::from_sub(f);
+
+    let dir = tmpdir();
+    let path = dir.join("node_field_points.svg");
+    f.plot(Some(View::front()), Some(&path), None, ColorScale::default())
+        .unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("[T]"));
+    assert!(text.contains("circle"), "points should be drawn as circles");
+}
+
+#[test]
+fn element_field_standalone_plot_reconstructs_mesh() {
+    use pyrucast::containers::element_field::ElementField;
+    use pyrucast::containers::finite_element_space::FiniteElementSpace;
+
+    let cfg = insert(Configuration::new(2).unwrap());
+    let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+    let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+    let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+    let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+    sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+    let mesh = Mesh::from_submesh(sm);
+    let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    let ef = ElementField::new(&fes, vec!["q".into()]).unwrap();
+    pyrucast::store::write(&ef.get(0).unwrap())
+        .unwrap()
+        .set_cell_uniform(0, "q", 2.5)
+        .unwrap();
+
+    let dir = tmpdir();
+    let path = dir.join("element_field_alone.svg");
+    ef.plot(Some(View::front()), Some(&path), None, ColorScale::default(), 3)
+        .unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("[q]"));
+    assert!(text.contains("polygon"), "faces should be drawn");
+}

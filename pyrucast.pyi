@@ -284,6 +284,17 @@ class ElementField:
         r"""
         Union of the sub-fields' component names, first-seen order.
         """
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4) -> None:
+        r"""
+        Visualize this field on its own support: each zone knows its
+        submesh through its FE subspace, so the mesh is reconstructed
+        (shared, not copied) and coloured by `component` — per-element
+        nodal fit of the Gauss values, the discontinuities between
+        elements stay visible.
+        
+        Same `view` / `save` / `show_axes` / `component` / `vmin` /
+        `vmax` / `cmap` / `smooth` semantics as `Mesh.plot`.
+        """
     def min(self, component: builtins.str) -> builtins.float:
         r"""
         Smallest value of `component` across the sub-fields defining it.
@@ -527,10 +538,11 @@ class Mesh:
         r"""
         Total number of cells across all submeshes.
         """
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4) -> None:
         r"""
         Visualize this mesh (every submesh in its own colour, or
-        coloured by a `NodeField` if `field` is supplied). See
+        coloured by a `NodeField` / `ElementField` if `field` is
+        supplied). See
         `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
         `field` and `component`.
         """
@@ -723,6 +735,16 @@ class NodeField:
     def max(self, component: builtins.str) -> builtins.float:
         r"""
         Largest value of `component` across the zones defining it.
+        """
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None) -> None:
+        r"""
+        Visualize this field alone, as a **coloured point cloud** over
+        its support nodes — the POI1 support has no connectivity, so no
+        surface can be drawn here; use `mesh.plot(field=...)` with the
+        original mesh for surfaces.
+        
+        Same `view` / `save` / `show_axes` / `component` / `vmin` /
+        `vmax` / `cmap` semantics as `Mesh.plot`.
         """
     def support_mesh(self) -> Mesh:
         r"""
@@ -1078,7 +1100,7 @@ class SubMesh:
         r"""
         Number of cells in this submesh.
         """
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4) -> None:
         r"""
         Visualize this submesh.
         
@@ -1088,9 +1110,13 @@ class SubMesh:
         - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
           corner (default `True`). In the interactive window, the key
           `A` toggles it at runtime.
-        - `field`: optional `NodeField` whose values colour each cell
-          (per-cell value = mean over the cell's nodes of the chosen
-          component). Default `None` ⇒ uniform face colour.
+        - `field`: optional `NodeField` **or** `ElementField` whose values
+          colour each cell. Node field: per-cell nodal values read
+          directly. Element field: nodal values fitted per element from
+          the Gauss values (least squares local to the cell — the
+          discontinuities between elements stay visible; with a single
+          Gauss point the colour is constant per element).
+          Default `None` ⇒ uniform face colour.
         - `component`: component name to display when `field` is set
           (defaults to the field's first component). In the
           interactive window, click the top button or press `Tab` to
@@ -1100,6 +1126,9 @@ class SubMesh:
           to track the data's own min / max for that bound.
         - `cmap`: colour scale name — `"viridis"` (default), `"jet"`,
           `"coolwarm"`, `"hot"` or `"gray"`.
+        - `smooth`: subdivision level of the interpolated rendering
+          (default `4`): the colour follows the shape functions inside
+          each element. `0` = one flat colour per cell.
         """
     def __len__(self) -> builtins.int:
         r"""

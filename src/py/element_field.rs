@@ -224,6 +224,53 @@ impl PyElementField {
         Ok(Field::components(&self.inner)?)
     }
 
+    /// Visualize this field on its own support: each zone knows its
+    /// submesh through its FE subspace, so the mesh is reconstructed
+    /// (shared, not copied) and coloured by `component` — per-element
+    /// nodal fit of the Gauss values, the discontinuities between
+    /// elements stay visible.
+    ///
+    /// Same `view` / `save` / `show_axes` / `component` / `vmin` /
+    /// `vmax` / `cmap` / `smooth` semantics as `Mesh.plot`.
+    #[cfg(feature = "viz")]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, component=None, vmin=None, vmax=None, cmap=None, smooth=4))]
+    #[allow(clippy::too_many_arguments)]
+    fn plot(
+        &self,
+        view: Option<(f64, f64, f64)>,
+        save: Option<std::path::PathBuf>,
+        show_axes: bool,
+        component: Option<String>,
+        vmin: Option<f64>,
+        vmax: Option<f64>,
+        cmap: Option<String>,
+        smooth: usize,
+    ) -> PyResult<()> {
+        let mut view = view
+            .map(|(yaw, pitch, scale)| crate::viz::View {
+                yaw,
+                pitch,
+                scale,
+                target: None,
+                show_axes,
+            })
+            .unwrap_or_else(crate::viz::View::default);
+        view.show_axes = show_axes;
+        let scale = crate::viz::ColorScale {
+            cmap: crate::py::mesh::parse_cmap(cmap)?,
+            vmin,
+            vmax,
+        };
+        self.inner.plot(
+            Some(view),
+            save.as_deref(),
+            component.as_deref(),
+            scale,
+            smooth,
+        )?;
+        Ok(())
+    }
+
     /// Smallest value of `component` across the sub-fields defining it.
     fn min(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::Field;

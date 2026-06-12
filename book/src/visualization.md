@@ -126,15 +126,32 @@ assert sm.face_color == (220, 60, 60)
 
 Quand on appelle `Mesh::plot`, chaque sous-maillage est rendu avec **sa propre** `face_color`, ce qui permet de distinguer visuellement des composants regroupés dans un même maillage (par exemple : peau / cœur / interfaces).
 
-## Coloration par un `NodeField`
+## Coloration par un champ — `NodeField` ou `ElementField`
 
-`plot` accepte un argument optionnel `field` (un [`NodeField`](node-field.md)) qui **remplace la couleur uniforme par cellule** par une couleur tirée d'une *colormap* appliquée aux valeurs du champ.
+`plot` accepte un argument optionnel `field` — un [`NodeField`](node-field.md) **ou** un [`ElementField`](element-field.md), interchangeables — qui **remplace la couleur uniforme** par une couleur tirée d'une *colormap* appliquée aux valeurs du champ.
 
-- **Valeur par cellule** = moyenne des valeurs du champ aux nœuds de la cellule (les nœuds absents du support ne contribuent pas).
+Le rendu raisonne **par élément** : pour dessiner un élément, il lui faut des valeurs à ses nœuds, propres à cet élément.
+
+- **`NodeField`** : les valeurs nodales sont lues directement (champ continu par construction ; un nœud absent du support prend la moyenne des nœuds présents).
+- **`ElementField`** : les valeurs vivent aux points de Gauss. Les valeurs nodales du tracé viennent d'un **moindre carré local à l'élément** (fit de l'interpolant Lagrange aux valeurs de Gauss de *cet* élément). Aucune moyenne entre éléments voisins : **les discontinuités inter-éléments — flux, contraintes — restent visibles**, c'est une information physique. Avec un seul point de Gauss, le fit dégénère en couleur constante par élément.
+
+Affichage commun aux deux types :
+
 - **Composante affichée** : la première composante du champ par défaut ; on en choisit une autre via `component="<nom>"`.
 - **Échelle** : linéaire entre le minimum et le maximum **observés** sur le maillage rendu, sauf si on fixe les bornes (voir [Bornes](#bornes-de-léchelle-vmin--vmax)).
 - **Colorbar** : une barre verticale graduée est dessinée sur le bord droit de l'image (bas = borne basse, haut = borne haute), avec le même dégradé que les cellules.
 - **Bandeau** : en haut de l'image, le nom de la composante affichée et l'intervalle `[min, max]`.
+
+### Rendu interpolé (`smooth`)
+
+Par défaut (`smooth=4`), la couleur **suit les fonctions de forme à l'intérieur de chaque élément** : chaque maille est sous-découpée en sous-triangles (TRI3 → n², QUA4 → 2n²) dont la géométrie et la valeur sont évaluées par `N_i(ξ)` — y compris le gauchissement bilinéaire des QUA4/HEX8. Le filaire noir n'est tracé que sur les arêtes d'origine des éléments. `smooth=0` revient à une couleur plate par cellule (moyenne des valeurs nodales) ; monter `smooth` lisse davantage au prix de `n²` polygones par élément.
+
+Le sous-découpage est purement graphique et interne à chaque élément : les sous-sommets d'une arête partagée sont évalués séparément de chaque côté, donc les discontinuités d'un `ElementField` traversent le rendu interpolé sans être gommées.
+
+### Tracé d'un champ seul
+
+- `element_field.plot(...)` fonctionne sans maillage : chaque zone retrouve son sous-maillage via son sous-espace EF (partagé, pas copié).
+- `node_field.plot(...)` trace un **nuage de points colorés** : son support POI1 ne porte pas de connectivité, aucune surface ne peut être inférée — pour des surfaces, passer par `mesh.plot(field=...)` avec le maillage d'origine.
 
 ### Échelles de couleur (`cmap`)
 
@@ -163,12 +180,19 @@ use pyrucast::viz::{Colormap, ColorScale};
 let mut u = SubNodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();
 // ... remplissage ...
 
-// Échelle auto, colormap par défaut (viridis), première composante.
-mesh.plot_with_field(None, Some(std::path::Path::new("ux.svg")), &u, None, ColorScale::default()).unwrap();
+// Échelle auto, viridis, première composante, rendu interpolé niveau 4.
+use pyrucast::viz::FieldArg;
+mesh.plot_with_field(None, Some(std::path::Path::new("ux.svg")),
+    FieldArg::Node(&u), None, ColorScale::default(), 4).unwrap();
 
-// Composante "UY", colormap coolwarm, bornes fixées à [-1, 1].
+// Composante "UY", colormap coolwarm, bornes fixées à [-1, 1], plat.
 let scale = ColorScale { cmap: Colormap::CoolWarm, vmin: Some(-1.0), vmax: Some(1.0) };
-mesh.plot_with_field(None, Some(std::path::Path::new("uy.svg")), &u, Some("UY"), scale).unwrap();
+mesh.plot_with_field(None, Some(std::path::Path::new("uy.svg")),
+    FieldArg::Node(&u), Some("UY"), scale, 0).unwrap();
+
+// Champ aux points de Gauss : même appel, FieldArg::Element.
+mesh.plot_with_field(None, Some(std::path::Path::new("flux.svg")),
+    FieldArg::Element(&flux), None, ColorScale::default(), 4).unwrap();
 ```
 
 Côté Python, `cmap`, `vmin` et `vmax` sont des arguments nommés de `plot` :
@@ -182,6 +206,17 @@ mesh.plot(save="uy.svg", field=u_field, component="UY", cmap="coolwarm", vmin=-1
 
 # Plafond seul fixé : le plancher suit le minimum des données.
 mesh.plot(save="t.svg", field=t_field, vmax=100.0)
+
+# Champ aux points de Gauss : strictement le même appel.
+mesh.plot(save="flux.svg", field=flux_field)
+
+# Couleur plate par cellule (comportement historique).
+mesh.plot(save="t_flat.svg", field=t_field, smooth=0)
+
+# Champ seul : l'ElementField reconstruit son maillage ; le NodeField
+# trace un nuage de points (pas de connectivité dans son support).
+flux_field.plot(save="flux_alone.svg")
+t_field.plot(save="t_points.svg")
 ```
 
 ### Bouton de sélection dans la fenêtre interactive

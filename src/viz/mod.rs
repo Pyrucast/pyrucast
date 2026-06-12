@@ -322,6 +322,38 @@ pub fn render_submesh_with_field(
     }
 }
 
+/// Render a [`crate::containers::node_field::NodeField`] alone, as a
+/// coloured point cloud over its support nodes (a POI1 support carries
+/// no connectivity — plot a mesh with `field=` for surfaces).
+pub(crate) fn render_node_field_points(
+    field: &crate::containers::node_field::NodeField,
+    component: Option<&str>,
+    scale: ColorScale,
+    view: Option<View>,
+    save: Option<&Path>,
+) -> Result<()> {
+    use crate::viz::mesh_draw::pad3;
+    let data = field_color::FieldData::Node(field.view()?);
+    let resolved = field_color::resolve_component(&data, component)?.to_string();
+    let cfg = field.configuration()?;
+    let mut points = Vec::new();
+    {
+        let c = crate::store::read(&cfg)?;
+        let field_color::FieldData::Node(v) = &data else { unreachable!() };
+        for nid in field.node_ids()? {
+            if let Some(val) = v.value_opt(nid, &resolved) {
+                points.push((pad3(c.coord(nid)?), val));
+            }
+        }
+    }
+    let drawable = field_color::NodeFieldPointsView {
+        points,
+        component: &resolved,
+        scale,
+    };
+    render(&drawable, view, save)
+}
+
 fn render_to_file<D: Drawable>(object: &D, view: View, path: &Path) -> Result<()> {
     use plotters::prelude::*;
 

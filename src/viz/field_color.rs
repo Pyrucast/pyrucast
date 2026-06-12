@@ -635,6 +635,53 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
     }
 }
 
+/// `Drawable` over the support nodes of a [`NodeField`], as a coloured
+/// point cloud — the honest standalone rendering of a node field (its
+/// POI1 support carries no connectivity; for surfaces, plot a mesh with
+/// `field=`).
+pub(crate) struct NodeFieldPointsView<'a> {
+    /// Distinct support nodes with their (padded 3-D) position and value.
+    pub(crate) points: Vec<(crate::containers::mesh::Point3, f64)>,
+    pub component: &'a str,
+    pub scale: crate::viz::ColorScale,
+}
+
+impl<'a> Drawable for NodeFieldPointsView<'a> {
+    fn bbox(&self) -> Result<Bbox3> {
+        let mut bb = Bbox3::empty();
+        for (p, _) in &self.points {
+            bb.extend(*p);
+        }
+        Ok(bb)
+    }
+
+    fn draw_on<DB: DrawingBackend>(
+        &self,
+        area: &DrawingArea<DB, Shift>,
+        view: &View,
+    ) -> Result<()>
+    where
+        DB::ErrorType: 'static,
+    {
+        let values: Vec<f64> = self.points.iter().map(|(_, v)| *v).collect();
+        let (dmin, dmax) = value_range([values.as_slice()]);
+        let (vmin, vmax) = self.scale.resolve(dmin, dmax);
+        let cmap = self.scale.cmap;
+        let prims: Vec<Primitive> = self
+            .points
+            .iter()
+            .map(|&(p, v)| Primitive::Point {
+                p,
+                color: colormap(cmap, v, vmin, vmax),
+            })
+            .collect();
+        render_primitives(area, view, &prims)?;
+        super::overlay::draw_field_overlay(area, self.component, vmin, vmax)?;
+        super::overlay::draw_colorbar(area, cmap, vmin, vmax)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
