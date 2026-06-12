@@ -27,7 +27,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
 use crate::containers::model::Model;
 use crate::error::Result;
-use crate::store::{insert, with};
+use crate::store::{insert, read};
 
 /// Integrate the constitutive law of `model` (Cast3m `COMP`).
 ///
@@ -49,7 +49,10 @@ pub fn integrate(
         // Cheap read under the sub-model lock: which FE subspaces this
         // sub-model wants for its deformation and its material.
         let (beh_fespace, mat_fespace) =
-            with(h, |sub| (sub.behavior_fespace(), sub.material_fespace()))?;
+            {
+                let sub = read(h)?;
+                (sub.behavior_fespace(), sub.material_fespace())
+            };
         let Some(beh_fespace) = beh_fespace else {
             continue; // constraint sub-model — no behaviour
         };
@@ -62,7 +65,7 @@ pub fn integrate(
             None => None,
         };
 
-        let state = with(h, |sub| sub.integrate_behavior(&input, material.as_ref()))??;
+        let state = read(h)?.integrate_behavior(&input, material.as_ref())?;
         out.add_sub(insert(state))?;
     }
     Ok(out)
@@ -124,14 +127,14 @@ mod tests {
 
         let state = integrate(&model, &def, &materials).unwrap();
         assert_eq!(state.len(), 1, "only the HC sub-model carries a behaviour");
-        with(&state.get(0).unwrap(), |s| {
+        {
+            let s = read(&state.get(0).unwrap()).unwrap();
             assert_eq!(s.components(), &["flux_x".to_string()]);
             // weak-form flux = k·∇T = 1.5 · (3/2) = 2.25.
             for g in 0..s.gauss_count() {
                 assert!((s.value(0, g, "flux_x").unwrap() - 2.25).abs() < 1e-12);
             }
-        })
-        .unwrap();
+        }
     }
 
     #[test]
@@ -181,13 +184,13 @@ mod tests {
         let state = integrate(&model, &def, &materials).unwrap();
         assert_eq!(state.len(), 2);
         // Zone A: k = 1 ⇒ flux = 1; zone B: k = 4 ⇒ flux = 4.
-        with(&state.get(0).unwrap(), |s| {
+        {
+            let s = read(&state.get(0).unwrap()).unwrap();
             assert!((s.value(0, 0, "flux_x").unwrap() - 1.0).abs() < 1e-12);
-        })
-        .unwrap();
-        with(&state.get(1).unwrap(), |s| {
+        }
+        {
+            let s = read(&state.get(1).unwrap()).unwrap();
             assert!((s.value(0, 0, "flux_x").unwrap() - 4.0).abs() < 1e-12);
-        })
-        .unwrap();
+        }
     }
 }

@@ -18,7 +18,7 @@ use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::containers::mesh::NodeId;
 use crate::error::Result;
-use crate::store::{insert, with};
+use crate::store::{insert, read};
 
 /// Merge the zones of `field` that share the same component set.
 ///
@@ -38,9 +38,10 @@ pub fn consolidate(field: &NodeField) -> Result<NodeField> {
     }
     let mut snaps: Vec<Snap> = Vec::with_capacity(field.len());
     for h in field {
-        let (nodes, components, values) = with(h, |s| {
+        let (nodes, components, values) = {
+            let s = read(h)?;
             (s.nodes().to_vec(), s.components().to_vec(), s.values().to_vec())
-        })?;
+        };
         snaps.push(Snap { handle: h.clone(), nodes, components, values });
     }
 
@@ -95,7 +96,7 @@ pub fn consolidate(field: &NodeField) -> Result<NodeField> {
 mod tests {
     use super::*;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
-    use crate::store::{insert, with_mut, Handle};
+    use crate::store::{insert, write, Handle};
 
     /// Two TRI3 zones sharing an interface edge (nodes n1, n2).
     fn two_zone_mesh() -> (Handle<Configuration>, Vec<Node>, Mesh) {
@@ -124,24 +125,22 @@ mod tests {
     fn same_components_fuse_into_one_sub() {
         let (_cfg, nodes, mesh) = two_zone_mesh();
         let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
-        with_mut(&f.get(0).unwrap(), |s| {
+        {
+            let mut s = write(&f.get(0).unwrap()).unwrap();
             s.set_value(nodes[0].id(), "T", 1.0).unwrap();
             s.set_value(nodes[1].id(), "T", 2.0).unwrap();
-        })
-        .unwrap();
-        with_mut(&f.get(1).unwrap(), |s| {
+        }
+        {
+            let mut s = write(&f.get(1).unwrap()).unwrap();
             s.set_value(nodes[1].id(), "T", 2.0).unwrap(); // interface: same value
             s.set_value(nodes[3].id(), "T", 4.0).unwrap();
-        })
-        .unwrap();
+        }
 
         let c = consolidate(&f).unwrap();
         assert_eq!(c.len(), 1);
         assert_eq!(c.node_count().unwrap(), 4);
-        crate::store::with(&c.get(0).unwrap(), |s| {
-            assert_eq!(s.node_count(), 4); // interface nodes stored once
-        })
-        .unwrap();
+        // interface nodes stored once
+        assert_eq!(read(&c.get(0).unwrap()).unwrap().node_count(), 4);
         assert_eq!(c.value(nodes[0].id(), "T").unwrap(), 1.0);
         assert_eq!(c.value(nodes[1].id(), "T").unwrap(), 2.0);
         assert_eq!(c.value(nodes[3].id(), "T").unwrap(), 4.0);
@@ -151,11 +150,13 @@ mod tests {
     fn incoherent_field_errors() {
         let (_cfg, nodes, mesh) = two_zone_mesh();
         let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
-        with_mut(&f.get(0).unwrap(), |s| s.set_value(nodes[1].id(), "T", 1.0))
+        write(&f.get(0).unwrap())
             .unwrap()
+            .set_value(nodes[1].id(), "T", 1.0)
             .unwrap();
-        with_mut(&f.get(1).unwrap(), |s| s.set_value(nodes[1].id(), "T", 2.0))
+        write(&f.get(1).unwrap())
             .unwrap()
+            .set_value(nodes[1].id(), "T", 2.0)
             .unwrap();
         assert!(consolidate(&f).is_err());
     }
@@ -182,15 +183,17 @@ mod tests {
             ],
         )
         .unwrap();
-        with_mut(&f.get(1).unwrap(), |s| s.set_value(nodes[3].id(), "UY", 9.0))
+        write(&f.get(1).unwrap())
             .unwrap()
+            .set_value(nodes[3].id(), "UY", 9.0)
             .unwrap();
         let c = consolidate(&f).unwrap();
         assert_eq!(c.len(), 1);
-        crate::store::with(&c.get(0).unwrap(), |s| {
-            assert_eq!(s.components(), &["UX", "UY"]); // first sub's order
-        })
-        .unwrap();
+        // first sub's order
+        assert_eq!(
+            read(&c.get(0).unwrap()).unwrap().components(),
+            &["UX", "UY"]
+        );
         assert_eq!(c.value(nodes[3].id(), "UY").unwrap(), 9.0);
     }
 
@@ -201,11 +204,13 @@ mod tests {
         let (_cfg, nodes, mesh) = two_zone_mesh();
         let f = NodeField::with(&mesh, &[vec!["T".into()], vec!["T".into(), "P".into()]])
             .unwrap();
-        with_mut(&f.get(0).unwrap(), |s| s.set_value(nodes[1].id(), "T", 1.0))
+        write(&f.get(0).unwrap())
             .unwrap()
+            .set_value(nodes[1].id(), "T", 1.0)
             .unwrap();
-        with_mut(&f.get(1).unwrap(), |s| s.set_value(nodes[1].id(), "T", 2.0))
+        write(&f.get(1).unwrap())
             .unwrap()
+            .set_value(nodes[1].id(), "T", 2.0)
             .unwrap();
         assert!(consolidate(&f).is_err());
     }

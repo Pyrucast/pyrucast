@@ -12,7 +12,7 @@ use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::Node;
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::store::{insert, with};
+use crate::store::{insert, read};
 
 /// Sweep between two SEG2 contour meshes to produce a QUA4 strip.
 ///
@@ -41,18 +41,22 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
     }
     let sm_a = mesh_a.get(0)?;
     let sm_b = mesh_b.get(0)?;
-    let cfg_a = with(&sm_a, |s| s.configuration())?;
-    let cfg_b = with(&sm_b, |s| s.configuration())?;
+    let cfg_a = read(&sm_a)?.configuration();
+    let cfg_b = read(&sm_b)?.configuration();
     if cfg_a.index() != cfg_b.index() || cfg_a.generation() != cfg_b.generation() {
         return Err(PyrucastError::Message(
             "sweep_qua4: meshes are attached to different Configurations".into(),
         ));
     }
 
-    let (et_a, n_elems, conn_a) =
-        with(&sm_a, |s| (s.element_type(), s.cell_count(), s.connectivity().to_vec()))?;
-    let (et_b, n_elems_b, conn_b) =
-        with(&sm_b, |s| (s.element_type(), s.cell_count(), s.connectivity().to_vec()))?;
+    let (et_a, n_elems, conn_a) = {
+        let s = read(&sm_a)?;
+        (s.element_type(), s.cell_count(), s.connectivity().to_vec())
+    };
+    let (et_b, n_elems_b, conn_b) = {
+        let s = read(&sm_b)?;
+        (s.element_type(), s.cell_count(), s.connectivity().to_vec())
+    };
 
     if et_a != ElementType::SEG2 {
         return Err(PyrucastError::Message(
@@ -85,13 +89,13 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
     let coords_a: Vec<Vec<f64>> = col_ids_a
         .iter()
         .map(|&id| -> Result<Vec<f64>> {
-            with(&cfg, |c| c.coord(id).map(|s| s.to_vec()))?
+            Ok(read(&cfg)?.coord(id)?.to_vec())
         })
         .collect::<Result<_>>()?;
     let coords_b: Vec<Vec<f64>> = col_ids_b
         .iter()
         .map(|&id| -> Result<Vec<f64>> {
-            with(&cfg, |c| c.coord(id).map(|s| s.to_vec()))?
+            Ok(read(&cfg)?.coord(id)?.to_vec())
         })
         .collect::<Result<_>>()?;
 
@@ -167,7 +171,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
         std::collections::HashMap::new();
     let mut ordered_ids: Vec<NodeId> = Vec::new();
     for sm in mesh {
-        for id in with(sm, |s| s.connectivity().to_vec())? {
+        for id in read(sm)?.connectivity().to_vec() {
             col_map.entry(id).or_insert_with(|| {
                 let col = ordered_ids.len();
                 ordered_ids.push(id);
@@ -183,7 +187,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
     let base_coords: Vec<Vec<f64>> = ordered_ids
         .iter()
         .map(|&id| -> Result<Vec<f64>> {
-            with(&cfg, |c| c.coord(id).map(|s| s.to_vec()))?
+            Ok(read(&cfg)?.coord(id)?.to_vec())
         })
         .collect::<Result<_>>()?;
 
@@ -227,9 +231,10 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
     let mut result = Mesh::empty();
 
     for sm_handle in mesh {
-        let (et, n_cells, conn) = with(sm_handle, |s| {
+        let (et, n_cells, conn) = {
+            let s = read(sm_handle)?;
             (s.element_type(), s.cell_count(), s.connectivity().to_vec())
-        })?;
+        };
         let npc = et.nodes_per_cell();
 
         let extruded_et = match et {

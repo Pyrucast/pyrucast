@@ -50,7 +50,7 @@ mod tests {
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::SubMesh;
-    use crate::store::{insert, with_mut};
+    use crate::store::{insert, write};
 
     /// Build a single-zone POI1 field on `n` fresh 1-D nodes;
     /// returns (cfg, nodes, field).
@@ -76,13 +76,12 @@ mod tests {
     #[test]
     fn restrict_subset() {
         let (cfg, nodes, f) = poi1_field(3, vec!["T".into(), "P".into()]);
-        with_mut(&f.get(0).unwrap(), |s| -> Result<()> {
-            s.set(0, 0, 1.0)?;
-            s.set(1, 0, 2.0)?;
-            s.set(2, 0, 3.0)
-        })
-        .unwrap()
-        .unwrap();
+        {
+            let mut s = write(&f.get(0).unwrap()).unwrap();
+            s.set(0, 0, 1.0).unwrap();
+            s.set(1, 0, 2.0).unwrap();
+            s.set(2, 0, 3.0).unwrap();
+        }
 
         // Mesh with only nodes[0] and nodes[2].
         let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
@@ -102,9 +101,7 @@ mod tests {
     #[test]
     fn restrict_node_absent_from_field_gives_zero() {
         let (cfg, nodes, f) = poi1_field(1, vec!["T".into()]);
-        with_mut(&f.get(0).unwrap(), |s| s.set(0, 0, 7.0))
-            .unwrap()
-            .unwrap();
+        write(&f.get(0).unwrap()).unwrap().set(0, 0, 7.0).unwrap();
         let nb = Node::create_in(cfg.clone(), &[1.0]).unwrap();
 
         // Mesh contains nb which is NOT in the field.

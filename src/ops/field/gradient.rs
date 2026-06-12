@@ -12,7 +12,7 @@ use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteEleme
 use crate::containers::mesh::NodeId;
 use crate::containers::node_field::{FieldSnapshot, NodeField};
 use crate::error::Result;
-use crate::store::{insert, with, Handle};
+use crate::store::{insert, read, Handle};
 
 /// Axis suffixes for spatial directions (`x`, `y`, `z`).
 pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
@@ -56,13 +56,14 @@ pub(crate) fn subspace_gradients(
         conn: Vec<NodeId>,
         dn_dx: Vec<Vec<Vec<f64>>>, // [cell][g][i * space_dim + a]
     }
-    let snap = with(fespace, |s| -> Result<Snap> {
+    let snap = {
+        let s = read(fespace)?;
         let n_cells = s.cell_count()?;
         let n_nodes = s.nodes_per_cell()?;
         let n_g = s.gauss_count();
         let space_dim = s.space_dim();
         let submesh = s.submesh();
-        let conn: Vec<NodeId> = with(&submesh, |sm| sm.connectivity().to_vec())?;
+        let conn: Vec<NodeId> = read(&submesh)?.connectivity().to_vec();
         let mut dn_dx = Vec::with_capacity(n_cells);
         for cell in 0..n_cells {
             let mut per_g = Vec::with_capacity(n_g);
@@ -71,8 +72,8 @@ pub(crate) fn subspace_gradients(
             }
             dn_dx.push(per_g);
         }
-        Ok(Snap { n_cells, n_g, space_dim, n_nodes, conn, dn_dx })
-    })??;
+        Snap { n_cells, n_g, space_dim, n_nodes, conn, dn_dx }
+    };
 
     let n_comp = components.len();
     let mut values = vec![0.0; snap.n_cells * snap.n_g * n_comp * snap.space_dim];
@@ -153,7 +154,7 @@ mod tests {
     use super::*;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
     use crate::containers::node_field::SubNodeField;
-    use crate::store::insert;
+    use crate::store::{insert, read};
 
     /// 1-D linear field `T(x) = x` on a single SEG2 ⇒ `∇T = 1`.
     #[test]
@@ -173,13 +174,13 @@ mod tests {
 
         let grad = gradient(&t, &fes).unwrap();
         assert_eq!(grad.len(), 1);
-        with(&grad.get(0).unwrap(), |s| {
+        {
+            let s = read(&grad.get(0).unwrap()).unwrap();
             assert_eq!(s.components(), &["grad_T_x".to_string()]);
             for g in 0..s.gauss_count() {
                 assert!((s.value(0, g, "grad_T_x").unwrap() - 1.0).abs() < 1e-12);
             }
-        })
-        .unwrap();
+        }
     }
 
     /// 2-D linear field `f = 2x + 3y` on a TRI3 ⇒ `∇f = (2, 3)`.
@@ -202,13 +203,13 @@ mod tests {
         let f = NodeField::from_sub(f);
 
         let grad = gradient(&f, &fes).unwrap();
-        with(&grad.get(0).unwrap(), |s| {
+        {
+            let s = read(&grad.get(0).unwrap()).unwrap();
             assert_eq!(s.components(), &["grad_f_x".to_string(), "grad_f_y".to_string()]);
             for g in 0..s.gauss_count() {
                 assert!((s.value(0, g, "grad_f_x").unwrap() - 2.0).abs() < 1e-12);
                 assert!((s.value(0, g, "grad_f_y").unwrap() - 3.0).abs() < 1e-12);
             }
-        })
-        .unwrap();
+        }
     }
 }

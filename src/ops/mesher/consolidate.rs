@@ -3,7 +3,7 @@ use crate::containers::mesh::NodeId;
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
-use crate::store::{insert, with};
+use crate::store::{insert, read};
 use std::collections::HashSet;
 
 /// Fuse submeshes of the same element type into one, dropping duplicate
@@ -21,7 +21,7 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
     // Collect types in first-seen order.
     let mut ordered_types: Vec<ElementType> = Vec::new();
     for sm_handle in mesh {
-        let et = with(sm_handle, |s| s.element_type())?;
+        let et = read(sm_handle)?.element_type();
         if !ordered_types.contains(&et) {
             ordered_types.push(et);
         }
@@ -33,8 +33,8 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
         // Face colour from the first submesh of this type.
         let first_color = mesh
             .iter()
-            .find(|h| with(h, |s| s.element_type()).ok() == Some(et))
-            .map(|h| with(h, |s| s.face_color()))
+            .find(|h| read(h).map(|s| s.element_type()).ok() == Some(et))
+            .map(|h| -> Result<_> { Ok(read(h)?.face_color()) })
             .transpose()?
             .unwrap_or_default();
 
@@ -43,11 +43,11 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
 
         let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
         for sm_handle in mesh {
-            let sm_et = with(sm_handle, |s| s.element_type())?;
+            let sm_et = read(sm_handle)?.element_type();
             if sm_et != et {
                 continue;
             }
-            let conn = with(sm_handle, |s| s.connectivity().to_vec())?;
+            let conn = read(sm_handle)?.connectivity().to_vec();
             for chunk in conn.chunks(npc) {
                 if seen.insert(chunk.to_vec()) {
                     new_sm.add_cell(chunk)?;

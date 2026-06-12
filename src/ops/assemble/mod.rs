@@ -27,7 +27,7 @@ use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::matrix::Matrix;
 use crate::containers::model::Model;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, with, Handle};
+use crate::store::{insert, read, Handle};
 
 /// Assemble the stiffness matrix `K` for `model`.
 ///
@@ -42,7 +42,8 @@ use crate::store::{insert, with, Handle};
 pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     let mut k = Matrix::empty();
     for sub_h in model {
-        let blocks = with(sub_h, |sub| -> Result<_> {
+        let blocks = {
+            let sub = read(sub_h)?;
             // Generic over the physics: a sub-model needs material data iff
             // it declares a material FE subspace. No per-variant match.
             let material = match sub.material_fespace() {
@@ -55,8 +56,8 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
                 }
                 None => None,
             };
-            sub.build_stiffness_blocks(material.as_ref())
-        })??;
+            sub.build_stiffness_blocks(material.as_ref())?
+        };
         for block in blocks {
             k.add_sub(insert(block))?;
         }
@@ -85,7 +86,7 @@ fn validate_material(
     material: &Handle<SubElementField>,
     required: &[&str],
 ) -> Result<()> {
-    let have: Vec<String> = with(material, |s| s.components().to_vec())?;
+    let have: Vec<String> = read(material)?.components().to_vec();
     for req in required {
         if !have.iter().any(|c| c == req) {
             return Err(PyrucastError::Message(format!(

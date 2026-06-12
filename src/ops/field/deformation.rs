@@ -74,7 +74,7 @@ mod tests {
     use super::*;
     use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
     use crate::containers::node_field::SubNodeField;
-    use crate::store::{insert, with};
+    use crate::store::{insert, read};
 
     /// Linear displacement `u_x = 2x + 0.5y`, `u_y = 0.1x + 3y` on a TRI3.
     /// ⇒ ε_xx = 2, ε_yy = 3, ε_xy = ½(0.5 + 0.1) = 0.3.
@@ -99,7 +99,8 @@ mod tests {
         let u = NodeField::from_sub(u);
 
         let strain = deformation(&u, &fes).unwrap();
-        with(&strain.get(0).unwrap(), |s| {
+        {
+            let s = read(&strain.get(0).unwrap()).unwrap();
             assert_eq!(
                 s.components(),
                 &["eps_xx".to_string(), "eps_xy".to_string(), "eps_yy".to_string()]
@@ -109,8 +110,7 @@ mod tests {
                 assert!((s.value(0, g, "eps_yy").unwrap() - 3.0).abs() < 1e-12);
                 assert!((s.value(0, g, "eps_xy").unwrap() - 0.3).abs() < 1e-12);
             }
-        })
-        .unwrap();
+        }
     }
 
     #[test]

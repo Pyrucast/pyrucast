@@ -4,7 +4,7 @@ use crate::containers::mesh::NodeId;
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::Node;
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::store::with;
+use crate::store::read;
 
 /// Fill the interior of one or more closed SEG2 contours with 2-D elements.
 ///
@@ -57,7 +57,7 @@ pub fn fill_surface(
         ));
     }
     let cfg = contour.configuration()?;
-    let dim = with(&cfg, |c| c.dim())?;
+    let dim = read(&cfg)?.dim();
     if dim != 2 && dim != 3 {
         return Err(PyrucastError::Message(format!(
             "fill_surface: contour configuration must be 2-D or 3-D, got dim={}",
@@ -69,9 +69,10 @@ pub fn fill_surface(
     let mut chains: Vec<Vec<NodeId>> = Vec::with_capacity(n_sub);
     for sm_idx in 0..n_sub {
         let sm = contour.get(sm_idx)?;
-        let (et, n_elems, conn) = with(&sm, |s| {
+        let (et, n_elems, conn) = {
+            let s = read(&sm)?;
             (s.element_type(), s.cell_count(), s.connectivity().to_vec())
-        })?;
+        };
         if et != ElementType::SEG2 {
             return Err(PyrucastError::Message(format!(
                 "fill_surface: submesh #{} must be SEG2, got {}",
@@ -150,23 +151,23 @@ pub fn fill_surface(
     let mut projection: Option<Projection3D> = None;
     let points_2d: Vec<Point2> = if dim == 2 {
         let mut pts = Vec::with_capacity(n_total);
-        with(&cfg, |c| -> Result<()> {
+        {
+            let c = read(&cfg)?;
             for &id in &flat_nodes {
                 let s = c.coord(id)?;
                 pts.push(Point2::new(s[0], s[1]));
             }
-            Ok(())
-        })??;
+        }
         pts
     } else {
         let mut pts3: Vec<Point3> = Vec::with_capacity(n_total);
-        with(&cfg, |c| -> Result<()> {
+        {
+            let c = read(&cfg)?;
             for &id in &flat_nodes {
                 let s = c.coord(id)?;
                 pts3.push(Point3::new(s[0], s[1], s[2]));
             }
-            Ok(())
-        })??;
+        }
 
         let normal: Vector3 = (0..n_sub)
             .find_map(|i| {
@@ -310,7 +311,7 @@ mod tests {
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
-    use crate::store::{insert, with, Handle};
+    use crate::store::{insert, read, Handle};
 
     fn build_contour_2d(cfg: Handle<Configuration>, pts: &[(f64, f64)]) -> (Mesh, Vec<Node>) {
         let nodes: Vec<Node> = pts
@@ -397,12 +398,12 @@ mod tests {
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
         let ids: Vec<_> = nodes.iter().map(|n| n.id()).collect();
 
-        with(&cfg, |c| {
+        {
+            let c = read(&cfg).unwrap();
             for &id in &ids {
                 assert_eq!(c.refcount(id), 3);
             }
-        })
-        .unwrap();
+        }
 
         let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
 
@@ -414,12 +415,12 @@ mod tests {
                 extra[k] += 1;
             }
         }
-        with(&cfg, |c| {
+        {
+            let c = read(&cfg).unwrap();
             for k in 0..4 {
                 assert_eq!(c.refcount(ids[k]), 3 + extra[k]);
             }
-        })
-        .unwrap();
+        }
     }
 
     #[test]
@@ -737,7 +738,7 @@ mod tests {
         let cfg = insert(Configuration::new(2).unwrap());
         let (contour, contour_nodes) =
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
-        let initial_node_count = with(&cfg, |c| c.node_count()).unwrap();
+        let initial_node_count = read(&cfg).unwrap().node_count();
 
         let opts = crate::ops::mesher::triangulation::RefinementOptions {
             max_edge_length: Some(1.5),
@@ -745,7 +746,7 @@ mod tests {
         };
         let tri = fill_surface(&contour, ElementType::TRI3, Some(opts)).unwrap();
 
-        let new_node_count = with(&cfg, |c| c.node_count()).unwrap();
+        let new_node_count = read(&cfg).unwrap().node_count();
         assert!(
             new_node_count > initial_node_count,
             "no Steiner nodes added: was {}, still {}",
@@ -778,7 +779,7 @@ mod tests {
         assert!(max_edge <= 1.5 + 1e-9, "max edge length {} > 1.5", max_edge);
 
         for n in &contour_nodes {
-            assert!(with(&cfg, |c| c.is_alive(n.id())).unwrap());
+            assert!(read(&cfg).unwrap().is_alive(n.id()));
         }
     }
 
@@ -787,9 +788,9 @@ mod tests {
         let cfg = insert(Configuration::new(2).unwrap());
         let (contour, _nodes) =
             build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
-        let initial_count = with(&cfg, |c| c.node_count()).unwrap();
+        let initial_count = read(&cfg).unwrap().node_count();
         let tri = fill_surface(&contour, ElementType::TRI3, Some(Default::default())).unwrap();
-        let final_count = with(&cfg, |c| c.node_count()).unwrap();
+        let final_count = read(&cfg).unwrap().node_count();
         assert_eq!(tri.cell_count().unwrap(), 2);
         assert_eq!(initial_count, final_count, "no Steiner expected");
     }

@@ -13,7 +13,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::models::Physics;
-use crate::store::{insert, with, Handle};
+use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature).
@@ -69,8 +69,8 @@ impl HeatConduction {
     /// [`SubMesh`] covering the subspace's unique nodes (reused as the
     /// row/col support of every assembled block).
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        let submesh = with(&fespace, |s| s.submesh())?;
-        let support = insert(with(&submesh, |s| s.to_poi1())??);
+        let submesh = read(&fespace)?.submesh();
+        let support = insert(read(&submesh)?.to_poi1()?);
         Ok(Self { fespace, support })
     }
 }
@@ -120,15 +120,16 @@ impl Physics for HeatConduction {
     ) -> Result<SubElementField> {
         let mat = material
             .expect("HeatConduction declares a material_fespace ⇒ material is supplied");
-        let space_dim = with(&self.fespace, |s| s.space_dim())?;
+        let space_dim = read(&self.fespace)?.space_dim();
         let grad_names = deformation_components(space_dim);
 
-        // `input` and `mat` are both `SubElementField`: the store Mutex is
-        // per-type and non-reentrant, so snapshot them in *sequential*
-        // critical sections — never nested.
-        let (n_cells, n_g) = with(input, |f| (f.cell_count(), f.gauss_count()))?;
+        let (n_cells, n_g) = {
+            let f = read(input)?;
+            (f.cell_count(), f.gauss_count())
+        };
         let mut grads: Vec<f64> = Vec::with_capacity(n_cells * n_g * space_dim);
-        with(input, |f| -> Result<()> {
+        {
+            let f = read(input)?;
             for cell in 0..n_cells {
                 for g in 0..n_g {
                     for a in 0..space_dim {
@@ -136,17 +137,16 @@ impl Physics for HeatConduction {
                     }
                 }
             }
-            Ok(())
-        })??;
+        }
         let mut ks: Vec<f64> = Vec::with_capacity(n_cells * n_g);
-        with(mat, |m| -> Result<()> {
+        {
+            let m = read(mat)?;
             for cell in 0..n_cells {
                 for g in 0..n_g {
                     ks.push(m.value(cell, g, MATERIAL_COMPONENT)?);
                 }
             }
-            Ok(())
-        })??;
+        }
 
         // Linear constitutive law: weak-form flux = k·∇T at each point.
         // (No internal-state variables for this law — `VAR0`/`VAR1` are
@@ -172,7 +172,7 @@ impl Physics for HeatConduction {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = with(&self.support, |s| s.cell_count()).unwrap_or(0);
+        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
         format!(
             "SubModel<HeatConduction>\n  primal var(s): {primal}\n  \
              dual var(s):   {dual}\n  support: {n} node(s)"
@@ -201,13 +201,14 @@ pub fn assemble_stiffness(
         det_j_w: Vec<f64>,    // |J|_g · w_g
     }
 
-    let snapshots: Vec<CellSnapshot> = with(fespace, |s| -> Result<_> {
+    let (snapshots, space_dim, n_nodes, n_g) = {
+        let s = read(fespace)?;
         let n_cells = s.cell_count()?;
         let n_nodes = s.nodes_per_cell()?;
         let n_g = s.gauss_count();
         let submesh = s.submesh();
 
-        let conn: Vec<NodeId> = with(&submesh, |sm| sm.connectivity().to_vec())?;
+        let conn: Vec<NodeId> = read(&submesh)?.connectivity().to_vec();
 
         let mut out = Vec::with_capacity(n_cells);
         for cell in 0..n_cells {
@@ -224,16 +225,13 @@ pub fn assemble_stiffness(
                 det_j_w,
             });
         }
-        Ok(out)
-    })??;
-
-    let space_dim = with(fespace, |s| s.space_dim())?;
-    let n_nodes = with(fespace, |s| s.nodes_per_cell())??;
-    let n_g = with(fespace, |s| s.gauss_count())?;
+        (out, s.space_dim(), n_nodes, n_g)
+    };
 
     // Read material conductivity once per (cell, gauss).
     let mut conductivities: Vec<Vec<f64>> = Vec::with_capacity(snapshots.len());
-    with(material, |f| -> Result<()> {
+    {
+        let f = read(material)?;
         for cell in 0..snapshots.len() {
             let mut row = Vec::with_capacity(n_g);
             for g in 0..n_g {
@@ -241,8 +239,7 @@ pub fn assemble_stiffness(
             }
             conductivities.push(row);
         }
-        Ok(())
-    })??;
+    }
 
     // Assemble cell by cell.
     for (cell, snap) in snapshots.iter().enumerate() {

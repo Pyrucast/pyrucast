@@ -1,11 +1,11 @@
 use crate::error::Result;
 use crate::containers::mesh::Configuration;
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::store::{with, Handle};
+use crate::store::{read, Handle};
 
 /// Create a POI1 mesh containing all live nodes of `config`.
 pub fn from_live_nodes(config: Handle<Configuration>) -> Result<Mesh> {
-    let node_ids: Vec<_> = with(&config, |c| c.iter_live().collect())?;
+    let node_ids: Vec<_> = read(&config)?.iter_live().collect();
     Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(config, &node_ids)?))
 }
 

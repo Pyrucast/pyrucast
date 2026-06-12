@@ -4,7 +4,7 @@ use crate::containers::mesh::NodeId;
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, with, with_mut};
+use crate::store::{insert, read, write};
 
 /// Map a coordinate-component name (`"X"`, `"Y"`, `"Z"`) to its axis index.
 fn axis_index(name: &str) -> Option<usize> {
@@ -32,7 +32,7 @@ fn axis_index(name: &str) -> Option<usize> {
 /// not have (e.g. `"Z"` on a 2-D mesh).
 pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeField> {
     let cfg = mesh.configuration()?;
-    let dim = with(&cfg, |c| c.dim())? as usize;
+    let dim = read(&cfg)?.dim() as usize;
 
     // Default component list = the axes present in this dimension.
     let components = match components {
@@ -68,12 +68,13 @@ pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeF
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
         // Read this zone's coordinates under a single Configuration lock.
         let nodes: Vec<NodeId> = sub.nodes().to_vec();
-        let coords: Vec<Vec<f64>> = with(&cfg, |c| -> Result<Vec<Vec<f64>>> {
+        let coords: Vec<Vec<f64>> = {
+            let c = read(&cfg)?;
             nodes
                 .iter()
                 .map(|&nid| c.coord(nid).map(|s| s.to_vec()))
-                .collect()
-        })??;
+                .collect::<Result<_>>()?
+        };
         for (ni, coord) in coords.iter().enumerate() {
             for (ci, &axis) in axes.iter().enumerate() {
                 sub.set(ni, ci, coord[axis])?;
@@ -142,15 +143,14 @@ fn per_node_values(field: &NodeField, comps: &[String]) -> Result<Vec<(NodeId, V
 /// `Configuration`.
 pub fn set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let cfg = field.configuration()?;
-    let dim = with(&cfg, |c| c.dim())? as usize;
+    let dim = read(&cfg)?.dim() as usize;
     let comps = resolve_axis_components(field, components, dim, &["X", "Y", "Z"])?;
     let targets = per_node_values(field, &comps)?;
-    with_mut(&cfg, |c| -> Result<()> {
-        for (nid, coord) in &targets {
-            c.set_coord(*nid, coord)?;
-        }
-        Ok(())
-    })?
+    let mut c = write(&cfg)?;
+    for (nid, coord) in &targets {
+        c.set_coord(*nid, coord)?;
+    }
+    Ok(())
 }
 
 /// **Displace** nodes by `field` (incremental): for every distinct node
@@ -161,19 +161,18 @@ pub fn set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> Re
 /// In-place on the field's `Configuration`.
 pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let cfg = field.configuration()?;
-    let dim = with(&cfg, |c| c.dim())? as usize;
+    let dim = read(&cfg)?.dim() as usize;
     let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
     let increments = per_node_values(field, &comps)?;
-    with_mut(&cfg, |c| -> Result<()> {
-        for (nid, inc) in &increments {
-            let mut coord = c.coord(*nid)?.to_vec();
-            for (a, dv) in inc.iter().enumerate() {
-                coord[a] += dv;
-            }
-            c.set_coord(*nid, &coord)?;
+    let mut c = write(&cfg)?;
+    for (nid, inc) in &increments {
+        let mut coord = c.coord(*nid)?.to_vec();
+        for (a, dv) in inc.iter().enumerate() {
+            coord[a] += dv;
         }
-        Ok(())
-    })?
+        c.set_coord(*nid, &coord)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -306,19 +305,18 @@ mod tests {
 
         // Field of target positions (X/Y), round-tripped from the reader.
         let f = coordinates(&mesh, None).unwrap();
-        with_mut(&f.get(0).unwrap(), |s| -> Result<()> {
-            s.set_value(a.id(), "X", 10.0)?;
-            s.set_value(a.id(), "Y", 20.0)
-        })
-        .unwrap()
-        .unwrap();
+        {
+            let mut s = write(&f.get(0).unwrap()).unwrap();
+            s.set_value(a.id(), "X", 10.0).unwrap();
+            s.set_value(a.id(), "Y", 20.0).unwrap();
+        }
 
         set_coordinates(&f, None).unwrap();
-        with(&cfg, |c| {
+        {
+            let c = read(&cfg).unwrap();
             assert_eq!(c.coord(a.id()).unwrap(), &[10.0, 20.0]);
             assert_eq!(c.coord(b.id()).unwrap(), &[1.0, 1.0]);
-        })
-        .unwrap();
+        }
     }
 
     #[test]
@@ -333,11 +331,11 @@ mod tests {
         d.set_value(b.id(), "ux", 2.0).unwrap();
 
         displace(&NodeField::from_sub(d), None).unwrap();
-        with(&cfg, |c| {
+        {
+            let c = read(&cfg).unwrap();
             assert_eq!(c.coord(a.id()).unwrap(), &[5.0, -1.0]);
             assert_eq!(c.coord(b.id()).unwrap(), &[3.0, 1.0]);
-        })
-        .unwrap();
+        }
     }
 
     #[test]
@@ -353,13 +351,14 @@ mod tests {
         }
         let f = NodeField::new(&mesh, vec!["ux".into()]).unwrap();
         for i in 0..2 {
-            with_mut(&f.get(i).unwrap(), |sub| sub.set_value(s.id(), "ux", 0.5))
+            write(&f.get(i).unwrap())
                 .unwrap()
+                .set_value(s.id(), "ux", 0.5)
                 .unwrap();
         }
 
         displace(&f, None).unwrap();
-        with(&cfg, |c| assert_eq!(c.coord(s.id()).unwrap(), &[1.5])).unwrap();
+        assert_eq!(read(&cfg).unwrap().coord(s.id()).unwrap(), &[1.5]);
     }
 
     #[test]

@@ -14,7 +14,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::Physics;
-use crate::store::{insert, with, with_mut, Handle};
+use crate::store::{insert, read, write, Handle};
 use serde::{Deserialize, Serialize};
 
 /// Multiplier-node name auto-generated from a primal variable name.
@@ -53,20 +53,21 @@ pub fn build(constrained_nodes: &[Node]) -> Result<Built> {
     // (left by `add_node`) over to a POI1 SubMesh via `add_cell_taking`
     // — ownership transfer, no extra incref/decref.
     let mut coords: Vec<Vec<f64>> = Vec::with_capacity(constrained_nodes.len());
-    with(&config, |c| -> Result<()> {
+    {
+        let c = read(&config)?;
         for n in constrained_nodes {
             coords.push(c.coord(n.id())?.to_vec());
         }
-        Ok(())
-    })??;
+    }
 
-    let multiplier_nodes: Vec<NodeId> = with_mut(&config, |c| -> Result<Vec<NodeId>> {
+    let multiplier_nodes: Vec<NodeId> = {
+        let mut c = write(&config)?;
         let mut out = Vec::with_capacity(coords.len());
         for coord in &coords {
             out.push(c.add_node(coord)?);
         }
-        Ok(out)
-    })??;
+        out
+    };
 
     let mut multiplier_sm = SubMesh::new(config, ElementType::POI1);
     for &nid in &multiplier_nodes {
@@ -148,9 +149,9 @@ impl Physics for Dirichlet {
         _material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
         let constrained_nodes: Vec<NodeId> =
-            with(&self.constrained_support, |s| s.connectivity().to_vec())?;
+            read(&self.constrained_support)?.connectivity().to_vec();
         let multiplier_nodes: Vec<NodeId> =
-            with(&self.multiplier_support, |s| s.connectivity().to_vec())?;
+            read(&self.multiplier_support)?.connectivity().to_vec();
         let lambda_name = multiplier_name(&self.primal_var);
         // C block: rows = multiplier × primal_var, cols = constrained × primal_var
         let mut c_block = SubMatrix::new(
@@ -186,7 +187,7 @@ impl Physics for Dirichlet {
     }
 
     fn display(&self) -> String {
-        let n = with(&self.constrained_support, |s| s.cell_count()).unwrap_or(0);
+        let n = read(&self.constrained_support).map(|s| s.cell_count()).unwrap_or(0);
         format!(
             "SubModel<Dirichlet({})>: {} constrained node(s)",
             self.primal_var, n
@@ -196,8 +197,8 @@ impl Physics for Dirichlet {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let nc = with(&self.constrained_support, |s| s.cell_count()).unwrap_or(0);
-        let nm = with(&self.multiplier_support, |s| s.cell_count()).unwrap_or(0);
+        let nc = read(&self.constrained_support).map(|s| s.cell_count()).unwrap_or(0);
+        let nm = read(&self.multiplier_support).map(|s| s.cell_count()).unwrap_or(0);
         format!(
             "SubModel<Dirichlet({primal_var})>\n  primal var(s): {primal} (multipliers)\n  \
              dual var(s):   {dual}\n  targets primary dual: {primal_dual}\n  \

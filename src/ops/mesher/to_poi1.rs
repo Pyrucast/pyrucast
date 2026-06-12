@@ -1,7 +1,7 @@
 use crate::aggregate::Aggregate;
 use crate::error::Result;
 use crate::containers::mesh::Mesh;
-use crate::store::{insert, with};
+use crate::store::{insert, read};
 
 /// Convert a mesh to POI1, **submesh by submesh**.
 ///
@@ -17,7 +17,7 @@ use crate::store::{insert, with};
 pub fn to_poi1(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_handle in mesh {
-        let poi = with(sm_handle, |s| s.to_poi1())??;
+        let poi = read(sm_handle)?.to_poi1()?;
         result.add_sub(insert(poi))?;
     }
     Ok(result)
@@ -31,7 +31,7 @@ mod tests {
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
-    use crate::store::{insert, with};
+    use crate::store::insert;
 
     #[test]
     fn tri3_submesh_becomes_unique_node_list() {
@@ -74,11 +74,11 @@ mod tests {
         mesh.add_sub(sm_tri).unwrap();
 
         // refcounts before: a is in POI1 + TRI3 + Node = 3; b,c in TRI3 + Node = 2.
-        with(&cfg, |cf| {
+        {
+            let cf = read(&cfg).unwrap();
             assert_eq!(cf.refcount(a.id()), 3);
             assert_eq!(cf.refcount(b.id()), 2);
-        })
-        .unwrap();
+        }
 
         let poi = to_poi1(&mesh).unwrap();
         assert_eq!(poi.len(), 2, "same number of submeshes");
@@ -89,18 +89,18 @@ mod tests {
         assert_eq!(poi.cell_counts().unwrap(), vec![1, 3]);
 
         // The new POI1 submeshes increfed every node they reference.
-        with(&cfg, |cf| {
+        {
+            let cf = read(&cfg).unwrap();
             assert_eq!(cf.refcount(a.id()), 5); // +POI1(sub0) +POI1(sub1)
             assert_eq!(cf.refcount(b.id()), 3); // +POI1(sub1)
-        })
-        .unwrap();
+        }
 
         drop(poi);
-        with(&cfg, |cf| {
+        {
+            let cf = read(&cfg).unwrap();
             assert_eq!(cf.refcount(a.id()), 3);
             assert_eq!(cf.refcount(b.id()), 2);
-        })
-        .unwrap();
+        }
     }
 
     #[test]

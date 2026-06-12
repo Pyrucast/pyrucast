@@ -51,18 +51,16 @@ mod tests {
         let nc = Node::create_in(cfg.clone(), &[2.0]).unwrap();
         let a = poi1_field(&cfg, &[&na, &nb], vec!["T".into()]);
         let b = poi1_field(&cfg, &[&nb, &nc], vec!["T".into()]);
-        crate::store::with_mut(&a.get(0).unwrap(), |s| -> Result<()> {
-            s.set(0, 0, 5.0)?;
-            s.set(1, 0, 3.0)
-        })
-        .unwrap()
-        .unwrap();
-        crate::store::with_mut(&b.get(0).unwrap(), |s| -> Result<()> {
-            s.set(0, 0, 3.0)?;
-            s.set(1, 0, 9.0)
-        })
-        .unwrap()
-        .unwrap();
+        {
+            let mut s = crate::store::write(&a.get(0).unwrap()).unwrap();
+            s.set(0, 0, 5.0).unwrap();
+            s.set(1, 0, 3.0).unwrap();
+        }
+        {
+            let mut s = crate::store::write(&b.get(0).unwrap()).unwrap();
+            s.set(0, 0, 3.0).unwrap();
+            s.set(1, 0, 9.0).unwrap();
+        }
 
         let c = merge(&a, &b).unwrap();
         assert_eq!(c.len(), 1, "same component set ⇒ one fused zone");
@@ -89,11 +87,13 @@ mod tests {
         let n = Node::create_in(cfg.clone(), &[0.0]).unwrap();
         let a = poi1_field(&cfg, &[&n], vec!["T".into()]);
         let b = poi1_field(&cfg, &[&n], vec!["T".into()]);
-        crate::store::with_mut(&a.get(0).unwrap(), |s| s.set(0, 0, 1.0))
+        crate::store::write(&a.get(0).unwrap())
             .unwrap()
+            .set(0, 0, 1.0)
             .unwrap();
-        crate::store::with_mut(&b.get(0).unwrap(), |s| s.set(0, 0, 2.0))
+        crate::store::write(&b.get(0).unwrap())
             .unwrap()
+            .set(0, 0, 2.0)
             .unwrap();
         assert!(merge(&a, &b).is_err());
     }

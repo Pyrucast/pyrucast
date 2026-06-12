@@ -2,7 +2,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::model::{Model, SubModel};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, with};
+use crate::store::{insert, read};
 
 /// Build the material [`SubElementField`] of a single material-hungry
 /// sub-model from uniform `(component, value)` pairs.
@@ -52,12 +52,14 @@ pub fn material_field(
 ) -> Result<ElementField> {
     let mut out = ElementField::empty();
     for h in model {
-        let opt_sub = with(h, |sub| -> Result<Option<SubElementField>> {
+        let opt_sub = {
+            let sub = read(h)?;
             if sub.material_fespace().is_none() {
-                return Ok(None);
+                None
+            } else {
+                Some(sub_material_field(&*sub, components_and_values)?)
             }
-            Ok(Some(sub_material_field(sub, components_and_values)?))
-        })??;
+        };
         if let Some(sub) = opt_sub {
             out.add_sub(insert(sub))?;
         }
@@ -88,7 +90,7 @@ pub fn material_field_per_sub_model(
         if spec.is_empty() {
             continue;
         }
-        let sub = with(h, |sub| sub_material_field(sub, spec))??;
+        let sub = sub_material_field(&*read(h)?, spec)?;
         out.add_sub(insert(sub))?;
     }
     Ok(out)
@@ -151,7 +153,7 @@ mod tests {
         let (_cfg, hc) = single_hc_sub();
         let sub = hc.material_fespace().unwrap();
         let mat = sub_material_field(&hc, &[("k", 2.5)]).unwrap();
-        let n_g = with(&sub, |s| s.gauss_count()).unwrap();
+        let n_g = read(&sub).unwrap().gauss_count();
         for g in 0..n_g {
             assert!((mat.value(0, g, "k").unwrap() - 2.5).abs() < 1e-12);
         }
