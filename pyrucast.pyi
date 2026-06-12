@@ -530,7 +530,7 @@ class Mesh:
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[NodeField] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None) -> None:
         r"""
         Visualize this mesh (every submesh in its own colour, or
-        coloured by a `SubNodeField` if `field` is supplied). See
+        coloured by a `NodeField` if `field` is supplied). See
         `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
         `field` and `component`.
         """
@@ -1088,7 +1088,7 @@ class SubMesh:
         - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
           corner (default `True`). In the interactive window, the key
           `A` toggles it at runtime.
-        - `field`: optional `SubNodeField` whose values colour each cell
+        - `field`: optional `NodeField` whose values colour each cell
           (per-cell value = mean over the cell's nodes of the chosen
           component). Default `None` ⇒ uniform face colour.
         - `component`: component name to display when `field` is set

@@ -1,20 +1,21 @@
 //! Field-aware colouring for mesh visualization.
 //!
-//! Given a [`crate::containers::node_field::SubNodeField`] sampled at the nodes, paint
-//! each mesh cell with the colour the field value maps to under a
-//! standard "jet-lite" colormap (blue → green → red, no perceptual
-//! ordering pretensions — good enough for early-stage debugging).
+//! Given a [`crate::containers::node_field::NodeField`] sampled at the
+//! nodes (consumed as a lock-free zone snapshot, first zone defining a
+//! `(node, component)` pair wins), paint each mesh cell with the colour
+//! the field value maps to under a standard colormap.
 //!
 //! Per-cell value = arithmetic mean of the field at the cell's nodes,
 //! restricted to nodes that are in the field's support. Nodes absent
 //! from the field do not contribute; a cell with no node in the
 //! support gets value `0.0`.
 
+use crate::aggregate::Aggregate;
 use crate::containers::mesh::RgbColor;
 use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::containers::node_field::SubNodeField;
+use crate::containers::node_field::FieldSnapshot;
 use crate::store::with;
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
@@ -142,14 +143,14 @@ pub fn colormap(cmap: Colormap, value: f64, vmin: f64, vmax: f64) -> RgbColor {
 /// contribute to the mean nor to the denominator). If **no** node is
 /// in the support, returns `0.0`.
 pub(crate) fn nodes_mean(
-    field: &SubNodeField,
+    field: &FieldSnapshot,
     node_ids: &[NodeId],
     component: &str,
 ) -> f64 {
     let mut sum = 0.0;
     let mut count = 0usize;
     for &nid in node_ids {
-        if let Ok(v) = field.value(nid, component) {
+        if let Some(v) = field.value_opt(nid, component) {
             sum += v;
             count += 1;
         }
@@ -166,7 +167,7 @@ pub(crate) fn nodes_mean(
 /// Length of the returned vector = number of cells in the submesh.
 pub(crate) fn submesh_cell_values(
     sm: &SubMesh,
-    field: &SubNodeField,
+    field: &FieldSnapshot,
     component: &str,
 ) -> Result<Vec<f64>> {
     let conn = sm.connectivity();
@@ -212,7 +213,7 @@ fn colors_from_values(values: &[f64], cmap: Colormap, vmin: f64, vmax: f64) -> V
 /// global `(min, max)` range over all submeshes.
 fn mesh_cell_values(
     mesh: &Mesh,
-    field: &SubNodeField,
+    field: &FieldSnapshot,
     component: &str,
 ) -> Result<(Vec<Vec<f64>>, f64, f64)> {
     let n_sub = mesh.len();
@@ -231,13 +232,13 @@ fn mesh_cell_values(
 ///
 /// `requested` `None` → first component of the field (its declared
 /// primary component); `Some(name)` → check it exists.
-pub fn resolve_component<'a>(
-    field: &'a SubNodeField,
+pub(crate) fn resolve_component<'a>(
+    field: &'a FieldSnapshot,
     requested: Option<&'a str>,
 ) -> Result<&'a str> {
     match requested {
         Some(name) => {
-            if field.component_index(name).is_none() {
+            if !field.components().iter().any(|c| c == name) {
                 return Err(PyrucastError::Message(format!(
                     "field has no component named \"{}\" (available: {:?})",
                     name,
@@ -254,10 +255,11 @@ pub fn resolve_component<'a>(
 
 // ─── Drawable wrappers ─────────────────────────────────────────────────────
 
-/// `Drawable` over a [`Mesh`] coloured by a [`SubNodeField`]'s component.
-pub struct MeshFieldView<'a> {
-    pub mesh: &'a Mesh,
-    pub field: &'a SubNodeField,
+/// `Drawable` over a [`Mesh`] coloured by a node field's component
+/// (zone snapshot of a [`crate::containers::node_field::NodeField`]).
+pub(crate) struct MeshFieldView<'a> {
+    pub(crate) mesh: &'a Mesh,
+    pub(crate) field: &'a FieldSnapshot,
     pub component: &'a str,
     /// Caller override for the colour-scale bounds; defaults to the
     /// data's own range.
@@ -295,11 +297,12 @@ impl<'a> Drawable for MeshFieldView<'a> {
     }
 }
 
-/// `Drawable` over a single [`SubMesh`] coloured by a [`SubNodeField`]'s
-/// component.
-pub struct SubMeshFieldView<'a> {
-    pub submesh: &'a SubMesh,
-    pub field: &'a SubNodeField,
+/// `Drawable` over a single [`SubMesh`] coloured by a node field's
+/// component (zone snapshot of a
+/// [`crate::containers::node_field::NodeField`]).
+pub(crate) struct SubMeshFieldView<'a> {
+    pub(crate) submesh: &'a SubMesh,
+    pub(crate) field: &'a FieldSnapshot,
     pub component: &'a str,
     /// Caller override for the colour-scale bounds; defaults to the
     /// data's own range.
@@ -339,6 +342,7 @@ mod tests {
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::SubMesh as RawSubMesh;
     use crate::containers::mesh::Node;
+    use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::store::insert;
 
     #[test]
@@ -410,9 +414,10 @@ mod tests {
         nf.set_value(a.id(), "T", 1.0).unwrap();
         nf.set_value(b.id(), "T", 2.0).unwrap();
         nf.set_value(c.id(), "T", 3.0).unwrap();
+        let snap = NodeField::from_sub(nf).snapshot().unwrap();
 
         let values = crate::store::with(&sm_h, |s| {
-            submesh_cell_values(s, &nf, "T")
+            submesh_cell_values(s, &snap, "T")
         })
         .unwrap()
         .unwrap();
@@ -431,8 +436,9 @@ mod tests {
         let poi1_h = insert(poi1);
         let mut nf = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
         nf.set_value(a.id(), "T", 4.0).unwrap();
+        let snap = NodeField::from_sub(nf).snapshot().unwrap();
         // Two-node "cell": only `a` is in the field; mean = 4.0.
-        let mean = nodes_mean(&nf, &[a.id(), b.id()], "T");
+        let mean = nodes_mean(&snap, &[a.id(), b.id()], "T");
         assert!((mean - 4.0).abs() < 1e-12);
     }
 

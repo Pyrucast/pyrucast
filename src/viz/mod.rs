@@ -216,25 +216,27 @@ pub(crate) fn render<D: Drawable>(
     }
 }
 
-/// Render a [`crate::containers::mesh::Mesh`] coloured by a `SubNodeField` component.
+/// Render a [`crate::containers::mesh::Mesh`] coloured by a `NodeField`
+/// component (zones resolved first-found, via one lock-free snapshot).
 /// File export draws the supplied `component`; the interactive window
 /// adds a clickable button (top-centre) and a `Tab` keyboard shortcut
-/// to cycle through every component.
+/// to cycle through every component (union of the zones').
 pub(crate) fn render_mesh_with_field(
     mesh: &crate::containers::mesh::Mesh,
-    field: &crate::containers::node_field::SubNodeField,
+    field: &crate::containers::node_field::NodeField,
     component: Option<&str>,
     scale: ColorScale,
     view: Option<View>,
     save: Option<&Path>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
-    let resolved = field_color::resolve_component(field, component)?;
+    let snapshot = field.snapshot()?;
+    let resolved = field_color::resolve_component(&snapshot, component)?;
     match save {
         Some(path) => {
             let drawable = field_color::MeshFieldView {
                 mesh,
-                field,
+                field: &snapshot,
                 component: resolved,
                 scale,
             };
@@ -243,7 +245,7 @@ pub(crate) fn render_mesh_with_field(
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_mesh_field(mesh, field, resolved, scale, view)
+                window::run_interactive_mesh_field(mesh, &snapshot, resolved, scale, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {
@@ -257,23 +259,24 @@ pub(crate) fn render_mesh_with_field(
     }
 }
 
-/// Render a [`crate::containers::mesh::SubMesh`] coloured by a `SubNodeField`
+/// Render a [`crate::containers::mesh::SubMesh`] coloured by a `NodeField`
 /// component. Same semantics as [`render_mesh_with_field`].
 pub(crate) fn render_submesh_with_field(
     submesh: &crate::containers::mesh::SubMesh,
-    field: &crate::containers::node_field::SubNodeField,
+    field: &crate::containers::node_field::NodeField,
     component: Option<&str>,
     scale: ColorScale,
     view: Option<View>,
     save: Option<&Path>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
-    let resolved = field_color::resolve_component(field, component)?;
+    let snapshot = field.snapshot()?;
+    let resolved = field_color::resolve_component(&snapshot, component)?;
     match save {
         Some(path) => {
             let drawable = field_color::SubMeshFieldView {
                 submesh,
-                field,
+                field: &snapshot,
                 component: resolved,
                 scale,
             };
@@ -282,7 +285,7 @@ pub(crate) fn render_submesh_with_field(
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_submesh_field(submesh, field, resolved, scale, view)
+                window::run_interactive_submesh_field(submesh, &snapshot, resolved, scale, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {

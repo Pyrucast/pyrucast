@@ -201,7 +201,7 @@ fn mesh_renders_mixed_element_types() {
 
 #[test]
 fn mesh_plot_with_field_export_svg_contains_overlay_label() {
-    use pyrucast::containers::node_field::SubNodeField;
+    use pyrucast::containers::node_field::{NodeField, SubNodeField};
 
     let cfg = insert(Configuration::new(2).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -224,6 +224,7 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
     field.set_value(a.id(), "T", 0.0).unwrap();
     field.set_value(b.id(), "T", 1.0).unwrap();
     field.set_value(c.id(), "T", 2.0).unwrap();
+    let field = NodeField::from_sub(field);
 
     let dir = tmpdir();
     let path = dir.join("mesh_field.svg");
@@ -247,7 +248,7 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
 
 #[test]
 fn plot_with_field_colorbar_uses_explicit_bounds() {
-    use pyrucast::containers::node_field::SubNodeField;
+    use pyrucast::containers::node_field::{NodeField, SubNodeField};
 
     let cfg = insert(Configuration::new(2).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -269,6 +270,7 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
     field.set_value(a.id(), "T", 0.0).unwrap();
     field.set_value(b.id(), "T", 1.0).unwrap();
     field.set_value(c.id(), "T", 2.0).unwrap();
+    let field = NodeField::from_sub(field);
 
     let dir = tmpdir();
     let path = dir.join("mesh_field_scaled.svg");
@@ -297,7 +299,7 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
 
 #[test]
 fn plot_with_field_explicit_component_choice() {
-    use pyrucast::containers::node_field::SubNodeField;
+    use pyrucast::containers::node_field::{NodeField, SubNodeField};
 
     let cfg = insert(Configuration::new(2).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
@@ -318,6 +320,7 @@ fn plot_with_field_explicit_component_choice() {
     field.set_value(a.id(), "UY", 3.14).unwrap();
     field.set_value(b.id(), "UY", 2.71).unwrap();
     field.set_value(c.id(), "UY", 1.41).unwrap();
+    let field = NodeField::from_sub(field);
 
     let dir = tmpdir();
     let path = dir.join("submesh_uy.svg");
@@ -338,14 +341,15 @@ fn plot_with_field_explicit_component_choice() {
 
 #[test]
 fn plot_with_field_unknown_component_errors() {
-    use pyrucast::containers::node_field::SubNodeField;
+    use pyrucast::containers::node_field::{NodeField, SubNodeField};
 
     let cfg = insert(Configuration::new(1).unwrap());
     let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
     let mut poi1 = SubMesh::new(cfg.clone(), ElementType::POI1);
     poi1.add_cell(&[a.id()]).unwrap();
     let poi1_h = insert(poi1);
-    let field = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
+    let field =
+        NodeField::from_sub(SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap());
 
     let mut tri = SubMesh::new(cfg.clone(), ElementType::SEG2);
     let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();

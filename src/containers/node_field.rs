@@ -768,14 +768,25 @@ impl NodeField {
     }
 
     /// Lock-free snapshot of the zones, for operators doing many
-    /// per-node reads (gradient, solver, …): one store lock per sub at
-    /// construction, none afterwards.
+    /// per-node reads (gradient, solver, viz, …): one store lock per sub
+    /// at construction, none afterwards.
+    ///
+    /// Pure data — no `Handle` is cloned, so no store refcount is
+    /// touched: building a snapshot is safe even under a `with::<SubMesh>`
+    /// (e.g. inside [`SubMesh::plot_with_field`]), where cloning a sub's
+    /// support handle would re-enter the SubMesh mutex and deadlock.
     pub(crate) fn snapshot(&self) -> Result<FieldSnapshot> {
-        let mut subs = Vec::with_capacity(self.len());
+        use crate::containers::field::SubField;
+        let components = crate::containers::field::Field::components(self)?;
+        let mut zones = Vec::with_capacity(self.len());
         for h in self {
-            subs.push(with(h, |s| s.clone())?);
+            zones.push(with(h, |s| ZoneSnapshot {
+                nodes: s.nodes().to_vec(),
+                components: s.components().to_vec(),
+                values: s.values().to_vec(),
+            })?);
         }
-        Ok(FieldSnapshot { subs })
+        Ok(FieldSnapshot { zones, components })
     }
 
     /// Verify zone coherence: every `(node, component)` stored by several
@@ -822,13 +833,36 @@ impl NodeField {
 }
 
 /// Lock-free snapshot of a [`NodeField`]'s zones (see
-/// [`NodeField::snapshot`]). Reads mirror the aggregate: first zone
-/// defining `(node, component)` wins.
+/// [`NodeField::snapshot`]). Pure data — holds no `Handle`. Reads
+/// mirror the aggregate: first zone defining `(node, component)` wins.
 pub(crate) struct FieldSnapshot {
-    subs: Vec<SubNodeField>,
+    zones: Vec<ZoneSnapshot>,
+    /// Union of the zones' component names, first-seen order.
+    components: Vec<String>,
+}
+
+/// One zone of a [`FieldSnapshot`]: the data of a [`SubNodeField`]
+/// without its support handle (same row-major value layout).
+struct ZoneSnapshot {
+    nodes: Vec<NodeId>,
+    components: Vec<String>,
+    values: Vec<f64>,
+}
+
+impl ZoneSnapshot {
+    fn value_opt(&self, nid: NodeId, component: &str) -> Option<f64> {
+        let ni = self.nodes.iter().position(|&n| n == nid)?;
+        let ci = self.components.iter().position(|c| c == component)?;
+        Some(self.values[ni * self.components.len() + ci])
+    }
 }
 
 impl FieldSnapshot {
+    /// Union of the zones' component names, first-seen order.
+    pub(crate) fn components(&self) -> &[String] {
+        &self.components
+    }
+
     /// Value at `(node, component)` — first zone wins; errors if absent.
     pub(crate) fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
         self.value_opt(nid, component).ok_or_else(|| {
@@ -841,9 +875,9 @@ impl FieldSnapshot {
 
     /// Like [`FieldSnapshot::value`], `None` when absent.
     pub(crate) fn value_opt(&self, nid: NodeId, component: &str) -> Option<f64> {
-        self.subs
+        self.zones
             .iter()
-            .find_map(|s| s.component_value_opt(nid, component))
+            .find_map(|z| z.value_opt(nid, component))
     }
 }
 

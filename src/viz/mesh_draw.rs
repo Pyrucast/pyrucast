@@ -13,6 +13,7 @@
 //! the same colour for points/segments, and overlaid with black edges for
 //! face boundaries.
 
+use crate::aggregate::Aggregate;
 use crate::containers::mesh::RgbColor;
 use crate::containers::mesh::{Configuration, NodeId};
 use crate::containers::mesh::ElementType;

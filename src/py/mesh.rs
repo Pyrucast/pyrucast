@@ -29,7 +29,7 @@ fn parse_cmap(name: Option<String>) -> PyResult<crate::viz::Colormap> {
 /// Resolve a `Handle<SubMesh>` from either a `SubMesh` view or a
 /// **unitary** `Mesh` (the parent→sub coercion — see `CONVENTIONS.md`,
 /// « Agrégats : un ou plusieurs »). Used wherever an API takes a single
-/// submesh support (`SubNodeField`, `Matrix.block`, …). A multi-submesh
+/// submesh support (`Matrix.block`, …). A multi-submesh
 /// `Mesh` is rejected with a clear error.
 pub(crate) fn submesh_handle(obj: &Bound<'_, PyAny>) -> PyResult<Handle<SubMesh>> {
     if let Ok(sm) = obj.extract::<PyRef<PySubMesh>>() {
@@ -96,7 +96,7 @@ impl PySubMesh {
     /// - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
     ///   corner (default `True`). In the interactive window, the key
     ///   `A` toggles it at runtime.
-    /// - `field`: optional `SubNodeField` whose values colour each cell
+    /// - `field`: optional `NodeField` whose values colour each cell
     ///   (per-cell value = mean over the cell's nodes of the chosen
     ///   component). Default `None` ⇒ uniform face colour.
     /// - `component`: component name to display when `field` is set
@@ -141,11 +141,8 @@ impl PySubMesh {
             Some(f) => {
                 let comp_ref = component.as_deref();
                 let sm_handle = self.handle.clone();
-                let field_handle = f.inner.unit()?;
                 crate::store::with(&sm_handle, |s| {
-                    crate::store::with(&field_handle, |fld| {
-                        s.plot_with_field(Some(view), save_ref, fld, comp_ref, scale)
-                    })?
+                    s.plot_with_field(Some(view), save_ref, &f.inner, comp_ref, scale)
                 })??;
             }
             None => {
@@ -250,7 +247,7 @@ impl PyMesh {
     }
 
     /// Visualize this mesh (every submesh in its own colour, or
-    /// coloured by a `SubNodeField` if `field` is supplied). See
+    /// coloured by a `NodeField` if `field` is supplied). See
     /// `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
     /// `field` and `component`.
     #[cfg(feature = "viz")]
@@ -285,10 +282,8 @@ impl PyMesh {
         match field {
             Some(f) => {
                 let comp_ref = component.as_deref();
-                let field_handle = f.inner.unit()?;
-                crate::store::with(&field_handle, |fld| {
-                    self.inner.plot_with_field(Some(view), save_ref, fld, comp_ref, scale)
-                })??;
+                self.inner
+                    .plot_with_field(Some(view), save_ref, &f.inner, comp_ref, scale)?;
             }
             None => {
                 self.inner.plot(Some(view), save_ref)?;
