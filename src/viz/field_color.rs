@@ -327,6 +327,118 @@ pub(crate) fn submesh_cell_values(
     Ok(out)
 }
 
+/// Per-cell nodal values of `component` for every cell of `sm`
+/// (smooth-rendering prepass; also yields the colour range).
+pub(crate) fn submesh_nodal_values(
+    ctx: &SubmeshFieldCtx<'_>,
+    sm: &SubMesh,
+    component: &str,
+) -> Result<Vec<Vec<f64>>> {
+    let npc = sm.element_type().nodes_per_cell();
+    let conn = sm.connectivity();
+    if npc == 0 || conn.is_empty() {
+        return Ok(Vec::new());
+    }
+    (0..conn.len() / npc)
+        .map(|cell| ctx.cell_node_values(sm, cell, component))
+        .collect()
+}
+
+/// Interpolated (smooth) primitives of one submesh: each cell is split
+/// into level-`n` sub-triangles whose geometry and value follow the
+/// shape functions of the element — see [`crate::viz::subdivide`]. The
+/// element boundary is drawn as a wire on top; the sub-faces carry no
+/// outline. Values are the **per-element** nodal values of `nodal`
+/// (one `Vec` per cell), so inter-element discontinuities remain.
+pub(crate) fn submesh_primitives_smooth(
+    sm: &SubMesh,
+    nodal: &[Vec<f64>],
+    cmap: Colormap,
+    vmin: f64,
+    vmax: f64,
+    n: usize,
+) -> Result<Vec<Primitive>> {
+    use crate::viz::mesh_draw::pad3;
+    use crate::viz::subdivide::{subdivide, CellSubdivision};
+    use crate::containers::finite_element_space::Interpolation;
+    use crate::containers::mesh::Point3;
+
+    let et = sm.element_type();
+    let npc = et.nodes_per_cell();
+    let conn = sm.connectivity();
+    let n_cells = conn.len() / npc.max(1);
+    if n_cells == 0 {
+        return Ok(Vec::new());
+    }
+    let sub = match et {
+        crate::containers::mesh::ElementType::POI1 => CellSubdivision::Points,
+        _ => subdivide(et, Interpolation::Lagrange1, n)?,
+    };
+
+    // All node coordinates of the submesh, padded to 3-D.
+    let cfg = sm.configuration();
+    let coords: Vec<Point3> = {
+        let c = read(&cfg)?;
+        conn.iter()
+            .map(|&nid| c.coord(nid).map(pad3))
+            .collect::<Result<_>>()?
+    };
+
+    let mut out = Vec::new();
+    for cell in 0..n_cells {
+        let xs = &coords[cell * npc..(cell + 1) * npc];
+        let vs = &nodal[cell];
+        let at = |w: &[f64]| -> (Point3, f64) {
+            let mut p = Point3::new(0.0, 0.0, 0.0);
+            let mut v = 0.0;
+            for i in 0..npc {
+                p += xs[i].coords * w[i];
+                v += vs[i] * w[i];
+            }
+            (p, v)
+        };
+        match &sub {
+            CellSubdivision::Points => {
+                out.push(Primitive::Point {
+                    p: xs[0],
+                    color: colormap(cmap, vs[0], vmin, vmax),
+                });
+            }
+            CellSubdivision::Segments { weights, segments } => {
+                let pv: Vec<(Point3, f64)> = weights.iter().map(|w| at(w)).collect();
+                for seg in segments {
+                    let (a, va) = pv[seg[0]];
+                    let (b, vb) = pv[seg[1]];
+                    out.push(Primitive::Segment {
+                        a,
+                        b,
+                        color: colormap(cmap, 0.5 * (va + vb), vmin, vmax),
+                    });
+                }
+            }
+            CellSubdivision::Faces(faces) => {
+                for face in faces {
+                    let pv: Vec<(Point3, f64)> =
+                        face.weights.iter().map(|w| at(w)).collect();
+                    for tri in &face.triangles {
+                        let value =
+                            (pv[tri[0]].1 + pv[tri[1]].1 + pv[tri[2]].1) / 3.0;
+                        out.push(Primitive::Face {
+                            verts: vec![pv[tri[0]].0, pv[tri[1]].0, pv[tri[2]].0],
+                            color: colormap(cmap, value, vmin, vmax),
+                            outline: false,
+                        });
+                    }
+                    out.push(Primitive::Wire {
+                        verts: face.outline.iter().map(|w| at(w).0).collect(),
+                    });
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Min / max of an arbitrary number of submesh-level value vectors.
 /// Empty input → `(0.0, 1.0)` so the colormap stays sensible.
 pub(crate) fn value_range<'a, I: IntoIterator<Item = &'a [f64]>>(values: I) -> (f64, f64) {
@@ -408,6 +520,9 @@ pub(crate) struct MeshFieldView<'a> {
     /// Caller override for the colour-scale bounds; defaults to the
     /// data's own range.
     pub scale: crate::viz::ColorScale,
+    /// Subdivision level of the interpolated rendering; `0` = one flat
+    /// colour per cell.
+    pub smooth: usize,
 }
 
 impl<'a> Drawable for MeshFieldView<'a> {
@@ -423,16 +538,44 @@ impl<'a> Drawable for MeshFieldView<'a> {
     where
         DB::ErrorType: 'static,
     {
-        let (per_sub, dmin, dmax) =
-            mesh_cell_values(self.mesh, self.field, self.component)?;
-        let (vmin, vmax) = self.scale.resolve(dmin, dmax);
         let cmap = self.scale.cmap;
         let mut all_prims: Vec<Primitive> = Vec::new();
-        for (i, values) in per_sub.iter().enumerate() {
-            let sm = self.mesh.get(i)?;
-            let colors = colors_from_values(values, cmap, vmin, vmax);
-            let prims = submesh_primitives_with_colors(&*read(&sm)?, &colors)?;
-            all_prims.extend(prims);
+        let (vmin, vmax);
+        if self.smooth == 0 {
+            let (per_sub, dmin, dmax) =
+                mesh_cell_values(self.mesh, self.field, self.component)?;
+            (vmin, vmax) = self.scale.resolve(dmin, dmax);
+            for (i, values) in per_sub.iter().enumerate() {
+                let sm = self.mesh.get(i)?;
+                let colors = colors_from_values(values, cmap, vmin, vmax);
+                let prims = submesh_primitives_with_colors(&*read(&sm)?, &colors)?;
+                all_prims.extend(prims);
+            }
+        } else {
+            // Prepass: per-element nodal values of every submesh + range.
+            let mut per_sub: Vec<Vec<Vec<f64>>> = Vec::with_capacity(self.mesh.len());
+            for i in 0..self.mesh.len() {
+                let sm = self.mesh.get(i)?;
+                let ctx = self.field.for_submesh(&sm)?;
+                per_sub.push(submesh_nodal_values(&ctx, &*read(&sm)?, self.component)?);
+            }
+            let flat: Vec<f64> = per_sub
+                .iter()
+                .flat_map(|cells| cells.iter().flatten().copied())
+                .collect();
+            let (dmin, dmax) = value_range([flat.as_slice()]);
+            (vmin, vmax) = self.scale.resolve(dmin, dmax);
+            for (i, nodal) in per_sub.iter().enumerate() {
+                let sm = self.mesh.get(i)?;
+                all_prims.extend(submesh_primitives_smooth(
+                    &*read(&sm)?,
+                    nodal,
+                    cmap,
+                    vmin,
+                    vmax,
+                    self.smooth,
+                )?);
+            }
         }
         render_primitives(area, view, &all_prims)?;
         super::overlay::draw_field_overlay(area, self.component, vmin, vmax)?;
@@ -450,6 +593,9 @@ pub(crate) struct SubMeshFieldView<'a> {
     /// Caller override for the colour-scale bounds; defaults to the
     /// data's own range.
     pub scale: crate::viz::ColorScale,
+    /// Subdivision level of the interpolated rendering; `0` = one flat
+    /// colour per cell.
+    pub smooth: usize,
 }
 
 impl<'a> Drawable for SubMeshFieldView<'a> {
@@ -467,12 +613,21 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
     {
         let ctx = self.field.for_submesh(self.submesh)?;
         let sm = read(self.submesh)?;
-        let values = submesh_cell_values(&ctx, &sm, self.component)?;
-        let (dmin, dmax) = value_range([values.as_slice()]);
-        let (vmin, vmax) = self.scale.resolve(dmin, dmax);
         let cmap = self.scale.cmap;
-        let colors = colors_from_values(&values, cmap, vmin, vmax);
-        let prims = submesh_primitives_with_colors(&sm, &colors)?;
+        let (prims, vmin, vmax);
+        if self.smooth == 0 {
+            let values = submesh_cell_values(&ctx, &sm, self.component)?;
+            let (dmin, dmax) = value_range([values.as_slice()]);
+            (vmin, vmax) = self.scale.resolve(dmin, dmax);
+            let colors = colors_from_values(&values, cmap, vmin, vmax);
+            prims = submesh_primitives_with_colors(&sm, &colors)?;
+        } else {
+            let nodal = submesh_nodal_values(&ctx, &sm, self.component)?;
+            let flat: Vec<f64> = nodal.iter().flatten().copied().collect();
+            let (dmin, dmax) = value_range([flat.as_slice()]);
+            (vmin, vmax) = self.scale.resolve(dmin, dmax);
+            prims = submesh_primitives_smooth(&sm, &nodal, cmap, vmin, vmax, self.smooth)?;
+        }
         render_primitives(area, view, &prims)?;
         super::overlay::draw_field_overlay(area, self.component, vmin, vmax)?;
         super::overlay::draw_colorbar(area, cmap, vmin, vmax)?;

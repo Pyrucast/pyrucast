@@ -234,6 +234,7 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
         pyrucast::viz::FieldArg::Node(&field),
         None,
         ColorScale::default(),
+        0,
     )
     .unwrap();
 
@@ -286,6 +287,7 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
             vmax: Some(10.0),
             ..Default::default()
         },
+        0,
     )
     .unwrap();
 
@@ -329,6 +331,7 @@ fn plot_with_field_explicit_component_choice() {
         pyrucast::viz::FieldArg::Node(&field),
         Some("UY"),
         ColorScale::default(),
+        0,
         Some(View::front()),
         Some(&path),
     )
@@ -360,6 +363,7 @@ fn plot_with_field_unknown_component_errors() {
         pyrucast::viz::FieldArg::Node(&field),
         Some("UNKNOWN"),
         ColorScale::default(),
+        0,
         None,
         Some(&path),
     )
@@ -411,6 +415,7 @@ fn plot_mesh_with_element_field_writes_svg() {
         pyrucast::viz::FieldArg::Element(&ef),
         None,
         ColorScale::default(),
+        4,
     )
     .unwrap();
 

@@ -44,6 +44,7 @@ pub mod drawable;
 pub mod field_color;
 pub mod mesh_draw;
 pub mod overlay;
+pub mod subdivide;
 #[cfg(feature = "viz-interactive")]
 pub mod window;
 
@@ -243,6 +244,7 @@ pub(crate) fn render_mesh_with_field(
     field: FieldArg<'_>,
     component: Option<&str>,
     scale: ColorScale,
+    smooth: usize,
     view: Option<View>,
     save: Option<&Path>,
 ) -> Result<()> {
@@ -256,13 +258,14 @@ pub(crate) fn render_mesh_with_field(
                 field: &data,
                 component: resolved,
                 scale,
+                smooth,
             };
             render_to_file(&drawable, view, path)
         }
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_mesh_field(mesh, &data, resolved, scale, view)
+                window::run_interactive_mesh_field(mesh, &data, resolved, scale, smooth, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {
@@ -284,6 +287,7 @@ pub fn render_submesh_with_field(
     field: FieldArg<'_>,
     component: Option<&str>,
     scale: ColorScale,
+    smooth: usize,
     view: Option<View>,
     save: Option<&Path>,
 ) -> Result<()> {
@@ -297,13 +301,14 @@ pub fn render_submesh_with_field(
                 field: &data,
                 component: resolved,
                 scale,
+                smooth,
             };
             render_to_file(&drawable, view, path)
         }
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_submesh_field(submesh, &data, resolved, scale, view)
+                window::run_interactive_submesh_field(submesh, &data, resolved, scale, smooth, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {

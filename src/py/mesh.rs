@@ -128,8 +128,11 @@ impl PySubMesh {
     ///   to track the data's own min / max for that bound.
     /// - `cmap`: colour scale name — `"viridis"` (default), `"jet"`,
     ///   `"coolwarm"`, `"hot"` or `"gray"`.
+    /// - `smooth`: subdivision level of the interpolated rendering
+    ///   (default `4`): the colour follows the shape functions inside
+    ///   each element. `0` = one flat colour per cell.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4))]
     fn plot(
         &self,
         view: Option<(f64, f64, f64)>,
@@ -140,6 +143,7 @@ impl PySubMesh {
         vmin: Option<f64>,
         vmax: Option<f64>,
         cmap: Option<String>,
+        smooth: usize,
     ) -> PyResult<()> {
         let mut view = view
             .map(|(yaw, pitch, scale)| crate::viz::View {
@@ -166,6 +170,7 @@ impl PySubMesh {
                         arg,
                         comp_ref,
                         scale,
+                        smooth,
                         Some(view),
                         save_ref,
                     )?;
@@ -279,7 +284,7 @@ impl PyMesh {
     /// `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
     /// `field` and `component`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4))]
     fn plot(
         &self,
         view: Option<(f64, f64, f64)>,
@@ -290,6 +295,7 @@ impl PyMesh {
         vmin: Option<f64>,
         vmax: Option<f64>,
         cmap: Option<String>,
+        smooth: usize,
     ) -> PyResult<()> {
         let mut view = view
             .map(|(yaw, pitch, scale)| crate::viz::View {
@@ -312,7 +318,7 @@ impl PyMesh {
                 let comp_ref = component.as_deref();
                 with_field_arg(&f, |arg| {
                     self.inner
-                        .plot_with_field(Some(view), save_ref, arg, comp_ref, scale)?;
+                        .plot_with_field(Some(view), save_ref, arg, comp_ref, scale, smooth)?;
                     Ok(())
                 })?;
             }

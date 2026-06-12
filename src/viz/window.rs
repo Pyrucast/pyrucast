@@ -323,6 +323,8 @@ struct FieldDrawable<'a> {
     components: Vec<String>,
     /// Caller override for the colorbar bounds.
     scale: crate::viz::ColorScale,
+    /// Subdivision level of the interpolated rendering (0 = flat).
+    smooth: usize,
     /// Index into `components`. `Cell` because the App only has `&self`
     /// access on draw, but mutates this from the event-handling path.
     selected: Cell<usize>,
@@ -339,6 +341,7 @@ impl<'a> FieldDrawable<'a> {
         field: &'a crate::viz::field_color::FieldData,
         initial_component: &str,
         scale: crate::viz::ColorScale,
+        smooth: usize,
     ) -> Self {
         let components: Vec<String> = field.components().to_vec();
         let selected = components
@@ -350,6 +353,7 @@ impl<'a> FieldDrawable<'a> {
             field,
             components,
             scale,
+            smooth,
             selected: Cell::new(selected),
         }
     }
@@ -382,6 +386,7 @@ impl<'a> Drawable for FieldDrawable<'a> {
                 field: self.field,
                 component,
                 scale: self.scale,
+                smooth: self.smooth,
             }
             .draw_on(area, view),
             GeomSource::SubMesh(sm) => crate::viz::field_color::SubMeshFieldView {
@@ -389,6 +394,7 @@ impl<'a> Drawable for FieldDrawable<'a> {
                 field: self.field,
                 component,
                 scale: self.scale,
+                smooth: self.smooth,
             }
             .draw_on(area, view),
         }
@@ -413,9 +419,11 @@ pub(crate) fn run_interactive_mesh_field(
     field: &crate::viz::field_color::FieldData,
     initial_component: &str,
     scale: crate::viz::ColorScale,
+    smooth: usize,
     view: View,
 ) -> Result<()> {
-    let drawable = FieldDrawable::new(GeomSource::Mesh(mesh), field, initial_component, scale);
+    let drawable =
+        FieldDrawable::new(GeomSource::Mesh(mesh), field, initial_component, scale, smooth);
     let bbox = drawable.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();
@@ -447,10 +455,16 @@ pub(crate) fn run_interactive_submesh_field(
     field: &crate::viz::field_color::FieldData,
     initial_component: &str,
     scale: crate::viz::ColorScale,
+    smooth: usize,
     view: View,
 ) -> Result<()> {
-    let drawable =
-        FieldDrawable::new(GeomSource::SubMesh(submesh), field, initial_component, scale);
+    let drawable = FieldDrawable::new(
+        GeomSource::SubMesh(submesh),
+        field,
+        initial_component,
+        scale,
+        smooth,
+    );
     let bbox = drawable.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();

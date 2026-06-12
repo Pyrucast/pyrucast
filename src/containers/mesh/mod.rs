@@ -525,8 +525,9 @@ impl Mesh {
         field: crate::viz::FieldArg<'_>,
         component: Option<&str>,
         scale: crate::viz::ColorScale,
+        smooth: usize,
     ) -> Result<()> {
-        crate::viz::render_mesh_with_field(self, field, component, scale, view, save)
+        crate::viz::render_mesh_with_field(self, field, component, scale, smooth, view, save)
     }
 
 }

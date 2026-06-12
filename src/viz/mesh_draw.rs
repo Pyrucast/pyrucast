@@ -29,7 +29,7 @@ use plotters::prelude::*;
 use crate::containers::mesh::Point3;
 
 /// Pad world coordinates to a 3-D point, filling missing components with 0.0.
-fn pad3(coords: &[f64]) -> Point3 {
+pub(crate) fn pad3(coords: &[f64]) -> Point3 {
     Point3::new(
         coords.first().copied().unwrap_or(0.0),
         coords.get(1).copied().unwrap_or(0.0),
@@ -58,13 +58,18 @@ fn read_points(
 pub(crate) enum Primitive {
     Point { p: Point3, color: RgbColor },
     Segment { a: Point3, b: Point3, color: RgbColor },
-    Face { verts: Vec<Point3>, color: RgbColor },
+    /// Filled polygon; `outline: false` skips the black wireframe (used
+    /// by the interpolated renderer for its interior sub-faces).
+    Face { verts: Vec<Point3>, color: RgbColor, outline: bool },
+    /// Stroke-only closed polyline, drawn slightly towards the viewer —
+    /// the element boundary on top of its (outline-free) sub-faces.
+    Wire { verts: Vec<Point3> },
 }
 
 // ─── Element-type → primitives ──────────────────────────────────────────────
 
 /// Faces of a TET4 — each oriented outwards (CCW seen from outside).
-const TET4_FACES: [[usize; 3]; 4] = [
+pub(crate) const TET4_FACES: [[usize; 3]; 4] = [
     [0, 2, 1],
     [0, 1, 3],
     [0, 3, 2],
@@ -74,7 +79,7 @@ const TET4_FACES: [[usize; 3]; 4] = [
 /// Faces of a HEX8 — bot / top / 4 lateral, in the convention used by
 /// [`crate::ops::mesher::extrude`]: HEX8 = [bot[0..4], top[0..4]], both CCW seen from
 /// outside the lateral surface.
-const HEX8_FACES: [[usize; 4]; 6] = [
+pub(crate) const HEX8_FACES: [[usize; 4]; 6] = [
     [0, 3, 2, 1], // bottom (normal opposed to extrusion direction)
     [4, 5, 6, 7], // top
     [0, 1, 5, 4],
@@ -152,6 +157,7 @@ fn submesh_primitives_impl(
                 out.push(Primitive::Face {
                     verts: vec![pts[3 * i], pts[3 * i + 1], pts[3 * i + 2]],
                     color: cell_color(i),
+                    outline: true,
                 });
             }
         }
@@ -165,6 +171,7 @@ fn submesh_primitives_impl(
                         pts[4 * i + 3],
                     ],
                     color: cell_color(i),
+                    outline: true,
                 });
             }
         }
@@ -180,6 +187,7 @@ fn submesh_primitives_impl(
                             pts[base + face[2]],
                         ],
                         color: c,
+                        outline: true,
                     });
                 }
             }
@@ -197,6 +205,7 @@ fn submesh_primitives_impl(
                             pts[base + face[3]],
                         ],
                         color: c,
+                        outline: true,
                     });
                 }
             }
@@ -216,7 +225,7 @@ fn primitives_bbox(prims: &[Primitive]) -> Bbox3 {
                 bb.extend(*a);
                 bb.extend(*b);
             }
-            Primitive::Face { verts, .. } => {
+            Primitive::Face { verts, .. } | Primitive::Wire { verts } => {
                 for v in verts {
                     bb.extend(*v);
                 }
@@ -234,7 +243,8 @@ fn primitives_bbox(prims: &[Primitive]) -> Bbox3 {
 enum ProjPrim {
     Point { p: (f64, f64), color: RgbColor, depth: f64 },
     Segment { a: (f64, f64), b: (f64, f64), color: RgbColor, depth: f64 },
-    Face { verts: Vec<(f64, f64)>, color: RgbColor, depth: f64 },
+    Face { verts: Vec<(f64, f64)>, color: RgbColor, depth: f64, outline: bool },
+    Wire { verts: Vec<(f64, f64)>, depth: f64 },
 }
 
 impl ProjPrim {
@@ -242,7 +252,8 @@ impl ProjPrim {
         match self {
             ProjPrim::Point { depth, .. }
             | ProjPrim::Segment { depth, .. }
-            | ProjPrim::Face { depth, .. } => *depth,
+            | ProjPrim::Face { depth, .. }
+            | ProjPrim::Wire { depth, .. } => *depth,
         }
     }
 }
@@ -286,7 +297,7 @@ where
                     depth: 0.5 * (va.z + vb.z),
                 }
             }
-            Primitive::Face { verts, color } => {
+            Primitive::Face { verts, color, outline } => {
                 let projected_verts: Vec<_> =
                     verts.iter().map(|v| proj.project(*v)).collect();
                 let n = projected_verts.len().max(1);
@@ -298,7 +309,21 @@ where
                     verts: v2d,
                     color: *color,
                     depth,
+                    outline: *outline,
                 }
+            }
+            Primitive::Wire { verts } => {
+                let projected_verts: Vec<_> =
+                    verts.iter().map(|v| proj.project(*v)).collect();
+                let n = projected_verts.len().max(1);
+                // Small bias towards the viewer so the wire is drawn on
+                // top of the coplanar sub-faces it delimits.
+                let depth: f64 = projected_verts.iter().map(|v| v.z).sum::<f64>()
+                    / n as f64
+                    - 1e-3 * bbox.diagonal().max(1.0);
+                let v2d: Vec<(f64, f64)> =
+                    projected_verts.iter().map(|v| (v.x, v.y)).collect();
+                ProjPrim::Wire { verts: v2d, depth }
             }
         })
         .collect();
@@ -377,8 +402,13 @@ where
                     .draw_series(LineSeries::new(vec![*a, *b], style))
                     .map_err(pl_err)?;
             }
-            ProjPrim::Face { verts, color, .. } => {
-                let face_rgba = RGBAColor(color.r, color.g, color.b, 0.85);
+            ProjPrim::Face { verts, color, outline, .. } => {
+                // Interior sub-faces of the interpolated renderer
+                // (outline-free) are drawn opaque: with translucency the
+                // antialiased joints between adjacent sub-triangles show
+                // through as seams.
+                let alpha = if *outline { 0.85 } else { 1.0 };
+                let face_rgba = RGBAColor(color.r, color.g, color.b, alpha);
                 let face_style = ShapeStyle {
                     color: face_rgba,
                     filled: true,
@@ -390,7 +420,18 @@ where
                         face_style,
                     )))
                     .map_err(pl_err)?;
-                // Close the loop for the wireframe overlay.
+                if *outline {
+                    // Close the loop for the wireframe overlay.
+                    let mut closed = verts.clone();
+                    if let Some(first) = verts.first() {
+                        closed.push(*first);
+                    }
+                    chart
+                        .draw_series(LineSeries::new(closed, edge_style))
+                        .map_err(pl_err)?;
+                }
+            }
+            ProjPrim::Wire { verts, .. } => {
                 let mut closed = verts.clone();
                 if let Some(first) = verts.first() {
                     closed.push(*first);
