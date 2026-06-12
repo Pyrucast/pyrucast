@@ -217,7 +217,7 @@ pub(crate) fn render<D: Drawable>(
 }
 
 /// Render a [`crate::containers::mesh::Mesh`] coloured by a `NodeField`
-/// component (zones resolved first-found, via one lock-free snapshot).
+/// component (zones resolved first-found, via one zero-copy view).
 /// File export draws the supplied `component`; the interactive window
 /// adds a clickable button (top-centre) and a `Tab` keyboard shortcut
 /// to cycle through every component (union of the zones').
@@ -230,13 +230,13 @@ pub(crate) fn render_mesh_with_field(
     save: Option<&Path>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
-    let snapshot = field.snapshot()?;
-    let resolved = field_color::resolve_component(&snapshot, component)?;
+    let fview = field.view()?;
+    let resolved = field_color::resolve_component(&fview, component)?;
     match save {
         Some(path) => {
             let drawable = field_color::MeshFieldView {
                 mesh,
-                field: &snapshot,
+                field: &fview,
                 component: resolved,
                 scale,
             };
@@ -245,7 +245,7 @@ pub(crate) fn render_mesh_with_field(
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_mesh_field(mesh, &snapshot, resolved, scale, view)
+                window::run_interactive_mesh_field(mesh, &fview, resolved, scale, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {
@@ -270,13 +270,13 @@ pub(crate) fn render_submesh_with_field(
     save: Option<&Path>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
-    let snapshot = field.snapshot()?;
-    let resolved = field_color::resolve_component(&snapshot, component)?;
+    let fview = field.view()?;
+    let resolved = field_color::resolve_component(&fview, component)?;
     match save {
         Some(path) => {
             let drawable = field_color::SubMeshFieldView {
                 submesh,
-                field: &snapshot,
+                field: &fview,
                 component: resolved,
                 scale,
             };
@@ -285,7 +285,7 @@ pub(crate) fn render_submesh_with_field(
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_submesh_field(submesh, &snapshot, resolved, scale, view)
+                window::run_interactive_submesh_field(submesh, &fview, resolved, scale, view)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {

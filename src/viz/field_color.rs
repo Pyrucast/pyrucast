@@ -15,7 +15,7 @@ use crate::containers::mesh::RgbColor;
 use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::containers::node_field::FieldSnapshot;
+use crate::containers::node_field::FieldView;
 use crate::store::read;
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
@@ -143,7 +143,7 @@ pub fn colormap(cmap: Colormap, value: f64, vmin: f64, vmax: f64) -> RgbColor {
 /// contribute to the mean nor to the denominator). If **no** node is
 /// in the support, returns `0.0`.
 pub(crate) fn nodes_mean(
-    field: &FieldSnapshot,
+    field: &FieldView,
     node_ids: &[NodeId],
     component: &str,
 ) -> f64 {
@@ -167,7 +167,7 @@ pub(crate) fn nodes_mean(
 /// Length of the returned vector = number of cells in the submesh.
 pub(crate) fn submesh_cell_values(
     sm: &SubMesh,
-    field: &FieldSnapshot,
+    field: &FieldView,
     component: &str,
 ) -> Result<Vec<f64>> {
     let conn = sm.connectivity();
@@ -213,7 +213,7 @@ fn colors_from_values(values: &[f64], cmap: Colormap, vmin: f64, vmax: f64) -> V
 /// global `(min, max)` range over all submeshes.
 fn mesh_cell_values(
     mesh: &Mesh,
-    field: &FieldSnapshot,
+    field: &FieldView,
     component: &str,
 ) -> Result<(Vec<Vec<f64>>, f64, f64)> {
     let n_sub = mesh.len();
@@ -233,7 +233,7 @@ fn mesh_cell_values(
 /// `requested` `None` → first component of the field (its declared
 /// primary component); `Some(name)` → check it exists.
 pub(crate) fn resolve_component<'a>(
-    field: &'a FieldSnapshot,
+    field: &'a FieldView,
     requested: Option<&'a str>,
 ) -> Result<&'a str> {
     match requested {
@@ -259,7 +259,7 @@ pub(crate) fn resolve_component<'a>(
 /// (zone snapshot of a [`crate::containers::node_field::NodeField`]).
 pub(crate) struct MeshFieldView<'a> {
     pub(crate) mesh: &'a Mesh,
-    pub(crate) field: &'a FieldSnapshot,
+    pub(crate) field: &'a FieldView,
     pub component: &'a str,
     /// Caller override for the colour-scale bounds; defaults to the
     /// data's own range.
@@ -302,7 +302,7 @@ impl<'a> Drawable for MeshFieldView<'a> {
 /// [`crate::containers::node_field::NodeField`]).
 pub(crate) struct SubMeshFieldView<'a> {
     pub(crate) submesh: &'a SubMesh,
-    pub(crate) field: &'a FieldSnapshot,
+    pub(crate) field: &'a FieldView,
     pub component: &'a str,
     /// Caller override for the colour-scale bounds; defaults to the
     /// data's own range.
@@ -414,9 +414,9 @@ mod tests {
         nf.set_value(a.id(), "T", 1.0).unwrap();
         nf.set_value(b.id(), "T", 2.0).unwrap();
         nf.set_value(c.id(), "T", 3.0).unwrap();
-        let snap = NodeField::from_sub(nf).snapshot().unwrap();
+        let view = NodeField::from_sub(nf).view().unwrap();
 
-        let values = submesh_cell_values(&*read(&sm_h).unwrap(), &snap, "T").unwrap();
+        let values = submesh_cell_values(&*read(&sm_h).unwrap(), &view, "T").unwrap();
         assert_eq!(values.len(), 1);
         assert!((values[0] - 2.0).abs() < 1e-12); // (1 + 2 + 3) / 3
     }
@@ -432,9 +432,9 @@ mod tests {
         let poi1_h = insert(poi1);
         let mut nf = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
         nf.set_value(a.id(), "T", 4.0).unwrap();
-        let snap = NodeField::from_sub(nf).snapshot().unwrap();
+        let view = NodeField::from_sub(nf).view().unwrap();
         // Two-node "cell": only `a` is in the field; mean = 4.0.
-        let mean = nodes_mean(&snap, &[a.id(), b.id()], "T");
+        let mean = nodes_mean(&view, &[a.id(), b.id()], "T");
         assert!((mean - 4.0).abs() < 1e-12);
     }
 

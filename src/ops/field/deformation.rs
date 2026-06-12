@@ -26,10 +26,10 @@ use crate::store::insert;
 /// `i ≤ j`, in order `eps_xx, eps_xy, …, eps_yy, …`.
 pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(u)?;
-    let snapshot = u.snapshot()?;
+    let view = u.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        let g = subspace_gradients(sub, &snapshot, &components)?;
+        let g = subspace_gradients(sub, &view, &components)?;
         if g.n_comp != g.space_dim {
             return Err(PyrucastError::Message(format!(
                 "deformation: the displacement field carries {} component(s) but the FE \

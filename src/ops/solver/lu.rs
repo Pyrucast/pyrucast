@@ -112,10 +112,10 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
 
     // ── Step 1 — build the b vector ────────────────────────────────────
     let mut b = DVector::<f64>::zeros(n);
-    let rhs_snapshot = rhs.snapshot()?;
+    let rhs_view = rhs.view()?;
     for (i, (node_id, field_name)) in row_dofs.iter().enumerate() {
         // "No zone defines this DOF" means "no imposed value here" — zero.
-        if let Some(v) = rhs_snapshot.value_opt(*node_id, field_name) {
+        if let Some(v) = rhs_view.value_opt(*node_id, field_name) {
             b[i] = v;
         }
     }

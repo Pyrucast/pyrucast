@@ -26,14 +26,14 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
     }
 
     let components = Field::components(field)?;
-    let snapshot = field.snapshot()?;
+    let view = field.view()?;
     let mut out = NodeField::default();
     for sm in mesh {
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
         let nodes = sub.nodes().to_vec();
         for nid in nodes {
             for comp in &components {
-                if let Some(v) = snapshot.value_opt(nid, comp) {
+                if let Some(v) = view.value_opt(nid, comp) {
                     sub.set_value(nid, comp, v)?;
                 }
             }

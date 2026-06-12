@@ -770,27 +770,19 @@ impl NodeField {
         Ok(self.node_ids()?.len())
     }
 
-    /// Lock-free snapshot of the zones, for operators doing many
-    /// per-node reads (gradient, solver, viz, …): one store lock per sub
-    /// at construction, none afterwards.
+    /// Zero-copy view of the zones, for operators doing many per-node
+    /// reads (gradient, solver, viz, …): one read guard per sub, data
+    /// read **in place** in the store for the lifetime of the view.
     ///
-    /// Pure data — no `Handle` is cloned, so no store refcount is
-    /// touched: building a snapshot is safe even under a `with::<SubMesh>`
-    /// (e.g. inside [`SubMesh::plot_with_field`]), where cloning a sub's
-    /// support handle would re-enter the SubMesh mutex and deadlock.
-    pub(crate) fn snapshot(&self) -> Result<FieldSnapshot> {
-        use crate::containers::field::SubField;
+    /// Holding the view keeps a shared lock on every sub: concurrent
+    /// reads are free, writes to the subs wait until the view is dropped.
+    pub(crate) fn view(&self) -> Result<FieldView> {
         let components = crate::containers::field::Field::components(self)?;
-        let mut zones = Vec::with_capacity(self.len());
-        for h in self {
-            let s = read(h)?;
-            zones.push(ZoneSnapshot {
-                nodes: s.nodes().to_vec(),
-                components: SubField::components(&*s).to_vec(),
-                values: s.values().to_vec(),
-            });
-        }
-        Ok(FieldSnapshot { zones, components })
+        let zones = self
+            .iter()
+            .map(crate::store::read)
+            .collect::<Result<Vec<_>>>()?;
+        Ok(FieldView { zones, components })
     }
 
     /// Verify zone coherence: every `(node, component)` stored by several
@@ -834,34 +826,19 @@ impl NodeField {
     }
 }
 
-/// Lock-free snapshot of a [`NodeField`]'s zones (see
-/// [`NodeField::snapshot`]). Pure data — holds no `Handle`. Reads
-/// mirror the aggregate: first zone defining `(node, component)` wins.
-pub(crate) struct FieldSnapshot {
-    zones: Vec<ZoneSnapshot>,
+/// Zero-copy view of a [`NodeField`]'s zones (see [`NodeField::view`]):
+/// one owned read guard per [`SubNodeField`], values read **in place**
+/// in the store. Reads mirror the aggregate: first zone defining
+/// `(node, component)` wins.
+pub(crate) struct FieldView {
+    zones: Vec<crate::store::ReadGuard<SubNodeField>>,
     /// Union of the zones' component names, first-seen order.
-    // Used in viz (feature-gated) and tests — suppress false dead-code warning.
+    // Consumed by viz (feature-gated) — suppress false dead-code warning.
     #[allow(dead_code)]
     components: Vec<String>,
 }
 
-/// One zone of a [`FieldSnapshot`]: the data of a [`SubNodeField`]
-/// without its support handle (same row-major value layout).
-struct ZoneSnapshot {
-    nodes: Vec<NodeId>,
-    components: Vec<String>,
-    values: Vec<f64>,
-}
-
-impl ZoneSnapshot {
-    fn value_opt(&self, nid: NodeId, component: &str) -> Option<f64> {
-        let ni = self.nodes.iter().position(|&n| n == nid)?;
-        let ci = self.components.iter().position(|c| c == component)?;
-        Some(self.values[ni * self.components.len() + ci])
-    }
-}
-
-impl FieldSnapshot {
+impl FieldView {
     /// Union of the zones' component names, first-seen order.
     #[allow(dead_code)]
     pub(crate) fn components(&self) -> &[String] {
@@ -878,11 +855,11 @@ impl FieldSnapshot {
         })
     }
 
-    /// Like [`FieldSnapshot::value`], `None` when absent.
+    /// Like [`FieldView::value`], `None` when absent.
     pub(crate) fn value_opt(&self, nid: NodeId, component: &str) -> Option<f64> {
         self.zones
             .iter()
-            .find_map(|z| z.value_opt(nid, component))
+            .find_map(|z| z.component_value_opt(nid, component))
     }
 }
 

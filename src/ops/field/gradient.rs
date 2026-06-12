@@ -9,8 +9,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::Field;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::containers::mesh::NodeId;
-use crate::containers::node_field::{FieldSnapshot, NodeField};
+use crate::containers::node_field::{FieldView, NodeField};
 use crate::error::Result;
 use crate::store::{insert, read, Handle};
 
@@ -38,56 +37,38 @@ impl Gradients {
 
 /// Compute `∂(component)/∂x_axis` for each of `components` of `field` at
 /// every Gauss point of `fespace` (one FE subspace). `∇f = Σ_i f_i ∇N_i`.
-/// `field` is a zone snapshot: node lookups resolve across the zones
-/// (first zone defining the pair wins) and error if a cell node lacks one
-/// of `components`.
+/// `field` is a zone view: node lookups resolve across the zones (first
+/// zone defining the pair wins) and error if a cell node lacks one of
+/// `components`.
 pub(crate) fn subspace_gradients(
     fespace: &Handle<SubFiniteElementSpace>,
-    field: &FieldSnapshot,
+    field: &FieldView,
     components: &[String],
 ) -> Result<Gradients> {
-    // Snapshot the reference/geometry data in one critical section
-    // (∇N at every (cell, Gauss) + connectivity), mirroring the assembler.
-    struct Snap {
-        n_cells: usize,
-        n_g: usize,
-        space_dim: usize,
-        n_nodes: usize,
-        conn: Vec<NodeId>,
-        dn_dx: Vec<Vec<Vec<f64>>>, // [cell][g][i * space_dim + a]
-    }
-    let snap = {
-        let s = read(fespace)?;
-        let n_cells = s.cell_count()?;
-        let n_nodes = s.nodes_per_cell()?;
-        let n_g = s.gauss_count();
-        let space_dim = s.space_dim();
-        let submesh = s.submesh();
-        let conn: Vec<NodeId> = read(&submesh)?.connectivity().to_vec();
-        let mut dn_dx = Vec::with_capacity(n_cells);
-        for cell in 0..n_cells {
-            let mut per_g = Vec::with_capacity(n_g);
-            for g in 0..n_g {
-                per_g.push(s.dn_dx(cell, g)?);
-            }
-            dn_dx.push(per_g);
-        }
-        Snap { n_cells, n_g, space_dim, n_nodes, conn, dn_dx }
-    };
+    // Read everything in place: the FE space, its submesh's connectivity
+    // and the field stay locked (shared) for the whole loop — no copy.
+    let s = read(fespace)?;
+    let n_cells = s.cell_count()?;
+    let n_nodes = s.nodes_per_cell()?;
+    let n_g = s.gauss_count();
+    let space_dim = s.space_dim();
+    let submesh = s.submesh();
+    let sm = read(&submesh)?;
+    let conn = sm.connectivity();
 
     let n_comp = components.len();
-    let mut values = vec![0.0; snap.n_cells * snap.n_g * n_comp * snap.space_dim];
-    for cell in 0..snap.n_cells {
-        let ids = &snap.conn[cell * snap.n_nodes..(cell + 1) * snap.n_nodes];
-        for g in 0..snap.n_g {
+    let mut values = vec![0.0; n_cells * n_g * n_comp * space_dim];
+    for cell in 0..n_cells {
+        let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
+        for g in 0..n_g {
+            let dn_dx = s.dn_dx(cell, g)?;
             for (ci, comp) in components.iter().enumerate() {
-                for a in 0..snap.space_dim {
+                for a in 0..space_dim {
                     let mut grad = 0.0;
-                    for i in 0..snap.n_nodes {
-                        grad += field.value(ids[i], comp)?
-                            * snap.dn_dx[cell][g][i * snap.space_dim + a];
+                    for i in 0..n_nodes {
+                        grad += field.value(ids[i], comp)? * dn_dx[i * space_dim + a];
                     }
-                    let idx = ((cell * snap.n_g + g) * n_comp + ci) * snap.space_dim + a;
+                    let idx = ((cell * n_g + g) * n_comp + ci) * space_dim + a;
                     values[idx] = grad;
                 }
             }
@@ -96,9 +77,9 @@ pub(crate) fn subspace_gradients(
 
     Ok(Gradients {
         fespace: fespace.clone(),
-        n_cells: snap.n_cells,
-        n_g: snap.n_g,
-        space_dim: snap.space_dim,
+        n_cells,
+        n_g,
+        space_dim,
         n_comp,
         values,
     })
@@ -115,10 +96,10 @@ pub(crate) fn subspace_gradients(
 /// whose behaviour consumes a gradient (heat conduction).
 pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(field)?;
-    let snapshot = field.snapshot()?;
+    let view = field.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        let g = subspace_gradients(sub, &snapshot, &components)?;
+        let g = subspace_gradients(sub, &view, &components)?;
         out.add_sub(insert(gradients_to_field(&g, &components)?))?;
     }
     Ok(out)
