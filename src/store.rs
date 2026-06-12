@@ -11,7 +11,7 @@
 //! - [`Handle<T>`] is **refcounted**: `Clone` increments, `Drop`
 //!   decrements, and the slot is recycled automatically when it reaches 0.
 //! - A slot may be evicted to disk via [`swap_out`] and is reloaded
-//!   automatically on the next [`with`] / [`with_mut`]. The binary format
+//!   automatically on the next [`read`] / [`write`]. The binary format
 //!   used is that of the [`crate::persist::Persist`] trait (portable
 //!   between Linux and Windows).
 //! - [`compact`] trims trailing free slots and shrinks memory.
@@ -31,35 +31,47 @@
 //!
 //! # Concurrency
 //!
-//! The per-type inner store is protected by a [`std::sync::Mutex`]. One
-//! usage rule applies: **do not perform any operation on the same type
-//! `T` from within a closure passed to [`with`] / [`with_mut`]**
-//! (reentrancy on the same mutex → deadlock). Operations on different
-//! types are independent.
+//! Locking is **per object**, not per type. Each slot carries its own
+//! [`parking_lot::RwLock`]; the store-level mutex is only held for the
+//! instant it takes to resolve a handle into its slot (and on
+//! insert/recycle). [`read`] returns a shared guard (many concurrent
+//! readers), [`write`] an exclusive one. Guards are *owned* (`'static`):
+//! they can be returned from functions and stored in structs, so
+//! operators read the data **in place** instead of copying it out.
+//!
+//! One usage rule applies: **do not acquire a second guard on an object
+//! while holding a write guard on that same object** (and do not `write`
+//! an object while holding any guard on it) — the slot lock is not
+//! reentrant. Distinct objects, even of the same type, are fully
+//! independent.
 //!
 //! # Example
 //!
 //! ```
-//! use pyrucast::store::{insert, with, with_mut};
+//! use pyrucast::store::{insert, read, write};
 //!
 //! #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
 //! struct Thing(Vec<f64>);
 //!
 //! let h = insert(Thing(vec![1.0, 2.0]));
-//! with(&h, |t| assert_eq!(t.0, vec![1.0, 2.0])).unwrap();
-//! with_mut(&h, |t| t.0.push(3.0)).unwrap();
-//! with(&h, |t| assert_eq!(t.0.len(), 3)).unwrap();
+//! assert_eq!(read(&h).unwrap().0, vec![1.0, 2.0]);
+//! write(&h).unwrap().0.push(3.0);
+//! assert_eq!(read(&h).unwrap().0.len(), 3);
 //! ```
 
 use crate::error::{PyrucastError, Result};
 use crate::persist::Persist;
+use parking_lot::lock_api::{
+    ArcRwLockReadGuard, ArcRwLockUpgradableReadGuard, ArcRwLockWriteGuard,
+};
+use parking_lot::{Mutex, RawRwLock, RwLock};
 use serde::{Deserialize, Serialize};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt;
-use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, OnceLock};
 
 // ─── Global swap configuration ──────────────────────────────────────────────
 
@@ -74,12 +86,12 @@ fn swap_dir_cell() -> &'static Mutex<Option<PathBuf>> {
 /// If never called, a per-process subdirectory of [`std::env::temp_dir`]
 /// is used.
 pub fn set_swap_dir(path: impl AsRef<Path>) {
-    *swap_dir_cell().lock().expect("poisoned mutex") = Some(path.as_ref().to_path_buf());
+    *swap_dir_cell().lock() = Some(path.as_ref().to_path_buf());
 }
 
 /// Return the effective swap directory, creating it if necessary.
 pub fn swap_dir() -> Result<PathBuf> {
-    let mut guard = swap_dir_cell().lock().expect("poisoned mutex");
+    let mut guard = swap_dir_cell().lock();
     if guard.is_none() {
         let p = std::env::temp_dir().join(format!("pyrucast-swap-{}", std::process::id()));
         std::fs::create_dir_all(&p)?;
@@ -98,8 +110,8 @@ fn registry() -> &'static Mutex<HashMap<TypeId, AnyStore>> {
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn store_for<T: Any + Send>() -> Arc<Mutex<StoreInner<T>>> {
-    let mut reg = registry().lock().expect("poisoned mutex");
+fn store_for<T: Any + Send + Sync>() -> Arc<Mutex<StoreInner<T>>> {
+    let mut reg = registry().lock();
     let entry = reg
         .entry(TypeId::of::<T>())
         .or_insert_with(|| Box::new(Arc::new(Mutex::new(StoreInner::<T>::new()))));
@@ -114,13 +126,22 @@ fn store_for<T: Any + Send>() -> Arc<Mutex<StoreInner<T>>> {
 enum SlotState<T> {
     Resident(T),
     OnDisk(PathBuf),
+    /// Post-extraction placeholder: the value left the cell (slot
+    /// recycled). Never observed through a live handle.
     Free,
 }
 
+/// Shared per-slot cell: the object's own lock plus the handle refcount.
+/// Lives in an `Arc` so that handles and guards keep it reachable without
+/// going through the store mutex.
+struct SlotCell<T> {
+    lock: Arc<RwLock<SlotState<T>>>,
+    refcount: AtomicU32,
+}
+
 struct Slot<T> {
-    state: SlotState<T>,
+    cell: Arc<SlotCell<T>>,
     gen: u32,
-    refcount: u32,
 }
 
 struct StoreInner<T> {
@@ -136,77 +157,38 @@ impl<T> StoreInner<T> {
         }
     }
 
-    fn insert(&mut self, value: T) -> (u32, u32) {
+    fn insert(&mut self, cell: Arc<SlotCell<T>>) -> (u32, u32) {
         if let Some(idx) = self.free.pop() {
             let s = &mut self.slots[idx as usize];
-            s.state = SlotState::Resident(value);
+            s.cell = cell;
             s.gen = s.gen.wrapping_add(1);
-            s.refcount = 1;
             (idx, s.gen)
         } else {
             let idx = self.slots.len() as u32;
-            self.slots.push(Slot {
-                state: SlotState::Resident(value),
-                gen: 1,
-                refcount: 1,
-            });
+            self.slots.push(Slot { cell, gen: 1 });
             (idx, 1)
         }
     }
 
-    fn validate(&self, idx: u32, gen: u32) -> Result<()> {
+    /// Resolve `(idx, gen)` into the slot's cell. A slot is live iff the
+    /// generation matches and at least one handle still points to it.
+    fn resolve(&self, idx: u32, gen: u32) -> Result<Arc<SlotCell<T>>> {
         let s = self.slots.get(idx as usize).ok_or(PyrucastError::StaleHandle)?;
-        if s.gen != gen || matches!(s.state, SlotState::Free) {
+        if s.gen != gen || s.cell.refcount.load(Ordering::Acquire) == 0 {
             return Err(PyrucastError::StaleHandle);
         }
-        Ok(())
-    }
-
-    fn incref(&mut self, idx: u32, gen: u32) -> Result<()> {
-        self.validate(idx, gen)?;
-        self.slots[idx as usize].refcount = self.slots[idx as usize].refcount.saturating_add(1);
-        Ok(())
+        Ok(s.cell.clone())
     }
 
     fn compact(&mut self) {
-        while matches!(self.slots.last().map(|s| &s.state), Some(SlotState::Free)) {
+        while self
+            .slots
+            .last()
+            .is_some_and(|s| s.cell.refcount.load(Ordering::Acquire) == 0)
+        {
             self.slots.pop();
         }
         self.free.retain(|&i| (i as usize) < self.slots.len());
-    }
-}
-
-impl<T: Persist> StoreInner<T> {
-    /// Decrement the refcount; if it reaches 0, return the value to be
-    /// dropped **outside the lock** (avoids any deadlock should `Drop`
-    /// touch a store of the same type).
-    ///
-    /// If the state was `OnDisk`, the value is reloaded from disk before
-    /// being returned for Drop — so the object's Drop side effects fire
-    /// exactly once.
-    fn decref(&mut self, idx: u32, gen: u32) -> Option<T> {
-        if self.validate(idx, gen).is_err() {
-            return None;
-        }
-        let s = &mut self.slots[idx as usize];
-        s.refcount = s.refcount.saturating_sub(1);
-        if s.refcount == 0 {
-            let old = std::mem::replace(&mut s.state, SlotState::Free);
-            self.free.push(idx);
-            return match old {
-                SlotState::Resident(v) => Some(v),
-                SlotState::OnDisk(path) => {
-                    // Reload to run Drop properly. On I/O or
-                    // deserialization failure, the slot's Drop side
-                    // effects are lost (documented limitation).
-                    let bytes = std::fs::read(&path).ok()?;
-                    let _ = std::fs::remove_file(path);
-                    T::from_bytes(&bytes).ok()
-                }
-                SlotState::Free => None,
-            };
-        }
-        None
     }
 }
 
@@ -221,17 +203,20 @@ impl<T: Persist> StoreInner<T> {
 ///
 /// `Handle<T>` is serializable (idx + generation); combined with the
 /// Drop-safe swap, this lets objects containing handles round-trip
-/// through disk without breaking refcounts.
+/// through disk without breaking refcounts (the serialized handle's
+/// count is carried by the on-disk object and reclaimed on reload).
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct Handle<T: Persist + Any + Send> {
+pub struct Handle<T: Persist + Any + Send + Sync> {
     idx: u32,
     gen: u32,
+    /// Cached pointer to the slot cell, resolved lazily (a freshly
+    /// deserialized handle starts empty). Skipped by serde.
     #[serde(skip)]
-    _t: PhantomData<fn() -> T>,
+    cell: OnceLock<Arc<SlotCell<T>>>,
 }
 
-impl<T: Persist + Any + Send> Handle<T> {
+impl<T: Persist + Any + Send + Sync> Handle<T> {
     /// Internal index (useful for debugging and display).
     pub fn index(&self) -> u32 {
         self.idx
@@ -240,33 +225,47 @@ impl<T: Persist + Any + Send> Handle<T> {
     pub fn generation(&self) -> u32 {
         self.gen
     }
+
+    /// Resolve (and cache) the slot cell. The store mutex is held only
+    /// for the lookup itself.
+    fn resolve(&self) -> Result<Arc<SlotCell<T>>> {
+        if let Some(c) = self.cell.get() {
+            return Ok(c.clone());
+        }
+        let store = store_for::<T>();
+        let cell = store.lock().resolve(self.idx, self.gen)?;
+        let _ = self.cell.set(cell.clone());
+        Ok(cell)
+    }
 }
 
-impl<T: Persist + Any + Send> Clone for Handle<T> {
+impl<T: Persist + Any + Send + Sync> Clone for Handle<T> {
     fn clone(&self) -> Self {
-        let _ = store_for::<T>()
-            .lock()
-            .expect("poisoned mutex")
-            .incref(self.idx, self.gen);
+        // While `&self` exists the refcount is ≥ 1, so the slot cannot be
+        // recycled under us: a plain atomic increment suffices.
+        let cache = OnceLock::new();
+        if let Ok(cell) = self.resolve() {
+            cell.refcount.fetch_add(1, Ordering::AcqRel);
+            let _ = cache.set(cell);
+        }
         Self {
             idx: self.idx,
             gen: self.gen,
-            _t: PhantomData,
+            cell: cache,
         }
     }
 }
 
-impl<T: Persist + Any + Send> Drop for Handle<T> {
+impl<T: Persist + Any + Send + Sync> Drop for Handle<T> {
     fn drop(&mut self) {
-        let to_drop = store_for::<T>()
-            .lock()
-            .expect("poisoned mutex")
-            .decref(self.idx, self.gen);
-        drop(to_drop);
+        let Ok(cell) = self.resolve() else { return };
+        if cell.refcount.fetch_sub(1, Ordering::AcqRel) == 1 {
+            release_slot::<T>(self.idx, self.gen);
+        }
     }
 }
 
-impl<T: Persist + Any + Send> fmt::Debug for Handle<T> {
+impl<T: Persist + Any + Send + Sync> fmt::Debug for Handle<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -278,7 +277,7 @@ impl<T: Persist + Any + Send> fmt::Debug for Handle<T> {
     }
 }
 
-impl<T: Persist + Any + Send> fmt::Display for Handle<T> {
+impl<T: Persist + Any + Send + Sync> fmt::Display for Handle<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let short = std::any::type_name::<T>()
             .rsplit("::")
@@ -288,75 +287,209 @@ impl<T: Persist + Any + Send> fmt::Display for Handle<T> {
     }
 }
 
+/// Recycle a slot whose refcount reached 0: mark it free under the store
+/// mutex, extract the value, then run its `Drop` **outside every lock**
+/// (Drop side effects touch other stores).
+fn release_slot<T: Persist + Any + Send + Sync>(idx: u32, gen: u32) {
+    let store = store_for::<T>();
+    let mut inner = store.lock();
+    let Some(slot) = inner.slots.get_mut(idx as usize) else {
+        return;
+    };
+    if slot.gen != gen || slot.cell.refcount.load(Ordering::Acquire) != 0 {
+        return;
+    }
+    // No handle ⇒ no guard (guards carry a handle), so this write lock is
+    // uncontended.
+    let old = {
+        let mut w = slot.cell.lock.write();
+        std::mem::replace(&mut *w, SlotState::Free)
+    };
+    inner.free.push(idx);
+    drop(inner);
+    match old {
+        SlotState::Resident(v) => drop(v),
+        SlotState::OnDisk(path) => {
+            // Reload to run Drop properly. On I/O or deserialization
+            // failure, the slot's Drop side effects are lost (documented
+            // limitation).
+            if let Ok(bytes) = std::fs::read(&path) {
+                let _ = std::fs::remove_file(&path);
+                if let Ok(v) = T::from_bytes(&bytes) {
+                    drop(v);
+                }
+            }
+        }
+        SlotState::Free => {}
+    }
+}
+
+// ─── Guards ─────────────────────────────────────────────────────────────────
+
+/// Shared (read) access to a stored object, returned by [`read`].
+///
+/// Owned (`'static`): can be returned from functions and stored in
+/// structs. Dereferences to `&T`; the slot lock is released — and the
+/// keepalive refcount dropped — when the guard goes out of scope.
+pub struct ReadGuard<T: Persist + Any + Send + Sync> {
+    guard: ArcRwLockReadGuard<RawRwLock, SlotState<T>>,
+    /// Keeps the slot alive while the guard lives. Declared after
+    /// `guard`: the lock is released before the refcount drops.
+    _keepalive: Handle<T>,
+}
+
+impl<T: Persist + Any + Send + Sync> std::ops::Deref for ReadGuard<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        match &*self.guard {
+            SlotState::Resident(v) => v,
+            // The state cannot change while we hold the slot lock, and
+            // acquisition guaranteed Resident.
+            _ => unreachable!("ReadGuard over a non-resident slot"),
+        }
+    }
+}
+
+impl<T: Persist + Any + Send + Sync + fmt::Debug> fmt::Debug for ReadGuard<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (**self).fmt(f)
+    }
+}
+
+/// Exclusive (write) access to a stored object, returned by [`write`].
+/// Same ownership properties as [`ReadGuard`].
+pub struct WriteGuard<T: Persist + Any + Send + Sync> {
+    guard: ArcRwLockWriteGuard<RawRwLock, SlotState<T>>,
+    _keepalive: Handle<T>,
+}
+
+impl<T: Persist + Any + Send + Sync> std::ops::Deref for WriteGuard<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        match &*self.guard {
+            SlotState::Resident(v) => v,
+            _ => unreachable!("WriteGuard over a non-resident slot"),
+        }
+    }
+}
+
+impl<T: Persist + Any + Send + Sync> std::ops::DerefMut for WriteGuard<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        match &mut *self.guard {
+            SlotState::Resident(v) => v,
+            _ => unreachable!("WriteGuard over a non-resident slot"),
+        }
+    }
+}
+
+impl<T: Persist + Any + Send + Sync + fmt::Debug> fmt::Debug for WriteGuard<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (**self).fmt(f)
+    }
+}
+
 // ─── Public store API ───────────────────────────────────────────────────────
 
 /// Insert a value into the global store for its type and return a handle.
-pub fn insert<T: Persist + Any + Send>(value: T) -> Handle<T> {
+pub fn insert<T: Persist + Any + Send + Sync>(value: T) -> Handle<T> {
+    let cell = Arc::new(SlotCell {
+        lock: Arc::new(RwLock::new(SlotState::Resident(value))),
+        refcount: AtomicU32::new(1),
+    });
     let store = store_for::<T>();
-    let (idx, gen) = store.lock().expect("poisoned mutex").insert(value);
+    let (idx, gen) = store.lock().insert(cell.clone());
+    let cache = OnceLock::new();
+    let _ = cache.set(cell);
     Handle {
         idx,
         gen,
-        _t: PhantomData,
+        cell: cache,
     }
 }
 
-/// Read access. Reloads from disk if the slot was evicted.
-pub fn with<T: Persist + Any + Send, R>(h: &Handle<T>, f: impl FnOnce(&T) -> R) -> Result<R> {
-    let store = store_for::<T>();
-    let mut inner = store.lock().expect("poisoned mutex");
-    ensure_resident::<T>(&mut inner, h.idx, h.gen)?;
-    let s = &inner.slots[h.idx as usize];
-    match &s.state {
-        SlotState::Resident(v) => Ok(f(v)),
-        _ => unreachable!("ensure_resident guarantees Resident state"),
-    }
-}
-
-/// Write access. Reloads from disk if necessary.
-pub fn with_mut<T: Persist + Any + Send, R>(
-    h: &Handle<T>,
-    f: impl FnOnce(&mut T) -> R,
-) -> Result<R> {
-    let store = store_for::<T>();
-    let mut inner = store.lock().expect("poisoned mutex");
-    ensure_resident::<T>(&mut inner, h.idx, h.gen)?;
-    let s = &mut inner.slots[h.idx as usize];
-    match &mut s.state {
-        SlotState::Resident(v) => Ok(f(v)),
-        _ => unreachable!("ensure_resident guarantees Resident state"),
-    }
-}
-
-fn ensure_resident<T: Persist + Any + Send>(
-    inner: &mut StoreInner<T>,
-    idx: u32,
-    gen: u32,
-) -> Result<()> {
-    inner.validate(idx, gen)?;
-    let s = &mut inner.slots[idx as usize];
-    if let SlotState::OnDisk(path) = &s.state {
-        let bytes = std::fs::read(path)?;
+/// Reload an `OnDisk` state in place. No-op when already resident.
+fn reload<T: Persist>(state: &mut SlotState<T>) -> Result<()> {
+    if let SlotState::OnDisk(path) = state {
+        let bytes = std::fs::read(&path)?;
         let value = T::from_bytes(&bytes)?;
         let path = path.clone();
-        s.state = SlotState::Resident(value);
+        *state = SlotState::Resident(value);
         let _ = std::fs::remove_file(path);
     }
     Ok(())
 }
 
+/// Shared read access: many readers may hold guards on the same object
+/// concurrently. Reloads from disk if the slot was evicted.
+pub fn read<T: Persist + Any + Send + Sync>(h: &Handle<T>) -> Result<ReadGuard<T>> {
+    let cell = h.resolve()?;
+    // Fast path: a shared lock suffices when the value is resident.
+    let g = cell.lock.read_arc();
+    let guard = if matches!(&*g, SlotState::OnDisk(_)) {
+        drop(g);
+        // Slow path: reload under an upgradable lock, then downgrade.
+        let up = cell.lock.upgradable_read_arc();
+        if matches!(&*up, SlotState::OnDisk(_)) {
+            let mut w = ArcRwLockUpgradableReadGuard::upgrade(up);
+            reload(&mut *w)?;
+            ArcRwLockWriteGuard::downgrade(w)
+        } else {
+            ArcRwLockUpgradableReadGuard::downgrade(up)
+        }
+    } else {
+        g
+    };
+    Ok(ReadGuard {
+        guard,
+        _keepalive: h.clone(),
+    })
+}
+
+/// Exclusive write access. Reloads from disk if necessary.
+pub fn write<T: Persist + Any + Send + Sync>(h: &Handle<T>) -> Result<WriteGuard<T>> {
+    let cell = h.resolve()?;
+    let mut g = cell.lock.write_arc();
+    reload(&mut *g)?;
+    Ok(WriteGuard {
+        guard: g,
+        _keepalive: h.clone(),
+    })
+}
+
+/// Read access through a closure.
+///
+/// Transitional sugar over [`read`] — prefer `read(h)?` in new code;
+/// this function will be removed once existing call sites are migrated.
+pub fn with<T: Persist + Any + Send + Sync, R>(
+    h: &Handle<T>,
+    f: impl FnOnce(&T) -> R,
+) -> Result<R> {
+    let g = read(h)?;
+    Ok(f(&g))
+}
+
+/// Write access through a closure.
+///
+/// Transitional sugar over [`write`] — prefer `write(h)?` in new code;
+/// this function will be removed once existing call sites are migrated.
+pub fn with_mut<T: Persist + Any + Send + Sync, R>(
+    h: &Handle<T>,
+    f: impl FnOnce(&mut T) -> R,
+) -> Result<R> {
+    let mut g = write(h)?;
+    Ok(f(&mut g))
+}
+
 /// Evict the slot to disk (freeing its RAM). The slot stays valid; the
-/// next [`with`] / [`with_mut`] will reload.
+/// next [`read`] / [`write`] will reload.
 ///
 /// **Important**: the evicted value's `Drop` does **not** run (the object
 /// is still logically alive). It will run on the final refcount
 /// decrement, reloading from disk first if necessary.
-pub fn swap_out<T: Persist + Any + Send>(h: &Handle<T>) -> Result<()> {
-    let store = store_for::<T>();
-    let mut inner = store.lock().expect("poisoned mutex");
-    inner.validate(h.idx, h.gen)?;
-    let s = &mut inner.slots[h.idx as usize];
-    let bytes = match &s.state {
+pub fn swap_out<T: Persist + Any + Send + Sync>(h: &Handle<T>) -> Result<()> {
+    let cell = h.resolve()?;
+    let mut w = cell.lock.write();
+    let bytes = match &*w {
         SlotState::Resident(v) => v.to_bytes()?,
         SlotState::OnDisk(_) => return Ok(()),
         SlotState::Free => return Err(PyrucastError::StaleHandle),
@@ -365,39 +498,36 @@ pub fn swap_out<T: Persist + Any + Send>(h: &Handle<T>) -> Result<()> {
     let type_id = TypeId::of::<T>();
     let path = dir.join(format!("slot-{:?}-{}-{}.bin", type_id, h.idx, h.gen));
     std::fs::write(&path, bytes)?;
-    let old = std::mem::replace(&mut s.state, SlotState::OnDisk(path));
+    let old = std::mem::replace(&mut *w, SlotState::OnDisk(path));
     // Object stays logically alive: bypass Drop so we do not trigger side
     // effects (refcounts, files, …). Drop will run on the final
     // refcount decrement.
-    match old {
-        SlotState::Resident(v) => std::mem::forget(v),
-        SlotState::OnDisk(_) | SlotState::Free => {}
-    }
+    std::mem::forget(old);
     Ok(())
 }
 
 /// Compact the store of type T: trim trailing free slots and shrink
 /// the associated memory.
-pub fn compact<T: Any + Send>() {
+pub fn compact<T: Any + Send + Sync>() {
     let store = store_for::<T>();
-    store.lock().expect("poisoned mutex").compact();
+    store.lock().compact();
 }
 
 /// Capacity (number of slots) of the store for type T.
-pub fn capacity<T: Any + Send>() -> usize {
+pub fn capacity<T: Any + Send + Sync>() -> usize {
     let store = store_for::<T>();
-    let inner = store.lock().expect("poisoned mutex");
+    let inner = store.lock();
     inner.slots.len()
 }
 
 /// Number of live (non-free) slots for type T.
-pub fn live_count<T: Any + Send>() -> usize {
+pub fn live_count<T: Any + Send + Sync>() -> usize {
     let store = store_for::<T>();
-    let inner = store.lock().expect("poisoned mutex");
+    let inner = store.lock();
     inner
         .slots
         .iter()
-        .filter(|s| !matches!(s.state, SlotState::Free))
+        .filter(|s| s.cell.refcount.load(Ordering::Acquire) > 0)
         .count()
 }
 
@@ -416,7 +546,7 @@ mod tests {
     #[test]
     fn insert_then_read() {
         let h = insert(PInsertGet(3.14));
-        with(&h, |v| assert_eq!(v.0, 3.14)).unwrap();
+        assert_eq!(read(&h).unwrap().0, 3.14);
     }
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -429,7 +559,7 @@ mod tests {
         assert_eq!(h1.index(), h2.index());
         assert_eq!(live_count::<PClone>(), 1);
         drop(h1);
-        with(&h2, |v| assert_eq!(v.0, 42)).unwrap();
+        assert_eq!(read(&h2).unwrap().0, 42);
         assert_eq!(live_count::<PClone>(), 1);
     }
 
@@ -460,9 +590,9 @@ mod tests {
         let stale: Handle<PStale> = Handle {
             idx,
             gen: obsolete_gen,
-            _t: PhantomData,
+            cell: OnceLock::new(),
         };
-        let err = with(&stale, |_| ()).unwrap_err();
+        let err = read(&stale).unwrap_err();
         assert!(matches!(err, PyrucastError::StaleHandle));
         std::mem::forget(stale);
     }
@@ -471,10 +601,10 @@ mod tests {
     struct PMut(Vec<u32>);
 
     #[test]
-    fn with_mut_modifies_in_place() {
+    fn write_modifies_in_place() {
         let h = insert(PMut(vec![1, 2]));
-        with_mut(&h, |v| v.0.push(3)).unwrap();
-        with(&h, |v| assert_eq!(v.0, vec![1, 2, 3])).unwrap();
+        write(&h).unwrap().0.push(3);
+        assert_eq!(read(&h).unwrap().0, vec![1, 2, 3]);
     }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -484,7 +614,7 @@ mod tests {
     fn swap_out_then_access_reloads() {
         let h = insert(PSwap(vec![10.0, 20.0, 30.0]));
         swap_out(&h).unwrap();
-        with(&h, |v| assert_eq!(v.0, vec![10.0, 20.0, 30.0])).unwrap();
+        assert_eq!(read(&h).unwrap().0, vec![10.0, 20.0, 30.0]);
     }
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -517,6 +647,89 @@ mod tests {
         assert!(dsp.starts_with("<PDisplay #"));
     }
 
+    // ─── Per-slot locking ───────────────────────────────────────────────
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct PNest(u32);
+
+    /// Guards on two distinct objects of the same type may coexist —
+    /// deadlocked with the old per-type mutex.
+    #[test]
+    fn guards_on_distinct_objects_same_type() {
+        let a = insert(PNest(1));
+        let b = insert(PNest(2));
+        let ga = read(&a).unwrap();
+        let gb = read(&b).unwrap();
+        assert_eq!(ga.0 + gb.0, 3);
+        // Write on a third object while holding the two reads.
+        let c = insert(PNest(0));
+        write(&c).unwrap().0 = ga.0;
+        assert_eq!(read(&c).unwrap().0, 1);
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct PCloneUnderGuard(u8);
+
+    /// Cloning a handle while a guard on the same object is held —
+    /// deadlocked with the old per-type mutex (refcount under the mutex).
+    #[test]
+    fn clone_handle_while_guard_held() {
+        let a = insert(PCloneUnderGuard(7));
+        let g = read(&a).unwrap();
+        let b = a.clone();
+        assert_eq!(g.0, 7);
+        drop(g);
+        assert_eq!(read(&b).unwrap().0, 7);
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct PKeepAlive(u8);
+
+    /// A guard keeps the slot alive past the drop of the last handle.
+    #[test]
+    fn guard_outlives_last_handle() {
+        let a = insert(PKeepAlive(9));
+        let g = read(&a).unwrap();
+        drop(a);
+        assert_eq!(g.0, 9);
+        assert_eq!(live_count::<PKeepAlive>(), 1);
+        drop(g); // slot released here
+        assert_eq!(live_count::<PKeepAlive>(), 0);
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct PPar(Vec<f64>);
+
+    /// Several threads may read the same object concurrently.
+    #[test]
+    fn concurrent_readers() {
+        let h = insert(PPar(vec![1.0; 1000]));
+        std::thread::scope(|s| {
+            for _ in 0..4 {
+                let h = h.clone();
+                s.spawn(move || {
+                    let g = read(&h).unwrap();
+                    assert_eq!(g.0.len(), 1000);
+                });
+            }
+        });
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct PSwapGuard(Vec<u8>);
+
+    /// Reload-on-read still works when the guard is kept around.
+    #[test]
+    fn guard_after_swap_reload() {
+        let h = insert(PSwapGuard(vec![1, 2, 3]));
+        swap_out(&h).unwrap();
+        let g = read(&h).unwrap();
+        assert_eq!(g.0, vec![1, 2, 3]);
+        // A second reader joins while the first guard is alive.
+        let g2 = read(&h).unwrap();
+        assert_eq!(g2.0, g.0);
+    }
+
     // ─── Swap safety w.r.t. Drop ────────────────────────────────────────
 
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -534,7 +747,7 @@ mod tests {
     fn swap_preserves_drop_of_objects() {
         SWAP_DROP_COUNT.store(0, Ordering::SeqCst);
 
-        // Resident path → swap_out → with → final drop
+        // Resident path → swap_out → read → final drop
         let h = insert(PSwapDrop);
         swap_out(&h).unwrap();
         assert_eq!(
@@ -542,11 +755,11 @@ mod tests {
             0,
             "swap_out must NOT run Drop"
         );
-        with(&h, |_| ()).unwrap();
+        drop(read(&h).unwrap());
         assert_eq!(
             SWAP_DROP_COUNT.load(Ordering::SeqCst),
             0,
-            "ensure_resident must NOT run Drop"
+            "reload must NOT run Drop"
         );
         drop(h);
         assert_eq!(

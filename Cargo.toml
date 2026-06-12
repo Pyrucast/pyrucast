@@ -30,6 +30,10 @@ softbuffer = { version = "0.4", optional = true }
 # + docstrings instead of `Any`. Activated by the `stub-gen` feature
 # and consumed by the `stub_gen` binary.
 pyo3-stub-gen = { version = "0.22", optional = true }
+# Per-slot locking of the global store. `arc_lock` provides the owned
+# ('static) guards behind `store::read` / `store::write`, which is what
+# lets operators hold data in place instead of copying it.
+parking_lot = { version = "0.12.5", features = ["arc_lock"] }
 
 [features]
 # Compile the Python binding code (the `#[pyclass]` wrappers etc.).

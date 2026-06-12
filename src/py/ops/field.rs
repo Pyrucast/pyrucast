@@ -9,13 +9,10 @@
 //! (unitary aggregates only) until the ops are generalised to the
 //! `NodeField` aggregate.
 
-use crate::aggregate::Aggregate;
-use crate::containers::node_field::NodeField;
 use crate::py::element_field::PyElementField;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::py::node_field::PyNodeField;
-use crate::store::with;
 use pyo3::prelude::*;
 
 /// Build a `NodeField` carrying the coordinates of every node of `mesh`

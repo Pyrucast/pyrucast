@@ -46,7 +46,7 @@ use std::any::Any;
 /// two required methods [`Aggregate::items`] and [`Aggregate::items_mut`].
 pub trait Aggregate: Default {
     /// Type of the sub-object held in the store (referenced via `Handle<Sub>`).
-    type Sub: Persist + Any + Send;
+    type Sub: Persist + Any + Send + Sync;
 
     /// Reference to the internal list of handles.
     fn items(&self) -> &[Handle<Self::Sub>];
@@ -184,9 +184,9 @@ pub trait Aggregate: Default {
 /// Safe against the per-type, non-reentrant store mutex: the only lock taken
 /// is the sub-object store's, and every sub-object `Debug` is itself
 /// lock-free, so no nesting of `with::<Sub>` inside `with::<Sub>` occurs.
-pub struct DebugItems<'a, S: Persist + Any + Send>(pub &'a [Handle<S>]);
+pub struct DebugItems<'a, S: Persist + Any + Send + Sync>(pub &'a [Handle<S>]);
 
-impl<S: Persist + Any + Send + std::fmt::Debug> std::fmt::Debug for DebugItems<'_, S> {
+impl<S: Persist + Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItems<'_, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut list = f.debug_list();
         for h in self.0 {
@@ -197,9 +197,9 @@ impl<S: Persist + Any + Send + std::fmt::Debug> std::fmt::Debug for DebugItems<'
 }
 
 /// A single dereferenced handle (see [`DebugItems`]).
-struct DebugItem<'a, S: Persist + Any + Send>(&'a Handle<S>);
+struct DebugItem<'a, S: Persist + Any + Send + Sync>(&'a Handle<S>);
 
-impl<S: Persist + Any + Send + std::fmt::Debug> std::fmt::Debug for DebugItem<'_, S> {
+impl<S: Persist + Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItem<'_, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match crate::store::with(self.0, |s| {
             if f.alternate() {
