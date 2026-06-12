@@ -838,6 +838,8 @@ impl NodeField {
 pub(crate) struct FieldSnapshot {
     zones: Vec<ZoneSnapshot>,
     /// Union of the zones' component names, first-seen order.
+    // Used in viz (feature-gated) and tests — suppress false dead-code warning.
+    #[allow(dead_code)]
     components: Vec<String>,
 }
 
@@ -859,6 +861,7 @@ impl ZoneSnapshot {
 
 impl FieldSnapshot {
     /// Union of the zones' component names, first-seen order.
+    #[allow(dead_code)]
     pub(crate) fn components(&self) -> &[String] {
         &self.components
     }
