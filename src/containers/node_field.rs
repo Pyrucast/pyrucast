@@ -776,13 +776,13 @@ impl NodeField {
     ///
     /// Holding the view keeps a shared lock on every sub: concurrent
     /// reads are free, writes to the subs wait until the view is dropped.
-    pub(crate) fn view(&self) -> Result<FieldView> {
+    pub(crate) fn view(&self) -> Result<NodeFieldView> {
         let components = crate::containers::field::Field::components(self)?;
         let zones = self
             .iter()
             .map(crate::store::read)
             .collect::<Result<Vec<_>>>()?;
-        Ok(FieldView { zones, components })
+        Ok(NodeFieldView { zones, components })
     }
 
     /// Verify zone coherence: every `(node, component)` stored by several
@@ -830,7 +830,7 @@ impl NodeField {
 /// one owned read guard per [`SubNodeField`], values read **in place**
 /// in the store. Reads mirror the aggregate: first zone defining
 /// `(node, component)` wins.
-pub(crate) struct FieldView {
+pub(crate) struct NodeFieldView {
     zones: Vec<crate::store::ReadGuard<SubNodeField>>,
     /// Union of the zones' component names, first-seen order.
     // Consumed by viz (feature-gated) — suppress false dead-code warning.
@@ -838,7 +838,7 @@ pub(crate) struct FieldView {
     components: Vec<String>,
 }
 
-impl FieldView {
+impl NodeFieldView {
     /// Union of the zones' component names, first-seen order.
     #[allow(dead_code)]
     pub(crate) fn components(&self) -> &[String] {
@@ -855,7 +855,7 @@ impl FieldView {
         })
     }
 
-    /// Like [`FieldView::value`], `None` when absent.
+    /// Like [`NodeFieldView::value`], `None` when absent.
     pub(crate) fn value_opt(&self, nid: NodeId, component: &str) -> Option<f64> {
         self.zones
             .iter()

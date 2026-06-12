@@ -318,7 +318,7 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
 /// App can cycle through components on click / Tab).
 struct FieldDrawable<'a> {
     source: FieldSource<'a>,
-    field: &'a crate::containers::node_field::FieldView,
+    field: &'a crate::containers::node_field::NodeFieldView,
     components: Vec<String>,
     /// Caller override for the colorbar bounds.
     scale: crate::viz::ColorScale,
@@ -335,7 +335,7 @@ enum FieldSource<'a> {
 impl<'a> FieldDrawable<'a> {
     fn new(
         source: FieldSource<'a>,
-        field: &'a crate::containers::node_field::FieldView,
+        field: &'a crate::containers::node_field::NodeFieldView,
         initial_component: &str,
         scale: crate::viz::ColorScale,
     ) -> Self {
@@ -409,7 +409,7 @@ impl<'a> FieldButton for FieldDrawable<'a> {
 /// component (with a button that cycles through components).
 pub(crate) fn run_interactive_mesh_field(
     mesh: &crate::containers::mesh::Mesh,
-    field: &crate::containers::node_field::FieldView,
+    field: &crate::containers::node_field::NodeFieldView,
     initial_component: &str,
     scale: crate::viz::ColorScale,
     view: View,
@@ -443,7 +443,7 @@ pub(crate) fn run_interactive_mesh_field(
 /// component (same UX as [`run_interactive_mesh_field`]).
 pub(crate) fn run_interactive_submesh_field(
     submesh: &crate::containers::mesh::SubMesh,
-    field: &crate::containers::node_field::FieldView,
+    field: &crate::containers::node_field::NodeFieldView,
     initial_component: &str,
     scale: crate::viz::ColorScale,
     view: View,

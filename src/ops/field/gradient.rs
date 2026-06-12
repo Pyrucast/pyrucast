@@ -9,7 +9,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::Field;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::containers::node_field::{FieldView, NodeField};
+use crate::containers::node_field::{NodeFieldView, NodeField};
 use crate::error::Result;
 use crate::store::{insert, read, Handle};
 
@@ -42,7 +42,7 @@ impl Gradients {
 /// `components`.
 pub(crate) fn subspace_gradients(
     fespace: &Handle<SubFiniteElementSpace>,
-    field: &FieldView,
+    field: &NodeFieldView,
     components: &[String],
 ) -> Result<Gradients> {
     // Read everything in place: the FE space, its submesh's connectivity

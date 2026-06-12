@@ -633,6 +633,57 @@ impl ElementField {
         }
         Ok(Self { subs })
     }
+
+    /// Zero-copy view of the zones, mirroring
+    /// [`NodeField::view`](crate::containers::node_field::NodeField):
+    /// one owned read guard per [`SubElementField`], values read **in
+    /// place** in the store for the lifetime of the view.
+    // Consumed by the viz layer (feature-gated).
+    #[allow(dead_code)]
+    pub(crate) fn view(&self) -> Result<ElementFieldView> {
+        let components = crate::containers::field::Field::components(self)?;
+        let zones = self
+            .iter()
+            .map(crate::store::read)
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ElementFieldView { zones, components })
+    }
+}
+
+/// Zero-copy view of an [`ElementField`]'s zones (see
+/// [`ElementField::view`]) — the Gauss-point counterpart of
+/// [`crate::containers::node_field::NodeFieldView`]. A zone is resolved
+/// from its support submesh by handle identity (idx + generation),
+/// the reciprocal of [`ElementField::sub_for_fespace`].
+// Consumed by the viz layer (feature-gated).
+#[allow(dead_code)]
+pub(crate) struct ElementFieldView {
+    zones: Vec<crate::store::ReadGuard<SubElementField>>,
+    /// Union of the zones' component names, first-seen order.
+    components: Vec<String>,
+}
+
+#[allow(dead_code)]
+impl ElementFieldView {
+    /// Union of the zones' component names, first-seen order.
+    pub(crate) fn components(&self) -> &[String] {
+        &self.components
+    }
+
+    /// The zone supported on `submesh` (matched through the zone's FE
+    /// subspace), or `None` if no zone lives on it.
+    pub(crate) fn zone_for_submesh(
+        &self,
+        submesh: &Handle<crate::containers::mesh::SubMesh>,
+    ) -> Result<Option<&SubElementField>> {
+        for z in &self.zones {
+            let sm = read(&z.fespace())?.submesh();
+            if sm.index() == submesh.index() && sm.generation() == submesh.generation() {
+                return Ok(Some(z));
+            }
+        }
+        Ok(None)
+    }
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
