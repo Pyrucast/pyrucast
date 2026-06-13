@@ -89,3 +89,35 @@ donc garanti à jour avec l'API.
 > La **version Python** équivalente et documentée est dans le dépôt :
 > `examples/thermal_line_1d.py` (lancer avec
 > `python examples/thermal_line_1d.py` après `maturin develop`).
+
+## Exemple : un carré
+
+La généralisation 2-D du cas précédent : un **carré** \\([0,1]^2\\) (grille
+structurée de `QUA4`), chauffé par une source répartie sur le bord **gauche**
+(\\(x=0\\)) et maintenu à \\(T=20\\) sur le bord **droit** (\\(x=1\\)). Les bords
+haut et bas ne portent **aucune condition** : c'est la condition naturelle
+(flux nul, bord *isolé*).
+
+Comme les bords latéraux sont isolés, le champ ne dépend pas de \\(y\\) : le
+carré **redonne le profil de la ligne**,
+
+\\[
+u(x) = 20 + \frac{Q}{k}\,(1 - x),
+\\]
+
+et la **réaction totale** (somme des multiplicateurs sur le bord imposé) vaut le
+flux injecté \\(Q\\).
+
+**Mise en donnée d'un flux réparti.** Il n'y a pas d'opérateur de flux de bord :
+une source répartie s'applique comme des **charges nodales cohérentes**. Pour un
+flux uniforme sur des éléments linéaires, chaque segment de bord de longueur
+\\(h\\) verse la moitié de sa charge à chacun de ses deux nœuds ; un nœud
+intérieur du bord (partagé par deux segments) reçoit donc \\(Q\,h\\), un coin
+\\(Q\,h/2\\) — leur somme vaut bien \\(Q\\).
+
+```rust,ignore
+{{#include ../../tests/thermal_square.rs:square}}
+```
+
+> Version Python : `examples/thermal_square_2d.py` (lancer avec
+> `python examples/thermal_square_2d.py` après `maturin develop`).
