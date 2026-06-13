@@ -13,5 +13,6 @@
 - [Champ aux points de Gauss](element-field.md)
 - [Matrice creuse](matrix.md)
 - [Modèle physique](model.md)
+- [Conduction thermique](thermique.md)
 - [Ajouter une physique](ajouter-une-physique.md)
 - [Visualisation](visualization.md)
