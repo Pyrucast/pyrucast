@@ -76,19 +76,27 @@ def main() -> None:
     # ── Matériau : k uniforme (Dirichlet ignoré automatiquement) ─────────────
     materials = pyrucast.material_field(model, [("k", K)])
 
-    # ── Chargement : flux réparti sur le bord gauche en charges nodales
-    #    cohérentes (Q*h à l'intérieur, Q*h/2 aux coins), + T imposée ──────────
-    load_mesh = pyrucast.Mesh(c, "POI1")
-    for j in range(N + 1):
-        load_mesh.unit().add_cell([grid[idx(0, j)]])
+    # ── Chargement ───────────────────────────────────────────────────────────
+    # Source : flux uniforme (densité Q) sur le bord gauche, transformé en
+    # charges nodales cohérentes par l'opérateur `flux` (Cast3m FLUX) — plus de
+    # répartition Q*h / Q*h/2 à la main. Le bord est un maillage SEG2 bâti sur
+    # les nœuds de la grille (intégré comme une ligne).
+    left_edge = pyrucast.Mesh(c, "SEG2")
+    for j in range(N):
+        left_edge.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
+    left_fes = pyrucast.FiniteElementSpace(left_edge)
+    source = pyrucast.flux(left_fes[0], Q, "q")
+
+    # Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
+    imposed_mesh = pyrucast.Mesh(c, "POI1")
     for m in mults:
-        load_mesh.unit().add_cell([m])
-    rhs = pyrucast.NodeField(load_mesh, ["imposed_T", "q"])
-    for j in range(N + 1):
-        weight = 0.5 if j in (0, N) else 1.0
-        rhs[0].set_value(grid[idx(0, j)], "q", Q * h * weight)
+        imposed_mesh.unit().add_cell([m])
+    imposed_load = pyrucast.NodeField(imposed_mesh, ["imposed_T"])
     for m in mults:
-        rhs[0].set_value(m, "imposed_T", T_IMPOSED)
+        imposed_load[0].set_value(m, "imposed_T", T_IMPOSED)
+
+    # Chargement = flux du bord + valeurs imposées (union des zones).
+    rhs = source + imposed_load
 
     # ── Assemblage + résolution ──────────────────────────────────────────────
     K_mat = pyrucast.stiffness(model, materials)

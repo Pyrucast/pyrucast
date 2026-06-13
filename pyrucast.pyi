@@ -30,6 +30,7 @@ __all__ = [
     "displace",
     "extrude",
     "fill_surface",
+    "flux",
     "from_live_nodes",
     "gradient",
     "integrate_behavior",
@@ -1383,6 +1384,19 @@ def fill_surface(contour: Mesh, element_type: builtins.str, max_edge_length: typ
     Fill the interior of a closed SEG2 `contour` with `element_type` cells
     (triangulation). `max_edge_length` / `min_angle_deg` optionally refine
     the result.
+    """
+
+def flux(fespace: SubFiniteElementSpace, density: typing.Any, component: builtins.str) -> NodeField:
+    r"""
+    Consistent nodal loads of a distributed flux over `fespace` — the analogue
+    of Cast3m `FLUX` / `PRES`: `∫ density · N_i dΓ`, returned as a `NodeField`
+    carrying the single component `component` (the model's dual variable, e.g.
+    `"q"` for heat conduction).
+    
+    `density` is either a **float** (uniform density) or a single-component
+    `SubElementField` (per-Gauss density). The element measure comes from the
+    FE subspace, so a `SEG2` edge in a 2-D mesh integrates as a line, a surface
+    mesh as an area.
     """
 
 def from_live_nodes(config: Configuration) -> Mesh:

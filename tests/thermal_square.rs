@@ -19,6 +19,7 @@
 //! *« Conduction thermique »*; runs under `cargo test`.
 
 // ANCHOR: square
+use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
@@ -72,25 +73,33 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     let model = (&conduction + &dirichlet)?;
     let materials = build::material_field(&model, &[("k", K)])?;
 
-    // ── Chargement : flux réparti sur le bord gauche en charges nodales
-    //    cohérentes (Q·h à l'intérieur, Q·h/2 aux coins), + T imposée ───────
-    let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
-    for j in 0..=N {
-        load_sm.add_cell(&[grid[idx(0, j)].id()])?;
+    // ── Chargement ─────────────────────────────────────────────────────────
+    // Source : flux uniforme (densité Q) sur le bord gauche, transformé en
+    // charges nodales cohérentes par l'opérateur `flux` (Cast3m FLUX) — plus de
+    // répartition Q·h / Q·h/2 à la main. Le bord est un maillage SEG2 bâti sur
+    // les nœuds de la grille ; il s'intègre comme une ligne.
+    let mut left_edge = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    for j in 0..N {
+        left_edge.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
     }
+    let left_fes = FiniteElementSpace::lagrange1(&left_edge)?;
+    let source = assemble::flux(&left_fes.get(0)?, assemble::FluxDensity::Uniform(Q), "q")?;
+
+    // Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
+    let mut imposed_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
     for m in &mults {
-        load_sm.add_cell(&[m.id()])?;
+        imposed_sm.add_cell(&[m.id()])?;
     }
-    let load_sm = insert(load_sm);
-    let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["imposed_T".into(), "q".into()])?;
-    for j in 0..=N {
-        let weight = if j == 0 || j == N { 0.5 } else { 1.0 };
-        rhs.set_value(grid[idx(0, j)].id(), "q", Q * h * weight)?;
-    }
+    let imposed_sm = insert(imposed_sm);
+    let mut imposed_load = SubNodeField::from_poi1(&imposed_sm, vec!["imposed_T".into()])?;
     for m in &mults {
-        rhs.set_value(m.id(), "imposed_T", T_IMPOSED)?;
+        imposed_load.set_value(m.id(), "imposed_T", T_IMPOSED)?;
     }
-    let rhs = NodeField::from_sub(rhs);
+
+    // Chargement = flux du bord + valeurs imposées (union des zones).
+    let source = NodeField::from_sub(source);
+    let imposed_load = NodeField::from_sub(imposed_load);
+    let rhs = (&source + &imposed_load)?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
     let stiffness = assemble::stiffness(&model, &materials)?;

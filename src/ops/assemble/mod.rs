@@ -30,6 +30,9 @@ use crate::containers::model::Model;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 
+pub mod flux;
+pub use flux::{flux, FluxDensity};
+
 /// Assemble the stiffness matrix `K` for `model`.
 ///
 /// `materials` is an [`ElementField`] aggregate; each sub-model that

@@ -56,9 +56,11 @@ Le pipeline est toujours le même :
      [`barycenter`](mesh.md) (nœuds neufs colocalisés). La valeur imposée
      \\(u_d\\) s'écrit dans le chargement au slot **`imposed_T`** du
      nœud-multiplicateur (cf. [Modèle physique](model.md)).
-   - **Neumann / source** : il n'y a pas d'opérateur de source ; une source de
-     chaleur est simplement une valeur du **chargement** sur la composante
-     duale **`"q"`** au nœud concerné.
+   - **Neumann / source** : une charge **ponctuelle** est une valeur du
+     **chargement** sur la composante duale **`"q"`** au nœud concerné ; un
+     **flux réparti** sur un bord (ou un volume) se transforme en charges
+     nodales cohérentes par l'opérateur [`flux`](#exemple--un-carré) (analogue
+     de `FLUX`/`PRES` de Cast3M).
 7. **Assemblage + résolution** — `assemble::stiffness` puis le solveur dense
    `solve` (voir [Modèle physique](model.md)).
 
@@ -108,12 +110,15 @@ u(x) = 20 + \frac{Q}{k}\,(1 - x),
 et la **réaction totale** (somme des multiplicateurs sur le bord imposé) vaut le
 flux injecté \\(Q\\).
 
-**Mise en donnée d'un flux réparti.** Il n'y a pas d'opérateur de flux de bord :
-une source répartie s'applique comme des **charges nodales cohérentes**. Pour un
-flux uniforme sur des éléments linéaires, chaque segment de bord de longueur
-\\(h\\) verse la moitié de sa charge à chacun de ses deux nœuds ; un nœud
-intérieur du bord (partagé par deux segments) reçoit donc \\(Q\,h\\), un coin
-\\(Q\,h/2\\) — leur somme vaut bien \\(Q\\).
+**Mise en donnée d'un flux réparti.** Une source répartie se transforme en
+**charges nodales cohérentes** \\(f_i = \int_\Gamma \varphi\,N_i\,d\Gamma\\) par
+l'opérateur `flux` — l'analogue de `FLUX`/`PRES` de Cast3M. On lui donne le bord
+(ici un maillage `SEG2`, intégré comme une **ligne** : la mesure vient du
+Jacobien *manifold*) et la densité de flux (une constante, ou un champ par
+éléments) ; il renvoie un `NodeField` sur la composante duale `"q"`, prêt à
+composer (`+`) avec le reste du chargement. Sous le capot, pour un flux uniforme
+sur des éléments linéaires, un nœud intérieur du bord reçoit \\(Q\,h\\) et un
+coin \\(Q\,h/2\\) (somme \\(Q\\)) — mais on n'a plus à le calculer à la main.
 
 ```rust,ignore
 {{#include ../../tests/thermal_square.rs:square}}
