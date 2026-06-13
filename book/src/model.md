@@ -52,7 +52,7 @@ Elles sont presque toujours **différentes** :
 |---|---|---|
 | `HeatConduction`   | `T` (température)  | `q` (flux de chaleur) |
 | `LinearElasticity` | `ux`, `uy`, …      | `fx`, `fy`, …       |
-| `Dirichlet { primal_var: "T" }` | `lambda_T`         | `T`                 |
+| `Dirichlet { imposed_variable: "T" }` | `lambda_T`         | `imposed_T`         |
 
 Les DOFs de la `Matrix` sont identifiés par le couple `(NodeID, nom_de_champ)` (voir [`Matrix`](matrix.md)) : deux SubModels qui utilisent le même nom (`"T"`) sur des nœuds différents ne se collisionnent pas, et la jonction se fait automatiquement quand ils partagent un même `(NodeID, nom)`.
 
@@ -88,17 +88,27 @@ Le bloc local de la cellule est écrit dans la matrice globale aux positions `ro
 
 ### `Dirichlet` (`models/dirichlet.rs`)
 
-Condition de Dirichlet `u(n) = u_d` enforcée par multiplicateurs de Lagrange. À la construction :
+Condition de Dirichlet `u(n) = u_d` imposée par multiplicateurs de Lagrange. C'est une **contrainte** : aucun matériau, aucune loi de comportement. Elle ne crée **aucun nœud** et ne mute jamais le `Configuration` — l'utilisateur fournit **deux maillages** :
 
-- l'utilisateur fournit la liste des `constrained_nodes` (nœuds réels à contraindre), le nom de la primale contrainte (`primal_var`, par ex. `"T"`) et le nom de la duale de la physique primaire (`primal_dual`, par ex. `"q"`) ;
-- le SubModel crée **un nœud-multiplicateur par contrainte** dans le `Configuration`, au même point que le nœud contraint, et incrémente le refcount des nœuds qu'il protège ;
-- à l'assemblage, deux entrées unité sont ajoutées par contrainte :
-  - **bloc C** : `(multiplier_node, primal_var) × (constrained_node, primal_var) = 1`
-  - **bloc Cᵀ** : `(constrained_node, primal_dual) × (multiplier_node, lambda_<primal_var>) = 1`
+- `imposed_mesh` (POI1 pour l'instant) : les nœuds contraints (partagés avec la physique cible) ;
+- `multiplier_mesh` (POI1) : le support des multiplicateurs, apparié élément-par-élément avec `imposed_mesh` (même structure de sous-maillage, même nombre de cellules par paire). On le fabrique typiquement depuis `imposed_mesh` avec le mesher générique `barycenter` (nœuds neufs colocalisés au centre de gravité), mais l'utilisateur reste libre (colocalisés, décalés, ou réutiliser les nœuds contraints eux-mêmes).
 
-Le multiplicateur lui-même se retrouve dans la solution sous le nom `lambda_<primal_var>` au nœud-multiplicateur ; sa valeur est la **force de réaction** de la contrainte. La valeur imposée `u_d` n'est **pas** stockée dans le SubModel : l'utilisateur la fournit dans le `NodeField` de chargement à la position `(multiplier_node, primal_var)`.
+Quatre noms de variables, dont deux déduits et **surchargeables** :
 
-À la destruction du SubModel, les refcounts (contraintes + multiplicateurs) sont décrémentés ; les nœuds-multiplicateurs deviennent collectables.
+| rôle | nom | fourniture |
+|---|---|---|
+| variable imposée (primale de la **cible**) | `imposed_variable` (ex `"T"`) | requis |
+| duale de la **cible** (ligne où atterrit la réaction `Cᵀ`) | `target_dual` (ex `"q"`) | requis |
+| primale propre = multiplicateur (inconnue du système) | `multiplier`, défaut `lambda_<imposed_variable>` | déduit |
+| duale propre = ligne de contrainte + **slot** où l'utilisateur écrit `u_d` | `imposed_value`, défaut `imposed_<imposed_variable>` | déduit |
+
+À l'assemblage, **une paire de blocs unité par sous-maillage**, chacun marqué **non-symétrique** (seule l'union `C ∪ Cᵀ` l'est — propriété globale du système point-selle) :
+  - **bloc C** : `(multiplier_node, imposed_value) × (imposed_node, imposed_variable) = 1`
+  - **bloc Cᵀ** : `(imposed_node, target_dual) × (multiplier_node, multiplier) = 1`
+
+Le multiplicateur se retrouve dans la solution sous le nom `multiplier` (`lambda_T`) au nœud-multiplicateur ; sa valeur est la **force de réaction** de la contrainte. La valeur imposée `u_d` n'est **pas** stockée dans le SubModel : l'utilisateur la fournit dans le `NodeField` de chargement à la position `(multiplier_node, imposed_value)`.
+
+Les nœuds-multiplicateurs vivent tant que leur maillage **ou** le SubModel les référence (refcounts) ; quand les deux disparaissent, ils deviennent collectables. Le SubModel ne décrémente que ce qu'il partage — il n'a rien créé.
 
 ## Règle invariante : un Model = une Matrice
 
@@ -115,7 +125,7 @@ use pyrucast::containers::mesh::node::Node;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::model::Model;
-use pyrucast::ops::{assemble, build};
+use pyrucast::ops::{assemble, build, mesher};
 use pyrucast::store::insert;
 
 // 1-D : maillage [0, 1] à un seul SEG2.
@@ -131,7 +141,11 @@ let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 // sous-espaces de `fes`), composés par `+` (merge) — on ne construit
 // jamais de `SubModel` à la main (cf. CONVENTIONS.md).
 let hc = Model::heat_conduction(&fes).unwrap();
-let dir = Model::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap();
+// Maillage des nœuds imposés + support des multiplicateurs (barycenter
+// colocalise des nœuds neufs). Le modèle ne crée aucun nœud lui-même.
+let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+let multiplier = mesher::barycenter(&imposed).unwrap();
+let dir = Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
 let model = (&hc + &dir).unwrap();
 
 // Matériau k = 1, appliqué aux sous-modèles qui en ont besoin (Dirichlet
@@ -155,14 +169,19 @@ fes = pyrucast.FiniteElementSpace(mesh)
 
 # Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
 # Constructeurs au niveau parent, composés par `+` — pas de SubModel à la main.
-model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet("T", "q", [a])
+# Le maillage des multiplicateurs est fabriqué depuis les nœuds imposés.
+imposed = pyrucast.poi1_from_nodes([a])
+multiplier = pyrucast.barycenter(imposed)
+model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet(
+    "T", "q", imposed, multiplier
+)
 
 # Matériau k = 1 (les sous-modèles Dirichlet sont ignorés automatiquement).
 materials = pyrucast.material_field(model, [("k", 1.0)])
 
 K = pyrucast.stiffness(model, materials)
 print("primal_vars =", model.primal_vars())   # ['T', 'lambda_T']
-print("dual_vars =",   model.dual_vars())      # ['q', 'T']
+print("dual_vars =",   model.dual_vars())      # ['q', 'imposed_T']
 print(K)                                        # Matrix: 3 row(s) × 3 col(s), …
 ```
 
@@ -192,26 +211,30 @@ fes = pyrucast.FiniteElementSpace(mesh)
 
 # 2) Modèle : conduction + Dirichlet aux deux bouts.
 # Chaque physique est un Model au niveau parent ; on les compose par `+`.
-# Un Model unitaire se réindexe (`left[0]`) pour atteindre la vue du
-# sous-modèle (ici son maillage de nœuds-multiplicateurs).
-left = pyrucast.Model.dirichlet("T", "q", [nodes[0]])
-right = pyrucast.Model.dirichlet("T", "q", [nodes[-1]])
-mult_left = left[0].multiplier_mesh().node(0, 0, 0)
-mult_right = right[0].multiplier_mesh().node(0, 0, 0)
+# On fabrique le support des multiplicateurs depuis les nœuds imposés
+# (`barycenter` colocalise des nœuds neufs), et on y lit le nœud-multiplicateur.
+imposed_left = pyrucast.poi1_from_nodes([nodes[0]])
+imposed_right = pyrucast.poi1_from_nodes([nodes[-1]])
+mult_mesh_left = pyrucast.barycenter(imposed_left)
+mult_mesh_right = pyrucast.barycenter(imposed_right)
+left = pyrucast.Model.dirichlet("T", "q", imposed_left, mult_mesh_left)
+right = pyrucast.Model.dirichlet("T", "q", imposed_right, mult_mesh_right)
+mult_left = mult_mesh_left.node(0, 0, 0)
+mult_right = mult_mesh_right.node(0, 0, 0)
 model = pyrucast.Model.heat_conduction(fes) + left + right
 
 # 3) Matériau k = 1 (appliqué à la conduction, Dirichlet ignoré)
 materials = pyrucast.material_field(model, [("k", 1.0)])
 
-# 4) Chargement : valeurs imposées aux nœuds-multiplicateurs.
+# 4) Chargement : valeurs imposées au slot `imposed_T` des nœuds-multiplicateurs.
 # NodeField accepte un Mesh comme support (une zone par submesh) ;
 # l'écriture passe par la zone (rhs[0]), la lecture par l'agrégat.
 rhs_mesh = pyrucast.Mesh(c, "POI1")
 rhs_mesh.unit().add_cell([mult_left])
 rhs_mesh.unit().add_cell([mult_right])
-rhs = pyrucast.NodeField(rhs_mesh, ["T"])
-rhs[0].set_value(mult_left, "T", 0.0)
-rhs[0].set_value(mult_right, "T", 1.0)
+rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T"])
+rhs[0].set_value(mult_left, "imposed_T", 0.0)
+rhs[0].set_value(mult_right, "imposed_T", 1.0)
 
 # 5) Assemblage + résolution
 K = pyrucast.stiffness(model, materials)

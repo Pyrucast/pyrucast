@@ -126,10 +126,20 @@ mod tests {
             .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
             .unwrap();
         if dirichlet_at_left {
+            let imposed =
+                Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+            let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
             model
                 .add_sub(insert(
-                    SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a))
-                        .unwrap(),
+                    SubModel::dirichlet(
+                        "T".into(),
+                        "q".into(),
+                        &imposed,
+                        &multiplier,
+                        None,
+                        None,
+                    )
+                    .unwrap(),
                 ))
                 .unwrap();
         }
@@ -164,7 +174,12 @@ mod tests {
     fn sub_errors_on_dirichlet() {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let dir = SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        let dir =
+            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+                .unwrap();
         assert!(sub_material_field(&dir, &[("k", 1.0)]).is_err());
     }
 
@@ -234,9 +249,20 @@ mod tests {
         model
             .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
             .unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
+        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
         model
             .add_sub(insert(
-                SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&n0)).unwrap(),
+                SubModel::dirichlet(
+                    "T".into(),
+                    "q".into(),
+                    &imposed,
+                    &multiplier,
+                    None,
+                    None,
+                )
+                .unwrap(),
             ))
             .unwrap();
         model

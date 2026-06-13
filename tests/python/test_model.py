@@ -21,7 +21,9 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
 
     model = pyrucast.Model.heat_conduction(fes)
     if dirichlet_left:
-        model = model + pyrucast.Model.dirichlet("T", "q", [a])
+        imposed = pyrucast.poi1_from_nodes([a])
+        multiplier = pyrucast.barycenter(imposed)
+        model = model + pyrucast.Model.dirichlet("T", "q", imposed, multiplier)
     return c, mesh, fes, sub, materials, model, a, b
 
 
@@ -37,7 +39,8 @@ def test_heat_conduction_alone_primal_dual():
 def test_with_dirichlet_includes_lagrange_names():
     _, _, _, _, _, model, *_ = _seg2_heat_model(dirichlet_left=True)
     assert model.primal_vars() == ["T", "lambda_T"]
-    assert model.dual_vars() == ["q", "T"]
+    # The Dirichlet dual is "imposed_T" — distinct from the primal "T".
+    assert model.dual_vars() == ["q", "imposed_T"]
 
 
 # ─── Stiffness assembly ─────────────────────────────────────────────────────
@@ -102,27 +105,28 @@ def test_dirichlet_creates_multiplier_node_and_writes_both_blocks():
     assert K.n_rows() == 3
     assert K.n_cols() == 3
 
-    # Locate the multiplier node: the row labelled "T" sits on the
+    # Locate the multiplier node: the row labelled "imposed_T" sits on the
     # one new node id.
     rows = K.row_dofs()
-    mult_id = next(nid for (nid, name) in rows if name == "T")
+    mult_id = next(nid for (nid, name) in rows if name == "imposed_T")
     assert mult_id != a.id  # new node
     mult = c.acquire(mult_id)
 
-    # C entry (mult, "T") × (a, "T")
-    assert K.get(mult, "T", a, "T") == 1.0
+    # C entry (mult, "imposed_T") × (a, "T")
+    assert K.get(mult, "imposed_T", a, "T") == 1.0
     # Cᵀ entry (a, "q") × (mult, "lambda_T")
     assert K.get(a, "q", mult, "lambda_T") == 1.0
 
 
-def test_dirichlet_empty_constraint_list_rejected():
-    pyrucast.Configuration(1)
+def test_dirichlet_empty_constraint_mesh_rejected():
+    c = pyrucast.Configuration(1)
+    empty = pyrucast.Mesh(c, "POI1")  # one POI1 submesh, zero cells
     try:
-        pyrucast.Model.dirichlet("T", "q", [])
-    except RuntimeError:
+        pyrucast.Model.dirichlet("T", "q", empty, empty)
+    except (RuntimeError, ValueError):
         pass
     else:
-        raise AssertionError("expected RuntimeError for empty constraints")
+        raise AssertionError("expected error for empty constraint mesh")
 
 
 # ─── Mass (v0: empty stub) ──────────────────────────────────────────────────

@@ -26,7 +26,7 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::SubMatrix;
-use crate::containers::mesh::SubMesh;
+use crate::containers::mesh::Mesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::store::Handle;
@@ -62,10 +62,11 @@ pub trait Physics {
         None
     }
 
-    /// POI1 support owning this physics's multiplier nodes, for Lagrange
+    /// POI1 mesh carrying this physics's multiplier nodes, for Lagrange
     /// variants (`Dirichlet`, …). `None` (default) for every physics that
-    /// introduces no multipliers.
-    fn multiplier_support(&self) -> Option<&Handle<SubMesh>> {
+    /// introduces no multipliers. Borrowed from the physics (the user supplied
+    /// it); generic code clones it when an owned `Mesh` is needed.
+    fn multiplier_mesh(&self) -> Option<&Mesh> {
         None
     }
 

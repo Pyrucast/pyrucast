@@ -24,7 +24,7 @@ SubModel  (enum : stockage + sérialisation bincode)
 Physics  (trait : tout le comportement)
 ├── primal_vars / dual_vars
 ├── material_components / material_fespace   (défaut : None)
-├── multiplier_support                       (défaut : None)
+├── multiplier_mesh                          (défaut : None)
 ├── build_stiffness_blocks
 ├── build_mass_blocks                        (défaut : vide)
 └── label / display / render
@@ -37,8 +37,9 @@ Ajouter une physique se réduit à **quatre** gestes :
 1. **`src/models/<ma_physique>.rs`** (nouveau) — une struct portant ses
    supports + un `impl Physics` + un constructeur `new(...)` faisant le
    travail de construction (calque sur `heat_conduction.rs`, cas simple à
-   1 bloc, ou `dirichlet.rs`, cas Lagrange à 2 blocs + nœuds créés à la
-   volée). La struct dérive `Clone, Serialize, Deserialize`.
+   1 bloc, ou `dirichlet.rs`, contrainte de Lagrange à 2 blocs portée par des
+   maillages fournis par l'utilisateur). La struct dérive `Serialize,
+   Deserialize` (et `Clone` si ses champs le permettent).
 2. **`src/models/mod.rs`** — `pub mod <ma_physique>;`.
 3. **`src/containers/model.rs`** — **une** variante dans `enum SubModel` et
    **une** ligne dans `SubModel::as_physics()`. Plus le constructeur public
@@ -60,7 +61,7 @@ pub trait Physics {
     fn dual_vars(&self) -> Vec<String>;
     fn material_components(&self) -> Option<&'static [&'static str]> { None }
     fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> { None }
-    fn multiplier_support(&self) -> Option<&Handle<SubMesh>> { None }
+    fn multiplier_mesh(&self) -> Option<&Mesh> { None }
     fn build_stiffness_blocks(&self, material: Option<&Handle<SubElementField>>)
         -> Result<Vec<SubMatrix>>;
     fn build_mass_blocks(&self, _material: Option<&Handle<SubElementField>>)
@@ -76,7 +77,7 @@ Conséquences pratiques :
 - **Matériau** : déclarer `material_fespace()` + `material_components()`
   suffit ; l'assembleur (`src/ops/assemble/mod.rs`) sélectionne et valide le
   `SubElementField` automatiquement, sans connaître la physique.
-- **Multiplicateurs de Lagrange** : redéfinir `multiplier_support()` suffit ;
+- **Multiplicateurs de Lagrange** : redéfinir `multiplier_mesh()` suffit ;
   `SubModel::multiplier_nodes()` et `multiplier_mesh()` en découlent.
 - **Terme de masse** : redéfinir `build_mass_blocks()` (sinon : pas de masse).
 

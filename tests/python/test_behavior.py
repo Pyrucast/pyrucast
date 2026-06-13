@@ -65,7 +65,11 @@ def test_has_behavior_true_for_hc_false_for_dirichlet():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet("T", "q", [a])
+    imposed = pyrucast.poi1_from_nodes([a])
+    multiplier = pyrucast.barycenter(imposed)
+    model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet(
+        "T", "q", imposed, multiplier
+    )
     assert model[0].has_behavior() is True
     assert model[1].has_behavior() is False
 

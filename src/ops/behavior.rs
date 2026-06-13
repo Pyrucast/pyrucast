@@ -104,9 +104,20 @@ mod tests {
             .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
             .unwrap();
         if dirichlet {
+            let imposed =
+                Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+            let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
             model
                 .add_sub(insert(
-                    SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap(),
+                    SubModel::dirichlet(
+                        "T".into(),
+                        "q".into(),
+                        &imposed,
+                        &multiplier,
+                        None,
+                        None,
+                    )
+                    .unwrap(),
                 ))
                 .unwrap();
         }

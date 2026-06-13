@@ -22,6 +22,7 @@ __all__ = [
     "SubMesh",
     "SubModel",
     "SubNodeField",
+    "barycenter",
     "circle_seg2",
     "consolidate",
     "coordinates",
@@ -598,15 +599,22 @@ class Model:
         `Model.heat_conduction(fes) + Model.dirichlet(...)`.
         """
     @classmethod
-    def dirichlet(cls, primal_var: builtins.str, primal_dual: builtins.str, constrained_nodes: typing.Sequence[Node]) -> Model:
+    def dirichlet(cls, imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
         r"""
-        `Model.dirichlet(primal_var, primal_dual, constrained_nodes)` —
-        Dirichlet-constraint model (a single sub-model) imposed via
-        Lagrange multipliers. `constrained_nodes` is a list of `Node`
-        objects. `primal_var` is the constrained primary variable (e.g.
-        `"T"`); `primal_dual` is the dual variable of the primary physics
-        it targets (e.g. `"q"` for heat conduction) — see the model
-        chapter of the book for the full semantics.
+        `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,
+        multiplier_mesh, multiplier=None, imposed_value=None)` — Dirichlet
+        constraint model (a single sub-model) imposed via Lagrange multipliers.
+        
+        `imposed_variable` is the constrained primary variable (e.g. `"T"`);
+        `target_dual` is the dual variable of the target physics it couples
+        into (e.g. `"q"` for heat conduction). `imposed_mesh` is the POI1 mesh
+        of constrained nodes; `multiplier_mesh` is the POI1 support of the
+        multipliers (same per-submesh cell count) — usually built from
+        `imposed_mesh` with the `barycenter` mesher. `multiplier` /
+        `imposed_value` override the derived names `lambda_<imposed_variable>` /
+        `imposed_<imposed_variable>`. The imposed value `u_d` is written by the
+        user in the load field at the multiplier node's `imposed_value`
+        component. See the model chapter of the book for the full semantics.
         """
     def primal_vars(self) -> builtins.list[builtins.str]:
         r"""
@@ -1303,6 +1311,18 @@ class SubNodeField:
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
         """
+
+def barycenter(mesh: Mesh) -> Mesh:
+    r"""
+    Build a POI1 mesh of per-element centroids (centres of gravity), submesh
+    by submesh.
+    
+    Returns a new mesh with the same number of submeshes; each output submesh
+    is a POI1 submesh with one **fresh** node per element of the corresponding
+    input submesh, placed at the element's centroid. A POI1 input is therefore
+    copied to colocated fresh nodes — handy to mint Lagrange-multiplier support
+    nodes from a set of constrained points.
+    """
 
 def circle_seg2(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int) -> Mesh:
     r"""

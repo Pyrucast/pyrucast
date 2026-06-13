@@ -218,7 +218,7 @@ classDiagram
     class py_PySubModel {
         -handle: Handle~containers_SubModel~
         +heat_conduction(_cls:&pyo3::Bound~'_, pyo3::types::PyType~, fespace:PyRef~py_PySubFiniteElementSpace~, material:PyRef~py_PySubElementField~) PyResult~Self~
-        +dirichlet(_cls:&pyo3::Bound~'_, pyo3::types::PyType~, config:PyRef~py_PyConfiguration~, primal_var:String, primal_dual:String, constrained_node_ids:Vec~u32~) PyResult~Self~
+        +dirichlet(_cls:&pyo3::Bound~'_, pyo3::types::PyType~, imposed_variable:String, target_dual:String, imposed_mesh:PyRef~py_PyMesh~, multiplier_mesh:PyRef~py_PyMesh~, multiplier:Option~String~, imposed_value:Option~String~) PyResult~Self~
         +primal_vars() PyResult~Vec<String>~
         +dual_vars() PyResult~Vec<String>~
         +multiplier_nodes() PyResult~Vec<u32>~
@@ -423,7 +423,7 @@ classDiagram
         -physics: containers_Physics
         +new(physics:containers_Physics) Self
         +heat_conduction(fespace:Handle~finite_element_space_SubFiniteElementSpace~, material:Handle~containers_SubElementField~) Self
-        +dirichlet(config:Handle~mesh_Configuration~, primal_var:String, primal_dual:String, constrained_nodes:Vec~mesh_NodeId~) Result~Self~
+        +dirichlet(imposed_variable:String, target_dual:String, imposed_mesh:&mesh_Mesh, multiplier_mesh:&mesh_Mesh, multiplier:Option~String~, imposed_value:Option~String~) Result~Self~
         +physics() &Physics
         +multiplier_nodes() &[NodeId]
         +primal_vars() Vec~String~
@@ -498,10 +498,13 @@ classDiagram
     class containers_Clone {
         +clone() Self
     }
-    class models_Built {
-        +constrained_support: Handle~mesh_SubMesh~
-        +multiplier_support: Handle~mesh_SubMesh~
-        +multiplier_nodes: Vec~mesh_NodeId~
+    class models_Dirichlet {
+        +imposed_variable: String
+        +target_dual: String
+        +multiplier: String
+        +imposed_value: String
+        +imposed_mesh: mesh_Mesh
+        +multiplier_mesh: mesh_Mesh
     }
     class models_CellSnapshot {
         -node_ids: Vec~mesh_NodeId~
@@ -918,11 +921,8 @@ namespace tests {
     containers_NodeField ..> containers_NodeField
     containers_NodeField ..> containers_NodeField
     containers_NodeField ..> containers_NodeField
-    models_Built --> Handle
-    models_Built --> mesh_SubMesh
-    models_Built --> Handle
-    models_Built --> mesh_SubMesh
-    models_Built --> mesh_NodeId
+    models_Dirichlet --> mesh_Mesh
+    models_Dirichlet --> mesh_Mesh
     models_CellSnapshot --> mesh_NodeId
     ops_mesher_triangulation_Cdt --> ops_mesher_triangulation_Triangle
     mesh_Cell --> Handle

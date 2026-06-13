@@ -33,6 +33,7 @@
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::containers::node_field::{NodeField, SubNodeField};
 //! use pyrucast::ops::assemble;
+//! use pyrucast::ops::mesher;
 //! use pyrucast::ops::solver::lu::solve;
 //! use pyrucast::store::insert;
 //!
@@ -53,21 +54,27 @@
 //! model
 //!     .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
 //!     .unwrap();
-//! let dir_a = SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap();
-//! let dir_b = SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&b)).unwrap();
+//! // Dirichlet at both ends: imposed POI1 meshes + colocated multiplier
+//! // supports minted by `barycenter`.
+//! let imposed_a = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+//! let imposed_b = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
+//! let mult_mesh_a = mesher::barycenter(&imposed_a).unwrap();
+//! let mult_mesh_b = mesher::barycenter(&imposed_b).unwrap();
+//! let dir_a = SubModel::dirichlet("T".into(), "q".into(), &imposed_a, &mult_mesh_a, None, None).unwrap();
+//! let dir_b = SubModel::dirichlet("T".into(), "q".into(), &imposed_b, &mult_mesh_b, None, None).unwrap();
 //! let mult_a = dir_a.multiplier_nodes().unwrap()[0];
 //! let mult_b = dir_b.multiplier_nodes().unwrap()[0];
 //! model.add_sub(insert(dir_a)).unwrap();
 //! model.add_sub(insert(dir_b)).unwrap();
 //!
-//! // Load: imposed values T_a = 0, T_b = 1 at the multiplier nodes.
+//! // Load: imposed values T_a = 0, T_b = 1 at the multiplier nodes (slot "imposed_T").
 //! let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
 //! load_sm.add_cell(&[mult_a]).unwrap();
 //! load_sm.add_cell(&[mult_b]).unwrap();
 //! let load_sm_h = insert(load_sm);
-//! let mut rhs = SubNodeField::from_poi1(&load_sm_h, vec!["T".into()]).unwrap();
-//! rhs.set_value(mult_a, "T", 0.0).unwrap();
-//! rhs.set_value(mult_b, "T", 1.0).unwrap();
+//! let mut rhs = SubNodeField::from_poi1(&load_sm_h, vec!["imposed_T".into()]).unwrap();
+//! rhs.set_value(mult_a, "imposed_T", 0.0).unwrap();
+//! rhs.set_value(mult_b, "imposed_T", 1.0).unwrap();
 //! let rhs = NodeField::from_sub(rhs);
 //!
 //! let k = assemble::stiffness(&model, &materials).unwrap();
@@ -208,13 +215,30 @@ mod tests {
         model
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
-        let left_dir =
-            SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&nodes[0]))
-                .unwrap();
+        let imposed_left = Mesh::from_submesh(
+            SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap(),
+        );
+        let imposed_right = Mesh::from_submesh(
+            SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[n_elems])).unwrap(),
+        );
+        let mult_mesh_left = crate::ops::mesher::barycenter(&imposed_left).unwrap();
+        let mult_mesh_right = crate::ops::mesher::barycenter(&imposed_right).unwrap();
+        let left_dir = SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &imposed_left,
+            &mult_mesh_left,
+            None,
+            None,
+        )
+        .unwrap();
         let right_dir = SubModel::dirichlet(
             "T".into(),
             "q".into(),
-            std::slice::from_ref(&nodes[n_elems]),
+            &imposed_right,
+            &mult_mesh_right,
+            None,
+            None,
         )
         .unwrap();
         let mult_left = left_dir.multiplier_nodes().unwrap()[0];
@@ -222,14 +246,15 @@ mod tests {
         model.add_sub(insert(left_dir)).unwrap();
         model.add_sub(insert(right_dir)).unwrap();
 
-        // Build rhs: T_left = 0 at mult_left, T_right = 1 at mult_right.
+        // Build rhs: T_left = 0 at mult_left, T_right = 1 at mult_right
+        // (imposed value goes to the "imposed_T" slot).
         let mut rhs_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[mult_left]).unwrap();
         rhs_sm.add_cell(&[mult_right]).unwrap();
         let rhs_sm_h = insert(rhs_sm);
-        let mut rhs = SubNodeField::from_poi1(&rhs_sm_h, vec!["T".into()]).unwrap();
-        rhs.set_value(mult_left, "T", 0.0).unwrap();
-        rhs.set_value(mult_right, "T", 1.0).unwrap();
+        let mut rhs = SubNodeField::from_poi1(&rhs_sm_h, vec!["imposed_T".into()]).unwrap();
+        rhs.set_value(mult_left, "imposed_T", 0.0).unwrap();
+        rhs.set_value(mult_right, "imposed_T", 1.0).unwrap();
         let rhs = NodeField::from_sub(rhs);
 
         // Assemble + solve.

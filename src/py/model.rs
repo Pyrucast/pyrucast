@@ -1,9 +1,7 @@
 //! Python wrappers for [`crate::containers::model::SubModel`] and [`crate::containers::model::Model`].
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::Node;
 use crate::containers::model::{Model, SubModel};
-use crate::py::node::PyNode;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::store::{read, Handle};
@@ -100,22 +98,39 @@ impl PyModel {
         Ok(Self { inner })
     }
 
-    /// `Model.dirichlet(primal_var, primal_dual, constrained_nodes)` —
-    /// Dirichlet-constraint model (a single sub-model) imposed via
-    /// Lagrange multipliers. `constrained_nodes` is a list of `Node`
-    /// objects. `primal_var` is the constrained primary variable (e.g.
-    /// `"T"`); `primal_dual` is the dual variable of the primary physics
-    /// it targets (e.g. `"q"` for heat conduction) — see the model
-    /// chapter of the book for the full semantics.
+    /// `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,
+    /// multiplier_mesh, multiplier=None, imposed_value=None)` — Dirichlet
+    /// constraint model (a single sub-model) imposed via Lagrange multipliers.
+    ///
+    /// `imposed_variable` is the constrained primary variable (e.g. `"T"`);
+    /// `target_dual` is the dual variable of the target physics it couples
+    /// into (e.g. `"q"` for heat conduction). `imposed_mesh` is the POI1 mesh
+    /// of constrained nodes; `multiplier_mesh` is the POI1 support of the
+    /// multipliers (same per-submesh cell count) — usually built from
+    /// `imposed_mesh` with the `barycenter` mesher. `multiplier` /
+    /// `imposed_value` override the derived names `lambda_<imposed_variable>` /
+    /// `imposed_<imposed_variable>`. The imposed value `u_d` is written by the
+    /// user in the load field at the multiplier node's `imposed_value`
+    /// component. See the model chapter of the book for the full semantics.
     #[classmethod]
+    #[pyo3(signature = (imposed_variable, target_dual, imposed_mesh, multiplier_mesh, multiplier=None, imposed_value=None))]
     fn dirichlet(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
-        primal_var: String,
-        primal_dual: String,
-        constrained_nodes: Vec<PyRef<'_, PyNode>>,
+        imposed_variable: String,
+        target_dual: String,
+        imposed_mesh: PyRef<'_, PyMesh>,
+        multiplier_mesh: PyRef<'_, PyMesh>,
+        multiplier: Option<String>,
+        imposed_value: Option<String>,
     ) -> PyResult<Self> {
-        let nodes: Vec<Node> = constrained_nodes.iter().map(|n| n.as_node().clone()).collect();
-        let inner = Model::dirichlet(primal_var, primal_dual, &nodes)?;
+        let inner = Model::dirichlet(
+            imposed_variable,
+            target_dual,
+            &imposed_mesh.inner,
+            &multiplier_mesh.inner,
+            multiplier,
+            imposed_value,
+        )?;
         Ok(Self { inner })
     }
 

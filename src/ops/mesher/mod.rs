@@ -9,6 +9,7 @@
 //! - [`sweep`] — extrusion and SEG2→QUA4 kernel used by [`sweep_qua4()`]
 //!   and [`extrude()`].
 
+pub mod barycenter;
 pub mod circle_seg2;
 pub mod consolidate;
 pub mod extrude;
@@ -20,6 +21,7 @@ pub mod sweep_qua4;
 pub mod to_poi1;
 pub mod triangulation;
 
+pub use barycenter::barycenter;
 pub use circle_seg2::circle_seg2;
 pub use consolidate::consolidate;
 pub use extrude::extrude;

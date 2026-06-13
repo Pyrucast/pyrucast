@@ -47,6 +47,21 @@ pub fn to_poi1(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
+/// Build a POI1 mesh of per-element centroids (centres of gravity), submesh
+/// by submesh.
+///
+/// Returns a new mesh with the same number of submeshes; each output submesh
+/// is a POI1 submesh with one **fresh** node per element of the corresponding
+/// input submesh, placed at the element's centroid. A POI1 input is therefore
+/// copied to colocated fresh nodes — handy to mint Lagrange-multiplier support
+/// nodes from a set of constrained points.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn barycenter(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::barycenter(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
 // `consolidate(mesh)` is exposed by the type-dispatching top-level
 // wrapper in `crate::py::ops::consolidate` (shared with NodeField).
 

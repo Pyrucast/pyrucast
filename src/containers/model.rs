@@ -40,23 +40,24 @@
 //!
 //! # Lagrange multipliers and DOF identification
 //!
-//! `SubModel::Dirichlet` introduces new DOFs of two kinds, both living
-//! on **multiplier nodes** that the sub-model creates on the fly in the
-//! [`crate::containers::mesh::Configuration`]:
+//! `SubModel::Dirichlet` introduces new DOFs of two kinds, both living on the
+//! **multiplier nodes** supplied by the user (`multiplier_mesh`; the sub-model
+//! creates no node):
 //!
-//! - the **primal** of the constraint sub-model is `lambda_<var>` at the
-//!   multiplier nodes — the Lagrange multiplier itself, an unknown of
-//!   the augmented system;
-//! - the **dual** of the constraint sub-model is `<var>` (the same
-//!   string as the primal being constrained) at the multiplier nodes —
-//!   the constraint equation row, in units of the primary variable.
+//! - the **primal** of the constraint sub-model is `multiplier` (default
+//!   `lambda_<imposed_variable>`) at the multiplier nodes — the Lagrange
+//!   multiplier itself, an unknown of the augmented system whose solved value
+//!   is the reaction;
+//! - the **dual** of the constraint sub-model is `imposed_value` (default
+//!   `imposed_<imposed_variable>`) at the multiplier nodes — the constraint
+//!   equation row, and the slot at which the user writes the imposed value.
 //!
-//! Different `(NodeId, field_name)` pairs distinguish the multiplier
-//! DOFs from the primary DOFs even when the field names happen to
-//! collide. The Matrix's symmetric flag is purely informative; this
-//! v0 stores both the `C` (constraint) and `Cᵀ` (its transpose) blocks
-//! explicitly so the dense LU solver gets a well-posed system without
-//! relying on the symmetry contract.
+//! Distinct `(NodeId, field_name)` pairs keep these multiplier DOFs apart from
+//! the primary DOFs. The blocks `C` (constraint) and `Cᵀ` (its transpose — the
+//! reaction in the target's `target_dual` row) are stored explicitly and each
+//! marked **non-symmetric**: only their union `C ∪ Cᵀ` is symmetric, a global
+//! property of the saddle-point system (the dense LU solver ignores the flag
+//! anyway).
 //!
 //! # Example: 1-D heat conduction with a Dirichlet condition
 //!
@@ -71,6 +72,7 @@
 //! use pyrucast::containers::model::{Model, SubModel};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::ops::assemble;
+//! use pyrucast::ops::mesher;
 //! use pyrucast::store::insert;
 //!
 //! // 1-D Configuration with two nodes spanning [0, 1].
@@ -93,9 +95,14 @@
 //! model
 //!     .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
 //!     .unwrap();
+//! // Dirichlet on node `a`: the imposed POI1 mesh + a colocated multiplier
+//! // support minted by the `barycenter` mesher.
+//! let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+//! let multiplier = mesher::barycenter(&imposed).unwrap();
 //! model
 //!     .add_sub(insert(
-//!         SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap(),
+//!         SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+//!             .unwrap(),
 //!     ))
 //!     .unwrap();
 //!
@@ -105,7 +112,7 @@
 //! assert_eq!(k.n_cols().unwrap(), 3);
 //! ```
 
-use crate::containers::mesh::{Node, NodeId};
+use crate::containers::mesh::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::error::Result;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
@@ -163,23 +170,30 @@ impl SubModel {
         ))
     }
 
-    /// Dirichlet sub-model: enforce `<primal_var> = u_d` on each
-    /// `constrained_node`, with `u_d` supplied later by the user
-    /// through the load `SubNodeField`.
+    /// Dirichlet sub-model: enforce `imposed_variable = u_d` on the nodes of
+    /// `imposed_mesh`, with multipliers living on `multiplier_mesh` and `u_d`
+    /// supplied later by the user through the load `SubNodeField`.
     ///
-    /// `primal_dual` is the dual variable name of the primary physics
-    /// whose primal is being constrained (e.g. `"q"` for heat
-    /// conduction, `"f_x"` for elasticity in `x`). See
-    /// [`dirichlet::Dirichlet::new`].
+    /// `target_dual` is the dual variable name of the target physics whose
+    /// primal is being constrained (e.g. `"q"` for heat conduction, `"f_x"`
+    /// for elasticity in `x`). `multiplier` / `imposed_value` default to
+    /// `lambda_<imposed_variable>` / `imposed_<imposed_variable>` when `None`.
+    /// See [`dirichlet::Dirichlet::new`].
     pub fn dirichlet(
-        primal_var: String,
-        primal_dual: String,
-        constrained_nodes: &[Node],
+        imposed_variable: String,
+        target_dual: String,
+        imposed_mesh: &Mesh,
+        multiplier_mesh: &Mesh,
+        multiplier: Option<String>,
+        imposed_value: Option<String>,
     ) -> Result<Self> {
         Ok(SubModel::Dirichlet(dirichlet::Dirichlet::new(
-            primal_var,
-            primal_dual,
-            constrained_nodes,
+            imposed_variable,
+            target_dual,
+            imposed_mesh,
+            multiplier_mesh,
+            multiplier,
+            imposed_value,
         )?))
     }
 
@@ -188,25 +202,30 @@ impl SubModel {
     /// …); empty for the other physics.
     ///
     /// Useful for the user who needs to write the imposed value `u_d` at
-    /// the multiplier node's `<primal_var>` component of the load
+    /// the multiplier node's `imposed_value` component of the load
     /// `SubNodeField`.
     pub fn multiplier_nodes(&self) -> Result<Vec<NodeId>> {
-        match self.as_physics().multiplier_support() {
-            Some(support) => Ok(read(support)?.connectivity().to_vec()),
-            None => Ok(Vec::new()),
+        let mut out = Vec::new();
+        if let Some(mesh) = self.as_physics().multiplier_mesh() {
+            for sm in mesh {
+                out.extend(read(sm)?.connectivity().iter().copied());
+            }
         }
+        Ok(out)
     }
 
-    /// POI1 [`Mesh`] of the multiplier nodes (shares the multiplier
-    /// support submesh — zero-copy). Empty for non-Lagrange physics.
+    /// POI1 [`Mesh`] of the multiplier nodes (shares the multiplier submeshes
+    /// — zero-copy). Empty for non-Lagrange physics.
     ///
-    /// This is the user-facing handle to the multiplier nodes: build a
-    /// load [`crate::containers::node_field::SubNodeField`] on its single
-    /// submesh to impose the constrained values.
+    /// This is the user-facing handle to the multiplier nodes: build a load
+    /// [`crate::containers::node_field::SubNodeField`] on it to impose the
+    /// constrained values.
     pub fn multiplier_mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
-        if let Some(support) = self.as_physics().multiplier_support() {
-            mesh.add_sub(support.clone())?;
+        if let Some(src) = self.as_physics().multiplier_mesh() {
+            for sm in src {
+                mesh.add_sub(sm.clone())?;
+            }
         }
         Ok(mesh)
     }
@@ -330,20 +349,27 @@ impl Model {
         Ok(model)
     }
 
-    /// Dirichlet `Model` (a single sub-model) constraining `<primal_var>`
-    /// on `constrained_nodes` via Lagrange multipliers. Parent-level
-    /// named constructor — see [`SubModel::dirichlet`] for the semantics
-    /// of `primal_var` / `primal_dual`.
+    /// Dirichlet `Model` (a single sub-model) constraining `imposed_variable`
+    /// on the nodes of `imposed_mesh` via Lagrange multipliers carried by
+    /// `multiplier_mesh`. Parent-level named constructor — see
+    /// [`SubModel::dirichlet`] for the semantics of the four variable names
+    /// and the two meshes.
     pub fn dirichlet(
-        primal_var: String,
-        primal_dual: String,
-        constrained_nodes: &[Node],
+        imposed_variable: String,
+        target_dual: String,
+        imposed_mesh: &Mesh,
+        multiplier_mesh: &Mesh,
+        multiplier: Option<String>,
+        imposed_value: Option<String>,
     ) -> Result<Self> {
         let mut model = Self::empty();
         model.add_sub(insert(SubModel::dirichlet(
-            primal_var,
-            primal_dual,
-            constrained_nodes,
+            imposed_variable,
+            target_dual,
+            imposed_mesh,
+            multiplier_mesh,
+            multiplier,
+            imposed_value,
         )?))?;
         Ok(model)
     }
@@ -425,10 +451,20 @@ mod tests {
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         if dirichlet_at_left {
+            let imposed =
+                Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+            let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
             model
                 .add_sub(insert(
-                    SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a))
-                        .unwrap(),
+                    SubModel::dirichlet(
+                        "T".into(),
+                        "q".into(),
+                        &imposed,
+                        &multiplier,
+                        None,
+                        None,
+                    )
+                    .unwrap(),
                 ))
                 .unwrap();
         }
@@ -449,11 +485,11 @@ mod tests {
             model.primal_vars().unwrap(),
             vec!["T".to_string(), "lambda_T".to_string()]
         );
-        // Dual side: "q" from heat conduction + "T" (dual of Dirichlet,
-        // same string but on different (NodeId, name) pairs).
+        // Dual side: "q" from heat conduction + "imposed_T" (the Dirichlet
+        // dual — a distinct name, no longer colliding with the primal "T").
         assert_eq!(
             model.dual_vars().unwrap(),
-            vec!["q".to_string(), "T".to_string()]
+            vec!["q".to_string(), "imposed_T".to_string()]
         );
     }
 
@@ -533,16 +569,16 @@ mod tests {
         assert_eq!(k.n_cols().unwrap(), 3);
 
         // Find the multiplier node id: the only NodeId that appears in
-        // a row labelled "T" of K.
+        // a row labelled "imposed_T" of K.
         let row_dofs = k.row_dofs().unwrap();
         let mult = row_dofs
             .iter()
-            .find(|(_, name)| name == "T")
+            .find(|(_, name)| name == "imposed_T")
             .expect("multiplier row missing")
             .0;
 
-        // C entry: (mult, "T") × (a_id, "T") = 1
-        assert_eq!(k.get(mult, "T", a_id, "T").unwrap(), 1.0);
+        // C entry: (mult, "imposed_T") × (a_id, "T") = 1
+        assert_eq!(k.get(mult, "imposed_T", a_id, "T").unwrap(), 1.0);
         // Cᵀ entry: (a_id, "q") × (mult, "lambda_T") = 1
         assert_eq!(k.get(a_id, "q", mult, "lambda_T").unwrap(), 1.0);
         // Ensure lambda_T appears as a column.
@@ -553,40 +589,48 @@ mod tests {
         assert!(lambda_col_present);
     }
 
-    /// SubModel Drop on Dirichlet decrements the refcounts it took (one
-    /// on each constrained node, one on each multiplier node).
+    /// The multiplier nodes (supplied by the user via `multiplier_mesh`) stay
+    /// alive as long as **either** the user's mesh **or** the sub-model holds
+    /// their submesh; once both are gone the node is released and collectable.
+    /// The sub-model creates no node and never mutates the Configuration.
     #[test]
-    fn dropping_dirichlet_releases_node_refcounts() {
+    fn multiplier_nodes_live_with_their_mesh() {
         let cfg = insert(Configuration::new(1).unwrap());
         let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let a_id = a.id();
 
-        // Before adding the sub-model: the Node holds 1 ref.
-        assert_eq!(read(&cfg).unwrap().refcount(a_id), 1);
-
-        let sub = SubModel::dirichlet(
-            "T".into(),
-            "q".into(),
-            std::slice::from_ref(&a),
-        )
-        .unwrap();
-
-        // After: the Node + the SubModel each hold 1 ref ⇒ 2.
-        assert_eq!(read(&cfg).unwrap().refcount(a_id), 2);
-        // The multiplier node has refcount 1 (owned by the sub-model).
-        let mult_id = sub.multiplier_nodes().unwrap()[0];
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        // The multiplier node is owned by the multiplier submesh (refcount 1;
+        // the transient Node below is dropped at the end of the statement).
+        let mult_id = multiplier.node(0, 0, 0).unwrap().id();
         assert_eq!(read(&cfg).unwrap().refcount(mult_id), 1);
 
+        let sub =
+            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+                .unwrap();
+        // Sharing the submesh handles does not touch node refcounts.
+        assert_eq!(read(&cfg).unwrap().refcount(mult_id), 1);
+        assert_eq!(sub.multiplier_nodes().unwrap(), vec![mult_id]);
+
+        // Drop the user's multiplier mesh: the sub-model still holds the
+        // submesh, so the node lives on.
+        drop(multiplier);
+        assert_eq!(read(&cfg).unwrap().refcount(mult_id), 1);
+
+        // Drop the sub-model too: the last holder of the multiplier submesh is
+        // gone ⇒ the node is released and collectable.
         drop(sub);
-        // Now back to 1 (only the Node remains).
-        assert_eq!(read(&cfg).unwrap().refcount(a_id), 1);
-        // And the multiplier is collectable.
+        assert_eq!(read(&cfg).unwrap().refcount(mult_id), 0);
         assert_eq!(write(&cfg).unwrap().gc(), 1);
     }
 
     #[test]
-    fn dirichlet_empty_constraint_list_rejected() {
-        assert!(SubModel::dirichlet("T".into(), "q".into(), &[]).is_err());
+    fn dirichlet_empty_imposed_mesh_rejected() {
+        let empty = Mesh::empty();
+        assert!(
+            SubModel::dirichlet("T".into(), "q".into(), &empty, &empty, None, None).is_err()
+        );
     }
 
     #[test]
@@ -652,7 +696,9 @@ mod tests {
         assert_eq!(hc.dual_vars().unwrap(), vec!["q".to_string()]);
 
         // Compose with a Dirichlet model via `+` (merge).
-        let dir = Model::dirichlet("T".into(), "q".into(), std::slice::from_ref(&n0)).unwrap();
+        let imp = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
+        let mlt = crate::ops::mesher::barycenter(&imp).unwrap();
+        let dir = Model::dirichlet("T".into(), "q".into(), &imp, &mlt, None, None).unwrap();
         assert_eq!(dir.len(), 1);
         let full = (&hc + &dir).unwrap();
         assert_eq!(full.len(), 3);
@@ -764,7 +810,12 @@ mod tests {
         let hc = SubModel::heat_conduction(sub).unwrap();
         assert_eq!(hc.material_components(), Some(&["k"][..]));
 
-        let dir = SubModel::dirichlet("T".into(), "q".into(), std::slice::from_ref(&a)).unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        let dir =
+            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+                .unwrap();
         assert!(dir.material_components().is_none());
     }
 
