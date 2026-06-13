@@ -98,6 +98,19 @@ impl PyModel {
         Ok(Self { inner })
     }
 
+    /// `Model.truss(fespace)` — truss / bar (axial-force) model spanning
+    /// **every** subspace of `fespace` (SEG2 elements). DOFs are the vector
+    /// displacement `u_x, u_y(, u_z)`; the orientation is taken from the node
+    /// coordinates. Material (`E`, `A`) is supplied at assembly time.
+    #[classmethod]
+    fn truss(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+    ) -> PyResult<Self> {
+        let inner = Model::truss(&fespace.inner)?;
+        Ok(Self { inner })
+    }
+
     /// `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,
     /// multiplier_mesh, multiplier=None, imposed_value=None)` — Dirichlet
     /// constraint model (a single sub-model) imposed via Lagrange multipliers.

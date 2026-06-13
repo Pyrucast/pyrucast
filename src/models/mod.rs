@@ -33,6 +33,7 @@ use crate::store::Handle;
 
 pub mod dirichlet;
 pub mod heat_conduction;
+pub mod truss;
 
 /// The behaviour contract of one physics, co-located with its data struct.
 ///

@@ -119,7 +119,7 @@ use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteEleme
 use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::Mesh;
 use crate::aggregate::Aggregate;
-use crate::models::{dirichlet, heat_conduction, Physics};
+use crate::models::{dirichlet, heat_conduction, truss, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -144,6 +144,8 @@ pub enum SubModel {
     /// Dirichlet constraint via Lagrange multipliers — see
     /// [`dirichlet::Dirichlet`].
     Dirichlet(dirichlet::Dirichlet),
+    /// Truss / bar (axial-force) element — see [`truss::Truss`].
+    Truss(truss::Truss),
 }
 
 impl SubModel {
@@ -155,6 +157,7 @@ impl SubModel {
         match self {
             SubModel::HeatConduction(p) => p,
             SubModel::Dirichlet(p) => p,
+            SubModel::Truss(p) => p,
         }
     }
 
@@ -168,6 +171,12 @@ impl SubModel {
         Ok(SubModel::HeatConduction(
             heat_conduction::HeatConduction::new(fespace)?,
         ))
+    }
+
+    /// Truss / bar sub-model on a `SEG2` FE subspace. Material data (`E`, `A`)
+    /// is supplied at assembly time. See [`truss::Truss::new`].
+    pub fn truss(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        Ok(SubModel::Truss(truss::Truss::new(fespace)?))
     }
 
     /// Dirichlet sub-model: enforce `imposed_variable = u_d` on the nodes of
@@ -345,6 +354,17 @@ impl Model {
         let mut model = Self::empty();
         for sub in fes {
             model.add_sub(insert(SubModel::heat_conduction(sub.clone())?))?;
+        }
+        Ok(model)
+    }
+
+    /// Truss / bar `Model` spanning **every** subspace of `fes` — one
+    /// [`SubModel::Truss`] per [`SubFiniteElementSpace`]. Parent-level named
+    /// constructor; material (`E`, `A`) is supplied at assembly time.
+    pub fn truss(fes: &FiniteElementSpace) -> Result<Self> {
+        let mut model = Self::empty();
+        for sub in fes {
+            model.add_sub(insert(SubModel::truss(sub.clone())?))?;
         }
         Ok(model)
     }

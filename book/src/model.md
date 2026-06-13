@@ -51,7 +51,7 @@ Elles sont presque toujours **différentes** :
 | Physique           | Primales (cols)    | Duales (rows)      |
 |---|---|---|
 | `HeatConduction`   | `T` (température)  | `q` (flux de chaleur) |
-| `LinearElasticity` | `ux`, `uy`, …      | `fx`, `fy`, …       |
+| `Truss` / `LinearElasticity` | `u_x`, `u_y`, …   | `f_x`, `f_y`, …    |
 | `Dirichlet { imposed_variable: "T" }` | `lambda_T`         | `imposed_T`         |
 
 Les DOFs de la `Matrix` sont identifiés par le couple `(NodeID, nom_de_champ)` (voir [`Matrix`](matrix.md)) : deux SubModels qui utilisent le même nom (`"T"`) sur des nœuds différents ne se collisionnent pas, et la jonction se fait automatiquement quand ils partagent un même `(NodeID, nom)`.
@@ -246,6 +246,6 @@ assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux à gauch
 ## Limitations actuelles
 
 - **Mass non assemblée** : `assemble::mass(model)` retourne une matrice vide en v0. L'intégrande `∫ ρc_p · N_i N_j dx` (et son équivalent pour les autres physiques) est additif et sera ajouté quand le besoin transient se présentera.
-- **Une seule physique « réelle »** : `HeatConduction`. `LinearElasticity`, `Timoshenko`, `Periodic`, etc. viendront comme nouvelles structs implémentant `Physics` (une variante de l'énum `SubModel` + un bras de `as_physics`, rien d'autre — cf. [Ajouter une physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier, indépendant du nombre de physiques existantes.
+- **Physiques disponibles** : `HeatConduction` (thermique) et `Truss` (barre, cf. [Mécanique](mecanique.md)) ; `LinearElasticity`, `Timoshenko`, `Periodic`, etc. viennent comme nouvelles structs implémentant `Physics` (une variante de l'énum `SubModel` + un bras de `as_physics`, rien d'autre — cf. [Ajouter une physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier, indépendant du nombre de physiques existantes.
 - **Pas de check de cohérence pré-assemblage** : la consistance (matériau définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre sub-models, etc.) est vérifiée au moment de `assemble::stiffness` / `assemble::mass`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose problème, un check eager est facile à ajouter.
 - **Solveur dense seulement** : le `solve` fourni est un harnais de test (LU dense via `nalgebra`). Pour les vrais problèmes Phase 3 introduira un trait `LinearSolver` enfichable (itératifs, direct creux, factorisation Cholesky pour les cas symétriques détectés via le drapeau de la `Matrix`).

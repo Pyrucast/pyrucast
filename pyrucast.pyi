@@ -600,6 +600,14 @@ class Model:
         `Model.heat_conduction(fes) + Model.dirichlet(...)`.
         """
     @classmethod
+    def truss(cls, fespace: FiniteElementSpace) -> Model:
+        r"""
+        `Model.truss(fespace)` — truss / bar (axial-force) model spanning
+        **every** subspace of `fespace` (SEG2 elements). DOFs are the vector
+        displacement `u_x, u_y(, u_z)`; the orientation is taken from the node
+        coordinates. Material (`E`, `A`) is supplied at assembly time.
+        """
+    @classmethod
     def dirichlet(cls, imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
         r"""
         `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,
