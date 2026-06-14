@@ -101,6 +101,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::field::merge, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::gradient, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::deformation, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::beam_deformation, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::stiffness, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::mass, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::flux, m)?)?;

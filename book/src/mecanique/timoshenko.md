@@ -26,7 +26,10 @@ pour le cisaillement). L'intégration réduite du cisaillement évite le
 - **primal** : `w, theta` — **dual** : `f_w` (force transverse), `m_theta`
   (moment).
 - **matériau** : `E`, `I`, `G`, `A_s` (aire de cisaillement `κ·A`).
-- v0 : **rigidité seule** (les efforts de section `COMP` viendront plus tard).
+- **comportement** (`COMP`) : efforts de section `M = E·I·κ` (moment) et
+  `V = G·A_s·γ` (effort tranchant), à partir des déformations `(κ, γ)`
+  produites par l'op [`beam_deformation`](../node-field.md) — évaluées de façon
+  **réduite** (constantes par élément), donc sans cisaillement parasite.
 
 ## Mise en donnée (Rust, testé)
 
@@ -37,6 +40,17 @@ donnerait une flèche bien trop faible). Code = test `tests/timoshenko.rs` :
 
 ```rust,ignore
 {{#include ../../../tests/timoshenko.rs:example}}
+```
+
+### Efforts de section (COMP)
+
+Une fois la solution `(w, θ)` obtenue, l'op `beam_deformation` calcule les
+déformations `(κ, γ)`, puis le comportement (`integrate_behavior`) donne le
+moment `M = E·I·κ` et l'effort tranchant `V = G·A_s·γ`. Sur la console :
+`V ≈ −P` (constant) et `M` linéaire (`|M(0)| ≈ P·L`, `|M(L)| ≈ 0`).
+
+```rust,ignore
+{{#include ../../../tests/timoshenko.rs:comp}}
 ```
 
 ## Exemple Python

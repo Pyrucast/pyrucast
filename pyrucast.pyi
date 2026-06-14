@@ -23,6 +23,7 @@ __all__ = [
     "SubModel",
     "SubNodeField",
     "barycenter",
+    "beam_deformation",
     "circle_seg2",
     "consolidate",
     "coordinates",
@@ -1348,6 +1349,14 @@ def barycenter(mesh: Mesh) -> Mesh:
     input submesh, placed at the element's centroid. A POI1 input is therefore
     copied to colocated fresh nodes — handy to mint Lagrange-multiplier support
     nodes from a set of constrained points.
+    """
+
+def beam_deformation(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
+    r"""
+    Timoshenko-beam section strains `(kappa, gamma)` of a `(w, theta)` node
+    field at the Gauss points of `fespace`. Feed the result to
+    `integrate_behavior` of a Timoshenko model to obtain the section forces
+    `M = E·I·κ` and `V = G·A_s·γ`.
     """
 
 def circle_seg2(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int) -> Mesh:

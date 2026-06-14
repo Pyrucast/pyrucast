@@ -121,3 +121,17 @@ pub fn deformation(
     let ef = crate::ops::field::deformation(&u.inner, &fespace.inner)?;
     Ok(PyElementField { inner: ef })
 }
+
+/// Timoshenko-beam section strains `(kappa, gamma)` of a `(w, theta)` node
+/// field at the Gauss points of `fespace`. Feed the result to
+/// `integrate_behavior` of a Timoshenko model to obtain the section forces
+/// `M = E·I·κ` and `V = G·A_s·γ`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn beam_deformation(
+    field: PyRef<PyNodeField>,
+    fespace: PyRef<PyFiniteElementSpace>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::field::beam_deformation(&field.inner, &fespace.inner)?;
+    Ok(PyElementField { inner: ef })
+}

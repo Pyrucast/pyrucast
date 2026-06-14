@@ -17,8 +17,9 @@
 //! `m_theta` (moment conjugate to `theta`). Material components `E`, `I`, `G`,
 //! `A_s` (the shear area `κ·A`).
 //!
-//! This v0 assembles the stiffness only; the section forces (`COMP`) are left
-//! for a later step.
+//! The behaviour (`COMP`) returns the **section forces** `M = E·I·κ`,
+//! `V = G·A_s·γ` from the section strains `(κ, γ)` produced by
+//! [`crate::ops::field::beam_deformation`].
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::{
@@ -119,6 +120,35 @@ impl Physics for Timoshenko {
         )?;
         assemble_stiffness(&self.bending, &self.shear, mat, &mut block)?;
         Ok(vec![block])
+    }
+
+    fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
+        Some(self.bending.clone())
+    }
+
+    fn integrate_behavior(
+        &self,
+        input: &Handle<SubElementField>,
+        material: Option<&Handle<SubElementField>>,
+    ) -> Result<SubElementField> {
+        let mat = material.expect("Timoshenko declares a material_fespace ⇒ material is supplied");
+        let (n_cells, n_g) = {
+            let f = read(input)?;
+            (f.cell_count(), f.gauss_count())
+        };
+        let mut out =
+            SubElementField::new(self.bending.clone(), vec!["M".to_string(), "V".to_string()])?;
+        let f = read(input)?;
+        let m = read(mat)?;
+        for cell in 0..n_cells {
+            let ei = m.value(cell, 0, "E")? * m.value(cell, 0, "I")?;
+            let gas = m.value(cell, 0, "G")? * m.value(cell, 0, "A_s")?;
+            for g in 0..n_g {
+                out.set(cell, g, 0, ei * f.value(cell, g, "kappa")?)?; // M = E·I·κ
+                out.set(cell, g, 1, gas * f.value(cell, g, "gamma")?)?; // V = G·A_s·γ
+            }
+        }
+        Ok(out)
     }
 
     fn label(&self) -> &'static str {
