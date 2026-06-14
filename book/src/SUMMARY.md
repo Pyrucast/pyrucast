@@ -15,5 +15,8 @@
 - [Modèle physique](model.md)
 - [Conduction thermique](thermique.md)
 - [Mécanique](mecanique.md)
+  - [Barre / treillis](mecanique/truss.md)
+  - [Élasticité linéaire](mecanique/elasticite.md)
+  - [Poutre de Timoshenko](mecanique/timoshenko.md)
 - [Ajouter une physique](ajouter-une-physique.md)
 - [Visualisation](visualization.md)
