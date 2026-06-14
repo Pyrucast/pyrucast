@@ -29,6 +29,7 @@ __all__ = [
     "coordinates",
     "deformation",
     "displace",
+    "divergence",
     "extrude",
     "fill_surface",
     "flux",
@@ -1421,6 +1422,14 @@ def displace(field: NodeField, components: typing.Optional[typing.Sequence[built
     components[a])` on the active coordinate set. `components` lists one
     displacement-component name per spatial axis, in axis order; `None` →
     `["ux", "uy", "uz"][:dim]`. Mutates the field's `Configuration` in place.
+    """
+
+def divergence(field: ElementField) -> NodeField:
+    r"""
+    Weak divergence `div F` of a per-element **vector** field — the adjoint of
+    `gradient`: `d_i = ∫ ∇N_i · F dΩ`, accumulated per node. The field must
+    carry exactly `space_dim` components (the vector components in order).
+    Returns a `NodeField` with a single `"div"` component (one zone per subspace).
     """
 
 def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:

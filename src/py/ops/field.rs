@@ -135,3 +135,14 @@ pub fn beam_deformation(
     let ef = crate::ops::field::beam_deformation(&field.inner, &fespace.inner)?;
     Ok(PyElementField { inner: ef })
 }
+
+/// Weak divergence `div F` of a per-element **vector** field — the adjoint of
+/// `gradient`: `d_i = ∫ ∇N_i · F dΩ`, accumulated per node. The field must
+/// carry exactly `space_dim` components (the vector components in order).
+/// Returns a `NodeField` with a single `"div"` component (one zone per subspace).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
+    let nf = crate::ops::field::divergence(&field.inner)?;
+    Ok(PyNodeField { inner: nf })
+}

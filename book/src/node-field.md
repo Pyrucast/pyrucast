@@ -166,6 +166,7 @@ et résolvent les nœuds **à travers les zones** (règle premier-trouvé) :
 | `coordinates(mesh)` | un `SubNodeField` par submesh, interfaces cohérentes par construction |
 | `set_coordinates(f)` / `displace(f)` | chaque nœud distinct traité **une seule fois** (un nœud d'interface n'est pas déplacé deux fois) |
 | `gradient(f, fes)` / `deformation(u, fes)` | lookups par nœud × Gauss via un snapshot des zones |
+| `divergence(F)` | adjoint de `gradient` : champ vectoriel par éléments → `NodeField` (`div`), accumulé par nœud (`d_i = ∫ ∇N_i·F`) |
 | `solve(matrix, rhs)` | second membre lu par DOF (absent ⇒ `0.0`) ; solution mono-zone sur les nœuds colonnes |
 | `restrict(f, mesh)` | une zone par submesh cible, `0.0` pour les nœuds non couverts |
 | `merge(a, b)` | union structurelle consolidée (conflit de valeur ⇒ erreur) |

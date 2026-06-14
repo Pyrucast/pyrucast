@@ -1,0 +1,193 @@
+//! Weak divergence of a per-element **vector** field — the adjoint of
+//! [`crate::ops::field::gradient`].
+//!
+//! Where `gradient` maps a nodal field to its gradient at the Gauss points
+//! (`∇f = Σ_i f_i ∇N_i`), `divergence` maps a per-element vector field `F`
+//! (given at the Gauss points) back to a [`NodeField`]:
+//!
+//! ```text
+//! d_i = ∫_Ω ∇N_i · F dΩ  ≈  Σ_cell Σ_g (∇N_i · F)|_g · |J|_g · w_g
+//! ```
+//!
+//! accumulated per node. This is the **discrete divergence operator** `Bᵀ`,
+//! the transpose of the gradient operator: for a nodal field `f`, it satisfies
+//! `⟨∇f, F⟩ = ⟨f, div F⟩`. By integration by parts it equals
+//! `∫ N_i (∇·F) − ∮ N_i F·n` — the consistent (weak) nodal divergence, no mass
+//! solve. The input field must carry exactly `space_dim` components, taken in
+//! order as `F_x, F_y, F_z`; each input subspace yields one output zone with a
+//! single `"div"` component.
+
+use crate::aggregate::Aggregate;
+use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::field::SubField;
+use crate::containers::mesh::NodeId;
+use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::error::{PyrucastError, Result};
+use crate::store::{insert, read, Handle};
+
+/// Weak divergence `div F` of a per-element vector `field` (see the module
+/// docs), as a [`NodeField`] — one zone per input subspace, component `"div"`.
+pub fn divergence(field: &ElementField) -> Result<NodeField> {
+    let mut out = NodeField::empty();
+    for sub in field {
+        out.add_sub(insert(subspace_divergence(sub)?))?;
+    }
+    Ok(out)
+}
+
+/// Weak divergence on a single subspace.
+fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> {
+    let f = read(field)?;
+    let fespace = f.fespace();
+    let s = read(&fespace)?;
+    let n_cells = s.cell_count()?;
+    let n_nodes = s.nodes_per_cell()?;
+    let n_g = s.gauss_count();
+    let space_dim = s.space_dim();
+    let conn: Vec<NodeId> = read(&s.submesh())?.connectivity().to_vec();
+
+    let comps = f.components();
+    if comps.len() != space_dim {
+        return Err(PyrucastError::Message(format!(
+            "divergence: the field carries {} component(s) but the FE space is {}-D — \
+             expected one vector component per axis",
+            comps.len(),
+            space_dim
+        )));
+    }
+
+    // Support: unique nodes + the local-node → support-position map.
+    let support = insert(read(&s.submesh())?.to_poi1()?);
+    let unique: Vec<NodeId> = read(&support)?.connectivity().to_vec();
+    let conn_pos: Vec<usize> = conn
+        .iter()
+        .map(|nid| unique.iter().position(|n| n == nid).expect("support covers conn"))
+        .collect();
+
+    // d_i += (∇N_i · F) |J| w, accumulated per node.
+    let mut div = vec![0.0_f64; unique.len()];
+    for cell in 0..n_cells {
+        for g in 0..n_g {
+            let dn = s.dn_dx(cell, g)?; // [i*space_dim + a]
+            let det_j_w = s.det_jacobian(cell, g)? * s.gauss_weight(g)?;
+            for i in 0..n_nodes {
+                let mut grad_dot_f = 0.0;
+                for (a, comp) in comps.iter().enumerate() {
+                    grad_dot_f += dn[i * space_dim + a] * f.value(cell, g, comp)?;
+                }
+                div[conn_pos[cell * n_nodes + i]] += grad_dot_f * det_j_w;
+            }
+        }
+    }
+
+    let mut out = SubNodeField::from_poi1(&support, vec!["div".to_string()])?;
+    for (k, &nid) in unique.iter().enumerate() {
+        out.set_value(nid, "div", div[k])?;
+    }
+    Ok(out)
+}
+
+// ─── Unit tests ────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::containers::field::Field;
+    use crate::containers::finite_element_space::FiniteElementSpace;
+    use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+
+    /// 1-D, two SEG2 on `[0, 2]`, uniform field `F = (a)`: the weak divergence
+    /// telescopes to `[−a, 0, +a]` — zero at the interior node (div of a
+    /// constant field), `±a` flux at the ends.
+    #[test]
+    fn divergence_of_uniform_1d_field_telescopes() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        mesh.add_cell(&[n0.id(), n1.id()]).unwrap();
+        mesh.add_cell(&[n1.id(), n2.id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+
+        let a = 3.0;
+        let mut field = SubElementField::new(fes.get(0).unwrap(), vec!["Fx".into()]).unwrap();
+        field.set_uniform("Fx", a).unwrap();
+        let mut ef = ElementField::empty();
+        ef.add_sub(insert(field)).unwrap();
+
+        let div = divergence(&ef).unwrap();
+        let view = div.view().unwrap();
+        let tol = 1e-12;
+        assert!((view.value(n0.id(), "div").unwrap() + a).abs() < tol); // −a
+        assert!(view.value(n1.id(), "div").unwrap().abs() < tol); //  0
+        assert!((view.value(n2.id(), "div").unwrap() - a).abs() < tol); // +a
+    }
+
+    /// Adjoint property `⟨∇f, F⟩ = ⟨f, div F⟩` on a 2-D TRI3.
+    #[test]
+    fn divergence_is_adjoint_of_gradient() {
+        use crate::containers::node_field::SubNodeField;
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
+        mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+
+        // Nodal field f and a per-element vector field F.
+        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let mut f = SubNodeField::from_poi1(&support, vec!["f".into()]).unwrap();
+        f.set_value(a.id(), "f", 0.5).unwrap();
+        f.set_value(b.id(), "f", 1.5).unwrap();
+        f.set_value(c.id(), "f", -2.0).unwrap();
+        let f = NodeField::from_sub(f);
+
+        let mut ff = SubElementField::new(fes.get(0).unwrap(), vec!["Fx".into(), "Fy".into()]).unwrap();
+        ff.set_uniform("Fx", 1.3).unwrap();
+        ff.set_uniform("Fy", -0.7).unwrap();
+        let mut ef = ElementField::empty();
+        ef.add_sub(insert(ff)).unwrap();
+
+        // ⟨∇f, F⟩ over the Gauss points (with |J|·w).
+        let grad = crate::ops::field::gradient(&f, &fes).unwrap();
+        let gsub = read(&grad.get(0).unwrap()).unwrap();
+        let s = read(&fes.get(0).unwrap()).unwrap();
+        let mut lhs = 0.0;
+        for cell in 0..s.cell_count().unwrap() {
+            for g in 0..s.gauss_count() {
+                let w = s.det_jacobian(cell, g).unwrap() * s.gauss_weight(g).unwrap();
+                lhs += (gsub.value(cell, g, "grad_f_x").unwrap() * 1.3
+                    + gsub.value(cell, g, "grad_f_y").unwrap() * -0.7)
+                    * w;
+            }
+        }
+
+        // ⟨f, div F⟩ over the nodes.
+        let div = divergence(&ef).unwrap();
+        let dview = div.view().unwrap();
+        let fview = f.view().unwrap();
+        let mut rhs = 0.0;
+        for nid in [a.id(), b.id(), c.id()] {
+            rhs += fview.value(nid, "f").unwrap() * dview.value(nid, "div").unwrap();
+        }
+        assert!((lhs - rhs).abs() < 1e-12, "adjoint: {lhs} ≠ {rhs}");
+    }
+
+    #[test]
+    fn wrong_component_count_is_rejected() {
+        let cfg = insert(Configuration::new(2).unwrap());
+        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+        mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        // 1 component on a 2-D space (needs 2).
+        let field = SubElementField::new(fes.get(0).unwrap(), vec!["Fx".into()]).unwrap();
+        let mut ef = ElementField::empty();
+        ef.add_sub(insert(field)).unwrap();
+        assert!(divergence(&ef).is_err());
+    }
+}
