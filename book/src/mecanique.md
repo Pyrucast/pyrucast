@@ -15,3 +15,5 @@ réactions).
 - [Élasticité linéaire](mecanique/elasticite.md) — continuum 2-D (CP/DP) et 3-D.
 - [Poutre de Timoshenko](mecanique/timoshenko.md) — flexion + cisaillement,
   intégration réduite (anti-verrouillage).
+- [Portique 2D](mecanique/portique.md) — poutre orientée (axial + flexion +
+  cisaillement), transformation local→global.

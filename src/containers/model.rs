@@ -120,7 +120,7 @@ use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::Mesh;
 use crate::aggregate::Aggregate;
 use crate::models::elasticity::ElasticityModel;
-use crate::models::{dirichlet, elasticity, heat_conduction, timoshenko, truss, Physics};
+use crate::models::{dirichlet, elasticity, frame, heat_conduction, timoshenko, truss, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -151,6 +151,8 @@ pub enum SubModel {
     Elasticity(elasticity::Elasticity),
     /// Timoshenko beam (shear-deformable bending) — see [`timoshenko::Timoshenko`].
     Timoshenko(timoshenko::Timoshenko),
+    /// Planar frame / portique (axial + bending + shear) — see [`frame::Frame`].
+    Frame(frame::Frame),
 }
 
 impl SubModel {
@@ -165,6 +167,7 @@ impl SubModel {
             SubModel::Truss(p) => p,
             SubModel::Elasticity(p) => p,
             SubModel::Timoshenko(p) => p,
+            SubModel::Frame(p) => p,
         }
     }
 
@@ -201,6 +204,13 @@ impl SubModel {
     /// [`timoshenko::Timoshenko::new`].
     pub fn timoshenko(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         Ok(SubModel::Timoshenko(timoshenko::Timoshenko::new(fespace)?))
+    }
+
+    /// Planar-frame sub-model on a 2-D `SEG2` FE subspace (axial + bending +
+    /// shear, any orientation). Material (`E`, `A`, `I`, `G`, `A_s`) is supplied
+    /// at assembly time. See [`frame::Frame::new`].
+    pub fn frame(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        Ok(SubModel::Frame(frame::Frame::new(fespace)?))
     }
 
     /// Dirichlet sub-model: enforce `imposed_variable = u_d` on the nodes of
@@ -411,6 +421,17 @@ impl Model {
         let mut out = Self::empty();
         for sub in fes {
             out.add_sub(insert(SubModel::timoshenko(sub.clone())?))?;
+        }
+        Ok(out)
+    }
+
+    /// Planar-frame `Model` spanning **every** subspace of `fes`. Parent-level
+    /// named constructor; material (`E`, `A`, `I`, `G`, `A_s`) is supplied at
+    /// assembly time.
+    pub fn frame(fes: &FiniteElementSpace) -> Result<Self> {
+        let mut out = Self::empty();
+        for sub in fes {
+            out.add_sub(insert(SubModel::frame(sub.clone())?))?;
         }
         Ok(out)
     }

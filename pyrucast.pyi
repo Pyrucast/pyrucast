@@ -626,6 +626,14 @@ class Model:
         (`E`, `I`, `G`, `A_s`) is supplied at assembly time.
         """
     @classmethod
+    def frame(cls, fespace: FiniteElementSpace) -> Model:
+        r"""
+        `Model.frame(fespace)` — planar frame / portique model spanning every
+        subspace of `fespace` (2-D `SEG2`): an oriented Timoshenko beam carrying
+        axial + bending + shear. DOFs `u_x, u_y, rz`; material
+        (`E`, `A`, `I`, `G`, `A_s`) is supplied at assembly time.
+        """
+    @classmethod
     def dirichlet(cls, imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
         r"""
         `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,

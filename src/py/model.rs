@@ -145,6 +145,19 @@ impl PyModel {
         Ok(Self { inner })
     }
 
+    /// `Model.frame(fespace)` — planar frame / portique model spanning every
+    /// subspace of `fespace` (2-D `SEG2`): an oriented Timoshenko beam carrying
+    /// axial + bending + shear. DOFs `u_x, u_y, rz`; material
+    /// (`E`, `A`, `I`, `G`, `A_s`) is supplied at assembly time.
+    #[classmethod]
+    fn frame(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+    ) -> PyResult<Self> {
+        let inner = Model::frame(&fespace.inner)?;
+        Ok(Self { inner })
+    }
+
     /// `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,
     /// multiplier_mesh, multiplier=None, imposed_value=None)` — Dirichlet
     /// constraint model (a single sub-model) imposed via Lagrange multipliers.

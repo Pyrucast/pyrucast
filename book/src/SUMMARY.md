@@ -18,5 +18,6 @@
   - [Barre / treillis](mecanique/truss.md)
   - [Élasticité linéaire](mecanique/elasticite.md)
   - [Poutre de Timoshenko](mecanique/timoshenko.md)
+  - [Portique 2D](mecanique/portique.md)
 - [Ajouter une physique](ajouter-une-physique.md)
 - [Visualisation](visualization.md)
