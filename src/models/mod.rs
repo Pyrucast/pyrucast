@@ -34,6 +34,7 @@ use crate::store::Handle;
 pub mod dirichlet;
 pub mod elasticity;
 pub mod frame;
+pub mod frame3d;
 pub mod heat_conduction;
 pub mod timoshenko;
 pub mod truss;

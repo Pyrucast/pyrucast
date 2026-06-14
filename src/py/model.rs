@@ -158,6 +158,19 @@ impl PyModel {
         Ok(Self { inner })
     }
 
+    /// `Model.frame3d(fespace)` — 3-D Timoshenko frame (space frame) spanning
+    /// every subspace of `fespace` (3-D `SEG2`). 6 DOFs/node: `u_x, u_y, u_z,
+    /// r_x, r_y, r_z`. Section axes are auto-oriented (global-Z reference).
+    /// Material (`E, A, I_y, I_z, J, G, A_sy, A_sz`) is supplied at assembly time.
+    #[classmethod]
+    fn frame3d(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+    ) -> PyResult<Self> {
+        let inner = Model::frame3d(&fespace.inner)?;
+        Ok(Self { inner })
+    }
+
     /// `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,
     /// multiplier_mesh, multiplier=None, imposed_value=None)` — Dirichlet
     /// constraint model (a single sub-model) imposed via Lagrange multipliers.

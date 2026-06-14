@@ -634,6 +634,14 @@ class Model:
         (`E`, `A`, `I`, `G`, `A_s`) is supplied at assembly time.
         """
     @classmethod
+    def frame3d(cls, fespace: FiniteElementSpace) -> Model:
+        r"""
+        `Model.frame3d(fespace)` — 3-D Timoshenko frame (space frame) spanning
+        every subspace of `fespace` (3-D `SEG2`). 6 DOFs/node: `u_x, u_y, u_z,
+        r_x, r_y, r_z`. Section axes are auto-oriented (global-Z reference).
+        Material (`E, A, I_y, I_z, J, G, A_sy, A_sz`) is supplied at assembly time.
+        """
+    @classmethod
     def dirichlet(cls, imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
         r"""
         `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,

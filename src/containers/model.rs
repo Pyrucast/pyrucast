@@ -120,7 +120,9 @@ use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::Mesh;
 use crate::aggregate::Aggregate;
 use crate::models::elasticity::ElasticityModel;
-use crate::models::{dirichlet, elasticity, frame, heat_conduction, timoshenko, truss, Physics};
+use crate::models::{
+    dirichlet, elasticity, frame, frame3d, heat_conduction, timoshenko, truss, Physics,
+};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -153,6 +155,8 @@ pub enum SubModel {
     Timoshenko(timoshenko::Timoshenko),
     /// Planar frame / portique (axial + bending + shear) — see [`frame::Frame`].
     Frame(frame::Frame),
+    /// 3-D Timoshenko frame (space frame, 6 DOF/node) — see [`frame3d::Frame3d`].
+    Frame3d(frame3d::Frame3d),
 }
 
 impl SubModel {
@@ -168,6 +172,7 @@ impl SubModel {
             SubModel::Elasticity(p) => p,
             SubModel::Timoshenko(p) => p,
             SubModel::Frame(p) => p,
+            SubModel::Frame3d(p) => p,
         }
     }
 
@@ -211,6 +216,13 @@ impl SubModel {
     /// at assembly time. See [`frame::Frame::new`].
     pub fn frame(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         Ok(SubModel::Frame(frame::Frame::new(fespace)?))
+    }
+
+    /// 3-D Timoshenko-frame sub-model on a 3-D `SEG2` FE subspace (6 DOF/node).
+    /// Material (`E, A, I_y, I_z, J, G, A_sy, A_sz`) is supplied at assembly
+    /// time. See [`frame3d::Frame3d::new`].
+    pub fn frame3d(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        Ok(SubModel::Frame3d(frame3d::Frame3d::new(fespace)?))
     }
 
     /// Dirichlet sub-model: enforce `imposed_variable = u_d` on the nodes of
@@ -432,6 +444,17 @@ impl Model {
         let mut out = Self::empty();
         for sub in fes {
             out.add_sub(insert(SubModel::frame(sub.clone())?))?;
+        }
+        Ok(out)
+    }
+
+    /// 3-D Timoshenko-frame `Model` spanning **every** subspace of `fes`.
+    /// Parent-level named constructor; material
+    /// (`E, A, I_y, I_z, J, G, A_sy, A_sz`) is supplied at assembly time.
+    pub fn frame3d(fes: &FiniteElementSpace) -> Result<Self> {
+        let mut out = Self::empty();
+        for sub in fes {
+            out.add_sub(insert(SubModel::frame3d(sub.clone())?))?;
         }
         Ok(out)
     }

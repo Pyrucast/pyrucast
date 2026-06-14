@@ -19,5 +19,6 @@
   - [Élasticité linéaire](mecanique/elasticite.md)
   - [Poutre de Timoshenko](mecanique/timoshenko.md)
   - [Portique 2D](mecanique/portique.md)
+  - [Cadre 3D](mecanique/cadre3d.md)
 - [Ajouter une physique](ajouter-une-physique.md)
 - [Visualisation](visualization.md)

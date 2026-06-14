@@ -17,3 +17,5 @@ réactions).
   intégration réduite (anti-verrouillage).
 - [Portique 2D](mecanique/portique.md) — poutre orientée (axial + flexion +
   cisaillement), transformation local→global.
+- [Cadre 3D](mecanique/cadre3d.md) — space frame 6 DOF/nœud (axial + torsion +
+  flexion 2 plans), orientation automatique.
