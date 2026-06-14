@@ -78,3 +78,37 @@ sur la composante `f_x`. Solution exacte `u_x = (S/E)·x`, `u_y = −(ν S/E)·y
 
 > Le même fichier contient un test **3-D** (cube `HEX8` en traction uniaxiale,
 > traction sur une face `QUA4`).
+
+## Poutre de Timoshenko (`models/timoshenko.rs`)
+
+Poutre planaire **déformable en cisaillement** : élément `SEG2` en
+configuration **1-D**, deux DOFs scalaires par nœud — la flèche `w` et la
+rotation de section `theta`. La rigidité est la somme d'un terme de **flexion**
+et d'un terme de **cisaillement** :
+
+\\[
+K_b = \int E\,I\,(\theta')^2\,dx \quad(\text{Gauss complet}), \qquad
+K_s = \int G\,A_s\,(w' - \theta)^2\,dx \quad(\text{réduit, 1 point}).
+\\]
+
+Les deux termes sont intégrés sur **deux `SubFiniteElementSpace`** du même
+maillage (un à quadrature complète, un à quadrature **réduite**). L'intégration
+réduite du cisaillement évite le **verrouillage** (*shear locking*) des poutres
+élancées.
+
+- **primal** : `w, theta` — **dual** : `f_w` (force transverse), `m_theta`
+  (moment).
+- **matériau** : `E`, `I`, `G`, `A_s` (aire de cisaillement `κ·A`).
+- v0 : **rigidité seule** (les efforts de section `COMP` viendront plus tard).
+
+### Exemple : console (non-verrouillage)
+
+Console élancée encastrée (`w = θ = 0`), charge transverse `P` au bout libre.
+Solution analytique `w = P·L³/(3·E·I) + P·L/(G·A_s)`. En raffinant, l'élément à
+intégration réduite **converge** vers cette valeur (un élément qui verrouille
+donnerait une flèche bien trop faible). L'exemple est le test
+`tests/timoshenko.rs` :
+
+```rust,ignore
+{{#include ../../tests/timoshenko.rs:example}}
+```

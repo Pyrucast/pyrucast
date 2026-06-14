@@ -1,0 +1,78 @@
+//! Worked Timoshenko-beam example, exercised end-to-end through the public API.
+//!
+//! A **slender** cantilever of length `L`, clamped at the left end
+//! (`w = θ = 0`), with a transverse tip load `P`. The analytical Timoshenko
+//! tip deflection is `w = P·L³/(3·E·I) + P·L/(G·A_s)` (bending + shear). With
+//! reduced integration of the shear term the linear element **does not lock**:
+//! refining the mesh converges to that value — a locking element would instead
+//! return a deflection orders of magnitude too small.
+//!
+//! Single source for the « Timoshenko » example of the mechanics book chapter;
+//! runs under `cargo test`.
+
+// ANCHOR: example
+use pyrucast::containers::finite_element_space::FiniteElementSpace;
+use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::model::Model;
+use pyrucast::containers::node_field::{NodeField, SubNodeField};
+use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::{assemble, build, mesher};
+use pyrucast::store::insert;
+use pyrucast::Result;
+
+#[test]
+fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
+    const E: f64 = 1.0;
+    const I: f64 = 1.0; // E·I = 1
+    const G: f64 = 30.0;
+    const A_S: f64 = 1.0; // G·A_s = 30 (slender ⇒ shear locking would be severe)
+    const L: f64 = 1.0;
+    const P: f64 = 1.0; // transverse tip load
+    const N: usize = 40; // beam elements
+
+    // ── Maillage : N éléments SEG2 alignés sur [0, L] (config 1-D) ─────────
+    let cfg = insert(Configuration::new(1)?);
+    let h = L / N as f64;
+    let nodes: Vec<Node> = (0..=N)
+        .map(|i| Node::create_in(cfg.clone(), &[i as f64 * h]))
+        .collect::<Result<_>>()?;
+    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    for i in 0..N {
+        mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
+    }
+    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+
+    // ── Modèle : poutre + encastrement à gauche (w = θ = 0) ────────────────
+    let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
+        let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
+        let multiplier = mesher::barycenter(&imposed)?;
+        Model::dirichlet(var.into(), dual.into(), &imposed, &multiplier, None, None)
+    };
+    let mut model = Model::timoshenko(&fes)?;
+    model = (&model + &clamp(&nodes[0], "w", "f_w")?)?;
+    model = (&model + &clamp(&nodes[0], "theta", "m_theta")?)?;
+
+    // ── Matériau E, I, G, A_s ──────────────────────────────────────────────
+    let materials = build::material_field(&model, &[("E", E), ("I", I), ("G", G), ("A_s", A_S)])?;
+
+    // ── Chargement : force transverse P au bout libre (composante f_w) ─────
+    let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    load_sm.add_cell(&[nodes[N].id()])?;
+    let load_sm = insert(load_sm);
+    let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_w".into()])?;
+    rhs.set_value(nodes[N].id(), "f_w", P)?;
+    let rhs = NodeField::from_sub(rhs);
+
+    // ── Assemblage + résolution ────────────────────────────────────────────
+    let solution = solve(&assemble::stiffness(&model, &materials)?, &rhs)?;
+
+    // ── Comparaison : w_tip = P·L³/(3·E·I) + P·L/(G·A_s) ───────────────────
+    let w_tip = solution.value(nodes[N].id(), "w")?;
+    let analytical = P * L.powi(3) / (3.0 * E * I) + P * L / (G * A_S);
+    assert!(
+        (w_tip - analytical).abs() < 1e-2 * analytical,
+        "w_tip = {w_tip}, analytique {analytical}"
+    );
+    Ok(())
+}
+// ANCHOR_END: example

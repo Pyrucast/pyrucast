@@ -48,6 +48,11 @@ use std::fmt;
 pub enum QuadratureRule {
     /// Standard Gauss rule, picked per element type as documented above.
     Gauss,
+    /// **Reduced** integration: a single point at the element centroid (weight
+    /// = the reference measure). Exact for constants only; used for
+    /// selective/reduced integration — e.g. the shear term of a Timoshenko
+    /// beam, to avoid shear locking.
+    Reduced,
 }
 
 impl QuadratureRule {
@@ -55,6 +60,7 @@ impl QuadratureRule {
     pub fn name(self) -> &'static str {
         match self {
             Self::Gauss => "GAUSS",
+            Self::Reduced => "REDUCED",
         }
     }
 
@@ -62,6 +68,7 @@ impl QuadratureRule {
     pub fn from_name(s: &str) -> Option<Self> {
         match s.to_ascii_uppercase().as_str() {
             "GAUSS" => Some(Self::Gauss),
+            "REDUCED" => Some(Self::Reduced),
             _ => None,
         }
     }
@@ -80,6 +87,7 @@ impl QuadratureRule {
             (Self::Gauss, ElementType::QUA4) => 4,
             (Self::Gauss, ElementType::TET4) => 4,
             (Self::Gauss, ElementType::HEX8) => 8,
+            (Self::Reduced, _) => 1,
             (_, ElementType::POI1) => unreachable!(),
         })
     }
@@ -149,6 +157,15 @@ impl QuadratureRule {
                 // callers, who only care about (xi_g, w_g) as a set.
                 (xi, vec![1.0; 8])
             }
+            // Reduced: one point at the centroid, weight = reference measure.
+            (Self::Reduced, et) => match et {
+                ElementType::SEG2 => (vec![0.0], vec![2.0]),
+                ElementType::TRI3 => (vec![1.0 / 3.0, 1.0 / 3.0], vec![0.5]),
+                ElementType::QUA4 => (vec![0.0, 0.0], vec![4.0]),
+                ElementType::TET4 => (vec![0.25, 0.25, 0.25], vec![1.0 / 6.0]),
+                ElementType::HEX8 => (vec![0.0, 0.0, 0.0], vec![8.0]),
+                ElementType::POI1 => unreachable!(),
+            },
             (_, ElementType::POI1) => unreachable!(),
         })
     }

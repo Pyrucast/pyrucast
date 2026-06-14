@@ -617,6 +617,14 @@ class Model:
         assembly time.
         """
     @classmethod
+    def timoshenko(cls, fespace: FiniteElementSpace) -> Model:
+        r"""
+        `Model.timoshenko(fespace)` — Timoshenko-beam model spanning every
+        subspace of `fespace` (1-D `SEG2`). DOFs `w` (deflection) and `theta`
+        (rotation); reduced shear integration avoids locking. Material
+        (`E`, `I`, `G`, `A_s`) is supplied at assembly time.
+        """
+    @classmethod
     def dirichlet(cls, imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
         r"""
         `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,

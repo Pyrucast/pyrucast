@@ -34,6 +34,7 @@ use crate::store::Handle;
 pub mod dirichlet;
 pub mod elasticity;
 pub mod heat_conduction;
+pub mod timoshenko;
 pub mod truss;
 
 /// The behaviour contract of one physics, co-located with its data struct.

@@ -120,7 +120,7 @@ use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::Mesh;
 use crate::aggregate::Aggregate;
 use crate::models::elasticity::ElasticityModel;
-use crate::models::{dirichlet, elasticity, heat_conduction, truss, Physics};
+use crate::models::{dirichlet, elasticity, heat_conduction, timoshenko, truss, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -149,6 +149,8 @@ pub enum SubModel {
     Truss(truss::Truss),
     /// Linear elasticity (2-D plane / 3-D solid) — see [`elasticity::Elasticity`].
     Elasticity(elasticity::Elasticity),
+    /// Timoshenko beam (shear-deformable bending) — see [`timoshenko::Timoshenko`].
+    Timoshenko(timoshenko::Timoshenko),
 }
 
 impl SubModel {
@@ -162,6 +164,7 @@ impl SubModel {
             SubModel::Dirichlet(p) => p,
             SubModel::Truss(p) => p,
             SubModel::Elasticity(p) => p,
+            SubModel::Timoshenko(p) => p,
         }
     }
 
@@ -191,6 +194,13 @@ impl SubModel {
         model: ElasticityModel,
     ) -> Result<Self> {
         Ok(SubModel::Elasticity(elasticity::Elasticity::new(fespace, model)?))
+    }
+
+    /// Timoshenko-beam sub-model on a 1-D `SEG2` FE subspace (full Gauss).
+    /// Material data (`E`, `I`, `G`, `A_s`) is supplied at assembly time. See
+    /// [`timoshenko::Timoshenko::new`].
+    pub fn timoshenko(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        Ok(SubModel::Timoshenko(timoshenko::Timoshenko::new(fespace)?))
     }
 
     /// Dirichlet sub-model: enforce `imposed_variable = u_d` on the nodes of
@@ -390,6 +400,17 @@ impl Model {
         let mut out = Self::empty();
         for sub in fes {
             out.add_sub(insert(SubModel::elasticity(sub.clone(), model)?))?;
+        }
+        Ok(out)
+    }
+
+    /// Timoshenko-beam `Model` spanning **every** subspace of `fes`.
+    /// Parent-level named constructor; material (`E`, `I`, `G`, `A_s`) is
+    /// supplied at assembly time.
+    pub fn timoshenko(fes: &FiniteElementSpace) -> Result<Self> {
+        let mut out = Self::empty();
+        for sub in fes {
+            out.add_sub(insert(SubModel::timoshenko(sub.clone())?))?;
         }
         Ok(out)
     }

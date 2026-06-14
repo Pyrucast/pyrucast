@@ -132,6 +132,19 @@ impl PyModel {
         Ok(Self { inner })
     }
 
+    /// `Model.timoshenko(fespace)` — Timoshenko-beam model spanning every
+    /// subspace of `fespace` (1-D `SEG2`). DOFs `w` (deflection) and `theta`
+    /// (rotation); reduced shear integration avoids locking. Material
+    /// (`E`, `I`, `G`, `A_s`) is supplied at assembly time.
+    #[classmethod]
+    fn timoshenko(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+    ) -> PyResult<Self> {
+        let inner = Model::timoshenko(&fespace.inner)?;
+        Ok(Self { inner })
+    }
+
     /// `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,
     /// multiplier_mesh, multiplier=None, imposed_value=None)` — Dirichlet
     /// constraint model (a single sub-model) imposed via Lagrange multipliers.
