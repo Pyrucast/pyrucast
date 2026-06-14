@@ -608,6 +608,15 @@ class Model:
         coordinates. Material (`E`, `A`) is supplied at assembly time.
         """
     @classmethod
+    def elasticity(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.elasticity(fespace, model)` — linear-elasticity model spanning
+        every subspace of `fespace`. `model` is `"plane_stress"` or
+        `"plane_strain"` (2-D), or `"solid"` (3-D). DOFs are the vector
+        displacement `u_x, u_y(, u_z)`; material (`E`, `nu`) is supplied at
+        assembly time.
+        """
+    @classmethod
     def dirichlet(cls, imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
         r"""
         `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,

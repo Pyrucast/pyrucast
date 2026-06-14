@@ -2,6 +2,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::model::{Model, SubModel};
+use crate::models::elasticity::ElasticityModel;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::store::{read, Handle};
@@ -108,6 +109,26 @@ impl PyModel {
         fespace: PyRef<PyFiniteElementSpace>,
     ) -> PyResult<Self> {
         let inner = Model::truss(&fespace.inner)?;
+        Ok(Self { inner })
+    }
+
+    /// `Model.elasticity(fespace, model)` — linear-elasticity model spanning
+    /// every subspace of `fespace`. `model` is `"plane_stress"` or
+    /// `"plane_strain"` (2-D), or `"solid"` (3-D). DOFs are the vector
+    /// displacement `u_x, u_y(, u_z)`; material (`E`, `nu`) is supplied at
+    /// assembly time.
+    #[classmethod]
+    fn elasticity(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+        model: &str,
+    ) -> PyResult<Self> {
+        let m = ElasticityModel::from_tag(model).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "elasticity: unknown model '{model}' (expected plane_stress|plane_strain|solid)"
+            ))
+        })?;
+        let inner = Model::elasticity(&fespace.inner, m)?;
         Ok(Self { inner })
     }
 

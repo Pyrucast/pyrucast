@@ -119,7 +119,8 @@ use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteEleme
 use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::Mesh;
 use crate::aggregate::Aggregate;
-use crate::models::{dirichlet, heat_conduction, truss, Physics};
+use crate::models::elasticity::ElasticityModel;
+use crate::models::{dirichlet, elasticity, heat_conduction, truss, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -146,6 +147,8 @@ pub enum SubModel {
     Dirichlet(dirichlet::Dirichlet),
     /// Truss / bar (axial-force) element — see [`truss::Truss`].
     Truss(truss::Truss),
+    /// Linear elasticity (2-D plane / 3-D solid) — see [`elasticity::Elasticity`].
+    Elasticity(elasticity::Elasticity),
 }
 
 impl SubModel {
@@ -158,6 +161,7 @@ impl SubModel {
             SubModel::HeatConduction(p) => p,
             SubModel::Dirichlet(p) => p,
             SubModel::Truss(p) => p,
+            SubModel::Elasticity(p) => p,
         }
     }
 
@@ -177,6 +181,16 @@ impl SubModel {
     /// is supplied at assembly time. See [`truss::Truss::new`].
     pub fn truss(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         Ok(SubModel::Truss(truss::Truss::new(fespace)?))
+    }
+
+    /// Linear-elasticity sub-model on an FE subspace, with the given 2-D/3-D
+    /// model. Material data (`E`, `nu`) is supplied at assembly time. See
+    /// [`elasticity::Elasticity::new`].
+    pub fn elasticity(
+        fespace: Handle<SubFiniteElementSpace>,
+        model: ElasticityModel,
+    ) -> Result<Self> {
+        Ok(SubModel::Elasticity(elasticity::Elasticity::new(fespace, model)?))
     }
 
     /// Dirichlet sub-model: enforce `imposed_variable = u_d` on the nodes of
@@ -367,6 +381,17 @@ impl Model {
             model.add_sub(insert(SubModel::truss(sub.clone())?))?;
         }
         Ok(model)
+    }
+
+    /// Linear-elasticity `Model` spanning **every** subspace of `fes` (same
+    /// 2-D/3-D `model` for all). Parent-level named constructor; material
+    /// (`E`, `nu`) is supplied at assembly time.
+    pub fn elasticity(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Self> {
+        let mut out = Self::empty();
+        for sub in fes {
+            out.add_sub(insert(SubModel::elasticity(sub.clone(), model)?))?;
+        }
+        Ok(out)
     }
 
     /// Dirichlet `Model` (a single sub-model) constraining `imposed_variable`

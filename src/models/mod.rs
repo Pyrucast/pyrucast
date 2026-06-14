@@ -32,6 +32,7 @@ use crate::error::{PyrucastError, Result};
 use crate::store::Handle;
 
 pub mod dirichlet;
+pub mod elasticity;
 pub mod heat_conduction;
 pub mod truss;
 
