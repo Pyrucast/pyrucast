@@ -11,6 +11,7 @@
 
 pub mod beam_deformation;
 pub mod consolidate;
+pub mod consolidate_element;
 pub mod coordinates;
 pub mod deformation;
 pub mod divergence;
@@ -20,6 +21,7 @@ pub mod restrict;
 
 pub use beam_deformation::beam_deformation;
 pub use consolidate::consolidate;
+pub use consolidate_element::consolidate_element;
 pub use coordinates::{coordinates, displace, set_coordinates};
 pub use deformation::deformation;
 pub use divergence::divergence;

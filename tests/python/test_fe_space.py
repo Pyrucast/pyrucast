@@ -19,7 +19,7 @@ def test_lagrange1_constructor_one_to_one_with_submeshes():
     tri.unit().add_cell([n0, n1, n2])
     qua = pyrucast.Mesh(c, "QUA4")
     qua.unit().add_cell([n0, n1, n3, n2])
-    mesh = tri + qua
+    mesh = tri | qua
 
     fes = pyrucast.FiniteElementSpace(mesh)
     assert len(fes) == 2
@@ -431,8 +431,8 @@ def test_repr_and_str():
 # ─── Aggregate addition (merge) ─────────────────────────────────────────────
 
 
-def test_add_merges_subspaces():
-    """`fes_a + fes_b` concatenates subspaces into a fresh space, like the
+def test_union_merges_subspaces():
+    """`fes_a | fes_b` concatenates subspaces into a fresh space, like the
     other aggregates. No DOF check is performed."""
     c = pyrucast.Configuration(2)
     n0 = c.add_node([0.0, 0.0])
@@ -447,7 +447,7 @@ def test_add_merges_subspaces():
 
     fes_a = pyrucast.FiniteElementSpace(tri)
     fes_b = pyrucast.FiniteElementSpace(qua)
-    merged = fes_a + fes_b
+    merged = fes_a | fes_b
 
     assert len(merged) == 2
     assert merged[0].element_type == "TRI3"

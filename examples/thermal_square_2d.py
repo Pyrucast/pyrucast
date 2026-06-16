@@ -69,7 +69,7 @@ def main() -> None:
     imposed = pyrucast.poi1_from_nodes(right_nodes)
     multiplier = pyrucast.barycenter(imposed)
     mults = [multiplier.node(0, j, 0) for j in range(N + 1)]
-    model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet(
+    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
         "T", "q", imposed, multiplier
     )
 
@@ -96,7 +96,7 @@ def main() -> None:
         imposed_load[0].set_value(m, "imposed_T", T_IMPOSED)
 
     # Chargement = flux du bord + valeurs imposées (union des zones).
-    rhs = source + imposed_load
+    rhs = source | imposed_load
 
     # ── Assemblage + résolution ──────────────────────────────────────────────
     K_mat = pyrucast.stiffness(model, materials)

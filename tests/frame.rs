@@ -12,6 +12,7 @@
 //! runs under `cargo test`.
 
 // ANCHOR: example
+use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
@@ -55,9 +56,9 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
         Model::dirichlet(var.into(), dual.into(), &imposed, &multiplier, None, None)
     };
     let mut model = Model::frame(&fes)?;
-    model = (&model + &clamp(&nodes[0], "u_x", "f_x")?)?;
-    model = (&model + &clamp(&nodes[0], "u_y", "f_y")?)?;
-    model = (&model + &clamp(&nodes[0], "rz", "m_z")?)?;
+    model = model.union(&clamp(&nodes[0], "u_x", "f_x")?)?;
+    model = model.union(&clamp(&nodes[0], "u_y", "f_y")?)?;
+    model = model.union(&clamp(&nodes[0], "rz", "m_z")?)?;
 
     let materials =
         build::material_field(&model, &[("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)])?;

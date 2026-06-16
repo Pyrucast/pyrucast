@@ -62,7 +62,7 @@ Le `Model` ne porte **aucune** logique de second membre. L'utilisateur :
 
 1. lit `model.dual_vars()` pour connaître les noms de composantes du vecteur force ;
 2. construit un `NodeField` avec ces composantes (forces de Neumann, sources de chaleur, valeurs imposées de Dirichlet aux nœuds-multiplicateurs, …) ;
-3. compose plusieurs sources avec `+` (union structurelle des zones) ou `merge` (fusion vérifiée) ;
+3. compose plusieurs sources avec `|` (union des zones, dédupliquée et fusionnée par support) — le nommé `merge` en est l'alias ;
 4. passe `Matrix + NodeField` au solveur.
 
 Cette séparation a deux mérites :
@@ -138,15 +138,15 @@ let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
 // Modèle : conduction (le matériau est fourni à l'assemblage, pas ici)
 // + Dirichlet à gauche. Constructeurs au niveau parent (balaient les
-// sous-espaces de `fes`), composés par `+` (merge) — on ne construit
-// jamais de `SubModel` à la main (cf. CONVENTIONS.md).
+// sous-espaces de `fes`), composés par `|` (union — Rust : `union`) — on
+// ne construit jamais de `SubModel` à la main (cf. CONVENTIONS.md).
 let hc = Model::heat_conduction(&fes).unwrap();
 // Maillage des nœuds imposés + support des multiplicateurs (barycenter
 // colocalise des nœuds neufs). Le modèle ne crée aucun nœud lui-même.
 let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
 let multiplier = mesher::barycenter(&imposed).unwrap();
 let dir = Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
-let model = (&hc + &dir).unwrap();
+let model = hc.union(&dir).unwrap();
 
 // Matériau k = 1, appliqué aux sous-modèles qui en ont besoin (Dirichlet
 // est automatiquement ignoré), puis assemblage.
@@ -168,11 +168,11 @@ mesh.unit().add_cell([a, b])
 fes = pyrucast.FiniteElementSpace(mesh)
 
 # Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
-# Constructeurs au niveau parent, composés par `+` — pas de SubModel à la main.
+# Constructeurs au niveau parent, composés par `|` — pas de SubModel à la main.
 # Le maillage des multiplicateurs est fabriqué depuis les nœuds imposés.
 imposed = pyrucast.poi1_from_nodes([a])
 multiplier = pyrucast.barycenter(imposed)
-model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet(
+model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
     "T", "q", imposed, multiplier
 )
 
@@ -210,7 +210,7 @@ for i in range(4):
 fes = pyrucast.FiniteElementSpace(mesh)
 
 # 2) Modèle : conduction + Dirichlet aux deux bouts.
-# Chaque physique est un Model au niveau parent ; on les compose par `+`.
+# Chaque physique est un Model au niveau parent ; on les compose par `|`.
 # On fabrique le support des multiplicateurs depuis les nœuds imposés
 # (`barycenter` colocalise des nœuds neufs), et on y lit le nœud-multiplicateur.
 imposed_left = pyrucast.poi1_from_nodes([nodes[0]])
@@ -221,7 +221,7 @@ left = pyrucast.Model.dirichlet("T", "q", imposed_left, mult_mesh_left)
 right = pyrucast.Model.dirichlet("T", "q", imposed_right, mult_mesh_right)
 mult_left = mult_mesh_left.node(0, 0, 0)
 mult_right = mult_mesh_right.node(0, 0, 0)
-model = pyrucast.Model.heat_conduction(fes) + left + right
+model = pyrucast.Model.heat_conduction(fes) | left | right
 
 # 3) Matériau k = 1 (appliqué à la conduction, Dirichlet ignoré)
 materials = pyrucast.material_field(model, [("k", 1.0)])

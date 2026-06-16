@@ -26,7 +26,7 @@ def _two_zone_mesh():
     za.unit().add_cell([n0, n1, n2])
     zb = pyrucast.Mesh(c, "TRI3")
     zb.unit().add_cell([n1, n3, n2])
-    return c, [n0, n1, n2, n3], za + zb
+    return c, [n0, n1, n2, n3], za | zb
 
 
 # ─── Construction ────────────────────────────────────────────────────────────
@@ -322,41 +322,43 @@ def test_subfield_add_scalar():
     assert f.value(nodes[0], "T") == 1.0
 
 
-def test_add_is_structural_merge():
-    # `a + b` composes zones (shared handles) — it does NOT add values.
+def test_union_is_structural_merge():
+    # `a | b` unites zones (shared handles) — it does NOT add values. The two
+    # zones live on distinct support SubMeshes, so they stay separate.
     c, nodes, mesh = _two_zone_mesh()
     a = pyrucast.NodeField(mesh[0], ["T"])
     b = pyrucast.NodeField(mesh[1], ["P"])
     a[0].set_value(nodes[0], "T", 1.0)
-    f = a + b
+    f = a | b
     assert len(f) == 2
     assert f.components() == ["T", "P"]
     assert f.value(nodes[0], "T") == 1.0
     assert f.value(nodes[3], "P") == 0.0
 
 
-def test_add_aggregate_plus_subfield():
+def test_union_aggregate_plus_subfield():
     c, nodes, mesh = _two_zone_mesh()
     a = pyrucast.NodeField(mesh[0], ["T"])
     b = pyrucast.NodeField(mesh[1], ["T"])
-    f = a + b[0]
+    f = a | b[0]
     assert len(f) == 2
 
 
-def test_add_field_to_itself_does_not_deadlock():
-    # Regression: same handle on both sides must not re-lock the store mutex.
+def test_union_field_to_itself_dedups_by_handle():
+    # Same handle on both sides: the union deduplicates by handle, so a single
+    # zone remains (and the store mutex is never re-locked).
     c, nodes, sm = _poi1_with(1)
     a = pyrucast.NodeField(sm, ["T"])
-    f = a + a
-    assert len(f) == 2
-    f.check()  # identical duplicated zone: coherent
+    f = a | a
+    assert len(f) == 1
+    f.check()  # coherent
 
 
-def test_add_rejects_bad_operand():
+def test_union_rejects_bad_operand():
     c, _nodes, sm = _poi1_with(1)
     f = pyrucast.NodeField(sm, ["T"])
     try:
-        f + "nope"
+        f | "nope"
     except TypeError:
         pass
     else:
@@ -453,7 +455,10 @@ def test_min_max_fold_across_zones():
 # ─── consolidate ─────────────────────────────────────────────────────────────
 
 
-def test_consolidate_fuses_same_component_zones():
+def test_consolidate_keeps_distinct_supports_separate():
+    # Fusion is by support handle: the two TRI3 zones live on distinct
+    # SubMeshes, so consolidate keeps both — but the shared interface node
+    # (same value) passes the cross-support check.
     c, nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField(mesh, ["T"])
     f[0].set_value(nodes[0], "T", 1.0)
@@ -462,9 +467,8 @@ def test_consolidate_fuses_same_component_zones():
     f[1].set_value(nodes[3], "T", 4.0)
 
     g = pyrucast.consolidate(f)
-    assert len(g) == 1
+    assert len(g) == 2
     assert g.node_count() == 4
-    assert g[0].node_count() == 4  # interface nodes stored once
     assert g.value(nodes[1], "T") == 2.0
     assert g.value(nodes[3], "T") == 4.0
 
@@ -500,5 +504,16 @@ def test_consolidate_still_dispatches_on_mesh():
     za.unit().add_cell([a, b, d])
     zb = pyrucast.Mesh(c, "TRI3")
     zb.unit().add_cell([a, b, d])  # duplicate cell in a second submesh
-    m = pyrucast.consolidate(za + zb)
+    m = pyrucast.consolidate(za | zb)
     assert len(m) == 1  # one submesh per element type, duplicates dropped
+
+
+def test_subfield_union_subfield_builds_aggregate():
+    # The original report: `SubNodeField | SubNodeField` must work, building a
+    # NodeField (distinct supports here → two zones).
+    c, nodes, mesh = _two_zone_mesh()
+    sa = pyrucast.NodeField(mesh[0], ["T"])[0]
+    sb = pyrucast.NodeField(mesh[1], ["P"])[0]
+    f = sa | sb
+    assert len(f) == 2
+    assert f.components() == ["T", "P"]

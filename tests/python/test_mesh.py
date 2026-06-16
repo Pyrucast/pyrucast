@@ -35,7 +35,7 @@ def test_poi1_from_nodes_empty_raises():
         raise AssertionError("expected RuntimeError for empty node list")
 
 
-def test_aggregate_plus_sub_and_sub_plus_sub():
+def test_aggregate_union_sub_and_sub_union_sub():
     c = pyrucast.Configuration(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
@@ -43,30 +43,30 @@ def test_aggregate_plus_sub_and_sub_plus_sub():
     s2 = pyrucast.poi1_from_nodes([b])[0]
 
     # sub + sub → Mesh
-    m = s1 + s2
+    m = s1 | s2
     assert len(m) == 2
 
     # mesh + sub → Mesh
     s3 = pyrucast.poi1_from_nodes([a])[0]
-    m2 = m + s3
+    m2 = m | s3
     assert len(m2) == 3
 
 
-def test_node_plus_node_and_mesh_plus_node():
+def test_node_union_node_and_mesh_union_node():
     c = pyrucast.Configuration(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     d = c.add_node([2.0, 0.0])
 
-    m = a + b  # node + node → unitary POI1 Mesh
+    m = a | b  # node | node → unitary POI1 Mesh
     assert m.element_types() == ["POI1"]
     assert m.cell_count() == 2
 
-    m2 = m + d  # mesh + node → unitary POI1 Mesh (via Node.__radd__)
+    m2 = m | d  # mesh | node → unitary POI1 Mesh (via Node.__ror__)
     assert m2.cell_count() == 3
 
 
-def test_mesh_plus_node_rejects_non_poi1():
+def test_mesh_union_node_rejects_non_poi1():
     c = pyrucast.Configuration(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
@@ -74,7 +74,7 @@ def test_mesh_plus_node_rejects_non_poi1():
     tri = pyrucast.Mesh(c, "TRI3")
     tri.unit().add_cell([a, b, cc])
     try:
-        _ = tri + a  # not a unitary POI1 mesh
+        _ = tri | a  # not a unitary POI1 mesh
     except RuntimeError:
         pass
     else:
@@ -147,7 +147,7 @@ def test_mesh_aggregates_submeshes():
     tri = pyrucast.Mesh(c, "TRI3")
     tri.unit().add_cell([a, b, cc])
 
-    mesh = pts + tri
+    mesh = pts | tri
     assert len(mesh) == 2
     assert mesh.cell_count() == 3  # 2 POI1 + 1 TRI3
 
@@ -198,7 +198,7 @@ def test_mesh_indexing_and_iteration():
     tri = pyrucast.Mesh(c, "TRI3")
     tri.unit().add_cell([a, b, cc])
 
-    mesh = pts + tri
+    mesh = pts | tri
 
     assert len(mesh) == 2
     assert [sm.element_type for sm in mesh] == ["POI1", "TRI3"]
@@ -221,7 +221,7 @@ def test_mesh_rejects_merge_from_other_configuration():
     m1 = pyrucast.Mesh(c1, "POI1")
     m2 = pyrucast.Mesh(c2, "POI1")  # different config
     try:
-        _ = m1 + m2  # merge across Configurations — must fail
+        _ = m1 | m2  # merge across Configurations — must fail
     except RuntimeError:
         pass
     else:
@@ -298,7 +298,7 @@ def test_fill_surface_with_one_hole_2d():
     c = pyrucast.Configuration(2)
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
-    combined = outer + hole
+    combined = outer | hole
     assert len(combined) == 2
 
     tri = pyrucast.fill_surface(combined, "TRI3")
@@ -319,7 +319,7 @@ def test_fill_surface_outer_loop_autodetected():
     c = pyrucast.Configuration(2)
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
-    combined = hole + outer
+    combined = hole | outer
     tri = pyrucast.fill_surface(combined, "TRI3")
     n_cells = tri.cell_count()
 
@@ -355,7 +355,7 @@ def test_fill_surface_refined_with_hole():
     c = pyrucast.Configuration(2)
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
-    combined = outer + hole
+    combined = outer | hole
     tri = pyrucast.fill_surface(combined, "TRI3", max_edge_length=1.0)
     total = 0.0
     for ci in range(tri.cell_count()):
@@ -479,7 +479,7 @@ def test_to_poi1_preserves_submesh_count():
     pts.unit().add_cell([a])
     tri = pyrucast.Mesh(c, "TRI3")
     tri.unit().add_cell([a, b, cc])
-    mesh = pts + tri
+    mesh = pts | tri
 
     poi = pyrucast.to_poi1(mesh)
     assert len(poi) == 2

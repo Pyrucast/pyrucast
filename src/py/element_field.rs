@@ -285,5 +285,5 @@ impl PyElementField {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField", subfield);
+crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField", subfield, ElementField);
 crate::impl_dump_pymethod!(handle PySubElementField, handle);

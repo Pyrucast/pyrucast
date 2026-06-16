@@ -30,7 +30,7 @@ def main() -> None:
     # Contour for fill_surface: a Mesh holding both SEG2 loops. The CDT
     # detects the outer loop automatically (largest signed area) and
     # treats the inner one as a hole.
-    contour = inner_mesh + outer_mesh
+    contour = inner_mesh | outer_mesh
     contour = outer_mesh
     surface_mesh = pc.Mesh.sweep_qua4(inner_mesh,outer_mesh,2)
     

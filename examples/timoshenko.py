@@ -42,8 +42,8 @@ def tip_deflection(n_elems: int) -> float:
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.timoshenko(fes)
-    model = model + _clamp(nodes[0], "w", "f_w")
-    model = model + _clamp(nodes[0], "theta", "m_theta")
+    model = model | _clamp(nodes[0], "w", "f_w")
+    model = model | _clamp(nodes[0], "theta", "m_theta")
 
     materials = pyrucast.material_field(model, [("E", E), ("I", I), ("G", G), ("A_s", A_S)])
 

@@ -10,6 +10,7 @@
 //! under `cargo test`.
 
 // ANCHOR: example
+use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
@@ -44,9 +45,9 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
         Model::dirichlet(var.into(), dual.into(), &imposed, &multiplier, None, None)
     };
     let mut model = Model::truss(&fes)?;
-    model = (&model + &clamp(&n0, "u_x", "f_x")?)?;
-    model = (&model + &clamp(&n0, "u_y", "f_y")?)?;
-    model = (&model + &clamp(&n1, "u_y", "f_y")?)?;
+    model = model.union(&clamp(&n0, "u_x", "f_x")?)?;
+    model = model.union(&clamp(&n0, "u_y", "f_y")?)?;
+    model = model.union(&clamp(&n1, "u_y", "f_y")?)?;
 
     // ── Matériau E, A (Dirichlet ignoré automatiquement) ───────────────────
     let materials = build::material_field(&model, &[("E", E), ("A", A)])?;

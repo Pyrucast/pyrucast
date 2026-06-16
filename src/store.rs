@@ -226,6 +226,18 @@ impl<T: Persist + Any + Send + Sync> Handle<T> {
         self.gen
     }
 
+    /// Whether two handles designate the **same store slot** — same index
+    /// *and* same generation (a recycled slot has a fresh generation, so
+    /// stale handles never compare equal to a live one).
+    ///
+    /// This is handle *identity*, not value equality: it is the basis of
+    /// the aggregates' union (`a | b` skips a sub whose handle is already
+    /// present). Deliberately not a `PartialEq` impl, to keep handle
+    /// comparison an explicit, intentional act.
+    pub fn same_slot(&self, other: &Self) -> bool {
+        self.idx == other.idx && self.gen == other.gen
+    }
+
     /// Resolve (and cache) the slot cell. The store mutex is held only
     /// for the lookup itself.
     fn resolve(&self) -> Result<Arc<SlotCell<T>>> {

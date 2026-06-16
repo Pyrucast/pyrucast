@@ -51,8 +51,8 @@ def main() -> None:
     left = [grid[idx(0, j)] for j in range(N + 1)]
     bottom = [grid[idx(i, 0)] for i in range(N + 1)]
     model = pyrucast.Model.elasticity(fes, "plane_stress")
-    model = model + _clamp(left, "u_x", "f_x")
-    model = model + _clamp(bottom, "u_y", "f_y")
+    model = model | _clamp(left, "u_x", "f_x")
+    model = model | _clamp(bottom, "u_y", "f_y")
 
     materials = pyrucast.material_field(model, [("E", E), ("nu", NU)])
 

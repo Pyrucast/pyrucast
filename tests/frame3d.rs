@@ -16,6 +16,7 @@
 //! runs under `cargo test`.
 
 // ANCHOR: example
+use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
@@ -68,7 +69,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
         ("r_y", "m_y"),
         ("r_z", "m_z"),
     ] {
-        model = (&model + &clamp(&nodes[0], var, dual)?)?;
+        model = model.union(&clamp(&nodes[0], var, dual)?)?;
     }
 
     let materials = build::material_field(

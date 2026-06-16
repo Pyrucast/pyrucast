@@ -56,22 +56,23 @@ impl PyNode {
         Ok(())
     }
 
-    /// `node + node` → a unitary POI1 `Mesh` over both nodes. Returns
-    /// `NotImplemented` for any other right-hand type.
-    fn __add__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    /// `node | node` → a unitary POI1 `Mesh` over both nodes (the same
+    /// union `|` as the aggregates). Returns `NotImplemented` for any other
+    /// right-hand type.
+    fn __or__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         if let Ok(o) = other.extract::<PyRef<'_, PyNode>>() {
-            let mesh = (self.as_node() + o.as_node())?;
+            let mesh = self.as_node().union(o.as_node())?;
             return Ok(Py::new(py, PyMesh { inner: mesh })?.into_any());
         }
         Ok(py.NotImplemented())
     }
 
-    /// Right-hand `mesh + node`: append this node to a **unitary POI1**
-    /// `Mesh`, yielding a new one. Reached when the left operand's `__add__`
-    /// returns `NotImplemented` (a `Mesh` doesn't know how to add a `Node`).
-    fn __radd__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    /// Right-hand `mesh | node`: append this node to a **unitary POI1**
+    /// `Mesh`, yielding a new one. Reached when the left operand's `__or__`
+    /// returns `NotImplemented` (a `Mesh` doesn't know how to union a `Node`).
+    fn __ror__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         if let Ok(m) = other.extract::<PyRef<'_, PyMesh>>() {
-            let mesh = (&m.inner + self.as_node())?;
+            let mesh = m.inner.union_node(self.as_node())?;
             return Ok(Py::new(py, PyMesh { inner: mesh })?.into_any());
         }
         Ok(py.NotImplemented())

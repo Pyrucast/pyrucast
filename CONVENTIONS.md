@@ -89,8 +89,8 @@ expose en `pub`.
   dans le store ; le contrôle total est le rôle de l'API Rust.
 - **Côté Python (surface curée).** Les `Sub*` sont des **vues** obtenues par
   indexation du parent (`parent[i]`) ; ils ne se **construisent pas**
-  directement. On construit au niveau parent et on compose par `+` (voir
-  « Agrégats : un ou plusieurs » ci-dessous). La coercition parent→sub
+  directement. On construit au niveau parent et on compose par `|` (union,
+  voir « Agrégats : un ou plusieurs » ci-dessous). La coercition parent→sub
   unitaire (`Aggregate::unit`) est l'autre face de cette restriction : là où
   une op a besoin d'un seul sous-objet, on lui passe un parent unitaire.
 
@@ -153,8 +153,8 @@ pour le cas courant (un seul sous-objet).
 D'où **une seule règle** :
 
 > **Les constructeurs nommés vivent au niveau du parent et renvoient un
-> parent ; on compose des parents avec `+` (merge) ; le `Sub*` est une vue
-> indexée, jamais un objet qu'on construit-puis-attache.**
+> parent ; on compose des parents avec `|` (union — Rust : `union`) ; le
+> `Sub*` est une vue indexée, jamais un objet qu'on construit-puis-attache.**
 
 Trois conséquences mécaniques :
 
@@ -168,10 +168,11 @@ Trois conséquences mécaniques :
    crée un maillage à un sous-maillage. Cible : `Model::heat_conduction(&fes)`
    crée une zone par sous-espace.
 
-2. **Composer = `+` (merge), jamais `add_sub` à la main.** Pour assembler
-   des physiques / zones hétérogènes, on additionne des parents :
-   `Model::heat_conduction(&fes)? + Model::dirichlet(...)?`. `merge` clone
-   les `Handle` (bump de refcount, pas de copie profonde), donc les
+2. **Composer = union (`|` Python, `union` Rust), jamais `add_sub` à la
+   main.** Pour assembler des physiques / zones hétérogènes, on unit des
+   parents : Python `Model.heat_conduction(fes) | Model.dirichlet(...)`,
+   Rust `model.union(&dirichlet)?`. L'union clone les `Handle` (bump de
+   refcount, pas de copie profonde) et **déduplique par handle**, donc les
    sous-objets sont **partagés** entre parents. `add_sub` reste un primitif
    bas niveau (et le chemin interne des constructeurs), pas l'API d'usage.
 
@@ -264,9 +265,10 @@ Côté Python, toutes les fonctions des thèmes ci-dessous sont **à plat**
 ## Cas tranchés explicitement
 
 - `restrict(field, mesh)` → **`ops::field`** (field + mesh en pairs).
-- `merge(a, b)` → **`ops::field`** (deux fields en pairs ; fusion nommée,
-  non arithmétique).
-- addition field+field → **opérateur `+`**, pas une `ops::field::add`.
+- `merge(a, b)` → **`ops::field`** (deux fields en pairs) ; alias nommé de
+  l'union `a | b` (`Aggregate::union`), fusion non arithmétique.
+- addition field+field → **opérateur `+`** (réservé : arithmétique au nœud,
+  pas la composition de zones), pas une `ops::field::add`.
 - `stiffness(model, mat)`, `mass(model)` → **`ops::assemble`** (famille
   assembleur ; `mass` suit `stiffness`, elles ne se séparent pas).
 - `consolidate(mesh)`, `to_poi1(mesh)` → **`ops::mesher`** (famille des

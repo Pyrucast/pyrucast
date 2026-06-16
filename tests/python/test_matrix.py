@@ -204,7 +204,7 @@ def test_matrix_aggregates_two_blocks():
     assert k.mul_dense([1.0, 1.0]) == [1.0, 1.0]
 
 
-def test_matrix_compose_blocks_with_plus():
+def test_matrix_compose_blocks_with_union():
     """`Matrix.block(...) + Matrix.block(...)` composes blocks the
     parent-level way; entries are filled through the block view `[0]`."""
     c = pyrucast.Configuration(1)
@@ -221,7 +221,7 @@ def test_matrix_compose_blocks_with_plus():
     bb[0].add_entry(b, "q", a, "T", -1.0)
     bb[0].add_entry(b, "q", b, "T", 2.0)
 
-    k = ba + bb
+    k = ba | bb
     k.finalize()
     assert len(k) == 2
     assert k.n_rows() == 2

@@ -27,7 +27,7 @@ def test_cantilever_bending_and_torsion():
         ("u_x", "f_x"), ("u_y", "f_y"), ("u_z", "f_z"),
         ("r_x", "m_x"), ("r_y", "m_y"), ("r_z", "m_z"),
     ):
-        model = model + _clamp(nodes[0], var, dual)
+        model = model | _clamp(nodes[0], var, dual)
     materials = pyrucast.material_field(
         model,
         [("E", E), ("A", A), ("I_y", IY), ("I_z", IZ),

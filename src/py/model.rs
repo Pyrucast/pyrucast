@@ -219,7 +219,6 @@ impl PyModel {
 
 }
 
-crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model);
-crate::impl_aggregate_sub_add!(PySubModel, PyModel);
+crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model, Model);
 crate::impl_dump_pymethod!(handle PySubModel, handle);
 

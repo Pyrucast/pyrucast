@@ -10,7 +10,7 @@ def _two_zone_model():
     """Build a 3-node 2-SEG2 mesh, FE space and a model with:
       - HC over both zones via Model.heat_conduction(fes), spanning
         subspace 0 (zone A) and subspace 1 (zone B);
-      - a Dirichlet constraint on the leftmost node, composed with `+`.
+      - a Dirichlet constraint on the leftmost node, composed with `|`.
     Sub-model order: [HC_A (model[0]), HC_B (model[1]), Dirichlet (model[2])].
     Returns (cfg, [n0, n1, n2], fes, model).
     """
@@ -20,12 +20,12 @@ def _two_zone_model():
     zone_a.unit().add_cell([nodes[0], nodes[1]])
     zone_b = pyrucast.Mesh(c, "SEG2")
     zone_b.unit().add_cell([nodes[1], nodes[2]])
-    mesh = zone_a + zone_b
+    mesh = zone_a | zone_b
     fes = pyrucast.FiniteElementSpace(mesh)
 
     imposed = pyrucast.poi1_from_nodes([nodes[0]])
     multiplier = pyrucast.barycenter(imposed)
-    model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet(
+    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
         "T", "q", imposed, multiplier
     )
     return c, nodes, fes, model

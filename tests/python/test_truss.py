@@ -21,9 +21,9 @@ def test_truss_bar_axial_elongation():
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.truss(fes)
-    model = model + _clamp(c, n0, "u_x", "f_x")
-    model = model + _clamp(c, n0, "u_y", "f_y")
-    model = model + _clamp(c, n1, "u_y", "f_y")  # bar has no transverse stiffness
+    model = model | _clamp(c, n0, "u_x", "f_x")
+    model = model | _clamp(c, n0, "u_y", "f_y")
+    model = model | _clamp(c, n1, "u_y", "f_y")  # bar has no transverse stiffness
 
     materials = pyrucast.material_field(model, [("E", E), ("A", A)])
 

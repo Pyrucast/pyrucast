@@ -48,7 +48,7 @@ def main() -> None:
 
     model = pyrucast.Model.frame(fes)
     for var, dual in (("u_x", "f_x"), ("u_y", "f_y"), ("rz", "m_z")):
-        model = model + _clamp(nodes[0], var, dual)
+        model = model | _clamp(nodes[0], var, dual)
     materials = pyrucast.material_field(
         model, [("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)]
     )

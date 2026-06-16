@@ -324,4 +324,4 @@ impl PyNodeField {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyNodeField, PySubNodeField, "NodeField", subfield);
+crate::impl_aggregate_pymethods!(PyNodeField, PySubNodeField, "NodeField", subfield, NodeField);

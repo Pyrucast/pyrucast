@@ -468,7 +468,15 @@ pub struct ElementField {
     subs: Vec<Handle<SubElementField>>,
 }
 
-crate::impl_aggregate!(ElementField, SubElementField, subfield, "subfield(s)");
+crate::impl_aggregate!(ElementField, SubElementField, subfield, "subfield(s)", {
+    /// Fuse zones sharing the same support `SubFiniteElementSpace` (union of
+    /// components, shared values verified). Runs at the end of every union
+    /// (`a | b`). See [`crate::ops::field::consolidate_element`].
+    fn finalize(&mut self) -> Result<()> {
+        *self = crate::ops::field::consolidate_element(self)?;
+        Ok(())
+    }
+});
 crate::impl_aggregate_dump!(ElementField);
 
 impl ElementField {

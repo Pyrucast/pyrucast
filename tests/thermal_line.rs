@@ -12,6 +12,7 @@
 //! the rest of the suite under `cargo test`.
 
 // ANCHOR: example
+use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
@@ -51,7 +52,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
 
     let conduction = Model::heat_conduction(&fes)?;
     let dirichlet = Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)?;
-    let model = (&conduction + &dirichlet)?;
+    let model = conduction.union(&dirichlet)?;
 
     // ── Matériau : k uniforme (Dirichlet est ignoré automatiquement) ───────
     let materials = build::material_field(&model, &[("k", K)])?;

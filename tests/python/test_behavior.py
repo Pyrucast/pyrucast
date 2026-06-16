@@ -67,7 +67,7 @@ def test_has_behavior_true_for_hc_false_for_dirichlet():
     fes = pyrucast.FiniteElementSpace(mesh)
     imposed = pyrucast.poi1_from_nodes([a])
     multiplier = pyrucast.barycenter(imposed)
-    model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet(
+    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
         "T", "q", imposed, multiplier
     )
     assert model[0].has_behavior() is True

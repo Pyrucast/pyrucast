@@ -1,92 +1,126 @@
-//! Consolidate a [`NodeField`]: merge its zones « au plus juste ».
+//! Consolidate a [`NodeField`]: fuse zones sharing the **same support**.
 //!
-//! Sub-fields sharing the **same component set** (order ignored) are
-//! fused into a single [`SubNodeField`] over the union of their nodes —
-//! interface nodes duplicated across zones are stored once. Sub-fields
-//! with distinct component sets stay separate: nothing is densified, no
-//! `0.0` is invented for a `(node, component)` pair no zone defines.
+//! Sub-fields defined on the *same* support `SubMesh` (matched by handle
+//! identity, [`crate::store::Handle::same_slot`]) are fused into a single
+//! [`SubNodeField`] carrying the **union of their components**. A component
+//! defined by several of those sub-fields must hold the **same** value at
+//! every shared node (exact comparison) — anything else is an error. Zones
+//! on distinct supports stay separate.
 //!
-//! Coherence is verified first ([`NodeField::check`]): consolidating a
-//! field whose zones disagree on a shared node is an error, never a
-//! silent first-wins pick.
+//! This is the finalization step of the node-field union (`a | b`,
+//! [`crate::aggregate::Aggregate::merge`]): after the union deduplicates by
+//! handle, `consolidate` collapses the remaining zones that share a support.
 //!
-//! A group reduced to a single sub-field is **shared** (same handle, no
-//! copy) in the result.
+//! Beyond per-support fusion, a final cross-zone check runs
+//! ([`NodeField::check`]): a node shared by sub-fields on *different*
+//! supports must still agree on any common component.
+//!
+//! A support group reduced to a single sub-field is **shared** (same handle,
+//! no copy) in the result.
 
 use crate::aggregate::Aggregate;
 use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::containers::mesh::NodeId;
 use crate::error::Result;
-use crate::store::{insert, read};
+use crate::store::{insert, read, Handle};
 
-/// Merge the zones of `field` that share the same component set.
+/// Fuse the zones of `field` that share the same support `SubMesh`.
 ///
-/// See the module documentation. Errors if `field` is incoherent
-/// (diverging duplicated interface values) or empty.
+/// See the module documentation. Errors if two zones on the same support
+/// disagree on a shared `(node, component)` value, or if the global
+/// cross-zone check fails.
 pub fn consolidate(field: &NodeField) -> Result<NodeField> {
-    field.check()?;
-    let cfg = field.configuration()?;
-
     // Snapshot every sub once (one lock each, never nested), keeping its
-    // handle for the singleton-group sharing case.
+    // support handle for grouping and the singleton-sharing case.
     struct Snap {
-        handle: crate::store::Handle<SubNodeField>,
+        handle: Handle<SubNodeField>,
+        support: Handle<crate::containers::mesh::SubMesh>,
         nodes: Vec<NodeId>,
         components: Vec<String>,
         values: Vec<f64>,
     }
     let mut snaps: Vec<Snap> = Vec::with_capacity(field.len());
     for h in field {
-        let (nodes, components, values) = {
+        let (support, nodes, components, values) = {
             let s = read(h)?;
-            (s.nodes().to_vec(), s.components().to_vec(), s.values().to_vec())
+            (
+                s.support(),
+                s.nodes().to_vec(),
+                s.components().to_vec(),
+                s.values().to_vec(),
+            )
         };
-        snaps.push(Snap { handle: h.clone(), nodes, components, values });
+        snaps.push(Snap { handle: h.clone(), support, nodes, components, values });
     }
 
-    // Group sub indices by component *set* (sorted key), first-seen order.
-    let mut groups: Vec<(Vec<String>, Vec<usize>)> = Vec::new();
+    // Group sub indices by support handle identity, first-seen order.
+    let mut groups: Vec<Vec<usize>> = Vec::new();
     for (i, snap) in snaps.iter().enumerate() {
-        let mut key = snap.components.clone();
-        key.sort();
-        match groups.iter_mut().find(|(k, _)| *k == key) {
-            Some((_, idxs)) => idxs.push(i),
-            None => groups.push((key, vec![i])),
+        match groups
+            .iter_mut()
+            .find(|idxs| snaps[idxs[0]].support.same_slot(&snap.support))
+        {
+            Some(idxs) => idxs.push(i),
+            None => groups.push(vec![i]),
         }
     }
 
     let mut out = NodeField::default();
-    for (_, idxs) in &groups {
+    for idxs in &groups {
         if let [single] = idxs.as_slice() {
             // Nothing to fuse: share the sub-field as-is.
             out.add_sub(snaps[*single].handle.clone())?;
             continue;
         }
-        // Component order of the group's first sub; union of the nodes.
-        let components = snaps[idxs[0]].components.clone();
-        let mut nodes: Vec<NodeId> = Vec::new();
+
+        // Union of the group's components, first-seen order across the subs.
+        let mut components: Vec<String> = Vec::new();
         for &i in idxs {
-            for &nid in &snaps[i].nodes {
-                if !nodes.contains(&nid) {
-                    nodes.push(nid);
+            for c in &snaps[i].components {
+                if !components.contains(c) {
+                    components.push(c.clone());
                 }
             }
         }
-        let mut fused =
-            SubNodeField::new_with_nodes(cfg.clone(), nodes, components.clone())?;
-        // Fill order is irrelevant: check() guaranteed duplicates agree.
+
+        // All subs in the group share the same support, hence the same node
+        // list; build the fused sub on that very support (shared handle).
+        let support = snaps[idxs[0]].support.clone();
+        let mut fused = SubNodeField::from_support(&support, components)?;
+
+        // Fill from every sub; a component shared by several subs must agree
+        // at each node (exact comparison) — first writer sets, later writers
+        // must match.
+        let mut seen: std::collections::HashSet<(NodeId, String)> =
+            std::collections::HashSet::new();
         for &i in idxs {
             let snap = &snaps[i];
             let ncomp = snap.components.len();
             for (ni, &nid) in snap.nodes.iter().enumerate() {
                 for (ci, comp) in snap.components.iter().enumerate() {
-                    fused.set_value(nid, comp, snap.values[ni * ncomp + ci])?;
+                    let v = snap.values[ni * ncomp + ci];
+                    if seen.insert((nid, comp.clone())) {
+                        fused.set_value(nid, comp, v)?;
+                    } else {
+                        let existing = fused.value(nid, comp)?;
+                        if existing != v {
+                            return Err(crate::error::PyrucastError::Message(format!(
+                                "incoherent NodeField on shared support: node {}, \
+                                 component {}: {} ≠ {}",
+                                nid, comp, existing, v
+                            )));
+                        }
+                    }
                 }
             }
         }
         out.add_sub(insert(fused))?;
     }
+
+    // Cross-support coherence: a node shared by zones on *different* supports
+    // must still agree on any common component.
+    out.check()?;
     Ok(out)
 }
 
@@ -95,76 +129,91 @@ pub fn consolidate(field: &NodeField) -> Result<NodeField> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::field::Field;
+    use crate::containers::mesh::{Configuration, ElementType, Node, SubMesh};
     use crate::store::{insert, write, Handle};
 
-    /// Two TRI3 zones sharing an interface edge (nodes n1, n2).
-    fn two_zone_mesh() -> (Handle<Configuration>, Vec<Node>, Mesh) {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
-        let mut mesh = Mesh::empty();
-        let sm_a = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
-            sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-            insert(sm)
-        };
-        let sm_b = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
-            sm.add_cell(&[n1.id(), n3.id(), n2.id()]).unwrap();
-            insert(sm)
-        };
-        mesh.add_sub(sm_a).unwrap();
-        mesh.add_sub(sm_b).unwrap();
-        (cfg, vec![n0, n1, n2, n3], mesh)
+    /// Single-zone POI1 field over `nodes`, sharing the support handle `sm`.
+    fn field_on(sm: &Handle<SubMesh>, components: Vec<String>) -> NodeField {
+        NodeField::from_sub(SubNodeField::from_poi1(sm, components).unwrap())
+    }
+
+    /// Two-zone field built **without** triggering the union's finalize, so
+    /// `consolidate` can be exercised directly. Each sub is a fresh handle.
+    fn two_zone(a: &NodeField, b: &NodeField) -> NodeField {
+        let mut f = NodeField::default();
+        f.add_sub(a.get(0).unwrap()).unwrap();
+        f.add_sub(b.get(0).unwrap()).unwrap();
+        f
+    }
+
+    fn poi1(cfg: &Handle<Configuration>, nodes: &[&Node]) -> Handle<SubMesh> {
+        let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        for nd in nodes {
+            sm.add_cell(&[nd.id()]).unwrap();
+        }
+        insert(sm)
     }
 
     #[test]
-    fn same_components_fuse_into_one_sub() {
-        let (_cfg, nodes, mesh) = two_zone_mesh();
-        let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
-        {
-            let mut s = write(&f.get(0).unwrap()).unwrap();
-            s.set_value(nodes[0].id(), "T", 1.0).unwrap();
-            s.set_value(nodes[1].id(), "T", 2.0).unwrap();
-        }
-        {
-            let mut s = write(&f.get(1).unwrap()).unwrap();
-            s.set_value(nodes[1].id(), "T", 2.0).unwrap(); // interface: same value
-            s.set_value(nodes[3].id(), "T", 4.0).unwrap();
-        }
+    fn same_support_distinct_components_fuse() {
+        // Two zones on the *same* POI1 support, components ["T"] and ["P"].
+        let cfg = insert(Configuration::new(1).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let sm = poi1(&cfg, &[&n0, &n1]);
 
-        let c = consolidate(&f).unwrap();
+        let a = field_on(&sm, vec!["T".into()]);
+        let b = field_on(&sm, vec!["P".into()]);
+        write(&a.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 5.0).unwrap();
+        write(&b.get(0).unwrap()).unwrap().set_value(n1.id(), "P", 9.0).unwrap();
+
+        let c = consolidate(&two_zone(&a, &b)).unwrap();
+        assert_eq!(c.len(), 1, "same support ⇒ one fused zone");
+        assert_eq!(Field::components(&c).unwrap(), vec!["T", "P"]);
+        assert_eq!(c.value(n0.id(), "T").unwrap(), 5.0);
+        assert_eq!(c.value(n1.id(), "P").unwrap(), 9.0);
+    }
+
+    #[test]
+    fn same_support_shared_component_must_agree() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let sm = poi1(&cfg, &[&n0]);
+        let a = field_on(&sm, vec!["T".into()]);
+        let b = field_on(&sm, vec!["T".into()]);
+        write(&a.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 1.0).unwrap();
+        write(&b.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 2.0).unwrap();
+        // Distinct handles, same support: the union's finalize fuses them
+        // and detects the diverging T — so `|` itself errors.
+        assert!(a.union(&b).is_err());
+    }
+
+    #[test]
+    fn same_support_shared_component_agreeing_is_ok() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let sm = poi1(&cfg, &[&n0]);
+        let a = field_on(&sm, vec!["T".into(), "P".into()]);
+        let b = field_on(&sm, vec!["T".into()]);
+        write(&a.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 7.0).unwrap();
+        write(&b.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 7.0).unwrap();
+        // Agreeing shared component → `|` succeeds and fuses.
+        let c = a.union(&b).unwrap();
         assert_eq!(c.len(), 1);
-        assert_eq!(c.node_count().unwrap(), 4);
-        // interface nodes stored once
-        assert_eq!(read(&c.get(0).unwrap()).unwrap().node_count(), 4);
-        assert_eq!(c.value(nodes[0].id(), "T").unwrap(), 1.0);
-        assert_eq!(c.value(nodes[1].id(), "T").unwrap(), 2.0);
-        assert_eq!(c.value(nodes[3].id(), "T").unwrap(), 4.0);
+        assert_eq!(c.value(n0.id(), "T").unwrap(), 7.0);
     }
 
     #[test]
-    fn incoherent_field_errors() {
-        let (_cfg, nodes, mesh) = two_zone_mesh();
-        let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
-        write(&f.get(0).unwrap())
-            .unwrap()
-            .set_value(nodes[1].id(), "T", 1.0)
-            .unwrap();
-        write(&f.get(1).unwrap())
-            .unwrap()
-            .set_value(nodes[1].id(), "T", 2.0)
-            .unwrap();
-        assert!(consolidate(&f).is_err());
-    }
-
-    #[test]
-    fn distinct_component_sets_stay_separate_and_share_handles() {
-        let (_cfg, _nodes, mesh) = two_zone_mesh();
-        let f = NodeField::with(&mesh, &[vec!["T".into()], vec!["P".into()]]).unwrap();
+    fn distinct_supports_stay_separate_and_share_handles() {
+        let cfg = insert(Configuration::new(1).unwrap());
+        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let sm_a = poi1(&cfg, &[&n0]);
+        let sm_b = poi1(&cfg, &[&n1]);
+        let a = field_on(&sm_a, vec!["T".into()]);
+        let b = field_on(&sm_b, vec!["P".into()]);
+        let f = two_zone(&a, &b);
         let c = consolidate(&f).unwrap();
         assert_eq!(c.len(), 2);
         // Singleton groups: handles shared, not copied.
@@ -173,50 +222,26 @@ mod tests {
     }
 
     #[test]
-    fn component_set_ignores_order_keeps_first_subs_order() {
-        let (_cfg, nodes, mesh) = two_zone_mesh();
-        let f = NodeField::with(
-            &mesh,
-            &[
-                vec!["UX".into(), "UY".into()],
-                vec!["UY".into(), "UX".into()],
-            ],
-        )
-        .unwrap();
-        write(&f.get(1).unwrap())
-            .unwrap()
-            .set_value(nodes[3].id(), "UY", 9.0)
-            .unwrap();
-        let c = consolidate(&f).unwrap();
-        assert_eq!(c.len(), 1);
-        // first sub's order
-        assert_eq!(
-            read(&c.get(0).unwrap()).unwrap().components(),
-            &["UX", "UY"]
-        );
-        assert_eq!(c.value(nodes[3].id(), "UY").unwrap(), 9.0);
+    fn cross_support_shared_node_checked() {
+        // Two distinct POI1 supports that both include node n (different
+        // submeshes, n shared); a diverging T at n is still an error.
+        let cfg = insert(Configuration::new(1).unwrap());
+        let n = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let m = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let sm_a = poi1(&cfg, &[&n, &m]);
+        let sm_b = poi1(&cfg, &[&n]);
+        let a = field_on(&sm_a, vec!["T".into()]);
+        let b = field_on(&sm_b, vec!["T".into()]);
+        write(&a.get(0).unwrap()).unwrap().set_value(n.id(), "T", 1.0).unwrap();
+        write(&b.get(0).unwrap()).unwrap().set_value(n.id(), "T", 2.0).unwrap();
+        // Different supports → no fusion, but the cross-support check in the
+        // union's finalize still catches the diverging shared node.
+        assert!(a.union(&b).is_err());
     }
 
     #[test]
-    fn overlapping_component_sets_checked_globally() {
-        // ["T"] and ["T", "P"] are different sets (no fusion), but a
-        // diverging shared T at the interface is still an error.
-        let (_cfg, nodes, mesh) = two_zone_mesh();
-        let f = NodeField::with(&mesh, &[vec!["T".into()], vec!["T".into(), "P".into()]])
-            .unwrap();
-        write(&f.get(0).unwrap())
-            .unwrap()
-            .set_value(nodes[1].id(), "T", 1.0)
-            .unwrap();
-        write(&f.get(1).unwrap())
-            .unwrap()
-            .set_value(nodes[1].id(), "T", 2.0)
-            .unwrap();
-        assert!(consolidate(&f).is_err());
-    }
-
-    #[test]
-    fn empty_field_errors() {
-        assert!(consolidate(&NodeField::default()).is_err());
+    fn empty_field_consolidates_to_empty() {
+        let c = consolidate(&NodeField::default()).unwrap();
+        assert!(c.is_empty());
     }
 }

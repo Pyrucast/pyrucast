@@ -65,18 +65,19 @@ fois par zone**. Trois règles régissent cette duplication :
 - **cohérence à la demande** : `field.check()` vérifie que toutes les
   zones stockant un même couple `(nœud, composante)` portent la **même**
   valeur (comparaison exacte) ; `consolidate(field)` fait cette
-  vérification puis **fusionne au plus juste** — les zones de même jeu de
-  composantes deviennent une seule zone sur l'union de leurs nœuds (les
-  nœuds d'interface ne sont plus stockés qu'une fois), les jeux distincts
-  restent séparés.
+  vérification puis **fusionne par support** — les zones définies sur le
+  **même** `SubMesh` (identité de handle) deviennent une seule zone portant
+  l'union de leurs composantes (valeurs des composantes communes vérifiées),
+  les supports distincts restent séparés.
 
-## Composition : `+` structurel
+## Composition : union `|`
 
-Comme pour tous les agrégats, `a + b` **compose les zones** (handles
-partagés, pas de copie) — ce n'est pas une addition de valeurs.
-L'arithmétique scalaire (`f + 2.0`, `f * 0.5`, …) vit au niveau zone
-(`SubNodeField`). Pour fusionner deux champs en vérifiant les valeurs :
-`merge(a, b)` ≡ `consolidate(a + b)`.
+Comme pour tous les agrégats, `a | b` **unit les zones** (handles partagés,
+pas de copie ; déduplication par handle) — ce n'est pas une addition de
+valeurs. L'union **finalise** en fusionnant les zones de même support (voir
+`consolidate` ci-dessus) et lève si deux zones divergent sur une valeur
+partagée. L'arithmétique scalaire (`f + 2.0`, `f * 0.5`, …) vit au niveau
+zone (`SubNodeField`) sur `+`/`*`/… Le nommé `merge(a, b)` ≡ `a | b`.
 
 ## API Rust
 

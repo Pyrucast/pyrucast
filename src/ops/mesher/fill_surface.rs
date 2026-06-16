@@ -582,7 +582,7 @@ mod tests {
             cfg.clone(),
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
-        let combined = (&outer + &hole).unwrap();
+        let combined = outer.union(&hole).unwrap();
         assert_eq!(combined.len(), 2);
 
         let tri = fill_surface(&combined, ElementType::TRI3, None).unwrap();
@@ -613,7 +613,7 @@ mod tests {
             cfg.clone(),
             &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
         );
-        let combined = (&hole + &outer).unwrap();
+        let combined = hole.union(&outer).unwrap();
         let tri = fill_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
         let mut total = 0.0;
@@ -642,7 +642,7 @@ mod tests {
             cfg.clone(),
             &[(4.0, 2.0), (5.0, 2.0), (5.0, 3.0), (4.0, 3.0)],
         );
-        let combined = (&(&outer + &h1).unwrap() + &h2).unwrap();
+        let combined = outer.union(&h1).unwrap().union(&h2).unwrap();
         assert_eq!(combined.len(), 3);
         let tri = fill_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
@@ -678,7 +678,7 @@ mod tests {
                 (1.0, 3.0, 1.0),
             ],
         );
-        let combined = (&outer + &hole).unwrap();
+        let combined = outer.union(&hole).unwrap();
 
         let tri = fill_surface(&combined, ElementType::TRI3, None).unwrap();
 
@@ -718,7 +718,7 @@ mod tests {
             cfg2,
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
-        assert!((&outer + &hole).is_err());
+        assert!(outer.union(&hole).is_err());
     }
 
     #[test]
@@ -833,7 +833,7 @@ mod tests {
             cfg.clone(),
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
-        let combined = (&outer + &hole).unwrap();
+        let combined = outer.union(&hole).unwrap();
         let opts = crate::ops::mesher::triangulation::RefinementOptions {
             max_edge_length: Some(1.0),
             min_angle_deg: None,

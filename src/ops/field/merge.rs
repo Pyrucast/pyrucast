@@ -1,20 +1,19 @@
+use crate::aggregate::Aggregate;
 use crate::containers::node_field::NodeField;
 use crate::error::Result;
-use crate::ops::field::consolidate;
 
-/// Merge two node fields « au plus juste »: the structural union of their
-/// zones (`a + b`), consolidated.
+/// Merge two node fields « au plus juste »: the union of their zones.
 ///
-/// Zones sharing the same component set are fused over the union of their
-/// nodes; a `(node, component)` pair stored by both fields must hold the
-/// **same** value (exact comparison) — anything else is an error. Zones
-/// with distinct component sets stay separate: nothing is densified, no
-/// `0.0` is invented.
+/// This is exactly [`Aggregate::union`] (Python's `a | b`): zones sharing
+/// the same support `SubMesh` are fused over the union of their components,
+/// and a `(node, component)` pair stored by both must hold the **same**
+/// value (exact comparison) — anything else is an error. Distinct supports
+/// stay separate; nothing is densified.
 ///
 /// Errors on a value conflict or if the fields are attached to different
 /// `Configuration`s.
 pub fn merge(a: &NodeField, b: &NodeField) -> Result<NodeField> {
-    consolidate(&(a + b)?)
+    a.union(b)
 }
 
 #[cfg(test)]
@@ -63,7 +62,10 @@ mod tests {
         }
 
         let c = merge(&a, &b).unwrap();
-        assert_eq!(c.len(), 1, "same component set ⇒ one fused zone");
+        // Different support SubMeshes ⇒ no fusion (fusion is by support
+        // handle, not by component set); the shared interface node nb is
+        // checked and agrees.
+        assert_eq!(c.len(), 2, "distinct supports stay separate");
         assert_eq!(c.node_count().unwrap(), 3);
         assert_eq!(c.value(na.id(), "T").unwrap(), 5.0);
         assert_eq!(c.value(nb.id(), "T").unwrap(), 3.0);
@@ -77,7 +79,7 @@ mod tests {
         let a = poi1_field(&cfg, &[&n], vec!["T".into()]);
         let b = poi1_field(&cfg, &[&n], vec!["P".into()]);
         let c = merge(&a, &b).unwrap();
-        assert_eq!(c.len(), 2, "no densification across component sets");
+        assert_eq!(c.len(), 2, "distinct supports ⇒ separate zones");
         assert_eq!(Field::components(&c).unwrap(), vec!["T", "P"]);
     }
 

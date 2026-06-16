@@ -247,3 +247,56 @@ def test_min_max_per_component():
         pass
     else:
         raise AssertionError("expected RuntimeError for unknown component")
+
+
+# ─── Union `|` (composition, uniform with the other aggregates) ──────────────
+
+
+def test_union_distinct_supports_stay_separate():
+    # Two element fields on distinct FE spaces (distinct supports) → the
+    # union keeps both zones.
+    _, _, fes_a = _tri3_subspace()
+    _, _, fes_b = _tri3_subspace()
+    a = pyrucast.ElementField(fes_a, ["E"])
+    b = pyrucast.ElementField(fes_b, ["nu"])
+    f = a | b
+    assert len(f) == 2
+
+
+def test_union_same_support_fuses_components():
+    # Two fields on the *same* subspace, different components → fused into
+    # one zone carrying the union of the components.
+    _, _, fes = _tri3_subspace()
+    a = pyrucast.ElementField(fes, ["E"])
+    b = pyrucast.ElementField(fes, ["nu"])
+    a[0].set_uniform("E", 210.0)
+    b[0].set_uniform("nu", 0.3)
+    f = a | b
+    assert len(f) == 1
+    assert f.components() == ["E", "nu"]
+    assert f[0].value(0, 0, "E") == 210.0
+    assert f[0].value(0, 0, "nu") == 0.3
+
+
+def test_union_same_support_conflict_raises():
+    _, _, fes = _tri3_subspace()
+    a = pyrucast.ElementField(fes, ["E"])
+    b = pyrucast.ElementField(fes, ["E"])
+    a[0].set_uniform("E", 1.0)
+    b[0].set_uniform("E", 2.0)
+    try:
+        a | b
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError on conflicting shared component")
+
+
+def test_subfield_union_subfield_builds_aggregate():
+    # `sub | sub` → a fresh ElementField holding both (distinct supports here).
+    _, _, fes_a = _tri3_subspace()
+    _, _, fes_b = _tri3_subspace()
+    sa = pyrucast.ElementField(fes_a, ["E"])[0]
+    sb = pyrucast.ElementField(fes_b, ["nu"])[0]
+    f = sa | sb
+    assert len(f) == 2

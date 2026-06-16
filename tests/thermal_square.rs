@@ -70,7 +70,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
 
     let conduction = Model::heat_conduction(&fes)?;
     let dirichlet = Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)?;
-    let model = (&conduction + &dirichlet)?;
+    let model = conduction.union(&dirichlet)?;
     let materials = build::material_field(&model, &[("k", K)])?;
 
     // ── Chargement ─────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     // Chargement = flux du bord + valeurs imposées (union des zones).
     let source = NodeField::from_sub(source);
     let imposed_load = NodeField::from_sub(imposed_load);
-    let rhs = (&source + &imposed_load)?;
+    let rhs = source.union(&imposed_load)?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
     let stiffness = assemble::stiffness(&model, &materials)?;

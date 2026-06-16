@@ -133,7 +133,7 @@ def test_mesh_plot_uses_each_submesh_color(tmp_path):
     blue.unit().add_cell([b, d, e])
     blue[0].face_color = (60, 60, 220)
 
-    mesh = red + blue
+    mesh = red | blue
 
     path = tmp_path / "mesh.svg"
     mesh.plot(save=str(path))

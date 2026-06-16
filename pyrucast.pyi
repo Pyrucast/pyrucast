@@ -326,14 +326,17 @@ class ElementField:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `a + b` — grow this aggregate. `other` may be another
-        aggregate of the same type (merge, union of sub-objects,
-        first-seen order) or a single sub-object (append). In both
-        cases sub-handles are **shared** (refcount bump), not
-        deep-copied. Returns `NotImplemented` for any other type so
-        Python can fall back to the right-hand operand's `__radd__`.
+        `a | b` — **union** of this aggregate with `other`. `other`
+        may be another aggregate of the same type or a single
+        sub-object. Sub-objects already present (same store slot)
+        are not added twice; remaining handles are **shared**
+        (refcount bump), not deep-copied. The fields additionally
+        fuse zones sharing a support (see their `finalize`), so
+        `|` may raise on incoherent values. Returns
+        `NotImplemented` for any other type so Python can fall
+        back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -393,14 +396,17 @@ class FiniteElementSpace:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `a + b` — grow this aggregate. `other` may be another
-        aggregate of the same type (merge, union of sub-objects,
-        first-seen order) or a single sub-object (append). In both
-        cases sub-handles are **shared** (refcount bump), not
-        deep-copied. Returns `NotImplemented` for any other type so
-        Python can fall back to the right-hand operand's `__radd__`.
+        `a | b` — **union** of this aggregate with `other`. `other`
+        may be another aggregate of the same type or a single
+        sub-object. Sub-objects already present (same store slot)
+        are not added twice; remaining handles are **shared**
+        (refcount bump), not deep-copied. The fields additionally
+        fuse zones sharing a support (see their `finalize`), so
+        `|` may raise on incoherent values. Returns
+        `NotImplemented` for any other type so Python can fall
+        back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -497,14 +503,17 @@ class Matrix:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `a + b` — grow this aggregate. `other` may be another
-        aggregate of the same type (merge, union of sub-objects,
-        first-seen order) or a single sub-object (append). In both
-        cases sub-handles are **shared** (refcount bump), not
-        deep-copied. Returns `NotImplemented` for any other type so
-        Python can fall back to the right-hand operand's `__radd__`.
+        `a | b` — **union** of this aggregate with `other`. `other`
+        may be another aggregate of the same type or a single
+        sub-object. Sub-objects already present (same store slot)
+        are not added twice; remaining handles are **shared**
+        (refcount bump), not deep-copied. The fields additionally
+        fuse zones sharing a support (see their `finalize`), so
+        `|` may raise on incoherent values. Returns
+        `NotImplemented` for any other type so Python can fall
+        back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -569,14 +578,17 @@ class Mesh:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `a + b` — grow this aggregate. `other` may be another
-        aggregate of the same type (merge, union of sub-objects,
-        first-seen order) or a single sub-object (append). In both
-        cases sub-handles are **shared** (refcount bump), not
-        deep-copied. Returns `NotImplemented` for any other type so
-        Python can fall back to the right-hand operand's `__radd__`.
+        `a | b` — **union** of this aggregate with `other`. `other`
+        may be another aggregate of the same type or a single
+        sub-object. Sub-objects already present (same store slot)
+        are not added twice; remaining handles are **shared**
+        (refcount bump), not deep-copied. The fields additionally
+        fuse zones sharing a support (see their `finalize`), so
+        `|` may raise on incoherent values. Returns
+        `NotImplemented` for any other type so Python can fall
+        back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -687,14 +699,17 @@ class Model:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `a + b` — grow this aggregate. `other` may be another
-        aggregate of the same type (merge, union of sub-objects,
-        first-seen order) or a single sub-object (append). In both
-        cases sub-handles are **shared** (refcount bump), not
-        deep-copied. Returns `NotImplemented` for any other type so
-        Python can fall back to the right-hand operand's `__radd__`.
+        `a | b` — **union** of this aggregate with `other`. `other`
+        may be another aggregate of the same type or a single
+        sub-object. Sub-objects already present (same store slot)
+        are not added twice; remaining handles are **shared**
+        (refcount bump), not deep-copied. The fields additionally
+        fuse zones sharing a support (see their `finalize`), so
+        `|` may raise on incoherent values. Returns
+        `NotImplemented` for any other type so Python can fall
+        back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -719,16 +734,17 @@ class Node:
         r"""
         Overwrite this node's coordinates.
         """
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `node + node` → a unitary POI1 `Mesh` over both nodes. Returns
-        `NotImplemented` for any other right-hand type.
+        `node | node` → a unitary POI1 `Mesh` over both nodes (the same
+        union `|` as the aggregates). Returns `NotImplemented` for any other
+        right-hand type.
         """
-    def __radd__(self, other: typing.Any) -> typing.Any:
+    def __ror__(self, other: typing.Any) -> typing.Any:
         r"""
-        Right-hand `mesh + node`: append this node to a **unitary POI1**
-        `Mesh`, yielding a new one. Reached when the left operand's `__add__`
-        returns `NotImplemented` (a `Mesh` doesn't know how to add a `Node`).
+        Right-hand `mesh | node`: append this node to a **unitary POI1**
+        `Mesh`, yielding a new one. Reached when the left operand's `__or__`
+        returns `NotImplemented` (a `Mesh` doesn't know how to union a `Node`).
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -822,14 +838,17 @@ class NodeField:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `a + b` — grow this aggregate. `other` may be another
-        aggregate of the same type (merge, union of sub-objects,
-        first-seen order) or a single sub-object (append). In both
-        cases sub-handles are **shared** (refcount bump), not
-        deep-copied. Returns `NotImplemented` for any other type so
-        Python can fall back to the right-hand operand's `__radd__`.
+        `a | b` — **union** of this aggregate with `other`. `other`
+        may be another aggregate of the same type or a single
+        sub-object. Sub-objects already present (same store slot)
+        are not added twice; remaining handles are **shared**
+        (refcount bump), not deep-copied. The fields additionally
+        fuse zones sharing a support (see their `finalize`), so
+        `|` may raise on incoherent values. Returns
+        `NotImplemented` for any other type so Python can fall
+        back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -927,6 +946,13 @@ class SubElementField:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def __or__(self, other: typing.Any) -> typing.Any:
+        r"""
+        `sub | sub` → a fresh aggregate holding both sub-objects
+        (first-seen order, deduplicated by handle, then finalized).
+        Sub-handles are shared (refcount bump). Returns
+        `NotImplemented` for any other right-hand type.
+        """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
         Print the full content (third display level) to stdout: values /
@@ -1036,11 +1062,12 @@ class SubFiniteElementSpace:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `sub + sub` → a fresh aggregate holding both sub-objects
-        (first-seen order). Sub-handles are shared (refcount bump).
-        Returns `NotImplemented` for any other right-hand type.
+        `sub | sub` → a fresh aggregate holding both sub-objects
+        (first-seen order, deduplicated by handle, then finalized).
+        Sub-handles are shared (refcount bump). Returns
+        `NotImplemented` for any other right-hand type.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -1109,11 +1136,12 @@ class SubMatrix:
     def __len__(self) -> builtins.int: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `sub + sub` → a fresh aggregate holding both sub-objects
-        (first-seen order). Sub-handles are shared (refcount bump).
-        Returns `NotImplemented` for any other right-hand type.
+        `sub | sub` → a fresh aggregate holding both sub-objects
+        (first-seen order, deduplicated by handle, then finalized).
+        Sub-handles are shared (refcount bump). Returns
+        `NotImplemented` for any other right-hand type.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -1194,11 +1222,12 @@ class SubMesh:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `sub + sub` → a fresh aggregate holding both sub-objects
-        (first-seen order). Sub-handles are shared (refcount bump).
-        Returns `NotImplemented` for any other right-hand type.
+        `sub | sub` → a fresh aggregate holding both sub-objects
+        (first-seen order, deduplicated by handle, then finalized).
+        Sub-handles are shared (refcount bump). Returns
+        `NotImplemented` for any other right-hand type.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -1241,11 +1270,12 @@ class SubModel:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def __add__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: typing.Any) -> typing.Any:
         r"""
-        `sub + sub` → a fresh aggregate holding both sub-objects
-        (first-seen order). Sub-handles are shared (refcount bump).
-        Returns `NotImplemented` for any other right-hand type.
+        `sub | sub` → a fresh aggregate holding both sub-objects
+        (first-seen order, deduplicated by handle, then finalized).
+        Sub-handles are shared (refcount bump). Returns
+        `NotImplemented` for any other right-hand type.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -1354,6 +1384,13 @@ class SubNodeField:
         r"""
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
+        """
+    def __or__(self, other: typing.Any) -> typing.Any:
+        r"""
+        `sub | sub` → a fresh aggregate holding both sub-objects
+        (first-seen order, deduplicated by handle, then finalized).
+        Sub-handles are shared (refcount bump). Returns
+        `NotImplemented` for any other right-hand type.
         """
 
 def barycenter(mesh: Mesh) -> Mesh:

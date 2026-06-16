@@ -69,16 +69,51 @@ pub trait Aggregate: Default {
     /// (e.g. `", 12 cell(s) total"`). Defaults to nothing.
     fn display_extra(&self) -> Option<String> { None }
 
-    /// Merge `self` and `other` into a fresh aggregate.
+    /// Union of `self` and `other` into a fresh aggregate.
     ///
-    /// Delegates to [`Aggregate::try_extend_from`] so domain constraints (e.g.
-    /// `Configuration` compatibility for `Mesh`) are enforced.
+    /// Exposed to Rust as [`Aggregate::union`] and to Python as `a | b`.
+    /// Sub-objects are deduplicated **by handle identity**
+    /// ([`Handle::same_slot`]): a sub already present (same store slot) is
+    /// not added twice. Order is first-seen. Domain constraints (e.g.
+    /// `Configuration` compatibility for `Mesh`) are enforced via
+    /// [`Aggregate::try_extend_from`]. After the union, [`Aggregate::finalize`]
+    /// runs — a no-op for most aggregates, but the fields override it to fuse
+    /// zones sharing the same support.
     fn merge(&self, other: &Self) -> Result<Self> where Self: Sized {
         let mut result = Self::default();
         result.try_extend_from(self)?;
         result.try_extend_from(other)?;
+        result.finalize()?;
         Ok(result)
     }
+
+    /// Union with another aggregate — the named Rust entry point for the
+    /// composition operator (`a | b` in Python). Alias of
+    /// [`Aggregate::merge`]; see it for the deduplication and finalization
+    /// semantics.
+    fn union(&self, other: &Self) -> Result<Self> where Self: Sized {
+        self.merge(other)
+    }
+
+    /// Union with a single sub-object `h`: a fresh aggregate holding
+    /// `self`'s subs plus `h`, unless `h`'s slot is already present. The
+    /// sub-handle is shared (refcount bump), then [`Aggregate::finalize`]
+    /// runs. Python: `aggregate | sub`.
+    fn union_sub(&self, h: &Handle<Self::Sub>) -> Result<Self> where Self: Sized {
+        let mut out = Self::default();
+        out.try_extend_from(self)?;
+        if !out.contains_handle(h) {
+            out.add_sub(h.clone())?;
+        }
+        out.finalize()?;
+        Ok(out)
+    }
+
+    /// Hook called at the end of [`Aggregate::merge`], once the union by
+    /// handle is complete. Override to fuse/normalize sub-objects beyond
+    /// handle identity (e.g. fields fusing two zones on the same support).
+    /// The default is a no-op.
+    fn finalize(&mut self) -> Result<()> where Self: Sized { Ok(()) }
 
     fn len(&self) -> usize {
         self.items().len()
@@ -136,6 +171,12 @@ pub trait Aggregate: Default {
         }
     }
 
+    /// Whether a sub with the same store slot as `h` is already held
+    /// ([`Handle::same_slot`]). Basis of the union's deduplication.
+    fn contains_handle(&self, h: &Handle<Self::Sub>) -> bool {
+        self.items().iter().any(|existing| existing.same_slot(h))
+    }
+
     /// Hook called before inserting a single handle. Override to enforce
     /// domain-specific constraints (e.g. same `Configuration` for `Mesh`).
     /// The default accepts everything.
@@ -157,12 +198,17 @@ pub trait Aggregate: Default {
     }
 
     /// Check compatibility (via [`Aggregate::check_push`] on the first item of `other`)
-    /// then append all handles from `other` into `self`.
+    /// then append handles from `other` into `self`, **deduplicating by
+    /// handle identity** ([`Handle::same_slot`]): a sub already present is
+    /// skipped. This is the union semantics of `|`.
     fn try_extend_from(&mut self, other: &Self) -> crate::error::Result<()> {
         if let Some(h) = other.items().first() {
             self.check_push(h)?;
         }
         for h in other.iter() {
+            if self.contains_handle(h) {
+                continue;
+            }
             self.items_mut().push(h.clone());
             self.post_push();
         }
@@ -247,12 +293,17 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 /// The struct `$T` **must** have a field named `inner` that implements
 /// [`Aggregate`]. The name `inner` is hardcoded by this macro.
 ///
+/// `$Inner` is the **Rust** aggregate type stored in `$T`'s `inner` field
+/// (e.g. `Mesh` behind `PyMesh`); it owns the `union`/`union_sub`/`union_subs`
+/// constructors that back the `|` operator. The macro wires both the
+/// aggregate-level `|` (on `$T`) **and** the sub-level `|` (on `$Sub`), so a
+/// single invocation gives the whole uniform union surface.
+///
 /// # Usage
 ///
 /// ```ignore
-/// pyrucast::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh);
-/// pyrucast::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace", subspace);
-/// pyrucast::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model);
+/// pyrucast::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh, Mesh);
+/// pyrucast::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model, Model);
 /// ```
 ///
 /// `$sub` is given once; `paste!` derives `{$sub}_count`, `$sub(i)`, and
@@ -260,7 +311,7 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 #[cfg(feature = "python-api")]
 #[macro_export]
 macro_rules! impl_aggregate_pymethods {
-    ($T:ident, $Sub:ident, $name:literal, $sub:ident) => {
+    ($T:ident, $Sub:ident, $name:literal, $sub:ident, $Inner:ty) => {
         paste::paste! {
             #[cfg_attr(
                 feature = "stub-gen",
@@ -325,58 +376,56 @@ macro_rules! impl_aggregate_pymethods {
                     $crate::dump::py_print(py, &text)
                 }
 
-                /// `a + b` — grow this aggregate. `other` may be another
-                /// aggregate of the same type (merge, union of sub-objects,
-                /// first-seen order) or a single sub-object (append). In both
-                /// cases sub-handles are **shared** (refcount bump), not
-                /// deep-copied. Returns `NotImplemented` for any other type so
-                /// Python can fall back to the right-hand operand's `__radd__`.
-                fn __add__(
+                /// `a | b` — **union** of this aggregate with `other`. `other`
+                /// may be another aggregate of the same type or a single
+                /// sub-object. Sub-objects already present (same store slot)
+                /// are not added twice; remaining handles are **shared**
+                /// (refcount bump), not deep-copied. The fields additionally
+                /// fuse zones sharing a support (see their `finalize`), so
+                /// `|` may raise on incoherent values. Returns
+                /// `NotImplemented` for any other type so Python can fall
+                /// back to the right operand's `__ror__`.
+                fn __or__(
                     &self,
                     py: pyo3::Python<'_>,
                     other: &pyo3::Bound<'_, pyo3::PyAny>,
                 ) -> pyo3::PyResult<pyo3::Py<pyo3::PyAny>> {
+                    use $crate::aggregate::Aggregate;
                     if let Ok(o) = other.extract::<pyo3::PyRef<'_, $T>>() {
-                        let inner = (&self.inner + &o.inner)?;
+                        let inner = self.inner.union(&o.inner)?;
                         return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
                     }
                     if let Ok(s) = other.extract::<pyo3::PyRef<'_, $Sub>>() {
-                        let inner = (&self.inner + &s.handle)?;
+                        let inner = self.inner.union_sub(&s.handle)?;
                         return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
                     }
                     Ok(py.NotImplemented())
                 }
             }
-        }
-    };
-}
 
-/// Add `sub + sub → aggregate` to a sub-object pyclass (`$Sub`, holding a
-/// `handle` field) producing the aggregate pyclass `$T` (holding `inner`).
-///
-/// Opt-in (a separate macro) because some sub-objects already use `+` for a
-/// different meaning — e.g. `SubElementField + scalar` is element-wise
-/// arithmetic, so it is **not** given this overload.
-#[cfg(feature = "python-api")]
-#[macro_export]
-macro_rules! impl_aggregate_sub_add {
-    ($Sub:ident, $T:ident) => {
-        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-        #[pyo3::pymethods]
-        impl $Sub {
-            /// `sub + sub` → a fresh aggregate holding both sub-objects
-            /// (first-seen order). Sub-handles are shared (refcount bump).
-            /// Returns `NotImplemented` for any other right-hand type.
-            fn __add__(
-                &self,
-                py: pyo3::Python<'_>,
-                other: &pyo3::Bound<'_, pyo3::PyAny>,
-            ) -> pyo3::PyResult<pyo3::Py<pyo3::PyAny>> {
-                if let Ok(o) = other.extract::<pyo3::PyRef<'_, $Sub>>() {
-                    let inner = (&self.handle + &o.handle)?;
-                    return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
+            // Sub-level `|` (uniform with the aggregate-level one above):
+            // `sub | sub` → a fresh aggregate holding both sub-objects.
+            #[cfg_attr(
+                feature = "stub-gen",
+                pyo3_stub_gen::derive::gen_stub_pymethods
+            )]
+            #[pyo3::pymethods]
+            impl $Sub {
+                /// `sub | sub` → a fresh aggregate holding both sub-objects
+                /// (first-seen order, deduplicated by handle, then finalized).
+                /// Sub-handles are shared (refcount bump). Returns
+                /// `NotImplemented` for any other right-hand type.
+                fn __or__(
+                    &self,
+                    py: pyo3::Python<'_>,
+                    other: &pyo3::Bound<'_, pyo3::PyAny>,
+                ) -> pyo3::PyResult<pyo3::Py<pyo3::PyAny>> {
+                    if let Ok(o) = other.extract::<pyo3::PyRef<'_, $Sub>>() {
+                        let inner = <$Inner>::union_subs(&self.handle, &o.handle)?;
+                        return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
+                    }
+                    Ok(py.NotImplemented())
                 }
-                Ok(py.NotImplemented())
             }
         }
     };
@@ -450,9 +499,10 @@ macro_rules! impl_dump_pymethod {
 ///
 /// Access goes through the [`Aggregate`] trait (generic, no per-type
 /// aliases): `len()`, `is_empty()`, `get(i)`, `add_sub(h)`, `iter()`,
-/// `unit()`, plus `Index`/`IntoIterator`/`Add` from
-/// [`crate::impl_aggregate_std_traits`]. The `$sub` snake-name is still passed (it
-/// names the sub in docs/call sites) but no longer generates methods.
+/// `unit()`, `union()`/`union_sub()`, plus `Index`/`IntoIterator` and the
+/// `union_subs(a, b)` constructor from [`crate::impl_aggregate_std_traits`].
+/// The `$sub` snake-name is still passed (it names the sub in docs/call
+/// sites) but no longer generates methods.
 ///
 /// An optional trailing `{ … }` block is forwarded verbatim into the
 /// `impl Aggregate` body to override default methods (`check_push`,
@@ -493,9 +543,9 @@ macro_rules! impl_aggregate {
 
 // ─── Std-trait macro ────────────────────────────────────────────────────────
 
-/// Generate `Index`, `IntoIterator`, `fmt::Debug`, `fmt::Display`, and
-/// `Add<&T> for &T` (returning `Result<T>`) for a concrete type that
-/// implements [`Aggregate`].
+/// Generate `Index`, `IntoIterator`, `fmt::Debug`, `fmt::Display`, and the
+/// `T::union_subs(a, b)` constructor (`sub | sub`, returning `Result<T>`)
+/// for a concrete type that implements [`Aggregate`].
 ///
 /// # Usage
 /// ```ignore
@@ -550,41 +600,25 @@ macro_rules! impl_aggregate_std_traits {
             }
         }
 
-        impl std::ops::Add<&$T> for &$T {
-            type Output = $crate::error::Result<$T>;
-            fn add(self, rhs: &$T) -> Self::Output {
-                $crate::aggregate::Aggregate::merge(self, rhs)
-            }
-        }
-
-        // `aggregate + sub` → a fresh aggregate with `sub` appended.
-        impl std::ops::Add<&$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>>
-            for &$T
-        {
-            type Output = $crate::error::Result<$T>;
-            fn add(
-                self,
-                rhs: &$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
-            ) -> Self::Output {
+        // `union` / `union_sub` (aggregate | aggregate, aggregate | sub)
+        // are default methods on the `Aggregate` trait. Only `sub | sub`
+        // needs a generated builder here: a sub-handle alone cannot name
+        // its parent aggregate type, so we hang the constructor on `$T`.
+        impl $T {
+            /// Build the aggregate that is the union of two sub-objects
+            /// (first-seen order, deduplicated by handle, then finalized).
+            /// Backs Python's `sub | sub`.
+            pub fn union_subs(
+                a: &$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
+                b: &$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
+            ) -> $crate::error::Result<$T> {
+                use $crate::aggregate::Aggregate;
                 let mut out = <$T as ::std::default::Default>::default();
-                $crate::aggregate::Aggregate::try_extend_from(&mut out, self)?;
-                $crate::aggregate::Aggregate::add_sub(&mut out, rhs.clone())?;
-                Ok(out)
-            }
-        }
-
-        // `sub + sub` → a fresh aggregate of the two subs (first-seen order).
-        impl std::ops::Add<&$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>>
-            for &$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>
-        {
-            type Output = $crate::error::Result<$T>;
-            fn add(
-                self,
-                rhs: &$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
-            ) -> Self::Output {
-                let mut out = <$T as ::std::default::Default>::default();
-                $crate::aggregate::Aggregate::add_sub(&mut out, self.clone())?;
-                $crate::aggregate::Aggregate::add_sub(&mut out, rhs.clone())?;
+                out.add_sub(a.clone())?;
+                if !a.same_slot(b) {
+                    out.add_sub(b.clone())?;
+                }
+                out.finalize()?;
                 Ok(out)
             }
         }

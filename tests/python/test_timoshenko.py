@@ -21,8 +21,8 @@ def test_cantilever_converges_without_locking():
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.timoshenko(fes)
-    model = model + _clamp(nodes[0], "w", "f_w")
-    model = model + _clamp(nodes[0], "theta", "m_theta")
+    model = model | _clamp(nodes[0], "w", "f_w")
+    model = model | _clamp(nodes[0], "theta", "m_theta")
 
     materials = pyrucast.material_field(model, [("E", E), ("I", I), ("G", G), ("A_s", A_S)])
 
@@ -51,8 +51,8 @@ def test_section_forces_cantilever():
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.timoshenko(fes)
-    model = model + _clamp(nodes[0], "w", "f_w")
-    model = model + _clamp(nodes[0], "theta", "m_theta")
+    model = model | _clamp(nodes[0], "w", "f_w")
+    model = model | _clamp(nodes[0], "theta", "m_theta")
     materials = pyrucast.material_field(model, [("E", E), ("I", I), ("G", G), ("A_s", A_S)])
 
     load = pyrucast.Mesh(c, "POI1")

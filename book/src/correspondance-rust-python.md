@@ -160,26 +160,53 @@ structurelle) et `__str__` (← `Display`, vue résumée façon cast3m) — voir
 | `Matrix` | nombre de sous-matrices | — (pas de `[i]`) | `Aggregate` (macro pour `len`) |
 | `SubMatrix` | nombre d'entrées | — | méthode `entry_count` |
 
-### Opérateur `+`
+### Union `|` (composition d'agrégats)
 
-Disponible côté **Rust** (trait `Add`, renvoie `Result<…>`) **et Python**
-(`__add__`). Les sous-objets sont **partagés** (refcount), jamais copiés ;
-les contraintes de domaine (même `Configuration` pour `Mesh`, etc.) restent
-vérifiées.
+La composition d'agrégats est l'**union** : côté **Python** elle s'écrit `|`
+(comme `set | set`), côté **Rust** ce sont les méthodes nommées `union` /
+`union_sub` / `union_subs` (renvoient `Result<…>`). Les sous-objets sont
+**partagés** (refcount), jamais copiés ; les contraintes de domaine (même
+`Configuration` pour `Mesh`, etc.) restent vérifiées.
 
-| Opération | Résultat | Sémantique |
-|---|---|---|
-| `agrégat + agrégat` | agrégat | fusion (union des sous-objets, ordre de 1ʳᵉ apparition) |
-| `agrégat + sub` | agrégat | ajoute un sous-objet |
-| `sub + sub` | agrégat | agrégat des deux sous-objets |
-| `Node + Node` | `Mesh` | maillage POI1 unitaire sur les deux nœuds |
-| `Mesh + Node` | `Mesh` | ajoute un point (erreur si le `Mesh` n'est pas unitaire POI1) |
+Sémantique d'union (uniforme pour **tous** les agrégats) :
 
-Vaut pour les 5 agrégats (`Mesh`, `FiniteElementSpace`, `ElementField`,
-`Matrix`, `Model`).
+1. **Déduplication par handle** : un sous-objet dont le `Handle` est déjà
+   présent (même slot, cf. `Handle::same_slot`) n'est pas ajouté deux fois.
+2. **Finalisation** (`Aggregate::finalize`) : par défaut un no-op ; les
+   **champs** la surchargent pour fusionner les zones partageant un même
+   support (voir plus bas).
 
-> **Exception arithmétique** : `SubElementField + scalaire` (et
-> `NodeField + …`) sont l'**arithmétique de champ** (élément par élément).
-> `SubElementField` n'a donc **pas** l'overload Python `sub + sub → agrégat`
-> (le `+` y est déjà pris) ; en Rust il existe quand même, car il porte sur
-> `Handle<SubElementField>`, distinct de la valeur.
+| Python | Rust | Résultat | Sémantique |
+|---|---|---|---|
+| `agrégat \| agrégat` | `a.union(&b)` | agrégat | union dédupliquée, ordre de 1ʳᵉ apparition |
+| `agrégat \| sub` | `a.union_sub(&h)` | agrégat | ajoute un sous-objet (ignoré si déjà présent) |
+| `sub \| sub` | `T::union_subs(&a, &b)` | agrégat | union des deux sous-objets |
+| `node \| node` | `a.union(&b)` | `Mesh` | maillage POI1 unitaire sur les deux nœuds |
+| `mesh \| node` | `m.union_node(&n)` | `Mesh` | ajoute un point (erreur si `Mesh` non unitaire POI1) |
+
+Vaut pour les six agrégats (`Mesh`, `FiniteElementSpace`, `Model`, `Matrix`,
+`NodeField`, `ElementField`) plus `Node`.
+
+#### Finalisation des champs (fusion par support)
+
+Après l'union par handle, `NodeField` et `ElementField` **fusionnent** les
+sous-champs définis sur le **même support** (même `Handle<SubMesh>` pour
+`NodeField`, même `Handle<SubFiniteElementSpace>` pour `ElementField`) :
+
+- le sous-champ fusionné porte l'**union des composantes** ;
+- une composante définie par plusieurs sous-champs doit y avoir la **même
+  valeur** partout (comparaison exacte), sinon `|` lève une erreur ;
+- pour `NodeField`, une vérification inter-supports finale impose qu'un nœud
+  partagé par des zones de supports différents s'accorde sur toute composante
+  commune.
+
+Ces opérations sont aussi exposées en Rust : `ops::field::consolidate`
+(`NodeField`) et `ops::field::consolidate_element` (`ElementField`).
+
+#### `+` est réservé à l'arithmétique de champ
+
+L'opérateur `+` (et `-`, `*`, `/`) reste l'**arithmétique scalaire** des
+sous-champs (`subfield + 2.0` → ajoute la valeur à chaque composante) et a
+vocation à porter, à terme, l'**addition réelle de champs** (valeur au nœud
+= somme des deux). Il n'est **jamais** utilisé pour composer des agrégats —
+c'est `|` qui s'en charge, sans collision.

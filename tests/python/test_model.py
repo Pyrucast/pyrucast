@@ -23,7 +23,7 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     if dirichlet_left:
         imposed = pyrucast.poi1_from_nodes([a])
         multiplier = pyrucast.barycenter(imposed)
-        model = model + pyrucast.Model.dirichlet("T", "q", imposed, multiplier)
+        model = model | pyrucast.Model.dirichlet("T", "q", imposed, multiplier)
     return c, mesh, fes, sub, materials, model, a, b
 
 

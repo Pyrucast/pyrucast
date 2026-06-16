@@ -805,12 +805,12 @@ mod tests {
         assert_eq!(hc.primal_vars().unwrap(), vec!["T".to_string()]);
         assert_eq!(hc.dual_vars().unwrap(), vec!["q".to_string()]);
 
-        // Compose with a Dirichlet model via `+` (merge).
+        // Compose with a Dirichlet model via `union` (Python `|`).
         let imp = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
         let mlt = crate::ops::mesher::barycenter(&imp).unwrap();
         let dir = Model::dirichlet("T".into(), "q".into(), &imp, &mlt, None, None).unwrap();
         assert_eq!(dir.len(), 1);
-        let full = (&hc + &dir).unwrap();
+        let full = hc.union(&dir).unwrap();
         assert_eq!(full.len(), 3);
         assert_eq!(
             full.primal_vars().unwrap(),

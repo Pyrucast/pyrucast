@@ -494,6 +494,14 @@ crate::impl_aggregate!(NodeField, SubNodeField, subfield, "subfield(s)", {
             Ok(())
         }
     }
+
+    /// Fuse zones sharing the same support `SubMesh` (union of components,
+    /// shared values verified). Runs at the end of every union (`a | b`).
+    /// See [`crate::ops::field::consolidate`].
+    fn finalize(&mut self) -> Result<()> {
+        *self = crate::ops::field::consolidate(self)?;
+        Ok(())
+    }
 });
 crate::impl_aggregate_dump!(NodeField);
 
@@ -1014,7 +1022,7 @@ mod tests {
         let (_cfg, _nodes, mesh) = make_two_zone_mesh();
         let a = NodeField::from_submesh(&mesh.get(0).unwrap(), vec!["T".into()]).unwrap();
         let b = NodeField::from_submesh(&mesh.get(1).unwrap(), vec!["P".into()]).unwrap();
-        let c = (&a + &b).unwrap();
+        let c = a.union(&b).unwrap();
         assert_eq!(c.len(), 2);
         // Sub-handles are shared, not copied.
         assert_eq!(c.get(0).unwrap().index(), a.get(0).unwrap().index());

@@ -53,7 +53,7 @@ def main() -> None:
     imposed = pyrucast.poi1_from_nodes([nodes[-1]])
     multiplier = pyrucast.barycenter(imposed)
     mult = multiplier.node(0, 0, 0)
-    model = pyrucast.Model.heat_conduction(fes) + pyrucast.Model.dirichlet(
+    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
         "T", "q", imposed, multiplier
     )
 
