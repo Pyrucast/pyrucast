@@ -467,8 +467,8 @@ crate::impl_subfield_scalar_ops!(SubNodeField);
 ///
 /// Mirrors the Mesh/SubMesh and ElementField/SubElementField hierarchies:
 /// a `NodeField` is a list of sub-field handles with the uniform
-/// [`Aggregate`] grammar (`len`, indexing, iteration, `+` as structural
-/// merge). Components may differ from one zone to the next — nothing is
+/// [`Aggregate`] grammar (`len`, indexing, iteration, `|` as structural
+/// union). Components may differ from one zone to the next — nothing is
 /// densified.
 ///
 /// A node shared by several zones (an interface node) may be stored by

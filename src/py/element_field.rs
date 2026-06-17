@@ -11,7 +11,7 @@ use pyo3::prelude::*;
 /// A **view** into one zone of an `ElementField`, obtained by indexing
 /// (`element_field[i]`) — never constructed directly. Build at the parent
 /// level instead: `ElementField(fes, components)` or
-/// `material_field(model, ...)`, composed with `+`.
+/// `material_field(model, ...)`, composed with `|`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubElementField")]
 pub struct PySubElementField {
@@ -187,7 +187,7 @@ impl PySubElementField {
 ///
 /// Build with `ElementField(fes, components)` or `material_field(model, ...)`;
 /// index it (`field[i]`) to reach a `SubElementField`, compose zones
-/// with `+`.
+/// with `|`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "ElementField")]
 pub struct PyElementField {

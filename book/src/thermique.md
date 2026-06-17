@@ -46,8 +46,8 @@ Le pipeline est toujours le même :
 4. **Matériau** — un `ElementField` portant la composante `"k"`, fabriqué
    commodément par `build::material_field(&model, &[("k", …)])` (les
    sous-modèles sans matériau, comme `Dirichlet`, sont ignorés).
-5. **`Model`** — `Model::heat_conduction(&fes)`, composé par `+` avec les
-   conditions limites.
+5. **`Model`** — `Model::heat_conduction(&fes)`, composé par `|` (union) avec
+   les conditions limites.
 6. **Conditions limites :**
    - **Dirichlet** (`T` imposée) : un sous-modèle `Model::dirichlet` qui impose
      la valeur via multiplicateurs de Lagrange. L'utilisateur fournit le
@@ -116,7 +116,7 @@ l'opérateur `flux` — l'analogue de `FLUX`/`PRES` de Cast3M. On lui donne le b
 (ici un maillage `SEG2`, intégré comme une **ligne** : la mesure vient du
 Jacobien *manifold*) et la densité de flux (une constante, ou un champ par
 éléments) ; il renvoie un `NodeField` sur la composante duale `"q"`, prêt à
-composer (`+`) avec le reste du chargement. Sous le capot, pour un flux uniforme
+composer (`|`) avec le reste du chargement. Sous le capot, pour un flux uniforme
 sur des éléments linéaires, un nœud intérieur du bord reçoit \\(Q\,h\\) et un
 coin \\(Q\,h/2\\) (somme \\(Q\\)) — mais on n'a plus à le calculer à la main.
 

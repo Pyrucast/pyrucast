@@ -11,7 +11,7 @@ use pyo3::prelude::*;
 /// A **view** into one sub-model of a `Model`, obtained by indexing
 /// (`model[i]`) — never constructed directly. Build physics at the parent
 /// level instead: `Model.heat_conduction(fes)` or `Model.dirichlet(...)`,
-/// composed with `+`.
+/// composed with `|`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubModel")]
 pub struct PySubModel {
@@ -67,7 +67,7 @@ impl PySubModel {
 /// Dirichlet BCs, ...) over finite-element spaces.
 ///
 /// Build sub-models with `Model.heat_conduction(fes)` / `Model.dirichlet(...)`
-/// and compose them with `+`; assemble with `stiffness` / `mass`.
+/// and compose them with `|`; assemble with `stiffness` / `mass`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Model")]
 pub struct PyModel {
@@ -77,7 +77,7 @@ pub struct PyModel {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyModel {
-    /// `Model()` — an empty model; add physics with `+`.
+    /// `Model()` — an empty model; add physics with `|`.
     #[new]
     fn py_new() -> PyResult<Self> {
         Ok(Self {
@@ -88,8 +88,8 @@ impl PyModel {
     /// `Model.heat_conduction(fespace)` — heat-conduction model spanning
     /// **every** subspace of `fespace` (one zone per subspace). A
     /// single-subspace space gives the unit case; several give one zone
-    /// each. Compose heterogeneous physics with `+`:
-    /// `Model.heat_conduction(fes) + Model.dirichlet(...)`.
+    /// each. Compose heterogeneous physics with `|`:
+    /// `Model.heat_conduction(fes) | Model.dirichlet(...)`.
     #[classmethod]
     fn heat_conduction(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,

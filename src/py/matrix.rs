@@ -12,7 +12,7 @@ use pyo3::prelude::*;
 
 /// One block (a COO sub-matrix) of a global `Matrix`, viewed by indexing
 /// (`matrix[i]`) — never constructed directly. Build a block at the parent
-/// level with `Matrix.block(...)` (a unit `Matrix`), composed with `+`.
+/// level with `Matrix.block(...)` (a unit `Matrix`), composed with `|`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubMatrix")]
 pub struct PySubMatrix {
@@ -131,7 +131,7 @@ impl PySubMatrix {
 /// A global finite-element matrix, assembled from rectangular blocks
 /// (`SubMatrix`).
 ///
-/// Build blocks with `Matrix.block(...)`, compose them with `+`, then call
+/// Build blocks with `Matrix.block(...)`, compose them with `|`, then call
 /// `finalize()` before solving. Index it (`matrix[i]`) to reach a block.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Matrix")]
@@ -143,7 +143,7 @@ pub struct PyMatrix {
 #[pymethods]
 impl PyMatrix {
     /// `Matrix()` — empty aggregate. Populate via `add_sub_matrix`, or
-    /// build blocks with `Matrix.block(...)` and compose them with `+`.
+    /// build blocks with `Matrix.block(...)` and compose them with `|`.
     #[new]
     fn py_new() -> PyResult<Self> {
         Ok(Self { inner: Matrix::empty() })
@@ -154,7 +154,7 @@ impl PyMatrix {
     /// `col_support` may each be a `SubMesh` view or a **unitary** `Mesh`.
     /// `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
     /// Fill entries via the block view (`block[0].add_entry(...)`) and
-    /// compose several blocks with `+`, then `finalize()`.
+    /// compose several blocks with `|`, then `finalize()`.
     #[classmethod]
     #[pyo3(signature = (row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=false))]
     fn block(

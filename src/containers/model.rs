@@ -394,8 +394,8 @@ impl Model {
     /// it consumes the FE-space *parent* and returns a `Model`, so the
     /// caller never builds a `SubModel` by hand. A single-subspace `fes`
     /// yields the unit case; several subspaces yield one zone each.
-    /// Compose heterogeneous physics with `+` (merge), e.g.
-    /// `Model::heat_conduction(&fes)? + Model::dirichlet(...)?`.
+    /// Compose heterogeneous physics with `union` (Python `|`), e.g.
+    /// `Model::heat_conduction(&fes)?.union(&Model::dirichlet(...)?)?`.
     pub fn heat_conduction(fes: &FiniteElementSpace) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
@@ -774,8 +774,8 @@ mod tests {
     }
 
     /// Parent-level `Model::heat_conduction(&fes)` builds one sub-model per
-    /// subspace and matches the hand-rolled `SubModel + add_sub` path, and
-    /// `+` (merge) composes it with a Dirichlet `Model`.
+    /// subspace and matches the hand-rolled `SubModel` + `add_sub` path, and
+    /// `union` composes it with a Dirichlet `Model`.
     #[test]
     fn parent_constructors_span_subspaces_and_compose() {
         let coords = insert(Coords::new(1).unwrap());

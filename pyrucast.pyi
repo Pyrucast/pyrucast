@@ -272,7 +272,7 @@ class ElementField:
     
     Build with `ElementField(fes, components)` or `material_field(model, ...)`;
     index it (`field[i]`) to reach a `SubElementField`, compose zones
-    with `+`.
+    with `|`.
     """
     def __new__(cls, fespace: FiniteElementSpace, components: typing.Sequence[builtins.str]) -> ElementField:
         r"""
@@ -347,7 +347,7 @@ class FiniteElementSpace:
     
     Build from a `Mesh` with `FiniteElementSpace(mesh)` (or
     `.with_choices(...)` per submesh); index it (`fes[i]`) to reach a
-    `SubFiniteElementSpace`, compose several with `+`.
+    `SubFiniteElementSpace`, compose several with `|`.
     """
     def __new__(cls, mesh: Mesh, interpolation: builtins.str = 'LAGRANGE1', quadrature: builtins.str = 'GAUSS') -> FiniteElementSpace:
         r"""
@@ -415,7 +415,7 @@ class Matrix:
     A global finite-element matrix, assembled from rectangular blocks
     (`SubMatrix`).
     
-    Build blocks with `Matrix.block(...)`, compose them with `+`, then call
+    Build blocks with `Matrix.block(...)`, compose them with `|`, then call
     `finalize()` before solving. Index it (`matrix[i]`) to reach a block.
     """
     @property
@@ -426,7 +426,7 @@ class Matrix:
     def __new__(cls) -> Matrix:
         r"""
         `Matrix()` — empty aggregate. Populate via `add_sub_matrix`, or
-        build blocks with `Matrix.block(...)` and compose them with `+`.
+        build blocks with `Matrix.block(...)` and compose them with `|`.
         """
     @classmethod
     def block(cls, row_support: typing.Any, col_support: typing.Any, dual_vars: typing.Sequence[builtins.str], primal_vars: typing.Sequence[builtins.str], ordering: builtins.str = 'nodes_then_vars', symmetric: builtins.bool = False) -> Matrix:
@@ -436,7 +436,7 @@ class Matrix:
         `col_support` may each be a `SubMesh` view or a **unitary** `Mesh`.
         `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
         Fill entries via the block view (`block[0].add_entry(...)`) and
-        compose several blocks with `+`, then `finalize()`.
+        compose several blocks with `|`, then `finalize()`.
         """
     def finalize(self) -> None:
         r"""
@@ -523,7 +523,7 @@ class Mesh:
     single element type.
     
     Build with `Mesh(coords, element_type)` for one zone, compose several
-    with `+`; index it (`mesh[i]`) to reach a `SubMesh`.
+    with `|`; index it (`mesh[i]`) to reach a `SubMesh`.
     """
     def __new__(cls, coords: Coords, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
@@ -598,11 +598,11 @@ class Model:
     Dirichlet BCs, ...) over finite-element spaces.
     
     Build sub-models with `Model.heat_conduction(fes)` / `Model.dirichlet(...)`
-    and compose them with `+`; assemble with `stiffness` / `mass`.
+    and compose them with `|`; assemble with `stiffness` / `mass`.
     """
     def __new__(cls) -> Model:
         r"""
-        `Model()` — an empty model; add physics with `+`.
+        `Model()` — an empty model; add physics with `|`.
         """
     @classmethod
     def heat_conduction(cls, fespace: FiniteElementSpace) -> Model:
@@ -610,8 +610,8 @@ class Model:
         `Model.heat_conduction(fespace)` — heat-conduction model spanning
         **every** subspace of `fespace` (one zone per subspace). A
         single-subspace space gives the unit case; several give one zone
-        each. Compose heterogeneous physics with `+`:
-        `Model.heat_conduction(fes) + Model.dirichlet(...)`.
+        each. Compose heterogeneous physics with `|`:
+        `Model.heat_conduction(fes) | Model.dirichlet(...)`.
         """
     @classmethod
     def truss(cls, fespace: FiniteElementSpace) -> Model:
@@ -762,7 +762,7 @@ class NodeField:
     
     Build with `NodeField(support, components)` where `support` is a `Mesh`
     (one sub-field per submesh) or a single `SubMesh`; index it
-    (`field[i]`) to reach a `SubNodeField`, compose zones with `+`. Reads
+    (`field[i]`) to reach a `SubNodeField`, compose zones with `|`. Reads
     (`field.value(node, "T")`) take the first zone defining the pair;
     `field.check()` verifies that zones agree on shared interface nodes.
     """
@@ -857,7 +857,7 @@ class SubElementField:
     A **view** into one zone of an `ElementField`, obtained by indexing
     (`element_field[i]`) — never constructed directly. Build at the parent
     level instead: `ElementField(fes, components)` or
-    `material_field(model, ...)`, composed with `+`.
+    `material_field(model, ...)`, composed with `|`.
     """
     def cell_count(self) -> builtins.int:
         r"""
@@ -1080,7 +1080,7 @@ class SubMatrix:
     r"""
     One block (a COO sub-matrix) of a global `Matrix`, viewed by indexing
     (`matrix[i]`) — never constructed directly. Build a block at the parent
-    level with `Matrix.block(...)` (a unit `Matrix`), composed with `+`.
+    level with `Matrix.block(...)` (a unit `Matrix`), composed with `|`.
     """
     @property
     def symmetric(self) -> builtins.bool:
@@ -1155,7 +1155,7 @@ class SubMesh:
     A **view** into one submesh of a `Mesh` — the cells of a single element
     type. Obtained by indexing (`mesh[i]`); never constructed directly.
     Build at the parent level instead: `Mesh(coords, element_type)` for a
-    single zone, composed with `+` for several.
+    single zone, composed with `|` for several.
     """
     @property
     def element_type(self) -> builtins.str:
@@ -1241,7 +1241,7 @@ class SubModel:
     A **view** into one sub-model of a `Model`, obtained by indexing
     (`model[i]`) — never constructed directly. Build physics at the parent
     level instead: `Model.heat_conduction(fes)` or `Model.dirichlet(...)`,
-    composed with `+`.
+    composed with `|`.
     """
     def primal_vars(self) -> builtins.list[builtins.str]:
         r"""
@@ -1288,7 +1288,7 @@ class SubNodeField:
     r"""
     A **view** into one zone of a `NodeField`, obtained by indexing
     (`node_field[i]`) — never constructed directly. Build at the parent
-    level instead: `NodeField(support, components)`, composed with `+`.
+    level instead: `NodeField(support, components)`, composed with `|`.
     """
     def node_count(self) -> builtins.int:
         r"""

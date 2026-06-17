@@ -61,7 +61,7 @@ pub(crate) fn submesh_handle(obj: &Bound<'_, PyAny>) -> PyResult<Handle<SubMesh>
 /// A **view** into one submesh of a `Mesh` — the cells of a single element
 /// type. Obtained by indexing (`mesh[i]`); never constructed directly.
 /// Build at the parent level instead: `Mesh(coords, element_type)` for a
-/// single zone, composed with `+` for several.
+/// single zone, composed with `|` for several.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubMesh")]
 pub struct PySubMesh {
@@ -217,7 +217,7 @@ impl PySubMesh {
 /// single element type.
 ///
 /// Build with `Mesh(coords, element_type)` for one zone, compose several
-/// with `+`; index it (`mesh[i]`) to reach a `SubMesh`.
+/// with `|`; index it (`mesh[i]`) to reach a `SubMesh`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Mesh")]
 pub struct PyMesh {

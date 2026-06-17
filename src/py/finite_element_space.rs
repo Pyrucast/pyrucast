@@ -177,7 +177,7 @@ impl PySubFiniteElementSpace {
 ///
 /// Build from a `Mesh` with `FiniteElementSpace(mesh)` (or
 /// `.with_choices(...)` per submesh); index it (`fes[i]`) to reach a
-/// `SubFiniteElementSpace`, compose several with `+`.
+/// `SubFiniteElementSpace`, compose several with `|`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "FiniteElementSpace")]
 pub struct PyFiniteElementSpace {

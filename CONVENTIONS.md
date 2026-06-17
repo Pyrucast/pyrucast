@@ -207,7 +207,7 @@ l'utilisateur de fournir le `Sub*` lui-même.
 
 Ce qui est **projeté mécaniquement** vers Python (miroir 1:1) : le
 constructeur nommé du parent (Rust `Model::heat_conduction` → `classmethod`
-Python), `merge` → `__add__`, l'indexation → `__getitem__`. La seule
+Python), l'union (`union` → `__or__`), l'indexation → `__getitem__`. La seule
 asymétrie est la **non-exposition** des constructeurs `Sub*` côté Python (et
 la coercition parent→sub unitaire qui l'accompagne) — l'exception décrite
 plus haut. La règle s'applique uniformément aux quatre agrégats et a vocation

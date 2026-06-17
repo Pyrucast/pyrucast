@@ -14,7 +14,7 @@ use pyo3::prelude::*;
 
 /// A **view** into one zone of a `NodeField`, obtained by indexing
 /// (`node_field[i]`) — never constructed directly. Build at the parent
-/// level instead: `NodeField(support, components)`, composed with `+`.
+/// level instead: `NodeField(support, components)`, composed with `|`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubNodeField")]
 pub struct PySubNodeField {
@@ -197,7 +197,7 @@ crate::impl_dump_pymethod!(handle PySubNodeField, handle);
 ///
 /// Build with `NodeField(support, components)` where `support` is a `Mesh`
 /// (one sub-field per submesh) or a single `SubMesh`; index it
-/// (`field[i]`) to reach a `SubNodeField`, compose zones with `+`. Reads
+/// (`field[i]`) to reach a `SubNodeField`, compose zones with `|`. Reads
 /// (`field.value(node, "T")`) take the first zone defining the pair;
 /// `field.check()` verifies that zones agree on shared interface nodes.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]

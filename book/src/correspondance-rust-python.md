@@ -51,8 +51,8 @@ ce sont des **vues** obtenues par indexation de leur parent (`parent[i]`). On
 construit toujours au niveau parent — `Mesh(coords, type)`,
 `FiniteElementSpace(mesh)`, `ElementField(fes, comps)`,
 `Model.heat_conduction(fes)`, `Matrix.block(...)` — et on compose plusieurs
-zones avec `+` (merge). Voir la règle « Agrégats : un ou plusieurs » de
-`CONVENTIONS.md`.
+zones avec `|` (union — Rust : `union`). Voir la règle « Agrégats : un ou
+plusieurs » de `CONVENTIONS.md`.
 
 ## Fonctions ↔ fonctions
 
@@ -85,9 +85,9 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` (dispatch par type, partagé avec `Mesh`) |
 
-> La composition de zones et l'arithmétique champ + scalaire passent par
-> l'**opérateur** `+` (Rust `impl Add` → Python `__add__`), pas par une
-> fonction `ops`.
+> La composition de zones passe par l'**union** (`|` Python / `union` Rust) ;
+> l'arithmétique champ + scalaire par l'**opérateur** `+`. Ni l'une ni l'autre
+> n'est une fonction `ops` — `merge(a, b)` est juste un alias nommé de `a | b`.
 
 ### `ops::build` — construction de champs matériau
 
@@ -131,13 +131,14 @@ structurelle) et `__str__` (← `Display`, vue résumée façon cast3m) — voir
 | Classe | Opérateurs Python | Sémantique | Trait Rust |
 |---|---|---|---|
 | `SubNodeField` | `f + s`, `f - s`, `f * s`, `f / s` | composante par composante avec un scalaire `s` | `Add`/`Sub`/`Mul`/`Div<f64>` |
-| `NodeField` | `a + b` | merge **structurel** des zones (handles partagés), comme tout agrégat | `Add<&NodeField>` via la grammaire `Aggregate` |
 | `SubElementField` | `f + s`, `f - s`, `f * s`, `f / s` | scalaire, composante par composante | `Add`/`Sub`/`Mul`/`Div<f64>` |
 
 > `f + s` renvoie un **nouveau** champ ; `+= ` n'est pas surchargé.
 > L'arithmétique scalaire vit au niveau **zone** (`SubNodeField`,
-> `SubElementField`) ; le `+` des agrégats est toujours la composition de
-> zones. Pour fusionner des valeurs avec vérification : `merge(a, b)`.
+> `SubElementField`). La **composition** de zones, elle, n'est **pas** sur `+` :
+> c'est l'union `|` (`union` en Rust, cf. ci-dessous) — `+` reste libre pour la
+> future addition réelle de champs. Pour fusionner des valeurs avec
+> vérification : `merge(a, b)` ≡ `a | b`.
 
 ### Indexation par clé
 
