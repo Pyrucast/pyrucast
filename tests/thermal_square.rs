@@ -21,7 +21,7 @@
 // ANCHOR: square
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::ops::solver::lu::solve;
@@ -39,15 +39,15 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     let h = 1.0 / N as f64;
 
     // ── Maillage : grille structurée (N+1)×(N+1) de QUA4 sur [0,1]² ─────────
-    let cfg = insert(Configuration::new(2)?);
+    let coords = insert(Coords::new(2)?);
     let idx = |i: usize, j: usize| j * (N + 1) + i; // nœud colonne i, ligne j
     let mut grid: Vec<Node> = Vec::with_capacity((N + 1) * (N + 1));
     for j in 0..=N {
         for i in 0..=N {
-            grid.push(Node::create_in(cfg.clone(), &[i as f64 * h, j as f64 * h])?);
+            grid.push(Node::create_in(coords.clone(), &[i as f64 * h, j as f64 * h])?);
         }
     }
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::QUA4));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     for j in 0..N {
         for i in 0..N {
             mesh.add_cell(&[
@@ -78,7 +78,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     // charges nodales cohérentes par l'opérateur `flux` (Cast3m FLUX) — plus de
     // répartition Q·h / Q·h/2 à la main. Le bord est un maillage SEG2 bâti sur
     // les nœuds de la grille ; il s'intègre comme une ligne.
-    let mut left_edge = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    let mut left_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for j in 0..N {
         left_edge.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
     }
@@ -86,7 +86,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     let source = assemble::flux(&left_fes.get(0)?, assemble::FluxDensity::Uniform(Q), "q")?;
 
     // Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
-    let mut imposed_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    let mut imposed_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     for m in &mults {
         imposed_sm.add_cell(&[m.id()])?;
     }

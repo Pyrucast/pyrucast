@@ -1,5 +1,5 @@
 import pyrucast as pc
-c = pc.Configuration(1)
+c = pc.Coords(1)
 a = c.add_node([0.])
 b = c.add_node([1.])
 lab = pc.line_seg2(a,b,10)

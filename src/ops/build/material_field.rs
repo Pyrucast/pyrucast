@@ -102,7 +102,7 @@ mod tests {
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::matrix::Matrix;
-    use crate::containers::mesh::{Configuration, NodeId};
+    use crate::containers::mesh::{Coords, NodeId};
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
@@ -110,15 +110,15 @@ mod tests {
     use crate::store::Handle;
 
     /// HC on a single SEG2 (+ optional Dirichlet on the left node).
-    /// Returns (cfg, a_id, b_id, model).
+    /// Returns (coords, a_id, b_id, model).
     fn seg2_heat_model(
         length: f64,
         dirichlet_at_left: bool,
-    ) -> (Handle<Configuration>, NodeId, NodeId, Model) {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[length]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    ) -> (Handle<Coords>, NodeId, NodeId, Model) {
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[length]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let mut model = Model::empty();
@@ -143,18 +143,18 @@ mod tests {
                 ))
                 .unwrap();
         }
-        (cfg, a.id(), b.id(), model)
+        (coords, a.id(), b.id(), model)
     }
 
-    fn single_hc_sub() -> (Handle<Configuration>, SubModel) {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    fn single_hc_sub() -> (Handle<Coords>, SubModel) {
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let hc = SubModel::heat_conduction(fes.get(0).unwrap()).unwrap();
-        (cfg, hc)
+        (coords, hc)
     }
 
     // ── sub_material_field ──────────────────────────────────────────────
@@ -172,8 +172,8 @@ mod tests {
 
     #[test]
     fn sub_errors_on_dirichlet() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
@@ -226,18 +226,18 @@ mod tests {
 
     #[test]
     fn per_sub_model_two_zones() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
         let mut mesh = Mesh::empty();
         let sm_a = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n0.id(), n1.id()]).unwrap();
             insert(sm)
         };
         let sm_b = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n1.id(), n2.id()]).unwrap();
             insert(sm)
         };

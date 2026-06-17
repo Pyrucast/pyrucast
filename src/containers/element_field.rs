@@ -53,7 +53,7 @@
 //! ```
 //! use pyrucast::aggregate::Aggregate;
 //! use pyrucast::containers::field::SubField;
-//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::Coords;
 //! use pyrucast::containers::element_field::ElementField;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -61,11 +61,11 @@
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::{insert, read, write};
 //!
-//! let cfg = insert(Configuration::new(2).unwrap());
-//! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-//! let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-//! let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+//! let coords = insert(Coords::new(2).unwrap());
+//! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+//! let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+//! let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
 //! mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 //!
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
@@ -622,7 +622,7 @@ impl ElementFieldView {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
     use crate::containers::finite_element_space::Interpolation;
@@ -632,12 +632,12 @@ mod tests {
     use crate::store::{insert, read, write};
 
     fn make_tri3_subfespace() -> Handle<SubFiniteElementSpace> {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+            let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
@@ -646,15 +646,15 @@ mod tests {
 
     fn make_multi_cell_tri3_subfespace(n_cells: usize) -> Handle<SubFiniteElementSpace> {
         // n_cells triangles sharing a common apex, like a fan from origin.
-        let cfg = insert(Configuration::new(2).unwrap());
-        let apex = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let apex = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut perimeter = Vec::with_capacity(n_cells + 1);
         for i in 0..=n_cells {
             let t = i as f64 / n_cells as f64;
-            perimeter.push(Node::create_in(cfg.clone(), &[1.0, t]).unwrap());
+            perimeter.push(Node::create_in(coords.clone(), &[1.0, t]).unwrap());
         }
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+            let mut sm = SubMesh::new(coords, ElementType::TRI3);
             for i in 0..n_cells {
                 sm.add_cell(&[apex.id(), perimeter[i].id(), perimeter[i + 1].id()])
                     .unwrap();
@@ -665,19 +665,19 @@ mod tests {
     }
 
     fn make_mesh_with_tri_and_qua() -> Mesh {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let n3 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
         let mut mesh = Mesh::empty();
         let sm_tri = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
         let sm_qua = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::QUA4);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
             sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
             insert(sm)
         };
@@ -947,11 +947,11 @@ mod tests {
 
     #[test]
     fn ef_subfield_out_of_bounds_errors() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();

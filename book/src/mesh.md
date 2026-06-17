@@ -3,7 +3,7 @@
 Le maillage de pyrucast se compose à deux niveaux :
 
 - **`SubMesh`** : regroupe toutes les cellules d'un même `ElementType`. Stocke la connectivité à plat (un `Vec<NodeId>` de longueur `cell_count × nodes_per_cell`).
-- **`Mesh`** : agrège plusieurs `SubMesh` liés à la même `Configuration`.
+- **`Mesh`** : agrège plusieurs `SubMesh` liés à la même `Coords`.
 
 Le cas POI1 est volontairement dégénéré : un sous-maillage POI1 est exactement une liste de nœuds, ce qui sert de support naturel aux `NodeField` (à venir).
 
@@ -24,10 +24,10 @@ Ajouter un nouveau type d'élément est purement additif : nouvelle variante + m
 
 ## Refcount sur les nœuds — interaction avec le GC
 
-Chaque appel à `SubMesh::add_cell` **incrémente** le refcount interne de chaque nœud dans la `Configuration` (cf. [Configuration](configuration.md)). Le `Drop` du `SubMesh` les **décrémente**. Tant qu'un `SubMesh` référence un nœud, le ramasse-miettes le protège — même si tous les `Node` utilisateurs ont disparu.
+Chaque appel à `SubMesh::add_cell` **incrémente** le refcount interne de chaque nœud dans la `Coords` (cf. [Coords](coords.md)). Le `Drop` du `SubMesh` les **décrémente**. Tant qu'un `SubMesh` référence un nœud, le ramasse-miettes le protège — même si tous les `Node` utilisateurs ont disparu.
 
 ```text
-   Configuration             ◀── refcount par NodeId
+   Coords             ◀── refcount par NodeId
         │                          (le nœud est-il vivant ?)
         ├── Node(s) utilisateur(s) ── chacun +1
         └── SubMesh(s)             ── chacun +1 par cellule incidente
@@ -38,22 +38,22 @@ En cas d'échec partiel d'`add_cell` (par exemple un nœud déjà ramassé), les
 ## API Rust
 
 ```rust,ignore
-use pyrucast::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::Coords;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
 use pyrucast::mesh::node::Node;
 use pyrucast::store::insert;
 
-let cfg = insert(Configuration::new(2).unwrap());
-let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+let coords = insert(Coords::new(2).unwrap());
+let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
-let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
 let sm_handle = insert(sm);
-let mut mesh = Mesh::new(cfg.clone());
+let mut mesh = Mesh::new(coords.clone());
 mesh.add_sub(sm_handle).unwrap();
 assert_eq!(mesh.cell_count().unwrap(), 1);
 ```
@@ -63,7 +63,7 @@ assert_eq!(mesh.cell_count().unwrap(), 1);
 ```python
 import pyrucast
 
-c = pyrucast.Configuration(dim=2)
+c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 n3 = c.add_node([0.5, 1.0])
@@ -125,7 +125,7 @@ Quand au moins un est renseigné, l'algorithme bascule sur la CDT (Bowyer-Watson
 
 La convergence n'est théoriquement garantie que pour `min_angle_deg ≤ 20.7°` (Shewchuk). pyrucast plafonne le nombre total d'insertions à `50 · n_contour + 1000` pour éviter les divergences sur entrées pathologiques ; l'erreur est explicite si la limite est atteinte.
 
-Les nouveaux nœuds (« Steiner ») sont créés dans la `Configuration` du contour, exactement comme les nœuds utilisateur. En 3D, leurs coordonnées sont calculées dans le plan local puis ré-injectées dans l'espace 3D via la base `(u, v, n)`.
+Les nouveaux nœuds (« Steiner ») sont créés dans la `Coords` du contour, exactement comme les nœuds utilisateur. En 3D, leurs coordonnées sont calculées dans le plan local puis ré-injectées dans l'espace 3D via la base `(u, v, n)`.
 
 ### Limitations actuelles
 
@@ -139,7 +139,7 @@ Les nouveaux nœuds (« Steiner ») sont créés dans la `Configuration` du cont
 ```python
 import pyrucast
 
-c = pyrucast.Configuration(dim=2)
+c = pyrucast.Coords(dim=2)
 nodes = [c.add_node(p) for p in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]]
 
 contour = pyrucast.Mesh(c, "SEG2")
@@ -156,7 +156,7 @@ print(surface)        # Mesh: 1 submesh(es), 2 cell(s) total
 import math
 import pyrucast
 
-c = pyrucast.Configuration(dim=3)
+c = pyrucast.Coords(dim=3)
 s = 1.0 / math.sqrt(2.0)
 # Carré unitaire incliné à 45° autour de l'axe x.
 pts = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, s, s), (0.0, s, s)]
@@ -175,7 +175,7 @@ surface = pyrucast.Mesh.fill_surface(contour, "TRI3")
 ```python
 import pyrucast
 
-c = pyrucast.Configuration(dim=2)
+c = pyrucast.Coords(dim=2)
 
 # Contour extérieur : carré 4×4.
 outer = pyrucast.Mesh(c, "SEG2")

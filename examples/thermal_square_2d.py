@@ -49,7 +49,7 @@ def main() -> None:
         return j * (N + 1) + i
 
     # ── Maillage : grille structurée (N+1)×(N+1) de QUA4 sur [0,1]² ───────────
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     grid = [
         c.add_node([i * h, j * h])
         for j in range(N + 1)

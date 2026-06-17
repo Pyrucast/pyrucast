@@ -40,17 +40,17 @@
 //! # Example — single block
 //!
 //! ```
-//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::Coords;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::containers::matrix::{SubMatrix, DofOrdering};
 //! use pyrucast::store::insert;
 //!
-//! let cfg = insert(Configuration::new(1).unwrap());
-//! let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-//! let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-//! let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+//! let coords = insert(Coords::new(1).unwrap());
+//! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+//! let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+//! let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
 //! sm.add_cell(&[a.id()]).unwrap();
 //! sm.add_cell(&[b.id()]).unwrap();
 //! let support = insert(sm);
@@ -785,23 +785,23 @@ impl crate::dump::Dump for Matrix {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::store::insert;
 
-    /// Build a POI1 SubMesh with `n` fresh nodes in a new 1-D Configuration.
-    /// Returns `(cfg, nodes, support_handle)`.
-    fn make_poi1(n: usize) -> (Handle<Configuration>, Vec<Node>, Handle<SubMesh>) {
-        let cfg = insert(Configuration::new(1).unwrap());
+    /// Build a POI1 SubMesh with `n` fresh nodes in a new 1-D Coords.
+    /// Returns `(coords, nodes, support_handle)`.
+    fn make_poi1(n: usize) -> (Handle<Coords>, Vec<Node>, Handle<SubMesh>) {
+        let coords = insert(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..n)
-            .map(|i| Node::create_in(cfg.clone(), &[i as f64]).unwrap())
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
         for node in &nodes {
             sm.add_cell(&[node.id()]).unwrap();
         }
-        (cfg, nodes, insert(sm))
+        (coords, nodes, insert(sm))
     }
 
     // ── SubMatrix tests ─────────────────────────────────────────────────────
@@ -1098,15 +1098,15 @@ mod tests {
     #[test]
     fn aggregate_unions_dofs_and_sums_at_coincidence() {
         // Single configuration: 5 distinct nodes to avoid NodeId collisions.
-        let (cfg, nodes, _) = make_poi1(5);
+        let (coords, nodes, _) = make_poi1(5);
         let (na, ca0, ca1, m0, m1) = (
             nodes[0].id(), nodes[1].id(), nodes[2].id(), nodes[3].id(), nodes[4].id(),
         );
 
         // Block a: 1 row (na) × 2 cols (ca0, ca1)
-        let mut row_a = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut row_a = SubMesh::new(coords.clone(), ElementType::POI1);
         row_a.add_cell(&[na]).unwrap();
-        let mut col_a = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut col_a = SubMesh::new(coords.clone(), ElementType::POI1);
         col_a.add_cell(&[ca0]).unwrap();
         col_a.add_cell(&[ca1]).unwrap();
         let mut a = SubMatrix::new(
@@ -1118,10 +1118,10 @@ mod tests {
         a.add_entry(na, "q", ca1, "T", -1.0).unwrap();
 
         // Block b: 2 rows (m0, m1) × 2 cols (m0, m1)
-        let mut row_b = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut row_b = SubMesh::new(coords.clone(), ElementType::POI1);
         row_b.add_cell(&[m0]).unwrap();
         row_b.add_cell(&[m1]).unwrap();
-        let mut col_b = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut col_b = SubMesh::new(coords.clone(), ElementType::POI1);
         col_b.add_cell(&[m0]).unwrap();
         col_b.add_cell(&[m1]).unwrap();
         let mut b = SubMatrix::new(
@@ -1161,15 +1161,15 @@ mod tests {
     #[test]
     fn aggregate_to_dmatrix_layout_is_union_first_seen() {
         // Two distinct nodes in the SAME configuration to avoid NodeId collisions.
-        let (cfg, nodes, _) = make_poi1(2);
+        let (coords, nodes, _) = make_poi1(2);
         let na = nodes[0].id();
         let nb = nodes[1].id();
 
-        let mut sm_a = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut sm_a = SubMesh::new(coords.clone(), ElementType::POI1);
         sm_a.add_cell(&[na]).unwrap();
         let sup_a = insert(sm_a);
 
-        let mut sm_b = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut sm_b = SubMesh::new(coords.clone(), ElementType::POI1);
         sm_b.add_cell(&[nb]).unwrap();
         let sup_b = insert(sm_b);
 
@@ -1221,7 +1221,7 @@ mod tests {
         let (na0, na1) = (nodes_a[0].id(), nodes_a[1].id());
         // row block a: only node na0 as row
         let mut row_a = SubMesh::new(
-            read(&sup_a).unwrap().configuration(),
+            read(&sup_a).unwrap().coords(),
             ElementType::POI1,
         );
         row_a.add_cell(&[na0]).unwrap();
@@ -1234,7 +1234,7 @@ mod tests {
         a.add_entry(na0, "q", na1, "T", -1.0).unwrap();
 
         let mut row_b = SubMesh::new(
-            read(&sup_a).unwrap().configuration(),
+            read(&sup_a).unwrap().coords(),
             ElementType::POI1,
         );
         row_b.add_cell(&[na1]).unwrap();

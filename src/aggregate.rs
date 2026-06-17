@@ -75,7 +75,7 @@ pub trait Aggregate: Default {
     /// Sub-objects are deduplicated **by handle identity**
     /// ([`Handle::same_slot`]): a sub already present (same store slot) is
     /// not added twice. Order is first-seen. Domain constraints (e.g.
-    /// `Configuration` compatibility for `Mesh`) are enforced via
+    /// `Coords` compatibility for `Mesh`) are enforced via
     /// [`Aggregate::try_extend_from`]. After the union, [`Aggregate::finalize`]
     /// runs — a no-op for most aggregates, but the fields override it to fuse
     /// zones sharing the same support.
@@ -153,7 +153,7 @@ pub trait Aggregate: Default {
         })
     }
 
-    /// Append a handle at the tail. Any extra validation (Configuration
+    /// Append a handle at the tail. Any extra validation (Coords
     /// compatibility, duplicates, ...) is the caller's responsibility.
     fn push(&mut self, h: Handle<Self::Sub>) {
         self.items_mut().push(h);
@@ -178,7 +178,7 @@ pub trait Aggregate: Default {
     }
 
     /// Hook called before inserting a single handle. Override to enforce
-    /// domain-specific constraints (e.g. same `Configuration` for `Mesh`).
+    /// domain-specific constraints (e.g. same `Coords` for `Mesh`).
     /// The default accepts everything.
     fn check_push(&self, _h: &Handle<Self::Sub>) -> crate::error::Result<()> {
         Ok(())

@@ -83,17 +83,17 @@ zone (`SubNodeField`) sur `+`/`*`/… Le nommé `merge(a, b)` ≡ `a | b`.
 
 ```rust,ignore
 use pyrucast::aggregate::Aggregate;
-use pyrucast::containers::mesh::{Configuration, ElementType, Node, SubMesh, Mesh};
+use pyrucast::containers::mesh::{Coords, ElementType, Node, SubMesh, Mesh};
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::store::{insert, write};
 
-let cfg = insert(Configuration::new(2).unwrap());
-let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+let coords = insert(Coords::new(2).unwrap());
+let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
 // Support : SubMesh POI1 contenant a et b.
 let sm = {
-    let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
     sm.add_cell(&[a.id()]).unwrap();
     sm.add_cell(&[b.id()]).unwrap();
     insert(sm)
@@ -118,7 +118,7 @@ field.check().unwrap();   // zones cohérentes aux interfaces
 ```python
 import pyrucast
 
-c = pyrucast.Configuration(dim=2)
+c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
@@ -147,8 +147,8 @@ g = pyrucast.consolidate(f)   # fusion au plus juste
 
 Le champ ne fait **aucune** comptabilité par nœud : il garde un clone du
 `Handle<SubMesh>` de son support, et c'est le SubMesh qui possède les
-increfs par nœud dans la `Configuration` (cf.
-[Configuration](configuration.md)). Tant qu'une zone du champ est vivante,
+increfs par nœud dans la `Coords` (cf.
+[Coords](coords.md)). Tant qu'une zone du champ est vivante,
 son support l'est aussi, donc ses nœuds aussi — même si tous les `Node`
 utilisateurs ont disparu.
 

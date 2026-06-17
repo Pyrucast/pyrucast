@@ -11,17 +11,17 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::Coords;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::insert;
 //!
-//! let cfg = insert(Configuration::new(1).unwrap());
-//! let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-//! let b = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+//! let coords = insert(Coords::new(1).unwrap());
+//! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+//! let b = Node::create_in(coords.clone(), &[2.0]).unwrap();
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 //! mesh.add_cell(&[a.id(), b.id()]).unwrap();
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //!
@@ -83,7 +83,7 @@ impl Element {
         read(&self.fespace)?.nodes_per_cell()
     }
 
-    /// Geometric (physical) dimension of the underlying `Configuration`.
+    /// Geometric (physical) dimension of the underlying `Coords`.
     pub fn space_dim(&self) -> Result<usize> {
         Ok(read(&self.fespace)?.space_dim())
     }
@@ -223,21 +223,21 @@ mod tests {
     use crate::aggregate::Aggregate;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::store::insert;
 
-    fn seg2_fes() -> (Handle<Configuration>, Vec<Node>, FiniteElementSpace) {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    fn seg2_fes() -> (Handle<Coords>, Vec<Node>, FiniteElementSpace) {
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[n0.id(), n1.id()]).unwrap();
         mesh.add_cell(&[n1.id(), n2.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        (cfg, vec![n0, n1, n2], fes)
+        (coords, vec![n0, n1, n2], fes)
     }
 
     #[test]

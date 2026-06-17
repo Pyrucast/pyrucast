@@ -4,7 +4,7 @@ import pyrucast
 
 
 def _seg2_fes(length=2.0):
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([length])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -28,7 +28,7 @@ def test_fes_element_returns_element_with_expected_geometry():
 
 
 def test_fes_elements_returns_a_list():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     nodes = [c.add_node([i * 1.0]) for i in range(3)]
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.unit().add_cell([nodes[0], nodes[1]])
@@ -40,7 +40,7 @@ def test_fes_elements_returns_a_list():
 
 
 def test_subspace_is_iterable_over_elements():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     nodes = [c.add_node([i * 1.0]) for i in range(4)]
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(3):

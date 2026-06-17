@@ -63,7 +63,7 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::containers::mesh::{Configuration, NodeId};
+//! use pyrucast::containers::mesh::{Coords, NodeId};
 //! use pyrucast::containers::element_field::SubElementField;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -75,11 +75,11 @@
 //! use pyrucast::ops::mesher;
 //! use pyrucast::store::insert;
 //!
-//! // 1-D Configuration with two nodes spanning [0, 1].
-//! let cfg = insert(Configuration::new(1).unwrap());
-//! let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-//! let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+//! // 1-D Coords with two nodes spanning [0, 1].
+//! let coords = insert(Coords::new(1).unwrap());
+//! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+//! let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
 //! mesh.add_cell(&[a.id(), b.id()]).unwrap();
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //! let sub = fes.get(0).unwrap();
@@ -527,7 +527,7 @@ mod tests {
     use super::*;
     use crate::containers::field::SubField;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::SubMesh;
     use crate::containers::element_field::ElementField;
@@ -537,16 +537,16 @@ mod tests {
     use crate::ops::assemble;
     use crate::store::{insert, write};
 
-    /// Returns `(cfg, a_id, b_id, model, materials)`.
+    /// Returns `(coords, a_id, b_id, model, materials)`.
     fn build_seg2_heat_model(
         length: f64,
         k: f64,
         dirichlet_at_left: bool,
-    ) -> (Handle<Configuration>, NodeId, NodeId, Model, ElementField) {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[length]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    ) -> (Handle<Coords>, NodeId, NodeId, Model, ElementField) {
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[length]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.get(0).unwrap();
@@ -578,7 +578,7 @@ mod tests {
                 ))
                 .unwrap();
         }
-        (cfg, a.id(), b.id(), model, materials)
+        (coords, a.id(), b.id(), model, materials)
     }
 
     #[test]
@@ -626,11 +626,11 @@ mod tests {
     /// tridiagonal `(1, -2, 1)` pattern after assembly.
     #[test]
     fn two_seg2_assembly_is_tridiagonal() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[n0.id(), n1.id()]).unwrap();
         mesh.add_cell(&[n1.id(), n2.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
@@ -666,10 +666,10 @@ mod tests {
     /// both `C` and `Cᵀ` entries (each value 1.0).
     #[test]
     fn dirichlet_adds_one_multiplier_node_and_two_block_entries() {
-        let (cfg, a_id, _b_id, model, materials) = build_seg2_heat_model(1.0, 1.0, true);
+        let (coords, a_id, _b_id, model, materials) = build_seg2_heat_model(1.0, 1.0, true);
 
-        // The Configuration grew by one node (the multiplier).
-        let n_nodes = read(&cfg).unwrap().node_count();
+        // The Coords grew by one node (the multiplier).
+        let n_nodes = read(&coords).unwrap().node_count();
         assert_eq!(n_nodes, 3);
 
         let k = assemble::stiffness(&model, &materials).unwrap();
@@ -702,11 +702,11 @@ mod tests {
     /// The multiplier nodes (supplied by the user via `multiplier_mesh`) stay
     /// alive as long as **either** the user's mesh **or** the sub-model holds
     /// their submesh; once both are gone the node is released and collectable.
-    /// The sub-model creates no node and never mutates the Configuration.
+    /// The sub-model creates no node and never mutates the Coords.
     #[test]
     fn multiplier_nodes_live_with_their_mesh() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
@@ -714,25 +714,25 @@ mod tests {
         // The multiplier node is owned by the multiplier submesh (refcount 1;
         // the transient Node below is dropped at the end of the statement).
         let mult_id = multiplier.node(0, 0, 0).unwrap().id();
-        assert_eq!(read(&cfg).unwrap().refcount(mult_id), 1);
+        assert_eq!(read(&coords).unwrap().refcount(mult_id), 1);
 
         let sub =
             SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
                 .unwrap();
         // Sharing the submesh handles does not touch node refcounts.
-        assert_eq!(read(&cfg).unwrap().refcount(mult_id), 1);
+        assert_eq!(read(&coords).unwrap().refcount(mult_id), 1);
         assert_eq!(sub.multiplier_nodes().unwrap(), vec![mult_id]);
 
         // Drop the user's multiplier mesh: the sub-model still holds the
         // submesh, so the node lives on.
         drop(multiplier);
-        assert_eq!(read(&cfg).unwrap().refcount(mult_id), 1);
+        assert_eq!(read(&coords).unwrap().refcount(mult_id), 1);
 
         // Drop the sub-model too: the last holder of the multiplier submesh is
         // gone ⇒ the node is released and collectable.
         drop(sub);
-        assert_eq!(read(&cfg).unwrap().refcount(mult_id), 0);
-        assert_eq!(write(&cfg).unwrap().gc(), 1);
+        assert_eq!(read(&coords).unwrap().refcount(mult_id), 0);
+        assert_eq!(write(&coords).unwrap().gc(), 1);
     }
 
     #[test]
@@ -746,10 +746,10 @@ mod tests {
     #[test]
     fn heat_conduction_errors_on_missing_k_component() {
         // Material has only "rho_cp", not "k": stiffness assembly must fail.
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.get(0).unwrap();
@@ -778,20 +778,20 @@ mod tests {
     /// `+` (merge) composes it with a Dirichlet `Model`.
     #[test]
     fn parent_constructors_span_subspaces_and_compose() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
 
         // Two SEG2 zones, one SubMesh each → fes with two subspaces.
         let mut mesh = Mesh::empty();
         let sm_a = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n0.id(), n1.id()]).unwrap();
             insert(sm)
         };
         let sm_b = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
@@ -821,10 +821,10 @@ mod tests {
     /// Single-subspace `fes` → unit `Model` (the common case).
     #[test]
     fn parent_heat_conduction_unit_case() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let model = Model::heat_conduction(&fes).unwrap();
@@ -847,21 +847,21 @@ mod tests {
     /// SubFiniteElementSpace.
     #[test]
     fn assemble_picks_per_zone_material() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
 
         // Zone A: SEG2 on [0, 1]. Zone B: SEG2 on [1, 2]. Each as its own
         // SubMesh inside one Mesh.
         let mut mesh = Mesh::empty();
         let sm_a = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n0.id(), n1.id()]).unwrap();
             insert(sm)
         };
         let sm_b = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
@@ -910,10 +910,10 @@ mod tests {
 
     #[test]
     fn physics_declares_material_components() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.get(0).unwrap();
@@ -933,10 +933,10 @@ mod tests {
     /// SubElementField matches a HeatConduction's FE subspace.
     #[test]
     fn assemble_errors_when_no_material_matches_fespace() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.get(0).unwrap();

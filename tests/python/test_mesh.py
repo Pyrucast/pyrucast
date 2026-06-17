@@ -6,7 +6,7 @@ import pyrucast
 
 
 def test_submesh_poi1_is_node_list():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     sm = pyrucast.Mesh(c, "POI1")[0]
@@ -17,10 +17,10 @@ def test_submesh_poi1_is_node_list():
 
 
 def test_poi1_from_nodes_builds_points_mesh():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
-    # Node-based: the Configuration is taken from the nodes themselves.
+    # Node-based: the Coords is taken from the nodes themselves.
     m = pyrucast.poi1_from_nodes([a, b])
     assert m.element_types() == ["POI1"]
     assert m.cell_count() == 2
@@ -36,7 +36,7 @@ def test_poi1_from_nodes_empty_raises():
 
 
 def test_aggregate_union_sub_and_sub_union_sub():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     s1 = pyrucast.poi1_from_nodes([a])[0]  # a PySubMesh
@@ -53,7 +53,7 @@ def test_aggregate_union_sub_and_sub_union_sub():
 
 
 def test_node_union_node_and_mesh_union_node():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     d = c.add_node([2.0, 0.0])
@@ -67,7 +67,7 @@ def test_node_union_node_and_mesh_union_node():
 
 
 def test_mesh_union_node_rejects_non_poi1():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
@@ -82,7 +82,7 @@ def test_mesh_union_node_rejects_non_poi1():
 
 
 def test_submesh_tri3_invalid_arity():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     sm = pyrucast.Mesh(c, "TRI3")[0]
     try:
@@ -94,7 +94,7 @@ def test_submesh_tri3_invalid_arity():
 
 
 def test_submesh_protects_nodes_from_gc():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
@@ -125,7 +125,7 @@ def test_submesh_protects_nodes_from_gc():
 
 
 def test_unknown_element_type():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     try:
         pyrucast.Mesh(c, "BOGUS")
     except ValueError:
@@ -135,7 +135,7 @@ def test_unknown_element_type():
 
 
 def test_mesh_aggregates_submeshes():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
@@ -155,7 +155,7 @@ def test_mesh_aggregates_submeshes():
 def test_submesh_cell_indexing_and_iteration():
     """`len(sm)` = cell count, `sm[i]` returns a Cell, and a Cell is
     itself iterable over its nodes."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
@@ -187,7 +187,7 @@ def test_mesh_indexing_and_iteration():
     """`mesh[i]`, `len(mesh)`, `for sm in mesh:` should all work, and the
     `SubMesh` returned by `mesh[i]` shares storage with the parent mesh
     so colour changes survive."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
@@ -215,21 +215,21 @@ def test_mesh_indexing_and_iteration():
         raise AssertionError("expected IndexError on out-of-range index")
 
 
-def test_mesh_rejects_merge_from_other_configuration():
-    c1 = pyrucast.Configuration(2)
-    c2 = pyrucast.Configuration(2)
+def test_mesh_rejects_merge_from_other_coords():
+    c1 = pyrucast.Coords(2)
+    c2 = pyrucast.Coords(2)
     m1 = pyrucast.Mesh(c1, "POI1")
     m2 = pyrucast.Mesh(c2, "POI1")  # different config
     try:
-        _ = m1 | m2  # merge across Configurations — must fail
+        _ = m1 | m2  # merge across Coords — must fail
     except RuntimeError:
         pass
     else:
-        raise AssertionError("expected RuntimeError for mismatched Configurations")
+        raise AssertionError("expected RuntimeError for mismatched Coords")
 
 
 def test_fill_surface_square_gives_two_triangles():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     nodes = [
         c.add_node([0.0, 0.0]),
         c.add_node([1.0, 0.0]),
@@ -246,7 +246,7 @@ def test_fill_surface_square_gives_two_triangles():
 
 
 def test_fill_surface_unknown_element_type():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     nodes = [
         c.add_node([0.0, 0.0]),
         c.add_node([1.0, 0.0]),
@@ -265,7 +265,7 @@ def test_fill_surface_unknown_element_type():
 
 
 def test_fill_surface_rejects_unsupported_target_element():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     nodes = [
         c.add_node([0.0, 0.0]),
         c.add_node([1.0, 0.0]),
@@ -295,7 +295,7 @@ def _build_seg2_loop(c, pts):
 
 def test_fill_surface_with_one_hole_2d():
     # 4×4 outer square, 2×2 inner hole centred at (2, 2).
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
     combined = outer | hole
@@ -316,7 +316,7 @@ def test_fill_surface_with_one_hole_2d():
 
 def test_fill_surface_outer_loop_autodetected():
     # Pass the hole first; the outer loop is still detected correctly.
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     combined = hole | outer
@@ -335,7 +335,7 @@ def test_fill_surface_outer_loop_autodetected():
 def test_fill_surface_refined_creates_more_triangles():
     # 4×4 square with max_edge_length=1.5 must produce strictly more
     # triangles than the un-refined 2.
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     tri = pyrucast.fill_surface(outer, "TRI3", max_edge_length=1.5)
     assert tri.cell_count() > 2
@@ -352,7 +352,7 @@ def test_fill_surface_refined_creates_more_triangles():
 
 def test_fill_surface_refined_with_hole():
     # 4×4 square minus 2×2 hole, refined: area must still be 12.
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
     combined = outer | hole
@@ -369,7 +369,7 @@ def test_fill_surface_refined_with_hole():
 def test_fill_surface_refined_angle_criterion():
     # 4×1 rectangle refined to min angle 20°: initial Delaunay has ~14°
     # somewhere; after refinement no triangle should be below ~19°.
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     rect, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 1.0), (0.0, 1.0)])
     tri = pyrucast.fill_surface(rect, "TRI3", min_angle_deg=20.0)
     # Compute min angle across all triangles.
@@ -395,7 +395,7 @@ def test_fill_surface_3d_tilted_square():
     import math
 
     s = 1.0 / math.sqrt(2.0)
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     pts = [
         (0.0, 0.0, 0.0),
         (1.0, 0.0, 0.0),
@@ -412,7 +412,7 @@ def test_fill_surface_3d_tilted_square():
 
 
 def test_fill_surface_3d_rejects_non_planar_contour():
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     # One corner well out of the z = 0 plane.
     pts = [
         (0.0, 0.0, 0.0),
@@ -434,7 +434,7 @@ def test_fill_surface_3d_rejects_non_planar_contour():
 
 
 def test_fill_surface_rejects_non_seg2_contour():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
@@ -450,7 +450,7 @@ def test_fill_surface_rejects_non_seg2_contour():
 
 
 def test_to_poi1_converts_each_submesh_to_node_list():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
@@ -470,7 +470,7 @@ def test_to_poi1_converts_each_submesh_to_node_list():
 
 
 def test_to_poi1_preserves_submesh_count():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
@@ -488,7 +488,7 @@ def test_to_poi1_preserves_submesh_count():
 
 
 def test_repr_str_submesh_and_mesh():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     sm = pyrucast.Mesh(c, "SEG2")[0]
     assert "SubMesh" in repr(sm)
     assert "SEG2" in str(sm)

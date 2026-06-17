@@ -14,7 +14,7 @@ def test_plane_stress_uniaxial_tension():
     """Unit square, traction S on the right edge ⇒ u_x = (S/E)·x, u_y = -(νS/E)·y."""
     E, NU, S, N = 210.0, 0.3, 2.0, 2
     h = 1.0 / N
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
 
     def idx(i, j):
         return j * (N + 1) + i
@@ -56,7 +56,7 @@ def test_plane_stress_uniaxial_tension():
 
 
 def test_elasticity_rejects_inconsistent_model():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     d = c.add_node([0.0, 1.0])

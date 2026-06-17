@@ -24,7 +24,7 @@
 //! ```
 //! use pyrucast::containers::field::SubField;
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::Coords;
 //! use pyrucast::containers::element_field::{ElementField, SubElementField};
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -38,10 +38,10 @@
 //! use pyrucast::store::insert;
 //!
 //! // 1-D Poisson on [0, 1] with one SEG2 element, k = 1.
-//! let cfg = insert(Configuration::new(1).unwrap());
-//! let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-//! let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+//! let coords = insert(Coords::new(1).unwrap());
+//! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+//! let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
 //! mesh.add_cell(&[a.id(), b.id()]).unwrap();
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //! let sub = fes.get(0).unwrap();
@@ -68,7 +68,7 @@
 //! model.add_sub(insert(dir_b)).unwrap();
 //!
 //! // Load: imposed values T_a = 0, T_b = 1 at the multiplier nodes (slot "imposed_T").
-//! let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+//! let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
 //! load_sm.add_cell(&[mult_a]).unwrap();
 //! load_sm.add_cell(&[mult_b]).unwrap();
 //! let load_sm_h = insert(load_sm);
@@ -137,7 +137,7 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
     })?;
 
     // ── Step 3 — wrap the solution into a fresh single-zone NodeField ──
-    let cfg = rhs.configuration()?;
+    let coords = rhs.coords()?;
 
     // Unique col nodes in first-seen order.
     let mut unique_nodes: Vec<NodeId> = Vec::new();
@@ -157,7 +157,7 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
     // POI1 submesh over the col nodes — provides the support of the
     // resulting SubNodeField. The submesh and the field both end up in the
     // store; they cascade-decref the nodes correctly when dropped.
-    let sm_h = insert(SubMesh::poi1_from_node_ids(cfg.clone(), &unique_nodes)?);
+    let sm_h = insert(SubMesh::poi1_from_node_ids(coords.clone(), &unique_nodes)?);
 
     let mut result = SubNodeField::from_poi1(&sm_h, unique_components)?;
     for (i, (node_id, field_name)) in col_dofs.iter().enumerate() {
@@ -173,7 +173,7 @@ mod tests {
     use super::*;
     use crate::containers::field::SubField;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::element_field::SubElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
@@ -191,13 +191,13 @@ mod tests {
     fn poisson_1d_dirichlet_at_both_ends_recovers_linear_solution() {
         let n_elems = 4;
         let h = 1.0 / n_elems as f64;
-        let cfg = insert(Configuration::new(1).unwrap());
+        let coords = insert(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..=n_elems)
-            .map(|i| Node::create_in(cfg.clone(), &[i as f64 * h]).unwrap())
+            .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]).unwrap())
             .collect();
 
         // Mesh.
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         for i in 0..n_elems {
             mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
         }
@@ -248,7 +248,7 @@ mod tests {
 
         // Build rhs: T_left = 0 at mult_left, T_right = 1 at mult_right
         // (imposed value goes to the "imposed_T" slot).
-        let mut rhs_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut rhs_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[mult_left]).unwrap();
         rhs_sm.add_cell(&[mult_right]).unwrap();
         let rhs_sm_h = insert(rhs_sm);
@@ -289,10 +289,10 @@ mod tests {
     fn singular_matrix_yields_error() {
         // 2-node SEG2 with no Dirichlet → K is the discrete Laplacian
         // [[1, -1], [-1, 1]], singular (kernel = constants).
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.get(0).unwrap();
@@ -307,8 +307,8 @@ mod tests {
         let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
 
         // Build a tiny non-empty rhs on a real node so we can find the
-        // Configuration of the result SubNodeField.
-        let mut rhs_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        // Coords of the result SubNodeField.
+        let mut rhs_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[a.id()]).unwrap();
         let rhs_sm_h = insert(rhs_sm);
         let rhs =
@@ -321,14 +321,14 @@ mod tests {
     fn rectangular_matrix_yields_error() {
         use crate::containers::matrix::{DofOrdering, SubMatrix};
         // 2-row support, 1-col support → 2×1 rectangular block.
-        let cfg = insert(Configuration::new(1).unwrap());
-        let r0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let r1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let c0 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-        let mut row_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let coords = insert(Coords::new(1).unwrap());
+        let r0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let r1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let c0 = Node::create_in(coords.clone(), &[2.0]).unwrap();
+        let mut row_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         row_sm.add_cell(&[r0.id()]).unwrap();
         row_sm.add_cell(&[r1.id()]).unwrap();
-        let mut col_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut col_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         col_sm.add_cell(&[c0.id()]).unwrap();
         let mut block = SubMatrix::new(
             insert(row_sm), insert(col_sm),
@@ -342,8 +342,8 @@ mod tests {
         m.add_sub(insert(block)).unwrap();
         m.finalize().unwrap();
 
-        // Build a minimal rhs on the same cfg.
-        let mut rhs_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        // Build a minimal rhs on the same coords.
+        let mut rhs_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[r0.id()]).unwrap();
         let rhs = NodeField::from_sub(
             SubNodeField::from_poi1(&insert(rhs_sm), vec!["q".into()]).unwrap(),
@@ -354,9 +354,9 @@ mod tests {
     #[test]
     fn empty_matrix_yields_error() {
         let m = crate::containers::matrix::Matrix::empty();
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let mut sm = SubMesh::new(cfg, ElementType::POI1);
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
         let rhs = NodeField::from_sub(
             SubNodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap(),

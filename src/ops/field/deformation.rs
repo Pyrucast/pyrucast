@@ -73,7 +73,7 @@ fn strain_from_gradients(g: &Gradients) -> Result<SubElementField> {
 mod tests {
     use super::*;
     use crate::containers::field::SubField;
-    use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::store::{insert, read};
 
@@ -81,11 +81,11 @@ mod tests {
     /// ⇒ ε_xx = 2, ε_yy = 3, ε_xy = ½(0.5 + 0.1) = 0.3.
     #[test]
     fn linear_displacement_gives_constant_strain() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
@@ -116,11 +116,11 @@ mod tests {
 
     #[test]
     fn rejects_displacement_with_wrong_component_count() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 

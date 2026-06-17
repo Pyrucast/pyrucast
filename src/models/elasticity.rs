@@ -394,16 +394,16 @@ mod tests {
     use crate::aggregate::Aggregate;
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Configuration, ElementType, Mesh, Node};
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node};
     use crate::store::insert;
 
     fn unit_quad(model: ElasticityModel) -> Elasticity {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
-        let d = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::QUA4));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
         mesh.add_cell(&[a.id(), b.id(), c.id(), d.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         Elasticity::new(fes.get(0).unwrap(), model).unwrap()
@@ -415,11 +415,11 @@ mod tests {
         assert_eq!(el.primal_vars(), vec!["u_x", "u_y"]);
         assert_eq!(el.dual_vars(), vec!["f_x", "f_y"]);
         // 2-D space cannot be Solid.
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         assert!(Elasticity::new(fes.get(0).unwrap(), ElasticityModel::Solid).is_err());

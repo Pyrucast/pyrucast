@@ -263,13 +263,13 @@ pub fn assemble_stiffness(
     material: &Handle<SubElementField>,
     k: &mut SubMatrix,
 ) -> Result<()> {
-    let (conn, n_cells, cfg) = {
+    let (conn, n_cells, coords) = {
         let s = read(fespace)?;
         let sm = s.submesh();
-        (read(&sm)?.connectivity().to_vec(), s.cell_count()?, s.configuration()?)
+        (read(&sm)?.connectivity().to_vec(), s.cell_count()?, s.coords()?)
     };
     let coords: Vec<Vec<f64>> = {
-        let c = read(&cfg)?;
+        let c = read(&coords)?;
         conn.iter().map(|&nid| Ok(c.coord(nid)?.to_vec())).collect::<Result<_>>()?
     };
     // [E·A, G·J, E, I_y, I_z, G, A_sy, A_sz] per cell.
@@ -326,14 +326,14 @@ mod tests {
     use crate::aggregate::Aggregate;
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Configuration, Mesh, Node, NodeId};
+    use crate::containers::mesh::{Coords, Mesh, Node, NodeId};
     use crate::store::insert;
 
     fn one_beam(bx: f64, by: f64, bz: f64) -> (Frame3d, NodeId, NodeId) {
-        let cfg = insert(Configuration::new(3).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[bx, by, bz]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let coords = insert(Coords::new(3).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[bx, by, bz]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let frame = Frame3d::new(fes.get(0).unwrap()).unwrap();

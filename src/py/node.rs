@@ -1,15 +1,15 @@
 //! Python wrapper for [`crate::containers::mesh::Node`].
 
-use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::{Coords, NodeId};
 use crate::containers::mesh::Node;
 use crate::py::mesh::PyMesh;
 use crate::store::Handle;
 use pyo3::prelude::*;
 
-/// A node of a `Configuration`: a stable identifier that carries the
-/// configuration it belongs to (and therefore its coordinates).
+/// A node of a `Coords`: a stable identifier that carries the
+/// `Coords` it belongs to (and therefore its coordinates).
 ///
-/// Created via `Configuration.add_node([x, y, ...])`; passed wherever an
+/// Created via `Coords.add_node([x, y, ...])`; passed wherever an
 /// API needs a node.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Node")]
@@ -19,9 +19,9 @@ pub struct PyNode {
 
 impl PyNode {
     /// Build a `PyNode` from a handle and an id that have **already
-    /// been incremented** on the Configuration side. For internal use
-    /// by `PyConfiguration::add_node` / `acquire`.
-    pub(crate) fn from_raw(handle: Handle<Configuration>, id: NodeId) -> Self {
+    /// been incremented** on the Coords side. For internal use
+    /// by `PyCoords::add_node` / `acquire`.
+    pub(crate) fn from_raw(handle: Handle<Coords>, id: NodeId) -> Self {
         Self {
             node: Node::from_parts(handle, id),
         }
@@ -39,7 +39,7 @@ impl PyNode {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyNode {
-    /// Stable integer id of this node within its `Configuration`.
+    /// Stable integer id of this node within its `Coords`.
     #[getter]
     fn id(&self) -> u32 {
         self.node.id().0

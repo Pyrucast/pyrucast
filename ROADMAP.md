@@ -27,7 +27,7 @@
 Un **seul** trait `Persist` (sérialisation `serde` + `bincode`) sert de socle commun :
 
 - **Swap** : sérialise un objet (slot) isolé pour libérer la RAM, rechargé à l'accès. Orchestré par le Store (indexation des slots, politique d'éviction).
-- **Sauvegarde / reprise** : sérialise le **graphe** d'objets d'une `Session` (un Mesh référence une Configuration, un Model un FE space…) avec remappage des handles, dans un conteneur versionné.
+- **Sauvegarde / reprise** : sérialise le **graphe** d'objets d'une `Session` (un Mesh référence une Coords, un Model un FE space…) avec remappage des handles, dans un conteneur versionné.
 
 Format **portable Linux ↔ Windows** :
 
@@ -67,8 +67,8 @@ Un objet n'est terminé que si ces 6 points sont verts.
 
 ### Phase 2 — Tous les objets (structures + bindings, sans numérique lourd)
 Dans l'ordre de dépendance, chacun selon la Definition of Done :
-1. **Configuration** — jeux de coordonnées, bascule de jeu actif, création/suppression de nœuds à chaud. Séparer identité (id interne stable) et ordre solveur (permutation rechargeable). Décision ouverte : politique de suppression d'un nœud encore référencé par un champ.
-2. **Node** — accesseur utilisateur (handle vers Configuration).
+1. **Coords** — jeux de coordonnées, bascule de jeu actif, création/suppression de nœuds à chaud. Séparer identité (id interne stable) et ordre solveur (permutation rechargeable). Décision ouverte : politique de suppression d'un nœud encore référencé par un champ.
+2. **Node** — accesseur utilisateur (handle vers Coords).
 3. **Mesh / SubMesh / `ElementType` (enum)** — un sous-maillage par type ; POI1 = liste de nœuds.
 4. **NodeField** — valeurs sur maillage POI1, multi-composantes nommées.
 5. **FiniteElementSpace** — maillage + formulation EF (éléments de référence, fonctions de forme, points de Gauss : données).
@@ -99,7 +99,7 @@ Le store actuel est la fondation : on **ne le remplace pas**. On y ajoute, **qua
    - *Déclencheur* : le swap manuel devient insuffisant (typiquement sur les premiers solveurs grosse échelle).
    - *Bénéfice* : swap intelligent façon cast3m moderne, sans appels manuels à `swap_out`.
 
-3. **C. Arènes par génération** *(à arbitrer)*. Jeune génération (objets transitoires, collectée souvent) + vieille génération (Configuration, Mesh, collectée rarement), style GC générationnel.
+3. **C. Arènes par génération** *(à arbitrer)*. Jeune génération (objets transitoires, collectée souvent) + vieille génération (Coords, Mesh, collectée rarement), style GC générationnel.
    - *À reconsidérer* uniquement quand A et B auront révélé leurs propres limites.
 
 Détails et tradeoffs : [book/src/memory-model.md](book/src/memory-model.md) (section *Limites connues et évolution prévue*).

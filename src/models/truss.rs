@@ -179,12 +179,12 @@ fn direction_cosines(
     fespace: &Handle<SubFiniteElementSpace>,
     space_dim: usize,
 ) -> Result<Vec<Vec<f64>>> {
-    let (conn, n_cells, cfg) = {
+    let (conn, n_cells, coords) = {
         let s = read(fespace)?;
         let sm = s.submesh();
-        (read(&sm)?.connectivity().to_vec(), s.cell_count()?, s.configuration()?)
+        (read(&sm)?.connectivity().to_vec(), s.cell_count()?, s.coords()?)
     };
-    let c = read(&cfg)?;
+    let c = read(&coords)?;
     let mut out = Vec::with_capacity(n_cells);
     for cell in 0..n_cells {
         let xa = c.coord(conn[2 * cell])?;
@@ -204,13 +204,13 @@ pub fn assemble_stiffness(
     space_dim: usize,
     k: &mut SubMatrix,
 ) -> Result<()> {
-    let (conn, n_cells, cfg) = {
+    let (conn, n_cells, coords) = {
         let s = read(fespace)?;
         let sm = s.submesh();
-        (read(&sm)?.connectivity().to_vec(), s.cell_count()?, s.configuration()?)
+        (read(&sm)?.connectivity().to_vec(), s.cell_count()?, s.coords()?)
     };
     let coords: Vec<Vec<f64>> = {
-        let c = read(&cfg)?;
+        let c = read(&coords)?;
         conn.iter().map(|&nid| Ok(c.coord(nid)?.to_vec())).collect::<Result<_>>()?
     };
     let (es, areas): (Vec<f64>, Vec<f64>) = {
@@ -259,15 +259,15 @@ mod tests {
     use crate::aggregate::Aggregate;
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, NodeId};
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId};
     use crate::store::insert;
 
     /// Truss on a single inclined SEG2 in 2-D, returns `(model, a_id, b_id)`.
     fn inclined_bar(e: f64, area: f64, dx: f64, dy: f64) -> (Truss, NodeId, NodeId, f64, [f64; 2]) {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[dx, dy]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[dx, dy]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let truss = Truss::new(fes.get(0).unwrap()).unwrap();

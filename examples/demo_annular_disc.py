@@ -18,8 +18,8 @@ import pyrucast as pc
 
 
 def main() -> None:
-    cfg = pc.Configuration(2)
-    center = cfg.add_node([0.0, 0.0])
+    coords = pc.Coords(2)
+    center = coords.add_node([0.0, 0.0])
 
     # `circle_seg2` always takes a 3-D normal, even for a 2-D config:
     # (0, 0, 1) means "circle in the XY plane".
@@ -43,7 +43,7 @@ def main() -> None:
     outer_mesh[0].face_color = (60, 60, 220)    # blue
     surface_mesh[0].face_color = (60, 180, 60)  # green
 
-    final = pc.Mesh(cfg)
+    final = pc.Mesh(coords)
     final.add_submesh(inner_mesh[0])
     final.add_submesh(outer_mesh[0])
     final.add_submesh(surface_mesh[0])

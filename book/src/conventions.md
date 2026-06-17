@@ -40,14 +40,14 @@ Toute l'API publique renvoie `pyrucast::Result<T>`, alias de `Result<T, Pyrucast
 Rust :
 
 ```rust,ignore
-use pyrucast::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::Coords;
 
 // Dimension nulle — erreur attendue.
-let err = Configuration::new(0).unwrap_err();
+let err = Coords::new(0).unwrap_err();
 assert!(err.to_string().contains("dim must be ≥ 1"));
 
 // Pattern-matching sur les variantes.
-match Configuration::new(0) {
+match Coords::new(0) {
     Ok(_) => unreachable!(),
     Err(pyrucast::PyrucastError::Message(msg)) => println!("erreur : {msg}"),
     Err(e) => println!("autre erreur : {e}"),
@@ -60,7 +60,7 @@ Python :
 import pyrucast
 
 try:
-    c = pyrucast.Configuration(0)  # dimension nulle
+    c = pyrucast.Coords(0)  # dimension nulle
 except RuntimeError as e:
     print(f"erreur : {e}")         # erreur : dim must be ≥ 1
 ```
@@ -77,11 +77,11 @@ Le binding PyO3 branche ces deux vues sur les dunder methods Python correspondan
 Rust :
 
 ```rust,ignore
-use pyrucast::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::Coords;
 use pyrucast::store::{insert, read};
 
-let cfg = insert(Configuration::new(2).unwrap());
-let c = read(&cfg).unwrap();
+let coords = insert(Coords::new(2).unwrap());
+let c = read(&coords).unwrap();
 println!("{:?}", &*c);  // vue structurelle (Debug)
 println!("{}", &*c);    // vue résumée (Display)
 ```
@@ -91,7 +91,7 @@ Python :
 ```python
 import pyrucast
 
-c = pyrucast.Configuration(dim=2)
+c = pyrucast.Coords(dim=2)
 c.add_node([0.0, 0.0])
 
 print(repr(c))  # vue structurelle — __repr__
@@ -120,7 +120,7 @@ let restored = Pt::from_bytes(&bytes).unwrap();
 assert_eq!(original, restored);
 ```
 
-Le swap disque des objets pyrucast (Configuration, SubMesh, NodeField…) passe par ce même mécanisme sans intervention de l'utilisateur.
+Le swap disque des objets pyrucast (Coords, SubMesh, NodeField…) passe par ce même mécanisme sans intervention de l'utilisateur.
 
 > **Python** : `Persist` n'est pas exposé côté Python — c'est une brique interne du store. La sérialisation des objets depuis Python passera par une API `Session::save` / `Session::load` (Phase 5).
 

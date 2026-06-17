@@ -6,9 +6,9 @@
 //! - [`SubMesh`] — every cell of a single [`ElementType`]. Stores the
 //!   connectivity flat (`Vec<NodeId>`, length `cell_count * nodes_per_cell`).
 //!   RAII referencing: `add_cell` increments the node refcounts in the
-//!   `Configuration`; the `SubMesh`'s `Drop` decrements every referenced
+//!   `Coords`; the `SubMesh`'s `Drop` decrements every referenced
 //!   node.
-//! - [`Mesh`] — aggregate of SubMeshes attached to the same `Configuration`.
+//! - [`Mesh`] — aggregate of SubMeshes attached to the same `Coords`.
 //!
 //! The POI1 case is deliberately degenerate: a POI1 submesh is exactly a
 //! list of nodes.
@@ -16,40 +16,40 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::Coords;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::{insert, read};
 //!
-//! let cfg = insert(Configuration::new(2).unwrap());
-//! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-//! let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-//! let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+//! let coords = insert(Coords::new(2).unwrap());
+//! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+//! let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+//! let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 //!
-//! let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+//! let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 //! sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 //! assert_eq!(sm.cell_count(), 1);
 //!
 //! // The SubMesh holds refs on the 3 nodes, in addition to the `Node`s.
-//! assert_eq!(read(&cfg).unwrap().refcount(a.id()), 2);
+//! assert_eq!(read(&coords).unwrap().refcount(a.id()), 2);
 //! drop(sm);  // decrements the referenced nodes
-//! assert_eq!(read(&cfg).unwrap().refcount(a.id()), 1);
+//! assert_eq!(read(&coords).unwrap().refcount(a.id()), 1);
 //! ```
 
 pub mod cell;
 pub mod color;
-pub mod configuration;
+pub mod coords;
 pub mod element_type;
 pub mod node;
 pub mod point;
 
 // Flat re-exports: the public types of this module are reachable as
-// `mesh::Cell`, `mesh::Configuration`, … alongside the `SubMesh` / `Mesh`
+// `mesh::Cell`, `mesh::Coords`, … alongside the `SubMesh` / `Mesh`
 // defined here, instead of through their defining sub-module.
 pub use cell::{Cell, CellIter};
 pub use color::RgbColor;
-pub use configuration::{Configuration, NodeId};
+pub use coords::{Coords, NodeId};
 pub use element_type::ElementType;
 pub use node::Node;
 pub use point::{Point2, Point3, Vector2, Vector3};
@@ -73,7 +73,7 @@ use std::fmt;
 #[derive(Serialize, Deserialize)]
 pub struct SubMesh {
     element_type: ElementType,
-    config: Handle<Configuration>,
+    coords: Handle<Coords>,
     /// Flat connectivity: cell `i` occupies `[i*npc, (i+1)*npc)`.
     connectivity: Vec<NodeId>,
     /// Face colour used by the viz layer. `serde(default)` keeps older
@@ -83,11 +83,11 @@ pub struct SubMesh {
 }
 
 impl SubMesh {
-    /// Create an empty submesh for the given element type, attached to `config`.
-    pub fn new(config: Handle<Configuration>, element_type: ElementType) -> Self {
+    /// Create an empty submesh for the given element type, attached to `coords`.
+    pub fn new(coords: Handle<Coords>, element_type: ElementType) -> Self {
         Self {
             element_type,
-            config,
+            coords,
             connectivity: Vec::new(),
             face_color: RgbColor::default(),
         }
@@ -105,7 +105,7 @@ impl SubMesh {
 
     /// Add a cell. The length of `nodes` must equal
     /// `element_type.nodes_per_cell()`, and each node must be alive in the
-    /// `Configuration`; each node is increfed. On increment failure
+    /// `Coords`; each node is increfed. On increment failure
     /// (invalid / collected id), the increfs already performed for this
     /// cell are rolled back.
     pub fn add_cell(&mut self, nodes: &[NodeId]) -> Result<usize> {
@@ -119,7 +119,7 @@ impl SubMesh {
             )));
         }
         {
-            let mut c = write(&self.config)?;
+            let mut c = write(&self.coords)?;
             let mut acquired = 0usize;
             for &n in nodes {
                 if let Err(e) = c.incref(n) {
@@ -142,7 +142,7 @@ impl SubMesh {
     /// increfing further; its `Drop` will decref as usual, which
     /// balances the donation.
     ///
-    /// Typical use: a freshly created node (`Configuration::add_node`
+    /// Typical use: a freshly created node (`Coords::add_node`
     /// returns refcount = 1) is handed directly to a POI1 SubMesh which
     /// then becomes its sole owner.
     ///
@@ -160,7 +160,7 @@ impl SubMesh {
             )));
         }
         {
-            let c = read(&self.config)?;
+            let c = read(&self.coords)?;
             for &n in nodes {
                 if !c.is_alive(n) {
                     return Err(PyrucastError::Message(format!(
@@ -190,42 +190,42 @@ impl SubMesh {
         &self.connectivity
     }
 
-    /// Handle to the owning `Configuration` (internal clone).
-    pub fn configuration(&self) -> Handle<Configuration> {
-        self.config.clone()
+    /// Handle to the owning `Coords` (internal clone).
+    pub fn coords(&self) -> Handle<Coords> {
+        self.coords.clone()
     }
 
     /// Build a POI1 submesh with **one cell per [`Node`]**, in the given
-    /// order. The [`Configuration`] is taken from the nodes themselves
+    /// order. The [`Coords`] is taken from the nodes themselves
     /// (every [`Node`] carries its own — project convention). Errors if
-    /// `nodes` is empty (no Configuration to attach to).
+    /// `nodes` is empty (no Coords to attach to).
     ///
-    /// Lower-level form when you already hold the ids and the config:
+    /// Lower-level form when you already hold the ids and the coords:
     /// [`SubMesh::poi1_from_node_ids`].
     pub fn poi1_from_nodes(nodes: &[Node]) -> Result<SubMesh> {
-        let config = nodes
+        let coords = nodes
             .first()
             .ok_or_else(|| {
                 PyrucastError::Message(
                     "SubMesh::poi1_from_nodes: nodes must not be empty".into(),
                 )
             })?
-            .configuration();
+            .coords();
         let ids: Vec<NodeId> = nodes.iter().map(|n| n.id()).collect();
-        SubMesh::poi1_from_node_ids(config, &ids)
+        SubMesh::poi1_from_node_ids(coords, &ids)
     }
 
     /// Build a POI1 submesh with **one cell per node id** in `nodes`, in the
     /// given order. Each node is increfed; on failure the partial submesh's
     /// `Drop` rolls back the increfs already done. The caller is responsible
     /// for any de-duplication (see [`SubMesh::to_poi1`] for the deduped
-    /// variant) and supplies the owning `config` explicitly. When you have
+    /// variant) and supplies the owning `coords` explicitly. When you have
     /// [`Node`] objects, prefer [`SubMesh::poi1_from_nodes`].
     pub fn poi1_from_node_ids(
-        config: Handle<Configuration>,
+        coords: Handle<Coords>,
         nodes: &[NodeId],
     ) -> Result<SubMesh> {
-        let mut sm = SubMesh::new(config, ElementType::POI1);
+        let mut sm = SubMesh::new(coords, ElementType::POI1);
         for &nid in nodes {
             sm.add_cell(&[nid])?;
         }
@@ -247,7 +247,7 @@ impl SubMesh {
                 seen.push(nid);
             }
         }
-        SubMesh::poi1_from_node_ids(self.config.clone(), &seen)
+        SubMesh::poi1_from_node_ids(self.coords.clone(), &seen)
     }
 
     /// Visualize this submesh.
@@ -275,7 +275,7 @@ impl SubMesh {
 impl Drop for SubMesh {
     fn drop(&mut self) {
         // One lock acquisition for all decrefs.
-        if let Ok(mut c) = write(&self.config) {
+        if let Ok(mut c) = write(&self.coords) {
             for &n in &self.connectivity {
                 let _ = c.decref(n);
             }
@@ -288,7 +288,7 @@ impl fmt::Debug for SubMesh {
         // Bounded structure only — the per-cell connectivity lives in `dump()`.
         f.debug_struct("SubMesh")
             .field("element_type", &self.element_type)
-            .field("configuration", &self.config)
+            .field("coords", &self.coords)
             .field("cell_count", &self.cell_count())
             .field("face_color", &self.face_color)
             .finish()
@@ -332,8 +332,8 @@ impl crate::dump::Dump for SubMesh {
 // ─── Mesh ───────────────────────────────────────────────────────────────────
 
 /// Mesh: aggregate of submeshes. Each submesh carries its own
-/// `Handle<Configuration>`; the mesh itself imposes no constraint on
-/// configuration homogeneity.
+/// `Handle<Coords>`; the mesh itself imposes no constraint on
+/// `Coords` homogeneity.
 #[derive(Serialize, Deserialize, Default)]
 pub struct Mesh {
     subs: Vec<Handle<SubMesh>>,
@@ -345,10 +345,10 @@ crate::impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
     }
     fn check_push(&self, h: &Handle<SubMesh>) -> Result<()> {
         if self.is_empty() { return Ok(()); }
-        let a = self.configuration()?;
-        let b = read(h)?.configuration();
+        let a = self.coords()?;
+        let b = read(h)?.coords();
         if a.index() != b.index() || a.generation() != b.generation() {
-            Err(PyrucastError::Message("mismatched Configurations".into()))
+            Err(PyrucastError::Message("mismatched Coords".into()))
         } else {
             Ok(())
         }
@@ -379,9 +379,9 @@ impl Mesh {
     /// (exactly one POI1 submesh). Python: `mesh | node`.
     pub fn union_node(&self, node: &Node) -> Result<Mesh> {
         let sub = self.unit()?;
-        let (et, cfg, mut ids) = {
+        let (et, coords, mut ids) = {
             let s = read(&sub)?;
-            (s.element_type(), s.configuration(), s.connectivity().to_vec())
+            (s.element_type(), s.coords(), s.connectivity().to_vec())
         };
         if et != ElementType::POI1 {
             return Err(PyrucastError::Message(
@@ -389,7 +389,7 @@ impl Mesh {
             ));
         }
         ids.push(node.id());
-        Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(cfg, &ids)?))
+        Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords, &ids)?))
     }
 }
 
@@ -403,18 +403,18 @@ impl Mesh {
         Ok(total)
     }
 
-    /// Handle to the `Configuration` of the first submesh.
+    /// Handle to the `Coords` of the first submesh.
     ///
     /// Returns an error if the mesh has no submeshes.
-    pub fn configuration(&self) -> Result<Handle<Configuration>> {
+    pub fn coords(&self) -> Result<Handle<Coords>> {
         let sm = self.items().first().ok_or_else(|| {
-            PyrucastError::Message("configuration: mesh has no submeshes".into())
+            PyrucastError::Message("coords: mesh has no submeshes".into())
         })?;
-        Ok(read(sm)?.configuration())
+        Ok(read(sm)?.coords())
     }
 
     /// Create a mesh wrapping a single `SubMesh`. Config-free at the Mesh
-    /// level: the submesh already carries its `Configuration` (a Mesh is a
+    /// level: the submesh already carries its `Coords` (a Mesh is a
     /// pure aggregate of submeshes). The submesh is moved into the store.
     pub fn from_submesh(sub: SubMesh) -> Self {
         let mut mesh = Self::default();
@@ -449,7 +449,7 @@ impl Mesh {
     /// Node at position `node_idx` in cell `cell_idx` of submesh `submesh_idx`.
     pub fn node(&self, submesh_idx: usize, cell_idx: usize, node_idx: usize) -> Result<Node> {
         let sm = self.get(submesh_idx)?;
-        let (nid, cfg) = {
+        let (nid, coords) = {
             let s = read(&sm)?;
             let npc = s.element_type.nodes_per_cell();
             let n = s.cell_count();
@@ -469,9 +469,9 @@ impl Mesh {
                         node_idx, npc
                     ))
                 })?;
-            (nid, s.configuration())
+            (nid, s.coords())
         };
-        Node::acquire(cfg, nid)
+        Node::acquire(coords, nid)
     }
 
     /// Return a `Cell` view on cell `cell_idx` of submesh `submesh_idx`.
@@ -541,11 +541,11 @@ mod tests {
 
     #[test]
     fn submesh_poi1_is_node_list() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
         sm.add_cell(&[b.id()]).unwrap();
         assert_eq!(sm.cell_count(), 2);
@@ -555,17 +555,17 @@ mod tests {
 
     #[test]
     fn poi1_from_nodes_derives_config_and_builds() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
-        // Node-based form: Configuration is taken from the nodes themselves.
+        // Node-based form: Coords is taken from the nodes themselves.
         let sm = SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
         assert_eq!(sm.element_type(), ElementType::POI1);
         assert_eq!(sm.cell_count(), 2);
         assert_eq!(sm.connectivity(), &[a.id(), b.id()]);
         // Matches the id-based form on the same nodes.
-        let sm2 = SubMesh::poi1_from_node_ids(cfg.clone(), &[a.id(), b.id()]).unwrap();
+        let sm2 = SubMesh::poi1_from_node_ids(coords.clone(), &[a.id(), b.id()]).unwrap();
         assert_eq!(sm.connectivity(), sm2.connectivity());
     }
 
@@ -576,23 +576,23 @@ mod tests {
 
     #[test]
     fn submesh_tri3_increfs_and_drop_decrefs() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         // SubMesh increfed each of the 3 nodes, in addition to the Nodes.
         {
-            let cf = read(&cfg).unwrap();
+            let cf = read(&coords).unwrap();
             assert_eq!(cf.refcount(a.id()), 2);
             assert_eq!(cf.refcount(b.id()), 2);
             assert_eq!(cf.refcount(c.id()), 2);
         }
         drop(sm);
         {
-            let cf = read(&cfg).unwrap();
+            let cf = read(&coords).unwrap();
             assert_eq!(cf.refcount(a.id()), 1);
             assert_eq!(cf.refcount(b.id()), 1);
             assert_eq!(cf.refcount(c.id()), 1);
@@ -601,36 +601,36 @@ mod tests {
 
     #[test]
     fn submesh_add_cell_invalid_arity() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         let err = sm.add_cell(&[a.id()]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
         // No increment should have survived the failure.
-        assert_eq!(read(&cfg).unwrap().refcount(a.id()), 1);
+        assert_eq!(read(&coords).unwrap().refcount(a.id()), 1);
     }
 
     #[test]
     fn submesh_add_cell_collected_node_rollback() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let dead_id = write(&cfg).unwrap().add_node(&[2.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let dead_id = write(&coords).unwrap().add_node(&[2.0]).unwrap();
         // dead_id starts at refcount=1; decrement then collect.
         {
-            let mut c = write(&cfg).unwrap();
+            let mut c = write(&coords).unwrap();
             c.decref(dead_id).unwrap();
             assert_eq!(c.gc(), 1);
         }
 
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         // a (live), b (live), dead_id (collected) → add_cell fails after
         // increfing a and b. The rollback must undo those increfs.
         let err = sm.add_cell(&[a.id(), b.id(), dead_id]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
         {
-            let cf = read(&cfg).unwrap();
+            let cf = read(&coords).unwrap();
             assert_eq!(cf.refcount(a.id()), 1, "a must be rolled back");
             assert_eq!(cf.refcount(b.id()), 1, "b must be rolled back");
         }
@@ -639,19 +639,19 @@ mod tests {
 
     #[test]
     fn mesh_aggregates_submeshes_same_config() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let cc = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let cc = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
         let sm_pts = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[a.id()]).unwrap();
             sm.add_cell(&[b.id()]).unwrap();
             insert(sm)
         };
         let sm_tri = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), cc.id()]).unwrap();
             insert(sm)
         };
@@ -665,16 +665,16 @@ mod tests {
 
     #[test]
     fn mesh_element_types_and_cell_counts() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
-        let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         m.add_cell(&[a.id()]).unwrap();
         m.add_cell(&[b.id()]).unwrap();
         let sm_tri = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
@@ -689,15 +689,15 @@ mod tests {
 
     #[test]
     fn mesh_index_and_iter_sugar() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
-        let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         m.add_cell(&[a.id()]).unwrap();
         let sm_tri = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
@@ -717,12 +717,12 @@ mod tests {
 
     #[test]
     fn mesh_node_access_by_indices() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
-        let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         m.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         let n = m.node(0, 0, 0).unwrap();
@@ -734,16 +734,16 @@ mod tests {
 
     #[test]
     fn mesh_merge_combines_submeshes() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
-        let mut m1 = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let mut m1 = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         m1.add_cell(&[a.id()]).unwrap();
         m1.add_cell(&[b.id()]).unwrap();
 
-        let mut m2 = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
+        let mut m2 = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         m2.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         let merged = m1.union(&m2).unwrap();
@@ -753,8 +753,8 @@ mod tests {
 
     #[test]
     fn debug_and_display_submesh_and_mesh() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+        let coords = insert(Coords::new(1).unwrap());
+        let sm = SubMesh::new(coords.clone(), ElementType::SEG2);
         let d = format!("{:?}", sm);
         let s = format!("{}", sm);
         assert!(d.contains("SubMesh"));
@@ -767,9 +767,9 @@ mod tests {
 
     #[test]
     fn aggregate_union_sub_and_sub_union_sub() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let s1 = insert(SubMesh::poi1_from_nodes(&[a.clone()]).unwrap());
         let s2 = insert(SubMesh::poi1_from_nodes(&[b.clone()]).unwrap());
 
@@ -785,10 +785,10 @@ mod tests {
 
     #[test]
     fn node_union_node_and_mesh_union_node() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
 
         let m = a.union(&b).unwrap();
         assert_eq!(m.len(), 1);
@@ -800,11 +800,11 @@ mod tests {
 
     #[test]
     fn mesh_union_node_rejects_non_unitary_poi1() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
-        let mut tri = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
+        let mut tri = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         // Non-POI1 → error.
         assert!(tri.union_node(&a).is_err());

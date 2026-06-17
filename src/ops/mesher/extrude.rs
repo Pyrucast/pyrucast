@@ -21,7 +21,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
@@ -30,9 +30,9 @@ mod tests {
 
     #[test]
     fn extrude_seg2_to_qua4() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let seg = line_seg2(&a, &b, 2).unwrap();
 
         let qua = extrude(&seg, &[0.0, 3.0], 3).unwrap();
@@ -48,9 +48,9 @@ mod tests {
 
     #[test]
     fn extrude_seg2_shared_nodes_stay_shared() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let seg = line_seg2(&a, &b, 2).unwrap();
 
         let qua = extrude(&seg, &[0.0, 1.0], 1).unwrap();
@@ -61,12 +61,12 @@ mod tests {
 
     #[test]
     fn extrude_qua4_to_hex8() {
-        let cfg = insert(Configuration::new(3).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[1.0, 1.0, 0.0]).unwrap();
-        let n3 = Node::create_in(cfg.clone(), &[0.0, 1.0, 0.0]).unwrap();
-        let mut qua_mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::QUA4));
+        let coords = insert(Coords::new(3).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[1.0, 1.0, 0.0]).unwrap();
+        let n3 = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
+        let mut qua_mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
         qua_mesh.add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()]).unwrap();
 
         let hex = extrude(&qua_mesh, &[0.0, 0.0, 2.0], 1).unwrap();
@@ -83,29 +83,29 @@ mod tests {
 
     #[test]
     fn extrude_rejects_zero_layers() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let seg = line_seg2(&a, &b, 1).unwrap();
         assert!(extrude(&seg, &[0.0, 1.0], 0).is_err());
     }
 
     #[test]
     fn extrude_rejects_wrong_direction_dim() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let seg = line_seg2(&a, &b, 1).unwrap();
         assert!(extrude(&seg, &[0.0, 1.0, 0.0], 1).is_err());
     }
 
     #[test]
     fn extrude_rejects_unsupported_element_type() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
-        let mut tri = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
+        let mut tri = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         assert!(extrude(&tri, &[0.0, 0.0], 1).is_err());
     }

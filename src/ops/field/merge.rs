@@ -11,7 +11,7 @@ use crate::error::Result;
 /// stay separate; nothing is densified.
 ///
 /// Errors on a value conflict or if the fields are attached to different
-/// `Configuration`s.
+/// `Coords`s.
 pub fn merge(a: &NodeField, b: &NodeField) -> Result<NodeField> {
     a.union(b)
 }
@@ -21,20 +21,20 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::containers::field::Field;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::SubNodeField;
     use crate::store::insert;
 
-    /// Single-zone POI1 field over the given nodes (attached to `cfg`).
+    /// Single-zone POI1 field over the given nodes (attached to `coords`).
     fn poi1_field(
-        cfg: &crate::store::Handle<Configuration>,
+        coords: &crate::store::Handle<Coords>,
         nodes: &[&Node],
         components: Vec<String>,
     ) -> NodeField {
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
         for nd in nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
@@ -44,12 +44,12 @@ mod tests {
     #[test]
     fn merge_compatible() {
         // a: [na, nb] T = [5, 3] ; b: [nb, nc] T = [3, 9] (nb shared, equal).
-        let cfg = insert(Configuration::new(1).unwrap());
-        let na = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let nb = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let nc = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-        let a = poi1_field(&cfg, &[&na, &nb], vec!["T".into()]);
-        let b = poi1_field(&cfg, &[&nb, &nc], vec!["T".into()]);
+        let coords = insert(Coords::new(1).unwrap());
+        let na = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let nb = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let nc = Node::create_in(coords.clone(), &[2.0]).unwrap();
+        let a = poi1_field(&coords, &[&na, &nb], vec!["T".into()]);
+        let b = poi1_field(&coords, &[&nb, &nc], vec!["T".into()]);
         {
             let mut s = crate::store::write(&a.get(0).unwrap()).unwrap();
             s.set(0, 0, 5.0).unwrap();
@@ -74,10 +74,10 @@ mod tests {
 
     #[test]
     fn merge_distinct_component_sets_stay_separate() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let a = poi1_field(&cfg, &[&n], vec!["T".into()]);
-        let b = poi1_field(&cfg, &[&n], vec!["P".into()]);
+        let coords = insert(Coords::new(1).unwrap());
+        let n = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let a = poi1_field(&coords, &[&n], vec!["T".into()]);
+        let b = poi1_field(&coords, &[&n], vec!["P".into()]);
         let c = merge(&a, &b).unwrap();
         assert_eq!(c.len(), 2, "distinct supports ⇒ separate zones");
         assert_eq!(Field::components(&c).unwrap(), vec!["T", "P"]);
@@ -85,10 +85,10 @@ mod tests {
 
     #[test]
     fn merge_conflict_errors() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let a = poi1_field(&cfg, &[&n], vec!["T".into()]);
-        let b = poi1_field(&cfg, &[&n], vec!["T".into()]);
+        let coords = insert(Coords::new(1).unwrap());
+        let n = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let a = poi1_field(&coords, &[&n], vec!["T".into()]);
+        let b = poi1_field(&coords, &[&n], vec!["T".into()]);
         crate::store::write(&a.get(0).unwrap())
             .unwrap()
             .set(0, 0, 1.0)
@@ -102,8 +102,8 @@ mod tests {
 
     #[test]
     fn merge_incompatible_cfg_errors() {
-        let cfg1 = insert(Configuration::new(1).unwrap());
-        let cfg2 = insert(Configuration::new(1).unwrap());
+        let cfg1 = insert(Coords::new(1).unwrap());
+        let cfg2 = insert(Coords::new(1).unwrap());
         let n1 = Node::create_in(cfg1.clone(), &[0.0]).unwrap();
         let n2 = Node::create_in(cfg2.clone(), &[0.0]).unwrap();
         let a = poi1_field(&cfg1, &[&n1], vec!["T".into()]);

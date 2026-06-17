@@ -6,7 +6,7 @@ import pyrucast
 
 
 def _poi1_with(n_nodes, dim=2):
-    c = pyrucast.Configuration(dim)
+    c = pyrucast.Coords(dim)
     coords = [0.0] * dim
     nodes = [c.add_node([float(i)] + coords[1:]) for i in range(n_nodes)]
     mesh = pyrucast.Mesh(c, "POI1")
@@ -17,7 +17,7 @@ def _poi1_with(n_nodes, dim=2):
 
 def _two_zone_mesh():
     """Two TRI3 zones sharing an interface edge (nodes n1, n2)."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -47,7 +47,7 @@ def test_from_mesh_zero_initialized():
 def test_non_poi1_support_uses_distinct_nodes():
     # A non-POI1 mesh is accepted: each zone's sub-field is supported on
     # the distinct nodes of its submesh.
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     seg = pyrucast.Mesh(c, "SEG2")
@@ -173,7 +173,7 @@ def test_value_first_zone_wins_and_check():
 
 
 def test_field_protects_nodes_from_gc():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     nid = a.id
     sm = pyrucast.Mesh(c, "POI1")
@@ -203,7 +203,7 @@ def test_field_protects_nodes_from_gc():
 
 
 def test_coordinates_poi1_mesh_xyz():
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     a = c.add_node([1.0, 2.0, 3.0])
     b = c.add_node([4.0, 5.0, 6.0])
     mesh = pyrucast.Mesh(c, "POI1")
@@ -220,7 +220,7 @@ def test_coordinates_poi1_mesh_xyz():
 
 
 def test_coordinates_converts_non_poi1_and_deduplicates():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.5, 1.0])
@@ -238,7 +238,7 @@ def test_coordinates_converts_non_poi1_and_deduplicates():
 
 
 def test_coordinates_component_subset():
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     a = c.add_node([1.0, 2.0, 3.0])
     mesh = pyrucast.Mesh(c, "POI1")
     mesh.unit().add_cell([a])
@@ -250,7 +250,7 @@ def test_coordinates_component_subset():
 
 
 def test_coordinates_rejects_axis_beyond_dimension():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     mesh = pyrucast.Mesh(c, "POI1")
     mesh.unit().add_cell([a])
@@ -263,7 +263,7 @@ def test_coordinates_rejects_axis_beyond_dimension():
 
 
 def test_set_coordinates_writes_positions():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 1.0])
     mesh = pyrucast.Mesh(c, "POI1")
@@ -280,7 +280,7 @@ def test_set_coordinates_writes_positions():
 
 
 def test_displace_adds_displacement():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 1.0])
     mesh = pyrucast.Mesh(c, "POI1")
@@ -370,7 +370,7 @@ def test_union_rejects_bad_operand():
 
 def test_merge_compatible_and_conflict():
     # a on {n0, n1}, b on {n1, n2} — n1 shared. Union = {n0, n1, n2}.
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     n0 = c.add_node([0.0])
     n1 = c.add_node([1.0])
     n2 = c.add_node([2.0])
@@ -496,7 +496,7 @@ def test_consolidate_keeps_distinct_component_sets_separate():
 
 def test_consolidate_still_dispatches_on_mesh():
     # The top-level consolidate dispatches on type: Mesh → mesher op.
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     d = c.add_node([0.0, 1.0])

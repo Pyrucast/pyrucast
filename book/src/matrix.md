@@ -6,7 +6,7 @@
 
 Chaque ligne et chaque colonne d'une `Matrix` est identifiée par un couple `(NodeId, ChampId)` :
 
-- **`NodeId`** — l'identifiant stable d'un nœud dans la `Configuration`.
+- **`NodeId`** — l'identifiant stable d'un nœud dans la `Coords`.
 - **`ChampId`** — un indice compact dans une petite table de noms portée par la matrice (typiquement 5–10 entrées). Les noms sont des chaînes comme `"T"`, `"q"`, `"ux"`, `"lambda_w"`.
 
 Le type concret est `DofId { node_id, field_idx }`. Cette représentation est compacte (un `u32` par champ partagé sur tous les DOFs qui le portent) et conserve l'information sémantique : à chaque entrée numérique de la matrice est attaché « quel inconnu, à quel nœud ».
@@ -47,7 +47,7 @@ Cette stratégie « COO en construction, CSR/CSC à l'usage » colle au style ca
 ## Cas d'usage typique : matrice de raideur du laplacien
 
 ```rust,ignore
-use pyrucast::mesh::configuration::NodeId;
+use pyrucast::containers::mesh::NodeId;
 use pyrucast::containers::matrix::Matrix;
 
 let mut k = Matrix::new(true);  // matrice de raideur, symétrique

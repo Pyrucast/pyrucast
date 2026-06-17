@@ -3,24 +3,24 @@
 //! It carries a cloned `Handle<SubMesh>` plus the cell's index — cloning
 //! a `Cell` is just an `Arc` clone, so it is cheap to pass around and to
 //! create on the fly inside an iterator. The actual node coordinates live
-//! in the `Configuration` and are fetched on demand through
+//! in the `Coords` and are fetched on demand through
 //! [`Cell::nodes`] / [`Cell::node_ids`].
 //!
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::Coords;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::insert;
 //!
-//! let cfg = insert(Configuration::new(2).unwrap());
-//! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-//! let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-//! let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+//! let coords = insert(Coords::new(2).unwrap());
+//! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+//! let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+//! let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 //!
-//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
 //! mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 //!
 //! let cell = mesh.cell(0, 0).unwrap();
@@ -82,13 +82,13 @@ impl Cell {
     }
 
     /// Materialise the cell's nodes as a `Vec<Node>`. Each `Node`
-    /// increments the node's refcount in the owning `Configuration`,
-    /// matching the behaviour of `Configuration::add_node`.
+    /// increments the node's refcount in the owning `Coords`,
+    /// matching the behaviour of `Coords::add_node`.
     pub fn nodes(&self) -> Result<Vec<Node>> {
-        let cfg = read(&self.sm)?.configuration();
+        let coords = read(&self.sm)?.coords();
         let ids = self.node_ids()?;
         ids.into_iter()
-            .map(|id| Node::acquire(cfg.clone(), id))
+            .map(|id| Node::acquire(coords.clone(), id))
             .collect()
     }
 }
@@ -118,11 +118,11 @@ impl crate::dump::Dump for Cell {
             Ok(et) => format!("Cell<{et}> #{}", self.idx),
             Err(_) => format!("Cell #{}", self.idx),
         };
-        // Per-node coordinate table (one lock on the Configuration).
+        // Per-node coordinate table (one lock on the Coords).
         let body = (|| -> Result<String> {
-            let cfg = read(&self.sm)?.configuration();
+            let coords = read(&self.sm)?.coords();
             let ids = self.node_ids()?;
-            let c = read(&cfg)?;
+            let c = read(&coords)?;
             let mut rows: Vec<Vec<String>> = Vec::with_capacity(ids.len());
             let mut dim = 0usize;
             for &id in &ids {
@@ -189,19 +189,19 @@ impl ExactSizeIterator for CellIter {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::mesh::Node;
     use crate::store::insert;
 
     #[test]
     fn cell_exposes_ids_and_nodes() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let h = insert(sm);
 
@@ -216,19 +216,19 @@ mod tests {
 
     #[test]
     fn cell_new_rejects_out_of_range() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let sm = insert(SubMesh::new(cfg, ElementType::TRI3));
+        let coords = insert(Coords::new(2).unwrap());
+        let sm = insert(SubMesh::new(coords, ElementType::TRI3));
         assert!(Cell::new(sm, 0).is_err());
     }
 
     #[test]
     fn cell_dump_renders_coordinate_table() {
         use crate::dump::{Dump, DumpOptions};
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
-        let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let cell = Cell::new(insert(sm), 0).unwrap();
 
@@ -243,12 +243,12 @@ mod tests {
 
     #[test]
     fn cells_iterator_yields_all_cells() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[2.0]).unwrap();
 
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         mesh.add_cell(&[b.id(), c.id()]).unwrap();
 

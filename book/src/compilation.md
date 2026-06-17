@@ -40,13 +40,13 @@ L'option `--release` compile en mode optimisé : recommandé pour tout usage ré
 ### Vérification immédiate
 
 ```bash
-python -c "import pyrucast; c = pyrucast.Configuration(2); n = c.add_node([0.0, 0.0]); print(c); print(n)"
+python -c "import pyrucast; c = pyrucast.Coords(2); n = c.add_node([0.0, 0.0]); print(c); print(n)"
 ```
 
 Sortie attendue :
 
 ```text
-Configuration: dim=2, sets=1 (active="default"), nodes=1 (0 collected), permutation: identity
+Coords: dim=2, configs=1 (active="default"), nodes=1 (0 collected), permutation: identity
 <Node #0>
 ```
 
@@ -54,12 +54,12 @@ Le module `pyrucast` est installé dans le venv. Tant que le venv est activé (`
 
 ### Premier exemple complet
 
-Un script minimal qui crée une `Configuration` 2D, deux nœuds, un sous-maillage et un maillage :
+Un script minimal qui crée une `Coords` 2D, deux nœuds, un sous-maillage et un maillage :
 
 ```python
 import pyrucast
 
-c = pyrucast.Configuration(dim=2)
+c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
@@ -76,23 +76,23 @@ print(mesh)
 L'exemple équivalent au script Python ci-dessus, compilable en tant que binary ou test d'intégration :
 
 ```rust,ignore
-use pyrucast::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::Coords;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
 use pyrucast::mesh::node::Node;
 use pyrucast::store::insert;
 
 fn main() {
-    let cfg = insert(Configuration::new(2).unwrap());
-    let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-    let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+    let coords = insert(Coords::new(2).unwrap());
+    let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
-    let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
     sm.add_cell(&[a.id()]).unwrap();
     sm.add_cell(&[b.id()]).unwrap();
 
     let sm_h = insert(sm);
-    let mut mesh = Mesh::new(cfg);
+    let mut mesh = Mesh::new(coords);
     mesh.add_sub(sm_h).unwrap();
 
     println!("{}", mesh); // Mesh: 1 submesh(es), 2 cell(s) total
@@ -181,7 +181,7 @@ Plusieurs morceaux de la bibliothèque sont gardés derrière des *features* Car
 
 | Feature | Apport | Implique | Quand l'activer |
 |---|---|---|---|
-| `python-api` | code des `#[pyclass]` (toutes les classes Python : `Configuration`, `Mesh`, `SubMesh`, `Cell`, `Node`, `NodeField`) | — | rarement à la main ; activée automatiquement par `extension-module` et `stub-gen`. Utile pour `cargo test` quand on veut compiler les bindings sans link spécial à libpython. |
+| `python-api` | code des `#[pyclass]` (toutes les classes Python : `Coords`, `Mesh`, `SubMesh`, `Cell`, `Node`, `NodeField`) | — | rarement à la main ; activée automatiquement par `extension-module` et `stub-gen`. Utile pour `cargo test` quand on veut compiler les bindings sans link spécial à libpython. |
 | `extension-module` | `python-api` + dit à `pyo3` de **ne pas** se lier à `libpython` (l'interpréteur hôte la fournit au chargement du `.so`) | `python-api`, `pyo3/extension-module` | systématique pour `maturin develop` / `maturin build` — sans elle, le module Python compilé ne s'importerait pas. |
 | `viz` | export PNG/SVG (rendu CPU via `plotters`) | — | scripts headless, captures pour la doc, CI. |
 | `viz-interactive` | fenêtre interactive `winit`/`softbuffer` (rotation souris, zoom molette, gizmo X/Y/Z) | `viz` | environnement graphique disponible (Linux X11/Wayland, Windows, macOS). |

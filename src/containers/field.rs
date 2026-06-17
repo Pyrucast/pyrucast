@@ -13,15 +13,15 @@
 //!
 //! ```
 //! use pyrucast::containers::field::SubField;
-//! use pyrucast::containers::mesh::{Configuration, ElementType, Node, SubMesh};
+//! use pyrucast::containers::mesh::{Coords, ElementType, Node, SubMesh};
 //! use pyrucast::containers::node_field::SubNodeField;
 //! use pyrucast::store::insert;
 //!
-//! let cfg = insert(Configuration::new(1).unwrap());
-//! let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-//! let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+//! let coords = insert(Coords::new(1).unwrap());
+//! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+//! let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
 //! let sm = {
-//!     let mut sm = SubMesh::new(cfg, ElementType::POI1);
+//!     let mut sm = SubMesh::new(coords, ElementType::POI1);
 //!     sm.add_cell(&[a.id()]).unwrap();
 //!     sm.add_cell(&[b.id()]).unwrap();
 //!     insert(sm)
@@ -330,17 +330,17 @@ mod tests {
     use super::*;
     use crate::containers::element_field::ElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::store::{insert, write, Handle};
 
     fn make_node_field(values: &[f64]) -> SubNodeField {
-        let cfg = insert(Configuration::new(1).unwrap());
+        let coords = insert(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..values.len())
-            .map(|i| Node::create_in(cfg.clone(), &[i as f64]).unwrap())
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::POI1);
+            let mut sm = SubMesh::new(coords, ElementType::POI1);
             for n in &nodes {
                 sm.add_cell(&[n.id()]).unwrap();
             }
@@ -370,11 +370,11 @@ mod tests {
     #[test]
     fn subfield_min_max_isolates_components() {
         // Two components: min/max must stride over the right offsets.
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::POI1);
+            let mut sm = SubMesh::new(coords, ElementType::POI1);
             sm.add_cell(&[a.id()]).unwrap();
             sm.add_cell(&[b.id()]).unwrap();
             insert(sm)
@@ -392,26 +392,26 @@ mod tests {
 
     #[test]
     fn subfield_min_on_empty_support_errors() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let sm: Handle<SubMesh> = insert(SubMesh::new(cfg, ElementType::POI1));
+        let coords = insert(Coords::new(1).unwrap());
+        let sm: Handle<SubMesh> = insert(SubMesh::new(coords, ElementType::POI1));
         let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         assert!(SubField::min(&f, "T").is_err());
     }
 
     fn make_two_zone_element_field() -> ElementField {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let n3 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
         let mut mesh = Mesh::empty();
         let sm_tri = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
         let sm_qua = {
-            let mut sm = SubMesh::new(cfg, ElementType::QUA4);
+            let mut sm = SubMesh::new(coords, ElementType::QUA4);
             sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
             insert(sm)
         };

@@ -5,7 +5,7 @@ import pyrucast
 
 def test_uniform_flux_consistent_loads_on_seg2_line():
     """Uniform flux φ on a SEG2 line: interior node gets φ·h, ends φ·h/2."""
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([0.5])
     d = c.add_node([1.0])
@@ -27,7 +27,7 @@ def test_uniform_flux_consistent_loads_on_seg2_line():
 def test_flux_from_element_field_matches_uniform():
     """A single-component ElementField density gives the same loads as the
     uniform value it carries."""
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -45,7 +45,7 @@ def test_flux_from_element_field_matches_uniform():
 
 def test_flux_rejects_bad_density():
     """A density that is neither a float nor a SubElementField is rejected."""
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")

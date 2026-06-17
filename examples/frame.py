@@ -39,9 +39,9 @@ def main() -> None:
     px, py = -s, c  # perpendiculaire unitaire
     h = L / N
 
-    cfg = pyrucast.Configuration(2)
-    nodes = [cfg.add_node([i * h * c, i * h * s]) for i in range(N + 1)]
-    mesh = pyrucast.Mesh(cfg, "SEG2")
+    coords = pyrucast.Coords(2)
+    nodes = [coords.add_node([i * h * c, i * h * s]) for i in range(N + 1)]
+    mesh = pyrucast.Mesh(coords, "SEG2")
     for i in range(N):
         mesh.unit().add_cell([nodes[i], nodes[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh)
@@ -53,7 +53,7 @@ def main() -> None:
         model, [("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)]
     )
 
-    load = pyrucast.Mesh(cfg, "POI1")
+    load = pyrucast.Mesh(coords, "POI1")
     load.unit().add_cell([nodes[-1]])
     rhs = pyrucast.NodeField(load, ["f_x", "f_y"])
     rhs[0].set_value(nodes[-1], "f_x", P * px)

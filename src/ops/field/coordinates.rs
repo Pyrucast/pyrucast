@@ -22,17 +22,17 @@ fn axis_index(name: &str) -> Option<usize> {
 /// values by construction).
 ///
 /// The field has one component per requested axis (`"X"`, `"Y"`, `"Z"`),
-/// each holding that node's coordinate in the Configuration's active
+/// each holding that node's coordinate in the Coords's active
 /// coordinate set. `components = None` requests all the axes the mesh's
-/// `Configuration` actually has: `["X"]` in 1-D, `["X", "Y"]` in 2-D,
+/// `Coords` actually has: `["X"]` in 1-D, `["X", "Y"]` in 2-D,
 /// `["X", "Y", "Z"]` in 3-D.
 ///
 /// Errors if `mesh` has no submeshes, if a requested component is not one
-/// of `"X"` / `"Y"` / `"Z"`, or if it names an axis the Configuration does
+/// of `"X"` / `"Y"` / `"Z"`, or if it names an axis the Coords does
 /// not have (e.g. `"Z"` on a 2-D mesh).
 pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeField> {
-    let cfg = mesh.configuration()?;
-    let dim = read(&cfg)?.dim() as usize;
+    let coords = mesh.coords()?;
+    let dim = read(&coords)?.dim() as usize;
 
     // Default component list = the axes present in this dimension.
     let components = match components {
@@ -55,7 +55,7 @@ pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeF
             if a >= dim {
                 return Err(PyrucastError::Message(format!(
                     "coordinates: component \"{name}\" needs dimension ≥ {}, \
-                     but the Configuration is {dim}-D",
+                     but the Coords is {dim}-D",
                     a + 1
                 )));
             }
@@ -66,10 +66,10 @@ pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeF
     let mut out = NodeField::default();
     for sm in mesh {
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
-        // Read this zone's coordinates under a single Configuration lock.
+        // Read this zone's coordinates under a single Coords lock.
         let nodes: Vec<NodeId> = sub.nodes().to_vec();
         let coords: Vec<Vec<f64>> = {
-            let c = read(&cfg)?;
+            let c = read(&coords)?;
             nodes
                 .iter()
                 .map(|&nid| c.coord(nid).map(|s| s.to_vec()))
@@ -140,13 +140,13 @@ fn per_node_values(field: &NodeField, comps: &[String]) -> Result<Vec<(NodeId, V
 /// the active coordinate set. `components` lists one field-component name
 /// per spatial axis, in axis order; `None` → `["X", "Y", "Z"][..dim]`
 /// (symmetric with [`coordinates`]). In-place on the field's
-/// `Configuration`.
+/// `Coords`.
 pub fn set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
-    let cfg = field.configuration()?;
-    let dim = read(&cfg)?.dim() as usize;
+    let coords = field.coords()?;
+    let dim = read(&coords)?.dim() as usize;
     let comps = resolve_axis_components(field, components, dim, &["X", "Y", "Z"])?;
     let targets = per_node_values(field, &comps)?;
-    let mut c = write(&cfg)?;
+    let mut c = write(&coords)?;
     for (nid, coord) in &targets {
         c.set_coord(*nid, coord)?;
     }
@@ -158,13 +158,13 @@ pub fn set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> Re
 /// coordinate set — an interface node shared by several zones is displaced
 /// exactly once. `components` lists one displacement-component name per
 /// spatial axis, in axis order; `None` → `["ux", "uy", "uz"][..dim]`.
-/// In-place on the field's `Configuration`.
+/// In-place on the field's `Coords`.
 pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
-    let cfg = field.configuration()?;
-    let dim = read(&cfg)?.dim() as usize;
+    let coords = field.coords()?;
+    let dim = read(&coords)?.dim() as usize;
     let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
     let increments = per_node_values(field, &comps)?;
-    let mut c = write(&cfg)?;
+    let mut c = write(&coords)?;
     for (nid, inc) in &increments {
         let mut coord = c.coord(*nid)?.to_vec();
         for (a, dv) in inc.iter().enumerate() {
@@ -178,7 +178,7 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::SubMesh;
@@ -186,10 +186,10 @@ mod tests {
 
     #[test]
     fn poi1_mesh_coordinates_xyz() {
-        let cfg = insert(Configuration::new(3).unwrap());
-        let a = Node::create_in(cfg.clone(), &[1.0, 2.0, 3.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[4.0, 5.0, 6.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let coords = insert(Coords::new(3).unwrap());
+        let a = Node::create_in(coords.clone(), &[1.0, 2.0, 3.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[4.0, 5.0, 6.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         mesh.add_cell(&[b.id()]).unwrap();
 
@@ -205,14 +205,14 @@ mod tests {
 
     #[test]
     fn non_poi1_mesh_uses_distinct_nodes() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
-        let d = Node::create_in(cfg.clone(), &[1.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[1.5, 1.0]).unwrap();
 
         // Two triangles sharing edge (b, c) in one submesh: 4 unique nodes.
-        let mut tri = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
+        let mut tri = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         tri.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
 
@@ -226,14 +226,14 @@ mod tests {
 
     #[test]
     fn one_sub_per_submesh_with_coherent_interface() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let n3 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
         let mut mesh = Mesh::empty();
         for cell in [[n0.id(), n1.id(), n2.id()], [n1.id(), n3.id(), n2.id()]] {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&cell).unwrap();
             mesh.add_sub(insert(sm)).unwrap();
         }
@@ -248,9 +248,9 @@ mod tests {
 
     #[test]
     fn default_components_follow_dimension() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[7.0, 8.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[7.0, 8.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
 
         let f = coordinates(&mesh, None).unwrap();
@@ -259,9 +259,9 @@ mod tests {
 
     #[test]
     fn explicit_component_subset() {
-        let cfg = insert(Configuration::new(3).unwrap());
-        let a = Node::create_in(cfg.clone(), &[1.0, 2.0, 3.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let coords = insert(Coords::new(3).unwrap());
+        let a = Node::create_in(coords.clone(), &[1.0, 2.0, 3.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
 
         let f = coordinates(&mesh, Some(vec!["X".into(), "Z".into()])).unwrap();
@@ -272,18 +272,18 @@ mod tests {
 
     #[test]
     fn rejects_unknown_component() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         assert!(coordinates(&mesh, Some(vec!["W".into()])).is_err());
     }
 
     #[test]
     fn rejects_axis_beyond_dimension() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         // "Z" needs dim ≥ 3 but the mesh is 2-D.
         assert!(coordinates(&mesh, Some(vec!["Z".into()])).is_err());
@@ -295,11 +295,11 @@ mod tests {
     }
 
     #[test]
-    fn set_coordinates_writes_active_set() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+    fn set_coordinates_writes_active_config() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         mesh.add_cell(&[b.id()]).unwrap();
 
@@ -313,17 +313,17 @@ mod tests {
 
         set_coordinates(&f, None).unwrap();
         {
-            let c = read(&cfg).unwrap();
+            let c = read(&coords).unwrap();
             assert_eq!(c.coord(a.id()).unwrap(), &[10.0, 20.0]);
             assert_eq!(c.coord(b.id()).unwrap(), &[1.0, 1.0]);
         }
     }
 
     #[test]
-    fn displace_adds_to_active_set() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+    fn displace_adds_to_active_config() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
         let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
         let mut d = SubNodeField::from_poi1(&support, vec!["ux".into(), "uy".into()]).unwrap();
         d.set_value(a.id(), "ux", 5.0).unwrap();
@@ -332,7 +332,7 @@ mod tests {
 
         displace(&NodeField::from_sub(d), None).unwrap();
         {
-            let c = read(&cfg).unwrap();
+            let c = read(&coords).unwrap();
             assert_eq!(c.coord(a.id()).unwrap(), &[5.0, -1.0]);
             assert_eq!(c.coord(b.id()).unwrap(), &[3.0, 1.0]);
         }
@@ -341,11 +341,11 @@ mod tests {
     #[test]
     fn displace_moves_interface_nodes_once() {
         // Two zones sharing node `s`: the increment must apply once, not twice.
-        let cfg = insert(Configuration::new(1).unwrap());
-        let s = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let s = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::empty();
         for _ in 0..2 {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[s.id()]).unwrap();
             mesh.add_sub(insert(sm)).unwrap();
         }
@@ -358,17 +358,17 @@ mod tests {
         }
 
         displace(&f, None).unwrap();
-        assert_eq!(read(&cfg).unwrap().coord(s.id()).unwrap(), &[1.5]);
+        assert_eq!(read(&coords).unwrap().coord(s.id()).unwrap(), &[1.5]);
     }
 
     #[test]
     fn writers_reject_wrong_component_count() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         let f = coordinates(&mesh, None).unwrap();
-        // 2-D Configuration needs 2 axis components, not 1.
+        // 2-D Coords needs 2 axis components, not 1.
         assert!(set_coordinates(&f, Some(vec!["X".into()])).is_err());
         // Unknown component name.
         assert!(set_coordinates(&f, Some(vec!["X".into(), "BOGUS".into()])).is_err());

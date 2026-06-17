@@ -40,7 +40,7 @@ def main() -> None:
     h = 1.0 / N_ELEMS
 
     # ── Maillage : une ligne de SEG2 sur [0, 1] ──────────────────────────────
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     nodes = [c.add_node([i * h]) for i in range(N_ELEMS + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(N_ELEMS):

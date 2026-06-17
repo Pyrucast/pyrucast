@@ -56,7 +56,7 @@ impl PyElement {
     }
 
     /// Materialised nodes of this element (each refcounted on the
-    /// Configuration) — symmetric with `Cell.nodes()`.
+    /// Coords) — symmetric with `Cell.nodes()`.
     fn nodes(&self) -> PyResult<Vec<PyNode>> {
         let nodes = self.inner.cell()?.nodes()?;
         Ok(nodes.into_iter().map(PyNode::from_node).collect())

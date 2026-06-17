@@ -14,7 +14,7 @@
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::ops::solver::lu::solve;
@@ -39,11 +39,11 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     let h = L / N as f64;
 
     // ── Maillage : N éléments SEG2 le long de la direction à 45° ───────────
-    let cfg = insert(Configuration::new(2)?);
+    let coords = insert(Coords::new(2)?);
     let nodes: Vec<Node> = (0..=N)
-        .map(|i| Node::create_in(cfg.clone(), &[i as f64 * h * c, i as f64 * h * s]))
+        .map(|i| Node::create_in(coords.clone(), &[i as f64 * h * c, i as f64 * h * s]))
         .collect::<Result<_>>()?;
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for i in 0..N {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }
@@ -64,7 +64,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
         build::material_field(&model, &[("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)])?;
 
     // ── Chargement : force P perpendiculaire à la poutre, au bout libre ────
-    let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
     let load_sm = insert(load_sm);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_x".into(), "f_y".into()])?;

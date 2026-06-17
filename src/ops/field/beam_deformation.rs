@@ -83,17 +83,17 @@ fn subspace_beam_deformation(
 mod tests {
     use super::*;
     use crate::containers::field::SubField;
-    use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::store::insert;
 
     /// Pure bending kinematics `w = 0`, `θ = x` on a SEG2 ⇒ `κ = 1`, `γ = −θ`.
     #[test]
     fn curvature_and_shear_of_linear_rotation() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[2.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[2.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 

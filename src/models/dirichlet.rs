@@ -4,7 +4,7 @@
 //! is a *constraint*, not a volumetric physics: it carries no material and no
 //! constitutive law. It is built from **two meshes supplied by the user** — it
 //! creates no node and never mutates the
-//! [`Configuration`](crate::containers::mesh::Configuration):
+//! [`Coords`](crate::containers::mesh::Coords):
 //!
 //! - `imposed_mesh`  — POI1 (for now): the constrained nodes (shared with the
 //!   target physics), one node per cell;
@@ -87,7 +87,7 @@ impl Dirichlet {
     /// `target_dual` is the dual variable of the target physics (e.g. `"q"`).
     /// `multiplier` / `imposed_value` default to `lambda_<imposed_variable>` /
     /// `imposed_<imposed_variable>` when `None`. Both meshes must be POI1 (for
-    /// now), share one [`Configuration`](crate::containers::mesh::Configuration),
+    /// now), share one [`Coords`](crate::containers::mesh::Coords),
     /// and pair element-for-element (same number of submeshes, same cell count
     /// per submesh).
     pub fn new(
@@ -111,12 +111,12 @@ impl Dirichlet {
                 multiplier_mesh.len()
             )));
         }
-        // NodeIds are Configuration-relative: both meshes must share it.
-        let cfg_i = imposed_mesh.configuration()?;
-        let cfg_m = multiplier_mesh.configuration()?;
-        if cfg_i.index() != cfg_m.index() || cfg_i.generation() != cfg_m.generation() {
+        // NodeIds are Coords-relative: both meshes must share it.
+        let coords_i = imposed_mesh.coords()?;
+        let coords_m = multiplier_mesh.coords()?;
+        if coords_i.index() != coords_m.index() || coords_i.generation() != coords_m.generation() {
             return Err(PyrucastError::Message(
-                "Dirichlet: imposed_mesh and multiplier_mesh must share a Configuration".into(),
+                "Dirichlet: imposed_mesh and multiplier_mesh must share a Coords".into(),
             ));
         }
         // POI1 (for now) + element-for-element pairing (equal cell counts).

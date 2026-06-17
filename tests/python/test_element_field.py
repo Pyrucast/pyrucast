@@ -6,7 +6,7 @@ import pyrucast
 def _tri3_subspace(n_cells=1):
     """Helper: returns (config, mesh, fes) — fes is a FE space with a
     single subspace."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     if n_cells == 1:
         nodes = [
             c.add_node([0.0, 0.0]),

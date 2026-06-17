@@ -7,7 +7,7 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     """Build a 1-D heat-conduction model on a single SEG2 element.
     Returns (config, mesh, fes, sub_fespace, materials, model, a, b).
     """
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([length])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -62,7 +62,7 @@ def test_heat_conduction_single_seg2_stiffness():
 
 
 def test_two_seg2_assembly_is_tridiagonal():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     n0 = c.add_node([0.0])
     n1 = c.add_node([1.0])
     n2 = c.add_node([2.0])
@@ -98,7 +98,7 @@ def test_two_seg2_assembly_is_tridiagonal():
 
 def test_dirichlet_creates_multiplier_node_and_writes_both_blocks():
     c, _, _, _, materials, model, a, _b = _seg2_heat_model(dirichlet_left=True)
-    # The Configuration now has 3 live nodes (2 real + 1 multiplier).
+    # The Coords now has 3 live nodes (2 real + 1 multiplier).
     assert c.node_count() == 3
 
     K = pyrucast.stiffness(model, materials)
@@ -119,7 +119,7 @@ def test_dirichlet_creates_multiplier_node_and_writes_both_blocks():
 
 
 def test_dirichlet_empty_constraint_mesh_rejected():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     empty = pyrucast.Mesh(c, "POI1")  # one POI1 submesh, zero cells
     try:
         pyrucast.Model.dirichlet("T", "q", empty, empty)

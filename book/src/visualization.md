@@ -62,7 +62,7 @@ Tout autre extension est rejetée avec une erreur explicite. Le format vectoriel
 Exemple Rust :
 
 ```rust,ignore
-use pyrucast::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::Coords;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::SubMesh;
 use pyrucast::mesh::node::Node;
@@ -70,11 +70,11 @@ use pyrucast::store::insert;
 use pyrucast::viz::View;
 use std::path::Path;
 
-let cfg = insert(Configuration::new(3).unwrap());
-let a = Node::create_in(cfg.clone(), &[0.0, 0.0, 0.0]).unwrap();
-let b = Node::create_in(cfg.clone(), &[1.0, 0.0, 0.0]).unwrap();
-let c = Node::create_in(cfg.clone(), &[0.0, 1.0, 0.0]).unwrap();
-let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+let coords = insert(Coords::new(3).unwrap());
+let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
+let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
+let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
+let mut sm = SubMesh::new(coords, ElementType::TRI3);
 sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
 // Export vectoriel.
@@ -88,12 +88,12 @@ Côté Python, l'API miroir prend des tuples :
 ```python
 import pyrucast
 
-cfg = pyrucast.Configuration(3)
-a = cfg.add_node([0.0, 0.0, 0.0])
-b = cfg.add_node([1.0, 0.0, 0.0])
-c = cfg.add_node([0.0, 1.0, 0.0])
+coords = pyrucast.Coords(3)
+a = coords.add_node([0.0, 0.0, 0.0])
+b = coords.add_node([1.0, 0.0, 0.0])
+c = coords.add_node([0.0, 1.0, 0.0])
 
-mesh = pyrucast.Mesh(cfg, "TRI3")
+mesh = pyrucast.Mesh(coords, "TRI3")
 mesh.unit().add_cell([a, b, c])
 
 # (yaw, pitch, scale) ; save=None ouvre la fenêtre interactive.
@@ -111,7 +111,7 @@ use pyrucast::mesh::color::RgbColor;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::SubMesh;
 
-let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+let mut sm = SubMesh::new(coords, ElementType::TRI3);
 sm.set_face_color(RgbColor::new(220, 60, 60));
 assert_eq!(sm.face_color(), RgbColor::new(220, 60, 60));
 ```
@@ -119,7 +119,7 @@ assert_eq!(sm.face_color(), RgbColor::new(220, 60, 60));
 Côté Python :
 
 ```python
-sm = pyrucast.Mesh(cfg, "TRI3")[0]   # vue du sous-maillage unique
+sm = pyrucast.Mesh(coords, "TRI3")[0]   # vue du sous-maillage unique
 sm.face_color = (220, 60, 60)
 assert sm.face_color == (220, 60, 60)
 ```

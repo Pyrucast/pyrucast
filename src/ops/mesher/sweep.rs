@@ -41,11 +41,11 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
     }
     let sm_a = mesh_a.get(0)?;
     let sm_b = mesh_b.get(0)?;
-    let cfg_a = read(&sm_a)?.configuration();
-    let cfg_b = read(&sm_b)?.configuration();
-    if cfg_a.index() != cfg_b.index() || cfg_a.generation() != cfg_b.generation() {
+    let coords_a = read(&sm_a)?.coords();
+    let coords_b = read(&sm_b)?.coords();
+    if coords_a.index() != coords_b.index() || coords_a.generation() != coords_b.generation() {
         return Err(PyrucastError::Message(
-            "sweep_qua4: meshes are attached to different Configurations".into(),
+            "sweep_qua4: meshes are attached to different Coords".into(),
         ));
     }
 
@@ -75,7 +75,7 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
         )));
     }
 
-    let cfg = cfg_a;
+    let coords = coords_a;
     let n_cols = n_elems + 1;
 
     // Column j: first node of elem 0 (j=0), or second node of elem j-1 (j≥1).
@@ -89,13 +89,13 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
     let coords_a: Vec<Vec<f64>> = col_ids_a
         .iter()
         .map(|&id| -> Result<Vec<f64>> {
-            Ok(read(&cfg)?.coord(id)?.to_vec())
+            Ok(read(&coords)?.coord(id)?.to_vec())
         })
         .collect::<Result<_>>()?;
     let coords_b: Vec<Vec<f64>> = col_ids_b
         .iter()
         .map(|&id| -> Result<Vec<f64>> {
-            Ok(read(&cfg)?.coord(id)?.to_vec())
+            Ok(read(&coords)?.coord(id)?.to_vec())
         })
         .collect::<Result<_>>()?;
 
@@ -106,19 +106,19 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
     layers.push(
         col_ids_a
             .iter()
-            .map(|&id| Node::acquire(cfg.clone(), id))
+            .map(|&id| Node::acquire(coords.clone(), id))
             .collect::<Result<Vec<_>>>()?,
     );
     for k in 1..n_layers {
         let t = k as f64 / n_layers as f64;
         let layer: Vec<Node> = (0..n_cols)
             .map(|j| {
-                let coords: Vec<f64> = coords_a[j]
+                let coord: Vec<f64> = coords_a[j]
                     .iter()
                     .zip(coords_b[j].iter())
                     .map(|(&ca, &cb)| ca + t * (cb - ca))
                     .collect();
-                Node::create_in(cfg.clone(), &coords)
+                Node::create_in(coords.clone(), &coord)
             })
             .collect::<Result<_>>()?;
         layers.push(layer);
@@ -126,11 +126,11 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
     layers.push(
         col_ids_b
             .iter()
-            .map(|&id| Node::acquire(cfg.clone(), id))
+            .map(|&id| Node::acquire(coords.clone(), id))
             .collect::<Result<Vec<_>>>()?,
     );
 
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::QUA4));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     for k in 0..n_layers {
         for j in 0..n_elems {
             mesh.add_cell(&[
@@ -164,7 +164,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
         ));
     }
 
-    let cfg = mesh.configuration()?;
+    let coords = mesh.coords()?;
 
     // Collect unique NodeIds across all submeshes, first-seen order.
     let mut col_map: std::collections::HashMap<NodeId, usize> =
@@ -187,7 +187,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
     let base_coords: Vec<Vec<f64>> = ordered_ids
         .iter()
         .map(|&id| -> Result<Vec<f64>> {
-            Ok(read(&cfg)?.coord(id)?.to_vec())
+            Ok(read(&coords)?.coord(id)?.to_vec())
         })
         .collect::<Result<_>>()?;
 
@@ -209,18 +209,18 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
     layers.push(
         ordered_ids
             .iter()
-            .map(|&id| Node::acquire(cfg.clone(), id))
+            .map(|&id| Node::acquire(coords.clone(), id))
             .collect::<Result<Vec<_>>>()?,
     );
     for k in 1..=n_layers {
         let layer: Vec<Node> = (0..n_cols)
             .map(|j| {
-                let coords: Vec<f64> = base_coords[j]
+                let coord: Vec<f64> = base_coords[j]
                     .iter()
                     .zip(step.iter())
                     .map(|(&c, &s)| c + k as f64 * s)
                     .collect();
-                Node::create_in(cfg.clone(), &coords)
+                Node::create_in(coords.clone(), &coord)
             })
             .collect::<Result<_>>()?;
         layers.push(layer);
@@ -248,7 +248,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
             }
         };
 
-        let mut sm_out = SubMesh::new(cfg.clone(), extruded_et);
+        let mut sm_out = SubMesh::new(coords.clone(), extruded_et);
 
         for k in 0..n_layers {
             for ci in 0..n_cells {

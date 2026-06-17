@@ -130,7 +130,7 @@ pub fn consolidate(field: &NodeField) -> Result<NodeField> {
 mod tests {
     use super::*;
     use crate::containers::field::Field;
-    use crate::containers::mesh::{Configuration, ElementType, Node, SubMesh};
+    use crate::containers::mesh::{Coords, ElementType, Node, SubMesh};
     use crate::store::{insert, write, Handle};
 
     /// Single-zone POI1 field over `nodes`, sharing the support handle `sm`.
@@ -147,8 +147,8 @@ mod tests {
         f
     }
 
-    fn poi1(cfg: &Handle<Configuration>, nodes: &[&Node]) -> Handle<SubMesh> {
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    fn poi1(coords: &Handle<Coords>, nodes: &[&Node]) -> Handle<SubMesh> {
+        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
         for nd in nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
@@ -158,10 +158,10 @@ mod tests {
     #[test]
     fn same_support_distinct_components_fuse() {
         // Two zones on the *same* POI1 support, components ["T"] and ["P"].
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let sm = poi1(&cfg, &[&n0, &n1]);
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let sm = poi1(&coords, &[&n0, &n1]);
 
         let a = field_on(&sm, vec!["T".into()]);
         let b = field_on(&sm, vec!["P".into()]);
@@ -177,9 +177,9 @@ mod tests {
 
     #[test]
     fn same_support_shared_component_must_agree() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let sm = poi1(&cfg, &[&n0]);
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let sm = poi1(&coords, &[&n0]);
         let a = field_on(&sm, vec!["T".into()]);
         let b = field_on(&sm, vec!["T".into()]);
         write(&a.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 1.0).unwrap();
@@ -191,9 +191,9 @@ mod tests {
 
     #[test]
     fn same_support_shared_component_agreeing_is_ok() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let sm = poi1(&cfg, &[&n0]);
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let sm = poi1(&coords, &[&n0]);
         let a = field_on(&sm, vec!["T".into(), "P".into()]);
         let b = field_on(&sm, vec!["T".into()]);
         write(&a.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 7.0).unwrap();
@@ -206,11 +206,11 @@ mod tests {
 
     #[test]
     fn distinct_supports_stay_separate_and_share_handles() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let sm_a = poi1(&cfg, &[&n0]);
-        let sm_b = poi1(&cfg, &[&n1]);
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let sm_a = poi1(&coords, &[&n0]);
+        let sm_b = poi1(&coords, &[&n1]);
         let a = field_on(&sm_a, vec!["T".into()]);
         let b = field_on(&sm_b, vec!["P".into()]);
         let f = two_zone(&a, &b);
@@ -225,11 +225,11 @@ mod tests {
     fn cross_support_shared_node_checked() {
         // Two distinct POI1 supports that both include node n (different
         // submeshes, n shared); a diverging T at n is still an error.
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let m = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let sm_a = poi1(&cfg, &[&n, &m]);
-        let sm_b = poi1(&cfg, &[&n]);
+        let coords = insert(Coords::new(1).unwrap());
+        let n = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let m = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let sm_a = poi1(&coords, &[&n, &m]);
+        let sm_b = poi1(&coords, &[&n]);
         let a = field_on(&sm_a, vec!["T".into()]);
         let b = field_on(&sm_b, vec!["T".into()]);
         write(&a.get(0).unwrap()).unwrap().set_value(n.id(), "T", 1.0).unwrap();

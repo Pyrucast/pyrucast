@@ -50,14 +50,14 @@ La méthode `point_values(cell, g)` expose directement le premier de ces pattern
 
 ## Refcount et cycle de vie
 
-L'`ElementField` détient un `Handle<SubFiniteElementSpace>` (cloné, donc compté par référence). Tant que le champ est vivant, son sous-espace ne peut pas être collecté. Quand le `Drop` du champ s'exécute, le refcount du sous-espace est décrémenté ; s'il atteint zéro, la cascade descend jusqu'au `SubMesh` et à la `Configuration`.
+L'`ElementField` détient un `Handle<SubFiniteElementSpace>` (cloné, donc compté par référence). Tant que le champ est vivant, son sous-espace ne peut pas être collecté. Quand le `Drop` du champ s'exécute, le refcount du sous-espace est décrémenté ; s'il atteint zéro, la cascade descend jusqu'au `SubMesh` et à la `Coords`.
 
 `ElementField` lui-même n'incrémente **pas** le refcount des nœuds : il n'a pas de support nodal direct. Les nœuds restent protégés par le `SubMesh` du sous-espace, qui les incref déjà.
 
 ## API Rust
 
 ```rust,ignore
-use pyrucast::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::Coords;
 use pyrucast::containers::element_field::ElementField;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::finite_element_space::FiniteElementSpace;
@@ -66,11 +66,11 @@ use pyrucast::containers::field::SubField;
 use pyrucast::mesh::node::Node;
 use pyrucast::store::insert;
 
-let cfg = insert(Configuration::new(2).unwrap());
-let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+let coords = insert(Coords::new(2).unwrap());
+let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
 mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 let sub = fes.get(0).unwrap();
@@ -112,7 +112,7 @@ let shifted = mat - 5.0;   // version consommante : zéro-copie
 import pyrucast
 
 # Maillage + FE space — préparation.
-c = pyrucast.Configuration(dim=2)
+c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 c2 = c.add_node([0.0, 1.0])

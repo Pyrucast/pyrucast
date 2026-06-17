@@ -9,7 +9,7 @@ import pyrucast
 
 
 def test_lagrange1_constructor_one_to_one_with_submeshes():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -34,7 +34,7 @@ def test_lagrange1_constructor_one_to_one_with_submeshes():
 
 
 def test_lagrange1_classmethod_equivalent():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -49,7 +49,7 @@ def test_lagrange1_classmethod_equivalent():
 
 
 def test_with_choices_explicit_per_submesh():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -64,7 +64,7 @@ def test_with_choices_explicit_per_submesh():
 
 
 def test_with_choices_rejects_bad_length():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -80,7 +80,7 @@ def test_with_choices_rejects_bad_length():
 
 
 def test_unknown_interpolation_raises():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -96,7 +96,7 @@ def test_unknown_interpolation_raises():
 
 
 def test_unknown_quadrature_raises():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -112,7 +112,7 @@ def test_unknown_quadrature_raises():
 
 
 def test_rejects_mesh_with_poi1_submesh():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     mesh = pyrucast.Mesh(c, "POI1")
     mesh.unit().add_cell([a])
@@ -125,7 +125,7 @@ def test_rejects_mesh_with_poi1_submesh():
 
 
 def test_rejects_empty_mesh():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     mesh = pyrucast.Mesh(c)
     try:
         pyrucast.FiniteElementSpace(mesh)
@@ -140,7 +140,7 @@ def test_rejects_empty_mesh():
 
 def test_reference_tables_partition_of_unity():
     """At every Gauss point, Σ_i N_i = 1 (partition of unity)."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -155,7 +155,7 @@ def test_reference_tables_partition_of_unity():
 
 def test_reference_tables_dn_dxi_sums_to_zero():
     """For each ref direction k, Σ_i ∂N_i/∂ξ_k = 0 (derivative of partition)."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([1.0, 1.0])
@@ -183,7 +183,7 @@ def test_gauss_weights_sum_to_reference_volume():
         "HEX8": 8.0,
     }
     for et, vol in expected.items():
-        c = pyrucast.Configuration(3 if et in ("TET4", "HEX8") else 2)
+        c = pyrucast.Coords(3 if et in ("TET4", "HEX8") else 2)
         # Build a minimal valid cell of this element type so the FE space
         # constructor has something to wrap.
         if et == "SEG2":
@@ -212,7 +212,7 @@ def test_gauss_weights_sum_to_reference_volume():
 
 def test_seg2_jacobian_1d():
     """SEG2 of length L on the x-axis: |J| = L/2 at every Gauss point."""
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([5.0])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -225,7 +225,7 @@ def test_seg2_jacobian_1d():
 
 def test_seg2_jacobian_in_plane():
     """SEG2 of length 3 in the xy-plane: J = [3/2, 0]^T, |J| = 3/2."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 1.0])
     b = c.add_node([3.0, 1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -242,7 +242,7 @@ def test_seg2_jacobian_in_plane():
 
 def test_tri3_jacobian_planar():
     """TRI3 (0,0), (a,0), (0,b): |J| = a·b (twice the area)."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([3.0, 0.0])
     n2 = c.add_node([0.0, 4.0])
@@ -255,9 +255,9 @@ def test_tri3_jacobian_planar():
 
 
 def test_tri3_manifold_in_3d():
-    """Same triangle but in a 3-D Configuration: |J| stays at 12 via
+    """Same triangle but in a 3-D Coords: |J| stays at 12 via
     sqrt(det(JᵀJ))."""
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     n0 = c.add_node([0.0, 0.0, 7.0])
     n1 = c.add_node([3.0, 0.0, 7.0])
     n2 = c.add_node([0.0, 4.0, 7.0])
@@ -273,7 +273,7 @@ def test_tri3_manifold_in_3d():
 
 def test_qua4_unit_square_integrates_to_area():
     """Σ_g w_g · |J(g)| over a unit QUA4 must equal the physical area = 1."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([1.0, 1.0])
@@ -287,7 +287,7 @@ def test_qua4_unit_square_integrates_to_area():
 
 
 def test_hex8_unit_cube_integrates_to_volume():
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     pts = [
         (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0),
         (0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (0.0, 1.0, 1.0),
@@ -304,7 +304,7 @@ def test_hex8_unit_cube_integrates_to_volume():
 def test_tri3_dn_dx_constant_known_values():
     """For the triangle (0,0), (3,0), (0,4) and Lagrange-1, dN/dx is
     constant: ∂N₁/∂x = -1/3, ∂N₁/∂y = -1/4, etc."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([3.0, 0.0])
     n2 = c.add_node([0.0, 4.0])
@@ -327,7 +327,7 @@ def test_tri3_dn_dx_constant_known_values():
 
 def test_jacobian_reflects_mesh_displacement():
     """After set_coord on a node, the on-the-fly Jacobian must update."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -347,7 +347,7 @@ def test_jacobian_reflects_mesh_displacement():
 
 
 def test_index_out_of_range():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -363,7 +363,7 @@ def test_index_out_of_range():
 
 
 def test_negative_indexing_works():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -374,7 +374,7 @@ def test_negative_indexing_works():
 
 
 def test_gauss_index_out_of_range_raises():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -391,7 +391,7 @@ def test_gauss_index_out_of_range_raises():
 
 
 def test_cell_index_out_of_range_raises():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -411,7 +411,7 @@ def test_cell_index_out_of_range_raises():
 
 
 def test_repr_and_str():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])
@@ -434,7 +434,7 @@ def test_repr_and_str():
 def test_union_merges_subspaces():
     """`fes_a | fes_b` concatenates subspaces into a fresh space, like the
     other aggregates. No DOF check is performed."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([1.0, 0.0])
     n2 = c.add_node([0.0, 1.0])

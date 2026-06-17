@@ -6,24 +6,24 @@
 
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, Node, SubMesh};
-use crate::py::configuration::PyConfiguration;
+use crate::py::coords::PyCoords;
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-/// Build a points (POI1) mesh holding every live node of `config`.
+/// Build a points (POI1) mesh holding every live node of `coords`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn from_live_nodes(config: PyRef<PyConfiguration>) -> PyResult<PyMesh> {
-    let mesh = crate::ops::mesher::from_live_nodes(config.handle.clone())?;
+pub fn from_live_nodes(coords: PyRef<PyCoords>) -> PyResult<PyMesh> {
+    let mesh = crate::ops::mesher::from_live_nodes(coords.handle.clone())?;
     Ok(PyMesh { inner: mesh })
 }
 
 /// Build a points (POI1) mesh with one point per node in `nodes`.
 ///
-/// The Configuration is taken from the nodes themselves (every `Node`
-/// carries its own), so no Configuration argument is needed. Returns a
+/// The Coords is taken from the nodes themselves (every `Node`
+/// carries its own), so no Coords argument is needed. Returns a
 /// Mesh with a single POI1 submesh; raises if `nodes` is empty.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

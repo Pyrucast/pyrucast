@@ -251,7 +251,7 @@ let triangles = triangulate_polygon_with_holes_refined(&outer, &[], Some(opts)).
 println!("{} triangles après raffinement", triangles.len());
 ```
 
-> Ces fonctions renvoient des indices dans le tableau de points fourni en entrée (plus les Steiner éventuels). Elles ne touchent pas au store ni à la `Configuration` — `fill_surface` se charge de la conversion vers les `NodeId`.
+> Ces fonctions renvoient des indices dans le tableau de points fourni en entrée (plus les Steiner éventuels). Elles ne touchent pas au store ni à la `Coords` — `fill_surface` se charge de la conversion vers les `NodeId`.
 
 ## Triangulation de Delaunay : la propriété du cercle vide
 

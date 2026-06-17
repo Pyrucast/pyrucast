@@ -33,7 +33,7 @@ def _clamp(nodes, var, dual):
 
 def main() -> None:
     h = 1.0 / N
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
 
     def idx(i, j):
         return j * (N + 1) + i

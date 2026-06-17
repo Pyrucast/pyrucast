@@ -13,7 +13,7 @@ def test_cantilever_converges_without_locking():
     """Slender cantilever, tip load P ⇒ w_tip = P·L³/(3EI) + P·L/(G·A_s)."""
     E, I, G, A_S, L, P, N = 1.0, 1.0, 30.0, 1.0, 1.0, 1.0, 40
     h = L / N
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     nodes = [c.add_node([i * h]) for i in range(N + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(N):
@@ -43,7 +43,7 @@ def test_section_forces_cantilever():
     """COMP : M = E·I·θ', V = G·A_s·(w'−θ). V ≈ −P constant, M linéaire."""
     E, I, G, A_S, L, P, N = 1.0, 1.0, 30.0, 1.0, 1.0, 1.0, 40
     h = L / N
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     nodes = [c.add_node([i * h]) for i in range(N + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(N):
@@ -72,7 +72,7 @@ def test_section_forces_cantilever():
 
 
 def test_timoshenko_vars():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")

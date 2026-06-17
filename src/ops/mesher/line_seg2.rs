@@ -6,7 +6,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 /// Build a mesh of `n_elems` SEG2 elements along the straight line from
 /// node `a` to node `b`.
 ///
-/// Both nodes must belong to the same `Configuration` and have the same
+/// Both nodes must belong to the same `Coords` and have the same
 /// coordinate dimension. `n_elems` must be ≥ 1.
 ///
 /// The two endpoint nodes are re-used (their refcount is incremented);
@@ -17,11 +17,11 @@ pub fn line_seg2(a: &Node, b: &Node, n_elems: usize) -> Result<Mesh> {
             "line_seg2: n_elems must be ≥ 1".into(),
         ));
     }
-    let cfg = a.configuration();
-    let cfg_b = b.configuration();
-    if cfg.index() != cfg_b.index() || cfg.generation() != cfg_b.generation() {
+    let coords = a.coords();
+    let coords_b = b.coords();
+    if coords.index() != coords_b.index() || coords.generation() != coords_b.generation() {
         return Err(PyrucastError::Message(
-            "line_seg2: nodes belong to different Configurations".into(),
+            "line_seg2: nodes belong to different Coords".into(),
         ));
     }
     let coords_a = a.coord()?;
@@ -34,19 +34,19 @@ pub fn line_seg2(a: &Node, b: &Node, n_elems: usize) -> Result<Mesh> {
 
     // n_elems+1 nodes: a, n_elems-1 intermediate, b.
     let mut nodes: Vec<Node> = Vec::with_capacity(n_elems + 1);
-    nodes.push(Node::acquire(cfg.clone(), a.id())?);
+    nodes.push(Node::acquire(coords.clone(), a.id())?);
     for i in 1..n_elems {
         let t = i as f64 / n_elems as f64;
-        let coords: Vec<f64> = coords_a
+        let coord: Vec<f64> = coords_a
             .iter()
             .zip(coords_b.iter())
             .map(|(&ca, &cb)| ca + t * (cb - ca))
             .collect();
-        nodes.push(Node::create_in(cfg.clone(), &coords)?);
+        nodes.push(Node::create_in(coords.clone(), &coord)?);
     }
-    nodes.push(Node::acquire(cfg.clone(), b.id())?);
+    nodes.push(Node::acquire(coords.clone(), b.id())?);
 
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     for i in 0..n_elems {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }
@@ -56,16 +56,16 @@ pub fn line_seg2(a: &Node, b: &Node, n_elems: usize) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::store::insert;
 
     #[test]
     fn line_seg2_basic() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[6.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[6.0]).unwrap();
 
         let mesh = line_seg2(&a, &b, 3).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG2]);
@@ -85,9 +85,9 @@ mod tests {
 
     #[test]
     fn line_seg2_one_element() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
 
         let mesh = line_seg2(&a, &b, 1).unwrap();
         assert_eq!(mesh.cell_count().unwrap(), 1);
@@ -97,9 +97,9 @@ mod tests {
 
     #[test]
     fn line_seg2_zero_elems_is_error() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         assert!(line_seg2(&a, &b, 0).is_err());
     }
 }

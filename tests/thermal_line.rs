@@ -14,7 +14,7 @@
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::ops::solver::lu::solve;
@@ -32,11 +32,11 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let h = 1.0 / N_ELEMS as f64;
 
     // ── Maillage : une ligne de SEG2 sur [0, 1] ────────────────────────────
-    let cfg = insert(Configuration::new(1)?);
+    let coords = insert(Coords::new(1)?);
     let nodes: Vec<Node> = (0..=N_ELEMS)
-        .map(|i| Node::create_in(cfg.clone(), &[i as f64 * h]))
+        .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
         .collect::<Result<_>>()?;
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for i in 0..N_ELEMS {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }
@@ -60,7 +60,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     // ── Chargement : source Q en x = 0 (composante duale "q"), valeur imposée
     //    T = 20 au nœud-multiplicateur (slot "imposed_T") ───────────────────
     let node0 = nodes[0].id();
-    let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[node0])?;
     load_sm.add_cell(&[mult])?;
     let load_sm = insert(load_sm);

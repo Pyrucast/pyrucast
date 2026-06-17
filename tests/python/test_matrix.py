@@ -28,7 +28,7 @@ def _make_block(c, row_ids, col_ids, dual_vars, primal_vars, symmetric=False):
 
 
 def test_empty_sub_matrix():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     m = _make_block(c, [a, b], [a, b], ["q"], ["T"])
@@ -39,7 +39,7 @@ def test_empty_sub_matrix():
 
 
 def test_sub_matrix_symmetric_flag():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     m = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
     assert m.symmetric is True
@@ -49,7 +49,7 @@ def test_sub_matrix_symmetric_flag():
 
 
 def test_sub_matrix_add_entry_and_get():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     m = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetric=True)
@@ -67,14 +67,14 @@ def test_sub_matrix_add_entry_and_get():
 
 
 def test_sub_matrix_get_unknown_returns_zero():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     m = _make_block(c, [a], [a], ["q"], ["T"])
     assert m.get(a, "x", a, "y") == 0.0
 
 
 def test_sub_matrix_repeated_entries_sum():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     m = _make_block(c, [a], [a], ["q"], ["T"])
     m.add_entry(a, "q", a, "T", 2.0)
@@ -85,7 +85,7 @@ def test_sub_matrix_repeated_entries_sum():
 
 
 def test_sub_matrix_dense_layout_is_row_major():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     m = _make_block(c, [a, b], [a, b], ["q"], ["T"])
@@ -97,7 +97,7 @@ def test_sub_matrix_dense_layout_is_row_major():
 
 
 def test_sub_matrix_mul_dense_against_known_block():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     m = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetric=True)
@@ -110,7 +110,7 @@ def test_sub_matrix_mul_dense_against_known_block():
 
 
 def test_sub_matrix_mul_dense_rejects_wrong_size():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     m = _make_block(c, [a], [a], ["q"], ["T"])
     m.add_entry(a, "q", a, "T", 1.0)
@@ -123,7 +123,7 @@ def test_sub_matrix_mul_dense_rejects_wrong_size():
 
 
 def test_sub_matrix_row_and_col_dofs():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     m = _make_block(c, [a, b], [a, b], ["q"], ["T"])
@@ -135,7 +135,7 @@ def test_sub_matrix_row_and_col_dofs():
 
 
 def test_sub_matrix_entries_preserves_insertion_order():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     m = _make_block(c, [a, b], [a, b], ["a"], ["b"])
@@ -151,7 +151,7 @@ def test_sub_matrix_entries_preserves_insertion_order():
 
 
 def test_sub_matrix_repr_and_str():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     m = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
     m.add_entry(a, "q", a, "T", 2.0)
@@ -176,7 +176,7 @@ def test_empty_matrix_aggregate():
 
 
 def test_matrix_aggregates_two_blocks():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     # Block A: row a, cols (a, b).
@@ -207,7 +207,7 @@ def test_matrix_aggregates_two_blocks():
 def test_matrix_compose_blocks_with_union():
     """`Matrix.block(...) + Matrix.block(...)` composes blocks the
     parent-level way; entries are filled through the block view `[0]`."""
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     ba = pyrucast.Matrix.block(
@@ -231,7 +231,7 @@ def test_matrix_compose_blocks_with_union():
 
 
 def test_matrix_get_sums_across_blocks():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     block_a = _make_block(c, [a], [a], ["q"], ["T"])
     block_a.add_entry(a, "q", a, "T", 2.0)
@@ -244,7 +244,7 @@ def test_matrix_get_sums_across_blocks():
 
 
 def test_matrix_symmetric_is_and_of_blocks():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     block_a = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
     block_b = _make_block(c, [a], [a], ["q"], ["T"], symmetric=False)
@@ -255,7 +255,7 @@ def test_matrix_symmetric_is_and_of_blocks():
 
 
 def test_matrix_entries_concatenates_blocks():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     block_a = _make_block(c, [a], [a], ["q"], ["T"])
@@ -272,7 +272,7 @@ def test_matrix_entries_concatenates_blocks():
 
 
 def test_matrix_repr_and_str():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     block_a = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
     block_a.add_entry(a, "q", a, "T", 2.0)
@@ -289,7 +289,7 @@ def test_matrix_repr_and_str():
 
 
 def test_sub_matrix_dump_prints_labeled_grid(capsys):
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     block = _make_block(c, [a, b], [a, b], ["q"], ["T"])
@@ -312,7 +312,7 @@ def test_sub_matrix_dump_prints_labeled_grid(capsys):
 
 
 def test_matrix_dump_prints_global_grid_and_elides(capsys):
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     block_a = _make_block(c, [a], [a, b], ["q"], ["T"], symmetric=True)

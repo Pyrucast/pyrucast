@@ -15,7 +15,7 @@
 //! (see [`FluxDensity`]).
 //!
 //! The element measure `|J|` comes from the FE subspace, so a **boundary** mesh
-//! works directly: a `SEG2` edge embedded in a 2-D `Configuration` integrates as
+//! works directly: a `SEG2` edge embedded in a 2-D `Coords` integrates as
 //! a line (manifold Jacobian), a surface mesh as an area.
 
 use crate::containers::element_field::SubElementField;
@@ -107,18 +107,18 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
     use crate::store::insert;
 
     /// Lagrange-1 FE subspace over a fresh SEG2 line of `n` equal elements from
     /// `a` to `b` (built on the given coordinates).
-    fn seg2_line(coords: &[Vec<f64>]) -> Handle<SubFiniteElementSpace> {
-        let cfg = insert(Configuration::new(coords[0].len() as u8).unwrap());
-        let nodes: Vec<Node> = coords
+    fn seg2_line(points: &[Vec<f64>]) -> Handle<SubFiniteElementSpace> {
+        let coords = insert(Coords::new(points[0].len() as u8).unwrap());
+        let nodes: Vec<Node> = points
             .iter()
-            .map(|c| Node::create_in(cfg.clone(), c).unwrap())
+            .map(|c| Node::create_in(coords.clone(), c).unwrap())
             .collect();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         for w in nodes.windows(2) {
             mesh.add_cell(&[w[0].id(), w[1].id()]).unwrap();
         }
@@ -148,7 +148,7 @@ mod tests {
         assert!((total - phi * 1.0).abs() < tol, "total {total} ≠ {}", phi);
     }
 
-    /// A SEG2 edge embedded in a 2-D Configuration is integrated with the
+    /// A SEG2 edge embedded in a 2-D Coords is integrated with the
     /// **line** measure (manifold Jacobian): a unit edge of uniform flux `φ`
     /// gives nodal loads summing to `φ·length`.
     #[test]

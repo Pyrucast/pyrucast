@@ -105,8 +105,8 @@ classDiagram
         +__repr__() PyResult~String~
         +__str__() PyResult~String~
     }
-    class py_PyConfiguration {
-        -handle: Handle~mesh_Configuration~
+    class py_PyCoords {
+        -handle: Handle~mesh_Coords~
         +py_new(dim:u8) PyResult~Self~
         +dim() PyResult~u8~
         +node_count() PyResult~usize~
@@ -118,10 +118,10 @@ classDiagram
         +gc() PyResult~usize~
         +coord(id:u32) PyResult~Vec<f64>~
         +set_coord(id:u32, coords:Vec~f64~) PyResult~()~
-        +add_coord_set(name:String) PyResult~usize~
-        +switch_to(set:usize) PyResult~()~
-        +active_set() PyResult~usize~
-        +set_names() PyResult~Vec<String>~
+        +add_config(name:String) PyResult~usize~
+        +select(config:usize) PyResult~()~
+        +active() PyResult~usize~
+        +names() PyResult~Vec<String>~
         +permutation() PyResult~Option<Vec<u32>>~
         +set_permutation(perm:Vec~u32~) PyResult~()~
         +clear_permutation() PyResult~()~
@@ -240,7 +240,7 @@ classDiagram
     }
     class py_PyNode {
         -node: mesh_Node
-        +from_raw(handle:Handle~mesh_Configuration~, id:mesh_NodeId) Self
+        +from_raw(handle:Handle~mesh_Coords~, id:mesh_NodeId) Self
         +from_node(node:mesh_Node) Self
         +as_node() &Node
         +id() u32
@@ -283,7 +283,7 @@ classDiagram
     }
     class py_PySubMesh {
         -handle: Handle~mesh_SubMesh~
-        +py_new(config:PyRef~py_PyConfiguration~, element_type:&str) PyResult~Self~
+        +py_new(coords:PyRef~py_PyCoords~, element_type:&str) PyResult~Self~
         +element_type() PyResult~String~
         +add_cell(nodes:Vec~u32~) PyResult~usize~
         +cell_count() PyResult~usize~
@@ -297,14 +297,14 @@ classDiagram
     }
     class py_PyMesh {
         -inner: mesh_Mesh
-        +py_new(config:PyRef~py_PyConfiguration~, element_type:Option~&str~) PyResult~Self~
+        +py_new(coords:PyRef~py_PyCoords~, element_type:Option~&str~) PyResult~Self~
         +add_submesh(sm:PyRef~py_PySubMesh~) PyResult~()~
         +add_cell(nodes:Vec~u32~) PyResult~usize~
         +element_type() PyResult~Option<String>~
         +element_types() PyResult~Vec<String>~
         +cell_counts() PyResult~Vec<usize>~
         +node(submesh_idx:usize, cell_idx:usize, node_idx:usize) PyResult~py_PyNode~
-        +from_live_nodes(_cls:&pyo3::Bound~'_, pyo3::types::PyType~, config:PyRef~py_PyConfiguration~) PyResult~Self~
+        +from_live_nodes(_cls:&pyo3::Bound~'_, pyo3::types::PyType~, coords:PyRef~py_PyCoords~) PyResult~Self~
         +line_seg2(_cls:&pyo3::Bound~'_, pyo3::types::PyType~, a:PyRef~py_PyNode~, b:PyRef~py_PyNode~, n_elems:usize) PyResult~Self~
         +circle_seg2(_cls:&pyo3::Bound~'_, pyo3::types::PyType~, center:PyRef~py_PyNode~, normal:Vec~f64~, radius:f64, n_elems:usize) PyResult~Self~
         +sweep_qua4(_cls:&pyo3::Bound~'_, pyo3::types::PyType~, mesh_a:PyRef~py_PyMesh~, mesh_b:PyRef~py_PyMesh~, n_layers:usize) PyResult~Self~
@@ -460,7 +460,7 @@ classDiagram
         +node_count() usize
         +component_count() usize
         +components() &[String]
-        +configuration() Handle~mesh_Configuration~
+        +coords() Handle~mesh_Coords~
         +support() Handle~mesh_SubMesh~
         +get(node_idx:usize, comp_idx:usize) Result~f64~
         +set(node_idx:usize, comp_idx:usize, value:f64) Result~()~
@@ -471,7 +471,7 @@ classDiagram
         +support_submesh() Result~mesh_SubMesh~
         +support_mesh() Result~mesh_Mesh~
         +node_values(node_idx:usize) Result~&[f64]~
-        +new_with_nodes(cfg:Handle~mesh_Configuration~, nodes:Vec~mesh_NodeId~, components:Vec~String~) Result~Self~
+        +new_with_nodes(coords:Handle~mesh_Coords~, nodes:Vec~mesh_NodeId~, components:Vec~String~) Result~Self~
         +component_value_opt(nid:mesh_NodeId, comp:&str) Option~f64~
         +get_or_default(nid:mesh_NodeId, comp:&str) f64
         +check_compatible(other:&NodeField) Result~()~
@@ -586,10 +586,10 @@ classDiagram
         +fmt(f:&mut fmt::Formatter~'_~) fmt::Result
         +fmt(f:&mut fmt::Formatter~'_~) fmt::Result
     }
-    class mesh_Configuration {
+    class mesh_Coords {
         -dim: u8
         -coord_sets: Vec~Vec<f64>~
-        -set_names: Vec~String~
+        -config_names: Vec~String~
         -active: usize
         -alive: Vec~bool~
         -refcount: Vec~u32~
@@ -608,10 +608,10 @@ classDiagram
         +set_coord(id:mesh_NodeId, coords:&[f64]) Result~()~
         +ensure_alive(id:mesh_NodeId) Result~()~
         +iter_live() impl Iterator~Item = NodeId~
-        +add_coord_set(name:impl Into~String~) usize
-        +switch_to(set:usize) Result~()~
-        +active_set() usize
-        +set_names() &[String]
+        +add_config(name:impl Into~String~) usize
+        +select(config:usize) Result~()~
+        +active() usize
+        +names() &[String]
         +permutation() Option~&[u32]~
         +set_permutation(perm:Vec~u32~) Result~()~
         +clear_permutation() void
@@ -626,13 +626,13 @@ classDiagram
         +fmt(f:&mut fmt::Formatter~'_~) fmt::Result
     }
     class mesh_Node {
-        -handle: Handle~mesh_Configuration~
+        -handle: Handle~mesh_Coords~
         -id: mesh_NodeId
-        +create_in(cfg:Handle~mesh_Configuration~, coords:&[f64]) Result~Self~
-        +acquire(cfg:Handle~mesh_Configuration~, id:mesh_NodeId) Result~Self~
-        +from_parts(handle:Handle~mesh_Configuration~, id:mesh_NodeId) Self
+        +create_in(coords:Handle~mesh_Coords~, coord:&[f64]) Result~Self~
+        +acquire(coords:Handle~mesh_Coords~, id:mesh_NodeId) Result~Self~
+        +from_parts(handle:Handle~mesh_Coords~, id:mesh_NodeId) Self
         +id() mesh_NodeId
-        +configuration() Handle~mesh_Configuration~
+        +coords() Handle~mesh_Coords~
         +coord() Result~Vec<f64>~
         +set_coord(coords:&[f64]) Result~()~
         +fmt(f:&mut fmt::Formatter~'_~) fmt::Result
@@ -646,10 +646,10 @@ classDiagram
     }
     class mesh_SubMesh {
         -element_type: mesh_ElementType
-        -config: Handle~mesh_Configuration~
+        -coords: Handle~mesh_Coords~
         -connectivity: Vec~mesh_NodeId~
         -face_color: mesh_RgbColor
-        +new(config:Handle~mesh_Configuration~, element_type:mesh_ElementType) Self
+        +new(coords:Handle~mesh_Coords~, element_type:mesh_ElementType) Self
         +face_color() mesh_RgbColor
         +set_face_color(color:mesh_RgbColor) void
         +add_cell(nodes:&[NodeId]) Result~usize~
@@ -657,7 +657,7 @@ classDiagram
         +element_type() mesh_ElementType
         +cell_count() usize
         +connectivity() &[NodeId]
-        +configuration() Handle~mesh_Configuration~
+        +coords() Handle~mesh_Coords~
         +plot(view:Option~crate::viz::View~, save:Option~&std::path::Path~) Result~()~
         +plot_with_field(view:Option~crate::viz::View~, save:Option~&std::path::Path~, field:&crate::containers::node_field::NodeField, component:Option~&str~) Result~()~
         +fmt(f:&mut fmt::Formatter~'_~) fmt::Result
@@ -673,15 +673,15 @@ classDiagram
         +submesh_count() usize
         +submesh(idx:usize) Result~Handle<SubMesh>~
         +cell_count() Result~usize~
-        +configuration() Result~Handle<Configuration>~
-        +with_element_type(config:Handle~mesh_Configuration~, element_type:mesh_ElementType) Self
+        +coords() Result~Handle<Coords>~
+        +with_element_type(coords:Handle~mesh_Coords~, element_type:mesh_ElementType) Self
         +add_cell(nodes:&[NodeId]) Result~usize~
         +element_types() Result~Vec<ElementType>~
         +cell_counts() Result~Vec<usize>~
         +node(submesh_idx:usize, cell_idx:usize, node_idx:usize) Result~mesh_Node~
         +cell(submesh_idx:usize, cell_idx:usize) Result~crate::mesh::cell::Cell~
         +cells(submesh_idx:usize) Result~crate::mesh::cell::CellIter~
-        +from_live_nodes(config:Handle~mesh_Configuration~) Result~mesh_Mesh~
+        +from_live_nodes(coords:Handle~mesh_Coords~) Result~mesh_Mesh~
         +line_seg2(a:&Node, b:&Node, n_elems:usize) Result~mesh_Mesh~
         +circle_seg2(center:&Node, normal:&[f64], radius:f64, n_elems:usize) Result~mesh_Mesh~
         +sweep_qua4(mesh_a:&Mesh, mesh_b:&Mesh, n_layers:usize) Result~mesh_Mesh~
@@ -736,7 +736,7 @@ classDiagram
         -dn_at_g: Vec~f64~
         +new(submesh:Handle~mesh_SubMesh~, interpolation:finite_element_space_Interpolation, quadrature:finite_element_space_QuadratureRule) Result~Self~
         +submesh() Handle~mesh_SubMesh~
-        +configuration() Result~Handle<Configuration>~
+        +coords() Result~Handle<Coords>~
         +interpolation() finite_element_space_Interpolation
         +quadrature() finite_element_space_QuadratureRule
         +element_type() Result~mesh_ElementType~
@@ -844,10 +844,10 @@ namespace tests {
     viz_Drawable ..> viz_Bbox3
     py_PyCell --> mesh_Cell
     py_PyCell ..> py_PyNode
-    py_PyConfiguration --> Handle
-    py_PyConfiguration --> mesh_Configuration
-    py_PyConfiguration ..> py_PyNode
-    py_PyConfiguration ..> py_PyNode
+    py_PyCoords --> Handle
+    py_PyCoords --> mesh_Coords
+    py_PyCoords ..> py_PyNode
+    py_PyCoords ..> py_PyNode
     py_PySubElementField --> Handle
     py_PySubElementField --> containers_SubElementField
     py_PySubElementField ..> py_PySubElementField
@@ -909,7 +909,7 @@ namespace tests {
     containers_NodeField --> mesh_SubMesh
     containers_NodeField --> mesh_NodeId
     containers_NodeField ..> Handle
-    containers_NodeField ..> mesh_Configuration
+    containers_NodeField ..> mesh_Coords
     containers_NodeField ..> Handle
     containers_NodeField ..> mesh_SubMesh
     containers_NodeField ..> mesh_SubMesh
@@ -931,22 +931,22 @@ namespace tests {
     mesh_CellIter --> Handle
     mesh_CellIter --> mesh_SubMesh
     mesh_Iterator ..> mesh_Cell
-    mesh_Configuration ..> mesh_NodeId
+    mesh_Coords ..> mesh_NodeId
     mesh_Node --> Handle
-    mesh_Node --> mesh_Configuration
+    mesh_Node --> mesh_Coords
     mesh_Node --> mesh_NodeId
     mesh_Node ..> mesh_NodeId
     mesh_Node ..> Handle
-    mesh_Node ..> mesh_Configuration
+    mesh_Node ..> mesh_Coords
     mesh_SubMesh --> mesh_ElementType
     mesh_SubMesh --> Handle
-    mesh_SubMesh --> mesh_Configuration
+    mesh_SubMesh --> mesh_Coords
     mesh_SubMesh --> mesh_NodeId
     mesh_SubMesh --> mesh_RgbColor
     mesh_SubMesh ..> mesh_RgbColor
     mesh_SubMesh ..> mesh_ElementType
     mesh_SubMesh ..> Handle
-    mesh_SubMesh ..> mesh_Configuration
+    mesh_SubMesh ..> mesh_Coords
     mesh_Mesh ..> mesh_Node
     mesh_Mesh ..> mesh_Mesh
     mesh_Mesh ..> mesh_Mesh

@@ -15,7 +15,7 @@ def test_cantilever_bending_and_torsion():
     L, PY, PZ, MX, N = 1.0, 1.0, 1.0, 1.0, 2
     h = L / N
 
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     nodes = [c.add_node([i * h, 0.0, 0.0]) for i in range(N + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(N):
@@ -51,7 +51,7 @@ def test_cantilever_bending_and_torsion():
 
 
 def test_frame3d_vars():
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     a = c.add_node([0.0, 0.0, 0.0])
     b = c.add_node([1.0, 0.0, 0.0])
     mesh = pyrucast.Mesh(c, "SEG2")

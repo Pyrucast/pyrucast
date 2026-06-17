@@ -19,7 +19,7 @@ use pyo3::prelude::*;
 /// — one `SubNodeField` per submesh, on the distinct nodes of its zone.
 ///
 /// One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
-/// requests all the axes the mesh's `Configuration` has (`["X"]` in 1-D,
+/// requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
 /// `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -37,7 +37,7 @@ pub fn coordinates(
 /// active-set coordinate on axis `a` becomes `field.value(node,
 /// components[a])`. `components` lists one component name per spatial axis,
 /// in axis order; `None` → `["X", "Y", "Z"][:dim]`. Mutates the field's
-/// `Configuration` in place.
+/// `Coords` in place.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (field, components=None))]
@@ -52,7 +52,7 @@ pub fn set_coordinates(
 /// Displace nodes by `field` (incremental): `coord[a] += field.value(node,
 /// components[a])` on the active coordinate set. `components` lists one
 /// displacement-component name per spatial axis, in axis order; `None` →
-/// `["ux", "uy", "uz"][:dim]`. Mutates the field's `Configuration` in place.
+/// `["ux", "uy", "uz"][:dim]`. Mutates the field's `Coords` in place.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (field, components=None))]
@@ -66,7 +66,7 @@ pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> P
 /// Returns a new `NodeField` with one zone per submesh of `mesh`,
 /// carrying the union of `field`'s components. Nodes of `mesh` absent
 /// from `field` are assigned `0.0`. Errors if `mesh` and `field` are
-/// attached to different `Configuration`s.
+/// attached to different `Coords`s.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
@@ -80,7 +80,7 @@ pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNo
 /// others stay separate (nothing is densified).
 ///
 /// Errors if the two fields hold different values at the same
-/// `(node, component)` pair, or are attached to different `Configuration`s.
+/// `(node, component)` pair, or are attached to different `Coords`s.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeField> {

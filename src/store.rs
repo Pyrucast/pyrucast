@@ -19,7 +19,7 @@
 //! # Swap safety with respect to `Drop`
 //!
 //! Many pyrucast objects carry side effects in their `Drop` (for instance,
-//! `SubMesh` decrements per-node refcounts inside the `Configuration`).
+//! `SubMesh` decrements per-node refcounts inside the `Coords`).
 //! The swap path is designed **not** to trigger `Drop` on eviction: the
 //! object is still logically alive, just relocated.
 //!  - [`swap_out`] serializes then swaps the Resident state for OnDisk,

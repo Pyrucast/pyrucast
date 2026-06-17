@@ -269,15 +269,15 @@ mod tests {
     use crate::containers::field::SubField;
     use crate::aggregate::Aggregate;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Configuration, ElementType, Mesh, Node};
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node};
     use crate::store::insert;
 
     /// HeatConduction on a single SEG2 of length `L`.
     fn seg2_hc(length: f64) -> HeatConduction {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[length]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[length]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         HeatConduction::new(fes.get(0).unwrap()).unwrap()

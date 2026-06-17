@@ -18,19 +18,19 @@
 //! # Example
 //!
 //! ```no_run
-//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::Coords;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::insert;
 //! use pyrucast::viz::View;
 //!
-//! let cfg = insert(Configuration::new(3).unwrap());
-//! let a = Node::create_in(cfg.clone(), &[0.0, 0.0, 0.0]).unwrap();
-//! let b = Node::create_in(cfg.clone(), &[1.0, 0.0, 0.0]).unwrap();
-//! let c = Node::create_in(cfg.clone(), &[0.0, 1.0, 0.0]).unwrap();
+//! let coords = insert(Coords::new(3).unwrap());
+//! let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
+//! let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
+//! let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
 //!
-//! let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+//! let mut sm = SubMesh::new(coords, ElementType::TRI3);
 //! sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 //!
 //! // Export to a PNG file in iso view (requires feature `viz`).
@@ -336,10 +336,10 @@ pub(crate) fn render_node_field_points(
     use crate::viz::mesh_draw::pad3;
     let data = field_color::FieldData::Node(field.view()?);
     let resolved = field_color::resolve_component(&data, component)?.to_string();
-    let cfg = field.configuration()?;
+    let coords = field.coords()?;
     let mut points = Vec::new();
     {
-        let c = crate::store::read(&cfg)?;
+        let c = crate::store::read(&coords)?;
         let field_color::FieldData::Node(v) = &data else { unreachable!() };
         for nid in field.node_ids()? {
             if let Some(val) = v.value_opt(nid, &resolved) {

@@ -10,7 +10,7 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     n_elems = 4
     h = 1.0 / n_elems
 
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     nodes = [c.add_node([i * h]) for i in range(n_elems + 1)]
 
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -55,7 +55,7 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
 def test_solver_singular_matrix_errors():
     """Without any Dirichlet, the bare conduction matrix is singular
     (kernel = constants)."""
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -85,7 +85,7 @@ def test_solver_with_nonzero_neumann():
     """
     n_elems = 2
     h = 1.0 / n_elems
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     nodes = [c.add_node([i * h]) for i in range(n_elems + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(n_elems):

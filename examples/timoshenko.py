@@ -34,7 +34,7 @@ def _clamp(node, var, dual):
 
 def tip_deflection(n_elems: int) -> float:
     h = L / n_elems
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     nodes = [c.add_node([i * h]) for i in range(n_elems + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(n_elems):

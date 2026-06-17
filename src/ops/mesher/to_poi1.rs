@@ -27,7 +27,7 @@ pub fn to_poi1(mesh: &Mesh) -> Result<Mesh> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
@@ -35,14 +35,14 @@ mod tests {
 
     #[test]
     fn tri3_submesh_becomes_unique_node_list() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
-        let d = Node::create_in(cfg.clone(), &[1.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[1.5, 1.0]).unwrap();
 
         // Two triangles sharing the edge (b, c): 4 distinct nodes total.
-        let mut tri = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::TRI3));
+        let mut tri = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         tri.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
 
@@ -58,16 +58,16 @@ mod tests {
 
     #[test]
     fn preserves_submesh_count_and_increfs_nodes() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
         // One POI1 submesh + one TRI3 submesh.
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         let sm_tri = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
@@ -75,7 +75,7 @@ mod tests {
 
         // refcounts before: a is in POI1 + TRI3 + Node = 3; b,c in TRI3 + Node = 2.
         {
-            let cf = read(&cfg).unwrap();
+            let cf = read(&coords).unwrap();
             assert_eq!(cf.refcount(a.id()), 3);
             assert_eq!(cf.refcount(b.id()), 2);
         }
@@ -90,14 +90,14 @@ mod tests {
 
         // The new POI1 submeshes increfed every node they reference.
         {
-            let cf = read(&cfg).unwrap();
+            let cf = read(&coords).unwrap();
             assert_eq!(cf.refcount(a.id()), 5); // +POI1(sub0) +POI1(sub1)
             assert_eq!(cf.refcount(b.id()), 3); // +POI1(sub1)
         }
 
         drop(poi);
         {
-            let cf = read(&cfg).unwrap();
+            let cf = read(&coords).unwrap();
             assert_eq!(cf.refcount(a.id()), 3);
             assert_eq!(cf.refcount(b.id()), 2);
         }

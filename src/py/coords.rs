@@ -1,6 +1,6 @@
-//! Python wrapper for [`crate::containers::mesh::Configuration`].
+//! Python wrapper for [`crate::containers::mesh::Coords`].
 
-use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::{Coords, NodeId};
 use crate::py::node::PyNode;
 use crate::store::{insert, read, write, Handle};
 use pyo3::prelude::*;
@@ -8,24 +8,24 @@ use pyo3::prelude::*;
 /// The registry of live nodes and their coordinates, in a fixed spatial
 /// dimension.
 ///
-/// Create one with `Configuration(dim)`, then add nodes with
+/// Create one with `Coords(dim)`, then add nodes with
 /// `add_node([x, y, ...])`. Every mesh, node and field is attached to a
-/// `Configuration`.
+/// `Coords`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(name = "Configuration")]
-pub struct PyConfiguration {
-    pub(crate) handle: Handle<Configuration>,
+#[pyclass(name = "Coords")]
+pub struct PyCoords {
+    pub(crate) handle: Handle<Coords>,
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
-impl PyConfiguration {
-    /// `Configuration(dim)` — an empty configuration in `dim` dimensions.
+impl PyCoords {
+    /// `Coords(dim)` — an empty `Coords` in `dim` dimensions.
     #[new]
     fn py_new(dim: u8) -> PyResult<Self> {
-        let cfg = Configuration::new(dim)?;
+        let coords = Coords::new(dim)?;
         Ok(Self {
-            handle: insert(cfg),
+            handle: insert(coords),
         })
     }
 
@@ -80,30 +80,30 @@ impl PyConfiguration {
     }
 
     // Per-node coordinate access lives on `Node` (`node.coord()` /
-    // `node.set_coord(...)`): a Node carries its Configuration, so the
+    // `node.set_coord(...)`): a Node carries its Coords, so the
     // (config, id) pair is never needed here.
 
-    /// Add a named alternative coordinate set (same nodes, new coordinates);
+    /// Add a named alternative configuration (same nodes, new coordinates);
     /// returns its index.
-    fn add_coord_set(&self, name: String) -> PyResult<usize> {
-        Ok(write(&self.handle)?.add_coord_set(name))
+    fn add_config(&self, name: String) -> PyResult<usize> {
+        Ok(write(&self.handle)?.add_config(name))
     }
 
-    /// Make coordinate set `set` the active one.
-    fn switch_to(&self, set: usize) -> PyResult<()> {
-        write(&self.handle)?.switch_to(set)?;
+    /// Make configuration `config` the active one.
+    fn select(&self, config: usize) -> PyResult<()> {
+        write(&self.handle)?.select(config)?;
         Ok(())
     }
 
-    /// Index of the active coordinate set.
+    /// Index of the active configuration.
     #[getter]
-    fn active_set(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.active_set())
+    fn active(&self) -> PyResult<usize> {
+        Ok(read(&self.handle)?.active())
     }
 
-    /// Names of the coordinate sets, by index.
-    fn set_names(&self) -> PyResult<Vec<String>> {
-        Ok(read(&self.handle)?.set_names().to_vec())
+    /// Names of the configurations, by index.
+    fn names(&self) -> PyResult<Vec<String>> {
+        Ok(read(&self.handle)?.names().to_vec())
     }
 
     /// Current node permutation (a renumbering), or `None` if unset.
@@ -132,4 +132,4 @@ impl PyConfiguration {
     }
 }
 
-crate::impl_dump_pymethod!(handle PyConfiguration, handle);
+crate::impl_dump_pymethod!(handle PyCoords, handle);

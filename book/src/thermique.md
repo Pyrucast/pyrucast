@@ -40,7 +40,7 @@ retrouve la matrice analytique \\((k/L)\,[[1,-1],[-1,1]]\\).
 
 Le pipeline est toujours le même :
 
-1. **`Configuration`** — l'espace des nœuds (dimension géométrique).
+1. **`Coords`** — l'espace des nœuds (dimension géométrique).
 2. **`Mesh`** — les éléments (ici des `SEG2` alignés sur \\([0,1]\\)).
 3. **`FiniteElementSpace`** — l'interpolation (`lagrange1`).
 4. **Matériau** — un `ElementField` portant la composante `"k"`, fabriqué

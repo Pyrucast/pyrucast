@@ -14,7 +14,7 @@
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::models::elasticity::ElasticityModel;
@@ -33,15 +33,15 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     let h = 1.0 / N as f64;
 
     // ── Maillage QUA4 sur [0,1]² ───────────────────────────────────────────
-    let cfg = insert(Configuration::new(2)?);
+    let coords = insert(Coords::new(2)?);
     let idx = |i: usize, j: usize| j * (N + 1) + i;
     let mut grid: Vec<Node> = Vec::new();
     for j in 0..=N {
         for i in 0..=N {
-            grid.push(Node::create_in(cfg.clone(), &[i as f64 * h, j as f64 * h])?);
+            grid.push(Node::create_in(coords.clone(), &[i as f64 * h, j as f64 * h])?);
         }
     }
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::QUA4));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     for j in 0..N {
         for i in 0..N {
             mesh.add_cell(&[
@@ -70,7 +70,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
 
     // ── Chargement : traction S sur le bord droit (charges nodales cohérentes
     //    via l'opérateur flux, sur la composante f_x) ────────────────────────
-    let mut right_edge = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    let mut right_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for j in 0..N {
         right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
     }
@@ -113,8 +113,8 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     const NU: f64 = 0.3;
     const S: f64 = 2.0;
 
-    let cfg = insert(Configuration::new(3)?);
-    let coords = [
+    let coords = insert(Coords::new(3)?);
+    let points = [
         [0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0],
         [1.0, 1.0, 0.0],
@@ -124,11 +124,11 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
         [1.0, 1.0, 1.0],
         [0.0, 1.0, 1.0],
     ];
-    let nodes: Vec<Node> = coords
+    let nodes: Vec<Node> = points
         .iter()
-        .map(|c| Node::create_in(cfg.clone(), c))
+        .map(|c| Node::create_in(coords.clone(), c))
         .collect::<Result<_>>()?;
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::HEX8));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
     mesh.add_cell(&nodes.iter().map(|n| n.id()).collect::<Vec<_>>())?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
@@ -141,7 +141,7 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     let materials = build::material_field(&model, &[("E", E), ("nu", NU)])?;
 
     // Traction S on the x = 1 face (QUA4 [1, 2, 6, 5]).
-    let mut face = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::QUA4));
+    let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
     let traction = assemble::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
@@ -150,7 +150,7 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     let solution = solve(&assemble::stiffness(&model, &materials)?, &rhs)?;
 
     let tol = 1e-10;
-    for (i, c) in coords.iter().enumerate() {
+    for (i, c) in points.iter().enumerate() {
         let id = nodes[i].id();
         assert!((solution.value(id, "u_x")? - S / E * c[0]).abs() < tol);
         assert!((solution.value(id, "u_y")? + NU * S / E * c[1]).abs() < tol);

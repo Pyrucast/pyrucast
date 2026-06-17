@@ -14,14 +14,14 @@ use crate::store::insert;
 /// `field` does not cover is assigned `0.0`; a node of `field` absent
 /// from `mesh` is dropped.
 ///
-/// Errors if `mesh` is attached to a different `Configuration` than
+/// Errors if `mesh` is attached to a different `Coords` than
 /// `field`.
 pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
-    let mesh_cfg = mesh.configuration()?;
-    let field_cfg = field.configuration()?;
-    if mesh_cfg.index() != field_cfg.index() || mesh_cfg.generation() != field_cfg.generation() {
+    let mesh_coords = mesh.coords()?;
+    let field_coords = field.coords()?;
+    if mesh_coords.index() != field_coords.index() || mesh_coords.generation() != field_coords.generation() {
         return Err(PyrucastError::Message(
-            "restrict: mesh is not attached to the same Configuration".into(),
+            "restrict: mesh is not attached to the same Coords".into(),
         ));
     }
 
@@ -46,36 +46,36 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::SubMesh;
     use crate::store::{insert, write};
 
     /// Build a single-zone POI1 field on `n` fresh 1-D nodes;
-    /// returns (cfg, nodes, field).
+    /// returns (coords, nodes, field).
     fn poi1_field(n: usize, components: Vec<String>) -> (
-        crate::store::Handle<Configuration>,
+        crate::store::Handle<Coords>,
         Vec<Node>,
         NodeField,
     ) {
-        let cfg = insert(Configuration::new(1).unwrap());
+        let coords = insert(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..n)
-            .map(|i| Node::create_in(cfg.clone(), &[i as f64]).unwrap())
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
         for nd in &nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
         let field = NodeField::from_sub(
             SubNodeField::from_poi1(&insert(sm), components).unwrap(),
         );
-        (cfg, nodes, field)
+        (coords, nodes, field)
     }
 
     #[test]
     fn restrict_subset() {
-        let (cfg, nodes, f) = poi1_field(3, vec!["T".into(), "P".into()]);
+        let (coords, nodes, f) = poi1_field(3, vec!["T".into(), "P".into()]);
         {
             let mut s = write(&f.get(0).unwrap()).unwrap();
             s.set(0, 0, 1.0).unwrap();
@@ -84,7 +84,7 @@ mod tests {
         }
 
         // Mesh with only nodes[0] and nodes[2].
-        let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         m.add_cell(&[nodes[0].id()]).unwrap();
         m.add_cell(&[nodes[2].id()]).unwrap();
 
@@ -100,12 +100,12 @@ mod tests {
 
     #[test]
     fn restrict_node_absent_from_field_gives_zero() {
-        let (cfg, nodes, f) = poi1_field(1, vec!["T".into()]);
+        let (coords, nodes, f) = poi1_field(1, vec!["T".into()]);
         write(&f.get(0).unwrap()).unwrap().set(0, 0, 7.0).unwrap();
-        let nb = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let nb = Node::create_in(coords.clone(), &[1.0]).unwrap();
 
         // Mesh contains nb which is NOT in the field.
-        let mut m = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::POI1));
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         m.add_cell(&[nodes[0].id()]).unwrap();
         m.add_cell(&[nb.id()]).unwrap();
 
@@ -117,10 +117,10 @@ mod tests {
 
     #[test]
     fn restrict_one_zone_per_mesh_submesh() {
-        let (cfg, nodes, f) = poi1_field(2, vec!["T".into()]);
+        let (coords, nodes, f) = poi1_field(2, vec!["T".into()]);
         let mut mesh = Mesh::empty();
         for nd in &nodes {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[nd.id()]).unwrap();
             mesh.add_sub(insert(sm)).unwrap();
         }
@@ -131,8 +131,8 @@ mod tests {
     #[test]
     fn restrict_incompatible_cfg_errors() {
         let (_cfg1, _nodes1, f) = poi1_field(1, vec!["T".into()]);
-        // A mesh attached to a *different* Configuration.
-        let cfg2 = insert(Configuration::new(1).unwrap());
+        // A mesh attached to a *different* Coords.
+        let cfg2 = insert(Coords::new(1).unwrap());
         let n2 = Node::create_in(cfg2.clone(), &[0.0]).unwrap();
         let mut m2 = Mesh::from_submesh(SubMesh::new(cfg2.clone(), ElementType::POI1));
         m2.add_cell(&[n2.id()]).unwrap();

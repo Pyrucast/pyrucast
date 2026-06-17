@@ -13,7 +13,7 @@ def _clamp(c, node, var, dual):
 def test_truss_bar_axial_elongation():
     """Single horizontal bar, axial force F at the right end ⇒ u_x = F·L/(E·A)."""
     E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([L, 0.0])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -42,7 +42,7 @@ def test_truss_bar_axial_elongation():
 
 
 def test_truss_model_vars():
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     mesh = pyrucast.Mesh(c, "SEG2")

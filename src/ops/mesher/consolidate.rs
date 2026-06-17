@@ -13,9 +13,9 @@ use std::collections::HashSet;
 /// submesh of each type is kept. Every node referenced by the result is
 /// increfed afresh by the new submeshes; `mesh` itself is left untouched.
 ///
-/// Errors if `mesh` has no submeshes (no Configuration to attach to).
+/// Errors if `mesh` has no submeshes (no Coords to attach to).
 pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
-    let cfg = mesh.configuration()?;
+    let coords = mesh.coords()?;
     let mut result = Mesh::empty();
 
     // Collect types in first-seen order.
@@ -38,7 +38,7 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
             .transpose()?
             .unwrap_or_default();
 
-        let mut new_sm = SubMesh::new(cfg.clone(), et);
+        let mut new_sm = SubMesh::new(coords.clone(), et);
         new_sm.set_face_color(first_color);
 
         let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
@@ -64,25 +64,25 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::Node;
     use crate::store::insert;
 
     #[test]
     fn merges_same_type_submeshes() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
         // Two separate TRI3 submeshes with one cell each.
         let sm1 = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
         let sm2 = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[b.id(), c.id(), a.id()]).unwrap(); // new cell
             insert(sm)
         };
@@ -100,18 +100,18 @@ mod tests {
 
     #[test]
     fn removes_duplicate_cells() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
         let sm1 = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
         let sm2 = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap(); // exact duplicate
             insert(sm)
         };
@@ -127,24 +127,24 @@ mod tests {
 
     #[test]
     fn preserves_distinct_types() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
         let sm_tri = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
         let sm_poi = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[a.id()]).unwrap();
             insert(sm)
         };
         // Second TRI3 with a duplicate.
         let sm_tri2 = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };

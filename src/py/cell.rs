@@ -40,7 +40,7 @@ impl PyCell {
     }
 
     /// Materialised nodes (each one refcounted on the
-    /// Configuration).
+    /// Coords).
     fn nodes(&self) -> PyResult<Vec<PyNode>> {
         let nodes = self.inner.nodes()?;
         Ok(nodes.into_iter().map(PyNode::from_node).collect())
@@ -62,8 +62,8 @@ impl PyCell {
         }
         let ids = self.inner.node_ids()?;
         let id = ids[normalized as usize];
-        let cfg = read(&self.inner.sm)?.configuration();
-        let node = Node::acquire(cfg, id)?;
+        let coords = read(&self.inner.sm)?.coords();
+        let node = Node::acquire(coords, id)?;
         Ok(PyNode::from_node(node))
     }
 

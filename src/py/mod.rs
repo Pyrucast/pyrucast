@@ -6,7 +6,7 @@
 //! and concentrate the FFI surface in one place.
 
 pub mod cell;
-pub mod configuration;
+pub mod coords;
 pub mod element;
 pub mod element_field;
 pub mod finite_element_space;

@@ -4,7 +4,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::py::configuration::PyConfiguration;
+use crate::py::coords::PyCoords;
 use crate::py::node::PyNode;
 use crate::store::{read, write, Handle};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
@@ -60,7 +60,7 @@ pub(crate) fn submesh_handle(obj: &Bound<'_, PyAny>) -> PyResult<Handle<SubMesh>
 
 /// A **view** into one submesh of a `Mesh` — the cells of a single element
 /// type. Obtained by indexing (`mesh[i]`); never constructed directly.
-/// Build at the parent level instead: `Mesh(config, element_type)` for a
+/// Build at the parent level instead: `Mesh(coords, element_type)` for a
 /// single zone, composed with `+` for several.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubMesh")]
@@ -216,7 +216,7 @@ impl PySubMesh {
 /// A geometric mesh: a collection of submeshes, each holding the cells of a
 /// single element type.
 ///
-/// Build with `Mesh(config, element_type)` for one zone, compose several
+/// Build with `Mesh(coords, element_type)` for one zone, compose several
 /// with `+`; index it (`mesh[i]`) to reach a `SubMesh`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Mesh")]
@@ -227,18 +227,18 @@ pub struct PyMesh {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyMesh {
-    /// `Mesh(config)` — empty mesh.
-    /// `Mesh(config, element_type)` — mesh with one pre-created submesh.
+    /// `Mesh(coords)` — empty mesh.
+    /// `Mesh(coords, element_type)` — mesh with one pre-created submesh.
     #[new]
-    #[pyo3(signature = (config, element_type=None))]
-    fn py_new(config: PyRef<PyConfiguration>, element_type: Option<&str>) -> PyResult<Self> {
-        let cfg = config.handle.clone();
+    #[pyo3(signature = (coords, element_type=None))]
+    fn py_new(coords: PyRef<PyCoords>, element_type: Option<&str>) -> PyResult<Self> {
+        let coords = coords.handle.clone();
         let mesh = match element_type {
             Some(et_str) => {
                 let et = ElementType::from_name(et_str).ok_or_else(|| {
                     PyValueError::new_err(format!("unknown element type: {et_str}"))
                 })?;
-                Mesh::from_submesh(SubMesh::new(cfg, et))
+                Mesh::from_submesh(SubMesh::new(coords, et))
             }
             None => Mesh::empty(),
         };

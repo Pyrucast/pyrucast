@@ -13,7 +13,7 @@
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::ops::solver::lu::solve;
@@ -32,12 +32,12 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     const N: usize = 40; // beam elements
 
     // ── Maillage : N éléments SEG2 alignés sur [0, L] (config 1-D) ─────────
-    let cfg = insert(Configuration::new(1)?);
+    let coords = insert(Coords::new(1)?);
     let h = L / N as f64;
     let nodes: Vec<Node> = (0..=N)
-        .map(|i| Node::create_in(cfg.clone(), &[i as f64 * h]))
+        .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
         .collect::<Result<_>>()?;
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for i in 0..N {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }
@@ -57,7 +57,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     let materials = build::material_field(&model, &[("E", E), ("I", I), ("G", G), ("A_s", A_S)])?;
 
     // ── Chargement : force transverse P au bout libre (composante f_w) ─────
-    let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
     let load_sm = insert(load_sm);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_w".into()])?;
@@ -96,11 +96,11 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
     const N: usize = 40;
     let h = L / N as f64;
 
-    let cfg = insert(Configuration::new(1)?);
+    let coords = insert(Coords::new(1)?);
     let nodes: Vec<Node> = (0..=N)
-        .map(|i| Node::create_in(cfg.clone(), &[i as f64 * h]))
+        .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
         .collect::<Result<_>>()?;
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for i in 0..N {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }
@@ -116,7 +116,7 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
     model = model.union(&clamp(&nodes[0], "theta", "m_theta")?)?;
     let materials = build::material_field(&model, &[("E", E), ("I", I), ("G", G), ("A_s", A_S)])?;
 
-    let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
     let load_sm = insert(load_sm);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_w".into()])?;

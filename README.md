@@ -41,7 +41,7 @@ maturin develop --release
 `maturin develop` compile le module et l'installe dans le venv. Vérification :
 
 ```bash
-python -c "import pyrucast; c = pyrucast.Configuration(2); print(c)"
+python -c "import pyrucast; c = pyrucast.Coords(2); print(c)"
 ```
 
 Après toute modification du Rust, relancer simplement `maturin develop --release`.

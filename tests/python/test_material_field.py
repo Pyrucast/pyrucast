@@ -12,9 +12,9 @@ def _two_zone_model():
         subspace 0 (zone A) and subspace 1 (zone B);
       - a Dirichlet constraint on the leftmost node, composed with `|`.
     Sub-model order: [HC_A (model[0]), HC_B (model[1]), Dirichlet (model[2])].
-    Returns (cfg, [n0, n1, n2], fes, model).
+    Returns (coords, [n0, n1, n2], fes, model).
     """
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     nodes = [c.add_node([i * 1.0]) for i in range(3)]
     zone_a = pyrucast.Mesh(c, "SEG2")
     zone_a.unit().add_cell([nodes[0], nodes[1]])
@@ -35,7 +35,7 @@ def _two_zone_model():
 
 
 def test_sub_model_build_material_field_uniform_value():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([2.0])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -50,7 +50,7 @@ def test_sub_model_build_material_field_uniform_value():
 
 
 def test_sub_model_build_material_field_errors_on_dirichlet():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     imposed = pyrucast.poi1_from_nodes([a])
     multiplier = pyrucast.barycenter(imposed)
@@ -60,7 +60,7 @@ def test_sub_model_build_material_field_errors_on_dirichlet():
 
 
 def test_sub_model_build_material_field_errors_on_empty_list():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -126,7 +126,7 @@ def test_model_build_material_field_per_sub_model_length_mismatch_errors():
 
 
 def test_sub_model_material_components_lists_required_components():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -142,7 +142,7 @@ def test_sub_model_material_components_lists_required_components():
 
 
 def test_sub_model_build_material_field_filters_extras_and_errors_on_missing():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")

@@ -2,7 +2,7 @@
 //! an external crate (Phase 0 + Phase 1 + Phase 2).
 
 use pyrucast::aggregate::Aggregate;
-use pyrucast::containers::mesh::configuration::{Configuration, NodeId};
+use pyrucast::containers::mesh::coords::{Coords, NodeId};
 use pyrucast::containers::mesh::element_type::ElementType;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::mesh::node::Node;
@@ -70,11 +70,11 @@ fn full_store_cycle_via_public_api() -> Result<()> {
     Ok(())
 }
 
-// ─── Configuration + Node integration tests (Phase 2) ───────────────────────
+// ─── Coords + Node integration tests (Phase 2) ───────────────────────
 
 #[test]
-fn configuration_cycle_via_store() -> Result<()> {
-    let h = insert(Configuration::new(2)?);
+fn coords_cycle_via_store() -> Result<()> {
+    let h = insert(Coords::new(2)?);
     let a: NodeId = write(&h)?.add_node(&[0.0, 0.0])?;
     let b: NodeId = write(&h)?.add_node(&[1.0, 0.0])?;
 
@@ -106,7 +106,7 @@ fn configuration_cycle_via_store() -> Result<()> {
 
 #[test]
 fn node_protects_from_gc() -> Result<()> {
-    let h = insert(Configuration::new(2)?);
+    let h = insert(Coords::new(2)?);
     let n = Node::create_in(h.clone(), &[3.0, 4.0])?;
     let id = n.id();
     assert_eq!(n.coord()?, vec![3.0, 4.0]);
@@ -126,20 +126,20 @@ fn node_protects_from_gc() -> Result<()> {
 
 #[test]
 fn submesh_protects_nodes_via_refcount() -> Result<()> {
-    let cfg = insert(Configuration::new(2)?);
-    let a = Node::create_in(cfg.clone(), &[0.0, 0.0])?;
-    let b = Node::create_in(cfg.clone(), &[1.0, 0.0])?;
-    let cc = Node::create_in(cfg.clone(), &[0.5, 1.0])?;
+    let coords = insert(Coords::new(2)?);
+    let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
+    let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
+    let cc = Node::create_in(coords.clone(), &[0.5, 1.0])?;
 
     let sm_handle = {
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), cc.id()])?;
         insert(sm)
     };
 
     // Nodes AND SubMesh each hold one ref ⇒ refcount = 2.
     {
-        let c = read(&cfg)?;
+        let c = read(&coords)?;
         assert_eq!(c.refcount(a.id()), 2);
         assert_eq!(c.refcount(b.id()), 2);
         assert_eq!(c.refcount(cc.id()), 2);
@@ -151,17 +151,17 @@ fn submesh_protects_nodes_via_refcount() -> Result<()> {
     drop(b);
     drop(cc);
     {
-        let c = read(&cfg)?;
+        let c = read(&coords)?;
         assert_eq!(c.refcount(ida), 1);
         assert_eq!(c.refcount(idb), 1);
         assert_eq!(c.refcount(idc), 1);
     }
     // gc must still collect nothing.
-    assert_eq!(write(&cfg)?.gc(), 0);
+    assert_eq!(write(&coords)?.gc(), 0);
 
     // Drop the SubMesh ⇒ all nodes drop to 0 ⇒ gc collects.
     drop(sm_handle);
-    assert_eq!(write(&cfg)?.gc(), 3);
+    assert_eq!(write(&coords)?.gc(), 3);
     Ok(())
 }
 
@@ -170,8 +170,8 @@ fn fill_surface_from_circle_contour() -> Result<()> {
     // Build a closed SEG2 circle (8 segments) and fill it with TRI3
     // through the public API. The result must have 6 triangles
     // (n - 2 with n = 8) and a total area close to π·r².
-    let cfg = insert(Configuration::new(2)?);
-    let center = Node::create_in(cfg.clone(), &[0.0, 0.0])?;
+    let coords = insert(Coords::new(2)?);
+    let center = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let circle = pyrucast::ops::mesher::circle_seg2(&center, &[0.0, 0.0, 1.0], 1.0, 8)?;
     let tri = pyrucast::ops::mesher::fill_surface(&circle, ElementType::TRI3, None)?;
     assert_eq!(tri.element_types()?, vec![ElementType::TRI3]);
@@ -201,20 +201,20 @@ fn fill_surface_from_circle_contour() -> Result<()> {
 
 #[test]
 fn mesh_composed_of_multiple_submeshes() -> Result<()> {
-    let cfg = insert(Configuration::new(2)?);
-    let a = Node::create_in(cfg.clone(), &[0.0, 0.0])?;
-    let b = Node::create_in(cfg.clone(), &[1.0, 0.0])?;
-    let cc = Node::create_in(cfg.clone(), &[0.5, 1.0])?;
+    let coords = insert(Coords::new(2)?);
+    let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
+    let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
+    let cc = Node::create_in(coords.clone(), &[0.5, 1.0])?;
 
     let sm_pts = {
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
         sm.add_cell(&[a.id()])?;
         sm.add_cell(&[b.id()])?;
         sm.add_cell(&[cc.id()])?;
         insert(sm)
     };
     let sm_tri = {
-        let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), cc.id()])?;
         insert(sm)
     };

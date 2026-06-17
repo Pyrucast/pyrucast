@@ -7,7 +7,7 @@ import pathlib
 import typing
 __all__ = [
     "Cell",
-    "Configuration",
+    "Coords",
     "Element",
     "ElementField",
     "FiniteElementSpace",
@@ -75,7 +75,7 @@ class Cell:
     def nodes(self) -> builtins.list[Node]:
         r"""
         Materialised nodes (each one refcounted on the
-        Configuration).
+        Coords).
         """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, idx: builtins.int) -> Node:
@@ -92,14 +92,14 @@ class Cell:
         """
 
 @typing.final
-class Configuration:
+class Coords:
     r"""
     The registry of live nodes and their coordinates, in a fixed spatial
     dimension.
     
-    Create one with `Configuration(dim)`, then add nodes with
+    Create one with `Coords(dim)`, then add nodes with
     `add_node([x, y, ...])`. Every mesh, node and field is attached to a
-    `Configuration`.
+    `Coords`.
     """
     @property
     def dim(self) -> builtins.int:
@@ -107,13 +107,13 @@ class Configuration:
         Spatial dimension of the coordinates (1, 2 or 3).
         """
     @property
-    def active_set(self) -> builtins.int:
+    def active(self) -> builtins.int:
         r"""
-        Index of the active coordinate set.
+        Index of the active configuration.
         """
-    def __new__(cls, dim: builtins.int) -> Configuration:
+    def __new__(cls, dim: builtins.int) -> Coords:
         r"""
-        `Configuration(dim)` — an empty configuration in `dim` dimensions.
+        `Coords(dim)` — an empty `Coords` in `dim` dimensions.
         """
     def node_count(self) -> builtins.int:
         r"""
@@ -150,18 +150,18 @@ class Configuration:
         r"""
         Run the garbage collector; return the number of collected nodes.
         """
-    def add_coord_set(self, name: builtins.str) -> builtins.int:
+    def add_config(self, name: builtins.str) -> builtins.int:
         r"""
-        Add a named alternative coordinate set (same nodes, new coordinates);
+        Add a named alternative configuration (same nodes, new coordinates);
         returns its index.
         """
-    def switch_to(self, set: builtins.int) -> None:
+    def select(self, config: builtins.int) -> None:
         r"""
-        Make coordinate set `set` the active one.
+        Make configuration `config` the active one.
         """
-    def set_names(self) -> builtins.list[builtins.str]:
+    def names(self) -> builtins.list[builtins.str]:
         r"""
-        Names of the coordinate sets, by index.
+        Names of the configurations, by index.
         """
     def permutation(self) -> typing.Optional[builtins.list[builtins.int]]:
         r"""
@@ -224,7 +224,7 @@ class Element:
     def nodes(self) -> builtins.list[Node]:
         r"""
         Materialised nodes of this element (each refcounted on the
-        Configuration) — symmetric with `Cell.nodes()`.
+        Coords) — symmetric with `Cell.nodes()`.
         """
     def gauss_xi(self, g: builtins.int) -> builtins.list[builtins.float]:
         r"""
@@ -522,13 +522,13 @@ class Mesh:
     A geometric mesh: a collection of submeshes, each holding the cells of a
     single element type.
     
-    Build with `Mesh(config, element_type)` for one zone, compose several
+    Build with `Mesh(coords, element_type)` for one zone, compose several
     with `+`; index it (`mesh[i]`) to reach a `SubMesh`.
     """
-    def __new__(cls, config: Configuration, element_type: typing.Optional[builtins.str] = None) -> Mesh:
+    def __new__(cls, coords: Coords, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        `Mesh(config)` — empty mesh.
-        `Mesh(config, element_type)` — mesh with one pre-created submesh.
+        `Mesh(coords)` — empty mesh.
+        `Mesh(coords, element_type)` — mesh with one pre-created submesh.
         """
     def element_types(self) -> builtins.list[builtins.str]:
         r"""
@@ -715,16 +715,16 @@ class Model:
 @typing.final
 class Node:
     r"""
-    A node of a `Configuration`: a stable identifier that carries the
-    configuration it belongs to (and therefore its coordinates).
+    A node of a `Coords`: a stable identifier that carries the
+    `Coords` it belongs to (and therefore its coordinates).
     
-    Created via `Configuration.add_node([x, y, ...])`; passed wherever an
+    Created via `Coords.add_node([x, y, ...])`; passed wherever an
     API needs a node.
     """
     @property
     def id(self) -> builtins.int:
         r"""
-        Stable integer id of this node within its `Configuration`.
+        Stable integer id of this node within its `Coords`.
         """
     def coord(self) -> builtins.list[builtins.float]:
         r"""
@@ -1154,7 +1154,7 @@ class SubMesh:
     r"""
     A **view** into one submesh of a `Mesh` — the cells of a single element
     type. Obtained by indexing (`mesh[i]`); never constructed directly.
-    Build at the parent level instead: `Mesh(config, element_type)` for a
+    Build at the parent level instead: `Mesh(coords, element_type)` for a
     single zone, composed with `+` for several.
     """
     @property
@@ -1438,7 +1438,7 @@ def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins
     — one `SubNodeField` per submesh, on the distinct nodes of its zone.
     
     One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
-    requests all the axes the mesh's `Configuration` has (`["X"]` in 1-D,
+    requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
     `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
     """
 
@@ -1458,7 +1458,7 @@ def displace(field: NodeField, components: typing.Optional[typing.Sequence[built
     Displace nodes by `field` (incremental): `coord[a] += field.value(node,
     components[a])` on the active coordinate set. `components` lists one
     displacement-component name per spatial axis, in axis order; `None` →
-    `["ux", "uy", "uz"][:dim]`. Mutates the field's `Configuration` in place.
+    `["ux", "uy", "uz"][:dim]`. Mutates the field's `Coords` in place.
     """
 
 def divergence(field: ElementField) -> NodeField:
@@ -1495,9 +1495,9 @@ def flux(fespace: SubFiniteElementSpace, density: typing.Any, component: builtin
     mesh as an area.
     """
 
-def from_live_nodes(config: Configuration) -> Mesh:
+def from_live_nodes(coords: Coords) -> Mesh:
     r"""
-    Build a points (POI1) mesh holding every live node of `config`.
+    Build a points (POI1) mesh holding every live node of `coords`.
     """
 
 def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
@@ -1559,15 +1559,15 @@ def merge(a: NodeField, b: NodeField) -> NodeField:
     others stay separate (nothing is densified).
     
     Errors if the two fields hold different values at the same
-    `(node, component)` pair, or are attached to different `Configuration`s.
+    `(node, component)` pair, or are attached to different `Coords`s.
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
     r"""
     Build a points (POI1) mesh with one point per node in `nodes`.
     
-    The Configuration is taken from the nodes themselves (every `Node`
-    carries its own), so no Configuration argument is needed. Returns a
+    The Coords is taken from the nodes themselves (every `Node`
+    carries its own), so no Coords argument is needed. Returns a
     Mesh with a single POI1 submesh; raises if `nodes` is empty.
     """
 
@@ -1578,7 +1578,7 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     Returns a new `NodeField` with one zone per submesh of `mesh`,
     carrying the union of `field`'s components. Nodes of `mesh` absent
     from `field` are assigned `0.0`. Errors if `mesh` and `field` are
-    attached to different `Configuration`s.
+    attached to different `Coords`s.
     """
 
 def set_coordinates(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
@@ -1587,7 +1587,7 @@ def set_coordinates(field: NodeField, components: typing.Optional[typing.Sequenc
     active-set coordinate on axis `a` becomes `field.value(node,
     components[a])`. `components` lists one component name per spatial axis,
     in axis order; `None` → `["X", "Y", "Z"][:dim]`. Mutates the field's
-    `Configuration` in place.
+    `Coords` in place.
     """
 
 def set_swap_dir(path: builtins.str | os.PathLike | pathlib.Path) -> None:

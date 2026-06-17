@@ -14,7 +14,7 @@ def _heat_setup(n_elems=4, length=1.0, k=2.0):
     """Heat-conduction model on [0, length] (n SEG2), conductivity `k`, and a
     nodal temperature field `T(x) = x`. Returns (model, fes, materials, t)."""
     h = length / n_elems
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     nodes = [c.add_node([i * h]) for i in range(n_elems + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(n_elems):
@@ -59,7 +59,7 @@ def test_integrate_behavior_returns_weak_form_flux():
 
 
 def test_has_behavior_true_for_hc_false_for_dirichlet():
-    c = pyrucast.Configuration(1)
+    c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -89,7 +89,7 @@ def test_integrate_behavior_missing_material_errors():
 
 def test_deformation_linearized_strain_2d():
     """u_x = 2x + 0.5y, u_y = 0.1x + 3y on a TRI3 ⇒ ε_xx=2, ε_yy=3, ε_xy=0.3."""
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])

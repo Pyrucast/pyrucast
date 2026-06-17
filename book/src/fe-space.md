@@ -36,7 +36,7 @@ Ces conventions sont cohérentes avec celles déjà imposées ailleurs dans le c
 
 ### Transformation géométrique de référence
 
-Soit un élément avec \\( n \\) nœuds, de coordonnées physiques \\( \mathbf{x}_1, \dots, \mathbf{x}_n \in \mathbb{R}^{d_s} \\) (avec \\( d_s \\) la dimension géométrique de la `Configuration`). La **transformation géométrique** \\( \chi : \hat{K} \to K \\) qui envoie l'élément de référence \\( \hat{K} \\) sur l'élément physique \\( K \\) est interpolée par les mêmes fonctions de forme :
+Soit un élément avec \\( n \\) nœuds, de coordonnées physiques \\( \mathbf{x}_1, \dots, \mathbf{x}_n \in \mathbb{R}^{d_s} \\) (avec \\( d_s \\) la dimension géométrique de la `Coords`). La **transformation géométrique** \\( \chi : \hat{K} \to K \\) qui envoie l'élément de référence \\( \hat{K} \\) sur l'élément physique \\( K \\) est interpolée par les mêmes fonctions de forme :
 
 \\[
 \mathbf{x}(\xi) = \chi(\xi) = \sum_{i=1}^{n} N_i(\xi)\, \mathbf{x}_i
@@ -139,7 +139,7 @@ où \\( a \in \{0, \dots, d_s - 1\} \\) parcourt les directions physiques et \\(
 
 ### Cas standard : \\( d_s = d_r \\)
 
-Quand le maillage et son espace ambiant ont la même dimension (par exemple TRI3 dans une `Configuration` 2D), \\( J \\) est carrée. Le déterminant ordinaire \\( \det(J) \\) mesure la dilatation locale du volume ; son **valeur absolue** intervient dans l'intégration. La fonction `SubFiniteElementSpace::det_jacobian` retourne \\( |\det(J)| \\).
+Quand le maillage et son espace ambiant ont la même dimension (par exemple TRI3 dans une `Coords` 2D), \\( J \\) est carrée. Le déterminant ordinaire \\( \det(J) \\) mesure la dilatation locale du volume ; son **valeur absolue** intervient dans l'intégration. La fonction `SubFiniteElementSpace::det_jacobian` retourne \\( |\det(J)| \\).
 
 La dérivation des fonctions de forme par rapport aux coordonnées physiques utilise l'inverse de \\( J \\) :
 \\[
@@ -151,7 +151,7 @@ La dérivation des fonctions de forme par rapport aux coordonnées physiques uti
 
 ### Cas manifold : \\( d_s > d_r \\)
 
-Un sous-maillage peut être **plongé** dans un espace de dimension supérieure : SEG2 dans une `Configuration` 2D ou 3D (contour, courbe), TRI3 dans une `Configuration` 3D (surface plongée). C'est exactement ce que produit `Mesh::fill_surface` quand on lui donne un contour 3D plan.
+Un sous-maillage peut être **plongé** dans un espace de dimension supérieure : SEG2 dans une `Coords` 2D ou 3D (contour, courbe), TRI3 dans une `Coords` 3D (surface plongée). C'est exactement ce que produit `Mesh::fill_surface` quand on lui donne un contour 3D plan.
 
 Dans ce cas, \\( J \\) est rectangulaire (taille \\( d_s \times d_r \\)). Le déterminant standard n'a plus de sens, mais on peut définir la **métrique tirée en arrière** :
 \\[
@@ -197,11 +197,11 @@ Le maillage support d'un `FiniteElementSpace` est topologiquement figé, mais se
 Ce choix donne deux propriétés importantes :
 
 1. **Empreinte mémoire indépendante du nombre de cellules.** Un `SubFiniteElementSpace` ne stocke que de l'ordre de \\( n_g \times n_\text{nodes} \times d_r \\) flottants — quelques centaines au plus par sous-espace. À comparer aux GB qu'un précalcul des Jacobiens demanderait sur un maillage 3D fin.
-2. **Robustesse au déplacement.** Réécrire les coordonnées dans la `Configuration` (par exemple via `Configuration::set_coord`) suffit à mettre à jour automatiquement toutes les évaluations de \\( J \\), \\( |J| \\) et \\( \partial N_i / \partial x_a \\) — pas d'invalidation à signaler, pas de cache à reconstruire.
+2. **Robustesse au déplacement.** Réécrire les coordonnées dans la `Coords` (par exemple via `Coords::set_coord`) suffit à mettre à jour automatiquement toutes les évaluations de \\( J \\), \\( |J| \\) et \\( \partial N_i / \partial x_a \\) — pas d'invalidation à signaler, pas de cache à reconstruire.
 
 Le coût est CPU plutôt que mémoire : chaque appel à `jacobian(cell, g)` recalcule la somme \\( J = \sum_i \mathbf{x}_i\, \nabla_\xi N_i \\). En pratique, l'assemblage matrice-élémentaire procède **cellule par cellule** : on calcule \\( J \\), \\( |J| \\), \\( \nabla_x N_i \\) une fois par couple (cellule, Gauss), puis on les réutilise pour tous les termes intégrés. Le surcoût reste donc proportionnel à \\( n_\text{cells} \times n_g \\) — soit le minimum incompressible — et non à \\( n_\text{cells} \times n_g \times n_\text{termes} \\).
 
-Si une mesure montrait un jour que ce recalcul devient un goulot d'étranglement, un cache invalidé sur incrément d'un compteur de version du `Configuration` pourrait être ajouté sans changer l'API publique. Phase 6, déclenché par la mesure.
+Si une mesure montrait un jour que ce recalcul devient un goulot d'étranglement, un cache invalidé sur incrément d'un compteur de version du `Coords` pourrait être ajouté sans changer l'API publique. Phase 6, déclenché par la mesure.
 
 ## Validation à la construction
 
@@ -225,19 +225,19 @@ Le déterminant du Jacobien n'est **pas** vérifié à la construction : un él�
 Constructeur principal — Lagrange-1 partout, quadrature de Gauss par défaut :
 
 ```rust,ignore
-use pyrucast::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::Coords;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::finite_element_space::FiniteElementSpace;
 use pyrucast::mesh::{Mesh, SubMesh};
 use pyrucast::mesh::node::Node;
 use pyrucast::store::{insert, read};
 
-let cfg = insert(Configuration::new(2).unwrap());
-let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
-let c = Node::create_in(cfg.clone(), &[0.0, 2.0]).unwrap();
+let coords = insert(Coords::new(2).unwrap());
+let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
+let c = Node::create_in(coords.clone(), &[0.0, 2.0]).unwrap();
 
-let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
 mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
@@ -285,7 +285,7 @@ for cell_idx in 0..s.cell_count().unwrap() {
 
 ## Déplacement de maillage : exemple
 
-Après modification des coordonnées dans la `Configuration`, les évaluations à la volée reflètent automatiquement le nouvel état :
+Après modification des coordonnées dans la `Coords`, les évaluations à la volée reflètent automatiquement le nouvel état :
 
 ```rust,ignore
 use pyrucast::store::{read, write};
@@ -295,7 +295,7 @@ let dj_before = read(&sub).unwrap().det_jacobian(0, 0).unwrap();
 assert!((dj_before - 0.5).abs() < 1e-12);
 
 // Étirement : on déplace le second nœud en x=4 → |J| = 2.0 (longueur 4 sur [-1,+1]).
-write(&cfg).unwrap().set_coord(b.id(), &[4.0, 0.0]).unwrap();
+write(&coords).unwrap().set_coord(b.id(), &[4.0, 0.0]).unwrap();
 let dj_after = read(&sub).unwrap().det_jacobian(0, 0).unwrap();
 assert!((dj_after - 2.0).abs() < 1e-12);
 ```
@@ -310,7 +310,7 @@ règles de quadrature sont passées en chaînes de caractères
 ```python
 import pyrucast
 
-c = pyrucast.Configuration(dim=2)
+c = pyrucast.Coords(dim=2)
 n0 = c.add_node([0.0, 0.0])
 n1 = c.add_node([2.0, 0.0])
 n2 = c.add_node([0.0, 2.0])
@@ -357,7 +357,7 @@ fes = pyrucast.FiniteElementSpace.with_choices(
 ```
 
 Déplacement du maillage : le Jacobien reflète automatiquement les
-coordonnées courantes du `Configuration` — pas de cache à invalider.
+coordonnées courantes du `Coords` — pas de cache à invalider.
 
 ```python
 print(sub.det_jacobian(0, 0))                 # |J| initial

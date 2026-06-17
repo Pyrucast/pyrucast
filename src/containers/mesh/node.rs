@@ -1,69 +1,69 @@
-//! Node — RAII accessor to a node of a [`Configuration`].
+//! Node — RAII accessor to a node of a [`Coords`].
 //!
 //! `Node` is the **user-facing interface** to a node: it holds a handle to
-//! its `Configuration` and a node id, and automatically maintains the
+//! its `Coords` and a node id, and automatically maintains the
 //! **internal** node refcount (`Clone` increments, `Drop` decrements). As
 //! long as at least one `Node` exists, the node is protected from the
-//! `Configuration`'s garbage collector.
+//! `Coords`'s garbage collector.
 //!
 //! Internal code can still manipulate [`crate::containers::mesh::NodeId`]
 //! values directly, but then loses the automatic GC protection: it must
-//! call [`Configuration::incref`](crate::containers::mesh::Configuration::incref) /
-//! [`Configuration::decref`](crate::containers::mesh::Configuration::decref)
+//! call [`Coords::incref`](crate::containers::mesh::Coords::incref) /
+//! [`Coords::decref`](crate::containers::mesh::Coords::decref)
 //! by hand.
 //!
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::Coords;
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::{insert, read, write};
 //!
-//! let cfg = insert(Configuration::new(2).unwrap());
-//! let n = Node::create_in(cfg.clone(), &[1.0, 2.0]).unwrap();
+//! let coords = insert(Coords::new(2).unwrap());
+//! let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
 //! assert_eq!(n.coord().unwrap(), vec![1.0, 2.0]);
 //!
 //! // The GC does not touch a node that a live Node still references.
-//! assert_eq!(write(&cfg).unwrap().gc(), 0);
+//! assert_eq!(write(&coords).unwrap().gc(), 0);
 //!
 //! let id = n.id();
 //! drop(n);
 //! // Now the refcount is 0; gc collects.
-//! assert_eq!(write(&cfg).unwrap().gc(), 1);
-//! assert!(!read(&cfg).unwrap().is_alive(id));
+//! assert_eq!(write(&coords).unwrap().gc(), 1);
+//! assert!(!read(&coords).unwrap().is_alive(id));
 //! ```
 
-use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::{Coords, NodeId};
 use crate::error::Result;
 use crate::store::{read, write, Handle};
 use std::fmt;
 
-/// RAII accessor to a node of a `Configuration`.
+/// RAII accessor to a node of a `Coords`.
 pub struct Node {
-    handle: Handle<Configuration>,
+    handle: Handle<Coords>,
     id: NodeId,
 }
 
 impl Node {
-    /// Add a new node to the pointed `Configuration` and return a `Node`
+    /// Add a new node to the pointed `Coords` and return a `Node`
     /// referencing it (refcount = 1).
-    pub fn create_in(cfg: Handle<Configuration>, coords: &[f64]) -> Result<Self> {
+    pub fn create_in(coords: Handle<Coords>, coord: &[f64]) -> Result<Self> {
         // `add_node` initializes refcount = 1; this Node takes that unit.
-        let id = write(&cfg)?.add_node(coords)?;
-        Ok(Self { handle: cfg, id })
+        let id = write(&coords)?.add_node(coord)?;
+        Ok(Self { handle: coords, id })
     }
 
     /// Build an additional `Node` for an existing id (refcount += 1).
-    pub fn acquire(cfg: Handle<Configuration>, id: NodeId) -> Result<Self> {
-        write(&cfg)?.incref(id)?;
-        Ok(Self { handle: cfg, id })
+    pub fn acquire(coords: Handle<Coords>, id: NodeId) -> Result<Self> {
+        write(&coords)?.incref(id)?;
+        Ok(Self { handle: coords, id })
     }
 
     /// Build a `Node` from a handle and an id that have **already been
-    /// incremented** on the Configuration side. Internal escape hatch used
+    /// incremented** on the Coords side. Internal escape hatch used
     /// by FFI wrappers that have already paid the refcount increment.
     #[cfg(feature = "python-api")]
-    pub(crate) fn from_parts(handle: Handle<Configuration>, id: NodeId) -> Self {
+    pub(crate) fn from_parts(handle: Handle<Coords>, id: NodeId) -> Self {
         Self { handle, id }
     }
 
@@ -72,12 +72,12 @@ impl Node {
         self.id
     }
 
-    /// Handle to the owning `Configuration` (internal clone).
-    pub fn configuration(&self) -> Handle<Configuration> {
+    /// Handle to the owning `Coords` (internal clone).
+    pub fn coords(&self) -> Handle<Coords> {
         self.handle.clone()
     }
 
-    /// Coordinates (copied) in the `Configuration`'s active set.
+    /// Coordinates (copied) in the `Coords`'s active set.
     pub fn coord(&self) -> Result<Vec<f64>> {
         Ok(read(&self.handle)?.coord(self.id)?.to_vec())
     }
@@ -155,46 +155,46 @@ mod tests {
 
     #[test]
     fn node_protects_from_gc() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let n = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let n = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let id = n.id();
-        assert_eq!(write(&cfg).unwrap().gc(), 0);
-        assert!(read(&cfg).unwrap().is_alive(id));
+        assert_eq!(write(&coords).unwrap().gc(), 0);
+        assert!(read(&coords).unwrap().is_alive(id));
         drop(n);
-        assert_eq!(write(&cfg).unwrap().gc(), 1);
-        assert!(!read(&cfg).unwrap().is_alive(id));
+        assert_eq!(write(&coords).unwrap().gc(), 1);
+        assert!(!read(&coords).unwrap().is_alive(id));
     }
 
     #[test]
     fn clone_and_drop_maintain_refcount() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let n = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let id = n.id();
         let m = n.clone();
-        assert_eq!(read(&cfg).unwrap().refcount(id), 2);
+        assert_eq!(read(&coords).unwrap().refcount(id), 2);
         drop(n);
-        assert_eq!(read(&cfg).unwrap().refcount(id), 1);
+        assert_eq!(read(&coords).unwrap().refcount(id), 1);
         drop(m);
-        assert_eq!(read(&cfg).unwrap().refcount(id), 0);
+        assert_eq!(read(&coords).unwrap().refcount(id), 0);
     }
 
     #[test]
     fn acquire_shares_same_id() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n = Node::create_in(cfg.clone(), &[7.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let n = Node::create_in(coords.clone(), &[7.0]).unwrap();
         let id = n.id();
-        let m = Node::acquire(cfg.clone(), id).unwrap();
+        let m = Node::acquire(coords.clone(), id).unwrap();
         assert_eq!(n.id(), m.id());
-        assert_eq!(read(&cfg).unwrap().refcount(id), 2);
+        assert_eq!(read(&coords).unwrap().refcount(id), 2);
         drop(n);
         drop(m);
-        assert_eq!(read(&cfg).unwrap().refcount(id), 0);
+        assert_eq!(read(&coords).unwrap().refcount(id), 0);
     }
 
     #[test]
     fn coord_and_set_coord() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let n = Node::create_in(cfg, &[1.0, 2.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let n = Node::create_in(coords, &[1.0, 2.0]).unwrap();
         assert_eq!(n.coord().unwrap(), vec![1.0, 2.0]);
         n.set_coord(&[5.0, 6.0]).unwrap();
         assert_eq!(n.coord().unwrap(), vec![5.0, 6.0]);
@@ -202,8 +202,8 @@ mod tests {
 
     #[test]
     fn debug_and_display() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let n = Node::create_in(cfg, &[1.5, 2.5]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let n = Node::create_in(coords, &[1.5, 2.5]).unwrap();
         let d = format!("{:?}", n);
         assert!(d.contains("Node"));
         assert!(d.contains("coord"));

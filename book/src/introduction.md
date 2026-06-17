@@ -14,7 +14,7 @@ Chaque structure ne dépend que des structures qui la précèdent dans le graphe
 Les noms entre parenthèses sont des types auxiliaires (enum / primitif) sans état partagé.
 
 ```text
-Configuration
+Coords
 ├── NodeId            (u32 opaque)
 ├── Node              (accesseur RAII — maintient le refcount GC)
 ├── NodeField         (valeurs par nœud × composante)
@@ -25,7 +25,7 @@ Configuration
                   └── ElementField        (valeurs par cellule × point de Gauss)
 
 SubFiniteElementSpace + ElementField ──► SubModel::HeatConduction ──┐
-Configuration              ──► SubModel::Dirichlet       ├──► Model
+Coords              ──► SubModel::Dirichlet       ├──► Model
                                                          ┘
 NodeId ──► DofId ──► Matrix  (matrice creuse, DOFs nommés par (NodeId, champ))
 
@@ -36,7 +36,7 @@ Résumé des rôles :
 
 | Structure              | Rôle                                                              |
 |------------------------|-------------------------------------------------------------------|
-| `Configuration`        | Référentiel de coordonnées de nœuds (plusieurs jeux possibles)    |
+| `Coords`        | Référentiel de coordonnées de nœuds (plusieurs jeux possibles)    |
 | `NodeId`               | Identifiant opaque u32 d'un nœud                                  |
 | `Node`                 | Accesseur utilisateur avec protection GC automatique              |
 | `SubMesh`              | Cellules d'un même `ElementType` (SEG2, TRI3, …)                  |
@@ -55,21 +55,21 @@ Résumé des rôles :
 Exemple minimal en Rust :
 
 ```rust,ignore
-use pyrucast::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::Coords;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
 use pyrucast::mesh::node::Node;
 use pyrucast::store::insert;
 
-let cfg = insert(Configuration::new(2).unwrap());
-let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+let coords = insert(Coords::new(2).unwrap());
+let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
-let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 sm.add_cell(&[a.id(), b.id()]).unwrap();
 
 let sm_h = insert(sm);
-let mut mesh = Mesh::new(cfg);
+let mut mesh = Mesh::new(coords);
 mesh.add_sub(sm_h).unwrap();
 println!("{}", mesh); // Mesh: 1 submesh(es), 1 cell(s) total
 ```
@@ -79,7 +79,7 @@ Exemple équivalent en Python :
 ```python
 import pyrucast
 
-c = pyrucast.Configuration(dim=2)
+c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 

@@ -377,9 +377,9 @@ pub(crate) fn submesh_primitives_smooth(
     };
 
     // All node coordinates of the submesh, padded to 3-D.
-    let cfg = sm.configuration();
+    let coords = sm.coords();
     let coords: Vec<Point3> = {
-        let c = read(&cfg)?;
+        let c = read(&coords)?;
         conn.iter()
             .map(|&nid| c.coord(nid).map(pad3))
             .collect::<Result<_>>()?
@@ -687,7 +687,7 @@ impl<'a> Drawable for NodeFieldPointsView<'a> {
 mod tests {
     use super::*;
     use crate::containers::field::Field;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::SubMesh as RawSubMesh;
     use crate::containers::mesh::Node;
@@ -745,16 +745,16 @@ mod tests {
 
     #[test]
     fn submesh_cell_values_averages_node_values_per_cell() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut sm = RawSubMesh::new(cfg.clone(), ElementType::TRI3);
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut sm = RawSubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let sm_h = insert(sm);
 
         // Build a POI1 SubNodeField with T values [1, 2, 3] on a, b, c.
-        let mut poi1 = RawSubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut poi1 = RawSubMesh::new(coords.clone(), ElementType::POI1);
         for n in [&a, &b, &c] {
             poi1.add_cell(&[n.id()]).unwrap();
         }
@@ -774,11 +774,11 @@ mod tests {
 
     #[test]
     fn cell_values_ignore_nodes_outside_field_support() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         // Field defined only on `a`.
-        let mut poi1 = RawSubMesh::new(cfg.clone(), ElementType::POI1);
+        let mut poi1 = RawSubMesh::new(coords.clone(), ElementType::POI1);
         poi1.add_cell(&[a.id()]).unwrap();
         let poi1_h = insert(poi1);
         let mut nf = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
@@ -786,7 +786,7 @@ mod tests {
         let view = NodeField::from_sub(nf).view().unwrap();
         // SEG2 cell [a, b]: only `a` is in the field; missing node takes
         // the mean of the present ones → flat value 4.0.
-        let mut seg = RawSubMesh::new(cfg.clone(), ElementType::SEG2);
+        let mut seg = RawSubMesh::new(coords.clone(), ElementType::SEG2);
         seg.add_cell(&[a.id(), b.id()]).unwrap();
         let seg_h = insert(seg);
         let data = FieldData::Node(view);
@@ -810,12 +810,12 @@ mod tests {
 
     /// Two TRI3 sharing the edge (b, c).
     fn two_tri_mesh_and_fespace() -> (Mesh, FiniteElementSpace) {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let d = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
-        let mut sm = RawSubMesh::new(cfg, ElementType::TRI3);
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        let mut sm = RawSubMesh::new(coords, ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         sm.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
         let mesh = Mesh::from_submesh(sm);
@@ -895,9 +895,9 @@ mod tests {
         let (mesh, fes) = two_tri_mesh_and_fespace();
         let ef = ElementField::new(&fes, vec!["q".into()]).unwrap();
         // A second, unrelated submesh.
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let mut poi1 = RawSubMesh::new(cfg, ElementType::POI1);
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let mut poi1 = RawSubMesh::new(coords, ElementType::POI1);
         poi1.add_cell(&[a.id()]).unwrap();
         let other = insert(poi1);
         let data = FieldData::Element(ef.view().unwrap());

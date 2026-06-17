@@ -88,7 +88,7 @@ Le bloc local de la cellule est écrit dans la matrice globale aux positions `ro
 
 ### `Dirichlet` (`models/dirichlet.rs`)
 
-Condition de Dirichlet `u(n) = u_d` imposée par multiplicateurs de Lagrange. C'est une **contrainte** : aucun matériau, aucune loi de comportement. Elle ne crée **aucun nœud** et ne mute jamais le `Configuration` — l'utilisateur fournit **deux maillages** :
+Condition de Dirichlet `u(n) = u_d` imposée par multiplicateurs de Lagrange. C'est une **contrainte** : aucun matériau, aucune loi de comportement. Elle ne crée **aucun nœud** et ne mute jamais le `Coords` — l'utilisateur fournit **deux maillages** :
 
 - `imposed_mesh` (POI1 pour l'instant) : les nœuds contraints (partagés avec la physique cible) ;
 - `multiplier_mesh` (POI1) : le support des multiplicateurs, apparié élément-par-élément avec `imposed_mesh` (même structure de sous-maillage, même nombre de cellules par paire). On le fabrique typiquement depuis `imposed_mesh` avec le mesher générique `barycenter` (nœuds neufs colocalisés au centre de gravité), mais l'utilisateur reste libre (colocalisés, décalés, ou réutiliser les nœuds contraints eux-mêmes).
@@ -119,7 +119,7 @@ Cette uniformité simplifie tout : le solveur reçoit une seule `Matrix` + un se
 ## API Rust
 
 ```rust,ignore
-use pyrucast::containers::mesh::configuration::Configuration;
+use pyrucast::containers::mesh::Coords;
 use pyrucast::containers::mesh::element_type::ElementType;
 use pyrucast::containers::mesh::node::Node;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -129,10 +129,10 @@ use pyrucast::ops::{assemble, build, mesher};
 use pyrucast::store::insert;
 
 // 1-D : maillage [0, 1] à un seul SEG2.
-let cfg = insert(Configuration::new(1).unwrap());
-let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+let coords = insert(Coords::new(1).unwrap());
+let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
 mesh.add_cell(&[a.id(), b.id()]).unwrap();
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
@@ -160,7 +160,7 @@ assert_eq!(k.n_rows().unwrap(), 3);  // 2 nœuds physiques + 1 multiplicateur
 ```python
 import pyrucast
 
-c = pyrucast.Configuration(dim=1)
+c = pyrucast.Coords(dim=1)
 a = c.add_node([0.0])
 b = c.add_node([1.0])
 mesh = pyrucast.Mesh(c, "SEG2")
@@ -202,7 +202,7 @@ C'est un harnais de test — pas le solveur final. Un objet `LinearSolver` enfic
 import pyrucast
 
 # 1) Maillage + FE space
-c = pyrucast.Configuration(dim=1)
+c = pyrucast.Coords(dim=1)
 nodes = [c.add_node([i / 4.0]) for i in range(5)]
 mesh = pyrucast.Mesh(c, "SEG2")
 for i in range(4):

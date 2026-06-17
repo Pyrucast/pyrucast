@@ -5,7 +5,7 @@
 - [Conventions & philosophie](conventions.md)
 - [Correspondance Rust ↔ Python](correspondance-rust-python.md)
 - [Modèle mémoire](memory-model.md)
-- [Configuration](configuration.md)
+- [Coordonnées (Coords)](coords.md)
 - [Maillage](mesh.md)
 - [Triangulation : briques mathématiques](triangulation.md)
 - [Champ aux nœuds](node-field.md)

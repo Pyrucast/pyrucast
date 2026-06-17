@@ -8,7 +8,7 @@ Ce chapitre décrit comment pyrucast gère la mémoire : principes directeurs, i
 
 2. **Libération automatique, sans `remove` explicite.** Toute référence à un objet passe par un `Handle<T>` qui est **compté** (`Clone` incrémente, `Drop` décrémente) et **générationnel** (un slot recyclé invalide les anciens handles). Quand le dernier handle disparaît, le slot est libéré.
 
-3. **Refcount à deux niveaux.** Le store gère la durée de vie des *slots* — un objet entier est-il logiquement vivant ? À l'intérieur d'objets composites comme `Configuration`, un second niveau de refcount gère la durée de vie de *composants* internes (les nœuds). Voir le chapitre [Configuration](configuration.md). Le ramasse-miettes manuel (`gc()`) opère sur ce second niveau.
+3. **Refcount à deux niveaux.** Le store gère la durée de vie des *slots* — un objet entier est-il logiquement vivant ? À l'intérieur d'objets composites comme `Coords`, un second niveau de refcount gère la durée de vie de *composants* internes (les nœuds). Voir le chapitre [Coords](coords.md). Le ramasse-miettes manuel (`gc()`) opère sur ce second niveau.
 
 4. **Swap transparent vis-à-vis de `Drop`.** Un slot peut être évincé sur disque sans que `Drop` ne s'exécute (l'objet reste *logiquement* vivant, juste relocalisé). Au décrément final, le slot est rechargé depuis le disque avant `Drop` si nécessaire, de sorte que les effets de bord s'exécutent **exactement une fois** sur la durée de vie de l'objet. Cela rend safe la combinaison « objets à `Drop` avec effets de bord » + « swap ».
 
@@ -18,9 +18,9 @@ Ce chapitre décrit comment pyrucast gère la mémoire : principes directeurs, i
 
 ### Vue d'ensemble : une analogie
 
-Imaginez une **bibliothèque municipale** où chaque rayon est dédié à un type d'ouvrage : un rayon pour les `Configuration`, un autre pour les `SubMesh`, un autre pour les `NodeField`, etc. Chaque rayon est une **étagère numérotée** : la case 0, la case 1, la case 2…
+Imaginez une **bibliothèque municipale** où chaque rayon est dédié à un type d'ouvrage : un rayon pour les `Coords`, un autre pour les `SubMesh`, un autre pour les `NodeField`, etc. Chaque rayon est une **étagère numérotée** : la case 0, la case 1, la case 2…
 
-- Quand vous déposez un livre, la bibliothécaire vous remet un **ticket** : « rayon Configuration, case n°7, *édition 3* ». Ce ticket, c'est un `Handle`.
+- Quand vous déposez un livre, la bibliothécaire vous remet un **ticket** : « rayon Coords, case n°7, *édition 3* ». Ce ticket, c'est un `Handle`.
 - Pour relire votre livre, vous présentez le ticket à la bibliothécaire : elle vérifie la case et l'édition (anti-falsification) — une formalité d'un instant — puis vous installe à un **pupitre de lecture** attaché à cette case : vous consultez le livre **sur place**, sans l'emporter. Ce pupitre, c'est un *guard*. Plusieurs lecteurs peuvent partager le même livre en même temps ; pour **annoter** le livre en revanche, il faut le pupitre exclusif — on attend que les lecteurs aient fini.
 - Pendant que vous lisez la case n°7, le reste du rayon est entièrement libre : chaque case a son propre pupitre, la bibliothécaire ne bloque jamais le rayon entier.
 - Quand votre ticket disparaît (et tous ses duplicatas), le livre est jeté et la case redevient libre. Mais la prochaine personne qui dépose un livre dans cette case repartira avec un ticket portant l'**édition 4** — votre vieux ticket édition 3 ne marchera plus, même si la case est la même.
@@ -29,7 +29,7 @@ Tout pyrucast tient dans cette image. Les sections suivantes en déroulent les m
 
 ### Le store : un grand tableau par type
 
-Chaque type d'objet (`Configuration`, `SubMesh`, …) possède **son propre store** : un `Vec<Slot<T>>` global au processus, créé à la demande lors du premier `insert::<T>(...)`. Tous les stores sont enregistrés dans une **table globale** indexée par `TypeId`, ce qui permet à `insert::<T>` de retrouver le bon `Vec` à l'exécution. Le code utilisateur n'a pas besoin de connaître cette table : il ne voit que les fonctions `insert`, `read`, `write`, `swap_out`, `compact`.
+Chaque type d'objet (`Coords`, `SubMesh`, …) possède **son propre store** : un `Vec<Slot<T>>` global au processus, créé à la demande lors du premier `insert::<T>(...)`. Tous les stores sont enregistrés dans une **table globale** indexée par `TypeId`, ce qui permet à `insert::<T>` de retrouver le bon `Vec` à l'exécution. Le code utilisateur n'a pas besoin de connaître cette table : il ne voit que les fonctions `insert`, `read`, `write`, `swap_out`, `compact`.
 
 Un `Slot<T>` se compose d'une **cellule partagée** (le casier proprement dit) et d'un compteur d'édition :
 
@@ -49,7 +49,7 @@ struct Slot<T> {
 Visuellement, le store ressemble à ceci :
 
 ```text
-   store<Configuration> :
+   store<Coords> :
    ┌─────┬─────┬─────┬─────┬─────┐
    │ #0  │ #1  │ #2  │ #3  │ #4  │ ← indices de slot
    │Res  │Free │Res  │OnDsk│Res  │ ← état (dans le RwLock de chaque cellule)
@@ -106,22 +106,22 @@ Chaque slot porte un compteur `gen`. À chaque recyclage, `gen` est incrémenté
 
 Toute lecture/écriture commence par `validate(idx, gen)` : si la génération du slot ne correspond pas à celle du handle, l'accès renvoie `PyrucastError::StaleHandle`. Le bug *use-after-free* devient une **erreur récupérable**, jamais une corruption silencieuse.
 
-### Pourquoi des `Handle`, et pas des `&Configuration` directs ?
+### Pourquoi des `Handle`, et pas des `&Coords` directs ?
 
-Une question naturelle : pourquoi ne pas simplement passer une référence Rust `&Configuration` ou un `Arc<Configuration>` ? Trois raisons cumulées :
+Une question naturelle : pourquoi ne pas simplement passer une référence Rust `&Coords` ou un `Arc<Coords>` ? Trois raisons cumulées :
 
-1. **Indépendance identité / placement.** Le store doit pouvoir **déplacer un objet** (vers le disque par swap, plus tard vers une autre case par compactage déplaçant). Une `&Configuration` interdit ce déplacement (le borrow-checker fige l'adresse). Un `Handle` désigne l'identité ; le store gère l'emplacement physique.
-2. **Sérialisation.** Un `&Configuration` n'est pas sérialisable. Un `Handle` est juste `(u32, u32)` : on peut le stocker dans un autre objet, le sauvegarder sur disque, et le relire — le pointage logique survit au round-trip. Combiné au swap Drop-safe, un `SubMesh` qui contient un `Handle<Configuration>` traverse le disque sans casser le graphe d'objets.
-3. **API uniforme côté Python.** PyO3 a besoin d'objets `Clone + Send + Sync + 'static` côté Rust pour les exposer en classes Python. `Handle<T>` coche ces cases ; `&Configuration` non.
+1. **Indépendance identité / placement.** Le store doit pouvoir **déplacer un objet** (vers le disque par swap, plus tard vers une autre case par compactage déplaçant). Une `&Coords` interdit ce déplacement (le borrow-checker fige l'adresse). Un `Handle` désigne l'identité ; le store gère l'emplacement physique.
+2. **Sérialisation.** Un `&Coords` n'est pas sérialisable. Un `Handle` est juste `(u32, u32)` : on peut le stocker dans un autre objet, le sauvegarder sur disque, et le relire — le pointage logique survit au round-trip. Combiné au swap Drop-safe, un `SubMesh` qui contient un `Handle<Coords>` traverse le disque sans casser le graphe d'objets.
+3. **API uniforme côté Python.** PyO3 a besoin d'objets `Clone + Send + Sync + 'static` côté Rust pour les exposer en classes Python. `Handle<T>` coche ces cases ; `&Coords` non.
 
 ### Accès via `read` / `write` : les guards
 
 Avec un `Handle`, le code utilisateur ne peut pas écrire `handle.dim` directement. Il passe par un **guard** :
 
 ```rust,ignore
-let cfg = read(&handle)?;            // verrou lecture sur CET objet seul
-println!("dim = {}", cfg.dim());     // cfg se comporte comme un &Configuration
-drop(cfg);                           // (ou fin de scope) → verrou relâché
+let coords = read(&handle)?;            // verrou lecture sur CET objet seul
+println!("dim = {}", coords.dim());     // coords se comporte comme un &Coords
+drop(coords);                           // (ou fin de scope) → verrou relâché
 
 write(&handle)?.add_node(&[0.0, 0.0])?;   // verrou écriture, le temps de l'appel
 ```
@@ -218,7 +218,7 @@ Le format binaire posé sur disque est celui du trait `Persist`, partagé avec l
 
 ### Sûreté du swap vis-à-vis de `Drop`
 
-Beaucoup d'objets pyrucast portent des effets de bord dans leur `Drop` (ex. `SubMesh` décrémente le refcount des nœuds de la `Configuration`). Le store assure :
+Beaucoup d'objets pyrucast portent des effets de bord dans leur `Drop` (ex. `SubMesh` décrémente le refcount des nœuds de la `Coords`). Le store assure :
 
 - `swap_out` n'exécute **pas** le `Drop` de la valeur évincée (`std::mem::forget` interne) — l'objet est logiquement vivant, juste relocalisé.
 - Au décrément final du refcount, si le slot est `OnDisk`, on recharge depuis le disque avant de dropper. `Drop` s'exécute donc une et une seule fois sur la durée de vie de l'objet, quel que soit le parcours swap.
@@ -267,9 +267,9 @@ Une alternative tentante au refcount par nœud serait un GC **mark-and-sweep** :
 
 **Obstacle 1 — où sont les racines ?**
 
-Les `SubMesh`, `Mesh`, `NodeField` (à venir) vivent dans le store : énumérables. Mais un `Node` utilisateur vit **sur la pile Rust** (ou dans le heap Python via PyO3), pas dans le store. Pour qu'un `Node` se signale à la `Configuration` comme racine vivante, il n'y a que deux options :
+Les `SubMesh`, `Mesh`, `NodeField` (à venir) vivent dans le store : énumérables. Mais un `Node` utilisateur vit **sur la pile Rust** (ou dans le heap Python via PyO3), pas dans le store. Pour qu'un `Node` se signale à la `Coords` comme racine vivante, il n'y a que deux options :
 
-1. Maintenir une **liste séparée** des `Node` vivants dans la `Configuration`, mise à jour à `Clone`/`Drop`. C'est un refcount déguisé en `HashSet<NodeId>` — sans gain.
+1. Maintenir une **liste séparée** des `Node` vivants dans la `Coords`, mise à jour à `Clone`/`Drop`. C'est un refcount déguisé en `HashSet<NodeId>` — sans gain.
 2. **Changer le contrat** : `Node` devient une vue non-protectrice, et seul un objet du store (typiquement un `SubMesh` POI1) peut maintenir un nœud vivant. C'est exactement le modèle cast3m (« un point isolé n'existe pas en dehors d'un MAILLAGE »). Légitime, mais c'est une rupture d'API plus large que la simplification cherchée.
 
 **Obstacle 2 — le swap se paie cher**
@@ -302,7 +302,7 @@ Le store actuel est une fondation correcte mais il a trois angles morts, déjà 
 |---|---|---|---|
 | **A. Indirection + compactage déplaçant** | Table `id → slot_idx`. On déplace les slots vivants pour combler les trous, la table est mise à jour. Les `Handle` restent valides car ils référencent l'`id` logique, pas le slot physique. | 1 indirection supplémentaire par accès ; ~100 lignes. | Fragmentation interne **résolue**. C'est l'approche historique de cast3m. |
 | **B. Swap annoté + éviction LRU** | Chaque slot porte une priorité (`Pinned` / `Working` / `Scratch`) et un `last_used`. Au-dessus d'un budget RAM, on évince automatiquement le bas-priorité + le plus ancien. | Heuristiques, instrumentation, paramètres à régler. | Swap « intelligent » façon cast3m moderne : plus besoin d'appels manuels à `swap_out`. |
-| **C. Arènes par génération** | Jeune génération (objets transitoires) collectée souvent ; vieille génération (Configuration, Mesh ancrés) collectée rarement. Inspiré des GC générationnels. | Lourd à implémenter (semi-spaces, indirection, write-barrier). | Très bien adapté au profil FE — beaucoup de scratch + peu d'objets stables. Le plus ambitieux. |
+| **C. Arènes par génération** | Jeune génération (objets transitoires) collectée souvent ; vieille génération (Coords, Mesh ancrés) collectée rarement. Inspiré des GC générationnels. | Lourd à implémenter (semi-spaces, indirection, write-barrier). | Très bien adapté au profil FE — beaucoup de scratch + peu d'objets stables. Le plus ambitieux. |
 
 ### Stratégie d'évolution
 

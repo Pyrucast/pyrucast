@@ -1,12 +1,12 @@
-//! Configuration — sets of node coordinates with garbage collection.
+//! Coords — node coordinates with garbage collection.
 //!
-//! A [`Configuration`] holds **one or more sets of coordinates** for the
-//! same set of nodes, in a fixed dimension.
+//! A [`Coords`] holds **one or more configurations** (sets of coordinates)
+//! for the same set of nodes, in a fixed dimension.
 //!
 //! # Node identity
 //!
 //! Every created node receives a **stable** internal identifier
-//! ([`NodeId`]), unique for the lifetime of the `Configuration`: **no id
+//! ([`NodeId`]), unique for the lifetime of the `Coords`: **no id
 //! is ever reused**, even after garbage collection. Other objects (meshes,
 //! fields) can therefore reference a node by id without worrying about
 //! stability.
@@ -14,15 +14,15 @@
 //! # Deletion policy: no direct removal
 //!
 //! There is **no** `remove_node` method. A referenced node is protected.
-//! Only the garbage collector [`Configuration::gc`] reclaims nodes whose
+//! Only the garbage collector [`Coords::gc`] reclaims nodes whose
 //! **internal** refcount has reached 0.
 //!
 //! # Two-level refcount model
 //!
-//! - The **Configuration slot** in the global store is protected by the
+//! - The **Coords slot** in the global store is protected by the
 //!   usual [`crate::store::Handle`] refcount.
-//! - **Each node** inside the Configuration has its own refcount,
-//!   manipulated via [`Configuration::incref`] / [`Configuration::decref`]
+//! - **Each node** inside the Coords has its own refcount,
+//!   manipulated via [`Coords::incref`] / [`Coords::decref`]
 //!   (used by [`crate::containers::mesh::Node`] and, later, by meshes and fields).
 //!
 //! # Identity vs solver ordering
@@ -32,19 +32,19 @@
 //! assigned to `node_id`. Phase 4 (Cuthill–McKee renumbering) will
 //! recompute it; the identity (`NodeId`) is never modified.
 //!
-//! # Multiple coordinate sets
+//! # Multiple configurations
 //!
 //! Useful for switching between reference / deformed / predicted
-//! configurations. An active set is designated by index;
-//! [`Configuration::coord`] reads from the active set.
+//! configurations. An active configuration is designated by index;
+//! [`Coords::coord`] reads from the active one.
 //!
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::{Configuration, NodeId};
+//! use pyrucast::containers::mesh::{Coords, NodeId};
 //! use pyrucast::store::{insert, write};
 //!
-//! let h = insert(Configuration::new(2).unwrap());
+//! let h = insert(Coords::new(2).unwrap());
 //! let a: NodeId = write(&h).unwrap().add_node(&[0.0, 0.0]).unwrap();
 //! // add_node initializes refcount = 1: without decref, the node is protected.
 //! assert_eq!(write(&h).unwrap().gc(), 0);
@@ -58,7 +58,7 @@ use crate::error::{PyrucastError, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Stable internal identifier of a node inside a `Configuration`.
+/// Stable internal identifier of a node inside a `Coords`.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodeId(pub u32);
 
@@ -80,15 +80,15 @@ impl crate::dump::Dump for NodeId {
     }
 }
 
-/// Sets of node coordinates with stable identity, multi-set support,
+/// Node coordinates with stable identity, multiple configurations,
 /// optional solver permutation, and a garbage collector for unreferenced
 /// nodes.
 #[derive(Serialize, Deserialize)]
-pub struct Configuration {
+pub struct Coords {
     dim: u8,
-    /// `coord_sets[s][id * dim + k]` — each set holds `capacity * dim` values.
-    coord_sets: Vec<Vec<f64>>,
-    set_names: Vec<String>,
+    /// `configs[c][id * dim + k]` — each configuration holds `capacity * dim` values.
+    configs: Vec<Vec<f64>>,
+    config_names: Vec<String>,
     active: usize,
     /// `alive[id] == false` ⇒ collected by the GC. Once `false`, stays so forever.
     alive: Vec<bool>,
@@ -98,17 +98,17 @@ pub struct Configuration {
     permutation: Option<Vec<u32>>,
 }
 
-impl Configuration {
-    /// Create an empty configuration in dimension `dim` (≥ 1). A first set
-    /// named `"default"` is created automatically.
+impl Coords {
+    /// Create an empty `Coords` in dimension `dim` (≥ 1). A first
+    /// configuration named `"default"` is created automatically.
     pub fn new(dim: u8) -> Result<Self> {
         if dim == 0 {
             return Err(PyrucastError::Message("dim must be ≥ 1".into()));
         }
         Ok(Self {
             dim,
-            coord_sets: vec![Vec::new()],
-            set_names: vec!["default".into()],
+            configs: vec![Vec::new()],
+            config_names: vec!["default".into()],
             active: 0,
             alive: Vec::new(),
             refcount: Vec::new(),
@@ -136,7 +136,7 @@ impl Configuration {
         self.alive.get(id.0 as usize).copied().unwrap_or(false)
     }
 
-    /// Add a node with these coordinates in **all** sets. Initializes its
+    /// Add a node with these coordinates in **all** configurations. Initializes its
     /// refcount to 1 — the caller is responsible for at least one decrement
     /// (typically through the end-of-life of a [`crate::containers::mesh::Node`]).
     pub fn add_node(&mut self, coords: &[f64]) -> Result<NodeId> {
@@ -148,7 +148,7 @@ impl Configuration {
             )));
         }
         let id = self.alive.len() as u32;
-        for set in &mut self.coord_sets {
+        for set in &mut self.configs {
             set.extend_from_slice(coords);
         }
         self.alive.push(true);
@@ -169,7 +169,7 @@ impl Configuration {
 
     /// Decrement the refcount of a live node. The node is not immediately
     /// collected even if the refcount reaches 0: call
-    /// [`Configuration::gc`] for that.
+    /// [`Coords::gc`] for that.
     pub fn decref(&mut self, id: NodeId) -> Result<()> {
         self.ensure_alive(id)?;
         let r = &mut self.refcount[id.0 as usize];
@@ -205,16 +205,16 @@ impl Configuration {
         collected
     }
 
-    /// Coordinates of a node in the active set. Error if the node was
+    /// Coordinates of a node in the active configuration. Error if the node was
     /// collected or never existed.
     pub fn coord(&self, id: NodeId) -> Result<&[f64]> {
         self.ensure_alive(id)?;
         let d = self.dim as usize;
         let s = id.0 as usize * d;
-        Ok(&self.coord_sets[self.active][s..s + d])
+        Ok(&self.configs[self.active][s..s + d])
     }
 
-    /// Set the coordinates of a node in the active set.
+    /// Set the coordinates of a node in the active configuration.
     pub fn set_coord(&mut self, id: NodeId, coords: &[f64]) -> Result<()> {
         self.ensure_alive(id)?;
         if coords.len() != self.dim as usize {
@@ -226,7 +226,7 @@ impl Configuration {
         }
         let d = self.dim as usize;
         let s = id.0 as usize * d;
-        self.coord_sets[self.active][s..s + d].copy_from_slice(coords);
+        self.configs[self.active][s..s + d].copy_from_slice(coords);
         Ok(())
     }
 
@@ -248,37 +248,37 @@ impl Configuration {
             .filter_map(|(i, &a)| a.then_some(NodeId(i as u32)))
     }
 
-    // ─── Coordinate sets ───
+    // ─── Configurations ───
 
-    /// Add a new coordinate set by cloning the active one. Returns its index.
-    pub fn add_coord_set(&mut self, name: impl Into<String>) -> usize {
-        let copy = self.coord_sets[self.active].clone();
-        self.coord_sets.push(copy);
-        self.set_names.push(name.into());
-        self.coord_sets.len() - 1
+    /// Add a new configuration by cloning the active one. Returns its index.
+    pub fn add_config(&mut self, name: impl Into<String>) -> usize {
+        let copy = self.configs[self.active].clone();
+        self.configs.push(copy);
+        self.config_names.push(name.into());
+        self.configs.len() - 1
     }
 
-    /// Switch the active set to index `set`.
-    pub fn switch_to(&mut self, set: usize) -> Result<()> {
-        if set >= self.coord_sets.len() {
+    /// Select the active configuration by index.
+    pub fn select(&mut self, config: usize) -> Result<()> {
+        if config >= self.configs.len() {
             return Err(PyrucastError::Message(format!(
-                "switch_to: index {} ≥ set count ({})",
-                set,
-                self.coord_sets.len()
+                "select: index {} ≥ configuration count ({})",
+                config,
+                self.configs.len()
             )));
         }
-        self.active = set;
+        self.active = config;
         Ok(())
     }
 
-    /// Index of the active set.
-    pub fn active_set(&self) -> usize {
+    /// Index of the active configuration.
+    pub fn active(&self) -> usize {
         self.active
     }
 
-    /// Names of the sets, in order.
-    pub fn set_names(&self) -> &[String] {
-        &self.set_names
+    /// Names of the configurations, in order.
+    pub fn names(&self) -> &[String] {
+        &self.config_names
     }
 
     // ─── Solver permutation ───
@@ -327,11 +327,11 @@ impl Configuration {
     }
 }
 
-impl fmt::Debug for Configuration {
+impl fmt::Debug for Coords {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Configuration")
+        f.debug_struct("Coords")
             .field("dim", &self.dim)
-            .field("coord_sets", &self.set_names)
+            .field("configs", &self.config_names)
             .field("active", &self.active)
             .field("node_count", &self.node_count())
             .field("capacity", &self.capacity())
@@ -340,9 +340,9 @@ impl fmt::Debug for Configuration {
     }
 }
 
-impl fmt::Display for Configuration {
+impl fmt::Display for Coords {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let active_name = &self.set_names[self.active];
+        let active_name = &self.config_names[self.active];
         let collected = self.capacity() - self.node_count();
         let perm_label = if self.permutation.is_some() {
             "custom"
@@ -351,9 +351,9 @@ impl fmt::Display for Configuration {
         };
         write!(
             f,
-            "Configuration: dim={}, sets={} (active=\"{}\"), nodes={} ({} collected), permutation: {}",
+            "Coords: dim={}, configs={} (active=\"{}\"), nodes={} ({} collected), permutation: {}",
             self.dim,
-            self.coord_sets.len(),
+            self.configs.len(),
             active_name,
             self.node_count(),
             collected,
@@ -362,7 +362,7 @@ impl fmt::Display for Configuration {
     }
 }
 
-impl crate::dump::Dump for Configuration {
+impl crate::dump::Dump for Coords {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         use crate::dump::{fmt_float, table};
         let dim = self.dim as usize;
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn create_and_dim() {
-        let c = Configuration::new(3).unwrap();
+        let c = Coords::new(3).unwrap();
         assert_eq!(c.dim(), 3);
         assert_eq!(c.node_count(), 0);
         assert_eq!(c.capacity(), 0);
@@ -402,13 +402,13 @@ mod tests {
 
     #[test]
     fn dim_zero_rejected() {
-        let err = Configuration::new(0).unwrap_err();
+        let err = Coords::new(0).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
     }
 
     #[test]
     fn add_node_initializes_refcount_to_one() {
-        let mut c = Configuration::new(2).unwrap();
+        let mut c = Coords::new(2).unwrap();
         let a = c.add_node(&[0.0, 0.0]).unwrap();
         assert_eq!(c.refcount(a), 1);
         assert!(c.is_alive(a));
@@ -416,14 +416,14 @@ mod tests {
 
     #[test]
     fn add_node_invalid_dim() {
-        let mut c = Configuration::new(3).unwrap();
+        let mut c = Coords::new(3).unwrap();
         let err = c.add_node(&[1.0, 2.0]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
     }
 
     #[test]
     fn gc_does_not_collect_referenced_nodes() {
-        let mut c = Configuration::new(2).unwrap();
+        let mut c = Coords::new(2).unwrap();
         let a = c.add_node(&[0.0, 0.0]).unwrap();
         // refcount = 1, gc must not collect anything
         assert_eq!(c.gc(), 0);
@@ -438,7 +438,7 @@ mod tests {
 
     #[test]
     fn incref_protects_from_gc() {
-        let mut c = Configuration::new(1).unwrap();
+        let mut c = Coords::new(1).unwrap();
         let a = c.add_node(&[3.0]).unwrap();
         c.incref(a).unwrap(); // refcount = 2
         c.decref(a).unwrap(); // refcount = 1
@@ -449,7 +449,7 @@ mod tests {
 
     #[test]
     fn id_not_reused_after_gc() {
-        let mut c = Configuration::new(1).unwrap();
+        let mut c = Coords::new(1).unwrap();
         let a = c.add_node(&[0.0]).unwrap();
         c.decref(a).unwrap();
         c.gc();
@@ -461,7 +461,7 @@ mod tests {
 
     #[test]
     fn coord_after_gc_is_error() {
-        let mut c = Configuration::new(1).unwrap();
+        let mut c = Coords::new(1).unwrap();
         let a = c.add_node(&[42.0]).unwrap();
         c.decref(a).unwrap();
         c.gc();
@@ -473,7 +473,7 @@ mod tests {
 
     #[test]
     fn decref_at_zero_is_error() {
-        let mut c = Configuration::new(1).unwrap();
+        let mut c = Coords::new(1).unwrap();
         let a = c.add_node(&[0.0]).unwrap();
         c.decref(a).unwrap();
         let err = c.decref(a).unwrap_err();
@@ -481,37 +481,37 @@ mod tests {
     }
 
     #[test]
-    fn set_coord_modifies_active_set() {
-        let mut c = Configuration::new(2).unwrap();
+    fn set_coord_modifies_active_config() {
+        let mut c = Coords::new(2).unwrap();
         let a = c.add_node(&[0.0, 0.0]).unwrap();
         c.set_coord(a, &[3.0, 4.0]).unwrap();
         assert_eq!(c.coord(a).unwrap(), &[3.0, 4.0]);
     }
 
     #[test]
-    fn multiple_sets_and_switching() {
-        let mut c = Configuration::new(2).unwrap();
+    fn multiple_configs_and_select() {
+        let mut c = Coords::new(2).unwrap();
         let a = c.add_node(&[0.0, 0.0]).unwrap();
-        let s2 = c.add_coord_set("deformed");
+        let s2 = c.add_config("deformed");
         assert_eq!(s2, 1);
-        c.switch_to(s2).unwrap();
+        c.select(s2).unwrap();
         c.set_coord(a, &[10.0, 20.0]).unwrap();
-        c.switch_to(0).unwrap();
+        c.select(0).unwrap();
         assert_eq!(c.coord(a).unwrap(), &[0.0, 0.0]);
-        c.switch_to(1).unwrap();
+        c.select(1).unwrap();
         assert_eq!(c.coord(a).unwrap(), &[10.0, 20.0]);
-        assert_eq!(c.set_names(), &["default".to_string(), "deformed".to_string()]);
+        assert_eq!(c.names(), &["default".to_string(), "deformed".to_string()]);
     }
 
     #[test]
-    fn switch_invalid() {
-        let mut c = Configuration::new(2).unwrap();
-        assert!(c.switch_to(5).is_err());
+    fn select_invalid() {
+        let mut c = Coords::new(2).unwrap();
+        assert!(c.select(5).is_err());
     }
 
     #[test]
     fn iter_live_skips_collected() {
-        let mut c = Configuration::new(1).unwrap();
+        let mut c = Coords::new(1).unwrap();
         let a = c.add_node(&[0.0]).unwrap();
         let b = c.add_node(&[1.0]).unwrap();
         let _cc = c.add_node(&[2.0]).unwrap();
@@ -523,7 +523,7 @@ mod tests {
 
     #[test]
     fn permutation_validation_and_invariant() {
-        let mut c = Configuration::new(1).unwrap();
+        let mut c = Coords::new(1).unwrap();
         for k in 0..4 {
             c.add_node(&[k as f64]).unwrap();
         }
@@ -538,7 +538,7 @@ mod tests {
 
     #[test]
     fn permutation_extended_by_add_node() {
-        let mut c = Configuration::new(1).unwrap();
+        let mut c = Coords::new(1).unwrap();
         for k in 0..3 {
             c.add_node(&[k as f64]).unwrap();
         }
@@ -553,11 +553,11 @@ mod tests {
 
     #[test]
     fn debug_display() {
-        let mut c = Configuration::new(2).unwrap();
+        let mut c = Coords::new(2).unwrap();
         c.add_node(&[0.0, 0.0]).unwrap();
         c.add_node(&[1.0, 1.0]).unwrap();
         let d = format!("{:?}", c);
-        assert!(d.contains("Configuration"));
+        assert!(d.contains("Coords"));
         assert!(d.contains("dim"));
         let s = format!("{}", c);
         assert!(s.contains("dim=2"));

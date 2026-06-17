@@ -24,8 +24,8 @@ Le nom de la classe Python est identique au nom de la structure Rust.
 
 | Module Rust | Structure Rust | Classe Python | Chapitre |
 |---|---|---|---|
-| `containers::mesh::configuration` | `Configuration` | `pyrucast.Configuration` | [Configuration](configuration.md) |
-| `containers::mesh::node` | `Node` | `pyrucast.Node` | [Configuration](configuration.md) |
+| `containers::mesh::coords` | `Coords` | `pyrucast.Coords` | [Coords](coords.md) |
+| `containers::mesh::node` | `Node` | `pyrucast.Node` | [Coords](coords.md) |
 | `containers::mesh` | `SubMesh` | `pyrucast.SubMesh` *(vue, via `mesh[i]`)* | [Maillage](mesh.md) |
 | `containers::mesh` | `Mesh` | `pyrucast.Mesh` | [Maillage](mesh.md) |
 | `containers::mesh::cell` | `Cell` | `pyrucast.Cell` | [Maillage](mesh.md) |
@@ -48,7 +48,7 @@ détails d'implémentation (`Physics`, l'énum des physiques sous `SubModel` ;
 Les sous-objets `Sub*` (`SubMesh`, `SubFiniteElementSpace`, `SubElementField`,
 `SubMatrix`, `SubModel`) ne se **construisent pas** directement côté Python :
 ce sont des **vues** obtenues par indexation de leur parent (`parent[i]`). On
-construit toujours au niveau parent — `Mesh(config, type)`,
+construit toujours au niveau parent — `Mesh(coords, type)`,
 `FiniteElementSpace(mesh)`, `ElementField(fes, comps)`,
 `Model.heat_conduction(fes)`, `Matrix.block(...)` — et on compose plusieurs
 zones avec `+` (merge). Voir la règle « Agrégats : un ou plusieurs » de
@@ -64,7 +64,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 | Rust (`ops::mesher::…`) | Python (`pyrucast.…`) |
 |---|---|
-| `from_live_nodes(config: Handle<Configuration>) -> Mesh` | `from_live_nodes(config) -> Mesh` |
+| `from_live_nodes(coords: Handle<Coords>) -> Mesh` | `from_live_nodes(coords) -> Mesh` |
 | `SubMesh::poi1_from_nodes(nodes: &[Node]) -> SubMesh` | `poi1_from_nodes(nodes) -> Mesh` |
 | `line_seg2(a: &Node, b: &Node, n_elems: usize) -> Mesh` | `line_seg2(a, b, n_elems) -> Mesh` |
 | `circle_seg2(center: &Node, normal: &[f64], radius: f64, n_elems: usize) -> Mesh` | `circle_seg2(center, normal, radius, n_elems) -> Mesh` |
@@ -166,7 +166,7 @@ La composition d'agrégats est l'**union** : côté **Python** elle s'écrit `|`
 (comme `set | set`), côté **Rust** ce sont les méthodes nommées `union` /
 `union_sub` / `union_subs` (renvoient `Result<…>`). Les sous-objets sont
 **partagés** (refcount), jamais copiés ; les contraintes de domaine (même
-`Configuration` pour `Mesh`, etc.) restent vérifiées.
+`Coords` pour `Mesh`, etc.) restent vérifiées.
 
 Sémantique d'union (uniforme pour **tous** les agrégats) :
 

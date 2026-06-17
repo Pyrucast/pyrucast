@@ -10,7 +10,7 @@
 //!   derivatives at those Gauss points) and computes the physical
 //!   quantities — Jacobian, `|J|`, `dN/dx` — **on the fly** from the
 //!   current node coordinates in the
-//!   [`crate::containers::mesh::Configuration`].
+//!   [`crate::containers::mesh::Coords`].
 //! - [`FiniteElementSpace`] — collection of `SubFiniteElementSpace` matching the
 //!   submeshes of a [`crate::containers::mesh::Mesh`] one-for-one. The mesh handle
 //!   is captured at construction.
@@ -27,19 +27,19 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::containers::mesh::Configuration;
+//! use pyrucast::containers::mesh::Coords;
 //! use pyrucast::containers::mesh::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::mesh::Node;
 //! use pyrucast::store::{insert, read};
 //!
-//! let cfg = insert(Configuration::new(2).unwrap());
-//! let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-//! let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
-//! let c = Node::create_in(cfg.clone(), &[0.0, 2.0]).unwrap();
+//! let coords = insert(Coords::new(2).unwrap());
+//! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+//! let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
+//! let c = Node::create_in(coords.clone(), &[0.0, 2.0]).unwrap();
 //!
-//! let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+//! let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
 //! mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 //!
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
@@ -63,7 +63,7 @@ pub use interpolation::Interpolation;
 pub use quadrature::QuadratureRule;
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::{Coords, NodeId};
 use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, SubMesh};
@@ -82,9 +82,9 @@ pub struct SubFiniteElementSpace {
     submesh: Handle<SubMesh>,
     interpolation: Interpolation,
     quadrature: QuadratureRule,
-    /// Geometric dimension of the owning `Configuration` at construction
+    /// Geometric dimension of the owning `Coords` at construction
     /// time (used only to size the on-the-fly Jacobians). The
-    /// `Configuration` may not change dimension, so this is stable for
+    /// `Coords` may not change dimension, so this is stable for
     /// the lifetime of the subspace.
     space_dim: usize,
 
@@ -112,9 +112,9 @@ impl SubFiniteElementSpace {
         interpolation: Interpolation,
         quadrature: QuadratureRule,
     ) -> Result<Self> {
-        let (et, cfg) = {
+        let (et, coords) = {
             let s = read(&submesh)?;
-            (s.element_type(), s.configuration())
+            (s.element_type(), s.coords())
         };
         if et == ElementType::POI1 {
             return Err(PyrucastError::Message(
@@ -133,7 +133,7 @@ impl SubFiniteElementSpace {
                 quadrature, et
             )));
         }
-        let space_dim = read(&cfg)?.dim() as usize;
+        let space_dim = read(&coords)?.dim() as usize;
         let ref_dim = et.topological_dim();
         if space_dim < ref_dim {
             return Err(PyrucastError::Message(format!(
@@ -173,9 +173,9 @@ impl SubFiniteElementSpace {
         self.submesh.clone()
     }
 
-    /// Handle to the owning `Configuration` (internal clone).
-    pub fn configuration(&self) -> Result<Handle<Configuration>> {
-        Ok(read(&self.submesh)?.configuration())
+    /// Handle to the owning `Coords` (internal clone).
+    pub fn coords(&self) -> Result<Handle<Coords>> {
+        Ok(read(&self.submesh)?.coords())
     }
 
     /// Interpolation in use.
@@ -198,7 +198,7 @@ impl SubFiniteElementSpace {
         Ok(self.element_type()?.topological_dim())
     }
 
-    /// Geometric (physical) dimension of the underlying `Configuration`.
+    /// Geometric (physical) dimension of the underlying `Coords`.
     pub fn space_dim(&self) -> usize {
         self.space_dim
     }
@@ -259,7 +259,7 @@ impl SubFiniteElementSpace {
     ///
     /// Flat row-major buffer of length `space_dim × ref_dim`, with
     /// `[a * ref_dim + k]` = `∂x_a/∂ξ_k`. Each entry is built from the
-    /// **current** node coordinates in the `Configuration`.
+    /// **current** node coordinates in the `Coords`.
     pub fn jacobian(&self, cell_idx: usize, g: usize) -> Result<Vec<f64>> {
         self.check_g(g)?;
         let coords = self.cell_node_coords(cell_idx)?;
@@ -305,7 +305,7 @@ impl SubFiniteElementSpace {
     /// `[n_nodes × space_dim]`, row-major (`[i * space_dim + a]`).
     fn cell_node_coords(&self, cell_idx: usize) -> Result<Vec<f64>> {
         let n_nodes = self.nodes_per_cell()?;
-        let (cfg, ids): (Handle<Configuration>, Vec<NodeId>) = {
+        let (coords, ids): (Handle<Coords>, Vec<NodeId>) = {
             let s = read(&self.submesh)?;
             let total = s.cell_count();
             if cell_idx >= total {
@@ -316,10 +316,10 @@ impl SubFiniteElementSpace {
             }
             let conn = s.connectivity();
             let ids = conn[cell_idx * n_nodes..(cell_idx + 1) * n_nodes].to_vec();
-            (s.configuration(), ids)
+            (s.coords(), ids)
         };
         let mut out = Vec::with_capacity(n_nodes * self.space_dim);
-        let c = read(&cfg)?;
+        let c = read(&coords)?;
         for id in ids {
             out.extend_from_slice(c.coord(id)?);
         }
@@ -396,7 +396,7 @@ impl crate::dump::Dump for SubFiniteElementSpace {
 ///
 /// Topology (connectivity, element types) is frozen at construction:
 /// each `SubFiniteElementSpace` captures its `SubMesh` handle. The node coordinates
-/// in the underlying `Configuration` may evolve later; the on-the-fly
+/// in the underlying `Coords` may evolve later; the on-the-fly
 /// Jacobian computation always reflects the current coordinates.
 #[derive(Serialize, Deserialize, Default)]
 pub struct FiniteElementSpace {
@@ -615,22 +615,22 @@ mod tests {
     use crate::containers::mesh::Node;
     use crate::store::{insert, read, write};
 
-    fn cfg2d() -> Handle<Configuration> {
-        insert(Configuration::new(2).unwrap())
+    fn cfg2d() -> Handle<Coords> {
+        insert(Coords::new(2).unwrap())
     }
 
-    fn cfg3d() -> Handle<Configuration> {
-        insert(Configuration::new(3).unwrap())
+    fn cfg3d() -> Handle<Coords> {
+        insert(Coords::new(3).unwrap())
     }
 
     // ── SubFiniteElementSpace structural checks ────────────────────────────────────────
 
     #[test]
     fn rejects_poi1_submesh() {
-        let cfg = cfg2d();
-        let n = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let coords = cfg2d();
+        let n = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[n.id()]).unwrap();
             insert(sm)
         };
@@ -640,13 +640,13 @@ mod tests {
 
     #[test]
     fn rejects_mesh_with_lower_space_dim_than_ref_dim() {
-        // 1-D Configuration but TRI3 (ref_dim = 2) → must be rejected.
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+        // 1-D Coords but TRI3 (ref_dim = 2) → must be rejected.
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[2.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+            let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
@@ -658,11 +658,11 @@ mod tests {
     /// SEG2 of length L in 1-D: J is constant, |J| = L/2.
     #[test]
     fn seg2_jacobian_1d() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[5.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[5.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::SEG2);
+            let mut sm = SubMesh::new(coords, ElementType::SEG2);
             sm.add_cell(&[a.id(), b.id()]).unwrap();
             insert(sm)
         };
@@ -679,11 +679,11 @@ mod tests {
     /// a 2×1 column [3/2, 0]; |J|_curve = 3/2.
     #[test]
     fn seg2_jacobian_in_plane() {
-        let cfg = cfg2d();
-        let a = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[3.0, 1.0]).unwrap();
+        let coords = cfg2d();
+        let a = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[3.0, 1.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::SEG2);
+            let mut sm = SubMesh::new(coords, ElementType::SEG2);
             sm.add_cell(&[a.id(), b.id()]).unwrap();
             insert(sm)
         };
@@ -701,12 +701,12 @@ mod tests {
     /// since ref triangle has area 1/2).
     #[test]
     fn tri3_jacobian_planar() {
-        let cfg = cfg2d();
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[3.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[0.0, 4.0]).unwrap();
+        let coords = cfg2d();
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[3.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[0.0, 4.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+            let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
@@ -721,12 +721,12 @@ mod tests {
     /// (manifold area element).
     #[test]
     fn tri3_jacobian_manifold_in_3d() {
-        let cfg = cfg3d();
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0, 7.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[3.0, 0.0, 7.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[0.0, 4.0, 7.0]).unwrap();
+        let coords = cfg3d();
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0, 7.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[3.0, 0.0, 7.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[0.0, 4.0, 7.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+            let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
@@ -743,13 +743,13 @@ mod tests {
     /// maps to half a physical unit.
     #[test]
     fn qua4_jacobian_unit_square() {
-        let cfg = cfg2d();
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
-        let n3 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
+        let coords = cfg2d();
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        let n3 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::QUA4);
+            let mut sm = SubMesh::new(coords, ElementType::QUA4);
             sm.add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()]).unwrap();
             insert(sm)
         };
@@ -765,7 +765,7 @@ mod tests {
     /// HEX8 unit cube: similar to QUA4 test in 3-D.
     #[test]
     fn hex8_jacobian_unit_cube() {
-        let cfg = cfg3d();
+        let coords = cfg3d();
         let n: Vec<_> = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -777,10 +777,10 @@ mod tests {
             [0.0, 1.0, 1.0],
         ]
         .iter()
-        .map(|p| Node::create_in(cfg.clone(), p).unwrap())
+        .map(|p| Node::create_in(coords.clone(), p).unwrap())
         .collect();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::HEX8);
+            let mut sm = SubMesh::new(coords, ElementType::HEX8);
             sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
             insert(sm)
         };
@@ -798,12 +798,12 @@ mod tests {
     /// `(-1/3, -1/4)` (constant across the cell, since Lagrange-1).
     #[test]
     fn tri3_dn_dx_constant() {
-        let cfg = cfg2d();
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[3.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[0.0, 4.0]).unwrap();
+        let coords = cfg2d();
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[3.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[0.0, 4.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+            let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
@@ -828,11 +828,11 @@ mod tests {
     /// coordinates — the FE space caches nothing physical.
     #[test]
     fn jacobian_reflects_mesh_displacement() {
-        let cfg = cfg2d();
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
+        let coords = cfg2d();
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let sm = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[a.id(), b.id()]).unwrap();
             insert(sm)
         };
@@ -842,7 +842,7 @@ mod tests {
         assert!((dj_before - 0.5).abs() < 1e-12);
 
         // Stretch the SEG2 to length 4 (move node b from x=1 to x=4).
-        write(&cfg).unwrap().set_coord(b.id(), &[4.0, 0.0]).unwrap();
+        write(&coords).unwrap().set_coord(b.id(), &[4.0, 0.0]).unwrap();
 
         let dj_after = sub.det_jacobian(0, 0).unwrap();
         assert!((dj_after - 2.0).abs() < 1e-12);
@@ -852,20 +852,20 @@ mod tests {
 
     #[test]
     fn lagrange1_constructor_matches_submeshes_one_to_one() {
-        let cfg = cfg2d();
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let n3 = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
+        let coords = cfg2d();
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let n3 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
 
         let mut mesh = Mesh::empty();
         let sm_tri = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::TRI3);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
         let sm_qua = {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::QUA4);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
             sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
             insert(sm)
         };
@@ -888,9 +888,9 @@ mod tests {
 
     #[test]
     fn rejects_mesh_with_poi1_submesh() {
-        let cfg = cfg2d();
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let mesh = crate::ops::mesher::from_live_nodes(cfg).unwrap();
+        let coords = cfg2d();
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let mesh = crate::ops::mesher::from_live_nodes(coords).unwrap();
         // from_live_nodes builds a POI1 mesh.
         assert!(mesh.len() >= 1);
         let _ = a; // keep alive
@@ -905,11 +905,11 @@ mod tests {
 
     #[test]
     fn with_constructor_validates_length() {
-        let cfg = cfg2d();
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+        let coords = cfg2d();
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         mesh.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
         let too_few: Vec<(Interpolation, QuadratureRule)> = vec![];
         assert!(FiniteElementSpace::with(&mesh, &too_few).is_err());
@@ -924,11 +924,11 @@ mod tests {
 
     #[test]
     fn display_and_debug() {
-        let cfg = cfg2d();
-        let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+        let coords = cfg2d();
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         mesh.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let s = format!("{}", fes);

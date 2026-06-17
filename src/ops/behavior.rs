@@ -78,7 +78,7 @@ mod tests {
     use super::*;
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
     use crate::containers::model::SubModel;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::ops::build::{material_field, material_field_per_sub_model};
@@ -92,10 +92,10 @@ mod tests {
         dt: f64,
         dirichlet: bool,
     ) -> (Model, FiniteElementSpace, NodeField) {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[length]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[length]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
@@ -162,13 +162,13 @@ mod tests {
     /// material per zone, exactly like `assemble::stiffness`.
     #[test]
     fn integrate_picks_per_zone_material() {
-        let cfg = insert(Configuration::new(1).unwrap());
-        let n0 = Node::create_in(cfg.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(cfg.clone(), &[1.0]).unwrap();
-        let n2 = Node::create_in(cfg.clone(), &[2.0]).unwrap();
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
         let mut mesh = Mesh::empty();
         for pair in [[&n0, &n1], [&n1, &n2]] {
-            let mut sm = SubMesh::new(cfg.clone(), ElementType::SEG2);
+            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[pair[0].id(), pair[1].id()]).unwrap();
             mesh.add_sub(insert(sm)).unwrap();
         }

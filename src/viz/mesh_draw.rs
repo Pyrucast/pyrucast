@@ -15,7 +15,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::mesh::RgbColor;
-use crate::containers::mesh::{Configuration, NodeId};
+use crate::containers::mesh::{Coords, NodeId};
 use crate::containers::mesh::ElementType;
 use crate::error::Result;
 use crate::containers::mesh::{Mesh, SubMesh};
@@ -37,12 +37,12 @@ pub(crate) fn pad3(coords: &[f64]) -> Point3 {
     )
 }
 
-/// Read every node referenced by `connectivity` from `config`, padded to 3-D.
+/// Read every node referenced by `connectivity` from `coords`, padded to 3-D.
 fn read_points(
-    config: &Handle<Configuration>,
+    coords: &Handle<Coords>,
     connectivity: &[NodeId],
 ) -> Result<Vec<Point3>> {
-    let c = read(config)?;
+    let c = read(coords)?;
     connectivity
         .iter()
         .map(|&nid| c.coord(nid).map(pad3))
@@ -114,8 +114,8 @@ fn submesh_primitives_impl(
     sm: &SubMesh,
     colors_per_cell: Option<&[RgbColor]>,
 ) -> Result<Vec<Primitive>> {
-    let cfg = sm.configuration();
-    let pts = read_points(&cfg, sm.connectivity())?;
+    let coords = sm.coords();
+    let pts = read_points(&coords, sm.connectivity())?;
     let default_color = sm.face_color();
     let et = sm.element_type();
     let npc = et.nodes_per_cell();
@@ -450,8 +450,8 @@ where
 
 impl Drawable for SubMesh {
     fn bbox(&self) -> Result<Bbox3> {
-        let cfg = self.configuration();
-        let pts = read_points(&cfg, self.connectivity())?;
+        let coords = self.coords();
+        let pts = read_points(&coords, self.connectivity())?;
         let mut b = Bbox3::empty();
         for p in pts {
             b.extend(p);
@@ -511,18 +511,18 @@ impl Drawable for Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::Node;
     use crate::store::insert;
 
     #[test]
     fn bbox_covers_all_nodes_2d() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[2.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[1.0, 3.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[1.0, 3.0]).unwrap();
 
-        let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+        let mut sm = SubMesh::new(coords, ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         let bb = sm.bbox().unwrap();
@@ -532,10 +532,10 @@ mod tests {
 
     #[test]
     fn primitives_poi1_emits_points() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 2.0]).unwrap();
-        let mut sm = SubMesh::new(cfg, ElementType::POI1);
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
         sm.add_cell(&[b.id()]).unwrap();
         let prims = submesh_primitives(&sm).unwrap();
@@ -546,10 +546,10 @@ mod tests {
 
     #[test]
     fn primitives_seg2_emits_segments() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let mut sm = SubMesh::new(cfg, ElementType::SEG2);
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::SEG2);
         sm.add_cell(&[a.id(), b.id()]).unwrap();
         let prims = submesh_primitives(&sm).unwrap();
         assert_eq!(prims.len(), 1);
@@ -558,12 +558,12 @@ mod tests {
 
     #[test]
     fn primitives_qua4_emits_one_face_per_cell() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
-        let d = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut sm = SubMesh::new(cfg, ElementType::QUA4);
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::QUA4);
         sm.add_cell(&[a.id(), b.id(), c.id(), d.id()]).unwrap();
         let prims = submesh_primitives(&sm).unwrap();
         assert_eq!(prims.len(), 1);
@@ -575,12 +575,12 @@ mod tests {
 
     #[test]
     fn primitives_tet4_emits_four_triangular_faces() {
-        let cfg = insert(Configuration::new(3).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.0, 1.0, 0.0]).unwrap();
-        let d = Node::create_in(cfg.clone(), &[0.0, 0.0, 1.0]).unwrap();
-        let mut sm = SubMesh::new(cfg, ElementType::TET4);
+        let coords = insert(Coords::new(3).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[0.0, 0.0, 1.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::TET4);
         sm.add_cell(&[a.id(), b.id(), c.id(), d.id()]).unwrap();
         let prims = submesh_primitives(&sm).unwrap();
         assert_eq!(prims.len(), 4);
@@ -594,7 +594,7 @@ mod tests {
 
     #[test]
     fn primitives_hex8_emits_six_quadrangular_faces() {
-        let cfg = insert(Configuration::new(3).unwrap());
+        let coords = insert(Coords::new(3).unwrap());
         let n: Vec<_> = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -606,9 +606,9 @@ mod tests {
             [0.0, 1.0, 1.0],
         ]
         .iter()
-        .map(|c| Node::create_in(cfg.clone(), c).unwrap())
+        .map(|c| Node::create_in(coords.clone(), c).unwrap())
         .collect();
-        let mut sm = SubMesh::new(cfg, ElementType::HEX8);
+        let mut sm = SubMesh::new(coords, ElementType::HEX8);
         let ids: Vec<_> = n.iter().map(|nn| nn.id()).collect();
         sm.add_cell(&ids).unwrap();
         let prims = submesh_primitives(&sm).unwrap();
@@ -623,11 +623,11 @@ mod tests {
 
     #[test]
     fn submesh_primitives_carries_face_color() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.0, 1.0]).unwrap();
-        let mut sm = SubMesh::new(cfg, ElementType::TRI3);
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         sm.set_face_color(RgbColor::new(10, 20, 30));
         let prims = submesh_primitives(&sm).unwrap();

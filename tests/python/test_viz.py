@@ -12,12 +12,12 @@ import pytest
 import pyrucast
 
 
-_HAS_VIZ = hasattr(pyrucast.Mesh(pyrucast.Configuration(2), "TRI3"), "plot")
+_HAS_VIZ = hasattr(pyrucast.Mesh(pyrucast.Coords(2), "TRI3"), "plot")
 pytestmark = pytest.mark.skipif(not _HAS_VIZ, reason="pyrucast built without viz feature")
 
 
 def _make_two_triangles():
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     a = c.add_node([0.0, 0.0, 0.0])
     b = c.add_node([1.0, 0.0, 0.0])
     cc = c.add_node([1.0, 1.0, 0.0])
@@ -29,13 +29,13 @@ def _make_two_triangles():
 
 
 def test_face_color_default():
-    sm = pyrucast.Mesh(pyrucast.Configuration(2), "TRI3")[0]
+    sm = pyrucast.Mesh(pyrucast.Coords(2), "TRI3")[0]
     r, g, b = sm.face_color
     assert (r, g, b) == (180, 200, 230)
 
 
 def test_face_color_roundtrip():
-    sm = pyrucast.Mesh(pyrucast.Configuration(2), "TRI3")[0]
+    sm = pyrucast.Mesh(pyrucast.Coords(2), "TRI3")[0]
     sm.face_color = (10, 200, 30)
     assert sm.face_color == (10, 200, 30)
 
@@ -108,7 +108,7 @@ def test_plot_unsupported_extension(tmp_path):
     ],
 )
 def test_plot_every_element_type(tmp_path, element_type, coords, connectivity):
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     nodes = [c.add_node(p) for p in coords]
     sm = pyrucast.Mesh(c, element_type)[0]
     sm.add_cell([nodes[i] for i in connectivity])
@@ -118,7 +118,7 @@ def test_plot_every_element_type(tmp_path, element_type, coords, connectivity):
 
 
 def test_mesh_plot_uses_each_submesh_color(tmp_path):
-    c = pyrucast.Configuration(3)
+    c = pyrucast.Coords(3)
     a = c.add_node([0.0, 0.0, 0.0])
     b = c.add_node([1.0, 0.0, 0.0])
     cc = c.add_node([0.0, 1.0, 0.0])
@@ -158,7 +158,7 @@ def _build_field_on_nodes(c, nodes, components, values_per_component):
 
 
 def test_mesh_plot_with_field_writes_overlay_label(tmp_path):
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])
@@ -176,7 +176,7 @@ def test_mesh_plot_with_field_writes_overlay_label(tmp_path):
 
 
 def test_submesh_plot_with_field_explicit_component(tmp_path):
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])
@@ -194,7 +194,7 @@ def test_submesh_plot_with_field_explicit_component(tmp_path):
 
 
 def test_plot_with_field_unknown_component_errors(tmp_path):
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])

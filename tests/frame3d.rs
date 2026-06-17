@@ -18,7 +18,7 @@
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::ops::solver::lu::solve;
@@ -43,12 +43,12 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     const N: usize = 2;
 
     // ── Maillage : N éléments SEG2 le long de l'axe X (config 3-D) ─────────
-    let cfg = insert(Configuration::new(3)?);
+    let coords = insert(Coords::new(3)?);
     let h = L / N as f64;
     let nodes: Vec<Node> = (0..=N)
-        .map(|i| Node::create_in(cfg.clone(), &[i as f64 * h, 0.0, 0.0]))
+        .map(|i| Node::create_in(coords.clone(), &[i as f64 * h, 0.0, 0.0]))
         .collect::<Result<_>>()?;
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for i in 0..N {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }
@@ -81,7 +81,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     )?;
 
     // ── Chargement : f_y, f_z et m_x au bout libre ─────────────────────────
-    let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
     let load_sm = insert(load_sm);
     let mut rhs =

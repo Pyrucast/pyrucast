@@ -36,7 +36,7 @@ pub fn circle_seg2(center: &Node, normal: &[f64], radius: f64, n_elems: usize) -
         ));
     }
 
-    let cfg = center.configuration();
+    let coords = center.coords();
     let center_coords = center.coord()?;
     let dim = center_coords.len();
     if !(2..=3).contains(&dim) {
@@ -65,10 +65,10 @@ pub fn circle_seg2(center: &Node, normal: &[f64], radius: f64, n_elems: usize) -
     for i in 0..n_elems {
         let theta = 2.0 * PI * i as f64 / n_elems as f64;
         let p3 = centre + radius * (theta.cos() * u + theta.sin() * v);
-        nodes.push(Node::create_in(cfg.clone(), &p3.as_slice()[..dim])?);
+        nodes.push(Node::create_in(coords.clone(), &p3.as_slice()[..dim])?);
     }
 
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     for i in 0..n_elems {
         mesh.add_cell(&[nodes[i].id(), nodes[(i + 1) % n_elems].id()])?;
     }
@@ -78,15 +78,15 @@ pub fn circle_seg2(center: &Node, normal: &[f64], radius: f64, n_elems: usize) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::store::insert;
 
     #[test]
     fn circle_seg2_basic_2d() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let center = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mesh = circle_seg2(&center, &[0.0, 0.0, 1.0], 1.0, 4).unwrap();
 
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG2]);
@@ -102,8 +102,8 @@ mod tests {
 
     #[test]
     fn circle_seg2_closed_loop() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let center = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mesh = circle_seg2(&center, &[0.0, 0.0, 1.0], 1.0, 6).unwrap();
 
         let last_end = mesh.node(0, 5, 1).unwrap();
@@ -113,8 +113,8 @@ mod tests {
 
     #[test]
     fn circle_seg2_radius_and_center_offset() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let center = Node::create_in(cfg.clone(), &[1.0, 2.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let center = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
         let mesh = circle_seg2(&center, &[0.0, 0.0, 1.0], 3.0, 8).unwrap();
 
         for ei in 0..8 {
@@ -126,8 +126,8 @@ mod tests {
 
     #[test]
     fn circle_seg2_3d_xz_plane() {
-        let cfg = insert(Configuration::new(3).unwrap());
-        let center = Node::create_in(cfg.clone(), &[0.0, 0.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(3).unwrap());
+        let center = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let mesh = circle_seg2(&center, &[0.0, 1.0, 0.0], 2.0, 8).unwrap();
         assert_eq!(mesh.cell_count().unwrap(), 8);
 
@@ -141,23 +141,23 @@ mod tests {
 
     #[test]
     fn circle_seg2_rejects_too_few_elements() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let center = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         assert!(circle_seg2(&center, &[0.0, 0.0, 1.0], 1.0, 2).is_err());
     }
 
     #[test]
     fn circle_seg2_rejects_nonpositive_radius() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let center = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         assert!(circle_seg2(&center, &[0.0, 0.0, 1.0], 0.0, 4).is_err());
         assert!(circle_seg2(&center, &[0.0, 0.0, 1.0], -1.0, 4).is_err());
     }
 
     #[test]
     fn circle_seg2_rejects_zero_normal() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let center = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
+        let coords = insert(Coords::new(2).unwrap());
+        let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         assert!(circle_seg2(&center, &[0.0, 0.0, 0.0], 1.0, 4).is_err());
     }
 }

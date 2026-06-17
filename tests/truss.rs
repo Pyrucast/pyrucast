@@ -12,7 +12,7 @@
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Configuration, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::ops::solver::lu::solve;
@@ -28,10 +28,10 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
     const F: f64 = 1000.0; // axial force at the right end (N)
 
     // ── Maillage : une barre SEG2 horizontale ──────────────────────────────
-    let cfg = insert(Configuration::new(2)?);
-    let n0 = Node::create_in(cfg.clone(), &[0.0, 0.0])?;
-    let n1 = Node::create_in(cfg.clone(), &[L, 0.0])?;
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg.clone(), ElementType::SEG2));
+    let coords = insert(Coords::new(2)?);
+    let n0 = Node::create_in(coords.clone(), &[0.0, 0.0])?;
+    let n1 = Node::create_in(coords.clone(), &[L, 0.0])?;
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     mesh.add_cell(&[n0.id(), n1.id()])?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
@@ -53,7 +53,7 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
     let materials = build::material_field(&model, &[("E", E), ("A", A)])?;
 
     // ── Chargement : force axiale F au nœud droit ──────────────────────────
-    let mut load_sm = SubMesh::new(cfg.clone(), ElementType::POI1);
+    let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[n1.id()])?;
     let load_sm = insert(load_sm);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_x".into()])?;

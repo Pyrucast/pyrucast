@@ -33,7 +33,7 @@ def _clamp(node, var, dual):
 
 
 def main() -> None:
-    c = pyrucast.Configuration(2)
+    c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([L, 0.0])
     mesh = pyrucast.Mesh(c, "SEG2")

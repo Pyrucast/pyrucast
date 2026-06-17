@@ -11,7 +11,7 @@ use crate::store::read;
 /// `contour` must be a [`Mesh`] with **one or more** SEG2 submeshes.
 /// Each submesh is treated as a single closed simple loop (each node
 /// appears once as the start of a segment and once as its end). The
-/// `Configuration` can be either:
+/// `Coords` can be either:
 /// - **2-D** — points are used directly,
 /// - **3-D** — every loop must be (nearly) co-planar; an in-plane
 ///   basis is computed by Newell's method and the points are
@@ -56,8 +56,8 @@ pub fn fill_surface(
             "fill_surface: contour must contain at least one SEG2 submesh".into(),
         ));
     }
-    let cfg = contour.configuration()?;
-    let dim = read(&cfg)?.dim();
+    let coords = contour.coords()?;
+    let dim = read(&coords)?.dim();
     if dim != 2 && dim != 3 {
         return Err(PyrucastError::Message(format!(
             "fill_surface: contour configuration must be 2-D or 3-D, got dim={}",
@@ -152,7 +152,7 @@ pub fn fill_surface(
     let points_2d: Vec<Point2> = if dim == 2 {
         let mut pts = Vec::with_capacity(n_total);
         {
-            let c = read(&cfg)?;
+            let c = read(&coords)?;
             for &id in &flat_nodes {
                 let s = c.coord(id)?;
                 pts.push(Point2::new(s[0], s[1]));
@@ -162,7 +162,7 @@ pub fn fill_surface(
     } else {
         let mut pts3: Vec<Point3> = Vec::with_capacity(n_total);
         {
-            let c = read(&cfg)?;
+            let c = read(&coords)?;
             for &id in &flat_nodes {
                 let s = c.coord(id)?;
                 pts3.push(Point3::new(s[0], s[1], s[2]));
@@ -280,23 +280,23 @@ pub fn fill_surface(
         }
     };
 
-    // 5. Create one Configuration node per Steiner point.
+    // 5. Create one Coords node per Steiner point.
     let mut _steiner_nodes: Vec<Node> = Vec::with_capacity(steiner_points_2d.len());
     for p in &steiner_points_2d {
-        let coords: Vec<f64> = match &projection {
+        let coord: Vec<f64> = match &projection {
             None => vec![p.x, p.y],
             Some(proj) => {
                 let p3 = proj.origin + proj.u * p.x + proj.v * p.y;
                 vec![p3.x, p3.y, p3.z]
             }
         };
-        let node = Node::create_in(cfg.clone(), &coords)?;
+        let node = Node::create_in(coords.clone(), &coord)?;
         flat_to_node.push(node.id());
         _steiner_nodes.push(node);
     }
 
     // 6. Build the TRI3 mesh.
-    let mut mesh = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
     for [i, j, k] in triangles {
         mesh.add_cell(&[flat_to_node[i], flat_to_node[j], flat_to_node[k]])?;
     }
@@ -307,18 +307,18 @@ pub fn fill_surface(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::Configuration;
+    use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::store::{insert, read, Handle};
 
-    fn build_contour_2d(cfg: Handle<Configuration>, pts: &[(f64, f64)]) -> (Mesh, Vec<Node>) {
+    fn build_contour_2d(coords: Handle<Coords>, pts: &[(f64, f64)]) -> (Mesh, Vec<Node>) {
         let nodes: Vec<Node> = pts
             .iter()
-            .map(|&(x, y)| Node::create_in(cfg.clone(), &[x, y]).unwrap())
+            .map(|&(x, y)| Node::create_in(coords.clone(), &[x, y]).unwrap())
             .collect();
-        let mut contour = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let mut contour = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         let n = nodes.len();
         for i in 0..n {
             contour
@@ -328,12 +328,12 @@ mod tests {
         (contour, nodes)
     }
 
-    fn build_contour_3d(cfg: Handle<Configuration>, pts: &[(f64, f64, f64)]) -> (Mesh, Vec<Node>) {
+    fn build_contour_3d(coords: Handle<Coords>, pts: &[(f64, f64, f64)]) -> (Mesh, Vec<Node>) {
         let nodes: Vec<Node> = pts
             .iter()
-            .map(|&(x, y, z)| Node::create_in(cfg.clone(), &[x, y, z]).unwrap())
+            .map(|&(x, y, z)| Node::create_in(coords.clone(), &[x, y, z]).unwrap())
             .collect();
-        let mut contour = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let mut contour = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         let n = nodes.len();
         for i in 0..n {
             contour
@@ -345,9 +345,9 @@ mod tests {
 
     #[test]
     fn fill_surface_square_gives_two_triangles() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (contour, nodes) =
-            build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
 
         let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn fill_surface_triangles_sum_to_polygon_area() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let l = [
             (0.0, 0.0),
             (3.0, 0.0),
@@ -373,7 +373,7 @@ mod tests {
             (1.0, 3.0),
             (0.0, 3.0),
         ];
-        let (contour, _nodes) = build_contour_2d(cfg.clone(), &l);
+        let (contour, _nodes) = build_contour_2d(coords.clone(), &l);
 
         let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 4);
@@ -393,13 +393,13 @@ mod tests {
 
     #[test]
     fn fill_surface_increfs_contour_nodes() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (contour, nodes) =
-            build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
         let ids: Vec<_> = nodes.iter().map(|n| n.id()).collect();
 
         {
-            let c = read(&cfg).unwrap();
+            let c = read(&coords).unwrap();
             for &id in &ids {
                 assert_eq!(c.refcount(id), 3);
             }
@@ -416,7 +416,7 @@ mod tests {
             }
         }
         {
-            let c = read(&cfg).unwrap();
+            let c = read(&coords).unwrap();
             for k in 0..4 {
                 assert_eq!(c.refcount(ids[k]), 3 + extra[k]);
             }
@@ -425,33 +425,33 @@ mod tests {
 
     #[test]
     fn fill_surface_rejects_non_tri3() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (contour, _n) =
-            build_contour_2d(cfg, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+            build_contour_2d(coords, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
         assert!(fill_surface(&contour, ElementType::QUA4, None).is_err());
     }
 
     #[test]
     fn fill_surface_rejects_non_seg2_contour() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[0.5, 1.0]).unwrap();
-        let mut bogus = Mesh::from_submesh(SubMesh::new(cfg, ElementType::TRI3));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
+        let mut bogus = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         bogus.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         assert!(fill_surface(&bogus, ElementType::TRI3, None).is_err());
     }
 
     #[test]
     fn fill_surface_rejects_dim_above_three() {
-        let cfg = insert(Configuration::new(4).unwrap());
+        let coords = insert(Coords::new(4).unwrap());
         let nodes: Vec<Node> = (0..4)
             .map(|i| {
                 let t = i as f64;
-                Node::create_in(cfg.clone(), &[t, 0.0, 0.0, 0.0]).unwrap()
+                Node::create_in(coords.clone(), &[t, 0.0, 0.0, 0.0]).unwrap()
             })
             .collect();
-        let mut contour = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let mut contour = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         for i in 0..4 {
             contour
                 .add_cell(&[nodes[i].id(), nodes[(i + 1) % 4].id()])
@@ -462,9 +462,9 @@ mod tests {
 
     #[test]
     fn fill_surface_3d_square_in_z_plane() {
-        let cfg = insert(Configuration::new(3).unwrap());
+        let coords = insert(Coords::new(3).unwrap());
         let (contour, _nodes) = build_contour_3d(
-            cfg.clone(),
+            coords.clone(),
             &[
                 (0.0, 0.0, 5.0),
                 (1.0, 0.0, 5.0),
@@ -503,9 +503,9 @@ mod tests {
     #[test]
     fn fill_surface_3d_tilted_square() {
         let s = 1.0_f64 / 2.0_f64.sqrt();
-        let cfg = insert(Configuration::new(3).unwrap());
+        let coords = insert(Coords::new(3).unwrap());
         let (contour, _nodes) = build_contour_3d(
-            cfg.clone(),
+            coords.clone(),
             &[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, s, s), (0.0, s, s)],
         );
         let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
@@ -530,9 +530,9 @@ mod tests {
 
     #[test]
     fn fill_surface_3d_rejects_non_planar_contour() {
-        let cfg = insert(Configuration::new(3).unwrap());
+        let coords = insert(Coords::new(3).unwrap());
         let (contour, _nodes) = build_contour_3d(
-            cfg.clone(),
+            coords.clone(),
             &[
                 (0.0, 0.0, 0.0),
                 (1.0, 0.0, 0.0),
@@ -547,9 +547,9 @@ mod tests {
 
     #[test]
     fn fill_surface_3d_accepts_tiny_numerical_noise() {
-        let cfg = insert(Configuration::new(3).unwrap());
+        let coords = insert(Coords::new(3).unwrap());
         let (contour, _nodes) = build_contour_3d(
-            cfg.clone(),
+            coords.clone(),
             &[
                 (0.0, 0.0, 0.0),
                 (1.0, 0.0, 0.0),
@@ -563,23 +563,23 @@ mod tests {
 
     #[test]
     fn fill_surface_rejects_empty_submesh() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (mut contour, _n) =
-            build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
-        let extra = insert(SubMesh::new(cfg, ElementType::SEG2));
+            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let extra = insert(SubMesh::new(coords, ElementType::SEG2));
         contour.add_sub(extra).unwrap();
         assert!(fill_surface(&contour, ElementType::TRI3, None).is_err());
     }
 
     #[test]
     fn fill_surface_with_one_hole_2d() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (outer, _no) = build_contour_2d(
-            cfg.clone(),
+            coords.clone(),
             &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
         );
         let (hole, _nh) = build_contour_2d(
-            cfg.clone(),
+            coords.clone(),
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
         let combined = outer.union(&hole).unwrap();
@@ -604,13 +604,13 @@ mod tests {
 
     #[test]
     fn fill_surface_outer_loop_is_autodetected() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (hole, _) = build_contour_2d(
-            cfg.clone(),
+            coords.clone(),
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
         let (outer, _) = build_contour_2d(
-            cfg.clone(),
+            coords.clone(),
             &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
         );
         let combined = hole.union(&outer).unwrap();
@@ -629,17 +629,17 @@ mod tests {
 
     #[test]
     fn fill_surface_with_two_holes_2d() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (outer, _) = build_contour_2d(
-            cfg.clone(),
+            coords.clone(),
             &[(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0.0, 4.0)],
         );
         let (h1, _) = build_contour_2d(
-            cfg.clone(),
+            coords.clone(),
             &[(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)],
         );
         let (h2, _) = build_contour_2d(
-            cfg.clone(),
+            coords.clone(),
             &[(4.0, 2.0), (5.0, 2.0), (5.0, 3.0), (4.0, 3.0)],
         );
         let combined = outer.union(&h1).unwrap().union(&h2).unwrap();
@@ -659,9 +659,9 @@ mod tests {
 
     #[test]
     fn fill_surface_with_one_hole_3d() {
-        let cfg = insert(Configuration::new(3).unwrap());
+        let coords = insert(Coords::new(3).unwrap());
         let (outer, _) = build_contour_3d(
-            cfg.clone(),
+            coords.clone(),
             &[
                 (0.0, 0.0, 1.0),
                 (4.0, 0.0, 1.0),
@@ -670,7 +670,7 @@ mod tests {
             ],
         );
         let (hole, _) = build_contour_3d(
-            cfg.clone(),
+            coords.clone(),
             &[
                 (1.0, 1.0, 1.0),
                 (3.0, 1.0, 1.0),
@@ -707,9 +707,9 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_with_hole_rejects_different_configurations() {
-        let cfg1 = insert(Configuration::new(2).unwrap());
-        let cfg2 = insert(Configuration::new(2).unwrap());
+    fn fill_surface_with_hole_rejects_different_coords() {
+        let cfg1 = insert(Coords::new(2).unwrap());
+        let cfg2 = insert(Coords::new(2).unwrap());
         let (outer, _) = build_contour_2d(
             cfg1.clone(),
             &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
@@ -723,11 +723,11 @@ mod tests {
 
     #[test]
     fn fill_surface_rejects_open_contour() {
-        let cfg = insert(Configuration::new(2).unwrap());
-        let a = Node::create_in(cfg.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(cfg.clone(), &[1.0, 0.0]).unwrap();
-        let c = Node::create_in(cfg.clone(), &[1.0, 1.0]).unwrap();
-        let mut open = Mesh::from_submesh(SubMesh::new(cfg, ElementType::SEG2));
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        let mut open = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         open.add_cell(&[a.id(), b.id()]).unwrap();
         open.add_cell(&[b.id(), c.id()]).unwrap();
         assert!(fill_surface(&open, ElementType::TRI3, None).is_err());
@@ -735,10 +735,10 @@ mod tests {
 
     #[test]
     fn fill_surface_refined_2d_square_creates_steiner_nodes() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (contour, contour_nodes) =
-            build_contour_2d(cfg.clone(), &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
-        let initial_node_count = read(&cfg).unwrap().node_count();
+            build_contour_2d(coords.clone(), &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
+        let initial_node_count = read(&coords).unwrap().node_count();
 
         let opts = crate::ops::mesher::triangulation::RefinementOptions {
             max_edge_length: Some(1.5),
@@ -746,7 +746,7 @@ mod tests {
         };
         let tri = fill_surface(&contour, ElementType::TRI3, Some(opts)).unwrap();
 
-        let new_node_count = read(&cfg).unwrap().node_count();
+        let new_node_count = read(&coords).unwrap().node_count();
         assert!(
             new_node_count > initial_node_count,
             "no Steiner nodes added: was {}, still {}",
@@ -779,27 +779,27 @@ mod tests {
         assert!(max_edge <= 1.5 + 1e-9, "max edge length {} > 1.5", max_edge);
 
         for n in &contour_nodes {
-            assert!(read(&cfg).unwrap().is_alive(n.id()));
+            assert!(read(&coords).unwrap().is_alive(n.id()));
         }
     }
 
     #[test]
     fn fill_surface_refined_inactive_options_is_noop() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (contour, _nodes) =
-            build_contour_2d(cfg.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
-        let initial_count = read(&cfg).unwrap().node_count();
+            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let initial_count = read(&coords).unwrap().node_count();
         let tri = fill_surface(&contour, ElementType::TRI3, Some(Default::default())).unwrap();
-        let final_count = read(&cfg).unwrap().node_count();
+        let final_count = read(&coords).unwrap().node_count();
         assert_eq!(tri.cell_count().unwrap(), 2);
         assert_eq!(initial_count, final_count, "no Steiner expected");
     }
 
     #[test]
     fn fill_surface_refined_3d_keeps_steiner_in_plane() {
-        let cfg = insert(Configuration::new(3).unwrap());
+        let coords = insert(Coords::new(3).unwrap());
         let (contour, _) = build_contour_3d(
-            cfg.clone(),
+            coords.clone(),
             &[
                 (0.0, 0.0, 1.0),
                 (4.0, 0.0, 1.0),
@@ -824,13 +824,13 @@ mod tests {
 
     #[test]
     fn fill_surface_refined_with_hole_conserves_area() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (outer, _) = build_contour_2d(
-            cfg.clone(),
+            coords.clone(),
             &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
         );
         let (hole, _) = build_contour_2d(
-            cfg.clone(),
+            coords.clone(),
             &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
         );
         let combined = outer.union(&hole).unwrap();
@@ -853,9 +853,9 @@ mod tests {
 
     #[test]
     fn fill_surface_works_with_cw_contour() {
-        let cfg = insert(Configuration::new(2).unwrap());
+        let coords = insert(Coords::new(2).unwrap());
         let (contour, _n) =
-            build_contour_2d(cfg, &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)]);
+            build_contour_2d(coords, &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)]);
         let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
 
