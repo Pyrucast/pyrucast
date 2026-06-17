@@ -134,34 +134,26 @@ impl PySubNodeField {
         Ok(())
     }
 
-    // ── Scalar operators (return a new sub-field) ───────────────────────
+    // ── Arithmetic operators (return a new sub-field) ───────────────────
+    //
+    // `rhs` may be a float (scalar broadcast over every node × component) or
+    // another `SubNodeField` (element-by-element, strict: same support and
+    // same components). Division does not guard against zero (inf/nan).
 
-    fn __add__(&self, rhs: f64) -> PyResult<PySubNodeField> {
-        let result = &*read(&self.handle)? + rhs;
-        Ok(PySubNodeField {
-            handle: insert(result),
-        })
+    fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
+        self.scalar_or_combine(rhs, |a, b| a + b)
     }
 
-    fn __sub__(&self, rhs: f64) -> PyResult<PySubNodeField> {
-        let result = &*read(&self.handle)? - rhs;
-        Ok(PySubNodeField {
-            handle: insert(result),
-        })
+    fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
+        self.scalar_or_combine(rhs, |a, b| a - b)
     }
 
-    fn __mul__(&self, rhs: f64) -> PyResult<PySubNodeField> {
-        let result = &*read(&self.handle)? * rhs;
-        Ok(PySubNodeField {
-            handle: insert(result),
-        })
+    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
+        self.scalar_or_combine(rhs, |a, b| a * b)
     }
 
-    fn __truediv__(&self, rhs: f64) -> PyResult<PySubNodeField> {
-        let result = &*read(&self.handle)? / rhs;
-        Ok(PySubNodeField {
-            handle: insert(result),
-        })
+    fn __truediv__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
+        self.scalar_or_combine(rhs, |a, b| a / b)
     }
 
     /// `subfield[node, "UX"]` — raises if the node or component is absent.
@@ -185,6 +177,29 @@ impl PySubNodeField {
 
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{}", &*read(&self.handle)?))
+    }
+}
+
+impl PySubNodeField {
+    /// Dispatch an arithmetic operator: float → scalar broadcast,
+    /// `SubNodeField` → strict element-by-element `combine`.
+    fn scalar_or_combine(
+        &self,
+        rhs: &Bound<'_, PyAny>,
+        op: fn(f64, f64) -> f64,
+    ) -> PyResult<PySubNodeField> {
+        if let Ok(s) = rhs.extract::<f64>() {
+            let out = read(&self.handle)?.map_all(|v| op(v, s));
+            Ok(PySubNodeField { handle: insert(out) })
+        } else if let Ok(other) = rhs.extract::<PyRef<PySubNodeField>>() {
+            let a = (*read(&self.handle)?).clone();
+            let b = (*read(&other.handle)?).clone();
+            Ok(PySubNodeField { handle: insert(a.combine(&b, op)?) })
+        } else {
+            Err(PyTypeError::new_err(
+                "unsupported operand: expected a float or a SubNodeField",
+            ))
+        }
     }
 }
 
@@ -321,6 +336,88 @@ impl PyNodeField {
             mesh.add_sub(sm)?;
         }
         Ok(PyMesh { inner: mesh })
+    }
+
+    // ── Per-component scalar ops (in place, on every zone defining it) ──
+
+    /// Add `scalar` to `component` on every zone that defines it.
+    fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
+        use crate::containers::field::Field;
+        self.inner.add_to_component(component, scalar)?;
+        Ok(())
+    }
+
+    /// Subtract `scalar` from `component` on every zone that defines it.
+    fn sub_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
+        use crate::containers::field::Field;
+        self.inner.sub_to_component(component, scalar)?;
+        Ok(())
+    }
+
+    /// Multiply `component` by `scalar` on every zone that defines it.
+    fn mul_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
+        use crate::containers::field::Field;
+        self.inner.mul_to_component(component, scalar)?;
+        Ok(())
+    }
+
+    /// Divide `component` by `scalar` on every zone that defines it.
+    fn div_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
+        use crate::containers::field::Field;
+        self.inner.div_to_component(component, scalar)?;
+        Ok(())
+    }
+
+    // ── Arithmetic operators (return a new field) ───────────────────────
+    //
+    // `rhs`: a float (scalar over every zone), a `NodeField` (same
+    // decomposition, strict), or a `SubNodeField` (targeted zone update).
+
+    fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
+        self.binary(rhs, |a, b| a + b)
+    }
+
+    fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
+        self.binary(rhs, |a, b| a - b)
+    }
+
+    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
+        self.binary(rhs, |a, b| a * b)
+    }
+
+    fn __truediv__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
+        self.binary(rhs, |a, b| a / b)
+    }
+}
+
+impl PyNodeField {
+    /// Dispatch an arithmetic operator: float → scalar, `NodeField` →
+    /// `combine_field` (same decomposition), `SubNodeField` →
+    /// `combine_subfield` (targeted zone update).
+    fn binary(
+        &self,
+        rhs: &Bound<'_, PyAny>,
+        op: fn(f64, f64) -> f64,
+    ) -> PyResult<PyNodeField> {
+        use crate::containers::field::Field;
+        if let Ok(s) = rhs.extract::<f64>() {
+            Ok(PyNodeField {
+                inner: self.inner.combine_scalar(op, s)?,
+            })
+        } else if let Ok(other) = rhs.extract::<PyRef<PyNodeField>>() {
+            Ok(PyNodeField {
+                inner: self.inner.combine_field(&other.inner, op)?,
+            })
+        } else if let Ok(sub) = rhs.extract::<PyRef<PySubNodeField>>() {
+            let s = (*read(&sub.handle)?).clone();
+            Ok(PyNodeField {
+                inner: self.inner.combine_subfield(&s, op)?,
+            })
+        } else {
+            Err(PyTypeError::new_err(
+                "unsupported operand: expected a float, a NodeField, or a SubNodeField",
+            ))
+        }
     }
 }
 

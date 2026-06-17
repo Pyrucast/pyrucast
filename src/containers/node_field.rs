@@ -350,6 +350,10 @@ impl SubNodeField {
 }
 
 impl crate::containers::field::SubField for SubNodeField {
+    type Support = SubMesh;
+    fn support(&self) -> Handle<SubMesh> {
+        self.support.clone()
+    }
     fn components(&self) -> &[String] {
         &self.components
     }

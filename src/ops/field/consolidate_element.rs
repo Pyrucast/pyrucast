@@ -38,7 +38,7 @@ pub fn consolidate_element(field: &ElementField) -> Result<ElementField> {
         let (fespace, components, n_cells, n_gauss, values) = {
             let s = read(h)?;
             (
-                s.fespace(),
+                s.support(),
                 s.components().to_vec(),
                 s.cell_count(),
                 s.gauss_count(),

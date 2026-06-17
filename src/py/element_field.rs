@@ -5,7 +5,7 @@ use crate::containers::field::SubField;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::store::{insert, read, write, Handle};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
 /// A **view** into one zone of an `ElementField`, obtained by indexing
@@ -127,34 +127,26 @@ impl PySubElementField {
         Ok(())
     }
 
-    // ── Scalar operators (return a new sub-field) ───────────────────────
+    // ── Arithmetic operators (return a new sub-field) ───────────────────
+    //
+    // `rhs` may be a float (scalar broadcast over every point × component) or
+    // another `SubElementField` (element-by-element, strict: same support and
+    // same components). Division does not guard against zero (inf/nan).
 
-    fn __add__(&self, rhs: f64) -> PyResult<PySubElementField> {
-        let res = &*read(&self.handle)? + rhs;
-        Ok(PySubElementField {
-            handle: insert(res),
-        })
+    fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubElementField> {
+        self.scalar_or_combine(rhs, |a, b| a + b)
     }
 
-    fn __sub__(&self, rhs: f64) -> PyResult<PySubElementField> {
-        let res = &*read(&self.handle)? - rhs;
-        Ok(PySubElementField {
-            handle: insert(res),
-        })
+    fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubElementField> {
+        self.scalar_or_combine(rhs, |a, b| a - b)
     }
 
-    fn __mul__(&self, rhs: f64) -> PyResult<PySubElementField> {
-        let res = &*read(&self.handle)? * rhs;
-        Ok(PySubElementField {
-            handle: insert(res),
-        })
+    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubElementField> {
+        self.scalar_or_combine(rhs, |a, b| a * b)
     }
 
-    fn __truediv__(&self, rhs: f64) -> PyResult<PySubElementField> {
-        let res = &*read(&self.handle)? / rhs;
-        Ok(PySubElementField {
-            handle: insert(res),
-        })
+    fn __truediv__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubElementField> {
+        self.scalar_or_combine(rhs, |a, b| a / b)
     }
 
     /// `field[cell, gauss, "name"]` — raises ValueError if the component
@@ -179,6 +171,29 @@ impl PySubElementField {
 
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{}", &*read(&self.handle)?))
+    }
+}
+
+impl PySubElementField {
+    /// Dispatch an arithmetic operator: float → scalar broadcast,
+    /// `SubElementField` → strict element-by-element `combine`.
+    fn scalar_or_combine(
+        &self,
+        rhs: &Bound<'_, PyAny>,
+        op: fn(f64, f64) -> f64,
+    ) -> PyResult<PySubElementField> {
+        if let Ok(s) = rhs.extract::<f64>() {
+            let out = read(&self.handle)?.map_all(|v| op(v, s));
+            Ok(PySubElementField { handle: insert(out) })
+        } else if let Ok(other) = rhs.extract::<PyRef<PySubElementField>>() {
+            let a = (*read(&self.handle)?).clone();
+            let b = (*read(&other.handle)?).clone();
+            Ok(PySubElementField { handle: insert(a.combine(&b, op)?) })
+        } else {
+            Err(PyTypeError::new_err(
+                "unsupported operand: expected a float or a SubElementField",
+            ))
+        }
     }
 }
 
@@ -282,6 +297,88 @@ impl PyElementField {
     fn max(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::Field;
         Ok(Field::max(&self.inner, component)?)
+    }
+
+    // ── Per-component scalar ops (in place, on every zone defining it) ──
+
+    /// Add `scalar` to `component` on every zone that defines it.
+    fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
+        use crate::containers::field::Field;
+        self.inner.add_to_component(component, scalar)?;
+        Ok(())
+    }
+
+    /// Subtract `scalar` from `component` on every zone that defines it.
+    fn sub_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
+        use crate::containers::field::Field;
+        self.inner.sub_to_component(component, scalar)?;
+        Ok(())
+    }
+
+    /// Multiply `component` by `scalar` on every zone that defines it.
+    fn mul_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
+        use crate::containers::field::Field;
+        self.inner.mul_to_component(component, scalar)?;
+        Ok(())
+    }
+
+    /// Divide `component` by `scalar` on every zone that defines it.
+    fn div_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
+        use crate::containers::field::Field;
+        self.inner.div_to_component(component, scalar)?;
+        Ok(())
+    }
+
+    // ── Arithmetic operators (return a new field) ───────────────────────
+    //
+    // `rhs`: a float (scalar over every zone), an `ElementField` (same
+    // decomposition, strict), or a `SubElementField` (targeted zone update).
+
+    fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyElementField> {
+        self.binary(rhs, |a, b| a + b)
+    }
+
+    fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyElementField> {
+        self.binary(rhs, |a, b| a - b)
+    }
+
+    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyElementField> {
+        self.binary(rhs, |a, b| a * b)
+    }
+
+    fn __truediv__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyElementField> {
+        self.binary(rhs, |a, b| a / b)
+    }
+}
+
+impl PyElementField {
+    /// Dispatch an arithmetic operator: float → scalar, `ElementField` →
+    /// `combine_field` (same decomposition), `SubElementField` →
+    /// `combine_subfield` (targeted zone update).
+    fn binary(
+        &self,
+        rhs: &Bound<'_, PyAny>,
+        op: fn(f64, f64) -> f64,
+    ) -> PyResult<PyElementField> {
+        use crate::containers::field::Field;
+        if let Ok(s) = rhs.extract::<f64>() {
+            Ok(PyElementField {
+                inner: self.inner.combine_scalar(op, s)?,
+            })
+        } else if let Ok(other) = rhs.extract::<PyRef<PyElementField>>() {
+            Ok(PyElementField {
+                inner: self.inner.combine_field(&other.inner, op)?,
+            })
+        } else if let Ok(sub) = rhs.extract::<PyRef<PySubElementField>>() {
+            let s = (*read(&sub.handle)?).clone();
+            Ok(PyElementField {
+                inner: self.inner.combine_subfield(&s, op)?,
+            })
+        } else {
+            Err(PyTypeError::new_err(
+                "unsupported operand: expected a float, an ElementField, or a SubElementField",
+            ))
+        }
     }
 }
 

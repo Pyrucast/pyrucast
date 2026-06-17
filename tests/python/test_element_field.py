@@ -300,3 +300,133 @@ def test_subfield_union_subfield_builds_aggregate():
     sb = pyrucast.ElementField(fes_b, ["nu"])[0]
     f = sa | sb
     assert len(f) == 2
+
+
+# ─── Arithmetic operators (binary, strict) ───────────────────────────────────
+
+
+def test_subfield_plus_subfield_same_support():
+    _, _, fes = _tri3_subspace()
+    a = pyrucast.ElementField(fes, ["E"])[0]
+    b = pyrucast.ElementField(fes, ["E"])[0]
+    a.set_uniform("E", 3.0)
+    b.set_uniform("E", 4.0)
+    s = a + b
+    for g in range(3):
+        assert s.value(0, g, "E") == 7.0
+    # operands untouched
+    assert a.value(0, 0, "E") == 3.0
+
+
+def test_subfield_plus_subfield_mismatched_components_raises():
+    _, _, fes = _tri3_subspace()
+    a = pyrucast.ElementField(fes, ["E"])[0]
+    b = pyrucast.ElementField(fes, ["nu"])[0]
+    try:
+        a + b
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError on mismatched components")
+
+
+def test_subfield_plus_subfield_distinct_support_raises():
+    _, _, fa = _tri3_subspace()
+    _, _, fb = _tri3_subspace()
+    a = pyrucast.ElementField(fa, ["E"])[0]
+    b = pyrucast.ElementField(fb, ["E"])[0]
+    try:
+        a + b
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError on distinct supports")
+
+
+def test_subfield_div_by_zero_is_inf():
+    import math
+    _, _, fes = _tri3_subspace()
+    a = pyrucast.ElementField(fes, ["E"])[0]
+    b = pyrucast.ElementField(fes, ["E"])[0]
+    a.set_uniform("E", 1.0)  # b stays zero
+    s = a / b
+    assert math.isinf(s.value(0, 0, "E"))
+
+
+def test_field_scalar_op_hits_every_zone():
+    _, _, fes_a = _tri3_subspace()
+    _, _, fes_b = _tri3_subspace()
+    a = pyrucast.ElementField(fes_a, ["E"])
+    b = pyrucast.ElementField(fes_b, ["E"])
+    a[0].set_uniform("E", 1.0)
+    b[0].set_uniform("E", 2.0)
+    f = a | b  # two zones
+    g = f + 10.0
+    assert g[0].value(0, 0, "E") == 11.0
+    assert g[1].value(0, 0, "E") == 12.0
+
+
+def test_field_plus_field_same_decomposition():
+    _, _, fes = _tri3_subspace()
+    a = pyrucast.ElementField(fes, ["E"])
+    b = pyrucast.ElementField(fes, ["E"])
+    a[0].set_uniform("E", 3.0)
+    b[0].set_uniform("E", 4.0)
+    s = a + b
+    assert s[0].value(0, 0, "E") == 7.0
+
+
+def test_field_plus_field_mismatched_decomposition_raises():
+    _, _, fa = _tri3_subspace()
+    _, _, fb = _tri3_subspace()
+    a = pyrucast.ElementField(fa, ["E"])
+    b = pyrucast.ElementField(fb, ["E"])
+    try:
+        a + b
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError on mismatched decomposition")
+
+
+def test_field_plus_subfield_targets_matching_zone():
+    _, _, fa = _tri3_subspace()
+    _, _, fb = _tri3_subspace()
+    a = pyrucast.ElementField(fa, ["E"])
+    b = pyrucast.ElementField(fb, ["E"])
+    a[0].set_uniform("E", 1.0)
+    b[0].set_uniform("E", 2.0)
+    f = a | b  # zone 0 on fa-support, zone 1 on fb-support
+    sub = pyrucast.ElementField(fa, ["E"])[0]  # same support as zone 0
+    sub.set_uniform("E", 10.0)
+    g = f + sub
+    assert len(g) == 2
+    assert g[0].value(0, 0, "E") == 11.0  # matching zone updated
+    assert g[1].value(0, 0, "E") == 2.0   # other zone unchanged
+
+
+def test_field_per_component_in_place():
+    _, _, fes = _tri3_subspace()
+    f = pyrucast.ElementField(fes, ["E", "nu"])
+    f[0].set_uniform("E", 100.0)
+    f.add_to_component("E", 1.0)
+    assert f[0].value(0, 0, "E") == 101.0
+    assert f[0].value(0, 0, "nu") == 0.0
+    try:
+        f.add_to_component("missing", 1.0)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for unknown component")
+
+
+def test_op_bad_operand_raises_type_error():
+    _, _, fes = _tri3_subspace()
+    f = pyrucast.ElementField(fes, ["E"])
+    for bad_lhs in (f, f[0]):
+        try:
+            bad_lhs + "nope"
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("expected TypeError for str operand")

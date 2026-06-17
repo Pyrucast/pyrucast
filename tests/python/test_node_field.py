@@ -517,3 +517,91 @@ def test_subfield_union_subfield_builds_aggregate():
     f = sa | sb
     assert len(f) == 2
     assert f.components() == ["T", "P"]
+
+
+# ─── Arithmetic operators (binary, strict) ───────────────────────────────────
+
+
+def _two_poi1_zones():
+    """Two single-node POI1 zones on distinct supports, same Coords."""
+    c = pyrucast.Coords(1)
+    n0 = c.add_node([0.0])
+    n1 = c.add_node([1.0])
+    za = pyrucast.Mesh(c, "POI1")
+    za.unit().add_cell([n0])
+    zb = pyrucast.Mesh(c, "POI1")
+    zb.unit().add_cell([n1])
+    return c, [n0, n1], za, zb
+
+
+def test_subfield_plus_subfield_same_support():
+    # Two node fields on the *same* POI1 mesh share the support handle.
+    c, nodes, sm = _poi1_with(2)
+    a = pyrucast.NodeField(sm, ["T"])[0]
+    b = pyrucast.NodeField(sm, ["T"])[0]
+    a.set_value(nodes[0], "T", 1.0)
+    a.set_value(nodes[1], "T", 2.0)
+    b.set_value(nodes[0], "T", 10.0)
+    b.set_value(nodes[1], "T", 20.0)
+    s = a + b
+    assert s.value(nodes[0], "T") == 11.0
+    assert s.value(nodes[1], "T") == 22.0
+
+
+def test_subfield_plus_subfield_mismatched_components_raises():
+    c, nodes, sm = _poi1_with(1)
+    a = pyrucast.NodeField(sm, ["T"])[0]
+    b = pyrucast.NodeField(sm, ["P"])[0]
+    try:
+        a + b
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError on mismatched components")
+
+
+def test_field_plus_field_same_decomposition():
+    c, nodes, sm = _poi1_with(2)
+    a = pyrucast.NodeField(sm, ["T"])
+    b = pyrucast.NodeField(sm, ["T"])
+    a[0].set_value(nodes[0], "T", 1.0)
+    b[0].set_value(nodes[0], "T", 5.0)
+    s = a + b
+    assert s.value(nodes[0], "T") == 6.0
+
+
+def test_field_scalar_and_per_component():
+    c, nodes, sm = _poi1_with(2)
+    f = pyrucast.NodeField(sm, ["T"])
+    f[0].set_value(nodes[0], "T", 1.0)
+    g = f * 3.0
+    assert g.value(nodes[0], "T") == 3.0
+    assert f.value(nodes[0], "T") == 1.0  # original untouched
+    f.add_to_component("T", 100.0)
+    assert f.value(nodes[0], "T") == 101.0
+
+
+def test_field_plus_subfield_targets_matching_zone():
+    c, nodes, za, zb = _two_poi1_zones()
+    f = pyrucast.NodeField(za, ["T"]) | pyrucast.NodeField(zb, ["T"])
+    assert len(f) == 2
+    f[0].set_value(nodes[0], "T", 1.0)
+    f[1].set_value(nodes[1], "T", 7.0)
+    sub = pyrucast.NodeField(za, ["T"])[0]  # same support as zone 0
+    sub.set_value(nodes[0], "T", 10.0)
+    g = f + sub
+    assert len(g) == 2
+    assert g.value(nodes[0], "T") == 11.0  # matching zone updated
+    assert g.value(nodes[1], "T") == 7.0   # other zone unchanged
+
+
+def test_op_bad_operand_raises_type_error():
+    c, nodes, sm = _poi1_with(1)
+    f = pyrucast.NodeField(sm, ["T"])
+    for bad_lhs in (f, f[0]):
+        try:
+            bad_lhs + "nope"
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("expected TypeError for str operand")

@@ -38,7 +38,7 @@ pub fn divergence(field: &ElementField) -> Result<NodeField> {
 /// Weak divergence on a single subspace.
 fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> {
     let f = read(field)?;
-    let fespace = f.fespace();
+    let fespace = f.support();
     let s = read(&fespace)?;
     let n_cells = s.cell_count()?;
     let n_nodes = s.nodes_per_cell()?;

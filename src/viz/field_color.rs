@@ -261,7 +261,7 @@ pub(crate) struct FitOperator {
 
 impl FitOperator {
     fn for_zone(zone: &SubElementField) -> Result<Self> {
-        let fespace = zone.fespace();
+        let fespace = zone.support();
         let s = read(&fespace)?;
         let npc = s.nodes_per_cell()?;
         let n_g = s.gauss_count();
