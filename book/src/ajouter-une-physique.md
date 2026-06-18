@@ -118,7 +118,7 @@ l'assembleur appellent tous `self.as_physics().<méthode>()` — ils sont
 
 Régénérer le stub `pyrucast.pyi` via `src/bin/stub_gen.rs`, puis **builder
 + tester avant de commiter** (`PYO3_PYTHON=/usr/bin/python3.13`, ou
-`scripts/check.sh` pour la passe complète).
+`script/check.sh` pour la passe complète).
 
 ---
 

@@ -20,7 +20,7 @@ en 1-D, 2-D et 3-D.
 - **primal** : `u_x, u_y(, u_z)` — **dual** : `f_x, f_y(, f_z)`.
 - **matériau** : `E` (module d'Young), `A` (section).
 - **comportement** (`COMP`) : effort axial `N = E·A·(cᵀ ε c)`, à partir de la
-  déformation `ε` (op [`deformation`](../node-field.md)).
+  déformation `ε` (op [`deformation`](../operateurs/champs.md)).
 
 > ⚠️ Une barre n'a **aucune raideur transversale** : pour un système bien posé
 > il faut bloquer les DOFs transverses (treillis triangulé, appuis), sinon la

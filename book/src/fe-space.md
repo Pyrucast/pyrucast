@@ -30,7 +30,7 @@ Chaque `ElementType` fixe son repère de référence \\( \xi \\) et la numérota
 | `TET4` | \\( \xi, \eta, \zeta \in [0, 1] \\), \\( \xi + \eta + \zeta \le 1 \\) | \\( (0,0,0), (1,0,0), (0,1,0), (0,0,1) \\) — face 0-1-2 CCW vue depuis nœud 3 |
 | `HEX8` | \\( \xi, \eta, \zeta \in [-1, +1] \\) | face inférieure CCW (nœuds 0..3) puis face supérieure CCW (nœuds 4..7) |
 
-Ces conventions sont cohérentes avec celles déjà imposées ailleurs dans le code : orientation CCW des triangles produits par `Mesh::fill_surface`, ordre HEX8 utilisé par `Mesh::extrude`.
+Ces conventions sont cohérentes avec celles déjà imposées ailleurs dans le code : orientation CCW des triangles produits par `fill_surface`, ordre HEX8 utilisé par `extrude`.
 
 ## Théorie : élément isoparamétrique
 
@@ -151,7 +151,7 @@ La dérivation des fonctions de forme par rapport aux coordonnées physiques uti
 
 ### Cas manifold : \\( d_s > d_r \\)
 
-Un sous-maillage peut être **plongé** dans un espace de dimension supérieure : SEG2 dans une `Coords` 2D ou 3D (contour, courbe), TRI3 dans une `Coords` 3D (surface plongée). C'est exactement ce que produit `Mesh::fill_surface` quand on lui donne un contour 3D plan.
+Un sous-maillage peut être **plongé** dans un espace de dimension supérieure : SEG2 dans une `Coords` 2D ou 3D (contour, courbe), TRI3 dans une `Coords` 3D (surface plongée). C'est exactement ce que produit `fill_surface` quand on lui donne un contour 3D plan.
 
 Dans ce cas, \\( J \\) est rectangulaire (taille \\( d_s \times d_r \\)). Le déterminant standard n'a plus de sens, mais on peut définir la **métrique tirée en arrière** :
 \\[
@@ -371,6 +371,6 @@ print(sub.det_jacobian(0, 0))                 # |J| recalculé
 ## Limitations actuelles
 
 - Une seule interpolation : `Lagrange1`. Les éléments quadratiques (TRI6, QUA8, etc.) viendront en parallèle d'une variante `Lagrange2`, conditionnée à l'ajout des `ElementType` correspondants.
-- Une seule quadrature : `QuadratureRule::Gauss` (la règle standard par défaut par `ElementType`). Les variantes « intégration réduite » ou « ordre supérieur » seront ajoutées comme nouvelles variantes.
+- Deux quadratures : `QuadratureRule::Gauss` (la règle standard par défaut par `ElementType`) et `QuadratureRule::Reduced` (**intégration réduite** : un point au centroïde, exact pour les constantes — utilisée par exemple pour le terme de cisaillement de la [poutre de Timoshenko](mecanique/timoshenko.md), anti-verrouillage). Les variantes d'ordre supérieur viendront comme nouvelles variantes.
 - `POI1` n'est pas un élément fini (pas de repère de référence). Un sous-maillage POI1 dans le maillage support fait échouer la construction du `FiniteElementSpace`.
 - Pas encore de cache invalidable des grandeurs physiques (\\( J \\), \\( |J| \\), \\( \nabla_x N_i \\)) : tout est recalculé à la volée. Une optimisation à base d'invalidation par compteur de version pourra être ajoutée si la mesure le justifie, sans changement d'API.

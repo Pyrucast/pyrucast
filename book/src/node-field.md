@@ -47,10 +47,10 @@ rangés en **row-major** : la composante `c` du nœud `i` est à l'indice
 initialisées à `0.0`. Au niveau agrégat, `components()` renvoie l'**union**
 des composantes des zones (ordre de première apparition).
 
-Les caractéristiques communes à tous les champs (composantes, `min`,
-`max`) sont portées par les traits Rust `SubField` (niveau zone) et
-`Field` (niveau agrégat, replié sur les zones) — partagés avec
-`ElementField`.
+Les caractéristiques communes à tous les champs (composantes, `min`, `max`,
+arithmétique scalaire et par composante) sont portées par les traits Rust
+[`SubField` (niveau zone) et `Field` (niveau agrégat)](field.md) — partagés
+avec [`ElementField`](element-field.md).
 
 ## Nœuds d'interface : duplication, lecture, cohérence
 
@@ -159,8 +159,11 @@ la valeur évincée, le `Drop` final est rejoué une seule fois.
 
 ## Opérateurs consommant un champ
 
-Toutes les opérations de `ops::field` et le solveur consomment l'agrégat
-et résolvent les nœuds **à travers les zones** (règle premier-trouvé) :
+Les opérateurs détaillés sont décrits dans
+[Opérateurs sur les champs](operateurs/champs.md) (dérivations),
+[Assemblage](operateurs/assemblage.md) (`flux`, second membre) et
+[Solveur](operateurs/solveur.md). Tous consomment l'agrégat et résolvent les
+nœuds **à travers les zones** (règle premier-trouvé) :
 
 | Opération | Particularité multi-zones |
 |---|---|

@@ -53,7 +53,7 @@ Le pipeline est toujours le même :
      la valeur via multiplicateurs de Lagrange. L'utilisateur fournit le
      maillage des nœuds imposés et le maillage support des multiplicateurs —
      typiquement fabriqué depuis le premier avec le mesher générique
-     [`barycenter`](mesh.md) (nœuds neufs colocalisés). La valeur imposée
+     [`barycenter`](operateurs/maillage.md) (nœuds neufs colocalisés). La valeur imposée
      \\(u_d\\) s'écrit dans le chargement au slot **`imposed_T`** du
      nœud-multiplicateur (cf. [Modèle physique](model.md)).
    - **Neumann / source** : une charge **ponctuelle** est une valeur du

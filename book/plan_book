@@ -1,0 +1,65 @@
+Introduction
+Correspondance rust-python
+Installation et démarrage rapide
+Aspect informatique
+Objet 
+   Coord
+      Principe
+      Interface
+   Node
+      Principe
+      Interface
+   Aggregat
+      Principe
+      Interface (union etc.)
+   Mesh/Submesh
+      Principe
+      Interface
+   FiniteElementSpace/Sub
+      Principe
+      Interface
+   Field/SubField
+      Principe du trait
+      Opération arithmétique
+      Interface
+   NodeField/subNodeField
+      Principe
+      Interface
+   ElementField/SubElementField
+      Principe
+      Interface
+   Model/SubModel
+      Principe
+      Interface
+   Matrix/Submatrix
+      Principe
+      Interface
+Détails des physiques
+   Thermique
+      conduction
+   Mecanique
+      Barre
+      Elasticite
+      Poutre de timoshenko
+      Portique2D
+      Cadre3D
+   Contrainte
+      Dirichlet
+Détail des opérateurs
+   Maillage
+      ...
+   Champs
+      ...
+   Visualisation
+
+Developper
+   Arboresence
+   Convention
+   Modele de memoire
+   Compilation et test
+   Ajouter une physique
+   Ajouter un element fini
+
+
+
+   

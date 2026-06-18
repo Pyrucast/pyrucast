@@ -1,14 +1,23 @@
 # Coordonnées (Coords)
 
-Un `Coords` héberge **une ou plusieurs configurations** (jeux de coordonnées) pour le même ensemble de nœuds, en dimension fixée. C'est le premier objet du modèle pyrucast — tous les autres objets (Mesh, NodeField, FE space…) viendront s'y greffer.
+Un `Coords` héberge **une ou plusieurs configurations** (jeux de coordonnées)
+pour le même ensemble de nœuds, en dimension fixée. C'est le premier objet du
+modèle pyrucast — tous les autres (Mesh, NodeField, FE space…) viennent s'y
+greffer. L'**accesseur** utilisateur d'un nœud, le [`Node`](node.md), fait
+l'objet du chapitre suivant.
 
 ## Identité d'un nœud
 
-Chaque nœud créé reçoit un identifiant interne **stable** (`NodeId`), unique pour toute la vie du `Coords` : **aucun id n'est jamais réutilisé**, même après ramassage par le GC. C'est ce qui permet aux maillages et champs (à venir) de référencer un nœud par son id sans s'inquiéter de la stabilité.
+Chaque nœud créé reçoit un identifiant interne **stable** (`NodeId`), unique
+pour toute la vie du `Coords` : **aucun id n'est jamais réutilisé**, même après
+ramassage par le GC. C'est ce qui permet aux maillages et champs de référencer
+un nœud par son id sans s'inquiéter de la stabilité.
 
 ## Politique de suppression : pas de suppression directe
 
-**Il n'existe aucune méthode `remove_node`.** Un nœud référencé est protégé. Seul le ramasse-miettes `Coords::gc()` retire les nœuds dont le refcount **interne** est tombé à 0.
+**Il n'existe aucune méthode `remove_node`.** Un nœud référencé est protégé.
+Seul le ramasse-miettes `Coords::gc()` retire les nœuds dont le refcount
+**interne** est tombé à 0.
 
 ```rust,ignore
 use pyrucast::containers::mesh::Coords;
@@ -23,27 +32,6 @@ assert_eq!(write(&coords).unwrap().gc(), 0);
 write(&coords).unwrap().decref(id).unwrap();
 assert_eq!(write(&coords).unwrap().gc(), 1);
 ```
-
-## `Node` : interface RAII
-
-Le `Node` est l'**accesseur utilisateur** d'un nœud. Il porte un handle vers le `Coords` et un `NodeId`, et maintient le refcount **automatiquement** :
-
-- `Clone` incrémente,
-- `Drop` décrémente.
-
-```rust,ignore
-use pyrucast::containers::mesh::{Coords, Node};
-use pyrucast::store::{insert, write};
-
-let coords = insert(Coords::new(2).unwrap());
-let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
-let m = n.clone();          // refcount = 2
-drop(n);                    // refcount = 1
-drop(m);                    // refcount = 0
-write(&coords).unwrap().gc();  // collecte
-```
-
-Le code interne peut toujours manipuler directement les `NodeId` sans passer par `Node`, mais perd alors la protection automatique du GC : il doit appeler manuellement `Coords::incref` / `Coords::decref` (utilisé par les maillages et les champs à venir).
 
 ## Modèle de refcount à deux niveaux
 
@@ -63,11 +51,18 @@ Le code interne peut toujours manipuler directement les `NodeId` sans passer par
 Les deux niveaux sont indépendants :
 
 - tant qu'un `Handle<Coords>` existe, le `Coords` reste en mémoire ;
-- tant qu'au moins un `Node` (ou un objet aval comme Mesh/Field via `incref`/`decref`) référence un `NodeId`, ce nœud est protégé du GC.
+- tant qu'au moins un [`Node`](node.md) (ou un objet aval comme Mesh / Field
+  via `incref`/`decref`) référence un `NodeId`, ce nœud est protégé du GC.
+
+Le détail du niveau slot (générations, swap, compactage) est dans
+[Modèle mémoire](memory-model.md) ; le niveau nœud, dans [Nœud](node.md).
 
 ## Plusieurs configurations
 
-Utile pour basculer entre référence / déformée / prédite. La configuration active est désignée par index ; lire les coordonnées d'un nœud (`node.coord()` en Python, `Coords::coord` côté Rust) renvoie celles de la configuration active. `add_config(name)` clone la configuration active sous un nouveau nom.
+Utile pour basculer entre référence / déformée / prédite. La configuration
+active est désignée par index ; lire les coordonnées d'un nœud (`node.coord()`
+en Python, `Coords::coord` côté Rust) renvoie celles de la configuration
+active. `add_config(name)` clone la configuration active sous un nouveau nom.
 
 Rust :
 
@@ -103,20 +98,31 @@ print(c.active)   # 1
 
 ## Pourquoi plusieurs configurations dans un `Coords` plutôt que plusieurs `Coords` ?
 
-cast3m suit historiquement la convention inverse : un objet de coordonnées = une seule configuration, et on multiplie les objets. Les deux modèles ont des compromis distincts.
+cast3m suit historiquement la convention inverse : un objet de coordonnées =
+une seule configuration, et on multiplie les objets. Les deux modèles ont des
+compromis distincts.
 
 | Modèle | Avantages | Limites |
 |---|---|---|
 | **Plusieurs configurations dans un `Coords`** *(pyrucast actuel)* | `NodeId 42` désigne le **même nœud physique** dans toutes les configurations. Les maillages et champs restent valides quelle que soit la configuration active (référence / déformée / prédite). Topologie, refcount, permutation **mutualisés**. `select(config)` est un simple changement d'index — pas de remapping aval. | Toutes les configurations ont le **même cardinal** de nœuds. Pas de configuration "partielle" ne couvrant qu'une portion du domaine. |
 | **Un `Coords` par configuration** *(modèle cast3m historique)* | Chaque objet est **autonome** : swap, sérialisation, GC indépendants. Permet des jeux de tailles différentes (sous-problèmes, maillages adaptés). | `NodeId 42` dans `coords_A` ≠ `NodeId 42` dans `coords_B` : tout maillage ou champ référençant plusieurs `Coords` doit porter une **table de correspondance** explicite. Source classique de bugs (« nœud copié au lieu de partagé »). Ajouter un nœud « à tous les `Coords` équivalents » est une opération transverse non triviale. |
 
-Le store sait mécaniquement énumérer tous les `Coords` résidents (registre indexé par `TypeId`), mais propager un `add_node` à tous deviendrait coûteux : il faudrait recharger en mémoire les slots `OnDisk`, ce qui annulerait un des bénéfices du swap (cf. [Modèle mémoire](memory-model.md)).
+Le store sait mécaniquement énumérer tous les `Coords` résidents (registre
+indexé par `TypeId`), mais propager un `add_node` à tous deviendrait coûteux :
+il faudrait recharger en mémoire les slots `OnDisk`, ce qui annulerait un des
+bénéfices du swap (cf. [Modèle mémoire](memory-model.md)).
 
-**Choix pyrucast** : un seul jeu d'identités par domaine géométrique, plusieurs configurations pour les variantes (référence / déformée / prédite). Des `Coords` distincts restent prévus pour les **vrais domaines indépendants** (sous-domaines, maillages adaptés de plus haute densité).
+**Choix pyrucast** : un seul jeu d'identités par domaine géométrique, plusieurs
+configurations pour les variantes (référence / déformée / prédite). Des
+`Coords` distincts restent prévus pour les **vrais domaines indépendants**
+(sous-domaines, maillages adaptés de plus haute densité).
 
 ## Permutation solveur
 
-Une permutation optionnelle (`Vec<u32>`, longueur = `capacity`) sépare l'**ordre solveur** de l'**identité** : `permutation[node_id]` donne l'ordre solveur associé. Phase 4 (renumérotation Cuthill–McKee) la calculera pour réduire la bande/profil. L'identité (`NodeId`) n'est jamais modifiée.
+Une permutation optionnelle (`Vec<u32>`, longueur = `capacity`) sépare
+l'**ordre solveur** de l'**identité** : `permutation[node_id]` donne l'ordre
+solveur associé. La Phase 4 (renumérotation Cuthill–McKee) la calculera pour
+réduire la bande/profil. L'identité (`NodeId`) n'est jamais modifiée.
 
 Rust :
 
@@ -179,3 +185,10 @@ del n
 pygc.collect()
 assert c.gc() == 1
 ```
+
+Méthodes d'inspection utiles : `node_count()` (nœuds vivants), `capacity()`
+(slots alloués, vivants + non encore collectés), `is_alive(id)` et
+`refcount(id)` — qui prennent un **id brut** (pas un `Node`) : un `Node`
+portant un refcount ne pourrait jamais être observé mort. `acquire(id)` rend un
+`Node` supplémentaire pour un id existant (refcount += 1). `dump()` imprime le
+contenu intégral (coordonnées, configurations) sur la sortie standard.

@@ -1,0 +1,132 @@
+# Champ (`Field` / `SubField`)
+
+Les deux familles de champs de pyrucast — le [champ aux nœuds](node-field.md)
+et le [champ aux points de Gauss](element-field.md) — partagent un **contrat
+commun**, capturé par deux traits Rust (`src/containers/field.rs`) :
+
+- **`SubField`** — une **zone** : un bloc homogène de valeurs, des composantes
+  nommées + un buffer plat ;
+- **`Field`** — le niveau **agrégat**, *blanket-implémenté* pour tout
+  [`Aggregate`](aggregate.md) dont la zone est un `SubField`.
+
+Ce chapitre décrit ce contrat (composantes, statistiques, arithmétique) ; les
+deux chapitres suivants donnent les spécificités de chaque famille.
+
+## Principe du trait
+
+### `SubField` : un bloc homogène
+
+Une zone porte :
+
+- une liste ordonnée de **composantes nommées** (`"UX"`, `"UY"`, `"T"`, `"k"`,
+  `"sigma_xx"`, …) — au moins une, noms uniques ;
+- un **buffer plat** de `f64` dans lequel l'**indice de composante varie le
+  plus vite** (stride = nombre de composantes).
+
+Le contrat est purement **structurel** : peu importe que les « lignes » du
+buffer soient des nœuds (`SubNodeField`) ou des couples `(cellule, point de
+Gauss)` (`SubElementField`) — dès qu'une zone fournit ses composantes et son
+buffer, le trait en dérive le reste : recherche d'une composante par nom,
+`min`/`max` par composante, opérations scalaires.
+
+```text
+   SubField (composantes [c0, c1], stride = 2)
+   values = [ ligne0.c0, ligne0.c1, ligne1.c0, ligne1.c1, … ]
+                                     └─ composante varie le plus vite ─┘
+```
+
+Chaque zone connaît aussi son **support** (`support()` : un `Handle<SubMesh>`
+pour un champ aux nœuds, un `Handle<SubFiniteElementSpace>` pour un champ aux
+Gauss). Deux zones sont « sur le même support » (`same_support`) si leurs
+handles désignent le **même slot** — c'est la précondition pour les combiner.
+
+### `Field` : le repli sur les zones
+
+Au niveau agrégat, `Field` **replie** les opérations sur les zones :
+
+- `components()` — l'**union** des composantes des zones (ordre de première
+  apparition) ; une composante peut n'exister que sur certaines zones ;
+- `min(c)` / `max(c)` — repliés sur les zones qui définissent `c` (erreur si
+  aucune) ;
+- `view()` — une vue **zéro-copie** (un guard de lecture par zone), utilisée
+  par les opérateurs qui font beaucoup de lectures (gradient, solveur, viz).
+
+## Opération arithmétique
+
+L'arithmétique des champs se décline en trois familles, du plus simple au plus
+contraint.
+
+### 1. Scalaire (broadcast)
+
+`field + s`, `field - s`, `field * s`, `field / s` renvoient un **nouveau**
+champ où l'opération est appliquée à **toutes** les valeurs de toutes les
+composantes de toutes les zones. Disponible au niveau **zone** (`SubField`,
+via `Add/Sub/Mul/Div<f64>`) **et** au niveau **agrégat** (`NodeField` /
+`ElementField`, dunders Python `__add__`, …).
+
+```python
+scaled = mat * 1.1      # nouveau champ, toutes composantes × 1.1
+shifted = u - 5.0       # nouveau champ
+```
+
+> `+=` n'est **pas** surchargé : `f + s` ne mute pas `f`. (Côté Rust, la
+> version consommante est zéro-copie, la version par référence clone d'abord.)
+
+### 2. Par composante (en place)
+
+Pour ne toucher **qu'une** composante, sur toutes les zones qui la portent :
+`add_to_component(c, s)`, `sub_to_component`, `mul_to_component`,
+`div_to_component` — **en place**, erreur seulement si **aucune** zone ne
+définit `c` (la division par zéro est refusée). Au niveau zone, `set_uniform(c,
+v)` force une composante à une valeur constante.
+
+```python
+mat.mul_to_component("E", 0.95)    # ne met à l'échelle que "E"
+```
+
+### 3. Binaire entre champs (strict)
+
+Combiner **deux champs** valeur à valeur (`combine`, et au niveau agrégat
+`combine_field` / `combine_subfield`) est **strict** :
+
+- les deux opérandes doivent être sur le **même support**
+  (`same_support`) — donc mêmes lignes dans le même ordre, les valeurs
+  s'alignent positionnellement ;
+- ils doivent porter le **même jeu de composantes** (alignées **par nom**,
+  l'ordre peut différer) ;
+- `combine_field` exige en plus que **chaque** zone d'un côté s'apparie
+  exactement à une zone de même support de l'autre (même **décomposition**) ;
+- `combine_subfield` cible : il combine une zone donnée dans la (les) zone(s)
+  de même support, laissant les autres inchangées.
+
+La division ne se protège **pas** du zéro à ce niveau (sémantique numpy :
+`inf` / `nan`). Cette stricte symétrie est volontaire : une addition de deux
+champs définis sur des décompositions différentes est presque toujours un bug,
+pas une intention.
+
+## Interface (résumé)
+
+| Niveau | Méthode | Effet |
+|---|---|---|
+| zone & agrégat | `components()` | composantes (union au niveau agrégat) |
+| zone & agrégat | `min(c)` / `max(c)` | extrema d'une composante |
+| zone | `set_uniform(c, v)` | force `c` à `v` |
+| zone & agrégat | `f + s`, `f - s`, `f * s`, `f / s` | scalaire, nouveau champ |
+| zone & agrégat | `add_to_component(c, s)` … | scalaire sur une composante, en place |
+| zone | `combine(other, op)` | binaire strict, même support |
+| agrégat | `combine_field(other, op)` | binaire, même décomposition |
+| agrégat | `combine_subfield(sub, op)` | binaire ciblé sur une zone |
+
+Les deux familles concrètes ajoutent leurs accès indexés et leurs
+constructeurs propres :
+
+- [`NodeField` / `SubNodeField`](node-field.md) — valeurs par nœud, lecture
+  agrégat `field.value(node, "c")`, écriture par zone ;
+- [`ElementField` / `SubElementField`](element-field.md) — valeurs par
+  `(cellule, point de Gauss)`.
+
+> **Et l'union `|` ?** L'union compose des **zones** (structure), l'arithmétique
+> combine des **valeurs**. Pour les champs, l'union finalise en plus en
+> fusionnant les zones de même support (et lève si elles divergent sur une
+> valeur partagée) — c'est le rôle des opérateurs `consolidate` /
+> `consolidate_element` (cf. [Opérateurs sur les champs](operateurs/champs.md)).

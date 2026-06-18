@@ -1,39 +1,65 @@
-# Champ aux points de Gauss (`ElementField`)
+# Champ aux points de Gauss (`ElementField` / `SubElementField`)
 
-Un **`ElementField`** porte une ou plusieurs valeurs **par `(cellule, point de Gauss)`** sur un [sous-espace éléments finis](fe-space.md). C'est le pendant de [`NodeField`](node-field.md) côté **valeurs aux points d'intégration**, et l'objet sur lequel s'écrivent naturellement :
+Un champ aux points de Gauss porte une ou plusieurs valeurs **par `(cellule,
+point de Gauss)`** sur un [espace éléments finis](fe-space.md). Il suit la même
+grammaire d'agrégat que tous les conteneurs de pyrucast (cf.
+[Agrégat](aggregate.md)) et le contrat de [champ](field.md) :
 
-- les **propriétés matériau** (module d'Young, coefficient de Poisson, conductivité, masse volumique, …) évaluées aux points où les intégrales sont calculées ;
-- les **variables internes** (déformation plastique, endommagement, écrouissage, …) que l'on doit garder de cellule en cellule et de point en point ;
-- les **grandeurs dérivées** d'une solution (contraintes, déformations, flux, …) pour le post-traitement.
+- **`SubElementField`** — les valeurs d'**une zone** : un bloc multi-composantes
+  sur les cellules × points de Gauss d'**un** `SubFiniteElementSpace` ;
+- **`ElementField`** — l'**agrégat** : une liste de `SubElementField`, un par
+  sous-espace, avec éventuellement des **composantes différentes d'une zone à
+  l'autre**.
 
-## Support : un sous-espace éléments finis
+C'est le miroir exact de [`NodeField`](node-field.md) côté **points
+d'intégration**. C'est l'objet sur lequel s'écrivent naturellement :
 
-Un `ElementField` est attaché à un seul `SubFiniteElementSpace` (cf. [Espace éléments finis](fe-space.md)) — celui-ci détermine :
+- les **propriétés matériau** (module d'Young, Poisson, conductivité, masse
+  volumique…) évaluées là où les intégrales sont calculées ;
+- les **variables internes** (déformation plastique, endommagement…) gardées de
+  cellule en cellule et de point en point ;
+- les **grandeurs dérivées** d'une solution (contraintes, déformations, flux…)
+  pour le post-traitement, produites par les [opérateurs de
+  champ](operateurs/champs.md) (`gradient`, `deformation`…) et le
+  [comportement](operateurs/comportement.md) (`integrate_behavior`).
+
+## Support : un sous-espace éléments finis par zone
+
+Chaque `SubElementField` est attaché à un seul `SubFiniteElementSpace` (cf.
+[Espace éléments finis](fe-space.md)), qui détermine :
 
 - la liste des cellules concernées (via son `SubMesh`) ;
 - le nombre de points de Gauss par cellule (via sa `QuadratureRule`).
 
-Les trois dimensions de l'objet sont **figées à la construction** :
+Les trois dimensions d'une zone sont **figées à la construction** :
+`cell_count` (du `SubMesh`), `gauss_count` (de la quadrature),
+`component_count` (choisi par l'utilisateur). Le buffer interne est dimensionné
+une fois pour toutes et n'est **jamais réalloué** — la topologie du maillage
+sous-jacent doit rester figée pour la durée de vie du champ (les coordonnées,
+elles, peuvent évoluer ; cf. [`FiniteElementSpace`](fe-space.md)).
 
-- `cell_count` — pris au `SubMesh::cell_count` du moment ;
-- `gauss_count` — fourni par la quadrature du sous-espace ;
-- `component_count` — choisi par l'utilisateur.
+Les coordonnées et poids des points de Gauss ne sont **pas** stockés dans le
+champ : ils restent sur le `SubFiniteElementSpace` comme données de référence.
 
-Le buffer interne est dimensionné une fois pour toutes et n'est **jamais réalloué**. La topologie du maillage sous-jacent doit rester figée pour la durée de vie du champ — c'est le contrat déjà documenté sur [`FiniteElementSpace`](fe-space.md) (les coordonnées peuvent évoluer, mais pas la connectivité ni le nombre de cellules).
-
-Les coordonnées et poids des points de Gauss eux-mêmes ne sont **pas** stockés dans l'`ElementField` : ils restent sur le `SubFiniteElementSpace` comme données de référence, accessibles à la demande. L'`ElementField` ne contient que les valeurs utilisateur.
+```text
+   ElementField (agrégat)
+   ├── SubElementField zone 0 ── support SubFiniteElementSpace ── values[…]
+   ├── SubElementField zone 1 ── support SubFiniteElementSpace ── values[…]
+   └── …
+```
 
 ## Composantes nommées
 
-Comme `NodeField`, un `ElementField` porte un ou plusieurs **noms de composantes** (`"E"`, `"nu"`, `"sigma_xx"`, `"plastic_strain"`, …). Les contraintes :
-
-- au moins une composante à la construction ;
-- noms uniques au sein d'un même champ ;
-- valeurs initiales toutes à `0.0`.
+Chaque zone porte ses **noms de composantes** (`"E"`, `"nu"`, `"sigma_xx"`,
+`"plastic_strain"`…) : au moins une, noms uniques, valeurs initialisées à
+`0.0`. Au niveau agrégat, `components()` renvoie l'**union** des composantes
+des zones (ordre de première apparition) ; une composante peut n'exister que
+sur certaines zones.
 
 ## Disposition mémoire
 
-Les valeurs sont rangées **à plat, ligne-major, dans l'ordre `cellule → gauss → composante`** :
+Les valeurs d'une zone sont rangées **à plat, ligne-major, dans l'ordre
+`cellule → gauss → composante`** :
 
 ```text
 values[cell_idx * gauss_count * component_count
@@ -41,30 +67,47 @@ values[cell_idx * gauss_count * component_count
        + c]
 ```
 
-Cet ordre rend deux accès courants particulièrement cache-friendly :
+Cet ordre rend deux accès courants cache-friendly :
 
-- lire **toutes les composantes** à un point de Gauss d'une cellule (par exemple `(E, nu, rho)` au point de Gauss courant pendant l'assemblage) — ce sont `component_count` flottants contigus ;
-- balayer **tous les points de Gauss** d'une cellule pour une composante donnée — ce sont `gauss_count` flottants régulièrement espacés.
+- lire **toutes les composantes** à un point de Gauss d'une cellule (par
+  exemple `(E, nu, rho)` pendant l'assemblage) — `component_count` flottants
+  contigus, exposés par `point_values(cell, g)` ;
+- balayer **tous les points de Gauss** d'une cellule pour une composante donnée
+  — `gauss_count` flottants régulièrement espacés.
 
-La méthode `point_values(cell, g)` expose directement le premier de ces patterns sous forme de slice.
+## Construction : au niveau agrégat
+
+Comme tout agrégat, un `ElementField` se construit au **niveau parent**, à
+partir d'un `FiniteElementSpace` : une zone par sous-espace.
+
+- `ElementField(fes, components)` — la **même** liste de composantes pour
+  chaque sous-espace ;
+- `ElementField.with_components_per_subspace(fes, [...])` — une liste de
+  composantes **par** sous-espace (multiphysique / multi-matériau).
+
+Pour fabriquer un champ matériau prêt pour l'assemblage, l'opérateur
+[`material_field(model, [...])`](operateurs/construction.md) est plus direct : il
+crée les zones nécessaires aux sous-modèles qui consomment du matériau et les
+remplit en un appel.
 
 ## Refcount et cycle de vie
 
-L'`ElementField` détient un `Handle<SubFiniteElementSpace>` (cloné, donc compté par référence). Tant que le champ est vivant, son sous-espace ne peut pas être collecté. Quand le `Drop` du champ s'exécute, le refcount du sous-espace est décrémenté ; s'il atteint zéro, la cascade descend jusqu'au `SubMesh` et à la `Coords`.
-
-`ElementField` lui-même n'incrémente **pas** le refcount des nœuds : il n'a pas de support nodal direct. Les nœuds restent protégés par le `SubMesh` du sous-espace, qui les incref déjà.
+Chaque zone détient un `Handle<SubFiniteElementSpace>` (cloné, donc compté).
+Tant qu'une zone est vivante, son sous-espace ne peut pas être collecté ; à son
+`Drop`, le refcount du sous-espace décroît et la cascade descend jusqu'au
+`SubMesh` puis à la `Coords`. Un `ElementField` n'incrémente **pas** le
+refcount des nœuds : il n'a pas de support nodal direct — les nœuds restent
+protégés par le `SubMesh` du sous-espace.
 
 ## API Rust
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
+use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::element_field::ElementField;
-use pyrucast::mesh::element_type::ElementType;
-use pyrucast::finite_element_space::FiniteElementSpace;
-use pyrucast::mesh::{Mesh, SubMesh};
-use pyrucast::containers::field::SubField;
-use pyrucast::mesh::node::Node;
-use pyrucast::store::insert;
+use pyrucast::containers::field::{Field, SubField};
+use pyrucast::containers::finite_element_space::FiniteElementSpace;
+use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+use pyrucast::store::{insert, write};
 
 let coords = insert(Coords::new(2).unwrap());
 let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
@@ -73,37 +116,26 @@ let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
 let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
 mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-let sub = fes.get(0).unwrap();
 
-// Élasticité linéaire 2-D : deux propriétés matériau.
-let mut mat = ElementField::new(sub, vec!["E".into(), "nu".into()]).unwrap();
-mat.set_uniform("E", 210e9).unwrap();    // module d'Young constant
-mat.set_uniform("nu", 0.3).unwrap();     // coefficient de Poisson constant
-assert_eq!(mat.value(0, 0, "E").unwrap(), 210e9);
-```
+// Élasticité linéaire 2-D : deux propriétés matériau, une zone (un sous-espace).
+let mat = ElementField::new(&fes, vec!["E".into(), "nu".into()]).unwrap();
+{
+    let mut z = write(&mat.get(0).unwrap()).unwrap();   // la zone (SubElementField)
+    z.set_uniform("E", 210e9).unwrap();                 // module d'Young constant
+    z.set_uniform("nu", 0.3).unwrap();                  // Poisson constant
+    assert_eq!(z.value(0, 0, "E").unwrap(), 210e9);
+}
 
-Autres constructeurs et fillers utiles :
-
-```rust,ignore
-// Champ uniforme par composante en un appel.
-let mat = ElementField::from_uniform_per_component(
-    sub.clone(),
-    vec!["E".into(), "nu".into(), "rho".into()],
-    &[210e9, 0.3, 7800.0],
+// Composantes par sous-espace (multi-matériau) :
+let mat2 = ElementField::with(
+    &fes,
+    &[vec!["E".into(), "nu".into()]],   // une liste par sous-espace
 ).unwrap();
 
-// Valeur homogène sur une cellule (matériau par sous-domaine).
-mat.set_cell_uniform(cell_idx, "E", 70e9).unwrap();
-
-// Opérations scalaires sur une composante (par exemple, mise à l'échelle d'un module).
-mat.mul_to_component("E", 0.95).unwrap();
-```
-
-Opérateurs avec un scalaire (le champ entier est translaté / mis à l'échelle) :
-
-```rust,ignore
-let scaled = &mat * 1.1;   // version par référence : préserve `mat`
-let shifted = mat - 5.0;   // version consommante : zéro-copie
+// Statistiques et arithmétique au niveau agrégat.
+assert_eq!(Field::max(&mat, "E").unwrap(), 210e9);
+let scaled = &mat * 1.1;       // nouveau champ (référence : préserve `mat`)
+mat.mul_to_component("E", 0.95).unwrap();   // en place, seulement "E"
 ```
 
 ## API Python
@@ -119,34 +151,58 @@ c2 = c.add_node([0.0, 1.0])
 mesh = pyrucast.Mesh(c, "TRI3")
 mesh.unit().add_cell([a, b, c2])
 fes = pyrucast.FiniteElementSpace(mesh)
-sub = fes[0]
 
-# Champ matériau.
-mat = pyrucast.ElementField(sub, ["E", "nu"])
-mat.set_uniform("E", 210e9)
-mat.set_uniform("nu", 0.3)
-print(mat)              # ElementField: 1 cell(s) × 3 gauss × 2 component(s) [E, nu]
+# Champ matériau : une zone par sous-espace de `fes`.
+mat = pyrucast.ElementField(fes, ["E", "nu"])
+print(mat)                 # ElementField: 1 subfield(s)
+print(mat.unit())          # SubElementField: 1 cell(s) × 3 gauss × 2 component(s) [E, nu]
 
-# Accès par nom + indice.
-assert mat.value(0, 0, "E") == 210e9
-mat.set_value(0, 1, "nu", 0.28)
+# Écriture via la zone ; lecture via la zone (ou les stats agrégat).
+z = mat.unit()             # la seule zone (erreur s'il y en avait plusieurs)
+z.set_uniform("E", 210e9)
+z.set_uniform("nu", 0.3)
+assert z.value(0, 0, "E") == 210e9
 
-# Accès dictionnaire-like — `field[cell, gauss, "name"]`.
-mat[0, 2, "E"] = 200e9
-assert mat[0, 2, "E"] == 200e9
+# Accès dictionnaire-like sur la zone — `sub[cell, gauss, "name"]`.
+z[0, 2, "nu"] = 0.28
+assert z[0, 2, "nu"] == 0.28
 
-# Constructeur compact pour matériau homogène multi-composantes.
-mat = pyrucast.ElementField.from_uniform_per_component(
-    sub, ["E", "nu", "rho"], [210e9, 0.3, 7800.0],
-)
+# Stats et arithmétique au niveau agrégat.
+print(mat.min("E"), mat.max("E"))   # 210000000000.0 210000000000.0
+mat.mul_to_component("E", 0.95)     # en place, seulement "E"
+scaled = mat * 1.1                  # nouveau champ
+
+# Composantes par sous-espace (multiphysique / multi-matériau).
+ef = pyrucast.ElementField.with_components_per_subspace(fes, [["E", "nu"]])
+print(ef.components())              # ['E', 'nu']
 ```
+
+Le plus souvent, on ne construit pas le champ matériau à la main : on appelle
+l'opérateur [`material_field`](operateurs/construction.md) qui apparie les zones aux
+sous-modèles consommateurs de matériau et ignore les autres (Dirichlet, …).
+
+## Visualisation
+
+`element_field.plot(...)` colore le champ **sur son propre support** : chaque
+zone retrouve son sous-maillage via son sous-espace EF (partagé, pas copié). Le
+rendu raisonne **par élément** — les valeurs nodales viennent d'un moindre
+carré local à l'élément sur les valeurs de Gauss, sans moyenne inter-éléments,
+de sorte que les **discontinuités (flux, contraintes) restent visibles**. Voir
+[Visualisation](visualization.md).
 
 ## Sérialisation
 
-`ElementField` implémente `Persist` via `serde` (comme tous les objets pyrucast). Le swap disque et la future sauvegarde fichier le traversent sans intervention de l'utilisateur ; seul le buffer de valeurs, la liste de noms et le `Handle<SubFiniteElementSpace>` voyagent dans le format binaire portable Linux ↔ Windows.
+`SubElementField` (et donc `ElementField`) implémente `Persist` via `serde`
+comme tous les objets pyrucast. Le swap disque et la future sauvegarde fichier
+le traversent sans intervention : seuls le buffer de valeurs, la liste de noms
+et le `Handle<SubFiniteElementSpace>` voyagent dans le format binaire portable
+Linux ↔ Windows.
 
 ## Limitations actuelles
 
-- L'`ElementField` est dimensionné par un seul `SubFiniteElementSpace`. Pour des grandeurs définies sur un maillage agrégé (`FiniteElementSpace`), il faudra construire un `ElementField` par sous-espace et les combiner côté utilisateur. Une variante agrégée pourra être ajoutée si le besoin se mesure.
-- Pas encore d'opérations entre `ElementField` (addition champ + champ, contraction, etc.). À venir avec les premiers besoins concrets de l'assemblage et du post-traitement.
-- Pas de mécanisme de **rééchantillonnage** entre quadratures (par exemple « projeter ce champ Gauss-2-points sur un autre Gauss-3-points »). Le sous-espace est implicitement figé à la création du champ.
+- Pas de mécanisme de **rééchantillonnage** entre quadratures (« projeter ce
+  champ Gauss-2-points sur un autre Gauss-3-points ») : le sous-espace est figé
+  à la création de chaque zone.
+- L'arithmétique binaire entre champs est **stricte** (même support, mêmes
+  composantes ; cf. [Champ](field.md)) — il n'y a pas (encore) de combinaison
+  tolérante avec rééchantillonnage ou complétion par zéro.

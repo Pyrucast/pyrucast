@@ -26,7 +26,7 @@ détermine `D` :
 - **primal** : `u_x, u_y(, u_z)` — **dual** : `f_x, f_y(, f_z)`.
 - **matériau** : `E` (Young), `nu` (Poisson).
 - **comportement** (`COMP`) : `σ = D ε` (convention tenseur → ingénieur
-  `γ = 2ε`), à partir de la déformation `ε` (op [`deformation`](../node-field.md)).
+  `γ = 2ε`), à partir de la déformation `ε` (op [`deformation`](../operateurs/champs.md)).
 
 ## Mise en donnée (Rust, testé)
 

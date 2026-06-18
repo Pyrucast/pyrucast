@@ -25,7 +25,7 @@ Le nom de la classe Python est identique au nom de la structure Rust.
 | Module Rust | Structure Rust | Classe Python | Chapitre |
 |---|---|---|---|
 | `containers::mesh::coords` | `Coords` | `pyrucast.Coords` | [Coords](coords.md) |
-| `containers::mesh::node` | `Node` | `pyrucast.Node` | [Coords](coords.md) |
+| `containers::mesh::node` | `Node` | `pyrucast.Node` | [Nœud](node.md) |
 | `containers::mesh` | `SubMesh` | `pyrucast.SubMesh` *(vue, via `mesh[i]`)* | [Maillage](mesh.md) |
 | `containers::mesh` | `Mesh` | `pyrucast.Mesh` | [Maillage](mesh.md) |
 | `containers::mesh::cell` | `Cell` | `pyrucast.Cell` | [Maillage](mesh.md) |
@@ -71,16 +71,21 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `sweep_qua4(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_qua4(mesh_a, mesh_b, n_layers) -> Mesh` |
 | `extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Mesh` | `extrude(mesh, direction, n_layers) -> Mesh` |
 | `fill_surface(contour: &Mesh, et: ElementType, refinement: Option<…>) -> Mesh` | `fill_surface(contour, element_type, max_edge_length=None, min_angle_deg=None) -> Mesh` |
+| `barycenter(mesh: &Mesh) -> Mesh` | `barycenter(mesh) -> Mesh` |
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
 | `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` (dispatch par type, partagé avec `NodeField`) |
 
-### `ops::field` — opérateurs sur les champs aux nœuds
+### `ops::field` — opérateurs sur les champs
 
 | Rust (`ops::field::…`) | Python (`pyrucast.…`) |
 |---|---|
 | `coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `coordinates(mesh, components=None) -> NodeField` |
 | `set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> ()` | `set_coordinates(field, components=None) -> None` |
 | `displace(field: &NodeField, components: Option<Vec<String>>) -> ()` | `displace(field, components=None) -> None` |
+| `gradient(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `gradient(field, fespace) -> ElementField` |
+| `deformation(u: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `deformation(u, fespace) -> ElementField` |
+| `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `beam_deformation(field, fespace) -> ElementField` |
+| `divergence(field: &ElementField) -> NodeField` | `divergence(field) -> NodeField` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` (dispatch par type, partagé avec `Mesh`) |
@@ -103,6 +108,13 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 |---|---|
 | `stiffness(model: &Model, materials: &ElementField) -> Matrix` | `stiffness(model, materials) -> Matrix` |
 | `mass(model: &Model) -> Matrix` | `mass(model) -> Matrix` |
+| `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
+
+### `ops::behavior` — intégration du comportement (`COMP`)
+
+| Rust (`ops::behavior::…`) | Python (`pyrucast.…`) |
+|---|---|
+| `integrate(model: &Model, deformation: &ElementField, materials: &ElementField) -> ElementField` | `integrate_behavior(model, deformation, materials) -> ElementField` |
 
 ### `ops::solver` — résolution
 
@@ -128,17 +140,23 @@ structurelle) et `__str__` (← `Display`, vue résumée façon cast3m) — voir
 
 ### Arithmétique sur les champs
 
-| Classe | Opérateurs Python | Sémantique | Trait Rust |
-|---|---|---|---|
-| `SubNodeField` | `f + s`, `f - s`, `f * s`, `f / s` | composante par composante avec un scalaire `s` | `Add`/`Sub`/`Mul`/`Div<f64>` |
-| `SubElementField` | `f + s`, `f - s`, `f * s`, `f / s` | scalaire, composante par composante | `Add`/`Sub`/`Mul`/`Div<f64>` |
+L'arithmétique scalaire (`f + s`, …) existe **au niveau zone et au niveau
+agrégat** ; les opérations par composante et entre champs sont portées par les
+traits [`SubField` / `Field`](field.md).
 
-> `f + s` renvoie un **nouveau** champ ; `+= ` n'est pas surchargé.
-> L'arithmétique scalaire vit au niveau **zone** (`SubNodeField`,
-> `SubElementField`). La **composition** de zones, elle, n'est **pas** sur `+` :
-> c'est l'union `|` (`union` en Rust, cf. ci-dessous) — `+` reste libre pour la
-> future addition réelle de champs. Pour fusionner des valeurs avec
-> vérification : `merge(a, b)` ≡ `a | b`.
+| Classe | Opérateurs / méthodes Python | Sémantique | Backing Rust |
+|---|---|---|---|
+| `SubNodeField` / `SubElementField` | `f + s`, `f - s`, `f * s`, `f / s` | broadcast scalaire, nouveau champ | `Add`/`Sub`/`Mul`/`Div<f64>` |
+| `NodeField` / `ElementField` | `f + s`, `f - s`, `f * s`, `f / s` | broadcast scalaire sur toutes les zones | `Field::combine_scalar` |
+| zone & agrégat | `add_to_component(c, s)`, `sub_/mul_/div_to_component` | scalaire sur **une** composante, en place | `SubField`/`Field::map_component` |
+| zone | `set_uniform(c, v)` | force une composante à `v` | `SubField::set_uniform` |
+
+> `f + s` renvoie un **nouveau** champ ; `+=` n'est pas surchargé. La
+> **composition** de zones n'est **pas** sur `+` : c'est l'union `|` (`union`
+> en Rust, cf. ci-dessous). L'opérateur `+` est entièrement réservé à
+> l'**arithmétique de champ** (scalaire aujourd'hui, addition champ + champ
+> via `combine_field` demain). Pour fusionner des zones avec vérification :
+> `merge(a, b)` ≡ `a | b`.
 
 ### Indexation par clé
 

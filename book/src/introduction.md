@@ -10,45 +10,43 @@
 
 ## Modèle d'objets (arbre de dépendances)
 
-Chaque structure ne dépend que des structures qui la précèdent dans le graphe.
-Les noms entre parenthèses sont des types auxiliaires (enum / primitif) sans état partagé.
+Chaque structure ne dépend que des structures qui la précèdent. La plupart
+viennent par **paire** zone / agrégat (`SubMesh`/`Mesh`…) — c'est le motif
+[Agrégat](aggregate.md), avec sa composition par union `|`.
 
 ```text
-Coords
-├── NodeId            (u32 opaque)
-├── Node              (accesseur RAII — maintient le refcount GC)
-├── NodeField         (valeurs par nœud × composante)
-└── SubMesh           (+ ElementType)
-      └── Mesh        (agrège N × SubMesh)
-            └── SubFiniteElementSpace  (+ Interpolation, QuadratureRule)
-                  ├── FiniteElementSpace  (agrège N × SubFiniteElementSpace)
-                  └── ElementField        (valeurs par cellule × point de Gauss)
+Coords ── Node                          (NodeId u32 stable ; Node = accesseur RAII)
+   │
+   ├── NodeField  (agrège des SubNodeField)        valeurs par nœud × composante
+   │
+   └── Mesh  (agrège des SubMesh, + ElementType)   géométrie
+          └── FiniteElementSpace  (agrège des SubFiniteElementSpace)
+                 │                  (+ Interpolation, QuadratureRule)
+                 ├── ElementField  (agrège des SubElementField)   valeurs aux Gauss
+                 └── Model  (agrège des SubModel : physiques + contraintes)
+                        └── ops::assemble ──► Matrix   (matrice creuse, DOFs nommés)
 
-SubFiniteElementSpace + ElementField ──► SubModel::HeatConduction ──┐
-Coords              ──► SubModel::Dirichlet       ├──► Model
-                                                         ┘
-NodeId ──► DofId ──► Matrix  (matrice creuse, DOFs nommés par (NodeId, champ))
-
-Model + NodeField (second membre) + Matrix ──► solve() ──► NodeField (solution)
+Model + ElementField (matériau) ──► stiffness ──► Matrix
+Matrix + NodeField (second membre) ──► solve ──► NodeField (solution)
 ```
+
+Deux **traits transverses** factorisent le comportement commun :
+[`Aggregate`](aggregate.md) (accès `len`/`[i]`/union `|`) et
+[`Field`/`SubField`](field.md) (composantes nommées, `min`/`max`, arithmétique),
+partagés entre `NodeField` et `ElementField`.
 
 Résumé des rôles :
 
-| Structure              | Rôle                                                              |
-|------------------------|-------------------------------------------------------------------|
-| `Coords`        | Référentiel de coordonnées de nœuds (plusieurs jeux possibles)    |
-| `NodeId`               | Identifiant opaque u32 d'un nœud                                  |
-| `Node`                 | Accesseur utilisateur avec protection GC automatique              |
-| `SubMesh`              | Cellules d'un même `ElementType` (SEG2, TRI3, …)                  |
-| `Mesh`                 | Union de sous-maillages                                           |
-| `NodeField`            | Valeurs scalaires ou vectorielles par nœud × composante           |
-| `SubFiniteElementSpace`           | Formulation EF sur un sous-maillage (interpolation + quadrature)  |
-| `FiniteElementSpace`   | Union de sous-espaces EF                                          |
-| `ElementField`         | Valeurs par cellule × point de Gauss × composante                 |
-| `SubModel`             | Physique locale : `HeatConduction` ou `Dirichlet`                 |
-| `Model`                | Problème physique complet (agrège N × SubModel)                   |
-| `DofId`                | Degré de liberté : `(NodeId, index de champ)`                     |
-| `Matrix`               | Matrice creuse dont les lignes/colonnes sont des `DofId`          |
+| Structure | Rôle |
+|---|---|
+| [`Coords`](coords.md) | Référentiel de coordonnées de nœuds (plusieurs configurations) |
+| [`Node`](node.md) | Accesseur utilisateur d'un nœud, avec protection GC automatique |
+| [`SubMesh`](mesh.md) / `Mesh` | Cellules d'un même `ElementType` / union de sous-maillages |
+| [`SubNodeField`](node-field.md) / `NodeField` | Valeurs par nœud × composante (zone / agrégat) |
+| [`SubFiniteElementSpace`](fe-space.md) / `FiniteElementSpace` | Formulation EF (interpolation + quadrature) / union |
+| [`SubElementField`](element-field.md) / `ElementField` | Valeurs par cellule × point de Gauss × composante |
+| [`SubModel`](model.md) / `Model` | Physique ou contrainte locale / problème complet |
+| [`SubMatrix`](matrix.md) / `Matrix` | Matrice creuse dont les lignes/colonnes sont des DOFs `(NodeId, champ)` |
 
 ## Premiers pas
 

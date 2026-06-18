@@ -1,6 +1,6 @@
 # Triangulation : briques mathématiques
 
-Ce chapitre rassemble les fondements mathématiques utilisés par `Mesh::fill_surface` et le module `pyrucast::ops::mesher::triangulation`. Toutes les formules sont écrites avec la convention de pyrucast : points 2D notés \\( P = (x, y) \\), points 3D notés \\( P = (x, y, z) \\), vecteurs en gras, produit scalaire \\( \cdot \\), produit vectoriel \\( \times \\).
+Ce chapitre rassemble les fondements mathématiques utilisés par `fill_surface` et le module `pyrucast::ops::mesher::triangulation`. Toutes les formules sont écrites avec la convention de pyrucast : points 2D notés \\( P = (x, y) \\), points 3D notés \\( P = (x, y, z) \\), vecteurs en gras, produit scalaire \\( \cdot \\), produit vectoriel \\( \times \\).
 
 ## Aire signée d'un polygone 2D (formule du lacet)
 
@@ -16,7 +16,7 @@ avec la convention d'indices modulo \\(n\\). Le signe de \\(A\\) encode l'orient
 - \\( A < 0 \\) : sens **horaire** (CW) ;
 - \\( A \approx 0 \\) : polygone dégénéré (sommets colinéaires).
 
-Implémentation : [`signed_area`](https://docs.rs/pyrucast) dans `src/triangulation.rs`.
+Implémentation : `signed_area` dans `src/ops/mesher/triangulation.rs`.
 
 ```rust,ignore
 use pyrucast::mesh::point::Point2;
@@ -40,7 +40,7 @@ assert!((signed_area(&pts_cw) + 1.0).abs() < 1e-12);
 
 ## Ear clipping : usage direct
 
-La fonction `ear_clip_2d` est utilisable indépendamment de `Mesh::fill_surface` sur n'importe quel polygone 2D simple :
+La fonction `ear_clip_2d` est utilisable indépendamment de `fill_surface` sur n'importe quel polygone 2D simple :
 
 ```rust,ignore
 use pyrucast::mesh::point::Point2;

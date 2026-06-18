@@ -28,7 +28,7 @@ pour le cisaillement). L'intégration réduite du cisaillement évite le
 - **matériau** : `E`, `I`, `G`, `A_s` (aire de cisaillement `κ·A`).
 - **comportement** (`COMP`) : efforts de section `M = E·I·κ` (moment) et
   `V = G·A_s·γ` (effort tranchant), à partir des déformations `(κ, γ)`
-  produites par l'op [`beam_deformation`](../node-field.md) — évaluées de façon
+  produites par l'op [`beam_deformation`](../operateurs/champs.md) — évaluées de façon
   **réduite** (constantes par élément), donc sans cisaillement parasite.
 
 ## Mise en donnée (Rust, testé)
