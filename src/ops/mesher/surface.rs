@@ -79,7 +79,7 @@ pub fn surface(
         }
     };
     if let Some(h) = target_size {
-        if !(h > 0.0) {
+        if h <= 0.0 || h.is_nan() {
             return Err(PyrucastError::Message(format!(
                 "surface: target_size must be > 0, got {}",
                 h
@@ -335,7 +335,7 @@ fn pave_single(ring: &[Point2], target_size: Option<f64>, nbnn: usize) -> Result
         perim += (ring[(i + 1) % n0] - ring[i]).norm();
     }
     let xmoy = target_size.unwrap_or(perim / n0 as f64);
-    if !(xmoy > 0.0) {
+    if xmoy <= 0.0 || xmoy.is_nan() {
         return Err(PyrucastError::Message(
             "surface: could not determine a positive element size".into(),
         ));
