@@ -16,6 +16,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, QUA4→HEX8, …) |
 | `sweep_qua4(mesh_a, mesh_b, n_layers)` | tisse des `QUA4` entre deux lignes `SEG2` |
 | `fill_surface(contour, type, …)` | triangule l'intérieur d'un contour fermé (voir plus bas) |
+| `surface(contour, type, size=None)` | maille l'intérieur d'un contour par **front avançant** avec création de nœuds internes (voir plus bas) |
 | `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
 | `consolidate(mesh)` | fusionne les sous-maillages de même type (dispatch partagé avec `NodeField`) |
@@ -179,3 +180,82 @@ prend un `Option<RefinementOptions>` (`max_edge_length`, `min_angle_deg`). Le mo
 `delaunay_2d`, `constrained_delaunay_2d`, `triangulate_polygon_with_holes`) —
 toutes opèrent sur des tableaux bruts, réutilisables indépendamment du système
 `Mesh` (voir [Triangulation](../triangulation.md)).
+
+## Mailleur frontal : `surface`
+
+`surface(contour, element_type, size=None)` remplit l'intérieur d'un contour
+fermé par un **front avançant** qui **crée des nœuds internes** pour respecter
+une taille de maille cible — là où `fill_surface` ne triangule que les nœuds
+du bord. C'est l'analogue de l'opérateur `SURF` historique.
+
+`element_type` vaut `"TRI3"` ou `"QUA4"` ; `size` fixe la longueur d'arête
+visée (par défaut : longueur moyenne des segments du contour). Le contour peut
+être en 2D, ou une boucle **quasi planaire** en 3D (projetée sur son plan de
+meilleure approximation, maillée, puis relevée — même contrôle de planéité que
+`fill_surface`).
+
+### Méthode
+
+1. **Épluchage des coins.** On retire itérativement le coin convexe le plus
+   aigu du front sous forme de triangle (« oreille ») ; une arête de fermeture
+   plus longue que `1.5 × size` est **bissectée** par un nœud neuf (deux
+   triangles) pour ne pas créer d'élément trop grand.
+2. **Couche frontale.** Quand aucun coin n'est assez aigu, tout le front est
+   **décalé vers l'intérieur** d'environ une taille de maille (bissectrice
+   intérieure), et une bande d'éléments est pavée entre le front et son
+   décalé ; le décalé devient le nouveau front et le procédé récurse. Une
+   cellule de bande est un quadrangle en mode QUA4, deux triangles en TRI3.
+3. **Fermeture par éventail.** Lorsque le front convexe s'est réduit à un
+   point, on le ferme par un éventail autour de son centroïde : triangles en
+   TRI3, éventail de quadrangles (avec au plus un triangle résiduel si le
+   nombre de nœuds est impair) en QUA4.
+
+Comme l'opérateur d'origine, un maillage **QUA4 est *quad-dominant*** : le
+résultat peut porter à la fois un sous-maillage `QUA4` et un sous-maillage
+`TRI3` (coins aigus, repli concave, éventail de fermeture). Les éléments sont
+orientés **CCW**.
+
+> **`surface` vs `fill_surface`.** `fill_surface` triangule les nœuds donnés
+> (ear clipping / Delaunay contraint, raffinement optionnel) et gère
+> nativement les **trous**. `surface` crée des nœuds internes pour une taille
+> contrôlée façon front avançant. Choisir `surface` pour un maillage de taille
+> homogène imposée ; `fill_surface` pour trianguler un contour (avec trous) ou
+> raffiner par critère d'arête/angle.
+
+### Exemple Python
+
+```python
+import pyrucast, math
+
+c = pyrucast.Coords(dim=2)
+# Contour : cercle discrétisé (rayon 5, 40 segments).
+nodes = [
+    c.add_node([5.0 * math.cos(2*math.pi*i/40), 5.0 * math.sin(2*math.pi*i/40)])
+    for i in range(40)
+]
+contour = pyrucast.Mesh(c, "SEG2")
+sm = contour[0]
+for i in range(40):
+    sm.add_cell([nodes[i], nodes[(i + 1) % 40]])
+
+# Maillage frontal en triangles de taille ~1.0 (nœuds internes créés).
+tri = pyrucast.surface(contour, "TRI3", 1.0)
+print(tri.element_types(), tri.cell_count())
+
+# Variante quad-dominante.
+quad = pyrucast.surface(contour, "QUA4", 1.0)
+print(quad.element_types())   # ['QUA4', 'TRI3'] en général
+```
+
+### Limitations actuelles
+
+- **Un seul contour** (pas de trous) : pour mailler un domaine troué, utiliser
+  `fill_surface` (CDT) en attendant la séparation/fusion de contours.
+- **Taille uniforme** : le champ de densité par nœud (un `size` variable, façon
+  `CHPO1`) n'est pas encore exposé.
+- Le pavage en couches utilise un décalage 1:1 sans rééchantillonnage
+  circonférentiel : la qualité près du centre est correcte mais perfectible.
+
+Côté Rust, `ops::mesher::surface(&contour, ElementType::TRI3, Some(1.0))`. Le
+cœur géométrique (`pave_single`) opère sur de simples `Vec<Point2>` sans
+toucher au store — frontière nette pour un futur parallélisme intra-opérateur.
