@@ -17,6 +17,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `sweep_qua4(mesh_a, mesh_b, n_layers)` | tisse des `QUA4` entre deux lignes `SEG2` |
 | `fill_surface(contour, type, …)` | triangule l'intérieur d'un contour fermé (voir plus bas) |
 | `surface(contour, type, size=None)` | maille l'intérieur d'un contour par **front avançant** avec création de nœuds internes (voir plus bas) |
+| `contour(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
 | `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
 | `consolidate(mesh)` | fusionne les sous-maillages de même type (dispatch partagé avec `NodeField`) |
@@ -267,3 +268,45 @@ d'interruption (timeout, drapeau partagé…) — voir
 Côté Rust, `ops::mesher::surface(&contour, ElementType::TRI3, Some(1.0))`. Le
 cœur géométrique (`pave_single`) opère sur de simples `Vec<Point2>` sans
 toucher au store — frontière nette pour un futur parallélisme intra-opérateur.
+
+## Bord d'une surface : `contour`
+
+`contour(mesh)` est l'**inverse** de `fill_surface` / `surface` : il prend un
+maillage de surface (cellules `TRI3` / `QUA4`) et renvoie son **bord** sous
+forme de boucles `SEG2` fermées.
+
+Une arête de cellule utilisée par **exactement une** cellule est une arête de
+bord ; les arêtes intérieures sont partagées par deux cellules (orientations
+opposées) et s'annulent. Les arêtes de bord de **tous** les sous-maillages de
+surface sont regroupées — la sortie `QUA4` + `TRI3` de `surface` donne donc un
+bord commun unique — puis chaînées en boucles fermées.
+
+Le résultat est un `Mesh` avec **un sous-maillage SEG2 par boucle** : une seule
+boucle pour un domaine simplement connexe, plusieurs quand le domaine a des
+trous ou des morceaux disjoints — d'où les « n contours ». Chaque boucle garde
+l'orientation CCW du bord (boucle extérieure CCW, trous CW) : le résultat peut
+donc **réalimenter directement** `surface` / `fill_surface`. Les nœuds d'origine
+sont réutilisés (et re-référencés).
+
+```python
+import pyrucast
+
+c = pyrucast.Coords(dim=2)
+center = c.add_node([0.0, 0.0])
+disc = pyrucast.fill_surface(
+    pyrucast.circle_seg2(center, [0.0, 0.0, 1.0], 2.0, 16), "TRI3"
+)
+
+bord = pyrucast.contour(disc)
+print(len(bord))                 # 1  (domaine simplement connexe)
+print(bord.element_types())      # ['SEG2']
+print(bord.cell_counts())        # [16]
+```
+
+Les sous-maillages POI1 (un point n'a pas d'arête) sont ignorés. La fonction
+lève une erreur si le maillage n'a aucune cellule de surface, s'il porte des
+cellules autres que POI1/TRI3/QUA4 (les bords 1D et 3D ne sont pas encore
+gérés), ou si le bord n'est pas un ensemble propre de boucles fermées (arête
+ouverte ou non-manifold).
+
+Côté Rust, `ops::mesher::contour(&mesh)`.

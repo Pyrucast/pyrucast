@@ -27,6 +27,7 @@ __all__ = [
     "beam_deformation",
     "circle_seg2",
     "consolidate",
+    "contour",
     "coordinates",
     "cos",
     "cosh",
@@ -1515,6 +1516,18 @@ def consolidate(obj: typing.Any) -> typing.Any:
       element type, drop duplicate cells;
     - `NodeField` → `ops::field::consolidate`: fuse zones with the same
       component set, dedupe interface nodes after a coherence check.
+    """
+
+def contour(mesh: Mesh) -> Mesh:
+    r"""
+    Extract the boundary of a surface mesh (TRI3/QUA4) as closed SEG2 loops.
+    
+    An element edge used by exactly one cell is a boundary edge; the boundary
+    edges (pooled across all surface submeshes) are chained into closed loops.
+    Returns a Mesh with one SEG2 submesh per loop — a single loop for a
+    simply-connected domain, several when the domain has holes or disjoint
+    pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
+    CW), so the result can feed straight back into `surface` / `fill_surface`.
     """
 
 def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:

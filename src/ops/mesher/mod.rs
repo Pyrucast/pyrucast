@@ -12,6 +12,7 @@
 pub mod barycenter;
 pub mod circle_seg2;
 pub mod consolidate;
+pub mod contour;
 pub mod extrude;
 pub mod fill_surface;
 pub mod from_live_nodes;
@@ -25,6 +26,7 @@ pub mod triangulation;
 pub use barycenter::barycenter;
 pub use circle_seg2::circle_seg2;
 pub use consolidate::consolidate;
+pub use contour::contour;
 pub use extrude::extrude;
 pub use fill_surface::fill_surface;
 pub use from_live_nodes::from_live_nodes;

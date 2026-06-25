@@ -66,6 +66,21 @@ pub fn barycenter(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 // `consolidate(mesh)` is exposed by the type-dispatching top-level
 // wrapper in `crate::py::ops::consolidate` (shared with NodeField).
 
+/// Extract the boundary of a surface mesh (TRI3/QUA4) as closed SEG2 loops.
+///
+/// An element edge used by exactly one cell is a boundary edge; the boundary
+/// edges (pooled across all surface submeshes) are chained into closed loops.
+/// Returns a Mesh with one SEG2 submesh per loop — a single loop for a
+/// simply-connected domain, several when the domain has holes or disjoint
+/// pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
+/// CW), so the result can feed straight back into `surface` / `fill_surface`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn contour(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::contour(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
 /// Build a line of `n_elems` SEG2 elements from node `a` to node `b`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
