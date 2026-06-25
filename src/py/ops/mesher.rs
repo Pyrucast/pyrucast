@@ -131,3 +131,25 @@ pub fn fill_surface(
     let mesh = crate::ops::mesher::fill_surface(&contour.inner, et, refinement)?;
     Ok(PyMesh { inner: mesh })
 }
+
+/// Mesh the interior of a closed SEG2 `contour` with `element_type` cells
+/// using a size-controlled advancing front that **creates interior nodes**
+/// (unlike `fill_surface`, which only triangulates the contour nodes).
+///
+/// `size` sets the target element edge length; `None` uses the mean length
+/// of the contour's segments. Currently supports a single planar (2-D)
+/// contour with TRI3 elements.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (contour, element_type, size=None))]
+pub fn surface(
+    contour: PyRef<PyMesh>,
+    element_type: &str,
+    size: Option<f64>,
+) -> PyResult<PyMesh> {
+    let et = ElementType::from_name(element_type).ok_or_else(|| {
+        PyValueError::new_err(format!("unknown element type: {element_type}"))
+    })?;
+    let mesh = crate::ops::mesher::surface(&contour.inner, et, size)?;
+    Ok(PyMesh { inner: mesh })
+}

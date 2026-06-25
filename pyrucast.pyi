@@ -48,6 +48,7 @@ __all__ = [
     "solve",
     "stiffness",
     "sub_material_field",
+    "surface",
     "swap_dir",
     "sweep_qua4",
     "to_poi1",
@@ -1662,6 +1663,17 @@ def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequen
     SubElementField on the sub-model's FE subspace, pre-filled with the
     given uniform value per declared component. Errors for physics that
     need no material (e.g. Dirichlet).
+    """
+
+def surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Mesh the interior of a closed SEG2 `contour` with `element_type` cells
+    using a size-controlled advancing front that **creates interior nodes**
+    (unlike `fill_surface`, which only triangulates the contour nodes).
+    
+    `size` sets the target element edge length; `None` uses the mean length
+    of the contour's segments. Currently supports a single planar (2-D)
+    contour with TRI3 elements.
     """
 
 def swap_dir() -> pathlib.Path:

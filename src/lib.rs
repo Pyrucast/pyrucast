@@ -91,6 +91,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesher::sweep_qua4, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::extrude, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::fill_surface, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::to_poi1, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::barycenter, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::consolidate, m)?)?;
