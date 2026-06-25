@@ -61,12 +61,33 @@ def test_surface_default_size():
     assert abs(_total_area(tri) - 4.0) < 1e-12
 
 
-def test_surface_rejects_quad_for_now():
+def test_surface_qua4_square_is_one_quad():
+    c = pyrucast.Coords(2)
+    contour = _contour(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+    q = pyrucast.surface(contour, "QUA4", 10.0)
+    assert q.element_types() == ["QUA4"]
+    assert q.cell_count() == 1
+
+
+def test_surface_qua4_circle_quad_dominant():
+    c = pyrucast.Coords(2)
+    nseg, r = 32, 4.0
+    pts = [
+        (r * math.cos(2 * math.pi * i / nseg), r * math.sin(2 * math.pi * i / nseg))
+        for i in range(nseg)
+    ]
+    contour = _contour(c, pts)
+    mesh = pyrucast.surface(contour, "QUA4", 0.8)
+    types = mesh.element_types()
+    assert "QUA4" in types
+
+
+def test_surface_rejects_unsupported_element():
     c = pyrucast.Coords(2)
     contour = _contour(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
     try:
-        pyrucast.surface(contour, "QUA4")
+        pyrucast.surface(contour, "TET4")
     except RuntimeError:
         pass
     else:
-        raise AssertionError("expected RuntimeError for QUA4 (not yet supported)")
+        raise AssertionError("expected RuntimeError for unsupported element type")

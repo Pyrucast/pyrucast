@@ -12,16 +12,22 @@
 //!    first; a closing edge longer than `1.5 × size` is **bisected** with a
 //!    fresh node instead, splitting the ear into two triangles.
 //! 2. **Frontal layer** — when no corner is sharp enough to peel, the whole
-//!    front is offset inward by ~one element size and a strip of triangles
-//!    is paved between the front and its offset; the offset becomes the new
-//!    front and the process recurses.
-//! 3. **Centroid fan** — once a convex front has shrunk to roughly a point,
-//!    it is closed with a fan of triangles around its centroid.
+//!    front is offset inward by ~one element size and a strip of elements is
+//!    paved between the front and its offset; the offset becomes the new
+//!    front and the process recurses. A strip cell is a quadrangle in QUA4
+//!    mode and two triangles in TRI3 mode.
+//! 3. **Fan closure** — once a convex front has shrunk to roughly a point,
+//!    it is closed with a fan around its centroid: triangles in TRI3 mode, a
+//!    fan of quadrangles (with at most one leftover triangle) in QUA4 mode.
 //!
-//! This first cut handles a **single planar (2-D) contour** with **TRI3**
-//! elements and a **uniform** target size. Holes (multiple loops), the
-//! quadrangle variant, the per-node density field and 3-D contour
-//! projection are layered on top in later steps.
+//! `element_type` may be **TRI3** or **QUA4**. As with the classic operator,
+//! a QUA4 mesh is *quad-dominant* but may contain a few triangles (sharp
+//! corners and fan leftovers); the result is then a [`Mesh`] with a QUA4
+//! submesh and, where needed, a TRI3 submesh.
+//!
+//! This step handles a **single planar (2-D) contour** with a **uniform**
+//! target size. Holes (multiple loops), the per-node density field and 3-D
+//! contour projection are layered on top in later steps.
 
 use crate::aggregate::Aggregate;
 use crate::containers::mesh::{ElementType, Mesh, Node, NodeId, Point2, SubMesh, Vector2};
@@ -35,35 +41,40 @@ const EPS_FACTOR: f64 = 1e-9;
 
 /// Interior-angle ceiling (radians) for the *sharp* peeling pass: only
 /// corners strictly sharper than this are clipped before the front is
-/// advanced as a layer. ~91.7°, matching the classic operator's TRI3
-/// threshold.
+/// advanced as a layer. ~91.7°, matching the classic operator's threshold.
 const SHARP_PEEL_ANGLE: f64 = 1.6;
 
 /// Inward offset of a frontal layer, as a fraction of the target size.
 const LAYER_OFFSET: f64 = 0.85;
 
-/// Fill the interior of a closed **SEG2** contour with **TRI3** elements
-/// using the frontal method described in the module docs.
+/// Fill the interior of a closed **SEG2** contour using the frontal method
+/// described in the module docs.
 ///
 /// `contour` must currently be a [`Mesh`] with **exactly one** SEG2 submesh
 /// forming a single closed simple loop, attached to a **2-D** `Coords`.
-/// `target_size` sets the desired element edge length; `None` uses the mean
+/// `element_type` is [`ElementType::TRI3`] or [`ElementType::QUA4`];
+/// `target_size` sets the desired element edge length, `None` uses the mean
 /// length of the contour's segments.
 ///
 /// The original contour nodes are reused (and re-referenced); interior
-/// nodes are created in the same `Coords`. Output triangles are oriented
-/// **CCW**.
+/// nodes are created in the same `Coords`. Output elements are oriented
+/// **CCW**. In QUA4 mode the result may carry both a QUA4 and a TRI3 submesh
+/// (quad-dominant with a few triangles).
 pub fn surface(
     contour: &Mesh,
     element_type: ElementType,
     target_size: Option<f64>,
 ) -> Result<Mesh> {
-    if element_type != ElementType::TRI3 {
-        return Err(PyrucastError::Message(format!(
-            "surface: only TRI3 is supported for now, got {}",
-            element_type
-        )));
-    }
+    let nbnn = match element_type {
+        ElementType::TRI3 => 3usize,
+        ElementType::QUA4 => 4usize,
+        other => {
+            return Err(PyrucastError::Message(format!(
+                "surface: only TRI3 and QUA4 are supported, got {}",
+                other
+            )))
+        }
+    };
     if let Some(h) = target_size {
         if !(h > 0.0) {
             return Err(PyrucastError::Message(format!(
@@ -104,23 +115,48 @@ pub fn surface(
     };
 
     // 3. Pave.
-    let (all_pts, triangles) = pave_tri3_single(&points, target_size)?;
+    let paved = pave_single(&points, target_size, nbnn)?;
 
     // 4. Create one node per interior (Steiner) point; map every point
     //    index to a NodeId.
-    let mut flat_to_node: Vec<NodeId> = Vec::with_capacity(all_pts.len());
+    let mut flat_to_node: Vec<NodeId> = Vec::with_capacity(paved.points.len());
     flat_to_node.extend_from_slice(&chain);
-    let mut _steiner: Vec<Node> = Vec::with_capacity(all_pts.len() - n0);
-    for p in &all_pts[n0..] {
+    let mut _steiner: Vec<Node> = Vec::with_capacity(paved.points.len() - n0);
+    for p in &paved.points[n0..] {
         let node = Node::create_in(coords.clone(), &[p.x, p.y])?;
         flat_to_node.push(node.id());
         _steiner.push(node);
     }
 
-    // 5. Build the TRI3 mesh.
-    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
-    for [i, j, k] in triangles {
-        mesh.add_cell(&[flat_to_node[i], flat_to_node[j], flat_to_node[k]])?;
+    // 5. Build the mesh — a QUA4 submesh and/or a TRI3 submesh.
+    let mut parts: Vec<Mesh> = Vec::with_capacity(2);
+    if !paved.quads.is_empty() {
+        let mut qm = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+        for [i, j, k, l] in &paved.quads {
+            qm.add_cell(&[
+                flat_to_node[*i],
+                flat_to_node[*j],
+                flat_to_node[*k],
+                flat_to_node[*l],
+            ])?;
+        }
+        parts.push(qm);
+    }
+    if !paved.tris.is_empty() {
+        let mut tm = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        for [i, j, k] in &paved.tris {
+            tm.add_cell(&[flat_to_node[*i], flat_to_node[*j], flat_to_node[*k]])?;
+        }
+        parts.push(tm);
+    }
+    if parts.is_empty() {
+        return Err(PyrucastError::Message(
+            "surface: paving produced no element".into(),
+        ));
+    }
+    let mut mesh = parts.remove(0);
+    for p in &parts {
+        mesh = mesh.union(p)?;
     }
     Ok(mesh)
 }
@@ -185,18 +221,25 @@ fn trace_single_loop(contour: &Mesh) -> Result<Vec<NodeId>> {
     Ok(chain)
 }
 
-/// Core 2-D frontal mesher for a single closed ring, TRI3.
+/// Output of the pure 2-D pavement: the full point list (originals first,
+/// then interior points) and the elements as index tuples into it.
+struct Paved {
+    points: Vec<Point2>,
+    tris: Vec<[usize; 3]>,
+    quads: Vec<[usize; 4]>,
+}
+
+/// Core 2-D frontal mesher for a single closed ring.
 ///
 /// `ring` lists the ring points in order (the loop closes implicitly from
 /// the last back to the first; the last point must not repeat the first).
-/// Returns the full point list — the first `ring.len()` entries are the
-/// input points **unchanged and in order**, followed by the interior points
-/// created during paving — together with the triangles as index triples
-/// into that list. All triangles are oriented CCW.
-fn pave_tri3_single(
-    ring: &[Point2],
-    target_size: Option<f64>,
-) -> Result<(Vec<Point2>, Vec<[usize; 3]>)> {
+/// `nbnn` is 3 (TRI3) or 4 (QUA4). The returned [`Paved::points`] starts
+/// with the input points **unchanged and in order**, followed by the
+/// interior points created during paving; all elements are CCW.
+///
+/// Operates purely on plain vectors — no store access — so it stays a clean
+/// target for future intra-operator parallelism.
+fn pave_single(ring: &[Point2], target_size: Option<f64>, nbnn: usize) -> Result<Paved> {
     let n0 = ring.len();
     if n0 < 3 {
         return Err(PyrucastError::Message(format!(
@@ -234,6 +277,7 @@ fn pave_tri3_single(
     let eps = xmoy * EPS_FACTOR;
 
     let mut tris: Vec<[usize; 3]> = Vec::new();
+    let mut quads: Vec<[usize; 4]> = Vec::new();
 
     // Generous safety cap: paving must shrink the front each iteration.
     let mut guard = 0usize;
@@ -256,10 +300,14 @@ fn pave_tri3_single(
             break;
         }
         if m < 3 {
-            // A degenerate sliver remains; nothing valid to emit.
             return Err(PyrucastError::Message(
                 "surface: front collapsed to fewer than 3 nodes".into(),
             ));
+        }
+        // Close a convex 4-node front directly as one quad in QUA4 mode.
+        if nbnn == 4 && m == 4 && is_convex(&pts, &front, eps) {
+            quads.push([front[0], front[1], front[2], front[3]]);
+            break;
         }
 
         // 1. Sharp peel: clip the sharpest convex ear (θ < SHARP_PEEL_ANGLE).
@@ -270,7 +318,7 @@ fn pave_tri3_single(
 
         // 2. Frontal layer when the (convex) front is smooth.
         if is_convex(&pts, &front, eps) {
-            advance_layer(&mut pts, &mut front, &mut tris, xmoy, eps);
+            advance_layer(&mut pts, &mut front, &mut tris, &mut quads, nbnn, xmoy, eps);
             continue;
         }
 
@@ -286,7 +334,11 @@ fn pave_tri3_single(
         ));
     }
 
-    Ok((pts, tris))
+    Ok(Paved {
+        points: pts,
+        tris,
+        quads,
+    })
 }
 
 /// Signed area of the polygon described by `front` (indices into `pts`).
@@ -385,14 +437,17 @@ fn peel_or_bisect(
 }
 
 /// Advance the whole (convex) front inward by one layer: offset every node
-/// along its inward bisector by `LAYER_OFFSET × xmoy`, pave a strip of
-/// triangles between the front and its offset, and replace the front by the
-/// offset. When the offset would collapse the front, close it with a
-/// centroid fan instead (and empty the front).
+/// along its inward bisector by `LAYER_OFFSET × xmoy`, pave a strip of cells
+/// between the front and its offset, and replace the front by the offset.
+/// When the offset would collapse the front, close it with a fan instead
+/// (and empty the front). Strip and fan cells are quadrangles in QUA4 mode
+/// (`nbnn == 4`), triangles in TRI3 mode.
 fn advance_layer(
     pts: &mut Vec<Point2>,
     front: &mut Vec<usize>,
     tris: &mut Vec<[usize; 3]>,
+    quads: &mut Vec<[usize; 4]>,
+    nbnn: usize,
     xmoy: f64,
     eps: f64,
 ) {
@@ -426,7 +481,7 @@ fn advance_layer(
     let cur_area = front_area(pts, front);
     let inner_area = signed_area(&off);
     if inner_area <= 0.3 * cur_area {
-        // Collapse: close with a centroid fan.
+        // Collapse: close with a fan around the centroid.
         let mut sum = Vector2::zeros();
         for &k in front.iter() {
             sum += pts[k].coords;
@@ -434,9 +489,7 @@ fn advance_layer(
         let centroid = Point2::from(sum / m as f64);
         let ci = pts.len();
         pts.push(centroid);
-        for k in 0..m {
-            tris.push([front[k], front[(k + 1) % m], ci]);
-        }
+        close_fan(front, tris, quads, nbnn, ci);
         front.clear();
         return;
     }
@@ -451,10 +504,42 @@ fn advance_layer(
         let p = front[kn];
         let q = inner[kn];
         let r = inner[k];
-        tris.push([o, p, q]);
-        tris.push([o, q, r]);
+        if nbnn == 4 {
+            quads.push([o, p, q, r]);
+        } else {
+            tris.push([o, p, q]);
+            tris.push([o, q, r]);
+        }
     }
     *front = inner;
+}
+
+/// Close the current ring `front` with a fan around the centroid node `ci`.
+/// TRI3: one triangle per edge. QUA4: a quad per pair of edges, plus at most
+/// one leftover triangle when the ring has an odd node count.
+fn close_fan(
+    front: &[usize],
+    tris: &mut Vec<[usize; 3]>,
+    quads: &mut Vec<[usize; 4]>,
+    nbnn: usize,
+    ci: usize,
+) {
+    let m = front.len();
+    if nbnn == 4 {
+        let mut k = 0;
+        while k + 2 <= m {
+            quads.push([front[k], front[(k + 1) % m], front[(k + 2) % m], ci]);
+            k += 2;
+        }
+        if k < m {
+            // Odd leftover edge (m odd): close it with a triangle.
+            tris.push([front[k], front[(k + 1) % m], ci]);
+        }
+    } else {
+        for k in 0..m {
+            tris.push([front[k], front[(k + 1) % m], ci]);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -480,18 +565,29 @@ mod tests {
         contour
     }
 
-    /// Total CCW area of the output triangles, and a check that each is CCW.
-    fn total_ccw_area(tri: &Mesh) -> f64 {
-        let n = tri.cell_count().unwrap();
+    /// Total CCW area over every submesh (TRI3 and/or QUA4), asserting each
+    /// element is convex and CCW.
+    fn total_ccw_area(mesh: &Mesh) -> f64 {
+        let types = mesh.element_types().unwrap();
+        let counts = mesh.cell_counts().unwrap();
         let mut total = 0.0;
-        for ci in 0..n {
-            let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
-            let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
-            let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
-            let a = 0.5
-                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
-            assert!(a > 0.0, "triangle {} not CCW (signed area {})", ci, a);
-            total += a;
+        for (si, et) in types.iter().enumerate() {
+            let npc = et.nodes_per_cell();
+            for ci in 0..counts[si] {
+                let p: Vec<Vec<f64>> = (0..npc)
+                    .map(|ni| mesh.node(si, ci, ni).unwrap().coord().unwrap())
+                    .collect();
+                // Shoelace area of the (CCW) polygon.
+                let mut a = 0.0;
+                for k in 0..npc {
+                    let u = &p[k];
+                    let w = &p[(k + 1) % npc];
+                    a += u[0] * w[1] - w[0] * u[1];
+                }
+                a *= 0.5;
+                assert!(a > 0.0, "submesh {} cell {} not CCW (area {})", si, ci, a);
+                total += a;
+            }
         }
         total
     }
@@ -503,37 +599,6 @@ mod tests {
                 (r * t.cos(), r * t.sin())
             })
             .collect()
-    }
-
-    #[test]
-    fn surface_square_peels_to_two_triangles() {
-        let coords = insert(Coords::new(2).unwrap());
-        // Unit square, target size ≥ diagonal ⇒ pure peeling, no interior nodes.
-        let contour =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
-        let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
-        assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
-        assert_eq!(tri.cell_count().unwrap(), 2);
-        assert!((total_ccw_area(&tri) - 1.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn surface_rejects_non_tri3() {
-        let coords = insert(Coords::new(2).unwrap());
-        let contour =
-            build_contour_2d(coords, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
-        assert!(surface(&contour, ElementType::QUA4, None).is_err());
-    }
-
-    #[test]
-    fn surface_rejects_multiple_contours() {
-        let coords = insert(Coords::new(2).unwrap());
-        let outer =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
-        let hole =
-            build_contour_2d(coords, &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]);
-        let combined = outer.union(&hole).unwrap();
-        assert!(surface(&combined, ElementType::TRI3, None).is_err());
     }
 
     /// Axis-aligned square `[0, s]²` boundary, one node every `step` along
@@ -557,6 +622,36 @@ mod tests {
     }
 
     #[test]
+    fn surface_square_peels_to_two_triangles() {
+        let coords = insert(Coords::new(2).unwrap());
+        let contour =
+            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
+        assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
+        assert_eq!(tri.cell_count().unwrap(), 2);
+        assert!((total_ccw_area(&tri) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn surface_rejects_unsupported_element() {
+        let coords = insert(Coords::new(2).unwrap());
+        let contour =
+            build_contour_2d(coords, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        assert!(surface(&contour, ElementType::TET4, None).is_err());
+    }
+
+    #[test]
+    fn surface_rejects_multiple_contours() {
+        let coords = insert(Coords::new(2).unwrap());
+        let outer =
+            build_contour_2d(coords.clone(), &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
+        let hole =
+            build_contour_2d(coords, &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]);
+        let combined = outer.union(&hole).unwrap();
+        assert!(surface(&combined, ElementType::TRI3, None).is_err());
+    }
+
+    #[test]
     fn surface_square_refined_conserves_area_and_size() {
         let coords = insert(Coords::new(2).unwrap());
         // Boundary already discretized at the target size: interior gets
@@ -568,7 +663,6 @@ mod tests {
         let n = tri.cell_count().unwrap();
         assert!(n > 2, "expected interior nodes/refinement, got {} cells", n);
         assert!((total_ccw_area(&tri) - 16.0).abs() < 1e-9);
-        // No edge wildly larger than a few target sizes.
         let mut max_edge = 0.0_f64;
         for ci in 0..n {
             let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
@@ -591,7 +685,6 @@ mod tests {
         let tri = surface(&contour, ElementType::TRI3, Some(1.0)).unwrap();
         let n = tri.cell_count().unwrap();
         assert!(n > nseg, "circle should be filled with interior nodes");
-        // Polygonal area of the inscribed regular n-gon.
         let poly_area = 0.5 * (nseg as f64) * r * r
             * (2.0 * std::f64::consts::PI / nseg as f64).sin();
         assert!(
@@ -621,7 +714,6 @@ mod tests {
     #[test]
     fn surface_works_with_cw_contour() {
         let coords = insert(Coords::new(2).unwrap());
-        // Clockwise unit square.
         let contour =
             build_contour_2d(coords.clone(), &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)]);
         let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
@@ -636,10 +728,62 @@ mod tests {
             build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
         let before = read(&coords).unwrap().node_count();
         let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
-        // Pure peeling on the unit square adds no interior node.
         let after = read(&coords).unwrap().node_count();
         assert_eq!(before, after, "no interior node expected for coarse square");
-        // The two triangles reference the four original nodes only.
         assert_eq!(tri.cell_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn surface_qua4_square_is_one_quad() {
+        let coords = insert(Coords::new(2).unwrap());
+        let contour =
+            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let q = surface(&contour, ElementType::QUA4, Some(10.0)).unwrap();
+        assert_eq!(q.element_types().unwrap(), vec![ElementType::QUA4]);
+        assert_eq!(q.cell_count().unwrap(), 1);
+        assert!((total_ccw_area(&q) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn surface_qua4_circle_is_quad_dominant_and_conserves_area() {
+        let coords = insert(Coords::new(2).unwrap());
+        let r = 5.0;
+        let nseg = 40;
+        let contour = build_contour_2d(coords.clone(), &regular_polygon(nseg, r));
+        let mesh = surface(&contour, ElementType::QUA4, Some(1.0)).unwrap();
+        let types = mesh.element_types().unwrap();
+        assert!(types.contains(&ElementType::QUA4), "no quads produced");
+        // Quad-dominant: quads outnumber any triangles.
+        let counts = mesh.cell_counts().unwrap();
+        let nq: usize = types
+            .iter()
+            .zip(&counts)
+            .filter(|(t, _)| **t == ElementType::QUA4)
+            .map(|(_, c)| *c)
+            .sum();
+        let nt: usize = types
+            .iter()
+            .zip(&counts)
+            .filter(|(t, _)| **t == ElementType::TRI3)
+            .map(|(_, c)| *c)
+            .sum();
+        assert!(nq > nt, "expected quad-dominant mesh, got {} quads {} tris", nq, nt);
+        let poly_area = 0.5 * (nseg as f64) * r * r
+            * (2.0 * std::f64::consts::PI / nseg as f64).sin();
+        assert!(
+            (total_ccw_area(&mesh) - poly_area).abs() < 1e-6,
+            "area drift: got {}",
+            total_ccw_area(&mesh)
+        );
+    }
+
+    #[test]
+    fn surface_qua4_refined_square_conserves_area() {
+        let coords = insert(Coords::new(2).unwrap());
+        let mesh = {
+            let contour = build_contour_2d(coords.clone(), &square_boundary(4.0, 1.0));
+            surface(&contour, ElementType::QUA4, Some(1.0)).unwrap()
+        };
+        assert!((total_ccw_area(&mesh) - 16.0).abs() < 1e-9);
     }
 }
