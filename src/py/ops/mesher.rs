@@ -66,6 +66,22 @@ pub fn barycenter(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 // `consolidate(mesh)` is exposed by the type-dispatching top-level
 // wrapper in `crate::py::ops::consolidate` (shared with NodeField).
 
+/// Weld together nodes closer than `tol`, redirecting the connectivity to one
+/// representative per cluster.
+///
+/// Returns a new mesh mirroring `mesh` (same submeshes, types and colours)
+/// with welded-away nodes redirected to their cluster representative — the
+/// smallest-id node of the cluster, which keeps its own coordinates (no
+/// averaging). Cells that collapse onto a repeated node (a degenerate segment,
+/// triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
+/// coincident nodes. `mesh` itself is left untouched.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn merge_nodes(mesh: PyRef<PyMesh>, tol: f64) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::merge_nodes(&mesh.inner, tol)?;
+    Ok(PyMesh { inner: result })
+}
+
 /// Extract the boundary of a surface mesh (TRI3/QUA4) as closed SEG2 loops.
 ///
 /// An element edge used by exactly one cell is a boundary edge; the boundary

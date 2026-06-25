@@ -21,6 +21,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
 | `consolidate(mesh)` | fusionne les sous-maillages de même type (dispatch partagé avec `NodeField`) |
+| `merge_nodes(mesh, tol)` | **soude** les nœuds distants de moins de `tol` ; remappe la connectivité, abandonne les cellules dégénérées (voir plus bas) |
 
 `barycenter` sert notamment à fabriquer les supports de multiplicateurs des
 contraintes : POI1 → nœuds **neufs** colocalisés au centre de chaque cellule
@@ -310,3 +311,55 @@ gérés), ou si le bord n'est pas un ensemble propre de boucles fermées (arête
 ouverte ou non-manifold).
 
 Côté Rust, `ops::mesher::contour(&mesh)`.
+
+## Soudure des nœuds proches : `merge_nodes`
+
+`merge_nodes(mesh, tol)` **soude** entre eux les nœuds distants de moins de
+`tol` (distance euclidienne). C'est l'opération de « recollage » classique :
+quand deux morceaux maillés séparément se rejoignent le long d'une interface,
+leurs nœuds y sont colocalisés mais **distincts** ; `merge_nodes` les fond en
+un seul, rendant le maillage topologiquement connexe.
+
+Chaque cluster de nœuds proches est représenté par **un seul** nœud — celui de
+plus petit identifiant —, et ce représentant **garde ses propres coordonnées**
+(aucune moyenne : on ne déplace jamais la géométrie en douce). La connectivité
+de chaque sous-maillage est réécrite pour pointer vers les représentants ; la
+structure de sous-maillages (types, ordre, couleurs) est préservée.
+
+Une cellule qui **s'effondre** — c'est-à-dire qui référence deux fois le même
+représentant après soudure (un `SEG2` dont les deux bouts fusionnent, un `TRI3`
+à deux coins confondus, …) — est **abandonnée** : elle est dégénérée. Les
+cellules `POI1` (un seul nœud) ne s'effondrent jamais et sont toujours
+conservées ; dédupliquer des points colocalisés reste le rôle de
+`consolidate`, pas celui-ci.
+
+`tol` doit être ≥ 0 ; `tol = 0` ne soude que les nœuds **exactement**
+colocalisés. Seuls les nœuds **référencés** par le maillage sont concernés. Le
+maillage d'entrée est laissé intact ; les nœuds soudés disparaissent de la
+connectivité du résultat et deviennent récupérables par le GC de la `Coords`
+une fois plus rien ne les référence.
+
+```python
+import pyrucast
+
+# Un maillage dont l'interface porte des nœuds colocalisés mais distincts
+# (deux SEG2 qui se touchent par un bout dupliqué).
+c = pyrucast.Coords(dim=2)
+a = c.add_node([0.0, 0.0])
+b = c.add_node([1.0, 0.0])
+b2 = c.add_node([1.0, 0.0])      # superposé à b, mais nœud distinct
+d = c.add_node([2.0, 0.0])
+
+mesh = pyrucast.Mesh(c, "SEG2")
+mesh.unit().add_cell([a, b])
+mesh.unit().add_cell([b2, d])
+
+joined = pyrucast.merge_nodes(mesh, 1e-6)   # b2 est soudé sur b
+```
+
+> `merge_nodes` opère **au sein d'une même `Coords`** (l'invariant du `Mesh`
+> impose déjà une `Coords` commune à tous les sous-maillages). Deux pièces
+> maillées dans des `Coords` séparées ne se soudent donc pas : il faut d'abord
+> les amener dans la même `Coords`.
+
+Côté Rust, `ops::mesher::merge_nodes(&mesh, tol)`.

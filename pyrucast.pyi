@@ -48,6 +48,7 @@ __all__ = [
     "material_field",
     "material_field_per_sub_model",
     "merge",
+    "merge_nodes",
     "poi1_from_nodes",
     "restrict",
     "set_coordinates",
@@ -1683,6 +1684,19 @@ def merge(a: NodeField, b: NodeField) -> NodeField:
     
     Errors if the two fields hold different values at the same
     `(node, component)` pair, or are attached to different `Coords`s.
+    """
+
+def merge_nodes(mesh: Mesh, tol: builtins.float) -> Mesh:
+    r"""
+    Weld together nodes closer than `tol`, redirecting the connectivity to one
+    representative per cluster.
+    
+    Returns a new mesh mirroring `mesh` (same submeshes, types and colours)
+    with welded-away nodes redirected to their cluster representative — the
+    smallest-id node of the cluster, which keeps its own coordinates (no
+    averaging). Cells that collapse onto a repeated node (a degenerate segment,
+    triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
+    coincident nodes. `mesh` itself is left untouched.
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
