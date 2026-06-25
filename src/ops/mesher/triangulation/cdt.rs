@@ -1226,7 +1226,7 @@ pub fn triangulate_polygon_with_holes_refined(
         }
     }
     if let Some(h) = options.max_edge_length {
-        if !(h > 0.0) {
+        if h.is_nan() || h <= 0.0 {
             return Err(PyrucastError::Message(format!(
                 "triangulate_polygon_with_holes_refined: max_edge_length must be > 0, got {}",
                 h
@@ -1513,7 +1513,7 @@ mod tests {
     fn holes_square_with_one_square_hole() {
         let outer = vec![p2(0.0, 0.0), p2(4.0, 0.0), p2(4.0, 4.0), p2(0.0, 4.0)];
         let hole = vec![p2(1.0, 1.0), p2(3.0, 1.0), p2(3.0, 3.0), p2(1.0, 3.0)];
-        let tris = triangulate_polygon_with_holes(&outer, &[hole.clone()]).unwrap();
+        let tris = triangulate_polygon_with_holes(&outer, std::slice::from_ref(&hole)).unwrap();
 
         let mut all: Vec<Point2> = outer.clone();
         all.extend_from_slice(&hole);

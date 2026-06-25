@@ -98,8 +98,8 @@ pub trait Physics {
     ///
     /// When `Some(_)`, the physics must implement
     /// [`integrate_behavior`](Self::integrate_behavior); its deformation
-    /// input is produced geometrically by [`crate::ops::field::gradient`] /
-    /// [`crate::ops::field::deformation`], and [`crate::ops::behavior`] uses
+    /// input is produced geometrically by [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) /
+    /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation), and [`crate::ops::behavior`] uses
     /// this handle to pair the per-zone deformation field with its
     /// sub-model. For a plain volumetric physics it is the same FE subspace
     /// as [`material_fespace`](Self::material_fespace).
@@ -113,7 +113,7 @@ pub trait Physics {
     /// `input` carries, at every `(cell, Gauss)` point, the deformation
     /// measure (the temperature gradient `∇T` for heat conduction, the
     /// strain `ε` for elasticity, …) produced by a *geometric* operator —
-    /// [`crate::ops::field::gradient`] / [`crate::ops::field::deformation`],
+    /// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) / [`crate::ops::field::deformation`](fn@crate::ops::field::deformation),
     /// independent of any model — followed by the input internal-state
     /// variables (`VAR0`). `material` is `Some(_)` iff this physics declares
     /// a [`material_fespace`](Self::material_fespace) (the operator

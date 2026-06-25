@@ -7,8 +7,8 @@
 //! [`crate::containers::element_field::ElementField`].
 //!
 //! The deformation input is built **separately and geometrically** by
-//! [`crate::ops::field::gradient`] (`∇T`, …) or
-//! [`crate::ops::field::deformation`] (`ε`, …) — those depend only on the FE
+//! [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) (`∇T`, …) or
+//! [`crate::ops::field::deformation`](fn@crate::ops::field::deformation) (`ε`, …) — those depend only on the FE
 //! space, not on the model. [`integrate`] then feeds that deformation (plus
 //! the input internal-state variables `VAR0`) and the per-zone material to
 //! each physics's law, returning the **material state**: the dual flux/stress
@@ -32,7 +32,7 @@ use crate::store::{insert, read};
 /// Integrate the constitutive law of `model` (Cast3m `COMP`).
 ///
 /// `deformation` is the behaviour-input aggregate (from
-/// [`crate::ops::field::gradient`] / [`crate::ops::field::deformation`],
+/// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) / [`crate::ops::field::deformation`](fn@crate::ops::field::deformation),
 /// optionally carrying the input state `VAR0`); `materials` supplies the
 /// per-zone material data. For each behaviour-bearing sub-model, the matching
 /// deformation and material sub-fields are paired by FE subspace, and the

@@ -2,8 +2,8 @@
 //! model/physics involved (it depends only on the FE space and the field).
 //!
 //! `∇f = Σ_i f_i ∇N_i` evaluated cell-by-cell, Gauss-point by Gauss-point.
-//! The shared [`subspace_gradients`] core also backs
-//! [`crate::ops::field::deformation`] (the symmetric gradient).
+//! The shared `subspace_gradients` core also backs
+//! [`crate::ops::field::deformation`](fn@crate::ops::field::deformation) (the symmetric gradient).
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};

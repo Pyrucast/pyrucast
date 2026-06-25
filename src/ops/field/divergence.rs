@@ -1,5 +1,5 @@
 //! Weak divergence of a per-element **vector** field — the adjoint of
-//! [`crate::ops::field::gradient`].
+//! [`crate::ops::field::gradient`](fn@crate::ops::field::gradient).
 //!
 //! Where `gradient` maps a nodal field to its gradient at the Gauss points
 //! (`∇f = Σ_i f_i ∇N_i`), `divergence` maps a per-element vector field `F`

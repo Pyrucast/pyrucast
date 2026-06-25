@@ -21,7 +21,7 @@ use std::collections::HashMap;
 /// after welding (a SEG2 whose two ends merge, a TRI3 with two coincident
 /// corners, …) — are **dropped**, since they are degenerate. POI1 cells, being
 /// single nodes, never collapse and are always kept (de-duplicating colocated
-/// points is [`consolidate`](crate::ops::mesher::consolidate)'s job, not this
+/// points is [`consolidate`](fn@crate::ops::mesher::consolidate)'s job, not this
 /// one's).
 ///
 /// Every node referenced by the result is increfed afresh by the new

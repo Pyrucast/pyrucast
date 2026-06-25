@@ -97,6 +97,7 @@ impl Elasticity {
             let s = read(&fespace)?;
             (s.submesh(), s.space_dim())
         };
+        #[allow(clippy::match_like_matches_macro)]
         let ok = match (space_dim, model) {
             (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,
             (3, ElasticityModel::Solid) => true,

@@ -321,7 +321,7 @@ impl SubModel {
     }
 
     /// Whether this sub-model carries a constitutive behaviour that can be
-    /// integrated via [`integrate_behavior`](Self::integrate_behavior) from a
+    /// integrated via `integrate_behavior` from a
     /// deformation field. `true` for volumetric physics, `false` for
     /// constraints (`Dirichlet`).
     pub fn has_behavior(&self) -> bool {

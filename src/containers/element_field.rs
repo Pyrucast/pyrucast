@@ -388,7 +388,7 @@ pub struct ElementField {
 crate::impl_aggregate!(ElementField, SubElementField, subfield, "subfield(s)", {
     /// Fuse zones sharing the same support `SubFiniteElementSpace` (union of
     /// components, shared values verified). Runs at the end of every union
-    /// (`a | b`). See [`crate::ops::field::consolidate_element`].
+    /// (`a | b`). See [`crate::ops::field::consolidate_element`](fn@crate::ops::field::consolidate_element).
     fn finalize(&mut self) -> Result<()> {
         *self = crate::ops::field::consolidate_element(self)?;
         Ok(())

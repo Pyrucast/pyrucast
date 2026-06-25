@@ -120,8 +120,7 @@ impl SubMesh {
         }
         {
             let mut c = write(&self.coords)?;
-            let mut acquired = 0usize;
-            for &n in nodes {
+            for (acquired, &n) in nodes.iter().enumerate() {
                 if let Err(e) = c.incref(n) {
                     // Roll back the increfs already done for this cell.
                     for &m in &nodes[..acquired] {
@@ -129,7 +128,6 @@ impl SubMesh {
                     }
                     return Err(e);
                 }
-                acquired += 1;
             }
         }
         let idx = self.connectivity.len() / npc;
@@ -770,15 +768,15 @@ mod tests {
         let coords = insert(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
-        let s1 = insert(SubMesh::poi1_from_nodes(&[a.clone()]).unwrap());
-        let s2 = insert(SubMesh::poi1_from_nodes(&[b.clone()]).unwrap());
+        let s1 = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let s2 = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
 
         // sub | sub → Mesh
         let m = Mesh::union_subs(&s1, &s2).unwrap();
         assert_eq!(m.len(), 2);
 
         // aggregate | sub → Mesh
-        let s3 = insert(SubMesh::poi1_from_nodes(&[a.clone()]).unwrap());
+        let s3 = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let m2 = m.union_sub(&s3).unwrap();
         assert_eq!(m2.len(), 3);
     }

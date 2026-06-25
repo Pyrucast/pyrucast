@@ -68,8 +68,7 @@ pub(crate) fn check_components(kind: &str, components: &[String]) -> Result<()> 
 /// concurrent reads are free, writes wait until the view is dropped.
 ///
 /// The kind-specific reading methods live next to each concrete sub
-/// type, on the [`crate::containers::node_field::NodeFieldView`] and
-/// [`crate::containers::element_field::ElementFieldView`] aliases.
+/// type, on the `NodeFieldView` and `ElementFieldView` aliases.
 pub struct FieldView<S: Persist + Any + Send + Sync> {
     pub(crate) zones: Vec<ReadGuard<S>>,
     components: Vec<String>,
@@ -567,7 +566,7 @@ impl MapValues for ElementField {
 /// Fold `op` over one component across every sub that defines it.
 fn fold_subs<A>(agg: &A, component: &str, op_name: &str, op: fn(f64, f64) -> f64) -> Result<f64>
 where
-    A: Aggregate + ?Sized,
+    A: Aggregate,
     A::Sub: SubField,
 {
     let mut acc: Option<f64> = None;

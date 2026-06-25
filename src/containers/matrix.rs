@@ -80,6 +80,10 @@ use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+/// A single COO entry with DOFs materialised as `(NodeId, var_name)` pairs:
+/// `(row_node, row_var, col_node, col_var, value)`.
+pub type MatrixEntry = (NodeId, String, NodeId, String, f64);
+
 // ─── DofOrdering ───────────────────────────────────────────────────────────
 
 /// How `(node_local_idx, var_idx)` maps to a flat matrix-row or -column
@@ -338,7 +342,7 @@ impl SubMatrix {
 
     /// All COO triplets, in insertion order, with DOFs materialised as
     /// `(NodeId, var_name)` pairs.
-    pub fn iter_entries(&self) -> Vec<(NodeId, String, NodeId, String, f64)> {
+    pub fn iter_entries(&self) -> Vec<MatrixEntry> {
         let n_rn = self.row_nodes.len();
         let n_dv = self.dual_vars.len();
         let n_cn = self.col_nodes.len();
@@ -494,7 +498,6 @@ mod coo_serde {
         for ((r, c), v) in data.row_indices.into_iter()
             .zip(data.col_indices)
             .zip(data.values)
-            .map(|((r, c), v)| ((r, c), v))
         {
             coo.push(r, c, v);
         }
@@ -680,7 +683,7 @@ impl Matrix {
     }
 
     /// All COO entries across every block, in block-insertion order.
-    pub fn iter_entries(&self) -> Result<Vec<(NodeId, String, NodeId, String, f64)>> {
+    pub fn iter_entries(&self) -> Result<Vec<MatrixEntry>> {
         let mut out = Vec::new();
         for h in self {
             out.extend(read(h)?.iter_entries());

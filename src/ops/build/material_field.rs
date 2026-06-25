@@ -57,7 +57,7 @@ pub fn material_field(
             if sub.material_fespace().is_none() {
                 None
             } else {
-                Some(sub_material_field(&*sub, components_and_values)?)
+                Some(sub_material_field(&sub, components_and_values)?)
             }
         };
         if let Some(sub) = opt_sub {

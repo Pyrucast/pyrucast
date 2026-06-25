@@ -11,7 +11,7 @@
 //! - [`Handle<T>`] is **refcounted**: `Clone` increments, `Drop`
 //!   decrements, and the slot is recycled automatically when it reaches 0.
 //! - A slot may be evicted to disk via [`swap_out`] and is reloaded
-//!   automatically on the next [`read`] / [`write`]. The binary format
+//!   automatically on the next [`read`] / [`write`](fn@write). The binary format
 //!   used is that of the [`crate::persist::Persist`] trait (portable
 //!   between Linux and Windows).
 //! - [`compact`] trims trailing free slots and shrinks memory.
@@ -35,7 +35,7 @@
 //! [`parking_lot::RwLock`]; the store-level mutex is only held for the
 //! instant it takes to resolve a handle into its slot (and on
 //! insert/recycle). [`read`] returns a shared guard (many concurrent
-//! readers), [`write`] an exclusive one. Guards are *owned* (`'static`):
+//! readers), [`write`](fn@write) an exclusive one. Guards are *owned* (`'static`):
 //! they can be returned from functions and stored in structs, so
 //! operators read the data **in place** instead of copying it out.
 //!
@@ -368,7 +368,7 @@ impl<T: Persist + Any + Send + Sync + fmt::Debug> fmt::Debug for ReadGuard<T> {
     }
 }
 
-/// Exclusive (write) access to a stored object, returned by [`write`].
+/// Exclusive (write) access to a stored object, returned by [`write`](fn@write).
 /// Same ownership properties as [`ReadGuard`].
 pub struct WriteGuard<T: Persist + Any + Send + Sync> {
     guard: ArcRwLockWriteGuard<RawRwLock, SlotState<T>>,
@@ -469,7 +469,7 @@ pub fn write<T: Persist + Any + Send + Sync>(h: &Handle<T>) -> Result<WriteGuard
 }
 
 /// Evict the slot to disk (freeing its RAM). The slot stays valid; the
-/// next [`read`] / [`write`] will reload.
+/// next [`read`] / [`write`](fn@write) will reload.
 ///
 /// **Important**: the evicted value's `Drop` does **not** run (the object
 /// is still logically alive). It will run on the final refcount
@@ -533,8 +533,8 @@ mod tests {
 
     #[test]
     fn insert_then_read() {
-        let h = insert(PInsertGet(3.14));
-        assert_eq!(read(&h).unwrap().0, 3.14);
+        let h = insert(PInsertGet(1.5));
+        assert_eq!(read(&h).unwrap().0, 1.5);
     }
 
     #[derive(Serialize, Deserialize, Debug)]

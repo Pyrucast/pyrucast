@@ -371,7 +371,7 @@ impl crate::dump::Dump for SubFiniteElementSpace {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         use crate::dump::{fmt_float, table};
         let ng = self.gauss_count();
-        let ref_dim = if ng > 0 { self.gauss_xi.len() / ng } else { 0 };
+        let ref_dim = self.gauss_xi.len().checked_div(ng).unwrap_or(0);
         let mut headers = vec!["g".to_string()];
         headers.extend((0..ref_dim).map(|i| format!("ξ{i}")));
         headers.push("weight".to_string());

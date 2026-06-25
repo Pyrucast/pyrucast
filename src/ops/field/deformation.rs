@@ -1,5 +1,5 @@
 //! Deformation measure of a displacement field at the Gauss points — the
-//! mechanical counterpart of [`crate::ops::field::gradient`].
+//! mechanical counterpart of [`crate::ops::field::gradient`](fn@crate::ops::field::gradient).
 //!
 //! Only the **linearized** (small-strain) measure `ε = ½(∇u + ∇uᵀ)` is
 //! implemented for now; non-linear measures (Green–Lagrange, …) will join it

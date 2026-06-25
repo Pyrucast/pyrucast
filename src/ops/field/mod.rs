@@ -1,7 +1,7 @@
 //! Field operators — derivations and transformations on
 //! [`crate::containers::node_field::SubNodeField`] / [`crate::containers::element_field::ElementField`].
 //!
-//! [`gradient`] (`∇f` of a nodal field) and [`deformation`] (the linearized
+//! [`gradient`](fn@gradient) (`∇f` of a nodal field) and [`deformation`](fn@deformation) (the linearized
 //! strain `ε` of a displacement field) are the purely geometric producers of
 //! the per-element field that [`crate::ops::behavior::integrate`] consumes.
 //! More to come: `divergence`, `interp_to_gauss`, `project_to_nodes`.

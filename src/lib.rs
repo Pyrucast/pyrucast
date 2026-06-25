@@ -30,6 +30,11 @@
 //! assert_eq!(a, b);
 //! ```
 
+// Numerical/FE code is full of legitimate index-based loops (symmetric matrix
+// fills, triangular axis pairs, indices shared across several arrays) where the
+// iterator rewrite clippy suggests is less clear or outright impossible.
+#![allow(clippy::needless_range_loop)]
+
 pub mod aggregate;
 pub mod containers;
 pub mod dump;

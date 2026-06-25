@@ -501,7 +501,7 @@ crate::impl_aggregate!(NodeField, SubNodeField, subfield, "subfield(s)", {
 
     /// Fuse zones sharing the same support `SubMesh` (union of components,
     /// shared values verified). Runs at the end of every union (`a | b`).
-    /// See [`crate::ops::field::consolidate`].
+    /// See [`crate::ops::field::consolidate`](fn@crate::ops::field::consolidate).
     fn finalize(&mut self) -> Result<()> {
         *self = crate::ops::field::consolidate(self)?;
         Ok(())
