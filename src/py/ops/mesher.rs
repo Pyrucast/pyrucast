@@ -6,11 +6,28 @@
 
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, Node, SubMesh};
+use crate::error::{PyrucastError, Result};
+use crate::interrupt::Cancel;
 use crate::py::coords::PyCoords;
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+
+/// Cancellation token backed by Python's signal handling: polling it runs
+/// `Python::check_signals`, so a `Ctrl+C` (SIGINT) pressed during a long
+/// operator turns into [`PyrucastError::Interrupted`] → `KeyboardInterrupt`.
+///
+/// This is the *only* place where Python interruption meets the PyO3-free
+/// operator core: the operators take a [`Cancel`] trait object and never see
+/// `Python`.
+struct PySignals<'py>(Python<'py>);
+
+impl Cancel for PySignals<'_> {
+    fn check(&self) -> Result<()> {
+        self.0.check_signals().map_err(|_| PyrucastError::Interrupted)
+    }
+}
 
 /// Build a points (POI1) mesh holding every live node of `coords`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
@@ -145,6 +162,7 @@ pub fn fill_surface(
 #[pyfunction]
 #[pyo3(signature = (contour, element_type, size=None))]
 pub fn surface(
+    py: Python<'_>,
     contour: PyRef<PyMesh>,
     element_type: &str,
     size: Option<f64>,
@@ -152,6 +170,8 @@ pub fn surface(
     let et = ElementType::from_name(element_type).ok_or_else(|| {
         PyValueError::new_err(format!("unknown element type: {element_type}"))
     })?;
-    let mesh = crate::ops::mesher::surface(&contour.inner, et, size)?;
+    // Poll Python signals while paving so a long mesh stays Ctrl+C-able.
+    let mesh =
+        crate::ops::mesher::surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
     Ok(PyMesh { inner: mesh })
 }

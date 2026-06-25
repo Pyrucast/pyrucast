@@ -34,6 +34,7 @@ pub mod aggregate;
 pub mod containers;
 pub mod dump;
 pub mod error;
+pub mod interrupt;
 pub mod models;
 pub mod ops;
 pub mod persist;

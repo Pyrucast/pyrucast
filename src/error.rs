@@ -30,6 +30,10 @@ pub enum PyrucastError {
     Serialization(String),
     /// Stale handle: slot freed or generation mismatch.
     StaleHandle,
+    /// The computation was cancelled by its [`crate::interrupt::Cancel`]
+    /// token (e.g. a `Ctrl+C`, a timeout, or an external stop flag). On the
+    /// Python side this surfaces as `KeyboardInterrupt`.
+    Interrupted,
     /// Generic error with a message.
     Message(String),
 }
@@ -42,6 +46,7 @@ impl fmt::Display for PyrucastError {
             PyrucastError::StaleHandle => {
                 write!(f, "stale handle (slot freed or generation mismatch)")
             }
+            PyrucastError::Interrupted => write!(f, "computation interrupted"),
             PyrucastError::Message(m) => write!(f, "{m}"),
         }
     }
@@ -58,6 +63,13 @@ impl From<std::io::Error> for PyrucastError {
 #[cfg(feature = "python-api")]
 impl From<PyrucastError> for pyo3::PyErr {
     fn from(e: PyrucastError) -> Self {
-        pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
+        match e {
+            // A cancelled computation must surface as the Python-native
+            // KeyboardInterrupt, not a generic RuntimeError.
+            PyrucastError::Interrupted => {
+                pyo3::exceptions::PyKeyboardInterrupt::new_err(e.to_string())
+            }
+            _ => pyo3::exceptions::PyRuntimeError::new_err(e.to_string()),
+        }
     }
 }

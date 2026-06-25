@@ -29,6 +29,6 @@ pub use extrude::extrude;
 pub use fill_surface::fill_surface;
 pub use from_live_nodes::from_live_nodes;
 pub use line_seg2::line_seg2;
-pub use surface::surface;
+pub use surface::{surface, surface_cancellable};
 pub use sweep_qua4::sweep_qua4;
 pub use to_poi1::to_poi1;

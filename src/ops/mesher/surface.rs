@@ -35,6 +35,7 @@ use crate::containers::mesh::{
     ElementType, Mesh, Node, NodeId, Point2, Point3, SubMesh, Vector2, Vector3,
 };
 use crate::error::{PyrucastError, Result};
+use crate::interrupt::{Cancel, NoCancel};
 use crate::ops::mesher::triangulation::{cross2, point_in_triangle, signed_area};
 use crate::store::read;
 
@@ -63,10 +64,26 @@ const LAYER_OFFSET: f64 = 0.85;
 /// nodes are created in the same `Coords`. Output elements are oriented
 /// **CCW**. In QUA4 mode the result may carry both a QUA4 and a TRI3 submesh
 /// (quad-dominant with a few triangles).
+///
+/// This is the uninterruptible convenience form; for a long mesh that a
+/// caller may want to stop early, use [`surface_cancellable`].
 pub fn surface(
     contour: &Mesh,
     element_type: ElementType,
     target_size: Option<f64>,
+) -> Result<Mesh> {
+    surface_cancellable(contour, element_type, target_size, &NoCancel)
+}
+
+/// Like [`surface`], but polls `cancel` periodically so the paving can be
+/// stopped early (returning [`PyrucastError::Interrupted`]). The frontend
+/// chooses what `cancel` means — a timeout, an external flag, or, in the
+/// Python binding, a `Ctrl+C` via `Python::check_signals`.
+pub fn surface_cancellable(
+    contour: &Mesh,
+    element_type: ElementType,
+    target_size: Option<f64>,
+    cancel: &dyn Cancel,
 ) -> Result<Mesh> {
     let nbnn = match element_type {
         ElementType::TRI3 => 3usize,
@@ -166,7 +183,7 @@ pub fn surface(
     };
 
     // 3. Pave.
-    let paved = pave_single(&points, target_size, nbnn)?;
+    let paved = pave_single(&points, target_size, nbnn, cancel)?;
 
     // 4. Create one node per interior (Steiner) point; map every point
     //    index to a NodeId. Lift back to 3-D through the projection when set.
@@ -305,7 +322,12 @@ struct Paved {
 ///
 /// Operates purely on plain vectors — no store access — so it stays a clean
 /// target for future intra-operator parallelism.
-fn pave_single(ring: &[Point2], target_size: Option<f64>, nbnn: usize) -> Result<Paved> {
+fn pave_single(
+    ring: &[Point2],
+    target_size: Option<f64>,
+    nbnn: usize,
+    cancel: &dyn Cancel,
+) -> Result<Paved> {
     let n0 = ring.len();
     if n0 < 3 {
         return Err(PyrucastError::Message(format!(
@@ -356,6 +378,11 @@ fn pave_single(ring: &[Point2], target_size: Option<f64>, nbnn: usize) -> Result
                 "surface: frontal paving did not converge (possibly non-simple contour)".into(),
             ));
         }
+        // Cooperative cancellation point. Each iteration is a coarse event
+        // (a whole peeled ear or a paved layer), so one check per turn is
+        // cheap — a no-op for `NoCancel`, one signal check per layer for the
+        // Python token.
+        cancel.check()?;
 
         let m = front.len();
         if m == 0 {
@@ -929,6 +956,29 @@ mod tests {
         let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
         assert!((total_area_3d(&tri) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn surface_cancellable_stops_on_preset_flag() {
+        use std::sync::atomic::AtomicBool;
+        let coords = insert(Coords::new(2).unwrap());
+        // A contour big enough to take several paving iterations.
+        let contour = build_contour_2d(coords.clone(), &regular_polygon(64, 5.0));
+        // Already-cancelled token: the first poll trips.
+        let flag = AtomicBool::new(true);
+        let err =
+            surface_cancellable(&contour, ElementType::TRI3, Some(0.2), &flag).unwrap_err();
+        assert!(matches!(err, PyrucastError::Interrupted));
+    }
+
+    #[test]
+    fn surface_cancellable_completes_when_not_cancelled() {
+        use std::sync::atomic::AtomicBool;
+        let coords = insert(Coords::new(2).unwrap());
+        let contour = build_contour_2d(coords.clone(), &regular_polygon(24, 3.0));
+        let flag = AtomicBool::new(false);
+        let tri = surface_cancellable(&contour, ElementType::TRI3, Some(1.0), &flag).unwrap();
+        assert!(tri.cell_count().unwrap() > 0);
     }
 
     #[test]
