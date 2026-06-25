@@ -215,7 +215,12 @@ contenu de `book/book/` sur la branche `pages` du dépôt — branche que Codebe
 Pages sert directement. Le workflow peut aussi être déclenché à la main
 (*workflow_dispatch*) depuis l'onglet *Actions*.
 
-Prérequis à configurer une fois côté Codeberg (interface web) :
+En attendant qu'un runner soit disponible, la publication peut se faire **à la
+main** avec `script/publish-book.sh` : il build le book et pousse le site sur la
+branche `pages` avec tes propres identifiants git (aucun token CI requis).
+
+Prérequis à configurer une fois côté Codeberg (interface web), pour la
+publication **automatique** via Forgejo Actions :
 
 1. **Activer les Actions** : Settings → *Units* (Overview) → cocher *Actions*.
 2. **Un runner** avec le label `docker` (les runners partagés Codeberg étant
