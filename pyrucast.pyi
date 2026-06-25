@@ -349,7 +349,14 @@ class ElementField:
         form is rejected.
         """
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, idx: builtins.int) -> SubElementField: ...
+    def __getitem__(self, key: typing.Any) -> typing.Any:
+        r"""
+        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
+        negative indices supported); `agg[i:j:k]` → a **fresh
+        aggregate** of the same type holding the sliced zones
+        (Python slicing: step, negative bounds). Other key types
+        raise `TypeError`.
+        """
     def unit(self) -> SubElementField:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -419,7 +426,14 @@ class FiniteElementSpace:
         Mirrors `Mesh.cells(sub_idx)`.
         """
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, idx: builtins.int) -> SubFiniteElementSpace: ...
+    def __getitem__(self, key: typing.Any) -> typing.Any:
+        r"""
+        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
+        negative indices supported); `agg[i:j:k]` → a **fresh
+        aggregate** of the same type holding the sliced zones
+        (Python slicing: step, negative bounds). Other key types
+        raise `TypeError`.
+        """
     def unit(self) -> SubFiniteElementSpace:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -526,7 +540,14 @@ class Matrix:
         tuples — every entry across every block, in block-insertion order.
         """
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, idx: builtins.int) -> SubMatrix: ...
+    def __getitem__(self, key: typing.Any) -> typing.Any:
+        r"""
+        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
+        negative indices supported); `agg[i:j:k]` → a **fresh
+        aggregate** of the same type holding the sliced zones
+        (Python slicing: step, negative bounds). Other key types
+        raise `TypeError`.
+        """
     def unit(self) -> SubMatrix:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -601,7 +622,14 @@ class Mesh:
         `field` and `component`.
         """
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, idx: builtins.int) -> SubMesh: ...
+    def __getitem__(self, key: typing.Any) -> typing.Any:
+        r"""
+        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
+        negative indices supported); `agg[i:j:k]` → a **fresh
+        aggregate** of the same type holding the sliced zones
+        (Python slicing: step, negative bounds). Other key types
+        raise `TypeError`.
+        """
     def unit(self) -> SubMesh:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -722,7 +750,14 @@ class Model:
         Names of the dual variables across the whole model.
         """
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, idx: builtins.int) -> SubModel: ...
+    def __getitem__(self, key: typing.Any) -> typing.Any:
+        r"""
+        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
+        negative indices supported); `agg[i:j:k]` → a **fresh
+        aggregate** of the same type holding the sliced zones
+        (Python slicing: step, negative bounds). Other key types
+        raise `TypeError`.
+        """
     def unit(self) -> SubModel:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -888,7 +923,14 @@ class NodeField:
         form is rejected.
         """
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, idx: builtins.int) -> SubNodeField: ...
+    def __getitem__(self, key: typing.Any) -> typing.Any:
+        r"""
+        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
+        negative indices supported); `agg[i:j:k]` → a **fresh
+        aggregate** of the same type holding the sliced zones
+        (Python slicing: step, negative bounds). Other key types
+        raise `TypeError`.
+        """
     def unit(self) -> SubNodeField:
         r"""
         The sole sub-object **view** of a unitary aggregate

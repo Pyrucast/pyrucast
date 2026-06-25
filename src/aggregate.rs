@@ -109,6 +109,26 @@ pub trait Aggregate: Default {
         Ok(out)
     }
 
+    /// Fresh aggregate holding the sub-objects at `indices` (already
+    /// resolved against `len`, in the given order). Each handle is shared
+    /// (refcount bump), not deep-copied. Backs Python slicing (`agg[i:j:k]`).
+    ///
+    /// Reuses [`Aggregate::add_sub`] — so [`Aggregate::check_push`] invariants
+    /// (e.g. `Coords` compatibility for `Mesh`) still hold — then runs
+    /// [`Aggregate::finalize`]. A slice yields distinct indices, so no handle
+    /// is added twice; on an already-finalized source `finalize` is a no-op.
+    fn subset<I: IntoIterator<Item = usize>>(&self, indices: I) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let mut out = Self::default();
+        for i in indices {
+            out.add_sub(self.get(i)?)?;
+        }
+        out.finalize()?;
+        Ok(out)
+    }
+
     /// Hook called at the end of [`Aggregate::merge`], once the union by
     /// handle is complete. Override to fuse/normalize sub-objects beyond
     /// handle identity (e.g. fields fusing two zones on the same support).
@@ -323,8 +343,45 @@ macro_rules! impl_aggregate_pymethods {
                     Ok($crate::aggregate::Aggregate::len(&self.inner))
                 }
 
-                fn __getitem__(&self, idx: isize) -> pyo3::PyResult<$Sub> {
+                /// `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
+                /// negative indices supported); `agg[i:j:k]` → a **fresh
+                /// aggregate** of the same type holding the sliced zones
+                /// (Python slicing: step, negative bounds). Other key types
+                /// raise `TypeError`.
+                fn __getitem__(
+                    &self,
+                    py: pyo3::Python<'_>,
+                    key: &pyo3::Bound<'_, pyo3::PyAny>,
+                ) -> pyo3::PyResult<pyo3::Py<pyo3::PyAny>> {
                     let n = $crate::aggregate::Aggregate::len(&self.inner);
+
+                    // Slice: agg[1:3], agg[::2], agg[-2:] ...
+                    if let Ok(slice) = key.cast::<pyo3::types::PySlice>() {
+                        let ind = slice.indices(n as isize)?;
+                        let mut idxs = Vec::new();
+                        let mut i = ind.start;
+                        if ind.step > 0 {
+                            while i < ind.stop {
+                                idxs.push(i as usize);
+                                i += ind.step;
+                            }
+                        } else {
+                            while i > ind.stop {
+                                idxs.push(i as usize);
+                                i += ind.step;
+                            }
+                        }
+                        let inner = $crate::aggregate::Aggregate::subset(&self.inner, idxs)?;
+                        return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
+                    }
+
+                    // Integer: agg[0], agg[-1]
+                    let idx: isize = key.extract().map_err(|_| {
+                        pyo3::exceptions::PyTypeError::new_err(concat!(
+                            $name,
+                            " indices must be integers or slices"
+                        ))
+                    })?;
                     let i = $crate::aggregate::normalize_index(idx, n).ok_or_else(|| {
                         pyo3::exceptions::PyIndexError::new_err(format!(
                             concat!($name, " index {} out of range (len={})"),
@@ -332,7 +389,7 @@ macro_rules! impl_aggregate_pymethods {
                         ))
                     })?;
                     let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
-                    Ok($Sub { handle: h })
+                    Ok(pyo3::Py::new(py, $Sub { handle: h })?.into_any())
                 }
 
                 /// The sole sub-object **view** of a unitary aggregate

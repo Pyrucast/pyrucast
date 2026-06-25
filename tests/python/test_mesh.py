@@ -495,3 +495,66 @@ def test_repr_str_submesh_and_mesh():
     mesh = pyrucast.Mesh(c)
     assert "Mesh" in repr(mesh)
     assert "submesh" in str(mesh)
+
+
+def _mesh_with_n_zones(n):
+    """A Mesh of `n` single-node POI1 zones sharing the same Coords."""
+    c = pyrucast.Coords(2)
+    subs = [pyrucast.poi1_from_nodes([c.add_node([float(i), 0.0])])[0] for i in range(n)]
+    mesh = subs[0]
+    for s in subs[1:]:
+        mesh = mesh | s
+    return mesh
+
+
+def test_slice_returns_aggregate_of_same_type():
+    mesh = _mesh_with_n_zones(4)
+    s = mesh[1:3]
+    assert type(s) is pyrucast.Mesh
+    assert len(s) == 2
+
+
+def test_slice_full_step_and_open_bounds():
+    mesh = _mesh_with_n_zones(4)
+    assert len(mesh[:]) == 4          # full copy
+    assert len(mesh[::2]) == 2        # one out of two
+    assert len(mesh[1:]) == 3         # all but first
+    assert len(mesh[:2]) == 2         # first two
+
+
+def test_slice_negative_bounds_and_step():
+    mesh = _mesh_with_n_zones(4)
+    assert len(mesh[-2:]) == 2        # last two
+    assert len(mesh[::-1]) == 4       # reversed
+    # reversed slice preserves the zones, order flipped
+    rev = mesh[::-1]
+    fwd = mesh[:]
+    assert rev[0].cell_count() == fwd[-1].cell_count()
+
+
+def test_slice_empty():
+    mesh = _mesh_with_n_zones(4)
+    assert len(mesh[2:2]) == 0
+    assert len(mesh[10:20]) == 0
+
+
+def test_integer_index_still_returns_view():
+    mesh = _mesh_with_n_zones(3)
+    assert "SubMesh" in repr(mesh[0])
+    assert "SubMesh" in repr(mesh[-1])
+
+
+def test_index_errors():
+    mesh = _mesh_with_n_zones(3)
+    try:
+        mesh[99]
+    except IndexError:
+        pass
+    else:
+        raise AssertionError("expected IndexError for out-of-range index")
+    try:
+        mesh["x"]
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("expected TypeError for non-int/slice key")

@@ -32,6 +32,7 @@ Tout agrégat expose, côté **Python** :
 |---|---|
 | `len(agg)` | nombre de zones |
 | `agg[i]` | **vue** typée sur la zone `i` (un `Sub…`) — jamais une copie |
+| `agg[i:j:k]` | **nouvel agrégat** du même type avec le sous-ensemble des zones (slicing Python : pas, bornes négatives) |
 | `for sub in agg:` | itère les zones (via le protocole séquence) |
 | `agg.unit()` | la **seule** zone d'un agrégat unitaire, sinon une erreur claire |
 | `agg.add_sub(sub)` | ajoute une zone en place |
@@ -39,8 +40,14 @@ Tout agrégat expose, côté **Python** :
 | `repr` / `str` / `dump()` | les trois niveaux d'affichage |
 
 Côté **Rust**, le trait `Aggregate` fournit les mêmes : `len`, `is_empty`,
-`get(i)`, `iter`, `unit`, `push`/`add_sub`, plus `Index<usize>` et
-`IntoIterator` via la macro `impl_aggregate_std_traits!`.
+`get(i)`, `subset(indices)`, `iter`, `unit`, `push`/`add_sub`, plus
+`Index<usize>` et `IntoIterator` via la macro `impl_aggregate_std_traits!`.
+
+> **`agg[i]` vue, `agg[i:j]` agrégat.** L'indexation entière renvoie une
+> **vue** sur une zone (un `Sub…`) ; le slicing renvoie un **agrégat** du même
+> type que `agg`, dont les zones sont des handles partagés (pas de copie). Le
+> slicing s'appuie sur `subset` côté Rust et préserve les invariants de
+> l'agrégat (`check_push`, `finalize`).
 
 > **`unit()` vs `[0]`.** `agg[0]` prend silencieusement la première de
 > plusieurs zones ; `agg.unit()` **exige** qu'il n'y en ait qu'une et lève
