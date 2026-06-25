@@ -4,7 +4,6 @@
 - [Correspondance Rust ↔ Python](correspondance-rust-python.md)
 - [Installation et démarrage rapide](installation.md)
 - [Aspect informatique](aspect-informatique.md)
-- [Référence API Rust (rustdoc)](https://gauthier.codeberg.page/pyrucast/rust/pyrucast/index.html)
 
 # Objets
 

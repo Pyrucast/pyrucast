@@ -2,6 +2,11 @@
 
 **pyrucast** est une librairie d'éléments finis dont le cœur est écrit en Rust et qui expose une API Python. Elle s'inspire des principes de cast3m : un noyau d'objets typés, accompagné de fonctions opérant sur ces objets.
 
+> 📖 **Référence API Rust (rustdoc).** Cette documentation couvre les principes,
+> l'architecture et les exemples ; la référence par item (signatures, types,
+> modules) est générée par rustdoc et publiée à côté de ce book :
+> <https://gauthier.codeberg.page/pyrucast/rust/pyrucast/index.html>.
+
 ## Philosophie
 
 - **Simplicité avant tout.** Le code doit rester maintenable et éditable par un humain non expert ; on évite la sophistication gratuite.
