@@ -1,6 +1,8 @@
 # pyrucast
 
-Bibliothèque d'éléments finis en Rust, inspirée de cast3m, exposée à Python.
+Bibliothèque d'éléments finis en Rust, inspirée de cast3m, exposée à Python —
+et utilisable telle quelle en **Rust pur** (`pyo3` est une dépendance
+optionnelle : un build par défaut ne tire ni `pyo3` ni `libpython`).
 
 - **Documentation complète** : le book mdbook dans [`book/`](book/) (architecture,
   modèle mémoire, maillage, champs, physiques…) — `mdbook build book` pour le HTML.
@@ -11,14 +13,32 @@ Bibliothèque d'éléments finis en Rust, inspirée de cast3m, exposée à Pytho
 | Outil | Version | Installation |
 |---|---|---|
 | Rust | stable (édition 2021) | [`rustup`](https://rustup.rs) |
-| Python | ≥ 3.9 | python.org ou gestionnaire de paquets |
-| En-têtes Python | — | **Linux uniquement** : `python3-dev` (Debian/Ubuntu) ou `python3-devel` (Fedora/RHEL). Windows : inclus dans l'installateur officiel. |
+| Python | ≥ 3.9 | *API Python uniquement* — inutile en Rust pur |
+| En-têtes Python | — | *API Python uniquement* — **Linux** : `python3-dev` (Debian/Ubuntu) ou `python3-devel` (Fedora/RHEL). Windows : inclus dans l'installateur officiel. |
 
-## Compilation dans un venv
+## Usage en Rust pur (sans Python)
 
-`pyo3` localise l'interpréteur Python via la variable `VIRTUAL_ENV` :
-**activez toujours le venv avant `cargo` ou `maturin`**, sinon la compilation
-échoue avec `error: failed to run the Python interpreter at ...`.
+```toml
+[dependencies]
+pyrucast = { git = "…", default-features = false }   # pas de pyo3, pas de libpython
+```
+
+```rust
+use pyrucast::containers::mesh::ElementType;
+let mesh = pyrucast::ops::mesher::surface(&contour, ElementType::TRI3, Some(1.0))?;
+```
+
+`cargo build` / `cargo test` (sans feature) compilent le cœur en Rust pur —
+ni Python ni venv requis. L'API Python (`#[pyclass]`) vit derrière la feature
+`python-api`, activée automatiquement par `maturin`.
+
+## Compilation dans un venv (API Python)
+
+Pour les builds **avec l'API Python** (`maturin`, ou `cargo --features
+python-api`), `pyo3` localise l'interpréteur via `VIRTUAL_ENV` : **activez
+toujours le venv avant `cargo` ou `maturin`**, sinon la compilation échoue avec
+`error: failed to run the Python interpreter at ...`. (Un `cargo build` pur n'a
+pas cette contrainte.)
 
 ### Linux / macOS
 
@@ -50,8 +70,8 @@ Après toute modification du Rust, relancer simplement `maturin develop --releas
 
 ```bash
 pip install pytest          # en plus de maturin, dans le venv
-cargo build                 # cœur Rust seul (le venv doit être activé)
-cargo test                  # tests unitaires + intégration + doctests
+cargo build                 # cœur Rust pur (sans pyo3 ; pas besoin du venv)
+cargo test                  # tests unitaires + intégration + doctests (Rust pur)
 maturin develop && python -m pytest   # tests Python
 bash script/check.sh        # enchaîne toutes les vérifications
 ```

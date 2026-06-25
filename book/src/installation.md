@@ -5,10 +5,15 @@ un premier script, et de quoi vérifier que tout fonctionne. Pour développer
 sur la librairie (tests Rust, doctests, génération de la documentation,
 *features* Cargo), voir [Compilation et tests](compilation.md).
 
+> **Rust pur ?** pyrucast s'utilise aussi comme **bibliothèque Rust sans
+> Python** : `pyo3` y est une dépendance optionnelle, donc un build par défaut
+> ne tire ni `pyo3` ni `libpython`. Voir
+> [Usage en Rust pur](compilation.md#usage-en-rust-pur).
+
 ## Prérequis
 
 - **Rust** stable, installé via [`rustup`](https://rustup.rs).
-- **Python** ≥ 3.9.
+- **Python** ≥ 3.9 (pour l'API Python ; inutile en [Rust pur](compilation.md#usage-en-rust-pur)).
 - **Linux uniquement** : les en-têtes Python — `python3-dev` (Debian/Ubuntu)
   ou `python3-devel` (Fedora/RHEL). `pyo3` en a besoin pour l'édition de
   liens ; sur Windows l'installateur officiel les inclut déjà.

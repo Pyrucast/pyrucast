@@ -13,11 +13,15 @@ documentation. Pour le **simple usage en Python** (quatre commandes), voir
 | Python | ≥ 3.9 (3.13 testé) | API Python et `maturin` |
 | `mdbook` | ≥ 0.4 | Génération de cette documentation |
 
-Système :
+Système (uniquement pour **builds avec l'API Python**, voir features plus bas) :
 
 - **Linux** : installer les en-têtes Python — `python3-dev` (Debian/Ubuntu) ou
   `python3-devel` (Fedora/RHEL). `pyo3` en a besoin pour l'édition de liens.
 - **Windows** : l'installateur officiel de Python inclut déjà les en-têtes.
+
+> **Build Rust pur.** Par défaut (`cargo build` / `cargo test`, sans feature),
+> le crate ne compile **ni `pyo3` ni `libpython`** : ni Python ni `python3-dev`
+> ne sont requis. Voir [« Usage en Rust pur »](#usage-en-rust-pur) ci-dessous.
 
 ## Mise en place du venv et des outils Python
 
@@ -40,10 +44,11 @@ python -m venv .venv
 pip install --upgrade pip maturin pytest
 ```
 
-> **Important.** `pyo3` cherche l'interpréteur Python via la variable
-> d'environnement `VIRTUAL_ENV`. **Activez toujours le venv** avant d'invoquer
-> `cargo` ou `maturin`, sinon `cargo build` peut échouer en tentant d'utiliser
-> un interpréteur introuvable.
+> **Important.** Pour les builds **avec l'API Python** (`maturin`, ou `cargo`
+> avec `--features python-api`/`stub-gen`), `pyo3` cherche l'interpréteur via
+> `VIRTUAL_ENV` : **activez toujours le venv** avant d'invoquer ces commandes.
+> Un `cargo build`/`cargo test` **pur** (sans feature) n'a pas cette contrainte
+> — il ne touche pas à Python.
 
 ## Compilation et tests, étape par étape
 
@@ -51,8 +56,8 @@ Les commandes suivantes supposent le venv activé. Elles sont identiques sous
 Windows et Linux.
 
 ```text
-cargo build                # cœur Rust (rlib + cdylib)
-cargo test                 # tests unitaires + intégration + doctests
+cargo build                # cœur Rust pur (rlib + cdylib), sans pyo3
+cargo test                 # tests unitaires + intégration + doctests (Rust pur)
 cargo test --doc           # doctests explicitement
 maturin develop            # construit et installe le module Python dans le venv
 python -m pytest           # tests Python
@@ -86,9 +91,12 @@ Plusieurs morceaux sont gardés derrière des *features* Cargo : ce qu'on
 n'active pas n'est ni compilé, ni embarqué. Toutes optionnelles, elles
 s'activent en cumul (`--features a,b`).
 
+Sans aucune feature, le crate est **du Rust pur** : `pyo3` n'est même pas
+compilé (dépendance optionnelle), donc aucun lien à `libpython`.
+
 | Feature | Apport | Implique | Quand l'activer |
 |---|---|---|---|
-| `python-api` | code des `#[pyclass]` (toutes les classes Python) | — | rarement à la main ; activée automatiquement par `extension-module` et `stub-gen`. Utile pour `cargo test` quand on veut compiler les bindings sans link spécial à libpython. |
+| `python-api` | tire la dépendance `pyo3` + compile le code des `#[pyclass]`/`#[pyfunction]` (toute l'API Python) | `dep:pyo3` | rarement à la main ; activée automatiquement par `extension-module` et `stub-gen`. La désactiver (défaut) donne un crate Rust pur. |
 | `extension-module` | `python-api` + dit à `pyo3` de **ne pas** se lier à `libpython` (l'interpréteur hôte la fournit au chargement du `.so`) | `python-api`, `pyo3/extension-module` | systématique pour `maturin develop` / `maturin build`. |
 | `viz` | export PNG/SVG (rendu CPU via `plotters`) | — | scripts headless, captures pour la doc, CI. |
 | `viz-interactive` | fenêtre interactive `winit`/`softbuffer` (souris, gizmo) | `viz` | environnement graphique disponible. |
@@ -99,6 +107,30 @@ s'activent en cumul (`--features a,b`).
 > `stub-gen` produit un **binaire exécutable** : il faut `libpython` linkée
 > normalement, donc on n'active **pas** `extension-module` ce jour-là. Les deux
 > ne sont jamais activées ensemble.
+
+### Usage en Rust pur
+
+pyrucast s'utilise comme **bibliothèque Rust** sans rien de Python. Comme
+`pyo3` est optionnel, une dépendance par défaut ne compile ni le binding ni
+`libpython` :
+
+```toml
+# Cargo.toml d'un projet Rust tiers
+[dependencies]
+pyrucast = { path = "…", default-features = false }   # Rust pur, pas de pyo3
+```
+
+```rust,ignore
+use pyrucast::containers::mesh::ElementType;
+use pyrucast::ops::mesher;
+
+let mesh = mesher::surface(&contour, ElementType::TRI3, Some(1.0))?;
+```
+
+Tout le cœur (`containers`, `ops`, `interrupt`, `store`, …) est disponible et
+PyO3-free. Seule la couche `py` (les `#[pyclass]`) demande `python-api`. Pour
+interrompre un calcul long depuis du Rust pur, voir
+[Interrompre une fonction](developper/interrompre-une-fonction.md).
 
 ### Génération du stub Python (`.pyi`)
 
