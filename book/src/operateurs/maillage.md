@@ -247,6 +247,14 @@ quad = pyrucast.surface(contour, "QUA4", 1.0)
 print(quad.element_types())   # ['QUA4', 'TRI3'] en général
 ```
 
+### Interruption
+
+Un maillage trop long s'**interrompt** par `Ctrl+C` : `surface` sonde les
+signaux à chaque couche/oreille et lève une `KeyboardInterrupt`. Côté Rust,
+`surface_cancellable(contour, type, size, &cancel)` accepte un jeton
+d'interruption (timeout, drapeau partagé…) — voir
+[Interrompre une fonction](../developper/interrompre-une-fonction.md).
+
 ### Limitations actuelles
 
 - **Un seul contour** (pas de trous) : pour mailler un domaine troué, utiliser
