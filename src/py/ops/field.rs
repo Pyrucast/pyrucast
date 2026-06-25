@@ -9,10 +9,12 @@
 //! (unitary aggregates only) until the ops are generalised to the
 //! `NodeField` aggregate.
 
-use crate::py::element_field::PyElementField;
+use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
-use crate::py::node_field::PyNodeField;
+use crate::py::node_field::{PyNodeField, PySubNodeField};
+use crate::store::{insert, read};
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
 /// Build a `NodeField` carrying the coordinates of every node of `mesh`
@@ -146,3 +148,53 @@ pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
     let nf = crate::ops::field::divergence(&field.inner)?;
     Ok(PyNodeField { inner: nf })
 }
+
+// ── Element-wise unary maths (numpy-style) ──────────────────────────────────
+//
+// `pyrucast.cos(field)`, `pyrucast.exp(field)`, … apply a scalar function to
+// every value of a field, returning a **new** field of the same type. They
+// accept any of the four field flavours (`NodeField` / `SubNodeField` /
+// `ElementField` / `SubElementField`) and mirror `crate::ops::field::*`.
+// Results are unguarded (numpy-like): `log` of ≤ 0 → `-inf`/`nan`, etc.
+
+/// Generate a `#[pyfunction] $name(field)` that dispatches over the four field
+/// wrapper types and applies the matching `ops::field::$name`.
+macro_rules! py_field_unary {
+    ($name:ident, $doc:literal) => {
+        #[doc = $doc]
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+        #[pyfunction]
+        pub fn $name(py: Python<'_>, field: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+            use crate::ops::field::$name as op;
+            if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
+                return Ok(Py::new(py, PyNodeField { inner: op(&f.inner)? })?.into_any());
+            }
+            if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
+                return Ok(Py::new(py, PyElementField { inner: op(&f.inner)? })?.into_any());
+            }
+            if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
+                let out = op(&*read(&f.handle)?)?;
+                return Ok(Py::new(py, PySubNodeField { handle: insert(out) })?.into_any());
+            }
+            if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
+                let out = op(&*read(&f.handle)?)?;
+                return Ok(Py::new(py, PySubElementField { handle: insert(out) })?.into_any());
+            }
+            Err(PyTypeError::new_err(
+                "expected a NodeField, SubNodeField, ElementField or SubElementField",
+            ))
+        }
+    };
+}
+
+py_field_unary!(abs, "Element-wise absolute value of a field.");
+py_field_unary!(sqrt, "Element-wise square root of a field (`nan` for negatives).");
+py_field_unary!(exp, "Element-wise exponential `eˣ` of a field.");
+py_field_unary!(log, "Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).");
+py_field_unary!(log10, "Element-wise base-10 logarithm of a field.");
+py_field_unary!(cos, "Element-wise cosine of a field (radians).");
+py_field_unary!(sin, "Element-wise sine of a field (radians).");
+py_field_unary!(tan, "Element-wise tangent of a field (radians).");
+py_field_unary!(sinh, "Element-wise hyperbolic sine of a field.");
+py_field_unary!(cosh, "Element-wise hyperbolic cosine of a field.");
+py_field_unary!(tanh, "Element-wise hyperbolic tangent of a field.");

@@ -115,6 +115,27 @@ numpy : `inf` / `nan`). Cette stricte symétrie est volontaire : combiner deux
 champs définis sur des décompositions différentes est presque toujours un bug,
 pas une intention.
 
+### 4. Fonctions unaires (`cos`, `exp`, …)
+
+Des fonctions mathématiques de base s'appliquent **élément par élément**,
+renvoyant un **nouveau** champ de même type (zone ou agrégat). Style numpy,
+exposées **au top-level** côté Python :
+
+```python
+import pyrucast as pc
+champ2 = pc.cos(champ1)        # cosinus de chaque valeur
+e = pc.exp(-pc.abs(u))         # elles se composent librement
+norme = pc.sqrt(sx ** 2.0 + sy ** 2.0)
+```
+
+Jeu disponible : `abs`, `sqrt`, `exp`, `log` (népérien), `log10`, `cos`,
+`sin`, `tan`, `sinh`, `cosh`, `tanh`. Sémantique **non gardée** comme le reste
+(`log` d'un négatif → `nan`). Côté Rust ce sont des fonctions nommées
+(`ops::field::cos(&f)`, …, génériques via le trait `MapValues`) ; il n'y a pas
+de syntaxe `cos(x)` pour un opérateur en Rust, donc seul Python en profite à
+l'écriture. Tout repose sur la primitive `map_all` (cf. plus haut), sans
+logique nouvelle.
+
 ## Interface (résumé)
 
 | Niveau | Méthode | Effet |

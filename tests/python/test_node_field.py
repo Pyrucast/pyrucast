@@ -372,6 +372,50 @@ def test_pow_rejects_modulo():
         raise AssertionError("expected TypeError for pow with modulo")
 
 
+# ─── element-wise unary maths (numpy-style top-level functions) ───────────────
+
+
+def test_unary_math_on_aggregate_and_subfield():
+    import math
+
+    c, nodes, sm = _poi1_with(3)
+    f = pyrucast.NodeField(sm, ["T"])
+    f[0].set_value(nodes[0], "T", 0.0)
+    f[0].set_value(nodes[1], "T", math.pi)
+    f[0].set_value(nodes[2], "T", 4.0)
+
+    cosf = pyrucast.cos(f)  # aggregate → aggregate
+    assert abs(cosf.value(nodes[0], "T") - 1.0) < 1e-12
+    assert abs(cosf.value(nodes[1], "T") + 1.0) < 1e-12
+    # Original is untouched.
+    assert f.value(nodes[1], "T") == math.pi
+
+    assert abs(pyrucast.sqrt(f).value(nodes[2], "T") - 2.0) < 1e-12
+    assert abs(pyrucast.exp(f).value(nodes[0], "T") - 1.0) < 1e-12
+
+    # Works on a single zone (SubNodeField) too.
+    g = pyrucast.sin(f[0])
+    assert abs(g.value(nodes[1], "T") - math.sin(math.pi)) < 1e-12
+
+
+def test_unary_math_log_unguarded_is_nan():
+    import math
+
+    c, nodes, sm = _poi1_with(1)
+    f = pyrucast.NodeField(sm, ["T"])
+    f[0].set_value(nodes[0], "T", -1.0)
+    assert math.isnan(pyrucast.log(f).value(nodes[0], "T"))
+
+
+def test_unary_math_rejects_bad_operand():
+    try:
+        pyrucast.cos("nope")
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("expected TypeError for non-field operand")
+
+
 def test_union_is_structural_merge():
     # `a | b` unites zones (shared handles) — it does NOT add values. The two
     # zones live on distinct support SubMeshes, so they stay separate.

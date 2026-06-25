@@ -15,6 +15,7 @@ pub mod consolidate_element;
 pub mod coordinates;
 pub mod deformation;
 pub mod divergence;
+pub mod elementwise;
 pub mod gradient;
 pub mod merge;
 pub mod restrict;
@@ -25,6 +26,9 @@ pub use consolidate_element::consolidate_element;
 pub use coordinates::{coordinates, displace, set_coordinates};
 pub use deformation::deformation;
 pub use divergence::divergence;
+pub use elementwise::{
+    abs, cos, cosh, exp, log, log10, sin, sinh, sqrt, tan, tanh, MapValues,
+};
 pub use gradient::gradient;
 pub use merge::merge;
 pub use restrict::restrict;

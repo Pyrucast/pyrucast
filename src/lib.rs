@@ -105,6 +105,17 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::field::deformation, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::beam_deformation, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::divergence, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::abs, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::sqrt, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::exp, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::log, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::log10, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::cos, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::sin, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::tan, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::sinh, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::cosh, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::tanh, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::stiffness, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::mass, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::flux, m)?)?;

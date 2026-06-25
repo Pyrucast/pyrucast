@@ -22,14 +22,18 @@ __all__ = [
     "SubMesh",
     "SubModel",
     "SubNodeField",
+    "abs",
     "barycenter",
     "beam_deformation",
     "circle_seg2",
     "consolidate",
     "coordinates",
+    "cos",
+    "cosh",
     "deformation",
     "displace",
     "divergence",
+    "exp",
     "extrude",
     "fill_surface",
     "flux",
@@ -37,6 +41,8 @@ __all__ = [
     "gradient",
     "integrate_behavior",
     "line_seg2",
+    "log",
+    "log10",
     "mass",
     "material_field",
     "material_field_per_sub_model",
@@ -45,12 +51,17 @@ __all__ = [
     "restrict",
     "set_coordinates",
     "set_swap_dir",
+    "sin",
+    "sinh",
     "solve",
+    "sqrt",
     "stiffness",
     "sub_material_field",
     "surface",
     "swap_dir",
     "sweep_qua4",
+    "tan",
+    "tanh",
     "to_poi1",
 ]
 
@@ -1462,6 +1473,11 @@ class SubNodeField:
         `NotImplemented` for any other right-hand type.
         """
 
+def abs(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise absolute value of a field.
+    """
+
 def barycenter(mesh: Mesh) -> Mesh:
     r"""
     Build a POI1 mesh of per-element centroids (centres of gravity), submesh
@@ -1511,6 +1527,16 @@ def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins
     `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
     """
 
+def cos(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise cosine of a field (radians).
+    """
+
+def cosh(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise hyperbolic cosine of a field.
+    """
+
 def deformation(u: NodeField, fespace: FiniteElementSpace) -> ElementField:
     r"""
     Linearized (small-strain) deformation `ε = ½(∇u + ∇uᵀ)` of a displacement
@@ -1536,6 +1562,11 @@ def divergence(field: ElementField) -> NodeField:
     `gradient`: `d_i = ∫ ∇N_i · F dΩ`, accumulated per node. The field must
     carry exactly `space_dim` components (the vector components in order).
     Returns a `NodeField` with a single `"div"` component (one zone per subspace).
+    """
+
+def exp(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise exponential `eˣ` of a field.
     """
 
 def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
@@ -1596,6 +1627,16 @@ def integrate_behavior(model: Model, deformation: ElementField, materials: Eleme
 def line_seg2(a: Node, b: Node, n_elems: builtins.int) -> Mesh:
     r"""
     Build a line of `n_elems` SEG2 elements from node `a` to node `b`.
+    """
+
+def log(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+    """
+
+def log10(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise base-10 logarithm of a field.
     """
 
 def mass(model: Model) -> Matrix:
@@ -1665,6 +1706,16 @@ def set_swap_dir(path: builtins.str | os.PathLike | pathlib.Path) -> None:
     per-process subdirectory of the system temp dir is used.
     """
 
+def sin(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise sine of a field (radians).
+    """
+
+def sinh(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise hyperbolic sine of a field.
+    """
+
 def solve(matrix: Matrix, rhs: NodeField) -> NodeField:
     r"""
     Solve the linear system `A·x = b` for `x` (dense LU).
@@ -1677,6 +1728,11 @@ def solve(matrix: Matrix, rhs: NodeField) -> NodeField:
     A `Ctrl+C` is honoured at the solver's phase boundaries (assembly,
     dense conversion, factorization). The dense factorization itself is a
     single library call and is not interrupted mid-way.
+    """
+
+def sqrt(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise square root of a field (`nan` for negatives).
     """
 
 def stiffness(model: Model, materials: ElementField) -> Matrix:
@@ -1719,6 +1775,16 @@ def sweep_qua4(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
     r"""
     Sweep two SEG2 line meshes into a QUA4 mesh, building `n_layers` layers
     of quads between `mesh_a` and `mesh_b`.
+    """
+
+def tan(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise tangent of a field (radians).
+    """
+
+def tanh(field: typing.Any) -> typing.Any:
+    r"""
+    Element-wise hyperbolic tangent of a field.
     """
 
 def to_poi1(mesh: Mesh) -> Mesh:
