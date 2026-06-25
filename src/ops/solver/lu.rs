@@ -87,6 +87,7 @@
 use crate::containers::mesh::NodeId;
 use crate::containers::field::Field;
 use crate::error::{PyrucastError, Result};
+use crate::interrupt::{Cancel, NoCancel};
 use crate::containers::matrix::Matrix;
 use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
@@ -104,7 +105,29 @@ use nalgebra::DVector;
 /// The returned `NodeField` is a single zone living on the column-DOF
 /// nodes of the matrix (a POI1 submesh built on the fly), with one
 /// component per distinct column field name.
+///
+/// Uninterruptible convenience form; see [`solve_cancellable`].
 pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
+    solve_cancellable(matrix, rhs, &NoCancel)
+}
+
+/// Like [`solve`], but polls `cancel` at each phase boundary so the call can
+/// be stopped early (returning [`PyrucastError::Interrupted`]).
+///
+/// **Granularity.** The dense factorization (`nalgebra`'s `lu()` / `solve`)
+/// is a single library call with no cooperative checkpoint, so it is **not**
+/// interrupted mid-way: `cancel` is polled *around* the heavy steps (vector
+/// assembly, dense conversion, before factorization, result write-back). A
+/// `Ctrl+C` therefore lands at the next phase boundary, not inside the
+/// factorization itself. The fine-grained, per-iteration interruption point
+/// is the natural home of the future iterative/sparse solver, which will
+/// poll this same token inside its loop.
+pub fn solve_cancellable(
+    matrix: &Matrix,
+    rhs: &NodeField,
+    cancel: &dyn Cancel,
+) -> Result<NodeField> {
+    cancel.check()?;
     let row_dofs = matrix.row_dofs()?;
     let col_dofs = matrix.col_dofs()?;
     if row_dofs.len() != col_dofs.len() {
@@ -130,11 +153,16 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
     }
 
     // ── Step 2 — LU factorization + solve ──────────────────────────────
+    // Poll before each heavy step (dense conversion, then the opaque
+    // factorization) so a Ctrl+C pressed during assembly lands here.
+    cancel.check()?;
     let a = matrix.to_dmatrix()?;
+    cancel.check()?;
     let lu = a.lu();
     let x = lu.solve(&b).ok_or_else(|| {
         PyrucastError::Message("solve: LU failed (matrix is singular)".into())
     })?;
+    cancel.check()?;
 
     // ── Step 3 — wrap the solution into a fresh single-zone NodeField ──
     let coords = rhs.coords()?;
@@ -349,6 +377,54 @@ mod tests {
             SubNodeField::from_poi1(&insert(rhs_sm), vec!["q".into()]).unwrap(),
         );
         assert!(solve(&m, &rhs).is_err());
+    }
+
+    /// A solvable 1×1 system `2·T = b` and a rhs carrying `b` at the row DOF.
+    fn tiny_system() -> (crate::containers::matrix::Matrix, NodeField, NodeId) {
+        use crate::containers::matrix::{DofOrdering, SubMatrix};
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[a.id()]).unwrap();
+            insert(sm)
+        };
+        let mut block = SubMatrix::new(
+            sm.clone(),
+            sm.clone(),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
+        let mut m = crate::containers::matrix::Matrix::empty();
+        m.add_sub(insert(block)).unwrap();
+        m.finalize().unwrap();
+
+        let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
+        rhs.set_value(a.id(), "q", 6.0).unwrap();
+        (m, NodeField::from_sub(rhs), a.id())
+    }
+
+    #[test]
+    fn solve_cancellable_stops_on_preset_flag() {
+        use std::sync::atomic::AtomicBool;
+        let (m, rhs, _a) = tiny_system();
+        let flag = AtomicBool::new(true);
+        let err = solve_cancellable(&m, &rhs, &flag).unwrap_err();
+        assert!(matches!(err, PyrucastError::Interrupted));
+    }
+
+    #[test]
+    fn solve_cancellable_completes_when_not_cancelled() {
+        use std::sync::atomic::AtomicBool;
+        let (m, rhs, a) = tiny_system();
+        let flag = AtomicBool::new(false);
+        let sol = solve_cancellable(&m, &rhs, &flag).unwrap();
+        // 2·T = 6 ⇒ T = 3.
+        assert!((sol.value(a, "T").unwrap() - 3.0).abs() < 1e-12);
     }
 
     #[test]

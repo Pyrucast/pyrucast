@@ -6,28 +6,12 @@
 
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Mesh, Node, SubMesh};
-use crate::error::{PyrucastError, Result};
-use crate::interrupt::Cancel;
 use crate::py::coords::PyCoords;
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
+use crate::py::signals::PySignals;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-
-/// Cancellation token backed by Python's signal handling: polling it runs
-/// `Python::check_signals`, so a `Ctrl+C` (SIGINT) pressed during a long
-/// operator turns into [`PyrucastError::Interrupted`] → `KeyboardInterrupt`.
-///
-/// This is the *only* place where Python interruption meets the PyO3-free
-/// operator core: the operators take a [`Cancel`] trait object and never see
-/// `Python`.
-struct PySignals<'py>(Python<'py>);
-
-impl Cancel for PySignals<'_> {
-    fn check(&self) -> Result<()> {
-        self.0.check_signals().map_err(|_| PyrucastError::Interrupted)
-    }
-}
 
 /// Build a points (POI1) mesh holding every live node of `coords`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
