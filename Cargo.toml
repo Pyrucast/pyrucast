@@ -12,7 +12,11 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 paste = "1"
-pyo3 = { version = "0.28", features = ["multiple-pymethods"] }
+# Optional: the Python binding only. Enabled by the `python-api` feature,
+# so a pure-Rust build (the default `cargo build` / `cargo test`) links
+# neither pyo3 nor libpython. All `#[pyclass]`/`#[pyfunction]` code lives
+# behind `#[cfg(feature = "python-api")]`.
+pyo3 = { version = "0.28", features = ["multiple-pymethods"], optional = true }
 serde = { version = "1", features = ["derive"] }
 bincode = "1.3"
 # Vector / matrix primitives used across geometry helpers, mesh
@@ -36,10 +40,11 @@ pyo3-stub-gen = { version = "0.22", optional = true }
 parking_lot = { version = "0.12.5", features = ["arc_lock"] }
 
 [features]
-# Compile the Python binding code (the `#[pyclass]` wrappers etc.).
-# On its own, pyo3 links to libpython normally — fine for `cargo test`
-# and for building utility binaries like `stub_gen`.
-python-api = []
+# Compile the Python binding code (the `#[pyclass]` wrappers etc.). Pulls
+# in the optional `pyo3` dependency. On its own, pyo3 links to libpython
+# normally — fine for building utility binaries like `stub_gen`. Without
+# this feature the crate is pure Rust (no pyo3, no libpython).
+python-api = ["dep:pyo3"]
 # Build as a Python extension module loaded by an interpreter. Tells
 # pyo3 NOT to link to libpython, since the host interpreter provides
 # it at runtime. Enabled by maturin when packaging the .so.
