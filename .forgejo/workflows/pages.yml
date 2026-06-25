@@ -1,8 +1,10 @@
 name: Publier le book
 
-# Build du mdBook (book/) et déploiement sur Codeberg Pages.
-# Codeberg sert le contenu de la branche `pages` à l'adresse
+# Build du mdBook (book/) + de la référence rustdoc, puis déploiement sur
+# Codeberg Pages. Codeberg sert le contenu de la branche `pages` à l'adresse
 # https://gauthier.codeberg.page/pyrucast/
+# Le site combiné place le book à la racine et la doc Rust sous `rust/`
+# (https://gauthier.codeberg.page/pyrucast/rust/pyrucast/index.html).
 #
 # Prérequis côté Codeberg (UI, hors dépôt) :
 #   1. Activer les Actions : Settings > Units (Overview) > Actions
@@ -15,6 +17,9 @@ on:
     branches: [master]
     paths:
       - 'book/**'
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.forgejo/workflows/pages.yml'
   workflow_dispatch:
 
@@ -35,18 +40,38 @@ jobs:
           curl -sSL "$url" | tar -xz -C /usr/local/bin
           mdbook --version
 
+      - name: Installer Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: Builder le book
         run: mdbook build book
+
+      - name: Builder la doc Rust (rustdoc)
+        # Rust pur (features par défaut) : ni pyo3 ni libpython requis.
+        run: |
+          . "$HOME/.cargo/env"
+          cargo doc --no-deps --lib
+
+      - name: Assembler le site (book + rust/)
+        run: |
+          rm -rf _site
+          mkdir _site
+          cp -a book/book/. _site/
+          mkdir _site/rust
+          cp -a target/doc/. _site/rust/
 
       - name: Déployer sur la branche pages
         env:
           DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
         run: |
-          cd book/book
+          cd _site
           git init -q
           git checkout -q -b pages
           git config user.name "forgejo-actions"
           git config user.email "ci@pyrucast"
           git add -A
-          git commit -q -m "Déploiement du book"
+          git commit -q -m "Déploiement du book + rustdoc"
           git push -f "https://gauthier:${DEPLOY_TOKEN}@codeberg.org/gauthier/pyrucast.git" pages

@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# pyrucast — build the book and publish it to Codeberg Pages by hand.
+# pyrucast — build the book + rustdoc and publish them to Codeberg Pages
+# by hand.
 #
-# Builds the mdBook (book/) and force-pushes the generated site to the
-# `pages` branch, which Codeberg serves at:
-#     https://gauthier.codeberg.page/pyrucast/
+# Builds the mdBook (book/) and the Rust API reference (rustdoc), then
+# force-pushes the combined site to the `pages` branch, which Codeberg
+# serves at:
+#     https://gauthier.codeberg.page/pyrucast/          (book, racine)
+#     https://gauthier.codeberg.page/pyrucast/rust/...  (rustdoc)
 #
 # This is the manual alternative to the Forgejo Actions workflow
 # (.forgejo/workflows/pages.yml), useful until a Forgejo runner is
@@ -25,6 +28,7 @@ die()  { printf '\nERROR: %s\n' "$1" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 have mdbook || die "mdbook not found — install it via 'cargo install mdbook'"
+have cargo  || die "cargo not found — install Rust via rustup"
 have git    || die "git not found"
 
 REMOTE_URL="$(git remote get-url --push origin)" \
@@ -33,11 +37,17 @@ REMOTE_URL="$(git remote get-url --push origin)" \
 step "Building the book"
 mdbook build book
 
-step "Publishing book/book/ to the 'pages' branch"
+step "Building the Rust API reference (rustdoc)"
+# Pure Rust (default features): neither pyo3 nor libpython is required.
+cargo doc --no-deps --lib
+
+step "Publishing the combined site (book + rust/) to the 'pages' branch"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 cp -a book/book/. "$TMP"/
+mkdir "$TMP"/rust
+cp -a target/doc/. "$TMP"/rust/
 (
     cd "$TMP"
     git init -q
@@ -45,9 +55,10 @@ cp -a book/book/. "$TMP"/
     git config user.name  "$(git -C "$ROOT" config user.name  || echo pyrucast)"
     git config user.email "$(git -C "$ROOT" config user.email || echo ci@pyrucast)"
     git add -A
-    git commit -q -m "Déploiement du book"
+    git commit -q -m "Déploiement du book + rustdoc"
     git push -f "$REMOTE_URL" pages
 )
 
 step "Done"
-echo "  Site : https://gauthier.codeberg.page/pyrucast/"
+echo "  Book   : https://gauthier.codeberg.page/pyrucast/"
+echo "  Rustdoc: https://gauthier.codeberg.page/pyrucast/rust/pyrucast/index.html"

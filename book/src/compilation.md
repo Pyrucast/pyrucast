@@ -85,6 +85,12 @@ Rustdoc et mdbook sont complémentaires : rustdoc couvre la **référence par
 item** ; ce mdbook couvre les **principes, l'architecture et les exemples
 transverses**.
 
+La référence rustdoc est **publiée à côté du book** sur Codeberg Pages, à
+<https://gauthier.codeberg.page/pyrucast/rust/pyrucast/index.html> (lien
+également présent dans le sommaire). Sa génération et son déploiement sont
+décrits dans [« Publication automatique du book »](#publication-automatique-du-book)
+ci-dessous.
+
 ## Features Cargo
 
 Plusieurs morceaux sont gardés derrière des *features* Cargo : ce qu'on
@@ -206,18 +212,21 @@ visualisation interactive** : il suffit d'activer le venv et d'appeler
 ## Publication automatique du book
 
 Le book est publié sur **Codeberg Pages** à l'adresse
-<https://gauthier.codeberg.page/pyrucast/>.
+<https://gauthier.codeberg.page/pyrucast/>, et la **référence rustdoc** à côté,
+sous <https://gauthier.codeberg.page/pyrucast/rust/pyrucast/index.html>.
 
 La publication est automatisée par un workflow **Forgejo Actions**
-(`.forgejo/workflows/pages.yml`) : à chaque push sur `master` qui touche à
-`book/**`, le workflow build le book (`mdbook build book`) puis pousse le
-contenu de `book/book/` sur la branche `pages` du dépôt — branche que Codeberg
-Pages sert directement. Le workflow peut aussi être déclenché à la main
+(`.forgejo/workflows/pages.yml`) : à chaque push sur `master` qui touche au
+book ou aux sources Rust, le workflow build le book (`mdbook build book`) **et**
+la doc Rust (`cargo doc --no-deps --lib`), puis pousse sur la branche `pages` un
+site combiné — le book à la racine, la rustdoc sous `rust/` — branche que
+Codeberg Pages sert directement. Le workflow peut aussi être déclenché à la main
 (*workflow_dispatch*) depuis l'onglet *Actions*.
 
 En attendant qu'un runner soit disponible, la publication peut se faire **à la
-main** avec `script/publish-book.sh` : il build le book et pousse le site sur la
-branche `pages` avec tes propres identifiants git (aucun token CI requis).
+main** avec `script/publish-book.sh` : il build le book **et** la rustdoc, puis
+pousse le site combiné sur la branche `pages` avec tes propres identifiants git
+(aucun token CI requis).
 
 Prérequis à configurer une fois côté Codeberg (interface web), pour la
 publication **automatique** via Forgejo Actions :
