@@ -26,9 +26,7 @@ pub use consolidate_element::consolidate_element;
 pub use coordinates::{coordinates, displace, set_coordinates};
 pub use deformation::deformation;
 pub use divergence::divergence;
-pub use elementwise::{
-    abs, cos, cosh, exp, log, log10, sin, sinh, sqrt, tan, tanh, MapValues,
-};
+pub use elementwise::{abs, cos, cosh, exp, log, log10, sin, sinh, sqrt, tan, tanh};
 pub use gradient::gradient;
 pub use merge::merge;
 pub use restrict::restrict;

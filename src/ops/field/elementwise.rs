@@ -16,43 +16,13 @@
 //! Rust has no `cos(x)`-style operator syntax, so these are plain named
 //! functions here (e.g. `ops::field::cos(&f)`); the Python binding exposes
 //! them flat as `pyrucast.cos(f)`, …, mirroring numpy.
+//!
+//! The functions are generic over [`MapValues`] (defined next to the field
+//! traits), which unifies the zone (`map_all`) and aggregate (`map_all`)
+//! element-wise maps so a single definition serves all four field types.
 
-use crate::containers::element_field::{ElementField, SubElementField};
-use crate::containers::field::{Field, SubField};
-use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::containers::field::MapValues;
 use crate::error::Result;
-
-/// Apply a scalar `f64 -> f64` function to every stored value, returning a
-/// new field of the same type. Implemented for both the zone (`Sub*Field`)
-/// and the aggregate (`*Field`) flavours.
-pub trait MapValues: Sized {
-    /// A new field with `f` applied element-wise.
-    fn map_values(&self, f: fn(f64) -> f64) -> Result<Self>;
-}
-
-impl MapValues for SubNodeField {
-    fn map_values(&self, f: fn(f64) -> f64) -> Result<Self> {
-        Ok(self.map_all(f))
-    }
-}
-
-impl MapValues for SubElementField {
-    fn map_values(&self, f: fn(f64) -> f64) -> Result<Self> {
-        Ok(self.map_all(f))
-    }
-}
-
-impl MapValues for NodeField {
-    fn map_values(&self, f: fn(f64) -> f64) -> Result<Self> {
-        self.map_subs(|s| Ok(s.map_all(f)))
-    }
-}
-
-impl MapValues for ElementField {
-    fn map_values(&self, f: fn(f64) -> f64) -> Result<Self> {
-        self.map_subs(|s| Ok(s.map_all(f)))
-    }
-}
 
 macro_rules! field_unary {
     ($(#[$doc:meta])* $name:ident, $f:expr) => {
@@ -112,7 +82,7 @@ field_unary!(
 mod tests {
     use super::*;
     use crate::containers::mesh::{Coords, ElementType, Node, NodeId, SubMesh};
-    use crate::containers::node_field::SubNodeField;
+    use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::store::insert;
 
     /// Build a single-zone `SubNodeField` named "T" carrying `values`,

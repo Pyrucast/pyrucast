@@ -34,6 +34,8 @@
 //! ```
 
 use crate::aggregate::Aggregate;
+use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::persist::Persist;
 use crate::store::{insert, read, write, Handle, ReadGuard};
@@ -386,6 +388,17 @@ where
         self.map_subs(|s| Ok(s.map_all(|v| op(v, rhs))))
     }
 
+    /// A new aggregate with `f` applied to **every** value of every zone —
+    /// the unary counterpart of [`Field::combine_scalar`], mirroring
+    /// [`SubField::map_all`] at the aggregate level.
+    fn map_all(&self, f: impl Fn(f64) -> f64 + Copy) -> Result<Self>
+    where
+        Self: Sized,
+        Self::Sub: Clone,
+    {
+        self.map_subs(|s| Ok(s.map_all(f)))
+    }
+
     /// Apply `f` **in place** to the named component, on every zone that
     /// defines it. Errors only if **no** zone defines the component.
     fn map_component(&self, component: &str, f: impl Fn(f64) -> f64 + Copy) -> Result<()> {
@@ -511,6 +524,45 @@ where
 }
 
 impl<A: Aggregate> Field for A where A::Sub: SubField {}
+
+/// Uniform element-wise unary map over **either** a single zone (`Sub*Field`)
+/// or an aggregate (`*Field`), returning a new field of the same type.
+///
+/// It is the minimal bridge that lets a generic operator (e.g.
+/// [`crate::ops::field::cos`]) accept both flavours: [`SubField`] and
+/// [`Field`] are sibling traits with no common ancestor, so a single generic
+/// bound needs this trait. Each impl simply delegates to the matching
+/// `map_all` ([`SubField::map_all`] / [`Field::map_all`]); the method keeps a
+/// distinct name to avoid colliding with those inherent `map_all` methods at
+/// concrete call sites.
+pub trait MapValues: Sized {
+    /// A new field with `f` applied to every value.
+    fn map_values(&self, f: fn(f64) -> f64) -> Result<Self>;
+}
+
+impl MapValues for SubNodeField {
+    fn map_values(&self, f: fn(f64) -> f64) -> Result<Self> {
+        Ok(self.map_all(f))
+    }
+}
+
+impl MapValues for SubElementField {
+    fn map_values(&self, f: fn(f64) -> f64) -> Result<Self> {
+        Ok(self.map_all(f))
+    }
+}
+
+impl MapValues for NodeField {
+    fn map_values(&self, f: fn(f64) -> f64) -> Result<Self> {
+        self.map_all(f)
+    }
+}
+
+impl MapValues for ElementField {
+    fn map_values(&self, f: fn(f64) -> f64) -> Result<Self> {
+        self.map_all(f)
+    }
+}
 
 /// Fold `op` over one component across every sub that defines it.
 fn fold_subs<A>(agg: &A, component: &str, op_name: &str, op: fn(f64, f64) -> f64) -> Result<f64>
