@@ -1,0 +1,52 @@
+name: Publier le book
+
+# Build du mdBook (book/) et déploiement sur Codeberg Pages.
+# Codeberg sert le contenu de la branche `pages` à l'adresse
+# https://gauthier.codeberg.page/pyrucast/
+#
+# Prérequis côté Codeberg (UI, hors dépôt) :
+#   1. Activer les Actions : Settings > Units (Overview) > Actions
+#   2. Un runner Forgejo disponible avec le label `docker`
+#   3. Un secret `DEPLOY_TOKEN` : Settings > Actions > Secrets
+#      (Access Token Codeberg avec le scope `write:repository`)
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'book/**'
+      - '.forgejo/workflows/pages.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: docker
+    container:
+      image: node:20-bookworm
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v4
+
+      - name: Installer mdBook
+        env:
+          MDBOOK_VERSION: '0.4.48'
+        run: |
+          url="https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sSL "$url" | tar -xz -C /usr/local/bin
+          mdbook --version
+
+      - name: Builder le book
+        run: mdbook build book
+
+      - name: Déployer sur la branche pages
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+        run: |
+          cd book/book
+          git init -q
+          git checkout -q -b pages
+          git config user.name "forgejo-actions"
+          git config user.email "ci@pyrucast"
+          git add -A
+          git commit -q -m "Déploiement du book"
+          git push -f "https://gauthier:${DEPLOY_TOKEN}@codeberg.org/gauthier/pyrucast.git" pages

@@ -203,6 +203,27 @@ Il déroule, dans l'ordre :
 visualisation interactive** : il suffit d'activer le venv et d'appeler
 `mesh.plot()` (`save=None` ouvre la fenêtre — cf. [Visualisation](visualization.md)).
 
+## Publication automatique du book
+
+Le book est publié sur **Codeberg Pages** à l'adresse
+<https://gauthier.codeberg.page/pyrucast/>.
+
+La publication est automatisée par un workflow **Forgejo Actions**
+(`.forgejo/workflows/pages.yml`) : à chaque push sur `master` qui touche à
+`book/**`, le workflow build le book (`mdbook build book`) puis pousse le
+contenu de `book/book/` sur la branche `pages` du dépôt — branche que Codeberg
+Pages sert directement. Le workflow peut aussi être déclenché à la main
+(*workflow_dispatch*) depuis l'onglet *Actions*.
+
+Prérequis à configurer une fois côté Codeberg (interface web) :
+
+1. **Activer les Actions** : Settings → *Units* (Overview) → cocher *Actions*.
+2. **Un runner** avec le label `docker` (les runners partagés Codeberg étant
+   limités, on enregistre généralement son propre *Forgejo Runner*).
+3. **Le secret `DEPLOY_TOKEN`** : Settings → Actions → Secrets, contenant un
+   *Access Token* Codeberg avec le scope `write:repository` (utilisé pour
+   pousser la branche `pages`).
+
 ## Dépannage rapide
 
 - *`error: failed to run the Python interpreter at ...`* lors d'un
