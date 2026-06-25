@@ -203,6 +203,16 @@ def test_operator_chained_sub_mul_div():
         assert abs(g.get(0, gp, 0) - 15.0) < 1e-12
 
 
+def test_operator_pow_scalar():
+    _, _, fes = _tri3_subspace()
+    f = _subfield(fes, ["x"])
+    f.set_uniform("x", 3.0)
+    g = f ** 2.0
+    for gp in range(3):
+        assert abs(g.get(0, gp, 0) - 9.0) < 1e-12
+    assert f.get(0, 0, 0) == 3.0  # f untouched
+
+
 # ─── __getitem__ / __setitem__ ──────────────────────────────────────────────
 
 

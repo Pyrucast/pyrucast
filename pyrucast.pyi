@@ -328,6 +328,13 @@ class ElementField:
     def __sub__(self, rhs: typing.Any) -> ElementField: ...
     def __mul__(self, rhs: typing.Any) -> ElementField: ...
     def __truediv__(self, rhs: typing.Any) -> ElementField: ...
+    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> ElementField:
+        r"""
+        `field ** exponent` — element-wise power, same dispatch as the other
+        operators (float → scalar, `ElementField` → strict same-decomposition,
+        `SubElementField` → targeted zone). The ternary `pow(x, y, z)` modulo
+        form is rejected.
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, idx: builtins.int) -> SubElementField: ...
     def unit(self) -> SubElementField:
@@ -860,6 +867,13 @@ class NodeField:
     def __sub__(self, rhs: typing.Any) -> NodeField: ...
     def __mul__(self, rhs: typing.Any) -> NodeField: ...
     def __truediv__(self, rhs: typing.Any) -> NodeField: ...
+    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> NodeField:
+        r"""
+        `field ** exponent` — element-wise power, same dispatch as the other
+        operators (float → scalar, `NodeField` → strict same-decomposition,
+        `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo
+        form is rejected.
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, idx: builtins.int) -> SubNodeField: ...
     def unit(self) -> SubNodeField:
@@ -976,6 +990,13 @@ class SubElementField:
     def __sub__(self, rhs: typing.Any) -> SubElementField: ...
     def __mul__(self, rhs: typing.Any) -> SubElementField: ...
     def __truediv__(self, rhs: typing.Any) -> SubElementField: ...
+    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> SubElementField:
+        r"""
+        `field ** exponent` — element-wise power, same dispatch as the other
+        operators (float exponent → broadcast; `SubElementField` → strict
+        element-by-element). The ternary `pow(x, y, z)` modulo form is
+        rejected (meaningless on floats).
+        """
     def __getitem__(self, key: tuple[builtins.int, builtins.int, builtins.str]) -> builtins.float:
         r"""
         `field[cell, gauss, "name"]` — raises ValueError if the component
@@ -1411,6 +1432,13 @@ class SubNodeField:
     def __sub__(self, rhs: typing.Any) -> SubNodeField: ...
     def __mul__(self, rhs: typing.Any) -> SubNodeField: ...
     def __truediv__(self, rhs: typing.Any) -> SubNodeField: ...
+    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> SubNodeField:
+        r"""
+        `field ** exponent` — element-wise power, same dispatch as the other
+        operators (float exponent → broadcast; `SubNodeField` → strict
+        element-by-element). The ternary `pow(x, y, z)` modulo form is
+        rejected (meaningless on floats).
+        """
     def __getitem__(self, key: tuple[Node, builtins.str]) -> builtins.float:
         r"""
         `subfield[node, "UX"]` — raises if the node or component is absent.
@@ -1645,6 +1673,10 @@ def solve(matrix: Matrix, rhs: NodeField) -> NodeField:
     as a `NodeField` (read through the aggregate, zones resolved per DOF).
     Returns the solution `x` as a single-zone `NodeField` over the
     column-DOF nodes.
+    
+    A `Ctrl+C` is honoured at the solver's phase boundaries (assembly,
+    dense conversion, factorization). The dense factorization itself is a
+    single library call and is not interrupted mid-way.
     """
 
 def stiffness(model: Model, materials: ElementField) -> Matrix:

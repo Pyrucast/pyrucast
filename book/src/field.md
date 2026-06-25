@@ -58,19 +58,27 @@ contraint.
 
 ### 1. Scalaire (broadcast)
 
-`field + s`, `field - s`, `field * s`, `field / s` renvoient un **nouveau**
-champ où l'opération est appliquée à **toutes** les valeurs de toutes les
-composantes de toutes les zones. Disponible au niveau **zone** (`SubField`,
-via `Add/Sub/Mul/Div<f64>`) **et** au niveau **agrégat** (`NodeField` /
-`ElementField`, dunders Python `__add__`, …).
+`field + s`, `field - s`, `field * s`, `field / s`, `field ** s` renvoient un
+**nouveau** champ où l'opération est appliquée à **toutes** les valeurs de
+toutes les composantes de toutes les zones. Disponible au niveau **zone**
+(`SubField`) **et** au niveau **agrégat** (`NodeField` / `ElementField`,
+dunders Python `__add__`, …, `__pow__`).
 
 ```python
 scaled = mat * 1.1      # nouveau champ, toutes composantes × 1.1
 shifted = u - 5.0       # nouveau champ
+energy = (u ** 2.0)     # puissance élément par élément (exposant fractionnaire OK)
 ```
 
 > `+=` n'est **pas** surchargé : `f + s` ne mute pas `f`. (Côté Rust, la
 > version consommante est zéro-copie, la version par référence clone d'abord.)
+
+> **Puissance — Python seulement.** Rust n'a pas d'opérateur de puissance ;
+> `+`/`-`/`*`/`/` passent par `Add/Sub/Mul/Div`, mais `**` est exposé par le seul
+> dunder `__pow__`. Côté Rust, faire une puissance via les primitives génériques :
+> `combine_scalar(|a, b| a.powf(b), s)` (scalaire) ou
+> `combine(other, |a, b| a.powf(b))` (binaire). La forme ternaire `pow(x, y, z)`
+> (modulo) est refusée — elle n'a pas de sens sur des flottants.
 
 ### 2. Par composante (en place)
 
@@ -99,8 +107,11 @@ Combiner **deux champs** valeur à valeur (`combine`, et au niveau agrégat
 - `combine_subfield` cible : il combine une zone donnée dans la (les) zone(s)
   de même support, laissant les autres inchangées.
 
-La division ne se protège **pas** du zéro à ce niveau (sémantique numpy :
-`inf` / `nan`). Cette stricte symétrie est volontaire : une addition de deux
+La même mécanique vaut pour `field ** field` (puissance élément par élément,
+exposant pris dans le second champ) : même support, mêmes composantes alignées
+par nom. La division — et la puissance à exposant fractionnaire sur base
+négative — ne se protègent **pas** des cas limites à ce niveau (sémantique
+numpy : `inf` / `nan`). Cette stricte symétrie est volontaire : combiner deux
 champs définis sur des décompositions différentes est presque toujours un bug,
 pas une intention.
 
@@ -112,6 +123,7 @@ pas une intention.
 | zone & agrégat | `min(c)` / `max(c)` | extrema d'une composante |
 | zone | `set_uniform(c, v)` | force `c` à `v` |
 | zone & agrégat | `f + s`, `f - s`, `f * s`, `f / s` | scalaire, nouveau champ |
+| zone & agrégat | `f ** s`, `f ** g` | puissance élément par élément (Python `**` ; Rust : `combine`) |
 | zone & agrégat | `add_to_component(c, s)` … | scalaire sur une composante, en place |
 | zone | `combine(other, op)` | binaire strict, même support |
 | agrégat | `combine_field(other, op)` | binaire, même décomposition |

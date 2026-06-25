@@ -156,6 +156,23 @@ impl PySubNodeField {
         self.scalar_or_combine(rhs, |a, b| a / b)
     }
 
+    /// `field ** exponent` — element-wise power, same dispatch as the other
+    /// operators (float exponent → broadcast; `SubNodeField` → strict
+    /// element-by-element). The ternary `pow(x, y, z)` modulo form is
+    /// rejected (meaningless on floats).
+    fn __pow__(
+        &self,
+        exponent: &Bound<'_, PyAny>,
+        modulo: &Bound<'_, PyAny>,
+    ) -> PyResult<PySubNodeField> {
+        if !modulo.is_none() {
+            return Err(PyTypeError::new_err(
+                "field ** exponent does not support a modulo argument",
+            ));
+        }
+        self.scalar_or_combine(exponent, |a, b| a.powf(b))
+    }
+
     /// `subfield[node, "UX"]` — raises if the node or component is absent.
     fn __getitem__(&self, key: (PyRef<'_, PyNode>, String)) -> PyResult<f64> {
         let (node, comp) = key;
@@ -387,6 +404,23 @@ impl PyNodeField {
 
     fn __truediv__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
         self.binary(rhs, |a, b| a / b)
+    }
+
+    /// `field ** exponent` — element-wise power, same dispatch as the other
+    /// operators (float → scalar, `NodeField` → strict same-decomposition,
+    /// `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo
+    /// form is rejected.
+    fn __pow__(
+        &self,
+        exponent: &Bound<'_, PyAny>,
+        modulo: &Bound<'_, PyAny>,
+    ) -> PyResult<PyNodeField> {
+        if !modulo.is_none() {
+            return Err(PyTypeError::new_err(
+                "field ** exponent does not support a modulo argument",
+            ));
+        }
+        self.binary(exponent, |a, b| a.powf(b))
     }
 }
 

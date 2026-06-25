@@ -322,6 +322,56 @@ def test_subfield_add_scalar():
     assert f.value(nodes[0], "T") == 1.0
 
 
+def test_subfield_pow_scalar():
+    c, nodes, sm = _poi1_with(2)
+    f = pyrucast.NodeField(sm, ["T"])
+    f[0].set_value(nodes[0], "T", 2.0)
+    f[0].set_value(nodes[1], "T", 3.0)
+    g = f[0] ** 2.0
+    assert g.value(nodes[0], "T") == 4.0
+    assert g.value(nodes[1], "T") == 9.0
+    # Fractional exponent: square root.
+    h = f[0] ** 0.5
+    assert abs(h.value(nodes[1], "T") - 3.0 ** 0.5) < 1e-12
+    # Original untouched.
+    assert f.value(nodes[0], "T") == 2.0
+
+
+def test_field_pow_scalar_aggregate():
+    c, nodes, sm = _poi1_with(2)
+    f = pyrucast.NodeField(sm, ["T"])
+    f[0].set_value(nodes[0], "T", 3.0)
+    g = f ** 3.0
+    assert g.value(nodes[0], "T") == 27.0
+
+
+def test_subfield_pow_field_elementwise():
+    # field ** field is strict and element-by-element.
+    c, nodes, sm = _poi1_with(2)
+    base = pyrucast.NodeField(sm, ["T"])
+    expo = pyrucast.NodeField(sm, ["T"])
+    base[0].set_value(nodes[0], "T", 2.0)
+    base[0].set_value(nodes[1], "T", 5.0)
+    expo[0].set_value(nodes[0], "T", 3.0)
+    expo[0].set_value(nodes[1], "T", 2.0)
+    g = base[0] ** expo[0]
+    assert g.value(nodes[0], "T") == 8.0
+    assert g.value(nodes[1], "T") == 25.0
+
+
+def test_pow_rejects_modulo():
+    c, nodes, sm = _poi1_with(1)
+    f = pyrucast.NodeField(sm, ["T"])
+    f[0].set_value(nodes[0], "T", 2.0)
+    # Ternary pow(base, exp, mod) is meaningless on float fields.
+    try:
+        pow(f[0], 2.0, 3.0)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("expected TypeError for pow with modulo")
+
+
 def test_union_is_structural_merge():
     # `a | b` unites zones (shared handles) — it does NOT add values. The two
     # zones live on distinct support SubMeshes, so they stay separate.
