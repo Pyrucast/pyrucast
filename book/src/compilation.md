@@ -86,8 +86,8 @@ item** ; ce mdbook couvre les **principes, l'architecture et les exemples
 transverses**.
 
 La référence rustdoc est **publiée à côté du book** sur Codeberg Pages, à
-<https://gauthier.codeberg.page/pyrucast/rust/pyrucast/index.html> (lien
-également présent dans le sommaire). Sa génération et son déploiement sont
+<https://gauthier.codeberg.page/pyrucast/rust/> (lien également présent en tête
+de l'[introduction](introduction.md)). Sa génération et son déploiement sont
 décrits dans [« Publication automatique du book »](#publication-automatique-du-book)
 ci-dessous.
 
@@ -213,7 +213,7 @@ visualisation interactive** : il suffit d'activer le venv et d'appeler
 
 Le book est publié sur **Codeberg Pages** à l'adresse
 <https://gauthier.codeberg.page/pyrucast/>, et la **référence rustdoc** à côté,
-sous <https://gauthier.codeberg.page/pyrucast/rust/pyrucast/index.html>.
+sous <https://gauthier.codeberg.page/pyrucast/rust/>.
 
 La publication est automatisée par un workflow **Forgejo Actions**
 (`.forgejo/workflows/pages.yml`) : à chaque push sur `master` qui touche au

@@ -48,6 +48,10 @@ trap 'rm -rf "$TMP"' EXIT
 cp -a book/book/. "$TMP"/
 mkdir "$TMP"/rust
 cp -a target/doc/. "$TMP"/rust/
+# cargo doc ne génère pas d'index.html à la racine de target/doc : on dépose
+# une redirection pour que /rust/ mène directement à la crate.
+printf '<!doctype html><meta http-equiv="refresh" content="0; url=pyrucast/index.html">\n' \
+    > "$TMP"/rust/index.html
 (
     cd "$TMP"
     git init -q
@@ -61,4 +65,4 @@ cp -a target/doc/. "$TMP"/rust/
 
 step "Done"
 echo "  Book   : https://gauthier.codeberg.page/pyrucast/"
-echo "  Rustdoc: https://gauthier.codeberg.page/pyrucast/rust/pyrucast/index.html"
+echo "  Rustdoc: https://gauthier.codeberg.page/pyrucast/rust/"

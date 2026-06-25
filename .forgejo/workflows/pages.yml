@@ -62,6 +62,10 @@ jobs:
           cp -a book/book/. _site/
           mkdir _site/rust
           cp -a target/doc/. _site/rust/
+          # cargo doc ne génère pas d'index.html à la racine de target/doc :
+          # on dépose une redirection pour que /rust/ mène à la crate.
+          printf '<!doctype html><meta http-equiv="refresh" content="0; url=pyrucast/index.html">\n' \
+            > _site/rust/index.html
 
       - name: Déployer sur la branche pages
         env:
