@@ -82,6 +82,22 @@ def test_surface_qua4_circle_quad_dominant():
     assert "QUA4" in types
 
 
+def test_surface_3d_square_in_plane():
+    c = pyrucast.Coords(3)
+    pts = [(0.0, 0.0, 2.0), (4.0, 0.0, 2.0), (4.0, 4.0, 2.0), (0.0, 4.0, 2.0)]
+    nodes = [c.add_node(list(p)) for p in pts]
+    mesh = pyrucast.Mesh(c, "SEG2")
+    sm = mesh[0]
+    n = len(nodes)
+    for i in range(n):
+        sm.add_cell([nodes[i], nodes[(i + 1) % n]])
+    tri = pyrucast.surface(mesh, "TRI3", 1.0)
+    # Every output node stays on the plane z = 2.
+    for ci in range(tri.cell_count()):
+        for ni in range(3):
+            assert abs(tri.node(0, ci, ni).coord()[2] - 2.0) < 1e-9
+
+
 def test_surface_rejects_unsupported_element():
     c = pyrucast.Coords(2)
     contour = _contour(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])

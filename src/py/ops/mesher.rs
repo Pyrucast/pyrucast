@@ -138,8 +138,9 @@ pub fn fill_surface(
 ///
 /// `size` sets the target element edge length; `None` uses the mean length
 /// of the contour's segments. `element_type` is "TRI3" or "QUA4" (QUA4 is
-/// quad-dominant: the result may also carry a few triangles). Currently
-/// supports a single planar (2-D) contour.
+/// quad-dominant: the result may also carry a few triangles). The contour
+/// may be 2-D or a nearly planar loop in 3-D (projected, paved, lifted
+/// back). A single contour is supported for now.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (contour, element_type, size=None))]

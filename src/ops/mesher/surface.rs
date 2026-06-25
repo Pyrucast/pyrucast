@@ -25,12 +25,15 @@
 //! corners and fan leftovers); the result is then a [`Mesh`] with a QUA4
 //! submesh and, where needed, a TRI3 submesh.
 //!
-//! This step handles a **single planar (2-D) contour** with a **uniform**
-//! target size. Holes (multiple loops), the per-node density field and 3-D
-//! contour projection are layered on top in later steps.
+//! A **single** closed contour is handled, in **2-D** or as a (nearly)
+//! planar loop in **3-D** — projected onto its best-fit plane, paved there,
+//! then lifted back. The target size is **uniform**. Holes (multiple loops)
+//! and a per-node density field are layered on top in later steps.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{ElementType, Mesh, Node, NodeId, Point2, SubMesh, Vector2};
+use crate::containers::mesh::{
+    ElementType, Mesh, Node, NodeId, Point2, Point3, SubMesh, Vector2, Vector3,
+};
 use crate::error::{PyrucastError, Result};
 use crate::ops::mesher::triangulation::{cross2, point_in_triangle, signed_area};
 use crate::store::read;
@@ -92,9 +95,9 @@ pub fn surface(
 
     let coords = contour.coords()?;
     let dim = read(&coords)?.dim();
-    if dim != 2 {
+    if dim != 2 && dim != 3 {
         return Err(PyrucastError::Message(format!(
-            "surface: only 2-D contours are supported for now, got dim={}",
+            "surface: contour must be 2-D or 3-D, got dim={}",
             dim
         )));
     }
@@ -103,8 +106,13 @@ pub fn surface(
     let chain = trace_single_loop(contour)?;
     let n0 = chain.len();
 
-    // 2. Collect the 2-D points in chain order.
-    let points: Vec<Point2> = {
+    // 2. Collect 2-D points to pave. In 2-D, the coordinates directly; in
+    //    3-D, the contour must be (nearly) planar — project it onto the
+    //    best-fit plane (Newell normal through the centroid), exactly as
+    //    `fill_surface` does, and remember the mapping to lift interior
+    //    points back to 3-D.
+    let mut projection: Option<Projection3D> = None;
+    let points: Vec<Point2> = if dim == 2 {
         let c = read(&coords)?;
         let mut pts = Vec::with_capacity(n0);
         for &id in &chain {
@@ -112,18 +120,68 @@ pub fn surface(
             pts.push(Point2::new(s[0], s[1]));
         }
         pts
+    } else {
+        let pts3: Vec<Point3> = {
+            let c = read(&coords)?;
+            let mut v = Vec::with_capacity(n0);
+            for &id in &chain {
+                let s = c.coord(id)?;
+                v.push(Point3::new(s[0], s[1], s[2]));
+            }
+            v
+        };
+        let normal = crate::ops::mesher::triangulation::newell_normal(&pts3).ok_or_else(|| {
+            PyrucastError::Message("surface: 3-D contour is collinear or zero-area".into())
+        })?;
+        let origin: Point3 = {
+            let sum: Vector3 = pts3.iter().map(|p| p.coords).sum();
+            Point3::from(sum / pts3.len() as f64)
+        };
+        let mut bb_min = Vector3::repeat(f64::INFINITY);
+        let mut bb_max = Vector3::repeat(f64::NEG_INFINITY);
+        let mut max_dev = 0.0_f64;
+        for p in &pts3 {
+            max_dev = max_dev.max((p - origin).dot(&normal).abs());
+            bb_min = bb_min.zip_map(&p.coords, f64::min);
+            bb_max = bb_max.zip_map(&p.coords, f64::max);
+        }
+        let diag = (bb_max - bb_min).norm();
+        let tol = 1e-6 * diag;
+        if max_dev > tol {
+            return Err(PyrucastError::Message(format!(
+                "surface: contour is not planar — max deviation {:.3e} exceeds tolerance {:.3e} (1e-6 × diag={:.3e})",
+                max_dev, tol, diag
+            )));
+        }
+        let (u, v) = crate::ops::mesher::triangulation::in_plane_basis(normal);
+        let pts2: Vec<Point2> = pts3
+            .iter()
+            .map(|p| {
+                let d = p - origin;
+                Point2::new(d.dot(&u), d.dot(&v))
+            })
+            .collect();
+        projection = Some(Projection3D { origin, u, v });
+        pts2
     };
 
     // 3. Pave.
     let paved = pave_single(&points, target_size, nbnn)?;
 
     // 4. Create one node per interior (Steiner) point; map every point
-    //    index to a NodeId.
+    //    index to a NodeId. Lift back to 3-D through the projection when set.
     let mut flat_to_node: Vec<NodeId> = Vec::with_capacity(paved.points.len());
     flat_to_node.extend_from_slice(&chain);
     let mut _steiner: Vec<Node> = Vec::with_capacity(paved.points.len() - n0);
     for p in &paved.points[n0..] {
-        let node = Node::create_in(coords.clone(), &[p.x, p.y])?;
+        let coord: Vec<f64> = match &projection {
+            None => vec![p.x, p.y],
+            Some(proj) => {
+                let p3 = proj.origin + proj.u * p.x + proj.v * p.y;
+                vec![p3.x, p3.y, p3.z]
+            }
+        };
+        let node = Node::create_in(coords.clone(), &coord)?;
         flat_to_node.push(node.id());
         _steiner.push(node);
     }
@@ -219,6 +277,14 @@ fn trace_single_loop(contour: &Mesh) -> Result<Vec<NodeId>> {
         )));
     }
     Ok(chain)
+}
+
+/// Mapping from the paving plane back to 3-D, for a projected contour:
+/// `p3 = origin + u·px + v·py`.
+struct Projection3D {
+    origin: Point3,
+    u: Vector3,
+    v: Vector3,
 }
 
 /// Output of the pure 2-D pavement: the full point list (originals first,
@@ -785,5 +851,94 @@ mod tests {
             surface(&contour, ElementType::QUA4, Some(1.0)).unwrap()
         };
         assert!((total_ccw_area(&mesh) - 16.0).abs() < 1e-9);
+    }
+
+    fn build_contour_3d(coords: Handle<Coords>, pts: &[(f64, f64, f64)]) -> Mesh {
+        let nodes: Vec<Node> = pts
+            .iter()
+            .map(|&(x, y, z)| Node::create_in(coords.clone(), &[x, y, z]).unwrap())
+            .collect();
+        let mut contour = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+        let n = nodes.len();
+        for i in 0..n {
+            contour
+                .add_cell(&[nodes[i].id(), nodes[(i + 1) % n].id()])
+                .unwrap();
+        }
+        contour
+    }
+
+    /// Total area of a 3-D mesh's elements (any submesh), via the magnitude
+    /// of the fan cross products around node 0 of each cell.
+    fn total_area_3d(mesh: &Mesh) -> f64 {
+        let types = mesh.element_types().unwrap();
+        let counts = mesh.cell_counts().unwrap();
+        let mut total = 0.0;
+        for (si, et) in types.iter().enumerate() {
+            let npc = et.nodes_per_cell();
+            for ci in 0..counts[si] {
+                let p: Vec<Vec<f64>> = (0..npc)
+                    .map(|ni| mesh.node(si, ci, ni).unwrap().coord().unwrap())
+                    .collect();
+                for k in 1..npc - 1 {
+                    let e1 = [p[k][0] - p[0][0], p[k][1] - p[0][1], p[k][2] - p[0][2]];
+                    let e2 = [
+                        p[k + 1][0] - p[0][0],
+                        p[k + 1][1] - p[0][1],
+                        p[k + 1][2] - p[0][2],
+                    ];
+                    let cr = [
+                        e1[1] * e2[2] - e1[2] * e2[1],
+                        e1[2] * e2[0] - e1[0] * e2[2],
+                        e1[0] * e2[1] - e1[1] * e2[0],
+                    ];
+                    total += 0.5 * (cr[0].powi(2) + cr[1].powi(2) + cr[2].powi(2)).sqrt();
+                }
+            }
+        }
+        total
+    }
+
+    #[test]
+    fn surface_3d_square_in_z_plane_conserves_area() {
+        let coords = insert(Coords::new(3).unwrap());
+        let contour = build_contour_3d(
+            coords.clone(),
+            &[(0.0, 0.0, 5.0), (4.0, 0.0, 5.0), (4.0, 4.0, 5.0), (0.0, 4.0, 5.0)],
+        );
+        let tri = surface(&contour, ElementType::TRI3, Some(1.0)).unwrap();
+        let n = tri.cell_count().unwrap();
+        // Every node sits on the plane z = 5.
+        for ci in 0..n {
+            for ni in 0..3 {
+                let p = tri.node(0, ci, ni).unwrap().coord().unwrap();
+                assert!((p[2] - 5.0).abs() < 1e-9, "node off plane: z={}", p[2]);
+            }
+        }
+        assert!((total_area_3d(&tri) - 16.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn surface_3d_tilted_square_conserves_area() {
+        let s = 1.0_f64 / 2.0_f64.sqrt();
+        let coords = insert(Coords::new(3).unwrap());
+        let contour = build_contour_3d(
+            coords.clone(),
+            &[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, s, s), (0.0, s, s)],
+        );
+        let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
+        assert_eq!(tri.cell_count().unwrap(), 2);
+        assert!((total_area_3d(&tri) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn surface_3d_rejects_non_planar() {
+        let coords = insert(Coords::new(3).unwrap());
+        let contour = build_contour_3d(
+            coords.clone(),
+            &[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.5), (0.0, 1.0, 0.0)],
+        );
+        let err = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap_err();
+        assert!(format!("{}", err).contains("not planar"));
     }
 }

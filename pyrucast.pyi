@@ -1673,8 +1673,9 @@ def surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[bui
     
     `size` sets the target element edge length; `None` uses the mean length
     of the contour's segments. `element_type` is "TRI3" or "QUA4" (QUA4 is
-    quad-dominant: the result may also carry a few triangles). Currently
-    supports a single planar (2-D) contour.
+    quad-dominant: the result may also carry a few triangles). The contour
+    may be 2-D or a nearly planar loop in 3-D (projected, paved, lifted
+    back). A single contour is supported for now.
     """
 
 def swap_dir() -> pathlib.Path:
