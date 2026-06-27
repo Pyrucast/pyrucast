@@ -23,6 +23,7 @@ pub mod sweep;
 pub mod sweep_qua4;
 pub mod to_poi1;
 pub mod triangulation;
+pub mod volume;
 
 pub use barycenter::barycenter;
 pub use circle_seg2::circle_seg2;
@@ -36,3 +37,4 @@ pub use merge_nodes::merge_nodes;
 pub use surface::{surface, surface_cancellable};
 pub use sweep_qua4::sweep_qua4;
 pub use to_poi1::to_poi1;
+pub use volume::{volume, volume_cancellable};

@@ -17,6 +17,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `sweep_qua4(mesh_a, mesh_b, n_layers)` | tisse des `QUA4` entre deux lignes `SEG2` |
 | `fill_surface(contour, type, …)` | triangule l'intérieur d'un contour fermé (voir plus bas) |
 | `surface(contour, type, size=None)` | maille l'intérieur d'un contour par **front avançant** avec création de nœuds internes (voir plus bas) |
+| `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
 | `contour(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
 | `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
@@ -269,6 +270,80 @@ d'interruption (timeout, drapeau partagé…) — voir
 Côté Rust, `ops::mesher::surface(&contour, ElementType::TRI3, Some(1.0))`. Le
 cœur géométrique (`pave_single`) opère sur de simples `Vec<Point2>` sans
 toucher au store — frontière nette pour un futur parallélisme intra-opérateur.
+
+## Mailleur frontal volumique : `volume`
+
+`volume(envelope, size=None)` est le **compagnon 3D** de `surface` : il remplit
+l'intérieur d'une **enveloppe surfacique fermée** avec des tétraèdres `TET4`, à
+taille de maille imposée, en créant les nœuds internes nécessaires. Le
+remplissage d'un intérieur vide est précisément ce que fait un opérateur de
+volume ; il s'appuie ici sur un cœur **Delaunay** robuste.
+
+L'`envelope` doit être une **surface `TRI3` fermée et orientée de façon
+cohérente** (un ou plusieurs sous-maillages, tous `TRI3`) sur un `Coords` **3D**.
+`size` fixe la longueur d'arête cible ; `None` prend la longueur moyenne des
+arêtes de l'enveloppe. Le résultat est un `Mesh` à un sous-maillage `TET4`
+(orientation à volume signé positif — convention `TET4`) ; les nœuds de bord
+sont **réutilisés**, les nœuds internes créés dans le même `Coords`.
+
+### Méthode
+
+1. **Points internes.** Une grille de nœuds candidats à la taille cible est
+   générée à l'intérieur de l'enveloppe (aucun nœud si la taille dépasse la
+   géométrie : le remplissage se fait alors avec les seuls nœuds de bord).
+2. **Tétraédrisation de Delaunay.** Les nœuds de bord et les nœuds internes
+   sont tétraédrisés par l'algorithme incrémental de **Bowyer–Watson**. Un
+   *jitter* déterministe minuscule est appliqué au calcul de **connectivité**
+   pour lever sans ambiguïté les dégénérescences cosphériques (les huit coins
+   d'un cube, par exemple) ; la sortie conserve les coordonnées exactes.
+3. **Découpe.** Les tétraèdres dont le centroïde tombe **hors** de l'enveloppe
+   d'origine sont écartés (test d'angle solide / *winding number*). Pour une
+   enveloppe convexe, tous les tétraèdres sont conservés et le remplissage pave
+   exactement le domaine ; pour une enveloppe peu concave, la découpe retire le
+   débord.
+
+### Exemple Python
+
+```python
+import pyrucast
+
+# Enveloppe : la surface d'un cube, en TRI3 fermés et orientés.
+# (par ex. obtenue en assemblant des faces TRI3, ou via les mailleurs de
+#  surface puis une mise en volume.)
+env = construire_enveloppe_cube()      # Mesh TRI3 fermé sur un Coords 3D
+
+# Remplissage en tétraèdres de taille ~0,5.
+tet = pyrucast.volume(env, 0.5)
+print(tet.element_types())             # ['TET4']
+```
+
+### Interruption
+
+Comme `surface`, un maillage trop long s'**interrompt** par `Ctrl+C` : `volume`
+sonde les signaux pendant la génération des points et l'insertion Delaunay, et
+lève une `KeyboardInterrupt`. Côté Rust,
+`volume_cancellable(envelope, size, &cancel)` accepte un jeton
+d'interruption (timeout, drapeau partagé…) — voir
+[Interrompre une fonction](../developper/interrompre-une-fonction.md).
+
+### Limitations actuelles
+
+- **Entrée `TRI3` seulement** : les enveloppes `QUA4` (découpe en triangles) ne
+  sont pas encore acceptées.
+- **Convexe ou peu concave** : la découpe se fait au centroïde, sans
+  *recouvrement de frontière* (boundary recovery). Pour une enveloppe convexe le
+  pavage est exact ; sur une **forte concavité**, le bord Delaunay s'écarte de
+  la surface d'entrée (le creux peut être comblé) — les cavités internes et les
+  surfaces de genre > 0 ne sont pas non plus garanties.
+- **Taille uniforme** : pas encore de champ de densité variable.
+- **Sortie `TET4`** : le remplissage hexaédrique (`HEX8`) n'est pas couvert.
+- Le maillage des nœuds **de bord** suit la triangulation de Delaunay : les
+  faces externes des `TET4` peuvent diviser les facettes d'entrée selon d'autres
+  diagonales (même surface, autre découpe).
+
+Côté Rust, `ops::mesher::volume(&envelope, Some(0.5))`. Le cœur géométrique
+(`pave_volume`) opère sur de simples `Vec<Point3>` sans toucher au store —
+frontière nette pour un futur parallélisme intra-opérateur.
 
 ## Bord d'une surface : `contour`
 

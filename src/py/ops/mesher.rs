@@ -190,3 +190,21 @@ pub fn surface(
         crate::ops::mesher::surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
     Ok(PyMesh { inner: mesh })
 }
+
+/// Fill the interior of a closed **TRI3** surface `envelope` with TET4 cells
+/// using a size-controlled **Delaunay** fill that **creates interior nodes** —
+/// the 3-D companion of `surface`.
+///
+/// `size` sets the target element edge length; `None` uses the mean edge
+/// length of the envelope's faces. The envelope must be a closed,
+/// consistently oriented TRI3 surface on a 3-D Coords. The result is a Mesh
+/// with a single TET4 submesh; boundary nodes are reused. This first version
+/// targets convex or mildly concave envelopes.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (envelope, size=None))]
+pub fn volume(py: Python<'_>, envelope: PyRef<PyMesh>, size: Option<f64>) -> PyResult<PyMesh> {
+    // Poll Python signals while paving so a long mesh stays Ctrl+C-able.
+    let mesh = crate::ops::mesher::volume_cancellable(&envelope.inner, size, &PySignals(py))?;
+    Ok(PyMesh { inner: mesh })
+}

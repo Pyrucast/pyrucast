@@ -65,6 +65,7 @@ __all__ = [
     "tan",
     "tanh",
     "to_poi1",
+    "volume",
 ]
 
 @typing.final
@@ -1863,5 +1864,18 @@ def to_poi1(mesh: Mesh) -> Mesh:
     Returns a new mesh with the same number of submeshes; each output
     submesh is a POI1 submesh holding the de-duplicated nodes of the
     corresponding input submesh, in order of first appearance.
+    """
+
+def volume(envelope: Mesh, size: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Fill the interior of a closed **TRI3** surface `envelope` with TET4 cells
+    using a size-controlled **Delaunay** fill that **creates interior nodes** —
+    the 3-D companion of `surface`.
+    
+    `size` sets the target element edge length; `None` uses the mean edge
+    length of the envelope's faces. The envelope must be a closed,
+    consistently oriented TRI3 surface on a 3-D Coords. The result is a Mesh
+    with a single TET4 submesh; boundary nodes are reused. This first version
+    targets convex or mildly concave envelopes.
     """
 
