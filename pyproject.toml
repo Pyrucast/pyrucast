@@ -9,6 +9,12 @@ description = "Finite-element library in Rust, inspired by cast3m, exposed to Py
 requires-python = ">=3.9"
 
 [tool.maturin]
+# Pin the binding type. `pyo3` is an *optional* Cargo dependency (so a pure
+# `cargo build` links no Python), which means maturin's auto-detection does
+# not see it and wrongly falls back to `cffi` — it then runs its bundled
+# cbindgen, which panics on our `Point2` type alias. Stating `pyo3`
+# explicitly skips that guess.
+bindings = "pyo3"
 # Enable the Cargo `extension-module` feature (correct Python linkage).
 features = ["extension-module"]
 

@@ -20,8 +20,10 @@ cargo build --features viz
 # Avec fenêtre interactive.
 cargo build --features viz-interactive
 
-# Côté Python (pour les tests pytest) :
-maturin develop --features viz
+# Côté Python (pour les tests pytest) : les features passées en ligne de
+# commande *remplacent* celles du pyproject, il faut donc redonner
+# `extension-module` en plus de `viz`.
+maturin develop --features extension-module,viz
 ```
 
 ## Modèle de point de vue
