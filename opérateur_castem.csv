@@ -100,7 +100,7 @@ Maths - fonctions;TANH;Tangente hyperbolique;tanh
 Maths - fonctions;ATG;Arc tangente;—
 Visualisation;TRAC;Tracé d'un maillage ou d'un champ;plot (viz)
 Visualisation;DEFO;Construit / trace la déformée;deformation + displace + viz
-Visualisation;EVOL;Crée une courbe d'évolution (X-Y);—
+Visualisation;EVOL;Crée une courbe d'évolution (X-Y);Evolution / SubEvolution (généralisé : valeur scalaire ou champ, interpolation linéaire)
 Visualisation;DESS;Dessine une courbe d'évolution;—
 Visualisation;OEIL;Définit le point de vue 3D;camera (viz)
 Visualisation;ZOOM;Cadrage / zoom du tracé;viz (caméra)

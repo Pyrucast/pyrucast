@@ -14,6 +14,8 @@ Coords ── Node
    │             └── Model (agrège des SubModel : physiques)
    │                    └── Matrix (matrice creuse, sortie d'assemblage)
    └── NodeField (champ aux nœuds)
+
+Evolution (agrège des SubEvolution : valeur tabulée vs variable, interpolée)
 ```
 
 Deux abstractions transverses traversent toute cette liste et méritent d'être

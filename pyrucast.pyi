@@ -10,6 +10,7 @@ __all__ = [
     "Coords",
     "Element",
     "ElementField",
+    "Evolution",
     "FiniteElementSpace",
     "Matrix",
     "Mesh",
@@ -17,6 +18,7 @@ __all__ = [
     "Node",
     "NodeField",
     "SubElementField",
+    "SubEvolution",
     "SubFiniteElementSpace",
     "SubMatrix",
     "SubMesh",
@@ -367,6 +369,75 @@ class ElementField:
         first of several) — see `CONVENTIONS.md`.
         """
     def add_sub(self, sub: SubElementField) -> None: ...
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
+    def __or__(self, other: typing.Any) -> typing.Any:
+        r"""
+        `a | b` — **union** of this aggregate with `other`. `other`
+        may be another aggregate of the same type or a single
+        sub-object. Sub-objects already present (same store slot)
+        are not added twice; remaining handles are **shared**
+        (refcount bump), not deep-copied. The fields additionally
+        fuse zones sharing a support (see their `finalize`), so
+        `|` may raise on incoherent values. Returns
+        `NotImplemented` for any other type so Python can fall
+        back to the right operand's `__ror__`.
+        """
+
+@typing.final
+class Evolution:
+    r"""
+    An aggregate of tabulated curves (one `SubEvolution` per zone), interpolated
+    linearly against a variable (often time).
+    
+    Build high-level with `Evolution(steps, out_of_range="error")` where each
+    step is `(abscissa, value)` and `value` is a whole `NodeField`,
+    `ElementField` or float (whole fields are transposed into one curve per
+    zone); or low-level by composing `SubEvolution`s with `|`. Index it
+    (`evolution[i]`) to reach a `SubEvolution`.
+    """
+    def __new__(cls, steps: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: builtins.str = 'error') -> Evolution:
+        r"""
+        `Evolution(steps, out_of_range="error")` — build from whole values
+        tabulated at each abscissa. `steps` is a list of `(abscissa, value)`
+        where `value` is a float, a `NodeField` or an `ElementField`; the kind
+        is taken from the first step. Whole fields are transposed into one
+        curve per zone.
+        """
+    def out_of_range(self) -> builtins.str:
+        r"""
+        The stored out-of-range policy name.
+        """
+    def interpolate(self, x: builtins.float, out_of_range: typing.Optional[builtins.str] = None) -> typing.Any:
+        r"""
+        Interpolate every curve at `x` and regroup the results: a `list[float]`
+        for scalars, a `NodeField` or `ElementField` for fields. `out_of_range`
+        overrides the stored policy for this query.
+        """
+    def __len__(self) -> builtins.int: ...
+    def __getitem__(self, key: typing.Any) -> typing.Any:
+        r"""
+        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
+        negative indices supported); `agg[i:j:k]` → a **fresh
+        aggregate** of the same type holding the sliced zones
+        (Python slicing: step, negative bounds). Other key types
+        raise `TypeError`.
+        """
+    def unit(self) -> SubEvolution:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubEvolution) -> None: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1075,6 +1146,55 @@ class SubElementField:
         r"""
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
+        """
+
+@typing.final
+class SubEvolution:
+    r"""
+    One tabulated curve: a sorted list of abscissas with the matching values
+    (a float, a `SubNodeField` or a `SubElementField`), interpolated linearly.
+    
+    Build with `SubEvolution(samples, out_of_range="error")` where `samples`
+    is a list of `(abscissa, value)` pairs; compose several curves into an
+    `Evolution` with `|`.
+    """
+    def __new__(cls, samples: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: builtins.str = 'error') -> SubEvolution:
+        r"""
+        `SubEvolution(samples, out_of_range="error")` — one curve. `samples`
+        is a list of `(abscissa, value)`; the values must all be of the same
+        kind (and, for fields, on the same support).
+        """
+    def __len__(self) -> builtins.int:
+        r"""
+        Number of samples.
+        """
+    def abscissas(self) -> builtins.list[builtins.float]:
+        r"""
+        The sorted abscissas.
+        """
+    def out_of_range(self) -> builtins.str:
+        r"""
+        The stored out-of-range policy name.
+        """
+    def interpolate(self, x: builtins.float, out_of_range: typing.Optional[builtins.str] = None) -> typing.Any:
+        r"""
+        Interpolate at `x`. Returns a float, a `SubNodeField` or a
+        `SubElementField`. `out_of_range` (`"error"` / `"clamp"` /
+        `"extrapolate"`) overrides the stored policy for this query.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout: values /
+        topology, beyond `repr`'s bounded structure. Returns nothing.
+        """
+    def __or__(self, other: typing.Any) -> typing.Any:
+        r"""
+        `sub | sub` → a fresh aggregate holding both sub-objects
+        (first-seen order, deduplicated by handle, then finalized).
+        Sub-handles are shared (refcount bump). Returns
+        `NotImplemented` for any other right-hand type.
         """
 
 @typing.final

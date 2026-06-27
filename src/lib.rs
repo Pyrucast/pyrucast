@@ -147,5 +147,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<py::matrix::PyMatrix>()?;
     m.add_class::<py::model::PySubModel>()?;
     m.add_class::<py::model::PyModel>()?;
+    m.add_class::<py::evolution::PySubEvolution>()?;
+    m.add_class::<py::evolution::PyEvolution>()?;
     Ok(())
 }
