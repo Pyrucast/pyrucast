@@ -27,6 +27,7 @@ use plotters::coord::Shift;
 use plotters::prelude::*;
 
 use crate::containers::mesh::Point3;
+use std::collections::{HashMap, HashSet};
 
 /// Pad world coordinates to a 3-D point, filling missing components with 0.0.
 pub(crate) fn pad3(coords: &[f64]) -> Point3 {
@@ -88,6 +89,55 @@ pub(crate) const HEX8_FACES: [[usize; 4]; 6] = [
     [3, 0, 4, 7],
 ];
 
+/// `(cell, local_face)` pairs whose face lies on the **boundary** of a
+/// volume submesh — a face shared by two cells (tetrahedra / hexahedra)
+/// sits inside the solid and is never visible once the skin is drawn
+/// opaque, so the renderer drops it: only the outer surface is emitted.
+/// This both fixes the see-through look of solid 3-D meshes and cuts the
+/// face count roughly in half.
+///
+/// Returns `None` for point / line / surface element types, where every
+/// primitive is kept (nothing is ever hidden behind another cell).
+///
+/// A face is keyed by the **set** of its global node ids (sorted), so the
+/// two cells sharing it produce the same key regardless of orientation.
+pub(crate) fn boundary_faces(
+    et: ElementType,
+    conn: &[NodeId],
+) -> Option<HashSet<(usize, usize)>> {
+    let faces: Vec<&[usize]> = match et {
+        ElementType::TET4 => TET4_FACES.iter().map(|f| f.as_slice()).collect(),
+        ElementType::HEX8 => HEX8_FACES.iter().map(|f| f.as_slice()).collect(),
+        _ => return None,
+    };
+    let npc = et.nodes_per_cell();
+    if npc == 0 {
+        return Some(HashSet::new());
+    }
+    let n_cells = conn.len() / npc;
+    let face_key = |cell: usize, f: &[usize]| -> Vec<u32> {
+        let base = cell * npc;
+        let mut k: Vec<u32> = f.iter().map(|&li| conn[base + li].0).collect();
+        k.sort_unstable();
+        k
+    };
+    let mut count: HashMap<Vec<u32>, usize> = HashMap::new();
+    for cell in 0..n_cells {
+        for f in &faces {
+            *count.entry(face_key(cell, f)).or_insert(0) += 1;
+        }
+    }
+    let mut keep = HashSet::new();
+    for cell in 0..n_cells {
+        for (fi, f) in faces.iter().enumerate() {
+            if count.get(&face_key(cell, f)) == Some(&1) {
+                keep.insert((cell, fi));
+            }
+        }
+    }
+    Some(keep)
+}
+
 /// Build the rendering primitives of a single `SubMesh`. The output is
 /// empty for an empty submesh; every supported element type produces at
 /// least one primitive per cell.
@@ -119,7 +169,7 @@ fn submesh_primitives_impl(
     let default_color = sm.face_color();
     let et = sm.element_type();
     let npc = et.nodes_per_cell();
-    let n_cells = if npc == 0 { 0 } else { pts.len() / npc };
+    let n_cells = pts.len().checked_div(npc).unwrap_or(0);
     if let Some(colors) = colors_per_cell {
         if colors.len() != n_cells {
             return Err(crate::error::PyrucastError::Message(format!(
@@ -136,6 +186,10 @@ fn submesh_primitives_impl(
         }
     };
     let mut out: Vec<Primitive> = Vec::new();
+
+    // Volume cells: keep only boundary faces (interior faces are hidden
+    // inside the opaque solid). `None` for non-volume types → keep all.
+    let keep = boundary_faces(et, sm.connectivity());
 
     match et {
         ElementType::POI1 => {
@@ -179,7 +233,10 @@ fn submesh_primitives_impl(
             for i in 0..n_cells {
                 let base = 4 * i;
                 let c = cell_color(i);
-                for face in &TET4_FACES {
+                for (fi, face) in TET4_FACES.iter().enumerate() {
+                    if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
+                        continue;
+                    }
                     out.push(Primitive::Face {
                         verts: vec![
                             pts[base + face[0]],
@@ -196,7 +253,10 @@ fn submesh_primitives_impl(
             for i in 0..n_cells {
                 let base = 8 * i;
                 let c = cell_color(i);
-                for face in &HEX8_FACES {
+                for (fi, face) in HEX8_FACES.iter().enumerate() {
+                    if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
+                        continue;
+                    }
                     out.push(Primitive::Face {
                         verts: vec![
                             pts[base + face[0]],
@@ -403,12 +463,11 @@ where
                     .map_err(pl_err)?;
             }
             ProjPrim::Face { verts, color, outline, .. } => {
-                // Interior sub-faces of the interpolated renderer
-                // (outline-free) are drawn opaque: with translucency the
-                // antialiased joints between adjacent sub-triangles show
-                // through as seams.
-                let alpha = if *outline { 0.85 } else { 1.0 };
-                let face_rgba = RGBAColor(color.r, color.g, color.b, alpha);
+                // Faces are opaque so the painter's pass performs hidden-
+                // surface removal: a near face fully overwrites the ones
+                // behind it. This is what makes a solid 3-D mesh read as a
+                // solid instead of a translucent shell you can see through.
+                let face_rgba = RGBAColor(color.r, color.g, color.b, 1.0);
                 let face_style = ShapeStyle {
                     color: face_rgba,
                     filled: true,
@@ -589,6 +648,87 @@ mod tests {
                 Primitive::Face { verts, .. } => assert_eq!(verts.len(), 3),
                 other => panic!("expected triangular Face, got {:?}", other),
             }
+        }
+    }
+
+    /// Six tets fanned around the main diagonal of a cube: the six faces
+    /// containing that diagonal are each shared by two tets (interior),
+    /// the other twelve are the cube's skin (boundary).
+    fn cube_six_tets() -> SubMesh {
+        let coords = insert(Coords::new(3).unwrap());
+        let corners = [
+            [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0],
+        ];
+        let nodes: Vec<_> = corners
+            .iter()
+            .map(|c| Node::create_in(coords.clone(), c).unwrap())
+            .collect();
+        let tets = [
+            [0, 1, 2, 6], [0, 2, 3, 6], [0, 3, 7, 6],
+            [0, 7, 4, 6], [0, 4, 5, 6], [0, 5, 1, 6],
+        ];
+        let mut sm = SubMesh::new(coords, ElementType::TET4);
+        for t in &tets {
+            sm.add_cell(&[
+                nodes[t[0]].id(), nodes[t[1]].id(), nodes[t[2]].id(), nodes[t[3]].id(),
+            ])
+            .unwrap();
+        }
+        sm
+    }
+
+    #[test]
+    fn boundary_faces_keeps_only_the_skin() {
+        let sm = cube_six_tets();
+        let keep = boundary_faces(ElementType::TET4, sm.connectivity()).unwrap();
+        // 6 tets × 4 faces = 24; 6 interior faces shared by two cells
+        // remove 12 instances, leaving 12 boundary triangles.
+        assert_eq!(keep.len(), 12);
+    }
+
+    #[test]
+    fn boundary_faces_culls_shared_hex_face() {
+        // Two unit hexes stacked along Z share their common quad: that
+        // face is interior, the other ten are boundary.
+        let coords = insert(Coords::new(3).unwrap());
+        let pts = [
+            [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0],
+            [0.0, 0.0, 2.0], [1.0, 0.0, 2.0], [1.0, 1.0, 2.0], [0.0, 1.0, 2.0],
+        ];
+        let n: Vec<_> = pts
+            .iter()
+            .map(|c| Node::create_in(coords.clone(), c).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords, ElementType::HEX8);
+        sm.add_cell(&(0..8).map(|i| n[i].id()).collect::<Vec<_>>()).unwrap();
+        sm.add_cell(&(4..12).map(|i| n[i].id()).collect::<Vec<_>>()).unwrap();
+        let keep = boundary_faces(ElementType::HEX8, sm.connectivity()).unwrap();
+        // 2 × 6 = 12 faces, one shared pair removed → 10 boundary quads.
+        assert_eq!(keep.len(), 10);
+    }
+
+    #[test]
+    fn boundary_faces_is_none_for_surface_types() {
+        // Surface / line / point types never hide faces behind a cell.
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::TRI3);
+        sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        assert!(boundary_faces(ElementType::TRI3, sm.connectivity()).is_none());
+    }
+
+    #[test]
+    fn tet_mesh_primitives_drop_interior_faces() {
+        let sm = cube_six_tets();
+        let prims = submesh_primitives(&sm).unwrap();
+        // Only the 12 boundary triangles are emitted, not all 24 faces.
+        assert_eq!(prims.len(), 12);
+        for p in &prims {
+            assert!(matches!(p, Primitive::Face { verts, .. } if verts.len() == 3));
         }
     }
 

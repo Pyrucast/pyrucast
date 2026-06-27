@@ -238,13 +238,20 @@ La caméra (rotation à la souris, molette, axes affichés via `A`) continue de 
 | `SEG2` | segment | une arête |
 | `TRI3` | face | triangle plein + contour noir |
 | `QUA4` | face | quadrangle plein + contour noir |
-| `TET4` | 4 faces | les 4 facettes triangulaires du volume |
-| `HEX8` | 6 faces | les 6 facettes quadrangulaires du volume |
+| `TET4` | faces triangulaires | la **peau** du volume (facettes de bord) |
+| `HEX8` | faces quadrangulaires | la **peau** du volume (facettes de bord) |
 
 `Mesh::plot` parcourt tous ses sous-maillages et dessine chacun selon son type. L'ajout d'un éventuel nouveau type d'élément se fera sans changement d'API, en étendant le `match` de `submesh_primitives` dans `src/viz/mesh_draw.rs`.
 
+### Maillages volumiques pleins
+
+Pour un sous-maillage volumique (`TET4` / `HEX8`), seules les **facettes de bord** sont dessinées : une facette partagée par deux éléments est intérieure au solide, jamais visible, et donc supprimée (une facette est de bord quand elle n'apparaît que dans un seul élément). Cela rend un maillage volumique plein comme une **surface fermée opaque** au lieu d'un enchevêtrement de toutes les facettes internes, et divise à peu près par deux le nombre de primitives.
+
+Les facettes sont tracées **opaques** : combinées au tri en profondeur de l'algorithme du peintre, elles réalisent l'élimination des faces cachées (une facette proche recouvre intégralement celles derrière elle), si bien qu'on ne voit que la peau tournée vers la caméra. La suppression des faces intérieures s'applique aussi bien au tracé géométrique qu'à la coloration par un champ (plate **et** interpolée), de sorte qu'un champ sur un maillage volumique colore correctement sa surface externe.
+
 ## Notes techniques
 
-- Le rendu utilise l'algorithme du **peintre** : projection 3D → 2D, tri des triangles par profondeur moyenne (du plus lointain au plus proche), puis dessin des facettes pleines suivies des arêtes noires en superposition. Coût : `O(n log n)` à chaque rafraîchissement, raisonnable jusqu'à quelques milliers de cellules. Pour des maillages industriels, prévoir un export `.vtu` vers ParaView.
+- Le rendu utilise l'algorithme du **peintre** : projection 3D → 2D, tri des triangles par profondeur moyenne (du plus lointain au plus proche), puis dessin des facettes pleines **opaques** suivies des arêtes noires en superposition. L'opacité assure l'élimination des faces cachées (les facettes proches recouvrent les lointaines) ; c'est ce qui fait qu'un solide 3D se lit comme un solide et non comme une coque transparente. Coût : `O(n log n)` à chaque rafraîchissement, raisonnable jusqu'à quelques milliers de cellules. Pour des maillages industriels, prévoir un export `.vtu` vers ParaView.
+- Limite connue de l'algorithme du peintre : pour un solide **fortement non convexe**, le tri par profondeur moyenne peut mal ordonner deux facettes qui se chevauchent en profondeur. C'est inhérent à la méthode ; un *z-buffer* par pixel le corrigerait, au prix d'un rendu non vectoriel.
 - L'export reste **portable Linux ↔ Windows** : tout le rendu se fait en CPU, sans pilote GPU. Le binaire `viz-interactive` nécessite en revanche un serveur d'affichage (X11, Wayland ou Windows) à l'exécution — ce qui est attendu pour une fenêtre interactive.
 - Le mode interactif est confiné à `src/viz/window.rs` ; il est entièrement encapsulé derrière la feature `viz-interactive` et ne s'invite pas dans la couche de calcul.

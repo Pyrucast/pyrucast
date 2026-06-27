@@ -376,6 +376,11 @@ pub(crate) fn submesh_primitives_smooth(
         _ => subdivide(et, Interpolation::Lagrange1, n)?,
     };
 
+    // Volume cells: keep only boundary faces. The `Faces` of the
+    // subdivision are in the same order as the element's face table
+    // (TET4_FACES / HEX8_FACES), so the keep-set indexes them directly.
+    let keep = crate::viz::mesh_draw::boundary_faces(et, conn);
+
     // All node coordinates of the submesh, padded to 3-D.
     let coords = sm.coords();
     let coords: Vec<Point3> = {
@@ -418,7 +423,10 @@ pub(crate) fn submesh_primitives_smooth(
                 }
             }
             CellSubdivision::Faces(faces) => {
-                for face in faces {
+                for (fi, face) in faces.iter().enumerate() {
+                    if keep.as_ref().is_some_and(|k| !k.contains(&(cell, fi))) {
+                        continue;
+                    }
                     let pv: Vec<(Point3, f64)> =
                         face.weights.iter().map(|w| at(w)).collect();
                     for tri in &face.triangles {
@@ -767,7 +775,7 @@ mod tests {
 
         let data = FieldData::Node(view);
         let ctx = data.for_submesh(&sm_h).unwrap();
-        let values = submesh_cell_values(&ctx, &*read(&sm_h).unwrap(), "T").unwrap();
+        let values = submesh_cell_values(&ctx, &read(&sm_h).unwrap(), "T").unwrap();
         assert_eq!(values.len(), 1);
         assert!((values[0] - 2.0).abs() < 1e-12); // (1 + 2 + 3) / 3
     }
@@ -791,7 +799,7 @@ mod tests {
         let seg_h = insert(seg);
         let data = FieldData::Node(view);
         let ctx = data.for_submesh(&seg_h).unwrap();
-        let values = submesh_cell_values(&ctx, &*read(&seg_h).unwrap(), "T").unwrap();
+        let values = submesh_cell_values(&ctx, &read(&seg_h).unwrap(), "T").unwrap();
         assert!((values[0] - 4.0).abs() < 1e-12);
     }
 

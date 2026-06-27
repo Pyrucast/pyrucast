@@ -319,7 +319,7 @@ fn plot_with_field_explicit_component_choice() {
     let poi1_h = insert(poi1);
     let mut field = SubNodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();
     // Default component would be "UX"; ask explicitly for "UY".
-    field.set_value(a.id(), "UY", 3.14).unwrap();
+    field.set_value(a.id(), "UY", 3.2).unwrap();
     field.set_value(b.id(), "UY", 2.71).unwrap();
     field.set_value(c.id(), "UY", 1.41).unwrap();
     let field = NodeField::from_sub(field);
