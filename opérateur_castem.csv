@@ -1,0 +1,156 @@
+Thématique;Opérateur Cast3M;Description courte;Équivalent pyrucast
+Maillage - création;POIN;Crée un point (nœud) à des coordonnées données;Node / poi1_from_nodes
+Maillage - création;DROI;Maille une droite en n segments SEG2;line_seg2
+Maillage - création;CERC;Maille un arc de cercle en SEG2;circle_seg2
+Maillage - création;C (CERC);Arc de cercle par 3 points;circle_seg2 (partiel)
+Maillage - création;COUR;Maille une courbe quelconque;—
+Maillage - création;CONT;Extrait le contour (frontière) d'une surface;contour
+Maillage - création;SURF;Maille une surface délimitée par un contour fermé;surface / fill_surface
+Maillage - création;DALL;Surface réglée (dallage) entre 4 lignes;—
+Maillage - création;REGL;Surface réglée entre deux lignes;—
+Maillage - création;PAVE;Maille un pavé / bloc volumique structuré;—
+Maillage - création;MANU;Maillage manuel (élément défini nœud par nœud);Mesh(coords, type)
+Maillage - génération;TRAN;Translation/extrusion d'un maillage (engendre la dimension supérieure);extrude
+Maillage - génération;ROTA;Rotation / révolution d'un maillage;—
+Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep_qua4 / volume
+Maillage - génération;GENE;Génère un maillage par balayage entre deux lignes;sweep_qua4
+Maillage - génération;SYME;Symétrie d'un maillage;—
+Maillage - génération;HOMO;Homothétie d'un maillage;—
+Maillage - génération;AFFI;Affinité (mise à l'échelle anisotrope);—
+Maillage - assemblage;ET;Union (assemblage) de plusieurs maillages;union (opérateur |)
+Maillage - assemblage;ELIM;Élimine les nœuds doubles (fusion par tolérance);merge_nodes
+Maillage - assemblage;ENLE;Enlève des éléments d'un maillage;—
+Maillage - assemblage;DIFF;Différence de maillages;—
+Maillage - assemblage;INTE;Intersection de maillages;—
+Maillage - transformation;CHAN;Change le type d'élément (ex. vers POI1);to_poi1 (cas POI1)
+Maillage - transformation;PLUS;Translate les coordonnées des nœuds;displace / set_coordinates
+Maillage - transformation;TOUR;Tourne (rotation) les coordonnées des nœuds;—
+Maillage - transformation;INVE;Inverse l'orientation des éléments;—
+Maillage - transformation;ORIE;Oriente les éléments d'une surface/ligne;—
+Maillage - transformation;RACC;Raccorde deux maillages (collage);—
+Maillage - transformation;DENS;Fixe la densité (taille de maille) courante;refinement de surface (paramètre)
+Maillage - transformation;BARY;Barycentre d'un maillage / centres des éléments;barycenter
+Maillage - info;COOR;Coordonnées des nœuds d'un maillage;coordinates
+Maillage - info;NOEU;Nœuds d'un maillage;Mesh / Node
+Maillage - info;FACE;Faces (frontières) des éléments;—
+Maillage - info;MESU;Mesure (longueur / aire / volume) d'un maillage;—
+Maillage - info;DIME;Dimension de l'espace de travail;Coords (dimension)
+Maillage - info;NBNO;Nombre de nœuds;len(mesh) / méthodes Mesh
+Maillage - info;QUEL;Information sur un élément (type, nœuds);Cell / Element
+Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément fini);Model.* (heat_conduction, elasticity…)
+Modèle et matériau;MATE;Définit le champ de propriétés matériau;material_field / sub_material_field
+Modèle et matériau;CARA;Caractéristiques géométriques (sections de poutres/coques);material_field (composantes section)
+Modèle et matériau;COMP;Intègre la loi de comportement (déf -> contraintes);integrate_behavior
+Modèle et matériau;ELAS;Renvoie les caractéristiques élastiques;modèle elasticity + material_field
+Assemblage matrices;RIGI;Matrice de rigidité;stiffness
+Assemblage matrices;MASS;Matrice de masse;mass
+Assemblage matrices;COND;Matrice de conductivité (thermique);stiffness (heat_conduction)
+Assemblage matrices;CAPA;Matrice de capacité thermique;mass (heat_conduction)
+Assemblage matrices;AMOR;Matrice d'amortissement;—
+Assemblage matrices;KSIG;Matrice de rigidité géométrique (précontrainte);—
+Assemblage matrices;BSIG;Forces internes nodales (B^T . sigma);—
+Conditions limites / chargement;BLOQ;Blocage de degrés de liberté (Dirichlet);Model.dirichlet
+Conditions limites / chargement;DEPI;Impose une valeur (déplacement) à un blocage;flux / second membre Dirichlet
+Conditions limites / chargement;RELA;Relation linéaire entre DDL;—
+Conditions limites / chargement;FORC;Force nodale appliquée;NodeField (second membre)
+Conditions limites / chargement;PRES;Chargement de pression sur une surface;—
+Conditions limites / chargement;FLUX;Flux surfacique/volumique imposé (thermique);flux
+Conditions limites / chargement;SOUR;Source volumique (thermique);flux (densité)
+Conditions limites / chargement;CONV;Échange par convection;—
+Conditions limites / chargement;CHAR;Définit un chargement (évolution temporelle);NodeField
+Résolution;RESO;Résout un système linéaire K.u = f;solve
+Résolution;PASAPAS;Procédure pas à pas (transitoire / non-linéaire);—
+Résolution;VIBR;Modes propres de vibration;—
+Résolution;FLAM;Modes de flambage;—
+Résolution;INVE (mat.);Inverse d'une matrice;solve (résolution dense LU)
+Résolution;KRES;Résolution avec conditions (rigidité + blocages);solve
+Champs - dérivation;GRAD;Gradient d'un champ aux points de Gauss;gradient
+Champs - dérivation;EPSI;Déformations à partir d'un déplacement;deformation / beam_deformation
+Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_behavior
+Champs - dérivation;REAC;Réactions nodales;—
+Champs - extraction;EXCO;Extrait/renomme une composante d'un champ;NodeField / ElementField (indexation composantes)
+Champs - extraction;DEPL;Extrait le champ de déplacement;NodeField
+Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);divergence / consolidate
+Champs - extraction;ELNO;Passe un champ des points de Gauss aux nœuds;divergence (partiel)
+Champs - extraction;REDU;Restreint un champ à un sous-maillage;restrict
+Champs - assemblage;NOMC;Renomme les composantes;—
+Champs - assemblage;PLUS (chp);Fusionne / additionne des champs;merge / union (|)
+Champs - réduction;INTG;Intégrale d'un champ sur un domaine;—
+Champs - réduction;RESU;Résultante d'un champ;—
+Champs - réduction;MAXI;Maximum d'un champ;—
+Champs - réduction;MINI;Minimum d'un champ;—
+Champs - réduction;MOYE;Moyenne d'un champ;—
+Champs - réduction;PSCA;Produit scalaire de deux champs;—
+Maths - arithmétique;+;Addition;__add__ (champs/scalaires)
+Maths - arithmétique;-;Soustraction;__sub__
+Maths - arithmétique;*;Multiplication;__mul__
+Maths - arithmétique;/;Division;__truediv__
+Maths - arithmétique;**;Puissance;—
+Maths - fonctions;ABS;Valeur absolue;abs
+Maths - fonctions;RACI;Racine carrée;sqrt
+Maths - fonctions;EXP;Exponentielle;exp
+Maths - fonctions;LOG;Logarithme népérien;log
+Maths - fonctions;LOG (base10);Logarithme décimal;log10
+Maths - fonctions;COS;Cosinus;cos
+Maths - fonctions;SIN;Sinus;sin
+Maths - fonctions;TANG;Tangente;tan
+Maths - fonctions;COSH;Cosinus hyperbolique;cosh
+Maths - fonctions;SINH;Sinus hyperbolique;sinh
+Maths - fonctions;TANH;Tangente hyperbolique;tanh
+Maths - fonctions;ATG;Arc tangente;—
+Visualisation;TRAC;Tracé d'un maillage ou d'un champ;plot (viz)
+Visualisation;DEFO;Construit / trace la déformée;deformation + displace + viz
+Visualisation;EVOL;Crée une courbe d'évolution (X-Y);—
+Visualisation;DESS;Dessine une courbe d'évolution;—
+Visualisation;OEIL;Définit le point de vue 3D;camera (viz)
+Visualisation;ZOOM;Cadrage / zoom du tracé;viz (caméra)
+Non-linéaire / transitoire;KTAN;Matrice de rigidité tangente (Newton non-linéaire);—
+Non-linéaire / transitoire;KSIGMA;Rigidité géométrique sous contrainte (variante de KSIG);—
+Non-linéaire / transitoire;PERT;Perturbation pour matrice tangente par différences finies;—
+Non-linéaire / transitoire;ADVE;Matrice d'advection (transport convectif);—
+Non-linéaire / transitoire;KEQU;Matrice équivalente (combinaison pondérée pour le transitoire);—
+Non-linéaire / transitoire;PJBA;Projette un champ sur une base de modes;—
+Non-linéaire / transitoire;LUMP;Concentration (lumping) d'une matrice masse/capacité;—
+Non-linéaire / transitoire;PHAJ;Changement de phase / chaleur latente (thermique);—
+Non-linéaire / transitoire;EPTH;Déformation thermique (dilatation libre);—
+Non-linéaire / transitoire;PRIN;Valeurs et directions principales (contraintes/déformations);—
+Non-linéaire / transitoire;VARI;Variables internes de la loi de comportement;ElementField (variables internes) (partiel)
+Non-linéaire / transitoire;NUAG;Interpolation par nuage de points (table -> champ);—
+Non-linéaire / transitoire;MASQ;Masque logique (sélection conditionnelle sur un champ);—
+Non-linéaire / transitoire;MULT;Produit matrice-champ (M . u);__matmul__ Matrix x field (partiel)
+Non-linéaire / transitoire;XTX;Produit X transposée par X;—
+Champs - manipulation;EXTR;Extrait une information/composante d'un objet ou d'une table;indexation conteneur / composantes
+Champs - manipulation;TIRE;Extrait une ligne/colonne d'une table ou d'un listréel;indexation
+Champs - manipulation;NOID;Numéros (identifiants) des nœuds;Node (numérotation) (partiel)
+Champs - manipulation;SOMM;Sommets d'un maillage ou d'un élément;—
+Champs - manipulation;NATURE;Nature d'un champ (CHPO / CHML / ...);type de conteneur (NodeField/ElementField)
+Champs - manipulation;MAIL;Extrait le maillage support d'un objet;support / .mesh
+Objets - gestion;EXIS;Teste l'existence d'un objet ou d'une composante;Python natif (in / hasattr)
+Objets - gestion;OUBL;Libère un objet de la mémoire;Python natif (del / GC)
+Objets - gestion;MENA;Nettoyage mémoire (ramasse-miettes);Python natif (GC)
+Objets - gestion;DETR;Détruit un objet;Python natif (del)
+Objets - gestion;COPI;Copie (duplique) un objet;.copy() / clone
+Objets - gestion;VIDE;Teste si un objet est vide;Python natif (len == 0)
+Objets - gestion;TYPE;Type d'un objet;Python natif (type())
+Objets - gestion;OPTI;Fixe les options globales (dimension, mode, mémoire);paramètres / Coords (dimension)
+Langage GIBIANE;DEBPROC;Définit le début d'une procédure;Python natif (def)
+Langage GIBIANE;FINPROC;Fin de procédure / valeurs de retour;Python natif (return)
+Langage GIBIANE;SI;Test conditionnel;Python natif (if)
+Langage GIBIANE;SINON;Alternative du test;Python natif (else)
+Langage GIBIANE;FINSI;Fin du bloc conditionnel;Python natif (fin de bloc)
+Langage GIBIANE;REPETER;Boucle itérative;Python natif (for / while)
+Langage GIBIANE;FINREPE;Fin de boucle;Python natif (fin de bloc)
+Langage GIBIANE;ITERER;Passe à l'itération suivante;Python natif (continue)
+Langage GIBIANE;QUITTER;Sort d'une boucle ou d'une procédure;Python natif (break / return)
+Langage GIBIANE;MESS;Affiche un message;Python natif (print)
+Langage GIBIANE;SAUT;Saut de ligne à l'affichage;Python natif (print)
+Langage GIBIANE;PROG;Crée un listréel (liste de flottants);Python natif (list[float] / numpy)
+Langage GIBIANE;TABL;Crée/manipule une table associative;Python natif (dict)
+Langage GIBIANE;MOTS;Crée une liste de mots-clés;Python natif (list[str])
+Langage GIBIANE;VALE;Lit/écrit une valeur dans une table;Python natif (dict[...])
+Langage GIBIANE;CHAI;Concatène des chaînes de caractères;Python natif (f-string / +)
+Langage GIBIANE;NEG;Négation logique;Python natif (not)
+Langage GIBIANE;EGA;Test d'égalité;Python natif (==)
+Langage GIBIANE;ET;Et logique;Python natif (and)
+Langage GIBIANE;OU;Ou logique;Python natif (or)
+Langage GIBIANE;NON;Non logique;Python natif (not)

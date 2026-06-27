@@ -16,6 +16,7 @@
 | Sérialisation | `serde` + `bincode` via un trait `Persist` **unique**, partagé entre swap disque et sauvegarde/relecture fichier. |
 | Binding Python | `pyo3` + `maturin`, incrémental objet par objet. |
 | Documentation | `mdbook` (théorie + doctests). |
+| Algorithmes non-linéaires / transitoires | **Orchestrés en Python**, pas en Rust : la boucle de Newton et l'intégration en temps sont des fonctions Python composant les opérateurs du cœur. Le Rust ne fournit que les briques (assemblage, résolution, comportement). |
 | Méthode | Largeur d'abord : toutes les structures + bindings + doc/tests avant le numérique lourd. |
 
 ### Dépendances approuvées (socle figé)
@@ -109,6 +110,39 @@ Détails et tradeoffs : [book/src/memory-model.md](book/src/memory-model.md) (se
 - Benchmarks (high-water mark mémoire, aller-retour swap, assemblage gros maillage).
 - Complétion mdbook (chapitres restants, exemples, galerie).
 - Passe performance générale.
+
+## Algorithmes non-linéaires & transitoires : orchestration Python
+
+Les schémas non-linéaires (boucle de **Newton**) et l'**intégration en temps**
+(transitoire) ne sont **pas** codés en Rust : ils sont **pilotés côté Python**,
+par des fonctions Python qui composent les opérateurs du cœur.
+
+C'est exactement le modèle de **Cast3M**, où ces algorithmes ne sont pas des
+opérateurs natifs mais des **procédures GIBIANE** (`PASAPAS`, `UNPAS`,
+`TRANSNON`…) qui enchaînent les opérateurs de base (`RIGI`, `KTAN`, `BSIG`,
+`RESO`, `COMP`, `EXCO`…) dans une boucle. Ici, le langage d'orchestration est
+**Python** au lieu de GIBIANE :
+
+- **Le cœur Rust fournit les briques** : assemblage (`stiffness`, `mass`,
+  matrice tangente à venir), résolution linéaire (`solve` derrière
+  `LinearSolver`), intégration du comportement (`integrate_behavior`),
+  opérations de champ (`deformation`, `merge`, arithmétique…).
+- **Python assemble l'algorithme** : la boucle de Newton (assemblage du résidu
+  et de la tangente, résolution de l'incrément, test de convergence) et le
+  schéma en temps (pas de temps, schéma θ, mise à jour des variables internes)
+  sont des fonctions Python pures appelant ces briques.
+
+Conséquence : un équivalent pyrucast de `pasapas`/`unpas`/`transnon` sera une
+**bibliothèque Python** livrée avec le binding, pas un opérateur Rust. Le cœur
+n'expose donc que ce qui doit être performant ou bas niveau ; la logique de
+pilotage reste lisible et éditable en Python (cf. la colonne « Équivalent
+pyrucast » de `opérateur_castem.csv`, où ces lignes sont marquées comme
+orchestration Python).
+
+> Briques Rust encore manquantes pour ces algorithmes (à planifier en
+> Phase 3+) : matrice de rigidité tangente (`KTAN`), forces internes
+> (`BSIG`), rigidité géométrique (`KSIG`/`KSIGMA`), matrice d'advection
+> (`ADVE`) et schéma d'intégration temporelle (`KEQU`, lumping).
 
 ## Décisions ouvertes (non bloquantes)
 
