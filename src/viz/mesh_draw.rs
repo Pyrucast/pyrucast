@@ -89,6 +89,23 @@ pub(crate) const HEX8_FACES: [[usize; 4]; 6] = [
     [3, 0, 4, 7],
 ];
 
+/// Edges of each element type, as local node-index pairs — used by the
+/// wireframe rendering style. POI1 has no edge (it draws as a dot).
+fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
+    match et {
+        ElementType::POI1 => &[],
+        ElementType::SEG2 => &[[0, 1]],
+        ElementType::TRI3 => &[[0, 1], [1, 2], [2, 0]],
+        ElementType::QUA4 => &[[0, 1], [1, 2], [2, 3], [3, 0]],
+        ElementType::TET4 => &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
+        ElementType::HEX8 => &[
+            [0, 1], [1, 2], [2, 3], [3, 0],
+            [4, 5], [5, 6], [6, 7], [7, 4],
+            [0, 4], [1, 5], [2, 6], [3, 7],
+        ],
+    }
+}
+
 /// `(cell, local_face)` pairs whose face lies on the **boundary** of a
 /// volume submesh — a face shared by two cells (tetrahedra / hexahedra)
 /// sits inside the solid and is never visible once the skin is drawn
@@ -565,6 +582,99 @@ impl Drawable for Mesh {
     }
 }
 
+// ─── Wireframe style ──────────────────────────────────────────────────────
+
+/// Wireframe primitives of a submesh: **every** distinct element edge as a
+/// segment — the interior edges of volume cells included — plus a dot per
+/// POI1. Edges shared by several cells of the submesh are emitted once.
+/// Unlike the surface style, nothing is hidden: this is the see-through
+/// "fil de fer" rendering. Lines take the submesh's `face_color` (as SEG2
+/// cells already do), so the components of a `Mesh` stay distinguishable.
+pub(crate) fn submesh_wireframe_primitives(sm: &SubMesh) -> Result<Vec<Primitive>> {
+    let coords = sm.coords();
+    let conn = sm.connectivity();
+    let pts = read_points(&coords, conn)?;
+    let et = sm.element_type();
+    let npc = et.nodes_per_cell();
+    let color = sm.face_color();
+    let mut out = Vec::new();
+    if et == ElementType::POI1 {
+        for &p in &pts {
+            out.push(Primitive::Point { p, color });
+        }
+        return Ok(out);
+    }
+    let edges = element_edges(et);
+    let n_cells = pts.len().checked_div(npc).unwrap_or(0);
+    // Deduplicate edges by their (sorted) global node-id pair.
+    let mut seen: HashSet<(u32, u32)> = HashSet::new();
+    for cell in 0..n_cells {
+        let base = cell * npc;
+        for e in edges {
+            let (mut ga, mut gb) = (conn[base + e[0]].0, conn[base + e[1]].0);
+            if ga > gb {
+                std::mem::swap(&mut ga, &mut gb);
+            }
+            if seen.insert((ga, gb)) {
+                out.push(Primitive::Segment {
+                    a: pts[base + e[0]],
+                    b: pts[base + e[1]],
+                    color,
+                });
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Wireframe `Drawable` wrapper over a [`SubMesh`] — same bbox as the
+/// solid view, but draws all edges instead of filled faces.
+pub(crate) struct SubMeshWire<'a>(pub &'a SubMesh);
+
+impl Drawable for SubMeshWire<'_> {
+    fn bbox(&self) -> Result<Bbox3> {
+        self.0.bbox()
+    }
+
+    fn draw_on<DB: DrawingBackend>(
+        &self,
+        area: &DrawingArea<DB, Shift>,
+        view: &View,
+    ) -> Result<()>
+    where
+        DB::ErrorType: 'static,
+    {
+        let prims = submesh_wireframe_primitives(self.0)?;
+        render_primitives(area, view, &prims)
+    }
+}
+
+/// Wireframe `Drawable` wrapper over a [`Mesh`] — every submesh drawn as
+/// edges, each in its own `face_color`.
+pub(crate) struct MeshWire<'a>(pub &'a Mesh);
+
+impl Drawable for MeshWire<'_> {
+    fn bbox(&self) -> Result<Bbox3> {
+        self.0.bbox()
+    }
+
+    fn draw_on<DB: DrawingBackend>(
+        &self,
+        area: &DrawingArea<DB, Shift>,
+        view: &View,
+    ) -> Result<()>
+    where
+        DB::ErrorType: 'static,
+    {
+        let mut all = Vec::new();
+        for i in 0..self.0.len() {
+            let sm = self.0.get(i)?;
+            all.extend(submesh_wireframe_primitives(&*read(&sm)?)?);
+        }
+        render_primitives(area, view, &all)
+    }
+}
+
 // ─── Unit tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -778,6 +888,57 @@ mod tests {
             }
             other => panic!("expected Face, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn wireframe_emits_every_distinct_edge_including_interior() {
+        // The 6-tet cube has 12 cube edges + 6 face diagonals + 1 space
+        // diagonal (the shared 0–6 edge, purely interior) = 19 distinct
+        // edges. The surface style would never show that interior edge.
+        let sm = cube_six_tets();
+        let prims = submesh_wireframe_primitives(&sm).unwrap();
+        assert_eq!(prims.len(), 19);
+        for p in &prims {
+            assert!(matches!(p, Primitive::Segment { .. }));
+        }
+    }
+
+    #[test]
+    fn wireframe_of_one_triangle_is_three_edges() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::TRI3);
+        sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let prims = submesh_wireframe_primitives(&sm).unwrap();
+        assert_eq!(prims.len(), 3);
+    }
+
+    #[test]
+    fn wireframe_of_poi1_is_points() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::POI1);
+        sm.add_cell(&[a.id()]).unwrap();
+        let prims = submesh_wireframe_primitives(&sm).unwrap();
+        assert_eq!(prims.len(), 1);
+        assert!(matches!(prims[0], Primitive::Point { .. }));
+    }
+
+    #[test]
+    fn wireframe_shares_edges_between_adjacent_cells() {
+        // Two triangles sharing edge (b, c): 3 + 3 − 1 shared = 5 edges.
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        let mut sm = SubMesh::new(coords, ElementType::TRI3);
+        sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        sm.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
+        let prims = submesh_wireframe_primitives(&sm).unwrap();
+        assert_eq!(prims.len(), 5);
     }
 
     #[test]

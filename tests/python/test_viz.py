@@ -208,3 +208,52 @@ def test_plot_with_field_unknown_component_errors(tmp_path):
         assert "DOES_NOT_EXIST" in str(e)
     else:
         raise AssertionError("expected RuntimeError for unknown component")
+
+
+# ─── wireframe style ────────────────────────────────────────────────────────
+
+
+def _solid_tetrahedron():
+    """A single TET4 cell — a solid volume mesh."""
+    c = pyrucast.Coords(3)
+    n = [
+        c.add_node([0.0, 0.0, 0.0]),
+        c.add_node([1.0, 0.0, 0.0]),
+        c.add_node([0.0, 1.0, 0.0]),
+        c.add_node([0.0, 0.0, 1.0]),
+    ]
+    mesh = pyrucast.Mesh(c, "TET4")
+    mesh[0].add_cell(n)
+    return c, mesh
+
+
+def test_wireframe_has_no_filled_faces(tmp_path):
+    """Worked example — a solid tetrahedron drawn two ways.
+
+    The default (``wireframe=False``) fills the opaque outer skin, so the
+    SVG carries ``<polygon>`` faces; ``wireframe=True`` draws every edge
+    instead, with no fill, so the SVG has no ``<polygon>`` at all. This is
+    the Python sibling of the Rust test ``mesh_wireframe_has_no_filled_faces``.
+    """
+    _, mesh = _solid_tetrahedron()
+
+    surface = tmp_path / "tet_surface.svg"
+    wire = tmp_path / "tet_wire.svg"
+    mesh.plot(view=(45.0, 35.264, 1.0), save=str(surface))
+    mesh.plot(view=(45.0, 35.264, 1.0), save=str(wire), wireframe=True)
+
+    assert "<polygon" in surface.read_text(), "surface fills its faces"
+    assert "<polygon" not in wire.read_text(), "wireframe draws edges only"
+
+
+def test_wireframe_with_field_is_rejected(tmp_path):
+    """`wireframe` makes no sense for a field plot — it must raise."""
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    cc = c.add_node([0.0, 1.0])
+    tri = pyrucast.Mesh(c, "TRI3")[0]
+    tri.add_cell([a, b, cc])
+    nf = _build_field_on_nodes(c, [a, b, cc], ["T"], [[0.0, 1.0, 2.0]])
+    with pytest.raises(ValueError):
+        tri.plot(save=str(tmp_path / "x.svg"), field=nf, wireframe=True)

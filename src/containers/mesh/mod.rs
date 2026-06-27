@@ -258,14 +258,26 @@ impl SubMesh {
     ///
     /// Every supported element type is rendered: POI1 as dots, SEG2 as
     /// segments, TRI3 / QUA4 as filled polygons, and TET4 / HEX8 as their
-    /// outer faces (4 triangles or 6 quads) under the painter's algorithm.
+    /// outer skin (boundary faces) under the painter's algorithm.
     #[cfg(feature = "viz")]
     pub fn plot(
         &self,
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
     ) -> Result<()> {
-        crate::viz::render(self, view, save)
+        self.plot_styled(view, save, crate::viz::MeshStyle::default())
+    }
+
+    /// Like [`SubMesh::plot`] but choosing the [`crate::viz::MeshStyle`]:
+    /// `Surface` (opaque skin) or `Wireframe` (all edges, see-through).
+    #[cfg(feature = "viz")]
+    pub fn plot_styled(
+        &self,
+        view: Option<crate::viz::View>,
+        save: Option<&std::path::Path>,
+        style: crate::viz::MeshStyle,
+    ) -> Result<()> {
+        crate::viz::render_submesh_styled(self, view, save, style)
     }
 
 }
@@ -494,7 +506,20 @@ impl Mesh {
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
     ) -> Result<()> {
-        crate::viz::render(self, view, save)
+        self.plot_styled(view, save, crate::viz::MeshStyle::default())
+    }
+
+    /// Like [`Mesh::plot`] but choosing the [`crate::viz::MeshStyle`]:
+    /// `Surface` (opaque skin) or `Wireframe` (all edges, see-through).
+    /// Each submesh is drawn in its own `face_color`.
+    #[cfg(feature = "viz")]
+    pub fn plot_styled(
+        &self,
+        view: Option<crate::viz::View>,
+        save: Option<&std::path::Path>,
+        style: crate::viz::MeshStyle,
+    ) -> Result<()> {
+        crate::viz::render_mesh_styled(self, view, save, style)
     }
 
     /// Visualize this mesh coloured by a field component — a

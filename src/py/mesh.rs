@@ -43,6 +43,24 @@ pub(crate) fn parse_cmap(name: Option<String>) -> PyResult<crate::viz::Colormap>
     }
 }
 
+/// Resolve the geometry rendering style from the `wireframe` flag,
+/// rejecting it when a field is also given (a field always colours faces,
+/// so a wireframe makes no sense).
+#[cfg(feature = "viz")]
+fn mesh_style(wireframe: bool, has_field: bool) -> PyResult<crate::viz::MeshStyle> {
+    if wireframe && has_field {
+        return Err(PyValueError::new_err(
+            "wireframe=True has no meaning with a field: a field colours the \
+             cell faces. Drop field, or set wireframe=False.",
+        ));
+    }
+    Ok(if wireframe {
+        crate::viz::MeshStyle::Wireframe
+    } else {
+        crate::viz::MeshStyle::Surface
+    })
+}
+
 /// Resolve a `Handle<SubMesh>` from either a `SubMesh` view or a
 /// **unitary** `Mesh` (the parent→sub coercion — see `CONVENTIONS.md`,
 /// « Agrégats : un ou plusieurs »). Used wherever an API takes a single
@@ -131,8 +149,13 @@ impl PySubMesh {
     /// - `smooth`: subdivision level of the interpolated rendering
     ///   (default `4`): the colour follows the shape functions inside
     ///   each element. `0` = one flat colour per cell.
+    /// - `wireframe`: when `True`, draw every element edge as a line
+    ///   (interior edges of volume cells included) instead of the opaque
+    ///   outer skin. Geometry only — combining it with `field` raises
+    ///   `ValueError`, since a field always colours the faces.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, wireframe=false))]
+    #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
         view: Option<(f64, f64, f64)>,
@@ -144,7 +167,9 @@ impl PySubMesh {
         vmax: Option<f64>,
         cmap: Option<String>,
         smooth: usize,
+        wireframe: bool,
     ) -> PyResult<()> {
+        let style = mesh_style(wireframe, field.is_some())?;
         let mut view = view
             .map(|(yaw, pitch, scale)| crate::viz::View {
                 yaw,
@@ -178,7 +203,7 @@ impl PySubMesh {
                 })?;
             }
             None => {
-                read(&self.handle)?.plot(Some(view), save_ref)?;
+                read(&self.handle)?.plot_styled(Some(view), save_ref, style)?;
             }
         }
         Ok(())
@@ -282,9 +307,10 @@ impl PyMesh {
     /// coloured by a `NodeField` / `ElementField` if `field` is
     /// supplied). See
     /// `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
-    /// `field` and `component`.
+    /// `field`, `component` and `wireframe`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, wireframe=false))]
+    #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
         view: Option<(f64, f64, f64)>,
@@ -296,7 +322,9 @@ impl PyMesh {
         vmax: Option<f64>,
         cmap: Option<String>,
         smooth: usize,
+        wireframe: bool,
     ) -> PyResult<()> {
+        let style = mesh_style(wireframe, field.is_some())?;
         let mut view = view
             .map(|(yaw, pitch, scale)| crate::viz::View {
                 yaw,
@@ -323,7 +351,7 @@ impl PyMesh {
                 })?;
             }
             None => {
-                self.inner.plot(Some(view), save_ref)?;
+                self.inner.plot_styled(Some(view), save_ref, style)?;
             }
         }
         Ok(())

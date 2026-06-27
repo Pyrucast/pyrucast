@@ -134,6 +134,27 @@ impl Default for View {
     }
 }
 
+// ─── Mesh rendering style ─────────────────────────────────────────────────────
+
+/// How a **geometry-only** mesh plot is drawn (no field colouring).
+///
+/// - [`Surface`](MeshStyle::Surface) — the default — fills the outer skin
+///   opaquely (boundary faces of volume cells), hiding what is behind it.
+/// - [`Wireframe`](MeshStyle::Wireframe) draws **every** element edge as a
+///   line, interior edges of volume cells included, with no fill — a
+///   see-through "fil de fer".
+///
+/// The style only applies to plain mesh plots; it is meaningless when a
+/// field colours the cells (the field always paints faces).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum MeshStyle {
+    /// Opaque outer surface (default).
+    #[default]
+    Surface,
+    /// All edges as a wireframe.
+    Wireframe,
+}
+
 // ─── Colour scale ─────────────────────────────────────────────────────────────
 
 /// User override for the colour-scale bounds of a field plot.
@@ -215,6 +236,35 @@ pub(crate) fn render<D: Drawable>(
                 ))
             }
         }
+    }
+}
+
+/// Render a [`crate::containers::mesh::SubMesh`] in the chosen
+/// [`MeshStyle`] (geometry only, no field). `Surface` draws the opaque
+/// skin; `Wireframe` draws every edge.
+pub(crate) fn render_submesh_styled(
+    sm: &crate::containers::mesh::SubMesh,
+    view: Option<View>,
+    save: Option<&Path>,
+    style: MeshStyle,
+) -> Result<()> {
+    match style {
+        MeshStyle::Surface => render(sm, view, save),
+        MeshStyle::Wireframe => render(&mesh_draw::SubMeshWire(sm), view, save),
+    }
+}
+
+/// Render a [`crate::containers::mesh::Mesh`] in the chosen [`MeshStyle`]
+/// (geometry only, no field).
+pub(crate) fn render_mesh_styled(
+    mesh: &crate::containers::mesh::Mesh,
+    view: Option<View>,
+    save: Option<&Path>,
+    style: MeshStyle,
+) -> Result<()> {
+    match style {
+        MeshStyle::Surface => render(mesh, view, save),
+        MeshStyle::Wireframe => render(&mesh_draw::MeshWire(mesh), view, save),
     }
 }
 

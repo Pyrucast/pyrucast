@@ -249,6 +249,39 @@ Pour un sous-maillage volumique (`TET4` / `HEX8`), seules les **facettes de bord
 
 Les facettes sont tracées **opaques** : combinées au tri en profondeur de l'algorithme du peintre, elles réalisent l'élimination des faces cachées (une facette proche recouvre intégralement celles derrière elle), si bien qu'on ne voit que la peau tournée vers la caméra. La suppression des faces intérieures s'applique aussi bien au tracé géométrique qu'à la coloration par un champ (plate **et** interpolée), de sorte qu'un champ sur un maillage volumique colore correctement sa surface externe.
 
+### Peau opaque ou fil de fer
+
+Pour le tracé **d'un maillage seul** (sans champ), deux styles sont disponibles :
+
+| Style | Rendu |
+|---|---|
+| `Surface` *(défaut)* | la peau externe opaque ; l'intérieur est masqué |
+| `Wireframe` | **toutes** les arêtes en fil de fer (y compris les arêtes intérieures des volumes), sans remplissage — un tracé transparent |
+
+Le fil de fer trace chaque arête distincte (les arêtes partagées par plusieurs cellules ne sont dessinées qu'une fois) dans la `face_color` du sous-maillage, donc les composants d'un `Mesh` restent distinguables. Ce choix **n'a pas de sens pour la coloration par un champ** (un champ peint toujours les faces) : le combiner avec `field` lève une erreur.
+
+Côté Rust, le style est un argument [`MeshStyle`] passé à `plot_styled` :
+
+```rust,ignore
+use pyrucast::viz::{MeshStyle, View};
+use std::path::Path;
+
+// Peau opaque (équivalent de plot).
+mesh.plot_styled(Some(View::iso()), Some(Path::new("solide.svg")), MeshStyle::Surface).unwrap();
+// Fil de fer : toutes les arêtes.
+mesh.plot_styled(Some(View::iso()), Some(Path::new("fil.svg")), MeshStyle::Wireframe).unwrap();
+```
+
+Côté Python, c'est l'argument booléen `wireframe` de `plot` :
+
+```python
+mesh.plot(save="solide.svg")                  # peau opaque (défaut)
+mesh.plot(save="fil.svg", wireframe=True)      # fil de fer
+
+# Sans objet avec un champ : lève ValueError.
+# mesh.plot(save="x.svg", field=t_field, wireframe=True)
+```
+
 ## Notes techniques
 
 - Le rendu utilise l'algorithme du **peintre** : projection 3D → 2D, tri des triangles par profondeur moyenne (du plus lointain au plus proche), puis dessin des facettes pleines **opaques** suivies des arêtes noires en superposition. L'opacité assure l'élimination des faces cachées (les facettes proches recouvrent les lointaines) ; c'est ce qui fait qu'un solide 3D se lit comme un solide et non comme une coque transparente. Coût : `O(n log n)` à chaque rafraîchissement, raisonnable jusqu'à quelques milliers de cellules. Pour des maillages industriels, prévoir un export `.vtu` vers ParaView.

@@ -614,13 +614,13 @@ class Mesh:
         r"""
         Total number of cells across all submeshes.
         """
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False) -> None:
         r"""
         Visualize this mesh (every submesh in its own colour, or
         coloured by a `NodeField` / `ElementField` if `field` is
         supplied). See
         `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
-        `field` and `component`.
+        `field`, `component` and `wireframe`.
         """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, key: typing.Any) -> typing.Any:
@@ -1298,7 +1298,7 @@ class SubMesh:
         r"""
         Number of cells in this submesh.
         """
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False) -> None:
         r"""
         Visualize this submesh.
         
@@ -1327,6 +1327,10 @@ class SubMesh:
         - `smooth`: subdivision level of the interpolated rendering
           (default `4`): the colour follows the shape functions inside
           each element. `0` = one flat colour per cell.
+        - `wireframe`: when `True`, draw every element edge as a line
+          (interior edges of volume cells included) instead of the opaque
+          outer skin. Geometry only — combining it with `field` raises
+          `ValueError`, since a field always colours the faces.
         """
     def __len__(self) -> builtins.int:
         r"""
