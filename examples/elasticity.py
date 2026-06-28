@@ -43,8 +43,12 @@ def main() -> None:
     for j in range(N):
         for i in range(N):
             mesh.unit().add_cell(
-                [grid[idx(i, j)], grid[idx(i + 1, j)],
-                 grid[idx(i + 1, j + 1)], grid[idx(i, j + 1)]]
+                [
+                    grid[idx(i, j)],
+                    grid[idx(i + 1, j)],
+                    grid[idx(i + 1, j + 1)],
+                    grid[idx(i, j + 1)],
+                ]
             )
     fes = pyrucast.FiniteElementSpace(mesh)
 

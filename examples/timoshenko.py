@@ -45,7 +45,9 @@ def tip_deflection(n_elems: int) -> float:
     model = model | _clamp(nodes[0], "w", "f_w")
     model = model | _clamp(nodes[0], "theta", "m_theta")
 
-    materials = pyrucast.material_field(model, [("E", E), ("I", I), ("G", G), ("A_s", A_S)])
+    materials = pyrucast.material_field(
+        model, [("E", E), ("I", I), ("G", G), ("A_s", A_S)]
+    )
 
     load = pyrucast.Mesh(c, "POI1")
     load.unit().add_cell([nodes[-1]])

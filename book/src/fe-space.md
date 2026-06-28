@@ -320,8 +320,8 @@ mesh.unit().add_cell([n0, n1, n2])
 
 # Constructeur par défaut : Lagrange1 + Gauss partout.
 fes = pyrucast.FiniteElementSpace(mesh)
-assert len(fes) == 1                          # 1 sous-espace = 1 sous-maillage
-sub = fes[0]                                  # vue typée du sous-espace 0
+assert len(fes) == 1  # 1 sous-espace = 1 sous-maillage
+sub = fes[0]  # vue typée du sous-espace 0
 assert sub.element_type == "TRI3"
 assert sub.interpolation == "LAGRANGE1"
 assert sub.quadrature == "GAUSS"
@@ -332,13 +332,13 @@ assert sub.ref_dim == 2
 # Évaluations à un point de Gauss donné.
 for g in range(sub.gauss_count()):
     print(sub.gauss_xi(g), sub.gauss_weight(g))
-    print(sub.n_at_g(g))                      # N_i(ξ_g), flat
-    print(sub.dn_at_g(g))                     # ∂N_i/∂ξ_j(ξ_g), flat
+    print(sub.n_at_g(g))  # N_i(ξ_g), flat
+    print(sub.dn_at_g(g))  # ∂N_i/∂ξ_j(ξ_g), flat
 
 # Grandeurs physiques (à la volée) sur la cellule 0.
-print(sub.jacobian(0, 0))                     # J, flat row-major
-print(sub.det_jacobian(0, 0))                 # |J|, scalaire
-print(sub.dn_dx(0, 0))                        # ∂N_i/∂x_a, flat row-major
+print(sub.jacobian(0, 0))  # J, flat row-major
+print(sub.det_jacobian(0, 0))  # |J|, scalaire
+print(sub.dn_dx(0, 0))  # ∂N_i/∂x_a, flat row-major
 ```
 
 Variantes de construction :
@@ -351,21 +351,19 @@ fes = pyrucast.FiniteElementSpace(mesh, interpolation="LAGRANGE1", quadrature="G
 fes = pyrucast.FiniteElementSpace.lagrange1(mesh)
 
 # (Interpolation, quadrature) explicites par sous-maillage.
-fes = pyrucast.FiniteElementSpace.with_choices(
-    mesh, [("LAGRANGE1", "GAUSS")]
-)
+fes = pyrucast.FiniteElementSpace.with_choices(mesh, [("LAGRANGE1", "GAUSS")])
 ```
 
 Déplacement du maillage : le Jacobien reflète automatiquement les
 coordonnées courantes du `Coords` — pas de cache à invalider.
 
 ```python
-print(sub.det_jacobian(0, 0))                 # |J| initial
+print(sub.det_jacobian(0, 0))  # |J| initial
 
 # Déplacement d'un nœud → toutes les évaluations à venir voient les
 # nouvelles coordonnées.
 n1.set_coord([4.0, 0.0])
-print(sub.det_jacobian(0, 0))                 # |J| recalculé
+print(sub.det_jacobian(0, 0))  # |J| recalculé
 ```
 
 ## Limitations actuelles

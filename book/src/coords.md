@@ -93,7 +93,7 @@ c.select(0)
 print(n.coord())  # [0.0, 0.0]  — configuration de référence
 c.select(c2)
 print(n.coord())  # [0.1, 0.05] — configuration déformée
-print(c.active)   # 1
+print(c.active)  # 1
 ```
 
 ## Pourquoi plusieurs configurations dans un `Coords` plutôt que plusieurs `Coords` ?
@@ -170,10 +170,10 @@ print(c.permutation())  # None
 import pyrucast
 
 c = pyrucast.Coords(dim=2)
-n = c.add_node([0.0, 0.0])      # n est un pyrucast.Node ; refcount = 1
+n = c.add_node([0.0, 0.0])  # n est un pyrucast.Node ; refcount = 1
 m = c.add_node([1.0, 0.0])
 
-print(c)                         # Coords: dim=2, configs=1 (active="default"), nodes=2 ...
+print(c)  # Coords: dim=2, configs=1 (active="default"), nodes=2 ...
 n.set_coord([0.5, 0.5])
 
 # GC ne touche pas tant qu'au moins un Node Python existe.
@@ -181,6 +181,7 @@ assert c.gc() == 0
 
 # del + collect force le Drop côté Rust et libère le refcount.
 import gc as pygc
+
 del n
 pygc.collect()
 assert c.gc() == 1

@@ -38,11 +38,11 @@ b = c.add_node([4.0, 0.0])
 
 # Ligne de 4 SEG2 entre a et b (3 nœuds intermédiaires créés).
 line = pyrucast.line_seg2(a, b, 4)
-print(line)               # Mesh: 1 submesh(es), 4 cell(s) total
+print(line)  # Mesh: 1 submesh(es), 4 cell(s) total
 
 # Extrusion en QUA4 sur 2 couches selon +y.
 surf = pyrucast.extrude(line, [0.0, 1.0], 2)
-print(surf.element_types())   # ['QUA4']
+print(surf.element_types())  # ['QUA4']
 ```
 
 ## Triangulation d'un contour fermé : `fill_surface`
@@ -144,7 +144,7 @@ for i in range(4):
     contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
 surface = pyrucast.fill_surface(contour, "TRI3")
-print(surface)        # Mesh: 1 submesh(es), 2 cell(s) total
+print(surface)  # Mesh: 1 submesh(es), 2 cell(s) total
 ```
 
 ### Exemple Python (avec trou et raffinement)
@@ -156,13 +156,17 @@ c = pyrucast.Coords(dim=2)
 
 # Contour extérieur : carré 4×4.
 outer = pyrucast.Mesh(c, "SEG2")
-outer_nodes = [c.add_node(list(p)) for p in [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]]
+outer_nodes = [
+    c.add_node(list(p)) for p in [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]
+]
 for i in range(4):
     outer.unit().add_cell([outer_nodes[i], outer_nodes[(i + 1) % 4]])
 
 # Trou : carré 2×2 centré.
 hole = pyrucast.Mesh(c, "SEG2")
-hole_nodes = [c.add_node(list(p)) for p in [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]]
+hole_nodes = [
+    c.add_node(list(p)) for p in [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]
+]
 for i in range(4):
     hole.unit().add_cell([hole_nodes[i], hole_nodes[(i + 1) % 4]])
 
@@ -234,7 +238,9 @@ import pyrucast, math
 c = pyrucast.Coords(dim=2)
 # Contour : cercle discrétisé (rayon 5, 40 segments).
 nodes = [
-    c.add_node([5.0 * math.cos(2*math.pi*i/40), 5.0 * math.sin(2*math.pi*i/40)])
+    c.add_node(
+        [5.0 * math.cos(2 * math.pi * i / 40), 5.0 * math.sin(2 * math.pi * i / 40)]
+    )
     for i in range(40)
 ]
 contour = pyrucast.Mesh(c, "SEG2")
@@ -248,7 +254,7 @@ print(tri.element_types(), tri.cell_count())
 
 # Variante quad-dominante.
 quad = pyrucast.surface(contour, "QUA4", 1.0)
-print(quad.element_types())   # ['QUA4', 'TRI3'] en général
+print(quad.element_types())  # ['QUA4', 'TRI3'] en général
 ```
 
 ### Interruption
@@ -311,11 +317,11 @@ import pyrucast
 # Enveloppe : la surface d'un cube, en TRI3 fermés et orientés.
 # (par ex. obtenue en assemblant des faces TRI3, ou via les mailleurs de
 #  surface puis une mise en volume.)
-env = construire_enveloppe_cube()      # Mesh TRI3 fermé sur un Coords 3D
+env = construire_enveloppe_cube()  # Mesh TRI3 fermé sur un Coords 3D
 
 # Remplissage en tétraèdres de taille ~0,5.
 tet = pyrucast.volume(env, 0.5)
-print(tet.element_types())             # ['TET4']
+print(tet.element_types())  # ['TET4']
 ```
 
 ### Interruption
@@ -375,9 +381,9 @@ disc = pyrucast.fill_surface(
 )
 
 bord = pyrucast.contour(disc)
-print(len(bord))                 # 1  (domaine simplement connexe)
-print(bord.element_types())      # ['SEG2']
-print(bord.cell_counts())        # [16]
+print(len(bord))  # 1  (domaine simplement connexe)
+print(bord.element_types())  # ['SEG2']
+print(bord.cell_counts())  # [16]
 ```
 
 Les sous-maillages POI1 (un point n'a pas d'arête) sont ignorés. La fonction
@@ -422,17 +428,17 @@ c = pyrucast.Coords(dim=2)
 nodes = [c.add_node(p) for p in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (2.0, 0.0)]]
 
 mesh = pyrucast.Mesh(c, "TRI3")
-mesh.unit().add_cell([nodes[0], nodes[1], nodes[2]])   # cellule 0
-mesh.unit().add_cell([nodes[1], nodes[3], nodes[2]])   # cellule 1
+mesh.unit().add_cell([nodes[0], nodes[1], nodes[2]])  # cellule 0
+mesh.unit().add_cell([nodes[1], nodes[3], nodes[2]])  # cellule 1
 
 # Points = {0, 1, 2} : seule la cellule 0 a tous ses nœuds dedans.
 pts = pyrucast.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
 
 strict = pyrucast.elements_on(mesh, pts, strict=True)
-print(strict.cell_count())          # 1  (cellule 0)
+print(strict.cell_count())  # 1  (cellule 0)
 
 loose = pyrucast.elements_on(mesh, pts, strict=False)
-print(loose.cell_count())           # 2  (les deux touchent un nœud de pts)
+print(loose.cell_count())  # 2  (les deux touchent un nœud de pts)
 ```
 
 Côté Rust, `ops::mesher::elements_on(&mesh, &points, strict)`.
@@ -472,14 +478,14 @@ import pyrucast
 c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
-b2 = c.add_node([1.0, 0.0])      # superposé à b, mais nœud distinct
+b2 = c.add_node([1.0, 0.0])  # superposé à b, mais nœud distinct
 d = c.add_node([2.0, 0.0])
 
 mesh = pyrucast.Mesh(c, "SEG2")
 mesh.unit().add_cell([a, b])
 mesh.unit().add_cell([b2, d])
 
-joined = pyrucast.merge_nodes(mesh, 1e-6)   # b2 est soudé sur b
+joined = pyrucast.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
 ```
 
 > `merge_nodes` opère **au sein d'une même `Coords`** (l'invariant du `Mesh`

@@ -121,7 +121,7 @@ assert_eq!(sm.face_color(), RgbColor::new(220, 60, 60));
 Côté Python :
 
 ```python
-sm = pyrucast.Mesh(coords, "TRI3")[0]   # vue du sous-maillage unique
+sm = pyrucast.Mesh(coords, "TRI3")[0]  # vue du sous-maillage unique
 sm.face_color = (220, 60, 60)
 assert sm.face_color == (220, 60, 60)
 ```
@@ -204,7 +204,9 @@ Côté Python, `cmap`, `vmin` et `vmax` sont des arguments nommés de `plot` :
 mesh.plot(save="t.svg", field=t_field)
 
 # Composante "UY", colormap "coolwarm", bornes fixées.
-mesh.plot(save="uy.svg", field=u_field, component="UY", cmap="coolwarm", vmin=-1.0, vmax=1.0)
+mesh.plot(
+    save="uy.svg", field=u_field, component="UY", cmap="coolwarm", vmin=-1.0, vmax=1.0
+)
 
 # Plafond seul fixé : le plancher suit le minimum des données.
 mesh.plot(save="t.svg", field=t_field, vmax=100.0)
@@ -246,8 +248,8 @@ e.plot(save="courbe.svg", x_label="temps", y_label="T", title="évolution de T")
 
 # Évolution d'un champ aux nœuds : un NodeField complet par pas de temps.
 ev = pc.Evolution([(0.0, champ_t0), (1.0, champ_t1), (2.0, champ_t2)])
-ev.plot(save="frame.png", frame=2)              # une valeur tabulée (défaut : la dernière)
-ev.plot(save="frame_surf.png", mesh=maillage)   # rendu surfacique sur un maillage fourni
+ev.plot(save="frame.png", frame=2)  # une valeur tabulée (défaut : la dernière)
+ev.plot(save="frame_surf.png", mesh=maillage)  # rendu surfacique sur un maillage fourni
 ```
 
 ### Slider de valeur tabulée (fenêtre interactive)
@@ -308,8 +310,8 @@ mesh.plot_styled(Some(View::iso()), Some(Path::new("fil.svg")), MeshStyle::Wiref
 Côté Python, c'est l'argument booléen `wireframe` de `plot` :
 
 ```python
-mesh.plot(save="solide.svg")                  # peau opaque (défaut)
-mesh.plot(save="fil.svg", wireframe=True)      # fil de fer
+mesh.plot(save="solide.svg")  # peau opaque (défaut)
+mesh.plot(save="fil.svg", wireframe=True)  # fil de fer
 
 # Sans objet avec un champ : lève ValueError.
 # mesh.plot(save="x.svg", field=t_field, wireframe=True)

@@ -107,7 +107,7 @@ Plus, pour les nœuds (cf. [Nœud](node.md)) :
 import pyrucast
 
 c = pyrucast.Coords(dim=2)
-ns = [c.add_node(p) for p in [(0,0), (1,0), (1,1), (0,1)]]
+ns = [c.add_node(p) for p in [(0, 0), (1, 0), (1, 1), (0, 1)]]
 
 tri = pyrucast.Mesh(c, "TRI3")
 tri.unit().add_cell([ns[0], ns[1], ns[2]])
@@ -117,8 +117,8 @@ qua.unit().add_cell([ns[0], ns[1], ns[2], ns[3]])
 
 # Union de deux maillages (zones partagées par handle).
 mesh = tri | qua
-print(len(mesh))          # 2 sous-maillages
-print(mesh)               # Mesh: 2 submesh(es), 2 cell(s) total
+print(len(mesh))  # 2 sous-maillages
+print(mesh)  # Mesh: 2 submesh(es), 2 cell(s) total
 ```
 
 ## Pourquoi un trait commun ?

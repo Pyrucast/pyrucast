@@ -164,9 +164,9 @@ model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
 materials = pyrucast.material_field(model, [("k", 1.0)])
 
 K = pyrucast.stiffness(model, materials)
-print("primal_vars =", model.primal_vars())   # ['T', 'lambda_T']
-print("dual_vars =",   model.dual_vars())      # ['q', 'imposed_T']
-print(K)                                        # Matrix: 3 row(s) × 3 col(s), …
+print("primal_vars =", model.primal_vars())  # ['T', 'lambda_T']
+print("dual_vars =", model.dual_vars())  # ['q', 'imposed_T']
+print(K)  # Matrix: 3 row(s) × 3 col(s), …
 ```
 
 ## Assemblage et résolution

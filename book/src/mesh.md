@@ -98,9 +98,9 @@ n3 = c.add_node([0.5, 1.0])
 # donne la vue, add_cell ajoute une cellule.
 mesh = pyrucast.Mesh(c, "TRI3")
 mesh.unit().add_cell([a, b, n3])
-print(mesh)               # Mesh: 1 submesh(es), 1 cell(s) total
-print(mesh.element_types())   # ['TRI3']
-print(mesh.cell_counts())     # [1]
+print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
+print(mesh.element_types())  # ['TRI3']
+print(mesh.cell_counts())  # [1]
 
 # Composer plusieurs zones : l'union | (jamais +).
 quad = pyrucast.Mesh(c, "QUA4")

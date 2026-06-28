@@ -108,7 +108,7 @@ rhs[0].set_value(mult_right, "imposed_T", 1.0)
 # 5) Assemblage + résolution.
 K = pyrucast.stiffness(model, materials)
 solution = pyrucast.solve(K, rhs)
-assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10          # T au milieu
+assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10  # T au milieu
 assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux à gauche
 ```
 

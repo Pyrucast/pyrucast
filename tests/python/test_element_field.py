@@ -207,7 +207,7 @@ def test_operator_pow_scalar():
     _, _, fes = _tri3_subspace()
     f = _subfield(fes, ["x"])
     f.set_uniform("x", 3.0)
-    g = f ** 2.0
+    g = f**2.0
     for gp in range(3):
         assert abs(g.get(0, gp, 0) - 9.0) < 1e-12
     assert f.get(0, 0, 0) == 3.0  # f untouched
@@ -355,6 +355,7 @@ def test_subfield_plus_subfield_distinct_support_raises():
 
 def test_subfield_div_by_zero_is_inf():
     import math
+
     _, _, fes = _tri3_subspace()
     a = pyrucast.ElementField(fes, ["E"])[0]
     b = pyrucast.ElementField(fes, ["E"])[0]
@@ -412,7 +413,7 @@ def test_field_plus_subfield_targets_matching_zone():
     g = f + sub
     assert len(g) == 2
     assert g[0].value(0, 0, "E") == 11.0  # matching zone updated
-    assert g[1].value(0, 0, "E") == 2.0   # other zone unchanged
+    assert g[1].value(0, 0, "E") == 2.0  # other zone unchanged
 
 
 def test_field_per_component_in_place():

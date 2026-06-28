@@ -74,12 +74,12 @@ c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
-mesh = pyrucast.Mesh(c, "POI1")     # un sous-maillage = liste de nœuds
+mesh = pyrucast.Mesh(c, "POI1")  # un sous-maillage = liste de nœuds
 mesh.unit().add_cell([a])
 mesh.unit().add_cell([b])
 
 print(c)
-print(mesh)                          # Mesh: 1 submesh(es), 2 cell(s) total
+print(mesh)  # Mesh: 1 submesh(es), 2 cell(s) total
 ```
 
 À partir d'ici, le chapitre [Introduction](introduction.md) présente le

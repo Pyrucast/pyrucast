@@ -69,11 +69,12 @@ Après toute modification du Rust, relancer simplement `maturin develop --releas
 ## Développement
 
 ```bash
-pip install pytest          # en plus de maturin, dans le venv
+pip install pytest ruff     # en plus de maturin, dans le venv
 cargo build                 # cœur Rust pur (sans pyo3 ; pas besoin du venv)
 cargo test                  # tests unitaires + intégration + doctests (Rust pur)
 maturin develop && python -m pytest   # tests Python
-bash script/check.sh        # enchaîne toutes les vérifications
+cargo fmt && ruff format .  # formatage standard (Rust + Python)
+bash script/check.sh        # enchaîne toutes les vérifications (formatage inclus)
 ```
 
 Le chapitre [Compilation et tests](book/src/compilation.md) du book détaille les

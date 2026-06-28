@@ -310,7 +310,9 @@ def test_fill_surface_with_one_hole_2d():
         p0 = tri.node(0, ci, 0).coord()
         p1 = tri.node(0, ci, 1).coord()
         p2 = tri.node(0, ci, 2).coord()
-        total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]))
+        total += 0.5 * (
+            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
+        )
     assert abs(total - 12.0) < 1e-9
 
 
@@ -328,7 +330,9 @@ def test_fill_surface_outer_loop_autodetected():
         p0 = tri.node(0, ci, 0).coord()
         p1 = tri.node(0, ci, 1).coord()
         p2 = tri.node(0, ci, 2).coord()
-        total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]))
+        total += 0.5 * (
+            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
+        )
     assert abs(total - 12.0) < 1e-9
 
 
@@ -346,7 +350,9 @@ def test_fill_surface_refined_creates_more_triangles():
         p0 = tri.node(0, ci, 0).coord()
         p1 = tri.node(0, ci, 1).coord()
         p2 = tri.node(0, ci, 2).coord()
-        total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]))
+        total += 0.5 * (
+            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
+        )
     assert abs(total - 16.0) < 1e-9
 
 
@@ -362,7 +368,9 @@ def test_fill_surface_refined_with_hole():
         p0 = tri.node(0, ci, 0).coord()
         p1 = tri.node(0, ci, 1).coord()
         p2 = tri.node(0, ci, 2).coord()
-        total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]))
+        total += 0.5 * (
+            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
+        )
     assert abs(total - 12.0) < 1e-9
 
 
@@ -374,6 +382,7 @@ def test_fill_surface_refined_angle_criterion():
     tri = pyrucast.fill_surface(rect, "TRI3", min_angle_deg=20.0)
     # Compute min angle across all triangles.
     import math
+
     min_deg = math.inf
     for ci in range(tri.cell_count()):
         pts = [tri.node(0, ci, k).coord() for k in range(3)]
@@ -500,7 +509,9 @@ def test_repr_str_submesh_and_mesh():
 def _mesh_with_n_zones(n):
     """A Mesh of `n` single-node POI1 zones sharing the same Coords."""
     c = pyrucast.Coords(2)
-    subs = [pyrucast.poi1_from_nodes([c.add_node([float(i), 0.0])])[0] for i in range(n)]
+    subs = [
+        pyrucast.poi1_from_nodes([c.add_node([float(i), 0.0])])[0] for i in range(n)
+    ]
     mesh = subs[0]
     for s in subs[1:]:
         mesh = mesh | s
@@ -516,16 +527,16 @@ def test_slice_returns_aggregate_of_same_type():
 
 def test_slice_full_step_and_open_bounds():
     mesh = _mesh_with_n_zones(4)
-    assert len(mesh[:]) == 4          # full copy
-    assert len(mesh[::2]) == 2        # one out of two
-    assert len(mesh[1:]) == 3         # all but first
-    assert len(mesh[:2]) == 2         # first two
+    assert len(mesh[:]) == 4  # full copy
+    assert len(mesh[::2]) == 2  # one out of two
+    assert len(mesh[1:]) == 3  # all but first
+    assert len(mesh[:2]) == 2  # first two
 
 
 def test_slice_negative_bounds_and_step():
     mesh = _mesh_with_n_zones(4)
-    assert len(mesh[-2:]) == 2        # last two
-    assert len(mesh[::-1]) == 4       # reversed
+    assert len(mesh[-2:]) == 2  # last two
+    assert len(mesh[::-1]) == 4  # reversed
     # reversed slice preserves the zones, order flipped
     rev = mesh[::-1]
     fwd = mesh[:]

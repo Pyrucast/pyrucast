@@ -13,7 +13,9 @@ import pyrucast
 
 
 _HAS_VIZ = hasattr(pyrucast.Mesh(pyrucast.Coords(2), "TRI3"), "plot")
-pytestmark = pytest.mark.skipif(not _HAS_VIZ, reason="pyrucast built without viz feature")
+pytestmark = pytest.mark.skipif(
+    not _HAS_VIZ, reason="pyrucast built without viz feature"
+)
 
 
 def _make_two_triangles():

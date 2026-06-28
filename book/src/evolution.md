@@ -99,20 +99,22 @@ import pyrucast as pc
 
 # Courbe scalaire (une SubEvolution).
 se = pc.SubEvolution([(0.0, 10.0), (1.0, 20.0)])
-print(se.interpolate(0.5))                       # 15.0
-print(se.interpolate(2.0, out_of_range="clamp")) # 20.0 (sinon : erreur)
+print(se.interpolate(0.5))  # 15.0
+print(se.interpolate(2.0, out_of_range="clamp"))  # 20.0 (sinon : erreur)
 
 # Agrégat scalaire → liste de flottants.
 e = pc.Evolution([(0.0, 10.0), (1.0, 20.0)])
-print(e.interpolate(0.5))                        # [15.0]
+print(e.interpolate(0.5))  # [15.0]
 
 # Bas niveau : composition de courbes par zone avec `|`.
-agg = pc.SubEvolution([(0.0, 1.0), (1.0, 2.0)]) | pc.SubEvolution([(0.0, 3.0), (1.0, 4.0)])
-print(agg.interpolate(0.5))                      # [1.5, 3.5]
+agg = pc.SubEvolution([(0.0, 1.0), (1.0, 2.0)]) | pc.SubEvolution(
+    [(0.0, 3.0), (1.0, 4.0)]
+)
+print(agg.interpolate(0.5))  # [1.5, 3.5]
 
 # Haut niveau temps-major : un NodeField complet par pas → NodeField interpolé.
 ev = pc.Evolution([(0.0, champ_t0), (2.0, champ_t1)])
-champ = ev.interpolate(1.0)                       # NodeField à mi-chemin
+champ = ev.interpolate(1.0)  # NodeField à mi-chemin
 ```
 
 ## Tracé
@@ -122,8 +124,8 @@ valeur tabulée pour des champs. Voir [Visualisation › Tracé d'une évolution
 
 ```python
 e = pc.Evolution([(0.0, 10.0), (1.0, 20.0), (2.0, 5.0)])
-e.plot(save="courbe.svg", x_label="temps", y_label="T")   # courbe scalaire
-ev.plot(save="frame.png", frame=2)                          # champ tabulé (un pas)
+e.plot(save="courbe.svg", x_label="temps", y_label="T")  # courbe scalaire
+ev.plot(save="frame.png", frame=2)  # champ tabulé (un pas)
 ```
 
 ## Place dans le modèle

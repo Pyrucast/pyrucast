@@ -117,10 +117,10 @@ let y = k.mul_dense(&[1.0, 1.0]).unwrap();
 import pyrucast
 
 k = pyrucast.Matrix(symmetric=True)
-k.add_entry(0, "q", 0, "T",  2.0)
+k.add_entry(0, "q", 0, "T", 2.0)
 k.add_entry(0, "q", 1, "T", -1.0)
 k.add_entry(1, "q", 0, "T", -1.0)
-k.add_entry(1, "q", 1, "T",  2.0)
+k.add_entry(1, "q", 1, "T", 2.0)
 
 assert k.n_rows() == 2
 assert k.n_cols() == 2

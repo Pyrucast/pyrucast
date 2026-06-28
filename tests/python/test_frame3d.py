@@ -24,14 +24,26 @@ def test_cantilever_bending_and_torsion():
 
     model = pyrucast.Model.frame3d(fes)
     for var, dual in (
-        ("u_x", "f_x"), ("u_y", "f_y"), ("u_z", "f_z"),
-        ("r_x", "m_x"), ("r_y", "m_y"), ("r_z", "m_z"),
+        ("u_x", "f_x"),
+        ("u_y", "f_y"),
+        ("u_z", "f_z"),
+        ("r_x", "m_x"),
+        ("r_y", "m_y"),
+        ("r_z", "m_z"),
     ):
         model = model | _clamp(nodes[0], var, dual)
     materials = pyrucast.material_field(
         model,
-        [("E", E), ("A", A), ("I_y", IY), ("I_z", IZ),
-         ("J", J), ("G", G), ("A_sy", ASY), ("A_sz", ASZ)],
+        [
+            ("E", E),
+            ("A", A),
+            ("I_y", IY),
+            ("I_z", IZ),
+            ("J", J),
+            ("G", G),
+            ("A_sy", ASY),
+            ("A_sz", ASZ),
+        ],
     )
 
     load = pyrucast.Mesh(c, "POI1")
@@ -44,8 +56,18 @@ def test_cantilever_bending_and_torsion():
 
     tip = nodes[-1]
     tol = 1e-9
-    assert abs(solution.value(tip, "u_y") - (PY * L**3 / (3 * E * IZ) + PY * L / (G * ASY))) < tol
-    assert abs(solution.value(tip, "u_z") - (PZ * L**3 / (3 * E * IY) + PZ * L / (G * ASZ))) < tol
+    assert (
+        abs(
+            solution.value(tip, "u_y") - (PY * L**3 / (3 * E * IZ) + PY * L / (G * ASY))
+        )
+        < tol
+    )
+    assert (
+        abs(
+            solution.value(tip, "u_z") - (PZ * L**3 / (3 * E * IY) + PZ * L / (G * ASZ))
+        )
+        < tol
+    )
     assert abs(solution.value(tip, "r_x") - MX * L / (G * J)) < tol
     assert abs(solution.value(tip, "u_x")) < tol
 

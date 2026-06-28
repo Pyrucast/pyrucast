@@ -56,9 +56,7 @@ def test_with_choices_explicit_per_submesh():
     mesh = pyrucast.Mesh(c, "TRI3")
     mesh.unit().add_cell([n0, n1, n2])
 
-    fes = pyrucast.FiniteElementSpace.with_choices(
-        mesh, [("LAGRANGE1", "GAUSS")]
-    )
+    fes = pyrucast.FiniteElementSpace.with_choices(mesh, [("LAGRANGE1", "GAUSS")])
     assert len(fes) == 1
     assert fes[0].interpolation == "LAGRANGE1"
 
@@ -189,16 +187,39 @@ def test_gauss_weights_sum_to_reference_volume():
         if et == "SEG2":
             nodes = [c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])]
         elif et == "TRI3":
-            nodes = [c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), c.add_node([0.0, 1.0])]
+            nodes = [
+                c.add_node([0.0, 0.0]),
+                c.add_node([1.0, 0.0]),
+                c.add_node([0.0, 1.0]),
+            ]
         elif et == "QUA4":
-            nodes = [c.add_node(p) for p in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]]
+            nodes = [
+                c.add_node(p) for p in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+            ]
         elif et == "TET4":
-            nodes = [c.add_node(p) for p in [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)]]
+            nodes = [
+                c.add_node(p)
+                for p in [
+                    (0.0, 0.0, 0.0),
+                    (1.0, 0.0, 0.0),
+                    (0.0, 1.0, 0.0),
+                    (0.0, 0.0, 1.0),
+                ]
+            ]
         else:  # HEX8
-            nodes = [c.add_node(list(p)) for p in [
-                (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0),
-                (0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (0.0, 1.0, 1.0),
-            ]]
+            nodes = [
+                c.add_node(list(p))
+                for p in [
+                    (0.0, 0.0, 0.0),
+                    (1.0, 0.0, 0.0),
+                    (1.0, 1.0, 0.0),
+                    (0.0, 1.0, 0.0),
+                    (0.0, 0.0, 1.0),
+                    (1.0, 0.0, 1.0),
+                    (1.0, 1.0, 1.0),
+                    (0.0, 1.0, 1.0),
+                ]
+            ]
         mesh = pyrucast.Mesh(c, et)
         mesh.unit().add_cell([n for n in nodes])
         fes = pyrucast.FiniteElementSpace(mesh)
@@ -282,22 +303,32 @@ def test_qua4_unit_square_integrates_to_area():
     mesh.unit().add_cell([n0, n1, n2, n3])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    area = sum(sub.gauss_weight(g) * sub.det_jacobian(0, g) for g in range(sub.gauss_count()))
+    area = sum(
+        sub.gauss_weight(g) * sub.det_jacobian(0, g) for g in range(sub.gauss_count())
+    )
     assert abs(area - 1.0) < 1e-12
 
 
 def test_hex8_unit_cube_integrates_to_volume():
     c = pyrucast.Coords(3)
     pts = [
-        (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0),
-        (0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (0.0, 1.0, 1.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (1.0, 0.0, 1.0),
+        (1.0, 1.0, 1.0),
+        (0.0, 1.0, 1.0),
     ]
     nodes = [c.add_node(list(p)) for p in pts]
     mesh = pyrucast.Mesh(c, "HEX8")
     mesh.unit().add_cell([n for n in nodes])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    vol = sum(sub.gauss_weight(g) * sub.det_jacobian(0, g) for g in range(sub.gauss_count()))
+    vol = sum(
+        sub.gauss_weight(g) * sub.det_jacobian(0, g) for g in range(sub.gauss_count())
+    )
     assert abs(vol - 1.0) < 1e-12
 
 
@@ -316,10 +347,10 @@ def test_tri3_dn_dx_constant_known_values():
         dn = sub.dn_dx(0, g)
         assert abs(dn[0] - (-1.0 / 3.0)) < 1e-12  # ∂N₁/∂x
         assert abs(dn[1] - (-1.0 / 4.0)) < 1e-12  # ∂N₁/∂y
-        assert abs(dn[2] - (1.0 / 3.0)) < 1e-12   # ∂N₂/∂x
-        assert abs(dn[3]) < 1e-12                  # ∂N₂/∂y
-        assert abs(dn[4]) < 1e-12                  # ∂N₃/∂x
-        assert abs(dn[5] - (1.0 / 4.0)) < 1e-12   # ∂N₃/∂y
+        assert abs(dn[2] - (1.0 / 3.0)) < 1e-12  # ∂N₂/∂x
+        assert abs(dn[3]) < 1e-12  # ∂N₂/∂y
+        assert abs(dn[4]) < 1e-12  # ∂N₃/∂x
+        assert abs(dn[5] - (1.0 / 4.0)) < 1e-12  # ∂N₃/∂y
 
 
 # ─── On-the-fly: mesh displacement ──────────────────────────────────────────

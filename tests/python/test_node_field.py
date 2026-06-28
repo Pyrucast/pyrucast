@@ -131,7 +131,9 @@ def test_unknown_node_or_component():
     f = pyrucast.NodeField(sm, ["T"])
     sub = f.unit()
     assert sub.component_index("missing") is None
-    other = c.add_node([99.0, 99.0])  # alive in the config but not in the field's support
+    other = c.add_node(
+        [99.0, 99.0]
+    )  # alive in the config but not in the field's support
     try:
         sub.get_by_node(other, 0)
     except RuntimeError:
@@ -332,7 +334,7 @@ def test_subfield_pow_scalar():
     assert g.value(nodes[1], "T") == 9.0
     # Fractional exponent: square root.
     h = f[0] ** 0.5
-    assert abs(h.value(nodes[1], "T") - 3.0 ** 0.5) < 1e-12
+    assert abs(h.value(nodes[1], "T") - 3.0**0.5) < 1e-12
     # Original untouched.
     assert f.value(nodes[0], "T") == 2.0
 
@@ -341,7 +343,7 @@ def test_field_pow_scalar_aggregate():
     c, nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", 3.0)
-    g = f ** 3.0
+    g = f**3.0
     assert g.value(nodes[0], "T") == 27.0
 
 
@@ -521,8 +523,8 @@ def test_min_max_per_component():
     c, nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["U", "V"])
     for i, n in enumerate(nodes):
-        f[0].set_value(n, "U", float(i + 1))      # 1, 2, 3
-        f[0].set_value(n, "V", -float(i + 1))     # -1, -2, -3
+        f[0].set_value(n, "U", float(i + 1))  # 1, 2, 3
+        f[0].set_value(n, "V", -float(i + 1))  # -1, -2, -3
     # Zone view and aggregate agree on a single-zone field.
     assert f[0].min("U") == 1.0
     assert f.min("U") == 1.0
@@ -686,7 +688,7 @@ def test_field_plus_subfield_targets_matching_zone():
     g = f + sub
     assert len(g) == 2
     assert g.value(nodes[0], "T") == 11.0  # matching zone updated
-    assert g.value(nodes[1], "T") == 7.0   # other zone unchanged
+    assert g.value(nodes[1], "T") == 7.0  # other zone unchanged
 
 
 def test_op_bad_operand_raises_type_error():

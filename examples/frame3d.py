@@ -48,14 +48,26 @@ def main() -> None:
 
     model = pyrucast.Model.frame3d(fes)
     for var, dual in (
-        ("u_x", "f_x"), ("u_y", "f_y"), ("u_z", "f_z"),
-        ("r_x", "m_x"), ("r_y", "m_y"), ("r_z", "m_z"),
+        ("u_x", "f_x"),
+        ("u_y", "f_y"),
+        ("u_z", "f_z"),
+        ("r_x", "m_x"),
+        ("r_y", "m_y"),
+        ("r_z", "m_z"),
     ):
         model = model | _clamp(nodes[0], var, dual)
     materials = pyrucast.material_field(
         model,
-        [("E", E), ("A", A), ("I_y", IY), ("I_z", IZ),
-         ("J", J), ("G", G), ("A_sy", ASY), ("A_sz", ASZ)],
+        [
+            ("E", E),
+            ("A", A),
+            ("I_y", IY),
+            ("I_z", IZ),
+            ("J", J),
+            ("G", G),
+            ("A_sy", ASY),
+            ("A_sz", ASZ),
+        ],
     )
 
     load = pyrucast.Mesh(c, "POI1")

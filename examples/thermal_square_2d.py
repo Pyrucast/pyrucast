@@ -36,10 +36,10 @@ Lancement ::
 import pyrucast
 
 # ── Données du problème ──────────────────────────────────────────────────────
-K = 1.0          # conductivité
-Q = 10.0         # flux de chaleur TOTAL injecté sur le bord gauche
+K = 1.0  # conductivité
+Q = 10.0  # flux de chaleur TOTAL injecté sur le bord gauche
 T_IMPOSED = 20.0  # température imposée sur le bord droit
-N = 4            # N×N éléments QUA4
+N = 4  # N×N éléments QUA4
 
 
 def main() -> None:
@@ -50,17 +50,17 @@ def main() -> None:
 
     # ── Maillage : grille structurée (N+1)×(N+1) de QUA4 sur [0,1]² ───────────
     c = pyrucast.Coords(2)
-    grid = [
-        c.add_node([i * h, j * h])
-        for j in range(N + 1)
-        for i in range(N + 1)
-    ]
+    grid = [c.add_node([i * h, j * h]) for j in range(N + 1) for i in range(N + 1)]
     mesh = pyrucast.Mesh(c, "QUA4")
     for j in range(N):
         for i in range(N):
             mesh.unit().add_cell(
-                [grid[idx(i, j)], grid[idx(i + 1, j)],
-                 grid[idx(i + 1, j + 1)], grid[idx(i, j + 1)]]
+                [
+                    grid[idx(i, j)],
+                    grid[idx(i + 1, j)],
+                    grid[idx(i + 1, j + 1)],
+                    grid[idx(i, j + 1)],
+                ]
             )
     fes = pyrucast.FiniteElementSpace(mesh)
 

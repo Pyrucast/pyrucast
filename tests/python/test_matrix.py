@@ -17,8 +17,10 @@ def _make_block(c, row_ids, col_ids, dual_vars, primal_vars, symmetric=False):
     `Matrix` (SubMatrix is no longer constructed directly — see
     CONVENTIONS.md). The view supports `add_entry` / `get` / `n_rows`."""
     return pyrucast.Matrix.block(
-        _poi1(c, row_ids), _poi1(c, col_ids),
-        dual_vars, primal_vars,
+        _poi1(c, row_ids),
+        _poi1(c, col_ids),
+        dual_vars,
+        primal_vars,
         ordering="nodes_then_vars",
         symmetric=symmetric,
     )[0]

@@ -34,7 +34,7 @@ tout l'intérêt d'intégrer le comportement exactement.
 
 ```python
 # Solution (w, theta) déjà obtenue par le solveur.
-eps = pyrucast.beam_deformation(solution, fes)          # (κ, γ) par élément
+eps = pyrucast.beam_deformation(solution, fes)  # (κ, γ) par élément
 forces = pyrucast.integrate_behavior(model, eps, materials)
 # forces porte le moment M = E·I·κ et l'effort tranchant V = G·A_s·γ.
 ```

@@ -62,7 +62,7 @@ import pyrucast
 try:
     c = pyrucast.Coords(0)  # dimension nulle
 except RuntimeError as e:
-    print(f"erreur : {e}")         # erreur : dim must be ≥ 1
+    print(f"erreur : {e}")  # erreur : dim must be ≥ 1
 ```
 
 ## Affichage : `Debug` vs `Display`
@@ -95,8 +95,8 @@ c = pyrucast.Coords(dim=2)
 c.add_node([0.0, 0.0])
 
 print(repr(c))  # vue structurelle — __repr__
-print(str(c))   # vue résumée cast3m — __str__
-print(c)        # même chose que str(c)
+print(str(c))  # vue résumée cast3m — __str__
+print(c)  # même chose que str(c)
 ```
 
 ## Sérialisation : un seul mécanisme

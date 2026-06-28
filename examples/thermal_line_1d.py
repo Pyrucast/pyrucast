@@ -30,8 +30,8 @@ Après avoir compilé l'extension dans le venv ::
 import pyrucast
 
 # ── Données du problème ──────────────────────────────────────────────────────
-K = 1.0          # conductivité
-Q = 10.0         # source de chaleur (flux de Neumann) en x = 0
+K = 1.0  # conductivité
+Q = 10.0  # source de chaleur (flux de Neumann) en x = 0
 T_IMPOSED = 20.0  # température imposée en x = 1
 N_ELEMS = 4
 

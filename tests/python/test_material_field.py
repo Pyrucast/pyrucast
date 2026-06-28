@@ -99,11 +99,14 @@ def test_model_build_material_field_uniform_skips_dirichlet():
 
 def test_model_build_material_field_per_sub_model_different_zones():
     _, nodes, _, model = _two_zone_model()
-    materials = pyrucast.material_field_per_sub_model(model, [
-        [("k", 1.0)],   # zone A (model[0])
-        [("k", 4.0)],   # zone B (model[1])
-        [],             # Dirichlet (model[2]) — skip
-    ])
+    materials = pyrucast.material_field_per_sub_model(
+        model,
+        [
+            [("k", 1.0)],  # zone A (model[0])
+            [("k", 4.0)],  # zone B (model[1])
+            [],  # Dirichlet (model[2]) — skip
+        ],
+    )
     assert len(materials) == 2  # only the two HC slots
 
     K = pyrucast.stiffness(model, materials)

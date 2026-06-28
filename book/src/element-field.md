@@ -154,11 +154,11 @@ fes = pyrucast.FiniteElementSpace(mesh)
 
 # Champ matériau : une zone par sous-espace de `fes`.
 mat = pyrucast.ElementField(fes, ["E", "nu"])
-print(mat)                 # ElementField: 1 subfield(s)
-print(mat.unit())          # SubElementField: 1 cell(s) × 3 gauss × 2 component(s) [E, nu]
+print(mat)  # ElementField: 1 subfield(s)
+print(mat.unit())  # SubElementField: 1 cell(s) × 3 gauss × 2 component(s) [E, nu]
 
 # Écriture via la zone ; lecture via la zone (ou les stats agrégat).
-z = mat.unit()             # la seule zone (erreur s'il y en avait plusieurs)
+z = mat.unit()  # la seule zone (erreur s'il y en avait plusieurs)
 z.set_uniform("E", 210e9)
 z.set_uniform("nu", 0.3)
 assert z.value(0, 0, "E") == 210e9
@@ -168,13 +168,13 @@ z[0, 2, "nu"] = 0.28
 assert z[0, 2, "nu"] == 0.28
 
 # Stats et arithmétique au niveau agrégat.
-print(mat.min("E"), mat.max("E"))   # 210000000000.0 210000000000.0
-mat.mul_to_component("E", 0.95)     # en place, seulement "E"
-scaled = mat * 1.1                  # nouveau champ
+print(mat.min("E"), mat.max("E"))  # 210000000000.0 210000000000.0
+mat.mul_to_component("E", 0.95)  # en place, seulement "E"
+scaled = mat * 1.1  # nouveau champ
 
 # Composantes par sous-espace (multiphysique / multi-matériau).
 ef = pyrucast.ElementField.with_components_per_subspace(fes, [["E", "nu"]])
-print(ef.components())              # ['E', 'nu']
+print(ef.components())  # ['E', 'nu']
 ```
 
 Le plus souvent, on ne construit pas le champ matériau à la main : on appelle

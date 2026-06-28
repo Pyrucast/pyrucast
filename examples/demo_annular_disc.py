@@ -32,15 +32,15 @@ def main() -> None:
     # treats the inner one as a hole.
     contour = inner_mesh | outer_mesh
     contour = outer_mesh
-    surface_mesh = pc.Mesh.sweep_qua4(inner_mesh,outer_mesh,2)
-    
+    surface_mesh = pc.Mesh.sweep_qua4(inner_mesh, outer_mesh, 2)
+
     print(surface_mesh)
 
     # `mesh[i]` returns the i-th submesh handle and shares storage with
     # the parent mesh, so colour changes survive every later
     # add_submesh / __add__.
-    inner_mesh[0].face_color = (220, 60, 60)    # red
-    outer_mesh[0].face_color = (60, 60, 220)    # blue
+    inner_mesh[0].face_color = (220, 60, 60)  # red
+    outer_mesh[0].face_color = (60, 60, 220)  # blue
     surface_mesh[0].face_color = (60, 180, 60)  # green
 
     final = pc.Mesh(coords)

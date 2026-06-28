@@ -65,9 +65,9 @@ toutes les composantes de toutes les zones. Disponible au niveau **zone**
 dunders Python `__add__`, …, `__pow__`).
 
 ```python
-scaled = mat * 1.1      # nouveau champ, toutes composantes × 1.1
-shifted = u - 5.0       # nouveau champ
-energy = (u ** 2.0)     # puissance élément par élément (exposant fractionnaire OK)
+scaled = mat * 1.1  # nouveau champ, toutes composantes × 1.1
+shifted = u - 5.0  # nouveau champ
+energy = u**2.0  # puissance élément par élément (exposant fractionnaire OK)
 ```
 
 > `+=` n'est **pas** surchargé : `f + s` ne mute pas `f`. (Côté Rust, la
@@ -89,7 +89,7 @@ définit `c` (la division par zéro est refusée). Au niveau zone, `set_uniform(
 v)` force une composante à une valeur constante.
 
 ```python
-mat.mul_to_component("E", 0.95)    # ne met à l'échelle que "E"
+mat.mul_to_component("E", 0.95)  # ne met à l'échelle que "E"
 ```
 
 ### 3. Binaire entre champs (strict)
@@ -123,9 +123,10 @@ exposées **au top-level** côté Python :
 
 ```python
 import pyrucast as pc
-champ2 = pc.cos(champ1)        # cosinus de chaque valeur
-e = pc.exp(-pc.abs(u))         # elles se composent librement
-norme = pc.sqrt(sx ** 2.0 + sy ** 2.0)
+
+champ2 = pc.cos(champ1)  # cosinus de chaque valeur
+e = pc.exp(-pc.abs(u))  # elles se composent librement
+norme = pc.sqrt(sx**2.0 + sy**2.0)
 ```
 
 Jeu disponible : `abs`, `sqrt`, `exp`, `log` (népérien), `log10`, `cos`,

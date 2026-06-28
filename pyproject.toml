@@ -18,5 +18,15 @@ bindings = "pyo3"
 # Enable the Cargo `extension-module` feature (correct Python linkage).
 features = ["extension-module"]
 
+[tool.ruff]
+# Style standard ruff (≈ black). On épingle la cible de version ; le reste
+# suit les défauts (line-length = 88). `ruff format` met en forme les exemples
+# et la suite de tests Python ; `ruff format --check` garde le standard (cf.
+# script/check.sh).
+target-version = "py39"
+# `pyrucast.pyi` est généré par `stub_gen` (cargo) : le laisser hors de ruff,
+# sinon il dériverait à chaque régénération.
+extend-exclude = ["pyrucast.pyi"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]

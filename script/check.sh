@@ -16,6 +16,7 @@ step() {
 }
 
 step "cargo fmt --check"                         cargo fmt --check
+step "ruff format --check (Python)"              ruff format --check .
 step "cargo test (default features)"             cargo test
 step "cargo test --doc (explicit)"               cargo test --doc
 step "cargo test --features viz"                 cargo test --features viz

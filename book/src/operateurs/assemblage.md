@@ -23,7 +23,7 @@ sous-modèles sans matériau (Dirichlet…) ignorent ce champ.
 ```python
 materials = pyrucast.material_field(model, [("k", 1.0)])
 K = pyrucast.stiffness(model, materials)
-print(K)        # Matrix: n row(s) × n col(s), …
+print(K)  # Matrix: n row(s) × n col(s), …
 ```
 
 ## `mass(model)` → `Matrix`

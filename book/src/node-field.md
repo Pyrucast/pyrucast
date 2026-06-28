@@ -128,19 +128,19 @@ mesh.unit().add_cell([b])
 
 # Un SubNodeField par submesh du support (Mesh ou SubMesh).
 u = pyrucast.NodeField(mesh, ["UX", "UY"])
-print(u)                      # NodeField: 1 subfield(s)
-print(u.unit())               # SubNodeField: 2 node(s), 2 component(s) [UX, UY]
+print(u)  # NodeField: 1 subfield(s)
+print(u.unit())  # SubNodeField: 2 node(s), 2 component(s) [UX, UY]
 
 # Écriture via la zone, lecture via l'agrégat.
 u[0][a, "UX"] = 1.5
-print(u.value(a, "UX"))       # 1.5
-print(u.min("UX"), u.max("UX"))   # 0.0 1.5
+print(u.value(a, "UX"))  # 1.5
+print(u.min("UX"), u.max("UX"))  # 0.0 1.5
 
 # Composantes par zone (multiphysique) :
 f = pyrucast.NodeField.with_components_per_submesh(two_zone_mesh, [["T"], ["UX", "UY"]])
-print(f.components())         # ['T', 'UX', 'UY']
-f.check()                     # cohérence des interfaces (lève sinon)
-g = pyrucast.consolidate(f)   # fusion au plus juste
+print(f.components())  # ['T', 'UX', 'UY']
+f.check()  # cohérence des interfaces (lève sinon)
+g = pyrucast.consolidate(f)  # fusion au plus juste
 ```
 
 ## Refcount et sûreté du swap
