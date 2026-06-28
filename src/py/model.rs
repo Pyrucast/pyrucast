@@ -216,9 +216,7 @@ impl PyModel {
     fn dual_vars(&self) -> PyResult<Vec<String>> {
         Ok(self.inner.dual_vars()?)
     }
-
 }
 
 crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model, Model);
 crate::impl_dump_pymethod!(handle PySubModel, handle);
-

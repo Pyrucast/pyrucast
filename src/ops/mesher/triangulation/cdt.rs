@@ -27,9 +27,9 @@
 //! Constraint enforcement (edges that must appear in the final mesh)
 //! and hole removal will be layered on top in subsequent commits.
 
-use crate::error::{PyrucastError, Result};
-use crate::containers::mesh::{Point2, Vector2};
 use super::{cross2, point_in_triangle};
+use crate::containers::mesh::{Point2, Vector2};
+use crate::error::{PyrucastError, Result};
 use std::collections::{HashMap, HashSet};
 
 /// Refinement criteria applied after the constrained Delaunay
@@ -742,11 +742,8 @@ impl Cdt {
 
             // 2. Find a bad interior triangle.
             let outside = self.flood_fill_outside(constrained_edges);
-            let bad = self.find_bad_interior_triangle(
-                &outside,
-                max_edge_sq,
-                radius_ratio_sq_threshold,
-            );
+            let bad =
+                self.find_bad_interior_triangle(&outside, max_edge_sq, radius_ratio_sq_threshold);
             let Some(t_idx) = bad else {
                 return Ok(());
             };
@@ -818,7 +815,10 @@ impl Cdt {
             }
             // Super-triangle sentinels live at indices [n_input, n_input + 3);
             // anything past that is a Steiner point added by refinement.
-            if t.v.iter().any(|&v| v >= self.n_input && v < self.n_input + 3) {
+            if t.v
+                .iter()
+                .any(|&v| v >= self.n_input && v < self.n_input + 3)
+            {
                 colour[idx] = Some(true);
                 queue.push(idx);
             }
@@ -913,8 +913,7 @@ fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
 /// Circumcenter of the triangle `(a, b, c)`. Returns `None` if the
 /// three vertices are (nearly) collinear.
 fn circumcenter(a: Point2, b: Point2, c: Point2) -> Option<Point2> {
-    let d = 2.0
-        * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+    let d = 2.0 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
     if d.abs() < 1e-15 {
         return None;
     }
@@ -968,8 +967,7 @@ fn in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
     let am = va.norm_squared();
     let bm = vb.norm_squared();
     let cm = vc.norm_squared();
-    va.x * (vb.y * cm - bm * vc.y)
-        - va.y * (vb.x * cm - bm * vc.x)
+    va.x * (vb.y * cm - bm * vc.y) - va.y * (vb.x * cm - bm * vc.x)
         + am * (vb.x * vc.y - vb.y * vc.x)
 }
 
@@ -1433,7 +1431,8 @@ mod tests {
     fn triangulation_has_edge(tris: &[[usize; 3]], a: usize, b: usize) -> bool {
         tris.iter().any(|[i, j, k]| {
             let e = [(*i, *j), (*j, *k), (*k, *i)];
-            e.iter().any(|&(p, q)| (p == a && q == b) || (p == b && q == a))
+            e.iter()
+                .any(|&(p, q)| (p == a && q == b) || (p == b && q == a))
         })
     }
 
@@ -1652,8 +1651,7 @@ mod tests {
             max_edge_length: Some(1.0),
             min_angle_deg: None,
         };
-        let (pts, tris) =
-            triangulate_polygon_with_holes_refined(&outer, &[hole], opts).unwrap();
+        let (pts, tris) = triangulate_polygon_with_holes_refined(&outer, &[hole], opts).unwrap();
         assert_all_ccw(&tris, &pts);
         assert!(max_edge_length(&tris, &pts) <= 1.0 + 1e-9);
         // Total area = 16 - 4 = 12.

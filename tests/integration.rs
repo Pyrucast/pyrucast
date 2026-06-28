@@ -4,8 +4,8 @@
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::mesh::coords::{Coords, NodeId};
 use pyrucast::containers::mesh::element_type::ElementType;
-use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::mesh::node::Node;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::persist::Persist;
 use pyrucast::store::{compact, insert, live_count, read, swap_out, write};
 use pyrucast::{PyrucastError, Result};
@@ -184,8 +184,7 @@ fn fill_surface_from_circle_contour() -> Result<()> {
         let p0 = tri.node(0, ci, 0)?.coord()?;
         let p1 = tri.node(0, ci, 1)?.coord()?;
         let p2 = tri.node(0, ci, 2)?.coord()?;
-        let area = 0.5
-            * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+        let area = 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
         assert!(area > 0.0, "triangle {} not CCW", ci);
         total += area;
     }

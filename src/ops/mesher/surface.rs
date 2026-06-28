@@ -717,8 +717,10 @@ mod tests {
     #[test]
     fn surface_square_peels_to_two_triangles() {
         let coords = insert(Coords::new(2).unwrap());
-        let contour =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let contour = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+        );
         let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
         assert_eq!(tri.cell_count().unwrap(), 2);
@@ -728,18 +730,18 @@ mod tests {
     #[test]
     fn surface_rejects_unsupported_element() {
         let coords = insert(Coords::new(2).unwrap());
-        let contour =
-            build_contour_2d(coords, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let contour = build_contour_2d(coords, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
         assert!(surface(&contour, ElementType::TET4, None).is_err());
     }
 
     #[test]
     fn surface_rejects_multiple_contours() {
         let coords = insert(Coords::new(2).unwrap());
-        let outer =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
-        let hole =
-            build_contour_2d(coords, &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]);
+        let outer = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
+        );
+        let hole = build_contour_2d(coords, &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]);
         let combined = outer.union(&hole).unwrap();
         assert!(surface(&combined, ElementType::TRI3, None).is_err());
     }
@@ -766,7 +768,12 @@ mod tests {
                 max_edge = max_edge.max(e);
             }
         }
-        assert!(max_edge < 4.0 * h, "max edge {} too large for size {}", max_edge, h);
+        assert!(
+            max_edge < 4.0 * h,
+            "max edge {} too large for size {}",
+            max_edge,
+            h
+        );
     }
 
     #[test]
@@ -778,8 +785,8 @@ mod tests {
         let tri = surface(&contour, ElementType::TRI3, Some(1.0)).unwrap();
         let n = tri.cell_count().unwrap();
         assert!(n > nseg, "circle should be filled with interior nodes");
-        let poly_area = 0.5 * (nseg as f64) * r * r
-            * (2.0 * std::f64::consts::PI / nseg as f64).sin();
+        let poly_area =
+            0.5 * (nseg as f64) * r * r * (2.0 * std::f64::consts::PI / nseg as f64).sin();
         assert!(
             (total_ccw_area(&tri) - poly_area).abs() < 1e-6,
             "area drift: got {}, expected {}",
@@ -807,8 +814,10 @@ mod tests {
     #[test]
     fn surface_works_with_cw_contour() {
         let coords = insert(Coords::new(2).unwrap());
-        let contour =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)]);
+        let contour = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)],
+        );
         let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
         assert!((total_ccw_area(&tri) - 1.0).abs() < 1e-12);
@@ -817,8 +826,10 @@ mod tests {
     #[test]
     fn surface_reuses_contour_nodes() {
         let coords = insert(Coords::new(2).unwrap());
-        let contour =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let contour = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+        );
         let before = read(&coords).unwrap().node_count();
         let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
         let after = read(&coords).unwrap().node_count();
@@ -829,8 +840,10 @@ mod tests {
     #[test]
     fn surface_qua4_square_is_one_quad() {
         let coords = insert(Coords::new(2).unwrap());
-        let contour =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let contour = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+        );
         let q = surface(&contour, ElementType::QUA4, Some(10.0)).unwrap();
         assert_eq!(q.element_types().unwrap(), vec![ElementType::QUA4]);
         assert_eq!(q.cell_count().unwrap(), 1);
@@ -860,9 +873,14 @@ mod tests {
             .filter(|(t, _)| **t == ElementType::TRI3)
             .map(|(_, c)| *c)
             .sum();
-        assert!(nq > nt, "expected quad-dominant mesh, got {} quads {} tris", nq, nt);
-        let poly_area = 0.5 * (nseg as f64) * r * r
-            * (2.0 * std::f64::consts::PI / nseg as f64).sin();
+        assert!(
+            nq > nt,
+            "expected quad-dominant mesh, got {} quads {} tris",
+            nq,
+            nt
+        );
+        let poly_area =
+            0.5 * (nseg as f64) * r * r * (2.0 * std::f64::consts::PI / nseg as f64).sin();
         assert!(
             (total_ccw_area(&mesh) - poly_area).abs() < 1e-6,
             "area drift: got {}",
@@ -931,7 +949,12 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let contour = build_contour_3d(
             coords.clone(),
-            &[(0.0, 0.0, 5.0), (4.0, 0.0, 5.0), (4.0, 4.0, 5.0), (0.0, 4.0, 5.0)],
+            &[
+                (0.0, 0.0, 5.0),
+                (4.0, 0.0, 5.0),
+                (4.0, 4.0, 5.0),
+                (0.0, 4.0, 5.0),
+            ],
         );
         let tri = surface(&contour, ElementType::TRI3, Some(1.0)).unwrap();
         let n = tri.cell_count().unwrap();
@@ -966,8 +989,7 @@ mod tests {
         let contour = build_contour_2d(coords.clone(), &regular_polygon(64, 5.0));
         // Already-cancelled token: the first poll trips.
         let flag = AtomicBool::new(true);
-        let err =
-            surface_cancellable(&contour, ElementType::TRI3, Some(0.2), &flag).unwrap_err();
+        let err = surface_cancellable(&contour, ElementType::TRI3, Some(0.2), &flag).unwrap_err();
         assert!(matches!(err, PyrucastError::Interrupted));
     }
 
@@ -986,7 +1008,12 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let contour = build_contour_3d(
             coords.clone(),
-            &[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.5), (0.0, 1.0, 0.0)],
+            &[
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (1.0, 1.0, 0.5),
+                (0.0, 1.0, 0.0),
+            ],
         );
         let err = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap_err();
         assert!(format!("{}", err).contains("not planar"));

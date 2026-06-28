@@ -5,12 +5,12 @@
 
 #![cfg(feature = "viz")]
 
+use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::mesh::color::RgbColor;
 use pyrucast::containers::mesh::coords::Coords;
 use pyrucast::containers::mesh::element_type::ElementType;
-use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::mesh::node::Node;
-use pyrucast::aggregate::Aggregate;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::store::insert;
 use pyrucast::viz::{ColorScale, MeshStyle, View};
 
@@ -349,8 +349,7 @@ fn plot_with_field_unknown_component_errors() {
     let mut poi1 = SubMesh::new(coords.clone(), ElementType::POI1);
     poi1.add_cell(&[a.id()]).unwrap();
     let poi1_h = insert(poi1);
-    let field =
-        NodeField::from_sub(SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap());
+    let field = NodeField::from_sub(SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap());
 
     let mut tri = SubMesh::new(coords.clone(), ElementType::SEG2);
     let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
@@ -445,8 +444,13 @@ fn node_field_standalone_plot_is_point_cloud() {
 
     let dir = tmpdir();
     let path = dir.join("node_field_points.svg");
-    f.plot(Some(View::front()), Some(&path), None, ColorScale::default())
-        .unwrap();
+    f.plot(
+        Some(View::front()),
+        Some(&path),
+        None,
+        ColorScale::default(),
+    )
+    .unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.contains("[T]"));
     assert!(text.contains("circle"), "points should be drawn as circles");
@@ -473,8 +477,14 @@ fn element_field_standalone_plot_reconstructs_mesh() {
 
     let dir = tmpdir();
     let path = dir.join("element_field_alone.svg");
-    ef.plot(Some(View::front()), Some(&path), None, ColorScale::default(), 3)
-        .unwrap();
+    ef.plot(
+        Some(View::front()),
+        Some(&path),
+        None,
+        ColorScale::default(),
+        3,
+    )
+    .unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.contains("[q]"));
     assert!(text.contains("polygon"), "faces should be drawn");
@@ -499,14 +509,17 @@ fn mesh_wireframe_has_no_filled_faces() {
     .map(|c| Node::create_in(coords.clone(), c).unwrap())
     .collect();
     let mut sm = SubMesh::new(coords, ElementType::TET4);
-    sm.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
+    sm.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])
+        .unwrap();
     let mesh = Mesh::from_submesh(sm);
 
     let dir = tmpdir();
     let surface = dir.join("tet_surface.svg");
     let wire = dir.join("tet_wire.svg");
-    mesh.plot_styled(Some(View::iso()), Some(&surface), MeshStyle::Surface).unwrap();
-    mesh.plot_styled(Some(View::iso()), Some(&wire), MeshStyle::Wireframe).unwrap();
+    mesh.plot_styled(Some(View::iso()), Some(&surface), MeshStyle::Surface)
+        .unwrap();
+    mesh.plot_styled(Some(View::iso()), Some(&wire), MeshStyle::Wireframe)
+        .unwrap();
 
     let surface_svg = std::fs::read_to_string(&surface).unwrap();
     let wire_svg = std::fs::read_to_string(&wire).unwrap();

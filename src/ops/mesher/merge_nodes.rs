@@ -213,7 +213,11 @@ mod tests {
         mesh.add_cell(&[b.id(), c.id()]).unwrap();
 
         let merged = merge_nodes(&mesh, 1e-6).unwrap();
-        assert_eq!(merged.cell_count().unwrap(), 1, "the (b,c) segment is dropped");
+        assert_eq!(
+            merged.cell_count().unwrap(),
+            1,
+            "the (b,c) segment is dropped"
+        );
     }
 
     #[test]

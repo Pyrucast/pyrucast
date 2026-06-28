@@ -49,8 +49,8 @@ pub mod subdivide;
 #[cfg(feature = "viz-interactive")]
 pub mod window;
 
-use crate::error::{PyrucastError, Result};
 use crate::containers::field::Field as _;
+use crate::error::{PyrucastError, Result};
 use crate::viz::drawable::Drawable;
 use std::path::Path;
 
@@ -191,7 +191,11 @@ pub(crate) enum SaveFormat {
 
 impl SaveFormat {
     pub(crate) fn from_path(path: &Path) -> Result<Self> {
-        match path.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()) {
+        match path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_ascii_lowercase())
+        {
             Some(ref s) if s == "png" => Ok(SaveFormat::Png),
             Some(ref s) if s == "svg" => Ok(SaveFormat::Svg),
             Some(other) => Err(PyrucastError::Message(format!(
@@ -518,12 +522,16 @@ fn render_one_frame(
         (Some(m), FrameField::Node(f)) => {
             render_mesh_with_field(m, FieldArg::Node(f), component, scale, smooth, view, save)
         }
-        (Some(m), FrameField::Element(f)) => {
-            render_mesh_with_field(m, FieldArg::Element(f), component, scale, smooth, view, save)
-        }
-        (None, FrameField::Node(f)) => {
-            render_node_field_points(f, component, scale, view, save)
-        }
+        (Some(m), FrameField::Element(f)) => render_mesh_with_field(
+            m,
+            FieldArg::Element(f),
+            component,
+            scale,
+            smooth,
+            view,
+            save,
+        ),
+        (None, FrameField::Node(f)) => render_node_field_points(f, component, scale, view, save),
         (None, FrameField::Element(_)) => Err(PyrucastError::Message(
             "evolution plot: element-field frames require a mesh".into(),
         )),

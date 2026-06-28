@@ -173,7 +173,10 @@ impl<T> StoreInner<T> {
     /// Resolve `(idx, gen)` into the slot's cell. A slot is live iff the
     /// generation matches and at least one handle still points to it.
     fn resolve(&self, idx: u32, gen: u32) -> Result<Arc<SlotCell<T>>> {
-        let s = self.slots.get(idx as usize).ok_or(PyrucastError::StaleHandle)?;
+        let s = self
+            .slots
+            .get(idx as usize)
+            .ok_or(PyrucastError::StaleHandle)?;
         if s.gen != gen || s.cell.refcount.load(Ordering::Acquire) == 0 {
             return Err(PyrucastError::StaleHandle);
         }

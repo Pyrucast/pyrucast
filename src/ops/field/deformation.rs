@@ -89,8 +89,7 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
-        let support =
-            insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
         let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
         // u_x = 2x + 0.5y, u_y = 0.1x + 3y at the three nodes.
         for (n, x, y) in [(&a, 0.0, 0.0), (&b, 1.0, 0.0), (&c, 0.0, 1.0)] {
@@ -104,7 +103,11 @@ mod tests {
             let s = read(&strain.get(0).unwrap()).unwrap();
             assert_eq!(
                 s.components(),
-                &["eps_xx".to_string(), "eps_xy".to_string(), "eps_yy".to_string()]
+                &[
+                    "eps_xx".to_string(),
+                    "eps_xy".to_string(),
+                    "eps_yy".to_string()
+                ]
             );
             for g in 0..s.gauss_count() {
                 assert!((s.value(0, g, "eps_xx").unwrap() - 2.0).abs() < 1e-12);
@@ -125,11 +128,8 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
         // 2-D space but a single displacement component.
-        let support =
-            insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
-        let u = NodeField::from_sub(
-            SubNodeField::from_poi1(&support, vec!["u_x".into()]).unwrap(),
-        );
+        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let u = NodeField::from_sub(SubNodeField::from_poi1(&support, vec!["u_x".into()]).unwrap());
         let err = deformation(&u, &fes).unwrap_err();
         assert!(format!("{err}").contains("one displacement component per axis"));
     }

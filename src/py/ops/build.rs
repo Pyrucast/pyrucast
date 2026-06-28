@@ -26,7 +26,9 @@ pub fn sub_material_field(
         .map(|(c, v)| (c.as_str(), *v))
         .collect();
     let sub = crate::ops::build::sub_material_field(&*read(&sub_model.handle)?, &pairs)?;
-    Ok(PySubElementField { handle: insert(sub) })
+    Ok(PySubElementField {
+        handle: insert(sub),
+    })
 }
 
 /// Build a material `ElementField` applying the same uniform

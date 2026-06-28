@@ -9,7 +9,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::Field;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::containers::node_field::{NodeFieldView, NodeField};
+use crate::containers::node_field::{NodeField, NodeFieldView};
 use crate::error::Result;
 use crate::store::{insert, read, Handle};
 
@@ -176,8 +176,7 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
-        let support =
-            insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
         let mut f = SubNodeField::from_poi1(&support, vec!["f".into()]).unwrap();
         f.set_value(a.id(), "f", 0.0).unwrap(); // 2·0 + 3·0
         f.set_value(b.id(), "f", 2.0).unwrap(); // 2·1 + 3·0
@@ -187,7 +186,10 @@ mod tests {
         let grad = gradient(&f, &fes).unwrap();
         {
             let s = read(&grad.get(0).unwrap()).unwrap();
-            assert_eq!(s.components(), &["grad_f_x".to_string(), "grad_f_y".to_string()]);
+            assert_eq!(
+                s.components(),
+                &["grad_f_x".to_string(), "grad_f_y".to_string()]
+            );
             for g in 0..s.gauss_count() {
                 assert!((s.value(0, g, "grad_f_x").unwrap() - 2.0).abs() < 1e-12);
                 assert!((s.value(0, g, "grad_f_y").unwrap() - 3.0).abs() < 1e-12);

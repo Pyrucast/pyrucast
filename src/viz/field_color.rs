@@ -19,13 +19,13 @@
 //! Flat rendering (one colour per cell) uses the arithmetic mean of
 //! those per-cell nodal values.
 
-use crate::containers::field::SubField;
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementFieldView, SubElementField};
+use crate::containers::field::SubField;
 use crate::containers::mesh::RgbColor;
-use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeFieldView;
+use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
@@ -359,10 +359,10 @@ pub(crate) fn submesh_primitives_smooth(
     vmax: f64,
     n: usize,
 ) -> Result<Vec<Primitive>> {
-    use crate::viz::mesh_draw::pad3;
-    use crate::viz::subdivide::{subdivide, CellSubdivision};
     use crate::containers::finite_element_space::Interpolation;
     use crate::containers::mesh::Point3;
+    use crate::viz::mesh_draw::pad3;
+    use crate::viz::subdivide::{subdivide, CellSubdivision};
 
     let et = sm.element_type();
     let npc = et.nodes_per_cell();
@@ -427,11 +427,9 @@ pub(crate) fn submesh_primitives_smooth(
                     if keep.as_ref().is_some_and(|k| !k.contains(&(cell, fi))) {
                         continue;
                     }
-                    let pv: Vec<(Point3, f64)> =
-                        face.weights.iter().map(|w| at(w)).collect();
+                    let pv: Vec<(Point3, f64)> = face.weights.iter().map(|w| at(w)).collect();
                     for tri in &face.triangles {
-                        let value =
-                            (pv[tri[0]].1 + pv[tri[1]].1 + pv[tri[2]].1) / 3.0;
+                        let value = (pv[tri[0]].1 + pv[tri[1]].1 + pv[tri[2]].1) / 3.0;
                         out.push(Primitive::Face {
                             verts: vec![pv[tri[0]].0, pv[tri[1]].0, pv[tri[2]].0],
                             color: colormap(cmap, value, vmin, vmax),
@@ -470,7 +468,10 @@ pub(crate) fn value_range<'a, I: IntoIterator<Item = &'a [f64]>>(values: I) -> (
 
 /// Build per-cell colours for one submesh from its per-cell values.
 fn colors_from_values(values: &[f64], cmap: Colormap, vmin: f64, vmax: f64) -> Vec<RgbColor> {
-    values.iter().map(|&v| colormap(cmap, v, vmin, vmax)).collect()
+    values
+        .iter()
+        .map(|&v| colormap(cmap, v, vmin, vmax))
+        .collect()
 }
 
 /// Compute the per-cell values of every submesh of a mesh, and the
@@ -512,9 +513,11 @@ pub(crate) fn resolve_component<'a>(
             }
             Ok(name)
         }
-        None => field.components().first().map(|s| s.as_str()).ok_or_else(|| {
-            PyrucastError::Message("field has no components".into())
-        }),
+        None => field
+            .components()
+            .first()
+            .map(|s| s.as_str())
+            .ok_or_else(|| PyrucastError::Message("field has no components".into())),
     }
 }
 
@@ -539,11 +542,7 @@ impl<'a> Drawable for MeshFieldView<'a> {
         self.mesh.bbox()
     }
 
-    fn draw_on<DB: DrawingBackend>(
-        &self,
-        area: &DrawingArea<DB, Shift>,
-        view: &View,
-    ) -> Result<()>
+    fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, view: &View) -> Result<()>
     where
         DB::ErrorType: 'static,
     {
@@ -551,8 +550,7 @@ impl<'a> Drawable for MeshFieldView<'a> {
         let mut all_prims: Vec<Primitive> = Vec::new();
         let (vmin, vmax);
         if self.smooth == 0 {
-            let (per_sub, dmin, dmax) =
-                mesh_cell_values(self.mesh, self.field, self.component)?;
+            let (per_sub, dmin, dmax) = mesh_cell_values(self.mesh, self.field, self.component)?;
             (vmin, vmax) = self.scale.resolve(dmin, dmax);
             for (i, values) in per_sub.iter().enumerate() {
                 let sm = self.mesh.get(i)?;
@@ -612,11 +610,7 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
         read(self.submesh)?.bbox()
     }
 
-    fn draw_on<DB: DrawingBackend>(
-        &self,
-        area: &DrawingArea<DB, Shift>,
-        view: &View,
-    ) -> Result<()>
+    fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, view: &View) -> Result<()>
     where
         DB::ErrorType: 'static,
     {
@@ -664,11 +658,7 @@ impl<'a> Drawable for NodeFieldPointsView<'a> {
         Ok(bb)
     }
 
-    fn draw_on<DB: DrawingBackend>(
-        &self,
-        area: &DrawingArea<DB, Shift>,
-        view: &View,
-    ) -> Result<()>
+    fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, view: &View) -> Result<()>
     where
         DB::ErrorType: 'static,
     {
@@ -697,8 +687,8 @@ mod tests {
     use crate::containers::field::Field;
     use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::SubMesh as RawSubMesh;
     use crate::containers::mesh::Node;
+    use crate::containers::mesh::SubMesh as RawSubMesh;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::store::insert;
 
@@ -723,7 +713,10 @@ mod tests {
     #[test]
     fn colormap_degenerate_range_returns_midpoint() {
         // Jet midpoint is green; the degenerate range falls back to t=0.5.
-        assert_eq!(colormap(Colormap::Jet, 7.0, 7.0, 7.0), RgbColor::new(0, 255, 0));
+        assert_eq!(
+            colormap(Colormap::Jet, 7.0, 7.0, 7.0),
+            RgbColor::new(0, 255, 0)
+        );
     }
 
     #[test]

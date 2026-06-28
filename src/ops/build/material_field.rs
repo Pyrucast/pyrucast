@@ -16,9 +16,7 @@ pub fn sub_material_field(
     components_and_values: &[(&str, f64)],
 ) -> Result<SubElementField> {
     let fespace = sub.material_fespace().ok_or_else(|| {
-        PyrucastError::Message(
-            "material_field: this sub-model does not need material data".into(),
-        )
+        PyrucastError::Message("material_field: this sub-model does not need material data".into())
     })?;
     let required = sub
         .material_components()
@@ -102,9 +100,9 @@ mod tests {
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::matrix::Matrix;
-    use crate::containers::mesh::{Coords, NodeId};
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
+    use crate::containers::mesh::{Coords, NodeId};
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::ops::assemble;
     use crate::store::Handle;
@@ -123,7 +121,9 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+            ))
             .unwrap();
         if dirichlet_at_left {
             let imposed =
@@ -131,15 +131,8 @@ mod tests {
             let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
             model
                 .add_sub(insert(
-                    SubModel::dirichlet(
-                        "T".into(),
-                        "q".into(),
-                        &imposed,
-                        &multiplier,
-                        None,
-                        None,
-                    )
-                    .unwrap(),
+                    SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+                        .unwrap(),
                 ))
                 .unwrap();
         }
@@ -178,8 +171,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
         let dir =
-            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
-                .unwrap();
+            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
         assert!(sub_material_field(&dir, &[("k", 1.0)]).is_err());
     }
 
@@ -247,26 +239,23 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+            ))
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
         model
             .add_sub(insert(
-                SubModel::dirichlet(
-                    "T".into(),
-                    "q".into(),
-                    &imposed,
-                    &multiplier,
-                    None,
-                    None,
-                )
-                .unwrap(),
+                SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+                    .unwrap(),
             ))
             .unwrap();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.get(1).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(1).unwrap()).unwrap(),
+            ))
             .unwrap();
 
         // Slot lengths must match sub_model_count (3): HC, Dirichlet (skip), HC.

@@ -164,7 +164,7 @@ fn local_stiffness(
     let mut k = [[0.0_f64; 12]; 12];
     let a = ea / l; // axial
     let t = gj / l; // torsion
-    // Shear parameters for the two bending planes.
+                    // Shear parameters for the two bending planes.
     let phi_y = 12.0 * e * iz / (g * asy * l * l); // x'-y' plane (I_z, A_sy)
     let phi_z = 12.0 * e * iy / (g * asz * l * l); // x'-z' plane (I_y, A_sz)
 
@@ -266,11 +266,17 @@ pub fn assemble_stiffness(
     let (conn, n_cells, coords) = {
         let s = read(fespace)?;
         let sm = s.submesh();
-        (read(&sm)?.connectivity().to_vec(), s.cell_count()?, s.coords()?)
+        (
+            read(&sm)?.connectivity().to_vec(),
+            s.cell_count()?,
+            s.coords()?,
+        )
     };
     let coords: Vec<Vec<f64>> = {
         let c = read(&coords)?;
-        conn.iter().map(|&nid| Ok(c.coord(nid)?.to_vec())).collect::<Result<_>>()?
+        conn.iter()
+            .map(|&nid| Ok(c.coord(nid)?.to_vec()))
+            .collect::<Result<_>>()?
     };
     // [E·A, G·J, E, I_y, I_z, G, A_sy, A_sz] per cell.
     let props: Vec<[f64; 8]> = {
@@ -375,7 +381,7 @@ mod tests {
         assert!((k.get(a, "f_x", a, "u_x") - 6.0 / l).abs() < tol); // axial
         assert!((k.get(a, "f_x", b, "u_x") + 6.0 / l).abs() < tol);
         assert!((k.get(a, "m_x", a, "r_x") - 0.96 / l).abs() < tol); // torsion
-        // Axial ⟂ everything else; the two bending planes are decoupled.
+                                                                     // Axial ⟂ everything else; the two bending planes are decoupled.
         assert!(k.get(a, "f_x", a, "u_y").abs() < tol);
         assert!(k.get(a, "f_x", a, "r_x").abs() < tol);
         assert!(k.get(a, "f_y", a, "u_z").abs() < tol);

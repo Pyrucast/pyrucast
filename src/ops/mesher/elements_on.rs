@@ -18,9 +18,9 @@ use std::collections::HashSet;
 ///
 /// The result mirrors `mesh` **submesh by submesh** (same order, same
 /// element types and face colours, [[feedback-viz-per-element]] — zones
-/// stay separate): each
-/// output submesh holds the kept cells of the matching input submesh,
-/// possibly empty. Use [`consolidate`](crate::ops::mesher::consolidate) to
+/// stay separate): each output submesh holds the kept cells of the matching
+/// input submesh, possibly empty. Use
+/// [`consolidate`](crate::ops::mesher::consolidate) to
 /// drop or fuse the empty/redundant zones afterwards. Kept cells reference
 /// the original nodes (refcount bumped); `mesh` itself is left untouched.
 ///
@@ -74,12 +74,9 @@ mod tests {
 
     /// Five nodes on a line and a TRI3 mesh of two triangles sharing edge
     /// (1, 2): cell0 = (0,1,2), cell1 = (1,3,4). Returns (coords, nodes, mesh).
-    fn two_triangles() -> (
-        crate::store::Handle<Coords>,
-        Vec<Node>,
-        Mesh,
-    ) {
+    fn two_triangles() -> (crate::store::Handle<Coords>, Vec<Node>, Mesh) {
         let coords = insert(Coords::new(2).unwrap());
+        #[rustfmt::skip]
         let n: Vec<Node> = [
             [0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [2.0, 0.0], [2.0, 1.0],
         ]
@@ -96,7 +93,10 @@ mod tests {
     fn cells(mesh: &Mesh, zone: usize) -> Vec<Vec<NodeId>> {
         let s = read(&mesh.get(zone).unwrap()).unwrap();
         let npc = s.element_type().nodes_per_cell();
-        s.connectivity().chunks_exact(npc).map(|c| c.to_vec()).collect()
+        s.connectivity()
+            .chunks_exact(npc)
+            .map(|c| c.to_vec())
+            .collect()
     }
 
     #[test]
@@ -117,16 +117,14 @@ mod tests {
     fn loose_keeps_cells_with_any_node() {
         let (coords, n, mesh) = two_triangles();
         // Points = {1}: shared node → both triangles touch it.
-        let pts = Mesh::from_submesh(
-            SubMesh::poi1_from_node_ids(coords.clone(), &[n[1].id()]).unwrap(),
-        );
+        let pts =
+            Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords.clone(), &[n[1].id()]).unwrap());
         let r = elements_on(&mesh, &pts, false).unwrap();
         assert_eq!(cells(&r, 0).len(), 2, "both cells share node 1");
 
         // Points = {3}: only cell1 uses it.
-        let pts3 = Mesh::from_submesh(
-            SubMesh::poi1_from_node_ids(coords.clone(), &[n[3].id()]).unwrap(),
-        );
+        let pts3 =
+            Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords.clone(), &[n[3].id()]).unwrap());
         let r3 = elements_on(&mesh, &pts3, false).unwrap();
         assert_eq!(cells(&r3, 0), vec![vec![n[1].id(), n[3].id(), n[4].id()]]);
     }
@@ -135,9 +133,8 @@ mod tests {
     fn strict_can_yield_empty_but_keeps_the_zone() {
         let (coords, n, mesh) = two_triangles();
         // Points = {0}: no triangle has *all* nodes inside.
-        let pts = Mesh::from_submesh(
-            SubMesh::poi1_from_node_ids(coords.clone(), &[n[0].id()]).unwrap(),
-        );
+        let pts =
+            Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords.clone(), &[n[0].id()]).unwrap());
         let r = elements_on(&mesh, &pts, true).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(read(&r.get(0).unwrap()).unwrap().cell_count(), 0);
@@ -194,9 +191,7 @@ mod tests {
         let (_c1, _n1, mesh) = two_triangles();
         let c2 = insert(Coords::new(2).unwrap());
         let m2 = Node::create_in(c2.clone(), &[0.0, 0.0]).unwrap();
-        let pts = Mesh::from_submesh(
-            SubMesh::poi1_from_node_ids(c2.clone(), &[m2.id()]).unwrap(),
-        );
+        let pts = Mesh::from_submesh(SubMesh::poi1_from_node_ids(c2.clone(), &[m2.id()]).unwrap());
         assert!(elements_on(&mesh, &pts, false).is_err());
     }
 }

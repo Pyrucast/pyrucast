@@ -1,0 +1,6 @@
+# Style standard rustfmt. On n'épingle que l'édition pour rendre la sortie
+# reproductible d'une version de toolchain à l'autre ; tout le reste suit les
+# valeurs par défaut (max_width = 100, …). Les rares tables de coordonnées /
+# connectivité volontairement compactes sont protégées localement par
+# `#[rustfmt::skip]`.
+edition = "2021"

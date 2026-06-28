@@ -46,7 +46,12 @@ pub fn flux(
 ) -> Result<SubNodeField> {
     let (submesh, n_cells, n_nodes, n_g) = {
         let s = read(fespace)?;
-        (s.submesh(), s.cell_count()?, s.nodes_per_cell()?, s.gauss_count())
+        (
+            s.submesh(),
+            s.cell_count()?,
+            s.nodes_per_cell()?,
+            s.gauss_count(),
+        )
     };
     let conn: Vec<NodeId> = read(&submesh)?.connectivity().to_vec();
 
@@ -64,7 +69,11 @@ pub fn flux(
             }
             let comp = comps[0].clone();
             (0..n_cells)
-                .map(|cell| (0..n_g).map(|g| f.value(cell, g, &comp)).collect::<Result<_>>())
+                .map(|cell| {
+                    (0..n_g)
+                        .map(|g| f.value(cell, g, &comp))
+                        .collect::<Result<_>>()
+                })
                 .collect::<Result<_>>()?
         }
     };
@@ -75,7 +84,12 @@ pub fn flux(
     let unique: Vec<NodeId> = read(&support)?.connectivity().to_vec();
     let conn_pos: Vec<usize> = conn
         .iter()
-        .map(|nid| unique.iter().position(|n| n == nid).expect("support covers conn"))
+        .map(|nid| {
+            unique
+                .iter()
+                .position(|n| n == nid)
+                .expect("support covers conn")
+        })
         .collect();
 
     // f_i += φ · N_i · |J| · w, accumulated per node.
@@ -122,7 +136,10 @@ mod tests {
         for w in nodes.windows(2) {
             mesh.add_cell(&[w[0].id(), w[1].id()]).unwrap();
         }
-        FiniteElementSpace::lagrange1(&mesh).unwrap().get(0).unwrap()
+        FiniteElementSpace::lagrange1(&mesh)
+            .unwrap()
+            .get(0)
+            .unwrap()
     }
 
     /// Uniform flux on a 1-D SEG2 line: interior nodes receive `φ·h`, the two
@@ -131,7 +148,10 @@ mod tests {
     fn uniform_flux_consistent_loads_on_seg2_line() {
         // Two elements of length h = 0.5 on [0, 1].
         let fes = seg2_line(&[vec![0.0], vec![0.5], vec![1.0]]);
-        let nodes: Vec<NodeId> = read(&read(&fes).unwrap().submesh()).unwrap().connectivity().to_vec();
+        let nodes: Vec<NodeId> = read(&read(&fes).unwrap().submesh())
+            .unwrap()
+            .connectivity()
+            .to_vec();
         // connectivity = [n0, n1, n1, n2] → unique [n0, n1, n2].
         let (n0, n1, n2) = (nodes[0], nodes[1], nodes[3]);
 
@@ -155,7 +175,10 @@ mod tests {
     fn uniform_flux_on_2d_edge_uses_line_measure() {
         // Single vertical edge from (0,0) to (0,1), length 1.
         let fes = seg2_line(&[vec![0.0, 0.0], vec![0.0, 1.0]]);
-        let nodes: Vec<NodeId> = read(&read(&fes).unwrap().submesh()).unwrap().connectivity().to_vec();
+        let nodes: Vec<NodeId> = read(&read(&fes).unwrap().submesh())
+            .unwrap()
+            .connectivity()
+            .to_vec();
         let (a, b) = (nodes[0], nodes[1]);
 
         let phi = 10.0;
@@ -178,7 +201,10 @@ mod tests {
         field.set_uniform("phi", phi).unwrap();
         let field = insert(field);
 
-        let nodes: Vec<NodeId> = read(&read(&fes).unwrap().submesh()).unwrap().connectivity().to_vec();
+        let nodes: Vec<NodeId> = read(&read(&fes).unwrap().submesh())
+            .unwrap()
+            .connectivity()
+            .to_vec();
         let n1 = nodes[1];
         let from_field = flux(&fes, FluxDensity::Field(&field), "q").unwrap();
         let from_uniform = flux(&fes, FluxDensity::Uniform(phi), "q").unwrap();
@@ -192,7 +218,8 @@ mod tests {
     #[test]
     fn multi_component_field_rejected() {
         let fes = seg2_line(&[vec![0.0], vec![1.0]]);
-        let field = insert(SubElementField::new(fes.clone(), vec!["a".into(), "b".into()]).unwrap());
+        let field =
+            insert(SubElementField::new(fes.clone(), vec!["a".into(), "b".into()]).unwrap());
         assert!(flux(&fes, FluxDensity::Field(&field), "q").is_err());
     }
 }

@@ -199,8 +199,7 @@ pub(crate) fn slider_frame_at(
     }
     let (x, y, w, h) = slider_rect(area_w, area_h);
     let in_x = px >= (x - SLIDER_KNOB_R) as f64 && px <= (x + w + SLIDER_KNOB_R) as f64;
-    let in_y =
-        py >= (y - SLIDER_HIT_PAD) as f64 && py <= (y + h + SLIDER_HIT_PAD) as f64;
+    let in_y = py >= (y - SLIDER_HIT_PAD) as f64 && py <= (y + h + SLIDER_HIT_PAD) as f64;
     if !in_x || !in_y {
         return None;
     }
@@ -268,7 +267,8 @@ where
     // Label above the track.
     let label = format!("frame {}/{}   x={:.4}", frame + 1, n_frames, abscissa);
     let text_style = TextStyle::from(("sans-serif", 13).into_font()).color(&BUTTON_TEXT);
-    area.draw_text(&label, &text_style, (x, y - 20)).map_err(pl_err)?;
+    area.draw_text(&label, &text_style, (x, y - 20))
+        .map_err(pl_err)?;
     Ok(())
 }
 
@@ -334,7 +334,10 @@ mod tests {
         // Far left → frame 0, far right → last, middle → middle.
         assert_eq!(slider_frame_at(x as f64, cy, 800, 600, 5), Some(0));
         assert_eq!(slider_frame_at((x + w) as f64, cy, 800, 600, 5), Some(4));
-        assert_eq!(slider_frame_at((x + w / 2) as f64, cy, 800, 600, 5), Some(2));
+        assert_eq!(
+            slider_frame_at((x + w / 2) as f64, cy, 800, 600, 5),
+            Some(2)
+        );
         // Click far above the track → no grab.
         assert_eq!(slider_frame_at((x + w / 2) as f64, 10.0, 800, 600, 5), None);
         // Single frame always reports 0.

@@ -26,10 +26,7 @@ use pyo3::prelude::*;
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, components=None))]
-pub fn coordinates(
-    mesh: PyRef<PyMesh>,
-    components: Option<Vec<String>>,
-) -> PyResult<PyNodeField> {
+pub fn coordinates(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
         inner: crate::ops::field::coordinates(&mesh.inner, components)?,
     })
@@ -43,10 +40,7 @@ pub fn coordinates(
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (field, components=None))]
-pub fn set_coordinates(
-    field: PyRef<PyNodeField>,
-    components: Option<Vec<String>>,
-) -> PyResult<()> {
+pub fn set_coordinates(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> PyResult<()> {
     crate::ops::field::set_coordinates(&field.inner, components)?;
     Ok(())
 }
@@ -210,18 +204,42 @@ macro_rules! py_field_unary {
         pub fn $name(py: Python<'_>, field: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
             use crate::ops::field::$name as op;
             if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
-                return Ok(Py::new(py, PyNodeField { inner: op(&f.inner)? })?.into_any());
+                return Ok(Py::new(
+                    py,
+                    PyNodeField {
+                        inner: op(&f.inner)?,
+                    },
+                )?
+                .into_any());
             }
             if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
-                return Ok(Py::new(py, PyElementField { inner: op(&f.inner)? })?.into_any());
+                return Ok(Py::new(
+                    py,
+                    PyElementField {
+                        inner: op(&f.inner)?,
+                    },
+                )?
+                .into_any());
             }
             if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
                 let out = op(&*read(&f.handle)?)?;
-                return Ok(Py::new(py, PySubNodeField { handle: insert(out) })?.into_any());
+                return Ok(Py::new(
+                    py,
+                    PySubNodeField {
+                        handle: insert(out),
+                    },
+                )?
+                .into_any());
             }
             if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
                 let out = op(&*read(&f.handle)?)?;
-                return Ok(Py::new(py, PySubElementField { handle: insert(out) })?.into_any());
+                return Ok(Py::new(
+                    py,
+                    PySubElementField {
+                        handle: insert(out),
+                    },
+                )?
+                .into_any());
             }
             Err(PyTypeError::new_err(
                 "expected a NodeField, SubNodeField, ElementField or SubElementField",
@@ -231,9 +249,15 @@ macro_rules! py_field_unary {
 }
 
 py_field_unary!(abs, "Element-wise absolute value of a field.");
-py_field_unary!(sqrt, "Element-wise square root of a field (`nan` for negatives).");
+py_field_unary!(
+    sqrt,
+    "Element-wise square root of a field (`nan` for negatives)."
+);
 py_field_unary!(exp, "Element-wise exponential `eˣ` of a field.");
-py_field_unary!(log, "Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).");
+py_field_unary!(
+    log,
+    "Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0)."
+);
 py_field_unary!(log10, "Element-wise base-10 logarithm of a field.");
 py_field_unary!(cos, "Element-wise cosine of a field (radians).");
 py_field_unary!(sin, "Element-wise sine of a field (radians).");

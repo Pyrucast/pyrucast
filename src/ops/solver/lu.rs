@@ -84,16 +84,15 @@
 //! assert!((solution.value(b.id(), "T").unwrap() - 1.0).abs() < 1e-12);
 //! ```
 
-use crate::containers::mesh::NodeId;
 use crate::containers::field::Field;
-use crate::error::{PyrucastError, Result};
-use crate::interrupt::{Cancel, NoCancel};
 use crate::containers::matrix::Matrix;
+use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::error::{PyrucastError, Result};
+use crate::interrupt::{Cancel, NoCancel};
 use crate::store::insert;
 use nalgebra::DVector;
-
 
 /// Solve `matrix · x = rhs` using dense LU factorization.
 ///
@@ -159,9 +158,9 @@ pub fn solve_cancellable(
     let a = matrix.to_dmatrix()?;
     cancel.check()?;
     let lu = a.lu();
-    let x = lu.solve(&b).ok_or_else(|| {
-        PyrucastError::Message("solve: LU failed (matrix is singular)".into())
-    })?;
+    let x = lu
+        .solve(&b)
+        .ok_or_else(|| PyrucastError::Message("solve: LU failed (matrix is singular)".into()))?;
     cancel.check()?;
 
     // ── Step 3 — wrap the solution into a fresh single-zone NodeField ──
@@ -199,16 +198,16 @@ pub fn solve_cancellable(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::field::SubField;
     use crate::aggregate::Aggregate;
+    use crate::containers::element_field::SubElementField;
+    use crate::containers::field::SubField;
+    use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
-    use crate::containers::element_field::SubElementField;
-    use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
-    use crate::containers::model::{Model, SubModel};
     use crate::containers::mesh::Node;
-    use crate::store::{insert};
+    use crate::containers::model::{Model, SubModel};
+    use crate::store::insert;
 
     /// 1-D Poisson `-u'' = 0` on `[0, 1]` with `u(0) = 0` and `u(1) = 1`,
     /// discretized with `n` SEG2 elements. The analytical solution is
@@ -243,9 +242,8 @@ mod tests {
         model
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
-        let imposed_left = Mesh::from_submesh(
-            SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap(),
-        );
+        let imposed_left =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
         let imposed_right = Mesh::from_submesh(
             SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[n_elems])).unwrap(),
         );
@@ -359,10 +357,14 @@ mod tests {
         let mut col_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         col_sm.add_cell(&[c0.id()]).unwrap();
         let mut block = SubMatrix::new(
-            insert(row_sm), insert(col_sm),
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false,
-        ).unwrap();
+            insert(row_sm),
+            insert(col_sm),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         block.add_entry(r0.id(), "q", c0.id(), "T", 1.0).unwrap();
         block.add_entry(r1.id(), "q", c0.id(), "T", 1.0).unwrap();
         // 2 rows × 1 col — rectangular.
@@ -434,9 +436,8 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let mut sm = SubMesh::new(coords, ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
-        let rhs = NodeField::from_sub(
-            SubNodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap(),
-        );
+        let rhs =
+            NodeField::from_sub(SubNodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap());
         assert!(solve(&m, &rhs).is_err());
     }
 }

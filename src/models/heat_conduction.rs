@@ -46,7 +46,9 @@ fn deformation_components(space_dim: usize) -> Vec<String> {
 /// hence the « COMP == stiffness » match in the linear case); the physical
 /// Fourier flux is its opposite, `−k·∇T`.
 fn flux_components(space_dim: usize) -> Vec<String> {
-    (0..space_dim).map(|a| format!("flux_{}", AXES[a])).collect()
+    (0..space_dim)
+        .map(|a| format!("flux_{}", AXES[a]))
+        .collect()
 }
 
 /// Linear heat conduction.
@@ -118,8 +120,8 @@ impl Physics for HeatConduction {
         input: &Handle<SubElementField>,
         material: Option<&Handle<SubElementField>>,
     ) -> Result<SubElementField> {
-        let mat = material
-            .expect("HeatConduction declares a material_fespace ⇒ material is supplied");
+        let mat =
+            material.expect("HeatConduction declares a material_fespace ⇒ material is supplied");
         let space_dim = read(&self.fespace)?.space_dim();
         let grad_names = deformation_components(space_dim);
 
@@ -249,12 +251,18 @@ pub fn assemble_stiffness(
                 for g in 0..n_g {
                     let mut grad_dot = 0.0;
                     for a in 0..space_dim {
-                        grad_dot += snap.dn_dx[g][i * space_dim + a]
-                            * snap.dn_dx[g][j * space_dim + a];
+                        grad_dot +=
+                            snap.dn_dx[g][i * space_dim + a] * snap.dn_dx[g][j * space_dim + a];
                     }
                     k_ij += conductivities[cell][g] * grad_dot * snap.det_j_w[g];
                 }
-                k.add_entry(snap.node_ids[i], DUAL_VAR, snap.node_ids[j], PRIMAL_VAR, k_ij)?;
+                k.add_entry(
+                    snap.node_ids[i],
+                    DUAL_VAR,
+                    snap.node_ids[j],
+                    PRIMAL_VAR,
+                    k_ij,
+                )?;
             }
         }
     }
@@ -266,8 +274,8 @@ pub fn assemble_stiffness(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::field::SubField;
     use crate::aggregate::Aggregate;
+    use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Coords, ElementType, Mesh, Node};
     use crate::store::insert;
@@ -301,8 +309,7 @@ mod tests {
         let grad = 1.5; // e.g. ΔT / L = 3 / 2
         let k = 1.5;
 
-        let mut def =
-            SubElementField::new(hc.fespace.clone(), deformation_components(1)).unwrap();
+        let mut def = SubElementField::new(hc.fespace.clone(), deformation_components(1)).unwrap();
         def.set_uniform("grad_T_x", grad).unwrap();
         let def = insert(def);
 

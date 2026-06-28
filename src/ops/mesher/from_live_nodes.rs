@@ -1,12 +1,14 @@
-use crate::error::Result;
 use crate::containers::mesh::Coords;
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::error::Result;
 use crate::store::{read, Handle};
 
 /// Create a POI1 mesh containing all live nodes of `coords`.
 pub fn from_live_nodes(coords: Handle<Coords>) -> Result<Mesh> {
     let node_ids: Vec<_> = read(&coords)?.iter_live().collect();
-    Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords, &node_ids)?))
+    Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(
+        coords, &node_ids,
+    )?))
 }
 
 #[cfg(test)]

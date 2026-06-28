@@ -122,9 +122,8 @@ pub trait SubField {
 
     /// Index of a named component, or an error naming it.
     fn component_index_or_err(&self, name: &str) -> Result<usize> {
-        self.component_index(name).ok_or_else(|| {
-            PyrucastError::Message(format!("unknown component: {}", name))
-        })
+        self.component_index(name)
+            .ok_or_else(|| PyrucastError::Message(format!("unknown component: {}", name)))
     }
 
     /// Flat value buffer, mutable (same layout as [`SubField::values`]).
@@ -817,19 +816,43 @@ mod tests {
     #[test]
     fn field_combine_scalar_hits_every_zone() {
         let ef = make_two_zone_element_field();
-        write(&ef.get(0).unwrap()).unwrap().set_uniform("k", 1.0).unwrap();
-        write(&ef.get(1).unwrap()).unwrap().set_uniform("k", 2.0).unwrap();
+        write(&ef.get(0).unwrap())
+            .unwrap()
+            .set_uniform("k", 1.0)
+            .unwrap();
+        write(&ef.get(1).unwrap())
+            .unwrap()
+            .set_uniform("k", 2.0)
+            .unwrap();
         let out = ef.combine_scalar(|a, b| a + b, 10.0).unwrap();
-        assert_eq!(read(&out.get(0).unwrap()).unwrap().value(0, 0, "k").unwrap(), 11.0);
-        assert_eq!(read(&out.get(1).unwrap()).unwrap().value(0, 0, "k").unwrap(), 12.0);
+        assert_eq!(
+            read(&out.get(0).unwrap())
+                .unwrap()
+                .value(0, 0, "k")
+                .unwrap(),
+            11.0
+        );
+        assert_eq!(
+            read(&out.get(1).unwrap())
+                .unwrap()
+                .value(0, 0, "k")
+                .unwrap(),
+            12.0
+        );
     }
 
     #[test]
     fn field_add_to_component_present_zones_only() {
         let ef = make_two_zone_element_field(); // zone0 ["k"], zone1 ["E","k"]
-        write(&ef.get(1).unwrap()).unwrap().set_uniform("E", 100.0).unwrap();
+        write(&ef.get(1).unwrap())
+            .unwrap()
+            .set_uniform("E", 100.0)
+            .unwrap();
         ef.add_to_component("E", 1.0).unwrap(); // E only on zone 1
-        assert_eq!(read(&ef.get(1).unwrap()).unwrap().value(0, 0, "E").unwrap(), 101.0);
+        assert_eq!(
+            read(&ef.get(1).unwrap()).unwrap().value(0, 0, "E").unwrap(),
+            101.0
+        );
         assert!(ef.add_to_component("missing", 1.0).is_err());
     }
 
@@ -838,8 +861,14 @@ mod tests {
         let fes = one_tri3_fes();
         let f = ElementField::new(&fes, vec!["E".into()]).unwrap();
         let g = ElementField::new(&fes, vec!["E".into()]).unwrap();
-        write(&f.get(0).unwrap()).unwrap().set_uniform("E", 3.0).unwrap();
-        write(&g.get(0).unwrap()).unwrap().set_uniform("E", 4.0).unwrap();
+        write(&f.get(0).unwrap())
+            .unwrap()
+            .set_uniform("E", 3.0)
+            .unwrap();
+        write(&g.get(0).unwrap())
+            .unwrap()
+            .set_uniform("E", 4.0)
+            .unwrap();
         let s = f.combine_field(&g, |a, b| a + b).unwrap();
         let z = read(&s.get(0).unwrap()).unwrap();
         for gp in 0..z.gauss_count() {
@@ -857,7 +886,10 @@ mod tests {
     #[test]
     fn field_combine_subfield_targets_matching_zone() {
         let ef = make_two_zone_element_field(); // zone0 ["k"], zone1 ["E","k"]
-        write(&ef.get(0).unwrap()).unwrap().set_uniform("k", 1.0).unwrap();
+        write(&ef.get(0).unwrap())
+            .unwrap()
+            .set_uniform("k", 1.0)
+            .unwrap();
         {
             let mut z1 = write(&ef.get(1).unwrap()).unwrap();
             z1.set_uniform("k", 2.0).unwrap();
@@ -868,7 +900,13 @@ mod tests {
         sub.set_uniform("k", 10.0).unwrap();
         let out = ef.combine_subfield(&sub, |a, b| a + b).unwrap();
         assert_eq!(out.len(), 2);
-        assert_eq!(read(&out.get(0).unwrap()).unwrap().value(0, 0, "k").unwrap(), 11.0);
+        assert_eq!(
+            read(&out.get(0).unwrap())
+                .unwrap()
+                .value(0, 0, "k")
+                .unwrap(),
+            11.0
+        );
         let z1 = read(&out.get(1).unwrap()).unwrap();
         assert_eq!(z1.value(0, 0, "k").unwrap(), 2.0);
         assert_eq!(z1.value(0, 0, "E").unwrap(), 5.0);

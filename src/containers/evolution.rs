@@ -155,9 +155,7 @@ impl SubValue {
 /// is reused; `combine` enforces same support and components.
 fn lerp(lo: &SubValue, hi: &SubValue, t: f64) -> Result<SubValue> {
     match (lo, hi) {
-        (SubValue::Scalar(a), SubValue::Scalar(b)) => {
-            Ok(SubValue::Scalar(a * (1.0 - t) + b * t))
-        }
+        (SubValue::Scalar(a), SubValue::Scalar(b)) => Ok(SubValue::Scalar(a * (1.0 - t) + b * t)),
         (SubValue::Node(a), SubValue::Node(b)) => {
             let la = a.map_all(|v| v * (1.0 - t));
             let lb = b.map_all(|v| v * t);
@@ -205,9 +203,7 @@ impl SubEvolution {
         }
         for (x, _) in &samples {
             if x.is_nan() {
-                return Err(PyrucastError::Message(
-                    "SubEvolution: NaN abscissa".into(),
-                ));
+                return Err(PyrucastError::Message("SubEvolution: NaN abscissa".into()));
             }
         }
         samples.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("non-NaN abscissas"));
@@ -462,10 +458,7 @@ impl crate::dump::Dump for SubEvolution {
                     SubValue::Node(f) => {
                         format!("SubNodeField({} node(s))", f.node_count())
                     }
-                    SubValue::Element(f) => format!(
-                        "SubElementField({} cell(s))",
-                        f.cell_count()
-                    ),
+                    SubValue::Element(f) => format!("SubElementField({} cell(s))", f.cell_count()),
                 };
                 vec![fmt_float(*x, opts.precision), cell]
             })
@@ -493,24 +486,30 @@ pub struct Evolution {
     out_of_range: OutOfRange,
 }
 
-crate::impl_aggregate!(Evolution, SubEvolution, sub_evolution, "sub-evolution(s)", {
-    /// Reject a sub-evolution whose value kind differs from the others'.
-    fn check_push(&self, h: &Handle<SubEvolution>) -> Result<()> {
-        if self.subs.is_empty() {
-            return Ok(());
+crate::impl_aggregate!(
+    Evolution,
+    SubEvolution,
+    sub_evolution,
+    "sub-evolution(s)",
+    {
+        /// Reject a sub-evolution whose value kind differs from the others'.
+        fn check_push(&self, h: &Handle<SubEvolution>) -> Result<()> {
+            if self.subs.is_empty() {
+                return Ok(());
+            }
+            let k0 = read(&self.subs[0])?.kind();
+            let k = read(h)?.kind();
+            if k != k0 {
+                return Err(PyrucastError::Message(format!(
+                    "Evolution: cannot mix {} and {} sub-evolutions",
+                    k0.label(),
+                    k.label()
+                )));
+            }
+            Ok(())
         }
-        let k0 = read(&self.subs[0])?.kind();
-        let k = read(h)?.kind();
-        if k != k0 {
-            return Err(PyrucastError::Message(format!(
-                "Evolution: cannot mix {} and {} sub-evolutions",
-                k0.label(),
-                k.label()
-            )));
-        }
-        Ok(())
     }
-});
+);
 crate::impl_aggregate_dump!(Evolution);
 
 /// The result of interpolating an [`Evolution`]: an aggregate of the per-zone
@@ -816,9 +815,7 @@ fn not_element_err() -> PyrucastError {
 /// element field, from each zone's FE support sub-mesh — so an element-field
 /// evolution can be plotted without the user re-supplying the geometry.
 #[cfg(feature = "viz")]
-fn element_support_mesh(
-    field: &ElementField,
-) -> Result<crate::containers::mesh::Mesh> {
+fn element_support_mesh(field: &ElementField) -> Result<crate::containers::mesh::Mesh> {
     use crate::containers::field::SubField;
     let mut mesh = crate::containers::mesh::Mesh::empty();
     for h in field.iter() {
@@ -869,7 +866,10 @@ mod tests {
 
     fn scalar_curve(samples: &[(f64, f64)], oor: OutOfRange) -> SubEvolution {
         SubEvolution::new(
-            samples.iter().map(|&(x, v)| (x, SubValue::Scalar(v))).collect(),
+            samples
+                .iter()
+                .map(|&(x, v)| (x, SubValue::Scalar(v)))
+                .collect(),
             oor,
         )
         .unwrap()
@@ -931,11 +931,23 @@ mod tests {
         assert!(se.interpolate(2.0, None).is_err());
         assert!(se.interpolate(-1.0, None).is_err());
         // Clamp → endpoints.
-        assert_eq!(as_scalar(se.interpolate(2.0, Some(OutOfRange::Clamp)).unwrap()), 20.0);
-        assert_eq!(as_scalar(se.interpolate(-1.0, Some(OutOfRange::Clamp)).unwrap()), 10.0);
+        assert_eq!(
+            as_scalar(se.interpolate(2.0, Some(OutOfRange::Clamp)).unwrap()),
+            20.0
+        );
+        assert_eq!(
+            as_scalar(se.interpolate(-1.0, Some(OutOfRange::Clamp)).unwrap()),
+            10.0
+        );
         // Extrapolate → linear extension (slope 10/unit).
-        assert_eq!(as_scalar(se.interpolate(2.0, Some(OutOfRange::Extrapolate)).unwrap()), 30.0);
-        assert_eq!(as_scalar(se.interpolate(-1.0, Some(OutOfRange::Extrapolate)).unwrap()), 0.0);
+        assert_eq!(
+            as_scalar(se.interpolate(2.0, Some(OutOfRange::Extrapolate)).unwrap()),
+            30.0
+        );
+        assert_eq!(
+            as_scalar(se.interpolate(-1.0, Some(OutOfRange::Extrapolate)).unwrap()),
+            0.0
+        );
     }
 
     #[test]
@@ -1051,11 +1063,7 @@ mod tests {
         let sm = poi1(2);
         let f0 = NodeField::from_sub(node_field(&sm, &[0.0, 0.0]));
         let f1 = NodeField::from_sub(node_field(&sm, &[10.0, 20.0]));
-        let e = Evolution::from_node_fields(
-            &[(0.0, &f0), (1.0, &f1)],
-            OutOfRange::Error,
-        )
-        .unwrap();
+        let e = Evolution::from_node_fields(&[(0.0, &f0), (1.0, &f1)], OutOfRange::Error).unwrap();
         assert_eq!(e.len(), 1);
         match e.interpolate(0.5, None).unwrap() {
             Interpolated::Node(field) => {

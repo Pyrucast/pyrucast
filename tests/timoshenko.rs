@@ -130,10 +130,19 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
     let f = read(&forces.get(0)?)?;
 
     for cell in 0..f.cell_count() {
-        assert!((f.value(cell, 0, "V")?.abs() - P).abs() < 2e-2 * P, "V non constant ≈ P");
+        assert!(
+            (f.value(cell, 0, "V")?.abs() - P).abs() < 2e-2 * P,
+            "V non constant ≈ P"
+        );
     }
-    assert!((f.value(0, 0, "M")?.abs() - P * L).abs() < 5e-2 * P * L, "|M(0)| ≈ P·L");
-    assert!(f.value(f.cell_count() - 1, 0, "M")?.abs() < 5e-2 * P * L, "|M(L)| ≈ 0");
+    assert!(
+        (f.value(0, 0, "M")?.abs() - P * L).abs() < 5e-2 * P * L,
+        "|M(0)| ≈ P·L"
+    );
+    assert!(
+        f.value(f.cell_count() - 1, 0, "M")?.abs() < 5e-2 * P * L,
+        "|M(L)| ≈ 0"
+    );
     Ok(())
 }
 // ANCHOR_END: comp

@@ -1,9 +1,9 @@
 use crate::aggregate::Aggregate;
-use crate::error::{PyrucastError, Result};
-use crate::containers::mesh::NodeId;
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::Node;
+use crate::containers::mesh::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::error::{PyrucastError, Result};
 use crate::store::read;
 
 /// Fill the interior of one or more closed SEG2 contours with 2-D elements.
@@ -346,8 +346,10 @@ mod tests {
     #[test]
     fn fill_surface_square_gives_two_triangles() {
         let coords = insert(Coords::new(2).unwrap());
-        let (contour, nodes) =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let (contour, nodes) = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+        );
 
         let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
@@ -357,7 +359,11 @@ mod tests {
         for ci in 0..2 {
             for ni in 0..3 {
                 let id = tri.node(0, ci, ni).unwrap().id();
-                assert!(node_ids.contains(&id), "triangle node {} not in contour", id);
+                assert!(
+                    node_ids.contains(&id),
+                    "triangle node {} not in contour",
+                    id
+                );
             }
         }
     }
@@ -383,8 +389,7 @@ mod tests {
             let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
             let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
             let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
-            let a = 0.5
-                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            let a = 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
             assert!(a > 0.0, "triangle {} not CCW (signed area {})", ci, a);
             total += a;
         }
@@ -394,8 +399,10 @@ mod tests {
     #[test]
     fn fill_surface_increfs_contour_nodes() {
         let coords = insert(Coords::new(2).unwrap());
-        let (contour, nodes) =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let (contour, nodes) = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+        );
         let ids: Vec<_> = nodes.iter().map(|n| n.id()).collect();
 
         {
@@ -564,8 +571,10 @@ mod tests {
     #[test]
     fn fill_surface_rejects_empty_submesh() {
         let coords = insert(Coords::new(2).unwrap());
-        let (mut contour, _n) =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let (mut contour, _n) = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+        );
         let extra = insert(SubMesh::new(coords, ElementType::SEG2));
         contour.add_sub(extra).unwrap();
         assert!(fill_surface(&contour, ElementType::TRI3, None).is_err());
@@ -594,8 +603,7 @@ mod tests {
             let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
             let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
             let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
-            let a = 0.5
-                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            let a = 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
             assert!(a > 0.0, "triangle {} not CCW (signed area {})", ci, a);
             total += a;
         }
@@ -621,8 +629,7 @@ mod tests {
             let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
             let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
             let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
-            total += 0.5
-                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
         }
         assert!((total - 12.0).abs() < 1e-9, "total area = {}", total);
     }
@@ -651,8 +658,7 @@ mod tests {
             let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
             let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
             let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
-            total += 0.5
-                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
         }
         assert!((total - 22.0).abs() < 1e-9, "total area = {}", total);
     }
@@ -714,10 +720,7 @@ mod tests {
             cfg1.clone(),
             &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
         );
-        let (hole, _) = build_contour_2d(
-            cfg2,
-            &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
-        );
+        let (hole, _) = build_contour_2d(cfg2, &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]);
         assert!(outer.union(&hole).is_err());
     }
 
@@ -736,8 +739,10 @@ mod tests {
     #[test]
     fn fill_surface_refined_2d_square_creates_steiner_nodes() {
         let coords = insert(Coords::new(2).unwrap());
-        let (contour, contour_nodes) =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
+        let (contour, contour_nodes) = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
+        );
         let initial_node_count = read(&coords).unwrap().node_count();
 
         let opts = crate::ops::mesher::triangulation::RefinementOptions {
@@ -761,8 +766,7 @@ mod tests {
             let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
             let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
             let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
-            let a = 0.5
-                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            let a = 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
             assert!(a > 0.0, "triangle {} not CCW", ci);
             total += a;
             for (u, v) in [
@@ -786,8 +790,10 @@ mod tests {
     #[test]
     fn fill_surface_refined_inactive_options_is_noop() {
         let coords = insert(Coords::new(2).unwrap());
-        let (contour, _nodes) =
-            build_contour_2d(coords.clone(), &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
+        let (contour, _nodes) = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+        );
         let initial_count = read(&coords).unwrap().node_count();
         let tri = fill_surface(&contour, ElementType::TRI3, Some(Default::default())).unwrap();
         let final_count = read(&coords).unwrap().node_count();
@@ -813,11 +819,19 @@ mod tests {
         };
         let tri = fill_surface(&contour, ElementType::TRI3, Some(opts)).unwrap();
         let n_cells = tri.cell_count().unwrap();
-        assert!(n_cells > 2, "no refinement happened: got only {} cells", n_cells);
+        assert!(
+            n_cells > 2,
+            "no refinement happened: got only {} cells",
+            n_cells
+        );
         for ci in 0..n_cells {
             for ni in 0..3 {
                 let p = tri.node(0, ci, ni).unwrap().coord().unwrap();
-                assert!((p[2] - 1.0).abs() < 1e-9, "Steiner node off plane: z={}", p[2]);
+                assert!(
+                    (p[2] - 1.0).abs() < 1e-9,
+                    "Steiner node off plane: z={}",
+                    p[2]
+                );
             }
         }
     }
@@ -845,8 +859,7 @@ mod tests {
             let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
             let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
             let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
-            total += 0.5
-                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            total += 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
         }
         assert!((total - 12.0).abs() < 1e-9, "area drift: {}", total);
     }
@@ -863,8 +876,7 @@ mod tests {
             let p0 = tri.node(0, ci, 0).unwrap().coord().unwrap();
             let p1 = tri.node(0, ci, 1).unwrap().coord().unwrap();
             let p2 = tri.node(0, ci, 2).unwrap().coord().unwrap();
-            let a = 0.5
-                * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
+            let a = 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
             assert!(a > 0.0, "triangle {} not CCW", ci);
         }
     }

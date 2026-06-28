@@ -20,8 +20,8 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::field::SubField;
-use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::containers::mesh::NodeId;
+use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
 use crate::store::{insert, read, Handle};
 
@@ -51,7 +51,13 @@ pub fn consolidate(field: &NodeField) -> Result<NodeField> {
                 s.values().to_vec(),
             )
         };
-        snaps.push(Snap { handle: h.clone(), support, nodes, components, values });
+        snaps.push(Snap {
+            handle: h.clone(),
+            support,
+            nodes,
+            components,
+            values,
+        });
     }
 
     // Group sub indices by support handle identity, first-seen order.
@@ -165,8 +171,14 @@ mod tests {
 
         let a = field_on(&sm, vec!["T".into()]);
         let b = field_on(&sm, vec!["P".into()]);
-        write(&a.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 5.0).unwrap();
-        write(&b.get(0).unwrap()).unwrap().set_value(n1.id(), "P", 9.0).unwrap();
+        write(&a.get(0).unwrap())
+            .unwrap()
+            .set_value(n0.id(), "T", 5.0)
+            .unwrap();
+        write(&b.get(0).unwrap())
+            .unwrap()
+            .set_value(n1.id(), "P", 9.0)
+            .unwrap();
 
         let c = consolidate(&two_zone(&a, &b)).unwrap();
         assert_eq!(c.len(), 1, "same support ⇒ one fused zone");
@@ -182,8 +194,14 @@ mod tests {
         let sm = poi1(&coords, &[&n0]);
         let a = field_on(&sm, vec!["T".into()]);
         let b = field_on(&sm, vec!["T".into()]);
-        write(&a.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 1.0).unwrap();
-        write(&b.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 2.0).unwrap();
+        write(&a.get(0).unwrap())
+            .unwrap()
+            .set_value(n0.id(), "T", 1.0)
+            .unwrap();
+        write(&b.get(0).unwrap())
+            .unwrap()
+            .set_value(n0.id(), "T", 2.0)
+            .unwrap();
         // Distinct handles, same support: the union's finalize fuses them
         // and detects the diverging T — so `|` itself errors.
         assert!(a.union(&b).is_err());
@@ -196,8 +214,14 @@ mod tests {
         let sm = poi1(&coords, &[&n0]);
         let a = field_on(&sm, vec!["T".into(), "P".into()]);
         let b = field_on(&sm, vec!["T".into()]);
-        write(&a.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 7.0).unwrap();
-        write(&b.get(0).unwrap()).unwrap().set_value(n0.id(), "T", 7.0).unwrap();
+        write(&a.get(0).unwrap())
+            .unwrap()
+            .set_value(n0.id(), "T", 7.0)
+            .unwrap();
+        write(&b.get(0).unwrap())
+            .unwrap()
+            .set_value(n0.id(), "T", 7.0)
+            .unwrap();
         // Agreeing shared component → `|` succeeds and fuses.
         let c = a.union(&b).unwrap();
         assert_eq!(c.len(), 1);
@@ -232,8 +256,14 @@ mod tests {
         let sm_b = poi1(&coords, &[&n]);
         let a = field_on(&sm_a, vec!["T".into()]);
         let b = field_on(&sm_b, vec!["T".into()]);
-        write(&a.get(0).unwrap()).unwrap().set_value(n.id(), "T", 1.0).unwrap();
-        write(&b.get(0).unwrap()).unwrap().set_value(n.id(), "T", 2.0).unwrap();
+        write(&a.get(0).unwrap())
+            .unwrap()
+            .set_value(n.id(), "T", 1.0)
+            .unwrap();
+        write(&b.get(0).unwrap())
+            .unwrap()
+            .set_value(n.id(), "T", 2.0)
+            .unwrap();
         // Different supports → no fusion, but the cross-support check in the
         // union's finalize still catches the diverging shared node.
         assert!(a.union(&b).is_err());

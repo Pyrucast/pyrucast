@@ -244,11 +244,7 @@ pub fn constitutive(e: f64, nu: f64, model: ElasticityModel, space_dim: usize) -
 /// component by name through `eps`. Off-diagonals become `γ = 2ε`.
 fn voigt_strain(eps: &dyn Fn(&str) -> Result<f64>, space_dim: usize) -> Result<Vec<f64>> {
     if space_dim == 2 {
-        Ok(vec![
-            eps("eps_xx")?,
-            eps("eps_yy")?,
-            2.0 * eps("eps_xy")?,
-        ])
+        Ok(vec![eps("eps_xx")?, eps("eps_yy")?, 2.0 * eps("eps_xy")?])
     } else {
         Ok(vec![
             eps("eps_xx")?,
@@ -335,7 +331,14 @@ pub fn assemble_stiffness(
     let dmats: Vec<Vec<Vec<f64>>> = {
         let m = read(material)?;
         (0..snapshots.len())
-            .map(|cell| Ok(constitutive(m.value(cell, 0, "E")?, m.value(cell, 0, "nu")?, model, space_dim)))
+            .map(|cell| {
+                Ok(constitutive(
+                    m.value(cell, 0, "E")?,
+                    m.value(cell, 0, "nu")?,
+                    model,
+                    space_dim,
+                ))
+            })
             .collect::<Result<_>>()?
     };
 
@@ -378,7 +381,13 @@ pub fn assemble_stiffness(
                 for j in 0..n_nodes {
                     for b in 0..space_dim {
                         let val = ke[i * space_dim + a][j * space_dim + b];
-                        k.add_entry(snap.node_ids[i], &dual[a], snap.node_ids[j], &primal[b], val)?;
+                        k.add_entry(
+                            snap.node_ids[i],
+                            &dual[a],
+                            snap.node_ids[j],
+                            &primal[b],
+                            val,
+                        )?;
                     }
                 }
             }
@@ -443,14 +452,17 @@ mod tests {
     fn integrate_behavior_plane_stress_uniaxial() {
         let (e, nu, eps0) = (210.0, 0.3, 0.001);
         let el = unit_quad(ElasticityModel::PlaneStress);
-        let mut mat = SubElementField::new(el.fespace.clone(), vec!["E".into(), "nu".into()]).unwrap();
+        let mut mat =
+            SubElementField::new(el.fespace.clone(), vec!["E".into(), "nu".into()]).unwrap();
         mat.set_uniform("E", e).unwrap();
         mat.set_uniform("nu", nu).unwrap();
         let mat = insert(mat);
 
-        let mut strain =
-            SubElementField::new(el.fespace.clone(), vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into()])
-                .unwrap();
+        let mut strain = SubElementField::new(
+            el.fespace.clone(),
+            vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into()],
+        )
+        .unwrap();
         strain.set_uniform("eps_xx", eps0).unwrap();
         let strain = insert(strain);
 
@@ -468,7 +480,8 @@ mod tests {
     #[test]
     fn element_stiffness_symmetric_and_rigid_body_free() {
         let el = unit_quad(ElasticityModel::PlaneStrain);
-        let mut mat = SubElementField::new(el.fespace.clone(), vec!["E".into(), "nu".into()]).unwrap();
+        let mut mat =
+            SubElementField::new(el.fespace.clone(), vec!["E".into(), "nu".into()]).unwrap();
         mat.set_uniform("E", 200.0).unwrap();
         mat.set_uniform("nu", 0.3).unwrap();
         let mat = insert(mat);
@@ -490,10 +503,7 @@ mod tests {
         }
         // A uniform translation in x ⇒ zero force everywhere (row sum = 0).
         for &ni in &nodes {
-            let row: f64 = nodes
-                .iter()
-                .map(|&nj| k.get(ni, "f_x", nj, "u_x"))
-                .sum();
+            let row: f64 = nodes.iter().map(|&nj| k.get(ni, "f_x", nj, "u_x")).sum();
             assert!(row.abs() < tol, "row sum {row} ≠ 0");
         }
     }

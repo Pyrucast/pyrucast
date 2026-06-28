@@ -6,8 +6,8 @@
 //! corner of the drawing area, independent of the visualized object's
 //! own bounding box / scale.
 
-use crate::error::Result;
 use crate::containers::mesh::{Point3, Vector3};
+use crate::error::Result;
 use crate::viz::camera::Projector;
 use crate::viz::drawable::pl_err;
 use crate::viz::View;

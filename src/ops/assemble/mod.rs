@@ -22,9 +22,9 @@
 //! covering only some of the FE subspaces is therefore valid as long as
 //! every material-hungry sub-model finds its match.
 
-use crate::containers::field::SubField;
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::field::SubField;
 use crate::containers::matrix::Matrix;
 use crate::containers::model::Model;
 use crate::error::{PyrucastError, Result};
@@ -86,10 +86,7 @@ pub fn mass(model: &Model) -> Result<Matrix> {
 
 /// Ensure `material` carries every component declared as required by
 /// the physics. Errors with both lists for a clear message.
-fn validate_material(
-    material: &Handle<SubElementField>,
-    required: &[&str],
-) -> Result<()> {
+fn validate_material(material: &Handle<SubElementField>, required: &[&str]) -> Result<()> {
     let have: Vec<String> = read(material)?.components().to_vec();
     for req in required {
         if !have.iter().any(|c| c == req) {

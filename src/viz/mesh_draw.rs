@@ -14,11 +14,11 @@
 //! face boundaries.
 
 use crate::aggregate::Aggregate;
+use crate::containers::mesh::ElementType;
 use crate::containers::mesh::RgbColor;
 use crate::containers::mesh::{Coords, NodeId};
-use crate::containers::mesh::ElementType;
-use crate::error::Result;
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::error::Result;
 use crate::store::{read, Handle};
 use crate::viz::camera::{Bbox3, Projector};
 use crate::viz::drawable::{pl_err, Drawable};
@@ -39,10 +39,7 @@ pub(crate) fn pad3(coords: &[f64]) -> Point3 {
 }
 
 /// Read every node referenced by `connectivity` from `coords`, padded to 3-D.
-fn read_points(
-    coords: &Handle<Coords>,
-    connectivity: &[NodeId],
-) -> Result<Vec<Point3>> {
+fn read_points(coords: &Handle<Coords>, connectivity: &[NodeId]) -> Result<Vec<Point3>> {
     let c = read(coords)?;
     connectivity
         .iter()
@@ -57,25 +54,33 @@ fn read_points(
 /// then overlays its boundary as a black wireframe.
 #[derive(Debug, Clone)]
 pub(crate) enum Primitive {
-    Point { p: Point3, color: RgbColor },
-    Segment { a: Point3, b: Point3, color: RgbColor },
+    Point {
+        p: Point3,
+        color: RgbColor,
+    },
+    Segment {
+        a: Point3,
+        b: Point3,
+        color: RgbColor,
+    },
     /// Filled polygon; `outline: false` skips the black wireframe (used
     /// by the interpolated renderer for its interior sub-faces).
-    Face { verts: Vec<Point3>, color: RgbColor, outline: bool },
+    Face {
+        verts: Vec<Point3>,
+        color: RgbColor,
+        outline: bool,
+    },
     /// Stroke-only closed polyline, drawn slightly towards the viewer —
     /// the element boundary on top of its (outline-free) sub-faces.
-    Wire { verts: Vec<Point3> },
+    Wire {
+        verts: Vec<Point3>,
+    },
 }
 
 // ─── Element-type → primitives ──────────────────────────────────────────────
 
 /// Faces of a TET4 — each oriented outwards (CCW seen from outside).
-pub(crate) const TET4_FACES: [[usize; 3]; 4] = [
-    [0, 2, 1],
-    [0, 1, 3],
-    [0, 3, 2],
-    [1, 2, 3],
-];
+pub(crate) const TET4_FACES: [[usize; 3]; 4] = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]];
 
 /// Faces of a HEX8 — bot / top / 4 lateral, in the convention used by
 /// [`crate::ops::mesher::extrude`]: HEX8 = [bot[0..4], top[0..4]], both CCW seen from
@@ -91,6 +96,7 @@ pub(crate) const HEX8_FACES: [[usize; 4]; 6] = [
 
 /// Edges of each element type, as local node-index pairs — used by the
 /// wireframe rendering style. POI1 has no edge (it draws as a dot).
+#[rustfmt::skip]
 fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
     match et {
         ElementType::POI1 => &[],
@@ -118,10 +124,7 @@ fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
 ///
 /// A face is keyed by the **set** of its global node ids (sorted), so the
 /// two cells sharing it produce the same key regardless of orientation.
-pub(crate) fn boundary_faces(
-    et: ElementType,
-    conn: &[NodeId],
-) -> Option<HashSet<(usize, usize)>> {
+pub(crate) fn boundary_faces(et: ElementType, conn: &[NodeId]) -> Option<HashSet<(usize, usize)>> {
     let faces: Vec<&[usize]> = match et {
         ElementType::TET4 => TET4_FACES.iter().map(|f| f.as_slice()).collect(),
         ElementType::HEX8 => HEX8_FACES.iter().map(|f| f.as_slice()).collect(),
@@ -211,7 +214,10 @@ fn submesh_primitives_impl(
     match et {
         ElementType::POI1 => {
             for i in 0..n_cells {
-                out.push(Primitive::Point { p: pts[i], color: cell_color(i) });
+                out.push(Primitive::Point {
+                    p: pts[i],
+                    color: cell_color(i),
+                });
             }
         }
         ElementType::SEG2 => {
@@ -235,12 +241,7 @@ fn submesh_primitives_impl(
         ElementType::QUA4 => {
             for i in 0..n_cells {
                 out.push(Primitive::Face {
-                    verts: vec![
-                        pts[4 * i],
-                        pts[4 * i + 1],
-                        pts[4 * i + 2],
-                        pts[4 * i + 3],
-                    ],
+                    verts: vec![pts[4 * i], pts[4 * i + 1], pts[4 * i + 2], pts[4 * i + 3]],
                     color: cell_color(i),
                     outline: true,
                 });
@@ -318,10 +319,27 @@ fn primitives_bbox(prims: &[Primitive]) -> Bbox3 {
 /// to order the painter's pass.
 #[derive(Debug, Clone)]
 enum ProjPrim {
-    Point { p: (f64, f64), color: RgbColor, depth: f64 },
-    Segment { a: (f64, f64), b: (f64, f64), color: RgbColor, depth: f64 },
-    Face { verts: Vec<(f64, f64)>, color: RgbColor, depth: f64, outline: bool },
-    Wire { verts: Vec<(f64, f64)>, depth: f64 },
+    Point {
+        p: (f64, f64),
+        color: RgbColor,
+        depth: f64,
+    },
+    Segment {
+        a: (f64, f64),
+        b: (f64, f64),
+        color: RgbColor,
+        depth: f64,
+    },
+    Face {
+        verts: Vec<(f64, f64)>,
+        color: RgbColor,
+        depth: f64,
+        outline: bool,
+    },
+    Wire {
+        verts: Vec<(f64, f64)>,
+        depth: f64,
+    },
 }
 
 impl ProjPrim {
@@ -374,14 +392,15 @@ where
                     depth: 0.5 * (va.z + vb.z),
                 }
             }
-            Primitive::Face { verts, color, outline } => {
-                let projected_verts: Vec<_> =
-                    verts.iter().map(|v| proj.project(*v)).collect();
+            Primitive::Face {
+                verts,
+                color,
+                outline,
+            } => {
+                let projected_verts: Vec<_> = verts.iter().map(|v| proj.project(*v)).collect();
                 let n = projected_verts.len().max(1);
-                let depth: f64 =
-                    projected_verts.iter().map(|v| v.z).sum::<f64>() / n as f64;
-                let v2d: Vec<(f64, f64)> =
-                    projected_verts.iter().map(|v| (v.x, v.y)).collect();
+                let depth: f64 = projected_verts.iter().map(|v| v.z).sum::<f64>() / n as f64;
+                let v2d: Vec<(f64, f64)> = projected_verts.iter().map(|v| (v.x, v.y)).collect();
                 ProjPrim::Face {
                     verts: v2d,
                     color: *color,
@@ -390,16 +409,13 @@ where
                 }
             }
             Primitive::Wire { verts } => {
-                let projected_verts: Vec<_> =
-                    verts.iter().map(|v| proj.project(*v)).collect();
+                let projected_verts: Vec<_> = verts.iter().map(|v| proj.project(*v)).collect();
                 let n = projected_verts.len().max(1);
                 // Small bias towards the viewer so the wire is drawn on
                 // top of the coplanar sub-faces it delimits.
-                let depth: f64 = projected_verts.iter().map(|v| v.z).sum::<f64>()
-                    / n as f64
+                let depth: f64 = projected_verts.iter().map(|v| v.z).sum::<f64>() / n as f64
                     - 1e-3 * bbox.diagonal().max(1.0);
-                let v2d: Vec<(f64, f64)> =
-                    projected_verts.iter().map(|v| (v.x, v.y)).collect();
+                let v2d: Vec<(f64, f64)> = projected_verts.iter().map(|v| (v.x, v.y)).collect();
                 ProjPrim::Wire { verts: v2d, depth }
             }
         })
@@ -479,7 +495,12 @@ where
                     .draw_series(LineSeries::new(vec![*a, *b], style))
                     .map_err(pl_err)?;
             }
-            ProjPrim::Face { verts, color, outline, .. } => {
+            ProjPrim::Face {
+                verts,
+                color,
+                outline,
+                ..
+            } => {
                 // Faces are opaque so the painter's pass performs hidden-
                 // surface removal: a near face fully overwrites the ones
                 // behind it. This is what makes a solid 3-D mesh read as a
@@ -491,10 +512,7 @@ where
                     stroke_width: 0,
                 };
                 chart
-                    .draw_series(std::iter::once(Polygon::new(
-                        verts.clone(),
-                        face_style,
-                    )))
+                    .draw_series(std::iter::once(Polygon::new(verts.clone(), face_style)))
                     .map_err(pl_err)?;
                 if *outline {
                     // Close the loop for the wireframe overlay.
@@ -535,11 +553,7 @@ impl Drawable for SubMesh {
         Ok(b)
     }
 
-    fn draw_on<DB: DrawingBackend>(
-        &self,
-        area: &DrawingArea<DB, Shift>,
-        view: &View,
-    ) -> Result<()>
+    fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, view: &View) -> Result<()>
     where
         DB::ErrorType: 'static,
     {
@@ -564,11 +578,7 @@ impl Drawable for Mesh {
         Ok(b)
     }
 
-    fn draw_on<DB: DrawingBackend>(
-        &self,
-        area: &DrawingArea<DB, Shift>,
-        view: &View,
-    ) -> Result<()>
+    fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, view: &View) -> Result<()>
     where
         DB::ErrorType: 'static,
     {
@@ -636,11 +646,7 @@ impl Drawable for SubMeshWire<'_> {
         self.0.bbox()
     }
 
-    fn draw_on<DB: DrawingBackend>(
-        &self,
-        area: &DrawingArea<DB, Shift>,
-        view: &View,
-    ) -> Result<()>
+    fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, view: &View) -> Result<()>
     where
         DB::ErrorType: 'static,
     {
@@ -658,11 +664,7 @@ impl Drawable for MeshWire<'_> {
         self.0.bbox()
     }
 
-    fn draw_on<DB: DrawingBackend>(
-        &self,
-        area: &DrawingArea<DB, Shift>,
-        view: &View,
-    ) -> Result<()>
+    fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, view: &View) -> Result<()>
     where
         DB::ErrorType: 'static,
     {
@@ -766,6 +768,7 @@ mod tests {
     /// the other twelve are the cube's skin (boundary).
     fn cube_six_tets() -> SubMesh {
         let coords = insert(Coords::new(3).unwrap());
+        #[rustfmt::skip]
         let corners = [
             [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
             [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0],
@@ -774,6 +777,7 @@ mod tests {
             .iter()
             .map(|c| Node::create_in(coords.clone(), c).unwrap())
             .collect();
+        #[rustfmt::skip]
         let tets = [
             [0, 1, 2, 6], [0, 2, 3, 6], [0, 3, 7, 6],
             [0, 7, 4, 6], [0, 4, 5, 6], [0, 5, 1, 6],
@@ -781,7 +785,10 @@ mod tests {
         let mut sm = SubMesh::new(coords, ElementType::TET4);
         for t in &tets {
             sm.add_cell(&[
-                nodes[t[0]].id(), nodes[t[1]].id(), nodes[t[2]].id(), nodes[t[3]].id(),
+                nodes[t[0]].id(),
+                nodes[t[1]].id(),
+                nodes[t[2]].id(),
+                nodes[t[3]].id(),
             ])
             .unwrap();
         }
@@ -802,6 +809,7 @@ mod tests {
         // Two unit hexes stacked along Z share their common quad: that
         // face is interior, the other ten are boundary.
         let coords = insert(Coords::new(3).unwrap());
+        #[rustfmt::skip]
         let pts = [
             [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
             [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0],
@@ -812,8 +820,10 @@ mod tests {
             .map(|c| Node::create_in(coords.clone(), c).unwrap())
             .collect();
         let mut sm = SubMesh::new(coords, ElementType::HEX8);
-        sm.add_cell(&(0..8).map(|i| n[i].id()).collect::<Vec<_>>()).unwrap();
-        sm.add_cell(&(4..12).map(|i| n[i].id()).collect::<Vec<_>>()).unwrap();
+        sm.add_cell(&(0..8).map(|i| n[i].id()).collect::<Vec<_>>())
+            .unwrap();
+        sm.add_cell(&(4..12).map(|i| n[i].id()).collect::<Vec<_>>())
+            .unwrap();
         let keep = boundary_faces(ElementType::HEX8, sm.connectivity()).unwrap();
         // 2 × 6 = 12 faces, one shared pair removed → 10 boundary quads.
         assert_eq!(keep.len(), 10);

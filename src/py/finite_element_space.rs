@@ -2,12 +2,12 @@
 //! [`crate::containers::finite_element_space::FiniteElementSpace`].
 
 use crate::aggregate::Aggregate;
-use crate::error::{PyrucastError, Result};
-use crate::containers::finite_element_space::{Element, FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::finite_element_space::Interpolation;
+use crate::containers::finite_element_space::QuadratureRule;
+use crate::containers::finite_element_space::{Element, FiniteElementSpace, SubFiniteElementSpace};
+use crate::error::{PyrucastError, Result};
 use crate::py::element::PyElement;
 use crate::py::mesh::PyMesh;
-use crate::containers::finite_element_space::QuadratureRule;
 use crate::store::{read, Handle};
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
@@ -194,11 +194,7 @@ impl PyFiniteElementSpace {
     /// — same `(interpolation, quadrature)` applied to every submesh.
     #[new]
     #[pyo3(signature = (mesh, interpolation="LAGRANGE1", quadrature="GAUSS"))]
-    fn py_new(
-        mesh: PyRef<PyMesh>,
-        interpolation: &str,
-        quadrature: &str,
-    ) -> PyResult<Self> {
+    fn py_new(mesh: PyRef<PyMesh>, interpolation: &str, quadrature: &str) -> PyResult<Self> {
         let interp = parse_interpolation(interpolation)?;
         let quad = parse_quadrature(quadrature)?;
         let n_sub = mesh.inner.len();
@@ -218,9 +214,8 @@ impl PyFiniteElementSpace {
         let parsed: Result<Vec<_>> = choices
             .iter()
             .map(|(i, q)| -> Result<(Interpolation, QuadratureRule)> {
-                let interp = Interpolation::from_name(i).ok_or_else(|| {
-                    PyrucastError::Message(format!("unknown interpolation: {i}"))
-                })?;
+                let interp = Interpolation::from_name(i)
+                    .ok_or_else(|| PyrucastError::Message(format!("unknown interpolation: {i}")))?;
                 let quad = QuadratureRule::from_name(q).ok_or_else(|| {
                     PyrucastError::Message(format!("unknown quadrature rule: {q}"))
                 })?;
@@ -257,5 +252,11 @@ impl PyFiniteElementSpace {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyFiniteElementSpace, PySubFiniteElementSpace, "FiniteElementSpace", subspace, FiniteElementSpace);
+crate::impl_aggregate_pymethods!(
+    PyFiniteElementSpace,
+    PySubFiniteElementSpace,
+    "FiniteElementSpace",
+    subspace,
+    FiniteElementSpace
+);
 crate::impl_dump_pymethod!(handle PySubFiniteElementSpace, handle);

@@ -59,15 +59,24 @@ pub trait Aggregate: Default {
     fn type_name() -> &'static str;
 
     /// Construct an empty aggregate (no sub-items). Equivalent to `Default::default()`.
-    fn empty() -> Self where Self: Sized { Self::default() }
+    fn empty() -> Self
+    where
+        Self: Sized,
+    {
+        Self::default()
+    }
 
     /// Plural label for the sub-item used by the default `Display`
     /// (e.g. `"submesh(es)"`). Defaults to `"item(s)"`.
-    fn sub_display_name() -> &'static str { "item(s)" }
+    fn sub_display_name() -> &'static str {
+        "item(s)"
+    }
 
     /// Optional suffix appended by the default `Display` after the count
     /// (e.g. `", 12 cell(s) total"`). Defaults to nothing.
-    fn display_extra(&self) -> Option<String> { None }
+    fn display_extra(&self) -> Option<String> {
+        None
+    }
 
     /// Union of `self` and `other` into a fresh aggregate.
     ///
@@ -79,7 +88,10 @@ pub trait Aggregate: Default {
     /// [`Aggregate::try_extend_from`]. After the union, [`Aggregate::finalize`]
     /// runs — a no-op for most aggregates, but the fields override it to fuse
     /// zones sharing the same support.
-    fn merge(&self, other: &Self) -> Result<Self> where Self: Sized {
+    fn merge(&self, other: &Self) -> Result<Self>
+    where
+        Self: Sized,
+    {
         let mut result = Self::default();
         result.try_extend_from(self)?;
         result.try_extend_from(other)?;
@@ -91,7 +103,10 @@ pub trait Aggregate: Default {
     /// composition operator (`a | b` in Python). Alias of
     /// [`Aggregate::merge`]; see it for the deduplication and finalization
     /// semantics.
-    fn union(&self, other: &Self) -> Result<Self> where Self: Sized {
+    fn union(&self, other: &Self) -> Result<Self>
+    where
+        Self: Sized,
+    {
         self.merge(other)
     }
 
@@ -99,7 +114,10 @@ pub trait Aggregate: Default {
     /// `self`'s subs plus `h`, unless `h`'s slot is already present. The
     /// sub-handle is shared (refcount bump), then [`Aggregate::finalize`]
     /// runs. Python: `aggregate | sub`.
-    fn union_sub(&self, h: &Handle<Self::Sub>) -> Result<Self> where Self: Sized {
+    fn union_sub(&self, h: &Handle<Self::Sub>) -> Result<Self>
+    where
+        Self: Sized,
+    {
         let mut out = Self::default();
         out.try_extend_from(self)?;
         if !out.contains_handle(h) {
@@ -133,7 +151,12 @@ pub trait Aggregate: Default {
     /// handle is complete. Override to fuse/normalize sub-objects beyond
     /// handle identity (e.g. fields fusing two zones on the same support).
     /// The default is a no-op.
-    fn finalize(&mut self) -> Result<()> where Self: Sized { Ok(()) }
+    fn finalize(&mut self) -> Result<()>
+    where
+        Self: Sized,
+    {
+        Ok(())
+    }
 
     fn len(&self) -> usize {
         self.items().len()
@@ -165,11 +188,7 @@ pub trait Aggregate: Default {
     /// Clone of the `i`-th handle. Explicit error if `i` is out of bounds.
     fn get(&self, i: usize) -> Result<Handle<Self::Sub>> {
         self.items().get(i).cloned().ok_or_else(|| {
-            PyrucastError::Message(format!(
-                "index {} out of bounds (len={})",
-                i,
-                self.len()
-            ))
+            PyrucastError::Message(format!("index {} out of bounds (len={})", i, self.len()))
         })
     }
 
@@ -234,7 +253,6 @@ pub trait Aggregate: Default {
         }
         Ok(())
     }
-
 }
 
 // ─── Debug helper: recurse into each sub-object ─────────────────────────────
@@ -515,9 +533,12 @@ macro_rules! impl_dump_pymethod {
                 max_rows: usize,
                 max_cols: usize,
             ) -> pyo3::PyResult<()> {
-                let opts = $crate::dump::DumpOptions { precision, max_rows, max_cols };
-                let text =
-                    $crate::dump::Dump::render(&*$crate::store::read(&self.$field)?, &opts);
+                let opts = $crate::dump::DumpOptions {
+                    precision,
+                    max_rows,
+                    max_cols,
+                };
+                let text = $crate::dump::Dump::render(&*$crate::store::read(&self.$field)?, &opts);
                 $crate::dump::py_print(py, &text)
             }
         }
@@ -536,7 +557,11 @@ macro_rules! impl_dump_pymethod {
                 max_rows: usize,
                 max_cols: usize,
             ) -> pyo3::PyResult<()> {
-                let opts = $crate::dump::DumpOptions { precision, max_rows, max_cols };
+                let opts = $crate::dump::DumpOptions {
+                    precision,
+                    max_rows,
+                    max_cols,
+                };
                 let text = $crate::dump::Dump::render(&self.$field, &opts);
                 $crate::dump::py_print(py, &text)
             }
@@ -621,7 +646,10 @@ macro_rules! impl_aggregate_std_traits {
 
         impl<'a> IntoIterator for &'a $T {
             type Item = &'a $crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>;
-            type IntoIter = std::slice::Iter<'a, $crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>>;
+            type IntoIter = std::slice::Iter<
+                'a,
+                $crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
+            >;
             fn into_iter(self) -> Self::IntoIter {
                 $crate::aggregate::Aggregate::iter(self)
             }
@@ -633,9 +661,7 @@ macro_rules! impl_aggregate_std_traits {
                     .field("count", &$crate::aggregate::Aggregate::len(self))
                     .field(
                         "items",
-                        &$crate::aggregate::DebugItems(
-                            $crate::aggregate::Aggregate::items(self),
-                        ),
+                        &$crate::aggregate::DebugItems($crate::aggregate::Aggregate::items(self)),
                     )
                     .finish()
             }
@@ -721,7 +747,6 @@ macro_rules! impl_aggregate_dump {
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -737,9 +762,15 @@ mod tests {
     }
     impl Aggregate for Bag {
         type Sub = Item;
-        fn items(&self) -> &[Handle<Item>] { &self.items }
-        fn items_mut(&mut self) -> &mut Vec<Handle<Item>> { &mut self.items }
-        fn type_name() -> &'static str { "Bag" }
+        fn items(&self) -> &[Handle<Item>] {
+            &self.items
+        }
+        fn items_mut(&mut self) -> &mut Vec<Handle<Item>> {
+            &mut self.items
+        }
+        fn type_name() -> &'static str {
+            "Bag"
+        }
     }
 
     #[test]

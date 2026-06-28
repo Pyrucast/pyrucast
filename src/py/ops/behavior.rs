@@ -27,7 +27,6 @@ pub fn integrate_behavior(
     deformation: PyRef<PyElementField>,
     materials: PyRef<PyElementField>,
 ) -> PyResult<PyElementField> {
-    let ef =
-        crate::ops::behavior::integrate(&model.inner, &deformation.inner, &materials.inner)?;
+    let ef = crate::ops::behavior::integrate(&model.inner, &deformation.inner, &materials.inner)?;
     Ok(PyElementField { inner: ef })
 }

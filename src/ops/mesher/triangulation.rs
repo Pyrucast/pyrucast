@@ -365,7 +365,10 @@ mod tests {
     #[test]
     fn newell_translated_polygon_same_normal() {
         let p1 = vec![p3(0.0, 0.0, 0.0), p3(1.0, 0.0, 0.0), p3(0.0, 1.0, 0.0)];
-        let p2: Vec<Point3> = p1.iter().map(|p| p3(p.x + 10.0, p.y - 5.0, p.z + 3.0)).collect();
+        let p2: Vec<Point3> = p1
+            .iter()
+            .map(|p| p3(p.x + 10.0, p.y - 5.0, p.z + 3.0))
+            .collect();
         let n1 = newell_normal(&p1).unwrap();
         let n2 = newell_normal(&p2).unwrap();
         assert!((n1 - n2).norm() < 1e-12);

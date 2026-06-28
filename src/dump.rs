@@ -46,7 +46,11 @@ pub struct DumpOptions {
 
 impl Default for DumpOptions {
     fn default() -> Self {
-        Self { precision: 3, max_rows: 20, max_cols: 12 }
+        Self {
+            precision: 3,
+            max_rows: 20,
+            max_cols: 12,
+        }
     }
 }
 
@@ -131,7 +135,11 @@ pub fn table(headers: &[String], rows: &[Vec<String>], opts: &DumpOptions) -> St
         grid.push(build_line(r));
     }
     if row_truncated {
-        let n = if col_truncated { shown_cols + 1 } else { shown_cols };
+        let n = if col_truncated {
+            shown_cols + 1
+        } else {
+            shown_cols
+        };
         grid.push(vec!["⋮".to_string(); n]);
     }
 
@@ -160,7 +168,10 @@ pub fn table(headers: &[String], rows: &[Vec<String>], opts: &DumpOptions) -> St
     }
 
     if row_truncated {
-        out.push_str(&format!("… ({} ligne(s) de plus)\n", rows.len() - shown_rows));
+        out.push_str(&format!(
+            "… ({} ligne(s) de plus)\n",
+            rows.len() - shown_rows
+        ));
     }
     if col_truncated {
         out.push_str(&format!(
@@ -225,19 +236,28 @@ mod tests {
     #[test]
     fn row_elision_marks_overflow() {
         let headers = vec!["node".into(), "T".into()];
-        let rows: Vec<Vec<String>> =
-            (0..5).map(|i| vec![i.to_string(), format!("{i}.0")]).collect();
-        let opts = DumpOptions { precision: 1, max_rows: 2, max_cols: 12 };
+        let rows: Vec<Vec<String>> = (0..5)
+            .map(|i| vec![i.to_string(), format!("{i}.0")])
+            .collect();
+        let opts = DumpOptions {
+            precision: 1,
+            max_rows: 2,
+            max_cols: 12,
+        };
         let s = table(&headers, &rows, &opts);
         assert!(s.contains("⋮"), "expected an elision cue row:\n{s}");
-        assert!(s.contains("3 ligne(s) de plus"), "expected a row note:\n{s}");
+        assert!(
+            s.contains("3 ligne(s) de plus"),
+            "expected a row note:\n{s}"
+        );
     }
 
     #[test]
     fn col_elision_keeps_label_column() {
         // 1 label column + 4 value columns, capped at 2.
-        let headers: Vec<String> =
-            std::iter::once("node".to_string()).chain((0..4).map(|c| format!("c{c}"))).collect();
+        let headers: Vec<String> = std::iter::once("node".to_string())
+            .chain((0..4).map(|c| format!("c{c}")))
+            .collect();
         let rows = vec![vec![
             "n0".into(),
             "1".into(),
@@ -245,10 +265,17 @@ mod tests {
             "3".into(),
             "4".into(),
         ]];
-        let opts = DumpOptions { precision: 1, max_rows: 20, max_cols: 2 };
+        let opts = DumpOptions {
+            precision: 1,
+            max_rows: 20,
+            max_cols: 2,
+        };
         let s = table(&headers, &rows, &opts);
         assert!(s.contains("node"), "label column must survive:\n{s}");
-        assert!(s.contains("2 colonne(s) de plus"), "expected a column note:\n{s}");
+        assert!(
+            s.contains("2 colonne(s) de plus"),
+            "expected a column note:\n{s}"
+        );
     }
 
     #[test]

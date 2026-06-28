@@ -48,11 +48,10 @@ pub fn integrate(
     for h in model {
         // Cheap read under the sub-model lock: which FE subspaces this
         // sub-model wants for its deformation and its material.
-        let (beh_fespace, mat_fespace) =
-            {
-                let sub = read(h)?;
-                (sub.behavior_fespace(), sub.material_fespace())
-            };
+        let (beh_fespace, mat_fespace) = {
+            let sub = read(h)?;
+            (sub.behavior_fespace(), sub.material_fespace())
+        };
         let Some(beh_fespace) = beh_fespace else {
             continue; // constraint sub-model — no behaviour
         };
@@ -87,11 +86,7 @@ mod tests {
     /// SEG2 of length `L`, HeatConduction model (+ optional Dirichlet on the
     /// left node), and the linear nodal solution `T(a)=0, T(b)=dt`. Returns
     /// `(model, fes, solution)`.
-    fn seg2(
-        length: f64,
-        dt: f64,
-        dirichlet: bool,
-    ) -> (Model, FiniteElementSpace, NodeField) {
+    fn seg2(length: f64, dt: f64, dirichlet: bool) -> (Model, FiniteElementSpace, NodeField) {
         let coords = insert(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[length]).unwrap();
@@ -101,7 +96,9 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+            ))
             .unwrap();
         if dirichlet {
             let imposed =
@@ -109,15 +106,8 @@ mod tests {
             let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
             model
                 .add_sub(insert(
-                    SubModel::dirichlet(
-                        "T".into(),
-                        "q".into(),
-                        &imposed,
-                        &multiplier,
-                        None,
-                        None,
-                    )
-                    .unwrap(),
+                    SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+                        .unwrap(),
                 ))
                 .unwrap();
         }
@@ -175,10 +165,14 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+            ))
             .unwrap();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.get(1).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(1).unwrap()).unwrap(),
+            ))
             .unwrap();
 
         // Linear ramp T = x ⇒ ∇T = 1 everywhere.

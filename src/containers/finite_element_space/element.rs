@@ -35,9 +35,9 @@
 
 use std::fmt;
 
-use crate::containers::mesh::NodeId;
-use crate::containers::mesh::Cell;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
+use crate::containers::mesh::Cell;
+use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
 
@@ -188,7 +188,11 @@ pub struct ElementIter {
 
 impl ElementIter {
     pub(crate) fn new(fespace: Handle<SubFiniteElementSpace>, end: usize) -> Self {
-        Self { fespace, next: 0, end }
+        Self {
+            fespace,
+            next: 0,
+            end,
+        }
     }
 }
 
@@ -222,10 +226,10 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::store::insert;
 
     fn seg2_fes() -> (Handle<Coords>, Vec<Node>, FiniteElementSpace) {

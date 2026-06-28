@@ -1,8 +1,8 @@
 //! Python wrappers for [`crate::containers::mesh::SubMesh`] and [`crate::containers::mesh::Mesh`].
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::NodeId;
 use crate::containers::mesh::ElementType;
+use crate::containers::mesh::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::py::coords::PyCoords;
 use crate::py::node::PyNode;
@@ -289,11 +289,7 @@ impl PyMesh {
 
     /// `mesh.cell(submesh_idx, cell_idx)` → `Cell` view; same thing
     /// as `mesh[submesh_idx][cell_idx]`.
-    fn cell(
-        &self,
-        submesh_idx: usize,
-        cell_idx: usize,
-    ) -> PyResult<crate::py::cell::PyCell> {
+    fn cell(&self, submesh_idx: usize, cell_idx: usize) -> PyResult<crate::py::cell::PyCell> {
         let cell = self.inner.cell(submesh_idx, cell_idx)?;
         Ok(crate::py::cell::PyCell::from_cell(cell))
     }
@@ -345,8 +341,14 @@ impl PyMesh {
             Some(f) => {
                 let comp_ref = component.as_deref();
                 with_field_arg(&f, |arg| {
-                    self.inner
-                        .plot_with_field(Some(view), save_ref, arg, comp_ref, scale, smooth)?;
+                    self.inner.plot_with_field(
+                        Some(view),
+                        save_ref,
+                        arg,
+                        comp_ref,
+                        scale,
+                        smooth,
+                    )?;
                     Ok(())
                 })?;
             }
@@ -356,7 +358,6 @@ impl PyMesh {
         }
         Ok(())
     }
-
 }
 
 crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh, Mesh);

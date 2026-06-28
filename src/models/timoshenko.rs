@@ -337,8 +337,6 @@ mod tests {
         assert!((k.get(n0, "f_w", n0, "theta") - gas / 2.0).abs() < tol);
         assert!((k.get(n1, "f_w", n1, "theta") + gas / 2.0).abs() < tol);
         // Symmetry.
-        assert!(
-            (k.get(n0, "f_w", n0, "theta") - k.get(n0, "m_theta", n0, "w")).abs() < tol
-        );
+        assert!((k.get(n0, "f_w", n0, "theta") - k.get(n0, "m_theta", n0, "w")).abs() < tol);
     }
 }

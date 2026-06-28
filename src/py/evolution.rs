@@ -47,9 +47,7 @@ fn extract_sub_value(value: &Bound<'_, PyAny>) -> PyResult<SubValue> {
 fn sub_value_to_py(py: Python<'_>, value: SubValue) -> PyResult<Py<PyAny>> {
     match value {
         SubValue::Scalar(s) => Ok(PyFloat::new(py, s).into_any().unbind()),
-        SubValue::Node(f) => {
-            Ok(Py::new(py, PySubNodeField { handle: insert(f) })?.into_any())
-        }
+        SubValue::Node(f) => Ok(Py::new(py, PySubNodeField { handle: insert(f) })?.into_any()),
         SubValue::Element(f) => {
             Ok(Py::new(py, PySubElementField { handle: insert(f) })?.into_any())
         }
@@ -78,7 +76,11 @@ impl PySubEvolution {
     /// kind (and, for fields, on the same support).
     #[new]
     #[pyo3(signature = (samples, out_of_range="error"))]
-    fn py_new(py: Python<'_>, samples: Vec<(f64, Py<PyAny>)>, out_of_range: &str) -> PyResult<Self> {
+    fn py_new(
+        py: Python<'_>,
+        samples: Vec<(f64, Py<PyAny>)>,
+        out_of_range: &str,
+    ) -> PyResult<Self> {
         let oor = OutOfRange::from_name(out_of_range)?;
         let mut pairs = Vec::with_capacity(samples.len());
         for (x, v) in samples {
@@ -342,4 +344,10 @@ fn build_view(view: Option<(f64, f64, f64)>, show_axes: bool) -> crate::viz::Vie
     v
 }
 
-crate::impl_aggregate_pymethods!(PyEvolution, PySubEvolution, "Evolution", sub_evolution, Evolution);
+crate::impl_aggregate_pymethods!(
+    PyEvolution,
+    PySubEvolution,
+    "Evolution",
+    sub_evolution,
+    Evolution
+);

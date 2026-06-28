@@ -38,7 +38,10 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     let mut grid: Vec<Node> = Vec::new();
     for j in 0..=N {
         for i in 0..=N {
-            grid.push(Node::create_in(coords.clone(), &[i as f64 * h, j as f64 * h])?);
+            grid.push(Node::create_in(
+                coords.clone(),
+                &[i as f64 * h, j as f64 * h],
+            )?);
         }
     }
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));

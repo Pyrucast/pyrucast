@@ -75,8 +75,14 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     let materials = build::material_field(
         &model,
         &[
-            ("E", E), ("A", A), ("I_y", IY), ("I_z", IZ), ("J", J), ("G", G),
-            ("A_sy", ASY), ("A_sz", ASZ),
+            ("E", E),
+            ("A", A),
+            ("I_y", IY),
+            ("I_z", IZ),
+            ("J", J),
+            ("G", G),
+            ("A_sy", ASY),
+            ("A_sz", ASZ),
         ],
     )?;
 

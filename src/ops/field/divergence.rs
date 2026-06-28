@@ -61,7 +61,12 @@ fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> 
     let unique: Vec<NodeId> = read(&support)?.connectivity().to_vec();
     let conn_pos: Vec<usize> = conn
         .iter()
-        .map(|nid| unique.iter().position(|n| n == nid).expect("support covers conn"))
+        .map(|nid| {
+            unique
+                .iter()
+                .position(|n| n == nid)
+                .expect("support covers conn")
+        })
         .collect();
 
     // d_i += (∇N_i · F) |J| w, accumulated per node.
@@ -144,7 +149,8 @@ mod tests {
         f.set_value(c.id(), "f", -2.0).unwrap();
         let f = NodeField::from_sub(f);
 
-        let mut ff = SubElementField::new(fes.get(0).unwrap(), vec!["Fx".into(), "Fy".into()]).unwrap();
+        let mut ff =
+            SubElementField::new(fes.get(0).unwrap(), vec!["Fx".into(), "Fy".into()]).unwrap();
         ff.set_uniform("Fx", 1.3).unwrap();
         ff.set_uniform("Fy", -0.7).unwrap();
         let mut ef = ElementField::empty();

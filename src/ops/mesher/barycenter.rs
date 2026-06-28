@@ -30,11 +30,7 @@ pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
     for sm_handle in mesh {
         let (coords, element_type, conn) = {
             let sm = read(sm_handle)?;
-            (
-                sm.coords(),
-                sm.element_type(),
-                sm.connectivity().to_vec(),
-            )
+            (sm.coords(), sm.element_type(), sm.connectivity().to_vec())
         };
         let npc = element_type.nodes_per_cell();
         let n_cells = conn.len() / npc;

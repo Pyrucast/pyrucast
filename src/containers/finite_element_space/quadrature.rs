@@ -296,7 +296,9 @@ mod tests {
     fn rejects_poi1() {
         assert!(!QuadratureRule::Gauss.is_compatible_with(ElementType::POI1));
         assert!(QuadratureRule::Gauss.points(ElementType::POI1).is_err());
-        assert!(QuadratureRule::Gauss.point_count(ElementType::POI1).is_err());
+        assert!(QuadratureRule::Gauss
+            .point_count(ElementType::POI1)
+            .is_err());
     }
 
     #[test]

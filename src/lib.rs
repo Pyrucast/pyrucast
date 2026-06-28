@@ -132,7 +132,10 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::behavior::integrate_behavior, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::build::sub_material_field, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::build::material_field, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::build::material_field_per_sub_model, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        py::ops::build::material_field_per_sub_model,
+        m
+    )?)?;
     m.add_class::<py::coords::PyCoords>()?;
     m.add_class::<py::node::PyNode>()?;
     m.add_class::<py::mesh::PySubMesh>()?;

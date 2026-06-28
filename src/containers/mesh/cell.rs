@@ -32,11 +32,11 @@
 
 use std::fmt;
 
-use crate::containers::mesh::NodeId;
 use crate::containers::mesh::ElementType;
-use crate::error::{PyrucastError, Result};
-use crate::containers::mesh::SubMesh;
 use crate::containers::mesh::Node;
+use crate::containers::mesh::NodeId;
+use crate::containers::mesh::SubMesh;
+use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
 
 /// Lightweight view on a single cell of a `SubMesh`.
@@ -190,8 +190,8 @@ impl ExactSizeIterator for CellIter {}
 mod tests {
     use super::*;
     use crate::containers::mesh::Coords;
-    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::mesh::Node;
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::store::insert;
 
     #[test]

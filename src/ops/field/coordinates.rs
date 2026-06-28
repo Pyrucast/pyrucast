@@ -1,7 +1,7 @@
 use crate::aggregate::Aggregate;
 use crate::containers::field::Field;
-use crate::containers::mesh::NodeId;
 use crate::containers::mesh::Mesh;
+use crate::containers::mesh::NodeId;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, write};

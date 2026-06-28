@@ -1,7 +1,7 @@
-use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::Node;
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::error::{PyrucastError, Result};
 
 /// Build a mesh of `n_elems` SEG2 elements along the straight line from
 /// node `a` to node `b`.

@@ -231,12 +231,7 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
         self.resize(size.width.max(1), size.height.max(1));
     }
 
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        _id: WindowId,
-        event: WindowEvent,
-    ) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
                 // Drop the surface and window *before* asking the loop to
@@ -269,7 +264,11 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                     // (and start a slider drag) instead of rotating.
                     if let (Some(fc), Some((cx, cy))) = (self.frame_control, self.cursor) {
                         if let Some(k) = overlay::slider_frame_at(
-                            cx, cy, self.width, self.height, fc.frame_count(),
+                            cx,
+                            cy,
+                            self.width,
+                            self.height,
+                            fc.frame_count(),
                         ) {
                             fc.set_frame(k);
                             self.sliding = true;
@@ -292,7 +291,11 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                 if self.sliding {
                     if let Some(fc) = self.frame_control {
                         if let Some(k) = overlay::slider_frame_at(
-                            x, y, self.width, self.height, fc.frame_count(),
+                            x,
+                            y,
+                            self.width,
+                            self.height,
+                            fc.frame_count(),
                         ) {
                             if k != fc.current() {
                                 fc.set_frame(k);
@@ -494,25 +497,24 @@ pub(crate) fn run_interactive_mesh_field(
     smooth: usize,
     view: View,
 ) -> Result<()> {
-    let drawable =
-        FieldDrawable::new(GeomSource::Mesh(mesh), field, initial_component, scale, smooth);
+    let drawable = FieldDrawable::new(
+        GeomSource::Mesh(mesh),
+        field,
+        initial_component,
+        scale,
+        smooth,
+    );
     let bbox = drawable.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();
         if slot.is_none() {
-            *slot = Some(
-                EventLoop::new()
-                    .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?,
-            );
+            *slot =
+                Some(EventLoop::new().map_err(|e| PyrucastError::Message(format!("winit: {e}")))?);
         }
         let event_loop = slot.as_mut().expect("just initialised");
         event_loop.set_control_flow(ControlFlow::Wait);
-        let mut app = App::new_with_button(
-            &drawable,
-            view,
-            bbox,
-            Some(&drawable as &dyn FieldButton),
-        );
+        let mut app =
+            App::new_with_button(&drawable, view, bbox, Some(&drawable as &dyn FieldButton));
         event_loop
             .run_app_on_demand(&mut app)
             .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?;
@@ -541,19 +543,13 @@ pub(crate) fn run_interactive_submesh_field(
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();
         if slot.is_none() {
-            *slot = Some(
-                EventLoop::new()
-                    .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?,
-            );
+            *slot =
+                Some(EventLoop::new().map_err(|e| PyrucastError::Message(format!("winit: {e}")))?);
         }
         let event_loop = slot.as_mut().expect("just initialised");
         event_loop.set_control_flow(ControlFlow::Wait);
-        let mut app = App::new_with_button(
-            &drawable,
-            view,
-            bbox,
-            Some(&drawable as &dyn FieldButton),
-        );
+        let mut app =
+            App::new_with_button(&drawable, view, bbox, Some(&drawable as &dyn FieldButton));
         event_loop
             .run_app_on_demand(&mut app)
             .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?;
@@ -577,10 +573,8 @@ pub(crate) fn run_interactive<D: Drawable>(object: &D, view: View) -> Result<()>
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();
         if slot.is_none() {
-            *slot = Some(
-                EventLoop::new()
-                    .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?,
-            );
+            *slot =
+                Some(EventLoop::new().map_err(|e| PyrucastError::Message(format!("winit: {e}")))?);
         }
         let event_loop = slot.as_mut().expect("just initialised");
         event_loop.set_control_flow(ControlFlow::Wait);
@@ -624,11 +618,9 @@ impl<'a> EvolutionFrames<'a> {
         smooth: usize,
     ) -> Result<Self> {
         let components = match &frames[0] {
-            crate::viz::FrameField::Node(f) => {
-                crate::viz::field_color::FieldData::Node(f.view()?)
-                    .components()
-                    .to_vec()
-            }
+            crate::viz::FrameField::Node(f) => crate::viz::field_color::FieldData::Node(f.view()?)
+                .components()
+                .to_vec(),
             crate::viz::FrameField::Element(f) => {
                 crate::viz::field_color::FieldData::Element(f.view()?)
                     .components()
@@ -779,9 +771,8 @@ pub(crate) fn run_interactive_evolution(
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();
         if slot.is_none() {
-            *slot = Some(
-                EventLoop::new().map_err(|e| PyrucastError::Message(format!("winit: {e}")))?,
-            );
+            *slot =
+                Some(EventLoop::new().map_err(|e| PyrucastError::Message(format!("winit: {e}")))?);
         }
         let event_loop = slot.as_mut().expect("just initialised");
         event_loop.set_control_flow(ControlFlow::Wait);

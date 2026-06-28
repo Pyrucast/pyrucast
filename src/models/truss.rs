@@ -182,7 +182,11 @@ fn direction_cosines(
     let (conn, n_cells, coords) = {
         let s = read(fespace)?;
         let sm = s.submesh();
-        (read(&sm)?.connectivity().to_vec(), s.cell_count()?, s.coords()?)
+        (
+            read(&sm)?.connectivity().to_vec(),
+            s.cell_count()?,
+            s.coords()?,
+        )
     };
     let c = read(&coords)?;
     let mut out = Vec::with_capacity(n_cells);
@@ -207,11 +211,17 @@ pub fn assemble_stiffness(
     let (conn, n_cells, coords) = {
         let s = read(fespace)?;
         let sm = s.submesh();
-        (read(&sm)?.connectivity().to_vec(), s.cell_count()?, s.coords()?)
+        (
+            read(&sm)?.connectivity().to_vec(),
+            s.cell_count()?,
+            s.coords()?,
+        )
     };
     let coords: Vec<Vec<f64>> = {
         let c = read(&coords)?;
-        conn.iter().map(|&nid| Ok(c.coord(nid)?.to_vec())).collect::<Result<_>>()?
+        conn.iter()
+            .map(|&nid| Ok(c.coord(nid)?.to_vec()))
+            .collect::<Result<_>>()?
     };
     let (es, areas): (Vec<f64>, Vec<f64>) = {
         let m = read(material)?;
@@ -277,7 +287,8 @@ mod tests {
     }
 
     fn material(truss: &Truss, e: f64, area: f64) -> Handle<SubElementField> {
-        let mut m = SubElementField::new(truss.fespace.clone(), vec!["E".into(), "A".into()]).unwrap();
+        let mut m =
+            SubElementField::new(truss.fespace.clone(), vec!["E".into(), "A".into()]).unwrap();
         m.set_uniform("E", e).unwrap();
         m.set_uniform("A", area).unwrap();
         insert(m)

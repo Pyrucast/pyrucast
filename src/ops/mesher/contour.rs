@@ -122,12 +122,15 @@ pub fn contour(mesh: &Mesh) -> Result<Mesh> {
         let mut chain = Vec::new();
         let mut current = start;
         loop {
-            let outs = adj.get_mut(&current).filter(|o| !o.is_empty()).ok_or_else(|| {
-                PyrucastError::Message(format!(
-                    "contour: boundary is not a closed loop (open or non-manifold at node {})",
-                    current
-                ))
-            })?;
+            let outs = adj
+                .get_mut(&current)
+                .filter(|o| !o.is_empty())
+                .ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "contour: boundary is not a closed loop (open or non-manifold at node {})",
+                        current
+                    ))
+                })?;
             let next = outs.remove(0);
             chain.push(current);
             if next == start {
@@ -243,7 +246,9 @@ mod tests {
         assert_eq!(sizes, vec![4, 12]);
 
         // Outer loop CCW (area > 0), hole loop CW (area < 0).
-        let areas: Vec<f64> = (0..2).map(|s| signed_area(&coords, &loop_of(&ct, s))).collect();
+        let areas: Vec<f64> = (0..2)
+            .map(|s| signed_area(&coords, &loop_of(&ct, s)))
+            .collect();
         assert!(areas.iter().any(|&a| a > 0.0), "an outer (CCW) loop");
         assert!(areas.iter().any(|&a| a < 0.0), "a hole (CW) loop");
     }

@@ -140,10 +140,14 @@ impl Interpolation {
             (Self::Lagrange1, ElementType::QUA4) => {
                 let (a, b) = (xi[0], xi[1]);
                 Ok(vec![
-                    -0.25 * (1.0 - b), -0.25 * (1.0 - a), // dN1
-                    0.25 * (1.0 - b), -0.25 * (1.0 + a), // dN2
-                    0.25 * (1.0 + b), 0.25 * (1.0 + a), // dN3
-                    -0.25 * (1.0 + b), 0.25 * (1.0 - a), // dN4
+                    -0.25 * (1.0 - b),
+                    -0.25 * (1.0 - a), // dN1
+                    0.25 * (1.0 - b),
+                    -0.25 * (1.0 + a), // dN2
+                    0.25 * (1.0 + b),
+                    0.25 * (1.0 + a), // dN3
+                    -0.25 * (1.0 + b),
+                    0.25 * (1.0 - a), // dN4
                 ])
             }
             (Self::Lagrange1, ElementType::TET4) => Ok(vec![
@@ -301,12 +305,7 @@ mod tests {
             ElementType::TRI3,
             &[vec![0.0, 0.0], vec![1.0, 0.0], vec![0.0, 1.0]],
         );
-        for (a, b) in [
-            (0.25, 0.25),
-            (1.0 / 3.0, 1.0 / 3.0),
-            (0.5, 0.0),
-            (0.0, 0.5),
-        ] {
+        for (a, b) in [(0.25, 0.25), (1.0 / 3.0, 1.0 / 3.0), (0.5, 0.0), (0.0, 0.5)] {
             check_partition_of_unity(Interpolation::Lagrange1, ElementType::TRI3, &[a, b]);
             check_derivatives_sum_to_zero(Interpolation::Lagrange1, ElementType::TRI3, &[a, b]);
         }
@@ -392,7 +391,10 @@ mod tests {
             Interpolation::from_name("lagrange1"),
             Some(Interpolation::Lagrange1)
         );
-        assert_eq!(Interpolation::from_name("LAG1"), Some(Interpolation::Lagrange1));
+        assert_eq!(
+            Interpolation::from_name("LAG1"),
+            Some(Interpolation::Lagrange1)
+        );
         assert_eq!(Interpolation::from_name("unknown"), None);
     }
 }

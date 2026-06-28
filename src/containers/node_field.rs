@@ -60,13 +60,13 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::field::SubField;
-use crate::containers::mesh::{Coords, NodeId};
 use crate::containers::mesh::ElementType;
-use crate::error::{PyrucastError, Result};
+use crate::containers::mesh::{Coords, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::store::{insert, read, Handle};
+use crate::error::{PyrucastError, Result};
 #[cfg(test)]
 use crate::store::write;
+use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Index, IndexMut};
@@ -190,17 +190,17 @@ impl SubNodeField {
 
     /// Read a value by `(NodeId, component_index)`.
     pub fn get_by_node(&self, nid: NodeId, comp_idx: usize) -> Result<f64> {
-        let i = self.index_of(nid).ok_or_else(|| {
-            PyrucastError::Message(format!("node {} not in field support", nid))
-        })?;
+        let i = self
+            .index_of(nid)
+            .ok_or_else(|| PyrucastError::Message(format!("node {} not in field support", nid)))?;
         self.get(i, comp_idx)
     }
 
     /// Write a value by `(NodeId, component_index)`.
     pub fn set_by_node(&mut self, nid: NodeId, comp_idx: usize, value: f64) -> Result<()> {
-        let i = self.index_of(nid).ok_or_else(|| {
-            PyrucastError::Message(format!("node {} not in field support", nid))
-        })?;
+        let i = self
+            .index_of(nid)
+            .ok_or_else(|| PyrucastError::Message(format!("node {} not in field support", nid)))?;
         self.set(i, comp_idx, value)
     }
 
@@ -208,7 +208,6 @@ impl SubNodeField {
     pub fn index_of(&self, nid: NodeId) -> Option<usize> {
         self.nodes.iter().position(|&n| n == nid)
     }
-
 
     /// Build a new POI1 [`SubMesh`] whose cells are exactly the support nodes
     /// of this field, in the same order. Each node is increfed by the new
@@ -305,18 +304,18 @@ impl SubNodeField {
 
     /// Read a value by `(NodeId, component name)`.
     pub fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
-        let ni = self.index_of(nid).ok_or_else(|| {
-            PyrucastError::Message(format!("node {} not in field support", nid))
-        })?;
+        let ni = self
+            .index_of(nid)
+            .ok_or_else(|| PyrucastError::Message(format!("node {} not in field support", nid)))?;
         let ci = self.component_index_or_err(component)?;
         Ok(self.values[ni * self.components.len() + ci])
     }
 
     /// Write a value by `(NodeId, component name)`.
     pub fn set_value(&mut self, nid: NodeId, component: &str, value: f64) -> Result<()> {
-        let ni = self.index_of(nid).ok_or_else(|| {
-            PyrucastError::Message(format!("node {} not in field support", nid))
-        })?;
+        let ni = self
+            .index_of(nid)
+            .ok_or_else(|| PyrucastError::Message(format!("node {} not in field support", nid)))?;
         let ci = self.component_index_or_err(component)?;
         let ncomp = self.components.len();
         self.values[ni * ncomp + ci] = value;
@@ -931,9 +930,19 @@ mod tests {
         f.set_value(nodes[0].id(), "UX", 1.25).unwrap();
 
         let dumped = f.render(&DumpOptions::default());
-        assert!(dumped.contains("UX") && dumped.contains("UY"), "headers:\n{dumped}");
-        assert!(dumped.contains("1.250"), "value at default precision:\n{dumped}");
-        assert_eq!(dumped.lines().count(), 4, "summary + header + 2 rows:\n{dumped}");
+        assert!(
+            dumped.contains("UX") && dumped.contains("UY"),
+            "headers:\n{dumped}"
+        );
+        assert!(
+            dumped.contains("1.250"),
+            "value at default precision:\n{dumped}"
+        );
+        assert_eq!(
+            dumped.lines().count(),
+            4,
+            "summary + header + 2 rows:\n{dumped}"
+        );
 
         // Debug must stay bounded: structure, never the value buffer.
         let dbg = format!("{f:?}");
@@ -982,8 +991,8 @@ mod tests {
     #[test]
     fn nf_with_per_zone_components() {
         let (_cfg, nodes, mesh) = make_two_zone_mesh();
-        let f = NodeField::with(&mesh, &[vec!["T".into()], vec!["UX".into(), "UY".into()]])
-            .unwrap();
+        let f =
+            NodeField::with(&mesh, &[vec!["T".into()], vec!["UX".into(), "UY".into()]]).unwrap();
         use crate::containers::field::Field;
         assert_eq!(Field::components(&f).unwrap(), vec!["T", "UX", "UY"]);
         // T exists on zone 0 only: defined at n0, absent at n3.
@@ -1004,12 +1013,21 @@ mod tests {
         let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
         let interface = nodes[1].id();
         // Diverging interface values: reads pick sub 0, check() errors.
-        write(&f.get(0).unwrap()).unwrap().set_value(interface, "T", 1.0).unwrap();
-        write(&f.get(1).unwrap()).unwrap().set_value(interface, "T", 2.0).unwrap();
+        write(&f.get(0).unwrap())
+            .unwrap()
+            .set_value(interface, "T", 1.0)
+            .unwrap();
+        write(&f.get(1).unwrap())
+            .unwrap()
+            .set_value(interface, "T", 2.0)
+            .unwrap();
         assert_eq!(f.value(interface, "T").unwrap(), 1.0);
         assert!(f.check().is_err());
         // Re-aligned values: check() passes.
-        write(&f.get(1).unwrap()).unwrap().set_value(interface, "T", 1.0).unwrap();
+        write(&f.get(1).unwrap())
+            .unwrap()
+            .set_value(interface, "T", 1.0)
+            .unwrap();
         f.check().unwrap();
     }
 
@@ -1130,7 +1148,7 @@ mod tests {
         assert_eq!(g.get(0, 0).unwrap(), 11.0);
         assert_eq!(g.get(1, 1).unwrap(), 13.0);
         assert_eq!(g.get(0, 1).unwrap(), 10.0); // 0.0 + 10.0
-        // f is still usable (reference version was used)
+                                                // f is still usable (reference version was used)
         assert_eq!(f.get(0, 0).unwrap(), 1.0);
     }
 
@@ -1143,5 +1161,4 @@ mod tests {
         assert_eq!((f.clone() * 3.0).get(0, 0).unwrap(), 36.0);
         assert_eq!((f * 4.0 / 2.0).get(0, 0).unwrap(), 24.0);
     }
-
 }

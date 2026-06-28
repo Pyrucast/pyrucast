@@ -45,7 +45,14 @@ pub fn consolidate_element(field: &ElementField) -> Result<ElementField> {
                 s.values().to_vec(),
             )
         };
-        snaps.push(Snap { handle: h.clone(), fespace, components, n_cells, n_gauss, values });
+        snaps.push(Snap {
+            handle: h.clone(),
+            fespace,
+            components,
+            n_cells,
+            n_gauss,
+            values,
+        });
     }
 
     // Group sub indices by FE-subspace handle identity, first-seen order.
@@ -151,8 +158,14 @@ mod tests {
         let fes = one_tri3_fes();
         let a = field_on(&fes, vec!["E".into()]);
         let b = field_on(&fes, vec!["nu".into()]);
-        crate::store::write(&a.get(0).unwrap()).unwrap().set_uniform("E", 210.0).unwrap();
-        crate::store::write(&b.get(0).unwrap()).unwrap().set_uniform("nu", 0.3).unwrap();
+        crate::store::write(&a.get(0).unwrap())
+            .unwrap()
+            .set_uniform("E", 210.0)
+            .unwrap();
+        crate::store::write(&b.get(0).unwrap())
+            .unwrap()
+            .set_uniform("nu", 0.3)
+            .unwrap();
 
         let c = consolidate_element(&two_zone(&a, &b)).unwrap();
         assert_eq!(c.len(), 1, "same support ⇒ one fused zone");
@@ -167,8 +180,14 @@ mod tests {
         let fes = one_tri3_fes();
         let a = field_on(&fes, vec!["E".into()]);
         let b = field_on(&fes, vec!["E".into()]);
-        crate::store::write(&a.get(0).unwrap()).unwrap().set_uniform("E", 1.0).unwrap();
-        crate::store::write(&b.get(0).unwrap()).unwrap().set_uniform("E", 2.0).unwrap();
+        crate::store::write(&a.get(0).unwrap())
+            .unwrap()
+            .set_uniform("E", 1.0)
+            .unwrap();
+        crate::store::write(&b.get(0).unwrap())
+            .unwrap()
+            .set_uniform("E", 2.0)
+            .unwrap();
         // The union's finalize fuses and detects the conflict → `|` errors.
         assert!(a.union(&b).is_err());
     }

@@ -58,8 +58,14 @@ fn subspace_beam_deformation(
     let mut field = SubElementField::new(fespace.clone(), vec!["kappa".into(), "gamma".into()])?;
     for cell in 0..n_cells {
         let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-        let w: Vec<f64> = ids.iter().map(|&id| view.value(id, "w")).collect::<Result<_>>()?;
-        let th: Vec<f64> = ids.iter().map(|&id| view.value(id, "theta")).collect::<Result<_>>()?;
+        let w: Vec<f64> = ids
+            .iter()
+            .map(|&id| view.value(id, "w"))
+            .collect::<Result<_>>()?;
+        let th: Vec<f64> = ids
+            .iter()
+            .map(|&id| view.value(id, "theta"))
+            .collect::<Result<_>>()?;
 
         // Linear element ⇒ θ', w' are constant: use the first Gauss point's
         // dN/dx. θ at the centre (reduced point) is the nodal average.

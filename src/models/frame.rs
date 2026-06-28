@@ -175,11 +175,17 @@ pub fn assemble_stiffness(
     let (conn, n_cells, coords) = {
         let s = read(fespace)?;
         let sm = s.submesh();
-        (read(&sm)?.connectivity().to_vec(), s.cell_count()?, s.coords()?)
+        (
+            read(&sm)?.connectivity().to_vec(),
+            s.cell_count()?,
+            s.coords()?,
+        )
     };
     let coords: Vec<Vec<f64>> = {
         let c = read(&coords)?;
-        conn.iter().map(|&nid| Ok(c.coord(nid)?.to_vec())).collect::<Result<_>>()?
+        conn.iter()
+            .map(|&nid| Ok(c.coord(nid)?.to_vec()))
+            .collect::<Result<_>>()?
     };
     let mats: Vec<[f64; 3]> = {
         let m = read(material)?;
@@ -258,7 +264,14 @@ mod tests {
         (frame, a.id(), b.id())
     }
 
-    fn material(frame: &Frame, e: f64, area: f64, i: f64, g: f64, a_s: f64) -> Handle<SubElementField> {
+    fn material(
+        frame: &Frame,
+        e: f64,
+        area: f64,
+        i: f64,
+        g: f64,
+        a_s: f64,
+    ) -> Handle<SubElementField> {
         let mut m = SubElementField::new(
             frame.fespace.clone(),
             vec!["E".into(), "A".into(), "I".into(), "G".into(), "A_s".into()],

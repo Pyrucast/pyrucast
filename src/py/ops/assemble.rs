@@ -54,7 +54,11 @@ pub fn flux(
     let sub = if let Ok(value) = density.extract::<f64>() {
         crate::ops::assemble::flux(&fespace.handle, FluxDensity::Uniform(value), component)?
     } else if let Ok(field) = density.extract::<PyRef<PySubElementField>>() {
-        crate::ops::assemble::flux(&fespace.handle, FluxDensity::Field(&field.handle), component)?
+        crate::ops::assemble::flux(
+            &fespace.handle,
+            FluxDensity::Field(&field.handle),
+            component,
+        )?
     } else {
         return Err(PyValueError::new_err(
             "flux: `density` doit être un float ou un SubElementField",

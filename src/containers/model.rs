@@ -112,13 +112,13 @@
 //! assert_eq!(k.n_cols().unwrap(), 3);
 //! ```
 
-use crate::containers::mesh::NodeId;
+use crate::aggregate::Aggregate;
 use crate::containers::element_field::SubElementField;
-use crate::error::Result;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::Mesh;
-use crate::aggregate::Aggregate;
+use crate::containers::mesh::NodeId;
+use crate::error::Result;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
     dirichlet, elasticity, frame, frame3d, heat_conduction, timoshenko, truss, Physics,
@@ -201,7 +201,9 @@ impl SubModel {
         fespace: Handle<SubFiniteElementSpace>,
         model: ElasticityModel,
     ) -> Result<Self> {
-        Ok(SubModel::Elasticity(elasticity::Elasticity::new(fespace, model)?))
+        Ok(SubModel::Elasticity(elasticity::Elasticity::new(
+            fespace, model,
+        )?))
     }
 
     /// Timoshenko-beam sub-model on a 1-D `SEG2` FE subspace (full Gauss).
@@ -505,7 +507,6 @@ impl Model {
         }
         Ok(union_names(all))
     }
-
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -525,15 +526,15 @@ fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::field::SubField;
     use crate::aggregate::Aggregate;
+    use crate::containers::element_field::ElementField;
+    use crate::containers::field::SubField;
+    use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::SubMesh;
-    use crate::containers::element_field::ElementField;
-    use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::containers::mesh::Node;
+    use crate::containers::mesh::SubMesh;
     use crate::ops::assemble;
     use crate::store::{insert, write};
 
@@ -566,15 +567,8 @@ mod tests {
             let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
             model
                 .add_sub(insert(
-                    SubModel::dirichlet(
-                        "T".into(),
-                        "q".into(),
-                        &imposed,
-                        &multiplier,
-                        None,
-                        None,
-                    )
-                    .unwrap(),
+                    SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+                        .unwrap(),
                 ))
                 .unwrap();
         }
@@ -717,8 +711,7 @@ mod tests {
         assert_eq!(read(&coords).unwrap().refcount(mult_id), 1);
 
         let sub =
-            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
-                .unwrap();
+            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
         // Sharing the submesh handles does not touch node refcounts.
         assert_eq!(read(&coords).unwrap().refcount(mult_id), 1);
         assert_eq!(sub.multiplier_nodes().unwrap(), vec![mult_id]);
@@ -738,9 +731,7 @@ mod tests {
     #[test]
     fn dirichlet_empty_imposed_mesh_rejected() {
         let empty = Mesh::empty();
-        assert!(
-            SubModel::dirichlet("T".into(), "q".into(), &empty, &empty, None, None).is_err()
-        );
+        assert!(SubModel::dirichlet("T".into(), "q".into(), &empty, &empty, None, None).is_err());
     }
 
     #[test]
@@ -924,8 +915,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
         let dir =
-            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
-                .unwrap();
+            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
         assert!(dir.material_components().is_none());
     }
 

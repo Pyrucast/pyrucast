@@ -63,10 +63,10 @@ pub use interpolation::Interpolation;
 pub use quadrature::QuadratureRule;
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{Coords, NodeId};
-use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::ElementType;
+use crate::containers::mesh::{Coords, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -352,10 +352,7 @@ impl fmt::Debug for SubFiniteElementSpace {
 
 impl fmt::Display for SubFiniteElementSpace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let et = self
-            .element_type()
-            .map(|e| e.name())
-            .unwrap_or("?");
+        let et = self.element_type().map(|e| e.name()).unwrap_or("?");
         write!(
             f,
             "SubFiniteElementSpace<{}, {}, {}>: {} Gauss point(s)",
@@ -403,7 +400,12 @@ pub struct FiniteElementSpace {
     subs: Vec<Handle<SubFiniteElementSpace>>,
 }
 
-crate::impl_aggregate!(FiniteElementSpace, SubFiniteElementSpace, subspace, "subspace(s)");
+crate::impl_aggregate!(
+    FiniteElementSpace,
+    SubFiniteElementSpace,
+    subspace,
+    "subspace(s)"
+);
 crate::impl_aggregate_dump!(FiniteElementSpace);
 
 impl FiniteElementSpace {
@@ -413,10 +415,7 @@ impl FiniteElementSpace {
     ///
     /// `choices.len()` must equal `mesh.len()`. The mesh must
     /// have at least one submesh and none of them may be POI1.
-    pub fn with(
-        mesh: &Mesh,
-        choices: &[(Interpolation, QuadratureRule)],
-    ) -> Result<Self> {
+    pub fn with(mesh: &Mesh, choices: &[(Interpolation, QuadratureRule)]) -> Result<Self> {
         let n_sub = mesh.len();
         if n_sub == 0 {
             return Err(PyrucastError::Message(
@@ -523,8 +522,7 @@ fn det_small(m: &[f64], n: usize) -> f64 {
         1 => m[0],
         2 => m[0] * m[3] - m[1] * m[2],
         3 => {
-            m[0] * (m[4] * m[8] - m[5] * m[7])
-                - m[1] * (m[3] * m[8] - m[5] * m[6])
+            m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6])
                 + m[2] * (m[3] * m[7] - m[4] * m[6])
         }
         _ => unreachable!("det_small: only n ∈ {{1,2,3}} supported"),
@@ -634,7 +632,8 @@ mod tests {
             sm.add_cell(&[n.id()]).unwrap();
             insert(sm)
         };
-        let err = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap_err();
+        let err = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
     }
 
@@ -650,7 +649,10 @@ mod tests {
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
-        assert!(SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).is_err());
+        assert!(
+            SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+                .is_err()
+        );
     }
 
     // ── Jacobian: closed-form checks ────────────────────────────────────────
@@ -666,7 +668,8 @@ mod tests {
             sm.add_cell(&[a.id(), b.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
         for g in 0..sub.gauss_count() {
             let jac = sub.jacobian(0, g).unwrap();
             assert_eq!(jac.len(), 1);
@@ -687,7 +690,8 @@ mod tests {
             sm.add_cell(&[a.id(), b.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
         for g in 0..sub.gauss_count() {
             let jac = sub.jacobian(0, g).unwrap();
             assert_eq!(jac.len(), 2);
@@ -710,7 +714,8 @@ mod tests {
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
         for g in 0..sub.gauss_count() {
             let dj = sub.det_jacobian(0, g).unwrap();
             assert!((dj - 12.0).abs() < 1e-12);
@@ -730,7 +735,8 @@ mod tests {
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
         for g in 0..sub.gauss_count() {
             let dj = sub.det_jacobian(0, g).unwrap();
             assert!((dj - 12.0).abs() < 1e-12);
@@ -753,7 +759,8 @@ mod tests {
             sm.add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
         // Integral of |J| over reference square should equal physical area = 1.
         let mut area = 0.0;
         for g in 0..sub.gauss_count() {
@@ -781,10 +788,12 @@ mod tests {
         .collect();
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::HEX8);
-            sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+            sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())
+                .unwrap();
             insert(sm)
         };
-        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
         let mut vol = 0.0;
         for g in 0..sub.gauss_count() {
             vol += sub.gauss_weight(g).unwrap() * sub.det_jacobian(0, g).unwrap();
@@ -807,7 +816,8 @@ mod tests {
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
         for g in 0..sub.gauss_count() {
             let dn = sub.dn_dx(0, g).unwrap();
             // ∂N_1/∂x = -1/3, ∂N_1/∂y = -1/4
@@ -836,13 +846,17 @@ mod tests {
             sm.add_cell(&[a.id(), b.id()]).unwrap();
             insert(sm)
         };
-        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
 
         let dj_before = sub.det_jacobian(0, 0).unwrap();
         assert!((dj_before - 0.5).abs() < 1e-12);
 
         // Stretch the SEG2 to length 4 (move node b from x=1 to x=4).
-        write(&coords).unwrap().set_coord(b.id(), &[4.0, 0.0]).unwrap();
+        write(&coords)
+            .unwrap()
+            .set_coord(b.id(), &[4.0, 0.0])
+            .unwrap();
 
         let dj_after = sub.det_jacobian(0, 0).unwrap();
         assert!((dj_after - 2.0).abs() < 1e-12);

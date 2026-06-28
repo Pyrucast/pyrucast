@@ -1,5 +1,5 @@
-use crate::error::Result;
 use crate::containers::mesh::Mesh;
+use crate::error::Result;
 
 /// Sweep two SEG2 meshes into a QUA4 mesh by building `n_layers` layers.
 ///

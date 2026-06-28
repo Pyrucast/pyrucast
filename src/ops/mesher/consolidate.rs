@@ -1,6 +1,6 @@
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::NodeId;
 use crate::containers::mesh::ElementType;
+use crate::containers::mesh::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
 use crate::store::{insert, read};
@@ -94,7 +94,11 @@ mod tests {
 
         let c2 = consolidate(&mesh).unwrap();
         assert_eq!(c2.len(), 1, "must merge the two TRI3 submeshes");
-        assert_eq!(c2.cell_count().unwrap(), 2, "two distinct cells must be kept");
+        assert_eq!(
+            c2.cell_count().unwrap(),
+            2,
+            "two distinct cells must be kept"
+        );
         assert_eq!(c2.element_types().unwrap(), vec![ElementType::TRI3]);
     }
 

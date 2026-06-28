@@ -102,18 +102,24 @@ pub enum DofOrdering {
 
 impl DofOrdering {
     /// `(node_local, var_idx)` → flat matrix index.
-    pub fn to_index(self, node_local: usize, var_idx: usize, n_nodes: usize, n_vars: usize) -> usize {
+    pub fn to_index(
+        self,
+        node_local: usize,
+        var_idx: usize,
+        n_nodes: usize,
+        n_vars: usize,
+    ) -> usize {
         match self {
-            DofOrdering::VarsThenNodes  => var_idx  * n_nodes + node_local,
-            DofOrdering::NodesThenVars  => node_local * n_vars  + var_idx,
+            DofOrdering::VarsThenNodes => var_idx * n_nodes + node_local,
+            DofOrdering::NodesThenVars => node_local * n_vars + var_idx,
         }
     }
 
     /// flat matrix index → `(node_local, var_idx)`.
     pub fn from_index(self, idx: usize, n_nodes: usize, n_vars: usize) -> (usize, usize) {
         match self {
-            DofOrdering::VarsThenNodes  => (idx % n_nodes, idx / n_nodes),
-            DofOrdering::NodesThenVars  => (idx / n_vars,  idx % n_vars),
+            DofOrdering::VarsThenNodes => (idx % n_nodes, idx / n_nodes),
+            DofOrdering::NodesThenVars => (idx / n_vars, idx % n_vars),
         }
     }
 }
@@ -169,10 +175,8 @@ impl SubMatrix {
         ordering: DofOrdering,
         symmetric: bool,
     ) -> Result<Self> {
-        let row_nodes: Vec<NodeId> =
-            read(&row_support)?.connectivity().to_vec();
-        let col_nodes: Vec<NodeId> =
-            read(&col_support)?.connectivity().to_vec();
+        let row_nodes: Vec<NodeId> = read(&row_support)?.connectivity().to_vec();
+        let col_nodes: Vec<NodeId> = read(&col_support)?.connectivity().to_vec();
         let nrows = row_nodes.len() * dual_vars.len();
         let ncols = col_nodes.len() * primal_vars.len();
         Ok(Self {
@@ -250,7 +254,7 @@ impl SubMatrix {
     /// row index `0..n_rows`.
     pub fn row_dofs(&self) -> Vec<(NodeId, String)> {
         let n_nodes = self.row_nodes.len();
-        let n_vars  = self.dual_vars.len();
+        let n_vars = self.dual_vars.len();
         (0..self.coo.nrows())
             .map(|i| {
                 let (nl, vi) = self.ordering.from_index(i, n_nodes, n_vars);
@@ -263,7 +267,7 @@ impl SubMatrix {
     /// each column index `0..n_cols`.
     pub fn col_dofs(&self) -> Vec<(NodeId, String)> {
         let n_nodes = self.col_nodes.len();
-        let n_vars  = self.primal_vars.len();
+        let n_vars = self.primal_vars.len();
         (0..self.coo.ncols())
             .map(|i| {
                 let (nl, vi) = self.ordering.from_index(i, n_nodes, n_vars);
@@ -281,28 +285,48 @@ impl SubMatrix {
     pub fn add_entry(
         &mut self,
         row_node: NodeId,
-        row_var:  &str,
+        row_var: &str,
         col_node: NodeId,
-        col_var:  &str,
-        value:    f64,
+        col_var: &str,
+        value: f64,
     ) -> Result<()> {
         let n_rn = self.row_nodes.len();
         let n_dv = self.dual_vars.len();
         let n_cn = self.col_nodes.len();
         let n_pv = self.primal_vars.len();
 
-        let rnl = self.row_nodes.iter().position(|&n| n == row_node)
-            .ok_or_else(|| PyrucastError::Message(
-                format!("add_entry: row node {row_node:?} not in row_support")))?;
-        let rvi = self.dual_vars.iter().position(|v| v == row_var)
-            .ok_or_else(|| PyrucastError::Message(
-                format!("add_entry: row var '{row_var}' not in dual_vars")))?;
-        let cnl = self.col_nodes.iter().position(|&n| n == col_node)
-            .ok_or_else(|| PyrucastError::Message(
-                format!("add_entry: col node {col_node:?} not in col_support")))?;
-        let cvi = self.primal_vars.iter().position(|v| v == col_var)
-            .ok_or_else(|| PyrucastError::Message(
-                format!("add_entry: col var '{col_var}' not in primal_vars")))?;
+        let rnl = self
+            .row_nodes
+            .iter()
+            .position(|&n| n == row_node)
+            .ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "add_entry: row node {row_node:?} not in row_support"
+                ))
+            })?;
+        let rvi = self
+            .dual_vars
+            .iter()
+            .position(|v| v == row_var)
+            .ok_or_else(|| {
+                PyrucastError::Message(format!("add_entry: row var '{row_var}' not in dual_vars"))
+            })?;
+        let cnl = self
+            .col_nodes
+            .iter()
+            .position(|&n| n == col_node)
+            .ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "add_entry: col node {col_node:?} not in col_support"
+                ))
+            })?;
+        let cvi = self
+            .primal_vars
+            .iter()
+            .position(|v| v == col_var)
+            .ok_or_else(|| {
+                PyrucastError::Message(format!("add_entry: col var '{col_var}' not in primal_vars"))
+            })?;
 
         let ri = self.ordering.to_index(rnl, rvi, n_rn, n_dv);
         let ci = self.ordering.to_index(cnl, cvi, n_cn, n_pv);
@@ -312,27 +336,35 @@ impl SubMatrix {
 
     /// Sum of all entries at `(row_node, row_var) × (col_node, col_var)`.
     /// Returns `0.0` if the DOF pair is unknown or has no entry.
-    pub fn get(
-        &self,
-        row_node: NodeId,
-        row_var:  &str,
-        col_node: NodeId,
-        col_var:  &str,
-    ) -> f64 {
+    pub fn get(&self, row_node: NodeId, row_var: &str, col_node: NodeId, col_var: &str) -> f64 {
         let n_rn = self.row_nodes.len();
         let n_dv = self.dual_vars.len();
         let n_cn = self.col_nodes.len();
         let n_pv = self.primal_vars.len();
 
-        let rnl = match self.row_nodes.iter().position(|&n| n == row_node) { Some(i) => i, None => return 0.0 };
-        let rvi = match self.dual_vars.iter().position(|v| v == row_var)   { Some(i) => i, None => return 0.0 };
-        let cnl = match self.col_nodes.iter().position(|&n| n == col_node) { Some(i) => i, None => return 0.0 };
-        let cvi = match self.primal_vars.iter().position(|v| v == col_var) { Some(i) => i, None => return 0.0 };
+        let rnl = match self.row_nodes.iter().position(|&n| n == row_node) {
+            Some(i) => i,
+            None => return 0.0,
+        };
+        let rvi = match self.dual_vars.iter().position(|v| v == row_var) {
+            Some(i) => i,
+            None => return 0.0,
+        };
+        let cnl = match self.col_nodes.iter().position(|&n| n == col_node) {
+            Some(i) => i,
+            None => return 0.0,
+        };
+        let cvi = match self.primal_vars.iter().position(|v| v == col_var) {
+            Some(i) => i,
+            None => return 0.0,
+        };
 
         let ri = self.ordering.to_index(rnl, rvi, n_rn, n_dv);
         let ci = self.ordering.to_index(cnl, cvi, n_cn, n_pv);
 
-        self.coo.row_indices().iter()
+        self.coo
+            .row_indices()
+            .iter()
             .zip(self.coo.col_indices())
             .zip(self.coo.values())
             .filter(|&((&r, &c), _)| r == ri && c == ci)
@@ -348,7 +380,9 @@ impl SubMatrix {
         let n_cn = self.col_nodes.len();
         let n_pv = self.primal_vars.len();
 
-        self.coo.row_indices().iter()
+        self.coo
+            .row_indices()
+            .iter()
             .zip(self.coo.col_indices())
             .zip(self.coo.values())
             .map(|((&ri, &ci), &v)| {
@@ -383,7 +417,10 @@ impl SubMatrix {
         let nr = self.coo.nrows();
         let nc = self.coo.ncols();
         let mut out = DMatrix::<f64>::zeros(nr, nc);
-        for ((&r, &c), &v) in self.coo.row_indices().iter()
+        for ((&r, &c), &v) in self
+            .coo
+            .row_indices()
+            .iter()
             .zip(self.coo.col_indices())
             .zip(self.coo.values())
         {
@@ -412,7 +449,8 @@ impl SubMatrix {
         if x.len() != self.n_cols() {
             return Err(PyrucastError::Message(format!(
                 "mul_dense: x has length {} but sub-matrix has {} columns",
-                x.len(), self.n_cols()
+                x.len(),
+                self.n_cols()
             )));
         }
         let csr = self.to_csr();
@@ -425,13 +463,13 @@ impl SubMatrix {
 impl fmt::Debug for SubMatrix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SubMatrix")
-            .field("n_rows",    &self.coo.nrows())
-            .field("n_cols",    &self.coo.ncols())
-            .field("entries",   &self.coo.nnz())
+            .field("n_rows", &self.coo.nrows())
+            .field("n_cols", &self.coo.ncols())
+            .field("entries", &self.coo.nnz())
             .field("symmetric", &self.symmetric)
-            .field("dual_vars",   &self.dual_vars)
+            .field("dual_vars", &self.dual_vars)
             .field("primal_vars", &self.primal_vars)
-            .field("ordering",    &self.ordering)
+            .field("ordering", &self.ordering)
             .finish()
     }
 }
@@ -482,20 +520,28 @@ mod coo_serde {
         values: Vec<f64>,
     }
 
-    pub fn serialize<S: Serializer>(coo: &CooMatrix<f64>, s: S) -> std::result::Result<S::Ok, S::Error> {
+    pub fn serialize<S: Serializer>(
+        coo: &CooMatrix<f64>,
+        s: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
         CooData {
             nrows: coo.nrows(),
             ncols: coo.ncols(),
             row_indices: coo.row_indices().to_vec(),
             col_indices: coo.col_indices().to_vec(),
             values: coo.values().to_vec(),
-        }.serialize(s)
+        }
+        .serialize(s)
     }
 
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> std::result::Result<CooMatrix<f64>, D::Error> {
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> std::result::Result<CooMatrix<f64>, D::Error> {
         let data = CooData::deserialize(d)?;
         let mut coo = CooMatrix::new(data.nrows, data.ncols);
-        for ((r, c), v) in data.row_indices.into_iter()
+        for ((r, c), v) in data
+            .row_indices
+            .into_iter()
             .zip(data.col_indices)
             .zip(data.values)
         {
@@ -560,7 +606,11 @@ impl Matrix {
         let col_dofs = self.collect_col_dofs()?;
         let coo = self.build_coo(&row_dofs, &col_dofs)?;
         let csr = CsrMatrix::from(&coo);
-        self.assembled = Some(AssembledData { row_dofs, col_dofs, csr });
+        self.assembled = Some(AssembledData {
+            row_dofs,
+            col_dofs,
+            csr,
+        });
         Ok(())
     }
 
@@ -578,7 +628,9 @@ impl Matrix {
         let mut out: Vec<NamedDof> = Vec::new();
         for h in self {
             for pair in read(h)?.row_dofs() {
-                if !out.contains(&pair) { out.push(pair); }
+                if !out.contains(&pair) {
+                    out.push(pair);
+                }
             }
         }
         Ok(out)
@@ -588,7 +640,9 @@ impl Matrix {
         let mut out: Vec<NamedDof> = Vec::new();
         for h in self {
             for pair in read(h)?.col_dofs() {
-                if !out.contains(&pair) { out.push(pair); }
+                if !out.contains(&pair) {
+                    out.push(pair);
+                }
             }
         }
         Ok(out)
@@ -598,9 +652,13 @@ impl Matrix {
         let mut coo = CooMatrix::<f64>::new(row_dofs.len(), col_dofs.len());
         for h in self {
             for (rn, rf, cn, cf, v) in read(h)?.iter_entries() {
-                let i = row_dofs.iter().position(|(n, nm)| *n == rn && nm == &rf)
+                let i = row_dofs
+                    .iter()
+                    .position(|(n, nm)| *n == rn && nm == &rf)
                     .expect("row dof must be in union");
-                let j = col_dofs.iter().position(|(n, nm)| *n == cn && nm == &cf)
+                let j = col_dofs
+                    .iter()
+                    .position(|(n, nm)| *n == cn && nm == &cf)
                     .expect("col dof must be in union");
                 coo.push(i, j, v);
             }
@@ -644,7 +702,9 @@ impl Matrix {
         let mut out: Vec<String> = Vec::new();
         for h in self {
             for name in read(h)?.field_names() {
-                if !out.contains(&name) { out.push(name); }
+                if !out.contains(&name) {
+                    out.push(name);
+                }
             }
         }
         Ok(out)
@@ -663,16 +723,18 @@ impl Matrix {
     /// Total COO entries stored across all blocks (counting duplicates).
     pub fn entry_count(&self) -> Result<usize> {
         let mut total = 0usize;
-        for h in self { total += read(h)?.entry_count(); }
+        for h in self {
+            total += read(h)?.entry_count();
+        }
         Ok(total)
     }
 
     /// Sum of contributions at `(row, col)` across every block.
     pub fn get(
         &self,
-        row_node:  NodeId,
+        row_node: NodeId,
         row_field: &str,
-        col_node:  NodeId,
+        col_node: NodeId,
         col_field: &str,
     ) -> Result<f64> {
         let mut total = 0.0;
@@ -715,7 +777,9 @@ impl Matrix {
         let m = self.to_dmatrix()?;
         let mut out = Vec::with_capacity(m.nrows() * m.ncols());
         for i in 0..m.nrows() {
-            for j in 0..m.ncols() { out.push(m[(i, j)]); }
+            for j in 0..m.ncols() {
+                out.push(m[(i, j)]);
+            }
         }
         Ok(out)
     }
@@ -742,7 +806,8 @@ impl Matrix {
         if x.len() != nc {
             return Err(PyrucastError::Message(format!(
                 "mul_dense: x has length {} but matrix has {} columns",
-                x.len(), nc
+                x.len(),
+                nc
             )));
         }
         let x_vec = DVector::<f64>::from_column_slice(x);
@@ -773,7 +838,12 @@ impl crate::dump::Dump for Matrix {
             }
             let row_labels: Vec<String> = row_dofs.iter().map(dof_label).collect();
             let col_labels: Vec<String> = col_dofs.iter().map(dof_label).collect();
-            Ok(crate::dump::labeled_grid(&row_labels, &col_labels, &data, opts))
+            Ok(crate::dump::labeled_grid(
+                &row_labels,
+                &col_labels,
+                &data,
+                opts,
+            ))
         })();
         match grid {
             Ok(g) => format!("{self}\n{g}"),
@@ -813,10 +883,14 @@ mod tests {
     fn empty_sub_matrix() {
         let (_cfg, _nodes, sup) = make_poi1(2);
         let m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false,
-        ).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         assert_eq!(m.n_rows(), 2);
         assert_eq!(m.n_cols(), 2);
         assert_eq!(m.entry_count(), 0);
@@ -827,10 +901,14 @@ mod tests {
     fn symmetric_flag_round_trip() {
         let (_cfg, _nodes, sup) = make_poi1(1);
         let m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, true,
-        ).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
         assert!(m.symmetric());
     }
 
@@ -839,14 +917,18 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, b) = (nodes[0].id(), nodes[1].id());
         let mut m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false,
-        ).unwrap();
-        m.add_entry(a, "q", a, "T",  2.0).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
-        m.add_entry(b, "q", b, "T",  2.0).unwrap();
+        m.add_entry(b, "q", b, "T", 2.0).unwrap();
         // dual_vars + primal_vars = 2 distinct names
         assert_eq!(m.field_names().len(), 2);
         assert_eq!(m.n_rows(), 2);
@@ -858,10 +940,14 @@ mod tests {
     fn get_unknown_returns_zero() {
         let (_cfg, nodes, sup) = make_poi1(1);
         let m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false,
-        ).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         // unknown field → 0.0
         assert_eq!(m.get(nodes[0].id(), "x", nodes[0].id(), "y"), 0.0);
     }
@@ -871,12 +957,16 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(1);
         let a = nodes[0].id();
         let mut m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false,
-        ).unwrap();
-        m.add_entry(a, "q", a, "T",  2.0).unwrap();
-        m.add_entry(a, "q", a, "T",  1.5).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        m.add_entry(a, "q", a, "T", 2.0).unwrap();
+        m.add_entry(a, "q", a, "T", 1.5).unwrap();
         m.add_entry(a, "q", a, "T", -0.5).unwrap();
         assert_eq!(m.get(a, "q", a, "T"), 3.0);
     }
@@ -886,14 +976,18 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, b) = (nodes[0].id(), nodes[1].id());
         let mut m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false,
-        ).unwrap();
-        m.add_entry(a, "q", a, "T",  2.0).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
-        m.add_entry(b, "q", b, "T",  2.0).unwrap();
+        m.add_entry(b, "q", b, "T", 2.0).unwrap();
         assert_eq!(m.dense(), vec![2.0, -1.0, -1.0, 2.0]);
     }
 
@@ -903,18 +997,25 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, b) = (nodes[0].id(), nodes[1].id());
         let mut m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false,
-        ).unwrap();
-        m.add_entry(a, "q", a, "T",  2.0).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
-        m.add_entry(b, "q", b, "T",  2.0).unwrap();
+        m.add_entry(b, "q", b, "T", 2.0).unwrap();
 
         let s = m.render(&DumpOptions::default());
         let mut lines = s.lines();
-        assert_eq!(lines.next().unwrap(), "SubMatrix: 2 row(s) × 2 col(s), 4 entries");
+        assert_eq!(
+            lines.next().unwrap(),
+            "SubMatrix: 2 row(s) × 2 col(s), 4 entries"
+        );
         // In-line DOF labels on both axes + values at default precision.
         assert!(s.contains(&format!("({a},q)")), "row label:\n{s}");
         assert!(s.contains(&format!("({a},T)")), "col label:\n{s}");
@@ -927,14 +1028,18 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, b) = (nodes[0].id(), nodes[1].id());
         let mut m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, true,
-        ).unwrap();
-        m.add_entry(a, "q", a, "T",  2.0).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
-        m.add_entry(b, "q", b, "T",  2.0).unwrap();
+        m.add_entry(b, "q", b, "T", 2.0).unwrap();
         assert_eq!(m.mul_dense(&[1.0, 1.0]).unwrap(), vec![1.0, 1.0]);
         assert_eq!(m.mul_dense(&[1.0, 2.0]).unwrap(), vec![0.0, 3.0]);
     }
@@ -944,10 +1049,14 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(1);
         let a = nodes[0].id();
         let mut m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false,
-        ).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         // 1 col, but x has 2 elements
         assert!(m.mul_dense(&[1.0, 2.0]).is_err());
@@ -958,12 +1067,18 @@ mod tests {
         let (_cfg_r, row_nodes, row_sup) = make_poi1(2);
         let (_cfg_c, col_nodes, col_sup) = make_poi1(2);
         let mut c = SubMatrix::new(
-            row_sup, col_sup,
-            vec!["T".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false,
-        ).unwrap();
-        c.add_entry(row_nodes[0].id(), "T", col_nodes[0].id(), "T", 1.0).unwrap();
-        c.add_entry(row_nodes[1].id(), "T", col_nodes[1].id(), "T", 1.0).unwrap();
+            row_sup,
+            col_sup,
+            vec!["T".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        c.add_entry(row_nodes[0].id(), "T", col_nodes[0].id(), "T", 1.0)
+            .unwrap();
+        c.add_entry(row_nodes[1].id(), "T", col_nodes[1].id(), "T", 1.0)
+            .unwrap();
         assert_eq!(c.n_rows(), 2);
         assert_eq!(c.n_cols(), 2);
         // "T" appears in both dual and primal — field_names deduplicates
@@ -975,10 +1090,14 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, b) = (nodes[0].id(), nodes[1].id());
         let mut m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false,
-        ).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         m.add_entry(b, "q", b, "T", 2.0).unwrap();
         m.add_entry(a, "q", a, "T", 3.0).unwrap();
@@ -994,13 +1113,17 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, b) = (nodes[0].id(), nodes[1].id());
         let mut m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, true,
-        ).unwrap();
-        m.add_entry(a, "q", a, "T",  2.0).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
-        m.add_entry(b, "q", b, "T",  2.0).unwrap();
+        m.add_entry(b, "q", b, "T", 2.0).unwrap();
         use crate::persist::Persist;
         let bytes = m.to_bytes().unwrap();
         let m2 = SubMatrix::from_bytes(&bytes).unwrap();
@@ -1015,10 +1138,14 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(1);
         let a = nodes[0].id();
         let mut m = SubMatrix::new(
-            sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, true,
-        ).unwrap();
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         let d = format!("{:?}", m);
         assert!(d.contains("SubMatrix"));
@@ -1038,12 +1165,14 @@ mod tests {
         let (_cfg2, nodes2, sup2) = make_poi1(2);
         let (c, d) = (nodes2[0].id(), nodes2[1].id());
         let mut m = SubMatrix::new(
-            sup, sup2,
+            sup,
+            sup2,
             vec!["p".into(), "q".into()],
             vec!["u".into(), "v".into()],
             DofOrdering::VarsThenNodes,
             false,
-        ).unwrap();
+        )
+        .unwrap();
         // With VarsThenNodes: row 0 = (p, node_a), row 1 = (p, node_b),
         //                     row 2 = (q, node_a), row 3 = (q, node_b)
         m.add_entry(a, "p", c, "u", 1.0).unwrap();
@@ -1069,12 +1198,14 @@ mod tests {
         let (_cfg2, nodes2, sup2) = make_poi1(2);
         let (c, _d) = (nodes2[0].id(), nodes2[1].id());
         let mut m = SubMatrix::new(
-            sup, sup2,
+            sup,
+            sup2,
             vec!["p".into(), "q".into()],
             vec!["u".into(), "v".into()],
             DofOrdering::NodesThenVars,
             false,
-        ).unwrap();
+        )
+        .unwrap();
         // With NodesThenVars: row 0 = (node_a, p), row 1 = (node_a, q),
         //                     row 2 = (node_b, p), row 3 = (node_b, q)
         m.add_entry(a, "p", c, "u", 7.0).unwrap();
@@ -1103,7 +1234,11 @@ mod tests {
         // Single configuration: 5 distinct nodes to avoid NodeId collisions.
         let (coords, nodes, _) = make_poi1(5);
         let (na, ca0, ca1, m0, m1) = (
-            nodes[0].id(), nodes[1].id(), nodes[2].id(), nodes[3].id(), nodes[4].id(),
+            nodes[0].id(),
+            nodes[1].id(),
+            nodes[2].id(),
+            nodes[3].id(),
+            nodes[4].id(),
         );
 
         // Block a: 1 row (na) × 2 cols (ca0, ca1)
@@ -1113,10 +1248,14 @@ mod tests {
         col_a.add_cell(&[ca0]).unwrap();
         col_a.add_cell(&[ca1]).unwrap();
         let mut a = SubMatrix::new(
-            insert(row_a), insert(col_a),
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, true,
-        ).unwrap();
+            insert(row_a),
+            insert(col_a),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
         a.add_entry(na, "q", ca0, "T", 2.0).unwrap();
         a.add_entry(na, "q", ca1, "T", -1.0).unwrap();
 
@@ -1128,10 +1267,14 @@ mod tests {
         col_b.add_cell(&[m0]).unwrap();
         col_b.add_cell(&[m1]).unwrap();
         let mut b = SubMatrix::new(
-            insert(row_b), insert(col_b),
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, true,
-        ).unwrap();
+            insert(row_b),
+            insert(col_b),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
         b.add_entry(m0, "q", m0, "T", 0.5).unwrap();
         b.add_entry(m1, "q", m0, "T", -1.0).unwrap();
         b.add_entry(m1, "q", m1, "T", 2.0).unwrap();
@@ -1149,12 +1292,24 @@ mod tests {
     #[test]
     fn aggregate_symmetric_is_and_of_subs() {
         let (_cfg, _nodes, sup) = make_poi1(1);
-        let a = SubMatrix::new(sup.clone(), sup.clone(),
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, true).unwrap();
-        let b = SubMatrix::new(sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false).unwrap();
+        let a = SubMatrix::new(
+            sup.clone(),
+            sup.clone(),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        let b = SubMatrix::new(
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         let mut k = Matrix::empty();
         k.add_sub(insert(a)).unwrap();
         k.add_sub(insert(b)).unwrap();
@@ -1176,14 +1331,26 @@ mod tests {
         sm_b.add_cell(&[nb]).unwrap();
         let sup_b = insert(sm_b);
 
-        let mut a = SubMatrix::new(sup_a.clone(), sup_a,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false).unwrap();
+        let mut a = SubMatrix::new(
+            sup_a.clone(),
+            sup_a,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         a.add_entry(na, "q", na, "T", 2.0).unwrap();
 
-        let mut b = SubMatrix::new(sup_b.clone(), sup_b,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false).unwrap();
+        let mut b = SubMatrix::new(
+            sup_b.clone(),
+            sup_b,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         b.add_entry(nb, "q", nb, "T", 3.0).unwrap();
 
         let mut k = Matrix::empty();
@@ -1204,9 +1371,15 @@ mod tests {
     fn not_finalized_yields_error() {
         let (_cfg, nodes, sup) = make_poi1(1);
         let a = nodes[0].id();
-        let mut m = SubMatrix::new(sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false).unwrap();
+        let mut m = SubMatrix::new(
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         let mut k = Matrix::empty();
         k.add_sub(insert(m)).unwrap();
@@ -1223,31 +1396,37 @@ mod tests {
         let (_cfg_a, nodes_a, sup_a) = make_poi1(2);
         let (na0, na1) = (nodes_a[0].id(), nodes_a[1].id());
         // row block a: only node na0 as row
-        let mut row_a = SubMesh::new(
-            read(&sup_a).unwrap().coords(),
-            ElementType::POI1,
-        );
+        let mut row_a = SubMesh::new(read(&sup_a).unwrap().coords(), ElementType::POI1);
         row_a.add_cell(&[na0]).unwrap();
         let row_a_h = insert(row_a);
 
-        let mut a = SubMatrix::new(row_a_h, sup_a.clone(),
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, true).unwrap();
-        a.add_entry(na0, "q", na0, "T",  2.0).unwrap();
+        let mut a = SubMatrix::new(
+            row_a_h,
+            sup_a.clone(),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        a.add_entry(na0, "q", na0, "T", 2.0).unwrap();
         a.add_entry(na0, "q", na1, "T", -1.0).unwrap();
 
-        let mut row_b = SubMesh::new(
-            read(&sup_a).unwrap().coords(),
-            ElementType::POI1,
-        );
+        let mut row_b = SubMesh::new(read(&sup_a).unwrap().coords(), ElementType::POI1);
         row_b.add_cell(&[na1]).unwrap();
         let row_b_h = insert(row_b);
 
-        let mut b = SubMatrix::new(row_b_h, sup_a,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, true).unwrap();
+        let mut b = SubMatrix::new(
+            row_b_h,
+            sup_a,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
         b.add_entry(na1, "q", na0, "T", -1.0).unwrap();
-        b.add_entry(na1, "q", na1, "T",  2.0).unwrap();
+        b.add_entry(na1, "q", na1, "T", 2.0).unwrap();
 
         let mut k = Matrix::empty();
         k.add_sub(insert(a)).unwrap();
@@ -1265,14 +1444,26 @@ mod tests {
         let na = nodes_a[0].id();
         let nb = nodes_b[0].id();
 
-        let mut a = SubMatrix::new(sup_a.clone(), sup_a,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false).unwrap();
+        let mut a = SubMatrix::new(
+            sup_a.clone(),
+            sup_a,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         a.add_entry(na, "q", na, "T", 1.0).unwrap();
 
-        let mut b = SubMatrix::new(sup_b.clone(), sup_b,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, false).unwrap();
+        let mut b = SubMatrix::new(
+            sup_b.clone(),
+            sup_b,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
         b.add_entry(nb, "q", nb, "T", 2.0).unwrap();
 
         let mut k = Matrix::empty();
@@ -1289,9 +1480,15 @@ mod tests {
     fn aggregate_debug_and_display() {
         let (_cfg, nodes, sup) = make_poi1(1);
         let a_id = nodes[0].id();
-        let mut a = SubMatrix::new(sup.clone(), sup,
-            vec!["q".into()], vec!["T".into()],
-            DofOrdering::NodesThenVars, true).unwrap();
+        let mut a = SubMatrix::new(
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
         a.add_entry(a_id, "q", a_id, "T", 2.0).unwrap();
         let mut k = Matrix::empty();
         k.add_sub(insert(a)).unwrap();

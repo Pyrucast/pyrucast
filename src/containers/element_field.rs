@@ -90,8 +90,8 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::field::SubField;
-use crate::error::{PyrucastError, Result};
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -282,7 +282,6 @@ impl SubElementField {
         }
         Ok(())
     }
-
 }
 
 impl crate::containers::field::SubField for SubElementField {
@@ -300,7 +299,6 @@ impl crate::containers::field::SubField for SubElementField {
         &mut self.values
     }
 }
-
 
 // ─── Clone ─────────────────────────────────────────────────────────────────
 
@@ -504,7 +502,6 @@ impl ElementField {
             save,
         )
     }
-
 }
 
 /// Zero-copy view of an [`ElementField`]'s zones — the
@@ -539,13 +536,13 @@ impl ElementFieldView {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::containers::finite_element_space::Interpolation;
+    use crate::containers::finite_element_space::QuadratureRule;
+    use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
     use crate::containers::mesh::Coords;
     use crate::containers::mesh::ElementType;
-    use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-    use crate::containers::finite_element_space::Interpolation;
-    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::mesh::Node;
-    use crate::containers::finite_element_space::QuadratureRule;
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::store::{insert, read, write};
 
     fn make_tri3_subfespace() -> Handle<SubFiniteElementSpace> {
@@ -558,7 +555,10 @@ mod tests {
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
-        insert(SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap())
+        insert(
+            SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+                .unwrap(),
+        )
     }
 
     fn make_multi_cell_tri3_subfespace(n_cells: usize) -> Handle<SubFiniteElementSpace> {
@@ -578,7 +578,10 @@ mod tests {
             }
             insert(sm)
         };
-        insert(SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap())
+        insert(
+            SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+                .unwrap(),
+        )
     }
 
     fn make_mesh_with_tri_and_qua() -> Mesh {
@@ -633,8 +636,7 @@ mod tests {
     #[test]
     fn sub_get_set_roundtrip() {
         let sub = make_multi_cell_tri3_subfespace(3);
-        let mut f =
-            SubElementField::new(sub, vec!["sigma_xx".into(), "sigma_yy".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["sigma_xx".into(), "sigma_yy".into()]).unwrap();
         assert_eq!(f.cell_count(), 3);
         f.set(0, 0, 0, 1.0).unwrap();
         f.set(1, 2, 1, -3.5).unwrap();
@@ -656,8 +658,7 @@ mod tests {
     #[test]
     fn sub_point_values_returns_all_components() {
         let sub = make_tri3_subfespace();
-        let mut f =
-            SubElementField::new(sub, vec!["a".into(), "b".into(), "c".into()]).unwrap();
+        let mut f = SubElementField::new(sub, vec!["a".into(), "b".into(), "c".into()]).unwrap();
         f.set(0, 1, 0, 1.0).unwrap();
         f.set(0, 1, 1, 2.0).unwrap();
         f.set(0, 1, 2, 3.0).unwrap();
@@ -854,11 +855,7 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let comps_one = vec![vec!["k".into()]];
         assert!(ElementField::with(&fes, &comps_one).is_err());
-        let comps_three = vec![
-            vec!["k".into()],
-            vec!["k".into()],
-            vec!["k".into()],
-        ];
+        let comps_three = vec![vec!["k".into()], vec!["k".into()], vec!["k".into()]];
         assert!(ElementField::with(&fes, &comps_three).is_err());
     }
 
@@ -895,8 +892,14 @@ mod tests {
         let mesh = make_mesh_with_tri_and_qua();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();
-        write(&ef.get(0).unwrap()).unwrap().set_uniform("k", 1.5).unwrap();
-        write(&ef.get(1).unwrap()).unwrap().set_uniform("k", 2.5).unwrap();
+        write(&ef.get(0).unwrap())
+            .unwrap()
+            .set_uniform("k", 1.5)
+            .unwrap();
+        write(&ef.get(1).unwrap())
+            .unwrap()
+            .set_uniform("k", 2.5)
+            .unwrap();
         assert_eq!(
             read(&ef.get(0).unwrap()).unwrap().value(0, 0, "k").unwrap(),
             1.5

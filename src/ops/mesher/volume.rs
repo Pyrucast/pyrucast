@@ -519,7 +519,8 @@ mod tests {
             } else {
                 *t
             };
-            mesh.add_cell(&[nodes[t[0]], nodes[t[1]], nodes[t[2]]]).unwrap();
+            mesh.add_cell(&[nodes[t[0]], nodes[t[1]], nodes[t[2]]])
+                .unwrap();
         }
         mesh
     }
@@ -540,7 +541,12 @@ mod tests {
             let c = Point3::new(p[2][0], p[2][1], p[2][2]);
             let d = Point3::new(p[3][0], p[3][1], p[3][2]);
             let v6 = tet_vol6(a, b, c, d);
-            assert!(v6 > 0.0, "cell {} has non-positive signed volume {}", ci, v6);
+            assert!(
+                v6 > 0.0,
+                "cell {} has non-positive signed volume {}",
+                ci,
+                v6
+            );
             total += v6 / 6.0;
         }
         total
@@ -568,7 +574,12 @@ mod tests {
     }
 
     fn tetrahedron(coords: Handle<Coords>) -> Mesh {
-        let pts = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)];
+        let pts = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        ];
         let tris = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]];
         build_surface(coords, &pts, &tris, (0.25, 0.25, 0.25))
     }
@@ -809,8 +820,7 @@ mod tests {
         use std::sync::atomic::AtomicBool;
         let coords = insert(Coords::new(3).unwrap());
         let flag = AtomicBool::new(true);
-        let err =
-            volume_cancellable(&octahedron(coords.clone()), Some(0.3), &flag).unwrap_err();
+        let err = volume_cancellable(&octahedron(coords.clone()), Some(0.3), &flag).unwrap_err();
         assert!(matches!(err, PyrucastError::Interrupted));
     }
 
@@ -819,8 +829,7 @@ mod tests {
         use std::sync::atomic::AtomicBool;
         let coords = insert(Coords::new(3).unwrap());
         let flag = AtomicBool::new(false);
-        let mesh =
-            volume_cancellable(&octahedron(coords.clone()), Some(0.5), &flag).unwrap();
+        let mesh = volume_cancellable(&octahedron(coords.clone()), Some(0.5), &flag).unwrap();
         assert!(mesh.cell_count().unwrap() > 0);
     }
 }

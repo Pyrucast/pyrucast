@@ -19,7 +19,9 @@ use crate::store::insert;
 pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
     let mesh_coords = mesh.coords()?;
     let field_coords = field.coords()?;
-    if mesh_coords.index() != field_coords.index() || mesh_coords.generation() != field_coords.generation() {
+    if mesh_coords.index() != field_coords.index()
+        || mesh_coords.generation() != field_coords.generation()
+    {
         return Err(PyrucastError::Message(
             "restrict: mesh is not attached to the same Coords".into(),
         ));
@@ -54,11 +56,10 @@ mod tests {
 
     /// Build a single-zone POI1 field on `n` fresh 1-D nodes;
     /// returns (coords, nodes, field).
-    fn poi1_field(n: usize, components: Vec<String>) -> (
-        crate::store::Handle<Coords>,
-        Vec<Node>,
-        NodeField,
-    ) {
+    fn poi1_field(
+        n: usize,
+        components: Vec<String>,
+    ) -> (crate::store::Handle<Coords>, Vec<Node>, NodeField) {
         let coords = insert(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..n)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
@@ -67,9 +68,7 @@ mod tests {
         for nd in &nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
-        let field = NodeField::from_sub(
-            SubNodeField::from_poi1(&insert(sm), components).unwrap(),
-        );
+        let field = NodeField::from_sub(SubNodeField::from_poi1(&insert(sm), components).unwrap());
         (coords, nodes, field)
     }
 

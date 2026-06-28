@@ -243,14 +243,16 @@ mod tests {
         for nd in &nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
-        let field =
-            NodeField::from_sub(SubNodeField::from_poi1(&insert(sm), components).unwrap());
+        let field = NodeField::from_sub(SubNodeField::from_poi1(&insert(sm), components).unwrap());
         (nodes, field)
     }
 
     /// Node ids of the (single) zone of a selection mesh, in order.
     fn picked(mesh: &Mesh, zone: usize) -> Vec<NodeId> {
-        read(&mesh.get(zone).unwrap()).unwrap().connectivity().to_vec()
+        read(&mesh.get(zone).unwrap())
+            .unwrap()
+            .connectivity()
+            .to_vec()
     }
 
     #[test]
@@ -292,9 +294,12 @@ mod tests {
         {
             let mut s = write(&f.get(0).unwrap()).unwrap();
             // node0: U=1 V=1 ; node1: U=1 V=9 ; node2: U=1 V=2
-            s.set(0, 0, 1.0).unwrap(); s.set(0, 1, 1.0).unwrap();
-            s.set(1, 0, 1.0).unwrap(); s.set(1, 1, 9.0).unwrap();
-            s.set(2, 0, 1.0).unwrap(); s.set(2, 1, 2.0).unwrap();
+            s.set(0, 0, 1.0).unwrap();
+            s.set(0, 1, 1.0).unwrap();
+            s.set(1, 0, 1.0).unwrap();
+            s.set(1, 1, 9.0).unwrap();
+            s.set(2, 0, 1.0).unwrap();
+            s.set(2, 1, 2.0).unwrap();
         }
         // 0 <= * <= 5 on BOTH components → node1 dropped (V=9).
         let sel = select_nodes(&f, Some(0.0), Some(5.0), None).unwrap();
@@ -306,13 +311,15 @@ mod tests {
         let (nodes, f) = poi1_field(3, vec!["U".into(), "V".into()]);
         {
             let mut s = write(&f.get(0).unwrap()).unwrap();
-            s.set(0, 0, 1.0).unwrap(); s.set(0, 1, 1.0).unwrap();
-            s.set(1, 0, 1.0).unwrap(); s.set(1, 1, 9.0).unwrap();
-            s.set(2, 0, 1.0).unwrap(); s.set(2, 1, 2.0).unwrap();
+            s.set(0, 0, 1.0).unwrap();
+            s.set(0, 1, 1.0).unwrap();
+            s.set(1, 0, 1.0).unwrap();
+            s.set(1, 1, 9.0).unwrap();
+            s.set(2, 0, 1.0).unwrap();
+            s.set(2, 1, 2.0).unwrap();
         }
         // Test U only: U=1 everywhere ⇒ all kept despite V out of band.
-        let sel =
-            select_nodes(&f, Some(0.0), Some(5.0), Some(vec!["U".into()])).unwrap();
+        let sel = select_nodes(&f, Some(0.0), Some(5.0), Some(vec!["U".into()])).unwrap();
         assert_eq!(
             picked(&sel, 0),
             vec![nodes[0].id(), nodes[1].id(), nodes[2].id()]
@@ -359,6 +366,7 @@ mod tests {
     /// One TRI3 + one QUA4 zone, lagrange-1; returns the ElementField.
     fn two_zone_element_field() -> (Vec<Node>, ElementField) {
         let coords = insert(Coords::new(2).unwrap());
+        #[rustfmt::skip]
         let n: Vec<Node> = [
             [0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [2.0, 0.0], [2.0, 1.0],
         ]
@@ -373,7 +381,8 @@ mod tests {
         };
         let qua = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
-            sm.add_cell(&[n[1].id(), n[3].id(), n[4].id(), n[2].id()]).unwrap();
+            sm.add_cell(&[n[1].id(), n[3].id(), n[4].id(), n[2].id()])
+                .unwrap();
             insert(sm)
         };
         mesh.add_sub(tri).unwrap();
@@ -387,7 +396,10 @@ mod tests {
     fn select_cells_all_gauss_must_pass() {
         let (_n, ef) = two_zone_element_field();
         // Zone0 (TRI3): s = 2 everywhere → in band [0,5].
-        write(&ef.get(0).unwrap()).unwrap().set_uniform("s", 2.0).unwrap();
+        write(&ef.get(0).unwrap())
+            .unwrap()
+            .set_uniform("s", 2.0)
+            .unwrap();
         // Zone1 (QUA4): one Gauss point at 100 → cell fails.
         {
             let mut s = write(&ef.get(1).unwrap()).unwrap();

@@ -7,11 +7,11 @@
 //!   QUA4 → HEX8).
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::NodeId;
-use crate::error::{PyrucastError, Result};
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::Node;
+use crate::containers::mesh::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read};
 
 /// Sweep between two SEG2 contour meshes to produce a QUA4 strip.
@@ -88,15 +88,11 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
 
     let coords_a: Vec<Vec<f64>> = col_ids_a
         .iter()
-        .map(|&id| -> Result<Vec<f64>> {
-            Ok(read(&coords)?.coord(id)?.to_vec())
-        })
+        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.coord(id)?.to_vec()) })
         .collect::<Result<_>>()?;
     let coords_b: Vec<Vec<f64>> = col_ids_b
         .iter()
-        .map(|&id| -> Result<Vec<f64>> {
-            Ok(read(&coords)?.coord(id)?.to_vec())
-        })
+        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.coord(id)?.to_vec()) })
         .collect::<Result<_>>()?;
 
     // layers[k][j] = Node at layer k, column j.
@@ -167,8 +163,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
     let coords = mesh.coords()?;
 
     // Collect unique NodeIds across all submeshes, first-seen order.
-    let mut col_map: std::collections::HashMap<NodeId, usize> =
-        std::collections::HashMap::new();
+    let mut col_map: std::collections::HashMap<NodeId, usize> = std::collections::HashMap::new();
     let mut ordered_ids: Vec<NodeId> = Vec::new();
     for sm in mesh {
         for id in read(sm)?.connectivity().to_vec() {
@@ -186,9 +181,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 
     let base_coords: Vec<Vec<f64>> = ordered_ids
         .iter()
-        .map(|&id| -> Result<Vec<f64>> {
-            Ok(read(&coords)?.coord(id)?.to_vec())
-        })
+        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.coord(id)?.to_vec()) })
         .collect::<Result<_>>()?;
 
     let coord_dim = base_coords[0].len();
@@ -253,10 +246,8 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
         for k in 0..n_layers {
             for ci in 0..n_cells {
                 let cell = &conn[ci * npc..(ci + 1) * npc];
-                let bot: Vec<NodeId> =
-                    cell.iter().map(|&id| layers[k][col(id)].id()).collect();
-                let top: Vec<NodeId> =
-                    cell.iter().map(|&id| layers[k + 1][col(id)].id()).collect();
+                let bot: Vec<NodeId> = cell.iter().map(|&id| layers[k][col(id)].id()).collect();
+                let top: Vec<NodeId> = cell.iter().map(|&id| layers[k + 1][col(id)].id()).collect();
 
                 match et {
                     ElementType::SEG2 => {
@@ -264,8 +255,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
                     }
                     ElementType::QUA4 => {
                         sm_out.add_cell(&[
-                            bot[0], bot[1], bot[2], bot[3],
-                            top[0], top[1], top[2], top[3],
+                            bot[0], bot[1], bot[2], bot[3], top[0], top[1], top[2], top[3],
                         ])?;
                     }
                     _ => unreachable!(),

@@ -1,8 +1,8 @@
 //! Python wrappers for [`crate::containers::node_field::SubNodeField`] and
 //! [`crate::containers::node_field::NodeField`].
 
-use crate::containers::field::SubField;
 use crate::aggregate::Aggregate;
+use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::py::mesh::{PyMesh, PySubMesh};
 use crate::py::node::PyNode;
@@ -207,11 +207,15 @@ impl PySubNodeField {
     ) -> PyResult<PySubNodeField> {
         if let Ok(s) = rhs.extract::<f64>() {
             let out = read(&self.handle)?.map_all(|v| op(v, s));
-            Ok(PySubNodeField { handle: insert(out) })
+            Ok(PySubNodeField {
+                handle: insert(out),
+            })
         } else if let Ok(other) = rhs.extract::<PyRef<PySubNodeField>>() {
             let a = (*read(&self.handle)?).clone();
             let b = (*read(&other.handle)?).clone();
-            Ok(PySubNodeField { handle: insert(a.combine(&b, op)?) })
+            Ok(PySubNodeField {
+                handle: insert(a.combine(&b, op)?),
+            })
         } else {
             Err(PyTypeError::new_err(
                 "unsupported operand: expected a float or a SubNodeField",
@@ -428,11 +432,7 @@ impl PyNodeField {
     /// Dispatch an arithmetic operator: float → scalar, `NodeField` →
     /// `combine_field` (same decomposition), `SubNodeField` →
     /// `combine_subfield` (targeted zone update).
-    fn binary(
-        &self,
-        rhs: &Bound<'_, PyAny>,
-        op: fn(f64, f64) -> f64,
-    ) -> PyResult<PyNodeField> {
+    fn binary(&self, rhs: &Bound<'_, PyAny>, op: fn(f64, f64) -> f64) -> PyResult<PyNodeField> {
         use crate::containers::field::Field;
         if let Ok(s) = rhs.extract::<f64>() {
             Ok(PyNodeField {
@@ -455,4 +455,10 @@ impl PyNodeField {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyNodeField, PySubNodeField, "NodeField", subfield, NodeField);
+crate::impl_aggregate_pymethods!(
+    PyNodeField,
+    PySubNodeField,
+    "NodeField",
+    subfield,
+    NodeField
+);

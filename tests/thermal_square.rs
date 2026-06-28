@@ -44,7 +44,10 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     let mut grid: Vec<Node> = Vec::with_capacity((N + 1) * (N + 1));
     for j in 0..=N {
         for i in 0..=N {
-            grid.push(Node::create_in(coords.clone(), &[i as f64 * h, j as f64 * h])?);
+            grid.push(Node::create_in(
+                coords.clone(),
+                &[i as f64 * h, j as f64 * h],
+            )?);
         }
     }
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));

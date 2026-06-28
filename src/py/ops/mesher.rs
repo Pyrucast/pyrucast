@@ -75,11 +75,7 @@ pub fn barycenter(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, points, strict=true))]
-pub fn elements_on(
-    mesh: PyRef<PyMesh>,
-    points: PyRef<PyMesh>,
-    strict: bool,
-) -> PyResult<PyMesh> {
+pub fn elements_on(mesh: PyRef<PyMesh>, points: PyRef<PyMesh>, strict: bool) -> PyResult<PyMesh> {
     let result = crate::ops::mesher::elements_on(&mesh.inner, &points.inner, strict)?;
     Ok(PyMesh { inner: result })
 }
@@ -144,7 +140,11 @@ pub fn circle_seg2(
 /// of quads between `mesh_a` and `mesh_b`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn sweep_qua4(mesh_a: PyRef<PyMesh>, mesh_b: PyRef<PyMesh>, n_layers: usize) -> PyResult<PyMesh> {
+pub fn sweep_qua4(
+    mesh_a: PyRef<PyMesh>,
+    mesh_b: PyRef<PyMesh>,
+    n_layers: usize,
+) -> PyResult<PyMesh> {
     let mesh = crate::ops::mesher::sweep_qua4(&mesh_a.inner, &mesh_b.inner, n_layers)?;
     Ok(PyMesh { inner: mesh })
 }
@@ -170,9 +170,8 @@ pub fn fill_surface(
     max_edge_length: Option<f64>,
     min_angle_deg: Option<f64>,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type).ok_or_else(|| {
-        PyValueError::new_err(format!("unknown element type: {element_type}"))
-    })?;
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
     let refinement = if max_edge_length.is_some() || min_angle_deg.is_some() {
         Some(crate::ops::mesher::triangulation::RefinementOptions {
             max_edge_length,
@@ -203,12 +202,10 @@ pub fn surface(
     element_type: &str,
     size: Option<f64>,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type).ok_or_else(|| {
-        PyValueError::new_err(format!("unknown element type: {element_type}"))
-    })?;
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
     // Poll Python signals while paving so a long mesh stays Ctrl+C-able.
-    let mesh =
-        crate::ops::mesher::surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
+    let mesh = crate::ops::mesher::surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
     Ok(PyMesh { inner: mesh })
 }
 

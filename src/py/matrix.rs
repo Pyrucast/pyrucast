@@ -146,7 +146,9 @@ impl PyMatrix {
     /// build blocks with `Matrix.block(...)` and compose them with `|`.
     #[new]
     fn py_new() -> PyResult<Self> {
-        Ok(Self { inner: Matrix::empty() })
+        Ok(Self {
+            inner: Matrix::empty(),
+        })
     }
 
     /// `Matrix.block(row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=False)`
@@ -169,9 +171,11 @@ impl PyMatrix {
         let ord = match ordering {
             "nodes_then_vars" => DofOrdering::NodesThenVars,
             "vars_then_nodes" => DofOrdering::VarsThenNodes,
-            other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "unknown ordering '{other}'; expected 'nodes_then_vars' or 'vars_then_nodes'"
-            ))),
+            other => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "unknown ordering '{other}'; expected 'nodes_then_vars' or 'vars_then_nodes'"
+                )))
+            }
         };
         let row = submesh_handle(row_support)?;
         let col = submesh_handle(col_support)?;

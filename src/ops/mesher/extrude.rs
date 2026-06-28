@@ -1,5 +1,5 @@
-use crate::error::Result;
 use crate::containers::mesh::Mesh;
+use crate::error::Result;
 
 /// Extrude a mesh by `n_layers` layers along `direction`.
 ///
@@ -67,7 +67,9 @@ mod tests {
         let n2 = Node::create_in(coords.clone(), &[1.0, 1.0, 0.0]).unwrap();
         let n3 = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
         let mut qua_mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
-        qua_mesh.add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()]).unwrap();
+        qua_mesh
+            .add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()])
+            .unwrap();
 
         let hex = extrude(&qua_mesh, &[0.0, 0.0, 2.0], 1).unwrap();
         assert_eq!(hex.element_types().unwrap(), vec![ElementType::HEX8]);

@@ -1,6 +1,6 @@
 use crate::aggregate::Aggregate;
-use crate::error::Result;
 use crate::containers::mesh::Mesh;
+use crate::error::Result;
 use crate::store::{insert, read};
 
 /// Convert a mesh to POI1, **submesh by submesh**.

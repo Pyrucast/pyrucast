@@ -58,11 +58,7 @@ impl Drawable for CurvePlot {
         Ok(Bbox3::empty())
     }
 
-    fn draw_on<DB: DrawingBackend>(
-        &self,
-        area: &DrawingArea<DB, Shift>,
-        _view: &View,
-    ) -> Result<()>
+    fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, _view: &View) -> Result<()>
     where
         DB::ErrorType: 'static,
     {

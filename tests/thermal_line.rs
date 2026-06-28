@@ -45,8 +45,9 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     // ── Modèle : conduction + Dirichlet T = 20 en x = 1 ────────────────────
     // Le support des multiplicateurs est fabriqué depuis le nœud imposé par le
     // mesher `barycenter` (un nœud neuf colocalisé). Le modèle ne crée rien.
-    let imposed =
-        Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(nodes.last().unwrap()))?);
+    let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(
+        nodes.last().unwrap(),
+    ))?);
     let multiplier = mesher::barycenter(&imposed)?;
     let mult = multiplier.node(0, 0, 0)?.id();
 

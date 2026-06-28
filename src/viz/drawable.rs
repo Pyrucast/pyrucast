@@ -29,11 +29,7 @@ pub trait Drawable {
     fn bbox(&self) -> Result<Bbox3>;
 
     /// Draw the object onto `area` from the viewpoint described by `view`.
-    fn draw_on<DB: DrawingBackend>(
-        &self,
-        area: &DrawingArea<DB, Shift>,
-        view: &View,
-    ) -> Result<()>
+    fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, view: &View) -> Result<()>
     where
         DB::ErrorType: 'static;
 }

@@ -34,7 +34,10 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     const N: usize = 40;
 
     // Beam direction (45°) and perpendicular.
-    let (c, s) = (std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2);
+    let (c, s) = (
+        std::f64::consts::FRAC_1_SQRT_2,
+        std::f64::consts::FRAC_1_SQRT_2,
+    );
     let (px, py) = (-s, c); // unit perpendicular
     let h = L / N as f64;
 
@@ -60,8 +63,10 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     model = model.union(&clamp(&nodes[0], "u_y", "f_y")?)?;
     model = model.union(&clamp(&nodes[0], "rz", "m_z")?)?;
 
-    let materials =
-        build::material_field(&model, &[("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)])?;
+    let materials = build::material_field(
+        &model,
+        &[("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)],
+    )?;
 
     // ── Chargement : force P perpendiculaire à la poutre, au bout libre ────
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
@@ -82,7 +87,10 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     // Projection sur la perpendiculaire (= δ) et sur l'axe (≈ 0).
     let transverse = ux * px + uy * py;
     let axial = ux * c + uy * s;
-    assert!((transverse - delta).abs() < 1e-2 * delta, "transverse {transverse} ≠ {delta}");
+    assert!(
+        (transverse - delta).abs() < 1e-2 * delta,
+        "transverse {transverse} ≠ {delta}"
+    );
     assert!(axial.abs() < 1e-6, "déplacement axial {axial} ≈ 0");
     Ok(())
 }

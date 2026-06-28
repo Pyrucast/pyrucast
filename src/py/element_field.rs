@@ -1,8 +1,8 @@
 //! Python wrappers for [`crate::containers::element_field::SubElementField`] and
 //! [`crate::containers::element_field::ElementField`].
 
-use crate::containers::field::SubField;
 use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::field::SubField;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::store::{insert, read, write, Handle};
 use pyo3::exceptions::{PyTypeError, PyValueError};
@@ -63,13 +63,7 @@ impl PySubElementField {
     }
 
     /// Set the value at `(cell, gauss)` for the named `component`.
-    fn set_value(
-        &self,
-        cell: usize,
-        gauss: usize,
-        component: &str,
-        value: f64,
-    ) -> PyResult<()> {
+    fn set_value(&self, cell: usize, gauss: usize, component: &str, value: f64) -> PyResult<()> {
         write(&self.handle)?.set_value(cell, gauss, component, value)?;
         Ok(())
     }
@@ -201,11 +195,15 @@ impl PySubElementField {
     ) -> PyResult<PySubElementField> {
         if let Ok(s) = rhs.extract::<f64>() {
             let out = read(&self.handle)?.map_all(|v| op(v, s));
-            Ok(PySubElementField { handle: insert(out) })
+            Ok(PySubElementField {
+                handle: insert(out),
+            })
         } else if let Ok(other) = rhs.extract::<PyRef<PySubElementField>>() {
             let a = (*read(&self.handle)?).clone();
             let b = (*read(&other.handle)?).clone();
-            Ok(PySubElementField { handle: insert(a.combine(&b, op)?) })
+            Ok(PySubElementField {
+                handle: insert(a.combine(&b, op)?),
+            })
         } else {
             Err(PyTypeError::new_err(
                 "unsupported operand: expected a float or a SubElementField",
@@ -232,10 +230,7 @@ impl PyElementField {
     /// `ElementField(fespace, components)` — one sub-field per subspace
     /// of `fespace`, sharing the same `components` list. Zero-initialized.
     #[new]
-    fn py_new(
-        fespace: PyRef<PyFiniteElementSpace>,
-        components: Vec<String>,
-    ) -> PyResult<Self> {
+    fn py_new(fespace: PyRef<PyFiniteElementSpace>, components: Vec<String>) -> PyResult<Self> {
         let ef = ElementField::new(&fespace.inner, components)?;
         Ok(Self { inner: ef })
     }
@@ -389,11 +384,7 @@ impl PyElementField {
     /// Dispatch an arithmetic operator: float → scalar, `ElementField` →
     /// `combine_field` (same decomposition), `SubElementField` →
     /// `combine_subfield` (targeted zone update).
-    fn binary(
-        &self,
-        rhs: &Bound<'_, PyAny>,
-        op: fn(f64, f64) -> f64,
-    ) -> PyResult<PyElementField> {
+    fn binary(&self, rhs: &Bound<'_, PyAny>, op: fn(f64, f64) -> f64) -> PyResult<PyElementField> {
         use crate::containers::field::Field;
         if let Ok(s) = rhs.extract::<f64>() {
             Ok(PyElementField {
@@ -416,5 +407,11 @@ impl PyElementField {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyElementField, PySubElementField, "ElementField", subfield, ElementField);
+crate::impl_aggregate_pymethods!(
+    PyElementField,
+    PySubElementField,
+    "ElementField",
+    subfield,
+    ElementField
+);
 crate::impl_dump_pymethod!(handle PySubElementField, handle);

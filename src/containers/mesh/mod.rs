@@ -204,9 +204,7 @@ impl SubMesh {
         let coords = nodes
             .first()
             .ok_or_else(|| {
-                PyrucastError::Message(
-                    "SubMesh::poi1_from_nodes: nodes must not be empty".into(),
-                )
+                PyrucastError::Message("SubMesh::poi1_from_nodes: nodes must not be empty".into())
             })?
             .coords();
         let ids: Vec<NodeId> = nodes.iter().map(|n| n.id()).collect();
@@ -219,10 +217,7 @@ impl SubMesh {
     /// for any de-duplication (see [`SubMesh::to_poi1`] for the deduped
     /// variant) and supplies the owning `coords` explicitly. When you have
     /// [`Node`] objects, prefer [`SubMesh::poi1_from_nodes`].
-    pub fn poi1_from_node_ids(
-        coords: Handle<Coords>,
-        nodes: &[NodeId],
-    ) -> Result<SubMesh> {
+    pub fn poi1_from_node_ids(coords: Handle<Coords>, nodes: &[NodeId]) -> Result<SubMesh> {
         let mut sm = SubMesh::new(coords, ElementType::POI1);
         for &nid in nodes {
             sm.add_cell(&[nid])?;
@@ -279,7 +274,6 @@ impl SubMesh {
     ) -> Result<()> {
         crate::viz::render_submesh_styled(self, view, save, style)
     }
-
 }
 
 impl Drop for SubMesh {
@@ -351,10 +345,15 @@ pub struct Mesh {
 
 crate::impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
     fn display_extra(&self) -> Option<String> {
-        Some(format!(", {} cell(s) total", self.cell_count().unwrap_or(0)))
+        Some(format!(
+            ", {} cell(s) total",
+            self.cell_count().unwrap_or(0)
+        ))
     }
     fn check_push(&self, h: &Handle<SubMesh>) -> Result<()> {
-        if self.is_empty() { return Ok(()); }
+        if self.is_empty() {
+            return Ok(());
+        }
         let a = self.coords()?;
         let b = read(h)?.coords();
         if a.index() != b.index() || a.generation() != b.generation() {
@@ -399,7 +398,9 @@ impl Mesh {
             ));
         }
         ids.push(node.id());
-        Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords, &ids)?))
+        Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(
+            coords, &ids,
+        )?))
     }
 }
 
@@ -417,9 +418,10 @@ impl Mesh {
     ///
     /// Returns an error if the mesh has no submeshes.
     pub fn coords(&self) -> Result<Handle<Coords>> {
-        let sm = self.items().first().ok_or_else(|| {
-            PyrucastError::Message("coords: mesh has no submeshes".into())
-        })?;
+        let sm = self
+            .items()
+            .first()
+            .ok_or_else(|| PyrucastError::Message("coords: mesh has no submeshes".into()))?;
         Ok(read(sm)?.coords())
     }
 
@@ -444,16 +446,12 @@ impl Mesh {
 
     /// Element type of each submesh, in order.
     pub fn element_types(&self) -> Result<Vec<ElementType>> {
-        self.iter()
-            .map(|sm| Ok(read(sm)?.element_type()))
-            .collect()
+        self.iter().map(|sm| Ok(read(sm)?.element_type())).collect()
     }
 
     /// Cell count of each submesh, in order.
     pub fn cell_counts(&self) -> Result<Vec<usize>> {
-        self.iter()
-            .map(|sm| Ok(read(sm)?.cell_count()))
-            .collect()
+        self.iter().map(|sm| Ok(read(sm)?.cell_count())).collect()
     }
 
     /// Node at position `node_idx` in cell `cell_idx` of submesh `submesh_idx`.
@@ -552,7 +550,6 @@ impl Mesh {
     ) -> Result<()> {
         crate::viz::render_mesh_with_field(self, field, component, scale, smooth, view, save)
     }
-
 }
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────
