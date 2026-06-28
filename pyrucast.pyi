@@ -420,6 +420,17 @@ class Evolution:
         for scalars, a `NodeField` or `ElementField` for fields. `out_of_range`
         overrides the stored policy for this query.
         """
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, mesh: typing.Optional[Mesh] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, frame: typing.Optional[builtins.int] = None, x_label: typing.Optional[builtins.str] = None, y_label: typing.Optional[builtins.str] = None, title: typing.Optional[builtins.str] = None) -> None:
+        r"""
+        Plot the evolution. A **scalar** evolution draws an X-Y curve (one line
+        per zone); a **field** evolution renders like `Mesh.plot(field=...)`
+        with a frame slider (drag, or ← / →) picking the tabulated value.
+        
+        `save` writes a PNG/SVG (a single `frame`, default = last for fields);
+        omit it for the interactive window. `mesh` supplies the surface for
+        field evolutions (node frames default to a point cloud). `x_label` /
+        `y_label` / `title` label the curve.
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, key: typing.Any) -> typing.Any:
         r"""
@@ -1181,6 +1192,11 @@ class SubEvolution:
         Interpolate at `x`. Returns a float, a `SubNodeField` or a
         `SubElementField`. `out_of_range` (`"error"` / `"clamp"` /
         `"extrapolate"`) overrides the stored policy for this query.
+        """
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, mesh: typing.Optional[Mesh] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, frame: typing.Optional[builtins.int] = None, x_label: typing.Optional[builtins.str] = None, y_label: typing.Optional[builtins.str] = None, title: typing.Optional[builtins.str] = None) -> None:
+        r"""
+        Plot this single curve — see `Evolution.plot`. A scalar curve draws an
+        X-Y line; a field curve renders with a frame slider.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...

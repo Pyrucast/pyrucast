@@ -151,6 +151,127 @@ where
     Ok(())
 }
 
+// ─── Frame slider (evolution plots) ─────────────────────────────────────────
+//
+// The slider is drawn and grabbed only in the interactive window (file export
+// shows a single static frame), so its helpers are gated like the rest of the
+// interactive path — plus `test` so the unit tests below stay reachable.
+
+#[cfg(any(test, feature = "viz-interactive"))]
+const SLIDER_MARGIN_X: i32 = 60;
+#[cfg(any(test, feature = "viz-interactive"))]
+const SLIDER_BOTTOM_MARGIN: i32 = 20;
+#[cfg(any(test, feature = "viz-interactive"))]
+const SLIDER_HEIGHT: i32 = 8;
+#[cfg(any(test, feature = "viz-interactive"))]
+const SLIDER_KNOB_R: i32 = 7;
+/// Vertical tolerance (px) around the track that still grabs the slider.
+#[cfg(any(test, feature = "viz-interactive"))]
+const SLIDER_HIT_PAD: i32 = 12;
+#[cfg(any(test, feature = "viz-interactive"))]
+const SLIDER_TRACK: RGBColor = RGBColor(210, 210, 210);
+#[cfg(any(test, feature = "viz-interactive"))]
+const SLIDER_FILL: RGBColor = RGBColor(70, 130, 200);
+
+/// Pixel-space track rectangle `(x, y, width, height)` of the frame slider,
+/// a horizontal bar near the bottom of a canvas of size `(w, h)`.
+#[cfg(any(test, feature = "viz-interactive"))]
+pub(crate) fn slider_rect(area_w: u32, area_h: u32) -> (i32, i32, i32, i32) {
+    let x = SLIDER_MARGIN_X;
+    let w = (area_w as i32 - 2 * SLIDER_MARGIN_X).max(1);
+    let y = area_h as i32 - SLIDER_BOTTOM_MARGIN - SLIDER_HEIGHT;
+    (x, y, w, SLIDER_HEIGHT)
+}
+
+/// The frame index a click at `(px, py)` selects on the slider, or `None`
+/// if the click is outside the slider's grab band. With a single frame the
+/// slider always reports frame 0.
+#[cfg(any(test, feature = "viz-interactive"))]
+pub(crate) fn slider_frame_at(
+    px: f64,
+    py: f64,
+    area_w: u32,
+    area_h: u32,
+    n_frames: usize,
+) -> Option<usize> {
+    if n_frames == 0 {
+        return None;
+    }
+    let (x, y, w, h) = slider_rect(area_w, area_h);
+    let in_x = px >= (x - SLIDER_KNOB_R) as f64 && px <= (x + w + SLIDER_KNOB_R) as f64;
+    let in_y =
+        py >= (y - SLIDER_HIT_PAD) as f64 && py <= (y + h + SLIDER_HIT_PAD) as f64;
+    if !in_x || !in_y {
+        return None;
+    }
+    if n_frames == 1 {
+        return Some(0);
+    }
+    let frac = ((px - x as f64) / w as f64).clamp(0.0, 1.0);
+    Some((frac * (n_frames - 1) as f64).round() as usize)
+}
+
+/// Draw the frame slider (track, filled portion, knob) plus a label
+/// `frame k/n   x=…` just above it. No-op on a canvas too small.
+#[cfg(any(test, feature = "viz-interactive"))]
+pub(crate) fn draw_slider<DB: DrawingBackend>(
+    area: &DrawingArea<DB, Shift>,
+    frame: usize,
+    n_frames: usize,
+    abscissa: f64,
+) -> Result<()>
+where
+    DB::ErrorType: 'static,
+{
+    if n_frames == 0 {
+        return Ok(());
+    }
+    let (w, h) = area.dim_in_pixel();
+    let (x, y, tw, th) = slider_rect(w, h);
+    if tw < 4 * SLIDER_KNOB_R {
+        return Ok(());
+    }
+    let frac = if n_frames > 1 {
+        frame as f64 / (n_frames - 1) as f64
+    } else {
+        0.0
+    };
+    let knob_x = x + (frac * tw as f64).round() as i32;
+    let cy = y + th / 2;
+
+    // Track.
+    area.draw(&Rectangle::new(
+        [(x, y), (x + tw, y + th)],
+        ShapeStyle::from(&SLIDER_TRACK).filled(),
+    ))
+    .map_err(pl_err)?;
+    // Filled portion up to the knob.
+    area.draw(&Rectangle::new(
+        [(x, y), (knob_x, y + th)],
+        ShapeStyle::from(&SLIDER_FILL).filled(),
+    ))
+    .map_err(pl_err)?;
+    // Knob.
+    area.draw(&Circle::new(
+        (knob_x, cy),
+        SLIDER_KNOB_R,
+        ShapeStyle::from(&SLIDER_FILL).filled(),
+    ))
+    .map_err(pl_err)?;
+    area.draw(&Circle::new(
+        (knob_x, cy),
+        SLIDER_KNOB_R,
+        ShapeStyle::from(&BUTTON_BORDER),
+    ))
+    .map_err(pl_err)?;
+
+    // Label above the track.
+    let label = format!("frame {}/{}   x={:.4}", frame + 1, n_frames, abscissa);
+    let text_style = TextStyle::from(("sans-serif", 13).into_font()).color(&BUTTON_TEXT);
+    area.draw_text(&label, &text_style, (x, y - 20)).map_err(pl_err)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,6 +325,34 @@ mod tests {
         assert!(buf.contains("0.000"));
         assert!(buf.contains("1.000"));
         assert!(buf.contains("2.000"));
+    }
+
+    #[test]
+    fn slider_frame_at_maps_position_to_index() {
+        let (x, y, w, h) = slider_rect(800, 600);
+        let cy = (y + h / 2) as f64;
+        // Far left → frame 0, far right → last, middle → middle.
+        assert_eq!(slider_frame_at(x as f64, cy, 800, 600, 5), Some(0));
+        assert_eq!(slider_frame_at((x + w) as f64, cy, 800, 600, 5), Some(4));
+        assert_eq!(slider_frame_at((x + w / 2) as f64, cy, 800, 600, 5), Some(2));
+        // Click far above the track → no grab.
+        assert_eq!(slider_frame_at((x + w / 2) as f64, 10.0, 800, 600, 5), None);
+        // Single frame always reports 0.
+        assert_eq!(slider_frame_at(x as f64, cy, 800, 600, 1), Some(0));
+    }
+
+    #[test]
+    fn draw_slider_renders_label_in_svg() {
+        let mut buf = String::new();
+        {
+            let backend = SVGBackend::with_string(&mut buf, (640, 480));
+            let area = backend.into_drawing_area();
+            area.fill(&WHITE).unwrap();
+            draw_slider(&area, 1, 4, 2.5).unwrap();
+            area.present().unwrap();
+        }
+        assert!(buf.contains("frame 2/4"));
+        assert!(buf.contains("x=2.5000"));
     }
 
     #[test]

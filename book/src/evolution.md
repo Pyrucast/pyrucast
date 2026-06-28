@@ -115,6 +115,17 @@ ev = pc.Evolution([(0.0, champ_t0), (2.0, champ_t1)])
 champ = ev.interpolate(1.0)                       # NodeField à mi-chemin
 ```
 
+## Tracé
+
+`evolution.plot(...)` visualise l'évolution : **courbe X-Y** pour des scalaires, **champ + slider** de
+valeur tabulée pour des champs. Voir [Visualisation › Tracé d'une évolution](visualization.md#tracé-dune-évolution).
+
+```python
+e = pc.Evolution([(0.0, 10.0), (1.0, 20.0), (2.0, 5.0)])
+e.plot(save="courbe.svg", x_label="temps", y_label="T")   # courbe scalaire
+ev.plot(save="frame.png", frame=2)                          # champ tabulé (un pas)
+```
+
 ## Place dans le modèle
 
 `SubValue` est un enum de stockage **inline** (scalaire / `SubNodeField` /

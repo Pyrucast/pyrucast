@@ -27,6 +27,7 @@ use winit::keyboard::{Key, NamedKey};
 use winit::platform::run_on_demand::EventLoopExtRunOnDemand;
 use winit::window::{Window, WindowAttributes, WindowId};
 
+use crate::containers::field::Field as _;
 use crate::error::{PyrucastError, Result};
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
@@ -45,12 +46,28 @@ pub(crate) trait FieldButton {
     fn cycle(&self);
 }
 
+/// Object-safe interface for a Drawable that exposes a **frame slider** (an
+/// evolution of fields). The App drives it from the slider drag and the
+/// ← / → keys without knowing the concrete Drawable type.
+pub(crate) trait FrameControl {
+    /// Number of tabulated frames.
+    fn frame_count(&self) -> usize;
+    /// Currently displayed frame index.
+    fn current(&self) -> usize;
+    /// Select frame `k` (clamped to the valid range).
+    fn set_frame(&self, k: usize);
+}
+
 struct App<'a, D: Drawable> {
     object: &'a D,
     /// Optional field-cycle handler — `Some` when the Drawable also
     /// implements [`FieldButton`] (the field-aware mesh / submesh
     /// rendering path).
     field_button: Option<&'a dyn FieldButton>,
+    /// Optional frame-slider handler — `Some` for an evolution of fields.
+    frame_control: Option<&'a dyn FrameControl>,
+    /// Whether a slider drag is in progress (suppresses camera rotation).
+    sliding: bool,
     /// Cached so we don't recompute the bbox each frame.
     target: crate::containers::mesh::Point3,
     yaw: f64,
@@ -91,6 +108,8 @@ impl<'a, D: Drawable> App<'a, D> {
         Self {
             object,
             field_button,
+            frame_control: None,
+            sliding: false,
             target,
             yaw: view.yaw,
             pitch: view.pitch,
@@ -246,15 +265,46 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                             return;
                         }
                     }
+                    // If the press landed on the frame slider, grab it
+                    // (and start a slider drag) instead of rotating.
+                    if let (Some(fc), Some((cx, cy))) = (self.frame_control, self.cursor) {
+                        if let Some(k) = overlay::slider_frame_at(
+                            cx, cy, self.width, self.height, fc.frame_count(),
+                        ) {
+                            fc.set_frame(k);
+                            self.sliding = true;
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                            return;
+                        }
+                    }
                     self.dragging = true;
                 } else {
                     self.dragging = false;
+                    self.sliding = false;
                     self.last_mouse = None;
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let (x, y) = (position.x, position.y);
                 self.cursor = Some((x, y));
+                if self.sliding {
+                    if let Some(fc) = self.frame_control {
+                        if let Some(k) = overlay::slider_frame_at(
+                            x, y, self.width, self.height, fc.frame_count(),
+                        ) {
+                            if k != fc.current() {
+                                fc.set_frame(k);
+                                if let Some(w) = &self.window {
+                                    w.request_redraw();
+                                }
+                            }
+                        }
+                    }
+                    self.last_mouse = Some((x, y));
+                    return;
+                }
                 if self.dragging {
                     if let Some((lx, ly)) = self.last_mouse {
                         let dx = x - lx;
@@ -299,6 +349,28 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                         btn.cycle();
                         if let Some(w) = &self.window {
                             w.request_redraw();
+                        }
+                    }
+                }
+                Key::Named(NamedKey::ArrowRight) => {
+                    if let Some(fc) = self.frame_control {
+                        let cur = fc.current();
+                        if cur + 1 < fc.frame_count() {
+                            fc.set_frame(cur + 1);
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                    }
+                }
+                Key::Named(NamedKey::ArrowLeft) => {
+                    if let Some(fc) = self.frame_control {
+                        let cur = fc.current();
+                        if cur > 0 {
+                            fc.set_frame(cur - 1);
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
                         }
                     }
                 }
@@ -519,6 +591,206 @@ pub(crate) fn run_interactive<D: Drawable>(object: &D, view: View) -> Result<()>
         // Touch the field so the compiler keeps it (the loop returns; we
         // just want to make sure the View round-trip is reachable).
         let _ = app.current_view();
+        Ok(())
+    })
+}
+
+// ─── Evolution of fields: interactive frame slider ──────────────────────────
+
+/// Interactive Drawable for an **evolution of fields**: it paints the
+/// currently selected **tabulated frame** (coloured by the selected
+/// component) and draws the frame slider. Implements [`Drawable`],
+/// [`FieldButton`] (component cycling) and [`FrameControl`] (frame slider /
+/// arrow keys).
+struct EvolutionFrames<'a> {
+    /// Surface geometry; `None` ⇒ node frames as a point cloud.
+    mesh: Option<&'a crate::containers::mesh::Mesh>,
+    frames: &'a [crate::viz::FrameField],
+    abscissas: &'a [f64],
+    components: Vec<String>,
+    scale: crate::viz::ColorScale,
+    smooth: usize,
+    selected_frame: Cell<usize>,
+    selected_comp: Cell<usize>,
+}
+
+impl<'a> EvolutionFrames<'a> {
+    fn new(
+        mesh: Option<&'a crate::containers::mesh::Mesh>,
+        frames: &'a [crate::viz::FrameField],
+        abscissas: &'a [f64],
+        initial_component: &str,
+        scale: crate::viz::ColorScale,
+        smooth: usize,
+    ) -> Result<Self> {
+        let components = match &frames[0] {
+            crate::viz::FrameField::Node(f) => {
+                crate::viz::field_color::FieldData::Node(f.view()?)
+                    .components()
+                    .to_vec()
+            }
+            crate::viz::FrameField::Element(f) => {
+                crate::viz::field_color::FieldData::Element(f.view()?)
+                    .components()
+                    .to_vec()
+            }
+        };
+        let selected_comp = components
+            .iter()
+            .position(|c| c == initial_component)
+            .unwrap_or(0);
+        Ok(Self {
+            mesh,
+            frames,
+            abscissas,
+            components,
+            scale,
+            smooth,
+            selected_frame: Cell::new(0),
+            selected_comp: Cell::new(selected_comp),
+        })
+    }
+
+    fn current_component(&self) -> &str {
+        &self.components[self.selected_comp.get()]
+    }
+}
+
+impl<'a> Drawable for EvolutionFrames<'a> {
+    fn bbox(&self) -> Result<Bbox3> {
+        match self.mesh {
+            Some(m) => m.bbox(),
+            None => match &self.frames[0] {
+                crate::viz::FrameField::Node(f) => crate::viz::node_field_bbox(f),
+                crate::viz::FrameField::Element(_) => Ok(Bbox3::empty()),
+            },
+        }
+    }
+
+    fn draw_on<DB: DrawingBackend>(
+        &self,
+        area: &plotters::drawing::DrawingArea<DB, plotters::coord::Shift>,
+        view: &View,
+    ) -> Result<()>
+    where
+        DB::ErrorType: 'static,
+    {
+        let k = self.selected_frame.get();
+        let comp = self.current_component();
+        match (self.mesh, &self.frames[k]) {
+            (Some(m), crate::viz::FrameField::Node(f)) => {
+                let data = crate::viz::field_color::FieldData::Node(f.view()?);
+                crate::viz::field_color::MeshFieldView {
+                    mesh: m,
+                    field: &data,
+                    component: comp,
+                    scale: self.scale,
+                    smooth: self.smooth,
+                }
+                .draw_on(area, view)?;
+            }
+            (Some(m), crate::viz::FrameField::Element(f)) => {
+                let data = crate::viz::field_color::FieldData::Element(f.view()?);
+                crate::viz::field_color::MeshFieldView {
+                    mesh: m,
+                    field: &data,
+                    component: comp,
+                    scale: self.scale,
+                    smooth: self.smooth,
+                }
+                .draw_on(area, view)?;
+            }
+            (None, crate::viz::FrameField::Node(f)) => {
+                let points = crate::viz::node_field_points(f, comp)?;
+                crate::viz::field_color::NodeFieldPointsView {
+                    points,
+                    component: comp,
+                    scale: self.scale,
+                }
+                .draw_on(area, view)?;
+            }
+            (None, crate::viz::FrameField::Element(_)) => {
+                return Err(PyrucastError::Message(
+                    "evolution plot: element-field frames require a mesh".into(),
+                ));
+            }
+        }
+        overlay::draw_slider(area, k, self.frames.len(), self.abscissas[k])?;
+        Ok(())
+    }
+}
+
+impl<'a> FieldButton for EvolutionFrames<'a> {
+    fn cycle(&self) {
+        let n = self.components.len();
+        if n == 0 {
+            return;
+        }
+        self.selected_comp.set((self.selected_comp.get() + 1) % n);
+    }
+}
+
+impl<'a> FrameControl for EvolutionFrames<'a> {
+    fn frame_count(&self) -> usize {
+        self.frames.len()
+    }
+    fn current(&self) -> usize {
+        self.selected_frame.get()
+    }
+    fn set_frame(&self, k: usize) {
+        let n = self.frames.len();
+        if n > 0 {
+            self.selected_frame.set(k.min(n - 1));
+        }
+    }
+}
+
+/// Run the interactive viewer on an evolution of fields: a frame slider (drag
+/// or ← / →) picks the tabulated value, the field button / Tab cycles the
+/// component.
+pub(crate) fn run_interactive_evolution(
+    mesh: Option<&crate::containers::mesh::Mesh>,
+    frames: &[crate::viz::FrameField],
+    abscissas: &[f64],
+    initial_component: Option<&str>,
+    scale: crate::viz::ColorScale,
+    smooth: usize,
+    view: View,
+) -> Result<()> {
+    if frames.is_empty() {
+        return Err(PyrucastError::Message(
+            "evolution plot: no tabulated frame".into(),
+        ));
+    }
+    if mesh.is_none() && matches!(frames[0], crate::viz::FrameField::Element(_)) {
+        return Err(PyrucastError::Message(
+            "evolution plot: element-field frames require a mesh".into(),
+        ));
+    }
+    let drawable = EvolutionFrames::new(
+        mesh,
+        frames,
+        abscissas,
+        initial_component.unwrap_or(""),
+        scale,
+        smooth,
+    )?;
+    let bbox = drawable.bbox()?;
+    EVENT_LOOP.with(|cell| -> Result<()> {
+        let mut slot = cell.borrow_mut();
+        if slot.is_none() {
+            *slot = Some(
+                EventLoop::new().map_err(|e| PyrucastError::Message(format!("winit: {e}")))?,
+            );
+        }
+        let event_loop = slot.as_mut().expect("just initialised");
+        event_loop.set_control_flow(ControlFlow::Wait);
+        let mut app =
+            App::new_with_button(&drawable, view, bbox, Some(&drawable as &dyn FieldButton));
+        app.frame_control = Some(&drawable as &dyn FrameControl);
+        event_loop
+            .run_app_on_demand(&mut app)
+            .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?;
         Ok(())
     })
 }

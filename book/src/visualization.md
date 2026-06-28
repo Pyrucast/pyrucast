@@ -230,6 +230,37 @@ En mode interactif (`viz-interactive`), un **bouton cliquable** apparaît au som
 
 La caméra (rotation à la souris, molette, axes affichés via `A`) continue de fonctionner exactement comme en plot classique ; seul un clic *sur* le bouton est intercepté, les clics ailleurs lancent une rotation comme d'habitude.
 
+## Tracé d'une évolution
+
+L'objet [`Evolution` / `SubEvolution`](evolution.md) expose `plot(...)`, qui s'adapte au type de valeur tabulée :
+
+- **évolution de scalaires** → une **courbe X-Y** : l'abscisse est la variable, l'ordonnée la valeur. Un agrégat à plusieurs zones trace **une ligne par zone** avec légende ; chaque échantillon tabulé est marqué d'un point. Les libellés se règlent par `x_label` / `y_label` / `title`. Les arguments de champ (`mesh`, `component`, `cmap`, …) sont sans effet ici.
+- **évolution de champs** → le champ est rendu **comme par `mesh.plot(field=...)`**, pour **une valeur tabulée** à la fois. La géométrie suit la même règle que le tracé d'un champ seul : champ par éléments → reconstruit son maillage via le support EF ; champ aux nœuds → **nuage de points** par défaut, ou surface si on passe `mesh=<maillage>`.
+
+```python
+import pyrucast as pc
+
+# Courbe scalaire (variable → valeur).
+e = pc.Evolution([(0.0, 10.0), (1.0, 20.0), (2.0, 5.0)])
+e.plot(save="courbe.svg", x_label="temps", y_label="T", title="évolution de T")
+
+# Évolution d'un champ aux nœuds : un NodeField complet par pas de temps.
+ev = pc.Evolution([(0.0, champ_t0), (1.0, champ_t1), (2.0, champ_t2)])
+ev.plot(save="frame.png", frame=2)              # une valeur tabulée (défaut : la dernière)
+ev.plot(save="frame_surf.png", mesh=maillage)   # rendu surfacique sur un maillage fourni
+```
+
+### Slider de valeur tabulée (fenêtre interactive)
+
+En mode interactif (`viz-interactive`, `save=None`), une évolution de champs ouvre la fenêtre avec un **slider** dessiné en bas, qui choisit **quelle valeur tabulée** est affichée (le libellé indique `frame k/n   x=…`) :
+
+- **glisser** le curseur du slider à la souris ;
+- **touches `←` / `→`** pour reculer / avancer d'un pas tabulé.
+
+Le **bouton de composante** (clic / `Tab`) et la caméra (rotation, molette, axes via `A`) fonctionnent comme d'habitude ; un clic *sur* le slider est intercepté, ailleurs c'est une rotation. Le slider ne choisit que parmi les valeurs **tabulées** — il n'interpole pas entre elles (pour une valeur intermédiaire, voir `interpolate` sur la page [Évolution](evolution.md)).
+
+> Toutes les sous-évolutions d'un agrégat tracé doivent partager la **même grille d'abscisses** (un index de frame global l'exige) ; sinon `plot` lève une erreur.
+
 ## Types d'éléments rendus
 
 **Tous les types d'éléments sont rendus**, chacun converti en une primitive géométrique :

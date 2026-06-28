@@ -5,6 +5,8 @@ use crate::containers::element_field::ElementField;
 use crate::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue};
 use crate::containers::node_field::NodeField;
 use crate::py::element_field::{PyElementField, PySubElementField};
+#[cfg(feature = "viz")]
+use crate::py::mesh::PyMesh;
 use crate::py::node_field::{PyNodeField, PySubNodeField};
 use crate::store::{insert, read, Handle};
 use pyo3::exceptions::{PyTypeError, PyValueError};
@@ -112,6 +114,50 @@ impl PySubEvolution {
         let policy = parse_policy(out_of_range)?;
         let value = read(&self.handle)?.interpolate(x, policy)?;
         sub_value_to_py(py, value)
+    }
+
+    /// Plot this single curve — see `Evolution.plot`. A scalar curve draws an
+    /// X-Y line; a field curve renders with a frame slider.
+    #[cfg(feature = "viz")]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, mesh=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, frame=None, x_label=None, y_label=None, title=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn plot(
+        &self,
+        view: Option<(f64, f64, f64)>,
+        save: Option<std::path::PathBuf>,
+        show_axes: bool,
+        mesh: Option<PyRef<'_, PyMesh>>,
+        component: Option<String>,
+        vmin: Option<f64>,
+        vmax: Option<f64>,
+        cmap: Option<String>,
+        smooth: usize,
+        frame: Option<usize>,
+        x_label: Option<String>,
+        y_label: Option<String>,
+        title: Option<String>,
+    ) -> PyResult<()> {
+        let view = build_view(view, show_axes);
+        let scale = crate::viz::ColorScale {
+            cmap: crate::py::mesh::parse_cmap(cmap)?,
+            vmin,
+            vmax,
+        };
+        // Clone out of the store so no read lock is held during rendering.
+        let sub = (*read(&self.handle)?).clone();
+        sub.plot(
+            Some(view),
+            save.as_deref(),
+            mesh.as_ref().map(|m| &m.inner),
+            component.as_deref(),
+            scale,
+            smooth,
+            frame,
+            x_label.as_deref(),
+            y_label.as_deref(),
+            title.as_deref(),
+        )?;
+        Ok(())
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -227,6 +273,70 @@ impl PyEvolution {
             Interpolated::Element(f) => Ok(Py::new(py, PyElementField { inner: f })?.into_any()),
         }
     }
+
+    /// Plot the evolution. A **scalar** evolution draws an X-Y curve (one line
+    /// per zone); a **field** evolution renders like `Mesh.plot(field=...)`
+    /// with a frame slider (drag, or ← / →) picking the tabulated value.
+    ///
+    /// `save` writes a PNG/SVG (a single `frame`, default = last for fields);
+    /// omit it for the interactive window. `mesh` supplies the surface for
+    /// field evolutions (node frames default to a point cloud). `x_label` /
+    /// `y_label` / `title` label the curve.
+    #[cfg(feature = "viz")]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, mesh=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, frame=None, x_label=None, y_label=None, title=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn plot(
+        &self,
+        view: Option<(f64, f64, f64)>,
+        save: Option<std::path::PathBuf>,
+        show_axes: bool,
+        mesh: Option<PyRef<'_, PyMesh>>,
+        component: Option<String>,
+        vmin: Option<f64>,
+        vmax: Option<f64>,
+        cmap: Option<String>,
+        smooth: usize,
+        frame: Option<usize>,
+        x_label: Option<String>,
+        y_label: Option<String>,
+        title: Option<String>,
+    ) -> PyResult<()> {
+        let view = build_view(view, show_axes);
+        let scale = crate::viz::ColorScale {
+            cmap: crate::py::mesh::parse_cmap(cmap)?,
+            vmin,
+            vmax,
+        };
+        self.inner.plot(
+            Some(view),
+            save.as_deref(),
+            mesh.as_ref().map(|m| &m.inner),
+            component.as_deref(),
+            scale,
+            smooth,
+            frame,
+            x_label.as_deref(),
+            y_label.as_deref(),
+            title.as_deref(),
+        )?;
+        Ok(())
+    }
+}
+
+/// Build a [`crate::viz::View`] from an optional `(yaw, pitch, scale)` triple.
+#[cfg(feature = "viz")]
+fn build_view(view: Option<(f64, f64, f64)>, show_axes: bool) -> crate::viz::View {
+    let mut v = view
+        .map(|(yaw, pitch, scale)| crate::viz::View {
+            yaw,
+            pitch,
+            scale,
+            target: None,
+            show_axes,
+        })
+        .unwrap_or_default();
+    v.show_axes = show_axes;
+    v
 }
 
 crate::impl_aggregate_pymethods!(PyEvolution, PySubEvolution, "Evolution", sub_evolution, Evolution);

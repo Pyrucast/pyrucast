@@ -62,6 +62,10 @@ use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+/// One labelled `(abscissa, value)` curve per zone — the input of a scalar
+/// X-Y plot ([`Evolution::scalar_series_set`]).
+pub type ScalarSeriesSet = Vec<(String, Vec<(f64, f64)>)>;
+
 // ─── OutOfRange policy ──────────────────────────────────────────────────────
 
 /// What an interpolation does when the requested abscissa falls **outside**
@@ -261,6 +265,62 @@ impl SubEvolution {
     /// This curve's stored out-of-range policy.
     pub fn out_of_range(&self) -> OutOfRange {
         self.out_of_range
+    }
+
+    /// The `(abscissa, value)` points of a **scalar** curve, in abscissa
+    /// order. Errors if the curve carries fields rather than scalars.
+    pub fn scalar_series(&self) -> Result<Vec<(f64, f64)>> {
+        if self.kind() != ValueKind::Scalar {
+            return Err(PyrucastError::Message(
+                "scalar_series: this evolution carries fields, not scalars".into(),
+            ));
+        }
+        Ok(self
+            .abscissas
+            .iter()
+            .zip(&self.values)
+            .map(|(x, v)| match v {
+                SubValue::Scalar(s) => (*x, *s),
+                _ => unreachable!("kind checked above"),
+            })
+            .collect())
+    }
+
+    /// The `k`-th tabulated value (a clone). Errors if `k` is out of range.
+    pub fn value_at(&self, k: usize) -> Result<SubValue> {
+        self.values.get(k).cloned().ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "SubEvolution: frame {} out of range (len={})",
+                k,
+                self.values.len()
+            ))
+        })
+    }
+
+    /// Plot this single curve — see [`Evolution::plot`]. Delegates to a
+    /// one-zone [`Evolution`] wrapping a clone of `self`.
+    #[cfg(feature = "viz")]
+    #[allow(clippy::too_many_arguments)]
+    pub fn plot(
+        &self,
+        view: Option<crate::viz::View>,
+        save: Option<&std::path::Path>,
+        mesh: Option<&crate::containers::mesh::Mesh>,
+        component: Option<&str>,
+        scale: crate::viz::ColorScale,
+        smooth: usize,
+        frame: Option<usize>,
+        x_label: Option<&str>,
+        y_label: Option<&str>,
+        title: Option<&str>,
+    ) -> Result<()> {
+        let evo = Evolution {
+            subs: vec![insert(self.clone())],
+            out_of_range: self.out_of_range,
+        };
+        evo.plot(
+            view, save, mesh, component, scale, smooth, frame, x_label, y_label, title,
+        )
     }
 
     /// Interpolate at `x`. `policy` overrides the stored [`OutOfRange`] for
@@ -516,6 +576,144 @@ impl Evolution {
         }
     }
 
+    /// The aggregate's value kind (taken from the first sub-evolution).
+    /// Errors if the evolution is empty.
+    pub fn kind(&self) -> Result<ValueKind> {
+        if self.subs.is_empty() {
+            return Err(PyrucastError::Message("Evolution: empty evolution".into()));
+        }
+        Ok(read(&self.subs[0])?.kind())
+    }
+
+    /// The abscissa grid **shared** by every sub-evolution, validated to be
+    /// identical across zones (a global frame slider requires it). Errors on
+    /// an empty evolution or mismatched grids.
+    pub fn shared_abscissas(&self) -> Result<Vec<f64>> {
+        if self.subs.is_empty() {
+            return Err(PyrucastError::Message("Evolution: empty evolution".into()));
+        }
+        let first = read(&self.subs[0])?.abscissas().to_vec();
+        for h in &self.subs[1..] {
+            if read(h)?.abscissas() != first.as_slice() {
+                return Err(PyrucastError::Message(
+                    "Evolution: sub-evolutions have different abscissa grids — \
+                     a frame index is ambiguous"
+                        .into(),
+                ));
+            }
+        }
+        Ok(first)
+    }
+
+    /// Number of tabulated frames (length of the shared abscissa grid).
+    pub fn frame_count(&self) -> Result<usize> {
+        Ok(self.shared_abscissas()?.len())
+    }
+
+    /// Regroup the `k`-th tabulated node sub-field of every zone into a
+    /// [`NodeField`]. Errors if the values are not node fields.
+    pub fn node_frame(&self, k: usize) -> Result<NodeField> {
+        let mut field = NodeField::default();
+        for h in &self.subs {
+            match read(h)?.value_at(k)? {
+                SubValue::Node(sf) => field.add_sub(insert(sf))?,
+                _ => return Err(not_node_err()),
+            }
+        }
+        Ok(field)
+    }
+
+    /// Regroup the `k`-th tabulated element sub-field of every zone into an
+    /// [`ElementField`]. Errors if the values are not element fields.
+    pub fn element_frame(&self, k: usize) -> Result<ElementField> {
+        let mut field = ElementField::default();
+        for h in &self.subs {
+            match read(h)?.value_at(k)? {
+                SubValue::Element(sf) => field.add_sub(insert(sf))?,
+                _ => return Err(not_element_err()),
+            }
+        }
+        Ok(field)
+    }
+
+    /// One labelled `(abscissa, value)` series per sub-evolution — for a
+    /// scalar X-Y plot. Errors if the values are not scalars.
+    pub fn scalar_series_set(&self) -> Result<ScalarSeriesSet> {
+        let mut out = Vec::with_capacity(self.subs.len());
+        for (i, h) in self.subs.iter().enumerate() {
+            let label = if self.subs.len() == 1 {
+                "value".to_string()
+            } else {
+                format!("zone {i}")
+            };
+            out.push((label, read(h)?.scalar_series()?));
+        }
+        Ok(out)
+    }
+
+    /// Plot the evolution.
+    ///
+    /// - **scalar** evolution → an X-Y curve (one line per zone) ;
+    /// - **field** evolution → the field rendered like [`crate::containers::mesh::Mesh::plot`],
+    ///   with a frame slider (interactive) picking the tabulated value.
+    ///
+    /// `save=Some(path)` writes a PNG/SVG (a single `frame`, default = last for
+    /// fields); `save=None` opens the interactive window. `mesh` supplies the
+    /// surface for field evolutions (node frames default to a point cloud;
+    /// element frames reconstruct their FE support when no mesh is given).
+    #[cfg(feature = "viz")]
+    #[allow(clippy::too_many_arguments)]
+    pub fn plot(
+        &self,
+        view: Option<crate::viz::View>,
+        save: Option<&std::path::Path>,
+        mesh: Option<&crate::containers::mesh::Mesh>,
+        component: Option<&str>,
+        scale: crate::viz::ColorScale,
+        smooth: usize,
+        frame: Option<usize>,
+        x_label: Option<&str>,
+        y_label: Option<&str>,
+        title: Option<&str>,
+    ) -> Result<()> {
+        match self.kind()? {
+            ValueKind::Scalar => crate::viz::render_curve(
+                self.scalar_series_set()?,
+                x_label.unwrap_or("variable"),
+                y_label.unwrap_or("value"),
+                title.unwrap_or(""),
+                view,
+                save,
+            ),
+            ValueKind::Node => {
+                let abscissas = self.shared_abscissas()?;
+                let frames: Vec<crate::viz::FrameField> = (0..abscissas.len())
+                    .map(|k| Ok(crate::viz::FrameField::Node(self.node_frame(k)?)))
+                    .collect::<Result<_>>()?;
+                crate::viz::render_evolution_field(
+                    mesh, &frames, &abscissas, component, scale, smooth, frame, view, save,
+                )
+            }
+            ValueKind::Element => {
+                let abscissas = self.shared_abscissas()?;
+                let frames: Vec<crate::viz::FrameField> = (0..abscissas.len())
+                    .map(|k| Ok(crate::viz::FrameField::Element(self.element_frame(k)?)))
+                    .collect::<Result<_>>()?;
+                // No mesh given → draw on the element field's own FE support.
+                let reconstructed = match (mesh, frames.first()) {
+                    (None, Some(crate::viz::FrameField::Element(ef))) => {
+                        Some(element_support_mesh(ef)?)
+                    }
+                    _ => None,
+                };
+                let geom = mesh.or(reconstructed.as_ref());
+                crate::viz::render_evolution_field(
+                    geom, &frames, &abscissas, component, scale, smooth, frame, view, save,
+                )
+            }
+        }
+    }
+
     /// Build a single-curve scalar `Evolution` from `(abscissa, scalar)`
     /// samples — the classic X→Y curve (one sub-evolution).
     pub fn from_scalars(samples: Vec<(f64, f64)>, out_of_range: OutOfRange) -> Result<Self> {
@@ -604,6 +802,31 @@ impl Evolution {
 
 fn mixed_kind_err() -> PyrucastError {
     PyrucastError::Message("Evolution: inconsistent value kinds across sub-evolutions".into())
+}
+
+fn not_node_err() -> PyrucastError {
+    PyrucastError::Message("Evolution: expected node-field values".into())
+}
+
+fn not_element_err() -> PyrucastError {
+    PyrucastError::Message("Evolution: expected element-field values".into())
+}
+
+/// Reconstruct the surface [`crate::containers::mesh::Mesh`] backing an
+/// element field, from each zone's FE support sub-mesh — so an element-field
+/// evolution can be plotted without the user re-supplying the geometry.
+#[cfg(feature = "viz")]
+fn element_support_mesh(
+    field: &ElementField,
+) -> Result<crate::containers::mesh::Mesh> {
+    use crate::containers::field::SubField;
+    let mut mesh = crate::containers::mesh::Mesh::empty();
+    for h in field.iter() {
+        let sub = read(h)?;
+        let fes = read(&sub.support())?;
+        mesh.add_sub(fes.submesh())?;
+    }
+    Ok(mesh)
 }
 
 /// Clone of the `field`'s sub-field on the given POI1 `support` (matched by
@@ -788,6 +1011,39 @@ mod tests {
             Interpolated::Scalars(v) => assert_eq!(v, vec![1.5, 3.5]),
             _ => panic!("expected scalars"),
         }
+    }
+
+    #[test]
+    fn scalar_series_set_labels_zones() {
+        let e0 = Evolution::from_scalars(vec![(0.0, 1.0), (1.0, 2.0)], OutOfRange::Error).unwrap();
+        let series = e0.scalar_series_set().unwrap();
+        assert_eq!(series.len(), 1);
+        assert_eq!(series[0].0, "value");
+        assert_eq!(series[0].1, vec![(0.0, 1.0), (1.0, 2.0)]);
+        // Two zones → labelled "zone 0" / "zone 1".
+        let e1 = Evolution::from_scalars(vec![(0.0, 3.0), (1.0, 4.0)], OutOfRange::Error).unwrap();
+        let u = e0.union(&e1).unwrap();
+        let s = u.scalar_series_set().unwrap();
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].0, "zone 0");
+        assert_eq!(s[1].0, "zone 1");
+    }
+
+    #[test]
+    fn shared_abscissas_validates_grid() {
+        let sm = poi1(2);
+        let a = node_field(&sm, &[0.0, 0.0]);
+        let b = node_field(&sm, &[10.0, 20.0]);
+        let f0 = NodeField::from_sub(a);
+        let f1 = NodeField::from_sub(b);
+        let e = Evolution::from_node_fields(&[(0.0, &f0), (2.0, &f1)], OutOfRange::Error).unwrap();
+        assert_eq!(e.shared_abscissas().unwrap(), vec![0.0, 2.0]);
+        assert_eq!(e.frame_count().unwrap(), 2);
+        // frame 1 = the second tabulated NodeField.
+        let frame = e.node_frame(1).unwrap();
+        let sub = read(&frame.get(0).unwrap()).unwrap();
+        assert_eq!(sub.get(0, 0).unwrap(), 10.0);
+        assert_eq!(sub.get(1, 0).unwrap(), 20.0);
     }
 
     #[test]
