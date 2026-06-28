@@ -1,0 +1,9 @@
+# Révisions à ignorer par `git blame` (reformatages massifs sans changement de
+# logique). Activer localement une fois :
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub respecte ce fichier automatiquement.
+
+# style: rustfmt standard sur tout l'arbre
+d328f765bfc53319e9321f2347ccf6c82dd4b91f
