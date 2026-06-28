@@ -23,7 +23,7 @@ lues tôt :
 
 - l'[**Agrégat**](aggregate.md) — la grammaire commune (`len`, `[i]`, union
   `|`) de tous les conteneurs « parent / zones » (`Mesh`, `FiniteElementSpace`,
-  `Model`, `Matrix`, `NodeField`, `ElementField`) ;
+  `Model`, `Matrix`, `NodeField`, `ElementField`, `Evolution`) ;
 - le [**Champ**](field.md) (`Field` / `SubField`) — le contrat partagé entre
   `NodeField` et `ElementField` : composantes nommées, `min`/`max`,
   arithmétique scalaire et par composante.

@@ -2,9 +2,10 @@
 
 La plupart des conteneurs de pyrucast viennent par **paires** : un objet
 **zone** (`SubMesh`, `SubFiniteElementSpace`, `SubNodeField`,
-`SubElementField`, `SubModel`, `SubMatrix`) et son **agrégat** (`Mesh`,
-`FiniteElementSpace`, `NodeField`, `ElementField`, `Model`, `Matrix`). Tous les
-agrégats partagent **exactement la même grammaire d'accès** et la même
+`SubElementField`, `SubModel`, `SubMatrix`, `SubEvolution`) et son **agrégat**
+(`Mesh`, `FiniteElementSpace`, `NodeField`, `ElementField`, `Model`, `Matrix`,
+`Evolution`). Tous les agrégats partagent **exactement la même grammaire
+d'accès** et la même
 **composition par union** — factorisées dans le trait Rust `Aggregate`
 (`src/aggregate.rs`). Ce chapitre décrit ce contrat commun une fois pour
 toutes ; chaque chapitre d'objet n'en redonne que les spécificités.
@@ -65,7 +66,7 @@ directement côté Python. On construit toujours au **niveau parent**
 ## Composition : l'union `|`
 
 Composer deux agrégats, c'est l'**union** : `a | b` côté Python, `a.union(&b)`
-côté Rust. La sémantique est **uniforme pour les six agrégats** :
+côté Rust. La sémantique est **uniforme pour les sept agrégats** :
 
 1. **Déduplication par handle.** Une zone dont le `Handle` est déjà présent
    (même slot du store, `Handle::same_slot`) n'est pas ajoutée deux fois.

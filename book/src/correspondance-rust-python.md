@@ -40,10 +40,15 @@ Le nom de la classe Python est identique au nom de la structure Rust.
 | `containers::matrix` | `Matrix` | `pyrucast.Matrix` | [Matrice creuse](matrix.md) |
 | `containers::model` | `SubModel` | `pyrucast.SubModel` *(vue, via `model[i]`)* | [Modèle physique](model.md) |
 | `containers::model` | `Model` | `pyrucast.Model` | [Modèle physique](model.md) |
+| `containers::evolution` | `SubEvolution` | `pyrucast.SubEvolution` *(constructible — voir ci-dessous)* | [Évolution](evolution.md) |
+| `containers::evolution` | `Evolution` | `pyrucast.Evolution` | [Évolution](evolution.md) |
 
 Quelques types Rust **ne sont pas** exposés en classes Python : ce sont des
 détails d'implémentation (`Physics`, l'énum des physiques sous `SubModel` ;
-`DofOrdering`, l'ordonnancement des DOFs d'une `SubMatrix`).
+`DofOrdering`, l'ordonnancement des DOFs d'une `SubMatrix` ; `SubValue`,
+`OutOfRange`, `ValueKind` et `Interpolated`, internes à l'`Evolution` — une
+valeur tabulée se passe directement en scalaire ou en champ, la politique
+hors-plage en chaîne `"error"`/`"clamp"`/`"extrapolate"`).
 
 Les sous-objets `Sub*` (`SubMesh`, `SubFiniteElementSpace`, `SubElementField`,
 `SubMatrix`, `SubModel`) ne se **construisent pas** directement côté Python :
@@ -53,6 +58,12 @@ construit toujours au niveau parent — `Mesh(coords, type)`,
 `Model.heat_conduction(fes)`, `Matrix.block(...)` — et on compose plusieurs
 zones avec `|` (union — Rust : `union`). Voir la règle « Agrégats : un ou
 plusieurs » de `CONVENTIONS.md`.
+
+**Exception : `SubEvolution`.** Seul sous-objet à la fois **vue** (via
+`evolution[i]`) **et constructible directement** —
+`SubEvolution([(t0, v0), (t1, v1), …])` — car une courbe tabulée n'a pas de
+« parent » géométrique qui la définirait. On compose ensuite les courbes par
+zone avec `|` (cf. [Évolution](evolution.md)).
 
 ## Fonctions ↔ fonctions
 
@@ -71,9 +82,13 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `sweep_qua4(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_qua4(mesh_a, mesh_b, n_layers) -> Mesh` |
 | `extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Mesh` | `extrude(mesh, direction, n_layers) -> Mesh` |
 | `fill_surface(contour: &Mesh, et: ElementType, refinement: Option<…>) -> Mesh` | `fill_surface(contour, element_type, max_edge_length=None, min_angle_deg=None) -> Mesh` |
+| `surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Mesh` | `surface(contour, element_type, size=None) -> Mesh` |
+| `volume(envelope: &Mesh, size: Option<f64>) -> Mesh` | `volume(envelope, size=None) -> Mesh` |
+| `contour(mesh: &Mesh) -> Mesh` | `contour(mesh) -> Mesh` |
 | `barycenter(mesh: &Mesh) -> Mesh` | `barycenter(mesh) -> Mesh` |
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
 | `elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Mesh` | `elements_on(mesh, points, strict=True) -> Mesh` |
+| `merge_nodes(mesh: &Mesh, tol: f64) -> Mesh` | `merge_nodes(mesh, tol) -> Mesh` |
 | `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` (dispatch par type, partagé avec `NodeField`) |
 
 ### `ops::field` — opérateurs sur les champs
@@ -91,6 +106,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `select_nodes(field: &NodeField, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, min=None, max=None, components=None) -> Mesh` (dispatch par type) |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` (dispatch par type, partagé avec `Mesh`) |
+| `abs` / `sqrt` / `exp` / `log` / `log10` / `cos` / `sin` / `tan` / `sinh` / `cosh` / `tanh` `(field) -> Field` | mêmes noms `pyrucast.…(field)` — maths **élément par élément** (style numpy), un champ neuf du même type ; acceptent les quatre saveurs de champ (`NodeField` / `SubNodeField` / `ElementField` / `SubElementField`). Résultats non bornés : `log` de ≤ 0 → `-inf`/`nan` |
 
 > La composition de zones passe par l'**union** (`|` Python / `union` Rust) ;
 > l'arithmétique champ + scalaire par l'**opérateur** `+`. Ni l'une ni l'autre
@@ -180,6 +196,8 @@ traits [`SubField` / `Field`](field.md).
 | `Model` | nombre de sous-modèles | `SubModel` | `Aggregate` (macro) |
 | `Matrix` | nombre de sous-matrices | — (pas de `[i]`) | `Aggregate` (macro pour `len`) |
 | `SubMatrix` | nombre d'entrées | — | méthode `entry_count` |
+| `Evolution` | nombre de sous-évolutions | `SubEvolution` | `Aggregate` (macro) |
+| `SubEvolution` | nombre d'échantillons tabulés | — | méthode `__len__` |
 
 ### Union `|` (composition d'agrégats)
 
@@ -205,8 +223,8 @@ Sémantique d'union (uniforme pour **tous** les agrégats) :
 | `node \| node` | `a.union(&b)` | `Mesh` | maillage POI1 unitaire sur les deux nœuds |
 | `mesh \| node` | `m.union_node(&n)` | `Mesh` | ajoute un point (erreur si `Mesh` non unitaire POI1) |
 
-Vaut pour les six agrégats (`Mesh`, `FiniteElementSpace`, `Model`, `Matrix`,
-`NodeField`, `ElementField`) plus `Node`.
+Vaut pour les sept agrégats (`Mesh`, `FiniteElementSpace`, `Model`, `Matrix`,
+`NodeField`, `ElementField`, `Evolution`) plus `Node`.
 
 #### Finalisation des champs (fusion par support)
 

@@ -87,6 +87,7 @@ d'accès) :
 | `SubElementField` | `ElementField` |
 | `SubModel` | `Model` |
 | `SubMatrix` | `Matrix` |
+| `SubEvolution` | `Evolution` |
 
 Tous les agrégats exposent la même interface (`len`, `[i]`, itération,
 `unit()`) et la même **composition par union `|`** (côté Rust : `union`). Les

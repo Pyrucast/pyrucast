@@ -34,7 +34,8 @@ src/
 │   ├── node_field.rs   # NodeField / SubNodeField
 │   ├── element_field.rs# ElementField / SubElementField
 │   ├── model.rs        # Model / SubModel (enum de stockage + dispatch)
-│   └── matrix.rs       # Matrix / SubMatrix (matrice creuse COO)
+│   ├── matrix.rs       # Matrix / SubMatrix (matrice creuse COO)
+│   └── evolution.rs    # Evolution / SubEvolution (valeur tabulée, interpolée)
 │
 ├── models/             # LES PHYSIQUES (une struct + impl Physics par fichier)
 │   ├── mod.rs              # trait Physics (tout le comportement)

@@ -129,6 +129,38 @@ de cisaillement** `γ = w' − θ`. Les deux sont pris **constants par élément
 parasite. Le champ doit porter les composantes `"w"` et `"theta"`. Le résultat
 se donne au [comportement](comportement.md) pour obtenir les efforts de section.
 
+## Maths élément par élément
+
+Onze fonctions appliquent une fonction scalaire à **chaque valeur** d'un champ
+et renvoient un **nouveau** champ du même type (style numpy). Elles acceptent
+indifféremment les quatre saveurs de champ — `NodeField`, `SubNodeField`,
+`ElementField`, `SubElementField` — et dispatchent par type.
+
+| Python | Effet |
+|---|---|
+| `abs(field)` | valeur absolue |
+| `sqrt(field)` | racine carrée (`nan` pour les négatifs) |
+| `exp(field)` | exponentielle `eˣ` |
+| `log(field)` | logarithme népérien (`-inf`/`nan` pour ≤ 0) |
+| `log10(field)` | logarithme base 10 |
+| `cos(field)` / `sin(field)` / `tan(field)` | trigonométrie (radians) |
+| `sinh(field)` / `cosh(field)` / `tanh(field)` | trigonométrie hyperbolique |
+
+Les résultats sont **non bornés**, comme en numpy : aucune protection sur le
+domaine (`log` de ≤ 0 donne `-inf`/`nan`, `sqrt` d'un négatif donne `nan`). Ces
+fonctions se combinent à l'arithmétique scalaire des champs (`f + s`, `f * s`,
+cf. [Champ](../field.md)) pour bâtir des expressions par composante.
+
+```python
+import pyrucast
+
+# Atténuation exponentielle d'un champ de température.
+attenue = pyrucast.exp(temperature * -0.1)
+
+# Magnitude d'un champ (combiné à l'arithmétique scalaire de champ).
+amplitude = pyrucast.abs(signal)
+```
+
 ## À venir dans `ops::field`
 
 Le module est conçu pour accueillir d'autres dérivations sur le même patron

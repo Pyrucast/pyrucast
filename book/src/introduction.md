@@ -52,6 +52,7 @@ Résumé des rôles :
 | [`SubElementField`](element-field.md) / `ElementField` | Valeurs par cellule × point de Gauss × composante |
 | [`SubModel`](model.md) / `Model` | Physique ou contrainte locale / problème complet |
 | [`SubMatrix`](matrix.md) / `Matrix` | Matrice creuse dont les lignes/colonnes sont des DOFs `(NodeId, champ)` |
+| [`SubEvolution`](evolution.md) / `Evolution` | Valeur (scalaire ou champ) tabulée vs une variable, interpolée linéairement (zone / agrégat) |
 
 ## Premiers pas
 
