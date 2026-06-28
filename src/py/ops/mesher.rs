@@ -63,6 +63,27 @@ pub fn barycenter(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
+/// Keep the elements of `mesh` resting on the nodes of `points`
+/// (Cast3m `ELEM … APPUYE`).
+///
+/// Only the node set referenced by `points` matters (typically a POI1
+/// points mesh). With `strict=True` a cell is kept when **all** its nodes
+/// are in the set (`APPUYE STRICTEMENT`); with `strict=False` when **at
+/// least one** is (`APPUYE`). The result mirrors `mesh` submesh by submesh
+/// (same types, possibly-empty zones). Both meshes must share the same
+/// `Coords`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, points, strict=true))]
+pub fn elements_on(
+    mesh: PyRef<PyMesh>,
+    points: PyRef<PyMesh>,
+    strict: bool,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::elements_on(&mesh.inner, &points.inner, strict)?;
+    Ok(PyMesh { inner: result })
+}
+
 // `consolidate(mesh)` is exposed by the type-dispatching top-level
 // wrapper in `crate::py::ops::consolidate` (shared with NodeField).
 

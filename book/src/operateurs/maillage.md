@@ -19,6 +19,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `surface(contour, type, size=None)` | maille l'intérieur d'un contour par **front avançant** avec création de nœuds internes (voir plus bas) |
 | `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
 | `contour(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
+| `elements_on(mesh, points, strict=True)` | les **éléments** de `mesh` qui s'**appuient** sur les nœuds de `points` (voir plus bas) |
 | `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
 | `consolidate(mesh)` | fusionne les sous-maillages de même type (dispatch partagé avec `NodeField`) |
@@ -386,6 +387,55 @@ gérés), ou si le bord n'est pas un ensemble propre de boucles fermées (arête
 ouverte ou non-manifold).
 
 Côté Rust, `ops::mesher::contour(&mesh)`.
+
+## Éléments s'appuyant sur des nœuds : `elements_on`
+
+`elements_on(mesh, points, strict=True)` renvoie le **sous-ensemble** des
+éléments de `mesh` qui **s'appuient** sur les nœuds de `points` — l'opérateur
+historique `ELEM … APPUYE`. Seul l'**ensemble des nœuds référencés** par
+`points` compte (typiquement un maillage de points POI1) ; ni le type ni la
+connectivité de `points` n'importent.
+
+Le critère dépend de `strict` :
+
+- `strict=True` — on garde une cellule lorsque **tous** ses nœuds sont dans
+  l'ensemble (`APPUYE STRICTEMENT`) ;
+- `strict=False` — on garde une cellule dès qu'**au moins un** de ses nœuds y
+  est (`APPUYE`).
+
+Le résultat **épouse la structure** de `mesh` sous-maillage par sous-maillage
+(même ordre, mêmes types d'éléments, mêmes couleurs) : chaque sous-maillage de
+sortie porte les cellules retenues du sous-maillage d'entrée correspondant,
+**éventuellement vide**. Les zones restent séparées (jamais de fusion). Au
+besoin, `consolidate(mesh)` élimine ou fond ensuite les zones vides ou
+redondantes. Les cellules retenues réutilisent les nœuds d'origine (refcount
+incrémenté) ; `mesh` est laissé intact.
+
+Les deux maillages doivent vivre sur la **même `Coords`** (un identifiant de
+nœud n'a de sens qu'au sein d'une `Coords`), sinon une erreur est levée. Un
+`points` vide ne retient rien.
+
+```python
+import pyrucast
+
+c = pyrucast.Coords(dim=2)
+nodes = [c.add_node(p) for p in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (2.0, 0.0)]]
+
+mesh = pyrucast.Mesh(c, "TRI3")
+mesh.unit().add_cell([nodes[0], nodes[1], nodes[2]])   # cellule 0
+mesh.unit().add_cell([nodes[1], nodes[3], nodes[2]])   # cellule 1
+
+# Points = {0, 1, 2} : seule la cellule 0 a tous ses nœuds dedans.
+pts = pyrucast.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
+
+strict = pyrucast.elements_on(mesh, pts, strict=True)
+print(strict.cell_count())          # 1  (cellule 0)
+
+loose = pyrucast.elements_on(mesh, pts, strict=False)
+print(loose.cell_count())           # 2  (les deux touchent un nœud de pts)
+```
+
+Côté Rust, `ops::mesher::elements_on(&mesh, &points, strict)`.
 
 ## Soudure des nœuds proches : `merge_nodes`
 

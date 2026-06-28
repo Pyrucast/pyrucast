@@ -36,6 +36,7 @@ __all__ = [
     "deformation",
     "displace",
     "divergence",
+    "elements_on",
     "exp",
     "extrude",
     "fill_surface",
@@ -1760,6 +1761,19 @@ def divergence(field: ElementField) -> NodeField:
     `gradient`: `d_i = ∫ ∇N_i · F dΩ`, accumulated per node. The field must
     carry exactly `space_dim` components (the vector components in order).
     Returns a `NodeField` with a single `"div"` component (one zone per subspace).
+    """
+
+def elements_on(mesh: Mesh, points: Mesh, strict: builtins.bool = True) -> Mesh:
+    r"""
+    Keep the elements of `mesh` resting on the nodes of `points`
+    (Cast3m `ELEM … APPUYE`).
+    
+    Only the node set referenced by `points` matters (typically a POI1
+    points mesh). With `strict=True` a cell is kept when **all** its nodes
+    are in the set (`APPUYE STRICTEMENT`); with `strict=False` when **at
+    least one** is (`APPUYE`). The result mirrors `mesh` submesh by submesh
+    (same types, possibly-empty zones). Both meshes must share the same
+    `Coords`.
     """
 
 def exp(field: typing.Any) -> typing.Any:

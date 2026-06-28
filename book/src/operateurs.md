@@ -12,7 +12,7 @@ par module, plus la visualisation (qui vit sous `src/viz/`).
 
 | Module Rust | Chapitre | Contenu |
 |---|---|---|
-| `ops::mesher` | [Maillage](operateurs/maillage.md) | `line_seg2`, `circle_seg2`, `extrude`, `sweep_qua4`, `fill_surface`, `to_poi1`, `barycenter`, `consolidate`… |
+| `ops::mesher` | [Maillage](operateurs/maillage.md) | `line_seg2`, `circle_seg2`, `extrude`, `sweep_qua4`, `fill_surface`, `elements_on`, `to_poi1`, `barycenter`, `consolidate`… |
 | `ops::build` | [Construction](operateurs/construction.md) | champs matériau (`material_field`…) |
 | `ops::geom` | [Géométrie](operateurs/geometrie.md) | mesures géométriques *(réservé)* |
 | `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `restrict`, `merge`, `consolidate`… |
