@@ -61,7 +61,7 @@ impl Band {
 
     /// Whether `v` lies in the band (missing bound ⇒ that side is open).
     fn contains(&self, v: f64) -> bool {
-        self.min.map_or(true, |lo| v >= lo) && self.max.map_or(true, |hi| v <= hi)
+        self.min.is_none_or(|lo| v >= lo) && self.max.is_none_or(|hi| v <= hi)
     }
 }
 

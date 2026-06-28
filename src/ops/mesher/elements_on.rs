@@ -17,7 +17,8 @@ use std::collections::HashSet;
 ///   set (Cast3m `APPUYE`).
 ///
 /// The result mirrors `mesh` **submesh by submesh** (same order, same
-/// element types, [[feedback-viz-per-element]] — zones stay separate): each
+/// element types and face colours, [[feedback-viz-per-element]] — zones
+/// stay separate): each
 /// output submesh holds the kept cells of the matching input submesh,
 /// possibly empty. Use [`consolidate`](crate::ops::mesher::consolidate) to
 /// drop or fuse the empty/redundant zones afterwards. Kept cells reference
@@ -155,8 +156,10 @@ mod tests {
         let (coords, n, _m) = two_triangles();
         // Two zones: a TRI3 and a SEG2, on the same coords.
         let mut mesh = Mesh::empty();
+        let tri_color = crate::containers::mesh::RgbColor::new(10, 20, 30);
         {
             let mut tri = SubMesh::new(coords.clone(), ElementType::TRI3);
+            tri.set_face_color(tri_color);
             tri.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
             mesh.add_sub(insert(tri)).unwrap();
             let mut seg = SubMesh::new(coords.clone(), ElementType::SEG2);
@@ -178,6 +181,8 @@ mod tests {
             vec![ElementType::TRI3, ElementType::SEG2]
         );
         assert_eq!(r.cell_counts().unwrap(), vec![1, 1]);
+        // Face colour of the TRI3 zone is carried over.
+        assert_eq!(read(&r.get(0).unwrap()).unwrap().face_color(), tri_color);
         // n[0] is referenced once more by the kept TRI3 cell.
         assert_eq!(read(&coords).unwrap().refcount(n[0].id()), before + 1);
         drop(r);

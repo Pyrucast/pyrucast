@@ -73,6 +73,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `fill_surface(contour: &Mesh, et: ElementType, refinement: Option<…>) -> Mesh` | `fill_surface(contour, element_type, max_edge_length=None, min_angle_deg=None) -> Mesh` |
 | `barycenter(mesh: &Mesh) -> Mesh` | `barycenter(mesh) -> Mesh` |
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
+| `elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Mesh` | `elements_on(mesh, points, strict=True) -> Mesh` |
 | `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` (dispatch par type, partagé avec `NodeField`) |
 
 ### `ops::field` — opérateurs sur les champs
