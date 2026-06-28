@@ -19,6 +19,7 @@ pub mod elementwise;
 pub mod gradient;
 pub mod merge;
 pub mod restrict;
+pub mod select;
 
 pub use beam_deformation::beam_deformation;
 pub use consolidate::consolidate;
@@ -30,3 +31,4 @@ pub use elementwise::{abs, cos, cosh, exp, log, log10, sin, sinh, sqrt, tan, tan
 pub use gradient::gradient;
 pub use merge::merge;
 pub use restrict::restrict;
+pub use select::{select_cells, select_nodes, select_sub_cells, select_sub_nodes};

@@ -38,6 +38,42 @@ erreur). Une vérification inter-supports finale impose qu'un nœud partagé par
 des zones de supports différents s'accorde sur toute composante commune.
 (L'équivalent côté `ElementField` est `consolidate_element`.)
 
+## Sélection par valeur
+
+`select` extrait, **zone par zone**, la partie du support d'un champ dont les
+valeurs tombent dans une bande `[min, max]`. C'est un filtre par valeur qui
+renvoie un `Mesh` — un sous-maillage par zone traitée (les zones restent
+séparées, rien n'est moyenné ni fusionné).
+
+| Python | Effet |
+|---|---|
+| `select(field, min=None, max=None, components=None)` | sous-ensemble du support du champ respectant la bande, une zone à la fois. |
+
+- **Type de champ.** Sur un `NodeField` / `SubNodeField`, on sélectionne les
+  **nœuds** : chaque zone donne un sous-maillage **POI1** des nœuds retenus.
+  Sur un `ElementField` / `SubElementField`, on sélectionne les **cellules** :
+  chaque zone donne un sous-maillage de **son propre type d'élément**, et une
+  cellule n'est retenue que si **tous** ses points de Gauss passent (la bande
+  doit tenir tout le long de la cellule).
+- **Bornes.** Au moins une de `min` / `max` doit être donnée (bornes
+  **inclusives**) ; une borne absente laisse ce côté ouvert. Erreur si les deux
+  sont `None`, ou si `min > max`.
+- **Composantes.** `components=None` teste **toutes** les composantes de chaque
+  zone. Une liste `components` ne teste **que** ces composantes, et seulement
+  sur les zones qui les portent **toutes** — une zone à laquelle il manque une
+  composante demandée est **ignorée** (aucun sous-maillage produit).
+- **Combinaison (ET).** Quand plusieurs composantes sont testées, elles sont
+  combinées en **ET** : un nœud / une cellule n'est retenu que si **chaque**
+  composante testée est dans la bande.
+
+```python
+# Nœuds dont la température est entre 20 et 80 °C.
+chauds = pyrucast.select(temperature, min=20.0, max=80.0)
+
+# Cellules dont la contrainte de von Mises dépasse un seuil (borne basse seule).
+critiques = pyrucast.select(sigma, min=250e6, components=["vm"])
+```
+
 ## Dérivation géométrique (vers les points de Gauss)
 
 Ces opérateurs ne dépendent **que** de l'espace EF et du champ — aucune

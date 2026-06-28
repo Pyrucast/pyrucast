@@ -87,6 +87,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `beam_deformation(field, fespace) -> ElementField` |
 | `divergence(field: &ElementField) -> NodeField` | `divergence(field) -> NodeField` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
+| `select_nodes(field: &NodeField, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, min=None, max=None, components=None) -> Mesh` (dispatch par type) |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` (dispatch par type, partagé avec `Mesh`) |
 

@@ -149,6 +149,49 @@ pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
     Ok(PyNodeField { inner: nf })
 }
 
+/// Select the part of a field's support whose values fall in `[min, max]`,
+/// zone by zone — a value-range filter returning a `Mesh`.
+///
+/// `field` may be a `NodeField` / `SubNodeField` (→ POI1 submeshes of the
+/// passing **nodes**) or an `ElementField` / `SubElementField` (→ submeshes
+/// of the passing **cells**, each of its zone's element type; a cell passes
+/// only when *all* its Gauss points do). The result has one submesh per
+/// processed zone.
+///
+/// At least one of `min` / `max` must be given (inclusive bounds). With
+/// several components in play the bounds are combined with **AND**: a
+/// point/cell is kept only when *every* tested component is in band.
+///
+/// `components=None` tests every component of each zone. A `components`
+/// list tests **only** those components, and only on the zones carrying
+/// **all** of them — a zone missing any listed component is skipped (no
+/// submesh). Errors if both bounds are `None`, or `min > max`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (field, min=None, max=None, components=None))]
+pub fn select(
+    field: &Bound<'_, PyAny>,
+    min: Option<f64>,
+    max: Option<f64>,
+    components: Option<Vec<String>>,
+) -> PyResult<PyMesh> {
+    use crate::ops::field as ops;
+    let inner = if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
+        ops::select_nodes(&f.inner, min, max, components)?
+    } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
+        ops::select_cells(&f.inner, min, max, components)?
+    } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
+        ops::select_sub_nodes(&*read(&f.handle)?, min, max, components)?
+    } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
+        ops::select_sub_cells(&*read(&f.handle)?, min, max, components)?
+    } else {
+        return Err(PyTypeError::new_err(
+            "expected a NodeField, SubNodeField, ElementField or SubElementField",
+        ));
+    };
+    Ok(PyMesh { inner })
+}
+
 // ── Element-wise unary maths (numpy-style) ──────────────────────────────────
 //
 // `pyrucast.cos(field)`, `pyrucast.exp(field)`, … apply a scalar function to

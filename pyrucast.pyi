@@ -1901,6 +1901,27 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     attached to different `Coords`s.
     """
 
+def select(field: typing.Any, min: typing.Optional[builtins.float] = None, max: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
+    r"""
+    Select the part of a field's support whose values fall in `[min, max]`,
+    zone by zone — a value-range filter returning a `Mesh`.
+
+    `field` may be a `NodeField` / `SubNodeField` (→ POI1 submeshes of the
+    passing **nodes**) or an `ElementField` / `SubElementField` (→ submeshes
+    of the passing **cells**, each of its zone's element type; a cell passes
+    only when *all* its Gauss points do). The result has one submesh per
+    processed zone.
+
+    At least one of `min` / `max` must be given (inclusive bounds). With
+    several components in play the bounds are combined with **AND**: a
+    point/cell is kept only when *every* tested component is in band.
+
+    `components=None` tests every component of each zone. A `components`
+    list tests **only** those components, and only on the zones carrying
+    **all** of them — a zone missing any listed component is skipped (no
+    submesh). Errors if both bounds are `None`, or `min > max`.
+    """
+
 def set_coordinates(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
     r"""
     Set node coordinates from `field` (absolute): for every node, the
