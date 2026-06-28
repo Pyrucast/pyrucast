@@ -5,7 +5,10 @@ use crate::containers::element_field::ElementField;
 use crate::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue};
 use crate::containers::node_field::NodeField;
 use crate::py::element_field::{PyElementField, PySubElementField};
-#[cfg(feature = "viz")]
+// Used by the viz-gated `plot` methods and — even without `viz` — by the
+// `gen_stub_pymethods` macro, which reads those methods' signatures to emit
+// the `.pyi` stub. Hence the import must also be present under `stub-gen`.
+#[cfg(any(feature = "viz", feature = "stub-gen"))]
 use crate::py::mesh::PyMesh;
 use crate::py::node_field::{PyNodeField, PySubNodeField};
 use crate::store::{insert, read, Handle};
