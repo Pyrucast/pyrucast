@@ -700,14 +700,6 @@ class Mesh:
         r"""
         Total number of cells across all submeshes.
         """
-    def coords(self) -> Coords:
-        r"""
-        The `Coords` this mesh hangs off (all submeshes share it).
-        
-        Raises if the mesh has no submesh yet (nothing to take a `Coords`
-        from). Handy to reach the nodes of an imported mesh — e.g. to add
-        boundary-condition points on a region read from a gmsh file.
-        """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False) -> None:
         r"""
         Visualize this mesh (every submesh in its own colour, or
@@ -1916,24 +1908,25 @@ def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
     Mesh with a single POI1 submesh; raises if `nodes` is empty.
     """
 
-def read_gmsh(path: builtins.str, dim: typing.Optional[builtins.int] = None) -> dict:
+def read_gmsh(coords: Coords, path: builtins.str) -> dict:
     r"""
     Read a gmsh `.msh` file (ASCII MSH 2.2 or 4.1) into a `dict` mapping each
-    physical group name to a `Mesh`.
+    physical group name to a `Mesh`, adding the nodes to `coords`.
     
-    All returned meshes share a single `Coords`, so a node on the boundary
-    between two named groups is the same node on both sides — convenient to
-    pose boundary conditions on a named region. Inside a group's mesh there
-    is one submesh per element type. Elements with no physical group land
-    under the key `"<ungrouped>"`. The dict preserves the file order.
+    The nodes land in the `coords` you pass, so you keep the handle needed to
+    pose boundary conditions on a named region. Its dimension decides how
+    many of gmsh's three coordinates are kept (a 2-D `Coords` flattens onto
+    `xy`). All returned meshes share that single `Coords`, so a node on the
+    boundary between two named groups is the same node on both sides. Inside
+    a group's mesh there is one submesh per element type; elements with no
+    physical group land under the key `"<ungrouped>"`. The dict preserves the
+    file order.
     
-    `dim` forces the coordinate dimension (extra coordinates dropped);
-    `None` infers it (2 if the mesh is planar on `z = 0`, else 3). Supported
-    element types: POI1, SEG2, TRI3, QUA4, TET4, HEX8; any other gmsh type
-    raises.
+    Supported element types: POI1, SEG2, TRI3, QUA4, TET4, HEX8; any other
+    gmsh type raises.
     """
 
-def read_gmsh_str(text: builtins.str, dim: typing.Optional[builtins.int] = None) -> dict:
+def read_gmsh_str(coords: Coords, text: builtins.str) -> dict:
     r"""
     Like `read_gmsh`, but parsing the `.msh` text already held in a string
     instead of reading from a path. Same `dict[str, Mesh]` result.

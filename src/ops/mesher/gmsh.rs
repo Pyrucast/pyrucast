@@ -38,16 +38,16 @@
 //!
 //! # Dimension
 //!
-//! gmsh always stores three coordinates per node. The target `Coords`
-//! dimension is, by default, **inferred**: `2` when every node sits on the
-//! `z = 0` plane, `3` otherwise. Pass an explicit `dim` to override (extra
-//! coordinates are then dropped, e.g. `dim = 2` flattens a mesh onto its
-//! `xy` projection).
+//! The caller supplies the `Coords` to read into, so its dimension decides
+//! how many coordinates are kept: gmsh always stores three per node, of
+//! which the first `coords.dim()` are taken (a 2-D `Coords` flattens the
+//! mesh onto its `xy` projection). The `Coords` may already hold geometry —
+//! the import is merged into it.
 
 use crate::aggregate::Aggregate;
 use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::insert;
+use crate::store::{insert, read, Handle};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -420,28 +420,14 @@ fn parse_gmsh_text(text: &str) -> Result<Parsed> {
     }
 }
 
-/// Infer the `Coords` dimension from the coordinates: `2` when every node is
-/// on `z = 0`, `3` otherwise. Empty input defaults to `3`.
-fn infer_dim(coords: &HashMap<u64, [f64; 3]>) -> u8 {
-    let mut scale = 1.0_f64;
-    let mut zmax = 0.0_f64;
-    for v in coords.values() {
-        scale = scale.max(v[0].abs()).max(v[1].abs()).max(v[2].abs());
-        zmax = zmax.max(v[2].abs());
-    }
-    if coords.is_empty() || zmax > 1e-9 * scale {
-        3
-    } else {
-        2
-    }
-}
-
-/// Build the per-group meshes from the parsed data, on a single shared
-/// `Coords` of dimension `dim`. Groups come out in order of first
-/// appearance; within a group, submeshes are ordered by the first cell of
-/// each element type.
-fn build_groups(parsed: &Parsed, dim: u8) -> Result<Vec<(String, Mesh)>> {
-    let coords = insert(Coords::new(dim)?);
+/// Build the per-group meshes from the parsed data into the **caller's**
+/// `coords`. The coordinate dimension is the one already carried by
+/// `coords`: gmsh always stores three coordinates per node, of which the
+/// first `coords.dim()` are kept (so a 2-D `Coords` flattens onto `xy`).
+/// Groups come out in order of first appearance; within a group, submeshes
+/// are ordered by the first cell of each element type.
+fn build_groups(parsed: &Parsed, coords: Handle<Coords>) -> Result<Vec<(String, Mesh)>> {
+    let dim = read(&coords)?.dim() as usize;
 
     // Materialize each referenced node once, keeping the `Node` alive in the
     // map so its refcount survives until every submesh has taken its own.
@@ -462,7 +448,7 @@ fn build_groups(parsed: &Parsed, dim: u8) -> Result<Vec<(String, Mesh)>> {
                     let xyz = parsed.coords.get(&tag).ok_or_else(|| {
                         err(format!("gmsh: element references unknown node {tag}"))
                     })?;
-                    let node = Node::create_in(coords.clone(), &xyz[..dim as usize])?;
+                    let node = Node::create_in(coords.clone(), &xyz[..dim])?;
                     let id = node.id();
                     node_map.insert(tag, node);
                     id
@@ -500,30 +486,32 @@ fn build_groups(parsed: &Parsed, dim: u8) -> Result<Vec<(String, Mesh)>> {
 }
 
 /// Read a gmsh `.msh` file (ASCII MSH 2.2 or 4.1) into one [`Mesh`] per
-/// physical group. See the module docs for the format, grouping and
-/// dimension rules.
+/// physical group, adding the nodes to the **caller's** `coords`. See the
+/// module docs for the format and grouping rules.
 ///
-/// `dim = None` infers the `Coords` dimension (`2` if planar, else `3`);
-/// `Some(d)` forces it, dropping any extra coordinate.
-pub fn read_gmsh(path: &Path, dim: Option<u8>) -> Result<Vec<(String, Mesh)>> {
+/// The coordinate dimension is the one of `coords`: the first
+/// `coords.dim()` of gmsh's three coordinates are kept. The nodes land in
+/// `coords` (which may already hold geometry — the import is merged in), so
+/// the caller keeps the handle it needs to pose boundary conditions etc.
+pub fn read_gmsh(coords: Handle<Coords>, path: &Path) -> Result<Vec<(String, Mesh)>> {
     let text = std::fs::read_to_string(path)?;
-    read_gmsh_str(&text, dim)
+    read_gmsh_str(coords, &text)
 }
 
 /// Like [`read_gmsh`] but parsing the file contents already held in memory.
-pub fn read_gmsh_str(text: &str, dim: Option<u8>) -> Result<Vec<(String, Mesh)>> {
+pub fn read_gmsh_str(coords: Handle<Coords>, text: &str) -> Result<Vec<(String, Mesh)>> {
     let parsed = parse_gmsh_text(text)?;
-    let dim = dim.unwrap_or_else(|| infer_dim(&parsed.coords));
-    if dim == 0 {
-        return Err(err("gmsh: dim must be ≥ 1"));
-    }
-    build_groups(&parsed, dim)
+    build_groups(&parsed, coords)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::read;
+
+    /// Fresh `Coords` of the given dimension, to read into.
+    fn coords(dim: u8) -> Handle<Coords> {
+        insert(Coords::new(dim).unwrap())
+    }
 
     // A unit square split into two TRI3, with a named surface "plate" and a
     // named bottom edge "bottom" (one SEG2). MSH 2.2 ASCII.
@@ -553,7 +541,7 @@ $EndElements
 
     #[test]
     fn v2_groups_and_types() {
-        let groups = read_gmsh_str(SQUARE_V2, None).unwrap();
+        let groups = read_gmsh_str(coords(2), SQUARE_V2).unwrap();
         let names: Vec<&str> = groups.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(names, vec!["bottom", "plate"]);
 
@@ -567,16 +555,17 @@ $EndElements
     }
 
     #[test]
-    fn v2_planar_is_dim_2_and_shares_coords() {
-        let groups = read_gmsh_str(SQUARE_V2, None).unwrap();
-        let ca = groups[0].1.coords().unwrap();
-        let cb = groups[1].1.coords().unwrap();
-        assert_eq!(read(&ca).unwrap().dim(), 2);
-        // Both groups hang off the very same Coords slot.
-        assert_eq!(ca.index(), cb.index());
-        assert_eq!(ca.generation(), cb.generation());
-        // 4 nodes referenced in total (the square's corners).
-        assert_eq!(read(&ca).unwrap().node_count(), 4);
+    fn reads_into_the_given_coords_shared_by_all_groups() {
+        let c = coords(2);
+        let groups = read_gmsh_str(c.clone(), SQUARE_V2).unwrap();
+        // Nodes landed in the caller's Coords (the square's 4 corners).
+        assert_eq!(read(&c).unwrap().node_count(), 4);
+        // Every group hangs off that very same Coords slot.
+        for (_, mesh) in &groups {
+            let mc = mesh.coords().unwrap();
+            assert_eq!(mc.index(), c.index());
+            assert_eq!(mc.generation(), c.generation());
+        }
     }
 
     // The same square in MSH 4.1: surface entity 1 → physical 2 ("plate"),
@@ -620,7 +609,7 @@ $EndElements
 
     #[test]
     fn v4_groups_and_types() {
-        let groups = read_gmsh_str(SQUARE_V4, None).unwrap();
+        let groups = read_gmsh_str(coords(2), SQUARE_V4).unwrap();
         let names: Vec<&str> = groups.iter().map(|(n, _)| n.as_str()).collect();
         // "bottom" (curve) appears first in the elements block.
         assert_eq!(names, vec!["bottom", "plate"]);
@@ -634,7 +623,7 @@ $EndElements
     }
 
     #[test]
-    fn dim_override_drops_z() {
+    fn coords_dimension_decides_kept_coordinates() {
         let mesh = "\
 $MeshFormat
 2.2 0 8
@@ -649,14 +638,18 @@ $Elements
 1 1 2 0 1 1 2
 $EndElements
 ";
-        // Without override: a non-zero z forces dim 3.
-        let g3 = read_gmsh_str(mesh, None).unwrap();
-        assert_eq!(read(&g3[0].1.coords().unwrap()).unwrap().dim(), 3);
-        // Forced to 2: z is dropped.
-        let g2 = read_gmsh_str(mesh, Some(2)).unwrap();
-        assert_eq!(read(&g2[0].1.coords().unwrap()).unwrap().dim(), 2);
-        let n = g2[0].1.node(0, 0, 0).unwrap();
-        assert_eq!(n.coord().unwrap(), vec![0.0, 0.0]);
+        // A 3-D Coords keeps z.
+        let g3 = read_gmsh_str(coords(3), mesh).unwrap();
+        assert_eq!(
+            g3[0].1.node(0, 0, 0).unwrap().coord().unwrap(),
+            vec![0.0, 0.0, 5.0]
+        );
+        // A 2-D Coords keeps only x, y — z is dropped.
+        let g2 = read_gmsh_str(coords(2), mesh).unwrap();
+        assert_eq!(
+            g2[0].1.node(0, 0, 0).unwrap().coord().unwrap(),
+            vec![0.0, 0.0]
+        );
     }
 
     #[test]
@@ -675,7 +668,7 @@ $Elements
 1 1 2 0 1 1 2
 $EndElements
 ";
-        let groups = read_gmsh_str(mesh, None).unwrap();
+        let groups = read_gmsh_str(coords(2), mesh).unwrap();
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].0, "<ungrouped>");
     }
@@ -698,7 +691,7 @@ $Elements
 $EndElements
 ";
         // gmsh type 8 = 3-node second-order line, not supported.
-        assert!(read_gmsh_str(mesh, None).is_err());
+        assert!(read_gmsh_str(coords(2), mesh).is_err());
     }
 
     #[test]
@@ -708,7 +701,7 @@ $MeshFormat
 2.2 1 8
 $EndMeshFormat
 ";
-        let e = read_gmsh_str(mesh, None).unwrap_err();
+        let e = read_gmsh_str(coords(2), mesh).unwrap_err();
         assert!(matches!(e, PyrucastError::Message(m) if m.contains("binary")));
     }
 }

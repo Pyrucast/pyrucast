@@ -242,27 +242,27 @@ fn groups_to_dict<'py>(
 }
 
 /// Read a gmsh `.msh` file (ASCII MSH 2.2 or 4.1) into a `dict` mapping each
-/// physical group name to a `Mesh`.
+/// physical group name to a `Mesh`, adding the nodes to `coords`.
 ///
-/// All returned meshes share a single `Coords`, so a node on the boundary
-/// between two named groups is the same node on both sides — convenient to
-/// pose boundary conditions on a named region. Inside a group's mesh there
-/// is one submesh per element type. Elements with no physical group land
-/// under the key `"<ungrouped>"`. The dict preserves the file order.
+/// The nodes land in the `coords` you pass, so you keep the handle needed to
+/// pose boundary conditions on a named region. Its dimension decides how
+/// many of gmsh's three coordinates are kept (a 2-D `Coords` flattens onto
+/// `xy`). All returned meshes share that single `Coords`, so a node on the
+/// boundary between two named groups is the same node on both sides. Inside
+/// a group's mesh there is one submesh per element type; elements with no
+/// physical group land under the key `"<ungrouped>"`. The dict preserves the
+/// file order.
 ///
-/// `dim` forces the coordinate dimension (extra coordinates dropped);
-/// `None` infers it (2 if the mesh is planar on `z = 0`, else 3). Supported
-/// element types: POI1, SEG2, TRI3, QUA4, TET4, HEX8; any other gmsh type
-/// raises.
+/// Supported element types: POI1, SEG2, TRI3, QUA4, TET4, HEX8; any other
+/// gmsh type raises.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (path, dim=None))]
 pub fn read_gmsh<'py>(
     py: Python<'py>,
+    coords: PyRef<PyCoords>,
     path: &str,
-    dim: Option<u8>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let groups = crate::ops::mesher::read_gmsh(std::path::Path::new(path), dim)?;
+    let groups = crate::ops::mesher::read_gmsh(coords.handle.clone(), std::path::Path::new(path))?;
     groups_to_dict(py, groups)
 }
 
@@ -270,12 +270,11 @@ pub fn read_gmsh<'py>(
 /// instead of reading from a path. Same `dict[str, Mesh]` result.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (text, dim=None))]
 pub fn read_gmsh_str<'py>(
     py: Python<'py>,
+    coords: PyRef<PyCoords>,
     text: &str,
-    dim: Option<u8>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let groups = crate::ops::mesher::read_gmsh_str(text, dim)?;
+    let groups = crate::ops::mesher::read_gmsh_str(coords.handle.clone(), text)?;
     groups_to_dict(py, groups)
 }

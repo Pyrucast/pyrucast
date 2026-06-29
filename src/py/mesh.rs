@@ -299,17 +299,6 @@ impl PyMesh {
         Ok(self.inner.cell_count()?)
     }
 
-    /// The `Coords` this mesh hangs off (all submeshes share it).
-    ///
-    /// Raises if the mesh has no submesh yet (nothing to take a `Coords`
-    /// from). Handy to reach the nodes of an imported mesh — e.g. to add
-    /// boundary-condition points on a region read from a gmsh file.
-    fn coords(&self) -> PyResult<PyCoords> {
-        Ok(PyCoords {
-            handle: self.inner.coords()?,
-        })
-    }
-
     /// Visualize this mesh (every submesh in its own colour, or
     /// coloured by a `NodeField` / `ElementField` if `field` is
     /// supplied). See

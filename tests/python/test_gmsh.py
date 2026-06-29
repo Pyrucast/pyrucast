@@ -80,7 +80,8 @@ SQUARE_V4 = textwrap.dedent(
 
 @pytest.mark.parametrize("src", [SQUARE_V2, SQUARE_V4], ids=["v2.2", "v4.1"])
 def test_read_returns_dict_by_group(src):
-    groups = pyrucast.read_gmsh_str(src)
+    coords = pyrucast.Coords(dim=2)
+    groups = pyrucast.read_gmsh_str(coords, src)
     assert isinstance(groups, dict)
     assert set(groups) == {"bottom", "plate"}
 
@@ -94,27 +95,29 @@ def test_read_returns_dict_by_group(src):
 
 
 @pytest.mark.parametrize("src", [SQUARE_V2, SQUARE_V4], ids=["v2.2", "v4.1"])
-def test_groups_share_one_coords(src):
-    groups = pyrucast.read_gmsh_str(src)
-    # The plate's bottom edge nodes are the very same nodes as in "bottom":
-    # a node shared between groups is shared, not duplicated.
-    plate_coords = groups["plate"].coords()
-    bottom_coords = groups["bottom"].coords()
-    assert plate_coords.dim == 2  # planar mesh → 2-D Coords
-    assert plate_coords.node_count() == bottom_coords.node_count() == 4
+def test_reads_into_the_given_coords(src):
+    # The nodes land in the caller's Coords; all groups share it, so a node
+    # shared between groups is shared, not duplicated (4 corners total).
+    coords = pyrucast.Coords(dim=2)
+    pyrucast.read_gmsh_str(coords, src)
+    assert coords.node_count() == 4
 
 
-def test_planar_is_2d_but_dim_override_keeps_3d():
-    g2 = pyrucast.read_gmsh_str(SQUARE_V2)
-    assert g2["plate"].coords().dim == 2
-    g3 = pyrucast.read_gmsh_str(SQUARE_V2, dim=3)
-    assert g3["plate"].coords().dim == 3
+def test_coords_dimension_decides_kept_coordinates():
+    # z = 0 here, so 2-D vs 3-D is observable on the node coordinate length.
+    c2 = pyrucast.Coords(dim=2)
+    g2 = pyrucast.read_gmsh_str(c2, SQUARE_V2)
+    assert len(g2["plate"].node(0, 0, 0).coord()) == 2
+    c3 = pyrucast.Coords(dim=3)
+    g3 = pyrucast.read_gmsh_str(c3, SQUARE_V2)
+    assert len(g3["plate"].node(0, 0, 0).coord()) == 3
 
 
 def test_read_from_file(tmp_path):
     path = tmp_path / "square.msh"
     path.write_text(SQUARE_V2)
-    groups = pyrucast.read_gmsh(str(path))
+    coords = pyrucast.Coords(dim=2)
+    groups = pyrucast.read_gmsh(coords, str(path))
     assert set(groups) == {"bottom", "plate"}
 
 
@@ -138,4 +141,4 @@ def test_unsupported_element_type_raises():
         """
     )
     with pytest.raises(Exception, match="unsupported element type"):
-        pyrucast.read_gmsh_str(bad)
+        pyrucast.read_gmsh_str(pyrucast.Coords(dim=2), bad)
