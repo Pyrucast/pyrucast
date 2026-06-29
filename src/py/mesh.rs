@@ -299,6 +299,17 @@ impl PyMesh {
         Ok(self.inner.cell_count()?)
     }
 
+    /// The `Coords` this mesh hangs off (all submeshes share it).
+    ///
+    /// A safety net to get the handle back when it has been dropped on the
+    /// Python side — e.g. after `read_gmsh(coords, …)` if `coords` went out
+    /// of scope. Raises if the mesh has no submesh yet (no `Coords` to take).
+    fn coords(&self) -> PyResult<PyCoords> {
+        Ok(PyCoords {
+            handle: self.inner.coords()?,
+        })
+    }
+
     /// Visualize this mesh (every submesh in its own colour, or
     /// coloured by a `NodeField` / `ElementField` if `field` is
     /// supplied). See

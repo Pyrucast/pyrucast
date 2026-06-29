@@ -700,6 +700,14 @@ class Mesh:
         r"""
         Total number of cells across all submeshes.
         """
+    def coords(self) -> Coords:
+        r"""
+        The `Coords` this mesh hangs off (all submeshes share it).
+        
+        A safety net to get the handle back when it has been dropped on the
+        Python side — e.g. after `read_gmsh(coords, …)` if `coords` went out
+        of scope. Raises if the mesh has no submesh yet (no `Coords` to take).
+        """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False) -> None:
         r"""
         Visualize this mesh (every submesh in its own colour, or

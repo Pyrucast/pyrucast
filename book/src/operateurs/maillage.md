@@ -539,6 +539,8 @@ print(plate.cell_count())
   ```
 
   La `Coords` peut déjà contenir de la géométrie : l'import s'y **ajoute**.
+  Si vous égarez le handle côté Python, `mesh.coords()` le récupère depuis
+  n'importe quel `Mesh` du `dict`.
 
 ### Types d'éléments reconnus
 

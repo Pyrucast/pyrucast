@@ -103,6 +103,16 @@ def test_reads_into_the_given_coords(src):
     assert coords.node_count() == 4
 
 
+@pytest.mark.parametrize("src", [SQUARE_V2, SQUARE_V4], ids=["v2.2", "v4.1"])
+def test_mesh_coords_recovers_the_handle(src):
+    # Even if the original Coords handle is dropped, mesh.coords() gets it
+    # back — and every group reports the very same Coords.
+    groups = pyrucast.read_gmsh_str(pyrucast.Coords(dim=2), src)
+    recovered = groups["plate"].coords()
+    assert recovered.node_count() == 4
+    assert groups["bottom"].coords().node_count() == 4
+
+
 def test_coords_dimension_decides_kept_coordinates():
     # z = 0 here, so 2-D vs 3-D is observable on the node coordinate length.
     c2 = pyrucast.Coords(dim=2)
