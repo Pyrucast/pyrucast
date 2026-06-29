@@ -499,11 +499,11 @@ Côté Rust, `ops::mesher::merge_nodes(&mesh, tol)`.
 
 ## Lecture d'un maillage gmsh : `read_gmsh`
 
-`read_gmsh` importe un maillage produit par **gmsh** (fichier `.msh` au
-format **ASCII**, versions **MSH 2.2** et **MSH 4.1**). L'appelant fournit la
-`Coords` dans laquelle lire (il garde ainsi la main sur les nœuds) ; le
-résultat est un `dict` Python qui associe à **chaque groupe physique** son
-`Mesh` :
+`read_gmsh` importe un maillage produit par **gmsh** (fichier `.msh`,
+versions **MSH 2.2** et **MSH 4.1**, en **ASCII comme en binaire** —
+l'endianness est lue dans le fichier). L'appelant fournit la `Coords` dans
+laquelle lire (il garde ainsi la main sur les nœuds) ; le résultat est un
+`dict` Python qui associe à **chaque groupe physique** son `Mesh` :
 
 ```python
 import pyrucast

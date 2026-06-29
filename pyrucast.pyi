@@ -1918,8 +1918,8 @@ def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
 
 def read_gmsh(coords: Coords, path: builtins.str) -> dict:
     r"""
-    Read a gmsh `.msh` file (ASCII MSH 2.2 or 4.1) into a `dict` mapping each
-    physical group name to a `Mesh`, adding the nodes to `coords`.
+    Read a gmsh `.msh` file (ASCII or binary, MSH 2.2 or 4.1) into a `dict`
+    mapping each physical group name to a `Mesh`, adding the nodes to `coords`.
     
     The nodes land in the `coords` you pass, so you keep the handle needed to
     pose boundary conditions on a named region. Its dimension decides how
