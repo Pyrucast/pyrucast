@@ -53,6 +53,8 @@ __all__ = [
     "merge",
     "merge_nodes",
     "poi1_from_nodes",
+    "read_gmsh",
+    "read_gmsh_str",
     "restrict",
     "select",
     "set_coordinates",
@@ -697,6 +699,14 @@ class Mesh:
     def cell_count(self) -> builtins.int:
         r"""
         Total number of cells across all submeshes.
+        """
+    def coords(self) -> Coords:
+        r"""
+        The `Coords` this mesh hangs off (all submeshes share it).
+        
+        Raises if the mesh has no submesh yet (nothing to take a `Coords`
+        from). Handy to reach the nodes of an imported mesh — e.g. to add
+        boundary-condition points on a region read from a gmsh file.
         """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False) -> None:
         r"""
@@ -1904,6 +1914,29 @@ def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
     The Coords is taken from the nodes themselves (every `Node`
     carries its own), so no Coords argument is needed. Returns a
     Mesh with a single POI1 submesh; raises if `nodes` is empty.
+    """
+
+def read_gmsh(path: builtins.str, dim: typing.Optional[builtins.int] = None) -> dict:
+    r"""
+    Read a gmsh `.msh` file (ASCII MSH 2.2 or 4.1) into a `dict` mapping each
+    physical group name to a `Mesh`.
+    
+    All returned meshes share a single `Coords`, so a node on the boundary
+    between two named groups is the same node on both sides — convenient to
+    pose boundary conditions on a named region. Inside a group's mesh there
+    is one submesh per element type. Elements with no physical group land
+    under the key `"<ungrouped>"`. The dict preserves the file order.
+    
+    `dim` forces the coordinate dimension (extra coordinates dropped);
+    `None` infers it (2 if the mesh is planar on `z = 0`, else 3). Supported
+    element types: POI1, SEG2, TRI3, QUA4, TET4, HEX8; any other gmsh type
+    raises.
+    """
+
+def read_gmsh_str(text: builtins.str, dim: typing.Optional[builtins.int] = None) -> dict:
+    r"""
+    Like `read_gmsh`, but parsing the `.msh` text already held in a string
+    instead of reading from a path. Same `dict[str, Mesh]` result.
     """
 
 def restrict(field: NodeField, mesh: Mesh) -> NodeField:

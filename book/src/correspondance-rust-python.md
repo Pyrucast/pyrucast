@@ -89,6 +89,8 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
 | `elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Mesh` | `elements_on(mesh, points, strict=True) -> Mesh` |
 | `merge_nodes(mesh: &Mesh, tol: f64) -> Mesh` | `merge_nodes(mesh, tol) -> Mesh` |
+| `read_gmsh(path: &Path, dim: Option<u8>) -> Vec<(String, Mesh)>` | `read_gmsh(path, dim=None) -> dict[str, Mesh]` |
+| `read_gmsh_str(text: &str, dim: Option<u8>) -> Vec<(String, Mesh)>` | `read_gmsh_str(text, dim=None) -> dict[str, Mesh]` |
 | `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` (dispatch par type, partagé avec `NodeField`) |
 
 ### `ops::field` — opérateurs sur les champs

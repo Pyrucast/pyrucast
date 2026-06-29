@@ -12,6 +12,7 @@ use crate::py::node::PyNode;
 use crate::py::signals::PySignals;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 
 /// Build a points (POI1) mesh holding every live node of `coords`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
@@ -225,4 +226,56 @@ pub fn volume(py: Python<'_>, envelope: PyRef<PyMesh>, size: Option<f64>) -> PyR
     // Poll Python signals while paving so a long mesh stays Ctrl+C-able.
     let mesh = crate::ops::mesher::volume_cancellable(&envelope.inner, size, &PySignals(py))?;
     Ok(PyMesh { inner: mesh })
+}
+
+/// Turn an ordered list of `(group name, Mesh)` pairs into a `dict` that
+/// keeps the file order (Python dicts are insertion-ordered).
+fn groups_to_dict<'py>(
+    py: Python<'py>,
+    groups: Vec<(String, Mesh)>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    for (name, mesh) in groups {
+        dict.set_item(name, Py::new(py, PyMesh { inner: mesh })?)?;
+    }
+    Ok(dict)
+}
+
+/// Read a gmsh `.msh` file (ASCII MSH 2.2 or 4.1) into a `dict` mapping each
+/// physical group name to a `Mesh`.
+///
+/// All returned meshes share a single `Coords`, so a node on the boundary
+/// between two named groups is the same node on both sides — convenient to
+/// pose boundary conditions on a named region. Inside a group's mesh there
+/// is one submesh per element type. Elements with no physical group land
+/// under the key `"<ungrouped>"`. The dict preserves the file order.
+///
+/// `dim` forces the coordinate dimension (extra coordinates dropped);
+/// `None` infers it (2 if the mesh is planar on `z = 0`, else 3). Supported
+/// element types: POI1, SEG2, TRI3, QUA4, TET4, HEX8; any other gmsh type
+/// raises.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (path, dim=None))]
+pub fn read_gmsh<'py>(
+    py: Python<'py>,
+    path: &str,
+    dim: Option<u8>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let groups = crate::ops::mesher::read_gmsh(std::path::Path::new(path), dim)?;
+    groups_to_dict(py, groups)
+}
+
+/// Like `read_gmsh`, but parsing the `.msh` text already held in a string
+/// instead of reading from a path. Same `dict[str, Mesh]` result.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (text, dim=None))]
+pub fn read_gmsh_str<'py>(
+    py: Python<'py>,
+    text: &str,
+    dim: Option<u8>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let groups = crate::ops::mesher::read_gmsh_str(text, dim)?;
+    groups_to_dict(py, groups)
 }

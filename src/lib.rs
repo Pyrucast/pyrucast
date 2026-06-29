@@ -104,6 +104,8 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesher::contour, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::merge_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::elements_on, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::read_gmsh, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::read_gmsh_str, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::consolidate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::coordinates, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::set_coordinates, m)?)?;

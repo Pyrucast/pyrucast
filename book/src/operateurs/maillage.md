@@ -24,6 +24,8 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
 | `consolidate(mesh)` | fusionne les sous-maillages de même type (dispatch partagé avec `NodeField`) |
 | `merge_nodes(mesh, tol)` | **soude** les nœuds distants de moins de `tol` ; remappe la connectivité, abandonne les cellules dégénérées (voir plus bas) |
+| `read_gmsh(path, dim=None)` | **lit un maillage gmsh** `.msh` (ASCII 2.2 ou 4.1) en un `dict` `{groupe physique: Mesh}` (voir plus bas) |
+| `read_gmsh_str(text, dim=None)` | comme `read_gmsh` mais depuis le **texte** du fichier déjà en mémoire |
 
 `barycenter` sert notamment à fabriquer les supports de multiplicateurs des
 contraintes : POI1 → nœuds **neufs** colocalisés au centre de chaque cellule
@@ -494,3 +496,78 @@ joined = pyrucast.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
 > les amener dans la même `Coords`.
 
 Côté Rust, `ops::mesher::merge_nodes(&mesh, tol)`.
+
+## Lecture d'un maillage gmsh : `read_gmsh`
+
+`read_gmsh` importe un maillage produit par **gmsh** (fichier `.msh` au
+format **ASCII**, versions **MSH 2.2** et **MSH 4.1**). Le résultat est un
+`dict` Python qui associe à **chaque groupe physique** son `Mesh` :
+
+```python
+import pyrucast
+
+regions = pyrucast.read_gmsh("piece.msh")
+# {'plate': Mesh<…>, 'bottom': Mesh<…>, …}  — ordre du fichier préservé
+
+plate = regions["plate"]
+print(plate.element_types())   # p.ex. ['TRI3']
+print(plate.cell_count())
+```
+
+### Groupes, types et `Coords` partagée
+
+- **Un `Mesh` par groupe physique**, et **un sous-maillage par type
+  d'élément** à l'intérieur de chaque groupe. Les éléments sans groupe
+  physique sont rangés sous la clé `"<ungrouped>"`.
+- **Tous les `Mesh` partagent une seule `Coords`** : un nœud à la frontière
+  de deux groupes (p. ex. un nœud du bord `"bottom"` qui appartient aussi à
+  la surface `"plate"`) est **le même nœud** des deux côtés — pas un
+  doublon. C'est exactement ce qu'il faut pour poser des conditions aux
+  limites sur une région nommée lue dans le fichier :
+
+  ```python
+  regions = pyrucast.read_gmsh("piece.msh")
+  plate = regions["plate"]
+  bottom = regions["bottom"]            # même Coords que plate
+
+  fes = pyrucast.FiniteElementSpace(plate)
+  # ... assemblage sur 'plate', blocage des nœuds de 'bottom', etc.
+  ```
+
+  On récupère la `Coords` sous-jacente d'un maillage importé avec
+  `mesh.coords()`.
+
+### Types d'éléments reconnus
+
+Les codes gmsh sont traduits vers les types pyrucast ; l'ordre local des
+nœuds coïncide déjà avec le repère de référence, la connectivité est donc
+copiée telle quelle.
+
+| Code gmsh | Type pyrucast |
+|---|---|
+| `1`  | `SEG2` |
+| `2`  | `TRI3` |
+| `3`  | `QUA4` |
+| `4`  | `TET4` |
+| `5`  | `HEX8` |
+| `15` | `POI1` |
+
+Tout autre type gmsh (éléments d'ordre supérieur, prisme, pyramide…) lève
+une erreur explicite.
+
+### Dimension
+
+gmsh stocke toujours trois coordonnées par nœud. La dimension de la `Coords`
+cible est par défaut **déduite** : `2` si tous les nœuds sont sur le plan
+`z = 0`, `3` sinon. On force la dimension avec `dim=` (les coordonnées en
+trop sont alors abandonnées, p. ex. `dim=2` projette sur `xy`).
+
+> Seuls les nœuds **référencés** par un élément sont matérialisés dans la
+> `Coords` ; les nœuds isolés listés mais utilisés par aucun élément sont
+> ignorés.
+
+`read_gmsh_str(text, dim=None)` fait la même chose à partir du **texte** du
+fichier déjà chargé en mémoire (utile pour les tests ou un `.msh` reçu sur
+le réseau). Côté Rust, `ops::mesher::read_gmsh(path, dim)` et
+`ops::mesher::read_gmsh_str(text, dim)` renvoient un
+`Vec<(String, Mesh)>` ordonné.
