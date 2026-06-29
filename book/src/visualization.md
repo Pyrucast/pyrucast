@@ -317,9 +317,47 @@ mesh.plot(save="fil.svg", wireframe=True)  # fil de fer
 # mesh.plot(save="x.svg", field=t_field, wireframe=True)
 ```
 
+## Export vers ParaView (`export_vtk`)
+
+Pour les maillages industriels — ou simplement pour exploiter les filtres de
+**ParaView** — `export_vtk` écrit un fichier **VTK legacy**
+(`UNSTRUCTURED_GRID`, ASCII) que ParaView lit nativement. C'est l'opérateur
+d'*export* (`src/ops/export`), pendant « écriture » du lecteur `read_gmsh`.
+
+```python
+import pyrucast
+
+# Géométrie seule.
+pyrucast.export_vtk(mesh, "maillage.vtk")
+
+# Géométrie + champ aux nœuds (POINT_DATA).
+pyrucast.export_vtk(mesh, "solution.vtk", field=temperature)
+
+# Géométrie + champ aux points de Gauss (CELL_DATA) : une valeur par
+# cellule = moyenne intra-élément des points de Gauss de la cellule.
+pyrucast.export_vtk(mesh, "contraintes.vtk", field=stresses)
+```
+
+- Chaque sous-maillage est écrit ; les types d'éléments se traduisent un pour
+  un (`POI1`→VERTEX, `SEG2`→LINE, `TRI3`→TRIANGLE, `QUA4`→QUAD, `TET4`→TETRA,
+  `HEX8`→HEXAHEDRON) et l'ordre local des nœuds coïncide déjà avec celui de
+  VTK : la connectivité est copiée telle quelle.
+- Une `Coords` 2-D est complétée en 3-D avec `z = 0`.
+- Un `NodeField` donne un tableau `SCALARS` par composante aux **points**
+  (valeur nodale, `0` là où le champ n'est pas défini) ; un `ElementField`
+  donne un tableau par composante aux **cellules**. La valeur par cellule est
+  la moyenne des points de Gauss de *cette* cellule (moyenne **intra**-élément
+  uniquement — les discontinuités inter-éléments restent visibles). Le champ
+  aux éléments doit provenir d'un espace bâti sur **ce** maillage (cellules
+  alignées une à une).
+
+Côté Rust : `ops::export::write_vtk_mesh`, `write_vtk_node_field`,
+`write_vtk_element_field` (et leurs variantes `vtk_*_string` qui rendent le
+texte sans toucher au disque).
+
 ## Notes techniques
 
-- Le rendu utilise l'algorithme du **peintre** : projection 3D → 2D, tri des triangles par profondeur moyenne (du plus lointain au plus proche), puis dessin des facettes pleines **opaques** suivies des arêtes noires en superposition. L'opacité assure l'élimination des faces cachées (les facettes proches recouvrent les lointaines) ; c'est ce qui fait qu'un solide 3D se lit comme un solide et non comme une coque transparente. Coût : `O(n log n)` à chaque rafraîchissement, raisonnable jusqu'à quelques milliers de cellules. Pour des maillages industriels, prévoir un export `.vtu` vers ParaView.
+- Le rendu utilise l'algorithme du **peintre** : projection 3D → 2D, tri des triangles par profondeur moyenne (du plus lointain au plus proche), puis dessin des facettes pleines **opaques** suivies des arêtes noires en superposition. L'opacité assure l'élimination des faces cachées (les facettes proches recouvrent les lointaines) ; c'est ce qui fait qu'un solide 3D se lit comme un solide et non comme une coque transparente. Coût : `O(n log n)` à chaque rafraîchissement, raisonnable jusqu'à quelques milliers de cellules. Pour des maillages plus lourds ou un post-traitement avancé, exporter vers ParaView avec `export_vtk` (voir ci-dessus).
 - Limite connue de l'algorithme du peintre : pour un solide **fortement non convexe**, le tri par profondeur moyenne peut mal ordonner deux facettes qui se chevauchent en profondeur. C'est inhérent à la méthode ; un *z-buffer* par pixel le corrigerait, au prix d'un rendu non vectoriel.
 - L'export reste **portable Linux ↔ Windows** : tout le rendu se fait en CPU, sans pilote GPU. Le binaire `viz-interactive` nécessite en revanche un serveur d'affichage (X11, Wayland ou Windows) à l'exécution — ce qui est attendu pour une fenêtre interactive.
 - Le mode interactif est confiné à `src/viz/window.rs` ; il est entièrement encapsulé derrière la feature `viz-interactive` et ne s'invite pas dans la couche de calcul.

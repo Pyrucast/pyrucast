@@ -22,6 +22,8 @@
 //! - [`solver`]: solve `A · x = b` (currently a single dense LU
 //!   back-end in [`solver::lu`]; sparse direct and iterative
 //!   back-ends will live alongside it).
+//! - [`export`]: write meshes and fields to external formats (legacy
+//!   VTK for ParaView) — the side-effecting counterpart of the readers.
 //!
 //! Each sub-module starts empty — new operators should land here from
 //! day one; legacy code migrates opportunistically.
@@ -29,6 +31,7 @@
 pub mod assemble;
 pub mod behavior;
 pub mod build;
+pub mod export;
 pub mod field;
 pub mod geom;
 pub mod mesher;

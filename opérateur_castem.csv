@@ -101,6 +101,7 @@ Maths - fonctions;SINH;Sinus hyperbolique;sinh
 Maths - fonctions;TANH;Tangente hyperbolique;tanh
 Maths - fonctions;ATG;Arc tangente;—
 Visualisation;TRAC;Tracé d'un maillage ou d'un champ;plot (viz)
+Visualisation;SORT;Écrit un maillage/champ dans un fichier externe (VTK pour ParaView);export_vtk
 Visualisation;DEFO;Construit / trace la déformée;deformation + displace + viz
 Visualisation;EVOL;Crée une courbe d'évolution (X-Y);Evolution / SubEvolution (généralisé : valeur scalaire ou champ, interpolation linéaire)
 Visualisation;DESS;Dessine une courbe d'évolution;Evolution.plot (courbe X-Y ; champ + slider de valeur tabulée)

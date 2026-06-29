@@ -19,6 +19,7 @@ par module, plus la visualisation (qui vit sous `src/viz/`).
 | `ops::assemble` | [Assemblage](operateurs/assemblage.md) | `stiffness`, `mass`, chargement réparti `flux` |
 | `ops::behavior` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`) |
 | `ops::solver` | [Solveur](operateurs/solveur.md) | `solve` (LU dense ; `LinearSolver` à venir) |
+| `ops::export` | [Visualisation](visualization.md) | `export_vtk` (maillage / champ → VTK pour ParaView) |
 | `src/viz` | [Visualisation](visualization.md) | tracé des maillages, coloration par champ |
 
 Le découpage est **par thème, pas par conteneur** : `gradient(field, fespace)`

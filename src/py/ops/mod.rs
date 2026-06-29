@@ -9,6 +9,7 @@
 pub mod assemble;
 pub mod behavior;
 pub mod build;
+pub mod export;
 pub mod field;
 pub mod mesher;
 pub mod solver;

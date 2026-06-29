@@ -38,6 +38,7 @@ __all__ = [
     "divergence",
     "elements_on",
     "exp",
+    "export_vtk",
     "extrude",
     "fill_surface",
     "flux",
@@ -1789,6 +1790,18 @@ def elements_on(mesh: Mesh, points: Mesh, strict: builtins.bool = True) -> Mesh:
 def exp(field: typing.Any) -> typing.Any:
     r"""
     Element-wise exponential `eˣ` of a field.
+    """
+
+def export_vtk(mesh: Mesh, path: builtins.str, field: typing.Optional[typing.Any] = None) -> None:
+    r"""
+    Write `mesh` to a legacy **VTK** file (`UNSTRUCTURED_GRID`, ASCII) that
+    ParaView reads natively.
+    
+    With `field=None` only the geometry is written. Pass a `NodeField` to add
+    it as `POINT_DATA` (one scalar array per component, the nodal value at
+    each point) or an `ElementField` to add it as `CELL_DATA` (one array per
+    component, the per-cell mean of that cell's Gauss values). An element
+    field must come from a space built on **this** mesh, so its cells line up.
     """
 
 def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:

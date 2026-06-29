@@ -173,7 +173,12 @@ def main() -> None:
     print(f"réaction totale Σλ = {reaction:.6f}  (attendu {Q})")
     assert abs(reaction - Q) < tol
 
-    print("\nOK : maillage gmsh importé, résolu, conforme à l'analytique.")
+    # ── 6. Export VTK pour ParaView (géométrie + champ T aux nœuds) ──────────
+    vtk_out = Path(tempfile.gettempdir()) / "pyrucast_plate.vtk"
+    pyrucast.export_vtk(plate, str(vtk_out), field=solution)
+    print(f"\nVTK écrit : {vtk_out}  (à ouvrir dans ParaView)")
+
+    print("\nOK : maillage gmsh importé, résolu, exporté, conforme à l'analytique.")
 
 
 if __name__ == "__main__":

@@ -142,6 +142,14 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 |---|---|
 | `solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs) -> NodeField` |
 
+### `ops::export` — export vers des formats externes
+
+| Rust (`ops::export::…`) | Python (`pyrucast.…`) |
+|---|---|
+| `write_vtk_mesh(mesh: &Mesh, path: &Path)` | `export_vtk(mesh, path) -> None` |
+| `write_vtk_node_field(mesh: &Mesh, field: &NodeField, path: &Path)` | `export_vtk(mesh, path, field=node_field) -> None` |
+| `write_vtk_element_field(mesh: &Mesh, field: &ElementField, path: &Path)` | `export_vtk(mesh, path, field=element_field) -> None` |
+
 ### Utilitaires de `store` (swap disque)
 
 | Rust (`store::…`) | Python (`pyrucast.…`) |

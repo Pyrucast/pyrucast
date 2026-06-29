@@ -56,7 +56,8 @@ src/
 │   ├── field/          # gradient, divergence, deformation, restrict, …
 │   ├── assemble/       # stiffness, mass, flux
 │   ├── behavior.rs     # integrate (COMP)
-│   └── solver/         # solve (LU dense, lu.rs)
+│   ├── solver/         # solve (LU dense, lu.rs)
+│   └── export/         # export VTK (read_gmsh côté mesher ; export_vtk ici)
 │
 ├── py/                 # BINDING PyO3 (miroir 1:1 de containers/ + ops/)
 │   ├── mod.rs
