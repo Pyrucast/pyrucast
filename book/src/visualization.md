@@ -355,6 +355,34 @@ Côté Rust : `ops::export::write_vtk_mesh`, `write_vtk_node_field`,
 `write_vtk_element_field` (et leurs variantes `vtk_*_string` qui rendent le
 texte sans toucher au disque).
 
+### Limites actuelles et évolutions possibles
+
+Cette première version vise la simplicité et la portabilité. Limites assumées,
+et les directions pour les lever :
+
+- **VTK legacy ASCII uniquement.** Pas de `.vtu` (XML), pas de variante
+  binaire ni de compression : les fichiers sont donc volumineux et l'écriture
+  reste en texte. Évolutions : un back-end `.vtu` (recommandé par ParaView,
+  extensible), puis un encodage binaire/compressé pour les gros maillages.
+- **Composantes en scalaires séparés.** Chaque composante donne un tableau
+  `SCALARS` distinct ; pas de regroupement en `VECTORS`/`TENSORS`. Un
+  déplacement `(ux, uy, uz)` sort en trois scalaires plutôt qu'en un champ
+  vectoriel directement « warpable » dans ParaView. Évolution : détecter/grouper
+  les composantes vectorielles et tensorielles.
+- **`CELL_DATA` = moyenne des points de Gauss.** Un champ aux éléments est
+  réduit à **une** valeur par cellule (moyenne intra-élément). Pas d'export
+  des valeurs nodales reconstruites par élément ni des points de Gauss
+  individuels. Évolution : écrire les valeurs ajustées par élément (comme la
+  viz) en `POINT_DATA` discontinu, ou un VTK à plusieurs points de Gauss.
+- **Un seul `Mesh`, un seul champ par fichier.** Pas de séries temporelles
+  (`PVD`/`.vtu` multi-pas) ni de plusieurs champs simultanés. Évolutions :
+  accepter plusieurs champs en une passe, et une série temporelle pour les
+  calculs transitoires (cf. `PASAPAS`).
+- **Cellules alignées requises pour `CELL_DATA`.** Le champ aux éléments doit
+  provenir d'un espace bâti sur **ce** maillage (correspondance cellule à
+  cellule, vérifiée par un simple comptage). Évolution : un appariement
+  explicite maillage ↔ espace EF plutôt qu'un ordre implicite.
+
 ## Notes techniques
 
 - Le rendu utilise l'algorithme du **peintre** : projection 3D → 2D, tri des triangles par profondeur moyenne (du plus lointain au plus proche), puis dessin des facettes pleines **opaques** suivies des arêtes noires en superposition. L'opacité assure l'élimination des faces cachées (les facettes proches recouvrent les lointaines) ; c'est ce qui fait qu'un solide 3D se lit comme un solide et non comme une coque transparente. Coût : `O(n log n)` à chaque rafraîchissement, raisonnable jusqu'à quelques milliers de cellules. Pour des maillages plus lourds ou un post-traitement avancé, exporter vers ParaView avec `export_vtk` (voir ci-dessus).
