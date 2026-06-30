@@ -24,7 +24,9 @@ Conséquences :
 
 - L'assemblage est **trivialement incrémental** : un `SubModel` peut appeler `add_entry(...)` autant de fois qu'il veut au même couple `(ligne, colonne)`, les contributions s'accumulent automatiquement.
 - L'ordre des insertions est sans effet sur le résultat numérique final (commutativité de la somme).
-- L'ordre des DOFs dans `row_dofs()` / `col_dofs()` est **l'ordre de première rencontre** lors des `add_entry`. C'est stable et reproductible pour une séquence d'assemblage donnée.
+- L'ordre des DOFs dans `row_dofs()` / `col_dofs()` est **l'ordre de première rencontre** lors des `add_entry` — sauf si le `Coords` porte une [`permutation`](coords.md) (ordre solveur), auquel cas la liste globale suit cet ordre (tri stable). Stable et reproductible dans les deux cas.
+
+**Numérotation & coût.** `NodeId` est déjà l'index nœud global (dense) ; chaque `SubMatrix` garde sa propre numérotation locale `(nœud, variable)`, et `add_entry` retrouve la position du nœud en **O(1)** (table `NodeId → position`, construite à la volée). À l'agrégation, la `Matrix` fait l'**union dédoublée** des DDL de ses blocs (une liste, via table de hachage) puis disperse chaque bloc via une **table de traduction** `index local → index global` — assemblage en **O(nnz)**, sans recherche par entrée. La `Matrix` ne dépend que de **ses blocs** (pas d'un `Model`), donc on peut toujours combiner une sous-matrice neuve à une matrice existante.
 
 Le stockage propre à pyrucast reste COO pour la phase d'assemblage ; les opérations qui en profitent (matrice-vecteur, factorisation directe) utilisent `nalgebra-sparse` via des conversions à la demande :
 
