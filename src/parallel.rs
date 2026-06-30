@@ -36,3 +36,27 @@ pub use rayon::prelude::*;
 /// Apply with `.with_min_len(MIN_PARALLEL_LEN)` on an indexed parallel
 /// iterator (`par_iter`, `par_chunks_mut`, …).
 pub const MIN_PARALLEL_LEN: usize = 256;
+
+/// Apply `f` to every element of `buf` **in place**, in parallel, honouring the
+/// grain-size policy. Each slot is written exactly once ⇒ result is independent
+/// of the thread count. The single primitive behind element-wise field maths
+/// (`map_all`, the scalar `+ − × ÷` operators, …).
+pub fn map_inplace(buf: &mut [f64], f: impl Fn(f64) -> f64 + Sync + Send) {
+    buf.par_iter_mut()
+        .with_min_len(MIN_PARALLEL_LEN)
+        .for_each(|v| *v = f(*v));
+}
+
+/// Apply `f` in place to component `ci` (stride `ncomp`, `ci < ncomp`) of a
+/// flat component-major buffer, in parallel. Each touched slot is written once.
+pub fn map_component_inplace(
+    buf: &mut [f64],
+    ncomp: usize,
+    ci: usize,
+    f: impl Fn(f64) -> f64 + Sync + Send,
+) {
+    debug_assert!(ncomp > 0 && ci < ncomp);
+    buf.par_chunks_mut(ncomp)
+        .with_min_len((MIN_PARALLEL_LEN / ncomp).max(1))
+        .for_each(|row| row[ci] = f(row[ci]));
+}

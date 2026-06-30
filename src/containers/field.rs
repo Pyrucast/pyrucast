@@ -37,6 +37,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
+use crate::parallel::*;
 use crate::persist::Persist;
 use crate::store::{insert, read, write, Handle, ReadGuard};
 use std::any::Any;
@@ -162,26 +163,24 @@ pub trait SubField {
     }
 
     /// Apply `f` to every entry of the named component (stride =
-    /// component count, offset = component index).
-    fn map_component(&mut self, component: &str, f: impl Fn(f64) -> f64) -> Result<()> {
+    /// component count, offset = component index). Parallel; each touched slot
+    /// is written once ⇒ thread-count-independent.
+    fn map_component(&mut self, component: &str, f: impl Fn(f64) -> f64 + Sync + Send) -> Result<()> {
         let ci = self.component_index_or_err(component)?;
         let ncomp = self.component_count();
-        for v in self.values_mut()[ci..].iter_mut().step_by(ncomp) {
-            *v = f(*v);
-        }
+        crate::parallel::map_component_inplace(self.values_mut(), ncomp, ci, f);
         Ok(())
     }
 
     /// A clone of `self` with `f` applied to **every** value (all
     /// nodes/points × all components) — the scalar-broadcast primitive.
-    fn map_all(&self, f: impl Fn(f64) -> f64) -> Self
+    /// Parallel; each value written once ⇒ thread-count-independent.
+    fn map_all(&self, f: impl Fn(f64) -> f64 + Sync + Send) -> Self
     where
         Self: Sized + Clone,
     {
         let mut out = self.clone();
-        for v in out.values_mut() {
-            *v = f(*v);
-        }
+        crate::parallel::map_inplace(out.values_mut(), f);
         out
     }
 
@@ -216,15 +215,18 @@ pub trait SubField {
             .collect::<Result<Vec<usize>>>()?;
         let ov = other.values();
         let mut out = self.clone();
-        let out_vals = out.values_mut();
-        let n_rows = out_vals.len() / nc;
-        for row in 0..n_rows {
-            for ci in 0..nc {
-                let a = out_vals[row * nc + ci];
-                let b = ov[row * nc + other_idx[ci]];
-                out_vals[row * nc + ci] = op(a, b);
-            }
-        }
+        // Per-row in parallel: every output slot written once (no race), and
+        // the row layout is identical on both operands (same support) so values
+        // line up positionally after the by-name component remap.
+        out.values_mut()
+            .par_chunks_mut(nc)
+            .with_min_len((MIN_PARALLEL_LEN / nc).max(1))
+            .enumerate()
+            .for_each(|(row, chunk)| {
+                for ci in 0..nc {
+                    chunk[ci] = op(chunk[ci], ov[row * nc + other_idx[ci]]);
+                }
+            });
         Ok(out)
     }
 
@@ -254,13 +256,14 @@ fn fold_component<S: SubField + ?Sized>(
         .component_index(component)
         .ok_or_else(|| PyrucastError::Message(format!("unknown component: {}", component)))?;
     let n_comp = field.component_count();
+    // Parallel reduction over rows: `op` (min/max) is associative & commutative
+    // ⇒ the result is identical to the sequential left-fold for any thread count.
     field
         .values()
-        .iter()
-        .skip(ci)
-        .step_by(n_comp)
-        .copied()
-        .reduce(op)
+        .par_chunks(n_comp)
+        .with_min_len((MIN_PARALLEL_LEN / n_comp).max(1))
+        .map(|row| row[ci])
+        .reduce_with(op)
         .ok_or_else(|| {
             PyrucastError::Message(format!(
                 "{}: no value for component {} (empty support)",
@@ -282,23 +285,25 @@ fn fold_component<S: SubField + ?Sized>(
 #[macro_export]
 macro_rules! impl_subfield_scalar_ops {
     ($T:ty) => {
-        $crate::__subfield_scalar_op!($T, Add, add, +=);
-        $crate::__subfield_scalar_op!($T, Sub, sub, -=);
-        $crate::__subfield_scalar_op!($T, Mul, mul, *=);
-        $crate::__subfield_scalar_op!($T, Div, div, /=);
+        $crate::__subfield_scalar_op!($T, Add, add, +);
+        $crate::__subfield_scalar_op!($T, Sub, sub, -);
+        $crate::__subfield_scalar_op!($T, Mul, mul, *);
+        $crate::__subfield_scalar_op!($T, Div, div, /);
     };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __subfield_scalar_op {
-    ($T:ty, $Trait:ident, $method:ident, $assign:tt) => {
+    ($T:ty, $Trait:ident, $method:ident, $op:tt) => {
         impl std::ops::$Trait<f64> for $T {
             type Output = $T;
             fn $method(mut self, rhs: f64) -> $T {
-                for v in $crate::containers::field::SubField::values_mut(&mut self) {
-                    *v $assign rhs;
-                }
+                // Parallel in-place broadcast; each value written once.
+                $crate::parallel::map_inplace(
+                    $crate::containers::field::SubField::values_mut(&mut self),
+                    move |v| v $op rhs,
+                );
                 self
             }
         }
@@ -364,14 +369,22 @@ where
     /// Rebuild the aggregate, mapping each sub-field through `f` (the sub is
     /// read, transformed into a fresh sub, re-inserted). Structure is
     /// preserved — no consolidation.
-    fn map_subs(&self, f: impl Fn(&Self::Sub) -> Result<Self::Sub>) -> Result<Self>
+    fn map_subs(&self, f: impl Fn(&Self::Sub) -> Result<Self::Sub> + Sync + Send) -> Result<Self>
     where
         Self: Sized,
     {
+        // Compute the zones in parallel — `read` takes concurrent shared locks,
+        // and the per-zone work itself may parallelise further (nested rayon is
+        // fine). Store mutation (`insert`) stays **serial and in order** so the
+        // result decomposition is identical to the sequential version.
+        let handles: Vec<&Handle<Self::Sub>> = self.iter().collect();
+        let subs: Vec<Self::Sub> = handles
+            .par_iter()
+            .map(|h| f(&*read(h)?))
+            .collect::<Result<_>>()?;
         let mut out = Self::default();
-        for h in self.iter() {
-            let new_sub = f(&*read(h)?)?;
-            out.add_sub(insert(new_sub))?;
+        for s in subs {
+            out.add_sub(insert(s))?;
         }
         Ok(out)
     }
@@ -389,7 +402,7 @@ where
     /// A new aggregate with `f` applied to **every** value of every zone —
     /// the unary counterpart of [`Field::combine_scalar`], mirroring
     /// [`SubField::map_all`] at the aggregate level.
-    fn map_all(&self, f: impl Fn(f64) -> f64 + Copy) -> Result<Self>
+    fn map_all(&self, f: impl Fn(f64) -> f64 + Copy + Sync + Send) -> Result<Self>
     where
         Self: Sized,
         Self::Sub: Clone,
@@ -399,7 +412,7 @@ where
 
     /// Apply `f` **in place** to the named component, on every zone that
     /// defines it. Errors only if **no** zone defines the component.
-    fn map_component(&self, component: &str, f: impl Fn(f64) -> f64 + Copy) -> Result<()> {
+    fn map_component(&self, component: &str, f: impl Fn(f64) -> f64 + Copy + Sync + Send) -> Result<()> {
         let mut found = false;
         for h in self.iter() {
             let mut s = write(h)?;
@@ -568,21 +581,22 @@ where
     A: Aggregate,
     A::Sub: SubField,
 {
-    let mut acc: Option<f64> = None;
-    for h in agg.iter() {
-        let s = read(h)?;
-        let sub_val = if s.component_index(component).is_none() {
-            None
-        } else {
-            Some(fold_component(&*s, component, op_name, op)?)
-        };
-        if let Some(v) = sub_val {
-            acc = Some(match acc {
-                Some(a) => op(a, v),
-                None => v,
-            });
-        }
-    }
+    // Per-zone fold in parallel (each zone fold is itself parallel), then a
+    // serial associative combine. `op` (min/max) is associative & commutative
+    // ⇒ thread-count-independent.
+    let handles: Vec<&Handle<A::Sub>> = agg.iter().collect();
+    let per_sub: Vec<Option<f64>> = handles
+        .par_iter()
+        .map(|h| -> Result<Option<f64>> {
+            let s = read(h)?;
+            if s.component_index(component).is_none() {
+                Ok(None)
+            } else {
+                Ok(Some(fold_component(&*s, component, op_name, op)?))
+            }
+        })
+        .collect::<Result<_>>()?;
+    let acc = per_sub.into_iter().flatten().reduce(op);
     acc.ok_or_else(|| {
         PyrucastError::Message(format!(
             "{}: no sub-field defines component {}",
