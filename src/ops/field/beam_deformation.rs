@@ -15,10 +15,11 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
-use crate::containers::field::Field;
+use crate::containers::field::{Field, SubField};
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::node_field::{NodeField, NodeFieldView};
 use crate::error::Result;
+use crate::parallel::*;
 use crate::store::{insert, read, Handle};
 
 /// Beam section strains `(kappa, gamma)` of a `(w, theta)` node `field` at the
@@ -49,37 +50,45 @@ fn subspace_beam_deformation(
     view: &NodeFieldView,
 ) -> Result<SubElementField> {
     let s = read(fespace)?;
-    let n_cells = s.cell_count()?;
     let n_nodes = s.nodes_per_cell()?;
     let n_g = s.gauss_count();
     let submesh = s.submesh();
     let conn = read(&submesh)?.connectivity().to_vec();
 
     let mut field = SubElementField::new(fespace.clone(), vec!["kappa".into(), "gamma".into()])?;
-    for cell in 0..n_cells {
-        let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-        let w: Vec<f64> = ids
-            .iter()
-            .map(|&id| view.value(id, "w"))
-            .collect::<Result<_>>()?;
-        let th: Vec<f64> = ids
-            .iter()
-            .map(|&id| view.value(id, "theta"))
-            .collect::<Result<_>>()?;
+    // Parallel per cell: each cell owns a disjoint 2·n_g chunk of the output,
+    // written once; the FE space and field guards are shared, read-only.
+    let s_ref: &SubFiniteElementSpace = &s;
+    field
+        .values_mut()
+        .par_chunks_mut(2 * n_g)
+        .with_min_len((MIN_PARALLEL_LEN / (2 * n_g).max(1)).max(1))
+        .enumerate()
+        .try_for_each(|(cell, chunk)| -> Result<()> {
+            let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
+            let w: Vec<f64> = ids
+                .iter()
+                .map(|&id| view.value(id, "w"))
+                .collect::<Result<_>>()?;
+            let th: Vec<f64> = ids
+                .iter()
+                .map(|&id| view.value(id, "theta"))
+                .collect::<Result<_>>()?;
 
-        // Linear element ⇒ θ', w' are constant: use the first Gauss point's
-        // dN/dx. θ at the centre (reduced point) is the nodal average.
-        let dn = s.dn_dx(cell, 0)?; // [dN_0/dx, dN_1/dx] (1-D)
-        let kappa: f64 = (0..n_nodes).map(|i| dn[i] * th[i]).sum(); // θ'
-        let dwdx: f64 = (0..n_nodes).map(|i| dn[i] * w[i]).sum(); // w'
-        let theta_centre: f64 = th.iter().sum::<f64>() / n_nodes as f64;
-        let gamma = dwdx - theta_centre; // γ = w' − θ (reduced)
+            // Linear element ⇒ θ', w' are constant: use the first Gauss point's
+            // dN/dx. θ at the centre (reduced point) is the nodal average.
+            let dn = s_ref.dn_dx(cell, 0)?; // [dN_0/dx, dN_1/dx] (1-D)
+            let kappa: f64 = (0..n_nodes).map(|i| dn[i] * th[i]).sum(); // θ'
+            let dwdx: f64 = (0..n_nodes).map(|i| dn[i] * w[i]).sum(); // w'
+            let theta_centre: f64 = th.iter().sum::<f64>() / n_nodes as f64;
+            let gamma = dwdx - theta_centre; // γ = w' − θ (reduced)
 
-        for g in 0..n_g {
-            field.set(cell, g, 0, kappa)?;
-            field.set(cell, g, 1, gamma)?;
-        }
-    }
+            for g in 0..n_g {
+                chunk[2 * g] = kappa;
+                chunk[2 * g + 1] = gamma;
+            }
+            Ok(())
+        })?;
     Ok(field)
 }
 

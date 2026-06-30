@@ -92,7 +92,10 @@ pub fn flux(
         })
         .collect();
 
-    // f_i += φ · N_i · |J| · w, accumulated per node.
+    // f_i += φ · N_i · |J| · w, accumulated per node. Kept sequential: this is
+    // a scatter that accumulates several cells' contributions into the same
+    // shared node (a data race if parallelised naively — out of the project's
+    // "safe data-parallel" scope; a parallel reduction is future work).
     let mut loads = vec![0.0_f64; unique.len()];
     {
         let s = read(fespace)?;

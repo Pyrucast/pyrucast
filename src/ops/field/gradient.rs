@@ -11,6 +11,7 @@ use crate::containers::field::Field;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::node_field::{NodeField, NodeFieldView};
 use crate::error::Result;
+use crate::parallel::*;
 use crate::store::{insert, read, Handle};
 
 /// Axis suffixes for spatial directions (`x`, `y`, `z`).
@@ -57,23 +58,31 @@ pub(crate) fn subspace_gradients(
     let conn = sm.connectivity();
 
     let n_comp = components.len();
-    let mut values = vec![0.0; n_cells * n_g * n_comp * space_dim];
-    for cell in 0..n_cells {
-        let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-        for g in 0..n_g {
-            let dn_dx = s.dn_dx(cell, g)?;
-            for (ci, comp) in components.iter().enumerate() {
-                for a in 0..space_dim {
-                    let mut grad = 0.0;
-                    for i in 0..n_nodes {
-                        grad += field.value(ids[i], comp)? * dn_dx[i * space_dim + a];
+    let per_cell = n_g * n_comp * space_dim;
+    let mut values = vec![0.0; n_cells * per_cell];
+    // Parallel per cell: each cell owns a disjoint chunk of `values` (written
+    // once) — the FE space, submesh and field guards are shared, read-only.
+    let s_ref: &SubFiniteElementSpace = &s;
+    values
+        .par_chunks_mut(per_cell)
+        .with_min_len((MIN_PARALLEL_LEN / per_cell.max(1)).max(1))
+        .enumerate()
+        .try_for_each(|(cell, chunk)| -> Result<()> {
+            let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
+            for g in 0..n_g {
+                let dn_dx = s_ref.dn_dx(cell, g)?;
+                for (ci, comp) in components.iter().enumerate() {
+                    for a in 0..space_dim {
+                        let mut grad = 0.0;
+                        for i in 0..n_nodes {
+                            grad += field.value(ids[i], comp)? * dn_dx[i * space_dim + a];
+                        }
+                        chunk[(g * n_comp + ci) * space_dim + a] = grad;
                     }
-                    let idx = ((cell * n_g + g) * n_comp + ci) * space_dim + a;
-                    values[idx] = grad;
                 }
             }
-        }
-    }
+            Ok(())
+        })?;
 
     Ok(Gradients {
         fespace: fespace.clone(),

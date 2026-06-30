@@ -69,7 +69,9 @@ fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> 
         })
         .collect();
 
-    // d_i += (∇N_i · F) |J| w, accumulated per node.
+    // d_i += (∇N_i · F) |J| w, accumulated per node. Kept sequential: a scatter
+    // accumulating several cells into the same shared node (a data race if
+    // parallelised naively — out of the "safe data-parallel" scope).
     let mut div = vec![0.0_f64; unique.len()];
     for cell in 0..n_cells {
         for g in 0..n_g {
