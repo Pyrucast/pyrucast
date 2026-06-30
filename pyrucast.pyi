@@ -796,6 +796,26 @@ class Model:
         assembly time.
         """
     @classmethod
+    def plasticity(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.plasticity(fespace, model)` — perfect von Mises elastoplasticity
+        spanning every subspace of `fespace`. `model` is `"plane_stress"` /
+        `"plane_strain"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity
+        (`u_x, u_y(, u_z)`); material (`E`, `nu`, `sigma_y`) is supplied at
+        assembly / integration time. The behaviour integration (`COMP`) carries
+        the plastic-strain + cumulated-`p` internal state (`VAR0`→`VAR1`).
+        """
+    @classmethod
+    def mazars(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.mazars(fespace, model)` — Mazars isotropic damage spanning every
+        subspace of `fespace`. `model` is `"plane_stress"` / `"plane_strain"`
+        (2-D) or `"solid"` (3-D). Same DOFs as elasticity; material
+        (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
+        assembly / integration time. The behaviour integration (`COMP`) carries
+        the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
+        """
+    @classmethod
     def timoshenko(cls, fespace: FiniteElementSpace) -> Model:
         r"""
         `Model.timoshenko(fespace)` — Timoshenko-beam model spanning every

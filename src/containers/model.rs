@@ -121,7 +121,8 @@ use crate::containers::mesh::NodeId;
 use crate::error::Result;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
-    dirichlet, elasticity, frame, frame3d, heat_conduction, timoshenko, truss, Physics,
+    dirichlet, elasticity, frame, frame3d, heat_conduction, mazars, plasticity, timoshenko, truss,
+    Physics,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -151,6 +152,10 @@ pub enum SubModel {
     Truss(truss::Truss),
     /// Linear elasticity (2-D plane / 3-D solid) — see [`elasticity::Elasticity`].
     Elasticity(elasticity::Elasticity),
+    /// Perfect von Mises elastoplasticity — see [`plasticity::Plasticity`].
+    Plasticity(plasticity::Plasticity),
+    /// Mazars isotropic damage — see [`mazars::Mazars`].
+    Mazars(mazars::Mazars),
     /// Timoshenko beam (shear-deformable bending) — see [`timoshenko::Timoshenko`].
     Timoshenko(timoshenko::Timoshenko),
     /// Planar frame / portique (axial + bending + shear) — see [`frame::Frame`].
@@ -170,6 +175,8 @@ impl SubModel {
             SubModel::Dirichlet(p) => p,
             SubModel::Truss(p) => p,
             SubModel::Elasticity(p) => p,
+            SubModel::Plasticity(p) => p,
+            SubModel::Mazars(p) => p,
             SubModel::Timoshenko(p) => p,
             SubModel::Frame(p) => p,
             SubModel::Frame3d(p) => p,
@@ -204,6 +211,25 @@ impl SubModel {
         Ok(SubModel::Elasticity(elasticity::Elasticity::new(
             fespace, model,
         )?))
+    }
+
+    /// Perfect-plasticity sub-model on an FE subspace, with the given 2-D/3-D
+    /// model. Material (`E`, `nu`, `sigma_y`) is supplied at assembly /
+    /// integration time. See [`plasticity::Plasticity::new`].
+    pub fn plasticity(
+        fespace: Handle<SubFiniteElementSpace>,
+        model: ElasticityModel,
+    ) -> Result<Self> {
+        Ok(SubModel::Plasticity(plasticity::Plasticity::new(
+            fespace, model,
+        )?))
+    }
+
+    /// Mazars-damage sub-model on an FE subspace, with the given 2-D/3-D model.
+    /// Material (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
+    /// assembly / integration time. See [`mazars::Mazars::new`].
+    pub fn mazars(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
+        Ok(SubModel::Mazars(mazars::Mazars::new(fespace, model)?))
     }
 
     /// Timoshenko-beam sub-model on a 1-D `SEG2` FE subspace (full Gauss).
@@ -424,6 +450,29 @@ impl Model {
         let mut out = Self::empty();
         for sub in fes {
             out.add_sub(insert(SubModel::elasticity(sub.clone(), model)?))?;
+        }
+        Ok(out)
+    }
+
+    /// Perfect-plasticity `Model` spanning **every** subspace of `fes` (same
+    /// 2-D/3-D `model` for all). Parent-level named constructor; material
+    /// (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time.
+    pub fn plasticity(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Self> {
+        let mut out = Self::empty();
+        for sub in fes {
+            out.add_sub(insert(SubModel::plasticity(sub.clone(), model)?))?;
+        }
+        Ok(out)
+    }
+
+    /// Mazars-damage `Model` spanning **every** subspace of `fes` (same 2-D/3-D
+    /// `model` for all). Parent-level named constructor; material
+    /// (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at assembly
+    /// / integration time.
+    pub fn mazars(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Self> {
+        let mut out = Self::empty();
+        for sub in fes {
+            out.add_sub(insert(SubModel::mazars(sub.clone(), model)?))?;
         }
         Ok(out)
     }

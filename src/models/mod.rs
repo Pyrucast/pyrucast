@@ -36,6 +36,8 @@ pub mod elasticity;
 pub mod frame;
 pub mod frame3d;
 pub mod heat_conduction;
+pub mod mazars;
+pub mod plasticity;
 pub mod timoshenko;
 pub mod truss;
 
