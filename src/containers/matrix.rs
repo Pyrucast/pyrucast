@@ -71,6 +71,7 @@
 //! assert_eq!(k.get(a.id(), "q", a.id(), "T"), 2.0);
 //! ```
 
+use crate::containers::mesh::Coords;
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::error::{PyrucastError, Result};
@@ -78,6 +79,7 @@ use crate::store::{read, Handle};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 
 /// A single COO entry with DOFs materialised as `(NodeId, var_name)` pairs:
@@ -159,6 +161,13 @@ pub struct SubMatrix {
     #[serde(with = "coo_serde")]
     coo: CooMatrix<f64>,
     symmetric: bool,
+    /// `NodeId → local position` for O(1) `add_entry`, derived from
+    /// `row_nodes` / `col_nodes`. Not serialized; built lazily on first use
+    /// (the support is fixed at construction).
+    #[serde(skip)]
+    row_index: HashMap<NodeId, u32>,
+    #[serde(skip)]
+    col_index: HashMap<NodeId, u32>,
 }
 
 impl SubMatrix {
@@ -189,6 +198,8 @@ impl SubMatrix {
             ordering,
             coo: CooMatrix::new(nrows, ncols),
             symmetric,
+            row_index: HashMap::new(),
+            col_index: HashMap::new(),
         })
     }
 
@@ -295,15 +306,11 @@ impl SubMatrix {
         let n_cn = self.col_nodes.len();
         let n_pv = self.primal_vars.len();
 
-        let rnl = self
-            .row_nodes
-            .iter()
-            .position(|&n| n == row_node)
-            .ok_or_else(|| {
-                PyrucastError::Message(format!(
-                    "add_entry: row node {row_node:?} not in row_support"
-                ))
-            })?;
+        // O(1) node → local position (maps built lazily; support is fixed).
+        self.ensure_node_indices();
+        let rnl = *self.row_index.get(&row_node).ok_or_else(|| {
+            PyrucastError::Message(format!("add_entry: row node {row_node:?} not in row_support"))
+        })? as usize;
         let rvi = self
             .dual_vars
             .iter()
@@ -311,15 +318,9 @@ impl SubMatrix {
             .ok_or_else(|| {
                 PyrucastError::Message(format!("add_entry: row var '{row_var}' not in dual_vars"))
             })?;
-        let cnl = self
-            .col_nodes
-            .iter()
-            .position(|&n| n == col_node)
-            .ok_or_else(|| {
-                PyrucastError::Message(format!(
-                    "add_entry: col node {col_node:?} not in col_support"
-                ))
-            })?;
+        let cnl = *self.col_index.get(&col_node).ok_or_else(|| {
+            PyrucastError::Message(format!("add_entry: col node {col_node:?} not in col_support"))
+        })? as usize;
         let cvi = self
             .primal_vars
             .iter()
@@ -332,6 +333,37 @@ impl SubMatrix {
         let ci = self.ordering.to_index(cnl, cvi, n_cn, n_pv);
         self.coo.push(ri, ci, value);
         Ok(())
+    }
+
+    /// Build the `NodeId → local position` maps from the support node lists, on
+    /// first use (idempotent). First occurrence wins, matching the previous
+    /// `position` lookup.
+    fn ensure_node_indices(&mut self) {
+        if self.row_index.is_empty() && !self.row_nodes.is_empty() {
+            self.row_index.reserve(self.row_nodes.len());
+            for (i, &n) in self.row_nodes.iter().enumerate() {
+                self.row_index.entry(n).or_insert(i as u32);
+            }
+        }
+        if self.col_index.is_empty() && !self.col_nodes.is_empty() {
+            self.col_index.reserve(self.col_nodes.len());
+            for (i, &n) in self.col_nodes.iter().enumerate() {
+                self.col_index.entry(n).or_insert(i as u32);
+            }
+        }
+    }
+
+    /// COO entries in **local** index form `(row, col, value)` — the block's own
+    /// numbering. Used by the aggregate to scatter into the global matrix via a
+    /// per-block translation table.
+    pub fn local_triplets(&self) -> impl Iterator<Item = (usize, usize, f64)> + '_ {
+        self.coo.triplet_iter().map(|(r, c, &v)| (r, c, v))
+    }
+
+    /// Handle to the `Coords` backing this block's row support (the col support
+    /// shares it in any assembled system).
+    pub fn coords(&self) -> Result<Handle<Coords>> {
+        Ok(read(&self.row_support)?.coords())
     }
 
     /// Sum of all entries at `(row_node, row_var) × (col_node, col_var)`.
