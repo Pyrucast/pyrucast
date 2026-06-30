@@ -273,3 +273,9 @@ tags
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,vim,rust,rust-analyzer,python,jupyternotebooks,venv,mdbook
+
+# Recall: keep the versioned resume summary (context.md), ignore the local
+# raw transcript log and capture state.
+.recall/history.md
+.recall/.capture.json
+.recall/.capture-paused

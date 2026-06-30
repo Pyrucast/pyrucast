@@ -1,0 +1,9 @@
+{
+  "output_dir": ".recall",
+  "capture_history": true,
+  "auto_save_context":"on_end",
+  "summary_sentences": 8,
+  "redact": true,
+  "include_git": true,
+  "max_input_chars": 200000
+}
