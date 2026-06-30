@@ -99,9 +99,18 @@ impl Physics for Frame3d {
             DofOrdering::NodesThenVars,
             true,
             Some(mat),
-            |geom, m, ke| element_stiffness(geom, m.unwrap(), ke),
+            |geom, m, ke| self.element_matrix(geom, m, ke),
         )?;
         Ok(vec![block])
+    }
+
+    fn element_matrix(
+        &self,
+        geom: &CellGeom,
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_stiffness(geom, material.expect("Frame3d requires a material field"), ke)
     }
 
     fn label(&self) -> &'static str {

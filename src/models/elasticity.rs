@@ -141,7 +141,6 @@ impl Physics for Elasticity {
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
         let mat = material.expect("Elasticity requires a material field");
-        let model = self.model;
         let block = kernel::assemble_block(
             &self.fespace,
             &self.support,
@@ -151,9 +150,19 @@ impl Physics for Elasticity {
             DofOrdering::NodesThenVars,
             true,
             Some(mat),
-            move |geom, m, ke| element_stiffness(geom, m.unwrap(), model, ke),
+            |geom, m, ke| self.element_matrix(geom, m, ke),
         )?;
         Ok(vec![block])
+    }
+
+    fn element_matrix(
+        &self,
+        geom: &CellGeom,
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
+        element_stiffness(geom, mat, self.model, ke)
     }
 
     fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {

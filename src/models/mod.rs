@@ -80,6 +80,28 @@ pub trait Physics: Sync {
         None
     }
 
+    /// Local element stiffness matrix of one cell — the pure, sequential kernel
+    /// a physics author writes (the stiffness counterpart of
+    /// [`integrate_point`](Self::integrate_point)). Fills `ke` (row-major,
+    /// node-major / variable-minor: `ke[(li*n_dual+di) * n_cols_loc + (lj*n_primal+pj)]`)
+    /// from the cell geometry and material. `material` is `Some(_)` iff the
+    /// physics declares a [`material_fespace`](Self::material_fespace).
+    ///
+    /// It **never sees rayon, the store, or a lock**: the assembler drives it in
+    /// parallel over all cells. Default errors (a physics with no element kernel,
+    /// e.g. a constraint such as `Dirichlet`).
+    fn element_matrix(
+        &self,
+        _geom: &CellGeom,
+        _material: Option<&SubElementField>,
+        _ke: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(format!(
+            "{}: no element kernel — element_matrix is undefined",
+            self.label()
+        )))
+    }
+
     /// Build and fill the stiffness [`SubMatrix`] block(s) of this physics.
     /// `material` is `Some(_)` iff [`material_fespace`](Self::material_fespace)
     /// is `Some(_)` (the assembler guarantees it).

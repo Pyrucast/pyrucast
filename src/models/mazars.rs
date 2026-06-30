@@ -134,7 +134,6 @@ impl Physics for Mazars {
         // Iteration operator = elastic (undamaged) stiffness. Reuse the
         // elasticity element kernel; it reads only `E` and `nu`.
         let mat = material.expect("Mazars requires a material field");
-        let model = self.model;
         let block = kernel::assemble_block(
             &self.fespace,
             &self.support,
@@ -144,9 +143,21 @@ impl Physics for Mazars {
             DofOrdering::NodesThenVars,
             true,
             Some(mat),
-            move |geom, m, ke| elasticity::element_stiffness(geom, m.unwrap(), model, ke),
+            |geom, m, ke| self.element_matrix(geom, m, ke),
         )?;
         Ok(vec![block])
+    }
+
+    fn element_matrix(
+        &self,
+        geom: &CellGeom,
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        // Iteration operator = elastic (undamaged) stiffness. Reuse the
+        // elasticity element kernel; it reads only `E` and `nu`.
+        let mat = material.expect("Mazars requires a material field");
+        elasticity::element_stiffness(geom, mat, self.model, ke)
     }
 
     fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
