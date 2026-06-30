@@ -71,6 +71,7 @@
 //! assert_eq!(k.get(a.id(), "q", a.id(), "T"), 2.0);
 //! ```
 
+use crate::aggregate::Aggregate;
 use crate::containers::mesh::Coords;
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
@@ -681,42 +682,59 @@ impl Matrix {
     // ── Block-traversal helpers (no finalize required) ──────────────────
 
     fn collect_row_dofs(&self) -> Result<Vec<NamedDof>> {
-        let mut out: Vec<NamedDof> = Vec::new();
-        for h in self {
-            for pair in read(h)?.row_dofs() {
-                if !out.contains(&pair) {
-                    out.push(pair);
-                }
-            }
-        }
-        Ok(out)
+        self.collect_dofs(true)
     }
 
     fn collect_col_dofs(&self) -> Result<Vec<NamedDof>> {
+        self.collect_dofs(false)
+    }
+
+    /// Deduplicated concatenation of the blocks' row (or col) DOFs — the global
+    /// DOF list. O(total block DOFs) via a hash set (no quadratic `contains`).
+    ///
+    /// Order: **solver order** when the backing `Coords` carries a
+    /// [`permutation`](crate::containers::mesh::Coords::permutation) (stable
+    /// sort by the node's permutation index, so the per-node variable order is
+    /// preserved); otherwise **first-seen** (identical to the historical
+    /// behaviour, hence bit-for-bit stable when no permutation is set).
+    fn collect_dofs(&self, row: bool) -> Result<Vec<NamedDof>> {
+        let mut seen: std::collections::HashSet<NamedDof> = std::collections::HashSet::new();
         let mut out: Vec<NamedDof> = Vec::new();
         for h in self {
-            for pair in read(h)?.col_dofs() {
-                if !out.contains(&pair) {
-                    out.push(pair);
+            let sub = read(h)?;
+            let dofs = if row { sub.row_dofs() } else { sub.col_dofs() };
+            for d in dofs {
+                if seen.insert(d.clone()) {
+                    out.push(d);
                 }
+            }
+        }
+        if let Some(first) = self.iter().next() {
+            let coords_h = read(first)?.coords()?;
+            if let Some(perm) = read(&coords_h)?.permutation() {
+                out.sort_by_key(|(n, _)| perm[n.0 as usize]);
             }
         }
         Ok(out)
     }
 
+    /// Assemble the global COO from the blocks, mapping each block's **local**
+    /// DOF indices to global ones via a per-block translation table (built once
+    /// from the global DOF maps). O(total block DOFs + nnz) — no per-entry
+    /// search.
     fn build_coo(&self, row_dofs: &[NamedDof], col_dofs: &[NamedDof]) -> Result<CooMatrix<f64>> {
+        let row_map: HashMap<NamedDof, usize> =
+            row_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
+        let col_map: HashMap<NamedDof, usize> =
+            col_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
         let mut coo = CooMatrix::<f64>::new(row_dofs.len(), col_dofs.len());
         for h in self {
-            for (rn, rf, cn, cf, v) in read(h)?.iter_entries() {
-                let i = row_dofs
-                    .iter()
-                    .position(|(n, nm)| *n == rn && nm == &rf)
-                    .expect("row dof must be in union");
-                let j = col_dofs
-                    .iter()
-                    .position(|(n, nm)| *n == cn && nm == &cf)
-                    .expect("col dof must be in union");
-                coo.push(i, j, v);
+            let sub = read(h)?;
+            // local DOF index → global index (the "simple remap").
+            let trow: Vec<usize> = sub.row_dofs().iter().map(|d| row_map[d]).collect();
+            let tcol: Vec<usize> = sub.col_dofs().iter().map(|d| col_map[d]).collect();
+            for (ri, ci, v) in sub.local_triplets() {
+                coo.push(trow[ri], tcol[ci], v);
             }
         }
         Ok(coo)
@@ -1421,6 +1439,62 @@ mod tests {
         assert_eq!(d[(0, 1)], 0.0);
         assert_eq!(d[(1, 0)], 0.0);
         assert_eq!(d[(1, 1)], 3.0);
+    }
+
+    #[test]
+    fn aggregate_dof_order_follows_permutation() {
+        // Same data as the first-seen test: na→2.0, nb→3.0, but a permutation
+        // orders nb's DOF before na's (solver order).
+        let (coords, nodes, _) = make_poi1(2);
+        let na = nodes[0].id();
+        let nb = nodes[1].id();
+
+        let mk = |nid| {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[nid]).unwrap();
+            insert(sm)
+        };
+        let sup_a = mk(na);
+        let sup_b = mk(nb);
+        let mut a = SubMatrix::new(
+            sup_a.clone(),
+            sup_a,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        a.add_entry(na, "q", na, "T", 2.0).unwrap();
+        let mut b = SubMatrix::new(
+            sup_b.clone(),
+            sup_b,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        b.add_entry(nb, "q", nb, "T", 3.0).unwrap();
+
+        let mut k = Matrix::empty();
+        k.add_sub(insert(a)).unwrap();
+        k.add_sub(insert(b)).unwrap();
+
+        // Transposition of the identity ⇒ nb sorts before na.
+        let cap = read(&coords).unwrap().capacity();
+        let mut perm: Vec<u32> = (0..cap as u32).collect();
+        perm.swap(na.0 as usize, nb.0 as usize);
+        crate::store::write(&coords).unwrap().set_permutation(perm).unwrap();
+
+        k.finalize().unwrap();
+
+        let rows = k.row_dofs().unwrap();
+        assert_eq!(rows[0], (nb, "q".to_string()));
+        assert_eq!(rows[1], (na, "q".to_string()));
+        let d = k.to_dmatrix().unwrap();
+        assert_eq!(d[(0, 0)], 3.0); // nb first
+        assert_eq!(d[(1, 1)], 2.0); // na second
     }
 
     #[test]
