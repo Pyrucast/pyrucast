@@ -36,10 +36,13 @@ pub mod elasticity;
 pub mod frame;
 pub mod frame3d;
 pub mod heat_conduction;
+pub mod kernel;
 pub mod mazars;
 pub mod plasticity;
 pub mod timoshenko;
 pub mod truss;
+
+pub use kernel::CellGeom;
 
 /// The behaviour contract of one physics, co-located with its data struct.
 ///
@@ -50,7 +53,7 @@ pub mod truss;
 /// only what is specific to it (a plain volumetric physics typically
 /// implements just `primal_vars`, `dual_vars`, `material_*`,
 /// `build_stiffness_blocks`, `label` and `render`).
-pub trait Physics {
+pub trait Physics: Sync {
     /// Primal variable names introduced by this physics (column labels).
     fn primal_vars(&self) -> Vec<String>;
 
@@ -128,16 +131,63 @@ pub trait Physics {
     /// linear law the two agree (`∫ Bᵀ·flux = K·u`); a non-linear law
     /// departs from that tangent.
     ///
-    /// Default: errors — a physics with no behaviour.
-    fn integrate_behavior(
-        &self,
-        _input: &Handle<SubElementField>,
-        _material: Option<&Handle<SubElementField>>,
-    ) -> Result<SubElementField> {
+    /// Output component names of the material-state field produced by
+    /// [`integrate_point`](Self::integrate_point) — the dual flux/stress
+    /// followed by the updated internal state (`VAR1`), in order. Implemented by
+    /// every behaviour-bearing physics; default errors.
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
         Err(PyrucastError::Message(format!(
-            "{}: no behaviour — integrate_behavior is undefined",
+            "{}: no behaviour — behavior_output_components is undefined",
             self.label()
         )))
+    }
+
+    /// Constitutive law at **one Gauss point** — the pure, sequential kernel a
+    /// physics author writes. For cell `geom.cell` at Gauss point `g`, read the
+    /// deformation (+ `VAR0`) from `input` and the material from `material`
+    /// (both borrowed in place), and write the
+    /// [`behavior_output_components`](Self::behavior_output_components) values
+    /// into `out`. `material` is `Some(_)` iff the physics declares a
+    /// [`material_fespace`](Self::material_fespace).
+    ///
+    /// It **never sees rayon, the store, or a lock**:
+    /// [`integrate_behavior`](Self::integrate_behavior) drives it in parallel
+    /// over all cells. Default errors (a physics with no behaviour).
+    fn integrate_point(
+        &self,
+        _geom: &CellGeom,
+        _input: &SubElementField,
+        _material: Option<&SubElementField>,
+        _g: usize,
+        _out: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(format!(
+            "{}: no behaviour — integrate_point is undefined",
+            self.label()
+        )))
+    }
+
+    /// Integrate the constitutive law (Cast3m `COMP`). **Provided**: drives the
+    /// point kernel [`integrate_point`](Self::integrate_point) in parallel over
+    /// the behaviour FE subspace via [`kernel::integrate_pointwise`]. A physics
+    /// implements the point kernel + [`behavior_output_components`]
+    /// (Self::behavior_output_components), **not** this. A physics with no
+    /// behaviour FE subspace falls through to a clear error here.
+    fn integrate_behavior(
+        &self,
+        input: &Handle<SubElementField>,
+        material: Option<&Handle<SubElementField>>,
+    ) -> Result<SubElementField> {
+        let fespace = self.behavior_fespace().ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "{}: no behaviour — integrate_behavior is undefined",
+                self.label()
+            ))
+        })?;
+        let out_components = self.behavior_output_components()?;
+        kernel::integrate_pointwise(&fespace, input, material, out_components, |geom, inp, mat, g, out| {
+            self.integrate_point(geom, inp, mat, g, out)
+        })
     }
 
     /// Short type label, e.g. `"HeatConduction"` (used by `Debug` and the

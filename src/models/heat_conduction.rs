@@ -12,7 +12,7 @@ use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::Physics;
+use crate::models::{CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -115,56 +115,30 @@ impl Physics for HeatConduction {
         Some(self.fespace.clone())
     }
 
-    fn integrate_behavior(
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Ok(flux_components(read(&self.fespace)?.space_dim()))
+    }
+
+    /// Linear constitutive law: weak-form flux = k·∇T at one Gauss point.
+    /// (No internal-state variables — `VAR0`/`VAR1` are empty; a non-linear law
+    /// would read trailing state components of `input` and write updated ones.)
+    fn integrate_point(
         &self,
-        input: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<SubElementField> {
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
         let mat =
             material.expect("HeatConduction declares a material_fespace ⇒ material is supplied");
-        let space_dim = read(&self.fespace)?.space_dim();
+        let (cell, space_dim) = (geom.cell, geom.space_dim);
+        let k = mat.value(cell, g, MATERIAL_COMPONENT)?;
         let grad_names = deformation_components(space_dim);
-
-        let (n_cells, n_g) = {
-            let f = read(input)?;
-            (f.cell_count(), f.gauss_count())
-        };
-        let mut grads: Vec<f64> = Vec::with_capacity(n_cells * n_g * space_dim);
-        {
-            let f = read(input)?;
-            for cell in 0..n_cells {
-                for g in 0..n_g {
-                    for a in 0..space_dim {
-                        grads.push(f.value(cell, g, &grad_names[a])?);
-                    }
-                }
-            }
+        for a in 0..space_dim {
+            out[a] = k * input.value(cell, g, &grad_names[a])?;
         }
-        let mut ks: Vec<f64> = Vec::with_capacity(n_cells * n_g);
-        {
-            let m = read(mat)?;
-            for cell in 0..n_cells {
-                for g in 0..n_g {
-                    ks.push(m.value(cell, g, MATERIAL_COMPONENT)?);
-                }
-            }
-        }
-
-        // Linear constitutive law: weak-form flux = k·∇T at each point.
-        // (No internal-state variables for this law — `VAR0`/`VAR1` are
-        // empty; a non-linear law would read trailing state components of
-        // `input` and append the updated ones to the output.)
-        let mut out = SubElementField::new(self.fespace.clone(), flux_components(space_dim))?;
-        for cell in 0..n_cells {
-            for g in 0..n_g {
-                let k = ks[cell * n_g + g];
-                for a in 0..space_dim {
-                    let grad = grads[(cell * n_g + g) * space_dim + a];
-                    out.set(cell, g, a, k * grad)?;
-                }
-            }
-        }
-        Ok(out)
+        Ok(())
     }
 
     fn label(&self) -> &'static str {

@@ -29,7 +29,7 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{ElementType, NodeId, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::Physics;
+use crate::models::{CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -126,29 +126,26 @@ impl Physics for Timoshenko {
         Some(self.bending.clone())
     }
 
-    fn integrate_behavior(
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Ok(vec!["M".to_string(), "V".to_string()])
+    }
+
+    /// Section forces at one Gauss point: `M = E·I·κ`, `V = G·A_s·γ`.
+    fn integrate_point(
         &self,
-        input: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<SubElementField> {
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
         let mat = material.expect("Timoshenko declares a material_fespace ⇒ material is supplied");
-        let (n_cells, n_g) = {
-            let f = read(input)?;
-            (f.cell_count(), f.gauss_count())
-        };
-        let mut out =
-            SubElementField::new(self.bending.clone(), vec!["M".to_string(), "V".to_string()])?;
-        let f = read(input)?;
-        let m = read(mat)?;
-        for cell in 0..n_cells {
-            let ei = m.value(cell, 0, "E")? * m.value(cell, 0, "I")?;
-            let gas = m.value(cell, 0, "G")? * m.value(cell, 0, "A_s")?;
-            for g in 0..n_g {
-                out.set(cell, g, 0, ei * f.value(cell, g, "kappa")?)?; // M = E·I·κ
-                out.set(cell, g, 1, gas * f.value(cell, g, "gamma")?)?; // V = G·A_s·γ
-            }
-        }
-        Ok(out)
+        let cell = geom.cell;
+        let ei = mat.value(cell, 0, "E")? * mat.value(cell, 0, "I")?;
+        let gas = mat.value(cell, 0, "G")? * mat.value(cell, 0, "A_s")?;
+        out[0] = ei * input.value(cell, g, "kappa")?;
+        out[1] = gas * input.value(cell, g, "gamma")?;
+        Ok(())
     }
 
     fn label(&self) -> &'static str {

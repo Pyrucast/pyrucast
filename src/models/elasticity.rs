@@ -14,7 +14,7 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{NodeId, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::Physics;
+use crate::models::{CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -157,33 +157,29 @@ impl Physics for Elasticity {
         Some(self.fespace.clone())
     }
 
-    fn integrate_behavior(
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Ok(stress_names(self.space_dim))
+    }
+
+    /// Linear stress σ = D·ε at one Gauss point (material `E`, `nu` per cell).
+    fn integrate_point(
         &self,
-        input: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<SubElementField> {
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
-        let d = self.space_dim;
-        let (n_cells, n_g) = {
-            let f = read(input)?;
-            (f.cell_count(), f.gauss_count())
-        };
-        let mut out = SubElementField::new(self.fespace.clone(), stress_names(d))?;
-        let f = read(input)?;
-        let m = read(mat)?;
-        for cell in 0..n_cells {
-            let e = m.value(cell, 0, "E")?;
-            let nu = m.value(cell, 0, "nu")?;
-            let dmat = constitutive(e, nu, self.model, d);
-            for g in 0..n_g {
-                let strain = voigt_strain(&|name| f.value(cell, g, name), d)?;
-                for (r, drow) in dmat.iter().enumerate() {
-                    let sigma: f64 = drow.iter().zip(&strain).map(|(dv, s)| dv * s).sum();
-                    out.set(cell, g, r, sigma)?;
-                }
-            }
+        let (cell, d) = (geom.cell, self.space_dim);
+        let e = mat.value(cell, 0, "E")?;
+        let nu = mat.value(cell, 0, "nu")?;
+        let dmat = constitutive(e, nu, self.model, d);
+        let strain = voigt_strain(&|name| input.value(cell, g, name), d)?;
+        for (r, drow) in dmat.iter().enumerate() {
+            out[r] = drow.iter().zip(&strain).map(|(dv, s)| dv * s).sum();
         }
-        Ok(out)
+        Ok(())
     }
 
     fn label(&self) -> &'static str {

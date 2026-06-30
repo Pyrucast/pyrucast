@@ -34,7 +34,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::Physics;
+use crate::models::{CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use nalgebra::Matrix3;
 use serde::{Deserialize, Serialize};
@@ -150,47 +150,44 @@ impl Physics for Mazars {
         Some(self.fespace.clone())
     }
 
-    fn integrate_behavior(
-        &self,
-        input: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<SubElementField> {
-        let mat = material.expect("Mazars declares a material_fespace ⇒ material is supplied");
-        let d = self.space_dim;
-        let (n_cells, n_g) = {
-            let f = read(input)?;
-            (f.cell_count(), f.gauss_count())
-        };
-
-        let mut comps = stress_names(d);
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        let mut comps = stress_names(self.space_dim);
         comps.push("damage".into());
         comps.push("kappa".into());
-        let mut out = SubElementField::new(self.fespace.clone(), comps)?;
+        Ok(comps)
+    }
 
-        let f = read(input)?;
-        let m = read(mat)?;
-        for cell in 0..n_cells {
-            let p = MazarsParams {
-                e: m.value(cell, 0, "E")?,
-                nu: m.value(cell, 0, "nu")?,
-                eps_d0: m.value(cell, 0, "eps_d0")?,
-                a_t: m.value(cell, 0, "A_t")?,
-                b_t: m.value(cell, 0, "B_t")?,
-                a_c: m.value(cell, 0, "A_c")?,
-                b_c: m.value(cell, 0, "B_c")?,
-            };
-            for g in 0..n_g {
-                let eps = read_strain(&f, cell, g, d, p.nu, self.model)?;
-                let kappa_old = read_opt(&f, cell, g, "kappa");
-                let (sigma, damage, kappa) = mazars_update(&eps, kappa_old, &p);
-                for (r, name) in stress_names(d).iter().enumerate() {
-                    out.set_value(cell, g, name, voigt_stress(&sigma, d, r))?;
-                }
-                out.set_value(cell, g, "damage", damage)?;
-                out.set_value(cell, g, "kappa", kappa)?;
-            }
+    /// Mazars damage update at one Gauss point. Output layout = stress (Voigt,
+    /// `v`) + `damage` + `kappa`.
+    fn integrate_point(
+        &self,
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
+        let mat = material.expect("Mazars declares a material_fespace ⇒ material is supplied");
+        let (cell, d) = (geom.cell, self.space_dim);
+        let p = MazarsParams {
+            e: mat.value(cell, 0, "E")?,
+            nu: mat.value(cell, 0, "nu")?,
+            eps_d0: mat.value(cell, 0, "eps_d0")?,
+            a_t: mat.value(cell, 0, "A_t")?,
+            b_t: mat.value(cell, 0, "B_t")?,
+            a_c: mat.value(cell, 0, "A_c")?,
+            b_c: mat.value(cell, 0, "B_c")?,
+        };
+        let eps = read_strain(input, cell, g, d, p.nu, self.model)?;
+        let kappa_old = read_opt(input, cell, g, "kappa");
+        let (sigma, damage, kappa) = mazars_update(&eps, kappa_old, &p);
+        let v = stress_names(d).len();
+        for r in 0..v {
+            out[r] = voigt_stress(&sigma, d, r);
         }
-        Ok(out)
+        out[v] = damage;
+        out[v + 1] = kappa;
+        Ok(())
     }
 
     fn label(&self) -> &'static str {

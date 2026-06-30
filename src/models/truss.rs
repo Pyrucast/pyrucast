@@ -19,7 +19,7 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::Physics;
+use crate::models::{CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -117,46 +117,40 @@ impl Physics for Truss {
         Some(self.fespace.clone())
     }
 
-    fn integrate_behavior(
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Ok(vec!["n".to_string()])
+    }
+
+    /// Axial force `N = E·A·ε_axial` at one Gauss point, with `ε_axial = cᵀ ε c`
+    /// and `c` the cell's unit direction cosine (from its node coordinates).
+    fn integrate_point(
         &self,
-        input: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<SubElementField> {
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
         let mat = material.expect("Truss declares a material_fespace ⇒ material is supplied");
-        let d = self.space_dim;
-        let cosines = direction_cosines(&self.fespace, d)?;
+        let (cell, d) = (geom.cell, self.space_dim);
+        let c = cell_cosine(geom, d)?;
         let strain = strain_names(d);
         // (i,j) → flat strain-component index (symmetric, i ≤ j).
         let comp_index = |i: usize, j: usize| -> usize {
             let (i, j) = if i <= j { (i, j) } else { (j, i) };
-            // offset of row i in the upper-triangular packing + (j - i)
             (0..i).map(|r| d - r).sum::<usize>() + (j - i)
         };
-
-        let (n_cells, n_g) = {
-            let f = read(input)?;
-            (f.cell_count(), f.gauss_count())
-        };
-        let mut out = SubElementField::new(self.fespace.clone(), vec!["n".to_string()])?;
-        let f = read(input)?;
-        let m = read(mat)?;
-        for cell in 0..n_cells {
-            let c = &cosines[cell];
-            let e = m.value(cell, 0, "E")?;
-            let a = m.value(cell, 0, "A")?;
-            for g in 0..n_g {
-                // Axial strain ε_axial = cᵀ ε c.
-                let mut eps_axial = 0.0;
-                for i in 0..d {
-                    for j in 0..d {
-                        let eps_ij = f.value(cell, g, &strain[comp_index(i, j)])?;
-                        eps_axial += c[i] * eps_ij * c[j];
-                    }
-                }
-                out.set(cell, g, 0, e * a * eps_axial)?; // N = E·A·ε_axial
+        let e = mat.value(cell, 0, "E")?;
+        let a = mat.value(cell, 0, "A")?;
+        let mut eps_axial = 0.0;
+        for i in 0..d {
+            for j in 0..d {
+                let eps_ij = input.value(cell, g, &strain[comp_index(i, j)])?;
+                eps_axial += c[i] * eps_ij * c[j];
             }
         }
-        Ok(out)
+        out[0] = e * a * eps_axial;
+        Ok(())
     }
 
     fn label(&self) -> &'static str {
@@ -174,30 +168,14 @@ impl Physics for Truss {
     }
 }
 
-/// Unit direction cosine vector `c = (x_B − x_A)/L` of every `SEG2` cell.
-fn direction_cosines(
-    fespace: &Handle<SubFiniteElementSpace>,
-    space_dim: usize,
-) -> Result<Vec<Vec<f64>>> {
-    let (conn, n_cells, coords) = {
-        let s = read(fespace)?;
-        let sm = s.submesh();
-        (
-            read(&sm)?.connectivity().to_vec(),
-            s.cell_count()?,
-            s.coords()?,
-        )
-    };
-    let c = read(&coords)?;
-    let mut out = Vec::with_capacity(n_cells);
-    for cell in 0..n_cells {
-        let xa = c.coord(conn[2 * cell])?;
-        let xb = c.coord(conn[2 * cell + 1])?;
-        let d: Vec<f64> = (0..space_dim).map(|a| xb[a] - xa[a]).collect();
-        let len = d.iter().map(|v| v * v).sum::<f64>().sqrt();
-        out.push(d.iter().map(|v| v / len).collect());
-    }
-    Ok(out)
+/// Unit direction cosine vector `c = (x_B − x_A)/L` of one `SEG2` cell, from its
+/// two node coordinates.
+fn cell_cosine(geom: &CellGeom, space_dim: usize) -> Result<Vec<f64>> {
+    let xa = geom.node_coord(0)?;
+    let xb = geom.node_coord(1)?;
+    let d: Vec<f64> = (0..space_dim).map(|a| xb[a] - xa[a]).collect();
+    let len = d.iter().map(|v| v * v).sum::<f64>().sqrt();
+    Ok(d.iter().map(|v| v / len).collect())
 }
 
 /// Assemble the truss stiffness contribution: `K_e = (E·A/L)·[[c⊗c,−c⊗c],…]`

@@ -27,7 +27,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::Physics;
+use crate::models::{CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -159,50 +159,45 @@ impl Physics for Plasticity {
         Some(self.fespace.clone())
     }
 
-    fn integrate_behavior(
-        &self,
-        input: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<SubElementField> {
-        let mat = material.expect("Plasticity declares a material_fespace ⇒ material is supplied");
-        let d = self.space_dim;
-        let (n_cells, n_g) = {
-            let f = read(input)?;
-            (f.cell_count(), f.gauss_count())
-        };
-
-        let mut comps = stress_names(d);
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        let mut comps = stress_names(self.space_dim);
         comps.extend(state_names());
-        let mut out = SubElementField::new(self.fespace.clone(), comps)?;
+        Ok(comps)
+    }
 
-        let f = read(input)?;
-        let m = read(mat)?;
-        for cell in 0..n_cells {
-            let e = m.value(cell, 0, "E")?;
-            let nu = m.value(cell, 0, "nu")?;
-            let sigma_y = m.value(cell, 0, "sigma_y")?;
-            let (lambda, mu) = lame(e, nu);
-            for g in 0..n_g {
-                // Total strain (tensor) and previous plastic strain (VAR0).
-                let eps_total = read_strain(&f, cell, g, d)?;
-                let eps_p_old = read_state_strain(&f, cell, g);
-                let p_old = read_opt(&f, cell, g, "p");
+    /// Radial-return at one Gauss point. Output layout = stress (Voigt, `v`) +
+    /// plastic strain `eps_p` (full 3-D tensor, 6) + cumulated plastic strain
+    /// `p` (1), matching `stress_names ++ state_names`.
+    fn integrate_point(
+        &self,
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
+        let mat = material.expect("Plasticity declares a material_fespace ⇒ material is supplied");
+        let (cell, d) = (geom.cell, self.space_dim);
+        let (lambda, mu) = lame(mat.value(cell, 0, "E")?, mat.value(cell, 0, "nu")?);
+        let sigma_y = mat.value(cell, 0, "sigma_y")?;
 
-                let (sigma, eps_p_new, p_new) =
-                    radial_return(&eps_total, &eps_p_old, p_old, lambda, mu, sigma_y, self.model);
+        // Total strain (tensor) and previous plastic state (VAR0).
+        let eps_total = read_strain(input, cell, g, d)?;
+        let eps_p_old = read_state_strain(input, cell, g);
+        let p_old = read_opt(input, cell, g, "p");
 
-                // Stress in the model's Voigt order.
-                for (r, name) in stress_names(d).iter().enumerate() {
-                    out.set_value(cell, g, name, voigt_stress(&sigma, d, r))?;
-                }
-                // Updated state (always full 3-D).
-                for (k, suf) in TENSOR_SUFFIXES.iter().enumerate() {
-                    out.set_value(cell, g, &format!("eps_p_{suf}"), eps_p_new[k])?;
-                }
-                out.set_value(cell, g, "p", p_new)?;
-            }
+        let (sigma, eps_p_new, p_new) =
+            radial_return(&eps_total, &eps_p_old, p_old, lambda, mu, sigma_y, self.model);
+
+        let v = stress_names(d).len();
+        for r in 0..v {
+            out[r] = voigt_stress(&sigma, d, r);
         }
-        Ok(out)
+        for k in 0..6 {
+            out[v + k] = eps_p_new[k];
+        }
+        out[v + 6] = p_new;
+        Ok(())
     }
 
     fn label(&self) -> &'static str {
