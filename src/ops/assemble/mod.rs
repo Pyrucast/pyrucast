@@ -30,6 +30,7 @@ use crate::containers::model::Model;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 
+pub mod coloring;
 pub mod flux;
 pub use flux::{flux, FluxDensity};
 
