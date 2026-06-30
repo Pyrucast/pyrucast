@@ -196,9 +196,7 @@ impl Physics for Plasticity {
         for r in 0..v {
             out[r] = voigt_stress(&sigma, d, r);
         }
-        for k in 0..6 {
-            out[v + k] = eps_p_new[k];
-        }
+        out[v..v + 6].copy_from_slice(&eps_p_new);
         out[v + 6] = p_new;
         Ok(())
     }
