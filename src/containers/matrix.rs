@@ -79,6 +79,7 @@ use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -404,6 +405,13 @@ impl SubMatrix {
         self.coo.triplet_iter().map(|(r, c, &v)| (r, c, v))
     }
 
+    /// The block's COO as raw parallel slices `(rows, cols, values)`, in
+    /// **local** index form. Same data as [`local_triplets`](Self::local_triplets)
+    /// but indexable, so the aggregate can remap the entries in parallel.
+    pub fn local_coo_arrays(&self) -> (&[usize], &[usize], &[f64]) {
+        (self.coo.row_indices(), self.coo.col_indices(), self.coo.values())
+    }
+
     /// Handle to the `Coords` backing this block's row support (the col support
     /// shares it in any assembled system).
     pub fn coords(&self) -> Result<Handle<Coords>> {
@@ -678,6 +686,88 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
 /// One row or column DOF of an aggregate [`Matrix`], in materialised form.
 pub type NamedDof = (NodeId, String);
 
+/// Sort each row segment `pairs[bounds[i]..bounds[i+1]]` by column, in place and
+/// in parallel. `bounds` are absolute offsets into the original buffer (so
+/// `bounds[0]` is this slice's base); recursion splits the **row range** and the
+/// buffer together via `split_at_mut`, giving each task a disjoint slice. The
+/// sort is stable, preserving the stream order of equal columns.
+fn sort_rows_in_place(pairs: &mut [(usize, f64)], bounds: &[usize]) {
+    let nrows = bounds.len() - 1;
+    let base = bounds[0];
+    // Below this many entries, the task-spawn overhead outweighs the work: sort
+    // the remaining rows serially.
+    const SERIAL_BELOW: usize = 4096;
+    if nrows <= 1 || pairs.len() < SERIAL_BELOW {
+        for i in 0..nrows {
+            pairs[bounds[i] - base..bounds[i + 1] - base].sort_by_key(|&(c, _)| c);
+        }
+        return;
+    }
+    let mid = nrows / 2;
+    let (left, right) = pairs.split_at_mut(bounds[mid] - base);
+    rayon::join(
+        || sort_rows_in_place(left, &bounds[..=mid]),
+        || sort_rows_in_place(right, &bounds[mid..]),
+    );
+}
+
+/// Build a CSR matrix from unsorted global `(row, col, value)` triplets,
+/// **summing duplicates**, in parallel. Equivalent to
+/// `CsrMatrix::from(&CooMatrix::try_from_triplets(…))`.
+///
+/// Uses a counting sort by row (cache-friendly bucket scatter) so the only
+/// comparison sort is *within* each row — tiny segments sorted across rows in
+/// parallel ([`sort_rows_in_place`]). The histogram, scatter and final
+/// dedup-and-sum scan are O(nnz) serial passes. The per-row sort is stable, so
+/// equal `(row, col)` entries are summed in stream order — bit-for-bit identical
+/// to the serial path.
+fn csr_from_triplets_parallel(
+    nrows: usize,
+    ncols: usize,
+    triplets: Vec<(usize, usize, f64)>,
+) -> Result<CsrMatrix<f64>> {
+    let nnz = triplets.len();
+    // 1. Entries per row → exclusive prefix sum → per-row bucket bounds.
+    let mut bounds = vec![0usize; nrows + 1];
+    for &(r, _, _) in &triplets {
+        bounds[r + 1] += 1;
+    }
+    for r in 0..nrows {
+        bounds[r + 1] += bounds[r];
+    }
+    // 2. Scatter (col, val) into each row's bucket, preserving stream order.
+    let mut cursor: Vec<usize> = bounds[..nrows].to_vec();
+    let mut pairs = vec![(0usize, 0.0f64); nnz];
+    for (r, c, v) in triplets {
+        pairs[cursor[r]] = (c, v);
+        cursor[r] += 1;
+    }
+    // 3. Sort each row's columns, in place and across rows in parallel.
+    sort_rows_in_place(&mut pairs, &bounds);
+    // 4. Serial scan: emit one CSR entry per distinct (row, col), summing dups.
+    let mut row_offsets = vec![0usize; nrows + 1];
+    let mut col_indices: Vec<usize> = Vec::with_capacity(nnz);
+    let mut values: Vec<f64> = Vec::with_capacity(nnz);
+    for r in 0..nrows {
+        let mut last_col: Option<usize> = None;
+        for &(c, v) in &pairs[bounds[r]..bounds[r + 1]] {
+            if last_col == Some(c) {
+                *values.last_mut().unwrap() += v;
+            } else {
+                col_indices.push(c);
+                values.push(v);
+                row_offsets[r + 1] += 1;
+                last_col = Some(c);
+            }
+        }
+    }
+    for r in 0..nrows {
+        row_offsets[r + 1] += row_offsets[r];
+    }
+    CsrMatrix::try_from_csr_data(nrows, ncols, row_offsets, col_indices, values)
+        .map_err(|e| PyrucastError::Message(format!("csr_from_triplets_parallel: {e}")))
+}
+
 impl Matrix {
     /// Build the global DOF union + CSR. Must be called before any
     /// solver-facing method (`to_csr`, `to_dmatrix`, `mul_dense`, `dense`,
@@ -689,8 +779,8 @@ impl Matrix {
         }
         let row_dofs = self.collect_row_dofs()?;
         let col_dofs = self.collect_col_dofs()?;
-        let coo = self.build_coo(&row_dofs, &col_dofs)?;
-        let csr = CsrMatrix::from(&coo);
+        let triplets = self.build_global_triplets(&row_dofs, &col_dofs)?;
+        let csr = csr_from_triplets_parallel(row_dofs.len(), col_dofs.len(), triplets)?;
         self.assembled = Some(AssembledData {
             row_dofs,
             col_dofs,
@@ -761,26 +851,39 @@ impl Matrix {
         Ok(out)
     }
 
-    /// Assemble the global COO from the blocks, mapping each block's **local**
-    /// DOF indices to global ones via a per-block translation table (built once
-    /// from the global DOF maps). O(total block DOFs + nnz) — no per-entry
+    /// Map every block's **local** triplets to global `(row, col, value)`
+    /// arrays via a per-block translation table (built once from the global DOF
+    /// maps). The remap is index-preserving, so the concatenated stream — blocks
+    /// in order, entries in COO order — matches the old serial scatter. The
+    /// per-block remap runs in parallel. O(total block DOFs + nnz), no per-entry
     /// search.
-    fn build_coo(&self, row_dofs: &[NamedDof], col_dofs: &[NamedDof]) -> Result<CooMatrix<f64>> {
+    fn build_global_triplets(
+        &self,
+        row_dofs: &[NamedDof],
+        col_dofs: &[NamedDof],
+    ) -> Result<Vec<(usize, usize, f64)>> {
         let row_map: HashMap<NamedDof, usize> =
             row_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
         let col_map: HashMap<NamedDof, usize> =
             col_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
-        let mut coo = CooMatrix::<f64>::new(row_dofs.len(), col_dofs.len());
+        let mut out: Vec<(usize, usize, f64)> = Vec::new();
         for h in self {
             let sub = read(h)?;
             // local DOF index → global index (the "simple remap").
             let trow: Vec<usize> = sub.row_dofs().iter().map(|d| row_map[d]).collect();
             let tcol: Vec<usize> = sub.col_dofs().iter().map(|d| col_map[d]).collect();
-            for (ri, ci, v) in sub.local_triplets() {
-                coo.push(trow[ri], tcol[ci], v);
+            let (lr, lc, lv) = sub.local_coo_arrays();
+            let block: Vec<(usize, usize, f64)> = (0..lv.len())
+                .into_par_iter()
+                .map(|k| (trow[lr[k]], tcol[lc[k]], lv[k]))
+                .collect();
+            if out.is_empty() {
+                out = block;
+            } else {
+                out.extend(block);
             }
         }
-        Ok(coo)
+        Ok(out)
     }
 
     // ── Inspection (always available) ───────────────────────────────────
@@ -936,21 +1039,16 @@ impl Matrix {
 impl crate::dump::Dump for Matrix {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         // Build the global labelled grid on the fly — `collect_*_dofs` and
-        // `build_coo` take `&self`, so no `finalize()` (which needs `&mut`)
-        // is required: a matrix dumps the same content whether assembled or
-        // not.
+        // `build_global_triplets` take `&self`, so no `finalize()` (which needs
+        // `&mut`) is required: a matrix dumps the same content whether assembled
+        // or not.
         let grid = (|| -> Result<String> {
             let row_dofs = self.collect_row_dofs()?;
             let col_dofs = self.collect_col_dofs()?;
-            let coo = self.build_coo(&row_dofs, &col_dofs)?;
+            let triplets = self.build_global_triplets(&row_dofs, &col_dofs)?;
             let nc = col_dofs.len();
             let mut data = vec![0.0f64; row_dofs.len() * nc];
-            for ((&r, &c), &v) in coo
-                .row_indices()
-                .iter()
-                .zip(coo.col_indices())
-                .zip(coo.values())
-            {
+            for (r, c, v) in triplets {
                 data[r * nc + c] += v;
             }
             let row_labels: Vec<String> = row_dofs.iter().map(dof_label).collect();
