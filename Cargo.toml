@@ -26,6 +26,12 @@ nalgebra = { version = "0.33", features = ["serde-serialize"] }
 # Sparse storage (CSR / CSC / COO) and matrix-vector operations. Same
 # 0.33-compatible release line as nalgebra.
 nalgebra-sparse = "0.10"
+# Shared-memory data parallelism. Always on: the heavy per-element /
+# per-Gauss-point compute loops fan out across cores via rayon. Thread
+# count honours `RAYON_NUM_THREADS`. Confined to the `parallel` module and
+# the per-physics drivers (`models::kernel`); the physics kernels
+# themselves never see it.
+rayon = "1"
 # Visualization stack (gated by features below).
 plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "bitmap_encoder", "svg_backend", "ttf", "line_series", "all_series"], optional = true }
 winit = { version = "0.30", optional = true }

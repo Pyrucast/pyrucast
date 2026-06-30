@@ -42,6 +42,7 @@ pub mod error;
 pub mod interrupt;
 pub mod models;
 pub mod ops;
+pub mod parallel;
 pub mod persist;
 pub mod store;
 
