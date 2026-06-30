@@ -72,9 +72,12 @@
 //! ```
 
 use crate::aggregate::Aggregate;
+use crate::containers::element_field::SubElementField;
+use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::mesh::Coords;
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
+use crate::containers::model::SubModel;
 use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
 use nalgebra::{DMatrix, DVector};
@@ -143,6 +146,22 @@ impl crate::dump::Dump for DofOrdering {
 /// `(row_nodes[node_local], dual_vars[var_idx])` where
 /// `(node_local, var_idx) = ordering.from_index(i, n_row_nodes, n_dual_vars)`.
 /// Columns are symmetric with `col_nodes` and `primal_vars`.
+/// The recipe a **computed** [`SubMatrix`] carries *instead of* stored values:
+/// how to evaluate its contribution on the fly. The global assembler drives the
+/// sub-model's [`element_matrix`](crate::models::Physics::element_matrix) kernel
+/// over `fespace`'s cells and scatters the result straight into the global
+/// matrix — a computed block never materialises a COO (its own `coo` stays an
+/// empty, correctly-sized placeholder, so structural queries still work).
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ComputedRecipe {
+    /// Sub-model whose element kernel produces the contribution.
+    pub submodel: Handle<SubModel>,
+    /// FE subspace the kernel integrates over (drives the cell loop).
+    pub fespace: Handle<SubFiniteElementSpace>,
+    /// Material field for the kernel; `Some` iff the physics declares one.
+    pub material: Option<Handle<SubElementField>>,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct SubMatrix {
     /// POI1 mesh: cell `k` holds the k-th row-support node.
@@ -163,6 +182,12 @@ pub struct SubMatrix {
     #[serde(with = "coo_serde")]
     coo: CooMatrix<f64>,
     symmetric: bool,
+    /// `Some` ⇒ this is a **computed** block: `coo` is an empty placeholder and
+    /// the contribution is produced on the fly by the global assembler from this
+    /// recipe. `None` ⇒ **literal** block, `coo` holds the values (the historical
+    /// behaviour, unchanged).
+    #[serde(default)]
+    recipe: Option<ComputedRecipe>,
     /// `NodeId → local position` for O(1) `add_entry`, derived from
     /// `row_nodes` / `col_nodes`. Not serialized; built lazily on first use
     /// (the support is fixed at construction).
@@ -200,6 +225,42 @@ impl SubMatrix {
             ordering,
             coo: CooMatrix::new(nrows, ncols),
             symmetric,
+            recipe: None,
+            row_index: HashMap::new(),
+            col_index: HashMap::new(),
+        })
+    }
+
+    /// Build a **computed** block: a sized-but-empty placeholder that carries a
+    /// [`ComputedRecipe`] instead of values. Its structure (supports, vars,
+    /// ordering, dimensions) is fully defined; the values are produced by the
+    /// global assembler, which drives `submodel`'s element kernel over
+    /// `recipe.fespace` and scatters straight into the global matrix.
+    #[allow(clippy::too_many_arguments)]
+    pub fn computed(
+        row_support: Handle<SubMesh>,
+        col_support: Handle<SubMesh>,
+        dual_vars: Vec<String>,
+        primal_vars: Vec<String>,
+        ordering: DofOrdering,
+        symmetric: bool,
+        recipe: ComputedRecipe,
+    ) -> Result<Self> {
+        let row_nodes: Vec<NodeId> = read(&row_support)?.connectivity().to_vec();
+        let col_nodes: Vec<NodeId> = read(&col_support)?.connectivity().to_vec();
+        let nrows = row_nodes.len() * dual_vars.len();
+        let ncols = col_nodes.len() * primal_vars.len();
+        Ok(Self {
+            row_support,
+            col_support,
+            row_nodes,
+            col_nodes,
+            dual_vars,
+            primal_vars,
+            ordering,
+            coo: CooMatrix::new(nrows, ncols),
+            symmetric,
+            recipe: Some(recipe),
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
@@ -243,9 +304,21 @@ impl SubMatrix {
             ordering,
             coo,
             symmetric,
+            recipe: None,
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
+    }
+
+    /// Whether this is a **computed** block (carries a [`ComputedRecipe`], no
+    /// stored values) rather than a literal one.
+    pub fn is_computed(&self) -> bool {
+        self.recipe.is_some()
+    }
+
+    /// The block's [`ComputedRecipe`], or `None` for a literal block.
+    pub fn recipe(&self) -> Option<&ComputedRecipe> {
+        self.recipe.as_ref()
     }
 
     /// Whether the assembler declared this block numerically symmetric.
@@ -346,6 +419,13 @@ impl SubMatrix {
         col_var: &str,
         value: f64,
     ) -> Result<()> {
+        if self.is_computed() {
+            return Err(PyrucastError::Message(
+                "add_entry: this is a computed block (its values come from its \
+                 recipe at assembly time); literal entries cannot be added"
+                    .into(),
+            ));
+        }
         let n_rn = self.row_nodes.len();
         let n_dv = self.dual_vars.len();
         let n_cn = self.col_nodes.len();
@@ -560,13 +640,19 @@ impl fmt::Debug for SubMatrix {
 
 impl fmt::Display for SubMatrix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let nr = self.coo.nrows();
+        // Literal blocks render exactly as before; computed blocks have no
+        // stored entries, so report their recipe instead of an entry count.
+        let entries: std::borrow::Cow<str> = if self.is_computed() {
+            "computed (values from recipe)".into()
+        } else {
+            format!("{} entries", self.coo.nnz()).into()
+        };
         write!(
             f,
-            "SubMatrix: {} row(s) × {} col(s), {} entries{}",
-            nr,
+            "SubMatrix: {} row(s) × {} col(s), {}{}",
+            self.coo.nrows(),
             self.coo.ncols(),
-            self.coo.nnz(),
+            entries,
             if self.symmetric { ", symmetric" } else { "" }
         )
     }
@@ -579,6 +665,23 @@ fn dof_label((n, v): &NamedDof) -> String {
 
 impl crate::dump::Dump for SubMatrix {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
+        // A computed block holds no values — show its structure, not a grid of
+        // zeros. The recipe's handles identify its sub-model / FE subspace.
+        if self.is_computed() {
+            let recipe = self.recipe.as_ref().expect("is_computed ⇒ recipe");
+            return format!(
+                "{self}\n  recipe: submodel {:?}, fespace {:?}{}\n  dual_vars: [{}]\n  primal_vars: [{}]",
+                recipe.submodel,
+                recipe.fespace,
+                recipe
+                    .material
+                    .as_ref()
+                    .map(|m| format!(", material {m:?}"))
+                    .unwrap_or_default(),
+                self.dual_vars.join(", "),
+                self.primal_vars.join(", "),
+            );
+        }
         let row_labels: Vec<String> = self.row_dofs().iter().map(dof_label).collect();
         let col_labels: Vec<String> = self.col_dofs().iter().map(dof_label).collect();
         let data = self.dense();
