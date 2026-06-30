@@ -240,6 +240,62 @@ pub fn assemble_block(
     material: Option<&Handle<SubElementField>>,
     element: impl Fn(&CellGeom, Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
 ) -> Result<SubMatrix> {
+    let (nrows, ncols, trips) = element_block_triplets(
+        fespace,
+        row_support,
+        col_support,
+        dual_vars.len(),
+        primal_vars.len(),
+        ordering,
+        material,
+        element,
+    )?;
+    let mut rows = Vec::with_capacity(trips.len());
+    let mut cols = Vec::with_capacity(trips.len());
+    let mut vals = Vec::with_capacity(trips.len());
+    for (r, c, v) in trips {
+        rows.push(r);
+        cols.push(c);
+        vals.push(v);
+    }
+    let coo = CooMatrix::try_from_triplets(nrows, ncols, rows, cols, vals)
+        .map_err(|e| PyrucastError::Message(format!("assemble_block: invalid COO: {e}")))?;
+    SubMatrix::from_coo(
+        row_support.clone(),
+        col_support.clone(),
+        dual_vars,
+        primal_vars,
+        ordering,
+        symmetric,
+        coo,
+    )
+}
+
+/// `(nrows, ncols, local (row, col, value) triplets)` — the shape returned by
+/// [`element_block_triplets`].
+pub type BlockTriplets = (usize, usize, Vec<(usize, usize, f64)>);
+
+/// Compute one stiffness block's entries as **local** `(row, col, value)`
+/// triplets (the block's own numbering, `(node_local, var)` via `ordering`),
+/// driving the per-cell `element` kernel in parallel. This is the shared core of
+/// both [`assemble_block`] (which wraps these in a [`SubMatrix`]) and the global
+/// computed-block assembler (which remaps them to global indices).
+///
+/// Cells are computed in parallel and their triplets concatenated **in cell
+/// order** (within a cell: `li, di, lj, pj`), so the stream is identical to a
+/// sequential run — the assembled values are reproducible. Returns
+/// `(nrows, ncols, triplets)`.
+#[allow(clippy::too_many_arguments)]
+pub fn element_block_triplets(
+    fespace: &Handle<SubFiniteElementSpace>,
+    row_support: &Handle<SubMesh>,
+    col_support: &Handle<SubMesh>,
+    n_dual: usize,
+    n_primal: usize,
+    ordering: DofOrdering,
+    material: Option<&Handle<SubElementField>>,
+    element: impl Fn(&CellGeom, Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
+) -> Result<BlockTriplets> {
     let fe = read(fespace)?;
     let submesh = fe.submesh();
     let sm = read(&submesh)?;
@@ -255,14 +311,12 @@ pub fn assemble_block(
     let coords_ref: &Coords = &coords;
     let mat_ref: Option<&SubElementField> = mat_guard.as_deref();
 
-    let n_dual = dual_vars.len();
-    let n_primal = primal_vars.len();
     let n_cols_loc = n_nodes * n_primal;
     let ke_len = (n_nodes * n_dual) * n_cols_loc;
 
     // Support → local position maps (first occurrence wins), and the block's
-    // local row/col dimensions — all known up front, so the whole scatter runs
-    // in parallel (no shared COO mutation).
+    // local row/col dimensions — all known up front, so the whole loop runs in
+    // parallel (no shared mutation).
     let row_nodes: Vec<NodeId> = read(row_support)?.connectivity().to_vec();
     let col_nodes: Vec<NodeId> = read(col_support)?.connectivity().to_vec();
     let n_row_nodes = row_nodes.len();
@@ -280,9 +334,9 @@ pub fn assemble_block(
     let col_pos = pos_map(&col_nodes);
 
     // Per cell, in parallel: compute the element matrix, then emit its triplets
-    // in **local** (global-to-block) indices. Order within a cell is
-    // li,di,lj,pj; cells are concatenated in order below ⇒ identical triplet
-    // stream to the old serial scatter (bit-for-bit result).
+    // in **local** indices. Order within a cell is li,di,lj,pj; cells are
+    // concatenated in order below ⇒ identical triplet stream regardless of
+    // thread count (bit-for-bit result).
     let per_cell: Vec<Vec<(usize, usize, f64)>> = (0..n_cells)
         .into_par_iter()
         .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
@@ -296,10 +350,10 @@ pub fn assemble_block(
             let mut cpos = Vec::with_capacity(n_nodes);
             for &nid in ids {
                 rpos.push(*row_pos.get(&nid).ok_or_else(|| {
-                    PyrucastError::Message(format!("assemble_block: node {nid:?} not in row support"))
+                    PyrucastError::Message(format!("element_block_triplets: node {nid:?} not in row support"))
                 })? as usize);
                 cpos.push(*col_pos.get(&nid).ok_or_else(|| {
-                    PyrucastError::Message(format!("assemble_block: node {nid:?} not in col support"))
+                    PyrucastError::Message(format!("element_block_triplets: node {nid:?} not in col support"))
                 })? as usize);
             }
 
@@ -321,28 +375,10 @@ pub fn assemble_block(
         })
         .collect::<Result<_>>()?;
 
-    // Concatenate the per-cell triplets (cell order) and build the COO in one
-    // shot — the serial part is now just pushing into three Vecs.
     let total: usize = per_cell.iter().map(|v| v.len()).sum();
-    let mut rows = Vec::with_capacity(total);
-    let mut cols = Vec::with_capacity(total);
-    let mut vals = Vec::with_capacity(total);
-    for trips in per_cell {
-        for (r, c, v) in trips {
-            rows.push(r);
-            cols.push(c);
-            vals.push(v);
-        }
+    let mut trips = Vec::with_capacity(total);
+    for cell_trips in per_cell {
+        trips.extend(cell_trips);
     }
-    let coo = CooMatrix::try_from_triplets(nrows, ncols, rows, cols, vals)
-        .map_err(|e| PyrucastError::Message(format!("assemble_block: invalid COO: {e}")))?;
-    SubMatrix::from_coo(
-        row_support.clone(),
-        col_support.clone(),
-        dual_vars,
-        primal_vars,
-        ordering,
-        symmetric,
-        coo,
-    )
+    Ok((nrows, ncols, trips))
 }
