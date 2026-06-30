@@ -50,6 +50,15 @@ parking_lot = { version = "0.12.5", features = ["arc_lock"] }
 # keep their roles.
 faer = "0.24.4"
 
+[dev-dependencies]
+# Benchmark harness (see `benches/parallel.rs`). Run with `cargo bench`; vary
+# `RAYON_NUM_THREADS` between runs to read the parallel speedup.
+criterion = "0.5"
+
+[[bench]]
+name = "parallel"
+harness = false
+
 [features]
 # Compile the Python binding code (the `#[pyclass]` wrappers etc.). Pulls
 # in the optional `pyo3` dependency. On its own, pyo3 links to libpython
