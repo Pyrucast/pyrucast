@@ -19,7 +19,7 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::{CellGeom, Physics};
+use crate::models::{kernel, CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -101,15 +101,17 @@ impl Physics for Truss {
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
         let mat = material.expect("Truss requires a material field");
-        let mut block = SubMatrix::new(
-            self.support.clone(),
-            self.support.clone(),
+        let block = kernel::assemble_block(
+            &self.fespace,
+            &self.support,
+            &self.support,
             self.dual_vars(),
             self.primal_vars(),
             DofOrdering::NodesThenVars,
             true,
+            Some(mat),
+            |geom, m, ke| element_stiffness(geom, m.unwrap(), ke),
         )?;
-        assemble_stiffness(&self.fespace, mat, self.space_dim, &mut block)?;
         Ok(vec![block])
     }
 
@@ -178,60 +180,31 @@ fn cell_cosine(geom: &CellGeom, space_dim: usize) -> Result<Vec<f64>> {
     Ok(d.iter().map(|v| v / len).collect())
 }
 
-/// Assemble the truss stiffness contribution: `K_e = (E·A/L)·[[c⊗c,−c⊗c],…]`
-/// written at `(NodeId_i, f_a) × (NodeId_j, u_b)`.
-pub fn assemble_stiffness(
-    fespace: &Handle<SubFiniteElementSpace>,
-    material: &Handle<SubElementField>,
-    space_dim: usize,
-    k: &mut SubMatrix,
+/// Element kernel: local truss stiffness `K_e = (E·A/L)·[[c⊗c,−c⊗c],…]` of one
+/// `SEG2`, written into `ke` (flat row-major, side `2·space_dim`, **node-major /
+/// component-minor** dof order). `c` is the unit direction cosine from the cell's
+/// node coordinates. Pure and sequential — driven in parallel by
+/// [`crate::models::kernel::assemble_block`].
+pub fn element_stiffness(
+    geom: &CellGeom,
+    material: &SubElementField,
+    ke: &mut [f64],
 ) -> Result<()> {
-    let (conn, n_cells, coords) = {
-        let s = read(fespace)?;
-        let sm = s.submesh();
-        (
-            read(&sm)?.connectivity().to_vec(),
-            s.cell_count()?,
-            s.coords()?,
-        )
+    let sd = geom.space_dim;
+    let side = 2 * sd;
+    let c = cell_cosine(geom, sd)?;
+    let len = {
+        let xa = geom.node_coord(0)?;
+        let xb = geom.node_coord(1)?;
+        (0..sd).map(|a| (xb[a] - xa[a]).powi(2)).sum::<f64>().sqrt()
     };
-    let coords: Vec<Vec<f64>> = {
-        let c = read(&coords)?;
-        conn.iter()
-            .map(|&nid| Ok(c.coord(nid)?.to_vec()))
-            .collect::<Result<_>>()?
-    };
-    let (es, areas): (Vec<f64>, Vec<f64>) = {
-        let m = read(material)?;
-        let mut es = Vec::with_capacity(n_cells);
-        let mut areas = Vec::with_capacity(n_cells);
-        for cell in 0..n_cells {
-            es.push(m.value(cell, 0, "E")?);
-            areas.push(m.value(cell, 0, "A")?);
-        }
-        (es, areas)
-    };
-
-    let dual: Vec<String> = (0..space_dim).map(dual_name).collect();
-    let primal: Vec<String> = (0..space_dim).map(primal_name).collect();
-
-    for cell in 0..n_cells {
-        let (ia, ib) = (2 * cell, 2 * cell + 1);
-        let nodes = [conn[ia], conn[ib]];
-        let (xa, xb) = (&coords[ia], &coords[ib]);
-        let dvec: Vec<f64> = (0..space_dim).map(|a| xb[a] - xa[a]).collect();
-        let len = dvec.iter().map(|v| v * v).sum::<f64>().sqrt();
-        let cos: Vec<f64> = dvec.iter().map(|v| v / len).collect();
-        let k_ax = es[cell] * areas[cell] / len;
-
-        for ii in 0..2 {
-            for jj in 0..2 {
-                let sign = if ii == jj { 1.0 } else { -1.0 };
-                for a in 0..space_dim {
-                    for b in 0..space_dim {
-                        let val = sign * k_ax * cos[a] * cos[b];
-                        k.add_entry(nodes[ii], &dual[a], nodes[jj], &primal[b], val)?;
-                    }
+    let k_ax = material.value(geom.cell, 0, "E")? * material.value(geom.cell, 0, "A")? / len;
+    for ii in 0..2 {
+        for jj in 0..2 {
+            let sign = if ii == jj { 1.0 } else { -1.0 };
+            for a in 0..sd {
+                for b in 0..sd {
+                    ke[(ii * sd + a) * side + (jj * sd + b)] = sign * k_ax * c[a] * c[b];
                 }
             }
         }

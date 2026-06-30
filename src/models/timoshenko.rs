@@ -110,6 +110,10 @@ impl Physics for Timoshenko {
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
         let mat = material.expect("Timoshenko requires a material field");
+        // Two-quadrature element (bending full Gauss + shear reduced): does not
+        // fit the single-FE-space `kernel::assemble_block` driver, and beam
+        // meshes are 1-D/small — kept on its own sequential path (its behaviour
+        // integration is mutualised via `integrate_point`).
         let mut block = SubMatrix::new(
             self.support.clone(),
             self.support.clone(),

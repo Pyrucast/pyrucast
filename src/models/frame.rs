@@ -18,7 +18,7 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::Physics;
+use crate::models::{kernel, CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -83,15 +83,17 @@ impl Physics for Frame {
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
         let mat = material.expect("Frame requires a material field");
-        let mut block = SubMatrix::new(
-            self.support.clone(),
-            self.support.clone(),
+        let block = kernel::assemble_block(
+            &self.fespace,
+            &self.support,
+            &self.support,
             self.dual_vars(),
             self.primal_vars(),
             DofOrdering::NodesThenVars,
             true,
+            Some(mat),
+            |geom, m, ke| element_stiffness(geom, m.unwrap(), ke),
         )?;
-        assemble_stiffness(&self.fespace, mat, &mut block)?;
         Ok(vec![block])
     }
 
@@ -165,67 +167,33 @@ fn matmul(a: &[[f64; 6]; 6], b: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
     out
 }
 
-/// Assemble `K = Tᵀ K_loc T` of every frame element into `k`, at
-/// `(NodeId_i, dual_a) × (NodeId_j, primal_b)`.
-pub fn assemble_stiffness(
-    fespace: &Handle<SubFiniteElementSpace>,
-    material: &Handle<SubElementField>,
-    k: &mut SubMatrix,
+/// Element kernel: local frame stiffness `K = Tᵀ K_loc T` of one 2-node frame
+/// element, written into `ke` (flat row-major 6×6, **node-major / variable-minor**
+/// dof order `dof = node·3 + var`). Pure and sequential — driven in parallel by
+/// [`crate::models::kernel::assemble_block`].
+pub fn element_stiffness(
+    geom: &CellGeom,
+    material: &SubElementField,
+    ke: &mut [f64],
 ) -> Result<()> {
-    let (conn, n_cells, coords) = {
-        let s = read(fespace)?;
-        let sm = s.submesh();
-        (
-            read(&sm)?.connectivity().to_vec(),
-            s.cell_count()?,
-            s.coords()?,
-        )
-    };
-    let coords: Vec<Vec<f64>> = {
-        let c = read(&coords)?;
-        conn.iter()
-            .map(|&nid| Ok(c.coord(nid)?.to_vec()))
-            .collect::<Result<_>>()?
-    };
-    let mats: Vec<[f64; 3]> = {
-        let m = read(material)?;
-        (0..n_cells)
-            .map(|cell| {
-                Ok([
-                    m.value(cell, 0, "E")? * m.value(cell, 0, "A")?,
-                    m.value(cell, 0, "E")? * m.value(cell, 0, "I")?,
-                    m.value(cell, 0, "G")? * m.value(cell, 0, "A_s")?,
-                ])
-            })
-            .collect::<Result<_>>()?
-    };
+    let cell = geom.cell;
+    let xa = geom.node_coord(0)?;
+    let xb = geom.node_coord(1)?;
+    let (dx, dy) = (xb[0] - xa[0], xb[1] - xa[1]);
+    let l = (dx * dx + dy * dy).sqrt();
+    let (c, s) = (dx / l, dy / l);
+    let ea = material.value(cell, 0, "E")? * material.value(cell, 0, "A")?;
+    let ei = material.value(cell, 0, "E")? * material.value(cell, 0, "I")?;
+    let gas = material.value(cell, 0, "G")? * material.value(cell, 0, "A_s")?;
 
-    for cell in 0..n_cells {
-        let nodes = [conn[2 * cell], conn[2 * cell + 1]];
-        let (xa, xb) = (&coords[2 * cell], &coords[2 * cell + 1]);
-        let (dx, dy) = (xb[0] - xa[0], xb[1] - xa[1]);
-        let l = (dx * dx + dy * dy).sqrt();
-        let (c, s) = (dx / l, dy / l);
-        let [ea, ei, gas] = mats[cell];
+    let kl = local_stiffness(ea, ei, gas, l);
+    let t = rotation(c, s);
+    // K_global = Tᵀ · K_loc · T.
+    let kg = matmul(&transpose(&t), &matmul(&kl, &t));
 
-        let kl = local_stiffness(ea, ei, gas, l);
-        let t = rotation(c, s);
-        // K_global = Tᵀ · K_loc · T.
-        let kt = matmul(&kl, &t);
-        let tt = transpose(&t);
-        let kg = matmul(&tt, &kt);
-
-        // Scatter: global DOF i ↔ (nodes[i/3], DUAL/PRIMAL[i%3]).
-        for r in 0..6 {
-            for col in 0..6 {
-                k.add_entry(
-                    nodes[r / 3],
-                    DUAL[r % 3],
-                    nodes[col / 3],
-                    PRIMAL[col % 3],
-                    kg[r][col],
-                )?;
-            }
+    for r in 0..6 {
+        for col in 0..6 {
+            ke[r * 6 + col] = kg[r][col];
         }
     }
     Ok(())
