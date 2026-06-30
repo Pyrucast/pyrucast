@@ -13,6 +13,10 @@ réactions).
 
 - [Barre / treillis](mecanique/truss.md) — élément à effort axial (1-D/2-D/3-D).
 - [Élasticité linéaire](mecanique/elasticite.md) — continuum 2-D (CP/DP) et 3-D.
+- [Plasticité parfaite (von Mises)](mecanique/plasticite.md) — J2 sans
+  écrouissage, retour radial (état interne `εᵖ`, `p`).
+- [Endommagement de Mazars](mecanique/mazars.md) — endommagement isotrope du
+  béton, deux variables (état interne `κ`).
 - [Poutre de Timoshenko](mecanique/timoshenko.md) — flexion + cisaillement,
   intégration réduite (anti-verrouillage).
 - [Portique 2D](mecanique/portique.md) — poutre orientée (axial + flexion +

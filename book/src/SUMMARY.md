@@ -27,6 +27,8 @@
   - [Mécanique](mecanique.md)
     - [Barre / treillis](mecanique/truss.md)
     - [Élasticité linéaire](mecanique/elasticite.md)
+    - [Plasticité parfaite (von Mises)](mecanique/plasticite.md)
+    - [Endommagement de Mazars](mecanique/mazars.md)
     - [Poutre de Timoshenko](mecanique/timoshenko.md)
     - [Portique 2D](mecanique/portique.md)
     - [Cadre 3D](mecanique/cadre3d.md)

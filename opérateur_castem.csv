@@ -39,7 +39,7 @@ Maillage - info;DIME;Dimension de l'espace de travail;Coords (dimension)
 Maillage - info;NBNO;Nombre de nœuds;len(mesh) / méthodes Mesh
 Maillage - info;QUEL;Information sur un élément (type, nœuds);Cell / Element
 Maillage - info;ELEM (APPUYE);Éléments d'un maillage s'appuyant sur un jeu de nœuds;elements_on
-Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément fini);Model.* (heat_conduction, elasticity…)
+Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément fini);Model.* (heat_conduction, elasticity, plasticity, mazars…)
 Modèle et matériau;MATE;Définit le champ de propriétés matériau;material_field / sub_material_field
 Modèle et matériau;CARA;Caractéristiques géométriques (sections de poutres/coques);material_field (composantes section)
 Modèle et matériau;COMP;Intègre la loi de comportement (déf -> contraintes);integrate_behavior

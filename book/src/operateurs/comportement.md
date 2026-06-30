@@ -41,4 +41,7 @@ forces = pyrucast.integrate_behavior(model, eps, materials)
 
 Les pages [Barre](../mecanique/truss.md), [Élasticité](../mecanique/elasticite.md)
 et [Timoshenko](../mecanique/timoshenko.md) détaillent l'intégrande de
-comportement (`COMP`) de chaque physique.
+comportement (`COMP`) de chaque physique. Pour les lois **non linéaires** avec
+variables internes (`VAR0` → `VAR1`), voir
+[Plasticité parfaite](../mecanique/plasticite.md) (retour radial von Mises) et
+[Endommagement de Mazars](../mecanique/mazars.md).
