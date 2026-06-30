@@ -204,6 +204,49 @@ impl SubMatrix {
         })
     }
 
+    /// Build a block from an already-assembled COO whose indices are this
+    /// block's **local** numbering (`(node_local, var_idx)` via `ordering`,
+    /// nodes positioned as in `row_support` / `col_support`). Lets an assembler
+    /// produce all entries in parallel and hand them over in one shot, bypassing
+    /// the per-entry [`add_entry`](Self::add_entry).
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_coo(
+        row_support: Handle<SubMesh>,
+        col_support: Handle<SubMesh>,
+        dual_vars: Vec<String>,
+        primal_vars: Vec<String>,
+        ordering: DofOrdering,
+        symmetric: bool,
+        coo: CooMatrix<f64>,
+    ) -> Result<Self> {
+        let row_nodes: Vec<NodeId> = read(&row_support)?.connectivity().to_vec();
+        let col_nodes: Vec<NodeId> = read(&col_support)?.connectivity().to_vec();
+        let nrows = row_nodes.len() * dual_vars.len();
+        let ncols = col_nodes.len() * primal_vars.len();
+        if coo.nrows() != nrows || coo.ncols() != ncols {
+            return Err(PyrucastError::Message(format!(
+                "from_coo: COO is {}×{} but the support/vars imply {}×{}",
+                coo.nrows(),
+                coo.ncols(),
+                nrows,
+                ncols
+            )));
+        }
+        Ok(Self {
+            row_support,
+            col_support,
+            row_nodes,
+            col_nodes,
+            dual_vars,
+            primal_vars,
+            ordering,
+            coo,
+            symmetric,
+            row_index: HashMap::new(),
+            col_index: HashMap::new(),
+        })
+    }
+
     /// Whether the assembler declared this block numerically symmetric.
     pub fn symmetric(&self) -> bool {
         self.symmetric

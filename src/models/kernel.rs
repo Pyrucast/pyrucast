@@ -25,22 +25,72 @@
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
-use crate::containers::finite_element_space::SubFiniteElementSpace;
+use crate::containers::finite_element_space::{
+    build_dn_dx, build_jacobian, jacobian_measure, SubFiniteElementSpace,
+};
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Coords, NodeId, SubMesh};
-use crate::error::Result;
+use crate::error::{PyrucastError, Result};
 use crate::parallel::*;
 use crate::store::{read, Handle};
+use nalgebra_sparse::CooMatrix;
+use std::collections::HashMap;
 
-/// Geometry of one cell, borrowed from shared read guards held by the driver.
+/// Reference-element data of an FE subspace, snapshotted **once** before the
+/// parallel loop (it would otherwise re-read the store on every call — through
+/// `element_type()` — and serialise all threads on the global store lock).
+/// Shape values, reference derivatives and weights at each Gauss point, plus the
+/// fixed dimensions. Shared read-only across threads.
+struct RefData {
+    n_nodes: usize,
+    n_gauss: usize,
+    space_dim: usize,
+    ref_dim: usize,
+    /// Shape values `N_i(ξ_g)` per Gauss point.
+    n_ref: Vec<Vec<f64>>,
+    /// Reference derivatives `∂N_i/∂ξ_k(ξ_g)` per Gauss point.
+    dn_ref: Vec<Vec<f64>>,
+    /// Gauss weights.
+    weights: Vec<f64>,
+}
+
+impl RefData {
+    fn snapshot(fe: &SubFiniteElementSpace) -> Result<Self> {
+        let n_gauss = fe.gauss_count();
+        let mut n_ref = Vec::with_capacity(n_gauss);
+        let mut dn_ref = Vec::with_capacity(n_gauss);
+        let mut weights = Vec::with_capacity(n_gauss);
+        for g in 0..n_gauss {
+            n_ref.push(fe.n_at_g(g)?.to_vec());
+            dn_ref.push(fe.dn_at_g(g)?.to_vec());
+            weights.push(fe.gauss_weight(g)?);
+        }
+        Ok(Self {
+            n_nodes: fe.nodes_per_cell()?,
+            n_gauss,
+            space_dim: fe.space_dim(),
+            ref_dim: fe.ref_dim()?,
+            n_ref,
+            dn_ref,
+            weights,
+        })
+    }
+}
+
+/// Geometry of one cell, computed **without touching the store**: coordinates
+/// come from a held `Coords` guard, reference data is shared. Every accessor is
+/// a pure local computation, so a kernel may call them while the driver runs the
+/// cells in parallel — the kernel sees only this, never rayon or the store.
 ///
-/// Every accessor is a pure `&self` read of the FE space / coordinates (neither
-/// has interior mutability), so a kernel may call them while the driver runs the
-/// cells in parallel. The kernel sees only this — never rayon or the store.
+/// The cell's node coordinates are gathered **lazily** (only `dn_dx` / `det_j_w`
+/// need them), so a point-local kernel that never asks for geometry (most
+/// behaviour integrands) pays nothing. `CellGeom` is created and used within one
+/// rayon task, so the interior-mutable cache is single-threaded.
 pub struct CellGeom<'a> {
-    fe: &'a SubFiniteElementSpace,
+    rd: &'a RefData,
     coords: &'a Coords,
     conn: &'a [NodeId],
+    cell_coords: std::cell::RefCell<Option<Vec<f64>>>,
     /// Index of this cell within the FE subspace.
     pub cell: usize,
     /// Nodes per cell.
@@ -52,29 +102,67 @@ pub struct CellGeom<'a> {
 }
 
 impl<'a> CellGeom<'a> {
+    fn new(rd: &'a RefData, coords: &'a Coords, conn: &'a [NodeId], cell: usize) -> Result<Self> {
+        Ok(Self {
+            rd,
+            coords,
+            conn,
+            cell_coords: std::cell::RefCell::new(None),
+            cell,
+            n_nodes: rd.n_nodes,
+            n_gauss: rd.n_gauss,
+            space_dim: rd.space_dim,
+        })
+    }
+
     /// Global node ids of this cell, in connectivity order.
     pub fn node_ids(&self) -> &'a [NodeId] {
         &self.conn[self.cell * self.n_nodes..(self.cell + 1) * self.n_nodes]
     }
 
-    /// Coordinates of local node `local` (0-based within the cell).
+    /// Coordinates of local node `local` (0-based within the cell). Read straight
+    /// from the held `Coords` (no gather).
     pub fn node_coord(&self, local: usize) -> Result<&[f64]> {
         self.coords.coord(self.node_ids()[local])
     }
 
+    /// Fill the lazy `cell_coords` cache on first use (gather from the held
+    /// `Coords`, no store access).
+    fn ensure_cell_coords(&self) -> Result<()> {
+        let mut cc = self.cell_coords.borrow_mut();
+        if cc.is_none() {
+            let mut v = Vec::with_capacity(self.n_nodes * self.space_dim);
+            for &id in self.node_ids() {
+                v.extend_from_slice(self.coords.coord(id)?);
+            }
+            *cc = Some(v);
+        }
+        Ok(())
+    }
+
     /// `∂N_i/∂x_a` at Gauss point `g`, flat layout `[i * space_dim + a]`.
     pub fn dn_dx(&self, g: usize) -> Result<Vec<f64>> {
-        self.fe.dn_dx(self.cell, g)
+        self.ensure_cell_coords()?;
+        let cc = self.cell_coords.borrow();
+        let cc = cc.as_ref().unwrap();
+        let dn = &self.rd.dn_ref[g];
+        let jac = build_jacobian(cc, dn, self.space_dim, self.rd.ref_dim, self.n_nodes);
+        build_dn_dx(&jac, dn, self.space_dim, self.rd.ref_dim, self.n_nodes)
     }
 
     /// Shape-function values `N_i(ξ_g)` at Gauss point `g`.
-    pub fn n_at_g(&self, g: usize) -> Result<&'a [f64]> {
-        self.fe.n_at_g(g)
+    pub fn n_at_g(&self, g: usize) -> Result<&[f64]> {
+        Ok(&self.rd.n_ref[g])
     }
 
     /// `|J|_g · w_g` — the integration weight of Gauss point `g`.
     pub fn det_j_w(&self, g: usize) -> Result<f64> {
-        Ok(self.fe.det_jacobian(self.cell, g)? * self.fe.gauss_weight(g)?)
+        self.ensure_cell_coords()?;
+        let cc = self.cell_coords.borrow();
+        let cc = cc.as_ref().unwrap();
+        let dn = &self.rd.dn_ref[g];
+        let jac = build_jacobian(cc, dn, self.space_dim, self.rd.ref_dim, self.n_nodes);
+        Ok(jacobian_measure(&jac, self.space_dim, self.rd.ref_dim) * self.rd.weights[g])
     }
 }
 
@@ -99,6 +187,7 @@ pub fn integrate_pointwise(
     let mut out = SubElementField::new(fespace.clone(), out_components)?;
 
     // Guards held for the whole parallel region — slices borrowed, not copied.
+    // Reference data snapshotted once (no per-cell store reads inside the loop).
     let fe = read(fespace)?;
     let submesh = fe.submesh();
     let sm = read(&submesh)?;
@@ -107,11 +196,10 @@ pub fn integrate_pointwise(
     let fin = read(input)?;
     let mat_guard = material.map(read).transpose()?;
 
-    let n_nodes = fe.nodes_per_cell()?;
-    let n_gauss = fe.gauss_count();
-    let space_dim = fe.space_dim();
+    let rd = RefData::snapshot(&fe)?;
+    let n_gauss = rd.n_gauss;
     let conn: &[NodeId] = sm.connectivity();
-    let fe_ref: &SubFiniteElementSpace = &fe;
+    let rd_ref: &RefData = &rd;
     let coords_ref: &Coords = &coords;
     let in_ref: &SubElementField = &fin;
     let mat_ref: Option<&SubElementField> = mat_guard.as_deref();
@@ -121,15 +209,7 @@ pub fn integrate_pointwise(
         .with_min_len((MIN_PARALLEL_LEN / n_gauss.max(1)).max(1))
         .enumerate()
         .try_for_each(|(cell, ochunk)| -> Result<()> {
-            let geom = CellGeom {
-                fe: fe_ref,
-                coords: coords_ref,
-                conn,
-                cell,
-                n_nodes,
-                n_gauss,
-                space_dim,
-            };
+            let geom = CellGeom::new(rd_ref, coords_ref, conn, cell)?;
             for g in 0..n_gauss {
                 let slot = &mut ochunk[g * out_stride..(g + 1) * out_stride];
                 point(&geom, in_ref, mat_ref, g, slot)?;
@@ -167,70 +247,102 @@ pub fn assemble_block(
     let coords = read(&coords_h)?;
     let mat_guard = material.map(read).transpose()?;
 
+    let rd = RefData::snapshot(&fe)?;
     let n_cells = fe.cell_count()?;
-    let n_nodes = fe.nodes_per_cell()?;
-    let n_gauss = fe.gauss_count();
-    let space_dim = fe.space_dim();
+    let n_nodes = rd.n_nodes;
     let conn: &[NodeId] = sm.connectivity();
-    let fe_ref: &SubFiniteElementSpace = &fe;
+    let rd_ref: &RefData = &rd;
     let coords_ref: &Coords = &coords;
     let mat_ref: Option<&SubElementField> = mat_guard.as_deref();
 
     let n_dual = dual_vars.len();
     let n_primal = primal_vars.len();
-    let n_rows_loc = n_nodes * n_dual;
     let n_cols_loc = n_nodes * n_primal;
-    let ke_len = n_rows_loc * n_cols_loc;
+    let ke_len = (n_nodes * n_dual) * n_cols_loc;
 
-    // Cell-local matrices in parallel (no shared mutation).
-    let locals: Vec<Vec<f64>> = (0..n_cells)
+    // Support → local position maps (first occurrence wins), and the block's
+    // local row/col dimensions — all known up front, so the whole scatter runs
+    // in parallel (no shared COO mutation).
+    let row_nodes: Vec<NodeId> = read(row_support)?.connectivity().to_vec();
+    let col_nodes: Vec<NodeId> = read(col_support)?.connectivity().to_vec();
+    let n_row_nodes = row_nodes.len();
+    let n_col_nodes = col_nodes.len();
+    let nrows = n_row_nodes * n_dual;
+    let ncols = n_col_nodes * n_primal;
+    let pos_map = |nodes: &[NodeId]| -> HashMap<NodeId, u32> {
+        let mut m = HashMap::with_capacity(nodes.len());
+        for (i, &n) in nodes.iter().enumerate() {
+            m.entry(n).or_insert(i as u32);
+        }
+        m
+    };
+    let row_pos = pos_map(&row_nodes);
+    let col_pos = pos_map(&col_nodes);
+
+    // Per cell, in parallel: compute the element matrix, then emit its triplets
+    // in **local** (global-to-block) indices. Order within a cell is
+    // li,di,lj,pj; cells are concatenated in order below ⇒ identical triplet
+    // stream to the old serial scatter (bit-for-bit result).
+    let per_cell: Vec<Vec<(usize, usize, f64)>> = (0..n_cells)
         .into_par_iter()
         .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
-        .map(|cell| {
-            let geom = CellGeom {
-                fe: fe_ref,
-                coords: coords_ref,
-                conn,
-                cell,
-                n_nodes,
-                n_gauss,
-                space_dim,
-            };
+        .map(|cell| -> Result<Vec<(usize, usize, f64)>> {
+            let geom = CellGeom::new(rd_ref, coords_ref, conn, cell)?;
             let mut ke = vec![0.0_f64; ke_len];
             element(&geom, mat_ref, &mut ke)?;
-            Ok(ke)
-        })
-        .collect::<Result<_>>()?;
 
-    // Serial scatter into the COO — insertion order = cell order ⇒ deterministic.
-    let mut block = SubMatrix::new(
-        row_support.clone(),
-        col_support.clone(),
-        dual_vars.clone(),
-        primal_vars.clone(),
-        ordering,
-        symmetric,
-    )?;
-    for cell in 0..n_cells {
-        let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-        let ke = &locals[cell];
-        for li in 0..n_nodes {
-            for di in 0..n_dual {
-                let r = li * n_dual + di;
-                for lj in 0..n_nodes {
-                    for pj in 0..n_primal {
-                        let c = lj * n_primal + pj;
-                        block.add_entry(
-                            ids[li],
-                            &dual_vars[di],
-                            ids[lj],
-                            &primal_vars[pj],
-                            ke[r * n_cols_loc + c],
-                        )?;
+            let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
+            let mut rpos = Vec::with_capacity(n_nodes);
+            let mut cpos = Vec::with_capacity(n_nodes);
+            for &nid in ids {
+                rpos.push(*row_pos.get(&nid).ok_or_else(|| {
+                    PyrucastError::Message(format!("assemble_block: node {nid:?} not in row support"))
+                })? as usize);
+                cpos.push(*col_pos.get(&nid).ok_or_else(|| {
+                    PyrucastError::Message(format!("assemble_block: node {nid:?} not in col support"))
+                })? as usize);
+            }
+
+            let mut trips = Vec::with_capacity(ke_len);
+            for li in 0..n_nodes {
+                for di in 0..n_dual {
+                    let r = li * n_dual + di;
+                    let ri = ordering.to_index(rpos[li], di, n_row_nodes, n_dual);
+                    for lj in 0..n_nodes {
+                        for pj in 0..n_primal {
+                            let c = lj * n_primal + pj;
+                            let ci = ordering.to_index(cpos[lj], pj, n_col_nodes, n_primal);
+                            trips.push((ri, ci, ke[r * n_cols_loc + c]));
+                        }
                     }
                 }
             }
+            Ok(trips)
+        })
+        .collect::<Result<_>>()?;
+
+    // Concatenate the per-cell triplets (cell order) and build the COO in one
+    // shot — the serial part is now just pushing into three Vecs.
+    let total: usize = per_cell.iter().map(|v| v.len()).sum();
+    let mut rows = Vec::with_capacity(total);
+    let mut cols = Vec::with_capacity(total);
+    let mut vals = Vec::with_capacity(total);
+    for trips in per_cell {
+        for (r, c, v) in trips {
+            rows.push(r);
+            cols.push(c);
+            vals.push(v);
         }
     }
-    Ok(block)
+    let coo = CooMatrix::try_from_triplets(nrows, ncols, rows, cols, vals)
+        .map_err(|e| PyrucastError::Message(format!("assemble_block: invalid COO: {e}")))?;
+    SubMatrix::from_coo(
+        row_support.clone(),
+        col_support.clone(),
+        dual_vars,
+        primal_vars,
+        ordering,
+        symmetric,
+        coo,
+    )
 }

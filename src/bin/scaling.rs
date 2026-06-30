@@ -155,8 +155,8 @@ fn main() {
     run_op("behavior::integrate", &threads, reps, &integrate);
 
     println!(
-        "Note: speedup is vs the 1-thread run. assemble::stiffness has a serial \
-         scatter phase (Amdahl), so it scales less than the near-fully-parallel \
-         behavior::integrate."
+        "Note: speedup is vs the 1-thread run. behavior::integrate is fully \
+         parallel; assemble::stiffness keeps a serial sparse-assembly phase \
+         (COO→CSR construction), so it is Amdahl-limited above a few cores."
     );
 }

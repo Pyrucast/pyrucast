@@ -474,7 +474,7 @@ impl FiniteElementSpace {
 ///
 /// `coords` has layout `[i * space_dim + a]`, `dn_dxi` has layout
 /// `[i * ref_dim + k]`.
-fn build_jacobian(
+pub(crate) fn build_jacobian(
     coords: &[f64],
     dn_dxi: &[f64],
     space_dim: usize,
@@ -496,7 +496,7 @@ fn build_jacobian(
 
 /// Compute `sqrt(det(JᵀJ))` — the measure scaling factor used in
 /// numerical integration. For square `J` this equals `|det(J)|`.
-fn jacobian_measure(jac: &[f64], space_dim: usize, ref_dim: usize) -> f64 {
+pub(crate) fn jacobian_measure(jac: &[f64], space_dim: usize, ref_dim: usize) -> f64 {
     let g = gram_matrix(jac, space_dim, ref_dim);
     det_small(&g, ref_dim).max(0.0).sqrt()
 }
@@ -568,7 +568,7 @@ fn inverse_small(m: &[f64], n: usize) -> Result<Vec<f64>> {
 ///
 /// Uses the unified formula `M = J · (JᵀJ)⁻¹`, which collapses to
 /// `J⁻ᵀ` when `J` is square. Output layout: `[i * space_dim + a]`.
-fn build_dn_dx(
+pub(crate) fn build_dn_dx(
     jac: &[f64],
     dn_dxi: &[f64],
     space_dim: usize,
