@@ -92,90 +92,219 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use crate::store::insert;
-use nalgebra::DVector;
+use faer::linalg::solvers::Solve;
+use faer::sparse::{SparseColMat, Triplet};
+use std::sync::Arc;
 
-/// Solve `matrix · x = rhs` using dense LU factorization.
+/// Direct solver method. Today only sparse LU (faer); the enum leaves room to
+/// force another backend (iterative, …) in the future without changing the
+/// `solve` call sites.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SolveMethod {
+    /// Sparse LU with partial pivoting (faer, multithreaded).
+    #[default]
+    Lu,
+}
+
+/// Options for [`solve_with_options`]. Defaults: sparse LU with the reusable
+/// factorization cache enabled.
+#[derive(Clone, Copy, Debug)]
+pub struct SolveOptions {
+    /// Direct method to use.
+    pub method: SolveMethod,
+    /// Reuse / populate the matrix's cached factorization. When `true` (default)
+    /// the first solve factorizes and caches; later solves on the **same**
+    /// matrix reuse the factors (descent/back-substitution only). When `false`,
+    /// factorize fresh and do not touch the cache.
+    pub cache: bool,
+}
+
+impl Default for SolveOptions {
+    fn default() -> Self {
+        Self {
+            method: SolveMethod::Lu,
+            cache: true,
+        }
+    }
+}
+
+/// A reusable sparse LU factorization of a [`Matrix`], plus the DOF layout
+/// needed to map a right-hand side in and a solution out. Cached transparently
+/// inside the `Matrix` (see [`SolveOptions::cache`]); derived, non-serialized
+/// state — never persisted.
+pub struct Factorization {
+    lu: faer::sparse::linalg::solvers::Lu<usize, f64>,
+    row_dofs: Vec<(NodeId, String)>,
+    col_dofs: Vec<(NodeId, String)>,
+}
+
+impl Factorization {
+    /// Factorize `matrix` (must be square and finalized) with sparse LU.
+    pub fn new(matrix: &Matrix) -> Result<Self> {
+        let row_dofs = matrix.row_dofs()?;
+        let col_dofs = matrix.col_dofs()?;
+        if row_dofs.len() != col_dofs.len() {
+            return Err(PyrucastError::Message(format!(
+                "solve: matrix must be square; got {}×{}",
+                row_dofs.len(),
+                col_dofs.len()
+            )));
+        }
+        let n = row_dofs.len();
+        if n == 0 {
+            return Err(PyrucastError::Message("solve: matrix is empty".into()));
+        }
+
+        // Build a faer sparse matrix from the (duplicate-summed) CSC. Each
+        // (row, col) appears once, so the triplet form is exact.
+        let csc = matrix.to_csc()?;
+        let col_offsets = csc.col_offsets();
+        let row_indices = csc.row_indices();
+        let values = csc.values();
+        let mut triplets: Vec<Triplet<usize, usize, f64>> = Vec::with_capacity(values.len());
+        for col in 0..n {
+            for k in col_offsets[col]..col_offsets[col + 1] {
+                triplets.push(Triplet::new(row_indices[k], col, values[k]));
+            }
+        }
+        let a = SparseColMat::<usize, f64>::try_new_from_triplets(n, n, &triplets)
+            .map_err(|e| PyrucastError::Message(format!("solve: sparse build failed: {e:?}")))?;
+        let lu = a
+            .sp_lu()
+            .map_err(|e| PyrucastError::Message(format!("solve: LU failed (singular?): {e:?}")))?;
+        Ok(Self {
+            lu,
+            row_dofs,
+            col_dofs,
+        })
+    }
+
+    /// Solve `A·x = b` for one right-hand side (descent/back-substitution only).
+    fn solve_vec(&self, b: &[f64]) -> Vec<f64> {
+        let n = self.row_dofs.len();
+        let mut x = faer::Mat::<f64>::zeros(n, 1);
+        for (i, &v) in b.iter().enumerate() {
+            x[(i, 0)] = v;
+        }
+        self.lu.solve_in_place(&mut x);
+        (0..self.col_dofs.len()).map(|i| x[(i, 0)]).collect()
+    }
+}
+
+/// Solve `matrix · x = rhs` using the default options (sparse LU, cached).
 ///
-/// `matrix` must be square (`n_rows == n_cols ≥ 1`). The `rhs`
-/// `NodeField` is read at every row DOF of the matrix, through the
-/// aggregate (first zone defining the pair wins); missing entries
-/// (no zone defines that `(node, component)`) default to `0.0`.
+/// `matrix` must be square (`n_rows == n_cols ≥ 1`). The `rhs` `NodeField` is
+/// read at every row DOF of the matrix, through the aggregate (first zone
+/// defining the pair wins); missing entries (no zone defines that
+/// `(node, component)`) default to `0.0`.
 ///
-/// The returned `NodeField` is a single zone living on the column-DOF
-/// nodes of the matrix (a POI1 submesh built on the fly), with one
-/// component per distinct column field name.
+/// The returned `NodeField` is a single zone living on the column-DOF nodes of
+/// the matrix (a POI1 submesh built on the fly), with one component per distinct
+/// column field name.
 ///
 /// Uninterruptible convenience form; see [`solve_cancellable`].
 pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
-    solve_cancellable(matrix, rhs, &NoCancel)
+    solve_inner(matrix, rhs, &SolveOptions::default(), &NoCancel)
 }
 
-/// Like [`solve`], but polls `cancel` at each phase boundary so the call can
-/// be stopped early (returning [`PyrucastError::Interrupted`]).
+/// Like [`solve`] but with explicit [`SolveOptions`] (method / factorization
+/// cache).
+pub fn solve_with_options(
+    matrix: &Matrix,
+    rhs: &NodeField,
+    options: &SolveOptions,
+) -> Result<NodeField> {
+    solve_inner(matrix, rhs, options, &NoCancel)
+}
+
+/// Like [`solve`], but polls `cancel` at each phase boundary so the call can be
+/// stopped early (returning [`PyrucastError::Interrupted`]).
 ///
-/// **Granularity.** The dense factorization (`nalgebra`'s `lu()` / `solve`)
+/// **Granularity.** The sparse factorization (faer's `sp_lu` / `solve_in_place`)
 /// is a single library call with no cooperative checkpoint, so it is **not**
 /// interrupted mid-way: `cancel` is polled *around* the heavy steps (vector
-/// assembly, dense conversion, before factorization, result write-back). A
-/// `Ctrl+C` therefore lands at the next phase boundary, not inside the
-/// factorization itself. The fine-grained, per-iteration interruption point
-/// is the natural home of the future iterative/sparse solver, which will
-/// poll this same token inside its loop.
+/// assembly, before factorization, result write-back). A `Ctrl+C` therefore
+/// lands at the next phase boundary, not inside the factorization itself. When
+/// the factorization is already cached, only the (cheap) substitution runs.
 pub fn solve_cancellable(
     matrix: &Matrix,
     rhs: &NodeField,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
-    cancel.check()?;
-    let row_dofs = matrix.row_dofs()?;
-    let col_dofs = matrix.col_dofs()?;
-    if row_dofs.len() != col_dofs.len() {
-        return Err(PyrucastError::Message(format!(
-            "solve: matrix must be square; got {}×{}",
-            row_dofs.len(),
-            col_dofs.len()
-        )));
-    }
-    let n = row_dofs.len();
-    if n == 0 {
-        return Err(PyrucastError::Message("solve: matrix is empty".into()));
-    }
+    solve_inner(matrix, rhs, &SolveOptions::default(), cancel)
+}
 
-    // ── Step 1 — build the b vector ────────────────────────────────────
-    let mut b = DVector::<f64>::zeros(n);
+/// [`solve_cancellable`] with explicit [`SolveOptions`] — the full form the
+/// Python binding routes to.
+pub fn solve_cancellable_with_options(
+    matrix: &Matrix,
+    rhs: &NodeField,
+    options: &SolveOptions,
+    cancel: &dyn Cancel,
+) -> Result<NodeField> {
+    solve_inner(matrix, rhs, options, cancel)
+}
+
+fn solve_inner(
+    matrix: &Matrix,
+    rhs: &NodeField,
+    options: &SolveOptions,
+    cancel: &dyn Cancel,
+) -> Result<NodeField> {
+    let SolveMethod::Lu = options.method;
+    cancel.check()?;
+
+    // ── Step 1 — obtain the factorization (cached or fresh) ────────────
+    let fact: Arc<Factorization> = if options.cache {
+        match matrix.cached_factorization::<Factorization>() {
+            Some(f) => f,
+            None => {
+                let f = Arc::new(Factorization::new(matrix)?);
+                matrix.store_factorization(f.clone());
+                f
+            }
+        }
+    } else {
+        Arc::new(Factorization::new(matrix)?)
+    };
+    cancel.check()?;
+
+    // ── Step 2 — build the b vector at the row DOFs ────────────────────
+    let n = fact.row_dofs.len();
+    let mut b = vec![0.0_f64; n];
     let rhs_view = rhs.view()?;
-    for (i, (node_id, field_name)) in row_dofs.iter().enumerate() {
+    for (i, (node_id, field_name)) in fact.row_dofs.iter().enumerate() {
         // "No zone defines this DOF" means "no imposed value here" — zero.
         if let Some(v) = rhs_view.value_opt(*node_id, field_name) {
             b[i] = v;
         }
     }
 
-    // ── Step 2 — LU factorization + solve ──────────────────────────────
-    // Poll before each heavy step (dense conversion, then the opaque
-    // factorization) so a Ctrl+C pressed during assembly lands here.
-    cancel.check()?;
-    let a = matrix.to_dmatrix()?;
-    cancel.check()?;
-    let lu = a.lu();
-    let x = lu
-        .solve(&b)
-        .ok_or_else(|| PyrucastError::Message("solve: LU failed (matrix is singular)".into()))?;
+    // ── Step 3 — substitution ──────────────────────────────────────────
+    let x = fact.solve_vec(&b);
+    // A singular matrix factorizes with a zero pivot; the back-substitution
+    // then divides by it, yielding non-finite entries. Flag it like the old
+    // dense solver did, instead of returning a garbage field.
+    if x.iter().any(|v| !v.is_finite()) {
+        return Err(PyrucastError::Message(
+            "solve: LU failed (matrix is singular)".into(),
+        ));
+    }
     cancel.check()?;
 
-    // ── Step 3 — wrap the solution into a fresh single-zone NodeField ──
+    // ── Step 4 — wrap the solution into a fresh single-zone NodeField ──
     let coords = rhs.coords()?;
 
     // Unique col nodes in first-seen order.
     let mut unique_nodes: Vec<NodeId> = Vec::new();
-    for (node_id, _) in &col_dofs {
+    for (node_id, _) in &fact.col_dofs {
         if !unique_nodes.contains(node_id) {
             unique_nodes.push(*node_id);
         }
     }
     // Unique col field names in first-seen order.
     let mut unique_components: Vec<String> = Vec::new();
-    for (_, name) in &col_dofs {
+    for (_, name) in &fact.col_dofs {
         if !unique_components.contains(name) {
             unique_components.push(name.clone());
         }
@@ -187,7 +316,7 @@ pub fn solve_cancellable(
     let sm_h = insert(SubMesh::poi1_from_node_ids(coords.clone(), &unique_nodes)?);
 
     let mut result = SubNodeField::from_poi1(&sm_h, unique_components)?;
-    for (i, (node_id, field_name)) in col_dofs.iter().enumerate() {
+    for (i, (node_id, field_name)) in fact.col_dofs.iter().enumerate() {
         result.set_value(*node_id, field_name, x[i])?;
     }
     Ok(NodeField::from_sub(result))
@@ -439,5 +568,56 @@ mod tests {
         let rhs =
             NodeField::from_sub(SubNodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap());
         assert!(solve(&m, &rhs).is_err());
+    }
+
+    #[test]
+    fn factorization_cache_reused_then_invalidated_on_change() {
+        use crate::containers::matrix::{DofOrdering, SubMatrix};
+        let (mut m, rhs, a) = tiny_system();
+
+        // Nothing cached before the first solve.
+        assert!(m.cached_factorization::<Factorization>().is_none());
+
+        // First solve factorizes + caches; 2·T = 6 ⇒ T = 3.
+        let s1 = solve(&m, &rhs).unwrap();
+        assert!((s1.value(a, "T").unwrap() - 3.0).abs() < 1e-12);
+        assert!(m.cached_factorization::<Factorization>().is_some());
+
+        // Second solve reuses the cached factorization: identical result.
+        let s2 = solve(&m, &rhs).unwrap();
+        assert_eq!(s1.value(a, "T").unwrap(), s2.value(a, "T").unwrap());
+
+        // Mutating the matrix invalidates the cache.
+        let coords = insert(Coords::new(1).unwrap());
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(coords, ElementType::POI1);
+            sm.add_cell(&[b.id()]).unwrap();
+            insert(sm)
+        };
+        let mut block = SubMatrix::new(
+            sm.clone(),
+            sm.clone(),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        block.add_entry(b.id(), "q", b.id(), "T", 4.0).unwrap();
+        m.add_sub(insert(block)).unwrap();
+        assert!(m.cached_factorization::<Factorization>().is_none());
+    }
+
+    #[test]
+    fn solve_with_cache_disabled_does_not_populate() {
+        let (m, rhs, a) = tiny_system();
+        let opts = SolveOptions {
+            method: SolveMethod::Lu,
+            cache: false,
+        };
+        let s = solve_with_options(&m, &rhs, &opts).unwrap();
+        assert!((s.value(a, "T").unwrap() - 3.0).abs() < 1e-12);
+        assert!(m.cached_factorization::<Factorization>().is_none());
     }
 }

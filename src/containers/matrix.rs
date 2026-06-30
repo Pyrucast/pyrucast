@@ -571,11 +571,20 @@ pub struct Matrix {
     subs: Vec<Handle<SubMatrix>>,
     #[serde(skip)]
     assembled: Option<AssembledData>,
+    /// Transparently cached factorization (e.g. the solver's sparse LU), reused
+    /// across solves on the same matrix. Derived state: never serialized,
+    /// type-erased so `containers` stays decoupled from the solver, and cleared
+    /// whenever the matrix changes (`add_sub` → `post_push`). Interior mutability
+    /// so `solve(&Matrix)` can fill it under a shared store read lock.
+    #[serde(skip)]
+    factorization: parking_lot::Mutex<Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>>,
 }
 
 crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
     fn post_push(&mut self) {
         self.assembled = None;
+        // The matrix content changed ⇒ any cached factorization is stale.
+        *self.factorization.get_mut() = None;
     }
     fn display_extra(&self) -> Option<String> {
         let n_rows = self.n_rows().unwrap_or(0);
@@ -620,6 +629,21 @@ impl Matrix {
                 "Matrix has not been finalized; call finalize() before solving".into(),
             )
         })
+    }
+
+    /// The cached factorization downcast to `T`, if one is present and of that
+    /// type. Lets the solver reuse a previous factorization transparently.
+    pub fn cached_factorization<T: std::any::Any + Send + Sync>(
+        &self,
+    ) -> Option<std::sync::Arc<T>> {
+        let arc = self.factorization.lock().as_ref().cloned()?;
+        arc.downcast::<T>().ok()
+    }
+
+    /// Store a freshly computed factorization for transparent reuse. Cleared
+    /// automatically whenever the matrix changes (`add_sub`).
+    pub fn store_factorization(&self, factorization: std::sync::Arc<dyn std::any::Any + Send + Sync>) {
+        *self.factorization.lock() = Some(factorization);
     }
 
     // ── Block-traversal helpers (no finalize required) ──────────────────
