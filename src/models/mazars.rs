@@ -34,7 +34,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::{CellGeom, Physics};
+use crate::models::{kernel, CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use nalgebra::Matrix3;
 use serde::{Deserialize, Serialize};
@@ -132,17 +132,20 @@ impl Physics for Mazars {
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
         // Iteration operator = elastic (undamaged) stiffness. Reuse the
-        // elasticity assembler; it reads only `E` and `nu`.
+        // elasticity element kernel; it reads only `E` and `nu`.
         let mat = material.expect("Mazars requires a material field");
-        let mut block = SubMatrix::new(
-            self.support.clone(),
-            self.support.clone(),
+        let model = self.model;
+        let block = kernel::assemble_block(
+            &self.fespace,
+            &self.support,
+            &self.support,
             self.dual_vars(),
             self.primal_vars(),
             DofOrdering::NodesThenVars,
             true,
+            Some(mat),
+            move |geom, m, ke| elasticity::element_stiffness(geom, m.unwrap(), model, ke),
         )?;
-        elasticity::assemble_stiffness(&self.fespace, mat, self.space_dim, self.model, &mut block)?;
         Ok(vec![block])
     }
 

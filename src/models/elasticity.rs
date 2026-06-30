@@ -11,10 +11,10 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::{NodeId, SubMesh};
+use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Physics};
+use crate::models::{kernel, CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -141,15 +141,18 @@ impl Physics for Elasticity {
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
         let mat = material.expect("Elasticity requires a material field");
-        let mut block = SubMatrix::new(
-            self.support.clone(),
-            self.support.clone(),
+        let model = self.model;
+        let block = kernel::assemble_block(
+            &self.fespace,
+            &self.support,
+            &self.support,
             self.dual_vars(),
             self.primal_vars(),
             DofOrdering::NodesThenVars,
             true,
+            Some(mat),
+            move |geom, m, ke| element_stiffness(geom, m.unwrap(), model, ke),
         )?;
-        assemble_stiffness(&self.fespace, mat, self.space_dim, self.model, &mut block)?;
         Ok(vec![block])
     }
 
@@ -284,108 +287,50 @@ fn b_matrix(dn_dx: &[f64], n_nodes: usize, space_dim: usize) -> Vec<Vec<f64>> {
     b
 }
 
-/// Assemble `K_e = ∫ Bᵀ D B |J| w` of every element into `k`, at
-/// `(NodeId_i, f_a) × (NodeId_j, u_b)`.
-pub fn assemble_stiffness(
-    fespace: &Handle<SubFiniteElementSpace>,
-    material: &Handle<SubElementField>,
-    space_dim: usize,
+/// Element kernel: local stiffness `K_e = Σ_g (Bᵀ D B) |J| w` of one cell,
+/// written into `ke` (flat row-major, side `space_dim·n_nodes`, **node-major /
+/// component-minor** dof order `dof = node·space_dim + component`). Pure and
+/// sequential — driven in parallel by [`crate::models::kernel::assemble_block`].
+/// Reused as-is by [`crate::models::plasticity`] and [`crate::models::mazars`]
+/// (their iteration operator is the elastic stiffness).
+pub fn element_stiffness(
+    geom: &CellGeom,
+    material: &SubElementField,
     model: ElasticityModel,
-    k: &mut SubMatrix,
+    ke: &mut [f64],
 ) -> Result<()> {
-    struct CellSnapshot {
-        node_ids: Vec<NodeId>,
-        b: Vec<Vec<Vec<f64>>>, // [g][voigt][dof]
-        det_j_w: Vec<f64>,
-    }
-
-    let (snapshots, n_nodes, n_g) = {
-        let s = read(fespace)?;
-        let n_cells = s.cell_count()?;
-        let n_nodes = s.nodes_per_cell()?;
-        let n_g = s.gauss_count();
-        let conn: Vec<NodeId> = read(&s.submesh())?.connectivity().to_vec();
-        let mut out = Vec::with_capacity(n_cells);
-        for cell in 0..n_cells {
-            let ids = conn[cell * n_nodes..(cell + 1) * n_nodes].to_vec();
-            let mut b = Vec::with_capacity(n_g);
-            let mut det_j_w = Vec::with_capacity(n_g);
-            for g in 0..n_g {
-                b.push(b_matrix(&s.dn_dx(cell, g)?, n_nodes, space_dim));
-                det_j_w.push(s.det_jacobian(cell, g)? * s.gauss_weight(g)?);
-            }
-            out.push(CellSnapshot {
-                node_ids: ids,
-                b,
-                det_j_w,
-            });
-        }
-        (out, n_nodes, n_g)
-    };
-
-    // Constitutive matrix per cell (E, nu read at Gauss 0 — constant material).
-    let dmats: Vec<Vec<Vec<f64>>> = {
-        let m = read(material)?;
-        (0..snapshots.len())
-            .map(|cell| {
-                Ok(constitutive(
-                    m.value(cell, 0, "E")?,
-                    m.value(cell, 0, "nu")?,
-                    model,
-                    space_dim,
-                ))
-            })
-            .collect::<Result<_>>()?
-    };
-
+    let n_nodes = geom.n_nodes;
+    let space_dim = geom.space_dim;
     let dofs = space_dim * n_nodes;
-    let dual: Vec<String> = (0..space_dim).map(dual_name).collect();
-    let primal: Vec<String> = (0..space_dim).map(primal_name).collect();
-
-    for (cell, snap) in snapshots.iter().enumerate() {
-        // K_e = Σ_g (Bᵀ D B) |J| w.
-        let mut ke = vec![vec![0.0; dofs]; dofs];
-        for g in 0..n_g {
-            let b = &snap.b[g];
-            let d = &dmats[cell];
-            // DB = D·B  (voigt × dofs).
-            let v = d.len();
-            let mut db = vec![vec![0.0; dofs]; v];
-            for r in 0..v {
-                for c in 0..dofs {
-                    let mut acc = 0.0;
-                    for w in 0..v {
-                        acc += d[r][w] * b[w][c];
-                    }
-                    db[r][c] = acc;
+    // E, nu read at Gauss 0 — constant material per cell.
+    let d = constitutive(
+        material.value(geom.cell, 0, "E")?,
+        material.value(geom.cell, 0, "nu")?,
+        model,
+        space_dim,
+    );
+    let v = d.len();
+    for g in 0..geom.n_gauss {
+        let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim);
+        // DB = D·B  (voigt × dofs).
+        let mut db = vec![vec![0.0; dofs]; v];
+        for r in 0..v {
+            for c in 0..dofs {
+                let mut acc = 0.0;
+                for w in 0..v {
+                    acc += d[r][w] * b[w][c];
                 }
-            }
-            let w = snap.det_j_w[g];
-            for r in 0..dofs {
-                for c in 0..dofs {
-                    let mut acc = 0.0;
-                    for vv in 0..v {
-                        acc += b[vv][r] * db[vv][c];
-                    }
-                    ke[r][c] += acc * w;
-                }
+                db[r][c] = acc;
             }
         }
-        // Scatter into the global block.
-        for i in 0..n_nodes {
-            for a in 0..space_dim {
-                for j in 0..n_nodes {
-                    for b in 0..space_dim {
-                        let val = ke[i * space_dim + a][j * space_dim + b];
-                        k.add_entry(
-                            snap.node_ids[i],
-                            &dual[a],
-                            snap.node_ids[j],
-                            &primal[b],
-                            val,
-                        )?;
-                    }
+        let w = geom.det_j_w(g)?;
+        for r in 0..dofs {
+            for c in 0..dofs {
+                let mut acc = 0.0;
+                for vv in 0..v {
+                    acc += b[vv][r] * db[vv][c];
                 }
+                ke[r * dofs + c] += acc * w;
             }
         }
     }
@@ -400,7 +345,7 @@ mod tests {
     use crate::aggregate::Aggregate;
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node};
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId};
     use crate::store::insert;
 
     fn unit_quad(model: ElasticityModel) -> Elasticity {

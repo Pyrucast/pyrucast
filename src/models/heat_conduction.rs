@@ -8,11 +8,10 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::{CellGeom, Physics};
+use crate::models::{kernel, CellGeom, Physics};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -99,15 +98,17 @@ impl Physics for HeatConduction {
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>> {
         let mat = material.expect("HeatConduction requires a material field");
-        let mut block = SubMatrix::new(
-            self.support.clone(),
-            self.support.clone(),
+        let block = kernel::assemble_block(
+            &self.fespace,
+            &self.support,
+            &self.support,
             vec![DUAL_VAR.to_string()],
             vec![PRIMAL_VAR.to_string()],
             DofOrdering::NodesThenVars,
             true,
+            Some(mat),
+            |geom, m, ke| element_stiffness(geom, m.unwrap(), ke),
         )?;
-        assemble_stiffness(&self.fespace, mat, &mut block)?;
         Ok(vec![block])
     }
 
@@ -156,87 +157,29 @@ impl Physics for HeatConduction {
     }
 }
 
-/// Assemble the heat-conduction stiffness contribution.
-///
-/// On each cell of `fespace`'s submesh, at each Gauss point `g`:
-///   `K_local[i, j] += k(g) · (∇N_i · ∇N_j)|_g · |J|_g · w_g`
-/// and the local block is written into `k` at
-///   row = `(NodeId_i, "q")`, col = `(NodeId_j, "T")`.
-pub fn assemble_stiffness(
-    fespace: &Handle<SubFiniteElementSpace>,
-    material: &Handle<SubElementField>,
-    k: &mut SubMatrix,
+/// Element kernel: local conductivity matrix of one cell,
+///   `K_local[i, j] = Σ_g k(g) · (∇N_i · ∇N_j)|_g · |J|_g · w_g`,
+/// written into `ke` (flat row-major, side `n_nodes`, `ke[i * n_nodes + j]`).
+/// Pure and sequential — driven in parallel by
+/// [`crate::models::kernel::assemble_block`].
+pub fn element_stiffness(
+    geom: &CellGeom,
+    material: &SubElementField,
+    ke: &mut [f64],
 ) -> Result<()> {
-    // Snapshot everything we need from the FE space and submesh in one
-    // pass. We then drop the FE space lock before reading the material
-    // (different store type, but better hygiene to keep critical
-    // sections small).
-    struct CellSnapshot {
-        node_ids: Vec<NodeId>,
-        dn_dx: Vec<Vec<f64>>, // [g][i * space_dim + a]
-        det_j_w: Vec<f64>,    // |J|_g · w_g
-    }
-
-    let (snapshots, space_dim, n_nodes, n_g) = {
-        let s = read(fespace)?;
-        let n_cells = s.cell_count()?;
-        let n_nodes = s.nodes_per_cell()?;
-        let n_g = s.gauss_count();
-        let submesh = s.submesh();
-
-        let conn: Vec<NodeId> = read(&submesh)?.connectivity().to_vec();
-
-        let mut out = Vec::with_capacity(n_cells);
-        for cell in 0..n_cells {
-            let ids = conn[cell * n_nodes..(cell + 1) * n_nodes].to_vec();
-            let mut dn_dx: Vec<Vec<f64>> = Vec::with_capacity(n_g);
-            let mut det_j_w: Vec<f64> = Vec::with_capacity(n_g);
-            for g in 0..n_g {
-                dn_dx.push(s.dn_dx(cell, g)?);
-                det_j_w.push(s.det_jacobian(cell, g)? * s.gauss_weight(g)?);
-            }
-            out.push(CellSnapshot {
-                node_ids: ids,
-                dn_dx,
-                det_j_w,
-            });
-        }
-        (out, s.space_dim(), n_nodes, n_g)
-    };
-
-    // Read material conductivity once per (cell, gauss).
-    let mut conductivities: Vec<Vec<f64>> = Vec::with_capacity(snapshots.len());
-    {
-        let f = read(material)?;
-        for cell in 0..snapshots.len() {
-            let mut row = Vec::with_capacity(n_g);
-            for g in 0..n_g {
-                row.push(f.value(cell, g, MATERIAL_COMPONENT)?);
-            }
-            conductivities.push(row);
-        }
-    }
-
-    // Assemble cell by cell.
-    for (cell, snap) in snapshots.iter().enumerate() {
+    let n_nodes = geom.n_nodes;
+    let space_dim = geom.space_dim;
+    for g in 0..geom.n_gauss {
+        let dn = geom.dn_dx(g)?;
+        let det_j_w = geom.det_j_w(g)?;
+        let k = material.value(geom.cell, g, MATERIAL_COMPONENT)?;
         for i in 0..n_nodes {
             for j in 0..n_nodes {
-                let mut k_ij = 0.0;
-                for g in 0..n_g {
-                    let mut grad_dot = 0.0;
-                    for a in 0..space_dim {
-                        grad_dot +=
-                            snap.dn_dx[g][i * space_dim + a] * snap.dn_dx[g][j * space_dim + a];
-                    }
-                    k_ij += conductivities[cell][g] * grad_dot * snap.det_j_w[g];
+                let mut grad_dot = 0.0;
+                for a in 0..space_dim {
+                    grad_dot += dn[i * space_dim + a] * dn[j * space_dim + a];
                 }
-                k.add_entry(
-                    snap.node_ids[i],
-                    DUAL_VAR,
-                    snap.node_ids[j],
-                    PRIMAL_VAR,
-                    k_ij,
-                )?;
+                ke[i * n_nodes + j] += k * grad_dot * det_j_w;
             }
         }
     }
