@@ -56,7 +56,7 @@ défaut : une physique volumique typique n'implémente que `primal_vars`,
 `dual_vars`, `material_*`, `build_stiffness_blocks`, `label` et `render`.
 
 ```rust,ignore
-pub trait Physics {
+pub trait Physics: Sync {
     fn primal_vars(&self) -> Vec<String>;
     fn dual_vars(&self) -> Vec<String>;
     fn material_components(&self) -> Option<&'static [&'static str]> { None }
@@ -66,6 +66,13 @@ pub trait Physics {
         -> Result<Vec<SubMatrix>>;
     fn build_mass_blocks(&self, _material: Option<&Handle<SubElementField>>)
         -> Result<Vec<SubMatrix>> { Ok(Vec::new()) }
+    // Comportement (loi de constitution) — noyau point-local pur :
+    fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> { None }
+    fn behavior_output_components(&self) -> Result<Vec<String>> { /* défaut : erreur */ }
+    fn integrate_point(&self, geom: &CellGeom, input: &SubElementField,
+        material: Option<&SubElementField>, g: usize, out: &mut [f64]) -> Result<()> { /* défaut : erreur */ }
+    fn integrate_behavior(&self, input: &Handle<SubElementField>,
+        material: Option<&Handle<SubElementField>>) -> Result<SubElementField> { /* fourni : pilote integrate_point */ }
     fn label(&self) -> &'static str;
     fn display(&self) -> String { format!("SubModel<{}>", self.label()) }
     fn render(&self, opts: &DumpOptions) -> String;
@@ -80,6 +87,20 @@ Conséquences pratiques :
 - **Multiplicateurs de Lagrange** : redéfinir `multiplier_mesh()` suffit ;
   `SubModel::multiplier_nodes()` et `multiplier_mesh()` en découlent.
 - **Terme de masse** : redéfinir `build_mass_blocks()` (sinon : pas de masse).
+- **Comportement** : déclarer `behavior_fespace()` + `behavior_output_components()`
+  et écrire `integrate_point(...)` — la loi de constitution **en un point de
+  Gauss**. `integrate_behavior` est **fourni** : il pilote ce noyau en parallèle
+  sur toutes les cellules.
+
+### Le parallélisme est gratuit (et invisible)
+
+Les noyaux qu'une physique écrit — `integrate_point` (un point de Gauss) et le
+noyau de matrice élémentaire passé à `kernel::assemble_block` (une cellule) —
+sont **séquentiels et purs** : ils ne voient ni rayon, ni le store, ni un verrou.
+Les *drivers* de `models::kernel` portent la parallélisation et le zéro-copie
+au-dessus d'eux. Voir [Parallélisme](developper/parallelisme.md). Concrètement,
+`build_stiffness_blocks` d'une physique de continuum se réduit à un appel à
+`kernel::assemble_block(..., |geom, mat, ke| element_kernel(geom, mat, ke))`.
 
 ## Le dispatch — `src/containers/model.rs`
 

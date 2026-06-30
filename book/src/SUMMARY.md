@@ -54,6 +54,7 @@
   - [Arborescence](developper/arborescence.md)
   - [Conventions & philosophie](conventions.md)
   - [Modèle mémoire](memory-model.md)
+  - [Parallélisme](developper/parallelisme.md)
   - [Compilation et tests](compilation.md)
   - [Ajouter une physique](ajouter-une-physique.md)
   - [Ajouter un élément fini](developper/ajouter-un-element-fini.md)
