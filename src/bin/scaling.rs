@@ -76,7 +76,7 @@ fn measure(threads: usize, reps: u32, f: &(dyn Fn() + Sync)) -> Duration {
         .num_threads(threads)
         .build()
         .unwrap();
-    pool.install(|| f()); // warm-up
+    pool.install(f); // warm-up
     let start = Instant::now();
     pool.install(|| {
         for _ in 0..reps {
