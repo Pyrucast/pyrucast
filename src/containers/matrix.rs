@@ -824,7 +824,7 @@ fn sort_rows_in_place(pairs: &mut [(usize, f64)], bounds: &[usize]) {
 /// dedup-and-sum scan are O(nnz) serial passes. The per-row sort is stable, so
 /// equal `(row, col)` entries are summed in stream order — bit-for-bit identical
 /// to the serial path.
-fn csr_from_triplets_parallel(
+pub(crate) fn csr_from_triplets_parallel(
     nrows: usize,
     ncols: usize,
     triplets: Vec<(usize, usize, f64)>,
@@ -880,6 +880,21 @@ impl Matrix {
         if self.assembled.is_some() {
             return Ok(());
         }
+        // A *computed* block carries no values: producing them means driving a
+        // model kernel that lives in `crate::models` (outside `containers`).
+        // Assembling it here would force a matrix↔kernel cycle, so we don't —
+        // the global assembler in `ops::assemble::stiffness` handles computed
+        // blocks and injects the finished CSR via `set_assembled`.
+        for h in &*self {
+            if read(h)?.is_computed() {
+                return Err(PyrucastError::Message(
+                    "Matrix::finalize: this matrix carries a computed block; \
+                     assemble it through ops::assemble (which scatters the kernel \
+                     into the global CSR and injects it), not finalize()"
+                        .into(),
+                ));
+            }
+        }
         let row_dofs = self.collect_row_dofs()?;
         let col_dofs = self.collect_col_dofs()?;
         let triplets = self.build_global_triplets(&row_dofs, &col_dofs)?;
@@ -890,6 +905,26 @@ impl Matrix {
             csr,
         });
         Ok(())
+    }
+
+    /// Inject a globally-assembled CSR built by an external assembler
+    /// ([`crate::ops::assemble`]), bypassing [`finalize`](Self::finalize).
+    /// `row_dofs` / `col_dofs` must be this matrix' global DOF union (as
+    /// returned by [`row_dofs`](Self::row_dofs) / [`col_dofs`](Self::col_dofs))
+    /// and index `csr`. This is the path for matrices carrying *computed*
+    /// blocks, which `finalize` cannot assemble on its own (it would have to
+    /// reach into the model/kernel — the cycle Option B avoids).
+    pub(crate) fn set_assembled(
+        &mut self,
+        row_dofs: Vec<NamedDof>,
+        col_dofs: Vec<NamedDof>,
+        csr: CsrMatrix<f64>,
+    ) {
+        self.assembled = Some(AssembledData {
+            row_dofs,
+            col_dofs,
+            csr,
+        });
     }
 
     fn assembled_or_err(&self) -> Result<&AssembledData> {
@@ -960,7 +995,7 @@ impl Matrix {
     /// in order, entries in COO order — matches the old serial scatter. The
     /// per-block remap runs in parallel. O(total block DOFs + nnz), no per-entry
     /// search.
-    fn build_global_triplets(
+    pub(crate) fn build_global_triplets(
         &self,
         row_dofs: &[NamedDof],
         col_dofs: &[NamedDof],
@@ -1060,6 +1095,27 @@ impl Matrix {
         col_node: NodeId,
         col_field: &str,
     ) -> Result<f64> {
+        // When assembled, the CSR is the source of truth — and the only place a
+        // *computed* block's values live (its COO is empty). Fall back to the
+        // per-block COO sum only for an unassembled (literal) matrix.
+        if let Some(a) = &self.assembled {
+            let r = a
+                .row_dofs
+                .iter()
+                .position(|(n, v)| *n == row_node && v == row_field);
+            let c = a
+                .col_dofs
+                .iter()
+                .position(|(n, v)| *n == col_node && v == col_field);
+            return Ok(match (r, c) {
+                (Some(r), Some(c)) => a
+                    .csr
+                    .get_entry(r, c)
+                    .map(|e| e.into_value())
+                    .unwrap_or(0.0),
+                _ => 0.0,
+            });
+        }
         let mut total = 0.0;
         for h in self {
             total += read(h)?.get(row_node, row_field, col_node, col_field);
@@ -1146,14 +1202,28 @@ impl crate::dump::Dump for Matrix {
         // `&mut`) is required: a matrix dumps the same content whether assembled
         // or not.
         let grid = (|| -> Result<String> {
-            let row_dofs = self.collect_row_dofs()?;
-            let col_dofs = self.collect_col_dofs()?;
-            let triplets = self.build_global_triplets(&row_dofs, &col_dofs)?;
-            let nc = col_dofs.len();
-            let mut data = vec![0.0f64; row_dofs.len() * nc];
-            for (r, c, v) in triplets {
-                data[r * nc + c] += v;
-            }
+            // When assembled, dump the cached CSR (the single source of truth —
+            // and the only correct view for a matrix with *computed* blocks,
+            // whose values the literal triplet path does not carry). Otherwise
+            // build the labelled grid on the fly from the literal blocks.
+            let (row_dofs, col_dofs, data) = if let Some(a) = &self.assembled {
+                let nc = a.col_dofs.len();
+                let mut data = vec![0.0f64; a.row_dofs.len() * nc];
+                for (r, c, v) in a.csr.triplet_iter() {
+                    data[r * nc + c] = *v;
+                }
+                (a.row_dofs.clone(), a.col_dofs.clone(), data)
+            } else {
+                let row_dofs = self.collect_row_dofs()?;
+                let col_dofs = self.collect_col_dofs()?;
+                let triplets = self.build_global_triplets(&row_dofs, &col_dofs)?;
+                let nc = col_dofs.len();
+                let mut data = vec![0.0f64; row_dofs.len() * nc];
+                for (r, c, v) in triplets {
+                    data[r * nc + c] += v;
+                }
+                (row_dofs, col_dofs, data)
+            };
             let row_labels: Vec<String> = row_dofs.iter().map(dof_label).collect();
             let col_labels: Vec<String> = col_dofs.iter().map(dof_label).collect();
             Ok(crate::dump::labeled_grid(

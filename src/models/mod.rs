@@ -25,8 +25,8 @@
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::matrix::SubMatrix;
-use crate::containers::mesh::Mesh;
+use crate::containers::matrix::{DofOrdering, SubMatrix};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::store::Handle;
@@ -43,6 +43,32 @@ pub mod timoshenko;
 pub mod truss;
 
 pub use kernel::CellGeom;
+
+/// Structural declaration a volumetric physics gives so the **global**
+/// assembler ([`crate::ops::assemble::stiffness`]) can build its stiffness
+/// contribution as a *computed* [`SubMatrix`] — a recipe, no eagerly
+/// materialised values — and scatter it straight into the global CSR.
+///
+/// Every field mirrors, one-for-one, what the physics'
+/// [`build_stiffness_blocks`](Physics::build_stiffness_blocks) would pass to
+/// [`kernel::assemble_block`](crate::models::kernel::assemble_block). The
+/// literal `build_stiffness_blocks` is **kept** alongside it as the bit-for-bit
+/// equivalence reference. Volumetric blocks are square on a single support, so
+/// one [`SubMesh`] gives both the row and column node sequence.
+pub struct StiffnessLayout {
+    /// FE subspace the element kernel integrates over (drives the cell loop).
+    pub fespace: Handle<SubFiniteElementSpace>,
+    /// POI1 sub-mesh giving the block's row **and** column node sequence.
+    pub support: Handle<SubMesh>,
+    /// Row variable names (dual).
+    pub dual_vars: Vec<String>,
+    /// Column variable names (primal).
+    pub primal_vars: Vec<String>,
+    /// `(node_local, var)` ↔ matrix-index ordering.
+    pub ordering: DofOrdering,
+    /// Whether the block is numerically symmetric.
+    pub symmetric: bool,
+}
 
 /// The behaviour contract of one physics, co-located with its data struct.
 ///
@@ -109,6 +135,20 @@ pub trait Physics: Sync {
         &self,
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<SubMatrix>>;
+
+    /// Structural layout of this physics' **computed** stiffness block, or
+    /// `None` (default) for a physics assembled the literal way (constraints
+    /// such as `Dirichlet`, or any multi-block physics). When `Some`, the
+    /// global assembler in [`crate::ops::assemble::stiffness`] builds a computed
+    /// [`SubMatrix`] from this layout + the physics'
+    /// [`element_matrix`](Self::element_matrix) kernel and scatters straight
+    /// into the global CSR, never materialising the block's values. A physics
+    /// that returns `Some` here keeps its
+    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) (the literal
+    /// path) as the bit-for-bit equivalence reference.
+    fn stiffness_layout(&self) -> Option<StiffnessLayout> {
+        None
+    }
 
     /// Build and fill the mass [`SubMatrix`] block(s) of this physics.
     /// Default: no mass term (empty).

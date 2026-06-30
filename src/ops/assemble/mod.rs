@@ -25,10 +25,14 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
-use crate::containers::matrix::Matrix;
+use crate::containers::matrix::{
+    csr_from_triplets_parallel, ComputedRecipe, Matrix, NamedDof, SubMatrix,
+};
 use crate::containers::model::Model;
 use crate::error::{PyrucastError, Result};
+use crate::models::kernel;
 use crate::store::{insert, read, Handle};
+use std::collections::HashMap;
 
 pub mod coloring;
 pub mod flux;
@@ -46,11 +50,18 @@ pub use flux::{flux, FluxDensity};
 /// The aggregate is finalized before being returned.
 pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     let mut k = Matrix::empty();
+
+    // Pass 1 — add every block. A volumetric physics declares a
+    // [`StiffnessLayout`](crate::models::StiffnessLayout) ⇒ one **computed**
+    // block (a recipe, no values). Everything else (Dirichlet, any multi-block
+    // physics) stays **literal** via `build_stiffness_blocks`.
     for sub_h in model {
-        let blocks = {
+        // Build the block(s) under a read guard, then drop it before `add_sub`
+        // (which takes the store write lock).
+        let built = {
             let sub = read(sub_h)?;
-            // Generic over the physics: a sub-model needs material data iff
-            // it declares a material FE subspace. No per-variant match.
+            // Generic over the physics: a sub-model needs material data iff it
+            // declares a material FE subspace. No per-variant match.
             let material = match sub.material_fespace() {
                 Some(fespace) => {
                     let m = materials.sub_for_fespace(&fespace)?;
@@ -61,14 +72,94 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
                 }
                 None => None,
             };
-            sub.build_stiffness_blocks(material.as_ref())?
+            match sub.as_physics().stiffness_layout() {
+                Some(layout) => {
+                    let recipe = ComputedRecipe {
+                        submodel: sub_h.clone(),
+                        fespace: layout.fespace,
+                        material,
+                    };
+                    BuiltBlocks::Computed(Box::new(SubMatrix::computed(
+                        layout.support.clone(),
+                        layout.support,
+                        layout.dual_vars,
+                        layout.primal_vars,
+                        layout.ordering,
+                        layout.symmetric,
+                        recipe,
+                    )?))
+                }
+                None => BuiltBlocks::Literal(sub.build_stiffness_blocks(material.as_ref())?),
+            }
         };
-        for block in blocks {
-            k.add_sub(insert(block))?;
+        match built {
+            BuiltBlocks::Computed(block) => {
+                k.add_sub(insert(*block))?;
+            }
+            BuiltBlocks::Literal(blocks) => {
+                for block in blocks {
+                    k.add_sub(insert(block))?;
+                }
+            }
         }
     }
-    k.finalize()?;
+
+    // Pass 2 — global symbolic + numeric assembly into one CSR, injected via
+    // `set_assembled` (Option B: the global assembler lives here, not in
+    // `Matrix`, so there is no matrix↔kernel cycle).
+    let row_dofs = k.row_dofs()?;
+    let col_dofs = k.col_dofs()?;
+    // Literal blocks contribute via their stored COO; a computed block has an
+    // empty COO ⇒ it adds nothing here and is scattered just below. Blocks are
+    // remapped in block order, so the resulting triplet stream — and hence the
+    // summed CSR — is bit-for-bit identical to the all-literal reference.
+    let mut triplets = k.build_global_triplets(&row_dofs, &col_dofs)?;
+    let row_map: HashMap<NamedDof, usize> =
+        row_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
+    let col_map: HashMap<NamedDof, usize> =
+        col_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
+    for blk_h in &k {
+        let blk = read(blk_h)?;
+        let Some(recipe) = blk.recipe() else { continue };
+        // Local block index → global index (the same remap the literal path
+        // applies to its COO).
+        let trow: Vec<usize> = blk.row_dofs().iter().map(|d| row_map[d]).collect();
+        let tcol: Vec<usize> = blk.col_dofs().iter().map(|d| col_map[d]).collect();
+        // Drive the physics' element kernel over the recipe's FE subspace (in
+        // parallel over cells) and remap each local triplet to global. The
+        // sub-model is read once, not per cell, so the kernel stays lock-free.
+        let sm = read(&recipe.submodel)?;
+        let phys = sm.as_physics();
+        let (_, _, local) = kernel::element_block_triplets(
+            &recipe.fespace,
+            blk.row_support(),
+            blk.col_support(),
+            blk.dual_vars().len(),
+            blk.primal_vars().len(),
+            blk.ordering(),
+            recipe.material.as_ref(),
+            |geom, m, ke| phys.element_matrix(geom, m, ke),
+        )?;
+        triplets.reserve(local.len());
+        for (r, c, v) in local {
+            triplets.push((trow[r], tcol[c], v));
+        }
+    }
+
+    let csr = csr_from_triplets_parallel(row_dofs.len(), col_dofs.len(), triplets)?;
+    k.set_assembled(row_dofs, col_dofs, csr);
     Ok(k)
+}
+
+/// One sub-model's stiffness contribution: either a single **computed** block
+/// (volumetric physics, scattered straight into the global CSR) or one-or-more
+/// **literal** blocks (Dirichlet, …). Lets pass 1 build the blocks under a read
+/// guard and insert them after the guard is dropped.
+enum BuiltBlocks {
+    // Boxed: a `SubMatrix` is large, and the two variants would otherwise differ
+    // wildly in size (`clippy::large_enum_variant`).
+    Computed(Box<SubMatrix>),
+    Literal(Vec<SubMatrix>),
 }
 
 /// Assemble the mass matrix `M` for `model`.
@@ -100,4 +191,145 @@ fn validate_material(material: &Handle<SubElementField>, required: &[&str]) -> R
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::containers::finite_element_space::FiniteElementSpace;
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::model::SubModel;
+    use crate::ops::build::material_field_per_sub_model;
+
+    /// Assemble the stiffness the **literal** way: every sub-model fills its
+    /// `SubMatrix` blocks eagerly (`build_stiffness_blocks`) and `finalize`
+    /// scatters them. This is the historical path the computed path must match
+    /// bit-for-bit — kept here purely as the equivalence reference.
+    fn assemble_literal_reference(model: &Model, materials: &ElementField) -> Result<Matrix> {
+        let mut k = Matrix::empty();
+        for sub_h in model {
+            let blocks = {
+                let sub = read(sub_h)?;
+                let material = match sub.material_fespace() {
+                    Some(fespace) => Some(materials.sub_for_fespace(&fespace)?),
+                    None => None,
+                };
+                sub.build_stiffness_blocks(material.as_ref())?
+            };
+            for block in blocks {
+                k.add_sub(insert(block))?;
+            }
+        }
+        k.finalize()?;
+        Ok(k)
+    }
+
+    /// Two heat-conduction zones sharing a node, plus a Dirichlet constraint —
+    /// so the assembly mixes **computed** blocks (the two zones) with **literal**
+    /// ones (Dirichlet's C / Cᵀ), and a shared node forces accumulation.
+    fn two_zone_heat_with_dirichlet() -> (Model, ElementField) {
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
+        let mut mesh = Mesh::empty();
+        let sm_a = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+            sm.add_cell(&[n0.id(), n1.id()]).unwrap();
+            insert(sm)
+        };
+        let sm_b = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+            sm.add_cell(&[n1.id(), n2.id()]).unwrap();
+            insert(sm)
+        };
+        mesh.add_sub(sm_a).unwrap();
+        mesh.add_sub(sm_b).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+
+        let mut model = Model::empty();
+        model
+            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
+            .unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
+        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        model
+            .add_sub(insert(
+                SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+                    .unwrap(),
+            ))
+            .unwrap();
+        model
+            .add_sub(insert(SubModel::heat_conduction(fes.get(1).unwrap()).unwrap()))
+            .unwrap();
+
+        let materials = material_field_per_sub_model(
+            &model,
+            &[&[("k", 1.0)], &[], &[("k", 4.0)]],
+        )
+        .unwrap();
+        (model, materials)
+    }
+
+    /// The computed path (`stiffness`) must produce a CSR **bit-for-bit**
+    /// identical to the literal reference: same sparsity (row offsets, column
+    /// indices) and same values down to the last bit.
+    #[test]
+    fn computed_equals_literal_bit_for_bit() {
+        let (model, materials) = two_zone_heat_with_dirichlet();
+
+        let k_new = stiffness(&model, &materials).unwrap();
+        let k_ref = assemble_literal_reference(&model, &materials).unwrap();
+
+        let csr_new = k_new.to_csr().unwrap();
+        let csr_ref = k_ref.to_csr().unwrap();
+
+        assert_eq!(csr_new.nrows(), csr_ref.nrows());
+        assert_eq!(csr_new.ncols(), csr_ref.ncols());
+        assert_eq!(csr_new.row_offsets(), csr_ref.row_offsets());
+        assert_eq!(csr_new.col_indices(), csr_ref.col_indices());
+        // Bit-for-bit on the values (the whole point of keeping both paths).
+        assert_eq!(csr_new.values(), csr_ref.values());
+    }
+
+    /// A matrix carrying a computed block cannot be assembled through
+    /// `finalize` — it must go through `ops::assemble`. `finalize` says so
+    /// rather than silently dropping the computed contribution.
+    #[test]
+    fn finalize_rejects_computed_block() {
+        let (model, materials) = two_zone_heat_with_dirichlet();
+        // Build the blocks (computed for the HC zones) but stop before the
+        // global assembly, then try to finalize directly.
+        let mut k = Matrix::empty();
+        for sub_h in &model {
+            let built = {
+                let sub = read(sub_h).unwrap();
+                let material = match sub.material_fespace() {
+                    Some(fespace) => Some(materials.sub_for_fespace(&fespace).unwrap()),
+                    None => None,
+                };
+                sub.as_physics().stiffness_layout().map(|layout| {
+                    SubMatrix::computed(
+                        layout.support.clone(),
+                        layout.support,
+                        layout.dual_vars,
+                        layout.primal_vars,
+                        layout.ordering,
+                        layout.symmetric,
+                        ComputedRecipe {
+                            submodel: sub_h.clone(),
+                            fespace: layout.fespace,
+                            material,
+                        },
+                    )
+                    .unwrap()
+                })
+            };
+            if let Some(block) = built {
+                k.add_sub(insert(block)).unwrap();
+            }
+        }
+        assert!(k.finalize().is_err());
+    }
 }

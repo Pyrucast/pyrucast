@@ -27,7 +27,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::{kernel, CellGeom, Physics};
+use crate::models::{kernel, CellGeom, Physics, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -155,6 +155,17 @@ impl Physics for Plasticity {
             |geom, m, ke| self.element_matrix(geom, m, ke),
         )?;
         Ok(vec![block])
+    }
+
+    fn stiffness_layout(&self) -> Option<StiffnessLayout> {
+        Some(StiffnessLayout {
+            fespace: self.fespace.clone(),
+            support: self.support.clone(),
+            dual_vars: self.dual_vars(),
+            primal_vars: self.primal_vars(),
+            ordering: crate::containers::matrix::DofOrdering::NodesThenVars,
+            symmetric: true,
+        })
     }
 
     fn element_matrix(

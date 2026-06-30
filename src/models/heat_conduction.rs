@@ -11,7 +11,7 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::{kernel, CellGeom, Physics};
+use crate::models::{kernel, CellGeom, Physics, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -110,6 +110,17 @@ impl Physics for HeatConduction {
             |geom, m, ke| self.element_matrix(geom, m, ke),
         )?;
         Ok(vec![block])
+    }
+
+    fn stiffness_layout(&self) -> Option<StiffnessLayout> {
+        Some(StiffnessLayout {
+            fespace: self.fespace.clone(),
+            support: self.support.clone(),
+            dual_vars: self.dual_vars(),
+            primal_vars: self.primal_vars(),
+            ordering: DofOrdering::NodesThenVars,
+            symmetric: true,
+        })
     }
 
     fn element_matrix(
