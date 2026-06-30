@@ -70,6 +70,7 @@ use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::OnceLock;
 
 // ─── SubFiniteElementSpace ────────────────────────────────────────────────────────────
 
@@ -97,6 +98,13 @@ pub struct SubFiniteElementSpace {
     n_at_g: Vec<f64>,
     /// Flat `n_g × n_nodes × ref_dim` values of `∂N_i/∂ξ_j(ξ_g)`.
     dn_at_g: Vec<f64>,
+
+    /// Cell colouring for conflict-free parallel assembly, computed once and
+    /// memoised. Topological (depends only on the frozen connectivity), so it is
+    /// invariant for the subspace's lifetime. Not serialised — recomputed after
+    /// a load, like the lazy index maps on `SubMatrix`.
+    #[serde(skip)]
+    coloring: OnceLock<Vec<Vec<usize>>>,
 }
 
 impl SubFiniteElementSpace {
@@ -163,7 +171,20 @@ impl SubFiniteElementSpace {
             gauss_w,
             n_at_g,
             dn_at_g,
+            coloring: OnceLock::new(),
         })
+    }
+
+    /// Cell colouring for conflict-free parallel assembly, computed **once** and
+    /// cached. Two cells of the same colour share no key, so their element
+    /// matrices scatter into the global matrix in parallel without conflict.
+    ///
+    /// The `compute` closure is supplied by the caller (the assembly `ops`), so
+    /// this container layer stays free of any assembly dependency and free to
+    /// choose the conflict keys (cell nodes today; global/master DOFs once MPC
+    /// condensation lands). It runs at most once per subspace.
+    pub fn coloring(&self, compute: impl FnOnce() -> Vec<Vec<usize>>) -> &[Vec<usize>] {
+        self.coloring.get_or_init(compute)
     }
 
     // ── Accessors (structural) ──────────────────────────────────────────────
@@ -619,6 +640,26 @@ mod tests {
 
     fn cfg3d() -> Handle<Coords> {
         insert(Coords::new(3).unwrap())
+    }
+
+    #[test]
+    fn coloring_is_memoised() {
+        let coords = cfg2d();
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(coords, ElementType::TRI3);
+            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+            insert(sm)
+        };
+        let sub =
+            SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let first = sub.coloring(|| vec![vec![0usize]]).to_vec();
+        // The second closure is never run: the memoised value is returned.
+        let second = sub.coloring(|| panic!("compute must not run twice")).to_vec();
+        assert_eq!(first, vec![vec![0usize]]);
+        assert_eq!(first, second);
     }
 
     // ── SubFiniteElementSpace structural checks ────────────────────────────────────────
