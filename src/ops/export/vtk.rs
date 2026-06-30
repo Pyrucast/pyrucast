@@ -33,6 +33,7 @@ use crate::containers::field::{Field, SubField};
 use crate::containers::mesh::{ElementType, Mesh, NodeId};
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
+use crate::parallel::*;
 use crate::store::read;
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -123,25 +124,43 @@ fn write_geometry(out: &mut String, geo: &Geometry, title: &str) {
     out.push('\n');
     out.push_str("ASCII\nDATASET UNSTRUCTURED_GRID\n");
 
+    // POINTS / CELLS / CELL_TYPES are pure formatting of `geo` (no store
+    // access): format each line in parallel, then append in order — byte-for-byte
+    // identical to the sequential output.
     let _ = writeln!(out, "POINTS {} double", geo.points.len());
-    for p in &geo.points {
-        let _ = writeln!(out, "{} {} {}", p[0], p[1], p[2]);
-    }
+    let pts: Vec<String> = geo
+        .points
+        .par_iter()
+        .with_min_len(MIN_PARALLEL_LEN)
+        .map(|p| format!("{} {} {}\n", p[0], p[1], p[2]))
+        .collect();
+    pts.iter().for_each(|s| out.push_str(s));
 
     let conn_size: usize = geo.cells.iter().map(|c| 1 + c.points.len()).sum();
     let _ = writeln!(out, "CELLS {} {}", geo.cells.len(), conn_size);
-    for c in &geo.cells {
-        let _ = write!(out, "{}", c.points.len());
-        for &i in &c.points {
-            let _ = write!(out, " {i}");
-        }
-        out.push('\n');
-    }
+    let cell_lines: Vec<String> = geo
+        .cells
+        .par_iter()
+        .with_min_len(MIN_PARALLEL_LEN)
+        .map(|c| {
+            let mut line = c.points.len().to_string();
+            for &i in &c.points {
+                let _ = write!(line, " {i}");
+            }
+            line.push('\n');
+            line
+        })
+        .collect();
+    cell_lines.iter().for_each(|s| out.push_str(s));
 
     let _ = writeln!(out, "CELL_TYPES {}", geo.cells.len());
-    for c in &geo.cells {
-        let _ = writeln!(out, "{}", c.cell_type);
-    }
+    let types: Vec<String> = geo
+        .cells
+        .par_iter()
+        .with_min_len(MIN_PARALLEL_LEN)
+        .map(|c| format!("{}\n", c.cell_type))
+        .collect();
+    types.iter().for_each(|s| out.push_str(s));
 }
 
 // ─── String builders (pure: no file I/O) ─────────────────────────────────────
