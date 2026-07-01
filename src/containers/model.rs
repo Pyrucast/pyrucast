@@ -115,7 +115,7 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::containers::matrix::{AssemblyPattern, SubMatrix};
+use crate::containers::matrix::AssemblyPattern;
 use crate::containers::mesh::Mesh;
 use crate::containers::mesh::NodeId;
 use crate::error::Result;
@@ -335,18 +335,6 @@ impl SubModel {
     /// Dual variable names introduced by this sub-model.
     pub fn dual_vars(&self) -> Vec<String> {
         self.as_physics().dual_vars()
-    }
-
-    /// Build and fill the stiffness [`SubMatrix`] block(s) for this
-    /// sub-model. Pure dispatch to the physics's
-    /// [`Physics::build_stiffness_blocks`]; the caller
-    /// ([`crate::ops::assemble::stiffness`]) supplies `material` iff the
-    /// physics declares a [`material_fespace`](Self::material_fespace).
-    pub(crate) fn build_stiffness_blocks(
-        &self,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<Vec<SubMatrix>> {
-        self.as_physics().build_stiffness_blocks(material)
     }
 
     /// Whether this sub-model carries a constitutive behaviour that can be

@@ -75,6 +75,32 @@ pub struct StiffnessLayout {
     pub symmetric: bool,
 }
 
+/// One stiffness contribution of a sub-model, as handed to the global
+/// assembler ([`crate::ops::assemble::stiffness`]).
+///
+/// A sub-model declares *how* each of its blocks is produced without the
+/// assembler needing to know its concrete type: it just iterates
+/// [`Physics::contributions`] and folds each variant in. This is the seam that
+/// keeps `Dirichlet`, a volumetric physics, and (later) a coupling/contact
+/// sub-model on one uniform path — the discriminant is the variant, not a
+/// per-type `match` in the assembler.
+///
+/// Today two variants suffice; a `Coupling { row_submodel, col_submodel, .. }`
+/// will join them when an inter-sub-model coupling physics lands (the enum is
+/// the extension point — see the *Physics → SubModelKind + Contribution* design
+/// note).
+pub enum Contribution {
+    /// A block integrated on the fly and scattered straight into the global CSR
+    /// (no values materialised): the fast path of every volumetric physics. The
+    /// assembler resolves the material and wraps this
+    /// [`StiffnessLayout`](StiffnessLayout) into a computed
+    /// [`SubMatrix`](crate::containers::matrix::SubMatrix).
+    Computed(StiffnessLayout),
+    /// One-or-more blocks whose values the sub-model has already filled in
+    /// (`Dirichlet`'s C / Cᵀ, MPC, …). Scattered by the literal path.
+    Literal(Vec<SubMatrix>),
+}
+
 /// The behaviour contract of one physics, co-located with its data struct.
 ///
 /// Generic code calls these through
@@ -137,6 +163,31 @@ pub trait Physics: Sync {
             "{}: no element kernel — element_matrix is undefined",
             self.label()
         )))
+    }
+
+    /// This sub-model's stiffness contributions, as the global assembler
+    /// consumes them. **Default**: derived from
+    /// [`stiffness_layout`](Self::stiffness_layout) — `Some(layout)` yields a
+    /// single [`Contribution::Computed`] (a volumetric physics, integrated
+    /// straight into the CSR), `None` falls back to a
+    /// [`Contribution::Literal`] built from
+    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) (a constraint
+    /// such as `Dirichlet`, or any multi-block physics).
+    ///
+    /// `material` is `Some(_)` iff [`material_fespace`](Self::material_fespace)
+    /// is `Some(_)` (the assembler guarantees it); it is only consulted on the
+    /// literal path — the computed path resolves material itself from the
+    /// layout. A sub-model rarely overrides this: writing `element_matrix` +
+    /// `stiffness_layout` (volumetric) or `build_stiffness_blocks` (literal) is
+    /// enough.
+    fn contributions(
+        &self,
+        material: Option<&Handle<SubElementField>>,
+    ) -> Result<Vec<Contribution>> {
+        Ok(match self.stiffness_layout() {
+            Some(layout) => vec![Contribution::Computed(layout)],
+            None => vec![Contribution::Literal(self.build_stiffness_blocks(material)?)],
+        })
     }
 
     /// Build and fill the stiffness [`SubMatrix`] block(s) of this physics.
