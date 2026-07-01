@@ -104,10 +104,10 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     // Pass 2 — global assembly, injected via `set_assembled` (Option B: the
     // global assembler lives here, not in `Matrix`, so there is no
     // matrix↔kernel cycle). The CSR sparsity comes from the blocks' topology
-    // ([`scatter::build_pattern`]); the values are scattered into it
-    // ([`scatter::scatter_serial`]), bit-for-bit with the old triplet path.
+    // ([`scatter::build_pattern`]); the values are scattered into it in parallel
+    // by cell colour ([`scatter::scatter_parallel`]).
     let pattern = scatter::build_pattern(&k)?;
-    let csr = scatter::scatter_serial(&k, &pattern)?;
+    let csr = scatter::scatter_parallel(&k, &pattern)?;
     k.set_assembled(pattern.row_dofs, pattern.col_dofs, csr);
     Ok(k)
 }
@@ -233,25 +233,140 @@ mod tests {
         (model, materials)
     }
 
-    /// The computed path (`stiffness`) must produce a CSR **bit-for-bit**
-    /// identical to the literal reference: same sparsity (row offsets, column
-    /// indices) and same values down to the last bit.
-    #[test]
-    fn computed_equals_literal_bit_for_bit() {
-        let (model, materials) = two_zone_heat_with_dirichlet();
+    /// A single heat-conduction zone over an `n_elems`-element SEG2 chain, plus
+    /// a Dirichlet constraint at the left end. Interior nodes are shared by two
+    /// cells, so the zone needs a real (two-colour) cell colouring — the
+    /// parallel scatter genuinely reorders per-slot summation, unlike a
+    /// one-cell-per-block mesh.
+    fn chain_heat_with_dirichlet(n_elems: usize) -> (Model, ElementField) {
+        let coords = insert(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = (0..=n_elems)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        for i in 0..n_elems {
+            sm.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
+        }
+        let mesh = Mesh::from_submesh(sm);
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
+        let mut model = Model::empty();
+        model
+            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
+            .unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
+        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        model
+            .add_sub(insert(
+                SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+                    .unwrap(),
+            ))
+            .unwrap();
+
+        let materials =
+            material_field_per_sub_model(&model, &[&[("k", 2.0)], &[]]).unwrap();
+        (model, materials)
+    }
+
+    /// Pass 1 of [`stiffness`] alone: the block aggregate (computed blocks for
+    /// the volumetric zones, literal for the rest) **before** the global
+    /// scatter. Lets a test drive `scatter::*` directly on the same blocks the
+    /// real assembler builds.
+    fn assemble_computed_blocks(model: &Model, materials: &ElementField) -> Matrix {
+        let mut k = Matrix::empty();
+        for sub_h in model {
+            let built = {
+                let sub = read(sub_h).unwrap();
+                let material = match sub.material_fespace() {
+                    Some(fespace) => Some(materials.sub_for_fespace(&fespace).unwrap()),
+                    None => None,
+                };
+                match sub.as_physics().stiffness_layout() {
+                    Some(layout) => BuiltBlocks::Computed(Box::new(
+                        SubMatrix::computed(
+                            layout.support.clone(),
+                            layout.support,
+                            layout.dual_vars,
+                            layout.primal_vars,
+                            layout.ordering,
+                            layout.symmetric,
+                            ComputedRecipe {
+                                submodel: sub_h.clone(),
+                                fespace: layout.fespace,
+                                material,
+                            },
+                        )
+                        .unwrap(),
+                    )),
+                    None => {
+                        BuiltBlocks::Literal(sub.build_stiffness_blocks(material.as_ref()).unwrap())
+                    }
+                }
+            };
+            match built {
+                BuiltBlocks::Computed(b) => {
+                    k.add_sub(insert(*b)).unwrap();
+                }
+                BuiltBlocks::Literal(bs) => {
+                    for b in bs {
+                        k.add_sub(insert(b)).unwrap();
+                    }
+                }
+            }
+        }
+        k
+    }
+
+    /// The **serial** scatter (`build_pattern` + `scatter_serial`) reproduces the
+    /// literal reference **bit-for-bit**: same sparsity and same values to the
+    /// last bit (it accumulates each slot in the triplet-stream order).
+    #[test]
+    fn serial_scatter_equals_literal_bit_for_bit() {
+        let (model, materials) = chain_heat_with_dirichlet(6);
+        let k = assemble_computed_blocks(&model, &materials);
+        let pattern = scatter::build_pattern(&k).unwrap();
+        let csr = scatter::scatter_serial(&k, &pattern).unwrap();
+
+        let k_ref = assemble_literal_reference(&model, &materials).unwrap();
+        let csr_ref = k_ref.to_csr().unwrap();
+
+        assert_eq!(csr.row_offsets(), csr_ref.row_offsets());
+        assert_eq!(csr.col_indices(), csr_ref.col_indices());
+        assert_eq!(csr.values(), csr_ref.values());
+    }
+
+    /// The **parallel** colour-driven scatter (`stiffness`) matches the literal
+    /// reference to floating tolerance — the sparsity is identical, the values
+    /// agree up to the reordered summation the colouring induces (so *not*
+    /// bit-for-bit with the serial path, by construction).
+    #[test]
+    fn parallel_scatter_matches_literal_within_tol() {
+        let (model, materials) = chain_heat_with_dirichlet(6);
         let k_new = stiffness(&model, &materials).unwrap();
         let k_ref = assemble_literal_reference(&model, &materials).unwrap();
-
         let csr_new = k_new.to_csr().unwrap();
         let csr_ref = k_ref.to_csr().unwrap();
 
-        assert_eq!(csr_new.nrows(), csr_ref.nrows());
-        assert_eq!(csr_new.ncols(), csr_ref.ncols());
         assert_eq!(csr_new.row_offsets(), csr_ref.row_offsets());
         assert_eq!(csr_new.col_indices(), csr_ref.col_indices());
-        // Bit-for-bit on the values (the whole point of keeping both paths).
-        assert_eq!(csr_new.values(), csr_ref.values());
+        for (x, y) in csr_new.values().iter().zip(csr_ref.values()) {
+            assert!(
+                (x - y).abs() <= 1e-12 * (1.0 + y.abs()),
+                "value mismatch: {x} vs {y}"
+            );
+        }
+    }
+
+    /// The colouring is fixed and each colour's writes are disjoint, so the
+    /// parallel scatter is reproducible: two assemblies of the same model give
+    /// bit-for-bit identical values (independent of thread scheduling).
+    #[test]
+    fn parallel_scatter_is_deterministic() {
+        let (model, materials) = chain_heat_with_dirichlet(6);
+        let a = stiffness(&model, &materials).unwrap();
+        let b = stiffness(&model, &materials).unwrap();
+        assert_eq!(a.to_csr().unwrap().values(), b.to_csr().unwrap().values());
     }
 
     /// A matrix carrying a computed block cannot be assembled through

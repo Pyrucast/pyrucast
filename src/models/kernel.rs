@@ -296,6 +296,38 @@ pub fn element_block_triplets(
     material: Option<&Handle<SubElementField>>,
     element: impl Fn(&CellGeom, Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
 ) -> Result<BlockTriplets> {
+    let (nrows, ncols, per_cell) = element_block_triplets_per_cell(
+        fespace, row_support, col_support, n_dual, n_primal, ordering, material, element,
+    )?;
+    let total: usize = per_cell.iter().map(|v| v.len()).sum();
+    let mut trips = Vec::with_capacity(total);
+    for cell_trips in per_cell {
+        trips.extend(cell_trips);
+    }
+    Ok((nrows, ncols, trips))
+}
+
+/// `(nrows, ncols, per-cell local (row, col, value) triplets)` — the shape
+/// returned by [`element_block_triplets_per_cell`].
+pub type BlockTripletsPerCell = (usize, usize, Vec<Vec<(usize, usize, f64)>>);
+
+/// Same as [`element_block_triplets`] but keeps each cell's triplets in its own
+/// `Vec` **instead of concatenating** them. Cells are still computed in parallel
+/// and their triplets ordered `li, di, lj, pj` within a cell, so the per-cell
+/// lists are reproducible. The grouping lets a colour-driven scatter process one
+/// colour's cells (which touch disjoint DOFs) in parallel without write
+/// conflicts.
+#[allow(clippy::too_many_arguments)]
+pub fn element_block_triplets_per_cell(
+    fespace: &Handle<SubFiniteElementSpace>,
+    row_support: &Handle<SubMesh>,
+    col_support: &Handle<SubMesh>,
+    n_dual: usize,
+    n_primal: usize,
+    ordering: DofOrdering,
+    material: Option<&Handle<SubElementField>>,
+    element: impl Fn(&CellGeom, Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
+) -> Result<BlockTripletsPerCell> {
     let fe = read(fespace)?;
     let submesh = fe.submesh();
     let sm = read(&submesh)?;
@@ -375,12 +407,7 @@ pub fn element_block_triplets(
         })
         .collect::<Result<_>>()?;
 
-    let total: usize = per_cell.iter().map(|v| v.len()).sum();
-    let mut trips = Vec::with_capacity(total);
-    for cell_trips in per_cell {
-        trips.extend(cell_trips);
-    }
-    Ok((nrows, ncols, trips))
+    Ok((nrows, ncols, per_cell))
 }
 
 /// `(nrows, ncols, per-cell block-local (row, col) index pairs)` — the shape
@@ -426,6 +453,8 @@ pub fn element_block_pattern(
     let col_pos = pos_map(&col_nodes);
 
     let per_cell: Vec<Vec<(usize, usize)>> = (0..n_cells)
+        .into_par_iter()
+        .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
         .map(|cell| -> Result<Vec<(usize, usize)>> {
             let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
             let mut rpos = Vec::with_capacity(n_nodes);
