@@ -121,34 +121,32 @@ impl Domain for Frame {
         self.fespace.clone()
     }
 
-    // The frame's behaviour (section forces N/M/V) is a linear law like any
-    // other domain's, but computing it needs the generalised section strains
-    // (axial ε, curvature κ, shear γ) in the element's **local** frame — i.e. a
-    // dedicated `ops::field::frame_deformation` operator (the co-rotational
-    // counterpart of `beam_deformation` for Timoshenko), which does not exist
-    // yet. Until it does, the behaviour is unimplemented: a documented gap, not
-    // a design exception.
+    /// Section forces `N` (axial), `M` (bending), `V` (shear) — the linear law
+    /// on the generalised strains `(eps, kappa, gamma)` produced by
+    /// [`crate::ops::field::frame_deformation`](fn@crate::ops::field::frame_deformation).
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Err(crate::error::PyrucastError::Message(
-            "Frame: section-force behaviour not implemented — needs \
-             ops::field::frame_deformation (local axial/bending/shear strains)"
-                .into(),
-        ))
+        Ok(vec!["N".into(), "M".into(), "V".into()])
     }
 
+    /// `N = E·A·ε`, `M = E·I·κ`, `V = G·A_s·γ` at one Gauss point, from the
+    /// local section strains `(eps, kappa, gamma)`.
     fn integrate_point(
         &self,
-        _geom: &CellGeom,
-        _input: &SubElementField,
-        _material: Option<&SubElementField>,
-        _g: usize,
-        _out: &mut [f64],
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
     ) -> Result<()> {
-        Err(crate::error::PyrucastError::Message(
-            "Frame: section-force behaviour not implemented — needs \
-             ops::field::frame_deformation (local axial/bending/shear strains)"
-                .into(),
-        ))
+        let mat = material.expect("Frame declares a material_fespace ⇒ material is supplied");
+        let cell = geom.cell;
+        let ea = mat.value(cell, 0, "E")? * mat.value(cell, 0, "A")?;
+        let ei = mat.value(cell, 0, "E")? * mat.value(cell, 0, "I")?;
+        let gas = mat.value(cell, 0, "G")? * mat.value(cell, 0, "A_s")?;
+        out[0] = ea * input.value(cell, g, "eps")?;
+        out[1] = ei * input.value(cell, g, "kappa")?;
+        out[2] = gas * input.value(cell, g, "gamma")?;
+        Ok(())
     }
 }
 

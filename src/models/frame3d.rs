@@ -132,31 +132,43 @@ impl Domain for Frame3d {
         self.fespace.clone()
     }
 
-    // Like `Frame`, the 3-D frame's section-force behaviour (N, M_y, M_z, T,
-    // V_y, V_z) is linear but needs the generalised strains in the element's
-    // **local** frame — a `frame_deformation` operator that does not exist yet.
-    // Documented gap, not a design exception.
+    /// Section forces `N, M_y, M_z, T, V_y, V_z` — the linear law on the
+    /// generalised strains `(eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z)`
+    /// produced by
+    /// [`crate::ops::field::frame_deformation`](fn@crate::ops::field::frame_deformation).
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Err(crate::error::PyrucastError::Message(
-            "Frame3d: section-force behaviour not implemented — needs \
-             ops::field::frame_deformation (local generalised strains)"
-                .into(),
-        ))
+        Ok(vec![
+            "N".into(),
+            "M_y".into(),
+            "M_z".into(),
+            "T".into(),
+            "V_y".into(),
+            "V_z".into(),
+        ])
     }
 
+    /// `N = E·A·ε`, `M_y = E·I_y·κ_y`, `M_z = E·I_z·κ_z`, `T = G·J·torsion`,
+    /// `V_y = G·A_sy·γ_y`, `V_z = G·A_sz·γ_z` at one Gauss point.
     fn integrate_point(
         &self,
-        _geom: &CellGeom,
-        _input: &SubElementField,
-        _material: Option<&SubElementField>,
-        _g: usize,
-        _out: &mut [f64],
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
     ) -> Result<()> {
-        Err(crate::error::PyrucastError::Message(
-            "Frame3d: section-force behaviour not implemented — needs \
-             ops::field::frame_deformation (local generalised strains)"
-                .into(),
-        ))
+        let mat = material.expect("Frame3d declares a material_fespace ⇒ material is supplied");
+        let cell = geom.cell;
+        let v = |c| mat.value(cell, 0, c);
+        let e = v("E")?;
+        let gg = v("G")?;
+        out[0] = e * v("A")? * input.value(cell, g, "eps")?;
+        out[1] = e * v("I_y")? * input.value(cell, g, "kappa_y")?;
+        out[2] = e * v("I_z")? * input.value(cell, g, "kappa_z")?;
+        out[3] = gg * v("J")? * input.value(cell, g, "torsion")?;
+        out[4] = gg * v("A_sy")? * input.value(cell, g, "gamma_y")?;
+        out[5] = gg * v("A_sz")? * input.value(cell, g, "gamma_z")?;
+        Ok(())
     }
 }
 
