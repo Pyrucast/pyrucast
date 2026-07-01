@@ -29,7 +29,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{Behavior, CellGeom, HasMaterial, SubModelKind, StiffnessLayout};
+use crate::models::{Behavior, CellGeom, HasMaterial, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 

@@ -26,7 +26,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::{Behavior, CellGeom, HasMaterial, SubModelKind, StiffnessLayout};
+use crate::models::{Behavior, CellGeom, HasMaterial, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -68,7 +68,10 @@ fn stress_names(space_dim: usize) -> Vec<String> {
 /// Internal-state component names: plastic strain tensor `eps_p_*` (six,
 /// always 3-D) followed by the cumulated plastic strain `p`.
 fn state_names() -> Vec<String> {
-    let mut v: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_p_{s}")).collect();
+    let mut v: Vec<String> = TENSOR_SUFFIXES
+        .iter()
+        .map(|s| format!("eps_p_{s}"))
+        .collect();
     v.push("p".into());
     v
 }
@@ -217,8 +220,9 @@ impl Behavior for Plasticity {
         let eps_p_old = read_state_strain(input, cell, g);
         let p_old = read_opt(input, cell, g, "p");
 
-        let (sigma, eps_p_new, p_new) =
-            radial_return(&eps_total, &eps_p_old, p_old, lambda, mu, sigma_y, self.model);
+        let (sigma, eps_p_new, p_new) = radial_return(
+            &eps_total, &eps_p_old, p_old, lambda, mu, sigma_y, self.model,
+        );
 
         let v = stress_names(d).len();
         for r in 0..v {
@@ -265,10 +269,8 @@ fn von_mises(sigma: &[f64; 6]) -> f64 {
         sigma[4],
         sigma[5],
     ];
-    let ss = s[0] * s[0]
-        + s[1] * s[1]
-        + s[2] * s[2]
-        + 2.0 * (s[3] * s[3] + s[4] * s[4] + s[5] * s[5]);
+    let ss =
+        s[0] * s[0] + s[1] * s[1] + s[2] * s[2] + 2.0 * (s[3] * s[3] + s[4] * s[4] + s[5] * s[5]);
     (1.5 * ss).sqrt()
 }
 
@@ -511,10 +513,7 @@ mod tests {
         // Small uniaxial strain well below yield (σ ≈ E·ε = 21 MPa < 250).
         let mut strain = SubElementField::new(
             pl.fespace.clone(),
-            TENSOR_SUFFIXES
-                .iter()
-                .map(|s| format!("eps_{s}"))
-                .collect(),
+            TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect(),
         )
         .unwrap();
         strain.set_uniform("eps_xx", 1e-4).unwrap();
@@ -523,7 +522,9 @@ mod tests {
         // Confined uniaxial *strain* (only ε_xx ≠ 0): σ_xx = (λ+2μ)·ε.
         let (lambda, mu) = lame(e, nu);
         for g in 0..out.gauss_count() {
-            assert!((out.value(0, g, "sigma_xx").unwrap() - (lambda + 2.0 * mu) * 1e-4).abs() < 1e-6);
+            assert!(
+                (out.value(0, g, "sigma_xx").unwrap() - (lambda + 2.0 * mu) * 1e-4).abs() < 1e-6
+            );
             assert!(out.value(0, g, "p").unwrap().abs() < 1e-14);
         }
     }
@@ -538,10 +539,7 @@ mod tests {
         // Large uniaxial strain (elastic trial ≈ 2100 MPa ≫ 250).
         let mut strain = SubElementField::new(
             pl.fespace.clone(),
-            TENSOR_SUFFIXES
-                .iter()
-                .map(|s| format!("eps_{s}"))
-                .collect(),
+            TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect(),
         )
         .unwrap();
         strain.set_uniform("eps_xx", 1e-2).unwrap();

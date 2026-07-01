@@ -24,7 +24,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, HasMaterial, SubModelKind, StiffnessLayout};
+use crate::models::{CellGeom, HasMaterial, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -99,7 +99,11 @@ impl SubModelKind for Frame3d {
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        element_stiffness(geom, material.expect("Frame3d requires a material field"), ke)
+        element_stiffness(
+            geom,
+            material.expect("Frame3d requires a material field"),
+            ke,
+        )
     }
 
     fn label(&self) -> &'static str {

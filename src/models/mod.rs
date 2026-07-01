@@ -194,7 +194,9 @@ pub trait SubModelKind: Sync {
     ) -> Result<Vec<Contribution>> {
         Ok(match self.stiffness_layout() {
             Some(layout) => vec![Contribution::Computed(layout)],
-            None => vec![Contribution::Literal(self.build_stiffness_blocks(material)?)],
+            None => vec![Contribution::Literal(
+                self.build_stiffness_blocks(material)?,
+            )],
         })
     }
 

@@ -37,10 +37,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     let row_dofs = k.row_dofs()?;
     let col_dofs = k.col_dofs()?;
-    let row_map: HashMap<NamedDof, usize> =
-        row_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
-    let col_map: HashMap<NamedDof, usize> =
-        col_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
+    let row_map: HashMap<NamedDof, usize> = row_dofs
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(i, d)| (d, i))
+        .collect();
+    let col_map: HashMap<NamedDof, usize> = col_dofs
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(i, d)| (d, i))
+        .collect();
 
     let nrows = row_dofs.len();
     // Per row, the columns it touches (with duplicates; deduped below).
@@ -276,8 +284,7 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                 let conn = submesh_g.connectivity();
                 let n_cells = fe.cell_count()?;
                 let keys_per_cell = conn.len().checked_div(n_cells).unwrap_or(0);
-                let coloring =
-                    fe.coloring(|| coloring::greedy_color(n_cells, keys_per_cell, conn));
+                let coloring = fe.coloring(|| coloring::greedy_color(n_cells, keys_per_cell, conn));
 
                 // Scatter colour by colour: within a colour, cells write disjoint
                 // slots ⇒ the parallel atomic stores never race. Slots are

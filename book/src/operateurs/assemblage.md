@@ -40,7 +40,7 @@ produites au scatter) que `Matrix::finalize` ne sait pas assembler seul. Pour
 existante puis réassembler — `ops::assemble::assemble(&mut m)` reconstruit le
 motif creux depuis les **blocs seuls** (sans `Model`) et redisperse les valeurs :
 
-```rust
+```rust,ignore
 let mut k = assemble::stiffness(&model, &materials)?;
 k.add_sub(insert(bloc_supplementaire))?;   // invalide l'état assemblé
 assemble::assemble(&mut k)?;                // réassemble, nouveau bloc inclus

@@ -317,9 +317,7 @@ impl SubModel {
     /// FE subspace on which this sub-model expects its material data, or
     /// `None` if this physics doesn't need material data (e.g. `Dirichlet`).
     pub fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        self.as_kind()
-            .as_material()
-            .map(|m| m.material_fespace())
+        self.as_kind().as_material().map(|m| m.material_fespace())
     }
 
     /// Material component names this sub-model expects, or `None` if it

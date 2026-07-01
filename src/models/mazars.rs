@@ -34,7 +34,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::{Behavior, CellGeom, HasMaterial, SubModelKind, StiffnessLayout};
+use crate::models::{Behavior, CellGeom, HasMaterial, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use nalgebra::Matrix3;
 use serde::{Deserialize, Serialize};
@@ -501,7 +501,9 @@ mod tests {
         let st2 = mz.integrate_behavior(&s2, Some(&mat)).unwrap();
         assert!((st2.value(0, 0, "kappa").unwrap() - k1).abs() < 1e-12);
         // Damage unchanged on unloading (same κ).
-        assert!((st2.value(0, 0, "damage").unwrap() - st1.value(0, 0, "damage").unwrap()).abs() < 1e-9);
+        assert!(
+            (st2.value(0, 0, "damage").unwrap() - st1.value(0, 0, "damage").unwrap()).abs() < 1e-9
+        );
     }
 
     /// Solid 3-D uniaxial tension also triggers tensile damage.
