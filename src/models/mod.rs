@@ -93,8 +93,7 @@ pub enum Contribution {
     /// A block integrated on the fly and scattered straight into the global CSR
     /// (no values materialised): the fast path of every volumetric physics. The
     /// assembler resolves the material and wraps this
-    /// [`StiffnessLayout`](StiffnessLayout) into a computed
-    /// [`SubMatrix`](crate::containers::matrix::SubMatrix).
+    /// [`StiffnessLayout`] into a computed [`SubMatrix`].
     Computed(StiffnessLayout),
     /// One-or-more blocks whose values the sub-model has already filled in
     /// (`Dirichlet`'s C / Cᵀ, MPC, …). Scattered by the literal path.
@@ -117,15 +116,21 @@ pub trait Physics: Sync {
     /// Dual variable names introduced by this physics (row labels).
     fn dual_vars(&self) -> Vec<String>;
 
-    /// Material component names this physics requires, or `None` if it
-    /// needs no material data. Default: `None`.
-    fn material_components(&self) -> Option<&'static [&'static str]> {
+    /// Borrow this physics as a [`HasMaterial`] capability, or `None`
+    /// (default) if it needs no material data (a constraint such as
+    /// `Dirichlet`). A physics that reads material overrides this to return
+    /// `Some(self)`. This is the seam the assembler and material builders use —
+    /// they never assume every sub-model carries material.
+    fn as_material(&self) -> Option<&dyn HasMaterial> {
         None
     }
 
-    /// FE subspace on which this physics expects its material data, or
-    /// `None` if it needs none. Default: `None`.
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
+    /// Borrow this physics as a [`Behavior`] capability, or `None` (default)
+    /// if it carries no constitutive law (a constraint such as `Dirichlet`). A
+    /// behaviour-bearing physics overrides this to return `Some(self)`. This is
+    /// the seam [`crate::ops::behavior`] uses — it never assumes every
+    /// sub-model integrates a behaviour.
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
         None
     }
 
@@ -139,10 +144,10 @@ pub trait Physics: Sync {
 
     /// Local element stiffness matrix of one cell — the pure, sequential kernel
     /// a physics author writes (the stiffness counterpart of
-    /// [`integrate_point`](Self::integrate_point)). Fills `ke` (row-major,
+    /// [`Behavior::integrate_point`]). Fills `ke` (row-major,
     /// node-major / variable-minor: `ke[(li*n_dual+di) * n_cols_loc + (lj*n_primal+pj)]`)
     /// from the cell geometry and material. `material` is `Some(_)` iff the
-    /// physics declares a [`material_fespace`](Self::material_fespace).
+    /// physics declares a [`HasMaterial::material_fespace`].
     ///
     /// `geoms` holds one [`CellGeom`] per FE subspace declared in
     /// [`stiffness_layout`](Self::stiffness_layout), in that order: a plain
@@ -174,8 +179,8 @@ pub trait Physics: Sync {
     /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) (a constraint
     /// such as `Dirichlet`, or any multi-block physics).
     ///
-    /// `material` is `Some(_)` iff [`material_fespace`](Self::material_fespace)
-    /// is `Some(_)` (the assembler guarantees it); it is only consulted on the
+    /// `material` is `Some(_)` iff [`HasMaterial::material_fespace`] is declared
+    /// (the assembler guarantees it); it is only consulted on the
     /// literal path — the computed path resolves material itself from the
     /// layout. A sub-model rarely overrides this: writing `element_matrix` +
     /// `stiffness_layout` (volumetric) or `build_stiffness_blocks` (literal) is
@@ -191,8 +196,8 @@ pub trait Physics: Sync {
     }
 
     /// Build and fill the stiffness [`SubMatrix`] block(s) of this physics.
-    /// `material` is `Some(_)` iff [`material_fespace`](Self::material_fespace)
-    /// is `Some(_)` (the assembler guarantees it).
+    /// `material` is `Some(_)` iff [`HasMaterial::material_fespace`] is declared
+    /// (the assembler guarantees it).
     ///
     /// **Default**: derived from [`stiffness_layout`](Self::stiffness_layout) —
     /// a single block on that layout, filled by
@@ -250,100 +255,6 @@ pub trait Physics: Sync {
         Ok(Vec::new())
     }
 
-    /// FE subspace this physics integrates its **constitutive behaviour**
-    /// on, or `None` (default) for a physics that carries no behaviour
-    /// (constraints such as `Dirichlet`).
-    ///
-    /// When `Some(_)`, the physics must implement
-    /// [`integrate_behavior`](Self::integrate_behavior); its deformation
-    /// input is produced geometrically by [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) /
-    /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation), and [`crate::ops::behavior`] uses
-    /// this handle to pair the per-zone deformation field with its
-    /// sub-model. For a plain volumetric physics it is the same FE subspace
-    /// as [`material_fespace`](Self::material_fespace).
-    fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        None
-    }
-
-    /// Integrate the constitutive law point-by-point (Cast3m `COMP` —
-    /// « intégrer le comportement »).
-    ///
-    /// `input` carries, at every `(cell, Gauss)` point, the deformation
-    /// measure (the temperature gradient `∇T` for heat conduction, the
-    /// strain `ε` for elasticity, …) produced by a *geometric* operator —
-    /// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) / [`crate::ops::field::deformation`](fn@crate::ops::field::deformation),
-    /// independent of any model — followed by the input internal-state
-    /// variables (`VAR0`). `material` is `Some(_)` iff this physics declares
-    /// a [`material_fespace`](Self::material_fespace) (the operator
-    /// guarantees it).
-    ///
-    /// Returns the **material-state** field: the dual flux/stress followed
-    /// by the updated internal-state variables (`VAR1`). Where
-    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) is the
-    /// *linearization* of the law, this is its *exact* response: for a
-    /// linear law the two agree (`∫ Bᵀ·flux = K·u`); a non-linear law
-    /// departs from that tangent.
-    ///
-    /// Output component names of the material-state field produced by
-    /// [`integrate_point`](Self::integrate_point) — the dual flux/stress
-    /// followed by the updated internal state (`VAR1`), in order. Implemented by
-    /// every behaviour-bearing physics; default errors.
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Err(PyrucastError::Message(format!(
-            "{}: no behaviour — behavior_output_components is undefined",
-            self.label()
-        )))
-    }
-
-    /// Constitutive law at **one Gauss point** — the pure, sequential kernel a
-    /// physics author writes. For cell `geom.cell` at Gauss point `g`, read the
-    /// deformation (+ `VAR0`) from `input` and the material from `material`
-    /// (both borrowed in place), and write the
-    /// [`behavior_output_components`](Self::behavior_output_components) values
-    /// into `out`. `material` is `Some(_)` iff the physics declares a
-    /// [`material_fespace`](Self::material_fespace).
-    ///
-    /// It **never sees rayon, the store, or a lock**:
-    /// [`integrate_behavior`](Self::integrate_behavior) drives it in parallel
-    /// over all cells. Default errors (a physics with no behaviour).
-    fn integrate_point(
-        &self,
-        _geom: &CellGeom,
-        _input: &SubElementField,
-        _material: Option<&SubElementField>,
-        _g: usize,
-        _out: &mut [f64],
-    ) -> Result<()> {
-        Err(PyrucastError::Message(format!(
-            "{}: no behaviour — integrate_point is undefined",
-            self.label()
-        )))
-    }
-
-    /// Integrate the constitutive law (Cast3m `COMP`). **Provided**: drives the
-    /// point kernel [`integrate_point`](Self::integrate_point) in parallel over
-    /// the behaviour FE subspace via [`kernel::integrate_pointwise`]. A physics
-    /// implements the point kernel +
-    /// [`behavior_output_components`](Self::behavior_output_components), **not**
-    /// this. A physics with no
-    /// behaviour FE subspace falls through to a clear error here.
-    fn integrate_behavior(
-        &self,
-        input: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<SubElementField> {
-        let fespace = self.behavior_fespace().ok_or_else(|| {
-            PyrucastError::Message(format!(
-                "{}: no behaviour — integrate_behavior is undefined",
-                self.label()
-            ))
-        })?;
-        let out_components = self.behavior_output_components()?;
-        kernel::integrate_pointwise(&fespace, input, material, out_components, |geom, inp, mat, g, out| {
-            self.integrate_point(geom, inp, mat, g, out)
-        })
-    }
-
     /// Short type label, e.g. `"HeatConduction"` (used by `Debug` and the
     /// default `display`).
     fn label(&self) -> &'static str;
@@ -355,4 +266,97 @@ pub trait Physics: Sync {
 
     /// Full multi-line rendering for [`crate::dump::Dump`].
     fn render(&self, opts: &DumpOptions) -> String;
+}
+
+/// A physics that consumes **material data** — an optional capability, not part
+/// of the base [`Physics`] contract. A physics implements it *and* returns
+/// `Some(self)` from [`Physics::as_material`]; a constraint such as `Dirichlet`
+/// implements neither, so no method can be called on it that would error for
+/// lack of material.
+pub trait HasMaterial {
+    /// FE subspace on which this physics expects its material data.
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace>;
+
+    /// Material component names this physics requires, or `None` if it declares
+    /// a material FE subspace but constrains no particular component. Default:
+    /// `None`.
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        None
+    }
+}
+
+/// A physics that carries an integrable **constitutive law** (Cast3m `COMP`) —
+/// an optional capability, not part of the base [`Physics`] contract. A physics
+/// implements it *and* returns `Some(self)` from [`Physics::as_behavior`]; a
+/// constraint such as `Dirichlet` implements neither, so its absence of
+/// behaviour is a compile-time fact, not a runtime error.
+///
+/// An implementer writes the point kernel
+/// [`integrate_point`](Self::integrate_point), the output components
+/// [`behavior_output_components`](Self::behavior_output_components), and the FE
+/// subspace [`behavior_fespace`](Self::behavior_fespace); the parallel driver
+/// [`integrate_behavior`](Self::integrate_behavior) is provided.
+pub trait Behavior: Sync {
+    /// FE subspace this physics integrates its constitutive behaviour on. Its
+    /// deformation input is produced geometrically by
+    /// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) /
+    /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation),
+    /// and [`crate::ops::behavior`] uses this handle to pair the per-zone
+    /// deformation field with its sub-model. For a plain volumetric physics it
+    /// is the same FE subspace as
+    /// [`HasMaterial::material_fespace`].
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace>;
+
+    /// Output component names of the material-state field produced by
+    /// [`integrate_point`](Self::integrate_point) — the dual flux/stress
+    /// followed by the updated internal state (`VAR1`), in order.
+    fn behavior_output_components(&self) -> Result<Vec<String>>;
+
+    /// Constitutive law at **one Gauss point** — the pure, sequential kernel a
+    /// physics author writes. For cell `geom.cell` at Gauss point `g`, read the
+    /// deformation (+ `VAR0`) from `input` and the material from `material`
+    /// (both borrowed in place), and write the
+    /// [`behavior_output_components`](Self::behavior_output_components) values
+    /// into `out`. `material` is `Some(_)` iff the physics also declares a
+    /// [`HasMaterial::material_fespace`].
+    ///
+    /// It **never sees rayon, the store, or a lock**:
+    /// [`integrate_behavior`](Self::integrate_behavior) drives it in parallel
+    /// over all cells.
+    fn integrate_point(
+        &self,
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()>;
+
+    /// Integrate the constitutive law (Cast3m `COMP`). **Provided**: drives the
+    /// point kernel [`integrate_point`](Self::integrate_point) in parallel over
+    /// the behaviour FE subspace via [`kernel::integrate_pointwise`].
+    ///
+    /// `input` carries, at every `(cell, Gauss)` point, the deformation measure
+    /// (the temperature gradient `∇T` for heat conduction, the strain `ε` for
+    /// elasticity, …) produced by a *geometric* operator, followed by the input
+    /// internal-state variables (`VAR0`). Returns the **material-state** field:
+    /// the dual flux/stress followed by the updated internal-state variables
+    /// (`VAR1`). Where [`Physics::build_stiffness_blocks`] is the *linearization*
+    /// of the law, this is its *exact* response: for a linear law the two agree
+    /// (`∫ Bᵀ·flux = K·u`); a non-linear law departs from that tangent.
+    fn integrate_behavior(
+        &self,
+        input: &Handle<SubElementField>,
+        material: Option<&Handle<SubElementField>>,
+    ) -> Result<SubElementField> {
+        let fespace = self.behavior_fespace();
+        let out_components = self.behavior_output_components()?;
+        kernel::integrate_pointwise(
+            &fespace,
+            input,
+            material,
+            out_components,
+            |geom, inp, mat, g, out| self.integrate_point(geom, inp, mat, g, out),
+        )
+    }
 }

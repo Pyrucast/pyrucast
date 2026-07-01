@@ -18,7 +18,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Physics, StiffnessLayout};
+use crate::models::{CellGeom, HasMaterial, Physics, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -70,12 +70,8 @@ impl Physics for Frame {
         DUAL.iter().map(|s| s.to_string()).collect()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
-    }
-
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
+    fn as_material(&self) -> Option<&dyn HasMaterial> {
+        Some(self)
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
@@ -109,6 +105,16 @@ impl Physics for Frame {
             "SubModel<Frame>\n  primal var(s): u_x, u_y, rz\n  dual var(s):   f_x, f_y, m_z\n  \
              support: {n} node(s)"
         )
+    }
+}
+
+impl HasMaterial for Frame {
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        Some(MATERIAL_COMPONENTS)
     }
 }
 

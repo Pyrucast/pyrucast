@@ -29,7 +29,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Physics, StiffnessLayout};
+use crate::models::{Behavior, CellGeom, HasMaterial, Physics, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -97,12 +97,12 @@ impl Physics for Timoshenko {
         DUAL.iter().map(|s| s.to_string()).collect()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
+    fn as_material(&self) -> Option<&dyn HasMaterial> {
+        Some(self)
     }
 
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.bending.clone())
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
@@ -152,8 +152,32 @@ impl Physics for Timoshenko {
         Ok(())
     }
 
-    fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.bending.clone())
+    fn label(&self) -> &'static str {
+        "Timoshenko"
+    }
+
+    fn render(&self, _opts: &DumpOptions) -> String {
+        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        format!(
+            "SubModel<Timoshenko>\n  primal var(s): w, theta\n  dual var(s):   f_w, m_theta\n  \
+             support: {n} node(s) (bending: full Gauss, shear: reduced)"
+        )
+    }
+}
+
+impl HasMaterial for Timoshenko {
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.bending.clone()
+    }
+
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        Some(MATERIAL_COMPONENTS)
+    }
+}
+
+impl Behavior for Timoshenko {
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.bending.clone()
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
@@ -176,18 +200,6 @@ impl Physics for Timoshenko {
         out[0] = ei * input.value(cell, g, "kappa")?;
         out[1] = gas * input.value(cell, g, "gamma")?;
         Ok(())
-    }
-
-    fn label(&self) -> &'static str {
-        "Timoshenko"
-    }
-
-    fn render(&self, _opts: &DumpOptions) -> String {
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
-        format!(
-            "SubModel<Timoshenko>\n  primal var(s): w, theta\n  dual var(s):   f_w, m_theta\n  \
-             support: {n} node(s) (bending: full Gauss, shear: reduced)"
-        )
     }
 }
 

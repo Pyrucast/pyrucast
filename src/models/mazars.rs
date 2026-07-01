@@ -34,7 +34,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::{CellGeom, Physics, StiffnessLayout};
+use crate::models::{Behavior, CellGeom, HasMaterial, Physics, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use nalgebra::Matrix3;
 use serde::{Deserialize, Serialize};
@@ -119,12 +119,12 @@ impl Physics for Mazars {
         (0..self.space_dim).map(dual_name).collect()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
+    fn as_material(&self) -> Option<&dyn HasMaterial> {
+        Some(self)
     }
 
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
@@ -151,8 +151,35 @@ impl Physics for Mazars {
         elasticity::element_stiffness(geom, mat, self.model, ke)
     }
 
-    fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
+    fn label(&self) -> &'static str {
+        "Mazars"
+    }
+
+    fn render(&self, _opts: &DumpOptions) -> String {
+        let primal = self.primal_vars().join(", ");
+        let dual = self.dual_vars().join(", ");
+        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        format!(
+            "SubModel<Mazars({:?})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
+             support: {n} node(s)",
+            self.model
+        )
+    }
+}
+
+impl HasMaterial for Mazars {
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        Some(MATERIAL_COMPONENTS)
+    }
+}
+
+impl Behavior for Mazars {
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
@@ -193,21 +220,6 @@ impl Physics for Mazars {
         out[v] = damage;
         out[v + 1] = kappa;
         Ok(())
-    }
-
-    fn label(&self) -> &'static str {
-        "Mazars"
-    }
-
-    fn render(&self, _opts: &DumpOptions) -> String {
-        let primal = self.primal_vars().join(", ");
-        let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
-        format!(
-            "SubModel<Mazars({:?})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
-             support: {n} node(s)",
-            self.model
-        )
     }
 }
 

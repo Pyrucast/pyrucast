@@ -317,14 +317,18 @@ impl SubModel {
     /// FE subspace on which this sub-model expects its material data, or
     /// `None` if this physics doesn't need material data (e.g. `Dirichlet`).
     pub fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        self.as_physics().material_fespace()
+        self.as_physics()
+            .as_material()
+            .map(|m| m.material_fespace())
     }
 
     /// Material component names this sub-model expects, or `None` if it
     /// doesn't need material data. Thin pass-through of
-    /// [`Physics::material_components`].
+    /// [`HasMaterial::material_components`](crate::models::HasMaterial::material_components).
     pub fn material_components(&self) -> Option<&'static [&'static str]> {
-        self.as_physics().material_components()
+        self.as_physics()
+            .as_material()
+            .and_then(|m| m.material_components())
     }
 
     /// Primal variable names introduced by this sub-model.
@@ -342,7 +346,7 @@ impl SubModel {
     /// deformation field. `true` for volumetric physics, `false` for
     /// constraints (`Dirichlet`).
     pub fn has_behavior(&self) -> bool {
-        self.as_physics().behavior_fespace().is_some()
+        self.as_physics().as_behavior().is_some()
     }
 
     /// FE subspace this sub-model integrates its behaviour on, or `None`
@@ -350,7 +354,7 @@ impl SubModel {
     /// [`crate::ops::behavior`] use it to pair the per-zone deformation
     /// field with its sub-model.
     pub fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        self.as_physics().behavior_fespace()
+        self.as_physics().as_behavior().map(|b| b.behavior_fespace())
     }
 
     /// Integrate this sub-model's constitutive law (Cast3m `COMP`). The
@@ -362,7 +366,15 @@ impl SubModel {
         input: &Handle<SubElementField>,
         material: Option<&Handle<SubElementField>>,
     ) -> Result<SubElementField> {
-        self.as_physics().integrate_behavior(input, material)
+        self.as_physics()
+            .as_behavior()
+            .ok_or_else(|| {
+                crate::error::PyrucastError::Message(format!(
+                    "{}: no behaviour — integrate_behavior is undefined",
+                    self.as_physics().label()
+                ))
+            })?
+            .integrate_behavior(input, material)
     }
 }
 
