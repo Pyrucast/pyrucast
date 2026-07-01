@@ -789,6 +789,45 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
 /// One row or column DOF of an aggregate [`Matrix`], in materialised form.
 pub type NamedDof = (NodeId, String);
 
+/// Global CSR sparsity pattern plus the DOF numbering it indexes.
+///
+/// A pure function of a model's **block structure** — not of the material
+/// values — so it can be built once and reused across assemblies of the same
+/// model (materials change, sparsity does not). The assembler
+/// ([`crate::ops::assemble`]) builds it from a [`Matrix`]'s blocks and caches it
+/// on the model (see `Model::stiffness_pattern`); the numeric scatter then only
+/// fills the values at each entry's fixed slot.
+#[derive(Clone)]
+pub struct AssemblyPattern {
+    /// Global row DOFs, in CSR row order.
+    pub row_dofs: Vec<NamedDof>,
+    /// Global column DOFs, in CSR column order.
+    pub col_dofs: Vec<NamedDof>,
+    /// CSR row offsets, length `row_dofs.len() + 1`.
+    pub row_offsets: Vec<usize>,
+    /// CSR column indices, sorted within each row, length `row_offsets[nrows]`.
+    pub col_indices: Vec<usize>,
+}
+
+impl AssemblyPattern {
+    /// Value-array slot of global entry `(r, c)`. `c` must be present in row
+    /// `r`'s column set — it is, for any entry a block contributes (the pattern
+    /// was built from exactly those entries).
+    #[inline]
+    pub(crate) fn slot(&self, r: usize, c: usize) -> usize {
+        let base = self.row_offsets[r];
+        let seg = &self.col_indices[base..self.row_offsets[r + 1]];
+        base + seg
+            .binary_search(&c)
+            .expect("scatter: entry (r, c) absent from the CSR pattern")
+    }
+
+    /// Number of stored entries (CSR `nnz`).
+    pub fn nnz(&self) -> usize {
+        self.col_indices.len()
+    }
+}
+
 /// Sort each row segment `pairs[bounds[i]..bounds[i+1]]` by column, in place and
 /// in parallel. `bounds` are absolute offsets into the original buffer (so
 /// `bounds[0]` is this slice's base); recursion splits the **row range** and the

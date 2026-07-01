@@ -19,7 +19,7 @@
 //! parallel colour-driven scatter (the actual speed-up) builds on this same
 //! pattern.
 
-use crate::containers::matrix::{Matrix, NamedDof};
+use crate::containers::matrix::{AssemblyPattern, Matrix, NamedDof};
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
 use crate::ops::assemble::coloring;
@@ -28,39 +28,6 @@ use nalgebra_sparse::CsrMatrix;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-
-/// The global CSR sparsity pattern plus the DOF numbering it indexes. Purely a
-/// function of the model's block structure (not of the material values), hence
-/// reusable across assemblies of the same model.
-pub struct AssemblyPattern {
-    /// Global row DOFs, in CSR row order.
-    pub row_dofs: Vec<NamedDof>,
-    /// Global column DOFs, in CSR column order.
-    pub col_dofs: Vec<NamedDof>,
-    /// CSR row offsets, length `row_dofs.len() + 1`.
-    pub row_offsets: Vec<usize>,
-    /// CSR column indices, sorted within each row, length `row_offsets[nrows]`.
-    pub col_indices: Vec<usize>,
-}
-
-impl AssemblyPattern {
-    /// Value-array slot of global entry `(r, c)`. `c` must be present in row
-    /// `r`'s column set (it is, for any entry a block contributes — the pattern
-    /// was built from exactly those entries).
-    #[inline]
-    fn slot(&self, r: usize, c: usize) -> usize {
-        let base = self.row_offsets[r];
-        let seg = &self.col_indices[base..self.row_offsets[r + 1]];
-        base + seg
-            .binary_search(&c)
-            .expect("scatter: entry (r, c) absent from the CSR pattern")
-    }
-
-    /// Number of stored entries (CSR `nnz`).
-    pub fn nnz(&self) -> usize {
-        self.col_indices.len()
-    }
-}
 
 /// Build the global CSR sparsity [`AssemblyPattern`] for `k` from its blocks'
 /// topology alone — no kernel evaluation. Each block contributes its global

@@ -103,12 +103,13 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
 
     // Pass 2 — global assembly, injected via `set_assembled` (Option B: the
     // global assembler lives here, not in `Matrix`, so there is no
-    // matrix↔kernel cycle). The CSR sparsity comes from the blocks' topology
-    // ([`scatter::build_pattern`]); the values are scattered into it in parallel
-    // by cell colour ([`scatter::scatter_parallel`]).
-    let pattern = scatter::build_pattern(&k)?;
-    let csr = scatter::scatter_parallel(&k, &pattern)?;
-    k.set_assembled(pattern.row_dofs, pattern.col_dofs, csr);
+    // matrix↔kernel cycle). The CSR sparsity ([`scatter::build_pattern`]) is a
+    // function of the model's block topology, so it is memoised on the model and
+    // reused across assemblies; the values are scattered into it in parallel by
+    // cell colour ([`scatter::scatter_parallel`]).
+    let pattern = model.stiffness_pattern(|| scatter::build_pattern(&k))?;
+    let csr = scatter::scatter_parallel(&k, pattern.as_ref())?;
+    k.set_assembled(pattern.row_dofs.clone(), pattern.col_dofs.clone(), csr);
     Ok(k)
 }
 
@@ -367,6 +368,33 @@ mod tests {
         let a = stiffness(&model, &materials).unwrap();
         let b = stiffness(&model, &materials).unwrap();
         assert_eq!(a.to_csr().unwrap().values(), b.to_csr().unwrap().values());
+    }
+
+    /// The sparsity pattern is memoised on the model and reused across
+    /// assemblies — a second assembly with **different materials** hits the
+    /// cache yet must still produce the correct values (the pattern is
+    /// material-independent, the values are not).
+    #[test]
+    fn cached_pattern_reused_across_materials() {
+        let (model, _) = chain_heat_with_dirichlet(6);
+        // First assembly (cache miss) with k = 2.
+        let m1 = material_field_per_sub_model(&model, &[&[("k", 2.0)], &[]]).unwrap();
+        let _ = stiffness(&model, &m1).unwrap();
+        // Second assembly (cache hit) with k = 7 on the same model.
+        let m2 = material_field_per_sub_model(&model, &[&[("k", 7.0)], &[]]).unwrap();
+        let k2 = stiffness(&model, &m2).unwrap();
+
+        let k_ref = assemble_literal_reference(&model, &m2).unwrap();
+        let csr2 = k2.to_csr().unwrap();
+        let csr_ref = k_ref.to_csr().unwrap();
+        assert_eq!(csr2.row_offsets(), csr_ref.row_offsets());
+        assert_eq!(csr2.col_indices(), csr_ref.col_indices());
+        for (x, y) in csr2.values().iter().zip(csr_ref.values()) {
+            assert!(
+                (x - y).abs() <= 1e-12 * (1.0 + y.abs()),
+                "cached-pattern reassembly value mismatch: {x} vs {y}"
+            );
+        }
     }
 
     /// A matrix carrying a computed block cannot be assembled through

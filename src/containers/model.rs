@@ -115,7 +115,7 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::containers::matrix::SubMatrix;
+use crate::containers::matrix::{AssemblyPattern, SubMatrix};
 use crate::containers::mesh::Mesh;
 use crate::containers::mesh::NodeId;
 use crate::error::Result;
@@ -127,6 +127,7 @@ use crate::models::{
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::{Arc, OnceLock};
 
 // ─── SubModel ──────────────────────────────────────────────────────────────
 
@@ -409,10 +410,43 @@ impl crate::dump::Dump for SubModel {
 #[derive(Serialize, Deserialize, Default)]
 pub struct Model {
     subs: Vec<Handle<SubModel>>,
+    /// Memoised global CSR sparsity of this model's stiffness (see
+    /// [`Model::stiffness_pattern`]). Derived state: never serialized, and
+    /// cleared whenever the model changes (`add_sub` → `post_push`), since a new
+    /// sub-model changes the DOF layout and the sparsity.
+    #[serde(skip)]
+    stiffness_pattern: OnceLock<Arc<AssemblyPattern>>,
 }
 
-crate::impl_aggregate!(Model, SubModel, sub_model, "sub-model(s)");
+crate::impl_aggregate!(Model, SubModel, sub_model, "sub-model(s)", {
+    fn post_push(&mut self) {
+        // The block set changed ⇒ any cached sparsity is stale.
+        self.stiffness_pattern = OnceLock::new();
+    }
+});
 crate::impl_aggregate_dump!(Model);
+
+impl Model {
+    /// The model's stiffness [`AssemblyPattern`], built once and reused. On the
+    /// first call `build` runs and its result is cached; later calls (same
+    /// model, e.g. a Newton loop re-assembling with new materials) return the
+    /// cached pattern without touching the store — this is what makes repeated
+    /// assembly scale, the sparsity being material-independent. The cache is
+    /// cleared by `add_sub` (via `post_push`).
+    pub(crate) fn stiffness_pattern(
+        &self,
+        build: impl FnOnce() -> Result<AssemblyPattern>,
+    ) -> Result<Arc<AssemblyPattern>> {
+        if let Some(p) = self.stiffness_pattern.get() {
+            return Ok(p.clone());
+        }
+        let p = Arc::new(build()?);
+        // A concurrent first caller may have won the race; either Arc is a valid
+        // pattern for this (unchanged) model, so keep whichever landed.
+        let _ = self.stiffness_pattern.set(p.clone());
+        Ok(p)
+    }
+}
 
 impl Model {
     /// Heat-conduction `Model` spanning **every** subspace of `fes` — one
