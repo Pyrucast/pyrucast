@@ -25,17 +25,14 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
-use crate::containers::matrix::{
-    csr_from_triplets_parallel, ComputedRecipe, Matrix, NamedDof, SubMatrix,
-};
+use crate::containers::matrix::{ComputedRecipe, Matrix, SubMatrix};
 use crate::containers::model::Model;
 use crate::error::{PyrucastError, Result};
-use crate::models::kernel;
 use crate::store::{insert, read, Handle};
-use std::collections::HashMap;
 
 pub mod coloring;
 pub mod flux;
+pub mod scatter;
 pub use flux::{flux, FluxDensity};
 
 /// Assemble the stiffness matrix `K` for `model`.
@@ -104,50 +101,14 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
         }
     }
 
-    // Pass 2 — global symbolic + numeric assembly into one CSR, injected via
-    // `set_assembled` (Option B: the global assembler lives here, not in
-    // `Matrix`, so there is no matrix↔kernel cycle).
-    let row_dofs = k.row_dofs()?;
-    let col_dofs = k.col_dofs()?;
-    // Literal blocks contribute via their stored COO; a computed block has an
-    // empty COO ⇒ it adds nothing here and is scattered just below. Blocks are
-    // remapped in block order, so the resulting triplet stream — and hence the
-    // summed CSR — is bit-for-bit identical to the all-literal reference.
-    let mut triplets = k.build_global_triplets(&row_dofs, &col_dofs)?;
-    let row_map: HashMap<NamedDof, usize> =
-        row_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
-    let col_map: HashMap<NamedDof, usize> =
-        col_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
-    for blk_h in &k {
-        let blk = read(blk_h)?;
-        let Some(recipe) = blk.recipe() else { continue };
-        // Local block index → global index (the same remap the literal path
-        // applies to its COO).
-        let trow: Vec<usize> = blk.row_dofs().iter().map(|d| row_map[d]).collect();
-        let tcol: Vec<usize> = blk.col_dofs().iter().map(|d| col_map[d]).collect();
-        // Drive the physics' element kernel over the recipe's FE subspace (in
-        // parallel over cells) and remap each local triplet to global. The
-        // sub-model is read once, not per cell, so the kernel stays lock-free.
-        let sm = read(&recipe.submodel)?;
-        let phys = sm.as_physics();
-        let (_, _, local) = kernel::element_block_triplets(
-            &recipe.fespace,
-            blk.row_support(),
-            blk.col_support(),
-            blk.dual_vars().len(),
-            blk.primal_vars().len(),
-            blk.ordering(),
-            recipe.material.as_ref(),
-            |geom, m, ke| phys.element_matrix(geom, m, ke),
-        )?;
-        triplets.reserve(local.len());
-        for (r, c, v) in local {
-            triplets.push((trow[r], tcol[c], v));
-        }
-    }
-
-    let csr = csr_from_triplets_parallel(row_dofs.len(), col_dofs.len(), triplets)?;
-    k.set_assembled(row_dofs, col_dofs, csr);
+    // Pass 2 — global assembly, injected via `set_assembled` (Option B: the
+    // global assembler lives here, not in `Matrix`, so there is no
+    // matrix↔kernel cycle). The CSR sparsity comes from the blocks' topology
+    // ([`scatter::build_pattern`]); the values are scattered into it
+    // ([`scatter::scatter_serial`]), bit-for-bit with the old triplet path.
+    let pattern = scatter::build_pattern(&k)?;
+    let csr = scatter::scatter_serial(&k, &pattern)?;
+    k.set_assembled(pattern.row_dofs, pattern.col_dofs, csr);
     Ok(k)
 }
 

@@ -382,3 +382,81 @@ pub fn element_block_triplets(
     }
     Ok((nrows, ncols, trips))
 }
+
+/// `(nrows, ncols, per-cell block-local (row, col) index pairs)` — the shape
+/// returned by [`element_block_pattern`].
+pub type BlockPattern = (usize, usize, Vec<Vec<(usize, usize)>>);
+
+/// The **symbolic** structure of a computed stiffness block: for each cell, the
+/// block-**local** `(row, col)` index pairs it writes, in the exact order
+/// [`element_block_triplets`] emits their values (`li, di, lj, pj`). Carries no
+/// geometry and evaluates no kernel — only connectivity + the DOF `ordering` —
+/// so an assembler can build the global CSR sparsity pattern (and, from it,
+/// per-cell scatter slots) cheaply and cache it, then run the numeric kernel
+/// only when values are needed. Returns `(nrows, ncols, per_cell_pairs)`.
+pub fn element_block_pattern(
+    fespace: &Handle<SubFiniteElementSpace>,
+    row_support: &Handle<SubMesh>,
+    col_support: &Handle<SubMesh>,
+    n_dual: usize,
+    n_primal: usize,
+    ordering: DofOrdering,
+) -> Result<BlockPattern> {
+    let fe = read(fespace)?;
+    let submesh = fe.submesh();
+    let sm = read(&submesh)?;
+    let conn: &[NodeId] = sm.connectivity();
+    let n_cells = fe.cell_count()?;
+    let n_nodes = conn.len().checked_div(n_cells).unwrap_or(0);
+
+    let row_nodes: Vec<NodeId> = read(row_support)?.connectivity().to_vec();
+    let col_nodes: Vec<NodeId> = read(col_support)?.connectivity().to_vec();
+    let n_row_nodes = row_nodes.len();
+    let n_col_nodes = col_nodes.len();
+    let nrows = n_row_nodes * n_dual;
+    let ncols = n_col_nodes * n_primal;
+    let pos_map = |nodes: &[NodeId]| -> HashMap<NodeId, u32> {
+        let mut m = HashMap::with_capacity(nodes.len());
+        for (i, &n) in nodes.iter().enumerate() {
+            m.entry(n).or_insert(i as u32);
+        }
+        m
+    };
+    let row_pos = pos_map(&row_nodes);
+    let col_pos = pos_map(&col_nodes);
+
+    let per_cell: Vec<Vec<(usize, usize)>> = (0..n_cells)
+        .map(|cell| -> Result<Vec<(usize, usize)>> {
+            let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
+            let mut rpos = Vec::with_capacity(n_nodes);
+            let mut cpos = Vec::with_capacity(n_nodes);
+            for &nid in ids {
+                rpos.push(*row_pos.get(&nid).ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "element_block_pattern: node {nid:?} not in row support"
+                    ))
+                })? as usize);
+                cpos.push(*col_pos.get(&nid).ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "element_block_pattern: node {nid:?} not in col support"
+                    ))
+                })? as usize);
+            }
+            let mut pairs = Vec::with_capacity(n_nodes * n_dual * n_nodes * n_primal);
+            for li in 0..n_nodes {
+                for di in 0..n_dual {
+                    let ri = ordering.to_index(rpos[li], di, n_row_nodes, n_dual);
+                    for lj in 0..n_nodes {
+                        for pj in 0..n_primal {
+                            let ci = ordering.to_index(cpos[lj], pj, n_col_nodes, n_primal);
+                            pairs.push((ri, ci));
+                        }
+                    }
+                }
+            }
+            Ok(pairs)
+        })
+        .collect::<Result<_>>()?;
+
+    Ok((nrows, ncols, per_cell))
+}

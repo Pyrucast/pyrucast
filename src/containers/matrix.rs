@@ -824,7 +824,7 @@ fn sort_rows_in_place(pairs: &mut [(usize, f64)], bounds: &[usize]) {
 /// dedup-and-sum scan are O(nnz) serial passes. The per-row sort is stable, so
 /// equal `(row, col)` entries are summed in stream order — bit-for-bit identical
 /// to the serial path.
-pub(crate) fn csr_from_triplets_parallel(
+fn csr_from_triplets_parallel(
     nrows: usize,
     ncols: usize,
     triplets: Vec<(usize, usize, f64)>,
@@ -995,7 +995,7 @@ impl Matrix {
     /// in order, entries in COO order — matches the old serial scatter. The
     /// per-block remap runs in parallel. O(total block DOFs + nnz), no per-entry
     /// search.
-    pub(crate) fn build_global_triplets(
+    fn build_global_triplets(
         &self,
         row_dofs: &[NamedDof],
         col_dofs: &[NamedDof],
