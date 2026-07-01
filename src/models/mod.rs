@@ -134,11 +134,13 @@ pub trait SubModelKind: Sync {
         None
     }
 
-    /// POI1 mesh carrying this physics's multiplier nodes, for Lagrange
-    /// variants (`Dirichlet`, …). `None` (default) for every physics that
-    /// introduces no multipliers. Borrowed from the physics (the user supplied
-    /// it); generic code clones it when an owned `Mesh` is needed.
-    fn multiplier_mesh(&self) -> Option<&Mesh> {
+    /// Borrow this sub-model as a [`Constraint`] capability, or `None`
+    /// (default) if it imposes no Lagrange constraint (every plain volumetric
+    /// physics). A constraint (`Dirichlet`, later MPC / strong contact)
+    /// overrides this to return `Some(self)`. This is the seam the multiplier
+    /// forwarders on [`SubModel`](crate::containers::model::SubModel) use — they
+    /// never assume every sub-model carries multipliers.
+    fn as_constraint(&self) -> Option<&dyn Constraint> {
         None
     }
 
@@ -271,6 +273,21 @@ pub trait SubModelKind: Sync {
 
     /// Full multi-line rendering for [`crate::dump::Dump`].
     fn render(&self, opts: &DumpOptions) -> String;
+}
+
+/// A sub-model that imposes a **Lagrange constraint** — an optional capability,
+/// not part of the base [`SubModelKind`] contract. A constraint implements it
+/// *and* returns `Some(self)` from [`SubModelKind::as_constraint`]; a plain
+/// volumetric physics implements neither, so it simply has no multipliers.
+///
+/// This is the seam of the constraint family — `Dirichlet` today, MPC and strong
+/// contact later — and the natural home for the multiplier-driven logic they
+/// share (e.g. the future condensation of the multiplier DOFs).
+pub trait Constraint {
+    /// POI1 mesh carrying this constraint's multiplier nodes. Borrowed from the
+    /// sub-model (the user supplied it); generic code clones it when an owned
+    /// [`Mesh`] is needed.
+    fn multiplier_mesh(&self) -> &Mesh;
 }
 
 /// A physics that consumes **material data** — an optional capability, not part

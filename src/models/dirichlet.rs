@@ -42,7 +42,7 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{ElementType, Mesh, NodeId};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{Contribution, SubModelKind};
+use crate::models::{Constraint, Contribution, SubModelKind};
 use crate::store::read;
 use serde::{Deserialize, Serialize};
 
@@ -173,8 +173,8 @@ impl SubModelKind for Dirichlet {
         vec![self.imposed_value.clone()]
     }
 
-    fn multiplier_mesh(&self) -> Option<&Mesh> {
-        Some(&self.multiplier_mesh)
+    fn as_constraint(&self) -> Option<&dyn Constraint> {
+        Some(self)
     }
 
     /// Dirichlet contributes its **literal** C / Cᵀ blocks directly — it has no
@@ -257,6 +257,12 @@ impl SubModelKind for Dirichlet {
             imposed_value = self.imposed_value,
             target_dual = self.target_dual,
         )
+    }
+}
+
+impl Constraint for Dirichlet {
+    fn multiplier_mesh(&self) -> &Mesh {
+        &self.multiplier_mesh
     }
 }
 

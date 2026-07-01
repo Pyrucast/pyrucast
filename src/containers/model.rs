@@ -290,8 +290,8 @@ impl SubModel {
     /// `SubNodeField`.
     pub fn multiplier_nodes(&self) -> Result<Vec<NodeId>> {
         let mut out = Vec::new();
-        if let Some(mesh) = self.as_kind().multiplier_mesh() {
-            for sm in mesh {
+        if let Some(constraint) = self.as_kind().as_constraint() {
+            for sm in constraint.multiplier_mesh() {
                 out.extend(read(sm)?.connectivity().iter().copied());
             }
         }
@@ -306,8 +306,8 @@ impl SubModel {
     /// constrained values.
     pub fn multiplier_mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
-        if let Some(src) = self.as_kind().multiplier_mesh() {
-            for sm in src {
+        if let Some(constraint) = self.as_kind().as_constraint() {
+            for sm in constraint.multiplier_mesh() {
                 mesh.add_sub(sm.clone())?;
             }
         }
