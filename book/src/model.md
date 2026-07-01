@@ -27,7 +27,10 @@ SubModel  (énum de stockage + dispatch — AUCUNE logique)
 
 Physics  (trait — TOUT le comportement, co-localisé par physique)
 ├── primal_vars / dual_vars / material_components / material_fespace
-├── build_stiffness_blocks / build_mass_blocks
+├── element_matrix          # noyau élémentaire (une cellule) — pur & séquentiel
+├── stiffness_layout        # Some ⇒ bloc CALCULÉ (scatter parallèle) ; None ⇒ littéral
+├── build_stiffness_blocks  # voie littérale : enveloppe element_matrix via assemble_block
+├── build_mass_blocks       # (défaut : vide)
 └── label / display / render
 ```
 
