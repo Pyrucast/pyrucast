@@ -10,8 +10,8 @@ chapitre.
 
 L'énum [`SubModel`](model.md) ne sert qu'au **stockage** et à la
 **sérialisation** ; **tout le comportement** vit dans une struct par
-physique (sous `src/models/`) qui implémente le trait `Physics`. Un unique
-point de dispatch, `SubModel::as_physics()`, relie les deux. Le code
+physique (sous `src/models/`) qui implémente le trait `SubModelKind`. Un unique
+point de dispatch, `SubModel::as_kind()`, relie les deux. Le code
 générique (l'agrégat `Model`, l'assembleur, `Dump`) ne fait **jamais** de
 `match` par variante.
 
@@ -19,15 +19,16 @@ générique (l'agrégat `Model`, l'assembleur, `Dump`) ne fait **jamais** de
 SubModel  (enum : stockage + sérialisation bincode)
 ├── HeatConduction(HeatConduction)
 ├── Dirichlet(Dirichlet)
-└── as_physics(&self) -> &dyn Physics   ← l'unique match
+└── as_kind(&self) -> &dyn SubModelKind   ← l'unique match
 
-Physics  (trait : tout le comportement)
+SubModelKind  (trait : tout le comportement)
 ├── primal_vars / dual_vars
 ├── material_components / material_fespace   (défaut : None)
 ├── multiplier_mesh                          (défaut : None)
 ├── element_matrix                           (noyau cellule ; défaut : erreur)
 ├── stiffness_layout                         (bloc calculé ; défaut : None)
-├── build_stiffness_blocks
+├── contributions                            (défaut : dérivé du layout)
+├── build_stiffness_blocks                   (défaut : dérivé du layout)
 ├── build_mass_blocks                        (défaut : vide)
 └── label / display / render
 ```
@@ -37,21 +38,21 @@ Physics  (trait : tout le comportement)
 Ajouter une physique se réduit à **quatre** gestes :
 
 1. **`src/models/<ma_physique>.rs`** (nouveau) — une struct portant ses
-   supports + un `impl Physics` + un constructeur `new(...)` faisant le
+   supports + un `impl SubModelKind` + un constructeur `new(...)` faisant le
    travail de construction (calque sur `heat_conduction.rs`, cas simple à
    1 bloc, ou `dirichlet.rs`, contrainte de Lagrange à 2 blocs portée par des
    maillages fournis par l'utilisateur). La struct dérive `Serialize,
    Deserialize` (et `Clone` si ses champs le permettent).
 2. **`src/models/mod.rs`** — `pub mod <ma_physique>;`.
 3. **`src/containers/model.rs`** — **une** variante dans `enum SubModel` et
-   **une** ligne dans `SubModel::as_physics()`. Plus le constructeur public
+   **une** ligne dans `SubModel::as_kind()`. Plus le constructeur public
    `Model::<ma_physique>(...)` (l'API parent).
 4. **`src/py/model.rs`** — un `#[classmethod]` `PyModel::<ma_physique>(...)`.
    Étant dans `#[pymethods]`, aucun enregistrement n'est nécessaire.
 
 Tout le reste est générique et **ne change pas**.
 
-## Le trait `Physics`
+## Le trait `SubModelKind`
 
 Défini dans `src/models/mod.rs`. La plupart des méthodes ont une valeur par
 défaut : une physique volumique typique n'implémente que `primal_vars`,
@@ -60,7 +61,7 @@ et `render`. Elle **n'écrit pas** `build_stiffness_blocks` : le défaut le dér
 de `stiffness_layout` + `element_matrix`.
 
 ```rust,ignore
-pub trait Physics: Sync {
+pub trait SubModelKind: Sync {
     fn primal_vars(&self) -> Vec<String>;
     fn dual_vars(&self) -> Vec<String>;
     fn material_components(&self) -> Option<&'static [&'static str]> { None }
@@ -142,7 +143,7 @@ pub enum SubModel {
 }
 
 impl SubModel {
-    pub fn as_physics(&self) -> &dyn Physics {
+    pub fn as_kind(&self) -> &dyn SubModelKind {
         match self {
             SubModel::HeatConduction(p) => p,
             SubModel::Dirichlet(p) => p,
@@ -153,7 +154,7 @@ impl SubModel {
 ```
 
 `Debug`, `Display`, `Dump`, les méthodes déléguantes de `SubModel` et
-l'assembleur appellent tous `self.as_physics().<méthode>()` — ils sont
+l'assembleur appellent tous `self.as_kind().<méthode>()` — ils sont
 écrits une fois pour toutes.
 
 ## Ce qui est générique (rien à toucher)
@@ -180,28 +181,28 @@ d'ajout** et la **persistance**.
 ### Coût d'ajout : O(1) fichier
 
 Le comportement d'une physique est **co-localisé** dans son fichier (struct
-+ `impl Physics`). Ajouter la physique n°30 ne touche que 4 endroits
++ `impl SubModelKind`). Ajouter la physique n°30 ne touche que 4 endroits
 (§ Les étapes), dont 2 sont des lignes uniques dans `model.rs`. Aucune des
 méthodes génériques n'est modifiée. C'est l'inverse du *« shotgun
 surgery »* qu'imposerait un enum où chaque méthode ferait son propre
 `match` : là, ajouter une physique forcerait à éditer une dizaine de sites.
 
-> Les deux lignes (variante + bras de `as_physics`) pourraient même être
+> Les deux lignes (variante + bras de `as_kind`) pourraient même être
 > générées par une macro `physics_enum! { HeatConduction, Dirichlet, … }`
 > pour ne laisser qu'une seule déclaration.
 
-### Pourquoi garder l'enum (et pas `Box<dyn Physics>`)
+### Pourquoi garder l'enum (et pas `Box<dyn SubModelKind>`)
 
 La persistance utilise **`bincode`** sur des `Serialize/Deserialize`
 *dérivés* (`src/persist.rs`), un format **non auto-descriptif**. Or :
 
 - un `enum SubModel` se sérialise nativement (indice de variante + payload),
   zéro code manuel ;
-- un `Box<dyn Physics>` imposerait `typetag`, qui **ne supporte pas** les
+- un `Box<dyn SubModelKind>` imposerait `typetag`, qui **ne supporte pas** les
   formats non auto-descriptifs comme `bincode`. On perdrait la persistance.
 
 L'enum donne aussi l'**exhaustivité** : le compilateur refuse d'oublier un
-cas dans `as_physics()`. On obtient donc le meilleur des deux mondes —
+cas dans `as_kind()`. On obtient donc le meilleur des deux mondes —
 sérialisation triviale et exhaustivité de l'enum, comportement co-localisé
 et coût d'ajout constant du trait.
 
@@ -211,7 +212,7 @@ Une donnée commune à *toutes* les physiques (un `name`, un flag `enabled`,
 une pondération) se traite selon sa nature :
 
 - **dérivable** (calculable à partir du type/de l'état) → un **défaut dans
-  le trait `Physics`** la fournit gratuitement à toutes les physiques, ex.
+  le trait `SubModelKind`** la fournit gratuitement à toutes les physiques, ex.
   `fn weight(&self) -> f64 { 1.0 }`. Le trait « l'impose et l'implémente
   automatiquement ».
 - **stockée et mutable** (saisie à l'exécution) → un trait **ne peut pas**
@@ -227,4 +228,4 @@ une pondération) se traite selon sa nature :
 - Format de persistance : enum + `bincode`, **stable**.
 - Coût d'ajout : **O(1) fichier**, ~2 lignes de câblage.
 - Comportement : **co-localisé** par physique.
-- Le seul `match` par variante du module modèle est `as_physics()`.
+- Le seul `match` par variante du module modèle est `as_kind()`.

@@ -42,7 +42,7 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{ElementType, Mesh, NodeId};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::Physics;
+use crate::models::{Contribution, SubModelKind};
 use crate::store::read;
 use serde::{Deserialize, Serialize};
 
@@ -164,7 +164,7 @@ impl Dirichlet {
     }
 }
 
-impl Physics for Dirichlet {
+impl SubModelKind for Dirichlet {
     fn primal_vars(&self) -> Vec<String> {
         vec![self.multiplier.clone()]
     }
@@ -177,10 +177,16 @@ impl Physics for Dirichlet {
         Some(&self.multiplier_mesh)
     }
 
-    fn build_stiffness_blocks(
+    /// Dirichlet contributes its **literal** C / Cᵀ blocks directly — it has no
+    /// [`stiffness_layout`](SubModelKind::stiffness_layout) (nothing is
+    /// integrated on a cell), so it bypasses the layout-driven default and
+    /// returns a single [`Contribution::Literal`] carrying the filled blocks.
+    /// This is *the* seam that keeps the assembler free of any Dirichlet-specific
+    /// special case.
+    fn contributions(
         &self,
         _material: Option<&crate::store::Handle<SubElementField>>,
-    ) -> Result<Vec<SubMatrix>> {
+    ) -> Result<Vec<Contribution>> {
         // One C / Cᵀ pair per submesh pair — the user's submeshes are used
         // directly as row/col supports (no flattening), so the submesh
         // structure carried through `barycenter` is preserved.
@@ -223,7 +229,7 @@ impl Physics for Dirichlet {
             blocks.push(c_block);
             blocks.push(ct_block);
         }
-        Ok(blocks)
+        Ok(vec![Contribution::Literal(blocks)])
     }
 
     fn label(&self) -> &'static str {

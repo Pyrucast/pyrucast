@@ -26,7 +26,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::{Behavior, CellGeom, HasMaterial, Physics, StiffnessLayout};
+use crate::models::{Behavior, CellGeom, HasMaterial, SubModelKind, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -117,7 +117,7 @@ impl Plasticity {
     }
 }
 
-impl Physics for Plasticity {
+impl SubModelKind for Plasticity {
     fn primal_vars(&self) -> Vec<String> {
         (0..self.space_dim).map(primal_name).collect()
     }

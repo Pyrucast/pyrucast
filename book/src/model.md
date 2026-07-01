@@ -5,7 +5,7 @@ Un **`Model`** est l'objet orchestrateur qui décrit un problème physique et **
 ```text
 Géométrie         Mesh / SubMesh                       (purement géométrique)
 Formulation EF    FiniteElementSpace / SubFiniteElementSpace      (interpolation, quadrature)
-Physique          Model / SubModel / Physics           (loi, matériaux, assemblage)
+Physique          Model / SubModel / SubModelKind      (loi, matériaux, assemblage)
 ```
 
 ## Architecture
@@ -22,21 +22,22 @@ ops::assemble (opérateurs, pas des méthodes de Model)
 
 SubModel  (énum de stockage + dispatch — AUCUNE logique)
 ├── HeatConduction(HeatConduction)    # chaque variante enveloppe une struct…
-├── Dirichlet(Dirichlet)             # …qui porte ses données + impl Physics
-└── as_physics(&self) -> &dyn Physics   # l'unique match du module modèle
+├── Dirichlet(Dirichlet)             # …qui porte ses données + impl SubModelKind
+└── as_kind(&self) -> &dyn SubModelKind   # l'unique match du module modèle
 
-Physics  (trait — TOUT le comportement, co-localisé par physique)
+SubModelKind  (trait — TOUT le comportement, co-localisé par physique)
 ├── primal_vars / dual_vars / material_components / material_fespace
 ├── element_matrix          # noyau élémentaire (une cellule) — pur & séquentiel
 ├── stiffness_layout        # Some ⇒ bloc CALCULÉ (scatter parallèle) ; None ⇒ littéral
+├── contributions           # défaut : dérivé du layout ; Dirichlet rend ses C/Cᵀ littéraux
 ├── build_stiffness_blocks  # défaut : dérivé de stiffness_layout + element_matrix
 ├── build_mass_blocks       # (défaut : vide)
 └── label / display / render
 ```
 
 L'énum `SubModel` ne sert qu'au **stockage** et à la **sérialisation**
-(`bincode`) ; il délègue chaque appel à l'`impl Physics` de la variante via
-`as_physics()`. Tout le code générique (l'agrégat `Model`, l'assembleur,
+(`bincode`) ; il délègue chaque appel à l'`impl SubModelKind` de la variante via
+`as_kind()`. Tout le code générique (l'agrégat `Model`, l'assembleur,
 `Dump`) passe par ce seul point — ajouter une physique ne touche donc aucun
 de ces sites. Voir le chapitre [Ajouter une physique](ajouter-une-physique.md).
 
@@ -72,10 +73,10 @@ Cette séparation a deux mérites :
 - les chargements sont des données utilisateur, faciles à composer ;
 - le `Model` reste une description compacte et indépendante du chargement (le même modèle peut être résolu avec plusieurs chargements en cascade).
 
-## Les variantes de `Physics`
+## Les physiques disponibles
 
 Chaque physique est une struct sous `src/models/` implémentant le trait
-`Physics`, enveloppée par une variante de l'énum `SubModel`. Leur **détail**
+`SubModelKind`, enveloppée par une variante de l'énum `SubModel`. Leur **détail**
 (équations, matériau, comportement, exemples) est dans la partie
 [Détails des physiques](physiques.md) ; on n'en rappelle ici que les
 constructeurs et les variables, vus du `Model` :
@@ -189,6 +190,6 @@ lecture des inconnues et des réactions) sont déroulés dans
 ## Limitations actuelles
 
 - **Mass non assemblée** : `assemble::mass(model)` retourne une matrice vide en v0. L'intégrande `∫ ρc_p · N_i N_j dx` (et son équivalent pour les autres physiques) est additif et sera ajouté quand le besoin transient se présentera.
-- **Physiques disponibles** : `HeatConduction` ([thermique](thermique.md)), `Truss`, `LinearElasticity`, `Timoshenko`, `Frame`, `Frame3d` ([mécanique](mecanique.md)) et la contrainte `Dirichlet` ([contraintes](contraintes.md)). Toute nouvelle physique est une struct implémentant `Physics` (une variante de l'énum `SubModel` + un bras de `as_physics`, rien d'autre — cf. [Ajouter une physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier, indépendant du nombre de physiques existantes.
+- **Physiques disponibles** : `HeatConduction` ([thermique](thermique.md)), `Truss`, `LinearElasticity`, `Timoshenko`, `Frame`, `Frame3d` ([mécanique](mecanique.md)) et la contrainte `Dirichlet` ([contraintes](contraintes.md)). Toute nouvelle physique est une struct implémentant `SubModelKind` (une variante de l'énum `SubModel` + un bras de `as_kind`, rien d'autre — cf. [Ajouter une physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier, indépendant du nombre de physiques existantes.
 - **Pas de check de cohérence pré-assemblage** : la consistance (matériau définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre sub-models, etc.) est vérifiée au moment de `assemble::stiffness` / `assemble::mass`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose problème, un check eager est facile à ajouter.
 - **Solveur dense seulement** : le `solve` fourni est un harnais de test (LU dense via `nalgebra`). Pour les vrais problèmes Phase 3 introduira un trait `LinearSolver` enfichable (itératifs, direct creux, factorisation Cholesky pour les cas symétriques détectés via le drapeau de la `Matrix`).

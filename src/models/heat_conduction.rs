@@ -11,7 +11,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::{Behavior, CellGeom, HasMaterial, Physics, StiffnessLayout};
+use crate::models::{Behavior, CellGeom, HasMaterial, SubModelKind, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -22,7 +22,7 @@ pub const DUAL_VAR: &str = "q";
 /// Required component on the material `SubElementField` (isotropic
 /// conductivity).
 pub const MATERIAL_COMPONENT: &str = "k";
-/// Material contract returned by [`Physics::material_components`].
+/// Material contract returned by [`SubModelKind::material_components`].
 const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
 
 /// Axis suffixes for the vector components of the deformation / flux at a
@@ -31,7 +31,7 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 
 /// Deformation component names (`grad_T_x`, …), one per spatial direction —
 /// the leading components of the behaviour-input field consumed by
-/// [`Physics::integrate_behavior`]. They match what
+/// [`SubModelKind::integrate_behavior`]. They match what
 /// [`crate::ops::field::gradient`] names the gradient of a temperature field
 /// whose component is [`PRIMAL_VAR`].
 fn deformation_components(space_dim: usize) -> Vec<String> {
@@ -76,7 +76,7 @@ impl HeatConduction {
     }
 }
 
-impl Physics for HeatConduction {
+impl SubModelKind for HeatConduction {
     fn primal_vars(&self) -> Vec<String> {
         vec![PRIMAL_VAR.to_string()]
     }

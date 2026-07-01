@@ -2,22 +2,22 @@
 //! variants.
 //!
 //! Each file here owns the **specifics** of one physics: a struct holding
-//! its supports (FE spaces, materials, node sets) plus an [`impl Physics`]
+//! its supports (FE spaces, materials, node sets) plus an [`impl SubModelKind`]
 //! carrying *all* of its behaviour — variable names, material contract,
 //! local assembly, and rendering. The
 //! [`crate::containers::model::SubModel`] enum exists **only** for storage
 //! and serialization; it dispatches every call through
-//! [`SubModel::as_physics`](crate::containers::model::SubModel::as_physics)
+//! [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind)
 //! so no generic code (the assembler, `Dump`, …) ever needs a per-variant
 //! `match`.
 //!
 //! # Adding a new physics
 //!
-//! 1. add `models/<name>.rs` with a struct + `impl Physics` (and a
+//! 1. add `models/<name>.rs` with a struct + `impl SubModelKind` (and a
 //!    `new(...)` constructor doing any build-time work);
 //! 2. add one variant to [`crate::containers::model::SubModel`];
 //! 3. add one arm to
-//!    [`SubModel::as_physics`](crate::containers::model::SubModel::as_physics);
+//!    [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind);
 //! 4. expose it via `Model::<name>` (Rust) and a `#[classmethod]` (Python).
 //!
 //! Everything else is generic. See the book chapter *« Ajouter une
@@ -50,7 +50,7 @@ pub use kernel::CellGeom;
 /// materialised values — and scatter it straight into the global CSR.
 ///
 /// Every field mirrors, one-for-one, what the physics'
-/// [`build_stiffness_blocks`](Physics::build_stiffness_blocks) would pass to
+/// [`build_stiffness_blocks`](SubModelKind::build_stiffness_blocks) would pass to
 /// [`kernel::assemble_block`]. The
 /// literal `build_stiffness_blocks` is **kept** alongside it as the bit-for-bit
 /// equivalence reference. Volumetric blocks are square on a single support, so
@@ -60,7 +60,7 @@ pub struct StiffnessLayout {
     /// single subspace for a plain volumetric physics, or several — sharing one
     /// submesh, differing only by quadrature — for a multi-quadrature element
     /// (a shear-deformable beam, a shell). The primary (index 0) drives the cell
-    /// loop and the DOF numbering; [`element_matrix`](Physics::element_matrix)
+    /// loop and the DOF numbering; [`element_matrix`](SubModelKind::element_matrix)
     /// receives one [`CellGeom`] per subspace, in this order.
     pub fespaces: Vec<Handle<SubFiniteElementSpace>>,
     /// POI1 sub-mesh giving the block's row **and** column node sequence.
@@ -80,7 +80,7 @@ pub struct StiffnessLayout {
 ///
 /// A sub-model declares *how* each of its blocks is produced without the
 /// assembler needing to know its concrete type: it just iterates
-/// [`Physics::contributions`] and folds each variant in. This is the seam that
+/// [`SubModelKind::contributions`] and folds each variant in. This is the seam that
 /// keeps `Dirichlet`, a volumetric physics, and (later) a coupling/contact
 /// sub-model on one uniform path — the discriminant is the variant, not a
 /// per-type `match` in the assembler.
@@ -103,13 +103,13 @@ pub enum Contribution {
 /// The behaviour contract of one physics, co-located with its data struct.
 ///
 /// Generic code calls these through
-/// [`SubModel::as_physics`](crate::containers::model::SubModel::as_physics);
+/// [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind);
 /// the [`SubModel`](crate::containers::model::SubModel) enum itself carries
 /// no logic. Most methods have sensible defaults so a physics overrides
 /// only what is specific to it (a plain volumetric physics typically
 /// implements just `primal_vars`, `dual_vars`, `material_*`,
 /// `build_stiffness_blocks`, `label` and `render`).
-pub trait Physics: Sync {
+pub trait SubModelKind: Sync {
     /// Primal variable names introduced by this physics (column labels).
     fn primal_vars(&self) -> Vec<String>;
 
@@ -176,15 +176,18 @@ pub trait Physics: Sync {
     /// single [`Contribution::Computed`] (a volumetric physics, integrated
     /// straight into the CSR), `None` falls back to a
     /// [`Contribution::Literal`] built from
-    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) (a constraint
-    /// such as `Dirichlet`, or any multi-block physics).
+    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks).
+    ///
+    /// A volumetric physics writes only `element_matrix` + `stiffness_layout`
+    /// and takes the default. A sub-model whose blocks are *not* a single
+    /// layout-driven integral (a constraint such as `Dirichlet`, or a future
+    /// coupling/contact sub-model) overrides **this** method to return its
+    /// blocks directly — that override is the extension seam, not a special case
+    /// buried in the assembler.
     ///
     /// `material` is `Some(_)` iff [`HasMaterial::material_fespace`] is declared
-    /// (the assembler guarantees it); it is only consulted on the
-    /// literal path — the computed path resolves material itself from the
-    /// layout. A sub-model rarely overrides this: writing `element_matrix` +
-    /// `stiffness_layout` (volumetric) or `build_stiffness_blocks` (literal) is
-    /// enough.
+    /// (the assembler guarantees it); it is only consulted on the literal path —
+    /// the computed path resolves material itself from the layout.
     fn contributions(
         &self,
         material: Option<&Handle<SubElementField>>,
@@ -203,10 +206,10 @@ pub trait Physics: Sync {
     /// a single block on that layout, filled by
     /// [`element_matrix`](Self::element_matrix) via [`kernel::assemble_block`].
     /// A plain volumetric physics therefore writes only `element_matrix` +
-    /// `stiffness_layout` and gets this for free. A physics with **no** layout
-    /// (a constraint such as `Dirichlet`, or any multi-block physics) must
-    /// override it. This literal path also serves as the bit-for-bit reference
-    /// of the computed (scatter) path.
+    /// `stiffness_layout` and gets this for free; this literal path serves as
+    /// the bit-for-bit reference of the computed (scatter) path. A sub-model
+    /// with **no** layout does not touch this method — it overrides
+    /// [`contributions`](Self::contributions) instead (see `Dirichlet`).
     fn build_stiffness_blocks(
         &self,
         material: Option<&Handle<SubElementField>>,
@@ -269,8 +272,8 @@ pub trait Physics: Sync {
 }
 
 /// A physics that consumes **material data** — an optional capability, not part
-/// of the base [`Physics`] contract. A physics implements it *and* returns
-/// `Some(self)` from [`Physics::as_material`]; a constraint such as `Dirichlet`
+/// of the base [`SubModelKind`] contract. A physics implements it *and* returns
+/// `Some(self)` from [`SubModelKind::as_material`]; a constraint such as `Dirichlet`
 /// implements neither, so no method can be called on it that would error for
 /// lack of material.
 pub trait HasMaterial {
@@ -286,8 +289,8 @@ pub trait HasMaterial {
 }
 
 /// A physics that carries an integrable **constitutive law** (Cast3m `COMP`) —
-/// an optional capability, not part of the base [`Physics`] contract. A physics
-/// implements it *and* returns `Some(self)` from [`Physics::as_behavior`]; a
+/// an optional capability, not part of the base [`SubModelKind`] contract. A physics
+/// implements it *and* returns `Some(self)` from [`SubModelKind::as_behavior`]; a
 /// constraint such as `Dirichlet` implements neither, so its absence of
 /// behaviour is a compile-time fact, not a runtime error.
 ///
@@ -341,7 +344,7 @@ pub trait Behavior: Sync {
     /// elasticity, …) produced by a *geometric* operator, followed by the input
     /// internal-state variables (`VAR0`). Returns the **material-state** field:
     /// the dual flux/stress followed by the updated internal-state variables
-    /// (`VAR1`). Where [`Physics::build_stiffness_blocks`] is the *linearization*
+    /// (`VAR1`). Where [`SubModelKind::build_stiffness_blocks`] is the *linearization*
     /// of the law, this is its *exact* response: for a linear law the two agree
     /// (`∫ Bᵀ·flux = K·u`); a non-linear law departs from that tangent.
     fn integrate_behavior(

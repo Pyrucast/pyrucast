@@ -72,7 +72,7 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
                 None => None,
             };
             let mut blocks = Vec::new();
-            for c in sub.as_physics().contributions(material.as_ref())? {
+            for c in sub.as_kind().contributions(material.as_ref())? {
                 blocks.extend(build_contribution(c, sub_h, material.clone())?);
             }
             blocks
@@ -191,9 +191,14 @@ mod tests {
     use crate::ops::build::material_field_per_sub_model;
 
     /// Assemble the stiffness the **literal** way: every sub-model fills its
-    /// `SubMatrix` blocks eagerly (`build_stiffness_blocks`) and `finalize`
-    /// scatters them. This is the historical path the computed path must match
-    /// bit-for-bit — kept here purely as the equivalence reference.
+    /// `SubMatrix` blocks eagerly and `finalize` scatters them. This is the
+    /// historical path the computed path must match bit-for-bit — kept here
+    /// purely as the equivalence reference.
+    ///
+    /// It reuses the [`Contribution`] seam so it stays honest: a `Literal`
+    /// contribution (Dirichlet's C / Cᵀ) is taken as-is, while a `Computed` one
+    /// is materialised through its physics' `build_stiffness_blocks` — the very
+    /// literal kernel the scatter path is being checked against.
     fn assemble_literal_reference(model: &Model, materials: &ElementField) -> Result<Matrix> {
         let mut k = Matrix::empty();
         for sub_h in model {
@@ -203,7 +208,17 @@ mod tests {
                     Some(fespace) => Some(materials.sub_for_fespace(&fespace)?),
                     None => None,
                 };
-                sub.as_physics().build_stiffness_blocks(material.as_ref())?
+                let kind = sub.as_kind();
+                let mut blocks = Vec::new();
+                for c in kind.contributions(material.as_ref())? {
+                    match c {
+                        Contribution::Computed(_) => {
+                            blocks.extend(kind.build_stiffness_blocks(material.as_ref())?);
+                        }
+                        Contribution::Literal(bs) => blocks.extend(bs),
+                    }
+                }
+                blocks
             };
             for block in blocks {
                 k.add_sub(insert(block))?;
@@ -338,7 +353,7 @@ mod tests {
                     .material_fespace()
                     .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
                 let mut blocks = Vec::new();
-                for c in sub.as_physics().contributions(material.as_ref()).unwrap() {
+                for c in sub.as_kind().contributions(material.as_ref()).unwrap() {
                     blocks.extend(build_contribution(c, sub_h, material.clone()).unwrap());
                 }
                 blocks
@@ -532,7 +547,7 @@ mod tests {
                 let material = sub
                     .material_fespace()
                     .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
-                sub.as_physics().stiffness_layout().map(|layout| {
+                sub.as_kind().stiffness_layout().map(|layout| {
                     SubMatrix::computed(
                         layout.support.clone(),
                         layout.support,

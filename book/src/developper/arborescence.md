@@ -37,8 +37,8 @@ src/
 │   ├── matrix.rs       # Matrix / SubMatrix (matrice creuse COO)
 │   └── evolution.rs    # Evolution / SubEvolution (valeur tabulée, interpolée)
 │
-├── models/             # LES PHYSIQUES (une struct + impl Physics par fichier)
-│   ├── mod.rs              # trait Physics (tout le comportement)
+├── models/             # LES PHYSIQUES (une struct + impl SubModelKind par fichier)
+│   ├── mod.rs              # trait SubModelKind (tout le comportement)
 │   ├── heat_conduction.rs
 │   ├── truss.rs
 │   ├── elasticity.rs
@@ -97,7 +97,7 @@ book/               # cette documentation (mdbook)
 Cette stratification garde le cœur de calcul **testable sans Python** (`cargo
 test`) et **réutilisable** en pure crate Rust. Le `models/` est à part : ce
 sont les physiques, branchées sur les conteneurs (`Model`/`SubModel`) via le
-trait `Physics` — voir [Ajouter une physique](../ajouter-une-physique.md).
+trait `SubModelKind` — voir [Ajouter une physique](../ajouter-une-physique.md).
 
 ## Où ajouter quoi ?
 

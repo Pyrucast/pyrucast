@@ -157,7 +157,7 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                 // Read the sub-model once (not per cell) so the element kernel
                 // stays lock-free while it runs in parallel over cells.
                 let sm = read(&recipe.submodel)?;
-                let phys = sm.as_physics();
+                let phys = sm.as_kind();
                 // Per-cell triplets so the value stream lines up cell-for-cell
                 // with the precomputed slots (same `(li,di,lj,pj)` order).
                 let (_, _, per_cell) = kernel::element_block_triplets_per_cell(
@@ -246,7 +246,7 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
         match blk.recipe() {
             Some(recipe) => {
                 let sm = read(&recipe.submodel)?;
-                let phys = sm.as_physics();
+                let phys = sm.as_kind();
                 // Element matrices, evaluated in parallel, one triplet list per
                 // cell (grouping needed for the colour-driven scatter).
                 let (_, _, per_cell) = kernel::element_block_triplets_per_cell(

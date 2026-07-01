@@ -24,7 +24,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, HasMaterial, Physics, StiffnessLayout};
+use crate::models::{CellGeom, HasMaterial, SubModelKind, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -68,7 +68,7 @@ impl Frame3d {
     }
 }
 
-impl Physics for Frame3d {
+impl SubModelKind for Frame3d {
     fn primal_vars(&self) -> Vec<String> {
         PRIMAL.iter().map(|s| s.to_string()).collect()
     }

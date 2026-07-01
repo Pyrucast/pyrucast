@@ -29,7 +29,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{Behavior, CellGeom, HasMaterial, Physics, StiffnessLayout};
+use crate::models::{Behavior, CellGeom, HasMaterial, SubModelKind, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -88,7 +88,7 @@ impl Timoshenko {
     }
 }
 
-impl Physics for Timoshenko {
+impl SubModelKind for Timoshenko {
     fn primal_vars(&self) -> Vec<String> {
         PRIMAL.iter().map(|s| s.to_string()).collect()
     }
