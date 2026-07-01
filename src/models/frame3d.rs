@@ -24,7 +24,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, HasMaterial, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -77,7 +77,7 @@ impl SubModelKind for Frame3d {
         DUAL.iter().map(|s| s.to_string()).collect()
     }
 
-    fn as_material(&self) -> Option<&dyn HasMaterial> {
+    fn as_domain(&self) -> Option<&dyn Domain> {
         Some(self)
     }
 
@@ -119,13 +119,44 @@ impl SubModelKind for Frame3d {
     }
 }
 
-impl HasMaterial for Frame3d {
+impl Domain for Frame3d {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
 
     fn material_components(&self) -> Option<&'static [&'static str]> {
         Some(MATERIAL_COMPONENTS)
+    }
+
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    // Like `Frame`, the 3-D frame's section-force behaviour (N, M_y, M_z, T,
+    // V_y, V_z) is linear but needs the generalised strains in the element's
+    // **local** frame — a `frame_deformation` operator that does not exist yet.
+    // Documented gap, not a design exception.
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Err(crate::error::PyrucastError::Message(
+            "Frame3d: section-force behaviour not implemented — needs \
+             ops::field::frame_deformation (local generalised strains)"
+                .into(),
+        ))
+    }
+
+    fn integrate_point(
+        &self,
+        _geom: &CellGeom,
+        _input: &SubElementField,
+        _material: Option<&SubElementField>,
+        _g: usize,
+        _out: &mut [f64],
+    ) -> Result<()> {
+        Err(crate::error::PyrucastError::Message(
+            "Frame3d: section-force behaviour not implemented — needs \
+             ops::field::frame_deformation (local generalised strains)"
+                .into(),
+        ))
     }
 }
 

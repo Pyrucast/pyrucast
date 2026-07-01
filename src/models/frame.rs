@@ -18,7 +18,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, HasMaterial, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -70,7 +70,7 @@ impl SubModelKind for Frame {
         DUAL.iter().map(|s| s.to_string()).collect()
     }
 
-    fn as_material(&self) -> Option<&dyn HasMaterial> {
+    fn as_domain(&self) -> Option<&dyn Domain> {
         Some(self)
     }
 
@@ -108,13 +108,47 @@ impl SubModelKind for Frame {
     }
 }
 
-impl HasMaterial for Frame {
+impl Domain for Frame {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
 
     fn material_components(&self) -> Option<&'static [&'static str]> {
         Some(MATERIAL_COMPONENTS)
+    }
+
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    // The frame's behaviour (section forces N/M/V) is a linear law like any
+    // other domain's, but computing it needs the generalised section strains
+    // (axial ε, curvature κ, shear γ) in the element's **local** frame — i.e. a
+    // dedicated `ops::field::frame_deformation` operator (the co-rotational
+    // counterpart of `beam_deformation` for Timoshenko), which does not exist
+    // yet. Until it does, the behaviour is unimplemented: a documented gap, not
+    // a design exception.
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Err(crate::error::PyrucastError::Message(
+            "Frame: section-force behaviour not implemented — needs \
+             ops::field::frame_deformation (local axial/bending/shear strains)"
+                .into(),
+        ))
+    }
+
+    fn integrate_point(
+        &self,
+        _geom: &CellGeom,
+        _input: &SubElementField,
+        _material: Option<&SubElementField>,
+        _g: usize,
+        _out: &mut [f64],
+    ) -> Result<()> {
+        Err(crate::error::PyrucastError::Message(
+            "Frame: section-force behaviour not implemented — needs \
+             ops::field::frame_deformation (local axial/bending/shear strains)"
+                .into(),
+        ))
     }
 }
 

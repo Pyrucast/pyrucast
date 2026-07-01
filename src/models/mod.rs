@@ -106,9 +106,9 @@ pub enum Contribution {
 /// [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind);
 /// the [`SubModel`](crate::containers::model::SubModel) enum itself carries
 /// no logic. Most methods have sensible defaults so a physics overrides
-/// only what is specific to it (a plain volumetric physics typically
-/// implements just `primal_vars`, `dual_vars`, `material_*`,
-/// `build_stiffness_blocks`, `label` and `render`).
+/// only what is specific to it (a plain domain physics typically implements
+/// `primal_vars`, `dual_vars`, `as_domain` + the [`Domain`] capability,
+/// `element_matrix`, `stiffness_layout`, `label` and `render`).
 pub trait SubModelKind: Sync {
     /// Primal variable names introduced by this physics (column labels).
     fn primal_vars(&self) -> Vec<String>;
@@ -116,21 +116,12 @@ pub trait SubModelKind: Sync {
     /// Dual variable names introduced by this physics (row labels).
     fn dual_vars(&self) -> Vec<String>;
 
-    /// Borrow this physics as a [`HasMaterial`] capability, or `None`
-    /// (default) if it needs no material data (a constraint such as
-    /// `Dirichlet`). A physics that reads material overrides this to return
-    /// `Some(self)`. This is the seam the assembler and material builders use —
-    /// they never assume every sub-model carries material.
-    fn as_material(&self) -> Option<&dyn HasMaterial> {
-        None
-    }
-
-    /// Borrow this physics as a [`Behavior`] capability, or `None` (default)
-    /// if it carries no constitutive law (a constraint such as `Dirichlet`). A
-    /// behaviour-bearing physics overrides this to return `Some(self)`. This is
-    /// the seam [`crate::ops::behavior`] uses — it never assumes every
-    /// sub-model integrates a behaviour.
-    fn as_behavior(&self) -> Option<&dyn Behavior> {
+    /// Borrow this sub-model as a [`Domain`] capability, or `None` (default) if
+    /// it is not a domain physics (a constraint such as `Dirichlet`). A domain
+    /// overrides this to return `Some(self)`. This is the seam the assembler,
+    /// the material builders and [`crate::ops::behavior`] use — they never
+    /// assume every sub-model reads material or integrates a behaviour.
+    fn as_domain(&self) -> Option<&dyn Domain> {
         None
     }
 
@@ -146,10 +137,10 @@ pub trait SubModelKind: Sync {
 
     /// Local element stiffness matrix of one cell — the pure, sequential kernel
     /// a physics author writes (the stiffness counterpart of
-    /// [`Behavior::integrate_point`]). Fills `ke` (row-major,
+    /// [`Domain::integrate_point`]). Fills `ke` (row-major,
     /// node-major / variable-minor: `ke[(li*n_dual+di) * n_cols_loc + (lj*n_primal+pj)]`)
     /// from the cell geometry and material. `material` is `Some(_)` iff the
-    /// physics declares a [`HasMaterial::material_fespace`].
+    /// physics declares a [`Domain::material_fespace`].
     ///
     /// `geoms` holds one [`CellGeom`] per FE subspace declared in
     /// [`stiffness_layout`](Self::stiffness_layout), in that order: a plain
@@ -187,7 +178,7 @@ pub trait SubModelKind: Sync {
     /// blocks directly — that override is the extension seam, not a special case
     /// buried in the assembler.
     ///
-    /// `material` is `Some(_)` iff [`HasMaterial::material_fespace`] is declared
+    /// `material` is `Some(_)` iff [`Domain::material_fespace`] is declared
     /// (the assembler guarantees it); it is only consulted on the literal path —
     /// the computed path resolves material itself from the layout.
     fn contributions(
@@ -203,7 +194,7 @@ pub trait SubModelKind: Sync {
     }
 
     /// Build and fill the stiffness [`SubMatrix`] block(s) of this physics.
-    /// `material` is `Some(_)` iff [`HasMaterial::material_fespace`] is declared
+    /// `material` is `Some(_)` iff [`Domain::material_fespace`] is declared
     /// (the assembler guarantees it).
     ///
     /// **Default**: derived from [`stiffness_layout`](Self::stiffness_layout) —
@@ -290,43 +281,47 @@ pub trait Constraint {
     fn multiplier_mesh(&self) -> &Mesh;
 }
 
-/// A physics that consumes **material data** — an optional capability, not part
-/// of the base [`SubModelKind`] contract. A physics implements it *and* returns
-/// `Some(self)` from [`SubModelKind::as_material`]; a constraint such as `Dirichlet`
-/// implements neither, so no method can be called on it that would error for
-/// lack of material.
-pub trait HasMaterial {
-    /// FE subspace on which this physics expects its material data.
+/// A **domain** sub-model — an optional capability, not part of the base
+/// [`SubModelKind`] contract. A domain is a physics defined *over a region*: it
+/// reads material data **and** integrates a constitutive law over its cells. A
+/// domain implements this trait *and* returns `Some(self)` from
+/// [`SubModelKind::as_domain`]; a constraint such as `Dirichlet` implements
+/// neither, so its absence of material and behaviour is a compile-time fact, not
+/// a runtime error.
+///
+/// Material and behaviour are **one** capability here, not two: the material
+/// *parametrises* the constitutive law (`σ = D(E,ν):ε`, `M = E·I·κ`, …), so
+/// every domain has both. That includes linear elements whose law is trivial (a
+/// bar's `N = E·A·ε`, a beam's section forces) — the triviality is in the *kernel*
+/// [`integrate_point`](Self::integrate_point), not in whether the capability
+/// exists. This mirrors the *Domaine* row of the sub-model natures.
+///
+/// An implementer writes the material declaration
+/// ([`material_fespace`](Self::material_fespace)), the behaviour kernel
+/// ([`integrate_point`](Self::integrate_point) +
+/// [`behavior_output_components`](Self::behavior_output_components)) and the FE
+/// subspace [`behavior_fespace`](Self::behavior_fespace); the stiffness kernel
+/// [`element_matrix`](SubModelKind::element_matrix) stays on the base trait, and
+/// the parallel driver [`integrate_behavior`](Self::integrate_behavior) is
+/// provided.
+pub trait Domain: Sync {
+    /// FE subspace on which this domain expects its material data.
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace>;
 
-    /// Material component names this physics requires, or `None` if it declares
-    /// a material FE subspace but constrains no particular component. Default:
+    /// Material component names this domain requires, or `None` if it declares a
+    /// material FE subspace but constrains no particular component. Default:
     /// `None`.
     fn material_components(&self) -> Option<&'static [&'static str]> {
         None
     }
-}
 
-/// A physics that carries an integrable **constitutive law** (Cast3m `COMP`) —
-/// an optional capability, not part of the base [`SubModelKind`] contract. A physics
-/// implements it *and* returns `Some(self)` from [`SubModelKind::as_behavior`]; a
-/// constraint such as `Dirichlet` implements neither, so its absence of
-/// behaviour is a compile-time fact, not a runtime error.
-///
-/// An implementer writes the point kernel
-/// [`integrate_point`](Self::integrate_point), the output components
-/// [`behavior_output_components`](Self::behavior_output_components), and the FE
-/// subspace [`behavior_fespace`](Self::behavior_fespace); the parallel driver
-/// [`integrate_behavior`](Self::integrate_behavior) is provided.
-pub trait Behavior: Sync {
-    /// FE subspace this physics integrates its constitutive behaviour on. Its
+    /// FE subspace this domain integrates its constitutive behaviour on. Its
     /// deformation input is produced geometrically by
     /// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) /
     /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation),
     /// and [`crate::ops::behavior`] uses this handle to pair the per-zone
-    /// deformation field with its sub-model. For a plain volumetric physics it
-    /// is the same FE subspace as
-    /// [`HasMaterial::material_fespace`].
+    /// deformation field with its sub-model. Usually the same FE subspace as
+    /// [`material_fespace`](Self::material_fespace).
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace>;
 
     /// Output component names of the material-state field produced by
@@ -339,8 +334,8 @@ pub trait Behavior: Sync {
     /// deformation (+ `VAR0`) from `input` and the material from `material`
     /// (both borrowed in place), and write the
     /// [`behavior_output_components`](Self::behavior_output_components) values
-    /// into `out`. `material` is `Some(_)` iff the physics also declares a
-    /// [`HasMaterial::material_fespace`].
+    /// into `out`. `material` is `Some(_)` iff the domain declares a
+    /// [`material_fespace`](Self::material_fespace).
     ///
     /// It **never sees rayon, the store, or a lock**:
     /// [`integrate_behavior`](Self::integrate_behavior) drives it in parallel

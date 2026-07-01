@@ -11,7 +11,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::{Behavior, CellGeom, HasMaterial, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -85,11 +85,7 @@ impl SubModelKind for HeatConduction {
         vec![DUAL_VAR.to_string()]
     }
 
-    fn as_material(&self) -> Option<&dyn HasMaterial> {
-        Some(self)
-    }
-
-    fn as_behavior(&self) -> Option<&dyn Behavior> {
+    fn as_domain(&self) -> Option<&dyn Domain> {
         Some(self)
     }
 
@@ -133,7 +129,7 @@ impl SubModelKind for HeatConduction {
     }
 }
 
-impl HasMaterial for HeatConduction {
+impl Domain for HeatConduction {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
@@ -141,9 +137,7 @@ impl HasMaterial for HeatConduction {
     fn material_components(&self) -> Option<&'static [&'static str]> {
         Some(MATERIAL_COMPONENTS)
     }
-}
 
-impl Behavior for HeatConduction {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }

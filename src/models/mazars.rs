@@ -34,7 +34,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::{Behavior, CellGeom, HasMaterial, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use nalgebra::Matrix3;
 use serde::{Deserialize, Serialize};
@@ -119,11 +119,7 @@ impl SubModelKind for Mazars {
         (0..self.space_dim).map(dual_name).collect()
     }
 
-    fn as_material(&self) -> Option<&dyn HasMaterial> {
-        Some(self)
-    }
-
-    fn as_behavior(&self) -> Option<&dyn Behavior> {
+    fn as_domain(&self) -> Option<&dyn Domain> {
         Some(self)
     }
 
@@ -167,7 +163,7 @@ impl SubModelKind for Mazars {
     }
 }
 
-impl HasMaterial for Mazars {
+impl Domain for Mazars {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
@@ -175,9 +171,7 @@ impl HasMaterial for Mazars {
     fn material_components(&self) -> Option<&'static [&'static str]> {
         Some(MATERIAL_COMPONENTS)
     }
-}
 
-impl Behavior for Mazars {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }

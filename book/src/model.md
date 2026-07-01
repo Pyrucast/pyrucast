@@ -25,14 +25,19 @@ SubModel  (énum de stockage + dispatch — AUCUNE logique)
 ├── Dirichlet(Dirichlet)             # …qui porte ses données + impl SubModelKind
 └── as_kind(&self) -> &dyn SubModelKind   # l'unique match du module modèle
 
-SubModelKind  (trait — TOUT le comportement, co-localisé par physique)
-├── primal_vars / dual_vars / material_components / material_fespace
+SubModelKind  (trait de base — le dénominateur commun, co-localisé par physique)
+├── primal_vars / dual_vars
+├── as_domain / as_constraint  # seams de capacité (None par défaut) — cf. ci-dessous
 ├── element_matrix          # noyau élémentaire (une cellule) — pur & séquentiel
 ├── stiffness_layout        # Some ⇒ bloc CALCULÉ (scatter parallèle) ; None ⇒ littéral
 ├── contributions           # défaut : dérivé du layout ; Dirichlet rend ses C/Cᵀ littéraux
 ├── build_stiffness_blocks  # défaut : dérivé de stiffness_layout + element_matrix
 ├── build_mass_blocks       # (défaut : vide)
 └── label / display / render
+
+Capacités (sous-traits, miroir des natures ; une struct n'a que la sienne) :
+├── Domain      # matériau + comportement (heat, elasticity, poutres, …)
+└── Constraint  # multiplicateurs de Lagrange (Dirichlet, futur MPC / contact)
 ```
 
 L'énum `SubModel` ne sert qu'au **stockage** et à la **sérialisation**

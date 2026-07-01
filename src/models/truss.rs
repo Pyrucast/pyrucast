@@ -19,7 +19,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::{Behavior, CellGeom, HasMaterial, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -88,11 +88,7 @@ impl SubModelKind for Truss {
         (0..self.space_dim).map(dual_name).collect()
     }
 
-    fn as_material(&self) -> Option<&dyn HasMaterial> {
-        Some(self)
-    }
-
-    fn as_behavior(&self) -> Option<&dyn Behavior> {
+    fn as_domain(&self) -> Option<&dyn Domain> {
         Some(self)
     }
 
@@ -132,7 +128,7 @@ impl SubModelKind for Truss {
     }
 }
 
-impl HasMaterial for Truss {
+impl Domain for Truss {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
@@ -140,9 +136,7 @@ impl HasMaterial for Truss {
     fn material_components(&self) -> Option<&'static [&'static str]> {
         Some(MATERIAL_COMPONENTS)
     }
-}
 
-impl Behavior for Truss {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }

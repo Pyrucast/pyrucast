@@ -29,7 +29,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{Behavior, CellGeom, HasMaterial, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -97,11 +97,7 @@ impl SubModelKind for Timoshenko {
         DUAL.iter().map(|s| s.to_string()).collect()
     }
 
-    fn as_material(&self) -> Option<&dyn HasMaterial> {
-        Some(self)
-    }
-
-    fn as_behavior(&self) -> Option<&dyn Behavior> {
+    fn as_domain(&self) -> Option<&dyn Domain> {
         Some(self)
     }
 
@@ -165,7 +161,7 @@ impl SubModelKind for Timoshenko {
     }
 }
 
-impl HasMaterial for Timoshenko {
+impl Domain for Timoshenko {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.bending.clone()
     }
@@ -173,9 +169,7 @@ impl HasMaterial for Timoshenko {
     fn material_components(&self) -> Option<&'static [&'static str]> {
         Some(MATERIAL_COMPONENTS)
     }
-}
 
-impl Behavior for Timoshenko {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.bending.clone()
     }
