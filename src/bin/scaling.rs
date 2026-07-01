@@ -155,8 +155,9 @@ fn main() {
     run_op("behavior::integrate", &threads, reps, &integrate);
 
     println!(
-        "Note: speedup is vs the 1-thread run. behavior::integrate is fully \
-         parallel; assemble::stiffness keeps a serial sparse-assembly phase \
-         (COO→CSR construction), so it is Amdahl-limited above a few cores."
+        "Note: speedup is vs the 1-thread run. Both ops are colour-parallel. \
+         assemble::stiffness memoises its CSR sparsity on the model (built once, \
+         reused here across reps), so the timed path is the parallel scatter; a \
+         first-ever assembly also pays the one-off symbolic build."
     );
 }
