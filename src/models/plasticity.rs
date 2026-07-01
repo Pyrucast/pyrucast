@@ -22,12 +22,11 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::matrix::SubMatrix;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::{kernel, CellGeom, Physics, StiffnessLayout};
+use crate::models::{CellGeom, Physics, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -133,28 +132,6 @@ impl Physics for Plasticity {
 
     fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
         Some(self.fespace.clone())
-    }
-
-    fn build_stiffness_blocks(
-        &self,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<Vec<SubMatrix>> {
-        // Iteration operator = elastic stiffness (no tangent KTAN yet — the
-        // Newton loop is orchestrated in Python). Reuse the elasticity element
-        // kernel verbatim; it reads only `E` and `nu` from the material.
-        let mat = material.expect("Plasticity requires a material field");
-        let block = kernel::assemble_block(
-            &self.fespace,
-            &self.support,
-            &self.support,
-            self.dual_vars(),
-            self.primal_vars(),
-            crate::containers::matrix::DofOrdering::NodesThenVars,
-            true,
-            Some(mat),
-            |geom, m, ke| self.element_matrix(geom, m, ke),
-        )?;
-        Ok(vec![block])
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {

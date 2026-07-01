@@ -20,11 +20,11 @@
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::matrix::{DofOrdering, SubMatrix};
+use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{kernel, CellGeom, Physics, StiffnessLayout};
+use crate::models::{CellGeom, Physics, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -83,25 +83,6 @@ impl Physics for Frame3d {
 
     fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
         Some(self.fespace.clone())
-    }
-
-    fn build_stiffness_blocks(
-        &self,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<Vec<SubMatrix>> {
-        let mat = material.expect("Frame3d requires a material field");
-        let block = kernel::assemble_block(
-            &self.fespace,
-            &self.support,
-            &self.support,
-            self.dual_vars(),
-            self.primal_vars(),
-            DofOrdering::NodesThenVars,
-            true,
-            Some(mat),
-            |geom, m, ke| self.element_matrix(geom, m, ke),
-        )?;
-        Ok(vec![block])
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {

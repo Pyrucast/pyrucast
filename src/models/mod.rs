@@ -131,21 +131,50 @@ pub trait Physics: Sync {
     /// Build and fill the stiffness [`SubMatrix`] block(s) of this physics.
     /// `material` is `Some(_)` iff [`material_fespace`](Self::material_fespace)
     /// is `Some(_)` (the assembler guarantees it).
+    ///
+    /// **Default**: derived from [`stiffness_layout`](Self::stiffness_layout) —
+    /// a single block on that layout, filled by
+    /// [`element_matrix`](Self::element_matrix) via [`kernel::assemble_block`].
+    /// A plain volumetric physics therefore writes only `element_matrix` +
+    /// `stiffness_layout` and gets this for free. A physics with **no** layout
+    /// (a constraint such as `Dirichlet`, or any multi-block physics) must
+    /// override it. This literal path also serves as the bit-for-bit reference
+    /// of the computed (scatter) path.
     fn build_stiffness_blocks(
         &self,
         material: Option<&Handle<SubElementField>>,
-    ) -> Result<Vec<SubMatrix>>;
+    ) -> Result<Vec<SubMatrix>> {
+        let Some(layout) = self.stiffness_layout() else {
+            return Err(PyrucastError::Message(format!(
+                "{}: build_stiffness_blocks has no default without a \
+                 stiffness_layout — override it (e.g. a constraint such as \
+                 Dirichlet, or a multi-block physics)",
+                self.label()
+            )));
+        };
+        let block = kernel::assemble_block(
+            &layout.fespace,
+            &layout.support,
+            &layout.support,
+            layout.dual_vars,
+            layout.primal_vars,
+            layout.ordering,
+            layout.symmetric,
+            material,
+            |geom, m, ke| self.element_matrix(geom, m, ke),
+        )?;
+        Ok(vec![block])
+    }
 
-    /// Structural layout of this physics' **computed** stiffness block, or
-    /// `None` (default) for a physics assembled the literal way (constraints
-    /// such as `Dirichlet`, or any multi-block physics). When `Some`, the
-    /// global assembler in [`crate::ops::assemble::stiffness`] builds a computed
-    /// [`SubMatrix`] from this layout + the physics'
-    /// [`element_matrix`](Self::element_matrix) kernel and scatters straight
-    /// into the global CSR, never materialising the block's values. A physics
-    /// that returns `Some` here keeps its
-    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) (the literal
-    /// path) as the bit-for-bit equivalence reference.
+    /// Structural layout of this physics' stiffness block, or `None` (default)
+    /// for a physics assembled the literal way (constraints such as `Dirichlet`,
+    /// or any multi-block physics). When `Some`, it drives **both** paths from a
+    /// single description: the global assembler
+    /// ([`crate::ops::assemble::stiffness`]) builds a *computed*
+    /// [`SubMatrix`] and scatters [`element_matrix`](Self::element_matrix)
+    /// straight into the CSR (never materialising values), and the default
+    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) produces the
+    /// *literal* equivalent from the same layout + kernel.
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
         None
     }

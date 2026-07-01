@@ -29,7 +29,7 @@ Physics  (trait — TOUT le comportement, co-localisé par physique)
 ├── primal_vars / dual_vars / material_components / material_fespace
 ├── element_matrix          # noyau élémentaire (une cellule) — pur & séquentiel
 ├── stiffness_layout        # Some ⇒ bloc CALCULÉ (scatter parallèle) ; None ⇒ littéral
-├── build_stiffness_blocks  # voie littérale : enveloppe element_matrix via assemble_block
+├── build_stiffness_blocks  # défaut : dérivé de stiffness_layout + element_matrix
 ├── build_mass_blocks       # (défaut : vide)
 └── label / display / render
 ```
