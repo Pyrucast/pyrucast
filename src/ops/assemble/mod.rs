@@ -113,6 +113,33 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     Ok(k)
 }
 
+/// Assemble (or re-assemble) `k` **from its blocks alone** — no `Model`.
+///
+/// The sparsity is rebuilt from the current blocks ([`scatter::build_pattern`],
+/// self-contained: a computed block resolves its fill through its recipe, a
+/// literal block through its COO) and the values are scattered into it. This is
+/// the composition path: after adding a block of any provenance to an already
+/// assembled matrix — which `finalize` cannot handle once computed blocks are
+/// present, and which `stiffness` cannot reach (it only knows a `Model`) — call
+/// this to fold the new block in.
+///
+/// ```ignore
+/// let mut k = assemble::stiffness(&model, &materials)?;
+/// k.add_sub(insert(some_block))?;   // invalidates the assembled state
+/// assemble::assemble(&mut k)?;      // re-assembles, new block included
+/// ```
+///
+/// Unlike [`stiffness`], this does not consult the model's cached pattern (there
+/// is no model here), so it rebuilds the sparsity each call — fine for the
+/// occasional composition; hot repeated assembly of a fixed model should keep
+/// going through [`stiffness`].
+pub fn assemble(k: &mut Matrix) -> Result<()> {
+    let pattern = scatter::build_pattern(k)?;
+    let csr = scatter::scatter_parallel(k, &pattern)?;
+    k.set_assembled(pattern.row_dofs, pattern.col_dofs, csr);
+    Ok(())
+}
+
 /// One sub-model's stiffness contribution: either a single **computed** block
 /// (volumetric physics, scattered straight into the global CSR) or one-or-more
 /// **literal** blocks (Dirichlet, …). Lets pass 1 build the blocks under a read
@@ -395,6 +422,55 @@ mod tests {
                 "cached-pattern reassembly value mismatch: {x} vs {y}"
             );
         }
+    }
+
+    /// Composition: after `stiffness`, add a **literal block of arbitrary
+    /// provenance** to the (computed-block) matrix and re-assemble it with the
+    /// self-contained [`assemble`]. `finalize` refuses (computed blocks present),
+    /// but `assemble` rebuilds the sparsity from the blocks and folds the new
+    /// contribution in.
+    #[test]
+    fn assemble_composes_extra_literal_block() {
+        // One heat element on nodes a—b.
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        sm.add_cell(&[a.id(), b.id()]).unwrap();
+        let mesh = Mesh::from_submesh(sm);
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let mut model = Model::empty();
+        model
+            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
+            .unwrap();
+        let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)]]).unwrap();
+
+        let mut k = stiffness(&model, &materials).unwrap();
+        let before = k.get(a.id(), "q", a.id(), "T").unwrap();
+
+        // A hand-built literal block (no model behind it) adding +10 at (a,q)×(a,T).
+        let support = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let mut blk = SubMatrix::new(
+            support.clone(),
+            support,
+            vec!["q".into()],
+            vec!["T".into()],
+            crate::containers::matrix::DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        blk.add_entry(a.id(), "q", a.id(), "T", 10.0).unwrap();
+        k.add_sub(insert(blk)).unwrap();
+
+        // `finalize` can't (computed block present); the self-contained path can.
+        assert!(k.finalize().is_err());
+        assemble(&mut k).unwrap();
+
+        let after = k.get(a.id(), "q", a.id(), "T").unwrap();
+        assert!(
+            (after - (before + 10.0)).abs() <= 1e-12 * (1.0 + before.abs()),
+            "composition failed: before {before}, after {after}"
+        );
     }
 
     /// A matrix carrying a computed block cannot be assembled through

@@ -928,8 +928,10 @@ impl Matrix {
             if read(h)?.is_computed() {
                 return Err(PyrucastError::Message(
                     "Matrix::finalize: this matrix carries a computed block; \
-                     assemble it through ops::assemble (which scatters the kernel \
-                     into the global CSR and injects it), not finalize()"
+                     assemble it with ops::assemble::assemble(&mut m) (or \
+                     ops::assemble::stiffness), which scatters the kernel into \
+                     the global CSR — finalize() cannot (it must not reach into \
+                     the model/kernel)"
                         .into(),
                 ));
             }
