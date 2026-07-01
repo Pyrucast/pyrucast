@@ -34,20 +34,35 @@ depuis plusieurs threads.
 
 ## Déterminisme
 
-Toute région parallélisée soit **écrit chaque case de sortie exactement une
-fois** (écriture indexée / `par_chunks_mut`), soit est une **réduction
-associative sur les mêmes valeurs dans le même regroupement** (min/max). Les
-résultats sont donc **bit-à-bit identiques** au séquentiel, quel que soit
-`RAYON_NUM_THREADS`. L'assemblage calcule les matrices élémentaires en parallèle
-puis les disperse (scatter) dans le COO **en série, en ordre de cellule** — même
-garantie.
+Les opérateurs de champ et d'intégration parallélisés soit **écrivent chaque
+case de sortie exactement une fois** (écriture indexée / `par_chunks_mut`), soit
+sont une **réduction associative sur les mêmes valeurs dans le même
+regroupement** (min/max). Ces résultats sont **bit-à-bit identiques** au
+séquentiel, quel que soit `RAYON_NUM_THREADS`.
 
-Vérification : la suite de tests (qui asservit des valeurs numériques exactes)
-passe à l'identique sous `RAYON_NUM_THREADS=1` puis `=8`.
+L'**assemblage** suit un schéma en deux temps. Le motif creux global (sparsité
+CSR) est construit depuis la seule **topologie des blocs** — indépendant des
+matériaux — puis **mémoïsé sur le `Model`**, donc réutilisé tel quel d'un
+assemblage à l'autre (le gain majeur pour une boucle de Newton, où seuls les
+matériaux changent). Les matrices élémentaires sont calculées en parallèle, puis
+**dispersées dans le CSR par coloration des cellules** : deux cellules d'une même
+couleur ne partagent aucun DOF, donc les cellules d'une couleur écrivent **en
+parallèle** dans des cases disjointes — via un `Vec<AtomicU64>` (`Relaxed`, soit
+un simple `mov` sur x86, sans `unsafe`) — les couleurs étant traitées en
+séquence. La coloration étant fixe, le résultat est **déterministe** (indépendant
+du nombre de threads), mais **pas bit-à-bit** face à une réduction séquentielle :
+la somme de chaque case est réordonnée par couleur. Un chemin de scatter
+**séquentiel** (en ordre de bloc), lui bit-à-bit, est conservé comme référence de
+test.
 
-**Seule exception : le solveur** (back-end faer, pivotage/ordering différents)
-n'est pas bit-à-bit identique à l'ancien LU dense, mais reste dans les tolérances
-numériques.
+Vérification : la suite de tests passe sous `RAYON_NUM_THREADS=1` puis `=8` ; les
+opérateurs write-once / réduction sont asservis à des valeurs exactes,
+l'assemblage parallèle à l'assemblage littéral **à tolérance**, plus un test de
+déterminisme.
+
+**Non bit-à-bit, par construction :** l'assemblage parallèle (ci-dessus, mais
+déterministe) et **le solveur** (back-end faer, pivotage/ordering différents de
+l'ancien LU dense) — tous deux dans les tolérances numériques.
 
 ## Ce qui reste séquentiel (et pourquoi)
 
@@ -72,8 +87,8 @@ dans [Opérateurs de solveur](../operateurs/solveur.md). Rôles des bibliothèqu
 
 ```
 nalgebra            nalgebra-sparse                faer
-primitives     →    assemblage COO→CSC + serde  →  factorise & résout (parallèle, creux)
-(B, J, géométrie)   stockage de la Matrice         back-end solveur uniquement
+primitives     →    stockage CSR/CSC + serde    →  factorise & résout (parallèle, creux)
+(B, J, géométrie)   Matrice (scatter → CSR)        back-end solveur uniquement
 ```
 
 ## Côté Python

@@ -32,6 +32,25 @@ Assemble la **matrice de masse** `M`. **Stub en v0** : retourne une matrice
 vide. L'intégrande `∫ ρ c_p · N_i N_j dx` (et ses équivalents mécaniques) est
 additif et sera branché quand le besoin transitoire / dynamique se présentera.
 
+## Composition : `assemble(&mut Matrix)` (Rust)
+
+`stiffness` produit une matrice portant des blocs **calculés** (recette, valeurs
+produites au scatter) que `Matrix::finalize` ne sait pas assembler seul. Pour
+**recomposer** — ajouter une `SubMatrix` de provenance quelconque à une matrice
+existante puis réassembler — `ops::assemble::assemble(&mut m)` reconstruit le
+motif creux depuis les **blocs seuls** (sans `Model`) et redisperse les valeurs :
+
+```rust
+let mut k = assemble::stiffness(&model, &materials)?;
+k.add_sub(insert(bloc_supplementaire))?;   // invalide l'état assemblé
+assemble::assemble(&mut k)?;                // réassemble, nouveau bloc inclus
+```
+
+Contrairement à `stiffness`, ce chemin ne consulte pas le motif mémoïsé sur le
+`Model` (il n'y a pas de `Model` ici) et reconstruit la sparsité à chaque appel —
+adapté à la composition ponctuelle ; le réassemblage à chaud d'un modèle fixe
+reste sur `stiffness`.
+
 ## Chargement réparti : `flux(fespace, density, component)` → `NodeField`
 
 L'analogue de `FLUX` / `PRES` de cast3m : transforme une densité de flux `φ`

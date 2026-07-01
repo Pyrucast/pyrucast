@@ -16,26 +16,36 @@ Les jeux de DOFs de lignes et de colonnes sont **indépendants** :
 - ils peuvent avoir des **tailles différentes** (matrice rectangulaire — par exemple le bloc Lagrange d'une condition de Dirichlet) ;
 - ils peuvent porter des **noms de champs différents** (les lignes étiquetées par des duales `q`, les colonnes par des primales `T`).
 
-## Stockage COO
+## Blocs bi-mode : littéral ou calculé
 
-Le format interne est **COO** (coordinate triplet list) : chaque insertion ajoute un triplet `(row_idx, col_idx, value)`. Plusieurs entrées au même `(row_idx, col_idx)` sont **conservées telles quelles** et **sommées à la lecture** ou à la mise en forme dense.
+Une `Matrix` est un **agrégat de blocs** `SubMatrix`, et un bloc est de l'un de deux modes :
 
-Conséquences :
+- **littéral** — il porte ses **valeurs**, stockées en **COO** (coordinate triplet list). Chaque `add_entry(...)` ajoute un triplet `(ligne, colonne, valeur)` ; plusieurs entrées au même couple s'**accumulent** (sommées à l'assemblage), l'ordre d'insertion étant sans effet. C'est le mode historique — celui des contraintes (blocs `C` / `Cᵀ` de Dirichlet) et de tout bloc monté à la main.
+- **calculé** — il ne porte **aucune valeur**, seulement une **recette** `{ sous-modèle, sous-espace EF, matériau }`. Ses entrées sont produites **à l'assemblage** par le noyau élémentaire du sous-modèle, dispersées directement dans la matrice globale. C'est le mode des physiques volumiques (raideur), qui évite de matérialiser un COO intermédiaire.
 
-- L'assemblage est **trivialement incrémental** : un `SubModel` peut appeler `add_entry(...)` autant de fois qu'il veut au même couple `(ligne, colonne)`, les contributions s'accumulent automatiquement.
-- L'ordre des insertions est sans effet sur le résultat numérique final (commutativité de la somme).
-- L'ordre des DOFs dans `row_dofs()` / `col_dofs()` est **l'ordre de première rencontre** lors des `add_entry` — sauf si le `Coords` porte une [`permutation`](coords.md) (ordre solveur), auquel cas la liste globale suit cet ordre (tri stable). Stable et reproductible dans les deux cas.
+Un bloc calculé garde son lien vers sa physique **via la recette** ; la `Matrix`, elle, reste un simple sac de blocs et **ne référence pas le `Model`**.
 
-**Numérotation & coût.** `NodeId` est déjà l'index nœud global (dense) ; chaque `SubMatrix` garde sa propre numérotation locale `(nœud, variable)`, et `add_entry` retrouve la position du nœud en **O(1)** (table `NodeId → position`, construite à la volée). À l'agrégation, la `Matrix` fait l'**union dédoublée** des DDL de ses blocs (une liste, via table de hachage) puis disperse chaque bloc via une **table de traduction** `index local → index global` — assemblage en **O(nnz)**, sans recherche par entrée. La `Matrix` ne dépend que de **ses blocs** (pas d'un `Model`), donc on peut toujours combiner une sous-matrice neuve à une matrice existante.
+## Assemblage : motif + scatter
 
-Le stockage propre à pyrucast reste COO pour la phase d'assemblage ; les opérations qui en profitent (matrice-vecteur, factorisation directe) utilisent `nalgebra-sparse` via des conversions à la demande :
+Passer d'un agrégat de blocs à une matrice utilisable se fait en deux temps :
+
+1. **Motif creux** (sparsité CSR) — l'**union dédoublée** des DDL des blocs (une liste globale, via table de hachage) et de leurs entrées. Il ne dépend que de la **topologie** (bloc calculé via la connectivité, bloc littéral via sa COO), pas des matériaux ; `stiffness` le **mémoïse donc sur le `Model`** et le réutilise d'un assemblage à l'autre.
+2. **Valeurs** — dispersées (scatter) dans le CSR : un bloc calculé lance son noyau élémentaire (en parallèle, par coloration des cellules — voir [Parallélisme](developper/parallelisme.md)) ; un bloc littéral recopie sa COO. Chaque bloc remappe sa numérotation locale `(nœud, variable)` vers l'index global via une **table de traduction** — O(nnz), sans recherche par entrée (`NodeId` est déjà l'index nœud global dense, et `add_entry` retrouve la position d'un nœud en O(1)).
+
+L'ordre des DOFs dans `row_dofs()` / `col_dofs()` est l'**ordre de première rencontre** des blocs — sauf si le `Coords` porte une [`permutation`](coords.md) (ordre solveur), auquel cas la liste globale suit cet ordre (tri stable). Reproductible dans les deux cas.
+
+### `finalize` vs `ops::assemble`
+
+- `Matrix::finalize()` n'assemble que des blocs **littéraux** (somme des COO → CSR). Il **refuse** un bloc calculé : le noyau vit dans `models`, hors de `containers`, et l'y appeler créerait un cycle `matrix ↔ kernel`. Il renvoie alors vers `ops::assemble`.
+- `ops::assemble::stiffness(model, materials)` construit les blocs (calculés pour les physiques volumiques, littéraux pour Dirichlet) et assemble, motif mémoïsé sur le `Model`.
+- `ops::assemble::assemble(&mut m)` réassemble une matrice **depuis ses blocs seuls**, sans `Model` : c'est le chemin de **composition** — combiner une sous-matrice neuve (de provenance quelconque) à une matrice existante puis réassembler. La `Matrix` ne dépendant que de ses blocs, cette composabilité de base est ainsi préservée y compris en présence de blocs calculés.
+
+Les opérations qui profitent du creux (matrice-vecteur, factorisation directe) utilisent `nalgebra-sparse` via des conversions à la demande :
 
 - [`Matrix::to_csr`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CsrMatrix<f64>`
 - [`Matrix::to_csc`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CscMatrix<f64>`
 - [`Matrix::to_coo`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CooMatrix<f64>`
 - [`Matrix::to_dmatrix`](#api-rust--accès-en-lecture) → `nalgebra::DMatrix<f64>`
-
-Cette stratégie « COO en construction, CSR/CSC à l'usage » colle au style cast3m (« finalisation au gel ») tout en évitant de réimplémenter ce que `nalgebra-sparse` fait déjà très bien.
 
 ## Drapeau `symmetric`
 
@@ -153,7 +163,6 @@ for row_node, row_field, col_node, col_field, value in k.entries():
 
 ## Limitations actuelles
 
-- **COO interne uniquement pendant l'assemblage** : `add_entry` n'utilise pas (encore) le `CooMatrix` de `nalgebra-sparse` parce que celui-ci exige des dimensions fixes à la construction ; or pyrucast découvre les DOFs au fil de l'insertion. La conversion vers `CooMatrix` / `CsrMatrix` / `CscMatrix` est faite à la demande au moment où ces vues sont utiles.
-- **Recherche linéaire des DOFs et des noms** lors de l'insertion : O(n_dofs + n_fields) par `add_entry`. Pour les premiers besoins (assemblage de quelques milliers de DOFs), c'est négligeable. Une indexation hash pourra être ajoutée en Phase 6 sans casser l'API publique.
-- **Pas de produit matrice-matrice** ni d'opérations entre matrices (somme, etc.) : à venir avec les premiers besoins concrets (préconditionneurs, formulations couplées).
+- **Cache de motif non invalidé par les mutations profondes** : le motif creux mémoïsé sur le `Model` est invalidé à l'ajout d'un sous-modèle (`add_sub`), mais pas si le maillage / l'espace EF sous-jacent change *en place* (remaillage) — reconstruire le modèle dans ce cas. Le chemin de composition `ops::assemble::assemble(&mut m)`, lui, reconstruit toujours le motif depuis les blocs.
+- **Pas de produit matrice-matrice** ni d'opérations algébriques entre matrices (somme, etc.) : à venir avec les premiers besoins concrets (préconditionneurs, formulations couplées).
 - Le drapeau `symmetric` n'est pas vérifié numériquement à l'assemblage. C'est de la responsabilité de l'assembleur (du `Model`) d'apparier correctement la déclaration et la réalité.

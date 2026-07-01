@@ -128,6 +128,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 |---|---|
 | `stiffness(model: &Model, materials: &ElementField) -> Matrix` | `stiffness(model, materials) -> Matrix` |
 | `mass(model: &Model) -> Matrix` | `mass(model) -> Matrix` |
+| `assemble(k: &mut Matrix) -> Result<()>` | — (Rust : (ré)assemble une matrice depuis ses blocs seuls, sans `Model` — chemin de composition) |
 | `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
 
 ### `ops::behavior` — intégration du comportement (`COMP`)

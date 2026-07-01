@@ -25,6 +25,8 @@ Physics  (trait : tout le comportement)
 ├── primal_vars / dual_vars
 ├── material_components / material_fespace   (défaut : None)
 ├── multiplier_mesh                          (défaut : None)
+├── element_matrix                           (noyau cellule ; défaut : erreur)
+├── stiffness_layout                         (bloc calculé ; défaut : None)
 ├── build_stiffness_blocks
 ├── build_mass_blocks                        (défaut : vide)
 └── label / display / render
@@ -53,7 +55,8 @@ Tout le reste est générique et **ne change pas**.
 
 Défini dans `src/models/mod.rs`. La plupart des méthodes ont une valeur par
 défaut : une physique volumique typique n'implémente que `primal_vars`,
-`dual_vars`, `material_*`, `build_stiffness_blocks`, `label` et `render`.
+`dual_vars`, `material_*`, le noyau `element_matrix` + `stiffness_layout` (la
+voie *calculée*), `build_stiffness_blocks`, `label` et `render`.
 
 ```rust,ignore
 pub trait Physics: Sync {
@@ -62,6 +65,12 @@ pub trait Physics: Sync {
     fn material_components(&self) -> Option<&'static [&'static str]> { None }
     fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> { None }
     fn multiplier_mesh(&self) -> Option<&Mesh> { None }
+    // Noyau de matrice élémentaire (une cellule) — pur et séquentiel :
+    fn element_matrix(&self, geom: &CellGeom,
+        material: Option<&SubElementField>, ke: &mut [f64]) -> Result<()> { /* défaut : erreur */ }
+    // Déclare le bloc *calculé* (assemblage global par scatter colorié parallèle) ;
+    // None (défaut) ⇒ physique assemblée en littéral (Dirichlet, blocs à la main) :
+    fn stiffness_layout(&self) -> Option<StiffnessLayout> { None }
     fn build_stiffness_blocks(&self, material: Option<&Handle<SubElementField>>)
         -> Result<Vec<SubMatrix>>;
     fn build_mass_blocks(&self, _material: Option<&Handle<SubElementField>>)
@@ -94,13 +103,19 @@ Conséquences pratiques :
 
 ### Le parallélisme est gratuit (et invisible)
 
-Les noyaux qu'une physique écrit — `integrate_point` (un point de Gauss) et le
-noyau de matrice élémentaire passé à `kernel::assemble_block` (une cellule) —
-sont **séquentiels et purs** : ils ne voient ni rayon, ni le store, ni un verrou.
-Les *drivers* de `models::kernel` portent la parallélisation et le zéro-copie
-au-dessus d'eux. Voir [Parallélisme](developper/parallelisme.md). Concrètement,
-`build_stiffness_blocks` d'une physique de continuum se réduit à un appel à
-`kernel::assemble_block(..., |geom, mat, ke| element_kernel(geom, mat, ke))`.
+Les noyaux qu'une physique écrit — `integrate_point` (un point de Gauss) et
+`element_matrix` (la matrice élémentaire d'une cellule) — sont **séquentiels et
+purs** : ils ne voient ni rayon, ni le store, ni un verrou. Les *drivers* de
+`models::kernel` portent la parallélisation et le zéro-copie au-dessus d'eux.
+Voir [Parallélisme](developper/parallelisme.md).
+
+Concrètement, une physique de continuum déclare `stiffness_layout()` (support,
+variables, ordering) : l'assembleur global bâtit alors un bloc **calculé** et
+disperse `element_matrix` directement dans le CSR, en parallèle par coloration
+des cellules — sans matérialiser de COO. Son `build_stiffness_blocks` (voie
+littérale, `kernel::assemble_block(..., |geom, mat, ke| self.element_matrix(...))`)
+est conservé comme référence d'équivalence, mais n'est plus le chemin de
+production des physiques volumiques.
 
 ## Le dispatch — `src/containers/model.rs`
 

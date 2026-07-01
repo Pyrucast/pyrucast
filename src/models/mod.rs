@@ -51,7 +51,7 @@ pub use kernel::CellGeom;
 ///
 /// Every field mirrors, one-for-one, what the physics'
 /// [`build_stiffness_blocks`](Physics::build_stiffness_blocks) would pass to
-/// [`kernel::assemble_block`](crate::models::kernel::assemble_block). The
+/// [`kernel::assemble_block`]. The
 /// literal `build_stiffness_blocks` is **kept** alongside it as the bit-for-bit
 /// equivalence reference. Volumetric blocks are square on a single support, so
 /// one [`SubMesh`] gives both the row and column node sequence.
@@ -232,8 +232,9 @@ pub trait Physics: Sync {
     /// Integrate the constitutive law (Cast3m `COMP`). **Provided**: drives the
     /// point kernel [`integrate_point`](Self::integrate_point) in parallel over
     /// the behaviour FE subspace via [`kernel::integrate_pointwise`]. A physics
-    /// implements the point kernel + [`behavior_output_components`]
-    /// (Self::behavior_output_components), **not** this. A physics with no
+    /// implements the point kernel +
+    /// [`behavior_output_components`](Self::behavior_output_components), **not**
+    /// this. A physics with no
     /// behaviour FE subspace falls through to a clear error here.
     fn integrate_behavior(
         &self,
