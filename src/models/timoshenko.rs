@@ -25,11 +25,11 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::{
     Interpolation, QuadratureRule, SubFiniteElementSpace,
 };
-use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::{ElementType, NodeId, SubMesh};
+use crate::containers::matrix::DofOrdering;
+use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Physics};
+use crate::models::{CellGeom, Physics, StiffnessLayout};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -105,25 +105,51 @@ impl Physics for Timoshenko {
         Some(self.bending.clone())
     }
 
-    fn build_stiffness_blocks(
+    fn stiffness_layout(&self) -> Option<StiffnessLayout> {
+        // Two-quadrature element: bending (full Gauss) + shear (reduced), two FE
+        // subspaces over the same mesh. The multi-fespace layout drives both the
+        // computed (parallel scatter) and literal paths from this one description.
+        Some(StiffnessLayout {
+            fespaces: vec![self.bending.clone(), self.shear.clone()],
+            support: self.support.clone(),
+            dual_vars: self.dual_vars(),
+            primal_vars: self.primal_vars(),
+            ordering: DofOrdering::NodesThenVars,
+            symmetric: true,
+        })
+    }
+
+    /// `K_b + K_s` of one beam element. `geoms[0]` is the full-Gauss bending
+    /// subspace, `geoms[1]` the reduced 1-point shear subspace (same cell, same
+    /// nodes). DOF vector `d = [w_0, θ_0, w_1, θ_1]`; bending strain
+    /// `θ' = B_b·d` with `B_b = [0, dN_0, 0, dN_1]`, shear strain
+    /// `γ = w' − θ = B_s·d` with `B_s = [dN_0, −N_0, dN_1, −N_1]`.
+    fn element_matrix(
         &self,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<Vec<SubMatrix>> {
-        let mat = material.expect("Timoshenko requires a material field");
-        // Two-quadrature element (bending full Gauss + shear reduced): does not
-        // fit the single-FE-space `kernel::assemble_block` driver, and beam
-        // meshes are 1-D/small — kept on its own sequential path (its behaviour
-        // integration is mutualised via `integrate_point`).
-        let mut block = SubMatrix::new(
-            self.support.clone(),
-            self.support.clone(),
-            self.dual_vars(),
-            self.primal_vars(),
-            DofOrdering::NodesThenVars,
-            true,
-        )?;
-        assemble_stiffness(&self.bending, &self.shear, mat, &mut block)?;
-        Ok(vec![block])
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let mat = material.expect("Timoshenko declares a material_fespace ⇒ material is supplied");
+        let (bend, shear) = (&geoms[0], &geoms[1]);
+        let cell = bend.cell;
+        let ei = mat.value(cell, 0, "E")? * mat.value(cell, 0, "I")?;
+        let gas = mat.value(cell, 0, "G")? * mat.value(cell, 0, "A_s")?;
+
+        // Bending: B_b = [0, dN_0, 0, dN_1], coefficient E·I (full Gauss).
+        for g in 0..bend.n_gauss {
+            let dn = bend.dn_dx(g)?; // [dN_0/dx, dN_1/dx] (1-D)
+            let bb = [0.0, dn[0], 0.0, dn[1]];
+            accumulate(ke, &bb, ei * bend.det_j_w(g)?);
+        }
+        // Shear: B_s = [dN_0, −N_0, dN_1, −N_1], coefficient G·A_s (reduced).
+        for g in 0..shear.n_gauss {
+            let dn = shear.dn_dx(g)?;
+            let n = shear.n_at_g(g)?;
+            let bs = [dn[0], -n[0], dn[1], -n[1]];
+            accumulate(ke, &bs, gas * shear.det_j_w(g)?);
+        }
+        Ok(())
     }
 
     fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
@@ -165,103 +191,12 @@ impl Physics for Timoshenko {
     }
 }
 
-/// Per-cell, per-Gauss integration data of a SEG2 subspace: the two nodal
-/// derivatives `dN/dx`, the two nodal values `N`, and `|J|·w`.
-struct GaussData {
-    dn: Vec<[f64; 2]>, // [g] = [dN_0/dx, dN_1/dx]
-    n: Vec<[f64; 2]>,  // [g] = [N_0, N_1]
-    det_j_w: Vec<f64>,
-}
-
-/// Snapshot one SEG2 subspace into per-cell [`GaussData`] (+ connectivity).
-fn gauss_data(fespace: &Handle<SubFiniteElementSpace>) -> Result<(Vec<GaussData>, Vec<NodeId>)> {
-    let s = read(fespace)?;
-    let n_cells = s.cell_count()?;
-    let n_g = s.gauss_count();
-    let conn: Vec<NodeId> = read(&s.submesh())?.connectivity().to_vec();
-    let mut out = Vec::with_capacity(n_cells);
-    for cell in 0..n_cells {
-        let mut dn = Vec::with_capacity(n_g);
-        let mut n = Vec::with_capacity(n_g);
-        let mut det_j_w = Vec::with_capacity(n_g);
-        for g in 0..n_g {
-            let d = s.dn_dx(cell, g)?; // [dN_0/dx, dN_1/dx] (1-D)
-            let sh = s.n_at_g(g)?; // [N_0, N_1]
-            dn.push([d[0], d[1]]);
-            n.push([sh[0], sh[1]]);
-            det_j_w.push(s.det_jacobian(cell, g)? * s.gauss_weight(g)?);
-        }
-        out.push(GaussData { dn, n, det_j_w });
-    }
-    Ok((out, conn))
-}
-
-/// Assemble `K_b + K_s` of every beam element into `k`.
-///
-/// Bending strain `θ' = B_b·d` with `B_b = [0, dN_0, 0, dN_1]`; shear strain
-/// `γ = w' − θ = B_s·d` with `B_s = [dN_0, −N_0, dN_1, −N_1]`, where the DOF
-/// vector is `d = [w_0, θ_0, w_1, θ_1]`.
-pub fn assemble_stiffness(
-    bending: &Handle<SubFiniteElementSpace>,
-    shear: &Handle<SubFiniteElementSpace>,
-    material: &Handle<SubElementField>,
-    k: &mut SubMatrix,
-) -> Result<()> {
-    let (bend, conn) = gauss_data(bending)?;
-    let (shr, _) = gauss_data(shear)?;
-    let n_cells = bend.len();
-
-    let (eis, gas): (Vec<f64>, Vec<f64>) = {
-        let m = read(material)?;
-        let mut eis = Vec::with_capacity(n_cells);
-        let mut gas = Vec::with_capacity(n_cells);
-        for cell in 0..n_cells {
-            eis.push(m.value(cell, 0, "E")? * m.value(cell, 0, "I")?);
-            gas.push(m.value(cell, 0, "G")? * m.value(cell, 0, "A_s")?);
-        }
-        (eis, gas)
-    };
-
-    for cell in 0..n_cells {
-        let nodes = [conn[2 * cell], conn[2 * cell + 1]];
-        let mut ke = [[0.0_f64; 4]; 4];
-
-        // Bending: B_b = [0, dN_0, 0, dN_1], coefficient E·I (full Gauss).
-        for (g, &[dn0, dn1]) in bend[cell].dn.iter().enumerate() {
-            let bb = [0.0, dn0, 0.0, dn1];
-            let coef = eis[cell] * bend[cell].det_j_w[g];
-            accumulate(&mut ke, &bb, coef);
-        }
-        // Shear: B_s = [dN_0, −N_0, dN_1, −N_1], coefficient G·A_s (reduced).
-        for g in 0..shr[cell].dn.len() {
-            let [dn0, dn1] = shr[cell].dn[g];
-            let [n0, n1] = shr[cell].n[g];
-            let bs = [dn0, -n0, dn1, -n1];
-            let coef = gas[cell] * shr[cell].det_j_w[g];
-            accumulate(&mut ke, &bs, coef);
-        }
-
-        // Scatter the 4×4 element matrix: DOF k ↔ (nodes[k/2], var[k%2]).
-        for r in 0..4 {
-            for c in 0..4 {
-                k.add_entry(
-                    nodes[r / 2],
-                    DUAL[r % 2],
-                    nodes[c / 2],
-                    PRIMAL[c % 2],
-                    ke[r][c],
-                )?;
-            }
-        }
-    }
-    Ok(())
-}
-
-/// `Ke += coef · (B ⊗ B)`.
-fn accumulate(ke: &mut [[f64; 4]; 4], b: &[f64; 4], coef: f64) {
+/// `Ke += coef · (B ⊗ B)` on the flat 4×4 element matrix (row-major,
+/// node-major / variable-minor: DOF `k ↔ (node k/2, var k%2)`).
+fn accumulate(ke: &mut [f64], b: &[f64; 4], coef: f64) {
     for r in 0..4 {
         for c in 0..4 {
-            ke[r][c] += coef * b[r] * b[c];
+            ke[r * 4 + c] += coef * b[r] * b[c];
         }
     }
 }
@@ -274,7 +209,7 @@ mod tests {
     use crate::aggregate::Aggregate;
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, Mesh, Node};
+    use crate::containers::mesh::{Coords, Mesh, Node, NodeId};
     use crate::store::insert;
 
     /// One SEG2 beam of length `L`, returns `(timoshenko, n0, n1, L)`.

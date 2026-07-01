@@ -56,8 +56,13 @@ pub use kernel::CellGeom;
 /// equivalence reference. Volumetric blocks are square on a single support, so
 /// one [`SubMesh`] gives both the row and column node sequence.
 pub struct StiffnessLayout {
-    /// FE subspace the element kernel integrates over (drives the cell loop).
-    pub fespace: Handle<SubFiniteElementSpace>,
+    /// FE subspaces the element kernel integrates over. **Give a `Vec`**: a
+    /// single subspace for a plain volumetric physics, or several — sharing one
+    /// submesh, differing only by quadrature — for a multi-quadrature element
+    /// (a shear-deformable beam, a shell). The primary (index 0) drives the cell
+    /// loop and the DOF numbering; [`element_matrix`](Physics::element_matrix)
+    /// receives one [`CellGeom`] per subspace, in this order.
+    pub fespaces: Vec<Handle<SubFiniteElementSpace>>,
     /// POI1 sub-mesh giving the block's row **and** column node sequence.
     pub support: Handle<SubMesh>,
     /// Row variable names (dual).
@@ -113,12 +118,18 @@ pub trait Physics: Sync {
     /// from the cell geometry and material. `material` is `Some(_)` iff the
     /// physics declares a [`material_fespace`](Self::material_fespace).
     ///
+    /// `geoms` holds one [`CellGeom`] per FE subspace declared in
+    /// [`stiffness_layout`](Self::stiffness_layout), in that order: a plain
+    /// volumetric physics reads `geoms[0]`, a multi-quadrature element (a
+    /// shear-deformable beam, a shell) reads each — e.g. `geoms[0]` full Gauss
+    /// for bending, `geoms[1]` reduced for shear.
+    ///
     /// It **never sees rayon, the store, or a lock**: the assembler drives it in
     /// parallel over all cells. Default errors (a physics with no element kernel,
     /// e.g. a constraint such as `Dirichlet`).
     fn element_matrix(
         &self,
-        _geom: &CellGeom,
+        _geoms: &[CellGeom],
         _material: Option<&SubElementField>,
         _ke: &mut [f64],
     ) -> Result<()> {
@@ -153,7 +164,7 @@ pub trait Physics: Sync {
             )));
         };
         let block = kernel::assemble_block(
-            &layout.fespace,
+            &layout.fespaces,
             &layout.support,
             &layout.support,
             layout.dual_vars,
@@ -161,7 +172,7 @@ pub trait Physics: Sync {
             layout.ordering,
             layout.symmetric,
             material,
-            |geom, m, ke| self.element_matrix(geom, m, ke),
+            |geoms, m, ke| self.element_matrix(geoms, m, ke),
         )?;
         Ok(vec![block])
     }

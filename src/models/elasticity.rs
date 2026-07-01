@@ -138,7 +138,7 @@ impl Physics for Elasticity {
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
         Some(StiffnessLayout {
-            fespace: self.fespace.clone(),
+            fespaces: vec![self.fespace.clone()],
             support: self.support.clone(),
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
@@ -149,10 +149,11 @@ impl Physics for Elasticity {
 
     fn element_matrix(
         &self,
-        geom: &CellGeom,
+        geoms: &[CellGeom],
         material: Option<&SubElementField>,
         ke: &mut [f64],
     ) -> Result<()> {
+        let geom = &geoms[0];
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
         element_stiffness(geom, mat, self.model, ke)
     }

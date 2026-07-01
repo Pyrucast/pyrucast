@@ -52,7 +52,7 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
         match blk.recipe() {
             Some(recipe) => {
                 let (_, _, per_cell) = kernel::element_block_pattern(
-                    &recipe.fespace,
+                    &recipe.fespaces[0],
                     blk.row_support(),
                     blk.col_support(),
                     blk.dual_vars().len(),
@@ -123,14 +123,14 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                 let sm = read(&recipe.submodel)?;
                 let phys = sm.as_physics();
                 let (_, _, trips) = kernel::element_block_triplets(
-                    &recipe.fespace,
+                    &recipe.fespaces,
                     blk.row_support(),
                     blk.col_support(),
                     blk.dual_vars().len(),
                     blk.primal_vars().len(),
                     blk.ordering(),
                     recipe.material.as_ref(),
-                    |geom, m, ke| phys.element_matrix(geom, m, ke),
+                    |geoms, m, ke| phys.element_matrix(geoms, m, ke),
                 )?;
                 for (ri, ci, v) in trips {
                     values[pattern.slot(trow[ri], tcol[ci])] += v;
@@ -200,19 +200,19 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                 // Element matrices, evaluated in parallel, one triplet list per
                 // cell (grouping needed for the colour-driven scatter).
                 let (_, _, per_cell) = kernel::element_block_triplets_per_cell(
-                    &recipe.fespace,
+                    &recipe.fespaces,
                     blk.row_support(),
                     blk.col_support(),
                     blk.dual_vars().len(),
                     blk.primal_vars().len(),
                     blk.ordering(),
                     recipe.material.as_ref(),
-                    |geom, m, ke| phys.element_matrix(geom, m, ke),
+                    |geoms, m, ke| phys.element_matrix(geoms, m, ke),
                 )?;
 
-                // Cell colouring (cached on the FE subspace): two cells sharing a
-                // node conflict, so one colour's cells touch disjoint DOFs.
-                let fe = read(&recipe.fespace)?;
+                // Cell colouring (cached on the primary FE subspace): two cells
+                // sharing a node conflict, so one colour's cells touch disjoint DOFs.
+                let fe = read(&recipe.fespaces[0])?;
                 let submesh = fe.submesh();
                 let submesh_g = read(&submesh)?;
                 let conn = submesh_g.connectivity();

@@ -66,8 +66,10 @@ pub trait Physics: Sync {
     fn material_components(&self) -> Option<&'static [&'static str]> { None }
     fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> { None }
     fn multiplier_mesh(&self) -> Option<&Mesh> { None }
-    // Noyau de matrice élémentaire (une cellule) — pur et séquentiel :
-    fn element_matrix(&self, geom: &CellGeom,
+    // Noyau de matrice élémentaire (une cellule) — pur et séquentiel ;
+    // `geoms` : un CellGeom par espace EF du layout (geoms[0] pour le cas usuel,
+    // plusieurs pour un élément multi-quadrature — poutre/coque) :
+    fn element_matrix(&self, geoms: &[CellGeom],
         material: Option<&SubElementField>, ke: &mut [f64]) -> Result<()> { /* défaut : erreur */ }
     // Déclare le bloc *calculé* (assemblage global par scatter colorié parallèle) ;
     // None (défaut) ⇒ physique assemblée en littéral (Dirichlet, blocs à la main) :
@@ -110,15 +112,24 @@ purs** : ils ne voient ni rayon, ni le store, ni un verrou. Les *drivers* de
 `models::kernel` portent la parallélisation et le zéro-copie au-dessus d'eux.
 Voir [Parallélisme](developper/parallelisme.md).
 
-Concrètement, une physique de continuum déclare `stiffness_layout()` (support,
-variables, ordering) : l'assembleur global bâtit alors un bloc **calculé** et
-disperse `element_matrix` directement dans le CSR, en parallèle par coloration
-des cellules — sans matérialiser de COO. La voie **littérale**
-(`build_stiffness_blocks`) en est le **défaut du trait**, dérivé du même couple
+Concrètement, une physique de continuum déclare `stiffness_layout()` (espaces EF,
+support, variables, ordering) : l'assembleur global bâtit alors un bloc
+**calculé** et disperse `element_matrix` directement dans le CSR, en parallèle par
+coloration des cellules — sans matérialiser de COO. La voie **littérale**
+(`build_stiffness_blocks`) en est le **défaut du trait**, dérivée du même couple
 `stiffness_layout` + `element_matrix` via `kernel::assemble_block` ; elle sert de
 référence d'équivalence et de repli, mais une physique volumique **ne l'écrit
-plus**. (Seules les physiques *sans* `stiffness_layout` — `Dirichlet`, Timoshenko
-à deux quadratures — redéfinissent `build_stiffness_blocks`.)
+plus**. (Seul `Dirichlet`, une contrainte *sans* `stiffness_layout`, redéfinit
+`build_stiffness_blocks`.)
+
+Le champ `fespaces` du `stiffness_layout` est un **`Vec`** : un seul espace EF
+pour une physique de continuum, ou plusieurs — partageant un maillage, ne
+différant que par la quadrature — pour un élément **multi-quadrature**. C'est ce
+que fait la **poutre de Timoshenko** (`fespaces: vec![bending, shear]`, flexion en
+Gauss complet + cisaillement réduit) : `element_matrix` reçoit alors deux
+`CellGeom`, `geoms[0]` pour la flexion et `geoms[1]` pour le cisaillement, et
+l'élément passe par le **même** chemin de scatter parallèle que le reste — la
+sparsité ne dépendant que de la connectivité, pas de la quadrature.
 
 ## Le dispatch — `src/containers/model.rs`
 

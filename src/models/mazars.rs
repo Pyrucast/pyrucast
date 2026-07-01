@@ -129,7 +129,7 @@ impl Physics for Mazars {
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
         Some(StiffnessLayout {
-            fespace: self.fespace.clone(),
+            fespaces: vec![self.fespace.clone()],
             support: self.support.clone(),
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
@@ -140,10 +140,11 @@ impl Physics for Mazars {
 
     fn element_matrix(
         &self,
-        geom: &CellGeom,
+        geoms: &[CellGeom],
         material: Option<&SubElementField>,
         ke: &mut [f64],
     ) -> Result<()> {
+        let geom = &geoms[0];
         // Iteration operator = elastic (undamaged) stiffness. Reuse the
         // elasticity element kernel; it reads only `E` and `nu`.
         let mat = material.expect("Mazars requires a material field");

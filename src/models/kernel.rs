@@ -8,7 +8,10 @@
 //!   Gauss point — read the deformation (+ `VAR0`) and material there, write the
 //!   flux/stress (+ `VAR1`);
 //! - an **element kernel** ([`assemble_block`]): the local stiffness matrix of
-//!   one cell from its geometry and material.
+//!   one cell from its geometry and material. It receives **one [`CellGeom`] per
+//!   FE subspace** of the block — a single one for a plain volumetric physics, or
+//!   several (sharing one mesh, differing by quadrature) for a multi-quadrature
+//!   element such as a shear-deformable beam or a shell.
 //!
 //! These drivers own the fan-out (rayon), the zero-copy borrowing of store data
 //! (read guards held across the parallel region, slices borrowed in place — no
@@ -222,15 +225,17 @@ pub fn integrate_pointwise(
 /// Assemble one stiffness block by a per-cell element-matrix kernel, in
 /// parallel.
 ///
-/// `element(geom, material, ke)` is a pure sequential kernel: it fills `ke` —
+/// `element(geoms, material, ke)` is a pure sequential kernel: it fills `ke` —
 /// the cell's local dense matrix, row-major, **node-major / variable-minor**:
 ///   row `r = li * n_dual + di`, col `c = lj * n_primal + pj`
 /// (with `li/lj` local node indices, `di/pj` indices into `dual_vars` /
-/// `primal_vars`). The driver scatters `ke` into the block's COO serially in
-/// cell order. `material` is `Some` iff the physics supplied one.
+/// `primal_vars`). `geoms` holds one [`CellGeom`] per FE subspace of `fespaces`
+/// (same order); a single-space physics reads `geoms[0]`, a multi-quadrature one
+/// reads each. The driver scatters `ke` into the block's COO serially in cell
+/// order. `material` is `Some` iff the physics supplied one.
 #[allow(clippy::too_many_arguments)]
 pub fn assemble_block(
-    fespace: &Handle<SubFiniteElementSpace>,
+    fespaces: &[Handle<SubFiniteElementSpace>],
     row_support: &Handle<SubMesh>,
     col_support: &Handle<SubMesh>,
     dual_vars: Vec<String>,
@@ -238,10 +243,10 @@ pub fn assemble_block(
     ordering: DofOrdering,
     symmetric: bool,
     material: Option<&Handle<SubElementField>>,
-    element: impl Fn(&CellGeom, Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
+    element: impl Fn(&[CellGeom], Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
 ) -> Result<SubMatrix> {
     let (nrows, ncols, trips) = element_block_triplets(
-        fespace,
+        fespaces,
         row_support,
         col_support,
         dual_vars.len(),
@@ -287,17 +292,17 @@ pub type BlockTriplets = (usize, usize, Vec<(usize, usize, f64)>);
 /// `(nrows, ncols, triplets)`.
 #[allow(clippy::too_many_arguments)]
 pub fn element_block_triplets(
-    fespace: &Handle<SubFiniteElementSpace>,
+    fespaces: &[Handle<SubFiniteElementSpace>],
     row_support: &Handle<SubMesh>,
     col_support: &Handle<SubMesh>,
     n_dual: usize,
     n_primal: usize,
     ordering: DofOrdering,
     material: Option<&Handle<SubElementField>>,
-    element: impl Fn(&CellGeom, Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
+    element: impl Fn(&[CellGeom], Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
 ) -> Result<BlockTriplets> {
     let (nrows, ncols, per_cell) = element_block_triplets_per_cell(
-        fespace, row_support, col_support, n_dual, n_primal, ordering, material, element,
+        fespaces, row_support, col_support, n_dual, n_primal, ordering, material, element,
     )?;
     let total: usize = per_cell.iter().map(|v| v.len()).sum();
     let mut trips = Vec::with_capacity(total);
@@ -317,29 +322,53 @@ pub type BlockTripletsPerCell = (usize, usize, Vec<Vec<(usize, usize, f64)>>);
 /// lists are reproducible. The grouping lets a colour-driven scatter process one
 /// colour's cells (which touch disjoint DOFs) in parallel without write
 /// conflicts.
+///
+/// `fespaces` is the block's FE subspaces: usually one, but several for a
+/// multi-quadrature element. They must **share one submesh** (same connectivity,
+/// same coordinates, same nodes-per-cell), differing only by quadrature — the
+/// primary (index 0) drives the cell loop and the scatter numbering, the others
+/// only add their reference data. The kernel receives one [`CellGeom`] per
+/// subspace, in order.
 #[allow(clippy::too_many_arguments)]
 pub fn element_block_triplets_per_cell(
-    fespace: &Handle<SubFiniteElementSpace>,
+    fespaces: &[Handle<SubFiniteElementSpace>],
     row_support: &Handle<SubMesh>,
     col_support: &Handle<SubMesh>,
     n_dual: usize,
     n_primal: usize,
     ordering: DofOrdering,
     material: Option<&Handle<SubElementField>>,
-    element: impl Fn(&CellGeom, Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
+    element: impl Fn(&[CellGeom], Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
 ) -> Result<BlockTripletsPerCell> {
-    let fe = read(fespace)?;
+    let primary = fespaces.first().ok_or_else(|| {
+        PyrucastError::Message("element_block_triplets_per_cell: no FE subspace".into())
+    })?;
+    let fe = read(primary)?;
     let submesh = fe.submesh();
     let sm = read(&submesh)?;
     let coords_h = sm.coords();
     let coords = read(&coords_h)?;
     let mat_guard = material.map(read).transpose()?;
 
-    let rd = RefData::snapshot(&fe)?;
+    // Reference data of every subspace, snapshotted once (they share the submesh
+    // ⇒ one connectivity + coords drive every CellGeom; only quadrature differs).
+    let mut rds = Vec::with_capacity(fespaces.len());
+    rds.push(RefData::snapshot(&fe)?);
+    for h in &fespaces[1..] {
+        let f = read(h)?;
+        if !f.submesh().same_slot(&submesh) {
+            return Err(PyrucastError::Message(
+                "element_block_triplets_per_cell: all FE subspaces of a block must share one submesh"
+                    .into(),
+            ));
+        }
+        rds.push(RefData::snapshot(&f)?);
+    }
+
     let n_cells = fe.cell_count()?;
-    let n_nodes = rd.n_nodes;
+    let n_nodes = rds[0].n_nodes;
     let conn: &[NodeId] = sm.connectivity();
-    let rd_ref: &RefData = &rd;
+    let rds_ref: &[RefData] = &rds;
     let coords_ref: &Coords = &coords;
     let mat_ref: Option<&SubElementField> = mat_guard.as_deref();
 
@@ -373,9 +402,12 @@ pub fn element_block_triplets_per_cell(
         .into_par_iter()
         .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
         .map(|cell| -> Result<Vec<(usize, usize, f64)>> {
-            let geom = CellGeom::new(rd_ref, coords_ref, conn, cell)?;
+            let geoms: Vec<CellGeom> = rds_ref
+                .iter()
+                .map(|rd| CellGeom::new(rd, coords_ref, conn, cell))
+                .collect::<Result<_>>()?;
             let mut ke = vec![0.0_f64; ke_len];
-            element(&geom, mat_ref, &mut ke)?;
+            element(&geoms, mat_ref, &mut ke)?;
 
             let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
             let mut rpos = Vec::with_capacity(n_nodes);

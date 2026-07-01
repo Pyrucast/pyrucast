@@ -73,7 +73,7 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
                 Some(layout) => {
                     let recipe = ComputedRecipe {
                         submodel: sub_h.clone(),
-                        fespace: layout.fespace,
+                        fespaces: layout.fespaces,
                         material,
                     };
                     BuiltBlocks::Computed(Box::new(SubMatrix::computed(
@@ -297,6 +297,34 @@ mod tests {
         (model, materials)
     }
 
+    /// A Timoshenko beam over an `n_elems`-element SEG2 chain (1-D). Exercises the
+    /// **multi-fespace** computed path: each block integrates two FE subspaces
+    /// (bending full Gauss + shear reduced) sharing one mesh, and interior nodes
+    /// are shared so the parallel scatter genuinely colours the cells.
+    fn timoshenko_beam(n_elems: usize) -> (Model, ElementField) {
+        let coords = insert(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = (0..=n_elems)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        for i in 0..n_elems {
+            sm.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
+        }
+        let mesh = Mesh::from_submesh(sm);
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+
+        let mut model = Model::empty();
+        model
+            .add_sub(insert(SubModel::timoshenko(fes.get(0).unwrap()).unwrap()))
+            .unwrap();
+        let materials = material_field_per_sub_model(
+            &model,
+            &[&[("E", 3.0), ("I", 2.0), ("G", 5.0), ("A_s", 2.0)]],
+        )
+        .unwrap();
+        (model, materials)
+    }
+
     /// Pass 1 of [`stiffness`] alone: the block aggregate (computed blocks for
     /// the volumetric zones, literal for the rest) **before** the global
     /// scatter. Lets a test drive `scatter::*` directly on the same blocks the
@@ -306,10 +334,9 @@ mod tests {
         for sub_h in model {
             let built = {
                 let sub = read(sub_h).unwrap();
-                let material = match sub.material_fespace() {
-                    Some(fespace) => Some(materials.sub_for_fespace(&fespace).unwrap()),
-                    None => None,
-                };
+                let material = sub
+                    .material_fespace()
+                    .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
                 match sub.as_physics().stiffness_layout() {
                     Some(layout) => BuiltBlocks::Computed(Box::new(
                         SubMatrix::computed(
@@ -321,7 +348,7 @@ mod tests {
                             layout.symmetric,
                             ComputedRecipe {
                                 submodel: sub_h.clone(),
-                                fespace: layout.fespace,
+                                fespaces: layout.fespaces,
                                 material,
                             },
                         )
@@ -395,6 +422,46 @@ mod tests {
         let a = stiffness(&model, &materials).unwrap();
         let b = stiffness(&model, &materials).unwrap();
         assert_eq!(a.to_csr().unwrap().values(), b.to_csr().unwrap().values());
+    }
+
+    /// A **multi-fespace** element (Timoshenko: bending full-Gauss + shear
+    /// reduced, two subspaces over one mesh) assembles through the computed
+    /// serial scatter **bit-for-bit** identically to its literal reference — the
+    /// two `CellGeom` per cell produce the exact same triplet stream as the
+    /// single-block driver.
+    #[test]
+    fn timoshenko_multi_fespace_serial_equals_literal_bit_for_bit() {
+        let (model, materials) = timoshenko_beam(5);
+        let k = assemble_computed_blocks(&model, &materials);
+        let pattern = scatter::build_pattern(&k).unwrap();
+        let csr = scatter::scatter_serial(&k, &pattern).unwrap();
+
+        let k_ref = assemble_literal_reference(&model, &materials).unwrap();
+        let csr_ref = k_ref.to_csr().unwrap();
+
+        assert_eq!(csr.row_offsets(), csr_ref.row_offsets());
+        assert_eq!(csr.col_indices(), csr_ref.col_indices());
+        assert_eq!(csr.values(), csr_ref.values());
+    }
+
+    /// Same Timoshenko beam through the **parallel** colour-driven scatter (the
+    /// real `stiffness` path): identical sparsity, values within tolerance.
+    #[test]
+    fn timoshenko_multi_fespace_parallel_matches_literal_within_tol() {
+        let (model, materials) = timoshenko_beam(5);
+        let k_new = stiffness(&model, &materials).unwrap();
+        let k_ref = assemble_literal_reference(&model, &materials).unwrap();
+        let csr_new = k_new.to_csr().unwrap();
+        let csr_ref = k_ref.to_csr().unwrap();
+
+        assert_eq!(csr_new.row_offsets(), csr_ref.row_offsets());
+        assert_eq!(csr_new.col_indices(), csr_ref.col_indices());
+        for (x, y) in csr_new.values().iter().zip(csr_ref.values()) {
+            assert!(
+                (x - y).abs() <= 1e-12 * (1.0 + y.abs()),
+                "timoshenko value mismatch: {x} vs {y}"
+            );
+        }
     }
 
     /// The sparsity pattern is memoised on the model and reused across
@@ -485,10 +552,9 @@ mod tests {
         for sub_h in &model {
             let built = {
                 let sub = read(sub_h).unwrap();
-                let material = match sub.material_fespace() {
-                    Some(fespace) => Some(materials.sub_for_fespace(&fespace).unwrap()),
-                    None => None,
-                };
+                let material = sub
+                    .material_fespace()
+                    .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
                 sub.as_physics().stiffness_layout().map(|layout| {
                     SubMatrix::computed(
                         layout.support.clone(),
@@ -499,7 +565,7 @@ mod tests {
                         layout.symmetric,
                         ComputedRecipe {
                             submodel: sub_h.clone(),
-                            fespace: layout.fespace,
+                            fespaces: layout.fespaces,
                             material,
                         },
                     )

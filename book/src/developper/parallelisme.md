@@ -55,6 +55,13 @@ la somme de chaque case est réordonnée par couleur. Un chemin de scatter
 **séquentiel** (en ordre de bloc), lui bit-à-bit, est conservé comme référence de
 test.
 
+Le noyau élémentaire reçoit **un `CellGeom` par espace EF** du bloc : un seul
+pour une physique de continuum, plusieurs — partageant un maillage, ne différant
+que par la quadrature — pour un élément **multi-quadrature** (poutre de
+Timoshenko flexion/cisaillement, coque à venir). La sparsité ne dépendant que de
+la connectivité, ces éléments empruntent le **même** chemin de scatter parallèle
+sans machinerie supplémentaire : seul le noyau numérique lit plusieurs géométries.
+
 Vérification : la suite de tests passe sous `RAYON_NUM_THREADS=1` puis `=8` ; les
 opérateurs write-once / réduction sont asservis à des valeurs exactes,
 l'assemblage parallèle à l'assemblage littéral **à tolérance**, plus un test de
@@ -73,9 +80,6 @@ l'ancien LU dense) — tous deux dans les tolérances numériques.
   parallèle sûr ».
 - **Fusion de champs** — `consolidate` / `consolidate_element` (dédup et
   vérification de cohérence entre zones).
-- **Poutre de Timoshenko** — élément à deux quadratures (flexion / cisaillement),
-  hors du driver à un seul espace EF ; les maillages de poutres sont 1-D et
-  petits. Son intégration de comportement, elle, est mutualisée.
 - **Mailleurs** — les noyaux séquentiels par nature (Bowyer–Watson, front
   avançant) restent séquentiels.
 

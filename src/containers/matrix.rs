@@ -156,8 +156,10 @@ impl crate::dump::Dump for DofOrdering {
 pub struct ComputedRecipe {
     /// Sub-model whose element kernel produces the contribution.
     pub submodel: Handle<SubModel>,
-    /// FE subspace the kernel integrates over (drives the cell loop).
-    pub fespace: Handle<SubFiniteElementSpace>,
+    /// FE subspaces the kernel integrates over. Usually one; several (sharing one
+    /// submesh, differing by quadrature) for a multi-quadrature element. The
+    /// primary (index 0) drives the cell loop and the scatter numbering.
+    pub fespaces: Vec<Handle<SubFiniteElementSpace>>,
     /// Material field for the kernel; `Some` iff the physics declares one.
     pub material: Option<Handle<SubElementField>>,
 }
@@ -670,9 +672,9 @@ impl crate::dump::Dump for SubMatrix {
         if self.is_computed() {
             let recipe = self.recipe.as_ref().expect("is_computed ⇒ recipe");
             return format!(
-                "{self}\n  recipe: submodel {:?}, fespace {:?}{}\n  dual_vars: [{}]\n  primal_vars: [{}]",
+                "{self}\n  recipe: submodel {:?}, fespaces {:?}{}\n  dual_vars: [{}]\n  primal_vars: [{}]",
                 recipe.submodel,
-                recipe.fespace,
+                recipe.fespaces,
                 recipe
                     .material
                     .as_ref()
