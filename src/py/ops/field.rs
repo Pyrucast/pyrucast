@@ -200,27 +200,27 @@ pub fn select(
 pub fn xty(x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyResult<f64> {
     use crate::containers::field::{Field, SubField};
     if let Ok(a) = x.extract::<PyRef<PyNodeField>>() {
-        let b = y.extract::<PyRef<PyNodeField>>().map_err(|_| {
-            PyTypeError::new_err("xty: both operands must be NodeFields")
-        })?;
+        let b = y
+            .extract::<PyRef<PyNodeField>>()
+            .map_err(|_| PyTypeError::new_err("xty: both operands must be NodeFields"))?;
         return Ok(a.inner.dot_field(&b.inner)?);
     }
     if let Ok(a) = x.extract::<PyRef<PyElementField>>() {
-        let b = y.extract::<PyRef<PyElementField>>().map_err(|_| {
-            PyTypeError::new_err("xty: both operands must be ElementFields")
-        })?;
+        let b = y
+            .extract::<PyRef<PyElementField>>()
+            .map_err(|_| PyTypeError::new_err("xty: both operands must be ElementFields"))?;
         return Ok(a.inner.dot_field(&b.inner)?);
     }
     if let Ok(a) = x.extract::<PyRef<PySubNodeField>>() {
-        let b = y.extract::<PyRef<PySubNodeField>>().map_err(|_| {
-            PyTypeError::new_err("xty: both operands must be SubNodeFields")
-        })?;
+        let b = y
+            .extract::<PyRef<PySubNodeField>>()
+            .map_err(|_| PyTypeError::new_err("xty: both operands must be SubNodeFields"))?;
         return Ok(read(&a.handle)?.dot(&*read(&b.handle)?)?);
     }
     if let Ok(a) = x.extract::<PyRef<PySubElementField>>() {
-        let b = y.extract::<PyRef<PySubElementField>>().map_err(|_| {
-            PyTypeError::new_err("xty: both operands must be SubElementFields")
-        })?;
+        let b = y
+            .extract::<PyRef<PySubElementField>>()
+            .map_err(|_| PyTypeError::new_err("xty: both operands must be SubElementFields"))?;
         return Ok(read(&a.handle)?.dot(&*read(&b.handle)?)?);
     }
     Err(PyTypeError::new_err(
@@ -262,14 +262,26 @@ pub fn psca(py: Python<'_>, x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyRes
             .extract::<PyRef<PySubNodeField>>()
             .map_err(|_| PyTypeError::new_err("psca: both operands must be SubNodeFields"))?;
         let out = read(&a.handle)?.pscal(&*read(&b.handle)?)?;
-        return Ok(Py::new(py, PySubNodeField { handle: insert(out) })?.into_any());
+        return Ok(Py::new(
+            py,
+            PySubNodeField {
+                handle: insert(out),
+            },
+        )?
+        .into_any());
     }
     if let Ok(a) = x.extract::<PyRef<PySubElementField>>() {
         let b = y
             .extract::<PyRef<PySubElementField>>()
             .map_err(|_| PyTypeError::new_err("psca: both operands must be SubElementFields"))?;
         let out = read(&a.handle)?.pscal(&*read(&b.handle)?)?;
-        return Ok(Py::new(py, PySubElementField { handle: insert(out) })?.into_any());
+        return Ok(Py::new(
+            py,
+            PySubElementField {
+                handle: insert(out),
+            },
+        )?
+        .into_any());
     }
     Err(PyTypeError::new_err(
         "expected a NodeField, SubNodeField, ElementField or SubElementField",

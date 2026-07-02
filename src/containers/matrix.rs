@@ -437,7 +437,9 @@ impl SubMatrix {
         // O(1) node → local position (maps built lazily; support is fixed).
         self.ensure_node_indices();
         let rnl = *self.row_index.get(&row_node).ok_or_else(|| {
-            PyrucastError::Message(format!("add_entry: row node {row_node:?} not in row_support"))
+            PyrucastError::Message(format!(
+                "add_entry: row node {row_node:?} not in row_support"
+            ))
         })? as usize;
         let rvi = self
             .dual_vars
@@ -447,7 +449,9 @@ impl SubMatrix {
                 PyrucastError::Message(format!("add_entry: row var '{row_var}' not in dual_vars"))
             })?;
         let cnl = *self.col_index.get(&col_node).ok_or_else(|| {
-            PyrucastError::Message(format!("add_entry: col node {col_node:?} not in col_support"))
+            PyrucastError::Message(format!(
+                "add_entry: col node {col_node:?} not in col_support"
+            ))
         })? as usize;
         let cvi = self
             .primal_vars
@@ -492,7 +496,11 @@ impl SubMatrix {
     /// **local** index form. Same data as [`local_triplets`](Self::local_triplets)
     /// but indexable, so the aggregate can remap the entries in parallel.
     pub fn local_coo_arrays(&self) -> (&[usize], &[usize], &[f64]) {
-        (self.coo.row_indices(), self.coo.col_indices(), self.coo.values())
+        (
+            self.coo.row_indices(),
+            self.coo.col_indices(),
+            self.coo.values(),
+        )
     }
 
     /// Handle to the `Coords` backing this block's row support (the col support
@@ -990,7 +998,10 @@ impl Matrix {
 
     /// Store a freshly computed factorization for transparent reuse. Cleared
     /// automatically whenever the matrix changes (`add_sub`).
-    pub fn store_factorization(&self, factorization: std::sync::Arc<dyn std::any::Any + Send + Sync>) {
+    pub fn store_factorization(
+        &self,
+        factorization: std::sync::Arc<dyn std::any::Any + Send + Sync>,
+    ) {
         *self.factorization.lock() = Some(factorization);
     }
 
@@ -1044,10 +1055,18 @@ impl Matrix {
         row_dofs: &[NamedDof],
         col_dofs: &[NamedDof],
     ) -> Result<Vec<(usize, usize, f64)>> {
-        let row_map: HashMap<NamedDof, usize> =
-            row_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
-        let col_map: HashMap<NamedDof, usize> =
-            col_dofs.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
+        let row_map: HashMap<NamedDof, usize> = row_dofs
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(i, d)| (d, i))
+            .collect();
+        let col_map: HashMap<NamedDof, usize> = col_dofs
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(i, d)| (d, i))
+            .collect();
         let mut out: Vec<(usize, usize, f64)> = Vec::new();
         for h in self {
             let sub = read(h)?;
@@ -1152,11 +1171,7 @@ impl Matrix {
                 .iter()
                 .position(|(n, v)| *n == col_node && v == col_field);
             return Ok(match (r, c) {
-                (Some(r), Some(c)) => a
-                    .csr
-                    .get_entry(r, c)
-                    .map(|e| e.into_value())
-                    .unwrap_or(0.0),
+                (Some(r), Some(c)) => a.csr.get_entry(r, c).map(|e| e.into_value()).unwrap_or(0.0),
                 _ => 0.0,
             });
         }
@@ -1879,7 +1894,10 @@ mod tests {
         let cap = read(&coords).unwrap().capacity();
         let mut perm: Vec<u32> = (0..cap as u32).collect();
         perm.swap(na.0 as usize, nb.0 as usize);
-        crate::store::write(&coords).unwrap().set_permutation(perm).unwrap();
+        crate::store::write(&coords)
+            .unwrap()
+            .set_permutation(perm)
+            .unwrap();
 
         k.finalize().unwrap();
 

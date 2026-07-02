@@ -103,7 +103,11 @@ impl Physics for Frame3d {
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        element_stiffness(geom, material.expect("Frame3d requires a material field"), ke)
+        element_stiffness(
+            geom,
+            material.expect("Frame3d requires a material field"),
+            ke,
+        )
     }
 
     fn label(&self) -> &'static str {

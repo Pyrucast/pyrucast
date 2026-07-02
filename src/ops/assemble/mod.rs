@@ -238,7 +238,9 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+            ))
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
@@ -250,14 +252,13 @@ mod tests {
             ))
             .unwrap();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.get(1).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(1).unwrap()).unwrap(),
+            ))
             .unwrap();
 
-        let materials = material_field_per_sub_model(
-            &model,
-            &[&[("k", 1.0)], &[], &[("k", 4.0)]],
-        )
-        .unwrap();
+        let materials =
+            material_field_per_sub_model(&model, &[&[("k", 1.0)], &[], &[("k", 4.0)]]).unwrap();
         (model, materials)
     }
 
@@ -280,7 +281,9 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+            ))
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
@@ -292,8 +295,7 @@ mod tests {
             ))
             .unwrap();
 
-        let materials =
-            material_field_per_sub_model(&model, &[&[("k", 2.0)], &[]]).unwrap();
+        let materials = material_field_per_sub_model(&model, &[&[("k", 2.0)], &[]]).unwrap();
         (model, materials)
     }
 
@@ -508,7 +510,9 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(fes.get(0).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+            ))
             .unwrap();
         let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)]]).unwrap();
 

@@ -293,9 +293,13 @@ pub trait Physics: Sync {
             ))
         })?;
         let out_components = self.behavior_output_components()?;
-        kernel::integrate_pointwise(&fespace, input, material, out_components, |geom, inp, mat, g, out| {
-            self.integrate_point(geom, inp, mat, g, out)
-        })
+        kernel::integrate_pointwise(
+            &fespace,
+            input,
+            material,
+            out_components,
+            |geom, inp, mat, g, out| self.integrate_point(geom, inp, mat, g, out),
+        )
     }
 
     /// Local internal-force vector of one cell — the pure, sequential kernel
@@ -404,7 +408,12 @@ pub(crate) fn continuum_internal_force_element(
 /// matrix `[a * d + b]`. Backs the continuum-mechanics
 /// [`Physics::internal_force_element`] default; reads by component name, so a
 /// state field carrying extra `VAR1` components (Mazars) is handled transparently.
-fn voigt_stress_matrix(stress: &SubElementField, cell: usize, g: usize, d: usize) -> Result<Vec<f64>> {
+fn voigt_stress_matrix(
+    stress: &SubElementField,
+    cell: usize,
+    g: usize,
+    d: usize,
+) -> Result<Vec<f64>> {
     let mut sig = vec![0.0_f64; d * d];
     for i in 0..d {
         for j in i..d {

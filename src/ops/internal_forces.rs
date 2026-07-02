@@ -104,8 +104,8 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
     use crate::containers::model::SubModel;
-    use crate::models::elasticity::ElasticityModel;
     use crate::containers::node_field::{NodeField, SubNodeField};
+    use crate::models::elasticity::ElasticityModel;
     use crate::ops::behavior::integrate;
     use crate::ops::build::material_field;
     use crate::ops::field::{beam_deformation, deformation};

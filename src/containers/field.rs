@@ -174,7 +174,11 @@ pub trait SubField {
     /// Apply `f` to every entry of the named component (stride =
     /// component count, offset = component index). Parallel; each touched slot
     /// is written once ⇒ thread-count-independent.
-    fn map_component(&mut self, component: &str, f: impl Fn(f64) -> f64 + Sync + Send) -> Result<()> {
+    fn map_component(
+        &mut self,
+        component: &str,
+        f: impl Fn(f64) -> f64 + Sync + Send,
+    ) -> Result<()> {
         let ci = self.component_index_or_err(component)?;
         let ncomp = self.component_count();
         crate::parallel::map_component_inplace(self.values_mut(), ncomp, ci, f);
@@ -519,7 +523,11 @@ where
 
     /// Apply `f` **in place** to the named component, on every zone that
     /// defines it. Errors only if **no** zone defines the component.
-    fn map_component(&self, component: &str, f: impl Fn(f64) -> f64 + Copy + Sync + Send) -> Result<()> {
+    fn map_component(
+        &self,
+        component: &str,
+        f: impl Fn(f64) -> f64 + Copy + Sync + Send,
+    ) -> Result<()> {
         let mut found = false;
         for h in self.iter() {
             let mut s = write(h)?;

@@ -96,7 +96,11 @@ mod tests {
                 }
             }
         }
-        assert_eq!(seen_cells.len(), n_cells, "not every cell was coloured once");
+        assert_eq!(
+            seen_cells.len(),
+            n_cells,
+            "not every cell was coloured once"
+        );
     }
 
     #[test]

@@ -303,7 +303,14 @@ pub fn element_block_triplets(
     element: impl Fn(&[CellGeom], Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
 ) -> Result<BlockTriplets> {
     let (nrows, ncols, per_cell) = element_block_triplets_per_cell(
-        fespaces, row_support, col_support, n_dual, n_primal, ordering, material, element,
+        fespaces,
+        row_support,
+        col_support,
+        n_dual,
+        n_primal,
+        ordering,
+        material,
+        element,
     )?;
     let total: usize = per_cell.iter().map(|v| v.len()).sum();
     let mut trips = Vec::with_capacity(total);
@@ -415,10 +422,14 @@ pub fn element_block_triplets_per_cell(
             let mut cpos = Vec::with_capacity(n_nodes);
             for &nid in ids {
                 rpos.push(*row_pos.get(&nid).ok_or_else(|| {
-                    PyrucastError::Message(format!("element_block_triplets: node {nid:?} not in row support"))
+                    PyrucastError::Message(format!(
+                        "element_block_triplets: node {nid:?} not in row support"
+                    ))
                 })? as usize);
                 cpos.push(*col_pos.get(&nid).ok_or_else(|| {
-                    PyrucastError::Message(format!("element_block_triplets: node {nid:?} not in col support"))
+                    PyrucastError::Message(format!(
+                        "element_block_triplets: node {nid:?} not in col support"
+                    ))
                 })? as usize);
             }
 

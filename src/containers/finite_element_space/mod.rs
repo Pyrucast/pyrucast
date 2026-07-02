@@ -653,11 +653,13 @@ mod tests {
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
             insert(sm)
         };
-        let sub =
-            SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss).unwrap();
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
         let first = sub.coloring(|| vec![vec![0usize]]).to_vec();
         // The second closure is never run: the memoised value is returned.
-        let second = sub.coloring(|| panic!("compute must not run twice")).to_vec();
+        let second = sub
+            .coloring(|| panic!("compute must not run twice"))
+            .to_vec();
         assert_eq!(first, vec![vec![0usize]]);
         assert_eq!(first, second);
     }
