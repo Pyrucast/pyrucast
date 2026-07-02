@@ -59,7 +59,7 @@
 //! ```
 
 use crate::aggregate::Aggregate;
-use crate::containers::field::SubField;
+use crate::containers::field::{Field, SubField};
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Coords, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
@@ -669,6 +669,60 @@ impl NodeField {
             }
         }
         Ok(())
+    }
+
+    /// Read the values at `dofs` (`(node, component)` pairs) into a dense
+    /// vector, in `dofs` order. Aggregate resolution: the first zone defining a
+    /// pair wins. A DOF no zone defines reads as `0.0` — the natural neutral for
+    /// a right-hand side or a multiplied vector (see [`crate::ops::solver::solve`]
+    /// and [`Matrix::mul_field`](crate::containers::matrix::Matrix::mul_field)).
+    pub fn gather(&self, dofs: &[(NodeId, String)]) -> Result<Vec<f64>> {
+        let view = self.view()?;
+        Ok(dofs
+            .iter()
+            .map(|(nid, name)| view.value_opt(*nid, name).unwrap_or(0.0))
+            .collect())
+    }
+
+    /// Build a fresh single-zone `NodeField` on `coords` holding `values` at
+    /// `dofs` (`(node, component)` pairs, in `values` order). The support is a
+    /// POI1 submesh over the distinct nodes (first-seen order); the components
+    /// are the distinct field names (first-seen order). `dofs` and `values` must
+    /// have equal length; a repeated DOF keeps the last value written.
+    ///
+    /// The inverse of [`gather`](Self::gather): together they bridge the
+    /// abstract `NodeField` and the flat DOF vectors the linear algebra speaks.
+    pub fn from_dof_values(
+        coords: Handle<Coords>,
+        dofs: &[(NodeId, String)],
+        values: &[f64],
+    ) -> Result<Self> {
+        if dofs.len() != values.len() {
+            return Err(PyrucastError::Message(format!(
+                "from_dof_values: {} dof(s) but {} value(s)",
+                dofs.len(),
+                values.len()
+            )));
+        }
+        // Distinct nodes and components, first-seen order.
+        let mut unique_nodes: Vec<NodeId> = Vec::new();
+        let mut unique_components: Vec<String> = Vec::new();
+        for (nid, name) in dofs {
+            if !unique_nodes.contains(nid) {
+                unique_nodes.push(*nid);
+            }
+            if !unique_components.contains(name) {
+                unique_components.push(name.clone());
+            }
+        }
+        // POI1 support over the distinct nodes; the submesh and field both land
+        // in the store and cascade-decref their nodes on drop.
+        let sm_h = insert(SubMesh::poi1_from_node_ids(coords, &unique_nodes)?);
+        let mut sub = SubNodeField::from_poi1(&sm_h, unique_components)?;
+        for ((nid, name), &v) in dofs.iter().zip(values) {
+            sub.set_value(*nid, name, v)?;
+        }
+        Ok(Self::from_sub(sub))
     }
 }
 

@@ -5,6 +5,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
 use crate::py::mesh::submesh_handle;
 use crate::py::node::PyNode;
+use crate::py::node_field::PyNodeField;
 use crate::store::{insert, read, write, Handle};
 use pyo3::prelude::*;
 
@@ -259,6 +260,14 @@ impl PyMatrix {
     /// `y = A · x` against a dense vector `x`.
     fn mul_dense(&self, x: Vec<f64>) -> PyResult<Vec<f64>> {
         Ok(self.inner.mul_dense(&x)?)
+    }
+
+    /// `y = A · x` against a `NodeField` (`matrix * field`). `x` is read at the
+    /// matrix's column DOFs; the result is a fresh `NodeField` over its row DOFs.
+    fn __mul__(&self, rhs: PyRef<'_, PyNodeField>) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: self.inner.mul_field(&rhs.inner)?,
+        })
     }
 
     /// List of `(row_node, row_field, col_node, col_field, value)`

@@ -78,6 +78,7 @@ use crate::containers::mesh::Coords;
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::SubModel;
+use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
 use nalgebra::{DMatrix, DVector};
@@ -1236,6 +1237,42 @@ impl Matrix {
         let y_vec: DVector<f64> = &a.csr * &x_vec;
         Ok(y_vec.iter().copied().collect())
     }
+
+    /// `y = A · x` against a [`NodeField`]. The column vector `x` is read from
+    /// `x_field` at the matrix's **column** DOFs (aggregate resolution, first
+    /// zone wins; a DOF no zone defines reads as `0.0`); the result `y` is a
+    /// fresh single-zone `NodeField` over the matrix's **row** DOF nodes.
+    ///
+    /// Columns carry the **primal** variables and rows the **dual** ones
+    /// (`K · u = f`), so this maps a *primal* field (e.g. `"T"`, `"u"`) to a
+    /// *dual* one (e.g. `"q"`). That is the exact mirror of
+    /// [`crate::ops::solver::solve`], which reads a *dual* right-hand side at the
+    /// rows and produces a *primal* solution at the columns. Both use
+    /// [`NodeField::gather`] / [`NodeField::from_dof_values`] to bridge the
+    /// abstract field and the flat DOF vector. Requires
+    /// [`finalize`](Self::finalize); the `*` operator (`&matrix * &field`) is
+    /// sugar for this method.
+    pub fn mul_field(&self, x_field: &NodeField) -> Result<NodeField> {
+        let x = x_field.gather(&self.col_dofs()?)?;
+        let y = self.mul_dense(&x)?;
+        NodeField::from_dof_values(x_field.coords()?, &self.row_dofs()?, &y)
+    }
+}
+
+impl std::ops::Mul<&NodeField> for &Matrix {
+    type Output = Result<NodeField>;
+    /// `&matrix * &field` — sugar for [`Matrix::mul_field`]. Fallible (the
+    /// matrix must be finalized), so the result is a `Result`: `(&k * &x)?`.
+    fn mul(self, rhs: &NodeField) -> Self::Output {
+        self.mul_field(rhs)
+    }
+}
+
+impl std::ops::Mul<&NodeField> for Matrix {
+    type Output = Result<NodeField>;
+    fn mul(self, rhs: &NodeField) -> Self::Output {
+        self.mul_field(rhs)
+    }
 }
 
 impl crate::dump::Dump for Matrix {
@@ -1922,6 +1959,57 @@ mod tests {
 
         assert_eq!(k.mul_dense(&[1.0, 1.0]).unwrap(), vec![1.0, 1.0]);
         assert_eq!(k.mul_dense(&[1.0, 2.0]).unwrap(), vec![0.0, 3.0]);
+    }
+
+    #[test]
+    fn aggregate_mul_field_matches_mul_dense_and_operator() {
+        use crate::containers::node_field::{NodeField, SubNodeField};
+
+        // K = [[2,-1],[-1,2]] with dual rows "q" and primal columns "T".
+        let (_cfg, nodes, sup) = make_poi1(2);
+        let (a, b) = (nodes[0].id(), nodes[1].id());
+        let mut sm = SubMatrix::new(
+            sup.clone(),
+            sup.clone(),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        sm.add_entry(a, "q", a, "T", 2.0).unwrap();
+        sm.add_entry(a, "q", b, "T", -1.0).unwrap();
+        sm.add_entry(b, "q", a, "T", -1.0).unwrap();
+        sm.add_entry(b, "q", b, "T", 2.0).unwrap();
+        let mut k = Matrix::empty();
+        k.add_sub(insert(sm)).unwrap();
+        k.finalize().unwrap();
+
+        // x = T:[1, 2] over both column nodes ⇒ y = K·x = [0, 3] at the "q" rows.
+        let mut x_sub = SubNodeField::from_poi1(&sup, vec!["T".into()]).unwrap();
+        x_sub.set_value(a, "T", 1.0).unwrap();
+        x_sub.set_value(b, "T", 2.0).unwrap();
+        let x = NodeField::from_sub(x_sub);
+
+        let y = k.mul_field(&x).unwrap();
+        assert_eq!(y.value(a, "q").unwrap(), 0.0);
+        assert_eq!(y.value(b, "q").unwrap(), 3.0);
+        // The result lives on the row DOFs — component is "q", not "T".
+        assert!(y.value_opt(a, "T").unwrap().is_none());
+
+        // The `*` operator is sugar for `mul_field`.
+        let y_op = (&k * &x).unwrap();
+        assert_eq!(y_op.value(a, "q").unwrap(), 0.0);
+        assert_eq!(y_op.value(b, "q").unwrap(), 3.0);
+
+        // A column DOF the field does not define contributes 0: with only
+        // T(a)=3 set, y = K·[3, 0] = [6, -3].
+        let mut x2_sub = SubNodeField::from_poi1(&sup, vec!["T".into()]).unwrap();
+        x2_sub.set_value(a, "T", 3.0).unwrap();
+        let x2 = NodeField::from_sub(x2_sub);
+        let y2 = k.mul_field(&x2).unwrap();
+        assert_eq!(y2.value(a, "q").unwrap(), 6.0);
+        assert_eq!(y2.value(b, "q").unwrap(), -3.0);
     }
 
     #[test]

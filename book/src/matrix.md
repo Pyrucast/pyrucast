@@ -121,6 +121,14 @@ for (row_dof, col_dof, value) in k.iter_entries() {
 
 // Produit matrice-vecteur dense : y = A · x (passe par CSR sous le capot).
 let y = k.mul_dense(&[1.0, 1.0]).unwrap();
+
+// Produit matrice · champ : `x` est lu aux DOFs *colonnes* (vars **primales** ;
+// une entrée qu'aucune zone ne définit vaut 0), le résultat est un `NodeField`
+// neuf sur les DOFs *lignes* (vars **duales**) — `K · u = f`. L'opérateur `*`
+// (`&k * &x`) est le sucre syntaxique de `mul_field`. C'est le miroir exact de
+// `solver::solve`, qui lit un champ dual aux lignes et rend un champ primal aux colonnes.
+let y: NodeField = k.mul_field(&x).unwrap();
+let y: NodeField = (&k * &x).unwrap();
 ```
 
 ## API Python
@@ -151,6 +159,10 @@ assert k.col_dofs() == [(0, "T"), (1, "T")]
 # Matrice-vecteur.
 y = k.mul_dense([1.0, 1.0])
 assert y == [1.0, 1.0]
+
+# Matrice · champ : `k * x` lit `x` aux DOFs colonnes et rend un NodeField
+# neuf sur les nœuds des DOFs lignes.
+y_field = k * x  # x: pyrucast.NodeField
 
 # Itération brute sur les triplets (ordre d'insertion).
 for row_node, row_field, col_node, col_field, value in k.entries():

@@ -84,14 +84,11 @@
 //! assert!((solution.value(b.id(), "T").unwrap() - 1.0).abs() < 1e-12);
 //! ```
 
-use crate::containers::field::Field;
 use crate::containers::matrix::Matrix;
 use crate::containers::mesh::NodeId;
-use crate::containers::mesh::SubMesh;
-use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
-use crate::store::insert;
 use faer::linalg::solvers::Solve;
 use faer::sparse::{SparseColMat, Triplet};
 use std::sync::Arc;
@@ -270,15 +267,8 @@ fn solve_inner(
     cancel.check()?;
 
     // ── Step 2 — build the b vector at the row DOFs ────────────────────
-    let n = fact.row_dofs.len();
-    let mut b = vec![0.0_f64; n];
-    let rhs_view = rhs.view()?;
-    for (i, (node_id, field_name)) in fact.row_dofs.iter().enumerate() {
-        // "No zone defines this DOF" means "no imposed value here" — zero.
-        if let Some(v) = rhs_view.value_opt(*node_id, field_name) {
-            b[i] = v;
-        }
-    }
+    // "No zone defines this DOF" means "no imposed value here" — zero.
+    let b = rhs.gather(&fact.row_dofs)?;
 
     // ── Step 3 — substitution ──────────────────────────────────────────
     let x = fact.solve_vec(&b);
@@ -293,33 +283,9 @@ fn solve_inner(
     cancel.check()?;
 
     // ── Step 4 — wrap the solution into a fresh single-zone NodeField ──
-    let coords = rhs.coords()?;
-
-    // Unique col nodes in first-seen order.
-    let mut unique_nodes: Vec<NodeId> = Vec::new();
-    for (node_id, _) in &fact.col_dofs {
-        if !unique_nodes.contains(node_id) {
-            unique_nodes.push(*node_id);
-        }
-    }
-    // Unique col field names in first-seen order.
-    let mut unique_components: Vec<String> = Vec::new();
-    for (_, name) in &fact.col_dofs {
-        if !unique_components.contains(name) {
-            unique_components.push(name.clone());
-        }
-    }
-
-    // POI1 submesh over the col nodes — provides the support of the
-    // resulting SubNodeField. The submesh and the field both end up in the
-    // store; they cascade-decref the nodes correctly when dropped.
-    let sm_h = insert(SubMesh::poi1_from_node_ids(coords.clone(), &unique_nodes)?);
-
-    let mut result = SubNodeField::from_poi1(&sm_h, unique_components)?;
-    for (i, (node_id, field_name)) in fact.col_dofs.iter().enumerate() {
-        result.set_value(*node_id, field_name, x[i])?;
-    }
-    Ok(NodeField::from_sub(result))
+    // A POI1 support over the distinct column nodes, one component per distinct
+    // column field name (see [`NodeField::from_dof_values`]).
+    NodeField::from_dof_values(rhs.coords()?, &fact.col_dofs, &x)
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
@@ -335,7 +301,9 @@ mod tests {
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Mesh;
     use crate::containers::mesh::Node;
+    use crate::containers::mesh::SubMesh;
     use crate::containers::model::{Model, SubModel};
+    use crate::containers::node_field::SubNodeField;
     use crate::store::insert;
 
     /// 1-D Poisson `-u'' = 0` on `[0, 1]` with `u(0) = 0` and `u(1) = 1`,

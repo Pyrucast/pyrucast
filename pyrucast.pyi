@@ -622,6 +622,11 @@ class Matrix:
         r"""
         `y = A · x` against a dense vector `x`.
         """
+    def __mul__(self, rhs: NodeField) -> NodeField:
+        r"""
+        `y = A · x` against a `NodeField` (`matrix * field`). `x` is read at the
+        matrix's column DOFs; the result is a fresh `NodeField` over its row DOFs.
+        """
     def entries(self) -> builtins.list[tuple[builtins.int, builtins.str, builtins.int, builtins.str, builtins.float]]:
         r"""
         List of `(row_node, row_field, col_node, col_field, value)`
@@ -2029,18 +2034,24 @@ def sinh(field: typing.Any) -> typing.Any:
     Element-wise hyperbolic sine of a field.
     """
 
-def solve(matrix: Matrix, rhs: NodeField) -> NodeField:
+def solve(matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
     r"""
-    Solve the linear system `A·x = b` for `x` (dense LU).
+    Solve the linear system `A·x = b` for `x` (sparse LU, faer).
     
     `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
     as a `NodeField` (read through the aggregate, zones resolved per DOF).
     Returns the solution `x` as a single-zone `NodeField` over the
     column-DOF nodes.
     
-    A `Ctrl+C` is honoured at the solver's phase boundaries (assembly,
-    dense conversion, factorization). The dense factorization itself is a
-    single library call and is not interrupted mid-way.
+    `method` selects the direct solver (currently only `"lu"`, the default).
+    `cache` (default `True`) reuses a factorization stored transparently on the
+    matrix: the first solve factorizes, later solves on the same matrix reuse the
+    factors (much cheaper). The cache is cleared automatically when the matrix
+    changes.
+    
+    A `Ctrl+C` is honoured at the solver's phase boundaries. The factorization
+    itself is a single library call and is not interrupted mid-way; when it is
+    already cached, only the (cheap) substitution runs.
     """
 
 def sqrt(field: typing.Any) -> typing.Any:
