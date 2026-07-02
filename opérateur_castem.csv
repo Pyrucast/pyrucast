@@ -79,8 +79,8 @@ Champs - assemblage;NOMC;Renomme les composantes;—
 Champs - assemblage;PLUS (chp);Fusionne / additionne des champs;merge / union (|)
 Champs - réduction;INTG;Intégrale d'un champ sur un domaine;—
 Champs - réduction;RESU;Résultante d'un champ;—
-Champs - réduction;MAXI;Maximum d'un champ;—
-Champs - réduction;MINI;Minimum d'un champ;—
+Champs - réduction;MAXI;Maximum d'un champ;NodeField.max / ElementField.max
+Champs - réduction;MINI;Minimum d'un champ;NodeField.min / ElementField.min
 Champs - réduction;MOYE;Moyenne d'un champ;—
 Champs - réduction;PSCA;Produit scalaire nœud par nœud de deux champs (renvoie un champ);psca
 Champs - réduction;XTY;Produit scalaire global de deux champs entiers (renvoie un flottant);xty
