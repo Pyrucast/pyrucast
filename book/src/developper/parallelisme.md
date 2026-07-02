@@ -89,7 +89,7 @@ Le solveur utilise un **LU creux multithreadé** (faer) et met en cache la
 **factorisation réutilisable** dans la `Matrix` (factor once, solve many). Détails
 dans [Opérateurs de solveur](../operateurs/solveur.md). Rôles des bibliothèques :
 
-```
+```text
 nalgebra            nalgebra-sparse                faer
 primitives     →    stockage CSR/CSC + serde    →  factorise & résout (parallèle, creux)
 (B, J, géométrie)   Matrice (scatter → CSR)        back-end solveur uniquement
