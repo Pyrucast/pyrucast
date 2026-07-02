@@ -362,6 +362,9 @@ impl crate::containers::field::SubField for SubNodeField {
     fn values_mut(&mut self) -> &mut [f64] {
         &mut self.values
     }
+    fn same_support_with(&self, components: Vec<String>) -> Result<Self> {
+        Self::from_support(&self.support, components)
+    }
 }
 
 impl fmt::Debug for SubNodeField {

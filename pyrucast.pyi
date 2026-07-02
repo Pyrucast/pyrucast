@@ -54,6 +54,7 @@ __all__ = [
     "merge",
     "merge_nodes",
     "poi1_from_nodes",
+    "psca",
     "read_gmsh",
     "read_gmsh_str",
     "restrict",
@@ -1955,6 +1956,21 @@ def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
     Mesh with a single POI1 submesh; raises if `nodes` is empty.
     """
 
+def psca(x: typing.Any, y: typing.Any) -> typing.Any:
+    r"""
+    Node-by-node (or point-by-point) scalar product of two fields — Cast3M's
+    `PSCA`. Returns a **new field** of the same flavour as the inputs, carrying
+    a single `"psca"` component whose value at each node/point is `∑_c xᵣ,c·yᵣ,c`
+    (reduction over components only, the support is kept).
+    
+    `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
+    `ElementField` / `SubElementField`), sit on the same support/decomposition,
+    and carry the same components (aligned by name).
+    
+    For the **global** scalar product (a single float over the whole field),
+    see [`xty`](fn@xty).
+    """
+
 def read_gmsh(coords: Coords, path: builtins.str) -> dict:
     r"""
     Read a gmsh `.msh` file (ASCII or binary, MSH 2.2 or 4.1) into a `dict`
@@ -2136,11 +2152,14 @@ def volume(envelope: Mesh, size: typing.Optional[builtins.float] = None) -> Mesh
 
 def xty(x: typing.Any, y: typing.Any) -> builtins.float:
     r"""
-    Scalar product `∑ xᵢ · yᵢ` of two fields — Cast3M's `XTY` / `PSCA`.
+    Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields — Cast3M's `XTY`.
     
     `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
     `ElementField` / `SubElementField`), sit on the same support/decomposition,
     and carry the same components (aligned by name). Returns a single float —
     the field inner product used for energies (`F·u`), residual norms, etc.
+    
+    For the **node-by-node** scalar product (a field, one value per node),
+    see [`psca`](fn@psca).
     """
 

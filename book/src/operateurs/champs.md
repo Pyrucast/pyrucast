@@ -163,23 +163,31 @@ amplitude = pyrucast.abs(signal)
 
 ## Réduction
 
+Deux produits scalaires, à ne pas confondre — ils diffèrent par **ce qui est
+réduit** et donc par le **type du résultat** :
+
+| Python | Cast3M | Réduit | Résultat |
+|---|---|---|---|
+| `xty(x, y)` | `XTY` | tout (nœuds/points × composantes) | un `float` |
+| `psca(x, y)` | `PSCA` | les composantes seules, nœud par nœud | un **champ** à une composante `"psca"` |
+
+Les deux ont le **même contrat strict** sur les opérandes : même saveur
+(`NodeField`, `SubNodeField`, `ElementField`, `SubElementField`), même support
+(même décomposition en zones), même jeu de composantes — alignées **par nom**,
+l'ordre pouvant différer (sinon erreur, comme l'arithmétique stricte de
+[Champ](../field.md)).
+
 ### `xty(x, y)` → `float`
 
-Produit scalaire de deux champs — l'opérateur `XTY`/`PSCA` de Cast3M :
+Produit scalaire **global** des deux champs entiers :
 
 \\[
-x \cdot y = \sum_i x_i\, y_i,
+x \cdot y = \sum_i \sum_c x_{i,c}\, y_{i,c},
 \\]
 
-la somme parcourant **toutes** les valeurs (nœuds/points × composantes). Les
-deux opérandes doivent être de la **même saveur** (`NodeField`, `SubNodeField`,
-`ElementField`, `SubElementField`), posés sur le **même support** (même
-décomposition en zones), et porter le **même jeu de composantes** — alignées
-**par nom**, l'ordre pouvant différer (sinon erreur, comme l'arithmétique
-stricte de [Champ](../field.md)). Le résultat est un unique `float` : le produit
-scalaire qui sert au calcul d'énergie (`F·u`), aux normes de résidu, etc.
-
-L'addition flottante n'étant pas associative, le total dépend du nombre de
+la somme parcourant **toutes** les valeurs. Le résultat est un unique `float` :
+le produit scalaire qui sert au calcul d'énergie (`F·u`), aux normes de résidu,
+etc. L'addition flottante n'étant pas associative, le total dépend du nombre de
 threads jusqu'au dernier ULP — comme le solveur, ce n'est pas reproductible
 bit à bit.
 
@@ -189,6 +197,26 @@ import pyrucast
 # Énergie de déformation externe : travail des efforts nodaux dans le champ
 # de déplacement (mêmes composantes, même maillage).
 energie = pyrucast.xty(forces, deplacements)
+```
+
+### `psca(x, y)` → champ (même saveur que les entrées)
+
+Produit scalaire **nœud par nœud** (ou point par point) — réduction sur les
+**composantes seules**, le support est conservé :
+
+\\[
+p_i = \sum_c x_{i,c}\, y_{i,c}.
+\\]
+
+Le résultat est un nouveau champ de la même saveur que les entrées, portant une
+seule composante `"psca"` : la valeur du produit scalaire à chaque nœud. Chaque
+sortie est écrite une fois (par nœud) ⇒ indépendant du nombre de threads.
+
+```python
+import pyrucast
+
+# Norme au carré d'un champ vectoriel, nœud par nœud.
+norme2 = pyrucast.psca(vitesse, vitesse)  # champ à une composante "psca"
 ```
 
 ## À venir dans `ops::field`

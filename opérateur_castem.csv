@@ -82,8 +82,8 @@ Champs - réduction;RESU;Résultante d'un champ;—
 Champs - réduction;MAXI;Maximum d'un champ;—
 Champs - réduction;MINI;Minimum d'un champ;—
 Champs - réduction;MOYE;Moyenne d'un champ;—
-Champs - réduction;PSCA;Produit scalaire de deux champs;xty
-Champs - réduction;XTY;Produit scalaire X transposée par Y;xty
+Champs - réduction;PSCA;Produit scalaire nœud par nœud de deux champs (renvoie un champ);psca
+Champs - réduction;XTY;Produit scalaire global de deux champs entiers (renvoie un flottant);xty
 Maths - arithmétique;+;Addition;__add__ (champs/scalaires)
 Maths - arithmétique;-;Soustraction;__sub__
 Maths - arithmétique;*;Multiplication;__mul__

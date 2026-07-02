@@ -130,6 +130,15 @@ pub trait SubField {
     /// Flat value buffer, mutable (same layout as [`SubField::values`]).
     fn values_mut(&mut self) -> &mut [f64];
 
+    /// A fresh, zero-initialised field on the **same support** as `self`, but
+    /// carrying `components` instead of `self`'s. Its rows are in the same
+    /// order as `self`'s (both derive from the same support), so values line
+    /// up positionally — the primitive behind reductions that change the
+    /// component set, such as [`SubField::pscal`].
+    fn same_support_with(&self, components: Vec<String>) -> Result<Self>
+    where
+        Self: Sized;
+
     /// Add `scalar` to every entry of the named component.
     fn add_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
         self.map_component(component, |v| v + scalar)
@@ -276,6 +285,56 @@ pub trait SubField {
             })
             .sum();
         Ok(sum)
+    }
+
+    /// Per-row scalar product `∑_c selfᵣ,c · otherᵣ,c`, one value per row —
+    /// Cast3M's `PSCA`. Unlike [`SubField::dot`] (which reduces the whole
+    /// field to a single number), this reduces **over components only**,
+    /// keeping the support: the result is a fresh single-component field
+    /// (component `"psca"`) on the same support, holding the node-by-node
+    /// (or point-by-point) scalar product. Strict, same contract as `dot`:
+    /// same support and same components (aligned by name).
+    fn pscal(&self, other: &Self) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        if !self.same_support(other) {
+            return Err(PyrucastError::Message(
+                "pscal: operands are not on the same support".into(),
+            ));
+        }
+        let nc = self.component_count();
+        if other.component_count() != nc {
+            return Err(PyrucastError::Message(format!(
+                "pscal: mismatched components ({} vs {})",
+                nc,
+                other.component_count()
+            )));
+        }
+        // self's components, mapped to other's indices (by name).
+        let other_idx = self
+            .components()
+            .iter()
+            .map(|c| other.component_index_or_err(c))
+            .collect::<Result<Vec<usize>>>()?;
+        let sv = self.values();
+        let ov = other.values();
+        // Same support ⇒ identical row layout on both operands and on the
+        // fresh output, so rows line up positionally. Each output slot is
+        // written once (per-row, no shared accumulation) ⇒ the result is
+        // independent of the thread count.
+        let mut out = self.same_support_with(vec!["psca".to_string()])?;
+        out.values_mut()
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(row, o)| {
+                let mut acc = 0.0;
+                for ci in 0..nc {
+                    acc += sv[row * nc + ci] * ov[row * nc + other_idx[ci]];
+                }
+                *o = acc;
+            });
+        Ok(out)
     }
 
     /// Smallest value of the named component.
@@ -601,6 +660,56 @@ where
             ));
         }
         Ok(acc)
+    }
+
+    /// Per-node/-point scalar product of two fields on the **same
+    /// decomposition** — Cast3M's `PSCA`. Each zone of `self` is paired with
+    /// the zone of `other` on the same support and reduced over components
+    /// ([`SubField::pscal`]); the result is a new field with one `"psca"`
+    /// component per zone. **Every** zone on both sides must pair exactly once.
+    fn pscal_field(&self, other: &Self) -> Result<Self>
+    where
+        Self: Sized,
+        Self::Sub: Clone,
+    {
+        // Snapshot other's zones so we never hold two guards at once — safe
+        // even when `other` shares handles with `self` (mirrors combine_field).
+        let others: Vec<Self::Sub> = other
+            .iter()
+            .map(|h| read(h).map(|g| (*g).clone()))
+            .collect::<Result<_>>()?;
+        let mut used = vec![false; others.len()];
+        let mut out = Self::default();
+        for h in self.iter() {
+            let s = read(h)?;
+            let mut matched = false;
+            for (j, os) in others.iter().enumerate() {
+                if used[j] {
+                    continue;
+                }
+                if s.same_support(os) {
+                    out.add_sub(insert(s.pscal(os)?))?;
+                    used[j] = true;
+                    matched = true;
+                    break;
+                }
+            }
+            if !matched {
+                return Err(PyrucastError::Message(
+                    "pscal_field: a zone of the left field has no matching \
+                     zone (same support) in the right field"
+                        .into(),
+                ));
+            }
+        }
+        if used.iter().any(|&u| !u) {
+            return Err(PyrucastError::Message(
+                "pscal_field: a zone of the right field has no matching \
+                 zone in the left field"
+                    .into(),
+            ));
+        }
+        Ok(out)
     }
 
     /// Targeted update: combine `sub` into the zone(s) of `self` sharing its
@@ -989,6 +1098,80 @@ mod tests {
         let b = NodeField::from_sub(SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap());
         // No zone of `a` shares a support with `b`.
         assert!(a.dot_field(&b).is_err());
+    }
+
+    // ─── SubField::pscal (per-node scalar product) ───────────────────────────
+
+    #[test]
+    fn subfield_pscal_reduces_over_components_per_node() {
+        let (sm, nodes) = poi1_support(2);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
+        f.set_value(nodes[0].id(), "UX", 1.0).unwrap();
+        f.set_value(nodes[0].id(), "UY", 2.0).unwrap();
+        f.set_value(nodes[1].id(), "UX", 3.0).unwrap();
+        f.set_value(nodes[1].id(), "UY", 4.0).unwrap();
+        let mut g = SubNodeField::from_poi1(&sm, vec!["UX".into(), "UY".into()]).unwrap();
+        g.set_value(nodes[0].id(), "UX", 10.0).unwrap();
+        g.set_value(nodes[0].id(), "UY", 20.0).unwrap();
+        g.set_value(nodes[1].id(), "UX", 30.0).unwrap();
+        g.set_value(nodes[1].id(), "UY", 40.0).unwrap();
+        let p = f.pscal(&g).unwrap();
+        assert_eq!(p.components(), &["psca".to_string()]);
+        // node 0: 1·10 + 2·20 = 50 ; node 1: 3·30 + 4·40 = 250
+        assert_eq!(p.value(nodes[0].id(), "psca").unwrap(), 50.0);
+        assert_eq!(p.value(nodes[1].id(), "psca").unwrap(), 250.0);
+    }
+
+    #[test]
+    fn subfield_pscal_aligns_components_by_name() {
+        let (sm, nodes) = poi1_support(1);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
+        f.set_value(nodes[0].id(), "U", 2.0).unwrap();
+        f.set_value(nodes[0].id(), "V", 3.0).unwrap();
+        // Same names, opposite order.
+        let mut g = SubNodeField::from_poi1(&sm, vec!["V".into(), "U".into()]).unwrap();
+        g.set_value(nodes[0].id(), "U", 10.0).unwrap();
+        g.set_value(nodes[0].id(), "V", 100.0).unwrap();
+        let p = f.pscal(&g).unwrap();
+        // 2·10 (U) + 3·100 (V) = 320
+        assert_eq!(p.value(nodes[0].id(), "psca").unwrap(), 320.0);
+    }
+
+    #[test]
+    fn subfield_pscal_mismatched_support_errors() {
+        let (sm_a, _) = poi1_support(1);
+        let (sm_b, _) = poi1_support(1);
+        let f = SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
+        let g = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
+        assert!(f.pscal(&g).is_err());
+    }
+
+    #[test]
+    fn field_pscal_field_one_zone_per_zone() {
+        use crate::containers::node_field::NodeField;
+        let coords = insert(Coords::new(1).unwrap());
+        let node = |x: f64| Node::create_in(coords.clone(), &[x]).unwrap();
+        let poi1 = |ns: &[&Node]| {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            for n in ns {
+                sm.add_cell(&[n.id()]).unwrap();
+            }
+            insert(sm)
+        };
+        let (na, nb) = (node(0.0), node(1.0));
+        let sm_a = poi1(&[&na]);
+        let sm_b = poi1(&[&nb]);
+        let mut za = SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
+        za.set(0, 0, 3.0).unwrap();
+        let mut zb = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
+        zb.set(0, 0, 5.0).unwrap();
+        let mut nf = NodeField::from_sub(za);
+        nf.add_sub(insert(zb)).unwrap();
+        // pscal with itself → per-node square, two zones preserved.
+        let p = nf.pscal_field(&nf).unwrap();
+        let view = p.view().unwrap();
+        assert_eq!(view.value(na.id(), "psca").unwrap(), 9.0);
+        assert_eq!(view.value(nb.id(), "psca").unwrap(), 25.0);
     }
 
     // ─── Field-level arithmetic ──────────────────────────────────────────────

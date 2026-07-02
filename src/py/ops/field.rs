@@ -186,12 +186,15 @@ pub fn select(
     Ok(PyMesh { inner })
 }
 
-/// Scalar product `∑ xᵢ · yᵢ` of two fields — Cast3M's `XTY` / `PSCA`.
+/// Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields — Cast3M's `XTY`.
 ///
 /// `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
 /// `ElementField` / `SubElementField`), sit on the same support/decomposition,
 /// and carry the same components (aligned by name). Returns a single float —
 /// the field inner product used for energies (`F·u`), residual norms, etc.
+///
+/// For the **node-by-node** scalar product (a field, one value per node),
+/// see [`psca`](fn@psca).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn xty(x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyResult<f64> {
@@ -219,6 +222,54 @@ pub fn xty(x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyResult<f64> {
             PyTypeError::new_err("xty: both operands must be SubElementFields")
         })?;
         return Ok(read(&a.handle)?.dot(&*read(&b.handle)?)?);
+    }
+    Err(PyTypeError::new_err(
+        "expected a NodeField, SubNodeField, ElementField or SubElementField",
+    ))
+}
+
+/// Node-by-node (or point-by-point) scalar product of two fields — Cast3M's
+/// `PSCA`. Returns a **new field** of the same flavour as the inputs, carrying
+/// a single `"psca"` component whose value at each node/point is `∑_c xᵣ,c·yᵣ,c`
+/// (reduction over components only, the support is kept).
+///
+/// `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
+/// `ElementField` / `SubElementField`), sit on the same support/decomposition,
+/// and carry the same components (aligned by name).
+///
+/// For the **global** scalar product (a single float over the whole field),
+/// see [`xty`](fn@xty).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn psca(py: Python<'_>, x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    use crate::containers::field::{Field, SubField};
+    if let Ok(a) = x.extract::<PyRef<PyNodeField>>() {
+        let b = y
+            .extract::<PyRef<PyNodeField>>()
+            .map_err(|_| PyTypeError::new_err("psca: both operands must be NodeFields"))?;
+        let inner = a.inner.pscal_field(&b.inner)?;
+        return Ok(Py::new(py, PyNodeField { inner })?.into_any());
+    }
+    if let Ok(a) = x.extract::<PyRef<PyElementField>>() {
+        let b = y
+            .extract::<PyRef<PyElementField>>()
+            .map_err(|_| PyTypeError::new_err("psca: both operands must be ElementFields"))?;
+        let inner = a.inner.pscal_field(&b.inner)?;
+        return Ok(Py::new(py, PyElementField { inner })?.into_any());
+    }
+    if let Ok(a) = x.extract::<PyRef<PySubNodeField>>() {
+        let b = y
+            .extract::<PyRef<PySubNodeField>>()
+            .map_err(|_| PyTypeError::new_err("psca: both operands must be SubNodeFields"))?;
+        let out = read(&a.handle)?.pscal(&*read(&b.handle)?)?;
+        return Ok(Py::new(py, PySubNodeField { handle: insert(out) })?.into_any());
+    }
+    if let Ok(a) = x.extract::<PyRef<PySubElementField>>() {
+        let b = y
+            .extract::<PyRef<PySubElementField>>()
+            .map_err(|_| PyTypeError::new_err("psca: both operands must be SubElementFields"))?;
+        let out = read(&a.handle)?.pscal(&*read(&b.handle)?)?;
+        return Ok(Py::new(py, PySubElementField { handle: insert(out) })?.into_any());
     }
     Err(PyTypeError::new_err(
         "expected a NodeField, SubNodeField, ElementField or SubElementField",

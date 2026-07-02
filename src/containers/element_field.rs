@@ -298,6 +298,9 @@ impl crate::containers::field::SubField for SubElementField {
     fn values_mut(&mut self) -> &mut [f64] {
         &mut self.values
     }
+    fn same_support_with(&self, components: Vec<String>) -> Result<Self> {
+        Self::new(self.support.clone(), components)
+    }
 }
 
 // ─── Clone ─────────────────────────────────────────────────────────────────

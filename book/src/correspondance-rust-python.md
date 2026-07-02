@@ -108,7 +108,8 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `select_nodes(field: &NodeField, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, min=None, max=None, components=None) -> Mesh` (dispatch par type) |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` (dispatch par type, partagé avec `Mesh`) |
-| `SubField::dot(&self, other) -> f64` / `Field::dot_field(&self, other) -> f64` | `xty(x, y) -> float` (dispatch par type ; produit scalaire de deux champs) |
+| `SubField::dot(&self, other) -> f64` / `Field::dot_field(&self, other) -> f64` | `xty(x, y) -> float` (dispatch par type ; produit scalaire **global** de deux champs) |
+| `SubField::pscal(&self, other) -> Self` / `Field::pscal_field(&self, other) -> Self` | `psca(x, y) -> field` (dispatch par type ; produit scalaire **nœud par nœud**, champ à une composante `"psca"`) |
 | `abs` / `sqrt` / `exp` / `log` / `log10` / `cos` / `sin` / `tan` / `sinh` / `cosh` / `tanh` `(field) -> Field` | mêmes noms `pyrucast.…(field)` — maths **élément par élément** (style numpy), un champ neuf du même type ; acceptent les quatre saveurs de champ (`NodeField` / `SubNodeField` / `ElementField` / `SubElementField`). Résultats non bornés : `log` de ≤ 0 → `-inf`/`nan` |
 
 > La composition de zones passe par l'**union** (`|` Python / `union` Rust) ;
