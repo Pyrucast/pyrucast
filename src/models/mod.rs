@@ -27,9 +27,14 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::containers::node_field::SubNodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::store::Handle;
+
+/// Spatial-axis suffixes for the Voigt stress-component names read by the
+/// continuum-mechanics [`Physics::internal_force_element`] default.
+const VOIGT_AXES: [&str; 3] = ["x", "y", "z"];
 
 pub mod dirichlet;
 pub mod elasticity;
@@ -293,6 +298,62 @@ pub trait Physics: Sync {
         })
     }
 
+    /// Local internal-force vector of one cell — the pure, sequential kernel
+    /// that applies `Bᵀ` to the stress (Cast3m `BSIG`). It is the **transpose**
+    /// of this physics' deformation operator `B` (the same `B` behind its
+    /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation) /
+    /// [`crate::ops::field::beam_deformation`](fn@crate::ops::field::beam_deformation)),
+    /// so it mirrors [`integrate_point`](Self::integrate_point)'s producer.
+    ///
+    /// Fills `fe` — the cell's local force vector, node-major / variable-minor
+    /// (`fe[li * n_dual + di]`, `di` indexing [`dual_vars`](Self::dual_vars)) —
+    /// from the cell geometry and the `stress` (the [`integrate_point`](Self::integrate_point)
+    /// output) borrowed in place. `geoms` holds one [`CellGeom`] per FE subspace
+    /// of [`stiffness_layout`](Self::stiffness_layout), in that order.
+    ///
+    /// **Default**: the continuum-mechanics `f_{i,a} = Σ_g Σ_b (∂N_i/∂x_b) σ_ab`
+    /// — one [`crate::ops::field::divergence`](fn@crate::ops::field::divergence)
+    /// per row of the symmetric stress tensor `σ`, read in Voigt naming
+    /// (`sigma_xx`, `sigma_xy`, …). A displacement physics (elasticity, Mazars,
+    /// plasticity) gets it for free; a physics whose dual is not a displacement
+    /// vector (heat, bar, beam) overrides it.
+    fn internal_force_element(
+        &self,
+        geoms: &[CellGeom],
+        stress: &SubElementField,
+        fe: &mut [f64],
+    ) -> Result<()> {
+        continuum_internal_force_element(geoms, stress, fe)
+    }
+
+    /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this physics (Cast3m `BSIG`),
+    /// scattered to a [`SubNodeField`] on the block's node support. `stress` is
+    /// this physics' [`integrate_behavior`](Self::integrate_behavior) output.
+    ///
+    /// **Provided**: drives [`internal_force_element`](Self::internal_force_element)
+    /// in parallel over the FE subspaces of
+    /// [`stiffness_layout`](Self::stiffness_layout) (same geometry as the
+    /// stiffness) and scatters to that layout's node support. A physics with no
+    /// stiffness layout (a constraint such as `Dirichlet`) has no internal-force
+    /// contribution and errors here. For a **linear** law the result equals
+    /// `K·u` (the stiffness applied to the solution).
+    fn build_internal_forces(&self, stress: &Handle<SubElementField>) -> Result<SubNodeField> {
+        let Some(layout) = self.stiffness_layout() else {
+            return Err(PyrucastError::Message(format!(
+                "{}: build_internal_forces has no default without a stiffness_layout \
+                 (e.g. a constraint such as Dirichlet)",
+                self.label()
+            )));
+        };
+        kernel::internal_forces(
+            &layout.fespaces,
+            &layout.support,
+            layout.dual_vars,
+            stress,
+            |geoms, s, fe| self.internal_force_element(geoms, s, fe),
+        )
+    }
+
     /// Short type label, e.g. `"HeatConduction"` (used by `Debug` and the
     /// default `display`).
     fn label(&self) -> &'static str;
@@ -304,4 +365,54 @@ pub trait Physics: Sync {
 
     /// Full multi-line rendering for [`crate::dump::Dump`].
     fn render(&self, opts: &DumpOptions) -> String;
+}
+
+/// Continuum-mechanics internal-force element kernel `f_{i,a} = Σ_g Σ_b
+/// (∂N_i/∂x_b) σ_ab |J| w` — one [`crate::ops::field::divergence`](fn@crate::ops::field::divergence)
+/// per row of the symmetric stress tensor `σ` (read in Voigt naming). Backs both
+/// the [`Physics::internal_force_element`] default (elasticity, Mazars,
+/// plasticity) and the model-free
+/// [`crate::ops::internal_forces::internal_forces_continuum`] operator. Fills
+/// `fe` node-major / axis-minor (`fe[i * space_dim + a]`).
+pub(crate) fn continuum_internal_force_element(
+    geoms: &[CellGeom],
+    stress: &SubElementField,
+    fe: &mut [f64],
+) -> Result<()> {
+    let geom = &geoms[0];
+    let d = geom.space_dim;
+    let n_nodes = geom.n_nodes;
+    for g in 0..geom.n_gauss {
+        let dn = geom.dn_dx(g)?; // [i * d + b]
+        let w = geom.det_j_w(g)?;
+        let sig = voigt_stress_matrix(stress, geom.cell, g, d)?; // [a * d + b]
+        for i in 0..n_nodes {
+            for a in 0..d {
+                let mut s = 0.0;
+                for b in 0..d {
+                    s += dn[i * d + b] * sig[a * d + b];
+                }
+                fe[i * d + a] += s * w;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Read the symmetric `d×d` stress tensor at `(cell, g)` from a Voigt-named
+/// stress field (`sigma_xx`, `sigma_yy`, `sigma_xy`, …), as a flat row-major
+/// matrix `[a * d + b]`. Backs the continuum-mechanics
+/// [`Physics::internal_force_element`] default; reads by component name, so a
+/// state field carrying extra `VAR1` components (Mazars) is handled transparently.
+fn voigt_stress_matrix(stress: &SubElementField, cell: usize, g: usize, d: usize) -> Result<Vec<f64>> {
+    let mut sig = vec![0.0_f64; d * d];
+    for i in 0..d {
+        for j in i..d {
+            let name = format!("sigma_{}{}", VOIGT_AXES[i], VOIGT_AXES[j]);
+            let v = stress.value(cell, g, &name)?;
+            sig[i * d + j] = v;
+            sig[j * d + i] = v; // symmetric
+        }
+    }
+    Ok(sig)
 }

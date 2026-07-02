@@ -11,6 +11,7 @@ pub mod behavior;
 pub mod build;
 pub mod export;
 pub mod field;
+pub mod internal_forces;
 pub mod mesher;
 pub mod solver;
 

@@ -157,6 +157,30 @@ impl Physics for Truss {
         Ok(())
     }
 
+    /// Internal forces `f = Bᵀ N` of one bar. `B` projects the nodal
+    /// displacement onto the axis (`ε = (u_B − u_A)·c / L`), so its transpose
+    /// spreads the axial force `N` back onto the two ends: `f_A = −N c`,
+    /// `f_B = +N c` — the equilibrating end forces along the direction cosine
+    /// `c`. `N` is element-constant (linear bar), read at the first Gauss point;
+    /// the closed form mirrors [`element_stiffness`]'s analytic treatment (a
+    /// SEG2 in space has no square isoparametric Jacobian).
+    fn internal_force_element(
+        &self,
+        geoms: &[CellGeom],
+        stress: &SubElementField,
+        fe: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let d = self.space_dim;
+        let c = cell_cosine(geom, d)?;
+        let n = stress.value(geom.cell, 0, "n")?;
+        for a in 0..d {
+            fe[a] = -n * c[a]; // node A
+            fe[d + a] = n * c[a]; // node B
+        }
+        Ok(())
+    }
+
     fn label(&self) -> &'static str {
         "Truss"
     }

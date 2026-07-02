@@ -178,6 +178,44 @@ impl Physics for Timoshenko {
         Ok(())
     }
 
+    /// Internal forces `f = ∫ (B_bᵀ M + B_sᵀ V) dx` of one beam — the transpose
+    /// of [`element_matrix`](Self::element_matrix), applied to the section forces
+    /// `(M, V)` instead of the strains. `geoms[0]` is the full-Gauss bending
+    /// space (bending moment `M`), `geoms[1]` the reduced shear space (shear
+    /// force `V`). DOF vector `[f_w0, m_theta0, f_w1, m_theta1]`, with
+    /// `B_b = [0, dN_0, 0, dN_1]` and `B_s = [dN_0, −N_0, dN_1, −N_1]`. `V` is
+    /// element-constant (read at the first Gauss point).
+    fn internal_force_element(
+        &self,
+        geoms: &[CellGeom],
+        stress: &SubElementField,
+        fe: &mut [f64],
+    ) -> Result<()> {
+        let (bend, shear) = (&geoms[0], &geoms[1]);
+        let cell = bend.cell;
+        // Bending: B_b = [0, dN_0, 0, dN_1] · M (full Gauss).
+        for g in 0..bend.n_gauss {
+            let dn = bend.dn_dx(g)?; // [dN_0/dx, dN_1/dx] (1-D)
+            let bb = [0.0, dn[0], 0.0, dn[1]];
+            let mw = stress.value(cell, g, "M")? * bend.det_j_w(g)?;
+            for (k, b) in bb.iter().enumerate() {
+                fe[k] += b * mw;
+            }
+        }
+        // Shear: B_s = [dN_0, −N_0, dN_1, −N_1] · V (reduced).
+        let v = stress.value(cell, 0, "V")?; // element-constant
+        for g in 0..shear.n_gauss {
+            let dn = shear.dn_dx(g)?;
+            let n = shear.n_at_g(g)?;
+            let bs = [dn[0], -n[0], dn[1], -n[1]];
+            let vw = v * shear.det_j_w(g)?;
+            for (k, b) in bs.iter().enumerate() {
+                fe[k] += b * vw;
+            }
+        }
+        Ok(())
+    }
+
     fn label(&self) -> &'static str {
         "Timoshenko"
     }

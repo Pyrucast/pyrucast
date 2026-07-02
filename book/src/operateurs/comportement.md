@@ -1,7 +1,9 @@
-# Opérateur de comportement
+# Opérateurs de comportement
 
 Le module `ops::behavior` **intègre la loi de comportement** d'un
-[`Model`](../model.md) — le `COMP` de cast3m (« intégrer le comportement »).
+[`Model`](../model.md) — le `COMP` de cast3m (« intégrer le comportement ») ; le
+module `ops::internal_forces` en calcule les **forces internes** — le `BSIG` de
+cast3m (`∫ Bᵀ σ`).
 
 ## `integrate_behavior(model, deformation, materials)` → `ElementField`
 
@@ -45,3 +47,42 @@ comportement (`COMP`) de chaque physique. Pour les lois **non linéaires** avec
 variables internes (`VAR0` → `VAR1`), voir
 [Plasticité parfaite](../mecanique/plasticite.md) (retour radial von Mises) et
 [Endommagement de Mazars](../mecanique/mazars.md).
+
+## `internal_forces(model, stresses)` → `NodeField`
+
+Les **forces internes** `f = ∫ Bᵀ σ dΩ` (le `BSIG` de cast3m) sont la
+**transposée** de l'opérateur de déformation `B` : là où
+[`deformation`](champs.md) applique `B` au déplacement (`ε = B·u`),
+`internal_forces` applique `Bᵀ` à la contrainte et **rassemble** le résultat aux
+nœuds. C'est la **généralisation mécanique** de [`divergence`](champs.md) (qui
+est exactement `Bᵀ q` pour un transport scalaire) : une composante de sortie par
+DDL dual.
+
+`stresses` est le champ d'état matériau renvoyé par `integrate_behavior`. Chaque
+sous-modèle porteur d'un comportement applique **son propre** `Bᵀ` — c'est
+pourquoi l'opérateur prend un **modèle** et pas un simple espace EF : un même
+`SEG2` peut être une barre (`Bᵀ` axial, DDL déplacement) ou une poutre (`Bᵀ` à
+deux quadratures flexion + cisaillement, DDL `w, θ`), et seul le modèle tranche.
+Solides continus, barres et poutres sont donc tous couverts.
+
+Pour une loi **linéaire**, le résultat égale la rigidité appliquée à la solution
+(`K·u`) ; pour une loi **non linéaire**, il donne les forces internes exactes, de
+sorte que `r = f_ext − f_int` est le **résidu** d'équilibre.
+
+```python
+# Solution déjà obtenue par le solveur.
+eps    = pyrucast.deformation(solution, fes)          # ε = B·u
+sig    = pyrucast.integrate_behavior(model, eps, materials)  # COMP : σ
+f_int  = pyrucast.internal_forces(model, sig)         # BSIG : ∫ Bᵀ σ
+residu = f_ext - f_int                                # équilibre
+```
+
+### `internal_forces_continuum(stresses, fespace)` → `NodeField`
+
+Variante **sans modèle** pour le cas **continu** (élasticité, Mazars,
+plasticité), où `B` est le gradient symétrique universel et les DDL sont toujours
+un déplacement : elle ne demande que la géométrie (`fespace`) et la contrainte en
+notation de Voigt (`sigma_xx`, `sigma_xy`…), et renvoie `space_dim` composantes
+`f_x, f_y, f_z` par nœud. **Barres et poutres ne sont pas couvertes** — leur `B`
+n'est pas le gradient symétrique — : utiliser `internal_forces(model, stresses)`
+pour celles-ci.

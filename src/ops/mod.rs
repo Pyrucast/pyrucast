@@ -34,5 +34,6 @@ pub mod build;
 pub mod export;
 pub mod field;
 pub mod geom;
+pub mod internal_forces;
 pub mod mesher;
 pub mod solver;

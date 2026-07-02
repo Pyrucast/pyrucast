@@ -33,6 +33,7 @@ use crate::containers::finite_element_space::{
 };
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Coords, NodeId, SubMesh};
+use crate::containers::node_field::SubNodeField;
 use crate::error::{PyrucastError, Result};
 use crate::parallel::*;
 use crate::store::{read, Handle};
@@ -520,4 +521,98 @@ pub fn element_block_pattern(
         .collect::<Result<_>>()?;
 
     Ok((nrows, ncols, per_cell))
+}
+
+/// Compute the internal nodal forces `f = ∫ Bᵀ σ dΩ` of one physics (Cast3m
+/// `BSIG`), by a per-cell force-vector kernel, and scatter them to a
+/// [`SubNodeField`] — the mechanical counterpart of
+/// [`crate::ops::field::divergence`](fn@crate::ops::field::divergence) (which is
+/// exactly this for a scalar transport `Bᵀ q`).
+///
+/// `element(geoms, stress, fe)` is a pure sequential kernel: for one cell it
+/// fills `fe` — the cell's local force vector, **node-major / variable-minor**
+/// (`fe[li * n_dual + di]`, `di` indexing `dual_vars`) — from the cell geometry
+/// (one [`CellGeom`] per FE subspace of `fespaces`, same order) and the stress
+/// borrowed in place. It never sees rayon, the store, or a lock.
+///
+/// The force vectors are computed in parallel per cell, then **scattered
+/// serially in cell order** into `support`'s nodes — a shared node accumulates
+/// several cells' contributions, so the sum runs sequentially in cell order and
+/// is bit-for-bit identical regardless of thread count. Returns the
+/// [`SubNodeField`] with one component per `dual_vars` on `support`.
+pub fn internal_forces(
+    fespaces: &[Handle<SubFiniteElementSpace>],
+    support: &Handle<SubMesh>,
+    dual_vars: Vec<String>,
+    stress: &Handle<SubElementField>,
+    element: impl Fn(&[CellGeom], &SubElementField, &mut [f64]) -> Result<()> + Sync,
+) -> Result<SubNodeField> {
+    let n_dual = dual_vars.len();
+    let primary = fespaces
+        .first()
+        .ok_or_else(|| PyrucastError::Message("internal_forces: no FE subspace".into()))?;
+    let fe = read(primary)?;
+    let submesh = fe.submesh();
+    let sm = read(&submesh)?;
+    let coords_h = sm.coords();
+    let coords = read(&coords_h)?;
+    let stress_guard = read(stress)?;
+
+    // Reference data of every subspace, snapshotted once (they share the submesh
+    // ⇒ one connectivity + coords drive every CellGeom; only quadrature differs).
+    let mut rds = Vec::with_capacity(fespaces.len());
+    rds.push(RefData::snapshot(&fe)?);
+    for h in &fespaces[1..] {
+        let f = read(h)?;
+        if !f.submesh().same_slot(&submesh) {
+            return Err(PyrucastError::Message(
+                "internal_forces: all FE subspaces must share one submesh".into(),
+            ));
+        }
+        rds.push(RefData::snapshot(&f)?);
+    }
+
+    let n_cells = fe.cell_count()?;
+    let n_nodes = rds[0].n_nodes;
+    let conn: &[NodeId] = sm.connectivity();
+    let rds_ref: &[RefData] = &rds;
+    let coords_ref: &Coords = &coords;
+    let stress_ref: &SubElementField = &stress_guard;
+    let fe_len = n_nodes * n_dual;
+
+    // Per cell, in parallel: the local force vector (written once, disjoint).
+    let per_cell: Vec<Vec<f64>> = (0..n_cells)
+        .into_par_iter()
+        .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
+        .map(|cell| -> Result<Vec<f64>> {
+            let geoms: Vec<CellGeom> = rds_ref
+                .iter()
+                .map(|rd| CellGeom::new(rd, coords_ref, conn, cell))
+                .collect::<Result<_>>()?;
+            let mut fe = vec![0.0_f64; fe_len];
+            element(&geoms, stress_ref, &mut fe)?;
+            Ok(fe)
+        })
+        .collect::<Result<_>>()?;
+
+    // Scatter serially in cell order: a shared node sums several cells, so the
+    // f64 accumulation order is fixed ⇒ bit-for-bit deterministic.
+    let mut acc: HashMap<NodeId, Vec<f64>> = HashMap::new();
+    for (cell, fe_cell) in per_cell.iter().enumerate() {
+        let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
+        for (li, &nid) in ids.iter().enumerate() {
+            let slot = acc.entry(nid).or_insert_with(|| vec![0.0; n_dual]);
+            for di in 0..n_dual {
+                slot[di] += fe_cell[li * n_dual + di];
+            }
+        }
+    }
+
+    let mut out = SubNodeField::from_poi1(support, dual_vars.clone())?;
+    for (nid, vals) in &acc {
+        for (di, name) in dual_vars.iter().enumerate() {
+            out.set_value(*nid, name, vals[di])?;
+        }
+    }
+    Ok(out)
 }

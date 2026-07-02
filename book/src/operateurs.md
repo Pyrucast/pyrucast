@@ -17,7 +17,7 @@ par module, plus la visualisation (qui vit sous `src/viz/`).
 | `ops::geom` | [Géométrie](operateurs/geometrie.md) | mesures géométriques *(réservé)* |
 | `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `restrict`, `select`, `merge`, `consolidate`, `xty` (produit scalaire global) / `psca` (produit scalaire nœud par nœud), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
 | `ops::assemble` | [Assemblage](operateurs/assemblage.md) | `stiffness`, `mass`, chargement réparti `flux` |
-| `ops::behavior` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`) |
+| `ops::behavior` / `ops::internal_forces` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`), `internal_forces` / `internal_forces_continuum` (le `BSIG`, `∫ Bᵀ σ`) |
 | `ops::solver` | [Solveur](operateurs/solveur.md) | `solve` (LU dense ; `LinearSolver` à venir) |
 | `ops::export` | [Visualisation](visualization.md) | `export_vtk` (maillage / champ → VTK pour ParaView) |
 | `src/viz` | [Visualisation](visualization.md) | tracé des maillages, coloration par champ |

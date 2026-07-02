@@ -45,6 +45,8 @@ __all__ = [
     "from_live_nodes",
     "gradient",
     "integrate_behavior",
+    "internal_forces",
+    "internal_forces_continuum",
     "line_seg2",
     "log",
     "log10",
@@ -1884,6 +1886,33 @@ def integrate_behavior(model: Model, deformation: ElementField, materials: Eleme
     
     For a linear law the result is consistent with the assembled stiffness
     (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
+    """
+
+def internal_forces(model: Model, stresses: ElementField) -> NodeField:
+    r"""
+    Internal nodal forces `f = ∫ Bᵀ σ dΩ` of `model` (Cast3m `BSIG`).
+    
+    `stresses` is the material-state field produced by `integrate_behavior`
+    (`COMP`). Each behaviour-bearing sub-model applies its own `Bᵀ` (continuum
+    solid, bar or beam) and the forces are scattered to the nodes. Returns a
+    `NodeField` whose components are each sub-model's dual variables (`f_x`, …
+    for a solid/bar; `f_w`, `m_theta` for a beam).
+    
+    For a linear law the result equals the assembled stiffness applied to the
+    solution (`K·u`); a non-linear law gives the exact internal forces, so
+    `r = f_ext − f_int` is the residual.
+    """
+
+def internal_forces_continuum(stresses: ElementField, fespace: FiniteElementSpace) -> NodeField:
+    r"""
+    Internal nodal forces of a **continuum-mechanics** stress field, without a
+    model (Cast3m `BSIG` for a plain solid).
+    
+    Convenience for the volumetric case (elasticity, Mazars, plasticity), where
+    `B` is the universal symmetric gradient: it needs only the geometry
+    (`fespace`) and the Voigt stress (`sigma_xx`, `sigma_xy`, …). Returns a
+    `NodeField` with `space_dim` components `f_x, f_y, f_z` per node. **Bars and
+    beams are not covered** — use `internal_forces(model, stresses)` for those.
     """
 
 def line_seg2(a: Node, b: Node, n_elems: builtins.int) -> Mesh:

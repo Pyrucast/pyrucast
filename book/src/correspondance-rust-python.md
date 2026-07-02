@@ -139,6 +139,13 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 |---|---|
 | `integrate(model: &Model, deformation: &ElementField, materials: &ElementField) -> ElementField` | `integrate_behavior(model, deformation, materials) -> ElementField` |
 
+### `ops::internal_forces` — forces internes (`BSIG`, `∫ Bᵀ σ`)
+
+| Rust (`ops::internal_forces::…`) | Python (`pyrucast.…`) |
+|---|---|
+| `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(model, stresses) -> NodeField` |
+| `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
+
 ### `ops::solver` — résolution
 
 | Rust (`ops::solver::lu::…`) | Python (`pyrucast.…`) |

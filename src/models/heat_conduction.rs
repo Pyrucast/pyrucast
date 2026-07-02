@@ -148,6 +148,34 @@ impl Physics for HeatConduction {
         Ok(())
     }
 
+    /// Internal nodal fluxes `q_i = ∫ ∇N_i · flux dx` of one cell — `Bᵀ` applied
+    /// to the weak-form flux, the scalar-transport counterpart of the
+    /// continuum-mechanics default (and identical to
+    /// [`crate::ops::field::divergence`](fn@crate::ops::field::divergence) of the
+    /// flux vector). Single dual variable `q`, so `fe[i]` per node.
+    fn internal_force_element(
+        &self,
+        geoms: &[CellGeom],
+        stress: &SubElementField,
+        fe: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let d = geom.space_dim;
+        let flux_names = flux_components(d);
+        for g in 0..geom.n_gauss {
+            let dn = geom.dn_dx(g)?; // [i * d + a]
+            let w = geom.det_j_w(g)?;
+            for i in 0..geom.n_nodes {
+                let mut s = 0.0;
+                for a in 0..d {
+                    s += dn[i * d + a] * stress.value(geom.cell, g, &flux_names[a])?;
+                }
+                fe[i] += s * w;
+            }
+        }
+        Ok(())
+    }
+
     fn label(&self) -> &'static str {
         "HeatConduction"
     }
