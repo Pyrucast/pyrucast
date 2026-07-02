@@ -76,9 +76,11 @@ fn subspace_frame_deformation(
         let (dofs, out_comps): (&[&str], &[&str]) = match space_dim {
             2 => (DOFS_2D, COMPONENTS_2D),
             3 => (DOFS_3D, COMPONENTS_3D),
-            d => return Err(PyrucastError::Message(format!(
+            d => {
+                return Err(PyrucastError::Message(format!(
                 "frame_deformation: frame element requires a 2-D or 3-D configuration, got {d}-D"
-            ))),
+            )))
+            }
         };
         (
             space_dim,
