@@ -15,10 +15,18 @@
 //! # Determinism
 //!
 //! Every parallel region either writes each output slot **exactly once**
-//! (indexed / `par_chunks_mut` writes) or is an **associative reduction over
-//! the same values in the same grouping**. Results are therefore bit-for-bit
-//! identical to a sequential run, regardless of `RAYON_NUM_THREADS` (the linear
-//! solver is the sole documented exception — see [`crate::ops::solver`]).
+//! (indexed / `par_chunks_mut` writes), is an **associative reduction over the
+//! same values in the same grouping**, or is a **colour-driven scatter**
+//! (the `add_atomic` primitive): cells are partitioned into colours that touch disjoint
+//! slots, so each slot accumulates its cells in a fixed order — increasing
+//! colour, then cell order within the colour — regardless of
+//! `RAYON_NUM_THREADS`. The first two are bit-for-bit identical to a sequential
+//! run; the colour-driven scatter is reproducible for any thread count but,
+//! summed in colour order rather than cell order, is not bit-for-bit with a
+//! naive sequential sum (it backs the global assembly and the nodal scatters —
+//! the `Bᵀ` divergence, the internal forces and the distributed flux load). The
+//! linear solver is the sole non-deterministic exception — see
+//! [`crate::ops::solver`].
 //!
 //! # Grain size
 //!
@@ -28,6 +36,9 @@
 //! hand-off overhead.
 
 pub use rayon::prelude::*;
+
+use crate::error::Result;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Minimum number of leaf items (values, cells, …) a rayon job should cover
 /// before it is worth splitting further. Tuned so that single small elements
@@ -59,4 +70,70 @@ pub fn map_component_inplace(
     buf.par_chunks_mut(ncomp)
         .with_min_len((MIN_PARALLEL_LEN / ncomp).max(1))
         .for_each(|row| row[ci] = f(row[ci]));
+}
+
+/// Accumulate `v` into the f64 atomic slot `a` (the value held as its bit
+/// pattern). The colour-driven scatters — the global assembly
+/// ([`crate::ops::assemble`]) and the nodal scatters ([`colored_scatter`], behind
+/// the `Bᵀ` divergence and the distributed flux load) — guarantee that within one
+/// colour no two parallel cells touch the same slot, so this load-then-store
+/// never races; colours run in sequence behind a rayon barrier, so cross-colour
+/// accumulation is ordered. `Relaxed` therefore suffices — on x86 the store is a
+/// plain `mov`, so a colour-disjoint scatter costs the same as a non-atomic one.
+#[inline]
+pub(crate) fn add_atomic(a: &AtomicU64, v: f64) {
+    let cur = f64::from_bits(a.load(Ordering::Relaxed));
+    a.store((cur + v).to_bits(), Ordering::Relaxed);
+}
+
+/// Handle onto a colour-scatter's flat f64 accumulator (held as atomics), handed
+/// to the per-cell closure of [`colored_scatter`]. Within one colour the cells
+/// touch pairwise-disjoint slots, so [`Scatter::add`] never races.
+pub struct Scatter<'a> {
+    values: &'a [AtomicU64],
+}
+
+impl Scatter<'_> {
+    /// Accumulate `v` into slot `slot` of the shared accumulator.
+    #[inline]
+    pub fn add(&self, slot: usize, v: f64) {
+        add_atomic(&self.values[slot], v);
+    }
+}
+
+/// Scatter per-cell contributions into a flat accumulator of `n_slots`, in
+/// parallel, **colour by colour**. `coloring` partitions the cells so that one
+/// colour's cells touch pairwise-disjoint slots; that colour's cells then run
+/// concurrently (grain `min_len`) without racing, the colours running in
+/// sequence. `init` builds a **per-thread** scratch value reused across a
+/// thread's cells (e.g. a local element buffer — pass `|| ()` when none is
+/// needed); `cell(c, scratch, out)` computes cell `c`'s contributions and pushes
+/// each into `out` via [`Scatter::add`].
+///
+/// Determinism: each slot accumulates its cells in a fixed order — increasing
+/// colour, then cell order within the colour — independent of the thread count,
+/// so the result is reproducible for any `RAYON_NUM_THREADS` (see the module
+/// *Determinism* note). It is the shared mechanism behind the `Bᵀ` divergence
+/// ([`crate::models::kernel::divergence`]) and the distributed flux load
+/// ([`crate::ops::assemble::flux`](fn@crate::ops::assemble::flux)). Returns the
+/// accumulator as plain `f64`.
+pub fn colored_scatter<S>(
+    n_slots: usize,
+    coloring: &[Vec<usize>],
+    min_len: usize,
+    init: impl Fn() -> S + Sync + Send,
+    cell: impl Fn(usize, &mut S, &Scatter) -> Result<()> + Sync,
+) -> Result<Vec<f64>> {
+    let values: Vec<AtomicU64> = (0..n_slots).map(|_| AtomicU64::new(0)).collect();
+    let out = Scatter { values: &values };
+    for color in coloring {
+        color
+            .par_iter()
+            .with_min_len(min_len)
+            .try_for_each_init(&init, |scratch, &c| cell(c, scratch, &out))?;
+    }
+    Ok(values
+        .into_iter()
+        .map(|a| f64::from_bits(a.into_inner()))
+        .collect())
 }

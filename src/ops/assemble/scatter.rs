@@ -23,11 +23,12 @@ use crate::containers::matrix::{AssemblyPattern, Matrix, NamedDof};
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
 use crate::ops::assemble::coloring;
+use crate::parallel::add_atomic;
 use crate::store::read;
 use nalgebra_sparse::CsrMatrix;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 
 /// Build the global CSR sparsity [`AssemblyPattern`] for `k` from its blocks'
 /// topology alone — no kernel evaluation. Each block contributes its global
@@ -169,18 +170,6 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
         values,
     )
     .map_err(|e| PyrucastError::Message(format!("scatter_serial: invalid CSR: {e}")))
-}
-
-/// Accumulate `v` into the atomic slot `a`. The caller guarantees that, within
-/// one colour, no two parallel cells touch the same slot (coloured cells share
-/// no DOF), so this load-then-store is never a data race; colours run in
-/// sequence, so accumulation across colours is ordered by the rayon barrier
-/// between them. `Relaxed` therefore suffices — on x86 it is a plain `mov`, so
-/// the colour-disjoint scatter costs the same as a non-atomic one.
-#[inline]
-fn add_atomic(a: &AtomicU64, v: f64) {
-    let cur = f64::from_bits(a.load(Ordering::Relaxed));
-    a.store((cur + v).to_bits(), Ordering::Relaxed);
 }
 
 /// Assemble `k` into a CSR by scattering each block's contribution into

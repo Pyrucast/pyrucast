@@ -25,6 +25,16 @@
 //! matrices in parallel and scatters them into the COO **serially in cell
 //! order**, so the assembled matrix is bit-for-bit identical to a sequential
 //! run regardless of `RAYON_NUM_THREADS`.
+//!
+//! [`divergence`] (the shared `Bᵀ` nodal scatter behind the internal forces and
+//! [`crate::ops::field::divergence`](fn@crate::ops::field::divergence)) instead
+//! builds each cell's local vector and
+//! scatters it in the **same parallel pass**, by **cell colouring** (colours =
+//! node-disjoint cells): every node accumulates in a fixed colour order, so the
+//! result is reproducible for any `RAYON_NUM_THREADS` — though, summed in colour
+//! order rather than cell order, not bit-for-bit with a sequential run. It shares
+//! the [`crate::parallel::colored_scatter`] mechanism with the distributed flux
+//! load.
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
@@ -35,6 +45,7 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Coords, NodeId, SubMesh};
 use crate::containers::node_field::SubNodeField;
 use crate::error::{PyrucastError, Result};
+use crate::ops::assemble::coloring;
 use crate::parallel::*;
 use crate::store::{read, Handle};
 use nalgebra_sparse::CooMatrix;
@@ -45,7 +56,7 @@ use std::collections::HashMap;
 /// `element_type()` — and serialise all threads on the global store lock).
 /// Shape values, reference derivatives and weights at each Gauss point, plus the
 /// fixed dimensions. Shared read-only across threads.
-struct RefData {
+pub(crate) struct RefData {
     n_nodes: usize,
     n_gauss: usize,
     space_dim: usize,
@@ -59,7 +70,7 @@ struct RefData {
 }
 
 impl RefData {
-    fn snapshot(fe: &SubFiniteElementSpace) -> Result<Self> {
+    pub(crate) fn snapshot(fe: &SubFiniteElementSpace) -> Result<Self> {
         let n_gauss = fe.gauss_count();
         let mut n_ref = Vec::with_capacity(n_gauss);
         let mut dn_ref = Vec::with_capacity(n_gauss);
@@ -106,7 +117,12 @@ pub struct CellGeom<'a> {
 }
 
 impl<'a> CellGeom<'a> {
-    fn new(rd: &'a RefData, coords: &'a Coords, conn: &'a [NodeId], cell: usize) -> Result<Self> {
+    pub(crate) fn new(
+        rd: &'a RefData,
+        coords: &'a Coords,
+        conn: &'a [NodeId],
+        cell: usize,
+    ) -> Result<Self> {
         Ok(Self {
             rd,
             coords,
@@ -534,40 +550,45 @@ pub fn element_block_pattern(
     Ok((nrows, ncols, per_cell))
 }
 
-/// Compute the internal nodal forces `f = ∫ Bᵀ σ dΩ` of one physics (Cast3m
-/// `BSIG`), by a per-cell force-vector kernel, and scatter them to a
-/// [`SubNodeField`] — the mechanical counterpart of
-/// [`crate::ops::field::divergence`](fn@crate::ops::field::divergence) (which is
-/// exactly this for a scalar transport `Bᵀ q`).
+/// Weak divergence `∫ Bᵀ v dΩ` of a per-element quantity `v`, scattered to a
+/// [`SubNodeField`] — the shared `Bᵀ` nodal driver. It backs both the internal
+/// forces `f = ∫ Bᵀ σ` (Cast3m `BSIG`, `B` = symmetric gradient) and the weak
+/// divergence of a vector field
+/// ([`crate::ops::field::divergence`](fn@crate::ops::field::divergence), `B` =
+/// the plain gradient), which is the scalar case (`n_dual = 1`).
 ///
-/// `element(geoms, stress, fe)` is a pure sequential kernel: for one cell it
-/// fills `fe` — the cell's local force vector, **node-major / variable-minor**
+/// `element(geoms, field, fe)` is a pure sequential kernel: for one cell it fills
+/// `fe` — the cell's local vector, **node-major / variable-minor**
 /// (`fe[li * n_dual + di]`, `di` indexing `dual_vars`) — from the cell geometry
-/// (one [`CellGeom`] per FE subspace of `fespaces`, same order) and the stress
+/// (one [`CellGeom`] per FE subspace of `fespaces`, same order) and `field`
 /// borrowed in place. It never sees rayon, the store, or a lock.
 ///
-/// The force vectors are computed in parallel per cell, then **scattered
-/// serially in cell order** into `support`'s nodes — a shared node accumulates
-/// several cells' contributions, so the sum runs sequentially in cell order and
-/// is bit-for-bit identical regardless of thread count. Returns the
+/// Each cell's vector is built and **scattered in the same parallel pass**,
+/// colour by colour (the primary FE subspace's cached cell colouring): within a
+/// colour the cells touch pairwise-disjoint nodes, so their accumulation into
+/// `support`'s node slots never races, and colours run in sequence. Each node
+/// therefore sums its cells in a fixed colour order — reproducible for any thread
+/// count, though not bit-for-bit with a cell-order sum (see
+/// [`crate::parallel::colored_scatter`]). The local vector lives on a per-thread
+/// scratch buffer, so the whole element set is never materialised. Returns the
 /// [`SubNodeField`] with one component per `dual_vars` on `support`.
-pub fn internal_forces(
+pub fn divergence(
     fespaces: &[Handle<SubFiniteElementSpace>],
     support: &Handle<SubMesh>,
     dual_vars: Vec<String>,
-    stress: &Handle<SubElementField>,
+    field: &Handle<SubElementField>,
     element: impl Fn(&[CellGeom], &SubElementField, &mut [f64]) -> Result<()> + Sync,
 ) -> Result<SubNodeField> {
     let n_dual = dual_vars.len();
     let primary = fespaces
         .first()
-        .ok_or_else(|| PyrucastError::Message("internal_forces: no FE subspace".into()))?;
+        .ok_or_else(|| PyrucastError::Message("divergence: no FE subspace".into()))?;
     let fe = read(primary)?;
     let submesh = fe.submesh();
     let sm = read(&submesh)?;
     let coords_h = sm.coords();
     let coords = read(&coords_h)?;
-    let stress_guard = read(stress)?;
+    let field_guard = read(field)?;
 
     // Reference data of every subspace, snapshotted once (they share the submesh
     // ⇒ one connectivity + coords drive every CellGeom; only quadrature differs).
@@ -577,7 +598,7 @@ pub fn internal_forces(
         let f = read(h)?;
         if !f.submesh().same_slot(&submesh) {
             return Err(PyrucastError::Message(
-                "internal_forces: all FE subspaces must share one submesh".into(),
+                "divergence: all FE subspaces must share one submesh".into(),
             ));
         }
         rds.push(RefData::snapshot(&f)?);
@@ -588,41 +609,54 @@ pub fn internal_forces(
     let conn: &[NodeId] = sm.connectivity();
     let rds_ref: &[RefData] = &rds;
     let coords_ref: &Coords = &coords;
-    let stress_ref: &SubElementField = &stress_guard;
+    let field_ref: &SubElementField = &field_guard;
     let fe_len = n_nodes * n_dual;
 
-    // Per cell, in parallel: the local force vector (written once, disjoint).
-    let per_cell: Vec<Vec<f64>> = (0..n_cells)
-        .into_par_iter()
-        .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
-        .map(|cell| -> Result<Vec<f64>> {
+    // Support slots: the unique nodes of `support` and each node's flat base.
+    // `support` is the POI1 of the submesh, so it covers every connectivity node
+    // and the map is total.
+    let unique: Vec<NodeId> = read(support)?.connectivity().to_vec();
+    let slot_of: HashMap<NodeId, usize> = unique.iter().enumerate().map(|(k, &n)| (n, k)).collect();
+
+    // Cell colouring (cached on the primary FE subspace): two cells sharing a
+    // node get different colours, so within a colour the cells scatter to
+    // pairwise-disjoint nodes.
+    let coloring = fe.coloring(|| coloring::greedy_color(n_cells, n_nodes, conn));
+
+    // Fused compute + scatter, colour by colour: each cell builds its local
+    // vector on a per-thread scratch buffer (no per-cell heap alloc, no
+    // materialisation of the whole element set) and scatters it straight into the
+    // node slots.
+    let flat = colored_scatter(
+        unique.len() * n_dual,
+        coloring,
+        (MIN_PARALLEL_LEN / n_nodes.max(1)).max(1),
+        || vec![0.0_f64; fe_len],
+        |cell, fe_cell, out| {
             let geoms: Vec<CellGeom> = rds_ref
                 .iter()
                 .map(|rd| CellGeom::new(rd, coords_ref, conn, cell))
                 .collect::<Result<_>>()?;
-            let mut fe = vec![0.0_f64; fe_len];
-            element(&geoms, stress_ref, &mut fe)?;
-            Ok(fe)
-        })
-        .collect::<Result<_>>()?;
-
-    // Scatter serially in cell order: a shared node sums several cells, so the
-    // f64 accumulation order is fixed ⇒ bit-for-bit deterministic.
-    let mut acc: HashMap<NodeId, Vec<f64>> = HashMap::new();
-    for (cell, fe_cell) in per_cell.iter().enumerate() {
-        let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-        for (li, &nid) in ids.iter().enumerate() {
-            let slot = acc.entry(nid).or_insert_with(|| vec![0.0; n_dual]);
-            for di in 0..n_dual {
-                slot[di] += fe_cell[li * n_dual + di];
+            fe_cell.iter_mut().for_each(|v| *v = 0.0);
+            element(&geoms, field_ref, fe_cell)?;
+            let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
+            for (li, &nid) in ids.iter().enumerate() {
+                let node_slot = *slot_of.get(&nid).ok_or_else(|| {
+                    PyrucastError::Message("divergence: support does not cover a cell node".into())
+                })?;
+                let base = node_slot * n_dual;
+                for di in 0..n_dual {
+                    out.add(base + di, fe_cell[li * n_dual + di]);
+                }
             }
-        }
-    }
+            Ok(())
+        },
+    )?;
 
     let mut out = SubNodeField::from_poi1(support, dual_vars.clone())?;
-    for (nid, vals) in &acc {
+    for (k, &nid) in unique.iter().enumerate() {
         for (di, name) in dual_vars.iter().enumerate() {
-            out.set_value(*nid, name, vals[di])?;
+            out.set_value(nid, name, flat[k * n_dual + di])?;
         }
     }
     Ok(out)

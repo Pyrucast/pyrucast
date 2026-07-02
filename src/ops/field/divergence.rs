@@ -20,13 +20,18 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
-use crate::containers::mesh::NodeId;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
+use crate::models::kernel::{self, CellGeom};
 use crate::store::{insert, read, Handle};
 
 /// Weak divergence `div F` of a per-element vector `field` (see the module
 /// docs), as a [`NodeField`] — one zone per input subspace, component `"div"`.
+///
+/// This is the scalar case of the `Bᵀ` scatter, so it delegates to the shared
+/// driver [`crate::models::kernel::divergence`] (with `B` = the gradient
+/// operator): it inherits the driver's colour-parallel, per-thread-scratch
+/// scatter rather than duplicating the loop.
 pub fn divergence(field: &ElementField) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for sub in field {
@@ -35,63 +40,55 @@ pub fn divergence(field: &ElementField) -> Result<NodeField> {
     Ok(out)
 }
 
-/// Weak divergence on a single subspace.
+/// Weak divergence on a single subspace, via the `Bᵀ` driver.
 fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> {
-    let f = read(field)?;
-    let fespace = f.support();
-    let s = read(&fespace)?;
-    let n_cells = s.cell_count()?;
-    let n_nodes = s.nodes_per_cell()?;
-    let n_g = s.gauss_count();
-    let space_dim = s.space_dim();
-    let conn: Vec<NodeId> = read(&s.submesh())?.connectivity().to_vec();
-
-    let comps = f.components();
-    if comps.len() != space_dim {
+    let (fespace, submesh, space_dim, n_comps) = {
+        let f = read(field)?;
+        let fespace = f.support();
+        let (submesh, space_dim) = {
+            let s = read(&fespace)?;
+            (s.submesh(), s.space_dim())
+        };
+        (fespace, submesh, space_dim, f.components().len())
+    };
+    if n_comps != space_dim {
         return Err(PyrucastError::Message(format!(
             "divergence: the field carries {} component(s) but the FE space is {}-D — \
              expected one vector component per axis",
-            comps.len(),
-            space_dim
+            n_comps, space_dim
         )));
     }
 
-    // Support: unique nodes + the local-node → support-position map.
-    let support = insert(read(&s.submesh())?.to_poi1()?);
-    let unique: Vec<NodeId> = read(&support)?.connectivity().to_vec();
-    let conn_pos: Vec<usize> = conn
-        .iter()
-        .map(|nid| {
-            unique
-                .iter()
-                .position(|n| n == nid)
-                .expect("support covers conn")
-        })
-        .collect();
+    let support = insert(read(&submesh)?.to_poi1()?);
+    kernel::divergence(
+        std::slice::from_ref(&fespace),
+        &support,
+        vec!["div".to_string()],
+        field,
+        divergence_element,
+    )
+}
 
-    // d_i += (∇N_i · F) |J| w, accumulated per node. Kept sequential: a scatter
-    // accumulating several cells into the same shared node (a data race if
-    // parallelised naively — out of the "safe data-parallel" scope).
-    let mut div = vec![0.0_f64; unique.len()];
-    for cell in 0..n_cells {
-        for g in 0..n_g {
-            let dn = s.dn_dx(cell, g)?; // [i*space_dim + a]
-            let det_j_w = s.det_jacobian(cell, g)? * s.gauss_weight(g)?;
-            for i in 0..n_nodes {
-                let mut grad_dot_f = 0.0;
-                for (a, comp) in comps.iter().enumerate() {
-                    grad_dot_f += dn[i * space_dim + a] * f.value(cell, g, comp)?;
-                }
-                div[conn_pos[cell * n_nodes + i]] += grad_dot_f * det_j_w;
+/// Element kernel of the weak divergence: `fe[i] = Σ_g (∇N_i · F_g) |J| w`, the
+/// single output component `"div"` per node (`n_dual = 1`). It is the transpose
+/// of the gradient, so it plugs into the [`crate::models::kernel::divergence`]
+/// `Bᵀ` driver exactly like a physics' `internal_force_element`.
+fn divergence_element(geoms: &[CellGeom], field: &SubElementField, fe: &mut [f64]) -> Result<()> {
+    let geom = &geoms[0];
+    let d = geom.space_dim;
+    let comps = field.components();
+    for g in 0..geom.n_gauss {
+        let dn = geom.dn_dx(g)?; // [i * d + a]
+        let det_j_w = geom.det_j_w(g)?;
+        for i in 0..geom.n_nodes {
+            let mut grad_dot_f = 0.0;
+            for (a, comp) in comps.iter().enumerate() {
+                grad_dot_f += dn[i * d + a] * field.value(geom.cell, g, comp)?;
             }
+            fe[i] += grad_dot_f * det_j_w;
         }
     }
-
-    let mut out = SubNodeField::from_poi1(&support, vec!["div".to_string()])?;
-    for (k, &nid) in unique.iter().enumerate() {
-        out.set_value(nid, "div", div[k])?;
-    }
-    Ok(out)
+    Ok(())
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────

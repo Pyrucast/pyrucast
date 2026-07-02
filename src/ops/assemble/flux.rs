@@ -24,7 +24,11 @@ use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::mesh::NodeId;
 use crate::containers::node_field::SubNodeField;
 use crate::error::{PyrucastError, Result};
+use crate::models::kernel::{CellGeom, RefData};
+use crate::ops::assemble::coloring;
+use crate::parallel::{colored_scatter, MIN_PARALLEL_LEN};
 use crate::store::{insert, read, Handle};
+use std::collections::HashMap;
 
 /// Per-Gauss flux density consumed by [`flux`].
 pub enum FluxDensity<'a> {
@@ -53,11 +57,11 @@ pub fn flux(
             s.gauss_count(),
         )
     };
-    let conn: Vec<NodeId> = read(&submesh)?.connectivity().to_vec();
 
-    // Flux density at every (cell, Gauss) point.
-    let densities: Vec<Vec<f64>> = match density {
-        FluxDensity::Uniform(v) => vec![vec![v; n_g]; n_cells],
+    // Flux density: a bare constant, or the field's single component read once
+    // (its guard cannot cross the parallel region, so snapshot it here).
+    let (uniform, densities): (f64, Option<Vec<Vec<f64>>>) = match density {
+        FluxDensity::Uniform(v) => (v, None),
         FluxDensity::Field(field) => {
             let f = read(field)?;
             let comps = f.components();
@@ -68,47 +72,64 @@ pub fn flux(
                 )));
             }
             let comp = comps[0].clone();
-            (0..n_cells)
+            let d = (0..n_cells)
                 .map(|cell| {
                     (0..n_g)
                         .map(|g| f.value(cell, g, &comp))
                         .collect::<Result<_>>()
                 })
-                .collect::<Result<_>>()?
+                .collect::<Result<Vec<Vec<f64>>>>()?;
+            (0.0, Some(d))
         }
     };
 
     // Support: unique nodes of the subspace's submesh (deduped POI1), and the
-    // local-node → support-position map (computed once, out of the hot loop).
+    // node → support-slot map. Built with scoped guards **before** the long-lived
+    // ones below: `to_poi1` takes a `Coords` write lock, which a held `coords`
+    // read guard would deadlock.
     let support = insert(read(&submesh)?.to_poi1()?);
     let unique: Vec<NodeId> = read(&support)?.connectivity().to_vec();
-    let conn_pos: Vec<usize> = conn
-        .iter()
-        .map(|nid| {
-            unique
-                .iter()
-                .position(|n| n == nid)
-                .expect("support covers conn")
-        })
-        .collect();
+    let slot_of: HashMap<NodeId, usize> = unique.iter().enumerate().map(|(k, &n)| (n, k)).collect();
 
-    // f_i += φ · N_i · |J| · w, accumulated per node. Kept sequential: this is
-    // a scatter that accumulates several cells' contributions into the same
-    // shared node (a data race if parallelised naively — out of the project's
-    // "safe data-parallel" scope; a parallel reduction is future work).
-    let mut loads = vec![0.0_f64; unique.len()];
-    {
-        let s = read(fespace)?;
-        for cell in 0..n_cells {
+    // Long-lived guards for the parallel region: reference data snapshotted once,
+    // coords/connectivity borrowed in place (the loop never touches the store).
+    let fe = read(fespace)?;
+    let sm = read(&submesh)?;
+    let coords_h = sm.coords();
+    let coords = read(&coords_h)?;
+    let conn: &[NodeId] = sm.connectivity();
+    let rd = RefData::snapshot(&fe)?;
+
+    // Cell colouring (cached on the FE subspace): within a colour the cells
+    // scatter to pairwise-disjoint nodes.
+    let coloring = fe.coloring(|| coloring::greedy_color(n_cells, n_nodes, conn));
+
+    let rd_ref = &rd;
+    let coords_ref = &coords;
+    let densities_ref = densities.as_deref();
+
+    // f_i += φ · N_i · |J| · w, scattered node-disjoint within each colour.
+    let loads = colored_scatter(
+        unique.len(),
+        coloring,
+        (MIN_PARALLEL_LEN / n_nodes.max(1)).max(1),
+        || (),
+        |cell, _scratch, out| {
+            let geom = CellGeom::new(rd_ref, coords_ref, conn, cell)?;
             for g in 0..n_g {
-                let shape = s.n_at_g(g)?;
-                let weight = s.det_jacobian(cell, g)? * s.gauss_weight(g)? * densities[cell][g];
+                let shape = geom.n_at_g(g)?;
+                let density = densities_ref.map_or(uniform, |d| d[cell][g]);
+                let weight = geom.det_j_w(g)? * density;
                 for i in 0..n_nodes {
-                    loads[conn_pos[cell * n_nodes + i]] += shape[i] * weight;
+                    let slot = *slot_of.get(&conn[cell * n_nodes + i]).ok_or_else(|| {
+                        PyrucastError::Message("flux: support does not cover a cell node".into())
+                    })?;
+                    out.add(slot, shape[i] * weight);
                 }
             }
-        }
-    }
+            Ok(())
+        },
+    )?;
 
     let mut out = SubNodeField::from_poi1(&support, vec![component.to_string()])?;
     for (k, &nid) in unique.iter().enumerate() {

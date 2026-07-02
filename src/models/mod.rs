@@ -349,7 +349,7 @@ pub trait Physics: Sync {
                 self.label()
             )));
         };
-        kernel::internal_forces(
+        kernel::divergence(
             &layout.fespaces,
             &layout.support,
             layout.dual_vars,

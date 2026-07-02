@@ -83,7 +83,7 @@ pub fn internal_forces_continuum(
         let support = insert(read(&submesh)?.to_poi1()?);
         let dual_vars: Vec<String> = (0..space_dim).map(|a| format!("f_{}", AXES[a])).collect();
         let stress = stresses.sub_for_fespace(sub)?;
-        let sub_nf = kernel::internal_forces(
+        let sub_nf = kernel::divergence(
             std::slice::from_ref(sub),
             &support,
             dual_vars,

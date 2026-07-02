@@ -62,22 +62,31 @@ Timoshenko flexion/cisaillement, coque à venir). La sparsité ne dépendant que
 la connectivité, ces éléments empruntent le **même** chemin de scatter parallèle
 sans machinerie supplémentaire : seul le noyau numérique lit plusieurs géométries.
 
+Les **scatters nodaux** — les opérateurs `Bᵀ` (`ops::field::divergence` et les
+forces internes `ops::internal_forces`, Cast3m `BSIG`) et la charge répartie
+`ops::assemble::flux` (`∫ φ N`) — dispersent tous de la même façon : chaque
+cellule calcule sa contribution locale, puis l'accumule dans ses nœuds. Ils
+partagent le helper `parallel::colored_scatter` : **même scatter par coloration**
+(couleur = nœuds disjoints, `Vec<AtomicU64>`), le tampon local tenant **par
+thread** — aucun ensemble élémentaire n'est matérialisé, et calcul et scatter se
+font dans la **même passe parallèle** (contrairement à l'assemblage, qui calcule
+d'abord les matrices élémentaires). `internal_forces` *est* une divergence (de la
+contrainte) : les deux passent par le même noyau `kernel::divergence`, dont
+`ops::field::divergence` n'est que le cas scalaire (`n_dual = 1`). Déterministe
+par couleur, non bit-à-bit face à une somme en ordre de cellule.
+
 Vérification : la suite de tests passe sous `RAYON_NUM_THREADS=1` puis `=8` ; les
 opérateurs write-once / réduction sont asservis à des valeurs exactes,
 l'assemblage parallèle à l'assemblage littéral **à tolérance**, plus un test de
 déterminisme.
 
-**Non bit-à-bit, par construction :** l'assemblage parallèle (ci-dessus, mais
-déterministe) et **le solveur** (back-end faer, pivotage/ordering différents de
-l'ancien LU dense) — tous deux dans les tolérances numériques.
+**Non bit-à-bit, par construction :** l'assemblage parallèle et les scatters
+nodaux (`divergence`, forces internes, `flux`) — tous déterministes par
+coloration — et **le solveur** (back-end faer, pivotage/ordering différents de
+l'ancien LU dense). Tous dans les tolérances numériques.
 
 ## Ce qui reste séquentiel (et pourquoi)
 
-- **Scatters nodaux à accumulation** — `ops::field::divergence` et
-  `ops::assemble::flux` accumulent plusieurs cellules dans un même nœud partagé
-  (`d[node] += …`). Paralléliser naïvement créerait une course ; une réduction
-  parallèle par partiels est une évolution future, hors du périmètre « data-
-  parallèle sûr ».
 - **Fusion de champs** — `consolidate` / `consolidate_element` (dédup et
   vérification de cohérence entre zones).
 - **Mailleurs** — les noyaux séquentiels par nature (Bowyer–Watson, front
