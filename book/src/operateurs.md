@@ -15,7 +15,7 @@ par module, plus la visualisation (qui vit sous `src/viz/`).
 | `ops::mesher` | [Maillage](operateurs/maillage.md) | `line_seg2`, `circle_seg2`, `extrude`, `sweep_qua4`, `fill_surface`, `surface`, `volume`, `contour`, `elements_on`, `merge_nodes`, `read_gmsh`, `to_poi1`, `barycenter`, `consolidate`… |
 | `ops::build` | [Construction](operateurs/construction.md) | champs matériau (`material_field`…) |
 | `ops::geom` | [Géométrie](operateurs/geometrie.md) | mesures géométriques *(réservé)* |
-| `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `restrict`, `select`, `merge`, `consolidate`, maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
+| `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `restrict`, `select`, `merge`, `consolidate`, `xty` (produit scalaire), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
 | `ops::assemble` | [Assemblage](operateurs/assemblage.md) | `stiffness`, `mass`, chargement réparti `flux` |
 | `ops::behavior` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`) |
 | `ops::solver` | [Solveur](operateurs/solveur.md) | `solve` (LU dense ; `LinearSolver` à venir) |

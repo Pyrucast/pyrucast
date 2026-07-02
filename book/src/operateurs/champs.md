@@ -161,6 +161,36 @@ attenue = pyrucast.exp(temperature * -0.1)
 amplitude = pyrucast.abs(signal)
 ```
 
+## Réduction
+
+### `xty(x, y)` → `float`
+
+Produit scalaire de deux champs — l'opérateur `XTY`/`PSCA` de Cast3M :
+
+\\[
+x \cdot y = \sum_i x_i\, y_i,
+\\]
+
+la somme parcourant **toutes** les valeurs (nœuds/points × composantes). Les
+deux opérandes doivent être de la **même saveur** (`NodeField`, `SubNodeField`,
+`ElementField`, `SubElementField`), posés sur le **même support** (même
+décomposition en zones), et porter le **même jeu de composantes** — alignées
+**par nom**, l'ordre pouvant différer (sinon erreur, comme l'arithmétique
+stricte de [Champ](../field.md)). Le résultat est un unique `float` : le produit
+scalaire qui sert au calcul d'énergie (`F·u`), aux normes de résidu, etc.
+
+L'addition flottante n'étant pas associative, le total dépend du nombre de
+threads jusqu'au dernier ULP — comme le solveur, ce n'est pas reproductible
+bit à bit.
+
+```python
+import pyrucast
+
+# Énergie de déformation externe : travail des efforts nodaux dans le champ
+# de déplacement (mêmes composantes, même maillage).
+energie = pyrucast.xty(forces, deplacements)
+```
+
 ## À venir dans `ops::field`
 
 Le module est conçu pour accueillir d'autres dérivations sur le même patron

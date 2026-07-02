@@ -73,6 +73,7 @@ __all__ = [
     "tanh",
     "to_poi1",
     "volume",
+    "xty",
 ]
 
 @typing.final
@@ -2131,5 +2132,15 @@ def volume(envelope: Mesh, size: typing.Optional[builtins.float] = None) -> Mesh
     consistently oriented TRI3 surface on a 3-D Coords. The result is a Mesh
     with a single TET4 submesh; boundary nodes are reused. This first version
     targets convex or mildly concave envelopes.
+    """
+
+def xty(x: typing.Any, y: typing.Any) -> builtins.float:
+    r"""
+    Scalar product `∑ xᵢ · yᵢ` of two fields — Cast3M's `XTY` / `PSCA`.
+    
+    `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
+    `ElementField` / `SubElementField`), sit on the same support/decomposition,
+    and carry the same components (aligned by name). Returns a single float —
+    the field inner product used for energies (`F·u`), residual norms, etc.
     """
 

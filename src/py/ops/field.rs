@@ -186,6 +186,45 @@ pub fn select(
     Ok(PyMesh { inner })
 }
 
+/// Scalar product `∑ xᵢ · yᵢ` of two fields — Cast3M's `XTY` / `PSCA`.
+///
+/// `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
+/// `ElementField` / `SubElementField`), sit on the same support/decomposition,
+/// and carry the same components (aligned by name). Returns a single float —
+/// the field inner product used for energies (`F·u`), residual norms, etc.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn xty(x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyResult<f64> {
+    use crate::containers::field::{Field, SubField};
+    if let Ok(a) = x.extract::<PyRef<PyNodeField>>() {
+        let b = y.extract::<PyRef<PyNodeField>>().map_err(|_| {
+            PyTypeError::new_err("xty: both operands must be NodeFields")
+        })?;
+        return Ok(a.inner.dot_field(&b.inner)?);
+    }
+    if let Ok(a) = x.extract::<PyRef<PyElementField>>() {
+        let b = y.extract::<PyRef<PyElementField>>().map_err(|_| {
+            PyTypeError::new_err("xty: both operands must be ElementFields")
+        })?;
+        return Ok(a.inner.dot_field(&b.inner)?);
+    }
+    if let Ok(a) = x.extract::<PyRef<PySubNodeField>>() {
+        let b = y.extract::<PyRef<PySubNodeField>>().map_err(|_| {
+            PyTypeError::new_err("xty: both operands must be SubNodeFields")
+        })?;
+        return Ok(read(&a.handle)?.dot(&*read(&b.handle)?)?);
+    }
+    if let Ok(a) = x.extract::<PyRef<PySubElementField>>() {
+        let b = y.extract::<PyRef<PySubElementField>>().map_err(|_| {
+            PyTypeError::new_err("xty: both operands must be SubElementFields")
+        })?;
+        return Ok(read(&a.handle)?.dot(&*read(&b.handle)?)?);
+    }
+    Err(PyTypeError::new_err(
+        "expected a NodeField, SubNodeField, ElementField or SubElementField",
+    ))
+}
+
 // ── Element-wise unary maths (numpy-style) ──────────────────────────────────
 //
 // `pyrucast.cos(field)`, `pyrucast.exp(field)`, … apply a scalar function to

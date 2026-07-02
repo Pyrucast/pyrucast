@@ -230,6 +230,54 @@ pub trait SubField {
         Ok(out)
     }
 
+    /// Scalar product `∑ selfᵢ · otherᵢ` over every value, **strict** —
+    /// same as [`SubField::combine`]'s contract but reducing to a single
+    /// number: both fields must sit on the same support
+    /// ([`SubField::same_support`]) and carry the same set of components
+    /// (aligned by name, order may differ). This is the field inner product
+    /// behind Cast3M's `XTY`/`PSCA` (energy `F·u`, residual norms, …).
+    fn dot(&self, other: &Self) -> Result<f64> {
+        if !self.same_support(other) {
+            return Err(PyrucastError::Message(
+                "dot: operands are not on the same support".into(),
+            ));
+        }
+        let nc = self.component_count();
+        if other.component_count() != nc {
+            return Err(PyrucastError::Message(format!(
+                "dot: mismatched components ({} vs {})",
+                nc,
+                other.component_count()
+            )));
+        }
+        // self's components, mapped to other's indices (by name).
+        let other_idx = self
+            .components()
+            .iter()
+            .map(|c| other.component_index_or_err(c))
+            .collect::<Result<Vec<usize>>>()?;
+        let ov = other.values();
+        // Per-row product-sum in parallel, then an associative reduction.
+        // Same support ⇒ identical row layout on both sides, so values line
+        // up positionally after the by-name component remap. Floating-point
+        // `+` is not associative, so the total is thread-count-dependent to
+        // the last ULP — like the solver, not bit-for-bit reproducible.
+        let sum = self
+            .values()
+            .par_chunks(nc.max(1))
+            .with_min_len((MIN_PARALLEL_LEN / nc.max(1)).max(1))
+            .enumerate()
+            .map(|(row, chunk)| {
+                let mut acc = 0.0;
+                for ci in 0..nc {
+                    acc += chunk[ci] * ov[row * nc + other_idx[ci]];
+                }
+                acc
+            })
+            .sum();
+        Ok(sum)
+    }
+
     /// Smallest value of the named component.
     ///
     /// Errors if the component is unknown or the field holds no value.
@@ -504,6 +552,55 @@ where
             ));
         }
         Ok(out)
+    }
+
+    /// Scalar product of two fields on the **same decomposition**: each zone
+    /// of `self` is paired with the zone of `other` on the same support
+    /// ([`SubField::same_support`]) and their [`SubField::dot`] contributions
+    /// are summed. **Every** zone on both sides must pair exactly once —
+    /// otherwise an error. The reduction behind Cast3M's `XTY`/`PSCA`.
+    fn dot_field(&self, other: &Self) -> Result<f64>
+    where
+        Self::Sub: Clone,
+    {
+        // Snapshot other's zones so we never hold two guards at once — safe
+        // even when `other` shares handles with `self` (mirrors combine_field).
+        let others: Vec<Self::Sub> = other
+            .iter()
+            .map(|h| read(h).map(|g| (*g).clone()))
+            .collect::<Result<_>>()?;
+        let mut used = vec![false; others.len()];
+        let mut acc = 0.0;
+        for h in self.iter() {
+            let s = read(h)?;
+            let mut matched = false;
+            for (j, os) in others.iter().enumerate() {
+                if used[j] {
+                    continue;
+                }
+                if s.same_support(os) {
+                    acc += s.dot(os)?;
+                    used[j] = true;
+                    matched = true;
+                    break;
+                }
+            }
+            if !matched {
+                return Err(PyrucastError::Message(
+                    "dot_field: a zone of the left field has no matching \
+                     zone (same support) in the right field"
+                        .into(),
+                ));
+            }
+        }
+        if used.iter().any(|&u| !u) {
+            return Err(PyrucastError::Message(
+                "dot_field: a zone of the right field has no matching \
+                 zone in the left field"
+                    .into(),
+            ));
+        }
+        Ok(acc)
     }
 
     /// Targeted update: combine `sub` into the zone(s) of `self` sharing its
@@ -807,6 +904,91 @@ mod tests {
         let g = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap(); // zero
         let s = f.combine(&g, |a, b| a / b).unwrap();
         assert!(s.get(0, 0).unwrap().is_infinite());
+    }
+
+    // ─── SubField::dot (scalar product, strict) ──────────────────────────────
+
+    #[test]
+    fn subfield_dot_sums_products() {
+        let (sm, _) = poi1_support(3);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let mut g = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        for (i, &(a, b)) in [(1.0, 4.0), (2.0, 5.0), (3.0, 6.0)].iter().enumerate() {
+            f.set(i, 0, a).unwrap();
+            g.set(i, 0, b).unwrap();
+        }
+        // 1·4 + 2·5 + 3·6 = 32
+        assert_eq!(f.dot(&g).unwrap(), 32.0);
+    }
+
+    #[test]
+    fn subfield_dot_aligns_components_by_name() {
+        let (sm, nodes) = poi1_support(1);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
+        f.set_value(nodes[0].id(), "U", 2.0).unwrap();
+        f.set_value(nodes[0].id(), "V", 3.0).unwrap();
+        // Other carries the same names in the opposite order.
+        let mut g = SubNodeField::from_poi1(&sm, vec!["V".into(), "U".into()]).unwrap();
+        g.set_value(nodes[0].id(), "U", 10.0).unwrap();
+        g.set_value(nodes[0].id(), "V", 100.0).unwrap();
+        // 2·10 (U) + 3·100 (V) = 320
+        assert_eq!(f.dot(&g).unwrap(), 320.0);
+    }
+
+    #[test]
+    fn subfield_dot_mismatched_support_errors() {
+        let (sm_a, _) = poi1_support(1);
+        let (sm_b, _) = poi1_support(1);
+        let f = SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
+        let g = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
+        assert!(f.dot(&g).is_err());
+    }
+
+    #[test]
+    fn subfield_dot_mismatched_components_errors() {
+        let (sm, _) = poi1_support(1);
+        let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        let g = SubNodeField::from_poi1(&sm, vec!["P".into()]).unwrap();
+        assert!(f.dot(&g).is_err());
+    }
+
+    #[test]
+    fn field_dot_sums_across_zones() {
+        use crate::containers::node_field::NodeField;
+        // Two POI1 zones sharing one Coords: dot_field must pair each zone by
+        // support and sum both contributions.
+        let coords = insert(Coords::new(1).unwrap());
+        let node = |x: f64| Node::create_in(coords.clone(), &[x]).unwrap();
+        let poi1 = |ns: &[&Node]| {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            for n in ns {
+                sm.add_cell(&[n.id()]).unwrap();
+            }
+            insert(sm)
+        };
+        let (na, nb, nc) = (node(0.0), node(1.0), node(2.0));
+        let sm_a = poi1(&[&na, &nb]);
+        let sm_b = poi1(&[&nc]);
+        let mut za = SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
+        za.set(0, 0, 2.0).unwrap();
+        za.set(1, 0, 3.0).unwrap();
+        let mut zb = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
+        zb.set(0, 0, 5.0).unwrap();
+        let mut nf = NodeField::from_sub(za);
+        nf.add_sub(insert(zb)).unwrap();
+        // Dot with itself = Σ value²: 2² + 3² (zone A) + 5² (zone B) = 38.
+        assert_eq!(nf.dot_field(&nf).unwrap(), 38.0);
+    }
+
+    #[test]
+    fn field_dot_mismatched_decomposition_errors() {
+        use crate::containers::node_field::NodeField;
+        let (sm_a, _) = poi1_support(1);
+        let (sm_b, _) = poi1_support(1);
+        let a = NodeField::from_sub(SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap());
+        let b = NodeField::from_sub(SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap());
+        // No zone of `a` shares a support with `b`.
+        assert!(a.dot_field(&b).is_err());
     }
 
     // ─── Field-level arithmetic ──────────────────────────────────────────────
