@@ -121,6 +121,9 @@ Les opérateurs `>=`, `>`, `<=`, `<` sur un champ (`NodeField`, `SubNodeField`,
 `ElementField`, `SubElementField`) renvoient le masque correspondant contre le
 scalaire de droite. `==` / `!=` gardent leur sens Python habituel (identité).
 
+> Exemple complet et exécutable : `examples/field_mask.py` (lancer avec
+> `python examples/field_mask.py` après `maturin develop`).
+
 ## Dérivation géométrique (vers les points de Gauss)
 
 Ces opérateurs ne dépendent **que** de l'espace EF et du champ — aucune

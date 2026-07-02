@@ -1,5 +1,5 @@
 //! Value-range masking — turn a field into a 0/1 indicator of the **same
-//! shape**, testing each value against a `[min, max]` band, component by
+//! shape**, testing each value against a `[lower, upper]` band, component by
 //! component (Cast3M's `MASQUE`).
 //!
 //! Unlike [`select`](super::select), which extracts the passing part of the
@@ -7,7 +7,7 @@
 //! zones, same support, same components) and only rewrites the values:
 //! `1.0` where the band holds, `0.0` where it does not. The result is
 //! therefore multipliable term by term with the input — `field *
-//! mask(field, min=0)` zeroes the out-of-band values, component by
+//! mask(field, ge=0)` zeroes the out-of-band values, component by
 //! component.
 //!
 //! There is **no** AND across components here (that is [`select`]'s job):
