@@ -217,6 +217,7 @@ pub(crate) fn draw_slider<DB: DrawingBackend>(
     area: &DrawingArea<DB, Shift>,
     frame: usize,
     n_frames: usize,
+    abscissa_label: &str,
     abscissa: f64,
 ) -> Result<()>
 where
@@ -265,7 +266,13 @@ where
     .map_err(pl_err)?;
 
     // Label above the track.
-    let label = format!("frame {}/{}   x={:.4}", frame + 1, n_frames, abscissa);
+    let label = format!(
+        "frame {}/{}   {}={:.4}",
+        frame + 1,
+        n_frames,
+        abscissa_label,
+        abscissa
+    );
     let text_style = TextStyle::from(("sans-serif", 13).into_font()).color(&BUTTON_TEXT);
     area.draw_text(&label, &text_style, (x, y - 20))
         .map_err(pl_err)?;
@@ -351,7 +358,7 @@ mod tests {
             let backend = SVGBackend::with_string(&mut buf, (640, 480));
             let area = backend.into_drawing_area();
             area.fill(&WHITE).unwrap();
-            draw_slider(&area, 1, 4, 2.5).unwrap();
+            draw_slider(&area, 1, 4, "x", 2.5).unwrap();
             area.present().unwrap();
         }
         assert!(buf.contains("frame 2/4"));

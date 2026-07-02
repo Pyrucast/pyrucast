@@ -457,6 +457,7 @@ pub(crate) fn render_evolution_field(
     mesh: Option<&crate::containers::mesh::Mesh>,
     frames: &[FrameField],
     abscissas: &[f64],
+    abscissa_label: &str,
     component: Option<&str>,
     scale: ColorScale,
     smooth: usize,
@@ -488,6 +489,7 @@ pub(crate) fn render_evolution_field(
                     mesh,
                     frames,
                     abscissas,
+                    abscissa_label,
                     component,
                     scale,
                     smooth,
@@ -496,7 +498,7 @@ pub(crate) fn render_evolution_field(
             }
             #[cfg(not(feature = "viz-interactive"))]
             {
-                let _ = (abscissas, smooth);
+                let _ = (abscissas, abscissa_label, smooth);
                 Err(PyrucastError::Message(
                     "interactive viz disabled — recompile with --features viz-interactive \
                      or pass an output path to save a PNG/SVG"

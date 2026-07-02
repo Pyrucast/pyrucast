@@ -601,6 +601,8 @@ struct EvolutionFrames<'a> {
     mesh: Option<&'a crate::containers::mesh::Mesh>,
     frames: &'a [crate::viz::FrameField],
     abscissas: &'a [f64],
+    /// Label for the slider's abscissa value (the abscissa type, or a default).
+    abscissa_label: String,
     components: Vec<String>,
     scale: crate::viz::ColorScale,
     smooth: usize,
@@ -613,6 +615,7 @@ impl<'a> EvolutionFrames<'a> {
         mesh: Option<&'a crate::containers::mesh::Mesh>,
         frames: &'a [crate::viz::FrameField],
         abscissas: &'a [f64],
+        abscissa_label: &str,
         initial_component: &str,
         scale: crate::viz::ColorScale,
         smooth: usize,
@@ -635,6 +638,7 @@ impl<'a> EvolutionFrames<'a> {
             mesh,
             frames,
             abscissas,
+            abscissa_label: abscissa_label.to_string(),
             components,
             scale,
             smooth,
@@ -707,7 +711,13 @@ impl<'a> Drawable for EvolutionFrames<'a> {
                 ));
             }
         }
-        overlay::draw_slider(area, k, self.frames.len(), self.abscissas[k])?;
+        overlay::draw_slider(
+            area,
+            k,
+            self.frames.len(),
+            &self.abscissa_label,
+            self.abscissas[k],
+        )?;
         Ok(())
     }
 }
@@ -740,10 +750,12 @@ impl<'a> FrameControl for EvolutionFrames<'a> {
 /// Run the interactive viewer on an evolution of fields: a frame slider (drag
 /// or ← / →) picks the tabulated value, the field button / Tab cycles the
 /// component.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_interactive_evolution(
     mesh: Option<&crate::containers::mesh::Mesh>,
     frames: &[crate::viz::FrameField],
     abscissas: &[f64],
+    abscissa_label: &str,
     initial_component: Option<&str>,
     scale: crate::viz::ColorScale,
     smooth: usize,
@@ -763,6 +775,7 @@ pub(crate) fn run_interactive_evolution(
         mesh,
         frames,
         abscissas,
+        abscissa_label,
         initial_component.unwrap_or(""),
         scale,
         smooth,

@@ -129,6 +129,7 @@ Champs - manipulation;NOID;Numéros (identifiants) des nœuds;Node (numérotatio
 Champs - manipulation;SOMM;Sommets d'un maillage ou d'un élément;—
 Champs - manipulation;NATURE;Nature d'un champ (CHPO / CHML / ...);type de conteneur (NodeField/ElementField)
 Champs - manipulation;MAIL;Extrait le maillage support d'un objet;support / .mesh
+Champs - manipulation;IPOL;Interpole une évolution en une abscisse (ou un champ) ;Evolution.interpolate / SubEvolution.interpolate (scalaire → scalaire/champ ; champ → champ via courbe de transfert typée)
 Objets - gestion;EXIS;Teste l'existence d'un objet ou d'une composante;Python natif (in / hasattr)
 Objets - gestion;OUBL;Libère un objet de la mémoire;Python natif (del / GC)
 Objets - gestion;MENA;Nettoyage mémoire (ramasse-miettes);Python natif (GC)

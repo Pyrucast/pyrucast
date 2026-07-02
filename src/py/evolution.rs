@@ -71,24 +71,43 @@ pub struct PySubEvolution {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubEvolution {
-    /// `SubEvolution(samples, out_of_range="error")` — one curve. `samples`
-    /// is a list of `(abscissa, value)`; the values must all be of the same
-    /// kind (and, for fields, on the same support).
+    /// `SubEvolution(samples, out_of_range="error", abscissa_type=None,
+    /// ordinate_type=None)` — one curve. `samples` is a list of
+    /// `(abscissa, value)`; the values must all be of the same kind (and, for
+    /// fields, on the same support). `abscissa_type` names the physical type of
+    /// the abscissa (used to label plots and to select a field component when a
+    /// field is interpolated); `ordinate_type` names the value's type (scalar
+    /// curves only).
     #[new]
-    #[pyo3(signature = (samples, out_of_range="error"))]
+    #[pyo3(signature = (samples, out_of_range="error", abscissa_type=None, ordinate_type=None))]
     fn py_new(
         py: Python<'_>,
         samples: Vec<(f64, Py<PyAny>)>,
         out_of_range: &str,
+        abscissa_type: Option<String>,
+        ordinate_type: Option<String>,
     ) -> PyResult<Self> {
         let oor = OutOfRange::from_name(out_of_range)?;
         let mut pairs = Vec::with_capacity(samples.len());
         for (x, v) in samples {
             pairs.push((x, extract_sub_value(v.bind(py))?));
         }
+        let mut sub = SubEvolution::new(pairs, oor)?;
+        sub.set_abscissa_type(abscissa_type);
+        sub.set_ordinate_type(ordinate_type)?;
         Ok(Self {
-            handle: insert(SubEvolution::new(pairs, oor)?),
+            handle: insert(sub),
         })
+    }
+
+    /// The abscissa's physical type, or `None`.
+    fn abscissa_type(&self) -> PyResult<Option<String>> {
+        Ok(read(&self.handle)?.abscissa_type().map(str::to_string))
+    }
+
+    /// The ordinate's physical type (scalar curves), or `None`.
+    fn ordinate_type(&self) -> PyResult<Option<String>> {
+        Ok(read(&self.handle)?.ordinate_type().map(str::to_string))
     }
 
     /// Number of samples.
@@ -106,19 +125,55 @@ impl PySubEvolution {
         Ok(read(&self.handle)?.out_of_range().name().to_string())
     }
 
-    /// Interpolate at `x`. Returns a float, a `SubNodeField` or a
-    /// `SubElementField`. `out_of_range` (`"error"` / `"clamp"` /
-    /// `"extrapolate"`) overrides the stored policy for this query.
+    /// Interpolate at `x`.
+    ///
+    /// - `x` a **float** → a float / `SubNodeField` / `SubElementField` (the
+    ///   curve's value at `x`);
+    /// - `x` a **`SubNodeField`** or **`SubElementField`** → a field of the
+    ///   same support whose every entry is this **scalar** curve evaluated at
+    ///   the input's `abscissa_type` component (the curve as a transfer
+    ///   function). The output component is named after `ordinate_type`.
+    ///
+    /// `out_of_range` (`"error"` / `"clamp"` / `"extrapolate"`) overrides the
+    /// stored policy for this query.
     #[pyo3(signature = (x, out_of_range=None))]
     fn interpolate(
         &self,
         py: Python<'_>,
-        x: f64,
+        x: Py<PyAny>,
         out_of_range: Option<&str>,
     ) -> PyResult<Py<PyAny>> {
         let policy = parse_policy(out_of_range)?;
-        let value = read(&self.handle)?.interpolate(x, policy)?;
-        sub_value_to_py(py, value)
+        let x = x.bind(py);
+        let sub = read(&self.handle)?;
+        if let Ok(v) = x.extract::<f64>() {
+            return sub_value_to_py(py, sub.interpolate(v, policy)?);
+        }
+        if let Ok(f) = x.extract::<PyRef<PySubNodeField>>() {
+            let field = (*read(&f.handle)?).clone();
+            let out = sub.interpolate_field(&field, policy)?;
+            return Ok(Py::new(
+                py,
+                PySubNodeField {
+                    handle: insert(out),
+                },
+            )?
+            .into_any());
+        }
+        if let Ok(f) = x.extract::<PyRef<PySubElementField>>() {
+            let field = (*read(&f.handle)?).clone();
+            let out = sub.interpolate_field(&field, policy)?;
+            return Ok(Py::new(
+                py,
+                PySubElementField {
+                    handle: insert(out),
+                },
+            )?
+            .into_any());
+        }
+        Err(PyTypeError::new_err(
+            "interpolate expects a float, a SubNodeField or a SubElementField",
+        ))
     }
 
     /// Plot this single curve — see `Evolution.plot`. A scalar curve draws an
@@ -201,8 +256,14 @@ impl PyEvolution {
     /// is taken from the first step. Whole fields are transposed into one
     /// curve per zone.
     #[new]
-    #[pyo3(signature = (steps, out_of_range="error"))]
-    fn py_new(py: Python<'_>, steps: Vec<(f64, Py<PyAny>)>, out_of_range: &str) -> PyResult<Self> {
+    #[pyo3(signature = (steps, out_of_range="error", abscissa_type=None, ordinate_type=None))]
+    fn py_new(
+        py: Python<'_>,
+        steps: Vec<(f64, Py<PyAny>)>,
+        out_of_range: &str,
+        abscissa_type: Option<String>,
+        ordinate_type: Option<String>,
+    ) -> PyResult<Self> {
         let oor = OutOfRange::from_name(out_of_range)?;
         if steps.is_empty() {
             return Err(PyValueError::new_err(
@@ -211,17 +272,13 @@ impl PyEvolution {
         }
         let first = steps[0].1.bind(py);
 
-        if first.extract::<f64>().is_ok() {
+        let mut inner = if first.extract::<f64>().is_ok() {
             let mut pairs = Vec::with_capacity(steps.len());
             for (x, v) in &steps {
                 pairs.push((*x, v.bind(py).extract::<f64>()?));
             }
-            return Ok(Self {
-                inner: Evolution::from_scalars(pairs, oor)?,
-            });
-        }
-
-        if first.extract::<PyRef<PyNodeField>>().is_ok() {
+            Evolution::from_scalars(pairs, oor)?
+        } else if first.extract::<PyRef<PyNodeField>>().is_ok() {
             let mut fields: Vec<PyRef<PyNodeField>> = Vec::with_capacity(steps.len());
             for (_, v) in &steps {
                 fields.push(v.bind(py).extract::<PyRef<PyNodeField>>()?);
@@ -231,12 +288,8 @@ impl PyEvolution {
                 .map(|(x, _)| *x)
                 .zip(fields.iter().map(|f| &f.inner))
                 .collect();
-            return Ok(Self {
-                inner: Evolution::from_node_fields(&refs, oor)?,
-            });
-        }
-
-        if first.extract::<PyRef<PyElementField>>().is_ok() {
+            Evolution::from_node_fields(&refs, oor)?
+        } else if first.extract::<PyRef<PyElementField>>().is_ok() {
             let mut fields: Vec<PyRef<PyElementField>> = Vec::with_capacity(steps.len());
             for (_, v) in &steps {
                 fields.push(v.bind(py).extract::<PyRef<PyElementField>>()?);
@@ -246,14 +299,15 @@ impl PyEvolution {
                 .map(|(x, _)| *x)
                 .zip(fields.iter().map(|f| &f.inner))
                 .collect();
-            return Ok(Self {
-                inner: Evolution::from_element_fields(&refs, oor)?,
-            });
-        }
-
-        Err(PyTypeError::new_err(
-            "Evolution step value must be a float, a NodeField or an ElementField",
-        ))
+            Evolution::from_element_fields(&refs, oor)?
+        } else {
+            return Err(PyTypeError::new_err(
+                "Evolution step value must be a float, a NodeField or an ElementField",
+            ));
+        };
+        inner.set_abscissa_type(abscissa_type)?;
+        inner.set_ordinate_type(ordinate_type)?;
+        Ok(Self { inner })
     }
 
     /// The stored out-of-range policy name.
@@ -261,22 +315,55 @@ impl PyEvolution {
         Ok(self.inner.out_of_range().name().to_string())
     }
 
-    /// Interpolate every curve at `x` and regroup the results: a `list[float]`
-    /// for scalars, a `NodeField` or `ElementField` for fields. `out_of_range`
-    /// overrides the stored policy for this query.
+    /// The abscissa's physical type, or `None`.
+    fn abscissa_type(&self) -> PyResult<Option<String>> {
+        Ok(self.inner.abscissa_type()?)
+    }
+
+    /// The ordinate's physical type (scalar evolutions), or `None`.
+    fn ordinate_type(&self) -> PyResult<Option<String>> {
+        Ok(self.inner.ordinate_type()?)
+    }
+
+    /// Interpolate at `x`.
+    ///
+    /// - `x` a **float** → every curve interpolated and regrouped: a
+    ///   `list[float]` for scalars, a `NodeField` / `ElementField` for fields;
+    /// - `x` a **`NodeField`** or **`ElementField`** → that field mapped
+    ///   through the (single, scalar) curve as a transfer function: each entry
+    ///   of the input's `abscissa_type` component is looked up, yielding a field
+    ///   of one component (named after `ordinate_type`) on the same support.
+    ///
+    /// `out_of_range` overrides the stored policy for this query.
     #[pyo3(signature = (x, out_of_range=None))]
     fn interpolate(
         &self,
         py: Python<'_>,
-        x: f64,
+        x: Py<PyAny>,
         out_of_range: Option<&str>,
     ) -> PyResult<Py<PyAny>> {
         let policy = parse_policy(out_of_range)?;
-        match self.inner.interpolate(x, policy)? {
-            Interpolated::Scalars(v) => Ok(PyList::new(py, v)?.into_any().unbind()),
-            Interpolated::Node(f) => Ok(Py::new(py, PyNodeField { inner: f })?.into_any()),
-            Interpolated::Element(f) => Ok(Py::new(py, PyElementField { inner: f })?.into_any()),
+        let x = x.bind(py);
+        if let Ok(v) = x.extract::<f64>() {
+            return match self.inner.interpolate(v, policy)? {
+                Interpolated::Scalars(v) => Ok(PyList::new(py, v)?.into_any().unbind()),
+                Interpolated::Node(f) => Ok(Py::new(py, PyNodeField { inner: f })?.into_any()),
+                Interpolated::Element(f) => {
+                    Ok(Py::new(py, PyElementField { inner: f })?.into_any())
+                }
+            };
         }
+        if let Ok(f) = x.extract::<PyRef<PyNodeField>>() {
+            let out = self.inner.interpolate_node_field(&f.inner, policy)?;
+            return Ok(Py::new(py, PyNodeField { inner: out })?.into_any());
+        }
+        if let Ok(f) = x.extract::<PyRef<PyElementField>>() {
+            let out = self.inner.interpolate_element_field(&f.inner, policy)?;
+            return Ok(Py::new(py, PyElementField { inner: out })?.into_any());
+        }
+        Err(PyTypeError::new_err(
+            "interpolate expects a float, a NodeField or an ElementField",
+        ))
     }
 
     /// Plot the evolution. A **scalar** evolution draws an X-Y curve (one line

@@ -53,12 +53,13 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
-use crate::containers::field::SubField;
+use crate::containers::field::{Field, SubField};
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, Handle};
+use crate::parallel::*;
+use crate::store::{insert, read, write, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -185,6 +186,17 @@ pub struct SubEvolution {
     values: Vec<SubValue>,
     /// Out-of-range policy used when this curve is interpolated directly.
     out_of_range: OutOfRange,
+    /// Physical **type** of the abscissa (e.g. `"T"`, `"time"`). Optional; used
+    /// to label plots and — when a field is mapped through a scalar curve — to
+    /// select which field component to look up (see
+    /// [`SubEvolution::interpolate_field`]).
+    #[serde(default)]
+    abscissa_type: Option<String>,
+    /// Physical **type** of the ordinate, for **scalar** curves only (e.g.
+    /// `"young"`). Optional; labels plots and names the component produced when
+    /// a field is mapped through the curve.
+    #[serde(default)]
+    ordinate_type: Option<String>,
 }
 
 impl SubEvolution {
@@ -235,7 +247,50 @@ impl SubEvolution {
             abscissas,
             values,
             out_of_range,
+            abscissa_type: None,
+            ordinate_type: None,
         })
+    }
+
+    /// The abscissa's physical type, if set.
+    pub fn abscissa_type(&self) -> Option<&str> {
+        self.abscissa_type.as_deref()
+    }
+
+    /// The ordinate's physical type (scalar curves), if set.
+    pub fn ordinate_type(&self) -> Option<&str> {
+        self.ordinate_type.as_deref()
+    }
+
+    /// Set (or clear) the abscissa's physical type.
+    pub fn set_abscissa_type(&mut self, t: Option<String>) {
+        self.abscissa_type = t;
+    }
+
+    /// Set (or clear) the ordinate's physical type. Errors if a type is given
+    /// for a curve that carries fields rather than scalars — only a scalar
+    /// curve has an ordinate to type.
+    pub fn set_ordinate_type(&mut self, t: Option<String>) -> Result<()> {
+        if t.is_some() && self.kind() != ValueKind::Scalar {
+            return Err(PyrucastError::Message(format!(
+                "ordinate type applies to scalar evolutions only (this one is {})",
+                self.kind().label()
+            )));
+        }
+        self.ordinate_type = t;
+        Ok(())
+    }
+
+    /// Builder form of [`SubEvolution::set_abscissa_type`].
+    pub fn with_abscissa_type(mut self, t: Option<String>) -> Self {
+        self.abscissa_type = t;
+        self
+    }
+
+    /// Builder form of [`SubEvolution::set_ordinate_type`] (validated).
+    pub fn with_ordinate_type(mut self, t: Option<String>) -> Result<Self> {
+        self.set_ordinate_type(t)?;
+        Ok(self)
     }
 
     /// Number of samples.
@@ -385,6 +440,67 @@ impl SubEvolution {
             xs[0],
             xs[xs.len() - 1]
         ))
+    }
+
+    /// Interpolate a **scalar** curve at `x`, returning the value directly.
+    /// Errors if this curve carries fields rather than scalars.
+    pub fn eval_scalar(&self, x: f64, policy: Option<OutOfRange>) -> Result<f64> {
+        match self.interpolate(x, policy)? {
+            SubValue::Scalar(v) => Ok(v),
+            _ => Err(PyrucastError::Message(
+                "evolution: a field can only be mapped through a scalar-valued evolution".into(),
+            )),
+        }
+    }
+
+    /// Map every value of `field`'s abscissa-typed component through this
+    /// **scalar** curve, node by node (or Gauss point by Gauss point).
+    ///
+    /// The curve acts as a transfer function `y = f(x)`: the field component
+    /// **named like the abscissa type** supplies the `x` values; the result is
+    /// a fresh single-component field on the **same support**, its component
+    /// named after the ordinate type (or `"value"` when none is set).
+    ///
+    /// Errors if the curve is not scalar-valued, has no abscissa type set, or
+    /// the field has no component matching that type (the requested
+    /// **type correspondence**).
+    pub fn interpolate_field<F>(&self, field: &F, policy: Option<OutOfRange>) -> Result<F>
+    where
+        F: SubField + Clone,
+    {
+        if self.kind() != ValueKind::Scalar {
+            return Err(PyrucastError::Message(
+                "evolution: a field can only be mapped through a scalar-valued evolution".into(),
+            ));
+        }
+        let abscissa = self.abscissa_type.as_deref().ok_or_else(|| {
+            PyrucastError::Message(
+                "evolution: set the abscissa type to map a field \
+                 (it selects which field component to look up)"
+                    .into(),
+            )
+        })?;
+        let ci = field.component_index(abscissa).ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "evolution: the field has no component '{abscissa}' matching the abscissa type"
+            ))
+        })?;
+        let out_name = self
+            .ordinate_type
+            .clone()
+            .unwrap_or_else(|| "value".to_string());
+        let nc = field.component_count();
+        // Per-row map in abscissa order (each output written once ⇒
+        // thread-count-independent); short-circuits on the first out-of-range.
+        let out_vals: Vec<f64> = field
+            .values()
+            .par_chunks(nc)
+            .with_min_len((MIN_PARALLEL_LEN / nc.max(1)).max(1))
+            .map(|row| self.eval_scalar(row[ci], policy))
+            .collect::<Result<Vec<f64>>>()?;
+        let mut out = field.same_support_with(vec![out_name])?;
+        out.values_mut().copy_from_slice(&out_vals);
+        Ok(out)
     }
 }
 
@@ -575,6 +691,87 @@ impl Evolution {
         }
     }
 
+    /// The abscissa's physical type (taken from the first sub-evolution), if
+    /// set. `None` for an empty evolution.
+    pub fn abscissa_type(&self) -> Result<Option<String>> {
+        match self.subs.first() {
+            Some(h) => Ok(read(h)?.abscissa_type().map(str::to_string)),
+            None => Ok(None),
+        }
+    }
+
+    /// The ordinate's physical type (scalar evolutions), if set. `None` for an
+    /// empty evolution.
+    pub fn ordinate_type(&self) -> Result<Option<String>> {
+        match self.subs.first() {
+            Some(h) => Ok(read(h)?.ordinate_type().map(str::to_string)),
+            None => Ok(None),
+        }
+    }
+
+    /// Set (or clear) the abscissa type on **every** sub-evolution.
+    pub fn set_abscissa_type(&mut self, t: Option<String>) -> Result<()> {
+        for h in &self.subs {
+            write(h)?.set_abscissa_type(t.clone());
+        }
+        Ok(())
+    }
+
+    /// Set (or clear) the ordinate type on **every** sub-evolution. Errors on a
+    /// field-valued evolution (only scalar curves have an ordinate to type).
+    pub fn set_ordinate_type(&mut self, t: Option<String>) -> Result<()> {
+        for h in &self.subs {
+            write(h)?.set_ordinate_type(t.clone())?;
+        }
+        Ok(())
+    }
+
+    /// The single scalar curve of a one-curve, scalar-valued evolution — the
+    /// transfer function used to map a field ([`Evolution::interpolate_node_field`]
+    /// / [`Evolution::interpolate_element_field`]). Returns a clone. Errors
+    /// unless the evolution holds exactly one scalar sub-evolution.
+    fn single_scalar_curve(&self) -> Result<SubEvolution> {
+        if self.subs.len() != 1 {
+            return Err(PyrucastError::Message(format!(
+                "evolution: mapping a field needs a single-curve evolution, but this one has {} curve(s)",
+                self.subs.len()
+            )));
+        }
+        let sub = read(&self.subs[0])?;
+        if sub.kind() != ValueKind::Scalar {
+            return Err(PyrucastError::Message(
+                "evolution: a field can only be mapped through a scalar-valued evolution".into(),
+            ));
+        }
+        Ok((*sub).clone())
+    }
+
+    /// Map a whole [`NodeField`] through the (single, scalar) curve — see
+    /// [`SubEvolution::interpolate_field`]. Each zone's abscissa-typed
+    /// component is looked up; the result is a node field of one component
+    /// (named after the ordinate type) on the same decomposition.
+    pub fn interpolate_node_field(
+        &self,
+        field: &NodeField,
+        policy: Option<OutOfRange>,
+    ) -> Result<NodeField> {
+        let curve = self.single_scalar_curve()?;
+        let policy = Some(policy.unwrap_or(self.out_of_range));
+        field.map_subs(move |s| curve.interpolate_field(s, policy))
+    }
+
+    /// Map a whole [`ElementField`] through the (single, scalar) curve — see
+    /// [`Evolution::interpolate_node_field`].
+    pub fn interpolate_element_field(
+        &self,
+        field: &ElementField,
+        policy: Option<OutOfRange>,
+    ) -> Result<ElementField> {
+        let curve = self.single_scalar_curve()?;
+        let policy = Some(policy.unwrap_or(self.out_of_range));
+        field.map_subs(move |s| curve.interpolate_field(s, policy))
+    }
+
     /// The aggregate's value kind (taken from the first sub-evolution).
     /// Errors if the evolution is empty.
     pub fn kind(&self) -> Result<ValueKind> {
@@ -675,22 +872,43 @@ impl Evolution {
         y_label: Option<&str>,
         title: Option<&str>,
     ) -> Result<()> {
+        // Axis / slider labels fall back to the abscissa & ordinate **types**
+        // (then to generic defaults) when the caller passes none.
+        let abscissa_label = match x_label {
+            Some(s) => s.to_string(),
+            None => self.abscissa_type()?.unwrap_or_else(|| "variable".into()),
+        };
         match self.kind()? {
-            ValueKind::Scalar => crate::viz::render_curve(
-                self.scalar_series_set()?,
-                x_label.unwrap_or("variable"),
-                y_label.unwrap_or("value"),
-                title.unwrap_or(""),
-                view,
-                save,
-            ),
+            ValueKind::Scalar => {
+                let y = match y_label {
+                    Some(s) => s.to_string(),
+                    None => self.ordinate_type()?.unwrap_or_else(|| "value".into()),
+                };
+                crate::viz::render_curve(
+                    self.scalar_series_set()?,
+                    &abscissa_label,
+                    &y,
+                    title.unwrap_or(""),
+                    view,
+                    save,
+                )
+            }
             ValueKind::Node => {
                 let abscissas = self.shared_abscissas()?;
                 let frames: Vec<crate::viz::FrameField> = (0..abscissas.len())
                     .map(|k| Ok(crate::viz::FrameField::Node(self.node_frame(k)?)))
                     .collect::<Result<_>>()?;
                 crate::viz::render_evolution_field(
-                    mesh, &frames, &abscissas, component, scale, smooth, frame, view, save,
+                    mesh,
+                    &frames,
+                    &abscissas,
+                    &abscissa_label,
+                    component,
+                    scale,
+                    smooth,
+                    frame,
+                    view,
+                    save,
                 )
             }
             ValueKind::Element => {
@@ -707,7 +925,16 @@ impl Evolution {
                 };
                 let geom = mesh.or(reconstructed.as_ref());
                 crate::viz::render_evolution_field(
-                    geom, &frames, &abscissas, component, scale, smooth, frame, view, save,
+                    geom,
+                    &frames,
+                    &abscissas,
+                    &abscissa_label,
+                    component,
+                    scale,
+                    smooth,
+                    frame,
+                    view,
+                    save,
                 )
             }
         }
@@ -1073,5 +1300,111 @@ mod tests {
             }
             _ => panic!("expected a node field"),
         }
+    }
+
+    // ─── Types & field-through-curve interpolation ───────────────────────────
+
+    /// A scalar curve `T → E` (double the abscissa), typed on both axes.
+    fn typed_curve() -> SubEvolution {
+        scalar_curve(&[(0.0, 0.0), (10.0, 20.0)], OutOfRange::Error)
+            .with_abscissa_type(Some("T".into()))
+            .with_ordinate_type(Some("E".into()))
+            .unwrap()
+    }
+
+    #[test]
+    fn ordinate_type_rejected_on_field_curve() {
+        // A node-valued curve has no ordinate to type.
+        let mut se = SubEvolution::new(
+            vec![(0.0, SubValue::Node(node_field(&poi1(1), &[1.0])))],
+            OutOfRange::Error,
+        )
+        .unwrap();
+        assert!(se.set_ordinate_type(Some("E".into())).is_err());
+        // Clearing it (None) is always fine.
+        assert!(se.set_ordinate_type(None).is_ok());
+    }
+
+    #[test]
+    fn interpolate_field_maps_component_pointwise() {
+        let se = typed_curve();
+        // Input field carries the abscissa-typed component "T".
+        let sm = poi1(3);
+        let input = node_field(&sm, &[0.0, 5.0, 10.0]);
+        let out = se.interpolate_field(&input, None).unwrap();
+        // Output is single-component, named after the ordinate type.
+        assert_eq!(out.components(), &["E".to_string()]);
+        assert_eq!(out.get(0, 0).unwrap(), 0.0); // 2·0
+        assert_eq!(out.get(1, 0).unwrap(), 10.0); // 2·5
+        assert_eq!(out.get(2, 0).unwrap(), 20.0); // 2·10
+    }
+
+    #[test]
+    fn interpolate_field_checks_type_correspondence() {
+        // Abscissa type "P" has no counterpart in a field whose component is "T".
+        let se = scalar_curve(&[(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error)
+            .with_abscissa_type(Some("P".into()));
+        let input = node_field(&poi1(1), &[0.5]);
+        assert!(se.interpolate_field(&input, None).is_err());
+    }
+
+    #[test]
+    fn interpolate_field_requires_abscissa_type() {
+        // No abscissa type set → cannot pick a field component.
+        let se = scalar_curve(&[(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error);
+        let input = node_field(&poi1(1), &[0.5]);
+        assert!(se.interpolate_field(&input, None).is_err());
+    }
+
+    #[test]
+    fn interpolate_field_out_of_range_honours_policy() {
+        let se = typed_curve(); // range [0, 10], Error
+        let input = node_field(&poi1(1), &[15.0]); // beyond the range
+        assert!(se.interpolate_field(&input, None).is_err());
+        // Clamp → the endpoint value (20).
+        assert_eq!(
+            se.interpolate_field(&input, Some(OutOfRange::Clamp))
+                .unwrap()
+                .get(0, 0)
+                .unwrap(),
+            20.0
+        );
+    }
+
+    #[test]
+    fn aggregate_interpolate_node_field_end_to_end() {
+        // A single-curve typed scalar Evolution used as a transfer function.
+        let mut e =
+            Evolution::from_scalars(vec![(0.0, 0.0), (10.0, 20.0)], OutOfRange::Error).unwrap();
+        e.set_abscissa_type(Some("T".into())).unwrap();
+        e.set_ordinate_type(Some("E".into())).unwrap();
+        let sm = poi1(2);
+        let input = NodeField::from_sub(node_field(&sm, &[0.0, 10.0]));
+        let out = e.interpolate_node_field(&input, None).unwrap();
+        let sub = read(&out.get(0).unwrap()).unwrap();
+        assert_eq!(sub.components(), &["E".to_string()]);
+        assert_eq!(sub.get(0, 0).unwrap(), 0.0);
+        assert_eq!(sub.get(1, 0).unwrap(), 20.0);
+    }
+
+    #[test]
+    fn aggregate_field_map_requires_single_scalar_curve() {
+        // Two curves → ambiguous, rejected.
+        let e0 = Evolution::from_scalars(vec![(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error).unwrap();
+        let e1 = Evolution::from_scalars(vec![(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error).unwrap();
+        let mut two = e0.union(&e1).unwrap();
+        two.set_abscissa_type(Some("T".into())).unwrap();
+        let input = NodeField::from_sub(node_field(&poi1(1), &[0.5]));
+        assert!(two.interpolate_node_field(&input, None).is_err());
+    }
+
+    #[test]
+    fn types_round_trip_on_aggregate() {
+        let mut e =
+            Evolution::from_scalars(vec![(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error).unwrap();
+        e.set_abscissa_type(Some("time".into())).unwrap();
+        e.set_ordinate_type(Some("force".into())).unwrap();
+        assert_eq!(e.abscissa_type().unwrap().as_deref(), Some("time"));
+        assert_eq!(e.ordinate_type().unwrap().as_deref(), Some("force"));
     }
 }

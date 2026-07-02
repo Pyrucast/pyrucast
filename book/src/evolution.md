@@ -38,6 +38,48 @@ compatibilité des supports/composantes des deux champs encadrants est vérifié
 ce moment-là. Une abscisse tombant exactement sur un échantillon rend la valeur
 telle quelle.
 
+## Types d'abscisse et d'ordonnée
+
+Une évolution peut porter le **type physique** de ses axes :
+
+- **`abscissa_type`** — le type de l'abscisse (p. ex. `"T"`, `"time"`). Valable
+  pour toutes les évolutions. Il sert à **étiqueter** les tracés (axe X d'une
+  courbe, slider d'un champ) et, lorsqu'on interpole un **champ**, à **choisir la
+  composante** du champ à lire (voir ci-dessous).
+- **`ordinate_type`** — le type de la valeur, pour les évolutions **scalaires
+  uniquement** (p. ex. `"young"`). Il étiquette l'axe Y et **nomme la
+  composante** produite quand on interpole un champ. Le donner sur une évolution
+  de champs est une erreur (un champ a déjà ses propres composantes).
+
+```python
+se = pc.SubEvolution([(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young")
+```
+
+## Interpoler un champ (courbe de transfert)
+
+Une évolution **scalaire** à une seule courbe s'utilise comme une **fonction de
+transfert** `y = f(x)` : au lieu d'un scalaire, on lui passe un **champ** et elle
+rend un **autre champ** de même support, où **chaque nœud / point de Gauss** est
+l'interpolation de la valeur d'entrée sur la courbe.
+
+- La composante lue dans le champ d'entrée est celle **nommée comme
+  l'`abscissa_type`** — la **correspondance de type** est vérifiée : si le champ
+  n'a pas de composante de ce nom, c'est une erreur.
+- Le champ de sortie a **une seule composante**, nommée d'après l'`ordinate_type`
+  (à défaut `"value"`).
+- La politique hors-plage s'applique valeur par valeur, comme pour un scalaire.
+
+```python
+# Loi matériau E(T) : module d'Young fonction de la température.
+loi = pc.Evolution([(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young")
+young = loi.interpolate(temperature)   # temperature : NodeField de composante "T"
+                                       # young : NodeField de composante "young"
+```
+
+Côté `Evolution` (agrégat), l'appel exige **une seule courbe scalaire** (sans
+quoi le choix de la courbe serait ambigu) ; une `SubEvolution` s'interpole
+directement.
+
 ## Politique hors plage
 
 Chaque évolution **porte** une politique appliquée quand l'abscisse demandée
@@ -90,6 +132,12 @@ match e.interpolate(0.5, None).unwrap() {
     Interpolated::Scalars(v) => assert_eq!(v, vec![15.0]),
     _ => unreachable!(),
 }
+
+// Courbe de transfert typée : mapper un champ nœud par nœud.
+let mut loi = Evolution::from_scalars(vec![(0.0, 0.0), (100.0, 210e9)], OutOfRange::Error).unwrap();
+loi.set_abscissa_type(Some("T".into())).unwrap();     // composante lue
+loi.set_ordinate_type(Some("young".into())).unwrap(); // composante produite
+let young = loi.interpolate_node_field(&temperature, None).unwrap();
 ```
 
 ## API Python
@@ -115,12 +163,20 @@ print(agg.interpolate(0.5))  # [1.5, 3.5]
 # Haut niveau temps-major : un NodeField complet par pas → NodeField interpolé.
 ev = pc.Evolution([(0.0, champ_t0), (2.0, champ_t1)])
 champ = ev.interpolate(1.0)  # NodeField à mi-chemin
+
+# Courbe de transfert : passer un champ → champ (loi matériau E(T)).
+loi = pc.Evolution([(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young")
+young = loi.interpolate(temperature)  # composante "T" lue → composante "young"
 ```
 
 ## Tracé
 
 `evolution.plot(...)` visualise l'évolution : **courbe X-Y** pour des scalaires, **champ + slider** de
 valeur tabulée pour des champs. Voir [Visualisation › Tracé d'une évolution](visualization.md#tracé-dune-évolution).
+
+À défaut de `x_label` / `y_label` explicites, les étiquettes reprennent
+l'`abscissa_type` (axe X d'une courbe, **slider** d'un champ) et l'`ordinate_type`
+(axe Y d'une courbe).
 
 ```python
 e = pc.Evolution([(0.0, 10.0), (1.0, 20.0), (2.0, 5.0)])
