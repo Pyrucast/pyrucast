@@ -3,10 +3,12 @@
 
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
+use crate::ops::field::Band;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::store::{insert, read, write, Handle};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::pyclass::CompareOp;
 
 /// A **view** into one zone of an `ElementField`, obtained by indexing
 /// (`element_field[i]`) — never constructed directly. Build at the parent
@@ -174,6 +176,36 @@ impl PySubElementField {
         let (cell, gauss, comp) = key;
         write(&self.handle)?.set_value(cell, gauss, &comp, value)?;
         Ok(())
+    }
+
+    /// Comparison sugar → a per-component 0/1 mask (see `mask`), one value per
+    /// Gauss point. `subfield >= x` / `> x` / `<= x` / `< x` test every
+    /// component against `x`; `==` / `!=` and non-scalar right-hands fall
+    /// back to `NotImplemented`.
+    fn __richcmp__(
+        &self,
+        py: Python<'_>,
+        other: &Bound<'_, PyAny>,
+        op: CompareOp,
+    ) -> PyResult<Py<PyAny>> {
+        let Ok(x) = other.extract::<f64>() else {
+            return Ok(py.NotImplemented());
+        };
+        let band = match op {
+            CompareOp::Ge => Band::new(Some(x), None, None, None),
+            CompareOp::Gt => Band::new(None, Some(x), None, None),
+            CompareOp::Le => Band::new(None, None, Some(x), None),
+            CompareOp::Lt => Band::new(None, None, None, Some(x)),
+            CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
+        }?;
+        let out = crate::ops::field::mask_sub_cells(&*read(&self.handle)?, &band, None);
+        Ok(Py::new(
+            py,
+            PySubElementField {
+                handle: insert(out),
+            },
+        )?
+        .into_any())
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -377,6 +409,30 @@ impl PyElementField {
             ));
         }
         self.binary(exponent, |a, b| a.powf(b))
+    }
+
+    /// Comparison sugar → a per-component 0/1 mask (see `mask`), one value per
+    /// Gauss point. `field >= x` / `> x` / `<= x` / `< x` test every component
+    /// against `x`; `==` / `!=` and non-scalar right-hands fall back to
+    /// `NotImplemented`.
+    fn __richcmp__(
+        &self,
+        py: Python<'_>,
+        other: &Bound<'_, PyAny>,
+        op: CompareOp,
+    ) -> PyResult<Py<PyAny>> {
+        let Ok(x) = other.extract::<f64>() else {
+            return Ok(py.NotImplemented());
+        };
+        let band = match op {
+            CompareOp::Ge => Band::new(Some(x), None, None, None),
+            CompareOp::Gt => Band::new(None, Some(x), None, None),
+            CompareOp::Le => Band::new(None, None, Some(x), None),
+            CompareOp::Lt => Band::new(None, None, None, Some(x)),
+            CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
+        }?;
+        let out = crate::ops::field::mask_cells(&self.inner, &band, None)?;
+        Ok(Py::new(py, PyElementField { inner: out })?.into_any())
     }
 }
 

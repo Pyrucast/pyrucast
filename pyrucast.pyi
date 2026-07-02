@@ -50,6 +50,7 @@ __all__ = [
     "line_seg2",
     "log",
     "log10",
+    "mask",
     "mass",
     "material_field",
     "material_field_per_sub_model",
@@ -360,6 +361,13 @@ class ElementField:
         `SubElementField` → targeted zone). The ternary `pow(x, y, z)` modulo
         form is rejected.
         """
+    def __richcmp__(self, other: typing.Any, op: int) -> typing.Any:
+        r"""
+        Comparison sugar → a per-component 0/1 mask (see `mask`), one value per
+        Gauss point. `field >= x` / `> x` / `<= x` / `< x` test every component
+        against `x`; `==` / `!=` and non-scalar right-hands fall back to
+        `NotImplemented`.
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, key: typing.Any) -> typing.Any:
         r"""
@@ -411,7 +419,7 @@ class Evolution:
     zone); or low-level by composing `SubEvolution`s with `|`. Index it
     (`evolution[i]`) to reach a `SubEvolution`.
     """
-    def __new__(cls, steps: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: builtins.str = 'error') -> Evolution:
+    def __new__(cls, steps: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: builtins.str = 'error', abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> Evolution:
         r"""
         `Evolution(steps, out_of_range="error")` — build from whole values
         tabulated at each abscissa. `steps` is a list of `(abscissa, value)`
@@ -423,11 +431,26 @@ class Evolution:
         r"""
         The stored out-of-range policy name.
         """
-    def interpolate(self, x: builtins.float, out_of_range: typing.Optional[builtins.str] = None) -> typing.Any:
+    def abscissa_type(self) -> typing.Optional[builtins.str]:
         r"""
-        Interpolate every curve at `x` and regroup the results: a `list[float]`
-        for scalars, a `NodeField` or `ElementField` for fields. `out_of_range`
-        overrides the stored policy for this query.
+        The abscissa's physical type, or `None`.
+        """
+    def ordinate_type(self) -> typing.Optional[builtins.str]:
+        r"""
+        The ordinate's physical type (scalar evolutions), or `None`.
+        """
+    def interpolate(self, x: typing.Any, out_of_range: typing.Optional[builtins.str] = None) -> typing.Any:
+        r"""
+        Interpolate at `x`.
+        
+        - `x` a **float** → every curve interpolated and regrouped: a
+          `list[float]` for scalars, a `NodeField` / `ElementField` for fields;
+        - `x` a **`NodeField`** or **`ElementField`** → that field mapped
+          through the (single, scalar) curve as a transfer function: each entry
+          of the input's `abscissa_type` component is looked up, yielding a field
+          of one component (named after `ordinate_type`) on the same support.
+        
+        `out_of_range` overrides the stored policy for this query.
         """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, mesh: typing.Optional[Mesh] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, frame: typing.Optional[builtins.int] = None, x_label: typing.Optional[builtins.str] = None, y_label: typing.Optional[builtins.str] = None, title: typing.Optional[builtins.str] = None) -> None:
         r"""
@@ -1047,6 +1070,12 @@ class NodeField:
         `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo
         form is rejected.
         """
+    def __richcmp__(self, other: typing.Any, op: int) -> typing.Any:
+        r"""
+        Comparison sugar → a per-component 0/1 mask (see `mask`). `field >= x`
+        / `> x` / `<= x` / `< x` test every component against the scalar `x`;
+        `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, key: typing.Any) -> typing.Any:
         r"""
@@ -1186,6 +1215,13 @@ class SubElementField:
         r"""
         `field[cell, gauss, "name"] = value`.
         """
+    def __richcmp__(self, other: typing.Any, op: int) -> typing.Any:
+        r"""
+        Comparison sugar → a per-component 0/1 mask (see `mask`), one value per
+        Gauss point. `subfield >= x` / `> x` / `<= x` / `< x` test every
+        component against `x`; `==` / `!=` and non-scalar right-hands fall
+        back to `NotImplemented`.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def __or__(self, other: typing.Any) -> typing.Any:
@@ -1211,11 +1247,23 @@ class SubEvolution:
     is a list of `(abscissa, value)` pairs; compose several curves into an
     `Evolution` with `|`.
     """
-    def __new__(cls, samples: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: builtins.str = 'error') -> SubEvolution:
+    def __new__(cls, samples: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: builtins.str = 'error', abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> SubEvolution:
         r"""
-        `SubEvolution(samples, out_of_range="error")` — one curve. `samples`
-        is a list of `(abscissa, value)`; the values must all be of the same
-        kind (and, for fields, on the same support).
+        `SubEvolution(samples, out_of_range="error", abscissa_type=None,
+        ordinate_type=None)` — one curve. `samples` is a list of
+        `(abscissa, value)`; the values must all be of the same kind (and, for
+        fields, on the same support). `abscissa_type` names the physical type of
+        the abscissa (used to label plots and to select a field component when a
+        field is interpolated); `ordinate_type` names the value's type (scalar
+        curves only).
+        """
+    def abscissa_type(self) -> typing.Optional[builtins.str]:
+        r"""
+        The abscissa's physical type, or `None`.
+        """
+    def ordinate_type(self) -> typing.Optional[builtins.str]:
+        r"""
+        The ordinate's physical type (scalar curves), or `None`.
         """
     def __len__(self) -> builtins.int:
         r"""
@@ -1229,11 +1277,19 @@ class SubEvolution:
         r"""
         The stored out-of-range policy name.
         """
-    def interpolate(self, x: builtins.float, out_of_range: typing.Optional[builtins.str] = None) -> typing.Any:
+    def interpolate(self, x: typing.Any, out_of_range: typing.Optional[builtins.str] = None) -> typing.Any:
         r"""
-        Interpolate at `x`. Returns a float, a `SubNodeField` or a
-        `SubElementField`. `out_of_range` (`"error"` / `"clamp"` /
-        `"extrapolate"`) overrides the stored policy for this query.
+        Interpolate at `x`.
+        
+        - `x` a **float** → a float / `SubNodeField` / `SubElementField` (the
+          curve's value at `x`);
+        - `x` a **`SubNodeField`** or **`SubElementField`** → a field of the
+          same support whose every entry is this **scalar** curve evaluated at
+          the input's `abscissa_type` component (the curve as a transfer
+          function). The output component is named after `ordinate_type`.
+        
+        `out_of_range` (`"error"` / `"clamp"` / `"extrapolate"`) overrides the
+        stored policy for this query.
         """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, mesh: typing.Optional[Mesh] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, frame: typing.Optional[builtins.int] = None, x_label: typing.Optional[builtins.str] = None, y_label: typing.Optional[builtins.str] = None, title: typing.Optional[builtins.str] = None) -> None:
         r"""
@@ -1685,6 +1741,12 @@ class SubNodeField:
         r"""
         `subfield[node, "UX"] = v` — raises if the node or component is absent.
         """
+    def __richcmp__(self, other: typing.Any, op: int) -> typing.Any:
+        r"""
+        Comparison sugar → a per-component 0/1 mask (see `mask`). `subfield >= x`
+        / `> x` / `<= x` / `< x` test every component against the scalar `x`;
+        `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1930,6 +1992,28 @@ def log10(field: typing.Any) -> typing.Any:
     Element-wise base-10 logarithm of a field.
     """
 
+def mask(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
+    r"""
+    Per-component 0/1 **mask** of a field against a value band — same flavour
+    and same structure as the input (Cast3M's `MASQUE`).
+    
+    Unlike [`select`](fn@select), which extracts the passing support into a
+    `Mesh`, `mask` keeps the field's exact shape (zones, support, components)
+    and only rewrites the values: `1.0` where the band holds, `0.0` where it
+    does not — so the result is multipliable term by term with the input
+    (`field * mask(field, ge=0)` zeroes the negatives, component by component).
+    A `NodeField` masks per node, an `ElementField` per Gauss point.
+    
+    The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
+    `le` (`≤`), `lt` (`<`) — same rules as [`select`](fn@select). There is
+    **no** AND across components here: each value stands on its own.
+    
+    `components=None` tests every component. A `components` list tests only
+    those; the others stay at `1.0` (identity for the product), and a zone
+    missing a listed component is left all-`1.0`. Errors if no bound is given,
+    or the lower one exceeds the upper.
+    """
+
 def mass(model: Model) -> Matrix:
     r"""
     Assemble the mass matrix `M` of `model`.
@@ -2034,10 +2118,10 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     attached to different `Coords`s.
     """
 
-def select(field: typing.Any, min: typing.Optional[builtins.float] = None, max: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
+def select(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
     r"""
-    Select the part of a field's support whose values fall in `[min, max]`,
-    zone by zone — a value-range filter returning a `Mesh`.
+    Select the part of a field's support passing a value band, zone by zone —
+    a value-range filter returning a `Mesh`.
     
     `field` may be a `NodeField` / `SubNodeField` (→ POI1 submeshes of the
     passing **nodes**) or an `ElementField` / `SubElementField` (→ submeshes
@@ -2045,14 +2129,16 @@ def select(field: typing.Any, min: typing.Optional[builtins.float] = None, max: 
     only when *all* its Gauss points do). The result has one submesh per
     processed zone.
     
-    At least one of `min` / `max` must be given (inclusive bounds). With
-    several components in play the bounds are combined with **AND**: a
-    point/cell is kept only when *every* tested component is in band.
+    The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+    `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+    (`le`/`lt`), at least one overall. With several components in play they
+    are combined with **AND**: a point/cell is kept only when *every* tested
+    component is in band.
     
     `components=None` tests every component of each zone. A `components`
     list tests **only** those components, and only on the zones carrying
     **all** of them — a zone missing any listed component is skipped (no
-    submesh). Errors if both bounds are `None`, or `min > max`.
+    submesh). Errors if no bound is given, or the lower one exceeds the upper.
     """
 
 def set_coordinates(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:

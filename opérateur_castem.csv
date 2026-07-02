@@ -120,7 +120,7 @@ Non-linéaire / transitoire;EPTH;Déformation thermique (dilatation libre);—
 Non-linéaire / transitoire;PRIN;Valeurs et directions principales (contraintes/déformations);—
 Non-linéaire / transitoire;VARI;Variables internes de la loi de comportement;ElementField (variables internes) (partiel)
 Non-linéaire / transitoire;NUAG;Interpolation par nuage de points (table -> champ);—
-Non-linéaire / transitoire;MASQ;Masque logique (sélection conditionnelle sur un champ);—
+Non-linéaire / transitoire;MASQ;Masque logique (sélection conditionnelle sur un champ);mask (champ 0/1 par composante ; sucre `>=` `>` `<=` `<`)
 Non-linéaire / transitoire;MULT;Produit matrice-champ (M . u);__matmul__ Matrix x field (partiel)
 Non-linéaire / transitoire;XTX;Produit X transposée par X;—
 Champs - manipulation;EXTR;Extrait une information/composante d'un objet ou d'une table;indexation conteneur / composantes

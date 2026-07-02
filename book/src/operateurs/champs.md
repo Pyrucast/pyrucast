@@ -38,16 +38,33 @@ erreur). Une vérification inter-supports finale impose qu'un nœud partagé par
 des zones de supports différents s'accorde sur toute composante commune.
 (L'équivalent côté `ElementField` est `consolidate_element`.)
 
+## Bande de valeurs (`ge` / `gt` / `le` / `lt`)
+
+`select` et `mask` partagent la même **bande de valeurs**, fixée par quatre
+bornes de comparaison qui reprennent une pour une les opérateurs Python :
+
+| Argument | Test | Opérateur |
+|---|---|---|
+| `ge` | `v ≥ ge` | `>=` |
+| `gt` | `v > gt`  | `>`  |
+| `le` | `v ≤ le` | `<=` |
+| `lt` | `v < lt`  | `<`  |
+
+On donne **au plus une** borne basse (`ge` *ou* `gt`) et **au plus une** borne
+haute (`le` *ou* `lt`), et **au moins une** borne en tout ; une borne absente
+laisse ce côté ouvert. Erreur si aucune borne, ou si la borne basse dépasse la
+haute.
+
 ## Sélection par valeur
 
 `select` extrait, **zone par zone**, la partie du support d'un champ dont les
-valeurs tombent dans une bande `[min, max]`. C'est un filtre par valeur qui
-renvoie un `Mesh` — un sous-maillage par zone traitée (les zones restent
-séparées, rien n'est moyenné ni fusionné).
+valeurs tombent dans la bande. C'est un filtre par valeur qui renvoie un
+`Mesh` — un sous-maillage par zone traitée (les zones restent séparées, rien
+n'est moyenné ni fusionné).
 
 | Python | Effet |
 |---|---|
-| `select(field, min=None, max=None, components=None)` | sous-ensemble du support du champ respectant la bande, une zone à la fois. |
+| `select(field, ge=None, gt=None, le=None, lt=None, components=None)` | sous-ensemble du support du champ respectant la bande, une zone à la fois. |
 
 - **Type de champ.** Sur un `NodeField` / `SubNodeField`, on sélectionne les
   **nœuds** : chaque zone donne un sous-maillage **POI1** des nœuds retenus.
@@ -55,9 +72,6 @@ séparées, rien n'est moyenné ni fusionné).
   chaque zone donne un sous-maillage de **son propre type d'élément**, et une
   cellule n'est retenue que si **tous** ses points de Gauss passent (la bande
   doit tenir tout le long de la cellule).
-- **Bornes.** Au moins une de `min` / `max` doit être donnée (bornes
-  **inclusives**) ; une borne absente laisse ce côté ouvert. Erreur si les deux
-  sont `None`, ou si `min > max`.
 - **Composantes.** `components=None` teste **toutes** les composantes de chaque
   zone. Une liste `components` ne teste **que** ces composantes, et seulement
   sur les zones qui les portent **toutes** — une zone à laquelle il manque une
@@ -67,12 +81,45 @@ séparées, rien n'est moyenné ni fusionné).
   composante testée est dans la bande.
 
 ```python
-# Nœuds dont la température est entre 20 et 80 °C.
-chauds = pyrucast.select(temperature, min=20.0, max=80.0)
+# Nœuds dont la température est entre 20 et 80 °C (bornes inclusives).
+chauds = pyrucast.select(temperature, ge=20.0, le=80.0)
 
 # Cellules dont la contrainte de von Mises dépasse un seuil (borne basse seule).
-critiques = pyrucast.select(sigma, min=250e6, components=["vm"])
+critiques = pyrucast.select(sigma, ge=250e6, components=["vm"])
 ```
+
+## Masque par valeur
+
+`mask` garde la **structure exacte** du champ (mêmes zones, même support, mêmes
+composantes) et se contente de réécrire les valeurs : `1.0` là où la bande
+tient, `0.0` sinon — **composante par composante** (le `MASQUE` de Cast3M). Le
+résultat est donc du **même type** que l'entrée et se multiplie terme à terme
+avec elle. Un `NodeField` est masqué par nœud, un `ElementField` par point de
+Gauss.
+
+| Python | Effet |
+|---|---|
+| `mask(field, ge=None, gt=None, le=None, lt=None, components=None)` | champ `0/1` de même structure que l'entrée. |
+
+- **Pas de ET entre composantes** (contrairement à `select`) : chaque valeur est
+  testée pour elle-même.
+- **Composantes.** `components=None` teste toutes les composantes. Une liste
+  `components` ne teste **que** celles-ci ; les autres restent à `1.0` (neutre
+  pour le produit), et une zone à laquelle il manque une composante demandée
+  reste tout à `1.0`.
+
+```python
+# Remet à zéro les valeurs négatives d'un champ, composante par composante.
+positif = champ * pyrucast.mask(champ, ge=0.0)
+
+# Sucre : les comparaisons construisent directement un masque.
+positif = champ * (champ >= 0.0)   # même chose
+chauds  = temperature > 80.0       # NodeField 0/1
+```
+
+Les opérateurs `>=`, `>`, `<=`, `<` sur un champ (`NodeField`, `SubNodeField`,
+`ElementField`, `SubElementField`) renvoient le masque correspondant contre le
+scalaire de droite. `==` / `!=` gardent leur sens Python habituel (identité).
 
 ## Dérivation géométrique (vers les points de Gauss)
 

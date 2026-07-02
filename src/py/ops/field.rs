@@ -143,8 +143,8 @@ pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
     Ok(PyNodeField { inner: nf })
 }
 
-/// Select the part of a field's support whose values fall in `[min, max]`,
-/// zone by zone — a value-range filter returning a `Mesh`.
+/// Select the part of a field's support passing a value band, zone by zone —
+/// a value-range filter returning a `Mesh`.
 ///
 /// `field` may be a `NodeField` / `SubNodeField` (→ POI1 submeshes of the
 /// passing **nodes**) or an `ElementField` / `SubElementField` (→ submeshes
@@ -152,38 +152,108 @@ pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
 /// only when *all* its Gauss points do). The result has one submesh per
 /// processed zone.
 ///
-/// At least one of `min` / `max` must be given (inclusive bounds). With
-/// several components in play the bounds are combined with **AND**: a
-/// point/cell is kept only when *every* tested component is in band.
+/// The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+/// `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+/// (`le`/`lt`), at least one overall. With several components in play they
+/// are combined with **AND**: a point/cell is kept only when *every* tested
+/// component is in band.
 ///
 /// `components=None` tests every component of each zone. A `components`
 /// list tests **only** those components, and only on the zones carrying
 /// **all** of them — a zone missing any listed component is skipped (no
-/// submesh). Errors if both bounds are `None`, or `min > max`.
+/// submesh). Errors if no bound is given, or the lower one exceeds the upper.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (field, min=None, max=None, components=None))]
+#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
+#[allow(clippy::too_many_arguments)]
 pub fn select(
     field: &Bound<'_, PyAny>,
-    min: Option<f64>,
-    max: Option<f64>,
+    ge: Option<f64>,
+    gt: Option<f64>,
+    le: Option<f64>,
+    lt: Option<f64>,
     components: Option<Vec<String>>,
 ) -> PyResult<PyMesh> {
     use crate::ops::field as ops;
+    let band = ops::Band::new(ge, gt, le, lt)?;
     let inner = if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
-        ops::select_nodes(&f.inner, min, max, components)?
+        ops::select_nodes(&f.inner, &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
-        ops::select_cells(&f.inner, min, max, components)?
+        ops::select_cells(&f.inner, &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        ops::select_sub_nodes(&*read(&f.handle)?, min, max, components)?
+        ops::select_sub_nodes(&*read(&f.handle)?, &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        ops::select_sub_cells(&*read(&f.handle)?, min, max, components)?
+        ops::select_sub_cells(&*read(&f.handle)?, &band, components)?
     } else {
         return Err(PyTypeError::new_err(
             "expected a NodeField, SubNodeField, ElementField or SubElementField",
         ));
     };
     Ok(PyMesh { inner })
+}
+
+/// Per-component 0/1 **mask** of a field against a value band — same flavour
+/// and same structure as the input (Cast3M's `MASQUE`).
+///
+/// Unlike [`select`](fn@select), which extracts the passing support into a
+/// `Mesh`, `mask` keeps the field's exact shape (zones, support, components)
+/// and only rewrites the values: `1.0` where the band holds, `0.0` where it
+/// does not — so the result is multipliable term by term with the input
+/// (`field * mask(field, ge=0)` zeroes the negatives, component by component).
+/// A `NodeField` masks per node, an `ElementField` per Gauss point.
+///
+/// The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
+/// `le` (`≤`), `lt` (`<`) — same rules as [`select`](fn@select). There is
+/// **no** AND across components here: each value stands on its own.
+///
+/// `components=None` tests every component. A `components` list tests only
+/// those; the others stay at `1.0` (identity for the product), and a zone
+/// missing a listed component is left all-`1.0`. Errors if no bound is given,
+/// or the lower one exceeds the upper.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
+#[allow(clippy::too_many_arguments)]
+pub fn mask(
+    py: Python<'_>,
+    field: &Bound<'_, PyAny>,
+    ge: Option<f64>,
+    gt: Option<f64>,
+    le: Option<f64>,
+    lt: Option<f64>,
+    components: Option<Vec<String>>,
+) -> PyResult<Py<PyAny>> {
+    use crate::ops::field as ops;
+    let band = ops::Band::new(ge, gt, le, lt)?;
+    if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
+        let out = ops::mask_nodes(&f.inner, &band, components)?;
+        Ok(Py::new(py, PyNodeField { inner: out })?.into_any())
+    } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
+        let out = ops::mask_cells(&f.inner, &band, components)?;
+        Ok(Py::new(py, PyElementField { inner: out })?.into_any())
+    } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
+        let out = ops::mask_sub_nodes(&*read(&f.handle)?, &band, components);
+        Ok(Py::new(
+            py,
+            PySubNodeField {
+                handle: insert(out),
+            },
+        )?
+        .into_any())
+    } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
+        let out = ops::mask_sub_cells(&*read(&f.handle)?, &band, components);
+        Ok(Py::new(
+            py,
+            PySubElementField {
+                handle: insert(out),
+            },
+        )?
+        .into_any())
+    } else {
+        Err(PyTypeError::new_err(
+            "expected a NodeField, SubNodeField, ElementField or SubElementField",
+        ))
+    }
 }
 
 /// Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields — Cast3M's `XTY`.

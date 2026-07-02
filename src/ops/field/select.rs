@@ -31,45 +31,20 @@ use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
 use crate::containers::mesh::{Mesh, NodeId, SubMesh};
 use crate::containers::node_field::{NodeField, SubNodeField};
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::store::{insert, read};
 
-/// Inclusive value band with optional bounds. At least one bound is set.
-#[derive(Clone, Copy)]
-struct Band {
-    min: Option<f64>,
-    max: Option<f64>,
-}
-
-impl Band {
-    /// Validate the bounds: at least one present, and `min <= max` when both are.
-    fn new(min: Option<f64>, max: Option<f64>) -> Result<Self> {
-        if min.is_none() && max.is_none() {
-            return Err(PyrucastError::Message(
-                "select: at least one of `min` or `max` must be given".into(),
-            ));
-        }
-        if let (Some(lo), Some(hi)) = (min, max) {
-            if lo > hi {
-                return Err(PyrucastError::Message(format!(
-                    "select: min ({lo}) is greater than max ({hi})"
-                )));
-            }
-        }
-        Ok(Band { min, max })
-    }
-
-    /// Whether `v` lies in the band (missing bound ⇒ that side is open).
-    fn contains(&self, v: f64) -> bool {
-        self.min.is_none_or(|lo| v >= lo) && self.max.is_none_or(|hi| v <= hi)
-    }
-}
+use super::band::Band;
 
 /// Indices, into a zone's component list, of the components to test.
 ///
-/// `None` ⇒ the zone must be **skipped** (the filter names a component the
-/// zone does not carry). With no filter, every component is tested.
-fn components_to_test(zone: &[String], requested: &Option<Vec<String>>) -> Option<Vec<usize>> {
+/// `None` ⇒ the filter names a component the zone does not carry (callers
+/// decide what that means: [`select`](self) skips the zone, [`mask`](super::mask)
+/// leaves it identity). With no filter, every component is tested.
+pub(crate) fn components_to_test(
+    zone: &[String],
+    requested: &Option<Vec<String>>,
+) -> Option<Vec<usize>> {
     match requested {
         None => Some((0..zone.len()).collect()),
         Some(names) => {
@@ -147,45 +122,39 @@ fn sub_element_submesh(
 
 // ─── Public operators ───────────────────────────────────────────────────────
 
-/// Select the nodes of `field` whose values fall in `[min, max]`, zone by
-/// zone. Returns a [`Mesh`] of POI1 submeshes — one per processed zone.
+/// Select the nodes of `field` passing `band`, zone by zone. Returns a
+/// [`Mesh`] of POI1 submeshes — one per processed zone.
 ///
 /// See the [module documentation](self) for the component-filter and
-/// AND-across-components semantics. Errors if both bounds are `None`, or
-/// `min > max`.
+/// AND-across-components semantics.
 pub fn select_nodes(
     field: &NodeField,
-    min: Option<f64>,
-    max: Option<f64>,
+    band: &Band,
     components: Option<Vec<String>>,
 ) -> Result<Mesh> {
-    let band = Band::new(min, max)?;
     let mut out = Mesh::empty();
     for h in field.iter() {
-        if let Some(sm) = sub_node_submesh(&*read(h)?, &band, &components)? {
+        if let Some(sm) = sub_node_submesh(&*read(h)?, band, &components)? {
             out.add_sub(insert(sm))?;
         }
     }
     Ok(out)
 }
 
-/// Select the cells of `field` whose values fall in `[min, max]`, zone by
-/// zone. A cell is kept only when **all** its Gauss points pass. Returns a
-/// [`Mesh`] of submeshes (each of its zone's element type) — one per
-/// processed zone.
+/// Select the cells of `field` passing `band`, zone by zone. A cell is kept
+/// only when **all** its Gauss points pass. Returns a [`Mesh`] of submeshes
+/// (each of its zone's element type) — one per processed zone.
 ///
 /// See the [module documentation](self) for the component-filter and
-/// AND semantics. Errors if both bounds are `None`, or `min > max`.
+/// AND semantics.
 pub fn select_cells(
     field: &ElementField,
-    min: Option<f64>,
-    max: Option<f64>,
+    band: &Band,
     components: Option<Vec<String>>,
 ) -> Result<Mesh> {
-    let band = Band::new(min, max)?;
     let mut out = Mesh::empty();
     for h in field.iter() {
-        if let Some(sm) = sub_element_submesh(&*read(h)?, &band, &components)? {
+        if let Some(sm) = sub_element_submesh(&*read(h)?, band, &components)? {
             out.add_sub(insert(sm))?;
         }
     }
@@ -196,13 +165,11 @@ pub fn select_cells(
 /// empty mesh when the component filter skips the zone.
 pub fn select_sub_nodes(
     sub: &SubNodeField,
-    min: Option<f64>,
-    max: Option<f64>,
+    band: &Band,
     components: Option<Vec<String>>,
 ) -> Result<Mesh> {
-    let band = Band::new(min, max)?;
     let mut out = Mesh::empty();
-    if let Some(sm) = sub_node_submesh(sub, &band, &components)? {
+    if let Some(sm) = sub_node_submesh(sub, band, &components)? {
         out.add_sub(insert(sm))?;
     }
     Ok(out)
@@ -212,13 +179,11 @@ pub fn select_sub_nodes(
 /// mesh when the component filter skips the zone.
 pub fn select_sub_cells(
     sub: &SubElementField,
-    min: Option<f64>,
-    max: Option<f64>,
+    band: &Band,
     components: Option<Vec<String>>,
 ) -> Result<Mesh> {
-    let band = Band::new(min, max)?;
     let mut out = Mesh::empty();
-    if let Some(sm) = sub_element_submesh(sub, &band, &components)? {
+    if let Some(sm) = sub_element_submesh(sub, band, &components)? {
         out.add_sub(insert(sm))?;
     }
     Ok(out)
@@ -265,7 +230,12 @@ mod tests {
             }
         }
         // 10 <= T <= 30 → nodes 1,2,3.
-        let sel = select_nodes(&f, Some(10.0), Some(30.0), None).unwrap();
+        let sel = select_nodes(
+            &f,
+            &Band::new(Some(10.0), None, Some(30.0), None).unwrap(),
+            None,
+        )
+        .unwrap();
         assert_eq!(sel.len(), 1);
         let ids = picked(&sel, 0);
         assert_eq!(ids, vec![nodes[1].id(), nodes[2].id(), nodes[3].id()]);
@@ -280,11 +250,11 @@ mod tests {
             s.set(1, 0, 5.0).unwrap();
             s.set(2, 0, 9.0).unwrap();
         }
-        // Only a max: T <= 5 → nodes 0,1.
-        let sel = select_nodes(&f, None, Some(5.0), None).unwrap();
+        // Only an upper bound: T <= 5 → nodes 0,1.
+        let sel = select_nodes(&f, &Band::new(None, None, Some(5.0), None).unwrap(), None).unwrap();
         assert_eq!(picked(&sel, 0), vec![nodes[0].id(), nodes[1].id()]);
-        // Only a min: T >= 5 → nodes 1,2.
-        let sel = select_nodes(&f, Some(5.0), None, None).unwrap();
+        // Only a lower bound: T >= 5 → nodes 1,2.
+        let sel = select_nodes(&f, &Band::new(Some(5.0), None, None, None).unwrap(), None).unwrap();
         assert_eq!(picked(&sel, 0), vec![nodes[1].id(), nodes[2].id()]);
     }
 
@@ -302,7 +272,12 @@ mod tests {
             s.set(2, 1, 2.0).unwrap();
         }
         // 0 <= * <= 5 on BOTH components → node1 dropped (V=9).
-        let sel = select_nodes(&f, Some(0.0), Some(5.0), None).unwrap();
+        let sel = select_nodes(
+            &f,
+            &Band::new(Some(0.0), None, Some(5.0), None).unwrap(),
+            None,
+        )
+        .unwrap();
         assert_eq!(picked(&sel, 0), vec![nodes[0].id(), nodes[2].id()]);
     }
 
@@ -319,7 +294,12 @@ mod tests {
             s.set(2, 1, 2.0).unwrap();
         }
         // Test U only: U=1 everywhere ⇒ all kept despite V out of band.
-        let sel = select_nodes(&f, Some(0.0), Some(5.0), Some(vec!["U".into()])).unwrap();
+        let sel = select_nodes(
+            &f,
+            &Band::new(Some(0.0), None, Some(5.0), None).unwrap(),
+            Some(vec!["U".into()]),
+        )
+        .unwrap();
         assert_eq!(
             picked(&sel, 0),
             vec![nodes[0].id(), nodes[1].id(), nodes[2].id()]
@@ -343,7 +323,12 @@ mod tests {
             .unwrap();
         assert_eq!(f.len(), 2);
         // Filter on "T": only zone0 is processed → one submesh out.
-        let sel = select_nodes(&f, Some(-1e9), Some(1e9), Some(vec!["T".into()])).unwrap();
+        let sel = select_nodes(
+            &f,
+            &Band::new(Some(-1e9), None, Some(1e9), None).unwrap(),
+            Some(vec!["T".into()]),
+        )
+        .unwrap();
         assert_eq!(sel.len(), 1);
         assert_eq!(picked(&sel, 0), vec![n[0].id()]);
     }
@@ -351,16 +336,14 @@ mod tests {
     #[test]
     fn select_nodes_empty_selection_keeps_empty_zone() {
         let (_nodes, f) = poi1_field(3, vec!["T".into()]); // all zero
-        let sel = select_nodes(&f, Some(100.0), Some(200.0), None).unwrap();
+        let sel = select_nodes(
+            &f,
+            &Band::new(Some(100.0), None, Some(200.0), None).unwrap(),
+            None,
+        )
+        .unwrap();
         assert_eq!(sel.len(), 1, "processed zone still yields a submesh");
         assert_eq!(read(&sel.get(0).unwrap()).unwrap().cell_count(), 0);
-    }
-
-    #[test]
-    fn select_bad_bounds_error() {
-        let (_nodes, f) = poi1_field(1, vec!["T".into()]);
-        assert!(select_nodes(&f, None, None, None).is_err());
-        assert!(select_nodes(&f, Some(5.0), Some(1.0), None).is_err());
     }
 
     /// One TRI3 + one QUA4 zone, lagrange-1; returns the ElementField.
@@ -406,7 +389,12 @@ mod tests {
             s.set_uniform("s", 2.0).unwrap();
             s.set_value(0, 0, "s", 100.0).unwrap();
         }
-        let sel = select_cells(&ef, Some(0.0), Some(5.0), None).unwrap();
+        let sel = select_cells(
+            &ef,
+            &Band::new(Some(0.0), None, Some(5.0), None).unwrap(),
+            None,
+        )
+        .unwrap();
         assert_eq!(sel.len(), 2, "one submesh per zone");
         // TRI3 cell kept, QUA4 cell dropped.
         assert_eq!(read(&sel.get(0).unwrap()).unwrap().cell_count(), 1);

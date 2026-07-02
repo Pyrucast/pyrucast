@@ -105,7 +105,8 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `beam_deformation(field, fespace) -> ElementField` |
 | `divergence(field: &ElementField) -> NodeField` | `divergence(field) -> NodeField` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
-| `select_nodes(field: &NodeField, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, min=None, max=None, components=None) -> Mesh` (dispatch par type) |
+| `select_nodes(field: &NodeField, band: &Band, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type) |
+| `mask_nodes(field: &NodeField, band: &Band, …) -> NodeField` / `mask_cells(field: &ElementField, …) -> ElementField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> field` (dispatch par type ; champ `0/1` de même structure). Sucre : `field >= x` / `> x` / `<= x` / `< x` → masque |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` (dispatch par type, partagé avec `Mesh`) |
 | `SubField::dot(&self, other) -> f64` / `Field::dot_field(&self, other) -> f64` | `xty(x, y) -> float` (dispatch par type ; produit scalaire **global** de deux champs) |
