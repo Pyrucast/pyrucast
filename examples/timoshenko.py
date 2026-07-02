@@ -33,29 +33,26 @@ def _clamp(node, var, dual):
 
 
 def tip_deflection(n_elems: int) -> float:
-    h = L / n_elems
     c = pyrucast.Coords(1)
-    nodes = [c.add_node([i * h]) for i in range(n_elems + 1)]
-    mesh = pyrucast.Mesh(c, "SEG2")
-    for i in range(n_elems):
-        mesh.unit().add_cell([nodes[i], nodes[i + 1]])
+    base = c.add_node([0.0])
+    tip = c.add_node([L])
+    mesh = pyrucast.line_seg2(base, tip, n_elems)  # console 1-D (`line_seg2`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.timoshenko(fes)
-    model = model | _clamp(nodes[0], "w", "f_w")
-    model = model | _clamp(nodes[0], "theta", "m_theta")
+    model = model | _clamp(base, "w", "f_w")
+    model = model | _clamp(base, "theta", "m_theta")
 
     materials = pyrucast.material_field(
         model, [("E", E), ("I", I), ("G", G), ("A_s", A_S)]
     )
 
-    load = pyrucast.Mesh(c, "POI1")
-    load.unit().add_cell([nodes[-1]])
+    load = pyrucast.poi1_from_nodes([tip])
     rhs = pyrucast.NodeField(load, ["f_w"])
-    rhs[0].set_value(nodes[-1], "f_w", P)
+    rhs[0].set_value(tip, "f_w", P)
 
     solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
-    return solution.value(nodes[-1], "w")
+    return solution.value(tip, "w")
 
 
 def main() -> None:

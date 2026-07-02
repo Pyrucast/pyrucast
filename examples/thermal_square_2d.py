@@ -48,20 +48,23 @@ def main() -> None:
     def idx(i: int, j: int) -> int:
         return j * (N + 1) + i
 
-    # ── Maillage : grille structurée (N+1)×(N+1) de QUA4 sur [0,1]² ───────────
+    # ── Maillage : grille N×N de QUA4 sur [0,1]², par balayage de deux lignes ─
+    # SEG2 (bas → haut) avec le mailleur `sweep_qua4` (Cast3m « regle »).
     c = pyrucast.Coords(2)
-    grid = [c.add_node([i * h, j * h]) for j in range(N + 1) for i in range(N + 1)]
-    mesh = pyrucast.Mesh(c, "QUA4")
-    for j in range(N):
-        for i in range(N):
-            mesh.unit().add_cell(
-                [
-                    grid[idx(i, j)],
-                    grid[idx(i + 1, j)],
-                    grid[idx(i + 1, j + 1)],
-                    grid[idx(i, j + 1)],
-                ]
-            )
+    bottom = pyrucast.line_seg2(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
+    top = pyrucast.line_seg2(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
+    mesh = pyrucast.sweep_qua4(bottom, top, N)
+
+    # Nœuds rangés par idx(i, j) (i selon x, j selon y) en relisant la
+    # connectivité QUA4 : maille (cy, cx) = cy*N + cx, nœuds locaux 0..3.
+    grid = [None] * ((N + 1) * (N + 1))
+    for cy in range(N):
+        for cx in range(N):
+            cell = cy * N + cx
+            grid[idx(cx, cy)] = mesh.node(0, cell, 0)
+            grid[idx(cx + 1, cy)] = mesh.node(0, cell, 1)
+            grid[idx(cx + 1, cy + 1)] = mesh.node(0, cell, 2)
+            grid[idx(cx, cy + 1)] = mesh.node(0, cell, 3)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     # ── Dirichlet T = 20 sur le bord droit (x = 1) ───────────────────────────
@@ -88,9 +91,7 @@ def main() -> None:
     source = pyrucast.flux(left_fes[0], Q, "q")
 
     # Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
-    imposed_mesh = pyrucast.Mesh(c, "POI1")
-    for m in mults:
-        imposed_mesh.unit().add_cell([m])
+    imposed_mesh = pyrucast.poi1_from_nodes(mults)
     imposed_load = pyrucast.NodeField(imposed_mesh, ["imposed_T"])
     for m in mults:
         imposed_load[0].set_value(m, "imposed_T", T_IMPOSED)

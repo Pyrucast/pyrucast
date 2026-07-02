@@ -38,12 +38,10 @@ def _clamp(node, var, dual):
 
 
 def main() -> None:
-    h = L / N
     c = pyrucast.Coords(3)
-    nodes = [c.add_node([i * h, 0.0, 0.0]) for i in range(N + 1)]
-    mesh = pyrucast.Mesh(c, "SEG2")
-    for i in range(N):
-        mesh.unit().add_cell([nodes[i], nodes[i + 1]])
+    base = c.add_node([0.0, 0.0, 0.0])
+    tip = c.add_node([L, 0.0, 0.0])
+    mesh = pyrucast.line_seg2(base, tip, N)  # console le long de X (`line_seg2`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.frame3d(fes)
@@ -55,7 +53,7 @@ def main() -> None:
         ("r_y", "m_y"),
         ("r_z", "m_z"),
     ):
-        model = model | _clamp(nodes[0], var, dual)
+        model = model | _clamp(base, var, dual)
     materials = pyrucast.material_field(
         model,
         [
@@ -70,15 +68,13 @@ def main() -> None:
         ],
     )
 
-    load = pyrucast.Mesh(c, "POI1")
-    load.unit().add_cell([nodes[-1]])
+    load = pyrucast.poi1_from_nodes([tip])
     rhs = pyrucast.NodeField(load, ["f_y", "f_z", "m_x"])
-    rhs[0].set_value(nodes[-1], "f_y", PY)
-    rhs[0].set_value(nodes[-1], "f_z", PZ)
-    rhs[0].set_value(nodes[-1], "m_x", MX)
+    rhs[0].set_value(tip, "f_y", PY)
+    rhs[0].set_value(tip, "f_z", PZ)
+    rhs[0].set_value(tip, "m_x", MX)
     solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
 
-    tip = nodes[-1]
     uy = PY * L**3 / (3 * E * IZ) + PY * L / (G * ASY)
     uz = PZ * L**3 / (3 * E * IY) + PZ * L / (G * ASZ)
     rx = MX * L / (G * J)

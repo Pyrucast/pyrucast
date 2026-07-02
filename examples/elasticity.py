@@ -38,18 +38,21 @@ def main() -> None:
     def idx(i, j):
         return j * (N + 1) + i
 
-    grid = [c.add_node([i * h, j * h]) for j in range(N + 1) for i in range(N + 1)]
-    mesh = pyrucast.Mesh(c, "QUA4")
-    for j in range(N):
-        for i in range(N):
-            mesh.unit().add_cell(
-                [
-                    grid[idx(i, j)],
-                    grid[idx(i + 1, j)],
-                    grid[idx(i + 1, j + 1)],
-                    grid[idx(i, j + 1)],
-                ]
-            )
+    # Grille N×N de QUA4 par balayage de deux lignes SEG2 (`sweep_qua4`).
+    bottom = pyrucast.line_seg2(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
+    top = pyrucast.line_seg2(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
+    mesh = pyrucast.sweep_qua4(bottom, top, N)
+
+    # Nœuds rangés par idx(i, j) (i selon x, j selon y) en relisant la
+    # connectivité QUA4 : maille (cy, cx) = cy*N + cx, nœuds locaux 0..3.
+    grid = [None] * ((N + 1) * (N + 1))
+    for cy in range(N):
+        for cx in range(N):
+            cell = cy * N + cx
+            grid[idx(cx, cy)] = mesh.node(0, cell, 0)
+            grid[idx(cx + 1, cy)] = mesh.node(0, cell, 1)
+            grid[idx(cx + 1, cy + 1)] = mesh.node(0, cell, 2)
+            grid[idx(cx, cy + 1)] = mesh.node(0, cell, 3)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     left = [grid[idx(0, j)] for j in range(N + 1)]

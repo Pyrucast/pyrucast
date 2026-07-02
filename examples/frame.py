@@ -37,32 +37,29 @@ def _clamp(node, var, dual):
 def main() -> None:
     c = s = 1.0 / math.sqrt(2.0)  # direction à 45°
     px, py = -s, c  # perpendiculaire unitaire
-    h = L / N
 
     coords = pyrucast.Coords(2)
-    nodes = [coords.add_node([i * h * c, i * h * s]) for i in range(N + 1)]
-    mesh = pyrucast.Mesh(coords, "SEG2")
-    for i in range(N):
-        mesh.unit().add_cell([nodes[i], nodes[i + 1]])
+    base = coords.add_node([0.0, 0.0])
+    tip = coords.add_node([L * c, L * s])
+    mesh = pyrucast.line_seg2(base, tip, N)  # ligne de N SEG2 à 45° (`line_seg2`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.frame(fes)
     for var, dual in (("u_x", "f_x"), ("u_y", "f_y"), ("rz", "m_z")):
-        model = model | _clamp(nodes[0], var, dual)
+        model = model | _clamp(base, var, dual)
     materials = pyrucast.material_field(
         model, [("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)]
     )
 
-    load = pyrucast.Mesh(coords, "POI1")
-    load.unit().add_cell([nodes[-1]])
+    load = pyrucast.poi1_from_nodes([tip])
     rhs = pyrucast.NodeField(load, ["f_x", "f_y"])
-    rhs[0].set_value(nodes[-1], "f_x", P * px)
-    rhs[0].set_value(nodes[-1], "f_y", P * py)
+    rhs[0].set_value(tip, "f_x", P * px)
+    rhs[0].set_value(tip, "f_y", P * py)
     solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
 
     delta = P * L**3 / (3.0 * E * I) + P * L / (G * A_S)
-    ux = solution.value(nodes[-1], "u_x")
-    uy = solution.value(nodes[-1], "u_y")
+    ux = solution.value(tip, "u_x")
+    uy = solution.value(tip, "u_y")
     transverse = ux * px + uy * py
     axial = ux * c + uy * s
     print(f"déplacement bout : u = ({ux:.6f}, {uy:.6f})")

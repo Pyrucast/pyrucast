@@ -36,8 +36,7 @@ def main() -> None:
     c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([L, 0.0])
-    mesh = pyrucast.Mesh(c, "SEG2")
-    mesh.unit().add_cell([n0, n1])
+    mesh = pyrucast.line_seg2(n0, n1, 1)  # un seul SEG2 (mailleur `line_seg2`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.truss(fes)
@@ -47,8 +46,7 @@ def main() -> None:
 
     materials = pyrucast.material_field(model, [("E", E), ("A", A)])
 
-    load = pyrucast.Mesh(c, "POI1")
-    load.unit().add_cell([n1])
+    load = pyrucast.poi1_from_nodes([n1])
     rhs = pyrucast.NodeField(load, ["f_x"])
     rhs[0].set_value(n1, "f_x", F)
 

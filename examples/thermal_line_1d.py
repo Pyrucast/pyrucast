@@ -39,12 +39,13 @@ N_ELEMS = 4
 def main() -> None:
     h = 1.0 / N_ELEMS
 
-    # ── Maillage : une ligne de SEG2 sur [0, 1] ──────────────────────────────
+    # ── Maillage : une ligne de N_ELEMS SEG2 sur [0, 1] (mailleur `line_seg2`) ─
     c = pyrucast.Coords(1)
-    nodes = [c.add_node([i * h]) for i in range(N_ELEMS + 1)]
-    mesh = pyrucast.Mesh(c, "SEG2")
-    for i in range(N_ELEMS):
-        mesh.unit().add_cell([nodes[i], nodes[i + 1]])
+    x0 = c.add_node([0.0])
+    x1 = c.add_node([1.0])
+    mesh = pyrucast.line_seg2(x0, x1, N_ELEMS)
+    # Nœuds ordonnés le long de la ligne : x0, intérieurs…, x1.
+    nodes = [mesh.node(0, i, 0) for i in range(N_ELEMS)] + [x1]
     fes = pyrucast.FiniteElementSpace(mesh)
 
     # ── Modèle : conduction + Dirichlet T = 20 en x = 1 ──────────────────────
@@ -62,9 +63,7 @@ def main() -> None:
 
     # ── Chargement : source Q en x = 0 (composante duale "q"), valeur imposée
     #    T = 20 au nœud-multiplicateur (slot "imposed_T") ─────────────────────
-    load_mesh = pyrucast.Mesh(c, "POI1")
-    load_mesh.unit().add_cell([nodes[0]])
-    load_mesh.unit().add_cell([mult])
+    load_mesh = pyrucast.poi1_from_nodes([nodes[0], mult])
     rhs = pyrucast.NodeField(load_mesh, ["imposed_T", "q"])
     rhs[0].set_value(nodes[0], "q", Q)
     rhs[0].set_value(mult, "imposed_T", T_IMPOSED)
