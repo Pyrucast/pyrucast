@@ -58,7 +58,12 @@ Un nœud partagé par plusieurs zones (nœud d'interface) est stocké **une
 fois par zone**. Trois règles régissent cette duplication :
 
 - **lecture agrégat** (`field.value(nœud, comp)`) : la **première zone**
-  définissant le couple gagne — aucune vérification au fil de l'eau ;
+  définissant le couple gagne — aucune vérification au fil de l'eau. La
+  forme par lot `field.values(nœuds, comp)` lit une **liste** de valeurs
+  dans le **même ordre** : `nœuds` est une liste de nœuds, un `SubMesh`
+  POI1, ou un `Mesh` POI1 (ses points pris dans l'ordre de la
+  connectivité) ; même règle « première zone » et même erreur qu'un nœud
+  non défini ;
 - **écriture** : il n'y a **pas** d'écriture au niveau agrégat ; toute
   mutation passe par les zones (`field[i]`), exactement comme
   `ElementField` ;
@@ -134,6 +139,10 @@ print(u.unit())  # SubNodeField: 2 node(s), 2 component(s) [UX, UY]
 # Écriture via la zone, lecture via l'agrégat.
 u[0][a, "UX"] = 1.5
 print(u.value(a, "UX"))  # 1.5
+
+# Lecture par lot : liste de nœuds (ou Mesh/SubMesh POI1) → liste ordonnée.
+print(u.values([a, b], "UX"))  # [1.5, 0.0]
+print(u.values(mesh, "UX"))    # [1.5, 0.0]  — points du maillage POI1
 print(u.min("UX"), u.max("UX"))  # 0.0 1.5
 print(u.sum("UX"))  # 1.5  — Σ sur les nœuds (résultante d'un champ de forces)
 

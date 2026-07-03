@@ -1021,6 +1021,15 @@ class NodeField:
         Value at `node` for the named `component` — the first zone
         defining both wins. Raises if none does.
         """
+    def values(self, nodes: typing.Any, component: builtins.str) -> builtins.list[builtins.float]:
+        r"""
+        Values for the named `component` at several nodes, returned in the
+        **same order** as given — the batch form of `value`. `nodes` is
+        either a list of `Node`, a POI1 `SubMesh`, or a POI1 `Mesh` (its
+        nodes taken in connectivity order). The first zone defining each
+        `(node, component)` pair wins; raises on the first node the field
+        does not define.
+        """
     def check(self) -> None:
         r"""
         Verify zone coherence: every `(node, component)` stored by several

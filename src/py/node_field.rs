@@ -3,6 +3,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::field::SubField;
+use crate::containers::mesh::NodeId;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::ops::field::Band;
 use crate::py::mesh::{PyMesh, PySubMesh};
@@ -11,6 +12,29 @@ use crate::store::{insert, read, write, Handle};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::pyclass::CompareOp;
+
+/// Resolve a node list from the several shapes a caller may pass to a
+/// batch read: a list of `Node`, a POI1 `SubMesh`, or a `Mesh` (its
+/// submeshes' nodes taken in connectivity order — one entry per point for
+/// a POI1 mesh). Order is preserved; duplicates are kept.
+fn extract_node_ids(obj: &Bound<'_, PyAny>) -> PyResult<Vec<NodeId>> {
+    if let Ok(sm) = obj.extract::<PyRef<PySubMesh>>() {
+        return Ok(read(&sm.handle)?.connectivity().to_vec());
+    }
+    if let Ok(mesh) = obj.extract::<PyRef<PyMesh>>() {
+        let mut ids: Vec<NodeId> = Vec::new();
+        for h in &mesh.inner {
+            ids.extend_from_slice(read(h)?.connectivity());
+        }
+        return Ok(ids);
+    }
+    if let Ok(nodes) = obj.extract::<Vec<PyRef<'_, PyNode>>>() {
+        return Ok(nodes.iter().map(|n| n.as_node().id()).collect());
+    }
+    Err(PyTypeError::new_err(
+        "expected a list of Node, a SubMesh, or a Mesh",
+    ))
+}
 
 // ─── SubNodeField (view) ────────────────────────────────────────────────────
 
@@ -326,6 +350,17 @@ impl PyNodeField {
     fn value(&self, node: PyRef<'_, PyNode>, component: &str) -> PyResult<f64> {
         let nid = node.as_node().id();
         Ok(self.inner.value(nid, component)?)
+    }
+
+    /// Values for the named `component` at several nodes, returned in the
+    /// **same order** as given — the batch form of `value`. `nodes` is
+    /// either a list of `Node`, a POI1 `SubMesh`, or a POI1 `Mesh` (its
+    /// nodes taken in connectivity order). The first zone defining each
+    /// `(node, component)` pair wins; raises on the first node the field
+    /// does not define.
+    fn values(&self, nodes: &Bound<'_, PyAny>, component: &str) -> PyResult<Vec<f64>> {
+        let ids = extract_node_ids(nodes)?;
+        Ok(self.inner.values_at(&ids, component)?)
     }
 
     /// Verify zone coherence: every `(node, component)` stored by several

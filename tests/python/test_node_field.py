@@ -201,6 +201,44 @@ def test_field_protects_nodes_from_gc():
     assert not c.is_alive(nid)
 
 
+def test_values_batch_list_submesh_and_mesh():
+    c, nodes, sm = _poi1_with(4)
+    f = pyrucast.NodeField(sm, ["T"])
+    for i, n in enumerate(nodes):
+        f[0].set_value(n, "T", float(i * 10))  # 0, 10, 20, 30
+
+    # 1) A plain list of nodes → values in the same order (duplicates kept).
+    assert f.values([nodes[2], nodes[0], nodes[2]], "T") == [20.0, 0.0, 20.0]
+
+    # 2) A POI1 Mesh → its points in connectivity order.
+    probe = pyrucast.Mesh(c, "POI1")
+    for n in (nodes[3], nodes[1]):
+        probe.unit().add_cell([n])
+    assert f.values(probe, "T") == [30.0, 10.0]
+
+    # 3) A POI1 SubMesh (the single zone of that mesh).
+    assert f.values(probe.unit(), "T") == [30.0, 10.0]
+
+
+def test_values_batch_errors_on_absent_and_bad_arg():
+    c, nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField.with_components_per_submesh(mesh, [["T"], ["UX", "UY"]])
+    # T lives on zone 0 only: absent at n3 → raises, like value().
+    try:
+        f.values([nodes[3]], "T")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError for (n3, T)")
+    # A wrong argument type is rejected.
+    try:
+        f.values("nope", "T")
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("expected TypeError for str argument")
+
+
 # ─── coordinates / set_coordinates / displace ────────────────────────────────
 
 

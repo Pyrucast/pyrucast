@@ -599,6 +599,19 @@ impl NodeField {
         Ok(None)
     }
 
+    /// Values at `nodes` for the named `component`, returned in the **same
+    /// order** as `nodes` — the batch form of [`value`](Self::value). The
+    /// first sub defining each `(node, component)` pair wins; errors on the
+    /// first node no sub defines. The view is built once, so this is a
+    /// single pass over the zones per node.
+    pub fn values_at(&self, nodes: &[NodeId], component: &str) -> Result<Vec<f64>> {
+        let view = self.view()?;
+        nodes
+            .iter()
+            .map(|&nid| view.value(nid, component))
+            .collect()
+    }
+
     /// Distinct node ids across the subs, first-seen order.
     pub fn node_ids(&self) -> Result<Vec<NodeId>> {
         let mut out: Vec<NodeId> = Vec::new();
@@ -1086,6 +1099,25 @@ mod tests {
             .set_value(interface, "T", 1.0)
             .unwrap();
         f.check().unwrap();
+    }
+
+    #[test]
+    fn nf_values_at_preserves_order_and_errors_on_absent() {
+        let (_cfg, nodes, mesh) = make_two_zone_mesh();
+        let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
+        {
+            // n0 and n2 both live in zone 0 (the TRI3 n0-n1-n2).
+            let mut z0 = write(&f.get(0).unwrap()).unwrap();
+            z0.set_value(nodes[0].id(), "T", 10.0).unwrap();
+            z0.set_value(nodes[2].id(), "T", 30.0).unwrap();
+        }
+        // Same order as asked, duplicates kept.
+        let ids = [nodes[2].id(), nodes[0].id(), nodes[2].id()];
+        assert_eq!(f.values_at(&ids, "T").unwrap(), vec![30.0, 10.0, 30.0]);
+        // Empty query → empty result.
+        assert_eq!(f.values_at(&[], "T").unwrap(), Vec::<f64>::new());
+        // Unknown component → error (mirrors `value`).
+        assert!(f.values_at(&[nodes[0].id()], "P").is_err());
     }
 
     #[test]
