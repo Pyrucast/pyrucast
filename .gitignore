@@ -279,3 +279,6 @@ tags
 .recall/history.md
 .recall/.capture.json
 .recall/.capture-paused
+book/.recall/history.md
+book/.recall/.capture.json
+book/.recall/.capture-paused
