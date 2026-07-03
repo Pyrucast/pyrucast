@@ -1,11 +1,14 @@
 //! Python wrappers for [`crate::containers::model::SubModel`] and [`crate::containers::model::Model`].
 
 use crate::aggregate::Aggregate;
+use crate::containers::mesh::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::mpc;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
+use crate::py::node::PyNode;
+use crate::py::node_field::PyNodeField;
 use crate::store::{read, Handle};
 use pyo3::prelude::*;
 
@@ -306,6 +309,46 @@ impl PyModel {
     /// all sub-models, or `None`. A helper to fill an MPC term's `target_dual`.
     fn dual_of(&self, variable: &str) -> PyResult<Option<String>> {
         Ok(self.inner.dual_of(variable)?)
+    }
+
+    /// `Model.constraint_rhs(imposed)` — build the constraint load (right-hand
+    /// side) of this model's constraint from `(node, g)` pairs.
+    ///
+    /// `imposed` is a list of `(Node, value)`: each node **keys the relation it
+    /// belongs to** (for `dirichlet` the constrained node itself, for `mpc` any
+    /// of the relation's term nodes), and `value` is the right-hand side `g`.
+    /// Returns a fresh `NodeField` over the multiplier nodes, carrying the
+    /// constraint's imposed-value component (its dual, e.g. `imposed_T` /
+    /// `mpc_rhs`), with `g` at each cited relation and `0` elsewhere. Union it
+    /// into the global load with `|`, e.g. `load | model.constraint_rhs([...])`.
+    ///
+    /// The model must hold exactly one constraint sub-model (the `dirichlet` /
+    /// `mpc` object). Raises if a node constrains none of its relations, or keys
+    /// several of them (ambiguous — drop it).
+    fn constraint_rhs(
+        &self,
+        py: Python<'_>,
+        imposed: Vec<(Py<PyNode>, f64)>,
+    ) -> PyResult<PyNodeField> {
+        let pairs: Vec<(NodeId, f64)> = imposed
+            .iter()
+            .map(|(node, g)| (node.borrow(py).as_node().id(), *g))
+            .collect();
+        let inner = self.inner.constraint_rhs(&pairs)?;
+        Ok(PyNodeField { inner })
+    }
+
+    /// `Model.constraint_rhs_by_index(imposed)` — like `constraint_rhs` but each
+    /// relation is keyed by its **index** (0-based, in `relations()` order)
+    /// instead of a node.
+    ///
+    /// `imposed` is a list of `(relation_index, g)`. Use this when a node
+    /// participates in several relations, where node keying would be ambiguous.
+    /// Returns the same kind of `NodeField` over the multiplier nodes; union it
+    /// with `|`. Raises if an index is out of range.
+    fn constraint_rhs_by_index(&self, imposed: Vec<(usize, f64)>) -> PyResult<PyNodeField> {
+        let inner = self.inner.constraint_rhs_by_index(&imposed)?;
+        Ok(PyNodeField { inner })
     }
 }
 

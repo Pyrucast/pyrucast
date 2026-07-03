@@ -219,7 +219,7 @@ impl SubModelKind for Mpc {
     /// Like `Dirichlet`, MPC has no [`stiffness_layout`](SubModelKind::stiffness_layout)
     /// (nothing is integrated on a cell): it returns its filled `C` / `Cᵀ` blocks
     /// directly, one pair per `(submesh, term)`, via the shared
-    /// [`constraint_block_pair`] builder (coefficient `aₖ` instead of `1`). All
+    /// `constraint_block_pair` builder (coefficient `aₖ` instead of `1`). All
     /// terms of a relation share the same multiplier node and `imposed_value` row,
     /// which is what sums them into one equation.
     fn contributions(

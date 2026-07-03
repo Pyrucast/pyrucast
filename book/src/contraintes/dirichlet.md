@@ -97,13 +97,12 @@ mult_right = mult_mesh_right.node(0, 0, 0)
 model = pyrucast.Model.heat_conduction(fes) | left | right
 materials = pyrucast.material_field(model, [("k", 1.0)])
 
-# 4) Chargement : u_d au slot imposed_T des nœuds-multiplicateurs.
-rhs_mesh = pyrucast.Mesh(c, "POI1")
-rhs_mesh.unit().add_cell([mult_left])
-rhs_mesh.unit().add_cell([mult_right])
-rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T"])
-rhs[0].set_value(mult_left, "imposed_T", 0.0)
-rhs[0].set_value(mult_right, "imposed_T", 1.0)
+# 4) Chargement : le helper `constraint_rhs` désigne chaque contrainte par son
+#    nœud contraint et écrit u_d au slot imposed_T du nœud-multiplicateur. On
+#    fusionne les deux avec `|`.
+rhs = left.constraint_rhs([(nodes[0], 0.0)]) | right.constraint_rhs(
+    [(nodes[-1], 1.0)]
+)
 
 # 5) Assemblage + résolution.
 K = pyrucast.stiffness(model, materials)

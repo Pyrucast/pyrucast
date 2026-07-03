@@ -118,16 +118,37 @@ use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteEleme
 use crate::containers::matrix::AssemblyPattern;
 use crate::containers::mesh::Mesh;
 use crate::containers::mesh::NodeId;
-use crate::error::Result;
+use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
     dirichlet, elasticity, frame, frame3d, heat_conduction, mazars, mpc, plasticity, timoshenko,
-    truss, SubModelKind,
+    truss, Constraint, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::{Arc, OnceLock};
+
+/// Record `g` at a relation's multiplier node in the `constraint_rhs*` helpers,
+/// erroring when two entries hit the **same** relation with different values.
+/// `caller` names the method for the message.
+fn insert_relation_value(
+    mult_value: &mut std::collections::HashMap<NodeId, f64>,
+    multiplier_node: NodeId,
+    g: f64,
+    caller: &str,
+) -> Result<()> {
+    if let Some(prev) = mult_value.insert(multiplier_node, g) {
+        if prev != g {
+            return Err(PyrucastError::Message(format!(
+                "{caller}: conflicting values ({prev} and {g}) for the same relation \
+                 (multiplier node {multiplier_node})"
+            )));
+        }
+    }
+    Ok(())
+}
 
 // ─── SubModel ──────────────────────────────────────────────────────────────
 
@@ -349,6 +370,159 @@ impl SubModel {
             }
         }
         Ok(mesh)
+    }
+
+    /// Build the constraint load (right-hand side) for this sub-model from a set
+    /// of `(constrained_node, g)` pairs — the mise-en-donnée helper that spares
+    /// the user from rebuilding the multiplier mesh and remembering the
+    /// imposed-value component name by hand.
+    ///
+    /// Returns a fresh [`NodeField`] over **this constraint's multiplier nodes**,
+    /// carrying the single component the constraint uses as its imposed-value
+    /// slot — its dual variable, e.g. `imposed_T` for a `Dirichlet` on `T` or
+    /// `mpc_rhs` for an `Mpc`. Every multiplier node is present; each cited
+    /// relation gets its `g`, the others default to `0`. Union it into the global
+    /// load with `|` (`load | constraint_rhs`).
+    ///
+    /// A node **keys the relation it belongs to**: for `Dirichlet` the single
+    /// constrained node, for `Mpc` any of the relation's term nodes. The method
+    /// looks up that relation's multiplier node (via
+    /// [`Constraint::relations`]) and writes
+    /// `g` there. When a node participates in several relations (so node keying
+    /// is ambiguous), key by index instead with
+    /// [`constraint_rhs_by_index`](Self::constraint_rhs_by_index).
+    ///
+    /// Errors when `self` is not a constraint, when a cited node is constrained
+    /// by none of its relations, when a node keys **several** relations (node
+    /// keying is ambiguous there), or when two cited nodes key the *same*
+    /// relation with conflicting values.
+    pub fn constraint_rhs(&self, imposed: &[(NodeId, f64)]) -> Result<NodeField> {
+        let (constraint, imposed_value) = self.constraint_and_dual()?;
+
+        // Map each constrained term node → the multiplier node of its relation,
+        // marking `None` as soon as a node keys two *distinct* relations.
+        let mut node_to_mult: std::collections::HashMap<NodeId, Option<NodeId>> =
+            std::collections::HashMap::new();
+        for rel in &constraint.relations()? {
+            for term in &rel.terms {
+                node_to_mult
+                    .entry(term.node)
+                    .and_modify(|slot| {
+                        if *slot != Some(rel.multiplier_node) {
+                            *slot = None;
+                        }
+                    })
+                    .or_insert(Some(rel.multiplier_node));
+            }
+        }
+
+        // Resolve the requested (node, g) → (multiplier node, g).
+        let mut mult_value: std::collections::HashMap<NodeId, f64> =
+            std::collections::HashMap::new();
+        for &(node, g) in imposed {
+            let mult = match node_to_mult.get(&node) {
+                None => {
+                    return Err(PyrucastError::Message(format!(
+                        "constraint_rhs: node {node} is not constrained by this {}",
+                        self.as_kind().label()
+                    )))
+                }
+                Some(None) => {
+                    return Err(PyrucastError::Message(format!(
+                        "constraint_rhs: node {node} keys several relations of this {} — \
+                         node keying is ambiguous, use constraint_rhs_by_index",
+                        self.as_kind().label()
+                    )))
+                }
+                Some(Some(m)) => *m,
+            };
+            insert_relation_value(&mut mult_value, mult, g, "constraint_rhs")?;
+        }
+
+        self.multiplier_load(&imposed_value, &mult_value)
+    }
+
+    /// Like [`constraint_rhs`](Self::constraint_rhs) but each relation is keyed
+    /// by its **index** in [`Constraint::relations`]
+    /// order (`0`-based) rather than by a node — the way to reach a relation
+    /// whose nodes are shared with others, where node keying would be ambiguous.
+    ///
+    /// `imposed` is a set of `(relation_index, g)` pairs; the returned field and
+    /// the union semantics are identical to `constraint_rhs`. Errors when `self`
+    /// is not a constraint, when an index is out of range, or when two pairs
+    /// target the same relation with conflicting values.
+    pub fn constraint_rhs_by_index(&self, imposed: &[(usize, f64)]) -> Result<NodeField> {
+        let (constraint, imposed_value) = self.constraint_and_dual()?;
+        let relations = constraint.relations()?;
+
+        let mut mult_value: std::collections::HashMap<NodeId, f64> =
+            std::collections::HashMap::new();
+        for &(idx, g) in imposed {
+            let rel = relations.get(idx).ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "constraint_rhs_by_index: relation index {idx} out of range (this \
+                     constraint has {} relation(s))",
+                    relations.len()
+                ))
+            })?;
+            insert_relation_value(
+                &mut mult_value,
+                rel.multiplier_node,
+                g,
+                "constraint_rhs_by_index",
+            )?;
+        }
+
+        self.multiplier_load(&imposed_value, &mult_value)
+    }
+
+    /// Borrow this sub-model as a [`Constraint`](crate::models::Constraint) and
+    /// return its single imposed-value component (the dual). Shared entry check
+    /// of the `constraint_rhs*` helpers.
+    fn constraint_and_dual(&self) -> Result<(&dyn Constraint, String)> {
+        let kind = self.as_kind();
+        let constraint = kind.as_constraint().ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "constraint_rhs: sub-model {} is not a constraint (it has no multipliers)",
+                kind.label()
+            ))
+        })?;
+        // A constraint owns exactly one dual — the imposed-value slot component.
+        let imposed_value = match kind.dual_vars().as_slice() {
+            [name] => name.clone(),
+            other => {
+                return Err(PyrucastError::Message(format!(
+                    "constraint_rhs: expected the constraint to own exactly one dual \
+                     variable, got {}",
+                    other.len()
+                )));
+            }
+        };
+        Ok((constraint, imposed_value))
+    }
+
+    /// Build the constraint load over **every** multiplier node: one
+    /// zero-initialised zone per multiplier submesh (sharing the supports,
+    /// preserving the structure carried through `barycenter`), then drop the
+    /// resolved `mult_value` in at the cited multiplier nodes. Shared tail of the
+    /// `constraint_rhs*` helpers.
+    fn multiplier_load(
+        &self,
+        imposed_value: &str,
+        mult_value: &std::collections::HashMap<NodeId, f64>,
+    ) -> Result<NodeField> {
+        let mut field = NodeField::default();
+        for sm in &self.multiplier_mesh()? {
+            let mut sub = SubNodeField::from_poi1(sm, vec![imposed_value.to_string()])?;
+            let nids: Vec<NodeId> = read(sm)?.connectivity().to_vec();
+            for nid in nids {
+                if let Some(&g) = mult_value.get(&nid) {
+                    sub.set_value(nid, imposed_value, g)?;
+                }
+            }
+            field.add_sub(insert(sub))?;
+        }
+        Ok(field)
     }
 
     /// FE subspace on which this sub-model expects its material data, or
@@ -656,6 +830,45 @@ impl Model {
             }
         }
         Ok(None)
+    }
+
+    /// Build the constraint load (right-hand side) from `(constrained_node, g)`
+    /// pairs — the model-level entry point of the mise-en-donnée helper. The
+    /// model must hold **exactly one** constraint sub-model (as returned by the
+    /// `dirichlet` / `mpc` constructors); it delegates to
+    /// [`SubModel::constraint_rhs`], whose doc describes the node keying and the
+    /// returned field.
+    pub fn constraint_rhs(&self, imposed: &[(NodeId, f64)]) -> Result<NodeField> {
+        read(&self.sole_constraint()?)?.constraint_rhs(imposed)
+    }
+
+    /// Build the constraint load from `(relation_index, g)` pairs — the
+    /// model-level entry point that delegates to
+    /// [`SubModel::constraint_rhs_by_index`] (relation keyed by its index rather
+    /// than a node). The model must hold **exactly one** constraint sub-model.
+    pub fn constraint_rhs_by_index(&self, imposed: &[(usize, f64)]) -> Result<NodeField> {
+        read(&self.sole_constraint()?)?.constraint_rhs_by_index(imposed)
+    }
+
+    /// The model's single constraint sub-model, or an error when it holds none
+    /// or several. Shared lookup of the `constraint_rhs*` model-level helpers.
+    fn sole_constraint(&self) -> Result<Handle<SubModel>> {
+        let mut found: Option<Handle<SubModel>> = None;
+        for h in self {
+            if read(h)?.as_kind().as_constraint().is_some() {
+                if found.is_some() {
+                    return Err(PyrucastError::Message(
+                        "constraint_rhs: model holds several constraint sub-models; call it \
+                         on a single-constraint model (e.g. the `dirichlet` / `mpc` object)"
+                            .into(),
+                    ));
+                }
+                found = Some(h.clone());
+            }
+        }
+        found.ok_or_else(|| {
+            PyrucastError::Message("constraint_rhs: model holds no constraint sub-model".into())
+        })
     }
 
     /// Primal variable names — union over all sub-models, first-seen order.
@@ -1111,5 +1324,123 @@ mod tests {
             .unwrap();
         let err = assemble::stiffness(&model, &materials).unwrap_err();
         assert!(format!("{}", err).contains("no SubElementField"));
+    }
+
+    // ── constraint_rhs (mise-en-donnée helper) ──────────────────────────────
+
+    /// Dirichlet: keying by the constrained node writes `g` at the multiplier
+    /// node, on the constraint's dual component (`imposed_T`), and the field
+    /// lives on the multiplier — not the constrained — node.
+    #[test]
+    fn constraint_rhs_dirichlet_writes_g_at_multiplier() {
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords, &[0.0]).unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        let dirichlet =
+            Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
+
+        let rhs = dirichlet.constraint_rhs(&[(a.id(), 3.0)]).unwrap();
+        let mult_id = multiplier.node(0, 0, 0).unwrap().id();
+        assert_eq!(rhs.value(mult_id, "imposed_T").unwrap(), 3.0);
+        // Written on the multiplier node, not the constrained one.
+        assert!(rhs.value(a.id(), "imposed_T").is_err());
+    }
+
+    /// MPC: a relation is keyed by *any* of its term nodes, both resolving to
+    /// the same multiplier node and value. Non-cited relations default to 0.
+    #[test]
+    fn constraint_rhs_mpc_keyed_by_any_term_node() {
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords, &[1.0]).unwrap();
+        let mesh_a =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let mesh_b =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
+        let mult = crate::ops::mesher::barycenter(&mesh_b).unwrap();
+        let terms = vec![
+            crate::models::mpc::MpcTerm::new(&mesh_b, "T".into(), "q".into(), 1.0).unwrap(),
+            crate::models::mpc::MpcTerm::new(&mesh_a, "T".into(), "q".into(), -1.0).unwrap(),
+        ];
+        let model = Model::mpc(terms, &mult, None, None).unwrap();
+        let mult_id = mult.node(0, 0, 0).unwrap().id();
+
+        let rhs = model.constraint_rhs(&[(b.id(), 2.5)]).unwrap();
+        assert_eq!(rhs.value(mult_id, "mpc_rhs").unwrap(), 2.5);
+        // The other term node keys the same relation → same field.
+        let rhs2 = model.constraint_rhs(&[(a.id(), 2.5)]).unwrap();
+        assert_eq!(rhs2.value(mult_id, "mpc_rhs").unwrap(), 2.5);
+    }
+
+    /// A model without any constraint sub-model rejects the call.
+    #[test]
+    fn constraint_rhs_errors_without_constraint() {
+        let (_c, _a, _b, model, _m) = build_seg2_heat_model(1.0, 1.0, false);
+        assert!(model.constraint_rhs(&[]).is_err());
+    }
+
+    /// A node keying two *distinct* relations (here node `a`, a term of both) is
+    /// ambiguous and rejected; a node keying a single relation still resolves.
+    #[test]
+    fn constraint_rhs_rejects_node_keying_several_relations() {
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[2.0]).unwrap();
+        let m0 = Node::create_in(coords.clone(), &[0.5]).unwrap();
+        let m1 = Node::create_in(coords.clone(), &[1.5]).unwrap();
+
+        // Term 1 uses `a` in *both* relations; term 2 uses `b` then `c`.
+        let mut t1 = SubMesh::new(coords.clone(), ElementType::POI1);
+        t1.add_cell(&[a.id()]).unwrap();
+        t1.add_cell(&[a.id()]).unwrap();
+        let t1_mesh = Mesh::from_submesh(t1);
+        let mut t2 = SubMesh::new(coords.clone(), ElementType::POI1);
+        t2.add_cell(&[b.id()]).unwrap();
+        t2.add_cell(&[c.id()]).unwrap();
+        let t2_mesh = Mesh::from_submesh(t2);
+        let mut mm = SubMesh::new(coords, ElementType::POI1);
+        mm.add_cell(&[m0.id()]).unwrap();
+        mm.add_cell(&[m1.id()]).unwrap();
+        let mult = Mesh::from_submesh(mm);
+
+        let terms = vec![
+            crate::models::mpc::MpcTerm::new(&t1_mesh, "T".into(), "q".into(), 1.0).unwrap(),
+            crate::models::mpc::MpcTerm::new(&t2_mesh, "T".into(), "q".into(), -1.0).unwrap(),
+        ];
+        let model = Model::mpc(terms, &mult, None, None).unwrap();
+
+        // `a` keys both relations → ambiguous.
+        assert!(model.constraint_rhs(&[(a.id(), 1.0)]).is_err());
+        // `b` keys only the first relation → resolves to m0.
+        let rhs = model.constraint_rhs(&[(b.id(), 1.0)]).unwrap();
+        assert_eq!(rhs.value(m0.id(), "mpc_rhs").unwrap(), 1.0);
+        assert_eq!(rhs.value(m1.id(), "mpc_rhs").unwrap(), 0.0);
+
+        // Keying by *index* sidesteps the ambiguity: relation 1 → m1.
+        let by_idx = model.constraint_rhs_by_index(&[(1, 4.0)]).unwrap();
+        assert_eq!(by_idx.value(m1.id(), "mpc_rhs").unwrap(), 4.0);
+        assert_eq!(by_idx.value(m0.id(), "mpc_rhs").unwrap(), 0.0);
+    }
+
+    /// `constraint_rhs_by_index` writes `g` at the relation's multiplier node and
+    /// rejects an out-of-range index.
+    #[test]
+    fn constraint_rhs_by_index_writes_and_bounds_checks() {
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords, &[0.0]).unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        let dirichlet =
+            Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
+
+        let mult_id = multiplier.node(0, 0, 0).unwrap().id();
+        let rhs = dirichlet.constraint_rhs_by_index(&[(0, 2.0)]).unwrap();
+        assert_eq!(rhs.value(mult_id, "imposed_T").unwrap(), 2.0);
+        // Only one relation (index 0) → index 1 is out of range.
+        assert!(dirichlet.constraint_rhs_by_index(&[(1, 2.0)]).is_err());
     }
 }

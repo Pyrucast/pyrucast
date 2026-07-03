@@ -79,6 +79,13 @@ Cette séparation a deux mérites :
 - les chargements sont des données utilisateur, faciles à composer ;
 - le `Model` reste une description compacte et indépendante du chargement (le même modèle peut être résolu avec plusieurs chargements en cascade).
 
+Pour la part **contrainte** du second membre (les valeurs imposées aux
+nœuds-multiplicateurs), le helper `model.constraint_rhs([(nœud, g), …])`
+construit ce `NodeField` tout seul : on désigne chaque relation par un nœud
+contraint (Dirichlet) ou un nœud-terme (MPC) et sa valeur `g`, et le helper
+retrouve le nœud-multiplicateur et la composante à renseigner
+(`imposed_<v>`, `mpc_rhs`). Voir [Contraintes](contraintes.md).
+
 ## Les physiques disponibles
 
 Chaque physique est une struct sous `src/models/` implémentant le trait

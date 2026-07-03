@@ -6,6 +6,8 @@ on the same augmented system as Dirichlet. On a 1-D heat-conduction bar
 linear solution, and the single-term MPC coincides with Dirichlet.
 """
 
+import pytest
+
 import pyrucast
 
 N_ELEMS = 4
@@ -116,3 +118,76 @@ def test_single_term_mpc_matches_dirichlet():
     _, mpc_sol = solve_mpc()
     for node in nodes:
         assert abs(dir_sol.value(node, "T") - mpc_sol.value(node, "T")) < TOL
+
+
+def test_constraint_rhs_helper_builds_second_member():
+    """`constraint_rhs` builds the RHS from constrained / term nodes: `g` lands
+    at the imposed-value component of the multiplier node, and the assembled
+    solve recovers u(x)=x."""
+    _, nodes, fes, materials = _heat_bar()
+
+    imposed0 = pyrucast.poi1_from_nodes([nodes[0]])
+    mult0 = pyrucast.barycenter(imposed0)
+    dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
+
+    base = pyrucast.Model.heat_conduction(fes)
+    dual = base.dual_of("T")
+    mesh_last = pyrucast.poi1_from_nodes([nodes[-1]])
+    mesh_first = pyrucast.poi1_from_nodes([nodes[0]])
+    mult_mpc = pyrucast.barycenter(mesh_last)
+    mpc = pyrucast.Model.mpc(
+        [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
+        mult_mpc,
+    )
+
+    model = base | dirichlet | mpc
+
+    # Node keying: constrained node for Dirichlet, a term node for the MPC. The
+    # multiplier node and imposed-value component are resolved by the helper.
+    rhs = dirichlet.constraint_rhs([(nodes[0], 0.0)]) | mpc.constraint_rhs(
+        [(nodes[-1], 1.0)]
+    )
+    assert abs(rhs.value(mult_mpc.node(0, 0, 0), "mpc_rhs") - 1.0) < TOL
+    assert abs(rhs.value(mult0.node(0, 0, 0), "imposed_T") - 0.0) < TOL
+
+    solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+    for i, node in enumerate(nodes):
+        assert abs(solution.value(node, "T") - i * H) < TOL
+
+
+def test_constraint_rhs_by_index_matches_node_keying():
+    """Keying a relation by its index gives the same field as keying by a node,
+    and an out-of-range index raises."""
+    _, nodes, fes, _ = _heat_bar()
+    base = pyrucast.Model.heat_conduction(fes)
+    dual = base.dual_of("T")
+    mesh_last = pyrucast.poi1_from_nodes([nodes[-1]])
+    mesh_first = pyrucast.poi1_from_nodes([nodes[0]])
+    mult_mpc = pyrucast.barycenter(mesh_last)
+    mpc = pyrucast.Model.mpc(
+        [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
+        mult_mpc,
+    )
+    mult = mult_mpc.node(0, 0, 0)
+
+    by_node = mpc.constraint_rhs([(nodes[-1], 1.0)])
+    by_index = mpc.constraint_rhs_by_index([(0, 1.0)])
+    assert abs(by_node.value(mult, "mpc_rhs") - by_index.value(mult, "mpc_rhs")) < TOL
+    assert abs(by_index.value(mult, "mpc_rhs") - 1.0) < TOL
+
+    with pytest.raises(Exception):
+        mpc.constraint_rhs_by_index([(1, 1.0)])  # only one relation
+
+
+def test_constraint_rhs_rejects_bad_input():
+    """The helper rejects a constraint-free model and an unconstrained node."""
+    _, nodes, fes, _ = _heat_bar()
+    base = pyrucast.Model.heat_conduction(fes)
+    with pytest.raises(Exception):
+        base.constraint_rhs([(nodes[0], 0.0)])
+
+    imposed0 = pyrucast.poi1_from_nodes([nodes[0]])
+    mult0 = pyrucast.barycenter(imposed0)
+    dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
+    with pytest.raises(Exception):
+        dirichlet.constraint_rhs([(nodes[-1], 0.0)])

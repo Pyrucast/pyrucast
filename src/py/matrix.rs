@@ -9,6 +9,10 @@ use crate::py::node_field::PyNodeField;
 use crate::store::{insert, read, write, Handle};
 use pyo3::prelude::*;
 
+/// Flattened COO entries as exposed to Python: one
+/// `(row_node, row_field, col_node, col_field, value)` tuple per entry.
+type PyMatrixEntries = Vec<(u32, String, u32, String, f64)>;
+
 // ─── PySubMatrix ───────────────────────────────────────────────────────────
 
 /// One block (a COO sub-matrix) of a global `Matrix`, viewed by indexing
@@ -106,7 +110,7 @@ impl PySubMatrix {
 
     /// List of `(row_node, row_field, col_node, col_field, value)`
     /// tuples, in insertion order.
-    fn entries(&self) -> PyResult<Vec<(u32, String, u32, String, f64)>> {
+    fn entries(&self) -> PyResult<PyMatrixEntries> {
         Ok(read(&self.handle)?
             .iter_entries()
             .into_iter()
@@ -272,7 +276,7 @@ impl PyMatrix {
 
     /// List of `(row_node, row_field, col_node, col_field, value)`
     /// tuples — every entry across every block, in block-insertion order.
-    fn entries(&self) -> PyResult<Vec<(u32, String, u32, String, f64)>> {
+    fn entries(&self) -> PyResult<PyMatrixEntries> {
         Ok(self
             .inner
             .iter_entries()?

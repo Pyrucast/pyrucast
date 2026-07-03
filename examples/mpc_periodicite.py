@@ -59,13 +59,14 @@ def main():
 
     model = base | dirichlet | mpc
 
-    # Charge : valeur imposée de Dirichlet + second membre g de la MPC.
-    rhs_mesh = pyrucast.Mesh(c, "POI1")
-    rhs_mesh.unit().add_cell([mult0.node(0, 0, 0)])
-    rhs_mesh.unit().add_cell([mult_mpc.node(0, 0, 0)])
-    rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T", "mpc_rhs"])
-    rhs[0].set_value(mult0.node(0, 0, 0), "imposed_T", 0.0)
-    rhs[0].set_value(mult_mpc.node(0, 0, 0), "mpc_rhs", 1.0)
+    # Charge : valeur imposée de Dirichlet + second membre g de la MPC. Le helper
+    # `constraint_rhs` construit chaque second membre à partir d'un nœud désignant
+    # la relation : le nœud contraint pour Dirichlet, un nœud-terme pour la MPC.
+    # Il retrouve seul le nœud multiplicateur et la composante imposée
+    # (`imposed_T`, `mpc_rhs`). On fusionne les deux avec `|`.
+    rhs = dirichlet.constraint_rhs([(nodes[0], 0.0)]) | mpc.constraint_rhs(
+        [(nodes[-1], 1.0)]
+    )
 
     solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
 
