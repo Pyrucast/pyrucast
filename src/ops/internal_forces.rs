@@ -10,7 +10,7 @@
 //! ([`crate::ops::field::deformation`](fn@crate::ops::field::deformation),
 //! [`crate::ops::field::beam_deformation`](fn@crate::ops::field::beam_deformation)),
 //! so continuum solids, bars and beams are all handled — each physics supplies
-//! its own `Bᵀ` kernel ([`crate::models::Physics::internal_force_element`]), and
+//! its own `Bᵀ` kernel ([`crate::models::SubModelKind::internal_force_element`]), and
 //! this layer only orchestrates the per-zone pairing and aggregation.
 //!
 //! `stresses` is the material-state aggregate produced by
@@ -62,7 +62,7 @@ pub fn internal_forces(model: &Model, stresses: &ElementField) -> Result<NodeFie
 /// A convenience for the volumetric case (elasticity, Mazars, plasticity), where
 /// `B` is the universal symmetric gradient and the DOFs are always a
 /// displacement: it applies the same continuum kernel as
-/// [`crate::models::Physics::internal_force_element`]'s default, so it needs only
+/// [`crate::models::SubModelKind::internal_force_element`]'s default, so it needs only
 /// the geometry (`fespace`) and the Voigt stress (`sigma_xx`, `sigma_xy`, …).
 /// Each subspace of `fespace` is paired with its stress sub-field; the result
 /// carries `space_dim` components `f_x, f_y, f_z` per node.
