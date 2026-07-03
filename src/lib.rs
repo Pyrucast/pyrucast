@@ -118,6 +118,8 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::field::merge, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::gradient, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::deformation, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::interp_to_gauss, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::thermal_strain, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::beam_deformation, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::divergence, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::integral, m)?)?;

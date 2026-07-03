@@ -72,7 +72,7 @@ Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_beha
 Champs - dérivation;REAC;Réactions nodales;—
 Champs - extraction;EXCO;Extrait/renomme une composante d'un champ;NodeField / ElementField (indexation composantes)
 Champs - extraction;DEPL;Extrait le champ de déplacement;NodeField
-Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);divergence / consolidate
+Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / consolidate
 Champs - extraction;ELNO;Passe un champ des points de Gauss aux nœuds;divergence (partiel)
 Champs - extraction;REDU;Restreint un champ à un sous-maillage;restrict
 Champs - assemblage;NOMC;Renomme les composantes;—
@@ -118,7 +118,7 @@ Non-linéaire / transitoire;KEQU;Matrice équivalente (combinaison pondérée po
 Non-linéaire / transitoire;PJBA;Projette un champ sur une base de modes;—
 Non-linéaire / transitoire;LUMP;Concentration (lumping) d'une matrice masse/capacité;—
 Non-linéaire / transitoire;PHAJ;Changement de phase / chaleur latente (thermique);—
-Non-linéaire / transitoire;EPTH;Déformation thermique (dilatation libre);—
+Non-linéaire / transitoire;EPTH;Déformation thermique (dilatation libre);thermal_strain
 Non-linéaire / transitoire;PRIN;Valeurs et directions principales (contraintes/déformations);—
 Non-linéaire / transitoire;VARI;Variables internes de la loi de comportement;ElementField (variables internes) (partiel)
 Non-linéaire / transitoire;NUAG;Interpolation par nuage de points (table -> champ);—

@@ -6,93 +6,16 @@
 //! [`crate::ops::field::deformation`](fn@crate::ops::field::deformation) (the symmetric gradient).
 
 use crate::aggregate::Aggregate;
-use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::element_field::ElementField;
 use crate::containers::field::Field;
-use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::containers::node_field::{NodeField, NodeFieldView};
+use crate::containers::finite_element_space::FiniteElementSpace;
+use crate::containers::node_field::NodeField;
 use crate::error::Result;
-use crate::parallel::*;
-use crate::store::{insert, read, Handle};
+use crate::models::kernel;
+use crate::store::{insert, read};
 
 /// Axis suffixes for spatial directions (`x`, `y`, `z`).
 pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
-
-/// Per-`(cell, Gauss)` partial derivatives `∂(component)/∂x_axis` of a node
-/// field's selected components on **one** FE subspace. Flat, row-major,
-/// indexed `((cell * n_g + g) * n_comp + ci) * space_dim + a`.
-pub(crate) struct Gradients {
-    pub(crate) fespace: Handle<SubFiniteElementSpace>,
-    pub(crate) n_cells: usize,
-    pub(crate) n_g: usize,
-    pub(crate) space_dim: usize,
-    pub(crate) n_comp: usize,
-    values: Vec<f64>,
-}
-
-impl Gradients {
-    /// `∂(component ci)/∂x_a` at `(cell, gauss)`.
-    pub(crate) fn at(&self, cell: usize, g: usize, ci: usize, a: usize) -> f64 {
-        self.values[((cell * self.n_g + g) * self.n_comp + ci) * self.space_dim + a]
-    }
-}
-
-/// Compute `∂(component)/∂x_axis` for each of `components` of `field` at
-/// every Gauss point of `fespace` (one FE subspace). `∇f = Σ_i f_i ∇N_i`.
-/// `field` is a zone view: node lookups resolve across the zones (first
-/// zone defining the pair wins) and error if a cell node lacks one of
-/// `components`.
-pub(crate) fn subspace_gradients(
-    fespace: &Handle<SubFiniteElementSpace>,
-    field: &NodeFieldView,
-    components: &[String],
-) -> Result<Gradients> {
-    // Read everything in place: the FE space, its submesh's connectivity
-    // and the field stay locked (shared) for the whole loop — no copy.
-    let s = read(fespace)?;
-    let n_cells = s.cell_count()?;
-    let n_nodes = s.nodes_per_cell()?;
-    let n_g = s.gauss_count();
-    let space_dim = s.space_dim();
-    let submesh = s.submesh();
-    let sm = read(&submesh)?;
-    let conn = sm.connectivity();
-
-    let n_comp = components.len();
-    let per_cell = n_g * n_comp * space_dim;
-    let mut values = vec![0.0; n_cells * per_cell];
-    // Parallel per cell: each cell owns a disjoint chunk of `values` (written
-    // once) — the FE space, submesh and field guards are shared, read-only.
-    let s_ref: &SubFiniteElementSpace = &s;
-    values
-        .par_chunks_mut(per_cell)
-        .with_min_len((MIN_PARALLEL_LEN / per_cell.max(1)).max(1))
-        .enumerate()
-        .try_for_each(|(cell, chunk)| -> Result<()> {
-            let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-            for g in 0..n_g {
-                let dn_dx = s_ref.dn_dx(cell, g)?;
-                for (ci, comp) in components.iter().enumerate() {
-                    for a in 0..space_dim {
-                        let mut grad = 0.0;
-                        for i in 0..n_nodes {
-                            grad += field.value(ids[i], comp)? * dn_dx[i * space_dim + a];
-                        }
-                        chunk[(g * n_comp + ci) * space_dim + a] = grad;
-                    }
-                }
-            }
-            Ok(())
-        })?;
-
-    Ok(Gradients {
-        fespace: fespace.clone(),
-        n_cells,
-        n_g,
-        space_dim,
-        n_comp,
-        values,
-    })
-}
 
 /// Gradient `∇f` of a node `field` at the Gauss points of every subspace of
 /// `fespace`.
@@ -103,38 +26,44 @@ pub(crate) fn subspace_gradients(
 /// order component-major then axis (`grad_T_x`, …). Feed the result to
 /// [`crate::ops::behavior::integrate`] as the deformation input of a physics
 /// whose behaviour consumes a gradient (heat conduction).
+///
+/// `∇f = Σ_i f_i ∇N_i` evaluated cell-by-cell, Gauss point by Gauss point, via
+/// the shared parallel driver
+/// [`crate::models::kernel::nodal_pointwise`](fn@crate::models::kernel::nodal_pointwise).
 pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(field)?;
     let view = field.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        let g = subspace_gradients(sub, &view, &components)?;
-        out.add_sub(insert(gradients_to_field(&g, &components)?))?;
-    }
-    Ok(out)
-}
-
-/// Lay the raw [`Gradients`] out as a `grad_<comp>_<axis>` [`SubElementField`].
-fn gradients_to_field(g: &Gradients, components: &[String]) -> Result<SubElementField> {
-    let mut names = Vec::with_capacity(g.n_comp * g.space_dim);
-    for comp in components {
-        for a in 0..g.space_dim {
-            names.push(format!("grad_{comp}_{}", AXES[a]));
-        }
-    }
-    let mut field = SubElementField::new(g.fespace.clone(), names)?;
-    for cell in 0..g.n_cells {
-        for gp in 0..g.n_g {
-            let mut out_c = 0;
-            for ci in 0..g.n_comp {
-                for a in 0..g.space_dim {
-                    field.set(cell, gp, out_c, g.at(cell, gp, ci, a))?;
-                    out_c += 1;
-                }
+        let space_dim = read(sub)?.space_dim();
+        let mut names = Vec::with_capacity(components.len() * space_dim);
+        for comp in &components {
+            for a in 0..space_dim {
+                names.push(format!("grad_{comp}_{}", AXES[a]));
             }
         }
+        // Point kernel: ∂(comp)/∂x_a = Σ_i f_i · ∂N_i/∂x_a, laid out
+        // component-major then axis (grad_<comp>_x, grad_<comp>_y, …).
+        let sf = kernel::nodal_pointwise(sub, &view, names, |geom, field, g, out| {
+            let dn_dx = geom.dn_dx(g)?;
+            let ids = geom.node_ids();
+            let sd = geom.space_dim;
+            let mut oc = 0;
+            for comp in &components {
+                for a in 0..sd {
+                    let mut grad = 0.0;
+                    for i in 0..geom.n_nodes {
+                        grad += field.value(ids[i], comp)? * dn_dx[i * sd + a];
+                    }
+                    out[oc] = grad;
+                    oc += 1;
+                }
+            }
+            Ok(())
+        })?;
+        out.add_sub(insert(sf))?;
     }
-    Ok(field)
+    Ok(out)
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────

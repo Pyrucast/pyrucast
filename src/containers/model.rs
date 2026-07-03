@@ -329,6 +329,16 @@ impl SubModel {
             .and_then(|d| d.material_components())
     }
 
+    /// Optional material component names this sub-model accepts (never required).
+    /// Thin pass-through of
+    /// [`Domain::optional_material_components`](crate::models::Domain::optional_material_components).
+    pub fn optional_material_components(&self) -> &'static [&'static str] {
+        self.as_kind()
+            .as_domain()
+            .map(|d| d.optional_material_components())
+            .unwrap_or(&[])
+    }
+
     /// Primal variable names introduced by this sub-model.
     pub fn primal_vars(&self) -> Vec<String> {
         self.as_kind().primal_vars()

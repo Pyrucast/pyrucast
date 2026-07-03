@@ -7,10 +7,12 @@ use crate::store::{insert, read};
 /// Build the material [`SubElementField`] of a single material-hungry
 /// sub-model from uniform `(component, value)` pairs.
 ///
-/// Only the components the sub-model's physics **declares** are kept (in
-/// declaration order); extra pairs are dropped. Errors if `sub` needs no
-/// material (e.g. `Dirichlet`) or if a declared component is missing from
-/// `components_and_values`.
+/// Every **required** component (`material_components`) must be present, in
+/// declaration order. Every **optional** component
+/// (`optional_material_components`, e.g. `alpha` for thermal expansion) is kept
+/// only if supplied, appended after the required ones. Any other pair is
+/// dropped. Errors if `sub` needs no material (e.g. `Dirichlet`) or if a
+/// required component is missing from `components_and_values`.
 pub fn sub_material_field(
     sub: &SubModel,
     components_and_values: &[(&str, f64)],
@@ -21,8 +23,9 @@ pub fn sub_material_field(
     let required = sub
         .material_components()
         .expect("material_fespace().is_some() ⇒ material_components() is Some");
-    let mut components: Vec<String> = Vec::with_capacity(required.len());
-    let mut values: Vec<f64> = Vec::with_capacity(required.len());
+    let optional = sub.optional_material_components();
+    let mut components: Vec<String> = Vec::with_capacity(required.len() + optional.len());
+    let mut values: Vec<f64> = Vec::with_capacity(required.len() + optional.len());
     for req in required {
         let v = components_and_values
             .iter()
@@ -37,6 +40,13 @@ pub fn sub_material_field(
             })?;
         components.push((*req).to_string());
         values.push(v);
+    }
+    // Optional components: kept only when the caller supplies them.
+    for opt in optional {
+        if let Some((_, v)) = components_and_values.iter().find(|(c, _)| c == opt) {
+            components.push((*opt).to_string());
+            values.push(*v);
+        }
     }
     SubElementField::from_uniform_per_component(fespace, components, &values)
 }
@@ -196,6 +206,58 @@ mod tests {
         let mat = sub_material_field(&hc, &[("k", 2.0), ("rho", 7.0), ("cp", 9.0)]).unwrap();
         assert_eq!(mat.components(), &["k".to_string()]);
         assert!((mat.value(0, 0, "k").unwrap() - 2.0).abs() < 1e-12);
+        assert!(mat.value(0, 0, "rho").is_err());
+    }
+
+    // ── optional material components (e.g. elasticity `alpha`) ──────────────
+
+    /// Elasticity on a single TRI3 (plane stress).
+    fn single_elasticity_sub() -> (Handle<Coords>, SubModel) {
+        use crate::models::elasticity::ElasticityModel;
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let el = SubModel::elasticity(fes.get(0).unwrap(), ElasticityModel::PlaneStress).unwrap();
+        (coords, el)
+    }
+
+    #[test]
+    fn optional_alpha_kept_when_supplied() {
+        let (_cfg, el) = single_elasticity_sub();
+        let mat = sub_material_field(&el, &[("E", 210e9), ("nu", 0.3), ("alpha", 1.2e-5)]).unwrap();
+        assert_eq!(
+            mat.components(),
+            &["E".to_string(), "nu".to_string(), "alpha".to_string()]
+        );
+        assert!((mat.value(0, 0, "alpha").unwrap() - 1.2e-5).abs() < 1e-18);
+    }
+
+    #[test]
+    fn optional_alpha_absent_is_valid() {
+        let (_cfg, el) = single_elasticity_sub();
+        // No alpha ⇒ plain elastic material, still valid (alpha never required).
+        let mat = sub_material_field(&el, &[("E", 210e9), ("nu", 0.3)]).unwrap();
+        assert_eq!(mat.components(), &["E".to_string(), "nu".to_string()]);
+        assert!(mat.value(0, 0, "alpha").is_err());
+    }
+
+    #[test]
+    fn unknown_component_still_dropped_with_optionals() {
+        let (_cfg, el) = single_elasticity_sub();
+        // "rho" is neither required nor optional ⇒ dropped; alpha kept.
+        let mat = sub_material_field(
+            &el,
+            &[("E", 1.0), ("nu", 0.2), ("alpha", 3.0), ("rho", 7.0)],
+        )
+        .unwrap();
+        assert_eq!(
+            mat.components(),
+            &["E".to_string(), "nu".to_string(), "alpha".to_string()]
+        );
         assert!(mat.value(0, 0, "rho").is_err());
     }
 

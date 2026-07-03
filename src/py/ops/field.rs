@@ -118,6 +118,45 @@ pub fn deformation(
     Ok(PyElementField { inner: ef })
 }
 
+/// Interpolate a nodal `field` to the Gauss points of `fespace`
+/// (`f(ξ_g) = Σ_i f_i N_i(ξ_g)`), turning a per-node `NodeField` into a
+/// per-element `ElementField` with the same component names. Cast3M `CHAN`
+/// (nodes → Gauss).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn interp_to_gauss(
+    field: PyRef<PyNodeField>,
+    fespace: PyRef<PyFiniteElementSpace>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::field::interp_to_gauss(&field.inner, &fespace.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// Thermal (free-dilation) strain `ε_th = α·(T − t_ref)` at the Gauss points of
+/// `fespace` — Cast3M `EPTH`. `temperature` is a per-element field carrying
+/// `"T"` (e.g. from `interp_to_gauss`); `materials` carries `"alpha"` (supplied
+/// via `material_field`). Returns the strain tensor in the same layout as
+/// `deformation`, so `deformation(u, fespace) - thermal_strain(...)` is the
+/// mechanical strain. Backbone of uncoupled thermomechanics: assemble the
+/// thermal load with `internal_forces(model, integrate_behavior(model, ε_th,
+/// materials))` and recover `σ = D:(ε − ε_th)`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn thermal_strain(
+    temperature: PyRef<PyElementField>,
+    materials: PyRef<PyElementField>,
+    fespace: PyRef<PyFiniteElementSpace>,
+    t_ref: f64,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::field::thermal_strain(
+        &temperature.inner,
+        &materials.inner,
+        &fespace.inner,
+        t_ref,
+    )?;
+    Ok(PyElementField { inner: ef })
+}
+
 /// Timoshenko-beam section strains `(kappa, gamma)` of a `(w, theta)` node
 /// field at the Gauss points of `fespace`. Feed the result to
 /// `integrate_behavior` of a Timoshenko model to obtain the section forces

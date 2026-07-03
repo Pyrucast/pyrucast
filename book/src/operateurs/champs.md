@@ -128,7 +128,23 @@ scalaire de droite. `==` / `!=` gardent leur sens Python habituel (identité).
 
 Ces opérateurs ne dépendent **que** de l'espace EF et du champ — aucune
 physique. Ils produisent l'`ElementField` que le
-[comportement](comportement.md) (`integrate_behavior`) consomme ensuite.
+[comportement](comportement.md) (`integrate_behavior`) consomme ensuite. Ils
+partagent tous le même moteur parallèle : le driver `nodal_pointwise`
+(déterministe bit-à-bit, cf. [Parallélisme](../developper/parallelisme.md)),
+pendant nodal de `integrate_pointwise`.
+
+### `interp_to_gauss(field, fespace)` → `ElementField`
+
+Interpole un champ **nodal** vers les points de Gauss (valeurs, pas dérivées) :
+
+\\[
+f(\xi_g) = \sum_i f_i\, N_i(\xi_g).
+\\]
+
+Le résultat porte les **mêmes composantes** que l'entrée, une valeur par
+`(cellule, point de Gauss)`. C'est le pendant « valeurs » de `gradient`
+(direction nœuds → Gauss du `CHAN` de Cast3M) : typiquement pour porter une
+température nodale aux points de Gauss avant `thermal_strain`.
 
 ### `gradient(field, fespace)` → `ElementField`
 
@@ -153,6 +169,26 @@ Le résultat est le tenseur **symétrique** en convention **tenseur**
 (`eps_xy = ½(∂u_x/∂y + ∂u_y/∂x)`, **pas** le cisaillement ingénieur `γ`), une
 composante `eps_<ai><aj>` par entrée indépendante `i ≤ j`. C'est l'entrée du
 comportement de l'[élasticité](../mecanique/elasticite.md).
+
+### `thermal_strain(temperature, materials, fespace, t_ref)` → `ElementField`
+
+Déformation thermique de libre dilatation (Cast3M `EPTH`), pour la
+thermomécanique **non couplée** :
+
+\\[
+\varepsilon_{th} = \alpha\,(T - T_{ref})\,\big[\,1,1,(1),0,0,0\,\big].
+\\]
+
+`temperature` est un champ **par éléments** portant `"T"` (p. ex. produit par
+`interp_to_gauss`) ; `alpha` est lu dans le champ matériau, où il voyage comme
+composante **facultative** de l'élasticité (à côté de `E`/`nu`, cf.
+[Élasticité](../mecanique/elasticite.md)). La sortie a **exactement la même
+disposition** que `deformation` (composantes normales à `α·ΔT`, cisaillements
+nuls), si bien que `deformation(u, fespace) - thermal_strain(...)` donne la
+déformation mécanique `ε(u) − ε_th`. Aucun couplage n'est fait ici :
+l'utilisateur compose la charge thermique et la contrainte réelle
+`σ = D:(ε − ε_th)` à partir des briques (`integrate_behavior`,
+`internal_forces`) — cf. l'[exemple thermomécanique](../mecanique/elasticite.md#thermomécanique-non-couplée).
 
 ### `divergence(field)` → `NodeField`
 
@@ -326,6 +362,6 @@ r2 = pyrucast.xtx(residu)
 ## À venir dans `ops::field`
 
 Le module est conçu pour accueillir d'autres dérivations sur le même patron
-`(champ, espace EF) → champ` : interpolation vers les Gauss (`interp_to_gauss`),
-projection L² vers les nœuds (`project_to_nodes`), mesures non linéaires de
-déformation (Green-Lagrange). Elles arriveront avec les premiers besoins.
+`(champ, espace EF) → champ` : projection L² vers les nœuds (`project_to_nodes`),
+mesures non linéaires de déformation (Green-Lagrange). Elles arriveront avec les
+premiers besoins.

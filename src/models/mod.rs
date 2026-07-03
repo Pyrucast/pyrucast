@@ -376,6 +376,17 @@ pub trait Domain: Sync {
         None
     }
 
+    /// Material component names this domain **accepts but does not require**:
+    /// passed through the material channel if supplied (kept by
+    /// [`material_field`](fn@crate::ops::build::material_field)), never demanded
+    /// at assembly (not checked by `validate_material`). Read by an ancillary
+    /// operator — e.g. `alpha` (thermal expansion) consumed by
+    /// [`crate::ops::field::thermal_strain`](fn@crate::ops::field::thermal_strain).
+    /// Default: `&[]`.
+    fn optional_material_components(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// FE subspace this domain integrates its constitutive behaviour on. Its
     /// deformation input is produced geometrically by
     /// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) /

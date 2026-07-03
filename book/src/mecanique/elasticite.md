@@ -24,7 +24,9 @@ détermine `D` :
 - `solid` (3-D) : matrice 6×6 isotrope.
 
 - **primal** : `u_x, u_y(, u_z)` — **dual** : `f_x, f_y(, f_z)`.
-- **matériau** : `E` (Young), `nu` (Poisson).
+- **matériau** : `E` (Young), `nu` (Poisson) ; **facultatif** `alpha` (dilatation
+  thermique, cf. [thermomécanique](#thermomécanique-non-couplée)) — accepté par le
+  champ matériau mais jamais exigé pour un assemblage purement élastique.
 - **comportement** (`COMP`) : `σ = D ε` (convention tenseur → ingénieur
   `γ = 2ε`), à partir de la déformation `ε` (op [`deformation`](../operateurs/champs.md)).
 
@@ -45,4 +47,36 @@ Solution exacte `u_x = (S/E)·x`, `u_y = −(ν S/E)·y`. Code = test
 
 ```python
 {{#include ../../../examples/elasticity.py}}
+```
+
+## Thermomécanique non couplée
+
+Première brique de thermomécanique : une température imposée `ΔT` engendre une
+déformation thermique de **libre dilatation** `ε_th = α·(T − T_ref)`, d'où des
+contraintes mécaniques — **sans** rétroaction de la mécanique sur le thermique.
+En petites déformations, la rigidité `K` reste l'élastique ; le terme thermique
+n'agit que sur le second membre et sur la contrainte réelle :
+
+\\[
+\sigma = D : (\varepsilon(u) - \varepsilon_{th}), \qquad
+f_{th} = \int_\Omega B^\top D\, \varepsilon_{th}\, d\Omega.
+\\]
+
+Aucune physique nouvelle : on compose les briques existantes. `alpha` est fourni
+au champ matériau (composante facultative) ; la température, portée aux points de
+Gauss par [`interp_to_gauss`](../operateurs/champs.md), alimente
+[`thermal_strain`](../operateurs/champs.md) (`EPTH`) ; la charge thermique sort
+de `integrate_behavior` + `internal_forces` (`BSIG`) ; enfin la contrainte réelle
+se relit sur `deformation(u) − ε_th`.
+
+Deux régimes sur une barre chauffée valident les fermetures analytiques : bord en
+x encastré aux deux bouts ⇒ `σ_xx = −E·α·ΔT` ; appuis simples ⇒ dilatation libre
+`u = α·ΔT·(x, y)` sans contrainte. Code = test `tests/thermoelastic_bar.rs` :
+
+```rust,ignore
+{{#include ../../../tests/thermoelastic_bar.rs:example}}
+```
+
+```python
+{{#include ../../../examples/thermoelastique_barre.py}}
 ```

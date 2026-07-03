@@ -43,7 +43,7 @@ use crate::containers::finite_element_space::{
 };
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Coords, NodeId, SubMesh};
-use crate::containers::node_field::SubNodeField;
+use crate::containers::node_field::{NodeFieldView, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::ops::assemble::coloring;
 use crate::parallel::*;
@@ -228,6 +228,60 @@ pub fn integrate_pointwise(
             for g in 0..n_gauss {
                 let slot = &mut ochunk[g * out_stride..(g + 1) * out_stride];
                 point(&geom, in_ref, mat_ref, g, slot)?;
+            }
+            Ok(())
+        })?;
+    Ok(out)
+}
+
+/// Produce a per-element (Gauss-point) field from a **nodal** field, in parallel.
+///
+/// The nodal counterpart of [`integrate_pointwise`]: where that reads an
+/// element-field `input`, this reads a nodal-field view `field`. `point(geom,
+/// field, g, out)` is a pure sequential kernel: for the cell `geom.cell` at Gauss
+/// point `g`, it reads nodal values (`field.value(id, comp)` for
+/// `id in geom.node_ids()`) and writes the `out_components.len()` output values
+/// into `out`. It uses `geom.n_at_g(g)` to interpolate values and/or
+/// `geom.dn_dx(g)` to differentiate them.
+///
+/// Same guarantees as [`integrate_pointwise`]: reference data snapshotted once,
+/// guards held for the whole region (slices borrowed, not copied), each output
+/// slot written exactly once (`par_chunks_mut` over cells) ⇒ **bit-for-bit
+/// deterministic**. Backs the geometric field producers
+/// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient),
+/// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation) and
+/// [`crate::ops::field::interp_to_gauss`](fn@crate::ops::field::interp_to_gauss).
+pub fn nodal_pointwise(
+    fespace: &Handle<SubFiniteElementSpace>,
+    field: &NodeFieldView,
+    out_components: Vec<String>,
+    point: impl Fn(&CellGeom, &NodeFieldView, usize, &mut [f64]) -> Result<()> + Sync,
+) -> Result<SubElementField> {
+    let out_stride = out_components.len();
+    let mut out = SubElementField::new(fespace.clone(), out_components)?;
+
+    // Guards held for the whole parallel region — slices borrowed, not copied.
+    let fe = read(fespace)?;
+    let submesh = fe.submesh();
+    let sm = read(&submesh)?;
+    let coords_h = sm.coords();
+    let coords = read(&coords_h)?;
+
+    let rd = RefData::snapshot(&fe)?;
+    let n_gauss = rd.n_gauss;
+    let conn: &[NodeId] = sm.connectivity();
+    let rd_ref: &RefData = &rd;
+    let coords_ref: &Coords = &coords;
+
+    out.values_mut()
+        .par_chunks_mut(n_gauss * out_stride)
+        .with_min_len((MIN_PARALLEL_LEN / n_gauss.max(1)).max(1))
+        .enumerate()
+        .try_for_each(|(cell, ochunk)| -> Result<()> {
+            let geom = CellGeom::new(rd_ref, coords_ref, conn, cell)?;
+            for g in 0..n_gauss {
+                let slot = &mut ochunk[g * out_stride..(g + 1) * out_stride];
+                point(&geom, field, g, slot)?;
             }
             Ok(())
         })?;

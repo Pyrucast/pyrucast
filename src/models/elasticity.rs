@@ -179,6 +179,14 @@ impl Domain for Elasticity {
         Some(MATERIAL_COMPONENTS)
     }
 
+    /// `alpha` (thermal-expansion coefficient) — accepted through the material
+    /// field when doing thermomechanics, never required for a plain elastic
+    /// assembly. Consumed by
+    /// [`crate::ops::field::thermal_strain`](fn@crate::ops::field::thermal_strain).
+    fn optional_material_components(&self) -> &'static [&'static str] {
+        &["alpha"]
+    }
+
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }

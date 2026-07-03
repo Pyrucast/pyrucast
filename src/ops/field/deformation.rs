@@ -8,13 +8,14 @@
 //! [`crate::ops::behavior::integrate`].
 
 use crate::aggregate::Aggregate;
-use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::element_field::ElementField;
 use crate::containers::field::Field;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
-use crate::ops::field::gradient::{subspace_gradients, Gradients, AXES};
-use crate::store::insert;
+use crate::models::kernel;
+use crate::ops::field::gradient::AXES;
+use crate::store::{insert, read};
 
 /// Linearized (small-strain) deformation `ε = ½(∇u + ∇uᵀ)` of a displacement
 /// field `u` at the Gauss points of every subspace of `fespace`.
@@ -24,47 +25,55 @@ use crate::store::insert;
 /// **tensor** convention (`eps_xy = ½(∂u_x/∂y + ∂u_y/∂x)`, *not* engineering
 /// shear `γ`), with one component `eps_<ai><aj>` per independent entry
 /// `i ≤ j`, in order `eps_xx, eps_xy, …, eps_yy, …`.
+///
+/// Runs on the shared parallel driver
+/// [`crate::models::kernel::nodal_pointwise`](fn@crate::models::kernel::nodal_pointwise),
+/// like [`crate::ops::field::gradient`](fn@crate::ops::field::gradient).
 pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(u)?;
     let view = u.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        let g = subspace_gradients(sub, &view, &components)?;
-        if g.n_comp != g.space_dim {
+        let space_dim = read(sub)?.space_dim();
+        if components.len() != space_dim {
             return Err(PyrucastError::Message(format!(
                 "deformation: the displacement field carries {} component(s) but the FE \
                  space is {}-D — expected exactly one displacement component per axis",
-                g.n_comp, g.space_dim
+                components.len(),
+                space_dim
             )));
         }
-        out.add_sub(insert(strain_from_gradients(&g)?))?;
-    }
-    Ok(out)
-}
-
-/// Symmetrize the displacement-gradient tensor in `g` into the strain
-/// [`SubElementField`] (`eps_<ai><aj>` for `i ≤ j`).
-fn strain_from_gradients(g: &Gradients) -> Result<SubElementField> {
-    let d = g.space_dim;
-    let mut names = Vec::with_capacity(d * (d + 1) / 2);
-    let mut pairs = Vec::with_capacity(d * (d + 1) / 2);
-    for i in 0..d {
-        for j in i..d {
-            names.push(format!("eps_{}{}", AXES[i], AXES[j]));
-            pairs.push((i, j));
-        }
-    }
-    let mut field = SubElementField::new(g.fespace.clone(), names)?;
-    for cell in 0..g.n_cells {
-        for gp in 0..g.n_g {
-            for (c, &(i, j)) in pairs.iter().enumerate() {
-                // ε_ij = ½(∂u_i/∂x_j + ∂u_j/∂x_i); diagonal ⇒ ∂u_i/∂x_i.
-                let eps = 0.5 * (g.at(cell, gp, i, j) + g.at(cell, gp, j, i));
-                field.set(cell, gp, c, eps)?;
+        // Independent strain entries eps_<ai><aj> for i ≤ j, in the order
+        // eps_xx, eps_xy, …, eps_yy, … — matching the tensor convention.
+        let mut names = Vec::with_capacity(space_dim * (space_dim + 1) / 2);
+        let mut pairs = Vec::with_capacity(space_dim * (space_dim + 1) / 2);
+        for i in 0..space_dim {
+            for j in i..space_dim {
+                names.push(format!("eps_{}{}", AXES[i], AXES[j]));
+                pairs.push((i, j));
             }
         }
+        // Point kernel: ε_ij = ½(∂u_i/∂x_j + ∂u_j/∂x_i) with ∂u_i/∂x_j = Σ_k u_i(k)·∂N_k/∂x_j.
+        let sf = kernel::nodal_pointwise(sub, &view, names, |geom, field, g, out| {
+            let dn_dx = geom.dn_dx(g)?;
+            let ids = geom.node_ids();
+            let sd = geom.space_dim;
+            for (c, &(i, j)) in pairs.iter().enumerate() {
+                let mut dij = 0.0; // ∂u_i/∂x_j
+                let mut dji = 0.0; // ∂u_j/∂x_i
+                for k in 0..geom.n_nodes {
+                    let u_i = field.value(ids[k], &components[i])?;
+                    let u_j = field.value(ids[k], &components[j])?;
+                    dij += u_i * dn_dx[k * sd + j];
+                    dji += u_j * dn_dx[k * sd + i];
+                }
+                out[c] = 0.5 * (dij + dji);
+            }
+            Ok(())
+        })?;
+        out.add_sub(insert(sf))?;
     }
-    Ok(field)
+    Ok(out)
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
