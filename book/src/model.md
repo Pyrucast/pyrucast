@@ -23,6 +23,7 @@ ops::assemble (opérateurs, pas des méthodes de Model)
 SubModel  (énum de stockage + dispatch — AUCUNE logique)
 ├── HeatConduction(HeatConduction)    # chaque variante enveloppe une struct…
 ├── Dirichlet(Dirichlet)             # …qui porte ses données + impl SubModelKind
+├── Mpc(Mpc)                         # contrainte multi-points (relations linéaires)
 └── as_kind(&self) -> &dyn SubModelKind   # l'unique match du module modèle
 
 SubModelKind  (trait de base — le dénominateur commun, co-localisé par physique)
@@ -30,14 +31,14 @@ SubModelKind  (trait de base — le dénominateur commun, co-localisé par physi
 ├── as_domain / as_constraint  # seams de capacité (None par défaut) — cf. ci-dessous
 ├── element_matrix          # noyau élémentaire (une cellule) — pur & séquentiel
 ├── stiffness_layout        # Some ⇒ bloc CALCULÉ (scatter parallèle) ; None ⇒ littéral
-├── contributions           # défaut : dérivé du layout ; Dirichlet rend ses C/Cᵀ littéraux
+├── contributions           # défaut : dérivé du layout ; contraintes rendent leurs C/Cᵀ littéraux
 ├── build_stiffness_blocks  # défaut : dérivé de stiffness_layout + element_matrix
 ├── build_mass_blocks       # (défaut : vide)
 └── label / display / render
 
 Capacités (sous-traits, miroir des natures ; une struct n'a que la sienne) :
 ├── Domain      # matériau + comportement (heat, elasticity, poutres, …)
-└── Constraint  # multiplicateurs de Lagrange (Dirichlet, futur MPC / contact)
+└── Constraint  # multiplicateurs de Lagrange (Dirichlet, MPC, futur contact)
 ```
 
 L'énum `SubModel` ne sert qu'au **stockage** et à la **sérialisation**
@@ -95,9 +96,10 @@ constructeurs et les variables, vus du `Model` :
 | `frame(fes)` | `u_x, u_y, rz` | `f_x, f_y, m_z` | `E, A, I, G, A_s` | [Portique 2D](mecanique/portique.md) |
 | `frame3d(fes)` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Cadre 3D](mecanique/cadre3d.md) |
 | `dirichlet(…)` | `lambda_<v>` | `imposed_<v>` | — | [Dirichlet](contraintes/dirichlet.md) |
+| `mpc(…)` | `lambda_mpc` | `mpc_rhs` | — | [Multi-points](contraintes/mpc.md) |
 
 Toutes balaient **tous** les sous-espaces du `fes` (une zone par sous-espace),
-sauf `dirichlet` qui est une [contrainte](contraintes/dirichlet.md) portée par
+sauf `dirichlet` et `mpc` qui sont des [contraintes](contraintes.md) portées par
 des maillages fournis par l'utilisateur. Le matériau est toujours fourni **à
 l'assemblage**, pas au modèle (cf. ci-dessous).
 
@@ -195,6 +197,6 @@ lecture des inconnues et des réactions) sont déroulés dans
 ## Limitations actuelles
 
 - **Mass non assemblée** : `assemble::mass(model)` retourne une matrice vide en v0. L'intégrande `∫ ρc_p · N_i N_j dx` (et son équivalent pour les autres physiques) est additif et sera ajouté quand le besoin transient se présentera.
-- **Physiques disponibles** : `HeatConduction` ([thermique](thermique.md)), `Truss`, `LinearElasticity`, `Timoshenko`, `Frame`, `Frame3d` ([mécanique](mecanique.md)) et la contrainte `Dirichlet` ([contraintes](contraintes.md)). Toute nouvelle physique est une struct implémentant `SubModelKind` (une variante de l'énum `SubModel` + un bras de `as_kind`, rien d'autre — cf. [Ajouter une physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier, indépendant du nombre de physiques existantes.
+- **Physiques disponibles** : `HeatConduction` ([thermique](thermique.md)), `Truss`, `LinearElasticity`, `Timoshenko`, `Frame`, `Frame3d` ([mécanique](mecanique.md)) et les contraintes `Dirichlet` et `Mpc` ([contraintes](contraintes.md)). Toute nouvelle physique est une struct implémentant `SubModelKind` (une variante de l'énum `SubModel` + un bras de `as_kind`, rien d'autre — cf. [Ajouter une physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier, indépendant du nombre de physiques existantes.
 - **Pas de check de cohérence pré-assemblage** : la consistance (matériau définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre sub-models, etc.) est vérifiée au moment de `assemble::stiffness` / `assemble::mass`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose problème, un check eager est facile à ajouter.
 - **Solveur dense seulement** : le `solve` fourni est un harnais de test (LU dense via `nalgebra`). Pour les vrais problèmes Phase 3 introduira un trait `LinearSolver` enfichable (itératifs, direct creux, factorisation Cholesky pour les cas symétriques détectés via le drapeau de la `Matrix`).

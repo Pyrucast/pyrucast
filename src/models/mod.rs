@@ -26,7 +26,7 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::{Mesh, SubMesh};
+use crate::containers::mesh::{Mesh, NodeId, SubMesh};
 use crate::containers::node_field::SubNodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
@@ -39,6 +39,7 @@ pub mod frame3d;
 pub mod heat_conduction;
 pub mod kernel;
 pub mod mazars;
+pub mod mpc;
 pub mod plasticity;
 pub mod timoshenko;
 pub mod truss;
@@ -340,6 +341,91 @@ pub trait Constraint {
     /// sub-model (the user supplied it); generic code clones it when an owned
     /// [`Mesh`] is needed.
     fn multiplier_mesh(&self) -> &Mesh;
+
+    /// The linear relations this constraint imposes, in a **method-neutral**
+    /// form: one [`Relation`] per multiplier node, each carrying its terms
+    /// `(node, variable, target_dual, coefficient)`. It is the single source of
+    /// truth the imposition methods consume — the Lagrange path
+    /// ([`SubModelKind::contributions`]) builds its `C` / `Cᵀ` blocks from the
+    /// same relations a future master/slave *elimination* will read, so neither
+    /// re-parses the user's mesh-per-term input.
+    fn relations(&self) -> Result<Vec<Relation>>;
+}
+
+/// One term of a linear constraint relation, carried **method-neutrally**:
+/// `coefficient · u(node, variable)`. Its reaction `coefficient · λ` lands in
+/// `target_dual`, the dual (residual) row of `variable` in its physics.
+#[derive(Clone, Debug)]
+pub struct ConstraintTerm {
+    /// Constrained node (a column of the target physics' stiffness).
+    pub node: NodeId,
+    /// Constrained primal variable (e.g. `"u_x"`).
+    pub variable: String,
+    /// Dual row of `variable` where the reaction is injected (e.g. `"f_x"`).
+    pub target_dual: String,
+    /// Scalar coefficient `aₖ`.
+    pub coefficient: f64,
+}
+
+/// One linear constraint relation `Σₖ coeffₖ · u(nodeₖ, varₖ) = g`, enforced by a
+/// fresh `multiplier_node` whose solved value is the reaction. The right-hand
+/// side `g` is supplied by the user in the load field at the multiplier node's
+/// imposed-value component, so it is **not** carried here.
+#[derive(Clone, Debug)]
+pub struct Relation {
+    /// The Lagrange-multiplier node that enforces this relation.
+    pub multiplier_node: NodeId,
+    /// The terms summed on the left-hand side.
+    pub terms: Vec<ConstraintTerm>,
+}
+
+/// Build the Lagrange `C` / `Cᵀ` block pair for **one** constraint term over one
+/// paired submesh (multiplier ↔ constrained, one cell per relation, paired
+/// element-for-element), every entry equal to `coefficient`:
+///
+/// - **`C`**  — rows `(multiplier, imposed_value)`, cols `(constrained, variable)`:
+///   the constraint-equation row;
+/// - **`Cᵀ`** — rows `(constrained, target_dual)`, cols `(multiplier, multiplier)`:
+///   the reaction in the target's dual row.
+///
+/// Shared by [`dirichlet::Dirichlet`] (one term, `coefficient = 1`) and
+/// [`mpc::Mpc`] (one call per term): the single place the saddle-point bordering
+/// blocks are filled.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn constraint_block_pair(
+    multiplier_sm: &Handle<SubMesh>,
+    constrained_sm: &Handle<SubMesh>,
+    variable: &str,
+    target_dual: &str,
+    multiplier: &str,
+    imposed_value: &str,
+    coefficient: f64,
+) -> Result<(SubMatrix, SubMatrix)> {
+    let mult_nodes: Vec<NodeId> = read(multiplier_sm)?.connectivity().to_vec();
+    let cons_nodes: Vec<NodeId> = read(constrained_sm)?.connectivity().to_vec();
+    // C block: rows = multiplier × imposed_value, cols = constrained × variable.
+    let mut c = SubMatrix::new(
+        multiplier_sm.clone(),
+        constrained_sm.clone(),
+        vec![imposed_value.to_string()],
+        vec![variable.to_string()],
+        DofOrdering::NodesThenVars,
+        false,
+    )?;
+    // Cᵀ block: rows = constrained × target_dual, cols = multiplier × multiplier.
+    let mut ct = SubMatrix::new(
+        constrained_sm.clone(),
+        multiplier_sm.clone(),
+        vec![target_dual.to_string()],
+        vec![multiplier.to_string()],
+        DofOrdering::NodesThenVars,
+        false,
+    )?;
+    for (cons, mult) in cons_nodes.iter().zip(mult_nodes.iter()) {
+        c.add_entry(*mult, imposed_value, *cons, variable, coefficient)?;
+        ct.add_entry(*cons, target_dual, *mult, multiplier, coefficient)?;
+    }
+    Ok((c, ct))
 }
 
 /// A **domain** sub-model — an optional capability, not part of the base

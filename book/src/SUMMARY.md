@@ -34,6 +34,7 @@
     - [Cadre 3D](mecanique/cadre3d.md)
   - [Contraintes](contraintes.md)
     - [Dirichlet](contraintes/dirichlet.md)
+    - [Multi-points (MPC)](contraintes/mpc.md)
 
 # Détail des opérateurs
 

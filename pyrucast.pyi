@@ -48,6 +48,7 @@ __all__ = [
     "integrate_behavior",
     "internal_forces",
     "internal_forces_continuum",
+    "interp_to_gauss",
     "line_seg2",
     "log",
     "log10",
@@ -76,6 +77,7 @@ __all__ = [
     "sweep_qua4",
     "tan",
     "tanh",
+    "thermal_strain",
     "to_poi1",
     "volume",
     "xtx",
@@ -896,6 +898,22 @@ class Model:
         user in the load field at the multiplier node's `imposed_value`
         component. See the model chapter of the book for the full semantics.
         """
+    @classmethod
+    def mpc(cls, terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.str, builtins.float]], multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
+        r"""
+        `Model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None)`
+        — multi-point constraint (a single sub-model) imposing, per relation,
+        `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
+        
+        `terms` is a list of `(mesh, variable, target_dual, coefficient)` tuples:
+        each `mesh` is a POI1 mesh (one node per relation), paired
+        element-for-element with the others and with `multiplier_mesh` (relation
+        `r` = cell `r` of every mesh). Find `target_dual` with
+        `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
+        derived names `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written
+        by the user in the load field at the multiplier node's `imposed_value`
+        component (default `0`). See the constraints chapter of the book.
+        """
     def primal_vars(self) -> builtins.list[builtins.str]:
         r"""
         Names of the primal (primary) variables across the whole model.
@@ -903,6 +921,12 @@ class Model:
     def dual_vars(self) -> builtins.list[builtins.str]:
         r"""
         Names of the dual variables across the whole model.
+        """
+    def dual_of(self, variable: builtins.str) -> typing.Optional[builtins.str]:
+        r"""
+        `Model.dual_of(variable)` — the dual (residual) variable conjugate to a
+        primal `variable` (e.g. `"u_x" -> "f_x"`, `"T" -> "q"`), searched across
+        all sub-models, or `None`. A helper to fill an MPC term's `target_dual`.
         """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, key: typing.Any) -> typing.Any:
@@ -2024,6 +2048,14 @@ def internal_forces_continuum(stresses: ElementField, fespace: FiniteElementSpac
     beams are not covered** — use `internal_forces(model, stresses)` for those.
     """
 
+def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
+    r"""
+    Interpolate a nodal `field` to the Gauss points of `fespace`
+    (`f(ξ_g) = Σ_i f_i N_i(ξ_g)`), turning a per-node `NodeField` into a
+    per-element `ElementField` with the same component names. Cast3M `CHAN`
+    (nodes → Gauss).
+    """
+
 def line_seg2(a: Node, b: Node, n_elems: builtins.int) -> Mesh:
     r"""
     Build a line of `n_elems` SEG2 elements from node `a` to node `b`.
@@ -2288,6 +2320,18 @@ def tan(field: typing.Any) -> typing.Any:
 def tanh(field: typing.Any) -> typing.Any:
     r"""
     Element-wise hyperbolic tangent of a field.
+    """
+
+def thermal_strain(temperature: ElementField, materials: ElementField, fespace: FiniteElementSpace, t_ref: builtins.float) -> ElementField:
+    r"""
+    Thermal (free-dilation) strain `ε_th = α·(T − t_ref)` at the Gauss points of
+    `fespace` — Cast3M `EPTH`. `temperature` is a per-element field carrying
+    `"T"` (e.g. from `interp_to_gauss`); `materials` carries `"alpha"` (supplied
+    via `material_field`). Returns the strain tensor in the same layout as
+    `deformation`, so `deformation(u, fespace) - thermal_strain(...)` is the
+    mechanical strain. Backbone of uncoupled thermomechanics: assemble the
+    thermal load with `internal_forces(model, integrate_behavior(model, ε_th,
+    materials))` and recover `σ = D:(ε − ε_th)`.
     """
 
 def to_poi1(mesh: Mesh) -> Mesh:

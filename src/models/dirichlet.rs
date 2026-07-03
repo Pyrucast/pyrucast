@@ -38,11 +38,12 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::SubElementField;
-use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{ElementType, Mesh, NodeId};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{Constraint, Contribution, SubModelKind};
+use crate::models::{
+    constraint_block_pair, Constraint, ConstraintTerm, Contribution, Relation, SubModelKind,
+};
 use crate::store::read;
 use serde::{Deserialize, Serialize};
 
@@ -188,43 +189,21 @@ impl SubModelKind for Dirichlet {
         _material: Option<&crate::store::Handle<SubElementField>>,
     ) -> Result<Vec<Contribution>> {
         // One C / Cᵀ pair per submesh pair — the user's submeshes are used
-        // directly as row/col supports (no flattening), so the submesh
-        // structure carried through `barycenter` is preserved.
+        // directly as row/col supports (no flattening), so the submesh structure
+        // carried through `barycenter` is preserved. Dirichlet is the single-term
+        // relation with coefficient 1, so it defers to the shared block builder.
         let mut blocks = Vec::with_capacity(self.imposed_mesh.len() * 2);
         for i in 0..self.imposed_mesh.len() {
             let imp_sm = self.imposed_mesh.get(i)?;
             let mult_sm = self.multiplier_mesh.get(i)?;
-            let imposed_nodes: Vec<NodeId> = read(&imp_sm)?.connectivity().to_vec();
-            let multiplier_nodes: Vec<NodeId> = read(&mult_sm)?.connectivity().to_vec();
-
-            // C block: rows = multiplier × imposed_value,
-            //          cols = imposed × imposed_variable.
-            let mut c_block = SubMatrix::new(
-                mult_sm.clone(),
-                imp_sm.clone(),
-                vec![self.imposed_value.clone()],
-                vec![self.imposed_variable.clone()],
-                DofOrdering::NodesThenVars,
-                false,
-            )?;
-            // Cᵀ block: rows = imposed × target_dual, cols = multiplier × multiplier.
-            let mut ct_block = SubMatrix::new(
-                imp_sm.clone(),
-                mult_sm.clone(),
-                vec![self.target_dual.clone()],
-                vec![self.multiplier.clone()],
-                DofOrdering::NodesThenVars,
-                false,
-            )?;
-            assemble_blocks(
-                &imposed_nodes,
-                &multiplier_nodes,
+            let (c_block, ct_block) = constraint_block_pair(
+                &mult_sm,
+                &imp_sm,
                 &self.imposed_variable,
                 &self.target_dual,
                 &self.multiplier,
                 &self.imposed_value,
-                &mut c_block,
-                &mut ct_block,
+                1.0,
             )?;
             blocks.push(c_block);
             blocks.push(ct_block);
@@ -264,6 +243,29 @@ impl Constraint for Dirichlet {
     fn multiplier_mesh(&self) -> &Mesh {
         &self.multiplier_mesh
     }
+
+    /// Dirichlet is a single-term relation `1·u = u_d` per constrained node.
+    fn relations(&self) -> Result<Vec<Relation>> {
+        let mut relations = Vec::with_capacity(self.imposed_mesh.cell_count()?);
+        for i in 0..self.imposed_mesh.len() {
+            let imposed_nodes: Vec<NodeId> =
+                read(&self.imposed_mesh.get(i)?)?.connectivity().to_vec();
+            let multiplier_nodes: Vec<NodeId> =
+                read(&self.multiplier_mesh.get(i)?)?.connectivity().to_vec();
+            for (imp, mult) in imposed_nodes.iter().zip(multiplier_nodes.iter()) {
+                relations.push(Relation {
+                    multiplier_node: *mult,
+                    terms: vec![ConstraintTerm {
+                        node: *imp,
+                        variable: self.imposed_variable.clone(),
+                        target_dual: self.target_dual.clone(),
+                        coefficient: 1.0,
+                    }],
+                });
+            }
+        }
+        Ok(relations)
+    }
 }
 
 /// Clone a mesh by sharing its submeshes — increfs each submesh handle so the
@@ -274,30 +276,4 @@ fn share(mesh: &Mesh) -> Result<Mesh> {
         out.add_sub(sm.clone())?;
     }
     Ok(out)
-}
-
-/// Fill the C and Cᵀ blocks of a Dirichlet sub-model for one submesh pair.
-///
-/// For each `(imposed_node, multiplier_node)` pair (element-for-element):
-/// - **C entry**  into `c_block`  at `(multiplier_node, imposed_value)` ×
-///   `(imposed_node, imposed_variable)` = `1` — the constraint equation;
-/// - **Cᵀ entry** into `ct_block` at `(imposed_node, target_dual)` ×
-///   `(multiplier_node, multiplier)` = `1` — the reaction in the target's
-///   dual row.
-#[allow(clippy::too_many_arguments)]
-pub fn assemble_blocks(
-    imposed_nodes: &[NodeId],
-    multiplier_nodes: &[NodeId],
-    imposed_variable: &str,
-    target_dual: &str,
-    multiplier: &str,
-    imposed_value: &str,
-    c_block: &mut SubMatrix,
-    ct_block: &mut SubMatrix,
-) -> Result<()> {
-    for (imp, mult) in imposed_nodes.iter().zip(multiplier_nodes.iter()) {
-        c_block.add_entry(*mult, imposed_value, *imp, imposed_variable, 1.0)?;
-        ct_block.add_entry(*imp, target_dual, *mult, multiplier, 1.0)?;
-    }
-    Ok(())
 }

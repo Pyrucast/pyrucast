@@ -3,6 +3,7 @@
 use crate::aggregate::Aggregate;
 use crate::containers::model::{Model, SubModel};
 use crate::models::elasticity::ElasticityModel;
+use crate::models::mpc;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::store::{read, Handle};
@@ -249,6 +250,47 @@ impl PyModel {
         Ok(Self { inner })
     }
 
+    /// `Model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None)`
+    /// — multi-point constraint (a single sub-model) imposing, per relation,
+    /// `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
+    ///
+    /// `terms` is a list of `(mesh, variable, target_dual, coefficient)` tuples:
+    /// each `mesh` is a POI1 mesh (one node per relation), paired
+    /// element-for-element with the others and with `multiplier_mesh` (relation
+    /// `r` = cell `r` of every mesh). Find `target_dual` with
+    /// `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
+    /// derived names `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written
+    /// by the user in the load field at the multiplier node's `imposed_value`
+    /// component (default `0`). See the constraints chapter of the book.
+    #[classmethod]
+    #[pyo3(signature = (terms, multiplier_mesh, multiplier=None, imposed_value=None))]
+    fn mpc(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        py: Python<'_>,
+        terms: Vec<(Py<PyMesh>, String, String, f64)>,
+        multiplier_mesh: PyRef<'_, PyMesh>,
+        multiplier: Option<String>,
+        imposed_value: Option<String>,
+    ) -> PyResult<Self> {
+        let mut rust_terms = Vec::with_capacity(terms.len());
+        for (mesh, variable, target_dual, coefficient) in &terms {
+            let mesh = mesh.borrow(py);
+            rust_terms.push(mpc::MpcTerm::new(
+                &mesh.inner,
+                variable.clone(),
+                target_dual.clone(),
+                *coefficient,
+            )?);
+        }
+        let inner = Model::mpc(
+            rust_terms,
+            &multiplier_mesh.inner,
+            multiplier,
+            imposed_value,
+        )?;
+        Ok(Self { inner })
+    }
+
     /// Names of the primal (primary) variables across the whole model.
     fn primal_vars(&self) -> PyResult<Vec<String>> {
         Ok(self.inner.primal_vars()?)
@@ -257,6 +299,13 @@ impl PyModel {
     /// Names of the dual variables across the whole model.
     fn dual_vars(&self) -> PyResult<Vec<String>> {
         Ok(self.inner.dual_vars()?)
+    }
+
+    /// `Model.dual_of(variable)` — the dual (residual) variable conjugate to a
+    /// primal `variable` (e.g. `"u_x" -> "f_x"`, `"T" -> "q"`), searched across
+    /// all sub-models, or `None`. A helper to fill an MPC term's `target_dual`.
+    fn dual_of(&self, variable: &str) -> PyResult<Option<String>> {
+        Ok(self.inner.dual_of(variable)?)
     }
 }
 

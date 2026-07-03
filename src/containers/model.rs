@@ -121,8 +121,8 @@ use crate::containers::mesh::NodeId;
 use crate::error::Result;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
-    dirichlet, elasticity, frame, frame3d, heat_conduction, mazars, plasticity, timoshenko, truss,
-    SubModelKind,
+    dirichlet, elasticity, frame, frame3d, heat_conduction, mazars, mpc, plasticity, timoshenko,
+    truss, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -149,6 +149,9 @@ pub enum SubModel {
     /// Dirichlet constraint via Lagrange multipliers — see
     /// [`dirichlet::Dirichlet`].
     Dirichlet(dirichlet::Dirichlet),
+    /// Multi-point constraint (linear relations) via Lagrange multipliers —
+    /// see [`mpc::Mpc`].
+    Mpc(mpc::Mpc),
     /// Truss / bar (axial-force) element — see [`truss::Truss`].
     Truss(truss::Truss),
     /// Linear elasticity (2-D plane / 3-D solid) — see [`elasticity::Elasticity`].
@@ -174,6 +177,7 @@ impl SubModel {
         match self {
             SubModel::HeatConduction(p) => p,
             SubModel::Dirichlet(p) => p,
+            SubModel::Mpc(p) => p,
             SubModel::Truss(p) => p,
             SubModel::Elasticity(p) => p,
             SubModel::Plasticity(p) => p,
@@ -279,6 +283,39 @@ impl SubModel {
             multiplier,
             imposed_value,
         )?))
+    }
+
+    /// Multi-point constraint sub-model: impose a linear relation
+    /// `Σₖ aₖ·u(nodeₖ, varₖ) = g` per relation, via Lagrange multipliers.
+    ///
+    /// `terms` are the `(mesh, variable, target_dual, coefficient)` terms
+    /// (build them with [`mpc::MpcTerm::new`]); `multiplier_mesh` carries one
+    /// `λ` node per relation. `multiplier` / `imposed_value` default to
+    /// `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written by the user
+    /// in the load field at the multiplier node's `imposed_value` component
+    /// (default `0`). See [`mpc::Mpc::new`].
+    pub fn mpc(
+        terms: Vec<mpc::MpcTerm>,
+        multiplier_mesh: &Mesh,
+        multiplier: Option<String>,
+        imposed_value: Option<String>,
+    ) -> Result<Self> {
+        Ok(SubModel::Mpc(mpc::Mpc::new(
+            terms,
+            multiplier_mesh,
+            multiplier,
+            imposed_value,
+        )?))
+    }
+
+    /// The dual (residual) variable conjugate to a primal `variable`, by the
+    /// positional pairing `primal_vars[i] ↔ dual_vars[i]` this sub-model
+    /// declares, or `None` if it declares no such primal. A helper for the MPC
+    /// mise-en-donnée: `dual_of("u_x") == Some("f_x")`.
+    pub fn dual_of(&self, variable: &str) -> Option<String> {
+        let kind = self.as_kind();
+        let position = kind.primal_vars().iter().position(|p| p == variable)?;
+        kind.dual_vars().get(position).cloned()
     }
 
     /// Multiplier node ids introduced by this sub-model. Non-empty only
@@ -586,6 +623,39 @@ impl Model {
             imposed_value,
         )?))?;
         Ok(model)
+    }
+
+    /// Multi-point constraint `Model` (a single sub-model) imposing a linear
+    /// relation per relation via Lagrange multipliers. Parent-level named
+    /// constructor — see [`SubModel::mpc`] and [`mpc::Mpc::new`] for the
+    /// mesh-per-term layout and the two variable names.
+    pub fn mpc(
+        terms: Vec<mpc::MpcTerm>,
+        multiplier_mesh: &Mesh,
+        multiplier: Option<String>,
+        imposed_value: Option<String>,
+    ) -> Result<Self> {
+        let mut model = Self::empty();
+        model.add_sub(insert(SubModel::mpc(
+            terms,
+            multiplier_mesh,
+            multiplier,
+            imposed_value,
+        )?))?;
+        Ok(model)
+    }
+
+    /// The dual (residual) variable conjugate to a primal `variable`, searched
+    /// across all sub-models (first match), or `None` if no sub-model declares
+    /// it. A helper for the MPC mise-en-donnée: `model.dual_of("ux")` returns the
+    /// dual to pass in an [`mpc::MpcTerm`].
+    pub fn dual_of(&self, variable: &str) -> Result<Option<String>> {
+        for h in self {
+            if let Some(dual) = read(h)?.dual_of(variable) {
+                return Ok(Some(dual));
+            }
+        }
+        Ok(None)
     }
 
     /// Primal variable names — union over all sub-models, first-seen order.

@@ -38,8 +38,12 @@ mute jamais le `Coords`.
 ## Contraintes disponibles
 
 - [Dirichlet](contraintes/dirichlet.md) — impose la valeur d'une variable
-  primale (`T = u_d`, `u_x = 0`, …) sur un ensemble de nœuds.
+  primale (`T = u_d`, `u_x = 0`, …) sur un ensemble de nœuds. C'est la relation
+  **à un seul terme** `1·u = u_d`.
+- [Multi-points (MPC)](contraintes/mpc.md) — impose une relation linéaire
+  **à N termes** `Σₖ aₖ·u(nœudₖ, varₖ) = g` entre plusieurs DOFs (égalité,
+  périodicité, liaison affine…). Généralise Dirichlet.
 
-D'autres contraintes (égalité de DOFs, périodicité, contact linéarisé…)
-suivront le même patron : une struct implémentant `SubModelKind`, deux blocs
-unité par sous-maillage. Voir [Ajouter une physique](ajouter-une-physique.md).
+D'autres contraintes (contact linéarisé…) suivront le même patron : une struct
+implémentant `SubModelKind`, des blocs `C`/`Cᵀ` littéraux. Voir [Ajouter une
+physique](ajouter-une-physique.md).

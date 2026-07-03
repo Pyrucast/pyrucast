@@ -24,5 +24,6 @@ Python**.
 - [Contraintes](contraintes.md) — conditions limites imposées par
   multiplicateurs de Lagrange :
   - [Dirichlet](contraintes/dirichlet.md)
+  - [Multi-points (MPC)](contraintes/mpc.md)
 
 Pour **ajouter** une physique, voir [Ajouter une physique](ajouter-une-physique.md).
