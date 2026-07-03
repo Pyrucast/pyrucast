@@ -83,12 +83,12 @@ pub fn internal_forces_continuum(
         let support = insert(read(&submesh)?.to_poi1()?);
         let dual_vars: Vec<String> = (0..space_dim).map(|a| format!("f_{}", AXES[a])).collect();
         let stress = stresses.sub_for_fespace(sub)?;
-        let sub_nf = kernel::divergence(
+        let stress_guard = read(&stress)?;
+        let sub_nf = kernel::scatter_to_nodes(
             std::slice::from_ref(sub),
             &support,
             dual_vars,
-            &stress,
-            continuum_internal_force_element,
+            |geoms, fe| continuum_internal_force_element(geoms, &stress_guard, fe),
         )?;
         out.add_sub(insert(sub_nf))?;
     }

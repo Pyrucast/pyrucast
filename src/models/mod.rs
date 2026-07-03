@@ -30,7 +30,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::SubNodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::store::{read, Handle};
 
 /// Spatial-axis suffixes for the Voigt stress-component names read by the
 /// continuum-mechanics [`Physics::internal_force_element`] default.
@@ -349,12 +349,12 @@ pub trait Physics: Sync {
                 self.label()
             )));
         };
-        kernel::divergence(
+        let stress_guard = read(stress)?;
+        kernel::scatter_to_nodes(
             &layout.fespaces,
             &layout.support,
             layout.dual_vars,
-            stress,
-            |geoms, s, fe| self.internal_force_element(geoms, s, fe),
+            |geoms, fe| self.internal_force_element(geoms, &stress_guard, fe),
         )
     }
 

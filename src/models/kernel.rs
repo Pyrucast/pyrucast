@@ -26,15 +26,15 @@
 //! order**, so the assembled matrix is bit-for-bit identical to a sequential
 //! run regardless of `RAYON_NUM_THREADS`.
 //!
-//! [`divergence`] (the shared `Bᵀ` nodal scatter behind the internal forces and
-//! [`crate::ops::field::divergence`](fn@crate::ops::field::divergence)) instead
-//! builds each cell's local vector and
-//! scatters it in the **same parallel pass**, by **cell colouring** (colours =
-//! node-disjoint cells): every node accumulates in a fixed colour order, so the
-//! result is reproducible for any `RAYON_NUM_THREADS` — though, summed in colour
-//! order rather than cell order, not bit-for-bit with a sequential run. It shares
-//! the [`crate::parallel::colored_scatter`] mechanism with the distributed flux
-//! load.
+//! [`scatter_to_nodes`] (the shared nodal integrate-and-scatter driver behind the
+//! internal forces, the weak divergence
+//! [`crate::ops::field::divergence`](fn@crate::ops::field::divergence) and the
+//! distributed flux load [`crate::ops::assemble::flux`](fn@crate::ops::assemble::flux))
+//! instead builds each cell's local vector and scatters it in the **same parallel
+//! pass**, by **cell colouring** (colours = node-disjoint cells): every node
+//! accumulates in a fixed colour order, so the result is reproducible for any
+//! `RAYON_NUM_THREADS` — though, summed in colour order rather than cell order, not
+//! bit-for-bit with a sequential run (via [`crate::parallel::colored_scatter`]).
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
@@ -56,7 +56,7 @@ use std::collections::HashMap;
 /// `element_type()` — and serialise all threads on the global store lock).
 /// Shape values, reference derivatives and weights at each Gauss point, plus the
 /// fixed dimensions. Shared read-only across threads.
-pub(crate) struct RefData {
+struct RefData {
     n_nodes: usize,
     n_gauss: usize,
     space_dim: usize,
@@ -70,7 +70,7 @@ pub(crate) struct RefData {
 }
 
 impl RefData {
-    pub(crate) fn snapshot(fe: &SubFiniteElementSpace) -> Result<Self> {
+    fn snapshot(fe: &SubFiniteElementSpace) -> Result<Self> {
         let n_gauss = fe.gauss_count();
         let mut n_ref = Vec::with_capacity(n_gauss);
         let mut dn_ref = Vec::with_capacity(n_gauss);
@@ -117,12 +117,7 @@ pub struct CellGeom<'a> {
 }
 
 impl<'a> CellGeom<'a> {
-    pub(crate) fn new(
-        rd: &'a RefData,
-        coords: &'a Coords,
-        conn: &'a [NodeId],
-        cell: usize,
-    ) -> Result<Self> {
+    fn new(rd: &'a RefData, coords: &'a Coords, conn: &'a [NodeId], cell: usize) -> Result<Self> {
         Ok(Self {
             rd,
             coords,
@@ -550,45 +545,46 @@ pub fn element_block_pattern(
     Ok((nrows, ncols, per_cell))
 }
 
-/// Weak divergence `∫ Bᵀ v dΩ` of a per-element quantity `v`, scattered to a
-/// [`SubNodeField`] — the shared `Bᵀ` nodal driver. It backs both the internal
-/// forces `f = ∫ Bᵀ σ` (Cast3m `BSIG`, `B` = symmetric gradient) and the weak
-/// divergence of a vector field
-/// ([`crate::ops::field::divergence`](fn@crate::ops::field::divergence), `B` =
-/// the plain gradient), which is the scalar case (`n_dual = 1`).
+/// Integrate a per-cell kernel over `fespaces` and **scatter the result to the
+/// nodes** of `support`, in parallel — the shared nodal integrate-and-scatter
+/// driver. It backs the `Bᵀ` operators (internal forces `∫ Bᵀ σ`, Cast3m `BSIG`;
+/// the weak divergence
+/// [`crate::ops::field::divergence`](fn@crate::ops::field::divergence)) and the
+/// distributed flux load `∫ φ N`
+/// ([`crate::ops::assemble::flux`](fn@crate::ops::assemble::flux)) alike.
 ///
-/// `element(geoms, field, fe)` is a pure sequential kernel: for one cell it fills
-/// `fe` — the cell's local vector, **node-major / variable-minor**
+/// `element(geoms, fe)` is a pure sequential kernel: for one cell it fills `fe` —
+/// the cell's local vector, **node-major / variable-minor**
 /// (`fe[li * n_dual + di]`, `di` indexing `dual_vars`) — from the cell geometry
-/// (one [`CellGeom`] per FE subspace of `fespaces`, same order) and `field`
-/// borrowed in place. It never sees rayon, the store, or a lock.
+/// (one [`CellGeom`] per FE subspace of `fespaces`, same order). Its integrand
+/// (a stress field, a flux density, …) is **captured by the closure**, borrowed
+/// in place; the driver itself is agnostic to it. `element` never sees rayon, the
+/// store, or a lock.
 ///
-/// Each cell's vector is built and **scattered in the same parallel pass**,
-/// colour by colour (the primary FE subspace's cached cell colouring): within a
-/// colour the cells touch pairwise-disjoint nodes, so their accumulation into
-/// `support`'s node slots never races, and colours run in sequence. Each node
-/// therefore sums its cells in a fixed colour order — reproducible for any thread
-/// count, though not bit-for-bit with a cell-order sum (see
+/// Each cell's vector is built and **scattered in the same parallel pass**, colour
+/// by colour (the primary FE subspace's cached cell colouring): within a colour
+/// the cells touch pairwise-disjoint nodes, so their accumulation into `support`'s
+/// node slots never races, and colours run in sequence. Each node therefore sums
+/// its cells in a fixed colour order — reproducible for any thread count, though
+/// not bit-for-bit with a cell-order sum (see
 /// [`crate::parallel::colored_scatter`]). The local vector lives on a per-thread
 /// scratch buffer, so the whole element set is never materialised. Returns the
 /// [`SubNodeField`] with one component per `dual_vars` on `support`.
-pub fn divergence(
+pub fn scatter_to_nodes(
     fespaces: &[Handle<SubFiniteElementSpace>],
     support: &Handle<SubMesh>,
     dual_vars: Vec<String>,
-    field: &Handle<SubElementField>,
-    element: impl Fn(&[CellGeom], &SubElementField, &mut [f64]) -> Result<()> + Sync,
+    element: impl Fn(&[CellGeom], &mut [f64]) -> Result<()> + Sync,
 ) -> Result<SubNodeField> {
     let n_dual = dual_vars.len();
     let primary = fespaces
         .first()
-        .ok_or_else(|| PyrucastError::Message("divergence: no FE subspace".into()))?;
+        .ok_or_else(|| PyrucastError::Message("scatter_to_nodes: no FE subspace".into()))?;
     let fe = read(primary)?;
     let submesh = fe.submesh();
     let sm = read(&submesh)?;
     let coords_h = sm.coords();
     let coords = read(&coords_h)?;
-    let field_guard = read(field)?;
 
     // Reference data of every subspace, snapshotted once (they share the submesh
     // ⇒ one connectivity + coords drive every CellGeom; only quadrature differs).
@@ -598,7 +594,7 @@ pub fn divergence(
         let f = read(h)?;
         if !f.submesh().same_slot(&submesh) {
             return Err(PyrucastError::Message(
-                "divergence: all FE subspaces must share one submesh".into(),
+                "scatter_to_nodes: all FE subspaces must share one submesh".into(),
             ));
         }
         rds.push(RefData::snapshot(&f)?);
@@ -609,7 +605,6 @@ pub fn divergence(
     let conn: &[NodeId] = sm.connectivity();
     let rds_ref: &[RefData] = &rds;
     let coords_ref: &Coords = &coords;
-    let field_ref: &SubElementField = &field_guard;
     let fe_len = n_nodes * n_dual;
 
     // Support slots: the unique nodes of `support` and each node's flat base.
@@ -638,11 +633,13 @@ pub fn divergence(
                 .map(|rd| CellGeom::new(rd, coords_ref, conn, cell))
                 .collect::<Result<_>>()?;
             fe_cell.iter_mut().for_each(|v| *v = 0.0);
-            element(&geoms, field_ref, fe_cell)?;
+            element(&geoms, fe_cell)?;
             let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
             for (li, &nid) in ids.iter().enumerate() {
                 let node_slot = *slot_of.get(&nid).ok_or_else(|| {
-                    PyrucastError::Message("divergence: support does not cover a cell node".into())
+                    PyrucastError::Message(
+                        "scatter_to_nodes: support does not cover a cell node".into(),
+                    )
                 })?;
                 let base = node_slot * n_dual;
                 for di in 0..n_dual {

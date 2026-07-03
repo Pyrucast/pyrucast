@@ -66,14 +66,18 @@ Les **scatters nodaux** — les opérateurs `Bᵀ` (`ops::field::divergence` et 
 forces internes `ops::internal_forces`, Cast3m `BSIG`) et la charge répartie
 `ops::assemble::flux` (`∫ φ N`) — dispersent tous de la même façon : chaque
 cellule calcule sa contribution locale, puis l'accumule dans ses nœuds. Ils
-partagent le helper `parallel::colored_scatter` : **même scatter par coloration**
-(couleur = nœuds disjoints, `Vec<AtomicU64>`), le tampon local tenant **par
-thread** — aucun ensemble élémentaire n'est matérialisé, et calcul et scatter se
-font dans la **même passe parallèle** (contrairement à l'assemblage, qui calcule
-d'abord les matrices élémentaires). `internal_forces` *est* une divergence (de la
-contrainte) : les deux passent par le même noyau `kernel::divergence`, dont
-`ops::field::divergence` n'est que le cas scalaire (`n_dual = 1`). Déterministe
-par couleur, non bit-à-bit face à une somme en ordre de cellule.
+passent tous par le **même driver** `kernel::scatter_to_nodes` (« intègre un
+noyau élémentaire et disperse aux nœuds »), qui s'appuie sur le helper
+`parallel::colored_scatter` : **scatter par coloration** (couleur = nœuds
+disjoints, `Vec<AtomicU64>`), le tampon local tenant **par thread** — aucun
+ensemble élémentaire n'est matérialisé, et calcul et scatter se font dans la
+**même passe parallèle** (contrairement à l'assemblage, qui calcule d'abord les
+matrices élémentaires). Le driver est **agnostique à l'intégrande** : l'appelant
+capture le sien (champ de contrainte, densité de flux…) dans la closure
+élémentaire. `internal_forces` *est* une divergence (de la contrainte), et
+`ops::field::divergence` en est le cas scalaire (`n_dual = 1`) ; `flux` en est
+l'instance « masse » pondérée par `N` plutôt que par `∇N`. Déterministe par
+couleur, non bit-à-bit face à une somme en ordre de cellule.
 
 Vérification : la suite de tests passe sous `RAYON_NUM_THREADS=1` puis `=8` ; les
 opérateurs write-once / réduction sont asservis à des valeurs exactes,

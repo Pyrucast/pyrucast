@@ -21,14 +21,10 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::mesh::NodeId;
 use crate::containers::node_field::SubNodeField;
 use crate::error::{PyrucastError, Result};
-use crate::models::kernel::{CellGeom, RefData};
-use crate::ops::assemble::coloring;
-use crate::parallel::{colored_scatter, MIN_PARALLEL_LEN};
+use crate::models::kernel;
 use crate::store::{insert, read, Handle};
-use std::collections::HashMap;
 
 /// Per-Gauss flux density consumed by [`flux`].
 pub enum FluxDensity<'a> {
@@ -48,14 +44,9 @@ pub fn flux(
     density: FluxDensity,
     component: &str,
 ) -> Result<SubNodeField> {
-    let (submesh, n_cells, n_nodes, n_g) = {
+    let (submesh, n_cells, n_g) = {
         let s = read(fespace)?;
-        (
-            s.submesh(),
-            s.cell_count()?,
-            s.nodes_per_cell()?,
-            s.gauss_count(),
-        )
+        (s.submesh(), s.cell_count()?, s.gauss_count())
     };
 
     // Flux density: a bare constant, or the field's single component read once
@@ -83,59 +74,29 @@ pub fn flux(
         }
     };
 
-    // Support: unique nodes of the subspace's submesh (deduped POI1), and the
-    // node → support-slot map. Built with scoped guards **before** the long-lived
-    // ones below: `to_poi1` takes a `Coords` write lock, which a held `coords`
-    // read guard would deadlock.
+    // `f_i = Σ_g φ · N_i · |J| w`, scattered to the nodes: the density is captured
+    // by the element closure (a plain snapshot, borrowed in place) and the shared
+    // driver owns the colour-parallel scatter — this is a mass-like `N`-weighted
+    // instance of the same nodal integrate-and-scatter as the `Bᵀ` operators.
     let support = insert(read(&submesh)?.to_poi1()?);
-    let unique: Vec<NodeId> = read(&support)?.connectivity().to_vec();
-    let slot_of: HashMap<NodeId, usize> = unique.iter().enumerate().map(|(k, &n)| (n, k)).collect();
-
-    // Long-lived guards for the parallel region: reference data snapshotted once,
-    // coords/connectivity borrowed in place (the loop never touches the store).
-    let fe = read(fespace)?;
-    let sm = read(&submesh)?;
-    let coords_h = sm.coords();
-    let coords = read(&coords_h)?;
-    let conn: &[NodeId] = sm.connectivity();
-    let rd = RefData::snapshot(&fe)?;
-
-    // Cell colouring (cached on the FE subspace): within a colour the cells
-    // scatter to pairwise-disjoint nodes.
-    let coloring = fe.coloring(|| coloring::greedy_color(n_cells, n_nodes, conn));
-
-    let rd_ref = &rd;
-    let coords_ref = &coords;
-    let densities_ref = densities.as_deref();
-
-    // f_i += φ · N_i · |J| · w, scattered node-disjoint within each colour.
-    let loads = colored_scatter(
-        unique.len(),
-        coloring,
-        (MIN_PARALLEL_LEN / n_nodes.max(1)).max(1),
-        || (),
-        |cell, _scratch, out| {
-            let geom = CellGeom::new(rd_ref, coords_ref, conn, cell)?;
-            for g in 0..n_g {
+    kernel::scatter_to_nodes(
+        std::slice::from_ref(fespace),
+        &support,
+        vec![component.to_string()],
+        |geoms, fe| {
+            let geom = &geoms[0];
+            let cell = geom.cell;
+            for g in 0..geom.n_gauss {
                 let shape = geom.n_at_g(g)?;
-                let density = densities_ref.map_or(uniform, |d| d[cell][g]);
-                let weight = geom.det_j_w(g)? * density;
-                for i in 0..n_nodes {
-                    let slot = *slot_of.get(&conn[cell * n_nodes + i]).ok_or_else(|| {
-                        PyrucastError::Message("flux: support does not cover a cell node".into())
-                    })?;
-                    out.add(slot, shape[i] * weight);
+                let phi = densities.as_deref().map_or(uniform, |d| d[cell][g]);
+                let w = geom.det_j_w(g)? * phi;
+                for i in 0..geom.n_nodes {
+                    fe[i] += shape[i] * w;
                 }
             }
             Ok(())
         },
-    )?;
-
-    let mut out = SubNodeField::from_poi1(&support, vec![component.to_string()])?;
-    for (k, &nid) in unique.iter().enumerate() {
-        out.set_value(nid, component, loads[k])?;
-    }
-    Ok(out)
+    )
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────
@@ -145,7 +106,7 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, SubMesh};
     use crate::store::insert;
 
     /// Lagrange-1 FE subspace over a fresh SEG2 line of `n` equal elements from

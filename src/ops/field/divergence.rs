@@ -29,7 +29,7 @@ use crate::store::{insert, read, Handle};
 /// docs), as a [`NodeField`] — one zone per input subspace, component `"div"`.
 ///
 /// This is the scalar case of the `Bᵀ` scatter, so it delegates to the shared
-/// driver [`crate::models::kernel::divergence`] (with `B` = the gradient
+/// driver [`crate::models::kernel::scatter_to_nodes`] (with `B` = the gradient
 /// operator): it inherits the driver's colour-parallel, per-thread-scratch
 /// scatter rather than duplicating the loop.
 pub fn divergence(field: &ElementField) -> Result<NodeField> {
@@ -42,15 +42,13 @@ pub fn divergence(field: &ElementField) -> Result<NodeField> {
 
 /// Weak divergence on a single subspace, via the `Bᵀ` driver.
 fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> {
-    let (fespace, submesh, space_dim, n_comps) = {
-        let f = read(field)?;
-        let fespace = f.support();
-        let (submesh, space_dim) = {
-            let s = read(&fespace)?;
-            (s.submesh(), s.space_dim())
-        };
-        (fespace, submesh, space_dim, f.components().len())
+    let f = read(field)?;
+    let fespace = f.support();
+    let (submesh, space_dim) = {
+        let s = read(&fespace)?;
+        (s.submesh(), s.space_dim())
     };
+    let n_comps = f.components().len();
     if n_comps != space_dim {
         return Err(PyrucastError::Message(format!(
             "divergence: the field carries {} component(s) but the FE space is {}-D — \
@@ -59,20 +57,22 @@ fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> 
         )));
     }
 
+    // The field guard is captured by the element closure (borrowed in place) and
+    // held across the parallel scatter.
     let support = insert(read(&submesh)?.to_poi1()?);
-    kernel::divergence(
+    kernel::scatter_to_nodes(
         std::slice::from_ref(&fespace),
         &support,
         vec!["div".to_string()],
-        field,
-        divergence_element,
+        |geoms, fe| divergence_element(geoms, &f, fe),
     )
 }
 
 /// Element kernel of the weak divergence: `fe[i] = Σ_g (∇N_i · F_g) |J| w`, the
 /// single output component `"div"` per node (`n_dual = 1`). It is the transpose
-/// of the gradient, so it plugs into the [`crate::models::kernel::divergence`]
-/// `Bᵀ` driver exactly like a physics' `internal_force_element`.
+/// of the gradient, so it plugs into the
+/// [`crate::models::kernel::scatter_to_nodes`] driver exactly like a physics'
+/// `internal_force_element`.
 fn divergence_element(geoms: &[CellGeom], field: &SubElementField, fe: &mut [f64]) -> Result<()> {
     let geom = &geoms[0];
     let d = geom.space_dim;

@@ -114,8 +114,9 @@ impl Scatter<'_> {
 /// colour, then cell order within the colour — independent of the thread count,
 /// so the result is reproducible for any `RAYON_NUM_THREADS` (see the module
 /// *Determinism* note). It is the shared mechanism behind the `Bᵀ` divergence
-/// ([`crate::models::kernel::divergence`]) and the distributed flux load
-/// ([`crate::ops::assemble::flux`](fn@crate::ops::assemble::flux)). Returns the
+/// ([`crate::models::kernel::scatter_to_nodes`], behind the `Bᵀ` divergence,
+/// the internal forces and the distributed flux load
+/// [`crate::ops::assemble::flux`](fn@crate::ops::assemble::flux)). Returns the
 /// accumulator as plain `f64`.
 pub fn colored_scatter<S>(
     n_slots: usize,
