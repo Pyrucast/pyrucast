@@ -1261,7 +1261,7 @@ impl Matrix {
     /// Columns carry the **primal** variables and rows the **dual** ones
     /// (`K · u = f`), so this maps a *primal* field (e.g. `"T"`, `"u"`) to a
     /// *dual* one (e.g. `"q"`). That is the exact mirror of
-    /// [`crate::ops::solver::solve`], which reads a *dual* right-hand side at the
+    /// [`crate::ops::solver::lu::solve`], which reads a *dual* right-hand side at the
     /// rows and produces a *primal* solution at the columns. Both use
     /// [`NodeField::gather`] / [`NodeField::from_dof_values`] to bridge the
     /// abstract field and the flat DOF vector. Requires

@@ -677,7 +677,7 @@ impl NodeField {
     /// Read the values at `dofs` (`(node, component)` pairs) into a dense
     /// vector, in `dofs` order. Aggregate resolution: the first zone defining a
     /// pair wins. A DOF no zone defines reads as `0.0` — the natural neutral for
-    /// a right-hand side or a multiplied vector (see [`crate::ops::solver::solve`]
+    /// a right-hand side or a multiplied vector (see [`crate::ops::solver::lu::solve`]
     /// and [`Matrix::mul_field`](crate::containers::matrix::Matrix::mul_field)).
     pub fn gather(&self, dofs: &[(NodeId, String)]) -> Result<Vec<f64>> {
         let view = self.view()?;

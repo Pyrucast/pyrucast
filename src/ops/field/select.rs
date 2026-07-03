@@ -1,6 +1,6 @@
 //! Value-range selection — extract, zone by zone, the part of a field's
 //! support whose values fall inside a `[lower, upper]` band (see
-//! [`Band`](super::band::Band), built from `ge` / `gt` / `le` / `lt`).
+//! [`Band`], built from `ge` / `gt` / `le` / `lt`).
 //!
 //! The two entry points mirror the two field flavours and the two kinds
 //! of support they carry:

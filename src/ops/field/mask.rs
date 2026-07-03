@@ -10,7 +10,7 @@
 //! mask(field, ge=0)` zeroes the out-of-band values, component by
 //! component.
 //!
-//! There is **no** AND across components here (that is [`select`]'s job):
+//! There is **no** AND across components here (that is [`select`](super::select)'s job):
 //! each value stands on its own, so the mask is per component.
 //!
 //! # Component filter
@@ -23,7 +23,7 @@
 //!
 //! # Bounds
 //!
-//! The `[lower, upper]` band comes from a shared [`Band`](super::band::Band),
+//! The `[lower, upper]` band comes from a shared [`Band`],
 //! built from the four comparison bounds `ge` / `gt` / `le` / `lt` — each
 //! side open, inclusive, or strict.
 
