@@ -46,7 +46,7 @@ const ALPHA: &str = "alpha";
 /// mechanical strain.
 ///
 /// Runs on the shared parallel driver
-/// [`kernel::integrate_pointwise`](fn@crate::models::kernel::integrate_pointwise),
+/// [`kernel::element_pointwise`](fn@crate::models::kernel::element_pointwise),
 /// like [`crate::ops::behavior::integrate`].
 pub fn thermal_strain(
     temperature: &ElementField,
@@ -86,7 +86,7 @@ pub fn thermal_strain(
             }
         }
 
-        let sf = kernel::integrate_pointwise(
+        let sf = kernel::element_pointwise(
             sub,
             &temp_sub,
             Some(&mat_sub),

@@ -4,9 +4,11 @@
 //! A physics implementation never mentions rayon, the store, or a lock. It
 //! supplies two kinds of **pure, sequential kernels**:
 //!
-//! - a **point kernel** ([`integrate_pointwise`]): the constitutive law at one
-//!   Gauss point — read the deformation (+ `VAR0`) and material there, write the
-//!   flux/stress (+ `VAR1`);
+//! - a **point kernel** at one Gauss point, driven either over an element-field
+//!   input ([`element_pointwise`]) or a nodal-field input ([`nodal_pointwise`]).
+//!   The constitutive law is one such kernel — read the deformation (+ `VAR0`)
+//!   and material, write the flux/stress (+ `VAR1`) — but the same driver also
+//!   powers point maps like the thermal strain;
 //! - an **element kernel** ([`assemble_block`]): the local stiffness matrix of
 //!   one cell from its geometry and material. It receives **one [`CellGeom`] per
 //!   FE subspace** of the block — a single one for a plain volumetric physics, or
@@ -20,7 +22,7 @@
 //!
 //! # Determinism
 //!
-//! [`integrate_pointwise`] writes each output slot exactly once
+//! [`element_pointwise`] writes each output slot exactly once
 //! (`par_chunks_mut` over cells). [`assemble_block`] computes cell-local
 //! matrices in parallel and scatters them into the COO **serially in cell
 //! order**, so the assembled matrix is bit-for-bit identical to a sequential
@@ -195,7 +197,7 @@ impl<'a> CellGeom<'a> {
 /// [`crate::ops::field::thermal_strain`](fn@crate::ops::field::thermal_strain).
 ///
 /// Returns the material-state field (flux/stress + `VAR1`) on `fespace`.
-pub fn integrate_pointwise(
+pub fn element_pointwise(
     fespace: &Handle<SubFiniteElementSpace>,
     input: &Handle<SubElementField>,
     material: Option<&Handle<SubElementField>>,
@@ -241,7 +243,7 @@ pub fn integrate_pointwise(
 
 /// Produce a per-element (Gauss-point) field from a **nodal** field, in parallel.
 ///
-/// The nodal counterpart of [`integrate_pointwise`]: where that reads an
+/// The nodal counterpart of [`element_pointwise`]: where that reads an
 /// element-field `input`, this reads a nodal-field view `field`. `point(geom,
 /// field, g, out)` is a pure sequential kernel: for the cell `geom.cell` at Gauss
 /// point `g`, it reads nodal values (`field.value(id, comp)` for
@@ -249,7 +251,7 @@ pub fn integrate_pointwise(
 /// into `out`. It uses `geom.n_at_g(g)` to interpolate values and/or
 /// `geom.dn_dx(g)` to differentiate them.
 ///
-/// Same guarantees as [`integrate_pointwise`]: reference data snapshotted once,
+/// Same guarantees as [`element_pointwise`]: reference data snapshotted once,
 /// guards held for the whole region (slices borrowed, not copied), each output
 /// slot written exactly once (`par_chunks_mut` over cells) ⇒ **bit-for-bit
 /// deterministic**. Backs the geometric field producers

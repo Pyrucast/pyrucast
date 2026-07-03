@@ -423,7 +423,7 @@ pub trait Domain: Sync {
 
     /// Integrate the constitutive law (Cast3m `COMP`). **Provided**: drives the
     /// point kernel [`integrate_point`](Self::integrate_point) in parallel over
-    /// the behaviour FE subspace via [`kernel::integrate_pointwise`].
+    /// the behaviour FE subspace via [`kernel::element_pointwise`].
     ///
     /// `input` carries, at every `(cell, Gauss)` point, the deformation measure
     /// (the temperature gradient `∇T` for heat conduction, the strain `ε` for
@@ -440,7 +440,7 @@ pub trait Domain: Sync {
     ) -> Result<SubElementField> {
         let fespace = self.behavior_fespace();
         let out_components = self.behavior_output_components()?;
-        kernel::integrate_pointwise(
+        kernel::element_pointwise(
             &fespace,
             input,
             material,
