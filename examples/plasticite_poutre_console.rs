@@ -141,10 +141,7 @@ fn main() -> Result<()> {
     model = model.union(&clamp(&left_nodes, "u_x", "f_x")?)?;
     model = model.union(&clamp(&left_nodes, "u_y", "f_y")?)?;
 
-    let materials = material_field(
-        &model,
-        &[("E", young), ("nu", nu), ("sigma_y", sigma_y)],
-    )?;
+    let materials = material_field(&model, &[("E", young), ("nu", nu), ("sigma_y", sigma_y)])?;
 
     // Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée
     // une fois ; `solve` met la factorisation en cache et la réutilise à chaque
@@ -159,15 +156,17 @@ fn main() -> Result<()> {
         right_edge.add_cell(&[grid[j][nx].id(), grid[j + 1][nx].id()])?;
     }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    let load_unit = NodeField::from_sub(flux(
-        &right_fes.get(0)?,
-        FluxDensity::Uniform(-1.0),
-        "f_y",
-    )?);
+    let load_unit =
+        NodeField::from_sub(flux(&right_fes.get(0)?, FluxDensity::Uniform(-1.0), "f_y")?);
     // Norme de la charge unitaire (pour l'échelle relative du résidu).
     let load_unit_sq: f64 = all_ids
         .iter()
-        .map(|&nid| load_unit.value_opt(nid, "f_y").unwrap_or(None).unwrap_or(0.0))
+        .map(|&nid| {
+            load_unit
+                .value_opt(nid, "f_y")
+                .unwrap_or(None)
+                .unwrap_or(0.0)
+        })
         .map(|v| v * v)
         .sum();
     let load_unit_norm = load_unit_sq.sqrt();
@@ -176,7 +175,10 @@ fn main() -> Result<()> {
     // Déplacement cumulé u (u_x, u_y sur tous les nœuds), initialement nul.
     let u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
     // État plastique VAR0 (nul au premier pas — la loi défaute à zéro).
-    let mut state = ElementField::new(&fes, STATE_COMPONENTS.iter().map(|s| s.to_string()).collect())?;
+    let mut state = ElementField::new(
+        &fes,
+        STATE_COMPONENTS.iter().map(|s| s.to_string()).collect(),
+    )?;
 
     // ── Boucle sur les pas de charge ────────────────────────────────────────
     // Newton modifié (opérateur = K élastique) : convergence linéaire, donc
@@ -236,7 +238,11 @@ fn main() -> Result<()> {
         let (p_max_val, n_plastic) = plastic_diagnostics(&state)?;
         let defl = u.value(tip_id, "u_y")?;
         any_plasticity |= n_plastic > 0;
-        let flag = if converged { "" } else { "  (résidu résiduel)" };
+        let flag = if converged {
+            ""
+        } else {
+            "  (résidu résiduel)"
+        };
         println!(
             "{step:>4} {load_p:>8.3} {iters:>6} {defl:>14.6e} {p_max_val:>14.6e} {n_plastic:>8}{flag}"
         );
@@ -321,7 +327,10 @@ fn build_behavior_input(
 /// de la sortie de comportement convergée — le `VAR0` du pas suivant.
 fn extract_state(out: &ElementField, fes: &FiniteElementSpace) -> Result<ElementField> {
     let out_sub = read(&out.get(0)?)?;
-    let state = ElementField::new(fes, STATE_COMPONENTS.iter().map(|s| s.to_string()).collect())?;
+    let state = ElementField::new(
+        fes,
+        STATE_COMPONENTS.iter().map(|s| s.to_string()).collect(),
+    )?;
     let (n_cells, n_gauss) = (out_sub.cell_count(), out_sub.gauss_count());
     let state_h = state.get(0)?;
     let mut state_sub = write(&state_h)?;

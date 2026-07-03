@@ -45,7 +45,13 @@ import pyrucast
 # Composantes de l'état interne plastique portées d'un pas au suivant (VAR) :
 # déformation plastique 3-D (tenseur, 6) + déformation plastique cumulée `p`.
 STATE_COMPONENTS = [
-    "eps_p_xx", "eps_p_yy", "eps_p_zz", "eps_p_yz", "eps_p_xz", "eps_p_xy", "p",
+    "eps_p_xx",
+    "eps_p_yy",
+    "eps_p_zz",
+    "eps_p_yz",
+    "eps_p_xz",
+    "eps_p_xy",
+    "p",
 ]
 
 
@@ -112,7 +118,9 @@ def main():
         f"Poutre console plastique : {nx}×{ny} QUA4  (L={length}, H={height}), "
         f"E={young}, ν={nu}, σy={sigma_y}"
     )
-    print(f"Chargement : 0 → {p_max_load} en {nsteps} pas (Newton modifié, K élastique)\n")
+    print(
+        f"Chargement : 0 → {p_max_load} en {nsteps} pas (Newton modifié, K élastique)\n"
+    )
 
     # ── Maillage : grille de nœuds (j en hauteur, i en long), cellules QUA4 ──
     c = pyrucast.Coords(2)
@@ -124,9 +132,14 @@ def main():
     cells = mesh.unit()
     for j in range(ny):
         for i in range(nx):
-            cells.add_cell([
-                grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i],
-            ])
+            cells.add_cell(
+                [
+                    grid[j][i],
+                    grid[j][i + 1],
+                    grid[j + 1][i + 1],
+                    grid[j + 1][i],
+                ]
+            )
     fes = pyrucast.FiniteElementSpace(mesh)
 
     # Ensembles de nœuds : bord gauche (encastré), bout (mi-hauteur).
@@ -157,7 +170,7 @@ def main():
     load_unit_norm = sum(load_unit.value(n, "f_y") ** 2 for n in right_nodes) ** 0.5
 
     # ── État de la simulation (persistant entre les pas) ────────────────────
-    u = pyrucast.NodeField(mesh, ["u_x", "u_y"])   # déplacement cumulé, nul au départ
+    u = pyrucast.NodeField(mesh, ["u_x", "u_y"])  # déplacement cumulé, nul au départ
     u_sub = u[0]
     state = pyrucast.ElementField(fes, STATE_COMPONENTS)  # VAR0, nul au premier pas
 
@@ -165,7 +178,9 @@ def main():
     # Newton modifié (opérateur = K élastique) : convergence linéaire, donc lente
     # sur la branche plastique. Plafond d'itérations haut, résidu relatif 1e-6.
     max_newton = 200
-    print(f"{'pas':>4} {'P':>8} {'iter':>6} {'flèche u_y':>14} {'p_max':>14} {'n_plast':>8}")
+    print(
+        f"{'pas':>4} {'P':>8} {'iter':>6} {'flèche u_y':>14} {'p_max':>14} {'n_plast':>8}"
+    )
 
     prev_defl = 0.0
     any_plasticity = False
@@ -183,7 +198,9 @@ def main():
         for _ in range(max_newton):
             # ε(u) → entrée de comportement (ε + VAR0) → σ, VAR1 (COMP).
             strain = pyrucast.deformation(u, fes)
-            out = pyrucast.integrate_behavior(model, _behavior_input(strain, state, fes), materials)
+            out = pyrucast.integrate_behavior(
+                model, _behavior_input(strain, state, fes), materials
+            )
             # Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
             f_int = pyrucast.internal_forces(model, out)
 
@@ -202,7 +219,7 @@ def main():
                     r_sub[node, "f_y"] = ry
                     if i != 0:
                         free_sq += rx * rx + ry * ry
-            res_norm = free_sq ** 0.5
+            res_norm = free_sq**0.5
             last_out = out
 
             if res_norm <= tol:
@@ -225,7 +242,9 @@ def main():
         defl = u.value(tip, "u_y")
         any_plasticity = any_plasticity or n_plastic > 0
         flag = "" if converged else "  (résidu résiduel)"
-        print(f"{step:>4} {load_p:>8.3f} {iters:>6} {defl:>14.6e} {p_max_val:>14.6e} {n_plastic:>8}{flag}")
+        print(
+            f"{step:>4} {load_p:>8.3f} {iters:>6} {defl:>14.6e} {p_max_val:>14.6e} {n_plastic:>8}{flag}"
+        )
 
         # La flèche croît (en valeur absolue, vers le bas) avec la charge.
         assert abs(defl) >= abs(prev_defl) - 1e-9, f"flèche non monotone au pas {step}"
@@ -238,9 +257,13 @@ def main():
             f"P_max={p_max_load} dépasse la première plastification "
             f"(≈{p_first_yield:.2f}) mais aucun point plastique détecté"
         )
-        print(f"\nOK : plastification développée (P_max={p_max_load} > P_élastique≈{p_first_yield:.2f}).")
+        print(
+            f"\nOK : plastification développée (P_max={p_max_load} > P_élastique≈{p_first_yield:.2f})."
+        )
     else:
-        print(f"\nOK : réponse restée élastique (P_max={p_max_load} ≤ ≈{p_first_yield:.2f}).")
+        print(
+            f"\nOK : réponse restée élastique (P_max={p_max_load} ≤ ≈{p_first_yield:.2f})."
+        )
 
 
 if __name__ == "__main__":
