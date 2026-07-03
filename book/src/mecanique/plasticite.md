@@ -82,3 +82,35 @@ p = state[0].value(0, 0, "p")  # déformation plastique cumulée
 Pour réinjecter l'état au pas suivant, on fusionne `eps_p_*` / `p` de `state`
 avec la nouvelle déformation (op [`merge`](../operateurs/champs.md)) avant
 d'appeler de nouveau `integrate_behavior`.
+
+La **boucle de Newton complète** (pas de charge, résidu, résolution, portage de
+l'état) est écrite dans `examples/plasticite_poutre_console.py` — voir la
+section Rust ci-dessous pour son architecture, identique.
+
+## Exemple Rust : poutre console, boucle de Newton complète
+
+`examples/plasticite_poutre_console.rs` déroule un **Newton complet** (et non
+un seul pas) autour des mêmes briques, côté API Rust : une poutre encastrée
+cisaillée au bout, chargée par incréments jusqu'à développer une zone plastique
+à l'encastrement.
+
+L'algorithmie de Newton vit **entièrement dans l'exemple**, pas dans pyrucast :
+la bibliothèque ne fournit que les opérateurs ponctuels — `stiffness` (rigidité
+**élastique**, opérateur d'itération), `deformation` (`ε`), `integrate` (`COMP`,
+retour radial → `σ` + état), `internal_forces` (`BSIG`, `∫ Bᵀσ`) et `solve`
+(LU creux, factorisation en cache). L'exemple assemble lui-même le résidu
+`r = F_ext − F_int`, résout `δu = K⁻¹ r` et porte l'état interne `VAR0 → VAR1`
+d'un pas au suivant. C'est un **Newton modifié** : `K` élastique constant,
+assemblé et factorisé une seule fois.
+
+Étant en Rust pur (aucune dépendance à Python), il sert aussi de banc de
+parallélisme — les boucles chaudes (assemblage, `deformation`, `integrate`,
+`internal_forces`) sont réévaluées à chaque itération :
+
+```text
+RAYON_NUM_THREADS=1 PYRUCAST_NX=200 PYRUCAST_NY=40 \
+    cargo run --release --example plasticite_poutre_console
+```
+
+Variables d'environnement : `PYRUCAST_NX` / `PYRUCAST_NY` (mailles),
+`PYRUCAST_NSTEPS` (pas de charge), `PYRUCAST_PMAX` (charge finale).
