@@ -48,7 +48,7 @@ initialisées à `0.0`. Au niveau agrégat, `components()` renvoie l'**union**
 des composantes des zones (ordre de première apparition).
 
 Les caractéristiques communes à tous les champs (composantes, `min`, `max`,
-arithmétique scalaire et par composante) sont portées par les traits Rust
+`sum`, arithmétique scalaire et par composante) sont portées par les traits Rust
 [`SubField` (niveau zone) et `Field` (niveau agrégat)](field.md) — partagés
 avec [`ElementField`](element-field.md).
 
@@ -135,6 +135,7 @@ print(u.unit())  # SubNodeField: 2 node(s), 2 component(s) [UX, UY]
 u[0][a, "UX"] = 1.5
 print(u.value(a, "UX"))  # 1.5
 print(u.min("UX"), u.max("UX"))  # 0.0 1.5
+print(u.sum("UX"))  # 1.5  — Σ sur les nœuds (résultante d'un champ de forces)
 
 # Composantes par zone (multiphysique) :
 f = pyrucast.NodeField.with_components_per_submesh(two_zone_mesh, [["T"], ["UX", "UY"]])

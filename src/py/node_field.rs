@@ -112,6 +112,14 @@ impl PySubNodeField {
         Ok(SubField::max(&*read(&self.handle)?, component)?)
     }
 
+    /// Sum of the named `component` over the support (Σ over nodes) — the
+    /// resultant of a nodal force field, one component at a time. Empty sums
+    /// to `0.0`.
+    fn sum(&self, component: &str) -> PyResult<f64> {
+        use crate::containers::field::SubField;
+        Ok(SubField::sum(&*read(&self.handle)?, component)?)
+    }
+
     /// Add `scalar` to every value of `component` (in place).
     fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
         write(&self.handle)?.add_to_component(component, scalar)?;
@@ -337,6 +345,13 @@ impl PyNodeField {
     fn max(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::Field;
         Ok(Field::max(&self.inner, component)?)
+    }
+
+    /// Sum of `component` across the zones defining it (Σ over the whole field)
+    /// — the resultant of a nodal force field, one component at a time.
+    fn sum(&self, component: &str) -> PyResult<f64> {
+        use crate::containers::field::Field;
+        Ok(Field::sum(&self.inner, component)?)
     }
 
     /// Visualize this field alone, as a **coloured point cloud** over

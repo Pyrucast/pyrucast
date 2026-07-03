@@ -120,7 +120,9 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::field::deformation, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::beam_deformation, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::divergence, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::integral, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::xty, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::xtx, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::psca, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::abs, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::sqrt, m)?)?;

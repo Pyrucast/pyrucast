@@ -658,3 +658,46 @@ pub fn scatter_to_nodes(
     }
     Ok(out)
 }
+
+/// Parallel **scalar reduction over the cells** of `fespace` — the reduction
+/// counterpart of [`scatter_to_nodes`]. `cell(geom)` returns one cell's scalar
+/// contribution (e.g. `∫_cell f dΩ` by quadrature); the driver sums them over
+/// every cell and returns `Σ_cell cell(geom)`.
+///
+/// The per-cell geometry is the same lock-free [`CellGeom`] (reference data
+/// snapshotted once, coordinates/connectivity borrowed in place), so `cell`
+/// never touches rayon or the store. Its integrand (a nodal field, an element
+/// field, …) is **captured by the closure**.
+///
+/// Determinism: the sum is an adaptive parallel reduction, so — like
+/// [`crate::containers::field::SubField::dot`] and the other value reductions —
+/// floating-point non-associativity makes the total thread-count-dependent to
+/// the last ULP (not bit-for-bit reproducible). Cell-local contributions and the
+/// geometry are identical to a sequential run; only the summation grouping
+/// varies.
+pub fn reduce_cells(
+    fespace: &Handle<SubFiniteElementSpace>,
+    cell: impl Fn(&CellGeom) -> Result<f64> + Sync,
+) -> Result<f64> {
+    let fe = read(fespace)?;
+    let submesh = fe.submesh();
+    let sm = read(&submesh)?;
+    let coords_h = sm.coords();
+    let coords = read(&coords_h)?;
+    let rd = RefData::snapshot(&fe)?;
+
+    let n_cells = fe.cell_count()?;
+    let n_nodes = rd.n_nodes;
+    let conn: &[NodeId] = sm.connectivity();
+    let rd_ref: &RefData = &rd;
+    let coords_ref: &Coords = &coords;
+
+    (0..n_cells)
+        .into_par_iter()
+        .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
+        .map(|c| -> Result<f64> {
+            let geom = CellGeom::new(rd_ref, coords_ref, conn, c)?;
+            cell(&geom)
+        })
+        .try_reduce(|| 0.0, |a, b| Ok(a + b))
+}

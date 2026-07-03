@@ -143,6 +143,65 @@ pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
     Ok(PyNodeField { inner: nf })
 }
 
+/// Integral `∫_Ω f dΩ` of a field over its support, using the finite-element
+/// quadrature — the total of one `component` (e.g. the resultant of a
+/// distributed force **density**).
+///
+/// - `NodeField`: interpolates with the shape functions, `∫ Σ_i f_i N_i dΩ` —
+///   `fespace` is **required**.
+/// - `ElementField`: integrates the Gauss-point values directly,
+///   `Σ_cell Σ_g f·|J|·w` — `fespace` is ignored.
+///
+/// For a field of already-integrated **nodal** forces, the resultant is a plain
+/// sum instead: `field.sum(component)`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (field, component, fespace=None))]
+pub fn integral(
+    field: &Bound<'_, PyAny>,
+    component: &str,
+    fespace: Option<PyRef<PyFiniteElementSpace>>,
+) -> PyResult<f64> {
+    if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
+        let fes = fespace.ok_or_else(|| {
+            PyTypeError::new_err("integral: a NodeField needs a FiniteElementSpace (fespace=...)")
+        })?;
+        return Ok(crate::ops::field::integral(
+            &f.inner, &fes.inner, component,
+        )?);
+    }
+    if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
+        return Ok(crate::ops::field::integral_element(&f.inner, component)?);
+    }
+    Err(PyTypeError::new_err(
+        "integral: expected a NodeField (with fespace=...) or an ElementField",
+    ))
+}
+
+/// Squared Euclidean norm `xᵀx = Σ v²` of a field (Cast3M `XTX`) — the sum of
+/// squares over every value of every zone. Accepts a `NodeField`,
+/// `SubNodeField`, `ElementField` or `SubElementField`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn xtx(x: &Bound<'_, PyAny>) -> PyResult<f64> {
+    use crate::containers::field::{Field, SubField};
+    if let Ok(a) = x.extract::<PyRef<PyNodeField>>() {
+        return Ok(a.inner.xtx()?);
+    }
+    if let Ok(a) = x.extract::<PyRef<PyElementField>>() {
+        return Ok(a.inner.xtx()?);
+    }
+    if let Ok(a) = x.extract::<PyRef<PySubNodeField>>() {
+        return Ok(read(&a.handle)?.xtx());
+    }
+    if let Ok(a) = x.extract::<PyRef<PySubElementField>>() {
+        return Ok(read(&a.handle)?.xtx());
+    }
+    Err(PyTypeError::new_err(
+        "expected a NodeField, SubNodeField, ElementField or SubElementField",
+    ))
+}
+
 /// Select the part of a field's support passing a value band, zone by zone —
 /// a value-range filter returning a `Mesh`.
 ///

@@ -354,6 +354,36 @@ pub trait SubField {
     fn max(&self, component: &str) -> Result<f64> {
         fold_component(self, component, "max", f64::max)
     }
+
+    /// Sum of the named component over the support (`Σ` over nodes / points).
+    ///
+    /// An empty support sums to `0.0`; errors only if the component is unknown.
+    /// Unlike [`SubField::min`] / [`SubField::max`] (exact regardless of order),
+    /// the sum groups adaptively in parallel, so — like [`SubField::dot`] — it is
+    /// thread-count-dependent to the last ULP.
+    fn sum(&self, component: &str) -> Result<f64> {
+        let ci = self
+            .component_index(component)
+            .ok_or_else(|| PyrucastError::Message(format!("unknown component: {}", component)))?;
+        let nc = self.component_count();
+        Ok(self
+            .values()
+            .par_chunks(nc.max(1))
+            .with_min_len((MIN_PARALLEL_LEN / nc.max(1)).max(1))
+            .map(|row| row[ci])
+            .sum())
+    }
+
+    /// Squared Euclidean norm `xᵀx = Σ v²` over **every** value (all components)
+    /// — Cast3M `XTX`, i.e. [`SubField::dot`] of the field with itself. Like
+    /// `dot`, thread-count-dependent to the last ULP.
+    fn xtx(&self) -> f64 {
+        self.values()
+            .par_iter()
+            .with_min_len(MIN_PARALLEL_LEN)
+            .map(|v| v * v)
+            .sum()
+    }
 }
 
 /// Fold `op` over every value of one component of a [`SubField`].
@@ -465,6 +495,44 @@ where
     /// Errors if no sub defines the component.
     fn max(&self, component: &str) -> Result<f64> {
         fold_subs(self, component, "max", f64::max)
+    }
+
+    /// Sum of `component` across the subs defining it (`Σ` over the whole field
+    /// — e.g. the resultant of a nodal force field, one component at a time).
+    ///
+    /// Errors if no sub defines the component; a defining sub with an empty
+    /// support contributes `0.0`. Thread-count-dependent to the last ULP.
+    fn sum(&self, component: &str) -> Result<f64> {
+        let handles: Vec<&Handle<Self::Sub>> = self.iter().collect();
+        let per_sub: Vec<Option<f64>> = handles
+            .par_iter()
+            .map(|h| -> Result<Option<f64>> {
+                let s = read(h)?;
+                if s.component_index(component).is_none() {
+                    Ok(None)
+                } else {
+                    Ok(Some(SubField::sum(&*s, component)?))
+                }
+            })
+            .collect::<Result<_>>()?;
+        let defining: Vec<f64> = per_sub.into_iter().flatten().collect();
+        if defining.is_empty() {
+            return Err(PyrucastError::Message(format!(
+                "sum: no sub-field defines component {}",
+                component
+            )));
+        }
+        Ok(defining.into_iter().sum())
+    }
+
+    /// Squared Euclidean norm `xᵀx = Σ v²` over every value of every zone
+    /// (Cast3M `XTX`). Thread-count-dependent to the last ULP.
+    fn xtx(&self) -> Result<f64> {
+        let mut acc = 0.0;
+        for h in self.iter() {
+            acc += SubField::xtx(&*read(h)?);
+        }
+        Ok(acc)
     }
 
     /// Zero-copy view of the zones, for operators doing many reads
@@ -894,6 +962,38 @@ mod tests {
         assert!(SubField::min(&f, "T").is_err());
     }
 
+    #[test]
+    fn subfield_sum_and_xtx() {
+        let coords = insert(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(coords, ElementType::POI1);
+            sm.add_cell(&[a.id()]).unwrap();
+            sm.add_cell(&[b.id()]).unwrap();
+            insert(sm)
+        };
+        let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
+        f.set(0, 0, 10.0).unwrap();
+        f.set(0, 1, -10.0).unwrap();
+        f.set(1, 0, 20.0).unwrap();
+        f.set(1, 1, -20.0).unwrap();
+        assert_eq!(SubField::sum(&f, "U").unwrap(), 30.0);
+        assert_eq!(SubField::sum(&f, "V").unwrap(), -30.0);
+        // xtx = 10² + (-10)² + 20² + (-20)² = 1000.
+        assert_eq!(SubField::xtx(&f), 1000.0);
+        assert!(SubField::sum(&f, "nope").is_err());
+    }
+
+    #[test]
+    fn subfield_sum_on_empty_support_is_zero() {
+        let coords = insert(Coords::new(1).unwrap());
+        let sm: Handle<SubMesh> = insert(SubMesh::new(coords, ElementType::POI1));
+        let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        assert_eq!(SubField::sum(&f, "T").unwrap(), 0.0);
+        assert_eq!(SubField::xtx(&f), 0.0);
+    }
+
     fn make_two_zone_element_field() -> ElementField {
         let coords = insert(Coords::new(2).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
@@ -947,6 +1047,33 @@ mod tests {
         let ef = make_two_zone_element_field();
         assert!(Field::min(&ef, "missing").is_err());
         assert!(Field::max(&ef, "missing").is_err());
+    }
+
+    #[test]
+    fn field_sum_and_xtx_fold_across_subs() {
+        let ef = make_two_zone_element_field();
+        write(&ef.get(0).unwrap())
+            .unwrap()
+            .set_uniform("k", 3.0)
+            .unwrap();
+        {
+            let mut s = write(&ef.get(1).unwrap()).unwrap();
+            s.set_uniform("k", -2.0).unwrap();
+            s.set_uniform("E", 5.0).unwrap();
+        }
+        // Field-level folds equal the sum of the per-zone reductions (no need to
+        // know the Gauss-point counts).
+        let z0 = SubField::sum(&*read(&ef.get(0).unwrap()).unwrap(), "k").unwrap();
+        let z1 = SubField::sum(&*read(&ef.get(1).unwrap()).unwrap(), "k").unwrap();
+        assert!((Field::sum(&ef, "k").unwrap() - (z0 + z1)).abs() < 1e-12);
+        // E lives on zone 1 only.
+        let e1 = SubField::sum(&*read(&ef.get(1).unwrap()).unwrap(), "E").unwrap();
+        assert!((Field::sum(&ef, "E").unwrap() - e1).abs() < 1e-12);
+        // xtx over the whole field = Σ of the per-zone xtx.
+        let x0 = SubField::xtx(&*read(&ef.get(0).unwrap()).unwrap());
+        let x1 = SubField::xtx(&*read(&ef.get(1).unwrap()).unwrap());
+        assert!((Field::xtx(&ef).unwrap() - (x0 + x1)).abs() < 1e-9);
+        assert!(Field::sum(&ef, "missing").is_err());
     }
 
     // ─── SubField::combine (binary, strict) ──────────────────────────────────

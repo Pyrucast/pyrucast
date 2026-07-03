@@ -84,6 +84,8 @@ Champs - réduction;MINI;Minimum d'un champ;NodeField.min / ElementField.min
 Champs - réduction;MOYE;Moyenne d'un champ;—
 Champs - réduction;PSCA;Produit scalaire nœud par nœud de deux champs (renvoie un champ);psca
 Champs - réduction;XTY;Produit scalaire global de deux champs entiers (renvoie un flottant);xty
+Champs - réduction;INTG;Intègre un champ sur son support (∫ f dΩ, quadrature EF);integral / integral_element
+Champs - réduction;RESU;Résultante (somme) d'un champ de forces nodal;NodeField.sum / ElementField.sum
 Maths - arithmétique;+;Addition;__add__ (champs/scalaires)
 Maths - arithmétique;-;Soustraction;__sub__
 Maths - arithmétique;*;Multiplication;__mul__
@@ -122,7 +124,7 @@ Non-linéaire / transitoire;VARI;Variables internes de la loi de comportement;El
 Non-linéaire / transitoire;NUAG;Interpolation par nuage de points (table -> champ);—
 Non-linéaire / transitoire;MASQ;Masque logique (sélection conditionnelle sur un champ);mask (champ 0/1 par composante ; sucre `>=` `>` `<=` `<`)
 Non-linéaire / transitoire;MULT;Produit matrice-champ (M . u);__matmul__ Matrix x field (partiel)
-Non-linéaire / transitoire;XTX;Produit X transposée par X;—
+Non-linéaire / transitoire;XTX;Produit X transposée par X (norme au carré);xtx
 Champs - manipulation;EXTR;Extrait une information/composante d'un objet ou d'une table;indexation conteneur / composantes
 Champs - manipulation;TIRE;Extrait une ligne/colonne d'une table ou d'un listréel;indexation
 Champs - manipulation;NOID;Numéros (identifiants) des nœuds;Node (numérotation) (partiel)

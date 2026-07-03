@@ -269,6 +269,60 @@ import pyrucast
 norme2 = pyrucast.psca(vitesse, vitesse)  # champ à une composante "psca"
 ```
 
+### `integral(field, component, fespace=None)` → `float`
+
+Intègre un champ sur son support par la **quadrature éléments finis**,
+`∫_Ω f dΩ` — le total d'une composante (p.ex. la **résultante** d'une *densité*
+de force distribuée) :
+
+\\[
+\int_\Omega f \, d\Omega \;=\; \sum_{\text{cell}} \sum_g f(\text{cell}, g)\, |J|_g\, w_g .
+\\]
+
+- sur un **`NodeField`** : les valeurs nodales sont relevées aux points de Gauss
+  par les fonctions de forme, `∫ Σ_i f_i N_i dΩ` — `fespace` est **requis** ;
+- sur un **`ElementField`** : les valeurs (déjà aux points de Gauss) sont
+  intégrées directement — `fespace` est ignoré.
+
+Comme `xty`, la somme flottante dépend du nombre de threads jusqu'au dernier ULP.
+En interne, la réduction parallèle sur les cellules passe par le driver
+`kernel::reduce_cells`.
+
+```python
+import pyrucast
+
+# Résultante d'une densité de force surfacique f_y sur une plaque (via N_i).
+r_y = pyrucast.integral(densite, "f_y", fespace=fes)
+# Mesure du domaine : ∫ 1 dΩ.
+aire = pyrucast.integral(champ_unite, "u", fespace=fes)
+```
+
+### Somme et `xtx`
+
+Pour une **résultante de forces déjà nodales** (sortie de `internal_forces`,
+réactions…), la résultante est une simple **somme par nœud** — exposée comme
+méthode, à côté de `min` / `max` :
+
+| Réduction | Réduit | Résultat |
+|---|---|---|
+| `field.min(comp)` / `field.max(comp)` | une composante | un `float` (exact) |
+| `field.sum(comp)` | une composante (`Σ` nœuds/points) | un `float` |
+| `xtx(field)` | toutes les valeurs au carré (`Σ v²`, `XTX`) | un `float` |
+
+`sum` et `xtx` regroupent la somme en parallèle : dépendantes du nombre de
+threads au dernier ULP (contrairement à `min` / `max`, exactes quel que soit
+l'ordre).
+
+```python
+import pyrucast
+
+# Résultante d'un champ de forces nodales, composante par composante.
+rx = forces.sum("f_x")
+ry = forces.sum("f_y")
+# Norme du résidu au carré, pour un test de convergence.
+r2 = pyrucast.xtx(residu)
+```
+
 ## À venir dans `ops::field`
 
 Le module est conçu pour accueillir d'autres dérivations sur le même patron

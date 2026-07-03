@@ -44,6 +44,7 @@ __all__ = [
     "flux",
     "from_live_nodes",
     "gradient",
+    "integral",
     "integrate_behavior",
     "internal_forces",
     "internal_forces_continuum",
@@ -77,6 +78,7 @@ __all__ = [
     "tanh",
     "to_poi1",
     "volume",
+    "xtx",
     "xty",
 ]
 
@@ -333,6 +335,11 @@ class ElementField:
     def max(self, component: builtins.str) -> builtins.float:
         r"""
         Largest value of `component` across the sub-fields defining it.
+        """
+    def sum(self, component: builtins.str) -> builtins.float:
+        r"""
+        Sum of `component` across the sub-fields defining it (Σ over the whole
+        field). Errors if no zone defines it.
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
@@ -1028,6 +1035,11 @@ class NodeField:
         r"""
         Largest value of `component` across the zones defining it.
         """
+    def sum(self, component: builtins.str) -> builtins.float:
+        r"""
+        Sum of `component` across the zones defining it (Σ over the whole field)
+        — the resultant of a nodal force field, one component at a time.
+        """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None) -> None:
         r"""
         Visualize this field alone, as a **coloured point cloud** over
@@ -1178,6 +1190,11 @@ class SubElementField:
     def max(self, component: builtins.str) -> builtins.float:
         r"""
         Largest value of the named `component`.
+        """
+    def sum(self, component: builtins.str) -> builtins.float:
+        r"""
+        Sum of the named `component` over the support (Σ over the Gauss points).
+        Empty sums to `0.0`.
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
@@ -1706,6 +1723,12 @@ class SubNodeField:
         r"""
         Largest value of the named `component`.
         """
+    def sum(self, component: builtins.str) -> builtins.float:
+        r"""
+        Sum of the named `component` over the support (Σ over nodes) — the
+        resultant of a nodal force field, one component at a time. Empty sums
+        to `0.0`.
+        """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
         Add `scalar` to every value of `component` (in place).
@@ -1934,6 +1957,21 @@ def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     differentiated w.r.t. every spatial axis, giving an `ElementField` with
     one component `grad_<name>_<axis>` per (input component, axis) pair
     (`grad_T_x`, …). Feed the result to `integrate_behavior`.
+    """
+
+def integral(field: typing.Any, component: builtins.str, fespace: typing.Optional[FiniteElementSpace] = None) -> builtins.float:
+    r"""
+    Integral `∫_Ω f dΩ` of a field over its support, using the finite-element
+    quadrature — the total of one `component` (e.g. the resultant of a
+    distributed force **density**).
+    
+    - `NodeField`: interpolates with the shape functions, `∫ Σ_i f_i N_i dΩ` —
+      `fespace` is **required**.
+    - `ElementField`: integrates the Gauss-point values directly,
+      `Σ_cell Σ_g f·|J|·w` — `fespace` is ignored.
+    
+    For a field of already-integrated **nodal** forces, the resultant is a plain
+    sum instead: `field.sum(component)`.
     """
 
 def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField) -> ElementField:
@@ -2263,6 +2301,13 @@ def volume(envelope: Mesh, size: typing.Optional[builtins.float] = None) -> Mesh
     consistently oriented TRI3 surface on a 3-D Coords. The result is a Mesh
     with a single TET4 submesh; boundary nodes are reused. This first version
     targets convex or mildly concave envelopes.
+    """
+
+def xtx(x: typing.Any) -> builtins.float:
+    r"""
+    Squared Euclidean norm `xᵀx = Σ v²` of a field (Cast3M `XTX`) — the sum of
+    squares over every value of every zone. Accepts a `NodeField`,
+    `SubNodeField`, `ElementField` or `SubElementField`.
     """
 
 def xty(x: typing.Any, y: typing.Any) -> builtins.float:

@@ -169,6 +169,7 @@ assert z[0, 2, "nu"] == 0.28
 
 # Stats et arithmétique au niveau agrégat.
 print(mat.min("E"), mat.max("E"))  # 210000000000.0 210000000000.0
+print(mat.sum("E"))  # Σ sur les points de Gauss
 mat.mul_to_component("E", 0.95)  # en place, seulement "E"
 scaled = mat * 1.1  # nouveau champ
 
