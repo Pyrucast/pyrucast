@@ -24,7 +24,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Physics, StiffnessLayout};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -68,7 +68,7 @@ impl Frame3d {
     }
 }
 
-impl Physics for Frame3d {
+impl SubModelKind for Frame3d {
     fn primal_vars(&self) -> Vec<String> {
         PRIMAL.iter().map(|s| s.to_string()).collect()
     }
@@ -77,12 +77,8 @@ impl Physics for Frame3d {
         DUAL.iter().map(|s| s.to_string()).collect()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
-    }
-
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
+    fn as_domain(&self) -> Option<&dyn Domain> {
+        Some(self)
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
@@ -120,6 +116,59 @@ impl Physics for Frame3d {
             "SubModel<Frame3d>\n  primal var(s): u_x, u_y, u_z, r_x, r_y, r_z\n  \
              dual var(s):   f_x, f_y, f_z, m_x, m_y, m_z\n  support: {n} node(s)"
         )
+    }
+}
+
+impl Domain for Frame3d {
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        Some(MATERIAL_COMPONENTS)
+    }
+
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    /// Section forces `N, M_y, M_z, T, V_y, V_z` — the linear law on the
+    /// generalised strains `(eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z)`
+    /// produced by
+    /// [`crate::ops::field::frame_deformation`](fn@crate::ops::field::frame_deformation).
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Ok(vec![
+            "N".into(),
+            "M_y".into(),
+            "M_z".into(),
+            "T".into(),
+            "V_y".into(),
+            "V_z".into(),
+        ])
+    }
+
+    /// `N = E·A·ε`, `M_y = E·I_y·κ_y`, `M_z = E·I_z·κ_z`, `T = G·J·torsion`,
+    /// `V_y = G·A_sy·γ_y`, `V_z = G·A_sz·γ_z` at one Gauss point.
+    fn integrate_point(
+        &self,
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
+        let mat = material.expect("Frame3d declares a material_fespace ⇒ material is supplied");
+        let cell = geom.cell;
+        let v = |c| mat.value(cell, 0, c);
+        let e = v("E")?;
+        let gg = v("G")?;
+        out[0] = e * v("A")? * input.value(cell, g, "eps")?;
+        out[1] = e * v("I_y")? * input.value(cell, g, "kappa_y")?;
+        out[2] = e * v("I_z")? * input.value(cell, g, "kappa_z")?;
+        out[3] = gg * v("J")? * input.value(cell, g, "torsion")?;
+        out[4] = gg * v("A_sy")? * input.value(cell, g, "gamma_y")?;
+        out[5] = gg * v("A_sz")? * input.value(cell, g, "gamma_z")?;
+        Ok(())
     }
 }
 

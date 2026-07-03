@@ -14,7 +14,7 @@ courantes (ajouter une physique, ajouter un élément fini).
 - [Compilation et tests](compilation.md) — installation détaillée, *features*
   Cargo, génération du stub `.pyi`, script « tout-en-un », dépannage.
 - [Ajouter une physique](ajouter-une-physique.md) — le coût en **O(1)
-  fichier** d'une nouvelle variante de `SubModel` / `Physics`.
+  fichier** d'une nouvelle variante de `SubModel` / `SubModelKind`.
 - [Ajouter un élément fini](developper/ajouter-un-element-fini.md) — un nouveau
   `ElementType`, son interpolation et sa quadrature.
 

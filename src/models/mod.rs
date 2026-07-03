@@ -2,22 +2,22 @@
 //! variants.
 //!
 //! Each file here owns the **specifics** of one physics: a struct holding
-//! its supports (FE spaces, materials, node sets) plus an [`impl Physics`]
+//! its supports (FE spaces, materials, node sets) plus an [`impl SubModelKind`]
 //! carrying *all* of its behaviour — variable names, material contract,
 //! local assembly, and rendering. The
 //! [`crate::containers::model::SubModel`] enum exists **only** for storage
 //! and serialization; it dispatches every call through
-//! [`SubModel::as_physics`](crate::containers::model::SubModel::as_physics)
+//! [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind)
 //! so no generic code (the assembler, `Dump`, …) ever needs a per-variant
 //! `match`.
 //!
 //! # Adding a new physics
 //!
-//! 1. add `models/<name>.rs` with a struct + `impl Physics` (and a
+//! 1. add `models/<name>.rs` with a struct + `impl SubModelKind` (and a
 //!    `new(...)` constructor doing any build-time work);
 //! 2. add one variant to [`crate::containers::model::SubModel`];
 //! 3. add one arm to
-//!    [`SubModel::as_physics`](crate::containers::model::SubModel::as_physics);
+//!    [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind);
 //! 4. expose it via `Model::<name>` (Rust) and a `#[classmethod]` (Python).
 //!
 //! Everything else is generic. See the book chapter *« Ajouter une
@@ -32,10 +32,6 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
 
-/// Spatial-axis suffixes for the Voigt stress-component names read by the
-/// continuum-mechanics [`Physics::internal_force_element`] default.
-const VOIGT_AXES: [&str; 3] = ["x", "y", "z"];
-
 pub mod dirichlet;
 pub mod elasticity;
 pub mod frame;
@@ -49,13 +45,17 @@ pub mod truss;
 
 pub use kernel::CellGeom;
 
+/// Axis suffixes used by the continuum-mechanics internal-force kernel to read
+/// Voigt-named stress components (`sigma_xx`, `sigma_xy`, …).
+const VOIGT_AXES: [&str; 3] = ["x", "y", "z"];
+
 /// Structural declaration a volumetric physics gives so the **global**
 /// assembler ([`crate::ops::assemble::stiffness`]) can build its stiffness
 /// contribution as a *computed* [`SubMatrix`] — a recipe, no eagerly
 /// materialised values — and scatter it straight into the global CSR.
 ///
 /// Every field mirrors, one-for-one, what the physics'
-/// [`build_stiffness_blocks`](Physics::build_stiffness_blocks) would pass to
+/// [`build_stiffness_blocks`](SubModelKind::build_stiffness_blocks) would pass to
 /// [`kernel::assemble_block`]. The
 /// literal `build_stiffness_blocks` is **kept** alongside it as the bit-for-bit
 /// equivalence reference. Volumetric blocks are square on a single support, so
@@ -65,7 +65,7 @@ pub struct StiffnessLayout {
     /// single subspace for a plain volumetric physics, or several — sharing one
     /// submesh, differing only by quadrature — for a multi-quadrature element
     /// (a shear-deformable beam, a shell). The primary (index 0) drives the cell
-    /// loop and the DOF numbering; [`element_matrix`](Physics::element_matrix)
+    /// loop and the DOF numbering; [`element_matrix`](SubModelKind::element_matrix)
     /// receives one [`CellGeom`] per subspace, in this order.
     pub fespaces: Vec<Handle<SubFiniteElementSpace>>,
     /// POI1 sub-mesh giving the block's row **and** column node sequence.
@@ -80,48 +80,72 @@ pub struct StiffnessLayout {
     pub symmetric: bool,
 }
 
+/// One stiffness contribution of a sub-model, as handed to the global
+/// assembler ([`crate::ops::assemble::stiffness`]).
+///
+/// A sub-model declares *how* each of its blocks is produced without the
+/// assembler needing to know its concrete type: it just iterates
+/// [`SubModelKind::contributions`] and folds each variant in. This is the seam that
+/// keeps `Dirichlet`, a volumetric physics, and (later) a coupling/contact
+/// sub-model on one uniform path — the discriminant is the variant, not a
+/// per-type `match` in the assembler.
+///
+/// Today two variants suffice; a `Coupling { row_submodel, col_submodel, .. }`
+/// will join them when an inter-sub-model coupling physics lands (the enum is
+/// the extension point — see the *Physics → SubModelKind + Contribution* design
+/// note).
+pub enum Contribution {
+    /// A block integrated on the fly and scattered straight into the global CSR
+    /// (no values materialised): the fast path of every volumetric physics. The
+    /// assembler resolves the material and wraps this
+    /// [`StiffnessLayout`] into a computed [`SubMatrix`].
+    Computed(StiffnessLayout),
+    /// One-or-more blocks whose values the sub-model has already filled in
+    /// (`Dirichlet`'s C / Cᵀ, MPC, …). Scattered by the literal path.
+    Literal(Vec<SubMatrix>),
+}
+
 /// The behaviour contract of one physics, co-located with its data struct.
 ///
 /// Generic code calls these through
-/// [`SubModel::as_physics`](crate::containers::model::SubModel::as_physics);
+/// [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind);
 /// the [`SubModel`](crate::containers::model::SubModel) enum itself carries
 /// no logic. Most methods have sensible defaults so a physics overrides
-/// only what is specific to it (a plain volumetric physics typically
-/// implements just `primal_vars`, `dual_vars`, `material_*`,
-/// `build_stiffness_blocks`, `label` and `render`).
-pub trait Physics: Sync {
+/// only what is specific to it (a plain domain physics typically implements
+/// `primal_vars`, `dual_vars`, `as_domain` + the [`Domain`] capability,
+/// `element_matrix`, `stiffness_layout`, `label` and `render`).
+pub trait SubModelKind: Sync {
     /// Primal variable names introduced by this physics (column labels).
     fn primal_vars(&self) -> Vec<String>;
 
     /// Dual variable names introduced by this physics (row labels).
     fn dual_vars(&self) -> Vec<String>;
 
-    /// Material component names this physics requires, or `None` if it
-    /// needs no material data. Default: `None`.
-    fn material_components(&self) -> Option<&'static [&'static str]> {
+    /// Borrow this sub-model as a [`Domain`] capability, or `None` (default) if
+    /// it is not a domain physics (a constraint such as `Dirichlet`). A domain
+    /// overrides this to return `Some(self)`. This is the seam the assembler,
+    /// the material builders and [`crate::ops::behavior`] use — they never
+    /// assume every sub-model reads material or integrates a behaviour.
+    fn as_domain(&self) -> Option<&dyn Domain> {
         None
     }
 
-    /// FE subspace on which this physics expects its material data, or
-    /// `None` if it needs none. Default: `None`.
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        None
-    }
-
-    /// POI1 mesh carrying this physics's multiplier nodes, for Lagrange
-    /// variants (`Dirichlet`, …). `None` (default) for every physics that
-    /// introduces no multipliers. Borrowed from the physics (the user supplied
-    /// it); generic code clones it when an owned `Mesh` is needed.
-    fn multiplier_mesh(&self) -> Option<&Mesh> {
+    /// Borrow this sub-model as a [`Constraint`] capability, or `None`
+    /// (default) if it imposes no Lagrange constraint (every plain volumetric
+    /// physics). A constraint (`Dirichlet`, later MPC / strong contact)
+    /// overrides this to return `Some(self)`. This is the seam the multiplier
+    /// forwarders on [`SubModel`](crate::containers::model::SubModel) use — they
+    /// never assume every sub-model carries multipliers.
+    fn as_constraint(&self) -> Option<&dyn Constraint> {
         None
     }
 
     /// Local element stiffness matrix of one cell — the pure, sequential kernel
     /// a physics author writes (the stiffness counterpart of
-    /// [`integrate_point`](Self::integrate_point)). Fills `ke` (row-major,
+    /// [`Domain::integrate_point`]). Fills `ke` (row-major,
     /// node-major / variable-minor: `ke[(li*n_dual+di) * n_cols_loc + (lj*n_primal+pj)]`)
     /// from the cell geometry and material. `material` is `Some(_)` iff the
-    /// physics declares a [`material_fespace`](Self::material_fespace).
+    /// physics declares a [`Domain::material_fespace`].
     ///
     /// `geoms` holds one [`CellGeom`] per FE subspace declared in
     /// [`stiffness_layout`](Self::stiffness_layout), in that order: a plain
@@ -144,18 +168,48 @@ pub trait Physics: Sync {
         )))
     }
 
+    /// This sub-model's stiffness contributions, as the global assembler
+    /// consumes them. **Default**: derived from
+    /// [`stiffness_layout`](Self::stiffness_layout) — `Some(layout)` yields a
+    /// single [`Contribution::Computed`] (a volumetric physics, integrated
+    /// straight into the CSR), `None` falls back to a
+    /// [`Contribution::Literal`] built from
+    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks).
+    ///
+    /// A volumetric physics writes only `element_matrix` + `stiffness_layout`
+    /// and takes the default. A sub-model whose blocks are *not* a single
+    /// layout-driven integral (a constraint such as `Dirichlet`, or a future
+    /// coupling/contact sub-model) overrides **this** method to return its
+    /// blocks directly — that override is the extension seam, not a special case
+    /// buried in the assembler.
+    ///
+    /// `material` is `Some(_)` iff [`Domain::material_fespace`] is declared
+    /// (the assembler guarantees it); it is only consulted on the literal path —
+    /// the computed path resolves material itself from the layout.
+    fn contributions(
+        &self,
+        material: Option<&Handle<SubElementField>>,
+    ) -> Result<Vec<Contribution>> {
+        Ok(match self.stiffness_layout() {
+            Some(layout) => vec![Contribution::Computed(layout)],
+            None => vec![Contribution::Literal(
+                self.build_stiffness_blocks(material)?,
+            )],
+        })
+    }
+
     /// Build and fill the stiffness [`SubMatrix`] block(s) of this physics.
-    /// `material` is `Some(_)` iff [`material_fespace`](Self::material_fespace)
-    /// is `Some(_)` (the assembler guarantees it).
+    /// `material` is `Some(_)` iff [`Domain::material_fespace`] is declared
+    /// (the assembler guarantees it).
     ///
     /// **Default**: derived from [`stiffness_layout`](Self::stiffness_layout) —
     /// a single block on that layout, filled by
     /// [`element_matrix`](Self::element_matrix) via [`kernel::assemble_block`].
     /// A plain volumetric physics therefore writes only `element_matrix` +
-    /// `stiffness_layout` and gets this for free. A physics with **no** layout
-    /// (a constraint such as `Dirichlet`, or any multi-block physics) must
-    /// override it. This literal path also serves as the bit-for-bit reference
-    /// of the computed (scatter) path.
+    /// `stiffness_layout` and gets this for free; this literal path serves as
+    /// the bit-for-bit reference of the computed (scatter) path. A sub-model
+    /// with **no** layout does not touch this method — it overrides
+    /// [`contributions`](Self::contributions) instead (see `Dirichlet`).
     fn build_stiffness_blocks(
         &self,
         material: Option<&Handle<SubElementField>>,
@@ -204,114 +258,16 @@ pub trait Physics: Sync {
         Ok(Vec::new())
     }
 
-    /// FE subspace this physics integrates its **constitutive behaviour**
-    /// on, or `None` (default) for a physics that carries no behaviour
-    /// (constraints such as `Dirichlet`).
-    ///
-    /// When `Some(_)`, the physics must implement
-    /// [`integrate_behavior`](Self::integrate_behavior); its deformation
-    /// input is produced geometrically by [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) /
-    /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation), and [`crate::ops::behavior`] uses
-    /// this handle to pair the per-zone deformation field with its
-    /// sub-model. For a plain volumetric physics it is the same FE subspace
-    /// as [`material_fespace`](Self::material_fespace).
-    fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        None
-    }
-
-    /// Integrate the constitutive law point-by-point (Cast3m `COMP` —
-    /// « intégrer le comportement »).
-    ///
-    /// `input` carries, at every `(cell, Gauss)` point, the deformation
-    /// measure (the temperature gradient `∇T` for heat conduction, the
-    /// strain `ε` for elasticity, …) produced by a *geometric* operator —
-    /// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) / [`crate::ops::field::deformation`](fn@crate::ops::field::deformation),
-    /// independent of any model — followed by the input internal-state
-    /// variables (`VAR0`). `material` is `Some(_)` iff this physics declares
-    /// a [`material_fespace`](Self::material_fespace) (the operator
-    /// guarantees it).
-    ///
-    /// Returns the **material-state** field: the dual flux/stress followed
-    /// by the updated internal-state variables (`VAR1`). Where
-    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) is the
-    /// *linearization* of the law, this is its *exact* response: for a
-    /// linear law the two agree (`∫ Bᵀ·flux = K·u`); a non-linear law
-    /// departs from that tangent.
-    ///
-    /// Output component names of the material-state field produced by
-    /// [`integrate_point`](Self::integrate_point) — the dual flux/stress
-    /// followed by the updated internal state (`VAR1`), in order. Implemented by
-    /// every behaviour-bearing physics; default errors.
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Err(PyrucastError::Message(format!(
-            "{}: no behaviour — behavior_output_components is undefined",
-            self.label()
-        )))
-    }
-
-    /// Constitutive law at **one Gauss point** — the pure, sequential kernel a
-    /// physics author writes. For cell `geom.cell` at Gauss point `g`, read the
-    /// deformation (+ `VAR0`) from `input` and the material from `material`
-    /// (both borrowed in place), and write the
-    /// [`behavior_output_components`](Self::behavior_output_components) values
-    /// into `out`. `material` is `Some(_)` iff the physics declares a
-    /// [`material_fespace`](Self::material_fespace).
-    ///
-    /// It **never sees rayon, the store, or a lock**:
-    /// [`integrate_behavior`](Self::integrate_behavior) drives it in parallel
-    /// over all cells. Default errors (a physics with no behaviour).
-    fn integrate_point(
-        &self,
-        _geom: &CellGeom,
-        _input: &SubElementField,
-        _material: Option<&SubElementField>,
-        _g: usize,
-        _out: &mut [f64],
-    ) -> Result<()> {
-        Err(PyrucastError::Message(format!(
-            "{}: no behaviour — integrate_point is undefined",
-            self.label()
-        )))
-    }
-
-    /// Integrate the constitutive law (Cast3m `COMP`). **Provided**: drives the
-    /// point kernel [`integrate_point`](Self::integrate_point) in parallel over
-    /// the behaviour FE subspace via [`kernel::integrate_pointwise`]. A physics
-    /// implements the point kernel +
-    /// [`behavior_output_components`](Self::behavior_output_components), **not**
-    /// this. A physics with no
-    /// behaviour FE subspace falls through to a clear error here.
-    fn integrate_behavior(
-        &self,
-        input: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<SubElementField> {
-        let fespace = self.behavior_fespace().ok_or_else(|| {
-            PyrucastError::Message(format!(
-                "{}: no behaviour — integrate_behavior is undefined",
-                self.label()
-            ))
-        })?;
-        let out_components = self.behavior_output_components()?;
-        kernel::integrate_pointwise(
-            &fespace,
-            input,
-            material,
-            out_components,
-            |geom, inp, mat, g, out| self.integrate_point(geom, inp, mat, g, out),
-        )
-    }
-
     /// Local internal-force vector of one cell — the pure, sequential kernel
     /// that applies `Bᵀ` to the stress (Cast3m `BSIG`). It is the **transpose**
     /// of this physics' deformation operator `B` (the same `B` behind its
     /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation) /
     /// [`crate::ops::field::beam_deformation`](fn@crate::ops::field::beam_deformation)),
-    /// so it mirrors [`integrate_point`](Self::integrate_point)'s producer.
+    /// so it mirrors [`Domain::integrate_point`]'s producer.
     ///
     /// Fills `fe` — the cell's local force vector, node-major / variable-minor
     /// (`fe[li * n_dual + di]`, `di` indexing [`dual_vars`](Self::dual_vars)) —
-    /// from the cell geometry and the `stress` (the [`integrate_point`](Self::integrate_point)
+    /// from the cell geometry and the `stress` (the [`Domain::integrate_point`]
     /// output) borrowed in place. `geoms` holds one [`CellGeom`] per FE subspace
     /// of [`stiffness_layout`](Self::stiffness_layout), in that order.
     ///
@@ -332,7 +288,7 @@ pub trait Physics: Sync {
 
     /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this physics (Cast3m `BSIG`),
     /// scattered to a [`SubNodeField`] on the block's node support. `stress` is
-    /// this physics' [`integrate_behavior`](Self::integrate_behavior) output.
+    /// this physics' [`Domain::integrate_behavior`] output.
     ///
     /// **Provided**: drives [`internal_force_element`](Self::internal_force_element)
     /// in parallel over the FE subspaces of
@@ -371,10 +327,122 @@ pub trait Physics: Sync {
     fn render(&self, opts: &DumpOptions) -> String;
 }
 
+/// A sub-model that imposes a **Lagrange constraint** — an optional capability,
+/// not part of the base [`SubModelKind`] contract. A constraint implements it
+/// *and* returns `Some(self)` from [`SubModelKind::as_constraint`]; a plain
+/// volumetric physics implements neither, so it simply has no multipliers.
+///
+/// This is the seam of the constraint family — `Dirichlet` today, MPC and strong
+/// contact later — and the natural home for the multiplier-driven logic they
+/// share (e.g. the future condensation of the multiplier DOFs).
+pub trait Constraint {
+    /// POI1 mesh carrying this constraint's multiplier nodes. Borrowed from the
+    /// sub-model (the user supplied it); generic code clones it when an owned
+    /// [`Mesh`] is needed.
+    fn multiplier_mesh(&self) -> &Mesh;
+}
+
+/// A **domain** sub-model — an optional capability, not part of the base
+/// [`SubModelKind`] contract. A domain is a physics defined *over a region*: it
+/// reads material data **and** integrates a constitutive law over its cells. A
+/// domain implements this trait *and* returns `Some(self)` from
+/// [`SubModelKind::as_domain`]; a constraint such as `Dirichlet` implements
+/// neither, so its absence of material and behaviour is a compile-time fact, not
+/// a runtime error.
+///
+/// Material and behaviour are **one** capability here, not two: the material
+/// *parametrises* the constitutive law (`σ = D(E,ν):ε`, `M = E·I·κ`, …), so
+/// every domain has both. That includes linear elements whose law is trivial (a
+/// bar's `N = E·A·ε`, a beam's section forces) — the triviality is in the *kernel*
+/// [`integrate_point`](Self::integrate_point), not in whether the capability
+/// exists. This mirrors the *Domaine* row of the sub-model natures.
+///
+/// An implementer writes the material declaration
+/// ([`material_fespace`](Self::material_fespace)), the behaviour kernel
+/// ([`integrate_point`](Self::integrate_point) +
+/// [`behavior_output_components`](Self::behavior_output_components)) and the FE
+/// subspace [`behavior_fespace`](Self::behavior_fespace); the stiffness kernel
+/// [`element_matrix`](SubModelKind::element_matrix) stays on the base trait, and
+/// the parallel driver [`integrate_behavior`](Self::integrate_behavior) is
+/// provided.
+pub trait Domain: Sync {
+    /// FE subspace on which this domain expects its material data.
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace>;
+
+    /// Material component names this domain requires, or `None` if it declares a
+    /// material FE subspace but constrains no particular component. Default:
+    /// `None`.
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        None
+    }
+
+    /// FE subspace this domain integrates its constitutive behaviour on. Its
+    /// deformation input is produced geometrically by
+    /// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) /
+    /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation),
+    /// and [`crate::ops::behavior`] uses this handle to pair the per-zone
+    /// deformation field with its sub-model. Usually the same FE subspace as
+    /// [`material_fespace`](Self::material_fespace).
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace>;
+
+    /// Output component names of the material-state field produced by
+    /// [`integrate_point`](Self::integrate_point) — the dual flux/stress
+    /// followed by the updated internal state (`VAR1`), in order.
+    fn behavior_output_components(&self) -> Result<Vec<String>>;
+
+    /// Constitutive law at **one Gauss point** — the pure, sequential kernel a
+    /// physics author writes. For cell `geom.cell` at Gauss point `g`, read the
+    /// deformation (+ `VAR0`) from `input` and the material from `material`
+    /// (both borrowed in place), and write the
+    /// [`behavior_output_components`](Self::behavior_output_components) values
+    /// into `out`. `material` is `Some(_)` iff the domain declares a
+    /// [`material_fespace`](Self::material_fespace).
+    ///
+    /// It **never sees rayon, the store, or a lock**:
+    /// [`integrate_behavior`](Self::integrate_behavior) drives it in parallel
+    /// over all cells.
+    fn integrate_point(
+        &self,
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()>;
+
+    /// Integrate the constitutive law (Cast3m `COMP`). **Provided**: drives the
+    /// point kernel [`integrate_point`](Self::integrate_point) in parallel over
+    /// the behaviour FE subspace via [`kernel::integrate_pointwise`].
+    ///
+    /// `input` carries, at every `(cell, Gauss)` point, the deformation measure
+    /// (the temperature gradient `∇T` for heat conduction, the strain `ε` for
+    /// elasticity, …) produced by a *geometric* operator, followed by the input
+    /// internal-state variables (`VAR0`). Returns the **material-state** field:
+    /// the dual flux/stress followed by the updated internal-state variables
+    /// (`VAR1`). Where [`SubModelKind::build_stiffness_blocks`] is the *linearization*
+    /// of the law, this is its *exact* response: for a linear law the two agree
+    /// (`∫ Bᵀ·flux = K·u`); a non-linear law departs from that tangent.
+    fn integrate_behavior(
+        &self,
+        input: &Handle<SubElementField>,
+        material: Option<&Handle<SubElementField>>,
+    ) -> Result<SubElementField> {
+        let fespace = self.behavior_fespace();
+        let out_components = self.behavior_output_components()?;
+        kernel::integrate_pointwise(
+            &fespace,
+            input,
+            material,
+            out_components,
+            |geom, inp, mat, g, out| self.integrate_point(geom, inp, mat, g, out),
+        )
+    }
+}
+
 /// Continuum-mechanics internal-force element kernel `f_{i,a} = Σ_g Σ_b
 /// (∂N_i/∂x_b) σ_ab |J| w` — one [`crate::ops::field::divergence`](fn@crate::ops::field::divergence)
 /// per row of the symmetric stress tensor `σ` (read in Voigt naming). Backs both
-/// the [`Physics::internal_force_element`] default (elasticity, Mazars,
+/// the [`SubModelKind::internal_force_element`] default (elasticity, Mazars,
 /// plasticity) and the model-free
 /// [`crate::ops::internal_forces::internal_forces_continuum`] operator. Fills
 /// `fe` node-major / axis-minor (`fe[i * space_dim + a]`).
@@ -406,7 +474,7 @@ pub(crate) fn continuum_internal_force_element(
 /// Read the symmetric `d×d` stress tensor at `(cell, g)` from a Voigt-named
 /// stress field (`sigma_xx`, `sigma_yy`, `sigma_xy`, …), as a flat row-major
 /// matrix `[a * d + b]`. Backs the continuum-mechanics
-/// [`Physics::internal_force_element`] default; reads by component name, so a
+/// [`SubModelKind::internal_force_element`] default; reads by component name, so a
 /// state field carrying extra `VAR1` components (Mazars) is handled transparently.
 fn voigt_stress_matrix(
     stress: &SubElementField,

@@ -11,7 +11,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::{CellGeom, Physics, StiffnessLayout};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -22,7 +22,7 @@ pub const DUAL_VAR: &str = "q";
 /// Required component on the material `SubElementField` (isotropic
 /// conductivity).
 pub const MATERIAL_COMPONENT: &str = "k";
-/// Material contract returned by [`Physics::material_components`].
+/// Material contract returned by [`SubModelKind::material_components`].
 const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
 
 /// Axis suffixes for the vector components of the deformation / flux at a
@@ -31,7 +31,7 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 
 /// Deformation component names (`grad_T_x`, …), one per spatial direction —
 /// the leading components of the behaviour-input field consumed by
-/// [`Physics::integrate_behavior`]. They match what
+/// [`SubModelKind::integrate_behavior`]. They match what
 /// [`crate::ops::field::gradient`] names the gradient of a temperature field
 /// whose component is [`PRIMAL_VAR`].
 fn deformation_components(space_dim: usize) -> Vec<String> {
@@ -76,7 +76,7 @@ impl HeatConduction {
     }
 }
 
-impl Physics for HeatConduction {
+impl SubModelKind for HeatConduction {
     fn primal_vars(&self) -> Vec<String> {
         vec![PRIMAL_VAR.to_string()]
     }
@@ -85,12 +85,8 @@ impl Physics for HeatConduction {
         vec![DUAL_VAR.to_string()]
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
-    }
-
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
+    fn as_domain(&self) -> Option<&dyn Domain> {
+        Some(self)
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
@@ -116,36 +112,6 @@ impl Physics for HeatConduction {
             material.expect("HeatConduction requires a material field"),
             ke,
         )
-    }
-
-    fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
-    }
-
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(flux_components(read(&self.fespace)?.space_dim()))
-    }
-
-    /// Linear constitutive law: weak-form flux = k·∇T at one Gauss point.
-    /// (No internal-state variables — `VAR0`/`VAR1` are empty; a non-linear law
-    /// would read trailing state components of `input` and write updated ones.)
-    fn integrate_point(
-        &self,
-        geom: &CellGeom,
-        input: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
-        out: &mut [f64],
-    ) -> Result<()> {
-        let mat =
-            material.expect("HeatConduction declares a material_fespace ⇒ material is supplied");
-        let (cell, space_dim) = (geom.cell, geom.space_dim);
-        let k = mat.value(cell, g, MATERIAL_COMPONENT)?;
-        let grad_names = deformation_components(space_dim);
-        for a in 0..space_dim {
-            out[a] = k * input.value(cell, g, &grad_names[a])?;
-        }
-        Ok(())
     }
 
     /// Internal nodal fluxes `q_i = ∫ ∇N_i · flux dx` of one cell — `Bᵀ` applied
@@ -188,6 +154,46 @@ impl Physics for HeatConduction {
             "SubModel<HeatConduction>\n  primal var(s): {primal}\n  \
              dual var(s):   {dual}\n  support: {n} node(s)"
         )
+    }
+}
+
+impl Domain for HeatConduction {
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        Some(MATERIAL_COMPONENTS)
+    }
+
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Ok(flux_components(read(&self.fespace)?.space_dim()))
+    }
+
+    /// Linear constitutive law: weak-form flux = k·∇T at one Gauss point.
+    /// (No internal-state variables — `VAR0`/`VAR1` are empty; a non-linear law
+    /// would read trailing state components of `input` and write updated ones.)
+    fn integrate_point(
+        &self,
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
+        let mat =
+            material.expect("HeatConduction declares a material_fespace ⇒ material is supplied");
+        let (cell, space_dim) = (geom.cell, geom.space_dim);
+        let k = mat.value(cell, g, MATERIAL_COMPONENT)?;
+        let grad_names = deformation_components(space_dim);
+        for a in 0..space_dim {
+            out[a] = k * input.value(cell, g, &grad_names[a])?;
+        }
+        Ok(())
     }
 }
 
@@ -245,7 +251,7 @@ mod tests {
     #[test]
     fn behavior_fespace_is_the_physics_fespace() {
         let hc = seg2_hc(1.0);
-        let fe = hc.behavior_fespace().expect("HC has a behaviour");
+        let fe = hc.behavior_fespace();
         assert_eq!(fe.index(), hc.fespace.index());
         assert_eq!(fe.generation(), hc.fespace.generation());
     }

@@ -19,7 +19,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::{CellGeom, Physics, StiffnessLayout};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -79,7 +79,7 @@ impl Truss {
     }
 }
 
-impl Physics for Truss {
+impl SubModelKind for Truss {
     fn primal_vars(&self) -> Vec<String> {
         (0..self.space_dim).map(primal_name).collect()
     }
@@ -88,12 +88,8 @@ impl Physics for Truss {
         (0..self.space_dim).map(dual_name).collect()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
-    }
-
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
+    fn as_domain(&self) -> Option<&dyn Domain> {
+        Some(self)
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
@@ -115,46 +111,6 @@ impl Physics for Truss {
     ) -> Result<()> {
         let geom = &geoms[0];
         element_stiffness(geom, material.expect("Truss requires a material field"), ke)
-    }
-
-    fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
-    }
-
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(vec!["n".to_string()])
-    }
-
-    /// Axial force `N = E·A·ε_axial` at one Gauss point, with `ε_axial = cᵀ ε c`
-    /// and `c` the cell's unit direction cosine (from its node coordinates).
-    fn integrate_point(
-        &self,
-        geom: &CellGeom,
-        input: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
-        out: &mut [f64],
-    ) -> Result<()> {
-        let mat = material.expect("Truss declares a material_fespace ⇒ material is supplied");
-        let (cell, d) = (geom.cell, self.space_dim);
-        let c = cell_cosine(geom, d)?;
-        let strain = strain_names(d);
-        // (i,j) → flat strain-component index (symmetric, i ≤ j).
-        let comp_index = |i: usize, j: usize| -> usize {
-            let (i, j) = if i <= j { (i, j) } else { (j, i) };
-            (0..i).map(|r| d - r).sum::<usize>() + (j - i)
-        };
-        let e = mat.value(cell, 0, "E")?;
-        let a = mat.value(cell, 0, "A")?;
-        let mut eps_axial = 0.0;
-        for i in 0..d {
-            for j in 0..d {
-                let eps_ij = input.value(cell, g, &strain[comp_index(i, j)])?;
-                eps_axial += c[i] * eps_ij * c[j];
-            }
-        }
-        out[0] = e * a * eps_axial;
-        Ok(())
     }
 
     /// Internal forces `f = Bᵀ N` of one bar. `B` projects the nodal
@@ -193,6 +149,56 @@ impl Physics for Truss {
             "SubModel<Truss>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)"
         )
+    }
+}
+
+impl Domain for Truss {
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        Some(MATERIAL_COMPONENTS)
+    }
+
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Ok(vec!["n".to_string()])
+    }
+
+    /// Axial force `N = E·A·ε_axial` at one Gauss point, with `ε_axial = cᵀ ε c`
+    /// and `c` the cell's unit direction cosine (from its node coordinates).
+    fn integrate_point(
+        &self,
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
+        let mat = material.expect("Truss declares a material_fespace ⇒ material is supplied");
+        let (cell, d) = (geom.cell, self.space_dim);
+        let c = cell_cosine(geom, d)?;
+        let strain = strain_names(d);
+        // (i,j) → flat strain-component index (symmetric, i ≤ j).
+        let comp_index = |i: usize, j: usize| -> usize {
+            let (i, j) = if i <= j { (i, j) } else { (j, i) };
+            (0..i).map(|r| d - r).sum::<usize>() + (j - i)
+        };
+        let e = mat.value(cell, 0, "E")?;
+        let a = mat.value(cell, 0, "A")?;
+        let mut eps_axial = 0.0;
+        for i in 0..d {
+            for j in 0..d {
+                let eps_ij = input.value(cell, g, &strain[comp_index(i, j)])?;
+                eps_axial += c[i] * eps_ij * c[j];
+            }
+        }
+        out[0] = e * a * eps_axial;
+        Ok(())
     }
 }
 

@@ -29,7 +29,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Physics, StiffnessLayout};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -88,7 +88,7 @@ impl Timoshenko {
     }
 }
 
-impl Physics for Timoshenko {
+impl SubModelKind for Timoshenko {
     fn primal_vars(&self) -> Vec<String> {
         PRIMAL.iter().map(|s| s.to_string()).collect()
     }
@@ -97,12 +97,8 @@ impl Physics for Timoshenko {
         DUAL.iter().map(|s| s.to_string()).collect()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
-    }
-
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.bending.clone())
+    fn as_domain(&self) -> Option<&dyn Domain> {
+        Some(self)
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
@@ -149,32 +145,6 @@ impl Physics for Timoshenko {
             let bs = [dn[0], -n[0], dn[1], -n[1]];
             accumulate(ke, &bs, gas * shear.det_j_w(g)?);
         }
-        Ok(())
-    }
-
-    fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.bending.clone())
-    }
-
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(vec!["M".to_string(), "V".to_string()])
-    }
-
-    /// Section forces at one Gauss point: `M = E·I·κ`, `V = G·A_s·γ`.
-    fn integrate_point(
-        &self,
-        geom: &CellGeom,
-        input: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
-        out: &mut [f64],
-    ) -> Result<()> {
-        let mat = material.expect("Timoshenko declares a material_fespace ⇒ material is supplied");
-        let cell = geom.cell;
-        let ei = mat.value(cell, 0, "E")? * mat.value(cell, 0, "I")?;
-        let gas = mat.value(cell, 0, "G")? * mat.value(cell, 0, "A_s")?;
-        out[0] = ei * input.value(cell, g, "kappa")?;
-        out[1] = gas * input.value(cell, g, "gamma")?;
         Ok(())
     }
 
@@ -226,6 +196,42 @@ impl Physics for Timoshenko {
             "SubModel<Timoshenko>\n  primal var(s): w, theta\n  dual var(s):   f_w, m_theta\n  \
              support: {n} node(s) (bending: full Gauss, shear: reduced)"
         )
+    }
+}
+
+impl Domain for Timoshenko {
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.bending.clone()
+    }
+
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        Some(MATERIAL_COMPONENTS)
+    }
+
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.bending.clone()
+    }
+
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Ok(vec!["M".to_string(), "V".to_string()])
+    }
+
+    /// Section forces at one Gauss point: `M = E·I·κ`, `V = G·A_s·γ`.
+    fn integrate_point(
+        &self,
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
+        let mat = material.expect("Timoshenko declares a material_fespace ⇒ material is supplied");
+        let cell = geom.cell;
+        let ei = mat.value(cell, 0, "E")? * mat.value(cell, 0, "I")?;
+        let gas = mat.value(cell, 0, "G")? * mat.value(cell, 0, "A_s")?;
+        out[0] = ei * input.value(cell, g, "kappa")?;
+        out[1] = gas * input.value(cell, g, "gamma")?;
+        Ok(())
     }
 }
 

@@ -18,7 +18,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Physics, StiffnessLayout};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -61,7 +61,7 @@ impl Frame {
     }
 }
 
-impl Physics for Frame {
+impl SubModelKind for Frame {
     fn primal_vars(&self) -> Vec<String> {
         PRIMAL.iter().map(|s| s.to_string()).collect()
     }
@@ -70,12 +70,8 @@ impl Physics for Frame {
         DUAL.iter().map(|s| s.to_string()).collect()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
-    }
-
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
+    fn as_domain(&self) -> Option<&dyn Domain> {
+        Some(self)
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
@@ -109,6 +105,48 @@ impl Physics for Frame {
             "SubModel<Frame>\n  primal var(s): u_x, u_y, rz\n  dual var(s):   f_x, f_y, m_z\n  \
              support: {n} node(s)"
         )
+    }
+}
+
+impl Domain for Frame {
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        Some(MATERIAL_COMPONENTS)
+    }
+
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    /// Section forces `N` (axial), `M` (bending), `V` (shear) — the linear law
+    /// on the generalised strains `(eps, kappa, gamma)` produced by
+    /// [`crate::ops::field::frame_deformation`](fn@crate::ops::field::frame_deformation).
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Ok(vec!["N".into(), "M".into(), "V".into()])
+    }
+
+    /// `N = E·A·ε`, `M = E·I·κ`, `V = G·A_s·γ` at one Gauss point, from the
+    /// local section strains `(eps, kappa, gamma)`.
+    fn integrate_point(
+        &self,
+        geom: &CellGeom,
+        input: &SubElementField,
+        material: Option<&SubElementField>,
+        g: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
+        let mat = material.expect("Frame declares a material_fespace ⇒ material is supplied");
+        let cell = geom.cell;
+        let ea = mat.value(cell, 0, "E")? * mat.value(cell, 0, "A")?;
+        let ei = mat.value(cell, 0, "E")? * mat.value(cell, 0, "I")?;
+        let gas = mat.value(cell, 0, "G")? * mat.value(cell, 0, "A_s")?;
+        out[0] = ea * input.value(cell, g, "eps")?;
+        out[1] = ei * input.value(cell, g, "kappa")?;
+        out[2] = gas * input.value(cell, g, "gamma")?;
+        Ok(())
     }
 }
 

@@ -44,7 +44,7 @@ Le nom de la classe Python est identique au nom de la structure Rust.
 | `containers::evolution` | `Evolution` | `pyrucast.Evolution` | [Évolution](evolution.md) |
 
 Quelques types Rust **ne sont pas** exposés en classes Python : ce sont des
-détails d'implémentation (`Physics`, l'énum des physiques sous `SubModel` ;
+détails d'implémentation (`SubModelKind`, l'énum des physiques sous `SubModel` ;
 `DofOrdering`, l'ordonnancement des DOFs d'une `SubMatrix` ; `SubValue`,
 `OutOfRange`, `ValueKind` et `Interpolated`, internes à l'`Evolution` — une
 valeur tabulée se passe directement en scalaire ou en champ, la politique

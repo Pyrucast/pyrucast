@@ -6,7 +6,7 @@
 //! (`FiniteElementSpace`, `SubFiniteElementSpace`). A [`Model`] is an aggregate of
 //! [`SubModel`]s; each [`SubModel`] is one physics instance (a variant of
 //! the enum) that owns its supports and dispatches its behaviour through
-//! the [`Physics`] trait. The Model is a pure orchestrator: it enumerates
+//! the [`SubModelKind`] trait. The Model is a pure orchestrator: it enumerates
 //! the DOFs of its sub-models, dimensions a
 //! [`crate::containers::matrix::Matrix`], and
 //! loops over the sub-models to accumulate the contributions.
@@ -23,12 +23,12 @@
 //! ├── stiffness(model, materials) -> Matrix   # rows: dual × cols: primal
 //! └── mass(model)                 -> Matrix   # same DOF layout, may be empty
 //!
-//! SubModel  (enum : stockage + sérialisation ; dispatch via as_physics())
+//! SubModel  (enum : stockage + sérialisation ; dispatch via as_kind())
 //! ├── HeatConduction(HeatConduction)
 //! ├── Dirichlet(Dirichlet)             # constraint = Lagrange multiplier
 //! └── ...
 //!
-//! Physics  (trait : tout le comportement, co-localisé par physique)
+//! SubModelKind  (trait : tout le comportement, co-localisé par physique)
 //! └── primal_vars / dual_vars / material_* / build_*_blocks / render / ...
 //! ```
 //!
@@ -115,14 +115,14 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::containers::matrix::{AssemblyPattern, SubMatrix};
+use crate::containers::matrix::AssemblyPattern;
 use crate::containers::mesh::Mesh;
 use crate::containers::mesh::NodeId;
 use crate::error::Result;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
     dirichlet, elasticity, frame, frame3d, heat_conduction, mazars, plasticity, timoshenko, truss,
-    Physics,
+    SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -137,11 +137,11 @@ use std::sync::{Arc, OnceLock};
 /// This enum is a **pure storage + dispatch** shell: it derives
 /// `Serialize`/`Deserialize` (so models persist through the `bincode`
 /// backbone), and forwards every behavioural call to the variant's
-/// [`Physics`] implementation through [`SubModel::as_physics`]. All physics
+/// [`SubModelKind`] implementation through [`SubModel::as_kind`]. All physics
 /// logic lives in the per-variant structs under [`crate::models`].
 ///
 /// Adding a physics means adding **one variant here** and **one arm to
-/// [`SubModel::as_physics`]** — no other site in this file changes.
+/// [`SubModel::as_kind`]** — no other site in this file changes.
 #[derive(Serialize, Deserialize)]
 pub enum SubModel {
     /// Linear heat conduction — see [`heat_conduction::HeatConduction`].
@@ -166,11 +166,11 @@ pub enum SubModel {
 }
 
 impl SubModel {
-    /// Borrow the variant as its [`Physics`] behaviour. This is the
+    /// Borrow the variant as its [`SubModelKind`] behaviour. This is the
     /// **only** per-variant `match` in the model layer; every generic
     /// method (variable names, material contract, assembly, rendering)
     /// dispatches through it.
-    pub fn as_physics(&self) -> &dyn Physics {
+    pub fn as_kind(&self) -> &dyn SubModelKind {
         match self {
             SubModel::HeatConduction(p) => p,
             SubModel::Dirichlet(p) => p,
@@ -290,8 +290,8 @@ impl SubModel {
     /// `SubNodeField`.
     pub fn multiplier_nodes(&self) -> Result<Vec<NodeId>> {
         let mut out = Vec::new();
-        if let Some(mesh) = self.as_physics().multiplier_mesh() {
-            for sm in mesh {
+        if let Some(constraint) = self.as_kind().as_constraint() {
+            for sm in constraint.multiplier_mesh() {
                 out.extend(read(sm)?.connectivity().iter().copied());
             }
         }
@@ -306,8 +306,8 @@ impl SubModel {
     /// constrained values.
     pub fn multiplier_mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
-        if let Some(src) = self.as_physics().multiplier_mesh() {
-            for sm in src {
+        if let Some(constraint) = self.as_kind().as_constraint() {
+            for sm in constraint.multiplier_mesh() {
                 mesh.add_sub(sm.clone())?;
             }
         }
@@ -317,36 +317,26 @@ impl SubModel {
     /// FE subspace on which this sub-model expects its material data, or
     /// `None` if this physics doesn't need material data (e.g. `Dirichlet`).
     pub fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        self.as_physics().material_fespace()
+        self.as_kind().as_domain().map(|d| d.material_fespace())
     }
 
     /// Material component names this sub-model expects, or `None` if it
     /// doesn't need material data. Thin pass-through of
-    /// [`Physics::material_components`].
+    /// [`Domain::material_components`](crate::models::Domain::material_components).
     pub fn material_components(&self) -> Option<&'static [&'static str]> {
-        self.as_physics().material_components()
+        self.as_kind()
+            .as_domain()
+            .and_then(|d| d.material_components())
     }
 
     /// Primal variable names introduced by this sub-model.
     pub fn primal_vars(&self) -> Vec<String> {
-        self.as_physics().primal_vars()
+        self.as_kind().primal_vars()
     }
 
     /// Dual variable names introduced by this sub-model.
     pub fn dual_vars(&self) -> Vec<String> {
-        self.as_physics().dual_vars()
-    }
-
-    /// Build and fill the stiffness [`SubMatrix`] block(s) for this
-    /// sub-model. Pure dispatch to the physics's
-    /// [`Physics::build_stiffness_blocks`]; the caller
-    /// ([`crate::ops::assemble::stiffness`]) supplies `material` iff the
-    /// physics declares a [`material_fespace`](Self::material_fespace).
-    pub(crate) fn build_stiffness_blocks(
-        &self,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<Vec<SubMatrix>> {
-        self.as_physics().build_stiffness_blocks(material)
+        self.as_kind().dual_vars()
     }
 
     /// Whether this sub-model carries a constitutive behaviour that can be
@@ -354,7 +344,7 @@ impl SubModel {
     /// deformation field. `true` for volumetric physics, `false` for
     /// constraints (`Dirichlet`).
     pub fn has_behavior(&self) -> bool {
-        self.as_physics().behavior_fespace().is_some()
+        self.as_kind().as_domain().is_some()
     }
 
     /// FE subspace this sub-model integrates its behaviour on, or `None`
@@ -362,7 +352,7 @@ impl SubModel {
     /// [`crate::ops::behavior`] use it to pair the per-zone deformation
     /// field with its sub-model.
     pub fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        self.as_physics().behavior_fespace()
+        self.as_kind().as_domain().map(|d| d.behavior_fespace())
     }
 
     /// Integrate this sub-model's constitutive law (Cast3m `COMP`). The
@@ -374,7 +364,15 @@ impl SubModel {
         input: &Handle<SubElementField>,
         material: Option<&Handle<SubElementField>>,
     ) -> Result<SubElementField> {
-        self.as_physics().integrate_behavior(input, material)
+        self.as_kind()
+            .as_domain()
+            .ok_or_else(|| {
+                crate::error::PyrucastError::Message(format!(
+                    "{}: no behaviour — integrate_behavior is undefined",
+                    self.as_kind().label()
+                ))
+            })?
+            .integrate_behavior(input, material)
     }
 
     /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this sub-model (Cast3m `BSIG`).
@@ -385,27 +383,27 @@ impl SubModel {
         &self,
         stress: &Handle<SubElementField>,
     ) -> Result<crate::containers::node_field::SubNodeField> {
-        self.as_physics().build_internal_forces(stress)
+        self.as_kind().build_internal_forces(stress)
     }
 }
 
 impl fmt::Debug for SubModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SubModel")
-            .field("physics", &self.as_physics().label())
+            .field("physics", &self.as_kind().label())
             .finish()
     }
 }
 
 impl fmt::Display for SubModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_physics().display())
+        write!(f, "{}", self.as_kind().display())
     }
 }
 
 impl crate::dump::Dump for SubModel {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
-        self.as_physics().render(opts)
+        self.as_kind().render(opts)
     }
 }
 

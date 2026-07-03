@@ -81,7 +81,7 @@ mod tests {
     use crate::containers::model::SubModel;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::ops::build::{material_field, material_field_per_sub_model};
-    use crate::ops::field::gradient;
+    use crate::ops::field::{frame_deformation, gradient};
 
     /// SEG2 of length `L`, HeatConduction model (+ optional Dirichlet on the
     /// left node), and the linear nodal solution `T(a)=0, T(b)=dt`. Returns
@@ -197,6 +197,60 @@ mod tests {
         {
             let s = read(&state.get(1).unwrap()).unwrap();
             assert!((s.value(0, 0, "flux_x").unwrap() - 4.0).abs() < 1e-12);
+        }
+    }
+
+    /// Full chain `frame_deformation → integrate` for a 2-D `Frame`: a known
+    /// displacement/rotation state on a horizontal element (local = global)
+    /// gives the hand-computed section forces `N = E·A·ε`, `M = E·I·κ`,
+    /// `V = G·A_s·γ`.
+    #[test]
+    fn integrate_returns_frame_section_forces() {
+        let l = 2.0;
+        let (e, area, i, g, a_s) = (3.0, 4.0, 2.0, 5.0, 2.0);
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[l, 0.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+        mesh.add_cell(&[a.id(), b.id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+
+        let mut model = Model::empty();
+        model
+            .add_sub(insert(SubModel::frame(fes.get(0).unwrap()).unwrap()))
+            .unwrap();
+
+        // Kinematics: u_x = 0.5·x ⇒ ε = 0.5; rz = 0.25·x ⇒ κ = 0.25;
+        // u_y = 0, so γ = w'/L − θ_centre = 0 − (0 + 0.5)/2 = −0.25.
+        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
+        let mut sol =
+            SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into(), "rz".into()])
+                .unwrap();
+        sol.set_value(a.id(), "u_x", 0.0).unwrap();
+        sol.set_value(b.id(), "u_x", 0.5 * l).unwrap();
+        sol.set_value(a.id(), "rz", 0.0).unwrap();
+        sol.set_value(b.id(), "rz", 0.25 * l).unwrap();
+        let sol = NodeField::from_sub(sol);
+
+        let def = frame_deformation(&sol, &fes).unwrap();
+        let materials = material_field(
+            &model,
+            &[("E", e), ("A", area), ("I", i), ("G", g), ("A_s", a_s)],
+        )
+        .unwrap();
+
+        let state = integrate(&model, &def, &materials).unwrap();
+        assert_eq!(state.len(), 1);
+        let s = read(&state.get(0).unwrap()).unwrap();
+        assert_eq!(
+            s.components(),
+            &["N".to_string(), "M".to_string(), "V".to_string()]
+        );
+        for gp in 0..s.gauss_count() {
+            assert!((s.value(0, gp, "N").unwrap() - e * area * 0.5).abs() < 1e-12); // 6.0
+            assert!((s.value(0, gp, "M").unwrap() - e * i * 0.25).abs() < 1e-12); // 1.5
+            assert!((s.value(0, gp, "V").unwrap() - g * a_s * (-0.25)).abs() < 1e-12);
+            // −2.5
         }
     }
 }

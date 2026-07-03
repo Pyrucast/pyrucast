@@ -26,7 +26,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::{CellGeom, Physics, StiffnessLayout};
+use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -120,7 +120,7 @@ impl Plasticity {
     }
 }
 
-impl Physics for Plasticity {
+impl SubModelKind for Plasticity {
     fn primal_vars(&self) -> Vec<String> {
         (0..self.space_dim).map(primal_name).collect()
     }
@@ -129,12 +129,8 @@ impl Physics for Plasticity {
         (0..self.space_dim).map(dual_name).collect()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
-    }
-
-    fn material_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
+    fn as_domain(&self) -> Option<&dyn Domain> {
+        Some(self)
     }
 
     fn stiffness_layout(&self) -> Option<StiffnessLayout> {
@@ -162,8 +158,33 @@ impl Physics for Plasticity {
         elasticity::element_stiffness(geom, mat, self.model, ke)
     }
 
-    fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        Some(self.fespace.clone())
+    fn label(&self) -> &'static str {
+        "Plasticity"
+    }
+
+    fn render(&self, _opts: &DumpOptions) -> String {
+        let primal = self.primal_vars().join(", ");
+        let dual = self.dual_vars().join(", ");
+        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        format!(
+            "SubModel<Plasticity({:?})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
+             support: {n} node(s)",
+            self.model
+        )
+    }
+}
+
+impl Domain for Plasticity {
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn material_components(&self) -> Option<&'static [&'static str]> {
+        Some(MATERIAL_COMPONENTS)
+    }
+
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
@@ -204,21 +225,6 @@ impl Physics for Plasticity {
         out[v..v + 6].copy_from_slice(&eps_p_new);
         out[v + 6] = p_new;
         Ok(())
-    }
-
-    fn label(&self) -> &'static str {
-        "Plasticity"
-    }
-
-    fn render(&self, _opts: &DumpOptions) -> String {
-        let primal = self.primal_vars().join(", ");
-        let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
-        format!(
-            "SubModel<Plasticity({:?})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
-             support: {n} node(s)",
-            self.model
-        )
     }
 }
 

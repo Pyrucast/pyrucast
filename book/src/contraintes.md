@@ -41,5 +41,5 @@ mute jamais le `Coords`.
   primale (`T = u_d`, `u_x = 0`, …) sur un ensemble de nœuds.
 
 D'autres contraintes (égalité de DOFs, périodicité, contact linéarisé…)
-suivront le même patron : une struct implémentant `Physics`, deux blocs
+suivront le même patron : une struct implémentant `SubModelKind`, deux blocs
 unité par sous-maillage. Voir [Ajouter une physique](ajouter-une-physique.md).

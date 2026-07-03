@@ -26,8 +26,9 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
 use crate::containers::matrix::{ComputedRecipe, Matrix, SubMatrix};
-use crate::containers::model::Model;
+use crate::containers::model::{Model, SubModel};
 use crate::error::{PyrucastError, Result};
+use crate::models::Contribution;
 use crate::store::{insert, read, Handle};
 
 pub mod coloring;
@@ -48,13 +49,14 @@ pub use flux::{flux, FluxDensity};
 pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     let mut k = Matrix::empty();
 
-    // Pass 1 — add every block. A volumetric physics declares a
-    // [`StiffnessLayout`](crate::models::StiffnessLayout) ⇒ one **computed**
-    // block (a recipe, no values). Everything else (Dirichlet, any multi-block
-    // physics) stays **literal** via `build_stiffness_blocks`.
+    // Pass 1 — add every block. Each sub-model declares its
+    // [`Contribution`](crate::models::Contribution)s; the assembler folds them
+    // in without a per-type `match`. A `Computed` contribution (volumetric
+    // physics) becomes a recipe-carrying block scattered straight into the CSR;
+    // a `Literal` one (Dirichlet, any multi-block physics) carries its values.
     for sub_h in model {
-        // Build the block(s) under a read guard, then drop it before `add_sub`
-        // (which takes the store write lock).
+        // Build the contribution(s) under a read guard, then drop it before
+        // `add_sub` (which takes the store write lock).
         let built = {
             let sub = read(sub_h)?;
             // Generic over the physics: a sub-model needs material data iff it
@@ -69,35 +71,14 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
                 }
                 None => None,
             };
-            match sub.as_physics().stiffness_layout() {
-                Some(layout) => {
-                    let recipe = ComputedRecipe {
-                        submodel: sub_h.clone(),
-                        fespaces: layout.fespaces,
-                        material,
-                    };
-                    BuiltBlocks::Computed(Box::new(SubMatrix::computed(
-                        layout.support.clone(),
-                        layout.support,
-                        layout.dual_vars,
-                        layout.primal_vars,
-                        layout.ordering,
-                        layout.symmetric,
-                        recipe,
-                    )?))
-                }
-                None => BuiltBlocks::Literal(sub.build_stiffness_blocks(material.as_ref())?),
+            let mut blocks = Vec::new();
+            for c in sub.as_kind().contributions(material.as_ref())? {
+                blocks.extend(build_contribution(c, sub_h, material.clone())?);
             }
+            blocks
         };
-        match built {
-            BuiltBlocks::Computed(block) => {
-                k.add_sub(insert(*block))?;
-            }
-            BuiltBlocks::Literal(blocks) => {
-                for block in blocks {
-                    k.add_sub(insert(block))?;
-                }
-            }
+        for block in built {
+            k.add_sub(insert(block))?;
         }
     }
 
@@ -140,15 +121,35 @@ pub fn assemble(k: &mut Matrix) -> Result<()> {
     Ok(())
 }
 
-/// One sub-model's stiffness contribution: either a single **computed** block
-/// (volumetric physics, scattered straight into the global CSR) or one-or-more
-/// **literal** blocks (Dirichlet, …). Lets pass 1 build the blocks under a read
-/// guard and insert them after the guard is dropped.
-enum BuiltBlocks {
-    // Boxed: a `SubMatrix` is large, and the two variants would otherwise differ
-    // wildly in size (`clippy::large_enum_variant`).
-    Computed(Box<SubMatrix>),
-    Literal(Vec<SubMatrix>),
+/// Turn one [`Contribution`] into a [`SubMatrix`] block ready to add to the
+/// aggregate. A `Computed` contribution is wrapped into a recipe-carrying block
+/// (material resolved by the assembler, sub-model handle threaded in); a
+/// `Literal` one is passed through as-is. Yields a `Vec` because a single
+/// literal contribution may carry several blocks (Dirichlet's C / Cᵀ).
+fn build_contribution(
+    contribution: Contribution,
+    sub_h: &Handle<SubModel>,
+    material: Option<Handle<SubElementField>>,
+) -> Result<Vec<SubMatrix>> {
+    Ok(match contribution {
+        Contribution::Computed(layout) => {
+            let recipe = ComputedRecipe {
+                submodel: sub_h.clone(),
+                fespaces: layout.fespaces,
+                material,
+            };
+            vec![SubMatrix::computed(
+                layout.support.clone(),
+                layout.support,
+                layout.dual_vars,
+                layout.primal_vars,
+                layout.ordering,
+                layout.symmetric,
+                recipe,
+            )?]
+        }
+        Contribution::Literal(blocks) => blocks,
+    })
 }
 
 /// Assemble the mass matrix `M` for `model`.
@@ -187,13 +188,17 @@ mod tests {
     use super::*;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
-    use crate::containers::model::SubModel;
     use crate::ops::build::material_field_per_sub_model;
 
     /// Assemble the stiffness the **literal** way: every sub-model fills its
-    /// `SubMatrix` blocks eagerly (`build_stiffness_blocks`) and `finalize`
-    /// scatters them. This is the historical path the computed path must match
-    /// bit-for-bit — kept here purely as the equivalence reference.
+    /// `SubMatrix` blocks eagerly and `finalize` scatters them. This is the
+    /// historical path the computed path must match bit-for-bit — kept here
+    /// purely as the equivalence reference.
+    ///
+    /// It reuses the [`Contribution`] seam so it stays honest: a `Literal`
+    /// contribution (Dirichlet's C / Cᵀ) is taken as-is, while a `Computed` one
+    /// is materialised through its physics' `build_stiffness_blocks` — the very
+    /// literal kernel the scatter path is being checked against.
     fn assemble_literal_reference(model: &Model, materials: &ElementField) -> Result<Matrix> {
         let mut k = Matrix::empty();
         for sub_h in model {
@@ -203,7 +208,17 @@ mod tests {
                     Some(fespace) => Some(materials.sub_for_fespace(&fespace)?),
                     None => None,
                 };
-                sub.build_stiffness_blocks(material.as_ref())?
+                let kind = sub.as_kind();
+                let mut blocks = Vec::new();
+                for c in kind.contributions(material.as_ref())? {
+                    match c {
+                        Contribution::Computed(_) => {
+                            blocks.extend(kind.build_stiffness_blocks(material.as_ref())?);
+                        }
+                        Contribution::Literal(bs) => blocks.extend(bs),
+                    }
+                }
+                blocks
             };
             for block in blocks {
                 k.add_sub(insert(block))?;
@@ -339,37 +354,14 @@ mod tests {
                 let material = sub
                     .material_fespace()
                     .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
-                match sub.as_physics().stiffness_layout() {
-                    Some(layout) => BuiltBlocks::Computed(Box::new(
-                        SubMatrix::computed(
-                            layout.support.clone(),
-                            layout.support,
-                            layout.dual_vars,
-                            layout.primal_vars,
-                            layout.ordering,
-                            layout.symmetric,
-                            ComputedRecipe {
-                                submodel: sub_h.clone(),
-                                fespaces: layout.fespaces,
-                                material,
-                            },
-                        )
-                        .unwrap(),
-                    )),
-                    None => {
-                        BuiltBlocks::Literal(sub.build_stiffness_blocks(material.as_ref()).unwrap())
-                    }
+                let mut blocks = Vec::new();
+                for c in sub.as_kind().contributions(material.as_ref()).unwrap() {
+                    blocks.extend(build_contribution(c, sub_h, material.clone()).unwrap());
                 }
+                blocks
             };
-            match built {
-                BuiltBlocks::Computed(b) => {
-                    k.add_sub(insert(*b)).unwrap();
-                }
-                BuiltBlocks::Literal(bs) => {
-                    for b in bs {
-                        k.add_sub(insert(b)).unwrap();
-                    }
-                }
+            for b in built {
+                k.add_sub(insert(b)).unwrap();
             }
         }
         k
@@ -559,7 +551,7 @@ mod tests {
                 let material = sub
                     .material_fespace()
                     .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
-                sub.as_physics().stiffness_layout().map(|layout| {
+                sub.as_kind().stiffness_layout().map(|layout| {
                     SubMatrix::computed(
                         layout.support.clone(),
                         layout.support,

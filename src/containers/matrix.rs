@@ -149,7 +149,7 @@ impl crate::dump::Dump for DofOrdering {
 /// Columns are symmetric with `col_nodes` and `primal_vars`.
 /// The recipe a **computed** [`SubMatrix`] carries *instead of* stored values:
 /// how to evaluate its contribution on the fly. The global assembler drives the
-/// sub-model's [`element_matrix`](crate::models::Physics::element_matrix) kernel
+/// sub-model's [`element_matrix`](crate::models::SubModelKind::element_matrix) kernel
 /// over `fespace`'s cells and scatters the result straight into the global
 /// matrix — a computed block never materialises a COO (its own `coo` stays an
 /// empty, correctly-sized placeholder, so structural queries still work).
@@ -818,12 +818,36 @@ pub struct AssemblyPattern {
     pub row_offsets: Vec<usize>,
     /// CSR column indices, sorted within each row, length `row_offsets[nrows]`.
     pub col_indices: Vec<usize>,
+    /// Precomputed value-array slot of every entry each block contributes, one
+    /// entry per block in the matrix's `subs` order. Since the pattern is
+    /// material-independent and cached, the `binary_search` that maps a
+    /// block-local `(r, c)` to its CSR slot is paid **once here**, not on every
+    /// assembly's numeric scatter. The scatter reads these back directly (see
+    /// [`crate::ops::assemble::scatter`]).
+    pub block_slots: Vec<BlockSlots>,
+}
+
+/// Precomputed CSR value-array slots for one block, aligned with the order that
+/// block emits its entries at scatter time. A computed block's cells are
+/// evaluated cell-by-cell, so its slots are grouped per cell, matching
+/// `element_block_triplets_per_cell`'s `per_cell` (and, entry-for-entry, the
+/// `(li, di, lj, pj)` emission order of `element_block_pattern`). A literal
+/// block's slots follow its `local_coo_arrays` order.
+#[derive(Clone)]
+pub enum BlockSlots {
+    /// One slot list per cell (computed block).
+    Computed(Vec<Vec<usize>>),
+    /// One slot per COO entry (literal block).
+    Literal(Vec<usize>),
 }
 
 impl AssemblyPattern {
     /// Value-array slot of global entry `(r, c)`. `c` must be present in row
     /// `r`'s column set — it is, for any entry a block contributes (the pattern
     /// was built from exactly those entries).
+    ///
+    /// Only the pattern build calls this; the numeric scatter reads the
+    /// precomputed [`AssemblyPattern::block_slots`] instead.
     #[inline]
     pub(crate) fn slot(&self, r: usize, c: usize) -> usize {
         let base = self.row_offsets[r];
