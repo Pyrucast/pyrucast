@@ -50,6 +50,38 @@ Options de `solve` :
 - `cache` — réutiliser/peupler le cache (`True` par défaut ; `False` factorise à
   neuf sans toucher le cache).
 
+## `solve_eliminate(model, matrix, rhs)` → `NodeField`
+
+Voie **alternative** pour un modèle contraint : au lieu de border le système par
+des multiplicateurs de Lagrange (ce que fait `solve` sur la matrice augmentée),
+on **élimine** les contraintes par condensation maître/esclave. Pour chaque
+relation `Σ aₖ·u(nœudₖ, varₖ) = g`, un terme *esclave* `s` est exprimé par les
+autres (*maîtres*) : `u_s = (g − Σ_{k≠s} aₖ·u_k)/a_s`. Le système se réduit à
+`K̂ û = f̂` avec `K̂ = Tᵀ K T`, résolu par le **même** LU creux (sur une matrice
+plus petite et définie, sans degré multiplicateur), puis prolongé `u = T·û + u₀`.
+
+- lit la structure des contraintes via le seam méthode-neutre
+  `Constraint::relations()` (partagé avec la voie Lagrange) ; le `K` physique est
+  extrait du bloc point-selle assemblé (nœuds multiplicateurs filtrés) ;
+- récupère en post-traitement la **réaction** (équivalent du multiplicateur),
+  `−(K·u − f)` à la ligne duale de chaque esclave (`= aₛ·λ`) ;
+- met en cache la **condensation** (`T`, `K̂` factorisé) sur la matrice, comme la
+  factorisation LU ; mêmes options `method` / `cache` ;
+- un modèle **sans contrainte** retombe sur un `solve` simple.
+
+**Périmètre v1** : non chaîné, esclaves disjoints — chaque relation élimine un
+esclave distinct, jamais réutilisé comme maître ni esclave ailleurs (couvre la
+périodicité ; erreur explicite sinon).
+
+```python
+K = pyrucast.stiffness(model, materials)
+lagrange = pyrucast.solve(K, rhs)                    # système augmenté
+condense = pyrucast.solve_eliminate(model, K, rhs)   # système réduit — même champ
+```
+
+Voir l'exemple `examples/mpc_condensation.py` et la page
+[Contraintes](../contraintes.md).
+
 ## Déterminisme
 
 Contrairement au reste des opérateurs (bit-à-bit identiques quel que soit le

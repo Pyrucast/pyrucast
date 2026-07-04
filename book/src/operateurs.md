@@ -18,7 +18,7 @@ par module, plus la visualisation (qui vit sous `src/viz/`).
 | `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `interp_to_gauss` (nœuds → Gauss), `thermal_strain` (déformation thermique `EPTH`), `restrict`, `select`, `mask`, `merge`, `consolidate`, `integral` / `integral_element` (intégrale `∫ f dΩ`), `xty` / `xtx` (produits scalaires globaux) / `psca` (produit scalaire nœud par nœud), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
 | `ops::assemble` | [Assemblage](operateurs/assemblage.md) | `stiffness`, `mass`, chargement réparti `flux` |
 | `ops::behavior` / `ops::internal_forces` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`), `internal_forces` / `internal_forces_continuum` (le `BSIG`, `∫ Bᵀ σ`) |
-| `ops::solver` | [Solveur](operateurs/solveur.md) | `solve` (LU dense ; `LinearSolver` à venir) |
+| `ops::solver` | [Solveur](operateurs/solveur.md) | `solve` (LU creux, Lagrange), `solve_eliminate` (condensation MPC) |
 | `ops::export` | [Visualisation](visualization.md) | `export_vtk` (maillage / champ → VTK pour ParaView) |
 | `src/viz` | [Visualisation](visualization.md) | tracé des maillages, coloration par champ |
 

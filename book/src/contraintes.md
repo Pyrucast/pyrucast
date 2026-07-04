@@ -35,6 +35,34 @@ Les **nœuds-multiplicateurs** sont des nœuds comme les autres, fournis par
 l'utilisateur via un maillage : la contrainte ne crée jamais de nœud et ne
 mute jamais le `Coords`.
 
+## Imposition par élimination (condensation)
+
+Voie **alternative** aux multiplicateurs, sélectionnée au moment de la résolution
+avec [`solve_eliminate`](operateurs/solveur.md) au lieu de `solve`. Plutôt que
+d'agrandir le système, on **élimine** chaque relation : un terme *esclave* `s`
+est exprimé par les *maîtres*,
+
+\\[
+u_s = \frac{1}{a_s}\Big(g - \sum_{k \neq s} a_k\, u_k\Big),
+\\]
+
+d'où une transformation globale `u = T·û + u₀` (`û` = DOFs retenus). Le système
+se réduit à `K̂ û = f̂` avec `K̂ = Tᵀ K T`, `f̂ = Tᵀ(f − K·u₀)`, résolu par le
+**même** LU creux — mais sur une matrice **plus petite et définie**, sans DOF
+multiplicateur. La solution est prolongée `u = T·û + u₀` ; la **réaction**
+(équivalent du multiplicateur) est récupérée en post-traitement, `−(K·u − f)` à
+la ligne duale de chaque esclave (`= aₛ·λ`).
+
+Les deux voies lisent la **même** description méthode-neutre des contraintes
+(`Constraint::relations()`) et acceptent le **même** chargement (le second membre
+`g` au nœud-multiplicateur, ci-dessous) : passer de l'une à l'autre ne change que
+l'appel de résolution.
+
+**Périmètre v1** : non chaîné, esclaves disjoints — chaque relation élimine un
+esclave distinct, jamais réutilisé comme maître ni esclave dans une autre
+relation (couvre la périodicité). Un système chaîné est refusé avec une erreur
+explicite ; il reste résoluble par la voie Lagrange (`solve`).
+
 ## Second membre : le helper `constraint_rhs`
 
 Le second membre `u_d` / `g` n'est **pas** stocké dans la contrainte :

@@ -153,9 +153,10 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 ### `ops::solver` — résolution
 
-| Rust (`ops::solver::lu::…`) | Python (`pyrucast.…`) |
+| Rust (`ops::solver::…`) | Python (`pyrucast.…`) |
 |---|---|
-| `solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs) -> NodeField` |
+| `lu::solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs) -> NodeField` |
+| `eliminate::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_eliminate(model, matrix, rhs) -> NodeField` |
 
 ### `ops::export` — export vers des formats externes
 
