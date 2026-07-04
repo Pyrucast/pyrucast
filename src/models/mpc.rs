@@ -312,6 +312,7 @@ impl Constraint for Mpc {
                     .collect();
                 relations.push(Relation {
                     multiplier_node: *mult,
+                    imposed_value: self.imposed_value.clone(),
                     terms,
                 });
             }

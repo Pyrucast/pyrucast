@@ -398,6 +398,7 @@ impl Constraint for Embedded {
                 }
                 relations.push(Relation {
                     multiplier_node: m,
+                    imposed_value: comp.imposed_value.clone(),
                     terms,
                 });
             }

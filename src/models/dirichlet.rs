@@ -255,6 +255,7 @@ impl Constraint for Dirichlet {
             for (imp, mult) in imposed_nodes.iter().zip(multiplier_nodes.iter()) {
                 relations.push(Relation {
                     multiplier_node: *mult,
+                    imposed_value: self.imposed_value.clone(),
                     terms: vec![ConstraintTerm {
                         node: *imp,
                         variable: self.imposed_variable.clone(),

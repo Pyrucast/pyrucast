@@ -134,16 +134,17 @@ use std::sync::{Arc, OnceLock};
 /// erroring when two entries hit the **same** relation with different values.
 /// `caller` names the method for the message.
 fn insert_relation_value(
-    mult_value: &mut std::collections::HashMap<NodeId, f64>,
+    values: &mut std::collections::HashMap<(NodeId, String), f64>,
     multiplier_node: NodeId,
+    slot: &str,
     g: f64,
     caller: &str,
 ) -> Result<()> {
-    if let Some(prev) = mult_value.insert(multiplier_node, g) {
+    if let Some(prev) = values.insert((multiplier_node, slot.to_string()), g) {
         if prev != g {
             return Err(PyrucastError::Message(format!(
                 "{caller}: conflicting values ({prev} and {g}) for the same relation \
-                 (multiplier node {multiplier_node})"
+                 (multiplier node {multiplier_node}, slot {slot})"
             )));
         }
     }
@@ -430,30 +431,33 @@ impl SubModel {
     /// keying is ambiguous there), or when two cited nodes key the *same*
     /// relation with conflicting values.
     pub fn constraint_rhs(&self, imposed: &[(NodeId, f64)]) -> Result<NodeField> {
-        let (constraint, imposed_value) = self.constraint_and_dual()?;
+        let (constraint, components) = self.constraint_components()?;
+        let relations = constraint.relations()?;
 
-        // Map each constrained term node → the multiplier node of its relation,
-        // marking `None` as soon as a node keys two *distinct* relations.
-        let mut node_to_mult: std::collections::HashMap<NodeId, Option<NodeId>> =
+        // Map each constrained term node → the index of its relation, marking
+        // `None` as soon as a node keys two *distinct* relations (a
+        // multi-component `Embedded` node keys one relation per component, so it
+        // is ambiguous here — the message points to the by-index variant).
+        let mut node_to_rel: std::collections::HashMap<NodeId, Option<usize>> =
             std::collections::HashMap::new();
-        for rel in &constraint.relations()? {
+        for (i, rel) in relations.iter().enumerate() {
             for term in &rel.terms {
-                node_to_mult
+                node_to_rel
                     .entry(term.node)
                     .and_modify(|slot| {
-                        if *slot != Some(rel.multiplier_node) {
+                        if *slot != Some(i) {
                             *slot = None;
                         }
                     })
-                    .or_insert(Some(rel.multiplier_node));
+                    .or_insert(Some(i));
             }
         }
 
-        // Resolve the requested (node, g) → (multiplier node, g).
-        let mut mult_value: std::collections::HashMap<NodeId, f64> =
+        // Resolve the requested (node, g) → (multiplier node, slot, g).
+        let mut values: std::collections::HashMap<(NodeId, String), f64> =
             std::collections::HashMap::new();
         for &(node, g) in imposed {
-            let mult = match node_to_mult.get(&node) {
+            let idx = match node_to_rel.get(&node) {
                 None => {
                     return Err(PyrucastError::Message(format!(
                         "constraint_rhs: node {node} is not constrained by this {}",
@@ -467,12 +471,19 @@ impl SubModel {
                         self.as_kind().label()
                     )))
                 }
-                Some(Some(m)) => *m,
+                Some(Some(i)) => *i,
             };
-            insert_relation_value(&mut mult_value, mult, g, "constraint_rhs")?;
+            let rel = &relations[idx];
+            insert_relation_value(
+                &mut values,
+                rel.multiplier_node,
+                &rel.imposed_value,
+                g,
+                "constraint_rhs",
+            )?;
         }
 
-        self.multiplier_load(&imposed_value, &mult_value)
+        self.multiplier_load(&components, &values)
     }
 
     /// Like [`constraint_rhs`](Self::constraint_rhs) but each relation is keyed
@@ -485,10 +496,10 @@ impl SubModel {
     /// is not a constraint, when an index is out of range, or when two pairs
     /// target the same relation with conflicting values.
     pub fn constraint_rhs_by_index(&self, imposed: &[(usize, f64)]) -> Result<NodeField> {
-        let (constraint, imposed_value) = self.constraint_and_dual()?;
+        let (constraint, components) = self.constraint_components()?;
         let relations = constraint.relations()?;
 
-        let mut mult_value: std::collections::HashMap<NodeId, f64> =
+        let mut values: std::collections::HashMap<(NodeId, String), f64> =
             std::collections::HashMap::new();
         for &(idx, g) in imposed {
             let rel = relations.get(idx).ok_or_else(|| {
@@ -499,20 +510,22 @@ impl SubModel {
                 ))
             })?;
             insert_relation_value(
-                &mut mult_value,
+                &mut values,
                 rel.multiplier_node,
+                &rel.imposed_value,
                 g,
                 "constraint_rhs_by_index",
             )?;
         }
 
-        self.multiplier_load(&imposed_value, &mult_value)
+        self.multiplier_load(&components, &values)
     }
 
     /// Borrow this sub-model as a [`Constraint`](crate::models::Constraint) and
-    /// return its single imposed-value component (the dual). Shared entry check
+    /// return its imposed-value components (its duals — one for a single-dual
+    /// constraint, several for a multi-component `Embedded`). Shared entry check
     /// of the `constraint_rhs*` helpers.
-    fn constraint_and_dual(&self) -> Result<(&dyn Constraint, String)> {
+    fn constraint_components(&self) -> Result<(&dyn Constraint, Vec<String>)> {
         let kind = self.as_kind();
         let constraint = kind.as_constraint().ok_or_else(|| {
             PyrucastError::Message(format!(
@@ -520,37 +533,35 @@ impl SubModel {
                 kind.label()
             ))
         })?;
-        // A constraint owns exactly one dual — the imposed-value slot component.
-        let imposed_value = match kind.dual_vars().as_slice() {
-            [name] => name.clone(),
-            other => {
-                return Err(PyrucastError::Message(format!(
-                    "constraint_rhs: expected the constraint to own exactly one dual \
-                     variable, got {}",
-                    other.len()
-                )));
-            }
-        };
-        Ok((constraint, imposed_value))
+        let components = kind.dual_vars();
+        if components.is_empty() {
+            return Err(PyrucastError::Message(
+                "constraint_rhs: the constraint owns no dual (imposed-value) variable".into(),
+            ));
+        }
+        Ok((constraint, components))
     }
 
     /// Build the constraint load over **every** multiplier node: one
-    /// zero-initialised zone per multiplier submesh (sharing the supports,
-    /// preserving the structure carried through `barycenter`), then drop the
-    /// resolved `mult_value` in at the cited multiplier nodes. Shared tail of the
-    /// `constraint_rhs*` helpers.
+    /// zero-initialised zone per multiplier submesh (carrying **all** the
+    /// constraint's imposed-value `components`, sharing the supports and
+    /// preserving the structure carried through `barycenter`), then drop each
+    /// resolved `(multiplier node, slot) → g` in at its component. Shared tail of
+    /// the `constraint_rhs*` helpers.
     fn multiplier_load(
         &self,
-        imposed_value: &str,
-        mult_value: &std::collections::HashMap<NodeId, f64>,
+        components: &[String],
+        values: &std::collections::HashMap<(NodeId, String), f64>,
     ) -> Result<NodeField> {
         let mut field = NodeField::default();
         for sm in &self.multiplier_mesh()? {
-            let mut sub = SubNodeField::from_poi1(sm, vec![imposed_value.to_string()])?;
+            let mut sub = SubNodeField::from_poi1(sm, components.to_vec())?;
             let nids: Vec<NodeId> = read(sm)?.connectivity().to_vec();
             for nid in nids {
-                if let Some(&g) = mult_value.get(&nid) {
-                    sub.set_value(nid, imposed_value, g)?;
+                for comp in components {
+                    if let Some(&g) = values.get(&(nid, comp.clone())) {
+                        sub.set_value(nid, comp, g)?;
+                    }
                 }
             }
             field.add_sub(insert(sub))?;

@@ -227,22 +227,15 @@ fn has_constraint(model: &Model) -> Result<bool> {
 /// the reduced matrix.
 fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
     // ── Collect (relation, imposed_value_slot) from every constraint ────
+    // The slot is carried **per relation** (`Relation::imposed_value`), so a
+    // multi-component constraint (`Embedded`) reads each component's own g slot.
     let mut relations: Vec<(crate::models::Relation, String)> = Vec::new();
     for h in model {
         let sub = read(h)?;
         if let Some(constraint) = sub.as_kind().as_constraint() {
-            let slot = sub
-                .as_kind()
-                .dual_vars()
-                .into_iter()
-                .next()
-                .ok_or_else(|| {
-                    PyrucastError::Message(
-                        "elimination: a constraint has no dual (imposed-value) variable".into(),
-                    )
-                })?;
             for rel in constraint.relations()? {
-                relations.push((rel, slot.clone()));
+                let slot = rel.imposed_value.clone();
+                relations.push((rel, slot));
             }
         }
     }

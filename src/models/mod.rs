@@ -376,6 +376,12 @@ pub struct ConstraintTerm {
 pub struct Relation {
     /// The Lagrange-multiplier node that enforces this relation.
     pub multiplier_node: NodeId,
+    /// The constraint's own dual (imposed-value) component this relation writes
+    /// its `g` into, at `multiplier_node` (e.g. `imposed_T`, `mpc_rhs`,
+    /// `imposed_u_y`). A single-dual constraint (`Dirichlet`, `Mpc`) repeats its
+    /// one name; a multi-component constraint (`Embedded`) names the relation's
+    /// component, so the RHS helper and the elimination path read the right slot.
+    pub imposed_value: String,
     /// The terms summed on the left-hand side.
     pub terms: Vec<ConstraintTerm>,
 }

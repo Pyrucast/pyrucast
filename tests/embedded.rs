@@ -199,3 +199,88 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     assert!((uz + NU * S / E * pc[2]).abs() < tol, "u_z: {uz}");
     Ok(())
 }
+
+/// Multi-component right-hand side: a **per-component** offset `g_c` at the
+/// immersed node, `u_c(p) − Σᵢ Nᵢ·u_c(hostᵢ) = g_c`, routed through
+/// `constraint_rhs_by_index` (relations are component-major: index
+/// `c·n + r`). Each component must pick up its **own** slot, so the immersed
+/// node reads `interpolation_c + g_c` — proof the per-relation imposed-value
+/// slot works for a multi-dual constraint.
+#[test]
+fn embedded_per_component_offset() -> Result<()> {
+    const E: f64 = 210.0;
+    const NU: f64 = 0.3;
+    const S: f64 = 2.0;
+    let g = [0.01, -0.02, 0.03]; // offsets on u_x, u_y, u_z
+
+    let coords = insert(Coords::new(3)?);
+    let points = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [1.0, 0.0, 1.0],
+        [1.0, 1.0, 1.0],
+        [0.0, 1.0, 1.0],
+    ];
+    let nodes: Vec<Node> = points
+        .iter()
+        .map(|c| Node::create_in(coords.clone(), c))
+        .collect::<Result<_>>()?;
+    let mut host = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
+    host.add_cell(&nodes.iter().map(|n| n.id()).collect::<Vec<_>>())?;
+    let fes = FiniteElementSpace::lagrange1(&host)?;
+
+    let clamp = |ids: &[usize], var: &str, dual: &str| -> Result<Model> {
+        let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
+        let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
+        let mult = barycenter(&imposed)?;
+        Model::dirichlet(var.into(), dual.into(), &imposed, &mult, None, None)
+    };
+    let mut model = Model::elasticity(&fes, ElasticityModel::Solid)?;
+    model = model.union(&clamp(&[0, 3, 4, 7], "u_x", "f_x")?)?;
+    model = model.union(&clamp(&[0, 1, 4, 5], "u_y", "f_y")?)?;
+    model = model.union(&clamp(&[0, 1, 2, 3], "u_z", "f_z")?)?;
+
+    let pc = [0.4, 0.7, 0.2];
+    let p = Node::create_in(coords.clone(), &pc)?;
+    let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&p))?);
+    let embedded = SubModel::embedded(
+        &bar,
+        &host,
+        vec![
+            ("u_x".into(), "f_x".into()),
+            ("u_y".into(), "f_y".into()),
+            ("u_z".into(), "f_z".into()),
+        ],
+        None,
+        None,
+        None,
+    )?;
+    // Per-component g via relation index (1 immersed node ⇒ index = component).
+    let emb_rhs = embedded.constraint_rhs_by_index(&[(0, g[0]), (1, g[1]), (2, g[2])])?;
+    let mut emb_model = Model::empty();
+    emb_model.add_sub(insert(embedded))?;
+    model = model.union(&emb_model)?;
+
+    let materials = build::material_field(&model, &[("E", E), ("nu", NU)])?;
+
+    let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
+    face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
+    let face_fes = FiniteElementSpace::lagrange1(&face)?;
+    let traction = assemble::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
+    let mut rhs = NodeField::from_sub(traction);
+    for sm in &emb_rhs {
+        rhs.add_sub(sm.clone())?;
+    }
+
+    let solution = solve(&stiffness(&model, &materials)?, &rhs)?;
+
+    // Immersed node = analytic interpolation + its own per-component offset.
+    let tol = 1e-9;
+    assert!((solution.value(p.id(), "u_x")? - (S / E * pc[0] + g[0])).abs() < tol);
+    assert!((solution.value(p.id(), "u_y")? - (-NU * S / E * pc[1] + g[1])).abs() < tol);
+    assert!((solution.value(p.id(), "u_z")? - (-NU * S / E * pc[2] + g[2])).abs() < tol);
+    Ok(())
+}
