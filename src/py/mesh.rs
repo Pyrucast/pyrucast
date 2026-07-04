@@ -6,7 +6,7 @@ use crate::containers::mesh::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::py::coords::PyCoords;
 use crate::py::node::PyNode;
-use crate::store::{read, write, Handle};
+use crate::store::{insert, read, write, Handle};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
@@ -105,6 +105,22 @@ impl PySubMesh {
     /// Number of cells in this submesh.
     fn cell_count(&self) -> PyResult<usize> {
         Ok(read(&self.handle)?.cell_count())
+    }
+
+    /// Whether this submesh is sealed: `True` once it is used by a
+    /// finite-element space, field or matrix, after which `add_cell` fails.
+    #[getter]
+    fn is_sealed(&self) -> PyResult<bool> {
+        Ok(read(&self.handle)?.is_sealed())
+    }
+
+    /// Deep-copy into a fresh, **unsealed** SubMesh with the same
+    /// connectivity — the way to keep editing after this one has been sealed.
+    fn duplicate(&self) -> PyResult<PySubMesh> {
+        let copy = read(&self.handle)?.duplicate()?;
+        Ok(PySubMesh {
+            handle: insert(copy),
+        })
     }
 
     /// Face colour as an `(r, g, b)` tuple of bytes.
@@ -279,6 +295,15 @@ impl PyMesh {
     /// Number of cells in each submesh, in order.
     fn cell_counts(&self) -> PyResult<Vec<usize>> {
         Ok(self.inner.cell_counts()?)
+    }
+
+    /// Deep-copy the whole mesh into fresh, **unsealed** submeshes with the
+    /// same connectivity — editable again even if the source was sealed by
+    /// consumers. Nodes are shared (same `Coords`).
+    fn duplicate(&self) -> PyResult<PyMesh> {
+        Ok(Self {
+            inner: self.inner.duplicate()?,
+        })
     }
 
     /// The `node_idx`-th node of cell `cell_idx` in submesh `submesh_idx`.

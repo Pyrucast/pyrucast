@@ -34,6 +34,11 @@ pub enum PyrucastError {
     /// token (e.g. a `Ctrl+C`, a timeout, or an external stop flag). On the
     /// Python side this surfaces as `KeyboardInterrupt`.
     Interrupted,
+    /// A structural mutation was attempted on a **sealed** [`crate::containers::mesh::SubMesh`].
+    /// A submesh is sealed the first time a non-mesh object (finite-element
+    /// space, field, matrix, …) captures it, after which its connectivity is
+    /// frozen so downstream objects cannot be left inconsistent.
+    MeshSealed,
     /// Generic error with a message.
     Message(String),
 }
@@ -47,6 +52,11 @@ impl fmt::Display for PyrucastError {
                 write!(f, "stale handle (slot freed or generation mismatch)")
             }
             PyrucastError::Interrupted => write!(f, "computation interrupted"),
+            PyrucastError::MeshSealed => write!(
+                f,
+                "submesh is sealed: it is already used by a finite-element space, \
+                 field or matrix and can no longer be modified"
+            ),
             PyrucastError::Message(m) => write!(f, "{m}"),
         }
     }

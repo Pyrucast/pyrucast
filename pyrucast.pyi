@@ -734,6 +734,12 @@ class Mesh:
         r"""
         Number of cells in each submesh, in order.
         """
+    def duplicate(self) -> Mesh:
+        r"""
+        Deep-copy the whole mesh into fresh, **unsealed** submeshes with the
+        same connectivity — editable again even if the source was sealed by
+        consumers. Nodes are shared (same `Coords`).
+        """
     def node(self, submesh_idx: builtins.int, cell_idx: builtins.int, node_idx: builtins.int) -> Node:
         r"""
         The `node_idx`-th node of cell `cell_idx` in submesh `submesh_idx`.
@@ -1626,6 +1632,12 @@ class SubMesh:
         Element type name of this submesh (e.g. `"TRI3"`).
         """
     @property
+    def is_sealed(self) -> builtins.bool:
+        r"""
+        Whether this submesh is sealed: `True` once it is used by a
+        finite-element space, field or matrix, after which `add_cell` fails.
+        """
+    @property
     def face_color(self) -> tuple[builtins.int, builtins.int, builtins.int]:
         r"""
         Face colour as an `(r, g, b)` tuple of bytes.
@@ -1642,6 +1654,11 @@ class SubMesh:
     def cell_count(self) -> builtins.int:
         r"""
         Number of cells in this submesh.
+        """
+    def duplicate(self) -> SubMesh:
+        r"""
+        Deep-copy into a fresh, **unsealed** SubMesh with the same
+        connectivity — the way to keep editing after this one has been sealed.
         """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False) -> None:
         r"""

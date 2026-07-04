@@ -35,6 +35,47 @@ def test_poi1_from_nodes_empty_raises():
         raise AssertionError("expected RuntimeError for empty node list")
 
 
+def test_submesh_sealed_by_fe_space_refuses_add_cell():
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    d = c.add_node([0.0, 1.0])
+    e = c.add_node([1.0, 1.0])
+    mesh = pyrucast.Mesh(c, "TRI3")
+    sm = mesh[0]
+    sm.add_cell([a, b, d])
+    assert sm.is_sealed is False
+    # Using the mesh in a finite-element space seals its submesh.
+    pyrucast.FiniteElementSpace(mesh)
+    assert sm.is_sealed is True
+    try:
+        sm.add_cell([b, d, e])
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError adding a cell to a sealed submesh")
+    assert sm.cell_count() == 1
+
+
+def test_duplicate_gives_editable_copy_after_seal():
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    d = c.add_node([0.0, 1.0])
+    e = c.add_node([1.0, 1.0])
+    mesh = pyrucast.Mesh(c, "TRI3")
+    mesh[0].add_cell([a, b, d])
+    pyrucast.FiniteElementSpace(mesh)  # seals mesh[0]
+
+    copy = mesh.duplicate()
+    assert copy.cell_count() == 1
+    assert copy[0].is_sealed is False
+    # The copy can keep growing while the original stays frozen.
+    copy[0].add_cell([b, d, e])
+    assert copy.cell_count() == 2
+    assert mesh.cell_count() == 1
+
+
 def test_aggregate_union_sub_and_sub_union_sub():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])

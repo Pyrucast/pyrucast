@@ -162,6 +162,11 @@ impl SubFiniteElementSpace {
             dn_at_g.extend_from_slice(&interpolation.dshape_dxi(et, xi)?);
         }
 
+        // Capturing the submesh in a finite-element space freezes its
+        // connectivity: the reference-space tables and any assembled matrix
+        // are cell-indexed and must not be invalidated by later `add_cell`s.
+        let submesh = crate::containers::mesh::seal(&submesh)?;
+
         Ok(Self {
             submesh,
             interpolation,
@@ -662,6 +667,28 @@ mod tests {
             .to_vec();
         assert_eq!(first, vec![vec![0usize]]);
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn new_seals_the_submesh() {
+        let coords = cfg2d();
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(coords, ElementType::TRI3);
+            sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+            insert(sm)
+        };
+        assert!(!read(&sm).unwrap().is_sealed());
+        let _sub = SubFiniteElementSpace::new(sm.clone(), Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
+        // Building the space froze the submesh: no more cells can be added.
+        assert!(read(&sm).unwrap().is_sealed());
+        assert!(matches!(
+            write(&sm).unwrap().add_cell(&[a.id(), b.id(), c.id()]).unwrap_err(),
+            PyrucastError::MeshSealed
+        ));
     }
 
     // ── SubFiniteElementSpace structural checks ────────────────────────────────────────

@@ -80,6 +80,14 @@ pub struct SubMesh {
     /// snapshots (without the field) readable.
     #[serde(default)]
     face_color: RgbColor,
+    /// Once **sealed**, the connectivity is frozen: [`SubMesh::add_cell`] and
+    /// [`SubMesh::add_cell_taking`] refuse to run. A submesh is sealed the
+    /// first time a non-mesh consumer (finite-element space, field, matrix, …)
+    /// captures its handle, so those consumers can never be left referencing
+    /// stale cells. The seal is permanent for the object's lifetime.
+    /// `serde(default)` keeps older snapshots (without the field) readable.
+    #[serde(default)]
+    sealed: bool,
 }
 
 impl SubMesh {
@@ -90,7 +98,24 @@ impl SubMesh {
             coords,
             connectivity: Vec::new(),
             face_color: RgbColor::default(),
+            sealed: false,
         }
+    }
+
+    /// Whether this submesh is sealed (connectivity frozen).
+    pub fn is_sealed(&self) -> bool {
+        self.sealed
+    }
+
+    /// Seal this submesh: freeze its connectivity permanently. After this,
+    /// [`SubMesh::add_cell`] / [`SubMesh::add_cell_taking`] return
+    /// [`PyrucastError::MeshSealed`]. Idempotent.
+    ///
+    /// Called by the container layer whenever a non-mesh object captures the
+    /// submesh — see the free function [`seal`]. A bare [`Mesh`] holding the
+    /// submesh does **not** seal it (a mesh may keep growing until consumed).
+    pub fn seal(&mut self) {
+        self.sealed = true;
     }
 
     /// Face colour used when this submesh is drawn (no numerical effect).
@@ -109,6 +134,9 @@ impl SubMesh {
     /// (invalid / collected id), the increfs already performed for this
     /// cell are rolled back.
     pub fn add_cell(&mut self, nodes: &[NodeId]) -> Result<usize> {
+        if self.sealed {
+            return Err(PyrucastError::MeshSealed);
+        }
         let npc = self.element_type.nodes_per_cell();
         if nodes.len() != npc {
             return Err(PyrucastError::Message(format!(
@@ -148,6 +176,9 @@ impl SubMesh {
     /// only checks that the cell length matches the element type and
     /// that the nodes are alive at the moment of the call.
     pub fn add_cell_taking(&mut self, nodes: &[NodeId]) -> Result<usize> {
+        if self.sealed {
+            return Err(PyrucastError::MeshSealed);
+        }
         let npc = self.element_type.nodes_per_cell();
         if nodes.len() != npc {
             return Err(PyrucastError::Message(format!(
@@ -171,6 +202,28 @@ impl SubMesh {
         let idx = self.connectivity.len() / npc;
         self.connectivity.extend_from_slice(nodes);
         Ok(idx)
+    }
+
+    /// Deep-copy this submesh into a **fresh, unsealed** one: same element
+    /// type, same `Coords`, same connectivity (each referenced node increfed
+    /// anew) and same face colour — but never inheriting the seal.
+    ///
+    /// This is the escape hatch for the seal: once a consumer has frozen a
+    /// submesh, `duplicate()` hands back an independent copy you can keep
+    /// editing with [`SubMesh::add_cell`]. The two share the same `Coords`
+    /// (nodes are not cloned, only their refcounts bumped).
+    pub fn duplicate(&self) -> Result<SubMesh> {
+        let mut copy = SubMesh::new(self.coords.clone(), self.element_type);
+        copy.face_color = self.face_color;
+        let npc = self.element_type.nodes_per_cell();
+        if npc > 0 {
+            for chunk in self.connectivity.chunks(npc) {
+                // `copy` is unsealed, so `add_cell` runs and increfs the
+                // nodes (with rollback on failure).
+                copy.add_cell(chunk)?;
+            }
+        }
+        Ok(copy)
     }
 
     /// Element type of the submesh.
@@ -276,6 +329,21 @@ impl SubMesh {
     }
 }
 
+/// Seal the submesh behind `handle`, freezing its connectivity.
+///
+/// This is the seam every non-mesh consumer goes through when it captures a
+/// [`SubMesh`] handle (finite-element space, node field, matrix support, …):
+/// from that point on the submesh can no longer grow, so the consumer's
+/// cell-indexed view can never go stale. Idempotent; returns the same handle
+/// (cloned) for ergonomic chaining at a constructor's capture site.
+///
+/// Must not be called while another guard on the same submesh is held (the
+/// slot lock is not reentrant — see [`crate::store`]).
+pub fn seal(handle: &Handle<SubMesh>) -> Result<Handle<SubMesh>> {
+    write(handle)?.seal();
+    Ok(handle.clone())
+}
+
 impl Drop for SubMesh {
     fn drop(&mut self) {
         // One lock acquisition for all decrefs.
@@ -295,6 +363,7 @@ impl fmt::Debug for SubMesh {
             .field("coords", &self.coords)
             .field("cell_count", &self.cell_count())
             .field("face_color", &self.face_color)
+            .field("sealed", &self.sealed)
             .finish()
     }
 }
@@ -432,6 +501,19 @@ impl Mesh {
         let mut mesh = Self::default();
         mesh.subs.push(insert(sub));
         mesh
+    }
+
+    /// Deep-copy the whole mesh: every submesh is [`SubMesh::duplicate`]d
+    /// into a fresh, unsealed submesh under a new handle. The copy is fully
+    /// editable even when the source's submeshes have been sealed by their
+    /// consumers; nodes are shared (same `Coords`), only their refcounts grow.
+    pub fn duplicate(&self) -> Result<Mesh> {
+        let mut copy = Self::default();
+        for sm in self {
+            let dup = read(sm)?.duplicate()?;
+            copy.subs.push(insert(dup));
+        }
+        Ok(copy)
     }
 
     /// Add a cell directly when the mesh has exactly one submesh.
@@ -617,6 +699,94 @@ mod tests {
             assert_eq!(cf.refcount(b.id()), 1);
             assert_eq!(cf.refcount(c.id()), 1);
         }
+    }
+
+    #[test]
+    fn sealed_submesh_refuses_add_cell() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+
+        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+        sm.add_cell(&[a.id()]).unwrap();
+        assert!(!sm.is_sealed());
+        sm.seal();
+        assert!(sm.is_sealed());
+        // Both mutating paths are now blocked with MeshSealed.
+        assert!(matches!(
+            sm.add_cell(&[b.id()]).unwrap_err(),
+            PyrucastError::MeshSealed
+        ));
+        assert!(matches!(
+            sm.add_cell_taking(&[b.id()]).unwrap_err(),
+            PyrucastError::MeshSealed
+        ));
+        assert_eq!(sm.cell_count(), 1);
+        // The refused cell left no lingering incref on b.
+        assert_eq!(read(&coords).unwrap().refcount(b.id()), 1);
+    }
+
+    #[test]
+    fn seal_via_handle_and_is_idempotent() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let h = insert({
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[a.id()]).unwrap();
+            sm
+        });
+        seal(&h).unwrap();
+        seal(&h).unwrap(); // idempotent
+        assert!(read(&h).unwrap().is_sealed());
+        assert!(matches!(
+            write(&h).unwrap().add_cell(&[a.id()]).unwrap_err(),
+            PyrucastError::MeshSealed
+        ));
+    }
+
+    #[test]
+    fn duplicate_is_unsealed_and_reincrefs() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
+
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        sm.seal();
+
+        let mut copy = sm.duplicate().unwrap();
+        // Copy carries the same connectivity but is not sealed.
+        assert!(!copy.is_sealed());
+        assert_eq!(copy.connectivity(), sm.connectivity());
+        // Each node is now referenced by the original AND the copy (+ Node).
+        {
+            let cf = read(&coords).unwrap();
+            assert_eq!(cf.refcount(a.id()), 3);
+        }
+        // The copy is editable even though the source is frozen.
+        let d = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        copy.add_cell(&[a.id(), b.id(), d.id()]).unwrap();
+        assert_eq!(copy.cell_count(), 2);
+        assert_eq!(sm.cell_count(), 1);
+    }
+
+    #[test]
+    fn mesh_duplicate_yields_editable_copy() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+
+        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+        sm.add_cell(&[a.id()]).unwrap();
+        sm.seal();
+        let mesh = Mesh::from_submesh(sm);
+
+        let mut copy = mesh.duplicate().unwrap();
+        assert_eq!(copy.cell_count().unwrap(), 1);
+        // A fresh submesh handle: editable.
+        copy.add_cell(&[b.id()]).unwrap();
+        assert_eq!(copy.cell_count().unwrap(), 2);
     }
 
     #[test]

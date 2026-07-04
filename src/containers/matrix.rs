@@ -216,6 +216,9 @@ impl SubMatrix {
     ) -> Result<Self> {
         let row_nodes: Vec<NodeId> = read(&row_support)?.connectivity().to_vec();
         let col_nodes: Vec<NodeId> = read(&col_support)?.connectivity().to_vec();
+        // The block's row/col numbering snapshots these supports; freeze them.
+        crate::containers::mesh::seal(&row_support)?;
+        crate::containers::mesh::seal(&col_support)?;
         let nrows = row_nodes.len() * dual_vars.len();
         let ncols = col_nodes.len() * primal_vars.len();
         Ok(Self {
@@ -251,6 +254,9 @@ impl SubMatrix {
     ) -> Result<Self> {
         let row_nodes: Vec<NodeId> = read(&row_support)?.connectivity().to_vec();
         let col_nodes: Vec<NodeId> = read(&col_support)?.connectivity().to_vec();
+        // The block's row/col numbering snapshots these supports; freeze them.
+        crate::containers::mesh::seal(&row_support)?;
+        crate::containers::mesh::seal(&col_support)?;
         let nrows = row_nodes.len() * dual_vars.len();
         let ncols = col_nodes.len() * primal_vars.len();
         Ok(Self {
@@ -286,6 +292,9 @@ impl SubMatrix {
     ) -> Result<Self> {
         let row_nodes: Vec<NodeId> = read(&row_support)?.connectivity().to_vec();
         let col_nodes: Vec<NodeId> = read(&col_support)?.connectivity().to_vec();
+        // The block's row/col numbering snapshots these supports; freeze them.
+        crate::containers::mesh::seal(&row_support)?;
+        crate::containers::mesh::seal(&col_support)?;
         let nrows = row_nodes.len() * dual_vars.len();
         let ncols = col_nodes.len() * primal_vars.len();
         if coo.nrows() != nrows || coo.ncols() != ncols {

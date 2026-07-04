@@ -115,10 +115,14 @@ impl SubNodeField {
             sm.connectivity().to_vec()
         };
 
+        // The field snapshots this POI1 support's node list and shares its
+        // handle; freeze it so the two can never diverge.
+        let support = crate::containers::mesh::seal(submesh)?;
+
         let n_nodes = nodes.len();
         let n_comp = components.len();
         Ok(SubNodeField {
-            support: submesh.clone(),
+            support,
             nodes,
             components,
             values: vec![0.0; n_nodes * n_comp],
@@ -146,6 +150,9 @@ impl SubNodeField {
             }
             (sm.coords(), nodes)
         };
+        // The field snapshots the distinct nodes of this source submesh;
+        // freeze the source so later `add_cell`s cannot leave it behind.
+        crate::containers::mesh::seal(submesh)?;
         Self::new_with_nodes(coords, nodes, components)
     }
 
@@ -283,7 +290,10 @@ impl SubNodeField {
     ) -> Result<Self> {
         let n_nodes = nodes.len();
         let n_comp = components.len();
-        let sm = SubMesh::poi1_from_node_ids(coords, &nodes)?;
+        let mut sm = SubMesh::poi1_from_node_ids(coords, &nodes)?;
+        // Freshly materialised support, owned by this field: seal it so a
+        // handle handed out via `support()` cannot mutate it under the field.
+        sm.seal();
         Ok(SubNodeField {
             support: insert(sm),
             nodes,

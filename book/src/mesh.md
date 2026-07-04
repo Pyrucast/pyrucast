@@ -79,6 +79,38 @@ En cas d'échec partiel d'`add_cell` (par exemple un nœud déjà ramassé), les
 incréments déjà effectués pour la cellule courante sont **annulés** (rollback
 transactionnel à l'échelle d'une cellule).
 
+## Scellement (connectivité figée après consommation)
+
+Par convention, un maillage n'est plus modifié une fois construit : un
+[espace éléments finis](fe-space.md), un [champ](node-field.md) ou une
+[matrice](matrix.md) indexent ses cellules, et lui ajouter une maille par la
+suite les laisserait dans un état incohérent.
+
+Cette convention est désormais **imposée**. Dès qu'un objet autre qu'un
+maillage capture un `SubMesh` (construction d'un `SubFiniteElementSpace`, d'un
+`SubNodeField`, d'un support de `SubMatrix`…), ce sous-maillage est **scellé** :
+sa connectivité est figée pour toujours. `add_cell` / `add_cell_taking`
+renvoient alors l'erreur `MeshSealed`. Un `Mesh` qui se contente de contenir le
+sous-maillage ne le scelle **pas** — il peut continuer à grossir tant qu'aucun
+consommateur ne s'y attache. On teste l'état avec `is_sealed`.
+
+Pour repartir d'un maillage scellé et le modifier à nouveau, on en prend une
+**copie profonde** avec `duplicate()` : un `SubMesh` (ou `Mesh`) neuf, **non
+scellé**, avec la même connectivité (les nœuds sont partagés — même `Coords` —,
+seuls leurs refcounts augmentent).
+
+```python
+mesh = pyrucast.Mesh(c, "TRI3")
+mesh.unit().add_cell([a, b, n3])
+
+pyrucast.FiniteElementSpace(mesh)   # scelle mesh[0]
+assert mesh[0].is_sealed
+# mesh[0].add_cell([...])           # → RuntimeError (MeshSealed)
+
+copie = mesh.duplicate()            # neuf, modifiable
+copie.unit().add_cell([b, n3, n4])  # OK
+```
+
 ## API Rust
 
 ```rust,ignore
