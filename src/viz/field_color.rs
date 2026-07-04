@@ -2,7 +2,7 @@
 //!
 //! Paints each mesh cell with the colour its field value maps to under a
 //! standard colormap. Two field kinds are accepted uniformly through
-//! [`FieldData`]:
+//! `FieldData`:
 //!
 //! - **node fields** ([`crate::containers::node_field::NodeField`]) —
 //!   values live at the nodes; the per-cell nodal values are read

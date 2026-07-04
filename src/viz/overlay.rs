@@ -3,7 +3,7 @@
 //! Drawn on top of the rendered scene whenever a node field is supplied
 //! (file export AND interactive window). In the interactive window the
 //! same rectangle doubles as a **clickable button** that cycles through
-//! the field's components — click detection uses [`button_rect`] so the
+//! the field's components — click detection uses `button_rect` so the
 //! geometry stays in one place.
 
 use crate::error::Result;

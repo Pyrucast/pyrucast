@@ -9,8 +9,8 @@
 //! (e.g. [`crate::containers::mesh::SubMesh::plot`]). Internals:
 //!
 //! - [`View`] is a small point-of-view descriptor (yaw, pitch, scale, target).
-//! - [`Bbox3`] is the axis-aligned 3D bounding box, used to centre and scale.
-//! - [`Projector`] (in [`camera`]) maps 3D world coordinates to a 2D screen.
+//! - `Bbox3` is the axis-aligned 3D bounding box, used to centre and scale.
+//! - `Projector` (in `camera`) maps 3D world coordinates to a 2D screen.
 //! - [`Drawable`] (in [`drawable`]) is the internal trait every visualizable
 //!   object implements; backends iterate over it the same way for PNG, SVG
 //!   and the live window.
@@ -337,7 +337,7 @@ pub(crate) fn render_mesh_with_field(
 
 /// Render a [`crate::containers::mesh::SubMesh`] (by handle, so
 /// element-field zones can be matched by identity) coloured by a field
-/// component. Same semantics as [`render_mesh_with_field`].
+/// component. Same semantics as `render_mesh_with_field`.
 pub fn render_submesh_with_field(
     submesh: &crate::store::Handle<crate::containers::mesh::SubMesh>,
     field: FieldArg<'_>,

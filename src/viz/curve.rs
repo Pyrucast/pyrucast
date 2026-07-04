@@ -1,8 +1,8 @@
 //! X-Y curve rendering (scalar evolutions).
 //!
-//! A [`CurvePlot`] is a [`Drawable`] that draws one or more `(x, y)` line
+//! A `CurvePlot` is a [`Drawable`] that draws one or more `(x, y)` line
 //! series on a `plotters` Cartesian chart. It ignores the 3-D `View` (a curve
-//! has no camera) — the dispatch in [`super::render_curve`] turns the gizmo
+//! has no camera) — the dispatch in `super::render_curve` turns the gizmo
 //! off so the 2-D chart fills the whole area.
 
 use plotters::coord::Shift;
