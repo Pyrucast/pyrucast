@@ -919,6 +919,26 @@ class Model:
         by the user in the load field at the multiplier node's `imposed_value`
         component (default `0`). See the constraints chapter of the book.
         """
+    @classmethod
+    def embedded(cls, immersed: Mesh, host: Mesh, components: typing.Sequence[tuple[builtins.str, builtins.str]], multipliers: typing.Optional[typing.Sequence[builtins.str]] = None, imposed_values: typing.Optional[typing.Sequence[builtins.str]] = None, tol: typing.Optional[builtins.float] = None) -> Model:
+        r"""
+        `Model.embedded(immersed, host, components, multipliers=None,
+        imposed_values=None, tol=None)` — embedded (immersed) constraint (a
+        single sub-model) tying each node of `immersed` to the interpolation of
+        `host` at that node, via Lagrange multipliers.
+        
+        `immersed` and `host` are meshes sharing one Coords (e.g. a bar
+        « baignée » in a volume). `components` is a list of `(variable,
+        target_dual)` pairs — the field components to tie (e.g.
+        `[("u_x","f_x"), ("u_y","f_y"), ("u_z","f_z")]`); find each `target_dual`
+        with `model.dual_of(variable)`. The coupling weights are the host shape
+        functions at each immersed node, computed once at build by locating the
+        node in the host (an immersed node outside the host is an error).
+        `multipliers` / `imposed_values` override the per-component derived names
+        `lambda_<variable>` / `imposed_<variable>`; `tol` is the location
+        tolerance (default `1e-6`). The right-hand side `g` defaults to `0` (a
+        rigid tie). See the constraints chapter of the book.
+        """
     def primal_vars(self) -> builtins.list[builtins.str]:
         r"""
         Names of the primal (primary) variables across the whole model.
@@ -932,6 +952,14 @@ class Model:
         `Model.dual_of(variable)` — the dual (residual) variable conjugate to a
         primal `variable` (e.g. `"u_x" -> "f_x"`, `"T" -> "q"`), searched across
         all sub-models, or `None`. A helper to fill an MPC term's `target_dual`.
+        """
+    def multiplier_mesh(self) -> Mesh:
+        r"""
+        `Model.multiplier_mesh()` — POI1 `Mesh` of the constraint multiplier
+        nodes across the model (empty for a model with no constraint). The handle
+        to the multiplier nodes of an `embedded` / `dirichlet` / `mpc` model whose
+        multipliers it minted itself: read them via `mesh.node(0, i, 0)` or build
+        a load `SubNodeField` on `mesh[0]`.
         """
     def constraint_rhs(self, imposed: typing.Sequence[tuple[Node, builtins.float]]) -> NodeField:
         r"""

@@ -852,6 +852,49 @@ impl Model {
         Ok(model)
     }
 
+    /// Embedded (immersed) constraint `Model` (a single sub-model) tying each
+    /// node of `immersed` to the interpolation of `host` at that node, for every
+    /// `(variable, target_dual)` in `components`. Parent-level named constructor
+    /// — see [`SubModel::embedded`] and [`embedded::Embedded::new`] for the
+    /// coupling weights, the per-component variable names and the errors.
+    #[allow(clippy::too_many_arguments)]
+    pub fn embedded(
+        immersed: &Mesh,
+        host: &Mesh,
+        components: Vec<(String, String)>,
+        multipliers: Option<Vec<String>>,
+        imposed_values: Option<Vec<String>>,
+        tol: Option<f64>,
+    ) -> Result<Self> {
+        let mut model = Self::empty();
+        model.add_sub(insert(SubModel::embedded(
+            immersed,
+            host,
+            components,
+            multipliers,
+            imposed_values,
+            tol,
+        )?))?;
+        Ok(model)
+    }
+
+    /// POI1 [`Mesh`] of every constraint multiplier node across the model
+    /// (shares the multiplier submeshes — zero-copy). Empty for a model with no
+    /// constraint. The handle to the multipliers of a constraint that minted
+    /// them itself (e.g. [`embedded`](Self::embedded), whose multiplier mesh is
+    /// internal): read the nodes or build the load field on it.
+    pub fn multiplier_mesh(&self) -> Result<Mesh> {
+        let mut mesh = Mesh::empty();
+        for h in self {
+            if let Some(constraint) = read(h)?.as_kind().as_constraint() {
+                for sm in constraint.multiplier_mesh() {
+                    mesh.add_sub(sm.clone())?;
+                }
+            }
+        }
+        Ok(mesh)
+    }
+
     /// The dual (residual) variable conjugate to a primal `variable`, searched
     /// across all sub-models (first match), or `None` if no sub-model declares
     /// it. A helper for the MPC mise-en-donnée: `model.dual_of("ux")` returns the
