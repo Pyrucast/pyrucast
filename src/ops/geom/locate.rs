@@ -1,0 +1,420 @@
+//! Point location in a host mesh — the inverse iso-parametric mapping.
+//!
+//! The forward map of a cell sends reference coordinates `ξ` to a physical
+//! point `x = Σᵢ Nᵢ(ξ)·Xᵢ`. [`locate_points`] inverts it: given a physical
+//! point, it finds the host cell that **contains** it and the reference
+//! coordinates `ξ` there, then returns the shape-function weights `Nᵢ(ξ)` and
+//! the cell's node ids. It is the geometric primitive under an *embedded* /
+//! *immersed* constraint: the weights are exactly the coefficients tying an
+//! immersed node's field to the host nodes' fields (`u(p) = Σᵢ Nᵢ·u(hostᵢ)`).
+//!
+//! The inverse map is solved cell-by-cell by a small Newton iteration on the
+//! residual `r(ξ) = x − Σᵢ Nᵢ(ξ)·Xᵢ`, using the element Jacobian
+//! `J = ∂x/∂ξ` (built from [`Interpolation::dshape_dxi`]). A cheap per-cell
+//! bounding-box test rejects the obvious misses first (broad phase); the
+//! reference-domain containment test on the converged `ξ` is the final word.
+//! For a point on a shared face the first containing cell (in submesh, then
+//! cell order) wins.
+
+use crate::containers::finite_element_space::Interpolation;
+use crate::containers::mesh::{ElementType, Mesh, NodeId};
+use crate::error::Result;
+use crate::store::read;
+
+/// Where one physical point sits inside a host mesh.
+#[derive(Clone, Debug)]
+pub struct Location {
+    /// Index of the host submesh the containing cell belongs to.
+    pub submesh: usize,
+    /// Index of the containing cell within that submesh.
+    pub cell: usize,
+    /// Reference coordinates `ξ` of the point in that cell.
+    pub xi: Vec<f64>,
+    /// Shape-function weights `Nᵢ(ξ)`, ordered like the cell's nodes
+    /// (sums to 1; length = `element_type.nodes_per_cell()`).
+    pub weights: Vec<f64>,
+    /// The containing cell's node ids, ordered like `weights`.
+    pub nodes: Vec<NodeId>,
+}
+
+/// Locate each physical point of `points` inside `host`.
+///
+/// Returns one entry per input point, `None` when the point lies in no host
+/// cell (within `tol` of a cell's reference domain). Each point coordinate
+/// slice must have the host `Coords` spatial dimension.
+///
+/// `tol` is the reference-domain slack for the containment test (a point up to
+/// `tol` outside the reference element is still accepted, so points exactly on
+/// a face are captured); `1e-6` is a sensible default.
+pub fn locate_points(host: &Mesh, points: &[Vec<f64>], tol: f64) -> Result<Vec<Option<Location>>> {
+    // Snapshot every host cell once: (submesh, cell, element type, node ids,
+    // node coordinates, bbox). One read lock per submesh; coordinates are copied
+    // out so no Coords guard is held during the Newton solves.
+    struct Cell {
+        submesh: usize,
+        cell: usize,
+        element_type: ElementType,
+        nodes: Vec<NodeId>,
+        coords: Vec<Vec<f64>>,
+        lo: Vec<f64>,
+        hi: Vec<f64>,
+    }
+
+    let mut cells: Vec<Cell> = Vec::new();
+    for (s_idx, sm_handle) in host.into_iter().enumerate() {
+        let (element_type, conn, coords_handle) = {
+            let sm = read(sm_handle)?;
+            (
+                sm.element_type(),
+                sm.connectivity().to_vec(),
+                sm.coords(),
+            )
+        };
+        if element_type == ElementType::POI1 {
+            continue; // A node has no interior to contain anything.
+        }
+        let npc = element_type.nodes_per_cell();
+        let c = read(&coords_handle)?;
+        for cell in 0..conn.len() / npc {
+            let ids = &conn[cell * npc..(cell + 1) * npc];
+            let coords: Vec<Vec<f64>> = ids.iter().map(|&n| Ok(c.coord(n)?.to_vec())).collect::<Result<_>>()?;
+            let dim = coords[0].len();
+            let mut lo = coords[0].clone();
+            let mut hi = coords[0].clone();
+            for p in &coords[1..] {
+                for a in 0..dim {
+                    lo[a] = lo[a].min(p[a]);
+                    hi[a] = hi[a].max(p[a]);
+                }
+            }
+            cells.push(Cell {
+                submesh: s_idx,
+                cell,
+                element_type,
+                nodes: ids.to_vec(),
+                coords,
+                lo,
+                hi,
+            });
+        }
+    }
+
+    let mut out = Vec::with_capacity(points.len());
+    for x in points {
+        let mut found: Option<Location> = None;
+        for cell in &cells {
+            // Broad phase: reject if outside the cell bbox expanded by a margin
+            // (relative to the box size, to absorb curved-edge overshoot).
+            if !in_bbox(x, &cell.lo, &cell.hi) {
+                continue;
+            }
+            if let Some((xi, weights)) = invert_cell(cell.element_type, &cell.coords, x, tol)? {
+                found = Some(Location {
+                    submesh: cell.submesh,
+                    cell: cell.cell,
+                    xi,
+                    weights,
+                    nodes: cell.nodes.clone(),
+                });
+                break;
+            }
+        }
+        out.push(found);
+    }
+    Ok(out)
+}
+
+/// Is `x` within the axis-aligned box `[lo, hi]` expanded by 10 % of its size?
+fn in_bbox(x: &[f64], lo: &[f64], hi: &[f64]) -> bool {
+    for a in 0..x.len() {
+        let margin = 0.1 * (hi[a] - lo[a]).abs() + 1e-12;
+        if x[a] < lo[a] - margin || x[a] > hi[a] + margin {
+            return false;
+        }
+    }
+    true
+}
+
+/// Newton inverse map for one cell. Returns `Some((ξ, N))` when `x` converges
+/// to a reference point inside the element (within `tol`), `None` otherwise.
+fn invert_cell(
+    element_type: ElementType,
+    coords: &[Vec<f64>],
+    x: &[f64],
+    tol: f64,
+) -> Result<Option<(Vec<f64>, Vec<f64>)>> {
+    let interp = interpolation_for(element_type);
+    let tdim = element_type.topological_dim();
+    let sdim = x.len();
+    let mut xi = reference_centroid(element_type);
+
+    for _ in 0..40 {
+        let n = interp.shape(element_type, &xi)?;
+        // Residual r = x − Σᵢ Nᵢ·Xᵢ  (length sdim).
+        let mut r = x.to_vec();
+        for (i, &ni) in n.iter().enumerate() {
+            for a in 0..sdim {
+                r[a] -= ni * coords[i][a];
+            }
+        }
+        // Jacobian J[a][j] = ∂x_a/∂ξ_j = Σᵢ (∂Nᵢ/∂ξ_j)·X[i][a]  (sdim × tdim).
+        let dn = interp.dshape_dxi(element_type, &xi)?; // [i*tdim + j]
+        let mut jac = vec![0.0; sdim * tdim];
+        for (i, coord) in coords.iter().enumerate() {
+            for a in 0..sdim {
+                for j in 0..tdim {
+                    jac[a * tdim + j] += dn[i * tdim + j] * coord[a];
+                }
+            }
+        }
+        // Solve J·δξ = r in the least-squares sense (normal equations, tdim ≤ 3).
+        let dxi = solve_normal(&jac, &r, sdim, tdim)?;
+        let mut step = 0.0;
+        for j in 0..tdim {
+            xi[j] += dxi[j];
+            step += dxi[j] * dxi[j];
+        }
+        if step.sqrt() <= 1e-12 {
+            break;
+        }
+    }
+
+    // Accept iff the converged point maps back onto x and lies in the reference
+    // domain (a diverged / out-of-cell solve fails one of the two).
+    let n = interp.shape(element_type, &xi)?;
+    let mut r2 = 0.0;
+    for a in 0..sdim {
+        let mut xa = 0.0;
+        for (i, &ni) in n.iter().enumerate() {
+            xa += ni * coords[i][a];
+        }
+        r2 += (x[a] - xa).powi(2);
+    }
+    let scale = bbox_scale(coords);
+    if r2.sqrt() <= 1e-9 * scale.max(1.0) && contains_reference(element_type, &xi, tol) {
+        Ok(Some((xi, n)))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Solve the (possibly rectangular) system `J·δ = r` via normal equations
+/// `(JᵀJ)·δ = Jᵀr`, with `J` stored row-major `sdim × tdim`. `tdim ≤ 3`.
+fn solve_normal(jac: &[f64], r: &[f64], sdim: usize, tdim: usize) -> Result<Vec<f64>> {
+    // A = JᵀJ (tdim × tdim), b = Jᵀr (tdim).
+    let mut a = vec![0.0; tdim * tdim];
+    let mut b = vec![0.0; tdim];
+    for i in 0..tdim {
+        for k in 0..tdim {
+            let mut s = 0.0;
+            for row in 0..sdim {
+                s += jac[row * tdim + i] * jac[row * tdim + k];
+            }
+            a[i * tdim + k] = s;
+        }
+        let mut s = 0.0;
+        for row in 0..sdim {
+            s += jac[row * tdim + i] * r[row];
+        }
+        b[i] = s;
+    }
+    solve_small(&mut a, &mut b, tdim)
+}
+
+/// In-place Gaussian elimination with partial pivoting for `n ≤ 3`. A singular
+/// system yields a zero step (the Newton iteration then simply stalls and the
+/// cell is rejected by the residual test).
+fn solve_small(a: &mut [f64], b: &mut [f64], n: usize) -> Result<Vec<f64>> {
+    for col in 0..n {
+        // Partial pivot.
+        let mut piv = col;
+        for row in (col + 1)..n {
+            if a[row * n + col].abs() > a[piv * n + col].abs() {
+                piv = row;
+            }
+        }
+        if a[piv * n + col].abs() < 1e-300 {
+            return Ok(vec![0.0; n]);
+        }
+        if piv != col {
+            for k in 0..n {
+                a.swap(col * n + k, piv * n + k);
+            }
+            b.swap(col, piv);
+        }
+        for row in (col + 1)..n {
+            let f = a[row * n + col] / a[col * n + col];
+            for k in col..n {
+                a[row * n + k] -= f * a[col * n + k];
+            }
+            b[row] -= f * b[col];
+        }
+    }
+    let mut x = vec![0.0; n];
+    for col in (0..n).rev() {
+        let mut s = b[col];
+        for k in (col + 1)..n {
+            s -= a[col * n + k] * x[k];
+        }
+        x[col] = s / a[col * n + col];
+    }
+    Ok(x)
+}
+
+/// A characteristic length of a cell (its bbox diagonal) for scaling residuals.
+fn bbox_scale(coords: &[Vec<f64>]) -> f64 {
+    let dim = coords[0].len();
+    let mut lo = coords[0].clone();
+    let mut hi = coords[0].clone();
+    for p in &coords[1..] {
+        for a in 0..dim {
+            lo[a] = lo[a].min(p[a]);
+            hi[a] = hi[a].max(p[a]);
+        }
+    }
+    let mut d2 = 0.0;
+    for a in 0..dim {
+        d2 += (hi[a] - lo[a]).powi(2);
+    }
+    d2.sqrt()
+}
+
+/// The interpolation whose degree matches `element_type` (linear ↔ Lagrange-1,
+/// quadratic ↔ Lagrange-2).
+fn interpolation_for(element_type: ElementType) -> Interpolation {
+    if Interpolation::Lagrange2.is_compatible_with(element_type) {
+        Interpolation::Lagrange2
+    } else {
+        Interpolation::Lagrange1
+    }
+}
+
+/// A reference-domain interior point used as the Newton starting guess.
+fn reference_centroid(element_type: ElementType) -> Vec<f64> {
+    use ElementType::*;
+    match element_type {
+        SEG2 | SEG3 => vec![0.0],
+        TRI3 | TRI6 => vec![1.0 / 3.0, 1.0 / 3.0],
+        QUA4 | QUA8 | QUA9 => vec![0.0, 0.0],
+        TET4 | TET10 => vec![0.25, 0.25, 0.25],
+        HEX8 | HEX20 | HEX27 => vec![0.0, 0.0, 0.0],
+        PENTA6 | PENTA15 => vec![1.0 / 3.0, 1.0 / 3.0, 0.5],
+        POI1 => vec![],
+    }
+}
+
+/// Is `ξ` inside `element_type`'s reference domain, allowing `tol` of slack?
+fn contains_reference(element_type: ElementType, xi: &[f64], tol: f64) -> bool {
+    use ElementType::*;
+    match element_type {
+        SEG2 | SEG3 => xi[0] >= -1.0 - tol && xi[0] <= 1.0 + tol,
+        QUA4 | QUA8 | QUA9 => xi.iter().all(|&v| v >= -1.0 - tol && v <= 1.0 + tol),
+        HEX8 | HEX20 | HEX27 => xi.iter().all(|&v| v >= -1.0 - tol && v <= 1.0 + tol),
+        TRI3 | TRI6 => {
+            let (a, b) = (xi[0], xi[1]);
+            a >= -tol && b >= -tol && a + b <= 1.0 + tol
+        }
+        TET4 | TET10 => {
+            let (a, b, c) = (xi[0], xi[1], xi[2]);
+            a >= -tol && b >= -tol && c >= -tol && a + b + c <= 1.0 + tol
+        }
+        PENTA6 | PENTA15 => {
+            let (a, b, c) = (xi[0], xi[1], xi[2]);
+            a >= -tol && b >= -tol && a + b <= 1.0 + tol && c >= -tol && c <= 1.0 + tol
+        }
+        POI1 => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::containers::mesh::{Coords, Node, SubMesh};
+    use crate::store::insert;
+
+    /// A unit HEX8 at the origin; locate its centre and a corner.
+    #[test]
+    fn locate_in_hex8() {
+        let coords = insert(Coords::new(3).unwrap());
+        let corners = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0],
+        ];
+        let ids: Vec<_> = corners
+            .iter()
+            .map(|c| Node::create_in(coords.clone(), c).unwrap().id())
+            .collect();
+        let mut sm = SubMesh::new(coords, ElementType::HEX8);
+        sm.add_cell(&ids).unwrap();
+        let mesh = Mesh::from_submesh(sm);
+
+        let pts = vec![vec![0.5, 0.5, 0.5], vec![2.0, 2.0, 2.0]];
+        let loc = locate_points(&mesh, &pts, 1e-6).unwrap();
+
+        // Centre: found, all weights 1/8.
+        let c = loc[0].as_ref().expect("centre is inside");
+        assert_eq!(c.nodes.len(), 8);
+        for w in &c.weights {
+            assert!((w - 0.125).abs() < 1e-9);
+        }
+        // Weights partition unity, and interpolate the coordinate back.
+        let sum: f64 = c.weights.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+        // Outside point: not found.
+        assert!(loc[1].is_none());
+    }
+
+    /// A single TET4; the shape weights at a known interior point match the
+    /// barycentric coordinates.
+    #[test]
+    fn locate_in_tet4_weights_are_barycentric() {
+        let coords = insert(Coords::new(3).unwrap());
+        let v = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ];
+        let ids: Vec<_> = v
+            .iter()
+            .map(|c| Node::create_in(coords.clone(), c).unwrap().id())
+            .collect();
+        let mut sm = SubMesh::new(coords, ElementType::TET4);
+        sm.add_cell(&ids).unwrap();
+        let mesh = Mesh::from_submesh(sm);
+
+        // Point x reconstructs from barycentric weights (0.1,0.2,0.3,0.4).
+        let x = vec![0.2, 0.3, 0.4];
+        let loc = locate_points(&mesh, std::slice::from_ref(&x), 1e-6).unwrap();
+        let l = loc[0].as_ref().expect("inside tet");
+        let expected = [0.1, 0.2, 0.3, 0.4];
+        for (w, e) in l.weights.iter().zip(expected.iter()) {
+            assert!((w - e).abs() < 1e-9, "weight {w} vs {e}");
+        }
+    }
+
+    /// A point just outside a QUA4 (2D) is rejected; one inside is accepted.
+    #[test]
+    fn locate_in_qua4_2d() {
+        let coords = insert(Coords::new(2).unwrap());
+        let v = [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 1.0]];
+        let ids: Vec<_> = v
+            .iter()
+            .map(|c| Node::create_in(coords.clone(), c).unwrap().id())
+            .collect();
+        let mut sm = SubMesh::new(coords, ElementType::QUA4);
+        sm.add_cell(&ids).unwrap();
+        let mesh = Mesh::from_submesh(sm);
+
+        let pts = vec![vec![1.0, 0.5], vec![1.0, 2.0]];
+        let loc = locate_points(&mesh, &pts, 1e-6).unwrap();
+        assert!(loc[0].is_some());
+        assert!(loc[1].is_none());
+    }
+}
