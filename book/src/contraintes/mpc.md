@@ -130,8 +130,9 @@ L'exemple complet est dans `examples/mpc_periodicite.py`.
 - Les terme-maillages sont **POI1** (un nœud par relation) ; l'appariement est
   positionnel (aucun outil géométrique fourni).
 - Les coefficients sont des **scalaires** par terme (constants sur les cellules
-  du terme-maillage) ; les coefficients variant par nœud (bras de levier d'une
-  liaison rigide) restent à faire.
+  du terme-maillage). Les coefficients variant par nœud (poids d'interpolation,
+  bras de levier) sont couverts par une contrainte dédiée,
+  [Baignage (embedded)](embedded.md).
 - Une **seule** relation reliant un grand nombre de termes (`Σ` sur 100 nœuds)
   demanderait autant de terme-maillages ; ce cas passera par une extension
   « cellule multi-nœuds ». Beaucoup de relations **parallèles** (le cas courant)

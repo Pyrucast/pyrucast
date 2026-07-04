@@ -35,6 +35,7 @@
   - [Contraintes](contraintes.md)
     - [Dirichlet](contraintes/dirichlet.md)
     - [Multi-points (MPC)](contraintes/mpc.md)
+    - [Baignage (embedded)](contraintes/embedded.md)
 
 # Détail des opérateurs
 

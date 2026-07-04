@@ -109,6 +109,11 @@ un index dépasse le nombre de relations.
 - [Multi-points (MPC)](contraintes/mpc.md) — impose une relation linéaire
   **à N termes** `Σₖ aₖ·u(nœudₖ, varₖ) = g` entre plusieurs DOFs (égalité,
   périodicité, liaison affine…). Généralise Dirichlet.
+- [Baignage (embedded)](contraintes/embedded.md) — lie chaque nœud d'un maillage
+  **immergé** à l'**interpolation** d'un maillage hôte au même point
+  (`u_c(p) = Σᵢ Nᵢ(ξ_p)·u_c(hôteᵢ)`) : une barre baignée dans un volume. Les
+  poids `Nᵢ` sont calculés par **localisation de point** à la construction ; c'est
+  une MPC dont les coefficients **varient par nœud**.
 
 D'autres contraintes (contact linéarisé…) suivront le même patron : une struct
 implémentant `SubModelKind`, des blocs `C`/`Cᵀ` littéraux. Voir [Ajouter une
