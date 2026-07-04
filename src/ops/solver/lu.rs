@@ -91,7 +91,57 @@ use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use faer::linalg::solvers::Solve;
 use faer::sparse::{SparseColMat, Triplet};
+use nalgebra_sparse::CscMatrix;
 use std::sync::Arc;
+
+/// A faer sparse LU factorization over `usize` indices and `f64` values — the
+/// direct back-end shared by [`Factorization`] (full saddle-point system) and
+/// [`crate::ops::solver::eliminate`] (reduced condensed system).
+pub(crate) type SparseLu = faer::sparse::linalg::solvers::Lu<usize, f64>;
+
+/// Factorize a square CSC matrix with sparse LU (faer). The single place the
+/// nalgebra-sparse CSC → faer `SparseColMat` → `sp_lu` conversion lives, so both
+/// the Lagrange and the elimination solvers share one implementation.
+pub(crate) fn factorize_csc(csc: &CscMatrix<f64>) -> Result<SparseLu> {
+    let n = csc.nrows();
+    if n == 0 {
+        return Err(PyrucastError::Message("solve: matrix is empty".into()));
+    }
+    if csc.ncols() != n {
+        return Err(PyrucastError::Message(format!(
+            "solve: matrix must be square; got {}×{}",
+            n,
+            csc.ncols()
+        )));
+    }
+    // Build a faer sparse matrix from the (duplicate-summed) CSC. Each
+    // (row, col) appears once, so the triplet form is exact.
+    let col_offsets = csc.col_offsets();
+    let row_indices = csc.row_indices();
+    let values = csc.values();
+    let mut triplets: Vec<Triplet<usize, usize, f64>> = Vec::with_capacity(values.len());
+    for col in 0..n {
+        for k in col_offsets[col]..col_offsets[col + 1] {
+            triplets.push(Triplet::new(row_indices[k], col, values[k]));
+        }
+    }
+    let a = SparseColMat::<usize, f64>::try_new_from_triplets(n, n, &triplets)
+        .map_err(|e| PyrucastError::Message(format!("solve: sparse build failed: {e:?}")))?;
+    a.sp_lu()
+        .map_err(|e| PyrucastError::Message(format!("solve: LU failed (singular?): {e:?}")))
+}
+
+/// Solve `A·x = b` for one right-hand side against a computed [`SparseLu`]
+/// (descent / back-substitution only). Shared by both direct solvers.
+pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
+    let n = b.len();
+    let mut x = faer::Mat::<f64>::zeros(n, 1);
+    for (i, &v) in b.iter().enumerate() {
+        x[(i, 0)] = v;
+    }
+    lu.solve_in_place(&mut x);
+    (0..n).map(|i| x[(i, 0)]).collect()
+}
 
 /// Direct solver method. Today only sparse LU (faer); the enum leaves room to
 /// force another backend (iterative, …) in the future without changing the
@@ -130,7 +180,7 @@ impl Default for SolveOptions {
 /// inside the `Matrix` (see [`SolveOptions::cache`]); derived, non-serialized
 /// state — never persisted.
 pub struct Factorization {
-    lu: faer::sparse::linalg::solvers::Lu<usize, f64>,
+    lu: SparseLu,
     row_dofs: Vec<(NodeId, String)>,
     col_dofs: Vec<(NodeId, String)>,
 }
@@ -147,28 +197,7 @@ impl Factorization {
                 col_dofs.len()
             )));
         }
-        let n = row_dofs.len();
-        if n == 0 {
-            return Err(PyrucastError::Message("solve: matrix is empty".into()));
-        }
-
-        // Build a faer sparse matrix from the (duplicate-summed) CSC. Each
-        // (row, col) appears once, so the triplet form is exact.
-        let csc = matrix.to_csc()?;
-        let col_offsets = csc.col_offsets();
-        let row_indices = csc.row_indices();
-        let values = csc.values();
-        let mut triplets: Vec<Triplet<usize, usize, f64>> = Vec::with_capacity(values.len());
-        for col in 0..n {
-            for k in col_offsets[col]..col_offsets[col + 1] {
-                triplets.push(Triplet::new(row_indices[k], col, values[k]));
-            }
-        }
-        let a = SparseColMat::<usize, f64>::try_new_from_triplets(n, n, &triplets)
-            .map_err(|e| PyrucastError::Message(format!("solve: sparse build failed: {e:?}")))?;
-        let lu = a
-            .sp_lu()
-            .map_err(|e| PyrucastError::Message(format!("solve: LU failed (singular?): {e:?}")))?;
+        let lu = factorize_csc(&matrix.to_csc()?)?;
         Ok(Self {
             lu,
             row_dofs,
@@ -178,13 +207,7 @@ impl Factorization {
 
     /// Solve `A·x = b` for one right-hand side (descent/back-substitution only).
     fn solve_vec(&self, b: &[f64]) -> Vec<f64> {
-        let n = self.row_dofs.len();
-        let mut x = faer::Mat::<f64>::zeros(n, 1);
-        for (i, &v) in b.iter().enumerate() {
-            x[(i, 0)] = v;
-        }
-        self.lu.solve_in_place(&mut x);
-        (0..self.col_dofs.len()).map(|i| x[(i, 0)]).collect()
+        lu_solve_vec(&self.lu, b)
     }
 }
 
