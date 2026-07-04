@@ -21,11 +21,15 @@ Ajouter une variante à l'enum `ElementType` et ses métadonnées :
 
 - **nombre de nœuds** par cellule ;
 - **dimension topologique** (0 pour POI1, 1 SEG, 2 face, 3 volume) ;
-- **nom court** cast3m (`"PRI6"`, `"PYR5"`…), utilisé pour le parse / display
-  côté Python (le type est passé en **chaîne** : `pyrucast.Mesh(c, "PRI6")`).
+- **nom court** cast3m (`"PENTA6"`, `"PYR5"`…), utilisé pour le parse / display
+  côté Python (le type est passé en **chaîne** : `pyrucast.Mesh(c, "PENTA6")`).
 
 À ce stade, le type est utilisable géométriquement. Aucun wrapper PyO3
 supplémentaire n'est nécessaire — `ElementType` voyage comme une chaîne.
+
+> **Exemple concret** : le prisme `PENTA6` (extrusion d'un TRI3) suit
+> exactement ce chapitre, des métadonnées jusqu'à l'export — un bon patron de
+> référence.
 
 ## 2. L'élément de référence
 
@@ -80,14 +84,38 @@ SEG2, 1/2 pour TRI3, 8 pour HEX8…) — c'est un test à ajouter.
 nouveau type sans interpolation/quadrature déclarée échouera proprement. Une
 fois les §3 et §4 faits, la construction passe automatiquement.
 
-## 6. Visualisation (optionnel) — `viz/mesh_draw.rs`
+## 6. Visualisation (optionnel) — `viz/`
 
-Pour tracer le nouveau type, ajouter un bras au `match` de
-`submesh_primitives` : convertir une cellule en primitive(s) géométrique(s)
-(point, arête, face(s)). Sans cela, le maillage reste calculable mais pas
-traçable.
+Pour tracer le nouveau type :
 
-## 7. Tests
+- **`viz/mesh_draw.rs`** — ajouter un bras au `match` de `submesh_primitives`
+  (convertir une cellule en point / arête / face(s)) et compléter
+  `element_edges` (arêtes du fil de fer). Pour un **volume**, définir la table
+  des faces (à l'image de `TET4_FACES` / `HEX8_FACES` / `PENTA6_FACES`) et
+  l'ajouter à `boundary_faces`, pour que seules les faces de peau soient
+  émises (les faces internes, cachées dans le solide opaque, sont retirées).
+- **`viz/subdivide.rs`** — pour le **rendu interpolé** (couleur variant dans
+  l'élément), ajouter les coordonnées de référence des nœuds (`ref_nodes`) et
+  un bras à `subdivide` qui découpe chaque face en sous-triangles. Un prisme
+  réutilise `tri_face` pour ses deux triangles et `quad_face` pour ses trois
+  faces latérales.
+
+Sans cela, le maillage reste calculable mais pas traçable.
+
+## 7. Interopérabilité (optionnel)
+
+Pour que le type traverse les entrées/sorties et les mailleurs :
+
+- **export VTK** — `ops/export/vtk.rs` : associer le **code de cellule VTK**
+  (`vtk_cell_type`) ; l'ordre local coïncidant avec VTK, la connectivité est
+  copiée telle quelle (prisme = *wedge*, code 13).
+- **lecture gmsh** — `ops/mesher/gmsh.rs` : associer le **code gmsh**
+  (`element_type_from_gmsh`) ; prisme = code 6.
+- **mailleurs producteurs** — un type volumique se fabrique typiquement par
+  extrusion : `ops/mesher/sweep.rs` engendre PENTA6 depuis un TRI3 (via
+  `extrude` et `sweep_solid`, TRI3 → PENTA6 comme QUA4 → HEX8).
+
+## 8. Tests
 
 Les invariants vérifiés par les tests des autres types s'appliquent au nouveau,
 et constituent une bonne checklist :
@@ -108,7 +136,9 @@ et constituent une bonne checklist :
 | convention de référence | (doc) `element_type.rs` + [fe-space](../fe-space.md) | l'élément fini |
 | fonctions de forme + dérivées | `containers/finite_element_space/interpolation.rs` | l'élément fini |
 | points / poids de Gauss | `containers/finite_element_space/quadrature.rs` | l'élément fini |
-| primitive de rendu | `viz/mesh_draw.rs` | la visualisation |
+| primitive de rendu + faces/arêtes | `viz/mesh_draw.rs` | la visualisation |
+| rendu interpolé (subdivision) | `viz/subdivide.rs` | la visualisation colorée |
+| code VTK / gmsh | `ops/export/vtk.rs`, `ops/mesher/gmsh.rs` | les entrées/sorties |
 | tests d'invariants | `tests/` / doctests | le merge |
 
 Comme pour [ajouter une physique](../ajouter-une-physique.md), tout le code

@@ -66,14 +66,22 @@ de la source reste partagé dans la copie.
   main droite), et `axis` est obligatoire (il n'a pas besoin d'être normé).
 
 ```python
-c = pyrucast.Coords(dim=3)
-# … un maillage de surface `face` sur c …
+import math
+import pyrucast
 
-# Copie translatée de 5 selon +z.
+# Une face TRI3 (un seul triangle) dans le plan z = 0.
+c = pyrucast.Coords(dim=3)
+face = pyrucast.Mesh(c, "TRI3")
+face.unit().add_cell([
+    c.add_node([1.0, 0.0, 0.0]),
+    c.add_node([2.0, 0.0, 0.0]),
+    c.add_node([1.0, 0.0, 1.0]),
+])
+
+# Copie translatée de 5 selon +z (nœuds neufs ; `face` reste intacte).
 haut = pyrucast.translate(face, [0.0, 0.0, 5.0])
 
 # Copie tournée de 30° autour de l'axe z passant par l'origine.
-import math
 tournee = pyrucast.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
 ```
 
@@ -95,8 +103,7 @@ Associé à `translate` / `rotate`, il construit une tranche de solide entre une
 surface et sa copie déplacée :
 
 ```python
-# `face` : une surface TRI3 sur un Coords 3D.
-tournee = pyrucast.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+# `face` et `tournee` : la face TRI3 ci-dessus et sa copie tournée de 30°.
 solide = pyrucast.sweep_solid(face, tournee, 1)
 print(solide.element_types())  # ['PENTA6']
 ```
