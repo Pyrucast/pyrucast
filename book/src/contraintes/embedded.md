@@ -125,7 +125,10 @@ solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
 assert abs(solution.value(p, "T") - field([0.3, 0.6, 0.2])) < 1e-9  # 4.2
 ```
 
-L'exemple complet est dans `examples/barre_baignee.py`.
+L'exemple complet est dans `examples/barre_baignee.py`. La variante
+**vectorielle** — une barre suivant les *déplacements* d'un volume élastique en
+`u_x`/`u_y`/`u_z`, le cas qui motive le baignage — est dans
+`examples/barre_baignee_elastique.py`.
 
 ## Limitations actuelles
 
