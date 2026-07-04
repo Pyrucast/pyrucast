@@ -191,3 +191,45 @@ def test_constraint_rhs_rejects_bad_input():
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
     with pytest.raises(Exception):
         dirichlet.constraint_rhs([(nodes[-1], 0.0)])
+
+
+def test_mpc_elimination_matches_lagrange():
+    """`solve_eliminate` reproduces the Lagrange `solve` on a non-chained,
+    two-term MPC: `2·T(node4) − 1·T(node2) = 1.5` with Dirichlet `T(node0) = 0`
+    (disjoint slaves). Both fields coincide and the relation holds exactly."""
+    c, nodes, fes, materials = _heat_bar()
+
+    imposed0 = pyrucast.poi1_from_nodes([nodes[0]])
+    mult0 = pyrucast.barycenter(imposed0)
+    dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
+    dir_mult = mult0.node(0, 0, 0)
+
+    mesh4 = pyrucast.poi1_from_nodes([nodes[4]])
+    mesh2 = pyrucast.poi1_from_nodes([nodes[2]])
+    mult_mpc = pyrucast.barycenter(mesh4)
+    mpc = pyrucast.Model.mpc(
+        [(mesh4, "T", "q", 2.0), (mesh2, "T", "q", -1.0)],
+        mult_mpc,
+    )
+    mpc_mult = mult_mpc.node(0, 0, 0)
+
+    model = pyrucast.Model.heat_conduction(fes) | dirichlet | mpc
+
+    rhs_mesh = pyrucast.Mesh(c, "POI1")
+    rhs_mesh.unit().add_cell([dir_mult])
+    rhs_mesh.unit().add_cell([mpc_mult])
+    rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T", "mpc_rhs"])
+    rhs[0].set_value(dir_mult, "imposed_T", 0.0)
+    rhs[0].set_value(mpc_mult, "mpc_rhs", 1.5)
+
+    k = pyrucast.stiffness(model, materials)
+    lagrange = pyrucast.solve(k, rhs)
+    elim = pyrucast.solve_eliminate(model, k, rhs)
+
+    for node in nodes:
+        assert abs(lagrange.value(node, "T") - elim.value(node, "T")) < TOL
+    t0 = elim.value(nodes[0], "T")
+    t2 = elim.value(nodes[2], "T")
+    t4 = elim.value(nodes[4], "T")
+    assert abs(t0) < TOL
+    assert abs(2.0 * t4 - t2 - 1.5) < TOL

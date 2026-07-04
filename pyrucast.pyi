@@ -69,6 +69,7 @@ __all__ = [
     "sin",
     "sinh",
     "solve",
+    "solve_eliminate",
     "sqrt",
     "stiffness",
     "sub_material_field",
@@ -927,6 +928,34 @@ class Model:
         `Model.dual_of(variable)` — the dual (residual) variable conjugate to a
         primal `variable` (e.g. `"u_x" -> "f_x"`, `"T" -> "q"`), searched across
         all sub-models, or `None`. A helper to fill an MPC term's `target_dual`.
+        """
+    def constraint_rhs(self, imposed: typing.Sequence[tuple[Node, builtins.float]]) -> NodeField:
+        r"""
+        `Model.constraint_rhs(imposed)` — build the constraint load (right-hand
+        side) of this model's constraint from `(node, g)` pairs.
+        
+        `imposed` is a list of `(Node, value)`: each node **keys the relation it
+        belongs to** (for `dirichlet` the constrained node itself, for `mpc` any
+        of the relation's term nodes), and `value` is the right-hand side `g`.
+        Returns a fresh `NodeField` over the multiplier nodes, carrying the
+        constraint's imposed-value component (its dual, e.g. `imposed_T` /
+        `mpc_rhs`), with `g` at each cited relation and `0` elsewhere. Union it
+        into the global load with `|`, e.g. `load | model.constraint_rhs([...])`.
+        
+        The model must hold exactly one constraint sub-model (the `dirichlet` /
+        `mpc` object). Raises if a node constrains none of its relations, or keys
+        several of them (ambiguous — drop it).
+        """
+    def constraint_rhs_by_index(self, imposed: typing.Sequence[tuple[builtins.int, builtins.float]]) -> NodeField:
+        r"""
+        `Model.constraint_rhs_by_index(imposed)` — like `constraint_rhs` but each
+        relation is keyed by its **index** (0-based, in `relations()` order)
+        instead of a node.
+        
+        `imposed` is a list of `(relation_index, g)`. Use this when a node
+        participates in several relations, where node keying would be ambiguous.
+        Returns the same kind of `NodeField` over the multiplier nodes; union it
+        with `|`. Raises if an index is out of range.
         """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, key: typing.Any) -> typing.Any:
@@ -2263,6 +2292,28 @@ def solve(matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] 
     A `Ctrl+C` is honoured at the solver's phase boundaries. The factorization
     itself is a single library call and is not interrupted mid-way; when it is
     already cached, only the (cheap) substitution runs.
+    """
+
+def solve_eliminate(model: Model, matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
+    r"""
+    Solve `model`'s constrained system by **master/slave elimination**
+    (condensation) — the alternative to the Lagrange-multiplier path of
+    [`solve`].
+    
+    `model` is the constrained model; `matrix` is its assembled (saddle-point)
+    stiffness; `rhs` is the load field (its right-hand sides `g` live at the
+    multiplier nodes' imposed-value slots). Each linear relation eliminates one
+    slave DOF, so the system solved is smaller and definite (no multiplier DOFs).
+    The solution carries the primal field at every physics node plus each slave's
+    reaction (the multiplier equivalent) in its dual row.
+    
+    A model with no constraint falls back to a plain [`solve`]. v1 scope:
+    non-chained, disjoint slaves (a slave DOF may not appear in another relation).
+    
+    `method` selects the direct back-end for the reduced system (currently only
+    `"lu"`). `cache` (default `True`) reuses the condensation stored transparently
+    on the matrix, cleared when the matrix changes. `Ctrl+C` is honoured at phase
+    boundaries.
     """
 
 def sqrt(field: typing.Any) -> typing.Any:
