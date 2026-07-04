@@ -80,7 +80,10 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `line_seg2(a: &Node, b: &Node, n_elems: usize) -> Mesh` | `line_seg2(a, b, n_elems) -> Mesh` |
 | `circle_seg2(center: &Node, normal: &[f64], radius: f64, n_elems: usize) -> Mesh` | `circle_seg2(center, normal, radius, n_elems) -> Mesh` |
 | `sweep_qua4(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_qua4(mesh_a, mesh_b, n_layers) -> Mesh` |
+| `sweep_solid(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_solid(mesh_a, mesh_b, n_layers) -> Mesh` |
 | `extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Mesh` | `extrude(mesh, direction, n_layers) -> Mesh` |
+| `translate(mesh: &Mesh, vector: &[f64]) -> Mesh` | `translate(mesh, vector) -> Mesh` |
+| `rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> Mesh` | `rotate(mesh, angle, center, axis=None) -> Mesh` |
 | `fill_surface(contour: &Mesh, et: ElementType, refinement: Option<…>) -> Mesh` | `fill_surface(contour, element_type, max_edge_length=None, min_angle_deg=None) -> Mesh` |
 | `surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Mesh` | `surface(contour, element_type, size=None) -> Mesh` |
 | `volume(envelope: &Mesh, size: Option<f64>) -> Mesh` | `volume(envelope, size=None) -> Mesh` |

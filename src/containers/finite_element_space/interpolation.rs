@@ -112,6 +112,19 @@ impl Interpolation {
                 }
                 Ok(n)
             }
+            (Self::Lagrange1, ElementType::PENTA6) => {
+                // Prism = TRI3 (barycentric ξ, η) ⊗ SEG2 (linear ζ ∈ [0, 1]).
+                let (a, b, c) = (xi[0], xi[1], xi[2]);
+                let (l1, l2, l3) = (1.0 - a - b, a, b);
+                Ok(vec![
+                    l1 * (1.0 - c), // node 0
+                    l2 * (1.0 - c), // node 1
+                    l3 * (1.0 - c), // node 2
+                    l1 * c,         // node 3
+                    l2 * c,         // node 4
+                    l3 * c,         // node 5
+                ])
+            }
             (Self::Lagrange1, ElementType::POI1) => unreachable!(), // ruled out above
         }
     }
@@ -168,6 +181,32 @@ impl Interpolation {
                     out.push(0.125 * zeta_i * one_a * one_b);
                 }
                 Ok(out)
+            }
+            (Self::Lagrange1, ElementType::PENTA6) => {
+                // ∂N_i/∂(ξ, η, ζ) with L1 = 1-ξ-η, L2 = ξ, L3 = η and the
+                // ζ ∈ [0, 1] linear factor.
+                let (a, b, c) = (xi[0], xi[1], xi[2]);
+                let (l1, l2, l3) = (1.0 - a - b, a, b);
+                Ok(vec![
+                    -(1.0 - c),
+                    -(1.0 - c),
+                    -l1, // dN0
+                    1.0 - c,
+                    0.0,
+                    -l2, // dN1
+                    0.0,
+                    1.0 - c,
+                    -l3, // dN2
+                    -c,
+                    -c,
+                    l1, // dN3
+                    c,
+                    0.0,
+                    l2, // dN4
+                    0.0,
+                    c,
+                    l3, // dN5
+                ])
             }
             (Self::Lagrange1, ElementType::POI1) => unreachable!(),
         }
@@ -360,6 +399,30 @@ mod tests {
         for (a, b, c) in [(0.0, 0.0, 0.0), (0.3, -0.7, 0.5), (-0.5, 0.5, -0.5)] {
             check_partition_of_unity(Interpolation::Lagrange1, ElementType::HEX8, &[a, b, c]);
             check_derivatives_sum_to_zero(Interpolation::Lagrange1, ElementType::HEX8, &[a, b, c]);
+        }
+    }
+
+    #[test]
+    fn lagrange1_penta6() {
+        check_kronecker(
+            Interpolation::Lagrange1,
+            ElementType::PENTA6,
+            &[
+                vec![0.0, 0.0, 0.0],
+                vec![1.0, 0.0, 0.0],
+                vec![0.0, 1.0, 0.0],
+                vec![0.0, 0.0, 1.0],
+                vec![1.0, 0.0, 1.0],
+                vec![0.0, 1.0, 1.0],
+            ],
+        );
+        for (a, b, c) in [(1.0 / 3.0, 1.0 / 3.0, 0.5), (0.1, 0.2, 0.7)] {
+            check_partition_of_unity(Interpolation::Lagrange1, ElementType::PENTA6, &[a, b, c]);
+            check_derivatives_sum_to_zero(
+                Interpolation::Lagrange1,
+                ElementType::PENTA6,
+                &[a, b, c],
+            );
         }
     }
 

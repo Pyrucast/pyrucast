@@ -151,11 +151,53 @@ pub fn sweep_qua4(
 }
 
 /// Extrude `mesh` by `n_layers` layers along `direction` (the total
-/// displacement vector). SEG2 → QUA4, QUA4 → HEX8.
+/// displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn extrude(mesh: PyRef<PyMesh>, direction: Vec<f64>, n_layers: usize) -> PyResult<PyMesh> {
     let result = crate::ops::mesher::extrude(&mesh.inner, &direction, n_layers)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Sweep two matching surface meshes into a solid mesh, building `n_layers`
+/// layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep_qua4`:
+/// TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn sweep_solid(
+    mesh_a: PyRef<PyMesh>,
+    mesh_b: PyRef<PyMesh>,
+    n_layers: usize,
+) -> PyResult<PyMesh> {
+    let mesh = crate::ops::mesher::sweep_solid(&mesh_a.inner, &mesh_b.inner, n_layers)?;
+    Ok(PyMesh { inner: mesh })
+}
+
+/// Translate `mesh` by `vector`, returning a fresh copy with its own nodes
+/// (the original is left untouched). `vector` matches the mesh dimension.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn translate(mesh: PyRef<PyMesh>, vector: Vec<f64>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::translate(&mesh.inner, &vector)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Rotate `mesh` by `angle` (radians) about `center`, returning a fresh copy
+/// with its own nodes (the original is left untouched).
+///
+/// In 2-D, `center` is a point and `axis` is ignored. In 3-D, the rotation is
+/// about the line through `center` directed by `axis` (right-handed); `axis`
+/// is required.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, angle, center, axis=None))]
+pub fn rotate(
+    mesh: PyRef<PyMesh>,
+    angle: f64,
+    center: Vec<f64>,
+    axis: Option<Vec<f64>>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::rotate(&mesh.inner, angle, &center, axis.as_deref())?;
     Ok(PyMesh { inner: result })
 }
 

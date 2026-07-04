@@ -97,7 +97,10 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesher::line_seg2, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::circle_seg2, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::sweep_qua4, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::sweep_solid, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::extrude, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::translate, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::rotate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::fill_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::volume, m)?)?;

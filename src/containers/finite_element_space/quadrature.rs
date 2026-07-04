@@ -86,6 +86,7 @@ impl QuadratureRule {
             (Self::Gauss, ElementType::TRI3) => 3,
             (Self::Gauss, ElementType::QUA4) => 4,
             (Self::Gauss, ElementType::TET4) => 4,
+            (Self::Gauss, ElementType::PENTA6) => 6,
             (Self::Gauss, ElementType::HEX8) => 8,
             (Self::Reduced, _) => 1,
             (_, ElementType::POI1) => unreachable!(),
@@ -139,6 +140,24 @@ impl QuadratureRule {
                     vec![1.0 / 24.0; 4],
                 )
             }
+            (Self::Gauss, ElementType::PENTA6) => {
+                // Tensor product of the 3-point TRI3 rule (weights 1/6) with
+                // the 2-point Gauss rule mapped to ζ ∈ [0, 1] (weights 1/2).
+                let g = 0.5 / 3.0_f64.sqrt();
+                let tri = [(0.5, 0.0), (0.5, 0.5), (0.0, 0.5)];
+                let zeta = [0.5 - g, 0.5 + g];
+                let mut xi = Vec::with_capacity(6 * 3);
+                let mut w = Vec::with_capacity(6);
+                for &(a, b) in &tri {
+                    for &z in &zeta {
+                        xi.push(a);
+                        xi.push(b);
+                        xi.push(z);
+                        w.push((1.0 / 6.0) * 0.5);
+                    }
+                }
+                (xi, w)
+            }
             (Self::Gauss, ElementType::HEX8) => {
                 let a = 1.0 / 3.0_f64.sqrt();
                 let mut xi = Vec::with_capacity(8 * 3);
@@ -163,6 +182,7 @@ impl QuadratureRule {
                 ElementType::TRI3 => (vec![1.0 / 3.0, 1.0 / 3.0], vec![0.5]),
                 ElementType::QUA4 => (vec![0.0, 0.0], vec![4.0]),
                 ElementType::TET4 => (vec![0.25, 0.25, 0.25], vec![1.0 / 6.0]),
+                ElementType::PENTA6 => (vec![1.0 / 3.0, 1.0 / 3.0, 0.5], vec![0.5]),
                 ElementType::HEX8 => (vec![0.0, 0.0, 0.0], vec![8.0]),
                 ElementType::POI1 => unreachable!(),
             },
@@ -203,6 +223,7 @@ mod tests {
             ElementType::TRI3 => 0.5,
             ElementType::QUA4 => 4.0,
             ElementType::TET4 => 1.0 / 6.0,
+            ElementType::PENTA6 => 0.5,
             ElementType::HEX8 => 8.0,
             ElementType::POI1 => unreachable!(),
         }
@@ -215,6 +236,7 @@ mod tests {
             ElementType::TRI3,
             ElementType::QUA4,
             ElementType::TET4,
+            ElementType::PENTA6,
             ElementType::HEX8,
         ] {
             let (_xi, w) = QuadratureRule::Gauss.points(et).unwrap();
@@ -237,6 +259,7 @@ mod tests {
             ElementType::TRI3,
             ElementType::QUA4,
             ElementType::TET4,
+            ElementType::PENTA6,
             ElementType::HEX8,
         ] {
             let n_g = QuadratureRule::Gauss.point_count(et).unwrap();

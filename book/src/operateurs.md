@@ -12,7 +12,7 @@ par module, plus la visualisation (qui vit sous `src/viz/`).
 
 | Module Rust | Chapitre | Contenu |
 |---|---|---|
-| `ops::mesher` | [Maillage](operateurs/maillage.md) | `line_seg2`, `circle_seg2`, `extrude`, `sweep_qua4`, `fill_surface`, `surface`, `volume`, `contour`, `elements_on`, `merge_nodes`, `read_gmsh`, `to_poi1`, `barycenter`, `consolidate`… |
+| `ops::mesher` | [Maillage](operateurs/maillage.md) | `line_seg2`, `circle_seg2`, `extrude`, `sweep_qua4`, `sweep_solid`, `translate`, `rotate`, `fill_surface`, `surface`, `volume`, `contour`, `elements_on`, `merge_nodes`, `read_gmsh`, `to_poi1`, `barycenter`, `consolidate`… |
 | `ops::build` | [Construction](operateurs/construction.md) | champs matériau (`material_field`…) |
 | `ops::geom` | [Géométrie](operateurs/geometrie.md) | mesures géométriques *(réservé)* |
 | `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `interp_to_gauss` (nœuds → Gauss), `thermal_strain` (déformation thermique `EPTH`), `restrict`, `select`, `mask`, `merge`, `consolidate`, `integral` / `integral_element` (intégrale `∫ f dΩ`), `xty` / `xtx` (produits scalaires globaux) / `psca` (produit scalaire nœud par nœud), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |

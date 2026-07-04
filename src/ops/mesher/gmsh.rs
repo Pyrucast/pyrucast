@@ -67,11 +67,12 @@ fn element_type_from_gmsh(code: u32) -> Result<ElementType> {
         3 => ElementType::QUA4,
         4 => ElementType::TET4,
         5 => ElementType::HEX8,
+        6 => ElementType::PENTA6,
         15 => ElementType::POI1,
         other => {
             return Err(err(format!(
                 "gmsh: unsupported element type {other} (supported: 1=SEG2, \
-                 2=TRI3, 3=QUA4, 4=TET4, 5=HEX8, 15=POI1)"
+                 2=TRI3, 3=QUA4, 4=TET4, 5=HEX8, 6=PENTA6, 15=POI1)"
             )))
         }
     })

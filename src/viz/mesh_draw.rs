@@ -94,6 +94,18 @@ pub(crate) const HEX8_FACES: [[usize; 4]; 6] = [
     [3, 0, 4, 7],
 ];
 
+/// Faces of a PENTA6 (prism) — two triangular caps then three
+/// quadrilateral sides, each oriented outwards, in the convention used by
+/// [`crate::ops::mesher::extrude`]: PENTA6 = [bot[0..3], top[0..3]]. The
+/// caps carry 3 indices, the sides 4, so the faces are stored as slices.
+pub(crate) const PENTA6_FACES: [&[usize]; 5] = [
+    &[0, 2, 1],    // bottom triangle (normal opposed to extrusion direction)
+    &[3, 4, 5],    // top triangle
+    &[0, 1, 4, 3], // side
+    &[1, 2, 5, 4], // side
+    &[2, 0, 3, 5], // side
+];
+
 /// Edges of each element type, as local node-index pairs — used by the
 /// wireframe rendering style. POI1 has no edge (it draws as a dot).
 #[rustfmt::skip]
@@ -104,6 +116,11 @@ fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
         ElementType::TRI3 => &[[0, 1], [1, 2], [2, 0]],
         ElementType::QUA4 => &[[0, 1], [1, 2], [2, 3], [3, 0]],
         ElementType::TET4 => &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
+        ElementType::PENTA6 => &[
+            [0, 1], [1, 2], [2, 0],
+            [3, 4], [4, 5], [5, 3],
+            [0, 3], [1, 4], [2, 5],
+        ],
         ElementType::HEX8 => &[
             [0, 1], [1, 2], [2, 3], [3, 0],
             [4, 5], [5, 6], [6, 7], [7, 4],
@@ -128,6 +145,7 @@ pub(crate) fn boundary_faces(et: ElementType, conn: &[NodeId]) -> Option<HashSet
     let faces: Vec<&[usize]> = match et {
         ElementType::TET4 => TET4_FACES.iter().map(|f| f.as_slice()).collect(),
         ElementType::HEX8 => HEX8_FACES.iter().map(|f| f.as_slice()).collect(),
+        ElementType::PENTA6 => PENTA6_FACES.to_vec(),
         _ => return None,
     };
     let npc = et.nodes_per_cell();
@@ -282,6 +300,22 @@ fn submesh_primitives_impl(
                             pts[base + face[2]],
                             pts[base + face[3]],
                         ],
+                        color: c,
+                        outline: true,
+                    });
+                }
+            }
+        }
+        ElementType::PENTA6 => {
+            for i in 0..n_cells {
+                let base = 6 * i;
+                let c = cell_color(i);
+                for (fi, face) in PENTA6_FACES.iter().enumerate() {
+                    if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
+                        continue;
+                    }
+                    out.push(Primitive::Face {
+                        verts: face.iter().map(|&li| pts[base + li]).collect(),
                         color: c,
                         outline: true,
                     });

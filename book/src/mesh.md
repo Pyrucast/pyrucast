@@ -30,6 +30,7 @@ cast3m).
 | `TRI3` | 3 | 2 | triangle linéaire |
 | `QUA4` | 4 | 2 | quadrangle linéaire |
 | `TET4` | 4 | 3 | tétraèdre linéaire |
+| `PENTA6` | 6 | 3 | prisme linéaire (extrusion d'un TRI3) |
 | `HEX8` | 8 | 3 | hexaèdre linéaire |
 
 Ajouter un nouveau type d'élément est purement additif (nouvelle variante +

@@ -23,7 +23,9 @@ pub mod merge_nodes;
 pub mod surface;
 pub mod sweep;
 pub mod sweep_qua4;
+pub mod sweep_solid;
 pub mod to_poi1;
+pub mod transform;
 pub mod triangulation;
 pub mod volume;
 
@@ -40,5 +42,7 @@ pub use line_seg2::line_seg2;
 pub use merge_nodes::merge_nodes;
 pub use surface::{surface, surface_cancellable};
 pub use sweep_qua4::sweep_qua4;
+pub use sweep_solid::sweep_solid;
 pub use to_poi1::to_poi1;
+pub use transform::{rotate, translate};
 pub use volume::{volume, volume_cancellable};

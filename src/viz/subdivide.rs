@@ -16,7 +16,7 @@
 use crate::containers::finite_element_space::Interpolation;
 use crate::containers::mesh::ElementType;
 use crate::error::Result;
-use crate::viz::mesh_draw::{HEX8_FACES, TET4_FACES};
+use crate::viz::mesh_draw::{HEX8_FACES, PENTA6_FACES, TET4_FACES};
 
 /// Subdivision of one face of the reference element.
 pub(crate) struct FaceSubdivision {
@@ -62,6 +62,14 @@ fn ref_nodes(et: ElementType) -> Vec<Vec<f64>> {
             vec![1.0, 0.0, 0.0],
             vec![0.0, 1.0, 0.0],
             vec![0.0, 0.0, 1.0],
+        ],
+        ElementType::PENTA6 => vec![
+            vec![0.0, 0.0, 0.0],
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+            vec![1.0, 0.0, 1.0],
+            vec![0.0, 1.0, 1.0],
         ],
         ElementType::HEX8 => [
             (-1.0, -1.0, -1.0),
@@ -127,6 +135,27 @@ pub(crate) fn subdivide(
         ElementType::HEX8 => {
             let mut faces = Vec::with_capacity(6);
             for f in &HEX8_FACES {
+                faces.push(quad_face(
+                    et,
+                    interp,
+                    n,
+                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]], &nodes[f[3]]],
+                )?);
+            }
+            Ok(CellSubdivision::Faces(faces))
+        }
+        ElementType::PENTA6 => {
+            // Two triangular caps + three quadrilateral sides.
+            let mut faces = Vec::with_capacity(5);
+            for f in PENTA6_FACES.iter().filter(|f| f.len() == 3) {
+                faces.push(tri_face(
+                    et,
+                    interp,
+                    n,
+                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]]],
+                )?);
+            }
+            for f in PENTA6_FACES.iter().filter(|f| f.len() == 4) {
                 faces.push(quad_face(
                     et,
                     interp,

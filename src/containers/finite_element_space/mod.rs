@@ -812,6 +812,38 @@ mod tests {
         assert!((area - 1.0).abs() < 1e-12);
     }
 
+    /// PENTA6 prism over the unit right triangle, height 2: its volume is
+    /// `area(1/2) × height(2) = 1`. Exercises the full physical Jacobian /
+    /// quadrature path for the prism, not just the reference rule.
+    #[test]
+    fn penta6_jacobian_unit_volume() {
+        let coords = cfg3d();
+        let n: Vec<_> = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 2.0],
+            [1.0, 0.0, 2.0],
+            [0.0, 1.0, 2.0],
+        ]
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p).unwrap())
+        .collect();
+        let sm = {
+            let mut sm = SubMesh::new(coords, ElementType::PENTA6);
+            sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())
+                .unwrap();
+            insert(sm)
+        };
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
+        let mut vol = 0.0;
+        for g in 0..sub.gauss_count() {
+            vol += sub.gauss_weight(g).unwrap() * sub.det_jacobian(0, g).unwrap();
+        }
+        assert!((vol - 1.0).abs() < 1e-12, "prism volume = {vol}");
+    }
+
     /// HEX8 unit cube: similar to QUA4 test in 3-D.
     #[test]
     fn hex8_jacobian_unit_cube() {

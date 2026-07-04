@@ -13,8 +13,11 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `poi1_from_nodes(nodes)` | un `Mesh` POI1 sur une liste de nœuds donnée |
 | `line_seg2(a, b, n_elems)` | une ligne de `n_elems` `SEG2` entre deux nœuds (nœuds intermédiaires créés) |
 | `circle_seg2(center, normal, radius, n_elems)` | un cercle de `SEG2` (plan défini par `normal`) |
-| `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, QUA4→HEX8, …) |
+| `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, TRI3→PENTA6, QUA4→HEX8) |
 | `sweep_qua4(mesh_a, mesh_b, n_layers)` | tisse des `QUA4` entre deux lignes `SEG2` |
+| `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep_qua4` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
+| `translate(mesh, vector)` | **copie** du maillage translatée de `vector` (nœuds neufs, original intact) |
+| `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `fill_surface(contour, type, …)` | triangule l'intérieur d'un contour fermé (voir plus bas) |
 | `surface(contour, type, size=None)` | maille l'intérieur d'un contour par **front avançant** avec création de nœuds internes (voir plus bas) |
 | `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
@@ -45,6 +48,57 @@ print(line)  # Mesh: 1 submesh(es), 4 cell(s) total
 # Extrusion en QUA4 sur 2 couches selon +y.
 surf = pyrucast.extrude(line, [0.0, 1.0], 2)
 print(surf.element_types())  # ['QUA4']
+```
+
+## Copies rigides : `translate` et `rotate`
+
+`translate(mesh, vector)` et `rotate(mesh, angle, center, axis=None)` renvoient
+une **copie neuve** du maillage — mêmes sous-maillages, mêmes types, mêmes
+couleurs, même connectivité — dont **tous les nœuds sont nouveaux**. Le maillage
+d'origine (et ses nœuds) reste intact ; un nœud partagé entre plusieurs cellules
+de la source reste partagé dans la copie.
+
+- `translate` décale chaque nœud de `vector` (dont la longueur doit valoir la
+  dimension du maillage).
+- `rotate` tourne de `angle` **radians** autour de `center`. En **2D**, `center`
+  est un point et `axis` est ignoré ; en **3D**, la rotation se fait autour de la
+  droite passant par `center` dirigée par `axis` (formule de Rodrigues,
+  main droite), et `axis` est obligatoire (il n'a pas besoin d'être normé).
+
+```python
+c = pyrucast.Coords(dim=3)
+# … un maillage de surface `face` sur c …
+
+# Copie translatée de 5 selon +z.
+haut = pyrucast.translate(face, [0.0, 0.0, 5.0])
+
+# Copie tournée de 30° autour de l'axe z passant par l'origine.
+import math
+tournee = pyrucast.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+```
+
+## Tissage d'un solide entre deux surfaces : `sweep_solid`
+
+`sweep_solid(mesh_a, mesh_b, n_layers)` est le **compagnon 3D** de `sweep_qua4` :
+là où ce dernier relie deux lignes `SEG2` par une bande de `QUA4`, `sweep_solid`
+relie deux **surfaces** par un solide. Les faces `TRI3` deviennent des prismes
+`PENTA6`, les faces `QUA4` des hexaèdres `HEX8`.
+
+La cellule `i` de `mesh_a` est appariée à la cellule `i` de `mesh_b`, nœud local
+par nœud local. Les deux maillages doivent être **mono-sous-maillage**, du
+**même** type de surface (`TRI3` ou `QUA4`), avec le même nombre de cellules et
+une correspondance de nœuds cohérente, sur le **même** `Coords`. Les `n_layers`
+couches de nœuds intermédiaires sont interpolées linéairement ; les nœuds des
+deux faces d'extrémité sont réutilisés.
+
+Associé à `translate` / `rotate`, il construit une tranche de solide entre une
+surface et sa copie déplacée :
+
+```python
+# `face` : une surface TRI3 sur un Coords 3D.
+tournee = pyrucast.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+solide = pyrucast.sweep_solid(face, tournee, 1)
+print(solide.element_types())  # ['PENTA6']
 ```
 
 ## Triangulation d'un contour fermé : `fill_surface`
@@ -555,10 +609,11 @@ copiée telle quelle.
 | `3`  | `QUA4` |
 | `4`  | `TET4` |
 | `5`  | `HEX8` |
+| `6`  | `PENTA6` |
 | `15` | `POI1` |
 
-Tout autre type gmsh (éléments d'ordre supérieur, prisme, pyramide…) lève
-une erreur explicite.
+Tout autre type gmsh (éléments d'ordre supérieur, pyramide…) lève une erreur
+explicite.
 
 ### Dimension
 

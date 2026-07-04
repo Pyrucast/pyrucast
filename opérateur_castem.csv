@@ -11,9 +11,9 @@ Maillage - création;REGL;Surface réglée entre deux lignes;—
 Maillage - création;PAVE;Maille un pavé / bloc volumique structuré;—
 Maillage - création;MANU;Maillage manuel (élément défini nœud par nœud);Mesh(coords, type)
 Maillage - création;LIRE;Lit un maillage depuis un fichier externe (gmsh .msh, ASCII/binaire);read_gmsh / read_gmsh_str
-Maillage - génération;TRAN;Translation/extrusion d'un maillage (engendre la dimension supérieure);extrude
-Maillage - génération;ROTA;Rotation / révolution d'un maillage;—
-Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep_qua4 / volume
+Maillage - génération;TRAN;Translation/extrusion d'un maillage (engendre la dimension supérieure);extrude / translate
+Maillage - génération;ROTA;Rotation / révolution d'un maillage;rotate / sweep_solid
+Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep_qua4 / sweep_solid / volume
 Maillage - génération;GENE;Génère un maillage par balayage entre deux lignes;sweep_qua4
 Maillage - génération;SYME;Symétrie d'un maillage;—
 Maillage - génération;HOMO;Homothétie d'un maillage;—
@@ -25,7 +25,7 @@ Maillage - assemblage;DIFF;Différence de maillages;—
 Maillage - assemblage;INTE;Intersection de maillages;—
 Maillage - transformation;CHAN;Change le type d'élément (ex. vers POI1);to_poi1 (cas POI1)
 Maillage - transformation;PLUS;Translate les coordonnées des nœuds;displace / set_coordinates
-Maillage - transformation;TOUR;Tourne (rotation) les coordonnées des nœuds;—
+Maillage - transformation;TOUR;Tourne (rotation) les coordonnées des nœuds;rotate
 Maillage - transformation;INVE;Inverse l'orientation des éléments;—
 Maillage - transformation;ORIE;Oriente les éléments d'une surface/ligne;—
 Maillage - transformation;RACC;Raccorde deux maillages (collage);—

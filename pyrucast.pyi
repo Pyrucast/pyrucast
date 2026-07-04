@@ -63,6 +63,7 @@ __all__ = [
     "read_gmsh",
     "read_gmsh_str",
     "restrict",
+    "rotate",
     "select",
     "set_coordinates",
     "set_swap_dir",
@@ -76,10 +77,12 @@ __all__ = [
     "surface",
     "swap_dir",
     "sweep_qua4",
+    "sweep_solid",
     "tan",
     "tanh",
     "thermal_strain",
     "to_poi1",
+    "translate",
     "volume",
     "xtx",
     "xty",
@@ -1983,7 +1986,7 @@ def export_vtk(mesh: Mesh, path: builtins.str, field: typing.Optional[typing.Any
 def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
     r"""
     Extrude `mesh` by `n_layers` layers along `direction` (the total
-    displacement vector). SEG2 → QUA4, QUA4 → HEX8.
+    displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
     """
 
 def fill_surface(contour: Mesh, element_type: builtins.str, max_edge_length: typing.Optional[builtins.float] = None, min_angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
@@ -2226,6 +2229,16 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     attached to different `Coords`s.
     """
 
+def rotate(mesh: Mesh, angle: builtins.float, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
+    r"""
+    Rotate `mesh` by `angle` (radians) about `center`, returning a fresh copy
+    with its own nodes (the original is left untouched).
+    
+    In 2-D, `center` is a point and `axis` is ignored. In 3-D, the rotation is
+    about the line through `center` directed by `axis` (right-handed); `axis`
+    is required.
+    """
+
 def select(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
     r"""
     Select the part of a field's support passing a value band, zone by zone —
@@ -2363,6 +2376,13 @@ def sweep_qua4(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
     of quads between `mesh_a` and `mesh_b`.
     """
 
+def sweep_solid(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
+    r"""
+    Sweep two matching surface meshes into a solid mesh, building `n_layers`
+    layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep_qua4`:
+    TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
+    """
+
 def tan(field: typing.Any) -> typing.Any:
     r"""
     Element-wise tangent of a field (radians).
@@ -2392,6 +2412,12 @@ def to_poi1(mesh: Mesh) -> Mesh:
     Returns a new mesh with the same number of submeshes; each output
     submesh is a POI1 submesh holding the de-duplicated nodes of the
     corresponding input submesh, in order of first appearance.
+    """
+
+def translate(mesh: Mesh, vector: typing.Sequence[builtins.float]) -> Mesh:
+    r"""
+    Translate `mesh` by `vector`, returning a fresh copy with its own nodes
+    (the original is left untouched). `vector` matches the mesh dimension.
     """
 
 def volume(envelope: Mesh, size: typing.Optional[builtins.float] = None) -> Mesh:

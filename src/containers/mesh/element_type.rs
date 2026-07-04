@@ -22,6 +22,7 @@
 //! | `TRI3` | `ξ, η ∈ [0, 1]` with `ξ + η ≤ 1` | `(0, 0)`, `(1, 0)`, `(0, 1)` — CCW |
 //! | `QUA4` | `ξ, η ∈ [-1, +1]` | `(-1, -1)`, `(1, -1)`, `(1, 1)`, `(-1, 1)` — CCW |
 //! | `TET4` | `ξ, η, ζ ∈ [0, 1]` with `ξ + η + ζ ≤ 1` | `(0,0,0)`, `(1,0,0)`, `(0,1,0)`, `(0,0,1)` — face 0-1-2 CCW seen from node 3 |
+//! | `PENTA6` | `ξ, η ∈ [0, 1]` with `ξ + η ≤ 1`, `ζ ∈ [0, 1]` | bottom triangle CCW then top triangle CCW: `(0,0,0)`, `(1,0,0)`, `(0,1,0)`, `(0,0,1)`, `(1,0,1)`, `(0,1,1)` — the extrusion of a TRI3 along `ζ` |
 //! | `HEX8` | `ξ, η, ζ ∈ [-1, +1]` | bottom face CCW then top face CCW: `(-1,-1,-1)`, `(1,-1,-1)`, `(1,1,-1)`, `(-1,1,-1)`, `(-1,-1,1)`, `(1,-1,1)`, `(1,1,1)`, `(-1,1,1)` |
 //!
 //! These conventions are compatible with the orientations already enforced
@@ -54,6 +55,12 @@ pub enum ElementType {
     /// Local order: `(0,0,0)`, `(1,0,0)`, `(0,1,0)`, `(0,0,1)` — face
     /// 0-1-2 CCW seen from node 3.
     TET4,
+    /// 6-node prism (pentahedron), the extrusion of a TRI3 along `ζ`.
+    /// Reference: `ξ, η ∈ [0, 1]`, `ξ + η ≤ 1`, `ζ ∈ [0, 1]`. Local order:
+    /// bottom triangle CCW (nodes 0..2 at `ζ = 0`), then top triangle CCW
+    /// (nodes 3..5 at `ζ = 1`), i.e. `(0,0,0)`, `(1,0,0)`, `(0,1,0)`,
+    /// `(0,0,1)`, `(1,0,1)`, `(0,1,1)`.
+    PENTA6,
     /// 8-node hexahedron. Reference: `ξ, η, ζ ∈ [-1, +1]`. Local order:
     /// bottom face CCW (nodes 0..3), then top face CCW (nodes 4..7),
     /// i.e. `(-1,-1,-1)`, `(1,-1,-1)`, `(1,1,-1)`, `(-1,1,-1)`,
@@ -69,6 +76,7 @@ impl ElementType {
             Self::SEG2 => 2,
             Self::TRI3 => 3,
             Self::QUA4 | Self::TET4 => 4,
+            Self::PENTA6 => 6,
             Self::HEX8 => 8,
         }
     }
@@ -79,7 +87,7 @@ impl ElementType {
             Self::POI1 => 0,
             Self::SEG2 => 1,
             Self::TRI3 | Self::QUA4 => 2,
-            Self::TET4 | Self::HEX8 => 3,
+            Self::TET4 | Self::PENTA6 | Self::HEX8 => 3,
         }
     }
 
@@ -91,6 +99,7 @@ impl ElementType {
             Self::TRI3 => "TRI3",
             Self::QUA4 => "QUA4",
             Self::TET4 => "TET4",
+            Self::PENTA6 => "PENTA6",
             Self::HEX8 => "HEX8",
         }
     }
@@ -103,6 +112,7 @@ impl ElementType {
             "TRI3" => Some(Self::TRI3),
             "QUA4" => Some(Self::QUA4),
             "TET4" => Some(Self::TET4),
+            "PENTA6" => Some(Self::PENTA6),
             "HEX8" => Some(Self::HEX8),
             _ => None,
         }
@@ -139,6 +149,8 @@ mod tests {
         assert_eq!(ElementType::TRI3.topological_dim(), 2);
         assert_eq!(ElementType::QUA4.nodes_per_cell(), 4);
         assert_eq!(ElementType::TET4.topological_dim(), 3);
+        assert_eq!(ElementType::PENTA6.nodes_per_cell(), 6);
+        assert_eq!(ElementType::PENTA6.topological_dim(), 3);
         assert_eq!(ElementType::HEX8.nodes_per_cell(), 8);
     }
 
