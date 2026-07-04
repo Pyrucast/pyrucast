@@ -126,6 +126,29 @@ fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
             [4, 5], [5, 6], [6, 7], [7, 4],
             [0, 4], [1, 5], [2, 6], [3, 7],
         ],
+        // Quadratic types: each geometric edge is split at its mid node so
+        // the wireframe passes through the mid-side nodes.
+        ElementType::SEG3 => &[[0, 2], [2, 1]],
+        ElementType::TRI6 => &[
+            [0, 3], [3, 1], [1, 4], [4, 2], [2, 5], [5, 0],
+        ],
+        ElementType::QUA8 => &[
+            [0, 4], [4, 1], [1, 5], [5, 2], [2, 6], [6, 3], [3, 7], [7, 0],
+        ],
+        ElementType::TET10 => &[
+            [0, 4], [4, 1], [1, 5], [5, 2], [2, 6], [6, 0],
+            [0, 7], [7, 3], [1, 8], [8, 3], [2, 9], [9, 3],
+        ],
+        ElementType::PENTA15 => &[
+            [0, 6], [6, 1], [1, 7], [7, 2], [2, 8], [8, 0],
+            [3, 9], [9, 4], [4, 10], [10, 5], [5, 11], [11, 3],
+            [0, 12], [12, 3], [1, 13], [13, 4], [2, 14], [14, 5],
+        ],
+        ElementType::HEX20 => &[
+            [0, 8], [8, 1], [1, 9], [9, 2], [2, 10], [10, 3], [3, 11], [11, 0],
+            [4, 12], [12, 5], [5, 13], [13, 6], [6, 14], [14, 7], [7, 15], [15, 4],
+            [0, 16], [16, 4], [1, 17], [17, 5], [2, 18], [18, 6], [3, 19], [19, 7],
+        ],
     }
 }
 
@@ -142,10 +165,13 @@ fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
 /// A face is keyed by the **set** of its global node ids (sorted), so the
 /// two cells sharing it produce the same key regardless of orientation.
 pub(crate) fn boundary_faces(et: ElementType, conn: &[NodeId]) -> Option<HashSet<(usize, usize)>> {
+    // Quadratic volumes reuse their linear parent's corner-face tables: the
+    // face key is built from corner node ids (indices < corner count), which
+    // two adjacent cells share, so interior-face culling still works.
     let faces: Vec<&[usize]> = match et {
-        ElementType::TET4 => TET4_FACES.iter().map(|f| f.as_slice()).collect(),
-        ElementType::HEX8 => HEX8_FACES.iter().map(|f| f.as_slice()).collect(),
-        ElementType::PENTA6 => PENTA6_FACES.to_vec(),
+        ElementType::TET4 | ElementType::TET10 => TET4_FACES.iter().map(|f| f.as_slice()).collect(),
+        ElementType::HEX8 | ElementType::HEX20 => HEX8_FACES.iter().map(|f| f.as_slice()).collect(),
+        ElementType::PENTA6 | ElementType::PENTA15 => PENTA6_FACES.to_vec(),
         _ => return None,
     };
     let npc = et.nodes_per_cell();
@@ -311,6 +337,73 @@ fn submesh_primitives_impl(
                 let base = 6 * i;
                 let c = cell_color(i);
                 for (fi, face) in PENTA6_FACES.iter().enumerate() {
+                    if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
+                        continue;
+                    }
+                    out.push(Primitive::Face {
+                        verts: face.iter().map(|&li| pts[base + li]).collect(),
+                        color: c,
+                        outline: true,
+                    });
+                }
+            }
+        }
+        // Quadratic types: draw the linearized skin over the corner nodes
+        // (the interpolated renderer in `subdivide` shows the curvature).
+        ElementType::SEG3 => {
+            for i in 0..n_cells {
+                let base = 3 * i;
+                let c = cell_color(i);
+                out.push(Primitive::Segment {
+                    a: pts[base],
+                    b: pts[base + 2],
+                    color: c,
+                });
+                out.push(Primitive::Segment {
+                    a: pts[base + 2],
+                    b: pts[base + 1],
+                    color: c,
+                });
+            }
+        }
+        ElementType::TRI6 => {
+            for i in 0..n_cells {
+                let base = 6 * i;
+                out.push(Primitive::Face {
+                    verts: vec![pts[base], pts[base + 1], pts[base + 2]],
+                    color: cell_color(i),
+                    outline: true,
+                });
+            }
+        }
+        ElementType::QUA8 => {
+            for i in 0..n_cells {
+                let base = 8 * i;
+                out.push(Primitive::Face {
+                    verts: vec![pts[base], pts[base + 1], pts[base + 2], pts[base + 3]],
+                    color: cell_color(i),
+                    outline: true,
+                });
+            }
+        }
+        ElementType::TET10 | ElementType::HEX20 | ElementType::PENTA15 => {
+            let faces: &[&[usize]] = match et {
+                ElementType::TET10 => &[&[0, 2, 1], &[0, 1, 3], &[0, 3, 2], &[1, 2, 3]],
+                ElementType::HEX20 => &[
+                    &[0, 3, 2, 1],
+                    &[4, 5, 6, 7],
+                    &[0, 1, 5, 4],
+                    &[1, 2, 6, 5],
+                    &[2, 3, 7, 6],
+                    &[3, 0, 4, 7],
+                ],
+                _ => &PENTA6_FACES, // PENTA15
+            };
+            let npc = et.nodes_per_cell();
+            for i in 0..n_cells {
+                let base = npc * i;
+                let c = cell_color(i);
+                for (fi, face) in faces.iter().enumerate() {
                     if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
                         continue;
                     }

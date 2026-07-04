@@ -25,6 +25,27 @@
 //! | `PENTA6` | `ξ, η ∈ [0, 1]` with `ξ + η ≤ 1`, `ζ ∈ [0, 1]` | bottom triangle CCW then top triangle CCW: `(0,0,0)`, `(1,0,0)`, `(0,1,0)`, `(0,0,1)`, `(1,0,1)`, `(0,1,1)` — the extrusion of a TRI3 along `ζ` |
 //! | `HEX8` | `ξ, η, ζ ∈ [-1, +1]` | bottom face CCW then top face CCW: `(-1,-1,-1)`, `(1,-1,-1)`, `(1,1,-1)`, `(-1,1,-1)`, `(-1,-1,1)`, `(1,-1,1)`, `(1,1,1)`, `(-1,1,1)` |
 //!
+//! ## Quadratic (Lagrange-2) variants
+//!
+//! Each quadratic type shares the reference frame and corner numbering of
+//! its linear parent, then adds the **mid-edge** nodes in a fixed edge
+//! order (the VTK convention, so [`crate::ops::export`] writes them
+//! verbatim). Mid-edge node `k` sits at the midpoint of the edge listed
+//! for it.
+//!
+//! | Variant | Parent | Mid-edge nodes (in order), each on edge `(a, b)` |
+//! |---|---|---|
+//! | `SEG3` | `SEG2` | node 2 on `(0, 1)` — i.e. `ξ = 0` |
+//! | `TRI6` | `TRI3` | 3 on `(0,1)`, `(1,2)`, `(2,0)` |
+//! | `QUA8` | `QUA4` | 4 on `(0,1)`, `(1,2)`, `(2,3)`, `(3,0)` |
+//! | `TET10` | `TET4` | 6 on `(0,1)`, `(1,2)`, `(2,0)`, `(0,3)`, `(1,3)`, `(2,3)` |
+//! | `PENTA15` | `PENTA6` | 9: `(0,1)`,`(1,2)`,`(2,0)` (bottom), `(3,4)`,`(4,5)`,`(5,3)` (top), `(0,3)`,`(1,4)`,`(2,5)` (vertical) |
+//! | `HEX20` | `HEX8` | 12: `(0,1)`,`(1,2)`,`(2,3)`,`(3,0)` (bottom), `(4,5)`,`(5,6)`,`(6,7)`,`(7,4)` (top), `(0,4)`,`(1,5)`,`(2,6)`,`(3,7)` (vertical) |
+//!
+//! `QUA8`, `HEX20` and `PENTA15` are **serendipity** (edge nodes only, no
+//! face or interior nodes); `SEG3`, `TRI6` and `TET10` are complete
+//! Lagrange elements.
+//!
 //! These conventions are compatible with the orientations already enforced
 //! elsewhere in the codebase (CCW filling in
 //! [`crate::ops::mesher::fill_surface()`], HEX8 node ordering in
@@ -66,6 +87,31 @@ pub enum ElementType {
     /// i.e. `(-1,-1,-1)`, `(1,-1,-1)`, `(1,1,-1)`, `(-1,1,-1)`,
     /// `(-1,-1,1)`, `(1,-1,1)`, `(1,1,1)`, `(-1,1,1)`.
     HEX8,
+    /// 3-node quadratic segment (Lagrange-2 `SEG2`). Corners 0, 1 at
+    /// `ξ = ∓1`, mid node 2 at `ξ = 0`.
+    SEG3,
+    /// 6-node quadratic triangle (Lagrange-2 `TRI3`). Corners 0..2 as
+    /// `TRI3`, then mid-edge nodes 3, 4, 5 on edges `(0,1)`, `(1,2)`,
+    /// `(2,0)`.
+    TRI6,
+    /// 8-node serendipity quadrangle (Lagrange-2 `QUA4`). Corners 0..3 as
+    /// `QUA4`, then mid-edge nodes 4..7 on edges `(0,1)`, `(1,2)`, `(2,3)`,
+    /// `(3,0)`.
+    QUA8,
+    /// 10-node quadratic tetrahedron (Lagrange-2 `TET4`). Corners 0..3 as
+    /// `TET4`, then mid-edge nodes 4..9 on edges `(0,1)`, `(1,2)`, `(2,0)`,
+    /// `(0,3)`, `(1,3)`, `(2,3)`.
+    TET10,
+    /// 15-node serendipity prism (Lagrange-2 `PENTA6`). Corners 0..5 as
+    /// `PENTA6`, then mid-edge nodes 6..14: bottom triangle `(0,1)`,
+    /// `(1,2)`, `(2,0)`, top triangle `(3,4)`, `(4,5)`, `(5,3)`, vertical
+    /// `(0,3)`, `(1,4)`, `(2,5)`.
+    PENTA15,
+    /// 20-node serendipity hexahedron (Lagrange-2 `HEX8`). Corners 0..7 as
+    /// `HEX8`, then mid-edge nodes 8..19: bottom `(0,1)`, `(1,2)`, `(2,3)`,
+    /// `(3,0)`, top `(4,5)`, `(5,6)`, `(6,7)`, `(7,4)`, vertical `(0,4)`,
+    /// `(1,5)`, `(2,6)`, `(3,7)`.
+    HEX20,
 }
 
 impl ElementType {
@@ -78,6 +124,12 @@ impl ElementType {
             Self::QUA4 | Self::TET4 => 4,
             Self::PENTA6 => 6,
             Self::HEX8 => 8,
+            Self::SEG3 => 3,
+            Self::TRI6 => 6,
+            Self::QUA8 => 8,
+            Self::TET10 => 10,
+            Self::PENTA15 => 15,
+            Self::HEX20 => 20,
         }
     }
 
@@ -88,6 +140,9 @@ impl ElementType {
             Self::SEG2 => 1,
             Self::TRI3 | Self::QUA4 => 2,
             Self::TET4 | Self::PENTA6 | Self::HEX8 => 3,
+            Self::SEG3 => 1,
+            Self::TRI6 | Self::QUA8 => 2,
+            Self::TET10 | Self::PENTA15 | Self::HEX20 => 3,
         }
     }
 
@@ -101,6 +156,12 @@ impl ElementType {
             Self::TET4 => "TET4",
             Self::PENTA6 => "PENTA6",
             Self::HEX8 => "HEX8",
+            Self::SEG3 => "SEG3",
+            Self::TRI6 => "TRI6",
+            Self::QUA8 => "QUA8",
+            Self::TET10 => "TET10",
+            Self::PENTA15 => "PENTA15",
+            Self::HEX20 => "HEX20",
         }
     }
 
@@ -114,6 +175,12 @@ impl ElementType {
             "TET4" => Some(Self::TET4),
             "PENTA6" => Some(Self::PENTA6),
             "HEX8" => Some(Self::HEX8),
+            "SEG3" => Some(Self::SEG3),
+            "TRI6" => Some(Self::TRI6),
+            "QUA8" => Some(Self::QUA8),
+            "TET10" => Some(Self::TET10),
+            "PENTA15" => Some(Self::PENTA15),
+            "HEX20" => Some(Self::HEX20),
             _ => None,
         }
     }
@@ -152,6 +219,16 @@ mod tests {
         assert_eq!(ElementType::PENTA6.nodes_per_cell(), 6);
         assert_eq!(ElementType::PENTA6.topological_dim(), 3);
         assert_eq!(ElementType::HEX8.nodes_per_cell(), 8);
+        assert_eq!(ElementType::SEG3.nodes_per_cell(), 3);
+        assert_eq!(ElementType::SEG3.topological_dim(), 1);
+        assert_eq!(ElementType::TRI6.nodes_per_cell(), 6);
+        assert_eq!(ElementType::TRI6.topological_dim(), 2);
+        assert_eq!(ElementType::QUA8.nodes_per_cell(), 8);
+        assert_eq!(ElementType::TET10.nodes_per_cell(), 10);
+        assert_eq!(ElementType::TET10.topological_dim(), 3);
+        assert_eq!(ElementType::PENTA15.nodes_per_cell(), 15);
+        assert_eq!(ElementType::HEX20.nodes_per_cell(), 20);
+        assert_eq!(ElementType::HEX20.topological_dim(), 3);
     }
 
     #[test]
@@ -159,6 +236,12 @@ mod tests {
         assert_eq!(format!("{}", ElementType::QUA4), "QUA4");
         assert_eq!(ElementType::from_name("tri3"), Some(ElementType::TRI3));
         assert_eq!(ElementType::from_name("HEX8"), Some(ElementType::HEX8));
+        assert_eq!(ElementType::from_name("tri6"), Some(ElementType::TRI6));
+        assert_eq!(
+            ElementType::from_name("PENTA15"),
+            Some(ElementType::PENTA15)
+        );
+        assert_eq!(format!("{}", ElementType::HEX20), "HEX20");
         assert_eq!(ElementType::from_name("unknown"), None);
     }
 }

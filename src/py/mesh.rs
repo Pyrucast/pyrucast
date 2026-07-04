@@ -178,7 +178,7 @@ impl PySubMesh {
                 target: None,
                 show_axes,
             })
-            .unwrap_or_else(crate::viz::View::default);
+            .unwrap_or_default();
         view.show_axes = show_axes;
         let scale = crate::viz::ColorScale {
             cmap: parse_cmap(cmap)?,
@@ -340,7 +340,7 @@ impl PyMesh {
                 target: None,
                 show_axes,
             })
-            .unwrap_or_else(crate::viz::View::default);
+            .unwrap_or_default();
         view.show_axes = show_axes;
         let scale = crate::viz::ColorScale {
             cmap: parse_cmap(cmap)?,

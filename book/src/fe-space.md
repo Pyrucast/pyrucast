@@ -31,7 +31,20 @@ Chaque `ElementType` fixe son repère de référence \\( \xi \\) et la numérota
 | `PENTA6` | \\( \xi, \eta \in [0, 1] \\), \\( \xi + \eta \le 1 \\), \\( \zeta \in [0, 1] \\) | triangle inférieur CCW (nœuds 0..2 en \\( \zeta = 0 \\)) puis triangle supérieur CCW (nœuds 3..5 en \\( \zeta = 1 \\)) — extrusion d'un TRI3 |
 | `HEX8` | \\( \xi, \eta, \zeta \in [-1, +1] \\) | face inférieure CCW (nœuds 0..3) puis face supérieure CCW (nœuds 4..7) |
 
-Ces conventions sont cohérentes avec celles déjà imposées ailleurs dans le code : orientation CCW des triangles produits par `fill_surface`, ordre HEX8/PENTA6 utilisé par `extrude` et `sweep_solid`.
+Les types **quadratiques** partagent le repère et la numérotation des sommets de leur parent linéaire, puis ajoutent les nœuds de **milieu d'arête** dans l'ordre d'arêtes de la convention VTK (documenté dans le rustdoc d'`ElementType`) :
+
+| ElementType | Parent | Nœuds de milieu d'arête (dans l'ordre), arête \\( (a,b) \\) |
+|---|---|---|
+| `SEG3` | `SEG2` | nœud 2 sur \\( (0,1) \\) (\\( \xi = 0 \\)) |
+| `TRI6` | `TRI3` | 3 sur \\( (0,1), (1,2), (2,0) \\) |
+| `QUA8` | `QUA4` | 4 sur \\( (0,1), (1,2), (2,3), (3,0) \\) |
+| `TET10` | `TET4` | 6 sur \\( (0,1), (1,2), (2,0), (0,3), (1,3), (2,3) \\) |
+| `PENTA15` | `PENTA6` | 9 : bas \\( (0,1),(1,2),(2,0) \\), haut \\( (3,4),(4,5),(5,3) \\), verticales \\( (0,3),(1,4),(2,5) \\) |
+| `HEX20` | `HEX8` | 12 : bas \\( (0,1),(1,2),(2,3),(3,0) \\), haut \\( (4,5),(5,6),(6,7),(7,4) \\), verticales \\( (0,4),(1,5),(2,6),(3,7) \\) |
+
+`QUA8`, `HEX20`, `PENTA15` sont **sérendipité** (arêtes seulement) ; `SEG3`, `TRI6`, `TET10` sont des Lagrange complets.
+
+Ces conventions sont cohérentes avec celles déjà imposées ailleurs dans le code : orientation CCW des triangles produits par `fill_surface`, ordre HEX8/PENTA6 utilisé par `extrude` et `sweep_solid`, ordre des nœuds de milieu d'arête aligné sur VTK (export verbatim) et réaligné à la lecture gmsh.
 
 ## Théorie : élément isoparamétrique
 
@@ -94,9 +107,24 @@ N_{j+3}(\xi, \eta, \zeta) = L_j\,\zeta \quad (j = 1, 2, 3)
 
 Une propriété immédiate, vérifiée par les tests unitaires : \\( \sum_i N_i(\xi) = 1 \\) en tout \\( \xi \\) (partition de l'unité).
 
+### Fonctions de forme quadratiques (Lagrange-2)
+
+L'interpolation `Lagrange2` couvre les six types quadratiques. Pour les Lagrange complets, avec les coordonnées barycentriques \\( L_i \\) :
+
+- **SEG3** : \\( N_0 = \tfrac12\xi(\xi-1),\; N_1 = \tfrac12\xi(\xi+1),\; N_2 = 1-\xi^2 \\).
+- **TRI6 / TET10** : sommets \\( L_i(2L_i-1) \\), milieux d'arête \\( 4 L_a L_b \\).
+
+Les sérendipité n'ont pas de nœud de face/intérieur :
+
+- **QUA8** : sommet \\( \tfrac14(1+\xi_i\xi)(1+\eta_i\eta)(\xi_i\xi+\eta_i\eta-1) \\) ; milieu \\( \tfrac12(1-\xi^2)(1+\eta_i\eta) \\) ou \\( \tfrac12(1+\xi_i\xi)(1-\eta^2) \\) selon l'arête.
+- **HEX20** : sommet \\( \tfrac18(1+\xi_i\xi)(1+\eta_i\eta)(1+\zeta_i\zeta)(\xi_i\xi+\eta_i\eta+\zeta_i\zeta-2) \\) ; milieu \\( \tfrac14(1-\xi^2)(1+\eta_i\eta)(1+\zeta_i\zeta) \\) (et permutations).
+- **PENTA15** : produit du TRI6 par un facteur quadratique en \\( \zeta \\), avec correction sérendipité aux sommets.
+
+Toutes vérifient Kronecker (\\( N_i(\xi_j)=\delta_{ij} \\)), partition de l'unité, et leurs dérivées analytiques sont recoupées par différences finies dans les tests.
+
 ### Dérivées de référence
 
-Les **dérivées de référence** \\( \partial N_i / \partial \xi_k \\) suivent par dérivation directe. Pour Lagrange-1 sur les simplexes (TRI3, TET4) et sur SEG2, ces dérivées sont **constantes** sur l'élément. Sur QUA4 et HEX8, elles sont polynomiales en les coordonnées de référence.
+Les **dérivées de référence** \\( \partial N_i / \partial \xi_k \\) suivent par dérivation directe. Pour Lagrange-1 sur les simplexes (TRI3, TET4) et sur SEG2, ces dérivées sont **constantes** sur l'élément. Sur QUA4 et HEX8 — et sur tous les types quadratiques — elles sont polynomiales en les coordonnées de référence.
 
 En dérivant la partition de l'unité, on obtient également \\( \sum_i \partial N_i / \partial \xi_k = 0 \\) pour chaque direction de référence \\( k \\). Cette identité est aussi testée.
 
@@ -129,8 +157,16 @@ pyrucast utilise une règle « par défaut » par type d'élément, calibrée po
 | `TET4` | 4 | Hammer : \\( \alpha = \tfrac{5 - \sqrt{5}}{20} \\), \\( \beta = \tfrac{5 + 3\sqrt{5}}{20} \\), points permutations, \\( w_g = 1/24 \\) | \\( \deg \le 2 \\) |
 | `PENTA6` | 6 | Produit tensoriel de la règle TRI3 (3 points, \\( w = 1/6 \\)) et de Gauss-Legendre 2 points sur \\( \zeta \in [0, 1] \\) (\\( \zeta_g = \tfrac{1}{2} \pm \tfrac{1}{2\sqrt{3}} \\), \\( w = 1/2 \\)) | \\( \deg \le 2 \\) en \\( (\xi, \eta) \\), \\( \le 3 \\) en \\( \zeta \\) |
 | `HEX8` | 8 | Produit tensoriel 2×2×2 de Gauss-Legendre : \\( \xi_g = (\pm 1/\sqrt{3})^3 \\), \\( w_g = 1 \\) | \\( \deg \le 3 \\) par direction |
+| `SEG3` | 3 | Gauss-Legendre 3 points | \\( \deg \le 5 \\) |
+| `TRI6` | 6 | Règle symétrique degré 4 (Dunavant) | \\( \deg \le 4 \\) |
+| `QUA8` | 9 | Produit tensoriel 3×3 | \\( \deg \le 5 \\) par direction |
+| `TET10` | 11 | Règle de Keast degré 4 (un poids négatif) | \\( \deg \le 4 \\) |
+| `PENTA15` | 18 | Produit tensoriel TRI6 × Gauss 3 points sur \\( \zeta \\) | \\( \deg \le 4 \\) / \\( \le 5 \\) en \\( \zeta \\) |
+| `HEX20` | 27 | Produit tensoriel 3×3×3 | \\( \deg \le 5 \\) par direction |
 
-La somme des poids vaut le volume de l'élément de référence : 2 pour SEG2, 1/2 pour TRI3, 4 pour QUA4, 1/6 pour TET4, 1/2 pour PENTA6, 8 pour HEX8 (vérifié par les tests).
+Les types quadratiques utilisent une règle exacte pour leur matrice de masse (degré 4) sur géométrie droite ; l'exactitude des règles custom TRI6 et TET10 est vérifiée par des tests d'intégration de monômes.
+
+La somme des poids vaut le volume de l'élément de référence : 2 pour SEG2/SEG3, 1/2 pour TRI3/TRI6, 4 pour QUA4/QUA8, 1/6 pour TET4/TET10, 1/2 pour PENTA6/PENTA15, 8 pour HEX8/HEX20 (vérifié par les tests).
 
 ## Théorie : Jacobien et grandeurs physiques
 
@@ -189,6 +225,12 @@ Le couple \\( (d_r, d_s) \\) possible pour notre v0 :
 | TET4 | 3 | 3 |
 | PENTA6 | 3 | 3 |
 | HEX8 | 3 | 3 |
+| SEG3 | 1 | 1, 2, 3 |
+| TRI6 | 2 | 2, 3 |
+| QUA8 | 2 | 2, 3 |
+| TET10 | 3 | 3 |
+| PENTA15 | 3 | 3 |
+| HEX20 | 3 | 3 |
 
 \\( d_s < d_r \\) n'a pas de sens (impossible de définir un élément 2D dans un espace 1D) ; le constructeur de `SubFiniteElementSpace` rejette ce cas.
 
@@ -377,7 +419,7 @@ print(sub.det_jacobian(0, 0))  # |J| recalculé
 
 ## Limitations actuelles
 
-- Une seule interpolation : `Lagrange1`. Les éléments quadratiques (TRI6, QUA8, etc.) viendront en parallèle d'une variante `Lagrange2`, conditionnée à l'ajout des `ElementType` correspondants.
+- Deux interpolations : `Lagrange1` (types linéaires) et `Lagrange2` (types quadratiques `SEG3`, `TRI6`, `QUA8`, `TET10`, `PENTA15`, `HEX20`). Le **degré** doit correspondre au type d'élément : un maillage quadratique se pose avec `interpolation="LAGRANGE2"` (le constructeur par défaut `LAGRANGE1` refuse un type quadratique, et inversement). Les ordres supérieurs (Lagrange-3…) restent à venir.
 - Deux quadratures : `QuadratureRule::Gauss` (la règle standard par défaut par `ElementType`) et `QuadratureRule::Reduced` (**intégration réduite** : un point au centroïde, exact pour les constantes — utilisée par exemple pour le terme de cisaillement de la [poutre de Timoshenko](mecanique/timoshenko.md), anti-verrouillage). Les variantes d'ordre supérieur viendront comme nouvelles variantes.
 - `POI1` n'est pas un élément fini (pas de repère de référence). Un sous-maillage POI1 dans le maillage support fait échouer la construction du `FiniteElementSpace`.
 - Pas encore de cache invalidable des grandeurs physiques (\\( J \\), \\( |J| \\), \\( \nabla_x N_i \\)) : tout est recalculé à la volée. Une optimisation à base d'invalidation par compteur de version pourra être ajoutée si la mesure le justifie, sans changement d'API.

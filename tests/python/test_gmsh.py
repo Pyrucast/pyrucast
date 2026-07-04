@@ -132,7 +132,8 @@ def test_read_from_file(tmp_path):
 
 
 def test_unsupported_element_type_raises():
-    # gmsh type 8 = 3-node second-order line.
+    # gmsh type 10 = 9-node quadrangle (full-Lagrange QUA9), unsupported
+    # (the 8-node serendipity QUA8 = type 16 is supported instead).
     bad = textwrap.dedent(
         """\
         $MeshFormat
@@ -146,7 +147,7 @@ def test_unsupported_element_type_raises():
         $EndNodes
         $Elements
         1
-        1 8 2 0 1 1 2 3
+        1 10 2 0 1 1 2 3
         $EndElements
         """
     )

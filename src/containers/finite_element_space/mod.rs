@@ -844,6 +844,112 @@ mod tests {
         assert!((vol - 1.0).abs() < 1e-12, "prism volume = {vol}");
     }
 
+    /// Build a straight-edged quadratic element (mid-edge nodes placed at the
+    /// exact edge midpoints, so the geometry map is affine) from its corner
+    /// coordinates and integrate the constant 1 over it — this exercises the
+    /// full Lagrange-2 shape/derivative/Jacobian/quadrature path.
+    fn quad_element_volume(et: ElementType, corners: &[[f64; 3]], edges: &[(usize, usize)]) -> f64 {
+        let coords = cfg3d();
+        let mut pts: Vec<[f64; 3]> = corners.to_vec();
+        for &(a, b) in edges {
+            pts.push([
+                0.5 * (corners[a][0] + corners[b][0]),
+                0.5 * (corners[a][1] + corners[b][1]),
+                0.5 * (corners[a][2] + corners[b][2]),
+            ]);
+        }
+        let ids: Vec<_> = pts
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
+            .collect();
+        let sm = {
+            let mut sm = SubMesh::new(coords, et);
+            sm.add_cell(&ids).unwrap();
+            insert(sm)
+        };
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange2, QuadratureRule::Gauss)
+            .unwrap();
+        (0..sub.gauss_count())
+            .map(|g| sub.gauss_weight(g).unwrap() * sub.det_jacobian(0, g).unwrap())
+            .sum()
+    }
+
+    #[test]
+    fn tet10_jacobian_volume() {
+        // Straight tetra (0,0,0),(2,0,0),(0,3,0),(0,0,4): volume 24/6 = 4.
+        let vol = quad_element_volume(
+            ElementType::TET10,
+            &[
+                [0.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [0.0, 3.0, 0.0],
+                [0.0, 0.0, 4.0],
+            ],
+            &[(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)],
+        );
+        assert!((vol - 4.0).abs() < 1e-12, "TET10 volume = {vol}");
+    }
+
+    #[test]
+    fn hex20_jacobian_unit_cube() {
+        let vol = quad_element_volume(
+            ElementType::HEX20,
+            &[
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0],
+                [0.0, 1.0, 1.0],
+            ],
+            &[
+                (0, 1),
+                (1, 2),
+                (2, 3),
+                (3, 0),
+                (4, 5),
+                (5, 6),
+                (6, 7),
+                (7, 4),
+                (0, 4),
+                (1, 5),
+                (2, 6),
+                (3, 7),
+            ],
+        );
+        assert!((vol - 1.0).abs() < 1e-12, "HEX20 volume = {vol}");
+    }
+
+    #[test]
+    fn penta15_jacobian_volume() {
+        // Prism over the unit right triangle, height 2: volume 1/2 × 2 = 1.
+        let vol = quad_element_volume(
+            ElementType::PENTA15,
+            &[
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 2.0],
+                [1.0, 0.0, 2.0],
+                [0.0, 1.0, 2.0],
+            ],
+            &[
+                (0, 1),
+                (1, 2),
+                (2, 0),
+                (3, 4),
+                (4, 5),
+                (5, 3),
+                (0, 3),
+                (1, 4),
+                (2, 5),
+            ],
+        );
+        assert!((vol - 1.0).abs() < 1e-12, "PENTA15 volume = {vol}");
+    }
+
     /// HEX8 unit cube: similar to QUA4 test in 3-D.
     #[test]
     fn hex8_jacobian_unit_cube() {

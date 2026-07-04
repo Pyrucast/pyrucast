@@ -88,6 +88,12 @@ impl QuadratureRule {
             (Self::Gauss, ElementType::TET4) => 4,
             (Self::Gauss, ElementType::PENTA6) => 6,
             (Self::Gauss, ElementType::HEX8) => 8,
+            (Self::Gauss, ElementType::SEG3) => 3,
+            (Self::Gauss, ElementType::TRI6) => 6,
+            (Self::Gauss, ElementType::QUA8) => 9,
+            (Self::Gauss, ElementType::TET10) => 11,
+            (Self::Gauss, ElementType::PENTA15) => 18,
+            (Self::Gauss, ElementType::HEX20) => 27,
             (Self::Reduced, _) => 1,
             (_, ElementType::POI1) => unreachable!(),
         })
@@ -176,14 +182,98 @@ impl QuadratureRule {
                 // callers, who only care about (xi_g, w_g) as a set.
                 (xi, vec![1.0; 8])
             }
+            // ── Quadratic (Lagrange-2) rules ────────────────────────────────
+            (Self::Gauss, ElementType::SEG3) => {
+                // 3-point Gauss-Legendre on [-1, 1] (exact to degree 5).
+                let (p, w) = gauss3_1d();
+                (p.to_vec(), w.to_vec())
+            }
+            (Self::Gauss, ElementType::TRI6) => tri6_gauss(),
+            (Self::Gauss, ElementType::QUA8) => {
+                // 3×3 tensor product of the 3-point rule (exact deg 5 / dir).
+                let (p, w) = gauss3_1d();
+                let mut xi = Vec::with_capacity(9 * 2);
+                let mut wt = Vec::with_capacity(9);
+                for j in 0..3 {
+                    for i in 0..3 {
+                        xi.push(p[i]);
+                        xi.push(p[j]);
+                        wt.push(w[i] * w[j]);
+                    }
+                }
+                (xi, wt)
+            }
+            (Self::Gauss, ElementType::TET10) => {
+                // Keast degree-4, 11-point rule (reference volume 1/6). One
+                // centroid point (negative weight), a 4-orbit and a 6-orbit.
+                let a = 1.0 / 14.0;
+                let b = 11.0 / 14.0;
+                let d = 0.399_403_576_166_799;
+                let c = 0.100_596_423_833_201;
+                let (w0, w1, w2) = (-74.0 / 5625.0, 343.0 / 45000.0, 56.0 / 2250.0);
+                let mut xi = vec![0.25, 0.25, 0.25];
+                let mut w = vec![w0];
+                for p in [[a, a, a], [b, a, a], [a, b, a], [a, a, b]] {
+                    xi.extend_from_slice(&p);
+                    w.push(w1);
+                }
+                for p in [
+                    [d, c, c],
+                    [c, d, c],
+                    [c, c, d],
+                    [d, d, c],
+                    [d, c, d],
+                    [c, d, d],
+                ] {
+                    xi.extend_from_slice(&p);
+                    w.push(w2);
+                }
+                (xi, w)
+            }
+            (Self::Gauss, ElementType::PENTA15) => {
+                // Tensor product of the 6-point TRI6 rule with the 3-point
+                // Gauss rule mapped to ζ ∈ [0, 1] (weights halved).
+                let (tri_xi, tri_w) = tri6_gauss();
+                let (gp, gw) = gauss3_1d();
+                let mut xi = Vec::with_capacity(18 * 3);
+                let mut w = Vec::with_capacity(18);
+                for tg in 0..tri_w.len() {
+                    for k in 0..3 {
+                        xi.push(tri_xi[2 * tg]);
+                        xi.push(tri_xi[2 * tg + 1]);
+                        xi.push(0.5 + 0.5 * gp[k]);
+                        w.push(tri_w[tg] * 0.5 * gw[k]);
+                    }
+                }
+                (xi, w)
+            }
+            (Self::Gauss, ElementType::HEX20) => {
+                // 3×3×3 tensor product of the 3-point rule.
+                let (p, w) = gauss3_1d();
+                let mut xi = Vec::with_capacity(27 * 3);
+                let mut wt = Vec::with_capacity(27);
+                for k in 0..3 {
+                    for j in 0..3 {
+                        for i in 0..3 {
+                            xi.push(p[i]);
+                            xi.push(p[j]);
+                            xi.push(p[k]);
+                            wt.push(w[i] * w[j] * w[k]);
+                        }
+                    }
+                }
+                (xi, wt)
+            }
             // Reduced: one point at the centroid, weight = reference measure.
             (Self::Reduced, et) => match et {
-                ElementType::SEG2 => (vec![0.0], vec![2.0]),
-                ElementType::TRI3 => (vec![1.0 / 3.0, 1.0 / 3.0], vec![0.5]),
-                ElementType::QUA4 => (vec![0.0, 0.0], vec![4.0]),
-                ElementType::TET4 => (vec![0.25, 0.25, 0.25], vec![1.0 / 6.0]),
-                ElementType::PENTA6 => (vec![1.0 / 3.0, 1.0 / 3.0, 0.5], vec![0.5]),
-                ElementType::HEX8 => (vec![0.0, 0.0, 0.0], vec![8.0]),
+                ElementType::SEG2 | ElementType::SEG3 => (vec![0.0], vec![2.0]),
+                ElementType::TRI3 | ElementType::TRI6 => (vec![1.0 / 3.0, 1.0 / 3.0], vec![0.5]),
+                ElementType::QUA4 | ElementType::QUA8 => (vec![0.0, 0.0], vec![4.0]),
+                ElementType::TET4 | ElementType::TET10 => (vec![0.25, 0.25, 0.25], vec![1.0 / 6.0]),
+                ElementType::PENTA6 | ElementType::PENTA15 => {
+                    (vec![1.0 / 3.0, 1.0 / 3.0, 0.5], vec![0.5])
+                }
+                ElementType::HEX8 | ElementType::HEX20 => (vec![0.0, 0.0, 0.0], vec![8.0]),
                 ElementType::POI1 => unreachable!(),
             },
             (_, ElementType::POI1) => unreachable!(),
@@ -199,6 +289,38 @@ impl QuadratureRule {
         }
         Ok(())
     }
+}
+
+/// 3-point Gauss-Legendre rule on `[-1, 1]` (exact to degree 5): points
+/// `(∓√(3/5), 0, +√(3/5))`, weights `(5/9, 8/9, 5/9)`.
+fn gauss3_1d() -> ([f64; 3], [f64; 3]) {
+    let a = (3.0_f64 / 5.0).sqrt();
+    ([-a, 0.0, a], [5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0])
+}
+
+/// 6-point degree-4 symmetric rule on the unit triangle (Dunavant). Returns
+/// `(xi, w)` with `xi` row-major over 6 points × 2 coordinates; the weights
+/// sum to the reference area `1/2`.
+fn tri6_gauss() -> (Vec<f64>, Vec<f64>) {
+    // Two 3-point orbits (b, b), (1-2b, b), (b, 1-2b).
+    let b1 = 0.445_948_490_915_965;
+    let b2 = 0.091_576_213_509_771;
+    let w1 = 0.223_381_589_678_011 / 2.0;
+    let w2 = 0.109_951_743_655_322 / 2.0;
+    let orbit = |b: f64| {
+        let a = 1.0 - 2.0 * b;
+        [(b, b), (a, b), (b, a)]
+    };
+    let mut xi = Vec::with_capacity(6 * 2);
+    let mut w = Vec::with_capacity(6);
+    for (b, weight) in [(b1, w1), (b2, w2)] {
+        for (x, y) in orbit(b) {
+            xi.push(x);
+            xi.push(y);
+            w.push(weight);
+        }
+    }
+    (xi, w)
 }
 
 impl fmt::Display for QuadratureRule {
@@ -219,26 +341,35 @@ mod tests {
 
     fn ref_volume(et: ElementType) -> f64 {
         match et {
-            ElementType::SEG2 => 2.0,
-            ElementType::TRI3 => 0.5,
-            ElementType::QUA4 => 4.0,
-            ElementType::TET4 => 1.0 / 6.0,
-            ElementType::PENTA6 => 0.5,
-            ElementType::HEX8 => 8.0,
+            ElementType::SEG2 | ElementType::SEG3 => 2.0,
+            ElementType::TRI3 | ElementType::TRI6 => 0.5,
+            ElementType::QUA4 | ElementType::QUA8 => 4.0,
+            ElementType::TET4 | ElementType::TET10 => 1.0 / 6.0,
+            ElementType::PENTA6 | ElementType::PENTA15 => 0.5,
+            ElementType::HEX8 | ElementType::HEX20 => 8.0,
             ElementType::POI1 => unreachable!(),
         }
     }
 
+    /// Every non-POI1 element type, for parametric quadrature tests.
+    const ALL_FE_TYPES: [ElementType; 12] = [
+        ElementType::SEG2,
+        ElementType::TRI3,
+        ElementType::QUA4,
+        ElementType::TET4,
+        ElementType::PENTA6,
+        ElementType::HEX8,
+        ElementType::SEG3,
+        ElementType::TRI6,
+        ElementType::QUA8,
+        ElementType::TET10,
+        ElementType::PENTA15,
+        ElementType::HEX20,
+    ];
+
     #[test]
     fn weights_sum_to_reference_volume() {
-        for et in [
-            ElementType::SEG2,
-            ElementType::TRI3,
-            ElementType::QUA4,
-            ElementType::TET4,
-            ElementType::PENTA6,
-            ElementType::HEX8,
-        ] {
+        for et in ALL_FE_TYPES {
             let (_xi, w) = QuadratureRule::Gauss.points(et).unwrap();
             let s: f64 = w.iter().sum();
             let expected = ref_volume(et);
@@ -254,14 +385,7 @@ mod tests {
 
     #[test]
     fn buffer_layouts() {
-        for et in [
-            ElementType::SEG2,
-            ElementType::TRI3,
-            ElementType::QUA4,
-            ElementType::TET4,
-            ElementType::PENTA6,
-            ElementType::HEX8,
-        ] {
+        for et in ALL_FE_TYPES {
             let n_g = QuadratureRule::Gauss.point_count(et).unwrap();
             let (xi, w) = QuadratureRule::Gauss.points(et).unwrap();
             assert_eq!(w.len(), n_g);
@@ -313,6 +437,58 @@ mod tests {
             sum,
             expected
         );
+    }
+
+    /// Factorial helper for the exact simplex-monomial integrals.
+    fn fact(n: u32) -> f64 {
+        (1..=n).map(|k| k as f64).product::<f64>().max(1.0)
+    }
+
+    /// The custom TRI6 (degree-4) rule integrates every monomial `ξ^p η^q`
+    /// with `p + q ≤ 4` exactly; on the unit triangle
+    /// `∫ ξ^p η^q = p! q! / (p+q+2)!`.
+    #[test]
+    fn gauss_tri6_exact_up_to_degree_4() {
+        let (xi, w) = QuadratureRule::Gauss.points(ElementType::TRI6).unwrap();
+        for p in 0..=4u32 {
+            for q in 0..=(4 - p) {
+                let mut sum = 0.0;
+                for g in 0..w.len() {
+                    sum += w[g] * xi[2 * g].powi(p as i32) * xi[2 * g + 1].powi(q as i32);
+                }
+                let expected = fact(p) * fact(q) / fact(p + q + 2);
+                assert!(
+                    (sum - expected).abs() < 1e-12,
+                    "TRI6: ∫ξ^{p}η^{q} = {sum} ≠ {expected}"
+                );
+            }
+        }
+    }
+
+    /// The custom TET10 (Keast degree-4) rule integrates every monomial
+    /// `ξ^p η^q ζ^r` with `p + q + r ≤ 4` exactly; on the unit tetrahedron
+    /// `∫ ξ^p η^q ζ^r = p! q! r! / (p+q+r+3)!`.
+    #[test]
+    fn gauss_tet10_exact_up_to_degree_4() {
+        let (xi, w) = QuadratureRule::Gauss.points(ElementType::TET10).unwrap();
+        for p in 0..=4u32 {
+            for q in 0..=(4 - p) {
+                for r in 0..=(4 - p - q) {
+                    let mut sum = 0.0;
+                    for g in 0..w.len() {
+                        sum += w[g]
+                            * xi[3 * g].powi(p as i32)
+                            * xi[3 * g + 1].powi(q as i32)
+                            * xi[3 * g + 2].powi(r as i32);
+                    }
+                    let expected = fact(p) * fact(q) * fact(r) / fact(p + q + r + 3);
+                    assert!(
+                        (sum - expected).abs() < 1e-12,
+                        "TET10: ∫ξ^{p}η^{q}ζ^{r} = {sum} ≠ {expected}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

@@ -17,7 +17,14 @@
 //!   | `TRI3` | `TRIANGLE`     | 5  |
 //!   | `QUA4` | `QUAD`         | 9  |
 //!   | `TET4` | `TETRA`        | 10 |
+//!   | `PENTA6` | `WEDGE`      | 13 |
 //!   | `HEX8` | `HEXAHEDRON`   | 12 |
+//!   | `SEG3` | `QUADRATIC_EDGE`     | 21 |
+//!   | `TRI6` | `QUADRATIC_TRIANGLE` | 22 |
+//!   | `QUA8` | `QUADRATIC_QUAD`     | 23 |
+//!   | `TET10` | `QUADRATIC_TETRA`   | 24 |
+//!   | `HEX20` | `QUADRATIC_HEXAHEDRON` | 25 |
+//!   | `PENTA15` | `QUADRATIC_WEDGE` | 26 |
 //!
 //! - **Node field** → `POINT_DATA`: one `SCALARS` array per component, the
 //!   nodal value at each point (`0` where the field does not define it).
@@ -49,6 +56,14 @@ fn vtk_cell_type(et: ElementType) -> u8 {
         ElementType::TET4 => 10,
         ElementType::PENTA6 => 13,
         ElementType::HEX8 => 12,
+        // Quadratic types: pyrucast's node order already matches VTK's, so
+        // the connectivity is written verbatim (corners then mid-edges).
+        ElementType::SEG3 => 21,    // VTK_QUADRATIC_EDGE
+        ElementType::TRI6 => 22,    // VTK_QUADRATIC_TRIANGLE
+        ElementType::QUA8 => 23,    // VTK_QUADRATIC_QUAD
+        ElementType::TET10 => 24,   // VTK_QUADRATIC_TETRA
+        ElementType::HEX20 => 25,   // VTK_QUADRATIC_HEXAHEDRON
+        ElementType::PENTA15 => 26, // VTK_QUADRATIC_WEDGE
     }
 }
 

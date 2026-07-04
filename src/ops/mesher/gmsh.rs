@@ -13,13 +13,22 @@
 //! | `3`  | `QUA4` |
 //! | `4`  | `TET4` |
 //! | `5`  | `HEX8` |
+//! | `6`  | `PENTA6` |
 //! | `15` | `POI1` |
+//! | `8`  | `SEG3` |
+//! | `9`  | `TRI6` |
+//! | `16` | `QUA8` |
+//! | `11` | `TET10` |
+//! | `17` | `HEX20` |
+//! | `18` | `PENTA15` |
 //!
-//! Any other gmsh element type (higher-order, prism, pyramid, …) is an
-//! error. The local node ordering of every supported type already matches
-//! pyrucast's reference frame (see
-//! [`crate::containers::mesh::ElementType`]), so the connectivity is copied
-//! verbatim — no reordering.
+//! Any other gmsh element type (full-Lagrange `QUA9`/`HEX27`, pyramid,
+//! order 3+, …) is an error. For most types the local node ordering already
+//! matches pyrucast's reference frame (see
+//! [`crate::containers::mesh::ElementType`]) and the connectivity is copied
+//! verbatim; the quadratic **volumes** (`TET10`, `HEX20`, `PENTA15`) have
+//! their mid-edge nodes **reordered** to pyrucast's (VTK) edge order — see
+//! [`gmsh_node_permutation`].
 //!
 //! # Grouping
 //!
@@ -69,13 +78,38 @@ fn element_type_from_gmsh(code: u32) -> Result<ElementType> {
         5 => ElementType::HEX8,
         6 => ElementType::PENTA6,
         15 => ElementType::POI1,
+        8 => ElementType::SEG3,
+        9 => ElementType::TRI6,
+        16 => ElementType::QUA8,
+        11 => ElementType::TET10,
+        17 => ElementType::HEX20,
+        18 => ElementType::PENTA15,
         other => {
             return Err(err(format!(
                 "gmsh: unsupported element type {other} (supported: 1=SEG2, \
-                 2=TRI3, 3=QUA4, 4=TET4, 5=HEX8, 6=PENTA6, 15=POI1)"
+                 2=TRI3, 3=QUA4, 4=TET4, 5=HEX8, 6=PENTA6, 15=POI1; quadratic: \
+                 8=SEG3, 9=TRI6, 16=QUA8, 11=TET10, 17=HEX20, 18=PENTA15)"
             )))
         }
     })
+}
+
+/// Permutation mapping a gmsh element's node order to pyrucast's (VTK) order:
+/// `pyrucast[i] = gmsh[perm[i]]`. Returns `None` when the two orders already
+/// coincide (all linear types, plus `SEG3`/`TRI6`/`QUA8`).
+///
+/// gmsh numbers the mid-edge nodes of `TET10`, `HEX20` and `PENTA15` in a
+/// different edge order than VTK; these tables realign them (same convention
+/// as meshio).
+fn gmsh_node_permutation(et: ElementType) -> Option<&'static [usize]> {
+    match et {
+        ElementType::TET10 => Some(&[0, 1, 2, 3, 4, 5, 6, 7, 9, 8]),
+        ElementType::HEX20 => Some(&[
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 9, 16, 18, 19, 17, 10, 12, 14, 15,
+        ]),
+        ElementType::PENTA15 => Some(&[0, 1, 2, 3, 4, 5, 6, 9, 7, 12, 14, 13, 8, 10, 11]),
+        _ => None,
+    }
 }
 
 // ─── Parsed (pure) representation ────────────────────────────────────────────
@@ -804,6 +838,13 @@ fn build_groups(parsed: &Parsed, coords: Handle<Coords>) -> Result<Vec<(String, 
             ids.push(id);
         }
 
+        // Realign gmsh's mid-edge node order to pyrucast's where they differ.
+        if let Some(perm) = gmsh_node_permutation(el.element_type) {
+            if ids.len() == perm.len() {
+                ids = perm.iter().map(|&p| ids[p]).collect();
+            }
+        }
+
         for g in &el.groups {
             let entry = groups.entry(g.clone()).or_insert_with(|| {
                 order.push(g.clone());
@@ -1041,11 +1082,56 @@ $Nodes
 $EndNodes
 $Elements
 1
-1 8 2 0 1 1 2 3
+1 10 2 0 1 1 2 3
 $EndElements
 ";
-        // gmsh type 8 = 3-node second-order line, not supported.
+        // gmsh type 10 = 9-node quadrangle (full-Lagrange QUA9), not supported
+        // (we handle the 8-node serendipity QUA8 = type 16 instead).
         assert!(read_gmsh_str(coords(2), mesh).is_err());
+    }
+
+    #[test]
+    fn reads_quadratic_tet10_with_node_permutation() {
+        // A single TET10 (gmsh type 11) on the unit tetrahedron, its 6
+        // mid-edge nodes at the exact edge midpoints, listed in **gmsh**
+        // node order (edges (0,1),(1,2),(2,0),(0,3),(2,3),(1,3)). After the
+        // gmsh→pyrucast permutation, local node 8 must be the (1,3) midpoint
+        // and node 9 the (2,3) midpoint.
+        let mesh = "\
+$MeshFormat
+2.2 0 8
+$EndMeshFormat
+$Nodes
+10
+1 0 0 0
+2 1 0 0
+3 0 1 0
+4 0 0 1
+5 0.5 0 0
+6 0.5 0.5 0
+7 0 0.5 0
+8 0 0 0.5
+9 0 0.5 0.5
+10 0.5 0 0.5
+$EndNodes
+$Elements
+1
+1 11 2 0 1 1 2 3 4 5 6 7 8 9 10
+$EndElements
+";
+        let g = read_gmsh_str(coords(3), mesh).unwrap();
+        let (_, m) = &g[0];
+        assert_eq!(m.element_types().unwrap(), vec![ElementType::TET10]);
+        assert_eq!(m.cell_count().unwrap(), 1);
+        // Local node 8 = edge (1,3) midpoint, node 9 = edge (2,3) midpoint.
+        assert_eq!(
+            m.node(0, 0, 8).unwrap().coord().unwrap(),
+            vec![0.5, 0.0, 0.5]
+        );
+        assert_eq!(
+            m.node(0, 0, 9).unwrap().coord().unwrap(),
+            vec![0.0, 0.5, 0.5]
+        );
     }
 
     // ─── Binary round-trips ──────────────────────────────────────────────────

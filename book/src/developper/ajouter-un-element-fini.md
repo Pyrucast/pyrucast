@@ -47,19 +47,23 @@ documente dans le rustdoc d'`ElementType` **et** dans le tableau du chapitre
 
 ## 3. L'interpolation — `containers/finite_element_space/interpolation.rs`
 
-Étendre l'enum `Interpolation` (aujourd'hui `Lagrange1` seul) pour le nouveau
-type :
+Étendre l'enum `Interpolation` (`Lagrange1` pour les types linéaires,
+`Lagrange2` pour les quadratiques) pour le nouveau type :
 
-- `Interpolation::supports(element_type)` — déclarer le couple `(ElementType,
-  Interpolation)` supporté ;
+- `Interpolation::is_compatible_with(element_type)` — déclarer le couple
+  `(ElementType, Interpolation)` supporté ; le **degré** doit correspondre au
+  type (un type linéaire va avec `Lagrange1`, un type quadratique avec
+  `Lagrange2`) ;
 - les **fonctions de forme** \\( N_i(\xi) \\) (propriété de Kronecker
   \\( N_i(\xi_j) = \delta_{ij} \\)) ;
 - les **dérivées de référence** `dshape_dxi(et, &xi)` — buffer plat row-major
   \\( \mathtt{dN}[i \times d_r + k] = \partial N_i / \partial \xi_k \\).
 
-> Ajouter un type **quadratique** (TRI6, QUA8…) suppose en général une nouvelle
-> variante d'interpolation `Lagrange2` en parallèle de la variante
-> d'`ElementType`.
+> Un type **quadratique** (TRI6, QUA8, TET10…) se branche sur l'interpolation
+> `Lagrange2` déjà en place. Un ordre encore supérieur (cubique…) demanderait
+> une nouvelle variante `Lagrange3`. Astuce de validation : recouper les
+> dérivées analytiques par différences finies (comme le fait
+> `check_dshape_matches_fd`).
 
 Le Jacobien, son déterminant (y compris le cas **manifold** \\( d_s > d_r \\)),
 et les dérivées physiques \\( \partial N_i / \partial x \\) sont **génériques** :
