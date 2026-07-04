@@ -122,8 +122,8 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
-    dirichlet, elasticity, frame, frame3d, heat_conduction, mazars, mpc, plasticity, timoshenko,
-    truss, Constraint, SubModelKind,
+    dirichlet, elasticity, embedded, frame, frame3d, heat_conduction, mazars, mpc, plasticity,
+    timoshenko, truss, Constraint, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -173,6 +173,9 @@ pub enum SubModel {
     /// Multi-point constraint (linear relations) via Lagrange multipliers —
     /// see [`mpc::Mpc`].
     Mpc(mpc::Mpc),
+    /// Embedded (immersed) constraint tying immersed nodes to a host
+    /// interpolation — see [`embedded::Embedded`].
+    Embedded(embedded::Embedded),
     /// Truss / bar (axial-force) element — see [`truss::Truss`].
     Truss(truss::Truss),
     /// Linear elasticity (2-D plane / 3-D solid) — see [`elasticity::Elasticity`].
@@ -199,6 +202,7 @@ impl SubModel {
             SubModel::HeatConduction(p) => p,
             SubModel::Dirichlet(p) => p,
             SubModel::Mpc(p) => p,
+            SubModel::Embedded(p) => p,
             SubModel::Truss(p) => p,
             SubModel::Elasticity(p) => p,
             SubModel::Plasticity(p) => p,
@@ -326,6 +330,35 @@ impl SubModel {
             multiplier_mesh,
             multiplier,
             imposed_value,
+        )?))
+    }
+
+    /// Embedded (immersed) constraint sub-model: tie each node of `immersed` to
+    /// the interpolation of `host` at that node, for every `(variable,
+    /// target_dual)` in `components` (e.g. `[("u_x","f_x"), ("u_y","f_y"),
+    /// ("u_z","f_z")]`) — a bar « baignée » in a volume.
+    ///
+    /// The coupling weights are the host shape functions at each immersed node,
+    /// computed once at build by locating the node in the host. `multipliers` /
+    /// `imposed_values` default to `lambda_<variable>` / `imposed_<variable>`;
+    /// `tol` is the location tolerance (default `1e-6`). The right-hand side `g`
+    /// defaults to `0` (a rigid tie). See [`embedded::Embedded::new`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn embedded(
+        immersed: &Mesh,
+        host: &Mesh,
+        components: Vec<(String, String)>,
+        multipliers: Option<Vec<String>>,
+        imposed_values: Option<Vec<String>>,
+        tol: Option<f64>,
+    ) -> Result<Self> {
+        Ok(SubModel::Embedded(embedded::Embedded::new(
+            immersed,
+            host,
+            components,
+            multipliers,
+            imposed_values,
+            tol,
         )?))
     }
 

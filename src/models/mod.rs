@@ -34,6 +34,7 @@ use crate::store::{read, Handle};
 
 pub mod dirichlet;
 pub mod elasticity;
+pub mod embedded;
 pub mod frame;
 pub mod frame3d;
 pub mod heat_conduction;
