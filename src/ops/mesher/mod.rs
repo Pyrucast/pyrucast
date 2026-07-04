@@ -6,7 +6,7 @@
 //! Internal helpers:
 //! - [`triangulation`] — 2-D primitives (ear clipping, CDT,
 //!   polygon-with-holes pipeline).
-//! - [`sweep`] — extrusion and SEG2→QUA4 kernel used by [`sweep_qua4()`]
+//! - [`sweep`] — extrusion and SEG2→QUA4 kernel used by [`sweep_qua4()`](fn@sweep_qua4)
 //!   and [`extrude()`].
 
 pub mod barycenter;

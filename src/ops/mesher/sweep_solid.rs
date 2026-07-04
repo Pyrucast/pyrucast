@@ -4,7 +4,7 @@ use crate::error::Result;
 /// Sweep two matching surface meshes into a solid mesh, building `n_layers`
 /// layers of solid cells between `mesh_a` and `mesh_b`.
 ///
-/// The 3-D companion of [`sweep_qua4`](crate::ops::mesher::sweep_qua4):
+/// The 3-D companion of [`sweep_qua4`](fn@crate::ops::mesher::sweep_qua4):
 /// where that one links two SEG2 contours into a QUA4 strip, this one links
 /// two surface meshes into a solid — TRI3 faces sweep into PENTA6 prisms,
 /// QUA4 faces into HEX8 hexahedra. Both meshes must be single-submesh

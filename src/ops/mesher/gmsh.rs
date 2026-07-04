@@ -29,7 +29,7 @@
 //! (see [`crate::containers::mesh::ElementType`]) and the connectivity is
 //! copied verbatim; the quadratic **volumes** (`TET10`, `HEX20`, `PENTA15`,
 //! `HEX27`) have their mid-edge / face nodes **reordered** to pyrucast's
-//! (VTK) order — see [`gmsh_node_permutation`].
+//! (VTK) order — see `gmsh_node_permutation`.
 //!
 //! # Grouping
 //!
