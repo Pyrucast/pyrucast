@@ -173,6 +173,17 @@ pub fn sweep_solid(
     Ok(PyMesh { inner: mesh })
 }
 
+/// Build the **quadratic** (Lagrange-2) copy of a linear mesh: each element
+/// type is bumped to its quadratic sibling (TRI3→TRI6, HEX8→HEX20, …). Corner
+/// nodes are re-used; one mid-edge node is created per edge (at the midpoint)
+/// and shared between the cells that use it. The original mesh is untouched.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn to_quadratic(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::to_quadratic(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
 /// Translate `mesh` by `vector`, returning a fresh copy with its own nodes
 /// (the original is left untouched). `vector` matches the mesh dimension.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]

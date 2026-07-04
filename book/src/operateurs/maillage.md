@@ -24,6 +24,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `contour(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
 | `elements_on(mesh, points, strict=True)` | les **éléments** de `mesh` qui s'**appuient** sur les nœuds de `points` (voir plus bas) |
 | `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 |
+| `to_quadratic(mesh)` | la **copie quadratique** (Lagrange-2) d'un maillage linéaire : TRI3→TRI6, HEX8→HEX20, … (voir plus bas) |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
 | `consolidate(mesh)` | fusionne les sous-maillages de même type (dispatch partagé avec `NodeField`) |
 | `merge_nodes(mesh, tol)` | **soude** les nœuds distants de moins de `tol` ; remappe la connectivité, abandonne les cellules dégénérées (voir plus bas) |
@@ -106,6 +107,30 @@ surface et sa copie déplacée :
 # `face` et `tournee` : la face TRI3 ci-dessus et sa copie tournée de 30°.
 solide = pyrucast.sweep_solid(face, tournee, 1)
 print(solide.element_types())  # ['PENTA6']
+```
+
+## Passage à l'ordre quadratique : `to_quadratic`
+
+`to_quadratic(mesh)` construit la **copie quadratique** (Lagrange-2) d'un
+maillage **linéaire** : chaque type d'élément est promu vers son homologue
+quadratique — `SEG2→SEG3`, `TRI3→TRI6`, `QUA4→QUA8`, `TET4→TET10`,
+`PENTA6→PENTA15`, `HEX8→HEX20`.
+
+Les **nœuds sommets sont réutilisés** (refcount incrémenté) ; un **nœud de
+milieu d'arête** est créé par arête distincte, au milieu géométrique de l'arête,
+et **partagé** entre toutes les cellules (tous sous-maillages confondus) qui
+utilisent cette arête — le résultat reste donc conforme. Le maillage d'origine
+n'est pas modifié. Un sous-maillage `POI1` ou déjà quadratique lève une erreur.
+
+Le maillage obtenu se calcule avec l'interpolation `LAGRANGE2` (cf.
+[Espace éléments finis](../fe-space.md)) :
+
+```python
+lin = pyrucast.surface(contour, "TRI3", 1.0)   # maillage TRI3
+quad = pyrucast.to_quadratic(lin)              # copie TRI6
+print(quad.element_types())                    # ['TRI6']
+
+fes = pyrucast.FiniteElementSpace(quad, interpolation="LAGRANGE2")
 ```
 
 ## Triangulation d'un contour fermé : `fill_surface`

@@ -82,6 +82,7 @@ __all__ = [
     "tanh",
     "thermal_strain",
     "to_poi1",
+    "to_quadratic",
     "translate",
     "volume",
     "xtx",
@@ -2412,6 +2413,14 @@ def to_poi1(mesh: Mesh) -> Mesh:
     Returns a new mesh with the same number of submeshes; each output
     submesh is a POI1 submesh holding the de-duplicated nodes of the
     corresponding input submesh, in order of first appearance.
+    """
+
+def to_quadratic(mesh: Mesh) -> Mesh:
+    r"""
+    Build the **quadratic** (Lagrange-2) copy of a linear mesh: each element
+    type is bumped to its quadratic sibling (TRI3→TRI6, HEX8→HEX20, …). Corner
+    nodes are re-used; one mid-edge node is created per edge (at the midpoint)
+    and shared between the cells that use it. The original mesh is untouched.
     """
 
 def translate(mesh: Mesh, vector: typing.Sequence[builtins.float]) -> Mesh:
