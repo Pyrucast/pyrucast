@@ -93,7 +93,7 @@ impl QuadratureRule {
             (Self::Gauss, ElementType::QUA8 | ElementType::QUA9) => 9,
             (Self::Gauss, ElementType::TET10) => 11,
             (Self::Gauss, ElementType::PENTA15) => 18,
-            (Self::Gauss, ElementType::HEX20) => 27,
+            (Self::Gauss, ElementType::HEX20 | ElementType::HEX27) => 27,
             (Self::Reduced, _) => 1,
             (_, ElementType::POI1) => unreachable!(),
         })
@@ -247,7 +247,7 @@ impl QuadratureRule {
                 }
                 (xi, w)
             }
-            (Self::Gauss, ElementType::HEX20) => {
+            (Self::Gauss, ElementType::HEX20 | ElementType::HEX27) => {
                 // 3×3×3 tensor product of the 3-point rule.
                 let (p, w) = gauss3_1d();
                 let mut xi = Vec::with_capacity(27 * 3);
@@ -275,7 +275,9 @@ impl QuadratureRule {
                 ElementType::PENTA6 | ElementType::PENTA15 => {
                     (vec![1.0 / 3.0, 1.0 / 3.0, 0.5], vec![0.5])
                 }
-                ElementType::HEX8 | ElementType::HEX20 => (vec![0.0, 0.0, 0.0], vec![8.0]),
+                ElementType::HEX8 | ElementType::HEX20 | ElementType::HEX27 => {
+                    (vec![0.0, 0.0, 0.0], vec![8.0])
+                }
                 ElementType::POI1 => unreachable!(),
             },
             (_, ElementType::POI1) => unreachable!(),
@@ -348,13 +350,13 @@ mod tests {
             ElementType::QUA4 | ElementType::QUA8 | ElementType::QUA9 => 4.0,
             ElementType::TET4 | ElementType::TET10 => 1.0 / 6.0,
             ElementType::PENTA6 | ElementType::PENTA15 => 0.5,
-            ElementType::HEX8 | ElementType::HEX20 => 8.0,
+            ElementType::HEX8 | ElementType::HEX20 | ElementType::HEX27 => 8.0,
             ElementType::POI1 => unreachable!(),
         }
     }
 
     /// Every non-POI1 element type, for parametric quadrature tests.
-    const ALL_FE_TYPES: [ElementType; 13] = [
+    const ALL_FE_TYPES: [ElementType; 14] = [
         ElementType::SEG2,
         ElementType::TRI3,
         ElementType::QUA4,
@@ -368,6 +370,7 @@ mod tests {
         ElementType::PENTA15,
         ElementType::HEX20,
         ElementType::QUA9,
+        ElementType::HEX27,
     ];
 
     #[test]

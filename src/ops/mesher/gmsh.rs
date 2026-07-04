@@ -22,14 +22,14 @@
 //! | `11` | `TET10` |
 //! | `17` | `HEX20` |
 //! | `18` | `PENTA15` |
+//! | `12` | `HEX27` |
 //!
-//! Any other gmsh element type (full-Lagrange `HEX27`, pyramid, order 3+, …)
-//! is an error. For most types the local node ordering already
-//! matches pyrucast's reference frame (see
-//! [`crate::containers::mesh::ElementType`]) and the connectivity is copied
-//! verbatim; the quadratic **volumes** (`TET10`, `HEX20`, `PENTA15`) have
-//! their mid-edge nodes **reordered** to pyrucast's (VTK) edge order — see
-//! [`gmsh_node_permutation`].
+//! Any other gmsh element type (pyramid, order 3+, …) is an error. For most
+//! types the local node ordering already matches pyrucast's reference frame
+//! (see [`crate::containers::mesh::ElementType`]) and the connectivity is
+//! copied verbatim; the quadratic **volumes** (`TET10`, `HEX20`, `PENTA15`,
+//! `HEX27`) have their mid-edge / face nodes **reordered** to pyrucast's
+//! (VTK) order — see [`gmsh_node_permutation`].
 //!
 //! # Grouping
 //!
@@ -86,11 +86,13 @@ fn element_type_from_gmsh(code: u32) -> Result<ElementType> {
         11 => ElementType::TET10,
         17 => ElementType::HEX20,
         18 => ElementType::PENTA15,
+        12 => ElementType::HEX27,
         other => {
             return Err(err(format!(
                 "gmsh: unsupported element type {other} (supported: 1=SEG2, \
                  2=TRI3, 3=QUA4, 4=TET4, 5=HEX8, 6=PENTA6, 15=POI1; quadratic: \
-                 8=SEG3, 9=TRI6, 16=QUA8, 10=QUA9, 11=TET10, 17=HEX20, 18=PENTA15)"
+                 8=SEG3, 9=TRI6, 16=QUA8, 10=QUA9, 11=TET10, 17=HEX20, \
+                 18=PENTA15, 12=HEX27)"
             )))
         }
     })
@@ -98,11 +100,11 @@ fn element_type_from_gmsh(code: u32) -> Result<ElementType> {
 
 /// Permutation mapping a gmsh element's node order to pyrucast's (VTK) order:
 /// `pyrucast[i] = gmsh[perm[i]]`. Returns `None` when the two orders already
-/// coincide (all linear types, plus `SEG3`/`TRI6`/`QUA8`).
+/// coincide (all linear types, plus `SEG3`/`TRI6`/`QUA8`/`QUA9`).
 ///
-/// gmsh numbers the mid-edge nodes of `TET10`, `HEX20` and `PENTA15` in a
-/// different edge order than VTK; these tables realign them (same convention
-/// as meshio).
+/// gmsh numbers the mid-edge nodes of `TET10`, `HEX20`, `PENTA15` and `HEX27`
+/// (and the face nodes of `HEX27`) in a different order than VTK; these tables
+/// realign them (same convention as meshio).
 fn gmsh_node_permutation(et: ElementType) -> Option<&'static [usize]> {
     match et {
         ElementType::TET10 => Some(&[0, 1, 2, 3, 4, 5, 6, 7, 9, 8]),
@@ -110,6 +112,12 @@ fn gmsh_node_permutation(et: ElementType) -> Option<&'static [usize]> {
             0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 9, 16, 18, 19, 17, 10, 12, 14, 15,
         ]),
         ElementType::PENTA15 => Some(&[0, 1, 2, 3, 4, 5, 6, 9, 7, 12, 14, 13, 8, 10, 11]),
+        ElementType::HEX27 => Some(&[
+            0, 1, 2, 3, 4, 5, 6, 7, // corners
+            8, 11, 13, 9, 16, 18, 19, 17, 10, 12, 14, 15, // edges (as HEX20)
+            22, 23, 21, 24, 20, 25, // faces (x-, x+, y-, y+, z-, z+)
+            26, // body center
+        ]),
         _ => None,
     }
 }
@@ -1084,11 +1092,10 @@ $Nodes
 $EndNodes
 $Elements
 1
-1 12 2 0 1 1 2 3
+1 7 2 0 1 1 2 3
 $EndElements
 ";
-        // gmsh type 12 = 27-node hexahedron (full-Lagrange HEX27), not
-        // supported (we handle the 20-node serendipity HEX20 = type 17).
+        // gmsh type 7 = 5-node pyramid (PYR5), not supported by pyrucast.
         assert!(read_gmsh_str(coords(2), mesh).is_err());
     }
 
@@ -1133,6 +1140,85 @@ $EndElements
         assert_eq!(
             m.node(0, 0, 9).unwrap().coord().unwrap(),
             vec![0.0, 0.5, 0.5]
+        );
+    }
+
+    #[test]
+    fn reads_quadratic_hex27_with_node_permutation() {
+        // A single HEX27 (gmsh type 12) on the unit cube, every mid-edge /
+        // face / center node at its exact geometric position, listed in
+        // **gmsh** node order. After the gmsh→pyrucast permutation the face
+        // centers (local 20..25) and body center (26) must land correctly.
+        let mesh = "\
+$MeshFormat
+2.2 0 8
+$EndMeshFormat
+$Nodes
+27
+1 0 0 0
+2 1 0 0
+3 1 1 0
+4 0 1 0
+5 0 0 1
+6 1 0 1
+7 1 1 1
+8 0 1 1
+9 0.5 0 0
+10 0 0.5 0
+11 0 0 0.5
+12 1 0.5 0
+13 1 0 0.5
+14 0.5 1 0
+15 1 1 0.5
+16 0 1 0.5
+17 0.5 0 1
+18 0 0.5 1
+19 1 0.5 1
+20 0.5 1 1
+21 0.5 0.5 0
+22 0.5 0 0.5
+23 0 0.5 0.5
+24 1 0.5 0.5
+25 0.5 1 0.5
+26 0.5 0.5 1
+27 0.5 0.5 0.5
+$EndNodes
+$Elements
+1
+1 12 2 0 1 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27
+$EndElements
+";
+        let g = read_gmsh_str(coords(3), mesh).unwrap();
+        let (_, m) = &g[0];
+        assert_eq!(m.element_types().unwrap(), vec![ElementType::HEX27]);
+        // Faces x-, x+, y-, y+, z-, z+ at local 20..25; body center at 26.
+        assert_eq!(
+            m.node(0, 0, 20).unwrap().coord().unwrap(),
+            vec![0.0, 0.5, 0.5]
+        );
+        assert_eq!(
+            m.node(0, 0, 21).unwrap().coord().unwrap(),
+            vec![1.0, 0.5, 0.5]
+        );
+        assert_eq!(
+            m.node(0, 0, 22).unwrap().coord().unwrap(),
+            vec![0.5, 0.0, 0.5]
+        );
+        assert_eq!(
+            m.node(0, 0, 23).unwrap().coord().unwrap(),
+            vec![0.5, 1.0, 0.5]
+        );
+        assert_eq!(
+            m.node(0, 0, 24).unwrap().coord().unwrap(),
+            vec![0.5, 0.5, 0.0]
+        );
+        assert_eq!(
+            m.node(0, 0, 25).unwrap().coord().unwrap(),
+            vec![0.5, 0.5, 1.0]
+        );
+        assert_eq!(
+            m.node(0, 0, 26).unwrap().coord().unwrap(),
+            vec![0.5, 0.5, 0.5]
         );
     }
 

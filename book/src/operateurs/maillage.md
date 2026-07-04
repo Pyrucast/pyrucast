@@ -650,12 +650,13 @@ copiée telle quelle.
 | `11` | `TET10` |
 | `17` | `HEX20` |
 | `18` | `PENTA15` |
+| `12` | `HEX27` |
 
-Pour les types quadratiques volumiques (`TET10`, `HEX20`, `PENTA15`), gmsh
-numérote les nœuds de milieu d'arête dans un ordre d'arêtes différent de la
-convention pyrucast (VTK) : la connectivité est **réalignée** à la lecture (même
-permutation que meshio). Tout autre type gmsh (Lagrange complet `HEX27`,
-pyramide, ordre 3+…) lève une erreur explicite.
+Pour les types quadratiques volumiques (`TET10`, `HEX20`, `PENTA15`, `HEX27`),
+gmsh numérote les nœuds de milieu d'arête (et de face pour `HEX27`) dans un
+ordre différent de la convention pyrucast (VTK) : la connectivité est
+**réalignée** à la lecture (même permutation que meshio). Tout autre type gmsh
+(pyramide, ordre 3+…) lève une erreur explicite.
 
 ### Dimension
 

@@ -61,7 +61,7 @@ impl Interpolation {
             Self::Lagrange2 => {
                 matches!(
                     element_type,
-                    SEG3 | TRI6 | QUA8 | QUA9 | TET10 | PENTA15 | HEX20
+                    SEG3 | TRI6 | QUA8 | QUA9 | TET10 | PENTA15 | HEX20 | HEX27
                 )
             }
         }
@@ -147,6 +147,7 @@ impl Interpolation {
             (Self::Lagrange2, ElementType::TET10) => Ok(tet10_shape(xi)),
             (Self::Lagrange2, ElementType::PENTA15) => Ok(penta15_shape(xi)),
             (Self::Lagrange2, ElementType::HEX20) => Ok(hex20_shape(xi)),
+            (Self::Lagrange2, ElementType::HEX27) => Ok(hex27_shape(xi)),
             // Every other pair is incompatible and ruled out by check_compat.
             _ => unreachable!("incompatible (interpolation, element_type) reached shape()"),
         }
@@ -238,6 +239,7 @@ impl Interpolation {
             (Self::Lagrange2, ElementType::TET10) => Ok(tet10_dshape(xi)),
             (Self::Lagrange2, ElementType::PENTA15) => Ok(penta15_dshape(xi)),
             (Self::Lagrange2, ElementType::HEX20) => Ok(hex20_dshape(xi)),
+            (Self::Lagrange2, ElementType::HEX27) => Ok(hex27_dshape(xi)),
             _ => unreachable!("incompatible (interpolation, element_type) reached dshape_dxi()"),
         }
     }
@@ -412,6 +414,60 @@ fn qua9_dshape(xi: &[f64]) -> Vec<f64> {
     for &(i, j) in QUA9_NODES.iter() {
         out.push(dlx[i] * ly[j]);
         out.push(lx[i] * dly[j]);
+    }
+    out
+}
+
+/// (ξ,η,ζ)-positions of each HEX27 node as indices into the 1-D quadratic
+/// basis `[node@-1, node@0, node@+1]`: 8 corners, 12 mid-edges (HEX20 order),
+/// 6 face centers (`x-`, `x+`, `y-`, `y+`, `z-`, `z+`), then the body center.
+const HEX27_NODES: [(usize, usize, usize); 27] = [
+    (0, 0, 0),
+    (2, 0, 0),
+    (2, 2, 0),
+    (0, 2, 0),
+    (0, 0, 2),
+    (2, 0, 2),
+    (2, 2, 2),
+    (0, 2, 2), // corners 0..7
+    (1, 0, 0),
+    (2, 1, 0),
+    (1, 2, 0),
+    (0, 1, 0), // bottom edges 8..11
+    (1, 0, 2),
+    (2, 1, 2),
+    (1, 2, 2),
+    (0, 1, 2), // top edges 12..15
+    (0, 0, 1),
+    (2, 0, 1),
+    (2, 2, 1),
+    (0, 2, 1), // vertical edges 16..19
+    (0, 1, 1),
+    (2, 1, 1), // faces x-, x+  (20, 21)
+    (1, 0, 1),
+    (1, 2, 1), // faces y-, y+  (22, 23)
+    (1, 1, 0),
+    (1, 1, 2), // faces z-, z+  (24, 25)
+    (1, 1, 1), // body center   (26)
+];
+
+/// HEX27 tri-quadratic on `[-1, 1]³`: the full `Q2` tensor product.
+fn hex27_shape(xi: &[f64]) -> Vec<f64> {
+    let (lx, ly, lz) = (lag1d(xi[0]), lag1d(xi[1]), lag1d(xi[2]));
+    HEX27_NODES
+        .iter()
+        .map(|&(i, j, k)| lx[i] * ly[j] * lz[k])
+        .collect()
+}
+
+fn hex27_dshape(xi: &[f64]) -> Vec<f64> {
+    let (lx, ly, lz) = (lag1d(xi[0]), lag1d(xi[1]), lag1d(xi[2]));
+    let (dlx, dly, dlz) = (dlag1d(xi[0]), dlag1d(xi[1]), dlag1d(xi[2]));
+    let mut out = Vec::with_capacity(81);
+    for &(i, j, k) in HEX27_NODES.iter() {
+        out.push(dlx[i] * ly[j] * lz[k]);
+        out.push(lx[i] * dly[j] * lz[k]);
+        out.push(lx[i] * ly[j] * dlz[k]);
     }
     out
 }
@@ -811,6 +867,13 @@ mod tests {
                 .iter()
                 .map(|&(a, b, c)| vec![a, b, c])
                 .collect(),
+            ElementType::HEX27 => {
+                let coord = |i: usize| (i as f64) - 1.0; // 0,1,2 -> -1,0,1
+                HEX27_NODES
+                    .iter()
+                    .map(|&(i, j, k)| vec![coord(i), coord(j), coord(k)])
+                    .collect()
+            }
             _ => unreachable!(),
         }
     }
@@ -825,6 +888,7 @@ mod tests {
             (ElementType::TET10, &[&[0.2, 0.3, 0.1], &[0.1, 0.1, 0.5]]),
             (ElementType::PENTA15, &[&[0.2, 0.3, 0.4], &[0.1, 0.5, 0.8]]),
             (ElementType::HEX20, &[&[-0.3, 0.5, 0.2], &[0.6, -0.4, 0.9]]),
+            (ElementType::HEX27, &[&[-0.3, 0.5, 0.2], &[0.6, -0.4, 0.9]]),
         ];
         for &(et, pts) in samples {
             // Kronecker delta at the nodes.

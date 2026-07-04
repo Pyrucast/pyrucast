@@ -132,8 +132,7 @@ def test_read_from_file(tmp_path):
 
 
 def test_unsupported_element_type_raises():
-    # gmsh type 12 = 27-node hexahedron (full-Lagrange HEX27), unsupported
-    # (the 20-node serendipity HEX20 = type 17 is supported instead).
+    # gmsh type 7 = 5-node pyramid (PYR5), unsupported by pyrucast.
     bad = textwrap.dedent(
         """\
         $MeshFormat
@@ -147,7 +146,7 @@ def test_unsupported_element_type_raises():
         $EndNodes
         $Elements
         1
-        1 12 2 0 1 1 2 3
+        1 7 2 0 1 1 2 3
         $EndElements
         """
     )

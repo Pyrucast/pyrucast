@@ -71,6 +71,49 @@ def test_qua9_biquadratic_fe_space():
     assert sub.gauss_count() == 9
 
 
+def test_hex27_triquadratic_fe_space():
+    # 27-node hex on the unit cube: corners, edges, face centers, body center.
+    c = pyrucast.Coords(3)
+    ref = [
+        (-1, -1, -1),
+        (1, -1, -1),
+        (1, 1, -1),
+        (-1, 1, -1),
+        (-1, -1, 1),
+        (1, -1, 1),
+        (1, 1, 1),
+        (-1, 1, 1),
+        (0, -1, -1),
+        (1, 0, -1),
+        (0, 1, -1),
+        (-1, 0, -1),
+        (0, -1, 1),
+        (1, 0, 1),
+        (0, 1, 1),
+        (-1, 0, 1),
+        (-1, -1, 0),
+        (1, -1, 0),
+        (1, 1, 0),
+        (-1, 1, 0),
+        (-1, 0, 0),
+        (1, 0, 0),
+        (0, -1, 0),
+        (0, 1, 0),
+        (0, 0, -1),
+        (0, 0, 1),
+        (0, 0, 0),
+    ]
+    ids = [c.add_node([float(x), float(y), float(z)]) for (x, y, z) in ref]
+    m = pyrucast.Mesh(c, "HEX27")
+    m.unit().add_cell(ids)
+    assert m.element_types() == ["HEX27"]
+
+    fes = pyrucast.FiniteElementSpace(m, interpolation="LAGRANGE2")
+    sub = fes[0]
+    assert sub.element_type == "HEX27"
+    assert sub.gauss_count() == 27
+
+
 def test_export_vtk_quadratic(tmp_path):
     c = pyrucast.Coords(2)
     m = _tri6(c)

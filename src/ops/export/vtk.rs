@@ -26,6 +26,7 @@
 //!   | `HEX20` | `QUADRATIC_HEXAHEDRON` | 25 |
 //!   | `PENTA15` | `QUADRATIC_WEDGE` | 26 |
 //!   | `QUA9` | `BIQUADRATIC_QUAD` | 28 |
+//!   | `HEX27` | `TRIQUADRATIC_HEXAHEDRON` | 29 |
 //!
 //! - **Node field** → `POINT_DATA`: one `SCALARS` array per component, the
 //!   nodal value at each point (`0` where the field does not define it).
@@ -66,6 +67,7 @@ fn vtk_cell_type(et: ElementType) -> u8 {
         ElementType::HEX20 => 25,   // VTK_QUADRATIC_HEXAHEDRON
         ElementType::PENTA15 => 26, // VTK_QUADRATIC_WEDGE
         ElementType::QUA9 => 28,    // VTK_BIQUADRATIC_QUAD
+        ElementType::HEX27 => 29,   // VTK_TRIQUADRATIC_HEXAHEDRON
     }
 }
 

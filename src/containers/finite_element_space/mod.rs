@@ -959,6 +959,64 @@ mod tests {
     }
 
     #[test]
+    fn hex27_jacobian_cube() {
+        // Straight [0,2]³ cube: all 27 nodes at their natural tensor
+        // positions (corners, edges, faces, center), volume 8.
+        let coords = cfg3d();
+        // Reference layout in {-1,0,1}³ (pyrucast HEX27 order), mapped to
+        // physical [0,2]³ via x = ξ + 1.
+        let refc: [(f64, f64, f64); 27] = [
+            (-1.0, -1.0, -1.0),
+            (1.0, -1.0, -1.0),
+            (1.0, 1.0, -1.0),
+            (-1.0, 1.0, -1.0),
+            (-1.0, -1.0, 1.0),
+            (1.0, -1.0, 1.0),
+            (1.0, 1.0, 1.0),
+            (-1.0, 1.0, 1.0),
+            (0.0, -1.0, -1.0),
+            (1.0, 0.0, -1.0),
+            (0.0, 1.0, -1.0),
+            (-1.0, 0.0, -1.0),
+            (0.0, -1.0, 1.0),
+            (1.0, 0.0, 1.0),
+            (0.0, 1.0, 1.0),
+            (-1.0, 0.0, 1.0),
+            (-1.0, -1.0, 0.0),
+            (1.0, -1.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (-1.0, 1.0, 0.0),
+            (-1.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, -1.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, -1.0),
+            (0.0, 0.0, 1.0),
+            (0.0, 0.0, 0.0),
+        ];
+        let ids: Vec<_> = refc
+            .iter()
+            .map(|&(x, y, z)| {
+                Node::create_in(coords.clone(), &[x + 1.0, y + 1.0, z + 1.0])
+                    .unwrap()
+                    .id()
+            })
+            .collect();
+        let sm = {
+            let mut sm = SubMesh::new(coords, ElementType::HEX27);
+            sm.add_cell(&ids).unwrap();
+            insert(sm)
+        };
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange2, QuadratureRule::Gauss)
+            .unwrap();
+        let mut vol = 0.0;
+        for g in 0..sub.gauss_count() {
+            vol += sub.gauss_weight(g).unwrap() * sub.det_jacobian(0, g).unwrap();
+        }
+        assert!((vol - 8.0).abs() < 1e-12, "HEX27 volume = {vol}");
+    }
+
+    #[test]
     fn penta15_jacobian_volume() {
         // Prism over the unit right triangle, height 2: volume 1/2 × 2 = 1.
         let vol = quad_element_volume(

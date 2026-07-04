@@ -144,7 +144,7 @@ fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
             [3, 9], [9, 4], [4, 10], [10, 5], [5, 11], [11, 3],
             [0, 12], [12, 3], [1, 13], [13, 4], [2, 14], [14, 5],
         ],
-        ElementType::HEX20 => &[
+        ElementType::HEX20 | ElementType::HEX27 => &[
             [0, 8], [8, 1], [1, 9], [9, 2], [2, 10], [10, 3], [3, 11], [11, 0],
             [4, 12], [12, 5], [5, 13], [13, 6], [6, 14], [14, 7], [7, 15], [15, 4],
             [0, 16], [16, 4], [1, 17], [17, 5], [2, 18], [18, 6], [3, 19], [19, 7],
@@ -170,7 +170,9 @@ pub(crate) fn boundary_faces(et: ElementType, conn: &[NodeId]) -> Option<HashSet
     // two adjacent cells share, so interior-face culling still works.
     let faces: Vec<&[usize]> = match et {
         ElementType::TET4 | ElementType::TET10 => TET4_FACES.iter().map(|f| f.as_slice()).collect(),
-        ElementType::HEX8 | ElementType::HEX20 => HEX8_FACES.iter().map(|f| f.as_slice()).collect(),
+        ElementType::HEX8 | ElementType::HEX20 | ElementType::HEX27 => {
+            HEX8_FACES.iter().map(|f| f.as_slice()).collect()
+        }
         ElementType::PENTA6 | ElementType::PENTA15 => PENTA6_FACES.to_vec(),
         _ => return None,
     };
@@ -387,10 +389,10 @@ fn submesh_primitives_impl(
                 });
             }
         }
-        ElementType::TET10 | ElementType::HEX20 | ElementType::PENTA15 => {
+        ElementType::TET10 | ElementType::HEX20 | ElementType::HEX27 | ElementType::PENTA15 => {
             let faces: &[&[usize]] = match et {
                 ElementType::TET10 => &[&[0, 2, 1], &[0, 1, 3], &[0, 3, 2], &[1, 2, 3]],
-                ElementType::HEX20 => &[
+                ElementType::HEX20 | ElementType::HEX27 => &[
                     &[0, 3, 2, 1],
                     &[4, 5, 6, 7],
                     &[0, 1, 5, 4],
