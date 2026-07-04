@@ -14,7 +14,9 @@ use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteEl
 use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
-use pyrucast::ops::assemble::stiffness;
+use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::ops::assemble::{self, stiffness, FluxDensity};
+use pyrucast::ops::build;
 use pyrucast::ops::mesher::barycenter;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::{insert, Handle};
@@ -114,5 +116,86 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
         (got - expected).abs() < TOL,
         "immersed node: got {got}, expected {expected}"
     );
+    Ok(())
+}
+
+/// The motivating case: a bar node « baignée » in a 3-D **elasticity** volume,
+/// tied in all three displacement components. Uniaxial tension of a unit HEX8
+/// cube gives the linear field `u_x = (S/E)x`, `u_y = −(νS/E)y`,
+/// `u_z = −(νS/E)z`; the immersed node must follow that field at its location —
+/// a genuine vector (multi-component) embedded constraint.
+#[test]
+fn immersed_node_follows_host_displacement_field() -> Result<()> {
+    const E: f64 = 210.0;
+    const NU: f64 = 0.3;
+    const S: f64 = 2.0;
+
+    let coords = insert(Coords::new(3)?);
+    let points = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [1.0, 0.0, 1.0],
+        [1.0, 1.0, 1.0],
+        [0.0, 1.0, 1.0],
+    ];
+    let nodes: Vec<Node> = points
+        .iter()
+        .map(|c| Node::create_in(coords.clone(), c))
+        .collect::<Result<_>>()?;
+    let mut host = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
+    host.add_cell(&nodes.iter().map(|n| n.id()).collect::<Vec<_>>())?;
+    let fes = FiniteElementSpace::lagrange1(&host)?;
+
+    // Symmetry rollers on the three faces through the origin.
+    let clamp = |ids: &[usize], var: &str, dual: &str| -> Result<Model> {
+        let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
+        let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
+        let mult = barycenter(&imposed)?;
+        Model::dirichlet(var.into(), dual.into(), &imposed, &mult, None, None)
+    };
+    let mut model = Model::elasticity(&fes, ElasticityModel::Solid)?;
+    model = model.union(&clamp(&[0, 3, 4, 7], "u_x", "f_x")?)?;
+    model = model.union(&clamp(&[0, 1, 4, 5], "u_y", "f_y")?)?;
+    model = model.union(&clamp(&[0, 1, 2, 3], "u_z", "f_z")?)?;
+
+    // Immersed node tied in all three components (g = 0, rigid tie ⇒ no RHS slot).
+    let pc = [0.4, 0.7, 0.2];
+    let p = Node::create_in(coords.clone(), &pc)?;
+    let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&p))?);
+    model = model.union(&Model::embedded(
+        &bar,
+        &host,
+        vec![
+            ("u_x".into(), "f_x".into()),
+            ("u_y".into(), "f_y".into()),
+            ("u_z".into(), "f_z".into()),
+        ],
+        None,
+        None,
+        None,
+    )?)?;
+
+    let materials = build::material_field(&model, &[("E", E), ("nu", NU)])?;
+
+    // Traction S on the x = 1 face (QUA4 [1, 2, 6, 5]).
+    let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
+    face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
+    let face_fes = FiniteElementSpace::lagrange1(&face)?;
+    let traction = assemble::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
+    let rhs = NodeField::from_sub(traction);
+
+    let solution = solve(&stiffness(&model, &materials)?, &rhs)?;
+
+    // The immersed node follows the analytic (linear) displacement field.
+    let tol = 1e-9;
+    let ux = solution.value(p.id(), "u_x")?;
+    let uy = solution.value(p.id(), "u_y")?;
+    let uz = solution.value(p.id(), "u_z")?;
+    assert!((ux - S / E * pc[0]).abs() < tol, "u_x: {ux}");
+    assert!((uy + NU * S / E * pc[1]).abs() < tol, "u_y: {uy}");
+    assert!((uz + NU * S / E * pc[2]).abs() < tol, "u_z: {uz}");
     Ok(())
 }
