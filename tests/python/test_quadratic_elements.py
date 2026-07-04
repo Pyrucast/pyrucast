@@ -47,6 +47,30 @@ def test_degree_must_match_element_type():
         pyrucast.FiniteElementSpace(m, interpolation="LAGRANGE1")
 
 
+def test_qua9_biquadratic_fe_space():
+    c = pyrucast.Coords(2)
+    pts = [
+        [-1.0, -1.0],
+        [1.0, -1.0],
+        [1.0, 1.0],
+        [-1.0, 1.0],
+        [0.0, -1.0],
+        [1.0, 0.0],
+        [0.0, 1.0],
+        [-1.0, 0.0],
+        [0.0, 0.0],
+    ]
+    ids = [c.add_node(p) for p in pts]
+    m = pyrucast.Mesh(c, "QUA9")
+    m.unit().add_cell(ids)
+    assert m.element_types() == ["QUA9"]
+
+    fes = pyrucast.FiniteElementSpace(m, interpolation="LAGRANGE2")
+    sub = fes[0]
+    assert sub.element_type == "QUA9"
+    assert sub.gauss_count() == 9
+
+
 def test_export_vtk_quadratic(tmp_path):
     c = pyrucast.Coords(2)
     m = _tri6(c)

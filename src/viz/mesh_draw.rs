@@ -132,7 +132,7 @@ fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
         ElementType::TRI6 => &[
             [0, 3], [3, 1], [1, 4], [4, 2], [2, 5], [5, 0],
         ],
-        ElementType::QUA8 => &[
+        ElementType::QUA8 | ElementType::QUA9 => &[
             [0, 4], [4, 1], [1, 5], [5, 2], [2, 6], [6, 3], [3, 7], [7, 0],
         ],
         ElementType::TET10 => &[
@@ -376,9 +376,10 @@ fn submesh_primitives_impl(
                 });
             }
         }
-        ElementType::QUA8 => {
+        ElementType::QUA8 | ElementType::QUA9 => {
+            let npc = et.nodes_per_cell();
             for i in 0..n_cells {
-                let base = 8 * i;
+                let base = npc * i;
                 out.push(Primitive::Face {
                     verts: vec![pts[base], pts[base + 1], pts[base + 2], pts[base + 3]],
                     color: cell_color(i),

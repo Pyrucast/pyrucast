@@ -35,6 +35,7 @@ cast3m).
 | `SEG3` | 3 | 1 | segment quadratique |
 | `TRI6` | 6 | 2 | triangle quadratique |
 | `QUA8` | 8 | 2 | quadrangle quadratique (sérendipité) |
+| `QUA9` | 9 | 2 | quadrangle biquadratique (Lagrange complet, nœud central) |
 | `TET10` | 10 | 3 | tétraèdre quadratique |
 | `PENTA15` | 15 | 3 | prisme quadratique (sérendipité) |
 | `HEX20` | 20 | 3 | hexaèdre quadratique (sérendipité) |
@@ -43,8 +44,9 @@ Les six derniers types sont **quadratiques** (Lagrange-2) : ils reprennent la
 numérotation des sommets de leur parent linéaire puis ajoutent les nœuds de
 **milieu d'arête**, dans l'ordre d'arêtes de la convention VTK (voir le rustdoc
 d'`ElementType`). `QUA8`, `HEX20` et `PENTA15` sont **sérendipité** (nœuds
-d'arête seulement) ; `SEG3`, `TRI6` et `TET10` sont des Lagrange complets. Ils
-se posent avec l'interpolation `LAGRANGE2` (cf. [Espace éléments finis](fe-space.md)).
+d'arête seulement) ; `SEG3`, `TRI6`, `TET10` et `QUA9` sont des Lagrange
+complets (`QUA9` = quadrangle biquadratique avec nœud central). Ils se posent
+avec l'interpolation `LAGRANGE2` (cf. [Espace éléments finis](fe-space.md)).
 
 Ajouter un nouveau type d'élément est purement additif (nouvelle variante +
 métadonnées dans `src/containers/mesh/element_type.rs`) — voir

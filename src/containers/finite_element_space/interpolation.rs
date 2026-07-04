@@ -59,7 +59,10 @@ impl Interpolation {
         match self {
             Self::Lagrange1 => matches!(element_type, SEG2 | TRI3 | QUA4 | TET4 | PENTA6 | HEX8),
             Self::Lagrange2 => {
-                matches!(element_type, SEG3 | TRI6 | QUA8 | TET10 | PENTA15 | HEX20)
+                matches!(
+                    element_type,
+                    SEG3 | TRI6 | QUA8 | QUA9 | TET10 | PENTA15 | HEX20
+                )
             }
         }
     }
@@ -140,6 +143,7 @@ impl Interpolation {
             (Self::Lagrange2, ElementType::SEG3) => Ok(seg3_shape(xi)),
             (Self::Lagrange2, ElementType::TRI6) => Ok(tri6_shape(xi)),
             (Self::Lagrange2, ElementType::QUA8) => Ok(qua8_shape(xi)),
+            (Self::Lagrange2, ElementType::QUA9) => Ok(qua9_shape(xi)),
             (Self::Lagrange2, ElementType::TET10) => Ok(tet10_shape(xi)),
             (Self::Lagrange2, ElementType::PENTA15) => Ok(penta15_shape(xi)),
             (Self::Lagrange2, ElementType::HEX20) => Ok(hex20_shape(xi)),
@@ -230,6 +234,7 @@ impl Interpolation {
             (Self::Lagrange2, ElementType::SEG3) => Ok(seg3_dshape(xi)),
             (Self::Lagrange2, ElementType::TRI6) => Ok(tri6_dshape(xi)),
             (Self::Lagrange2, ElementType::QUA8) => Ok(qua8_dshape(xi)),
+            (Self::Lagrange2, ElementType::QUA9) => Ok(qua9_dshape(xi)),
             (Self::Lagrange2, ElementType::TET10) => Ok(tet10_dshape(xi)),
             (Self::Lagrange2, ElementType::PENTA15) => Ok(penta15_dshape(xi)),
             (Self::Lagrange2, ElementType::HEX20) => Ok(hex20_dshape(xi)),
@@ -365,6 +370,49 @@ fn qua8_dshape(xi: &[f64]) -> Vec<f64> {
         -0.5 * (1.0 - b * b),
         -b * (1.0 - a), // 7
     ]);
+    out
+}
+
+/// (ξ-position, η-position) of each QUA9 node, encoded as an index into the
+/// 1-D quadratic Lagrange basis `[node@-1, node@0, node@+1]`. Corners 0..3,
+/// mid-edges 4..7, center 8.
+const QUA9_NODES: [(usize, usize); 9] = [
+    (0, 0),
+    (2, 0),
+    (2, 2),
+    (0, 2), // corners
+    (1, 0),
+    (2, 1),
+    (1, 2),
+    (0, 1), // mid-edges
+    (1, 1), // center
+];
+
+/// 1-D quadratic Lagrange basis on `[-1, 1]` at `t`, nodes `-1, 0, +1`.
+fn lag1d(t: f64) -> [f64; 3] {
+    [0.5 * t * (t - 1.0), 1.0 - t * t, 0.5 * t * (t + 1.0)]
+}
+
+/// Its derivative.
+fn dlag1d(t: f64) -> [f64; 3] {
+    [t - 0.5, -2.0 * t, t + 0.5]
+}
+
+/// QUA9 biquadratic on `[-1, 1]²`: the full `Q2` tensor product (corners,
+/// mid-edges, and a center node).
+fn qua9_shape(xi: &[f64]) -> Vec<f64> {
+    let (lx, ly) = (lag1d(xi[0]), lag1d(xi[1]));
+    QUA9_NODES.iter().map(|&(i, j)| lx[i] * ly[j]).collect()
+}
+
+fn qua9_dshape(xi: &[f64]) -> Vec<f64> {
+    let (lx, ly) = (lag1d(xi[0]), lag1d(xi[1]));
+    let (dlx, dly) = (dlag1d(xi[0]), dlag1d(xi[1]));
+    let mut out = Vec::with_capacity(18);
+    for &(i, j) in QUA9_NODES.iter() {
+        out.push(dlx[i] * ly[j]);
+        out.push(lx[i] * dly[j]);
+    }
     out
 }
 
@@ -719,6 +767,17 @@ mod tests {
                 vec![0.0, 1.0],
                 vec![-1.0, 0.0],
             ],
+            ElementType::QUA9 => vec![
+                vec![-1.0, -1.0],
+                vec![1.0, -1.0],
+                vec![1.0, 1.0],
+                vec![-1.0, 1.0],
+                vec![0.0, -1.0],
+                vec![1.0, 0.0],
+                vec![0.0, 1.0],
+                vec![-1.0, 0.0],
+                vec![0.0, 0.0], // center
+            ],
             ElementType::TET10 => vec![
                 vec![0.0, 0.0, 0.0],
                 vec![1.0, 0.0, 0.0],
@@ -762,6 +821,7 @@ mod tests {
             (ElementType::SEG3, &[&[-0.4], &[0.2], &[0.9]]),
             (ElementType::TRI6, &[&[0.2, 0.3], &[0.1, 0.6]]),
             (ElementType::QUA8, &[&[-0.3, 0.5], &[0.7, -0.2]]),
+            (ElementType::QUA9, &[&[-0.3, 0.5], &[0.7, -0.2]]),
             (ElementType::TET10, &[&[0.2, 0.3, 0.1], &[0.1, 0.1, 0.5]]),
             (ElementType::PENTA15, &[&[0.2, 0.3, 0.4], &[0.1, 0.5, 0.8]]),
             (ElementType::HEX20, &[&[-0.3, 0.5, 0.2], &[0.6, -0.4, 0.9]]),

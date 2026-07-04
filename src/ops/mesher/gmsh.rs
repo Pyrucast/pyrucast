@@ -18,12 +18,13 @@
 //! | `8`  | `SEG3` |
 //! | `9`  | `TRI6` |
 //! | `16` | `QUA8` |
+//! | `10` | `QUA9` |
 //! | `11` | `TET10` |
 //! | `17` | `HEX20` |
 //! | `18` | `PENTA15` |
 //!
-//! Any other gmsh element type (full-Lagrange `QUA9`/`HEX27`, pyramid,
-//! order 3+, …) is an error. For most types the local node ordering already
+//! Any other gmsh element type (full-Lagrange `HEX27`, pyramid, order 3+, …)
+//! is an error. For most types the local node ordering already
 //! matches pyrucast's reference frame (see
 //! [`crate::containers::mesh::ElementType`]) and the connectivity is copied
 //! verbatim; the quadratic **volumes** (`TET10`, `HEX20`, `PENTA15`) have
@@ -81,6 +82,7 @@ fn element_type_from_gmsh(code: u32) -> Result<ElementType> {
         8 => ElementType::SEG3,
         9 => ElementType::TRI6,
         16 => ElementType::QUA8,
+        10 => ElementType::QUA9,
         11 => ElementType::TET10,
         17 => ElementType::HEX20,
         18 => ElementType::PENTA15,
@@ -88,7 +90,7 @@ fn element_type_from_gmsh(code: u32) -> Result<ElementType> {
             return Err(err(format!(
                 "gmsh: unsupported element type {other} (supported: 1=SEG2, \
                  2=TRI3, 3=QUA4, 4=TET4, 5=HEX8, 6=PENTA6, 15=POI1; quadratic: \
-                 8=SEG3, 9=TRI6, 16=QUA8, 11=TET10, 17=HEX20, 18=PENTA15)"
+                 8=SEG3, 9=TRI6, 16=QUA8, 10=QUA9, 11=TET10, 17=HEX20, 18=PENTA15)"
             )))
         }
     })
@@ -1082,11 +1084,11 @@ $Nodes
 $EndNodes
 $Elements
 1
-1 10 2 0 1 1 2 3
+1 12 2 0 1 1 2 3
 $EndElements
 ";
-        // gmsh type 10 = 9-node quadrangle (full-Lagrange QUA9), not supported
-        // (we handle the 8-node serendipity QUA8 = type 16 instead).
+        // gmsh type 12 = 27-node hexahedron (full-Lagrange HEX27), not
+        // supported (we handle the 20-node serendipity HEX20 = type 17).
         assert!(read_gmsh_str(coords(2), mesh).is_err());
     }
 

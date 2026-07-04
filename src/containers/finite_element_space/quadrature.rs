@@ -90,7 +90,7 @@ impl QuadratureRule {
             (Self::Gauss, ElementType::HEX8) => 8,
             (Self::Gauss, ElementType::SEG3) => 3,
             (Self::Gauss, ElementType::TRI6) => 6,
-            (Self::Gauss, ElementType::QUA8) => 9,
+            (Self::Gauss, ElementType::QUA8 | ElementType::QUA9) => 9,
             (Self::Gauss, ElementType::TET10) => 11,
             (Self::Gauss, ElementType::PENTA15) => 18,
             (Self::Gauss, ElementType::HEX20) => 27,
@@ -189,7 +189,7 @@ impl QuadratureRule {
                 (p.to_vec(), w.to_vec())
             }
             (Self::Gauss, ElementType::TRI6) => tri6_gauss(),
-            (Self::Gauss, ElementType::QUA8) => {
+            (Self::Gauss, ElementType::QUA8 | ElementType::QUA9) => {
                 // 3×3 tensor product of the 3-point rule (exact deg 5 / dir).
                 let (p, w) = gauss3_1d();
                 let mut xi = Vec::with_capacity(9 * 2);
@@ -268,7 +268,9 @@ impl QuadratureRule {
             (Self::Reduced, et) => match et {
                 ElementType::SEG2 | ElementType::SEG3 => (vec![0.0], vec![2.0]),
                 ElementType::TRI3 | ElementType::TRI6 => (vec![1.0 / 3.0, 1.0 / 3.0], vec![0.5]),
-                ElementType::QUA4 | ElementType::QUA8 => (vec![0.0, 0.0], vec![4.0]),
+                ElementType::QUA4 | ElementType::QUA8 | ElementType::QUA9 => {
+                    (vec![0.0, 0.0], vec![4.0])
+                }
                 ElementType::TET4 | ElementType::TET10 => (vec![0.25, 0.25, 0.25], vec![1.0 / 6.0]),
                 ElementType::PENTA6 | ElementType::PENTA15 => {
                     (vec![1.0 / 3.0, 1.0 / 3.0, 0.5], vec![0.5])
@@ -343,7 +345,7 @@ mod tests {
         match et {
             ElementType::SEG2 | ElementType::SEG3 => 2.0,
             ElementType::TRI3 | ElementType::TRI6 => 0.5,
-            ElementType::QUA4 | ElementType::QUA8 => 4.0,
+            ElementType::QUA4 | ElementType::QUA8 | ElementType::QUA9 => 4.0,
             ElementType::TET4 | ElementType::TET10 => 1.0 / 6.0,
             ElementType::PENTA6 | ElementType::PENTA15 => 0.5,
             ElementType::HEX8 | ElementType::HEX20 => 8.0,
@@ -352,7 +354,7 @@ mod tests {
     }
 
     /// Every non-POI1 element type, for parametric quadrature tests.
-    const ALL_FE_TYPES: [ElementType; 12] = [
+    const ALL_FE_TYPES: [ElementType; 13] = [
         ElementType::SEG2,
         ElementType::TRI3,
         ElementType::QUA4,
@@ -365,6 +367,7 @@ mod tests {
         ElementType::TET10,
         ElementType::PENTA15,
         ElementType::HEX20,
+        ElementType::QUA9,
     ];
 
     #[test]

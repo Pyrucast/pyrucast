@@ -103,6 +103,17 @@ fn ref_nodes(et: ElementType) -> Vec<Vec<f64>> {
             vec![0.0, 1.0],
             vec![-1.0, 0.0],
         ],
+        ElementType::QUA9 => vec![
+            vec![-1.0, -1.0],
+            vec![1.0, -1.0],
+            vec![1.0, 1.0],
+            vec![-1.0, 1.0],
+            vec![0.0, -1.0],
+            vec![1.0, 0.0],
+            vec![0.0, 1.0],
+            vec![-1.0, 0.0],
+            vec![0.0, 0.0],
+        ],
         ElementType::TET10 => vec![
             vec![0.0, 0.0, 0.0],
             vec![1.0, 0.0, 0.0],
@@ -256,7 +267,7 @@ pub(crate) fn subdivide(
             n,
             [&nodes[0], &nodes[1], &nodes[2]],
         )?])),
-        ElementType::QUA8 => Ok(CellSubdivision::Faces(vec![quad_face(
+        ElementType::QUA8 | ElementType::QUA9 => Ok(CellSubdivision::Faces(vec![quad_face(
             et,
             interp,
             n,

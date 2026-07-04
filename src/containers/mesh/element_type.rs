@@ -38,13 +38,14 @@
 //! | `SEG3` | `SEG2` | node 2 on `(0, 1)` — i.e. `ξ = 0` |
 //! | `TRI6` | `TRI3` | 3 on `(0,1)`, `(1,2)`, `(2,0)` |
 //! | `QUA8` | `QUA4` | 4 on `(0,1)`, `(1,2)`, `(2,3)`, `(3,0)` |
+//! | `QUA9` | `QUA4` | 4 on `(0,1)`, `(1,2)`, `(2,3)`, `(3,0)`, then a **center** node 8 at `(0, 0)` |
 //! | `TET10` | `TET4` | 6 on `(0,1)`, `(1,2)`, `(2,0)`, `(0,3)`, `(1,3)`, `(2,3)` |
 //! | `PENTA15` | `PENTA6` | 9: `(0,1)`,`(1,2)`,`(2,0)` (bottom), `(3,4)`,`(4,5)`,`(5,3)` (top), `(0,3)`,`(1,4)`,`(2,5)` (vertical) |
 //! | `HEX20` | `HEX8` | 12: `(0,1)`,`(1,2)`,`(2,3)`,`(3,0)` (bottom), `(4,5)`,`(5,6)`,`(6,7)`,`(7,4)` (top), `(0,4)`,`(1,5)`,`(2,6)`,`(3,7)` (vertical) |
 //!
 //! `QUA8`, `HEX20` and `PENTA15` are **serendipity** (edge nodes only, no
-//! face or interior nodes); `SEG3`, `TRI6` and `TET10` are complete
-//! Lagrange elements.
+//! face or interior nodes); `SEG3`, `TRI6`, `TET10` and `QUA9` are complete
+//! Lagrange elements (`QUA9` is the biquadratic quad with a center node).
 //!
 //! These conventions are compatible with the orientations already enforced
 //! elsewhere in the codebase (CCW filling in
@@ -112,6 +113,11 @@ pub enum ElementType {
     /// `(3,0)`, top `(4,5)`, `(5,6)`, `(6,7)`, `(7,4)`, vertical `(0,4)`,
     /// `(1,5)`, `(2,6)`, `(3,7)`.
     HEX20,
+    /// 9-node biquadratic quadrangle (full Lagrange-2 `QUA4`). Corners 0..3
+    /// as `QUA4`, mid-edge nodes 4..7 on edges `(0,1)`, `(1,2)`, `(2,3)`,
+    /// `(3,0)`, then a **center** node 8 at `(0, 0)`. Unlike the serendipity
+    /// `QUA8`, it carries the central node (complete `Q2` tensor product).
+    QUA9,
 }
 
 impl ElementType {
@@ -130,6 +136,7 @@ impl ElementType {
             Self::TET10 => 10,
             Self::PENTA15 => 15,
             Self::HEX20 => 20,
+            Self::QUA9 => 9,
         }
     }
 
@@ -143,6 +150,7 @@ impl ElementType {
             Self::SEG3 => 1,
             Self::TRI6 | Self::QUA8 => 2,
             Self::TET10 | Self::PENTA15 | Self::HEX20 => 3,
+            Self::QUA9 => 2,
         }
     }
 
@@ -162,6 +170,7 @@ impl ElementType {
             Self::TET10 => "TET10",
             Self::PENTA15 => "PENTA15",
             Self::HEX20 => "HEX20",
+            Self::QUA9 => "QUA9",
         }
     }
 
@@ -181,6 +190,7 @@ impl ElementType {
             "TET10" => Some(Self::TET10),
             "PENTA15" => Some(Self::PENTA15),
             "HEX20" => Some(Self::HEX20),
+            "QUA9" => Some(Self::QUA9),
             _ => None,
         }
     }
@@ -229,6 +239,8 @@ mod tests {
         assert_eq!(ElementType::PENTA15.nodes_per_cell(), 15);
         assert_eq!(ElementType::HEX20.nodes_per_cell(), 20);
         assert_eq!(ElementType::HEX20.topological_dim(), 3);
+        assert_eq!(ElementType::QUA9.nodes_per_cell(), 9);
+        assert_eq!(ElementType::QUA9.topological_dim(), 2);
     }
 
     #[test]

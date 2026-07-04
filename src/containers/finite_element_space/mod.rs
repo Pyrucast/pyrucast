@@ -812,6 +812,42 @@ mod tests {
         assert!((area - 1.0).abs() < 1e-12);
     }
 
+    /// QUA9 biquadratic on a straight unit square (mid-edge and center nodes
+    /// at their natural positions): area = 1. Exercises the full Lagrange-2
+    /// path for the 9-node quad.
+    #[test]
+    fn qua9_jacobian_unit_square() {
+        let coords = cfg2d();
+        // Corners, mid-edges, then center — all at their geometric positions.
+        let pts: [[f64; 2]; 9] = [
+            [0.0, 0.0],
+            [2.0, 0.0],
+            [2.0, 2.0],
+            [0.0, 2.0],
+            [1.0, 0.0],
+            [2.0, 1.0],
+            [1.0, 2.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+        ];
+        let ids: Vec<_> = pts
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
+            .collect();
+        let sm = {
+            let mut sm = SubMesh::new(coords, ElementType::QUA9);
+            sm.add_cell(&ids).unwrap();
+            insert(sm)
+        };
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange2, QuadratureRule::Gauss)
+            .unwrap();
+        let mut area = 0.0;
+        for g in 0..sub.gauss_count() {
+            area += sub.gauss_weight(g).unwrap() * sub.det_jacobian(0, g).unwrap();
+        }
+        assert!((area - 4.0).abs() < 1e-12, "QUA9 area = {area}");
+    }
+
     /// PENTA6 prism over the unit right triangle, height 2: its volume is
     /// `area(1/2) × height(2) = 1`. Exercises the full physical Jacobian /
     /// quadrature path for the prism, not just the reference rule.
