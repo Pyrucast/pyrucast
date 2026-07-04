@@ -19,6 +19,7 @@
 use crate::containers::finite_element_space::Interpolation;
 use crate::containers::mesh::{ElementType, Mesh, NodeId};
 use crate::error::Result;
+use crate::parallel::*;
 use crate::store::read;
 
 /// Where one physical point sits inside a host mesh.
@@ -99,29 +100,176 @@ pub fn locate_points(host: &Mesh, points: &[Vec<f64>], tol: f64) -> Result<Vec<O
         }
     }
 
-    let mut out = Vec::with_capacity(points.len());
-    for x in points {
-        let mut found: Option<Location> = None;
-        for cell in &cells {
-            // Broad phase: reject if outside the cell bbox expanded by a margin
-            // (relative to the box size, to absorb curved-edge overshoot).
-            if !in_bbox(x, &cell.lo, &cell.hi) {
-                continue;
+    if cells.is_empty() {
+        return Ok(vec![None; points.len()]);
+    }
+
+    // Spatial index: a uniform grid bucketing cells by the grid cells their
+    // (margin-expanded) bbox overlaps. A query then tests only the cells in the
+    // point's own bucket instead of scanning all of them — any cell whose
+    // broad-phase bbox contains the point was inserted into that bucket.
+    let lo: Vec<Vec<f64>> = cells.iter().map(|c| c.lo.clone()).collect();
+    let hi: Vec<Vec<f64>> = cells.iter().map(|c| c.hi.clone()).collect();
+    let grid = Grid::build(&lo, &hi);
+
+    // One independent location per point, in parallel (each writes its own output
+    // slot exactly once ⇒ result is independent of the thread count). Within a
+    // point, candidates are visited in ascending cell order, so the "first
+    // containing cell wins" tie-break is deterministic and matches a full scan.
+    points
+        .par_iter()
+        .with_min_len(MIN_PARALLEL_LEN)
+        .map(|x| -> Result<Option<Location>> {
+            for &ci in grid.candidates(x) {
+                let cell = &cells[ci];
+                if !in_bbox(x, &cell.lo, &cell.hi) {
+                    continue;
+                }
+                if let Some((xi, weights)) = invert_cell(cell.element_type, &cell.coords, x, tol)? {
+                    return Ok(Some(Location {
+                        submesh: cell.submesh,
+                        cell: cell.cell,
+                        xi,
+                        weights,
+                        nodes: cell.nodes.clone(),
+                    }));
+                }
             }
-            if let Some((xi, weights)) = invert_cell(cell.element_type, &cell.coords, x, tol)? {
-                found = Some(Location {
-                    submesh: cell.submesh,
-                    cell: cell.cell,
-                    xi,
-                    weights,
-                    nodes: cell.nodes.clone(),
-                });
-                break;
+            Ok(None)
+        })
+        .collect()
+}
+
+/// A uniform grid over the host bounding box, mapping each grid cell to the host
+/// cells whose (margin-expanded) bbox overlaps it — the broad-phase accelerator
+/// of [`locate_points`].
+struct Grid {
+    lo: Vec<f64>,
+    inv: Vec<f64>,    // 1 / grid-cell size per axis (0 on a degenerate axis)
+    res: Vec<usize>,  // grid cells per axis
+    stride: Vec<usize>,
+    buckets: Vec<Vec<usize>>,
+}
+
+impl Grid {
+    /// Build the grid from per-cell bounding boxes (`lo[i]`, `hi[i]`), aiming for
+    /// roughly one host cell per grid cell.
+    fn build(lo: &[Vec<f64>], hi: &[Vec<f64>]) -> Grid {
+        let n = lo.len();
+        let dim = lo[0].len();
+
+        // Global bbox.
+        let mut glo = lo[0].clone();
+        let mut ghi = hi[0].clone();
+        for i in 1..n {
+            for a in 0..dim {
+                glo[a] = glo[a].min(lo[i][a]);
+                ghi[a] = ghi[a].max(hi[i][a]);
             }
         }
-        out.push(found);
+
+        // ~n buckets total ⇒ res ≈ n^(1/dim) per non-degenerate axis.
+        let target = (n as f64).powf(1.0 / dim as f64).round().max(1.0) as usize;
+        let target = target.clamp(1, 128);
+        let mut res = vec![1usize; dim];
+        let mut inv = vec![0.0f64; dim];
+        for a in 0..dim {
+            let extent = ghi[a] - glo[a];
+            if extent > 1e-12 {
+                res[a] = target;
+                inv[a] = res[a] as f64 / extent;
+            }
+        }
+        let mut stride = vec![1usize; dim];
+        for a in 1..dim {
+            stride[a] = stride[a - 1] * res[a - 1];
+        }
+        let total: usize = res.iter().product();
+        let mut buckets = vec![Vec::new(); total];
+
+        // Insert each cell into every bucket its margin-expanded bbox overlaps
+        // (the same margin as `in_bbox`, so a point that passes the broad phase
+        // for a cell always lands in a bucket holding that cell).
+        for i in 0..n {
+            let mut ranges: Vec<(usize, usize)> = Vec::with_capacity(dim);
+            for a in 0..dim {
+                let margin = 0.1 * (hi[i][a] - lo[i][a]).abs() + 1e-12;
+                let la = axis_index(lo[i][a] - margin, glo[a], inv[a], res[a]);
+                let ha = axis_index(hi[i][a] + margin, glo[a], inv[a], res[a]);
+                ranges.push((la, ha));
+            }
+            insert_ranges(&mut buckets, &ranges, &stride, i);
+        }
+
+        Grid {
+            lo: glo,
+            inv,
+            res,
+            stride,
+            buckets,
+        }
     }
-    Ok(out)
+
+    /// The host-cell indices to test for a query point (its bucket's contents),
+    /// in ascending cell order.
+    fn candidates(&self, x: &[f64]) -> &[usize] {
+        let mut linear = 0;
+        for a in 0..self.lo.len() {
+            linear += axis_index(x[a], self.lo[a], self.inv[a], self.res[a]) * self.stride[a];
+        }
+        &self.buckets[linear]
+    }
+}
+
+/// Grid index of coordinate `v` on one axis, clamped to `[0, res-1]`.
+fn axis_index(v: f64, origin: f64, inv: f64, res: usize) -> usize {
+    if inv == 0.0 {
+        return 0;
+    }
+    let idx = ((v - origin) * inv).floor();
+    if idx < 0.0 {
+        0
+    } else if idx as usize >= res {
+        res - 1
+    } else {
+        idx as usize
+    }
+}
+
+/// Push cell index `i` into every bucket of the axis-aligned index box `ranges`
+/// (inclusive per axis), enumerating the cartesian product.
+fn insert_ranges(
+    buckets: &mut [Vec<usize>],
+    ranges: &[(usize, usize)],
+    stride: &[usize],
+    i: usize,
+) {
+    let dim = ranges.len();
+    let mut idx = vec![0usize; dim];
+    for (a, &(l, _)) in ranges.iter().enumerate() {
+        idx[a] = l;
+    }
+    loop {
+        let mut linear = 0;
+        for a in 0..dim {
+            linear += idx[a] * stride[a];
+        }
+        buckets[linear].push(i);
+
+        // Increment the multi-index (row-major over the ranges).
+        let mut a = 0;
+        loop {
+            if a == dim {
+                return;
+            }
+            if idx[a] < ranges[a].1 {
+                idx[a] += 1;
+                break;
+            }
+            idx[a] = ranges[a].0;
+            a += 1;
+        }
+    }
 }
 
 /// Is `x` within the axis-aligned box `[lo, hi]` expanded by 10 % of its size?
@@ -397,6 +545,70 @@ mod tests {
         for (w, e) in l.weights.iter().zip(expected.iter()) {
             assert!((w - e).abs() < 1e-9, "weight {w} vs {e}");
         }
+    }
+
+    /// A block of `n³` HEX8 cells: every cell centre locates in **its** cell
+    /// (weights 1/8), and a point outside the block is rejected — exercising the
+    /// uniform-grid spatial index over many cells.
+    #[test]
+    fn locate_in_hex8_block() {
+        let n = 3usize;
+        let coords = insert(Coords::new(3).unwrap());
+        let node = |i: usize, j: usize, k: usize| -> Vec<f64> {
+            vec![i as f64, j as f64, k as f64]
+        };
+        // Grid of (n+1)³ nodes.
+        let mut id = std::collections::HashMap::new();
+        for k in 0..=n {
+            for j in 0..=n {
+                for i in 0..=n {
+                    id.insert(
+                        (i, j, k),
+                        Node::create_in(coords.clone(), &node(i, j, k)).unwrap().id(),
+                    );
+                }
+            }
+        }
+        let mut sm = SubMesh::new(coords, ElementType::HEX8);
+        for k in 0..n {
+            for j in 0..n {
+                for i in 0..n {
+                    sm.add_cell(&[
+                        id[&(i, j, k)],
+                        id[&(i + 1, j, k)],
+                        id[&(i + 1, j + 1, k)],
+                        id[&(i, j + 1, k)],
+                        id[&(i, j, k + 1)],
+                        id[&(i + 1, j, k + 1)],
+                        id[&(i + 1, j + 1, k + 1)],
+                        id[&(i, j + 1, k + 1)],
+                    ])
+                    .unwrap();
+                }
+            }
+        }
+        let mesh = Mesh::from_submesh(sm);
+
+        // One point at each cell centre, plus one outside the block.
+        let mut pts = Vec::new();
+        for k in 0..n {
+            for j in 0..n {
+                for i in 0..n {
+                    pts.push(vec![i as f64 + 0.5, j as f64 + 0.5, k as f64 + 0.5]);
+                }
+            }
+        }
+        pts.push(vec![100.0, 100.0, 100.0]);
+        let loc = locate_points(&mesh, &pts, 1e-6).unwrap();
+
+        for (c, l) in loc.iter().take(n * n * n).enumerate() {
+            let l = l.as_ref().unwrap_or_else(|| panic!("cell centre {c} not located"));
+            assert_eq!(l.cell, c, "point {c} should map to cell {c}");
+            for w in &l.weights {
+                assert!((w - 0.125).abs() < 1e-9);
+            }
+        }
+        assert!(loc[n * n * n].is_none(), "outside point rejected");
     }
 
     /// A point just outside a QUA4 (2D) is rejected; one inside is accepted.
