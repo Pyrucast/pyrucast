@@ -2412,7 +2412,7 @@ def solve_eliminate(model: Model, matrix: Matrix, rhs: NodeField, method: typing
     boundaries.
     """
 
-def solve_unilateral(model: Model, matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10) -> NodeField:
+def solve_unilateral(model: Model, matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] = None, active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10) -> NodeField:
     r"""
     Solve `model`'s system with **unilateral** (inequality) constraints by the
     active-set (status) method — the operator for constraints built with
@@ -2429,10 +2429,14 @@ def solve_unilateral(model: Model, matrix: Matrix, rhs: NodeField, method: typin
     A model with no inequality relation falls back to a plain `solve`.
     
     `method` selects the direct back-end of each iteration (currently only
-    `"lu"`). `cache` (default `True`) stores the active-set state transparently
-    on the matrix (cleared when the matrix changes). `max_iter` (default `100`)
-    bounds the status loop; `tol` (default `1e-10`) is the sign tolerance on the
-    multiplier and the gap. `Ctrl+C` is honoured at each iteration boundary.
+    `"lu"`). `active_set` selects how each status's system is factorized:
+    `"schur"` (default) factorizes the inequality-free base once and updates it
+    per status (falling back to refactorization when that base is singular),
+    `"refactorize"` refactorizes the full system at each status change. `cache`
+    (default `True`) stores the active-set state transparently on the matrix
+    (cleared when the matrix changes). `max_iter` (default `100`) bounds the
+    status loop; `tol` (default `1e-10`) is the sign tolerance on the multiplier
+    and the gap. `Ctrl+C` is honoured at each iteration boundary.
     """
 
 def sqrt(field: typing.Any) -> typing.Any:

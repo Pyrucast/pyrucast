@@ -87,25 +87,104 @@ Voir l'exemple `examples/mpc_condensation.py` et la page
 Solveur **actif/inactif** (méthode du statut) pour un modèle portant des
 relations **unilatérales** (contraintes construites avec `sense=">="` /
 `"<="`) : chaque relation est soit *active* (imposée en égalité, `λ` = la
-réaction), soit *inactive* (`λ = 0`, le jeu reste du côté admissible). La
-boucle part de toutes les inégalités actives (ou du statut convergé précédent
-quand le cache est chaud), résout, relâche les relations dont la réaction tire,
-active celles dont le jeu pénètre, et répète jusqu'à stabilité du statut —
-chaque itération coûte une factorisation.
+réaction), soit *inactive* (`λ = 0`, le jeu reste du côté admissible).
+
+### Conditions KKT et boucle de statut
+
+Une relation unilatérale `Cᵣ·u ≥ gᵣ` (ou `≤`) n'obéit pas à une équation mais
+aux **conditions de complémentarité** de Karush–Kuhn–Tucker : soit elle est
+active (`Cᵣ·u = gᵣ`, le multiplicateur `λᵣ` porte la réaction), soit inactive
+(le jeu `Cᵣ·u − gᵣ` est du côté admissible et `λᵣ = 0`). Les deux ne peuvent
+être violées à la fois. On ne sait pas *a priori* quelles relations sont
+actives ; la méthode du statut itère dessus :
+
+1. partir d'un statut d'essai (toutes actives, ou le statut convergé précédent
+   quand le cache est chaud — un *warm start*) ;
+2. résoudre le système point-selle avec, pour chaque relation **inactive**, sa
+   ligne de contrainte remplacée par `λᵣ = 0` (la matrice garde sa taille) ;
+3. vérifier les signes : une relation active dont le `λ` **tire** (signe
+   inadmissible pour son sens) est **relâchée** ; une relation inactive dont le
+   jeu **pénètre** est **activée** ;
+4. aucun changement de statut ⇒ convergence (la boucle finie classique du
+   statut) ; sinon on recommence.
+
+La **convention de signe** vient du système point-selle assemblé `K·u + Cᵀ·λ =
+f`, `C·u = g` : contre le multiplicateur KKT `μ ≥ 0` d'une contrainte `≥` on a
+`λ = −μ`. Donc, dans le champ solution : `≥` active a `λ ≤ 0` (relâchée si `λ >
+tol`) ; `≤` active a `λ ≥ 0` (relâchée si `λ < −tol`).
 
 - les relations d'**égalité** du modèle sont imposées inconditionnellement,
   comme par `solve` ; un modèle **sans inégalité** retombe sur un `solve`
   simple ;
-- l'état actif/inactif convergé et sa factorisation sont mis en **cache** sur
-  la matrice (*warm start* de la résolution suivante ; invalidé dès que la
-  matrice change) ;
-- options : `method` / `cache` (comme `solve`), `max_iter` (borne de la boucle
-  de statut, `100`), `tol` (tolérance de signe sur `λ` et sur le jeu, `1e-10`).
+- la structure des contraintes est lue via le seam méthode-neutre
+  `Constraint::relations()` (partagé avec les voies Lagrange et élimination) ;
+- options : `method` / `cache` (comme `solve`), `active_set` (stratégie de
+  factorisation, ci-dessous), `max_iter` (borne de la boucle de statut, `100`),
+  `tol` (tolérance de signe sur `λ` et sur le jeu, `1e-10`).
+
+### Deux stratégies de factorisation (`active_set`)
+
+Les deux stratégies parcourent **exactement la même** trajectoire de statuts
+(mêmes tests KKT, même résultat convergé) — elles ne diffèrent que par la façon
+de factoriser le système d'un statut donné.
+
+**`"refactorize"` — refactorisation par itération.** La méthode d'origine :
+à chaque changement de statut, on refactorise le point-selle creux complet (une
+LU faer par itération). Robuste (aucune hypothèse sur la structure), mais paie
+une factorisation creuse à chaque pas.
+
+**`"schur"` (défaut) — complément de Schur / opérateur de Delassus.** On
+factorise **une seule fois** le **socle sans inégalités** `A` (physique `K` +
+contraintes d'égalité, toutes les relations unilatérales relâchées), on le met
+en cache sur la matrice, et on obtient chaque statut par une mise à jour dense.
+
+Le point clé : passer une relation `r` de l'état relâché à l'état actif ne
+change **qu'une seule ligne** de `A`. Dans le socle, la ligne relâchée porte
+l'identité `λᵣ = 0` (un `1` à la colonne du multiplicateur, notée `λcolᵣ`) ;
+l'activer y restaure la vraie ligne de contrainte `Cᵣ`. Restaurer les `k`
+relations actives est donc une **mise à jour de rang `k`** :
+
+```text
+M = A + Σ_{r actif} e_row(r) · (Cᵣ − e_λcol(r))ᵀ
+  = A + U Vᵀ,   U = [e_row(r)],   Vᵣ = Cᵣ − e_λcol(r)
+```
+
+La formule de Sherman–Morrison–Woodbury donne alors la solution du statut sans
+refactoriser `A` :
+
+```text
+x = A⁻¹·b − X · (I + Vᵀ X)⁻¹ · (Vᵀ A⁻¹ b),   X = [A⁻¹·e_row(r)]
+```
+
+- les colonnes `xᵣ = A⁻¹·e_row(r)` (une descente/remontée creuse par relation)
+  sont **mises en cache paresseusement** : calculées la première fois qu'une
+  relation devient active, réutilisées ensuite ;
+- le petit système `k × k` `G = I + Vᵀ X` est l'**opérateur de Delassus**
+  restreint aux relations actives — dense, factorisé par une LU dense
+  (`nalgebra`) à chaque itération (coût `k³/3`, négligeable jusqu'à quelques
+  milliers de contacts) ; ses entrées se lisent des colonnes cachées :
+  `Gᵢⱼ = δᵢⱼ + Cᵢ·xⱼ − xⱼ[λcolᵢ]` ;
+- une itération de statut ne coûte donc plus **aucune factorisation creuse** —
+  seulement des descentes/remontées sur `A` (cachée) et une LU dense `k × k`.
+  Un re-solve à chargement identique ou proche est quasi gratuit.
+
+**Repli automatique sur socle singulier.** Le socle `A` doit être inversible,
+c.-à-d. la structure doit tenir **sans aucun contact** (bloquée par ailleurs).
+Un corps simplement *posé* sur un appui n'a pas ce luxe : `A` est singulière
+(mode rigide) alors que la méthode du statut converge très bien. Comme la LU
+creuse peut factoriser une matrice singulière en valeurs *finies fausses* sans
+erreur, la non-singularité du socle est confirmée par un **aller-retour**
+`A⁻¹·(A·1) ≈ 1` ; s'il échoue, la voie `"schur"` **retombe automatiquement** sur
+`"refactorize"` (marqué une fois pour toutes sur la matrice). Aucune régression
+possible : le résultat est le même, seul le coût change.
 
 ```python
 K = pyrucast.stiffness(model, materials)              # modèle avec sense=">="
-solution = pyrucast.solve_unilateral(model, K, rhs)
+solution = pyrucast.solve_unilateral(model, K, rhs)   # "schur" par défaut
 reaction = solution.value(mult_node, "lambda_u_y")    # 0 si la butée est relâchée
+
+# Forcer l'ancienne méthode (refactorisation à chaque pas) :
+sol2 = pyrucast.solve_unilateral(model, K, rhs, active_set="refactorize")
 ```
 
 Voir la section « Relations unilatérales » de la page

@@ -5,7 +5,7 @@
 //! is the *operation*, not its `NodeField` result).
 
 use crate::ops::solver::lu::{SolveMethod, SolveOptions};
-use crate::ops::solver::unilateral::UnilateralOptions;
+use crate::ops::solver::unilateral::{ActiveSetMethod, UnilateralOptions};
 use crate::py::matrix::PyMatrix;
 use crate::py::model::PyModel;
 use crate::py::node_field::PyNodeField;
@@ -21,6 +21,18 @@ fn parse_method(method: Option<&str>) -> PyResult<SolveMethod> {
         None | Some("lu") | Some("LU") => Ok(SolveMethod::Lu),
         Some(other) => Err(PyValueError::new_err(format!(
             "unknown solver method '{other}' (expected 'lu')"
+        ))),
+    }
+}
+
+/// Resolve the optional `active_set` string into an [`ActiveSetMethod`] for
+/// `solve_unilateral` (`"schur"` default, or `"refactorize"`).
+fn parse_active_set(active_set: Option<&str>) -> PyResult<ActiveSetMethod> {
+    match active_set {
+        None | Some("schur") | Some("Schur") => Ok(ActiveSetMethod::SchurComplement),
+        Some("refactorize") | Some("Refactorize") => Ok(ActiveSetMethod::Refactorize),
+        Some(other) => Err(PyValueError::new_err(format!(
+            "unknown active-set method '{other}' (expected 'schur' or 'refactorize')"
         ))),
     }
 }
@@ -122,13 +134,17 @@ pub fn solve_eliminate(
 /// A model with no inequality relation falls back to a plain `solve`.
 ///
 /// `method` selects the direct back-end of each iteration (currently only
-/// `"lu"`). `cache` (default `True`) stores the active-set state transparently
-/// on the matrix (cleared when the matrix changes). `max_iter` (default `100`)
-/// bounds the status loop; `tol` (default `1e-10`) is the sign tolerance on the
-/// multiplier and the gap. `Ctrl+C` is honoured at each iteration boundary.
+/// `"lu"`). `active_set` selects how each status's system is factorized:
+/// `"schur"` (default) factorizes the inequality-free base once and updates it
+/// per status (falling back to refactorization when that base is singular),
+/// `"refactorize"` refactorizes the full system at each status change. `cache`
+/// (default `True`) stores the active-set state transparently on the matrix
+/// (cleared when the matrix changes). `max_iter` (default `100`) bounds the
+/// status loop; `tol` (default `1e-10`) is the sign tolerance on the multiplier
+/// and the gap. `Ctrl+C` is honoured at each iteration boundary.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (model, matrix, rhs, method=None, cache=true, max_iter=100, tol=1e-10))]
+#[pyo3(signature = (model, matrix, rhs, method=None, active_set=None, cache=true, max_iter=100, tol=1e-10))]
 #[allow(clippy::too_many_arguments)]
 pub fn solve_unilateral(
     py: Python<'_>,
@@ -136,12 +152,14 @@ pub fn solve_unilateral(
     matrix: PyRef<PyMatrix>,
     rhs: PyRef<PyNodeField>,
     method: Option<String>,
+    active_set: Option<String>,
     cache: bool,
     max_iter: usize,
     tol: f64,
 ) -> PyResult<PyNodeField> {
     let options = UnilateralOptions {
         method: parse_method(method.as_deref())?,
+        active_set: parse_active_set(active_set.as_deref())?,
         cache,
         max_iter,
         tol,

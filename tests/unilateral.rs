@@ -268,6 +268,117 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
     Ok(())
 }
 
+/// The two active-set back-ends — the Schur base-reuse method (default) and the
+/// per-status refactorization — must reach the **same** solution on every
+/// scenario (active, released, both senses). The Schur path here has a
+/// non-singular inequality-free base (`T(0) = 0` pins the bar), so it never
+/// falls back.
+#[test]
+fn schur_and_refactorize_agree() -> Result<()> {
+    use pyrucast::ops::solver::unilateral::{ActiveSetMethod, UnilateralOptions};
+
+    let cases = [
+        (5.0, 2.0, RelationSense::GreaterEqual),
+        (1.0, 2.0, RelationSense::GreaterEqual),
+        (5.0, 2.0, RelationSense::LessEqual),
+        (1.0, 2.0, RelationSense::LessEqual),
+    ];
+    for (q, bound, sense) in cases {
+        let setup = bounded_bar(q, bound, sense)?;
+        let k = stiffness(&setup.model, &setup.materials)?;
+        let schur = unilateral::solve_with_options(
+            &setup.model,
+            &k,
+            &setup.rhs,
+            &UnilateralOptions {
+                active_set: ActiveSetMethod::SchurComplement,
+                ..Default::default()
+            },
+        )?;
+        let refac = unilateral::solve_with_options(
+            &setup.model,
+            &k,
+            &setup.rhs,
+            &UnilateralOptions {
+                active_set: ActiveSetMethod::Refactorize,
+                ..Default::default()
+            },
+        )?;
+        for node in &setup.nodes {
+            let a = schur.value(node.id(), "T")?;
+            let b = refac.value(node.id(), "T")?;
+            assert!((a - b).abs() < TOL, "T mismatch q={q} sense={sense:?}");
+        }
+        let la = schur.value(setup.uni_mult, "lambda_T")?;
+        let lb = refac.value(setup.uni_mult, "lambda_T")?;
+        assert!((la - lb).abs() < TOL, "λ mismatch q={q} sense={sense:?}");
+    }
+    Ok(())
+}
+
+/// When the inequality-free base is **singular** (a structure that only holds
+/// once the contact is active — here a bar with a single bound and no equality
+/// Dirichlet, so the released state is pure Neumann), the Schur path must fall
+/// back to refactorization and still return the correct solution.
+#[test]
+fn schur_falls_back_when_base_is_singular() -> Result<()> {
+    use pyrucast::ops::solver::unilateral::{ActiveSetMethod, UnilateralOptions};
+
+    let (nodes, coords, mut model, materials) = heat_bar()?;
+    // A single `T(1) ≤ 2` bound, no other constraint.
+    let imp = poi1(&nodes[N_ELEMS])?;
+    let mult = barycenter(&imp)?;
+    let uni = SubModel::dirichlet(
+        "T".into(),
+        "q".into(),
+        &imp,
+        &mult,
+        None,
+        None,
+        RelationSense::LessEqual,
+    )?;
+    let uni_mult = uni.multiplier_nodes()?[0];
+    model.add_sub(insert(uni))?;
+
+    // Flux q = 5 at the right end drives T up into the bound ⇒ the relation is
+    // active, `T ≡ 2` (a flat field satisfying the pinned end and zero flux).
+    let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
+    rhs_sm.add_cell(&[nodes[N_ELEMS].id()])?;
+    rhs_sm.add_cell(&[uni_mult])?;
+    let rhs_sm = insert(rhs_sm);
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed_T".into()])?;
+    rhs.set_value(nodes[N_ELEMS].id(), "q", 5.0)?;
+    rhs.set_value(uni_mult, "imposed_T", 2.0)?;
+    let rhs = NodeField::from_sub(rhs);
+
+    let k = stiffness(&model, &materials)?;
+    let schur = unilateral::solve_with_options(
+        &model,
+        &k,
+        &rhs,
+        &UnilateralOptions {
+            active_set: ActiveSetMethod::SchurComplement,
+            ..Default::default()
+        },
+    )?;
+    let refac = unilateral::solve_with_options(
+        &model,
+        &k,
+        &rhs,
+        &UnilateralOptions {
+            active_set: ActiveSetMethod::Refactorize,
+            ..Default::default()
+        },
+    )?;
+    for node in &nodes {
+        let a = schur.value(node.id(), "T")?;
+        let b = refac.value(node.id(), "T")?;
+        assert!((a - b).abs() < TOL, "fallback must match refactorize");
+        assert!((a - 2.0).abs() < TOL, "active ≤ bound ⇒ T ≡ 2");
+    }
+    Ok(())
+}
+
 /// A model whose constraints are all equalities routes through the plain LU
 /// path: `solve_unilateral` and `solve` agree to machine precision.
 #[test]
