@@ -57,6 +57,7 @@ use crate::ops::geom::project_points;
 use crate::ops::mesher::barycenter;
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 /// Default multiplier (primal) name — the contact reaction intensity.
 pub fn default_multiplier() -> String {
@@ -187,9 +188,10 @@ impl Contact {
 
         // The block support: slave nodes ∪ every paired master node, dedup'd.
         let mut support_ids = slave_ids.clone();
+        let mut seen: HashSet<NodeId> = support_ids.iter().copied().collect();
         for p in &pairings {
             for &n in &p.nodes {
-                if !support_ids.contains(&n) {
+                if seen.insert(n) {
                     support_ids.push(n);
                 }
             }
@@ -380,15 +382,16 @@ impl Constraint for Contact {
 
 /// Unique node ids of a mesh, in order of first appearance across submeshes.
 fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
-    let mut seen: Vec<NodeId> = Vec::new();
+    let mut seen: HashSet<NodeId> = HashSet::new();
+    let mut out: Vec<NodeId> = Vec::new();
     for sm in mesh {
         for &nid in read(sm)?.connectivity() {
-            if !seen.contains(&nid) {
-                seen.push(nid);
+            if seen.insert(nid) {
+                out.push(nid);
             }
         }
     }
-    Ok(seen)
+    Ok(out)
 }
 
 #[cfg(test)]

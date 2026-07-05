@@ -56,6 +56,7 @@ use crate::ops::geom::locate_points;
 use crate::ops::mesher::barycenter;
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 /// Default reference-domain tolerance for locating immersed nodes in the host.
 const DEFAULT_TOL: f64 = 1e-6;
@@ -210,9 +211,10 @@ impl Embedded {
 
         // The block support: immersed nodes ∪ every host node, deduplicated.
         let mut support_ids = immersed_ids.clone();
+        let mut seen: HashSet<NodeId> = support_ids.iter().copied().collect();
         for h in &hosts {
             for &n in &h.nodes {
-                if !support_ids.contains(&n) {
+                if seen.insert(n) {
                     support_ids.push(n);
                 }
             }
@@ -420,15 +422,16 @@ impl Constraint for Embedded {
 
 /// Unique node ids of a mesh, in order of first appearance across submeshes.
 fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
-    let mut seen: Vec<NodeId> = Vec::new();
+    let mut seen: HashSet<NodeId> = HashSet::new();
+    let mut out: Vec<NodeId> = Vec::new();
     for sm in mesh {
         for &nid in read(sm)?.connectivity() {
-            if !seen.contains(&nid) {
-                seen.push(nid);
+            if seen.insert(nid) {
+                out.push(nid);
             }
         }
     }
-    Ok(seen)
+    Ok(out)
 }
 
 #[cfg(test)]
