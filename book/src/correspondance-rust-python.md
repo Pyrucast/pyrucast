@@ -122,8 +122,10 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `abs` / `sqrt` / `exp` / `log` / `log10` / `cos` / `sin` / `tan` / `sinh` / `cosh` / `tanh` `(field) -> Field` | mêmes noms `pyrucast.…(field)` — maths **élément par élément** (style numpy), un champ neuf du même type ; acceptent les quatre saveurs de champ (`NodeField` / `SubNodeField` / `ElementField` / `SubElementField`). Résultats non bornés : `log` de ≤ 0 → `-inf`/`nan` |
 
 > La composition de zones passe par l'**union** (`|` Python / `union` Rust) ;
-> l'arithmétique champ + scalaire par l'**opérateur** `+`. Ni l'une ni l'autre
-> n'est une fonction `ops` — `merge(a, b)` est juste un alias nommé de `a | b`.
+> l'arithmétique champ + scalaire **et** champ + champ par les **opérateurs**
+> `+`, `-`, `*`, `/`, `**` (cf. [Opérateurs](#opérateurs-dunders--traits-rust)).
+> Ni l'une ni l'autre n'est une fonction `ops` — `merge(a, b)` est juste un
+> alias nommé de `a | b`.
 
 ### `ops::build` — construction de champs matériau
 
@@ -191,23 +193,31 @@ structurelle) et `__str__` (← `Display`, vue résumée façon cast3m) — voir
 
 ### Arithmétique sur les champs
 
-L'arithmétique scalaire (`f + s`, …) existe **au niveau zone et au niveau
+L'arithmétique (`f + s`, `f + g`, …) existe **au niveau zone et au niveau
 agrégat** ; les opérations par composante et entre champs sont portées par les
-traits [`SubField` / `Field`](field.md).
+traits [`SubField` / `Field`](field.md). Les dunders `+`, `-`, `*`, `/`, `**`
+**dispatchent selon l'opérande droite** : un `float` déclenche l'arithmétique
+scalaire, un champ du même type l'arithmétique **champ + champ** (valeur à
+valeur).
 
 | Classe | Opérateurs / méthodes Python | Sémantique | Backing Rust |
 |---|---|---|---|
-| `SubNodeField` / `SubElementField` | `f + s`, `f - s`, `f * s`, `f / s` | broadcast scalaire, nouveau champ | `Add`/`Sub`/`Mul`/`Div<f64>` |
-| `NodeField` / `ElementField` | `f + s`, `f - s`, `f * s`, `f / s` | broadcast scalaire sur toutes les zones | `Field::combine_scalar` |
+| `SubNodeField` / `SubElementField` | `f + s`, `f - s`, `f * s`, `f / s`, `f ** s` | broadcast scalaire, nouveau champ | `Add`/`Sub`/`Mul`/`Div<f64>`, `map_all` |
+| `SubNodeField` / `SubElementField` | `f + g`, `f - g`, `f * g`, `f / g`, `f ** g` | champ + champ **strict** (même support, mêmes composantes), nouveau champ | `SubField::combine` |
+| `NodeField` / `ElementField` | `f + s`, `f - s`, `f * s`, `f / s`, `f ** s` | broadcast scalaire sur toutes les zones | `Field::combine_scalar` |
+| `NodeField` / `ElementField` | `f + g`, `f - g`, `f * g`, `f / g`, `f ** g` | champ + champ, **même décomposition** (chaque zone appariée par support) | `Field::combine_field` |
+| `NodeField` / `ElementField` | `f + sub`, `f - sub`, … (`sub` = sous-champ) | maj **ciblée** de la (des) zone(s) de même support | `Field::combine_subfield` |
 | zone & agrégat | `add_to_component(c, s)`, `sub_/mul_/div_to_component` | scalaire sur **une** composante, en place | `SubField`/`Field::map_component` |
 | zone | `set_uniform(c, v)` | force une composante à `v` | `SubField::set_uniform` |
 
-> `f + s` renvoie un **nouveau** champ ; `+=` n'est pas surchargé. La
+> `f + s` / `f + g` renvoie un **nouveau** champ ; `+=` n'est pas surchargé. La
 > **composition** de zones n'est **pas** sur `+` : c'est l'union `|` (`union`
 > en Rust, cf. ci-dessous). L'opérateur `+` est entièrement réservé à
-> l'**arithmétique de champ** (scalaire aujourd'hui, addition champ + champ
-> via `combine_field` demain). Pour fusionner des zones avec vérification :
-> `merge(a, b)` ≡ `a | b`.
+> l'**arithmétique de champ** — scalaire (`f + 1.0`) **et** champ + champ valeur
+> à valeur (`f + g` via `combine`/`combine_field`) ; p. ex. deux champs
+> constants valant 1 s'additionnent en un champ constant valant 2. Pour
+> fusionner des zones avec vérification (et non additionner) : `merge(a, b)`
+> ≡ `a | b`.
 
 ### Indexation par clé
 
