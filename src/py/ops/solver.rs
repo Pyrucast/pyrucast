@@ -5,6 +5,7 @@
 //! is the *operation*, not its `NodeField` result).
 
 use crate::ops::solver::lu::{SolveMethod, SolveOptions};
+use crate::ops::solver::unilateral::UnilateralOptions;
 use crate::py::matrix::PyMatrix;
 use crate::py::model::PyModel;
 use crate::py::node_field::PyNodeField;
@@ -97,6 +98,55 @@ pub fn solve_eliminate(
         cache,
     };
     let solution = crate::ops::solver::eliminate::solve_cancellable_with_options(
+        &model.inner,
+        &matrix.inner,
+        &rhs.inner,
+        &options,
+        &PySignals(py),
+    )?;
+    Ok(PyNodeField { inner: solution })
+}
+
+/// Solve `model`'s system with **unilateral** (inequality) constraints by the
+/// active-set (status) method — the operator for constraints built with
+/// `sense=">="` / `"<="` (Dirichlet, MPC).
+///
+/// `model` is the constrained model; `matrix` is its assembled (saddle-point)
+/// stiffness; `rhs` is the load field (the right-hand sides `g` live at the
+/// multiplier nodes' imposed-value slots). The status loop starts with every
+/// inequality active (or from the previous converged status when `cache` is
+/// on — a warm start), solves, releases the relations whose reaction pulls,
+/// activates the relations whose gap penetrates, and repeats until the status
+/// is stable. Inactive relations report `λ = 0` in the solution.
+///
+/// A model with no inequality relation falls back to a plain `solve`.
+///
+/// `method` selects the direct back-end of each iteration (currently only
+/// `"lu"`). `cache` (default `True`) stores the active-set state transparently
+/// on the matrix (cleared when the matrix changes). `max_iter` (default `100`)
+/// bounds the status loop; `tol` (default `1e-10`) is the sign tolerance on the
+/// multiplier and the gap. `Ctrl+C` is honoured at each iteration boundary.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (model, matrix, rhs, method=None, cache=true, max_iter=100, tol=1e-10))]
+#[allow(clippy::too_many_arguments)]
+pub fn solve_unilateral(
+    py: Python<'_>,
+    model: PyRef<PyModel>,
+    matrix: PyRef<PyMatrix>,
+    rhs: PyRef<PyNodeField>,
+    method: Option<String>,
+    cache: bool,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<PyNodeField> {
+    let options = UnilateralOptions {
+        method: parse_method(method.as_deref())?,
+        cache,
+        max_iter,
+        tol,
+    };
+    let solution = crate::ops::solver::unilateral::solve_cancellable_with_options(
         &model.inner,
         &matrix.inner,
         &rhs.inner,

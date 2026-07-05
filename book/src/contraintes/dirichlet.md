@@ -36,8 +36,12 @@ Signature complète :
 
 ```text
 Model.dirichlet(imposed_variable, target_dual, imposed_mesh, multiplier_mesh,
-                multiplier=None, imposed_value=None)
+                multiplier=None, imposed_value=None, sense="=")
 ```
+
+`sense` (`"="`, `">="`, `"<="`) rend la contrainte **unilatérale** (`u ≥ u_d` :
+une butée) — voir la section « Relations unilatérales » de la page
+[Contraintes](../contraintes.md) et le solveur `solve_unilateral`.
 
 ## Les deux blocs unité
 

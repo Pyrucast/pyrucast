@@ -42,7 +42,8 @@ use crate::containers::mesh::{ElementType, Mesh, NodeId};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
-    constraint_block_pair, Constraint, ConstraintTerm, Contribution, Relation, SubModelKind,
+    constraint_block_pair, Constraint, ConstraintTerm, Contribution, Relation, RelationSense,
+    SubModelKind,
 };
 use crate::store::read;
 use serde::{Deserialize, Serialize};
@@ -79,6 +80,10 @@ pub struct Dirichlet {
     /// POI1 mesh of the multiplier nodes, paired element-for-element with
     /// `imposed_mesh` (same submesh structure, same per-submesh cell count).
     pub(crate) multiplier_mesh: Mesh,
+    /// Equality (default) or unilateral inequality (`u ≥ u_d` / `u ≤ u_d`),
+    /// solved by the active-set operator.
+    #[serde(default)]
+    pub(crate) sense: RelationSense,
 }
 
 impl Dirichlet {
@@ -91,6 +96,11 @@ impl Dirichlet {
     /// now), share one [`Coords`](crate::containers::mesh::Coords),
     /// and pair element-for-element (same number of submeshes, same cell count
     /// per submesh).
+    ///
+    /// `sense` turns the constraint unilateral: `GreaterEqual` imposes
+    /// `u ≥ u_d` (`LessEqual`: `u ≤ u_d`), enforced only while in contact — such
+    /// a model is solved by the active-set operator
+    /// [`unilateral`](crate::ops::solver::unilateral).
     pub fn new(
         imposed_variable: String,
         target_dual: String,
@@ -98,6 +108,7 @@ impl Dirichlet {
         multiplier_mesh: &Mesh,
         multiplier: Option<String>,
         imposed_value: Option<String>,
+        sense: RelationSense,
     ) -> Result<Self> {
         if imposed_mesh.cell_count()? == 0 {
             return Err(PyrucastError::Message(
@@ -161,6 +172,7 @@ impl Dirichlet {
             imposed_value,
             imposed_mesh: share(imposed_mesh)?,
             multiplier_mesh: share(multiplier_mesh)?,
+            sense,
         })
     }
 }
@@ -229,12 +241,13 @@ impl SubModelKind for Dirichlet {
         format!(
             "SubModel<Dirichlet({imposed_variable})>\n  primal var(s): {multiplier} \
              (multiplier)\n  dual var(s):   {imposed_value} (imposed value)\n  \
-             targets primary dual: {target_dual}\n  constrained: {nc} node(s)\n  \
-             multipliers: {nm} node(s)",
+             targets primary dual: {target_dual}\n  sense: {sense}\n  \
+             constrained: {nc} node(s)\n  multipliers: {nm} node(s)",
             imposed_variable = self.imposed_variable,
             multiplier = self.multiplier,
             imposed_value = self.imposed_value,
             target_dual = self.target_dual,
+            sense = self.sense,
         )
     }
 }
@@ -244,7 +257,8 @@ impl Constraint for Dirichlet {
         &self.multiplier_mesh
     }
 
-    /// Dirichlet is a single-term relation `1·u = u_d` per constrained node.
+    /// Dirichlet is a single-term relation `1·u ⋈ u_d` per constrained node
+    /// (`⋈` is the sub-model's sense, `=` by default).
     fn relations(&self) -> Result<Vec<Relation>> {
         let mut relations = Vec::with_capacity(self.imposed_mesh.cell_count()?);
         for i in 0..self.imposed_mesh.len() {
@@ -262,6 +276,7 @@ impl Constraint for Dirichlet {
                         target_dual: self.target_dual.clone(),
                         coefficient: 1.0,
                     }],
+                    sense: self.sense,
                 });
             }
         }

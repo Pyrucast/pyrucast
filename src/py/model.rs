@@ -4,7 +4,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::mesh::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::models::elasticity::ElasticityModel;
-use crate::models::mpc;
+use crate::models::{mpc, RelationSense};
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
@@ -218,8 +218,9 @@ impl PyModel {
     }
 
     /// `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,
-    /// multiplier_mesh, multiplier=None, imposed_value=None)` — Dirichlet
-    /// constraint model (a single sub-model) imposed via Lagrange multipliers.
+    /// multiplier_mesh, multiplier=None, imposed_value=None, sense="=")` —
+    /// Dirichlet constraint model (a single sub-model) imposed via Lagrange
+    /// multipliers.
     ///
     /// `imposed_variable` is the constrained primary variable (e.g. `"T"`);
     /// `target_dual` is the dual variable of the target physics it couples
@@ -230,9 +231,13 @@ impl PyModel {
     /// `imposed_value` override the derived names `lambda_<imposed_variable>` /
     /// `imposed_<imposed_variable>`. The imposed value `u_d` is written by the
     /// user in the load field at the multiplier node's `imposed_value`
-    /// component. See the model chapter of the book for the full semantics.
+    /// component. `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the
+    /// constraint unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved
+    /// with `solve_unilateral`. See the model chapter of the book for the full
+    /// semantics.
     #[classmethod]
-    #[pyo3(signature = (imposed_variable, target_dual, imposed_mesh, multiplier_mesh, multiplier=None, imposed_value=None))]
+    #[pyo3(signature = (imposed_variable, target_dual, imposed_mesh, multiplier_mesh, multiplier=None, imposed_value=None, sense=None))]
+    #[allow(clippy::too_many_arguments)]
     fn dirichlet(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         imposed_variable: String,
@@ -241,6 +246,7 @@ impl PyModel {
         multiplier_mesh: PyRef<'_, PyMesh>,
         multiplier: Option<String>,
         imposed_value: Option<String>,
+        sense: Option<String>,
     ) -> PyResult<Self> {
         let inner = Model::dirichlet(
             imposed_variable,
@@ -249,13 +255,14 @@ impl PyModel {
             &multiplier_mesh.inner,
             multiplier,
             imposed_value,
+            RelationSense::parse(sense.as_deref())?,
         )?;
         Ok(Self { inner })
     }
 
-    /// `Model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None)`
-    /// — multi-point constraint (a single sub-model) imposing, per relation,
-    /// `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
+    /// `Model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None,
+    /// sense="=")` — multi-point constraint (a single sub-model) imposing, per
+    /// relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
     ///
     /// `terms` is a list of `(mesh, variable, target_dual, coefficient)` tuples:
     /// each `mesh` is a POI1 mesh (one node per relation), paired
@@ -264,9 +271,11 @@ impl PyModel {
     /// `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
     /// derived names `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written
     /// by the user in the load field at the multiplier node's `imposed_value`
-    /// component (default `0`). See the constraints chapter of the book.
+    /// component (default `0`). `sense` (`"="`, `">="` or `"<="`, default `"="`)
+    /// turns the relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is
+    /// solved with `solve_unilateral`. See the constraints chapter of the book.
     #[classmethod]
-    #[pyo3(signature = (terms, multiplier_mesh, multiplier=None, imposed_value=None))]
+    #[pyo3(signature = (terms, multiplier_mesh, multiplier=None, imposed_value=None, sense=None))]
     fn mpc(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         py: Python<'_>,
@@ -274,6 +283,7 @@ impl PyModel {
         multiplier_mesh: PyRef<'_, PyMesh>,
         multiplier: Option<String>,
         imposed_value: Option<String>,
+        sense: Option<String>,
     ) -> PyResult<Self> {
         let mut rust_terms = Vec::with_capacity(terms.len());
         for (mesh, variable, target_dual, coefficient) in &terms {
@@ -290,6 +300,7 @@ impl PyModel {
             &multiplier_mesh.inner,
             multiplier,
             imposed_value,
+            RelationSense::parse(sense.as_deref())?,
         )?;
         Ok(Self { inner })
     }

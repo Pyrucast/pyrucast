@@ -72,7 +72,15 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         .collect::<Result<_>>()?;
 
     let conduction = Model::heat_conduction(&fes)?;
-    let dirichlet = Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)?;
+    let dirichlet = Model::dirichlet(
+        "T".into(),
+        "q".into(),
+        &imposed,
+        &multiplier,
+        None,
+        None,
+        Default::default(),
+    )?;
     let model = conduction.union(&dirichlet)?;
     let materials = build::material_field(&model, &[("k", K)])?;
 

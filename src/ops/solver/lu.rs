@@ -60,8 +60,8 @@
 //! let imposed_b = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
 //! let mult_mesh_a = mesher::barycenter(&imposed_a).unwrap();
 //! let mult_mesh_b = mesher::barycenter(&imposed_b).unwrap();
-//! let dir_a = SubModel::dirichlet("T".into(), "q".into(), &imposed_a, &mult_mesh_a, None, None).unwrap();
-//! let dir_b = SubModel::dirichlet("T".into(), "q".into(), &imposed_b, &mult_mesh_b, None, None).unwrap();
+//! let dir_a = SubModel::dirichlet("T".into(), "q".into(), &imposed_a, &mult_mesh_a, None, None, Default::default()).unwrap();
+//! let dir_b = SubModel::dirichlet("T".into(), "q".into(), &imposed_b, &mult_mesh_b, None, None, Default::default()).unwrap();
 //! let mult_a = dir_a.multiplier_nodes().unwrap()[0];
 //! let mult_b = dir_b.multiplier_nodes().unwrap()[0];
 //! model.add_sub(insert(dir_a)).unwrap();
@@ -376,6 +376,7 @@ mod tests {
             &mult_mesh_left,
             None,
             None,
+            Default::default(),
         )
         .unwrap();
         let right_dir = SubModel::dirichlet(
@@ -385,6 +386,7 @@ mod tests {
             &mult_mesh_right,
             None,
             None,
+            Default::default(),
         )
         .unwrap();
         let mult_left = left_dir.multiplier_nodes().unwrap()[0];

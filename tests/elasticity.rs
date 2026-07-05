@@ -61,7 +61,15 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     let roller = |nodes: &[Node], var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
         let multiplier = mesher::barycenter(&imposed)?;
-        Model::dirichlet(var.into(), dual.into(), &imposed, &multiplier, None, None)
+        Model::dirichlet(
+            var.into(),
+            dual.into(),
+            &imposed,
+            &multiplier,
+            None,
+            None,
+            Default::default(),
+        )
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
@@ -104,7 +112,15 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
 fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
     let multiplier = mesher::barycenter(&imposed)?;
-    Model::dirichlet(var.into(), dual.into(), &imposed, &multiplier, None, None)
+    Model::dirichlet(
+        var.into(),
+        dual.into(),
+        &imposed,
+        &multiplier,
+        None,
+        None,
+        Default::default(),
+    )
 }
 
 /// 3-D solid: uniaxial tension of a unit HEX8 cube. Symmetry rollers on the

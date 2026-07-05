@@ -49,9 +49,14 @@ L'MPC partage **une** paire de variables entre toutes ses relations, toutes deux
 Signature complète :
 
 ```text
-Model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None)
+Model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None, sense="=")
 # terms : liste de (mesh, variable, dual, coefficient)
 ```
+
+`sense` (`"="`, `">="`, `"<="`) rend les relations **unilatérales**
+(`Σₖ aₖ·uₖ ≥ g` : une liaison à jeu) — voir la section « Relations
+unilatérales » de la page [Contraintes](../contraintes.md) et le solveur
+`solve_unilateral`.
 
 ## Les blocs `C` / `Cᵀ`
 

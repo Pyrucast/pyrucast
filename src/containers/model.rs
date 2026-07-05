@@ -101,7 +101,7 @@
 //! let multiplier = mesher::barycenter(&imposed).unwrap();
 //! model
 //!     .add_sub(insert(
-//!         SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
+//!         SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None, Default::default())
 //!             .unwrap(),
 //!     ))
 //!     .unwrap();
@@ -123,7 +123,7 @@ use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
     dirichlet, elasticity, embedded, frame, frame3d, heat_conduction, mazars, mpc, plasticity,
-    timoshenko, truss, Constraint, SubModelKind,
+    timoshenko, truss, Constraint, RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -292,7 +292,11 @@ impl SubModel {
     /// primal is being constrained (e.g. `"q"` for heat conduction, `"f_x"`
     /// for elasticity in `x`). `multiplier` / `imposed_value` default to
     /// `lambda_<imposed_variable>` / `imposed_<imposed_variable>` when `None`.
+    /// `sense` (default equality) turns the constraint unilateral (`u ≥ u_d` /
+    /// `u ≤ u_d`), solved by the active-set operator
+    /// [`unilateral`](crate::ops::solver::unilateral).
     /// See [`dirichlet::Dirichlet::new`].
+    #[allow(clippy::too_many_arguments)]
     pub fn dirichlet(
         imposed_variable: String,
         target_dual: String,
@@ -300,6 +304,7 @@ impl SubModel {
         multiplier_mesh: &Mesh,
         multiplier: Option<String>,
         imposed_value: Option<String>,
+        sense: RelationSense,
     ) -> Result<Self> {
         Ok(SubModel::Dirichlet(dirichlet::Dirichlet::new(
             imposed_variable,
@@ -308,6 +313,7 @@ impl SubModel {
             multiplier_mesh,
             multiplier,
             imposed_value,
+            sense,
         )?))
     }
 
@@ -319,18 +325,22 @@ impl SubModel {
     /// `λ` node per relation. `multiplier` / `imposed_value` default to
     /// `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written by the user
     /// in the load field at the multiplier node's `imposed_value` component
-    /// (default `0`). See [`mpc::Mpc::new`].
+    /// (default `0`). `sense` (default equality) turns the relations unilateral
+    /// (`Σ aₖ·uₖ ≥ g` / `≤ g`), solved by the active-set operator
+    /// [`unilateral`](crate::ops::solver::unilateral). See [`mpc::Mpc::new`].
     pub fn mpc(
         terms: Vec<mpc::MpcTerm>,
         multiplier_mesh: &Mesh,
         multiplier: Option<String>,
         imposed_value: Option<String>,
+        sense: RelationSense,
     ) -> Result<Self> {
         Ok(SubModel::Mpc(mpc::Mpc::new(
             terms,
             multiplier_mesh,
             multiplier,
             imposed_value,
+            sense,
         )?))
     }
 
@@ -823,6 +833,7 @@ impl Model {
     /// `multiplier_mesh`. Parent-level named constructor — see
     /// [`SubModel::dirichlet`] for the semantics of the four variable names
     /// and the two meshes.
+    #[allow(clippy::too_many_arguments)]
     pub fn dirichlet(
         imposed_variable: String,
         target_dual: String,
@@ -830,6 +841,7 @@ impl Model {
         multiplier_mesh: &Mesh,
         multiplier: Option<String>,
         imposed_value: Option<String>,
+        sense: RelationSense,
     ) -> Result<Self> {
         let mut model = Self::empty();
         model.add_sub(insert(SubModel::dirichlet(
@@ -839,6 +851,7 @@ impl Model {
             multiplier_mesh,
             multiplier,
             imposed_value,
+            sense,
         )?))?;
         Ok(model)
     }
@@ -852,6 +865,7 @@ impl Model {
         multiplier_mesh: &Mesh,
         multiplier: Option<String>,
         imposed_value: Option<String>,
+        sense: RelationSense,
     ) -> Result<Self> {
         let mut model = Self::empty();
         model.add_sub(insert(SubModel::mpc(
@@ -859,6 +873,7 @@ impl Model {
             multiplier_mesh,
             multiplier,
             imposed_value,
+            sense,
         )?))?;
         Ok(model)
     }
@@ -1039,8 +1054,16 @@ mod tests {
             let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
             model
                 .add_sub(insert(
-                    SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
-                        .unwrap(),
+                    SubModel::dirichlet(
+                        "T".into(),
+                        "q".into(),
+                        &imposed,
+                        &multiplier,
+                        None,
+                        None,
+                        Default::default(),
+                    )
+                    .unwrap(),
                 ))
                 .unwrap();
         }
@@ -1182,8 +1205,16 @@ mod tests {
         let mult_id = multiplier.node(0, 0, 0).unwrap().id();
         assert_eq!(read(&coords).unwrap().refcount(mult_id), 1);
 
-        let sub =
-            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
+        let sub = SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &imposed,
+            &multiplier,
+            None,
+            None,
+            Default::default(),
+        )
+        .unwrap();
         // Sharing the submesh handles does not touch node refcounts.
         assert_eq!(read(&coords).unwrap().refcount(mult_id), 1);
         assert_eq!(sub.multiplier_nodes().unwrap(), vec![mult_id]);
@@ -1203,7 +1234,16 @@ mod tests {
     #[test]
     fn dirichlet_empty_imposed_mesh_rejected() {
         let empty = Mesh::empty();
-        assert!(SubModel::dirichlet("T".into(), "q".into(), &empty, &empty, None, None).is_err());
+        assert!(SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &empty,
+            &empty,
+            None,
+            None,
+            Default::default()
+        )
+        .is_err());
     }
 
     #[test]
@@ -1271,7 +1311,16 @@ mod tests {
         // Compose with a Dirichlet model via `union` (Python `|`).
         let imp = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
         let mlt = crate::ops::mesher::barycenter(&imp).unwrap();
-        let dir = Model::dirichlet("T".into(), "q".into(), &imp, &mlt, None, None).unwrap();
+        let dir = Model::dirichlet(
+            "T".into(),
+            "q".into(),
+            &imp,
+            &mlt,
+            None,
+            None,
+            Default::default(),
+        )
+        .unwrap();
         assert_eq!(dir.len(), 1);
         let full = hc.union(&dir).unwrap();
         assert_eq!(full.len(), 3);
@@ -1386,8 +1435,16 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
-        let dir =
-            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
+        let dir = SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &imposed,
+            &multiplier,
+            None,
+            None,
+            Default::default(),
+        )
+        .unwrap();
         assert!(dir.material_components().is_none());
     }
 
@@ -1425,8 +1482,16 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
-        let dirichlet =
-            Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
+        let dirichlet = Model::dirichlet(
+            "T".into(),
+            "q".into(),
+            &imposed,
+            &multiplier,
+            None,
+            None,
+            Default::default(),
+        )
+        .unwrap();
 
         let rhs = dirichlet.constraint_rhs(&[(a.id(), 3.0)]).unwrap();
         let mult_id = multiplier.node(0, 0, 0).unwrap().id();
@@ -1451,7 +1516,7 @@ mod tests {
             crate::models::mpc::MpcTerm::new(&mesh_b, "T".into(), "q".into(), 1.0).unwrap(),
             crate::models::mpc::MpcTerm::new(&mesh_a, "T".into(), "q".into(), -1.0).unwrap(),
         ];
-        let model = Model::mpc(terms, &mult, None, None).unwrap();
+        let model = Model::mpc(terms, &mult, None, None, Default::default()).unwrap();
         let mult_id = mult.node(0, 0, 0).unwrap().id();
 
         let rhs = model.constraint_rhs(&[(b.id(), 2.5)]).unwrap();
@@ -1497,7 +1562,7 @@ mod tests {
             crate::models::mpc::MpcTerm::new(&t1_mesh, "T".into(), "q".into(), 1.0).unwrap(),
             crate::models::mpc::MpcTerm::new(&t2_mesh, "T".into(), "q".into(), -1.0).unwrap(),
         ];
-        let model = Model::mpc(terms, &mult, None, None).unwrap();
+        let model = Model::mpc(terms, &mult, None, None, Default::default()).unwrap();
 
         // `a` keys both relations → ambiguous.
         assert!(model.constraint_rhs(&[(a.id(), 1.0)]).is_err());
@@ -1521,8 +1586,16 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
-        let dirichlet =
-            Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
+        let dirichlet = Model::dirichlet(
+            "T".into(),
+            "q".into(),
+            &imposed,
+            &multiplier,
+            None,
+            None,
+            Default::default(),
+        )
+        .unwrap();
 
         let mult_id = multiplier.node(0, 0, 0).unwrap().id();
         let rhs = dirichlet.constraint_rhs_by_index(&[(0, 2.0)]).unwrap();

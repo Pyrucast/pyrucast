@@ -141,8 +141,16 @@ mod tests {
             let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
             model
                 .add_sub(insert(
-                    SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
-                        .unwrap(),
+                    SubModel::dirichlet(
+                        "T".into(),
+                        "q".into(),
+                        &imposed,
+                        &multiplier,
+                        None,
+                        None,
+                        Default::default(),
+                    )
+                    .unwrap(),
                 ))
                 .unwrap();
         }
@@ -180,8 +188,16 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
-        let dir =
-            SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
+        let dir = SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &imposed,
+            &multiplier,
+            None,
+            None,
+            Default::default(),
+        )
+        .unwrap();
         assert!(sub_material_field(&dir, &[("k", 1.0)]).is_err());
     }
 
@@ -310,8 +326,16 @@ mod tests {
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
         model
             .add_sub(insert(
-                SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
-                    .unwrap(),
+                SubModel::dirichlet(
+                    "T".into(),
+                    "q".into(),
+                    &imposed,
+                    &multiplier,
+                    None,
+                    None,
+                    Default::default(),
+                )
+                .unwrap(),
             ))
             .unwrap();
         model

@@ -65,11 +65,7 @@ pub fn locate_points(host: &Mesh, points: &[Vec<f64>], tol: f64) -> Result<Vec<O
     for (s_idx, sm_handle) in host.into_iter().enumerate() {
         let (element_type, conn, coords_handle) = {
             let sm = read(sm_handle)?;
-            (
-                sm.element_type(),
-                sm.connectivity().to_vec(),
-                sm.coords(),
-            )
+            (sm.element_type(), sm.connectivity().to_vec(), sm.coords())
         };
         if element_type == ElementType::POI1 {
             continue; // A node has no interior to contain anything.
@@ -78,7 +74,10 @@ pub fn locate_points(host: &Mesh, points: &[Vec<f64>], tol: f64) -> Result<Vec<O
         let c = read(&coords_handle)?;
         for cell in 0..conn.len() / npc {
             let ids = &conn[cell * npc..(cell + 1) * npc];
-            let coords: Vec<Vec<f64>> = ids.iter().map(|&n| Ok(c.coord(n)?.to_vec())).collect::<Result<_>>()?;
+            let coords: Vec<Vec<f64>> = ids
+                .iter()
+                .map(|&n| Ok(c.coord(n)?.to_vec()))
+                .collect::<Result<_>>()?;
             let dim = coords[0].len();
             let mut lo = coords[0].clone();
             let mut hi = coords[0].clone();
@@ -145,8 +144,8 @@ pub fn locate_points(host: &Mesh, points: &[Vec<f64>], tol: f64) -> Result<Vec<O
 /// of [`locate_points`].
 struct Grid {
     lo: Vec<f64>,
-    inv: Vec<f64>,    // 1 / grid-cell size per axis (0 on a degenerate axis)
-    res: Vec<usize>,  // grid cells per axis
+    inv: Vec<f64>,   // 1 / grid-cell size per axis (0 on a degenerate axis)
+    res: Vec<usize>, // grid cells per axis
     stride: Vec<usize>,
     buckets: Vec<Vec<usize>>,
 }
@@ -554,9 +553,8 @@ mod tests {
     fn locate_in_hex8_block() {
         let n = 3usize;
         let coords = insert(Coords::new(3).unwrap());
-        let node = |i: usize, j: usize, k: usize| -> Vec<f64> {
-            vec![i as f64, j as f64, k as f64]
-        };
+        let node =
+            |i: usize, j: usize, k: usize| -> Vec<f64> { vec![i as f64, j as f64, k as f64] };
         // Grid of (n+1)³ nodes.
         let mut id = std::collections::HashMap::new();
         for k in 0..=n {
@@ -564,7 +562,9 @@ mod tests {
                 for i in 0..=n {
                     id.insert(
                         (i, j, k),
-                        Node::create_in(coords.clone(), &node(i, j, k)).unwrap().id(),
+                        Node::create_in(coords.clone(), &node(i, j, k))
+                            .unwrap()
+                            .id(),
                     );
                 }
             }
@@ -602,7 +602,9 @@ mod tests {
         let loc = locate_points(&mesh, &pts, 1e-6).unwrap();
 
         for (c, l) in loc.iter().take(n * n * n).enumerate() {
-            let l = l.as_ref().unwrap_or_else(|| panic!("cell centre {c} not located"));
+            let l = l
+                .as_ref()
+                .unwrap_or_else(|| panic!("cell centre {c} not located"));
             assert_eq!(l.cell, c, "point {c} should map to cell {c}");
             for w in &l.weights {
                 assert!((w - 0.125).abs() < 1e-9);

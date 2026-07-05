@@ -63,6 +63,54 @@ esclave distinct, jamais réutilisé comme maître ni esclave dans une autre
 relation (couvre la périodicité). Un système chaîné est refusé avec une erreur
 explicite ; il reste résoluble par la voie Lagrange (`solve`).
 
+## Relations unilatérales (inégalités)
+
+Toute relation d'égalité peut devenir **unilatérale** : `Σₖ aₖ·uₖ ≥ g` (ou
+`≤ g`) au lieu de `= g`. C'est le paramètre optionnel `sense` des contraintes
+(`"="` par défaut, `">="`, `"<="`) — une butée `u ≥ a` est un Dirichlet
+unilatéral, une liaison à jeu est une MPC unilatérale :
+
+```python
+butee = pyrucast.Model.dirichlet("u_y", "f_y", imposed, mult, sense=">=")
+```
+
+Une relation unilatérale obéit aux conditions de **complémentarité** (KKT) : ou
+bien elle est **active** (l'égalité tient et le multiplicateur porte la
+réaction), ou bien elle est **inactive** (le jeu `C·u − g` est du côté
+admissible et `λ = 0`). Avec la convention des blocs assemblés
+(`K·u + Cᵀ·λ = f`), le signe admissible du multiplicateur est `λ ≤ 0` pour une
+relation `≥` active, `λ ≥ 0` pour une `≤` active.
+
+Comme l'ensemble actif n'est pas connu d'avance, la résolution est itérative —
+la **méthode du statut** (*active-set*), portée par l'opérateur
+[`solve_unilateral`](operateurs/solveur.md) :
+
+1. statut initial : toutes les inégalités actives (ou le statut convergé
+   précédent quand le cache est chaud — *warm start*) ;
+2. résolution du système point-selle avec, pour chaque relation **inactive**,
+   sa ligne de contrainte remplacée par `λ = 0` (la matrice garde sa taille,
+   seules les valeurs changent) ;
+3. mise à jour du statut : une relation active dont le `λ` tire (signe
+   inadmissible) est **relâchée**, une inactive dont le jeu pénètre est
+   **activée** ;
+4. statut stable ⇒ convergé ; sinon on refactorise et on répète (boucle finie
+   de la méthode du statut classique, bornée par `max_iter`).
+
+```python
+solution = pyrucast.solve_unilateral(model, k, rhs)   # method, cache, max_iter, tol
+```
+
+Les relations inactives sortent avec `λ = 0` exact ; la solution a la même
+forme que la voie Lagrange (primal + multiplicateurs). L'assemblage est
+**inchangé** — le `sense` n'est lu que par les solveurs : `solve` sur un modèle
+unilatéral résout la version « tout collé » (toutes les relations en égalité),
+et `solve_eliminate` le **refuse** avec une erreur explicite. Un modèle sans
+inégalité retombe sur le `solve` ordinaire.
+
+Le second membre `g` (la borne) suit le mécanisme habituel : au slot
+`imposed_value` du nœud-multiplicateur, donc `constraint_rhs` fonctionne tel
+quel.
+
 ## Second membre : le helper `constraint_rhs`
 
 Le second membre `u_d` / `g` n'est **pas** stocké dans la contrainte :

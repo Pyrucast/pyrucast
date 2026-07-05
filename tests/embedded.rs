@@ -67,7 +67,15 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
     }
     let corner_mesh = Mesh::from_submesh(corner_sm);
     let corner_mult = barycenter(&corner_mesh)?;
-    let dir = SubModel::dirichlet("T".into(), "q".into(), &corner_mesh, &corner_mult, None, None)?;
+    let dir = SubModel::dirichlet(
+        "T".into(),
+        "q".into(),
+        &corner_mesh,
+        &corner_mult,
+        None,
+        None,
+        Default::default(),
+    )?;
     let dir_mult_nodes = dir.multiplier_nodes()?; // paired corner-for-corner
     model.add_sub(insert(dir))?;
 
@@ -108,7 +116,11 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
     // Corners recover the linear field (sanity), and the immersed node too.
     for (n, c) in corners.iter().zip(corner_coords.iter()) {
         let got = solution.value(n.id(), "T")?;
-        assert!((got - field(c)).abs() < TOL, "corner: {got} vs {}", field(c));
+        assert!(
+            (got - field(c)).abs() < TOL,
+            "corner: {got} vs {}",
+            field(c)
+        );
     }
     let got = solution.value(p.id(), "T")?;
     let expected = field(&[0.3, 0.6, 0.2]); // 1 + 0.6 + 1.8 + 0.8 = 4.2
@@ -154,7 +166,15 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
         let mult = barycenter(&imposed)?;
-        Model::dirichlet(var.into(), dual.into(), &imposed, &mult, None, None)
+        Model::dirichlet(
+            var.into(),
+            dual.into(),
+            &imposed,
+            &mult,
+            None,
+            None,
+            Default::default(),
+        )
     };
     let mut model = Model::elasticity(&fes, ElasticityModel::Solid)?;
     model = model.union(&clamp(&[0, 3, 4, 7], "u_x", "f_x")?)?;
@@ -236,7 +256,15 @@ fn embedded_per_component_offset() -> Result<()> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
         let mult = barycenter(&imposed)?;
-        Model::dirichlet(var.into(), dual.into(), &imposed, &mult, None, None)
+        Model::dirichlet(
+            var.into(),
+            dual.into(),
+            &imposed,
+            &mult,
+            None,
+            None,
+            Default::default(),
+        )
     };
     let mut model = Model::elasticity(&fes, ElasticityModel::Solid)?;
     model = model.union(&clamp(&[0, 3, 4, 7], "u_x", "f_x")?)?;

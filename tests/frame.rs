@@ -56,7 +56,15 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesher::barycenter(&imposed)?;
-        Model::dirichlet(var.into(), dual.into(), &imposed, &multiplier, None, None)
+        Model::dirichlet(
+            var.into(),
+            dual.into(),
+            &imposed,
+            &multiplier,
+            None,
+            None,
+            Default::default(),
+        )
     };
     let mut model = Model::frame(&fes)?;
     model = model.union(&clamp(&nodes[0], "u_x", "f_x")?)?;

@@ -161,6 +161,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 |---|---|
 | `lu::solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs) -> NodeField` |
 | `eliminate::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_eliminate(model, matrix, rhs) -> NodeField` |
+| `unilateral::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_unilateral(model, matrix, rhs, max_iter=100, tol=1e-10) -> NodeField` |
 
 ### `ops::export` — export vers des formats externes
 

@@ -681,12 +681,16 @@ mod tests {
             insert(sm)
         };
         assert!(!read(&sm).unwrap().is_sealed());
-        let _sub = SubFiniteElementSpace::new(sm.clone(), Interpolation::Lagrange1, QuadratureRule::Gauss)
-            .unwrap();
+        let _sub =
+            SubFiniteElementSpace::new(sm.clone(), Interpolation::Lagrange1, QuadratureRule::Gauss)
+                .unwrap();
         // Building the space froze the submesh: no more cells can be added.
         assert!(read(&sm).unwrap().is_sealed());
         assert!(matches!(
-            write(&sm).unwrap().add_cell(&[a.id(), b.id(), c.id()]).unwrap_err(),
+            write(&sm)
+                .unwrap()
+                .add_cell(&[a.id(), b.id(), c.id()])
+                .unwrap_err(),
             PyrucastError::MeshSealed
         ));
     }

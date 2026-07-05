@@ -234,6 +234,15 @@ fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
         let sub = read(h)?;
         if let Some(constraint) = sub.as_kind().as_constraint() {
             for rel in constraint.relations()? {
+                // Condensation enforces its relations unconditionally — a
+                // unilateral relation needs the active-set solver instead.
+                if rel.sense != crate::models::RelationSense::Equality {
+                    return Err(PyrucastError::Message(format!(
+                        "elimination: relation at multiplier node {:?} is unilateral \
+                         ('{}') — solve it with solve_unilateral",
+                        rel.multiplier_node, rel.sense
+                    )));
+                }
                 let slot = rel.imposed_value.clone();
                 relations.push((rel, slot));
             }

@@ -82,6 +82,36 @@ condense = pyrucast.solve_eliminate(model, K, rhs)   # système réduit — mêm
 Voir l'exemple `examples/mpc_condensation.py` et la page
 [Contraintes](../contraintes.md).
 
+## `solve_unilateral(model, matrix, rhs)` → `NodeField`
+
+Solveur **actif/inactif** (méthode du statut) pour un modèle portant des
+relations **unilatérales** (contraintes construites avec `sense=">="` /
+`"<="`) : chaque relation est soit *active* (imposée en égalité, `λ` = la
+réaction), soit *inactive* (`λ = 0`, le jeu reste du côté admissible). La
+boucle part de toutes les inégalités actives (ou du statut convergé précédent
+quand le cache est chaud), résout, relâche les relations dont la réaction tire,
+active celles dont le jeu pénètre, et répète jusqu'à stabilité du statut —
+chaque itération coûte une factorisation.
+
+- les relations d'**égalité** du modèle sont imposées inconditionnellement,
+  comme par `solve` ; un modèle **sans inégalité** retombe sur un `solve`
+  simple ;
+- l'état actif/inactif convergé et sa factorisation sont mis en **cache** sur
+  la matrice (*warm start* de la résolution suivante ; invalidé dès que la
+  matrice change) ;
+- options : `method` / `cache` (comme `solve`), `max_iter` (borne de la boucle
+  de statut, `100`), `tol` (tolérance de signe sur `λ` et sur le jeu, `1e-10`).
+
+```python
+K = pyrucast.stiffness(model, materials)              # modèle avec sense=">="
+solution = pyrucast.solve_unilateral(model, K, rhs)
+reaction = solution.value(mult_node, "lambda_u_y")    # 0 si la butée est relâchée
+```
+
+Voir la section « Relations unilatérales » de la page
+[Contraintes](../contraintes.md) pour les conditions de complémentarité et la
+convention de signe.
+
 ## Déterminisme
 
 Contrairement au reste des opérateurs (bit-à-bit identiques quel que soit le

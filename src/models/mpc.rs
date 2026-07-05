@@ -44,7 +44,8 @@ use crate::containers::mesh::{ElementType, Mesh, NodeId};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
-    constraint_block_pair, Constraint, ConstraintTerm, Contribution, Relation, SubModelKind,
+    constraint_block_pair, Constraint, ConstraintTerm, Contribution, Relation, RelationSense,
+    SubModelKind,
 };
 use crate::store::read;
 use serde::{Deserialize, Serialize};
@@ -110,22 +111,31 @@ pub struct Mpc {
     pub(crate) multiplier: String,
     /// This sub-model's dual — constraint row + `g` slot (e.g. `"mpc_rhs"`).
     pub(crate) imposed_value: String,
+    /// Equality (default) or unilateral inequality (`Σ aₖ·uₖ ≥ g` / `≤ g`),
+    /// solved by the active-set operator.
+    #[serde(default)]
+    pub(crate) sense: RelationSense,
 }
 
 impl Mpc {
     /// Build a multi-point constraint imposing, for each relation `r`,
-    /// `Σₖ aₖ·u(nodeₖ, varₖ) = g` — the `r`-th cell of every term mesh paired
-    /// with the `r`-th multiplier node.
+    /// `Σₖ aₖ·u(nodeₖ, varₖ) ⋈ g` (`⋈` is `sense`, `=` by default) — the `r`-th
+    /// cell of every term mesh paired with the `r`-th multiplier node.
     ///
     /// `multiplier` / `imposed_value` default to `lambda_mpc` / `mpc_rhs` when
     /// `None`. Every term mesh and `multiplier_mesh` must be POI1, share one
     /// [`Coords`](crate::containers::mesh::Coords), and pair element-for-element
     /// (same number of submeshes, same cell count per submesh).
+    ///
+    /// A non-equality `sense` turns the relations unilateral (enforced only
+    /// while active); such a model is solved by the active-set operator
+    /// [`unilateral`](crate::ops::solver::unilateral).
     pub fn new(
         terms: Vec<MpcTerm>,
         multiplier_mesh: &Mesh,
         multiplier: Option<String>,
         imposed_value: Option<String>,
+        sense: RelationSense,
     ) -> Result<Self> {
         if terms.is_empty() {
             return Err(PyrucastError::Message(
@@ -199,6 +209,7 @@ impl Mpc {
             multiplier_mesh: share(multiplier_mesh)?,
             multiplier: multiplier.unwrap_or_else(default_multiplier),
             imposed_value: imposed_value.unwrap_or_else(default_imposed_value),
+            sense,
         })
     }
 }
@@ -265,8 +276,8 @@ impl SubModelKind for Mpc {
         let n = self.multiplier_mesh.cell_count().unwrap_or(0);
         let mut out = format!(
             "SubModel<Mpc>\n  primal var(s): {} (multiplier)\n  dual var(s):   {} \
-             (imposed value / g)\n  relations: {n}\n  terms:",
-            self.multiplier, self.imposed_value,
+             (imposed value / g)\n  sense: {}\n  relations: {n}\n  terms:",
+            self.multiplier, self.imposed_value, self.sense,
         );
         for t in &self.terms {
             out.push_str(&format!(
@@ -314,6 +325,7 @@ impl Constraint for Mpc {
                     multiplier_node: *mult,
                     imposed_value: self.imposed_value.clone(),
                     terms,
+                    sense: self.sense,
                 });
             }
         }
@@ -347,7 +359,7 @@ mod tests {
         let coords = insert(Coords::new(1).unwrap());
         let n = Node::create_in(coords, &[0.0]).unwrap();
         let mult = barycenter(&poi1(&n)).unwrap();
-        assert!(Mpc::new(vec![], &mult, None, None).is_err());
+        assert!(Mpc::new(vec![], &mult, None, None, Default::default()).is_err());
     }
 
     #[test]
@@ -362,7 +374,7 @@ mod tests {
         let term_mesh = Mesh::from_submesh(term_sm);
         let mult = barycenter(&poi1(&a)).unwrap();
         let term = MpcTerm::new(&term_mesh, "T".into(), "q".into(), 1.0).unwrap();
-        assert!(Mpc::new(vec![term], &mult, None, None).is_err());
+        assert!(Mpc::new(vec![term], &mult, None, None, Default::default()).is_err());
     }
 
     #[test]
@@ -377,7 +389,7 @@ mod tests {
             MpcTerm::new(&mesh_a, "T".into(), "q".into(), 2.0).unwrap(),
             MpcTerm::new(&mesh_b, "T".into(), "q".into(), -3.0).unwrap(),
         ];
-        let mpc = Mpc::new(terms, &mult, None, None).unwrap();
+        let mpc = Mpc::new(terms, &mult, None, None, Default::default()).unwrap();
 
         // Default variable names.
         assert_eq!(mpc.primal_vars(), vec!["lambda_mpc".to_string()]);

@@ -31,6 +31,7 @@ use crate::containers::node_field::SubNodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
+use serde::{Deserialize, Serialize};
 
 pub mod dirichlet;
 pub mod elasticity;
@@ -368,8 +369,55 @@ pub struct ConstraintTerm {
     pub coefficient: f64,
 }
 
-/// One linear constraint relation `Σₖ coeffₖ · u(nodeₖ, varₖ) = g`, enforced by a
-/// fresh `multiplier_node` whose solved value is the reaction. The right-hand
+/// The sense of a constraint relation: an **equality** (the default, always
+/// enforced) or a **unilateral inequality** solved by the active-set operator
+/// [`solver::unilateral`](crate::ops::solver::unilateral).
+///
+/// The KKT conditions follow the sign convention of the existing Lagrange
+/// blocks (`Cᵀ·λ` is *added* to the target's dual row):
+///
+/// - [`GreaterEqual`](Self::GreaterEqual): `C·u ≥ g`, `λ ≥ 0`, `λ·(C·u − g) = 0`;
+/// - [`LessEqual`](Self::LessEqual): `C·u ≤ g`, `λ ≤ 0`, `λ·(C·u − g) = 0`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RelationSense {
+    /// `Σₖ aₖ·uₖ = g` — always enforced (both solve paths).
+    #[default]
+    Equality,
+    /// `Σₖ aₖ·uₖ ≥ g` — enforced only while active (reaction `λ ≥ 0`).
+    GreaterEqual,
+    /// `Σₖ aₖ·uₖ ≤ g` — enforced only while active (reaction `λ ≤ 0`).
+    LessEqual,
+}
+
+impl RelationSense {
+    /// Parse the user-facing spelling: `"="` (equality), `">="` (`≥`), `"<="`
+    /// (`≤`). `None` defaults to equality. The single place the string form is
+    /// interpreted (Rust convenience constructors and the Python bindings).
+    pub fn parse(sense: Option<&str>) -> Result<Self> {
+        match sense {
+            None | Some("=") | Some("==") => Ok(Self::Equality),
+            Some(">=") | Some("≥") => Ok(Self::GreaterEqual),
+            Some("<=") | Some("≤") => Ok(Self::LessEqual),
+            Some(other) => Err(PyrucastError::Message(format!(
+                "unknown relation sense '{other}' (expected '=', '>=' or '<=')"
+            ))),
+        }
+    }
+}
+
+impl std::fmt::Display for RelationSense {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Equality => "=",
+            Self::GreaterEqual => ">=",
+            Self::LessEqual => "<=",
+        })
+    }
+}
+
+/// One linear constraint relation `Σₖ coeffₖ · u(nodeₖ, varₖ) ⋈ g` (`⋈` is the
+/// [`sense`](Self::sense) — `=` by default), enforced by a fresh
+/// `multiplier_node` whose solved value is the reaction. The right-hand
 /// side `g` is supplied by the user in the load field at the multiplier node's
 /// imposed-value component, so it is **not** carried here.
 #[derive(Clone, Debug)]
@@ -384,6 +432,9 @@ pub struct Relation {
     pub imposed_value: String,
     /// The terms summed on the left-hand side.
     pub terms: Vec<ConstraintTerm>,
+    /// Equality (default) or unilateral inequality — read by the solvers only,
+    /// the Lagrange blocks are assembled identically either way.
+    pub sense: RelationSense,
 }
 
 /// Build the Lagrange `C` / `Cᵀ` block pair for **one** constraint term over one

@@ -54,6 +54,7 @@ Assemblage matrices;BSIG;Forces internes nodales (B^T . sigma);internal_forces /
 Conditions limites / chargement;BLOQ;Blocage de degrés de liberté (Dirichlet);Model.dirichlet
 Conditions limites / chargement;DEPI;Impose une valeur (déplacement) à un blocage;flux / second membre Dirichlet
 Conditions limites / chargement;RELA;Relation linéaire entre DDL;Model.mpc
+Conditions limites / chargement;RELA INEG;Relation unilatérale (inégalité) entre DDL;Model.dirichlet / Model.mpc (sense=">=")
 Conditions limites / chargement;FORC;Force nodale appliquée;NodeField (second membre)
 Conditions limites / chargement;PRES;Chargement de pression sur une surface;—
 Conditions limites / chargement;FLUX;Flux surfacique/volumique imposé (thermique);flux
@@ -67,6 +68,7 @@ Résolution;FLAM;Modes de flambage;—
 Résolution;INVE (mat.);Inverse d'une matrice;solve (résolution dense LU)
 Résolution;KRES;Résolution avec conditions (rigidité + blocages);solve
 Résolution;CONDENSATION;Élimination des relations linéaires (maître/esclave) au lieu de multiplicateurs;solve_eliminate
+Résolution;RESO (INEG);Résolution avec relations unilatérales (statut actif/inactif);solve_unilateral
 Champs - dérivation;GRAD;Gradient d'un champ aux points de Gauss;gradient
 Champs - dérivation;EPSI;Déformations à partir d'un déplacement;deformation / beam_deformation
 Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_behavior

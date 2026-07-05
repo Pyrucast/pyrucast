@@ -71,7 +71,15 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     let clamp = |nodes: &[Node], var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
         let multiplier = mesher::barycenter(&imposed)?;
-        Model::dirichlet(var.into(), dual.into(), &imposed, &multiplier, None, None)
+        Model::dirichlet(
+            var.into(),
+            dual.into(),
+            &imposed,
+            &multiplier,
+            None,
+            None,
+            Default::default(),
+        )
     };
     let left: Vec<Node> = (0..=NY).map(|j| grid[idx(0, j)].clone()).collect();
     let right: Vec<Node> = (0..=NY).map(|j| grid[idx(NX, j)].clone()).collect();

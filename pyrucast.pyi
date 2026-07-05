@@ -71,6 +71,7 @@ __all__ = [
     "sinh",
     "solve",
     "solve_eliminate",
+    "solve_unilateral",
     "sqrt",
     "stiffness",
     "sub_material_field",
@@ -892,11 +893,12 @@ class Model:
         Material (`E, A, I_y, I_z, J, G, A_sy, A_sz`) is supplied at assembly time.
         """
     @classmethod
-    def dirichlet(cls, imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
+    def dirichlet(cls, imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None, sense: typing.Optional[builtins.str] = None) -> Model:
         r"""
         `Model.dirichlet(imposed_variable, target_dual, imposed_mesh,
-        multiplier_mesh, multiplier=None, imposed_value=None)` — Dirichlet
-        constraint model (a single sub-model) imposed via Lagrange multipliers.
+        multiplier_mesh, multiplier=None, imposed_value=None, sense="=")` —
+        Dirichlet constraint model (a single sub-model) imposed via Lagrange
+        multipliers.
         
         `imposed_variable` is the constrained primary variable (e.g. `"T"`);
         `target_dual` is the dual variable of the target physics it couples
@@ -907,14 +909,17 @@ class Model:
         `imposed_value` override the derived names `lambda_<imposed_variable>` /
         `imposed_<imposed_variable>`. The imposed value `u_d` is written by the
         user in the load field at the multiplier node's `imposed_value`
-        component. See the model chapter of the book for the full semantics.
+        component. `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the
+        constraint unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved
+        with `solve_unilateral`. See the model chapter of the book for the full
+        semantics.
         """
     @classmethod
-    def mpc(cls, terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.str, builtins.float]], multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
+    def mpc(cls, terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.str, builtins.float]], multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None, sense: typing.Optional[builtins.str] = None) -> Model:
         r"""
-        `Model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None)`
-        — multi-point constraint (a single sub-model) imposing, per relation,
-        `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
+        `Model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None,
+        sense="=")` — multi-point constraint (a single sub-model) imposing, per
+        relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
         
         `terms` is a list of `(mesh, variable, target_dual, coefficient)` tuples:
         each `mesh` is a POI1 mesh (one node per relation), paired
@@ -923,7 +928,9 @@ class Model:
         `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
         derived names `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written
         by the user in the load field at the multiplier node's `imposed_value`
-        component (default `0`). See the constraints chapter of the book.
+        component (default `0`). `sense` (`"="`, `">="` or `"<="`, default `"="`)
+        turns the relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is
+        solved with `solve_unilateral`. See the constraints chapter of the book.
         """
     @classmethod
     def embedded(cls, immersed: Mesh, host: Mesh, components: typing.Sequence[tuple[builtins.str, builtins.str]], multipliers: typing.Optional[typing.Sequence[builtins.str]] = None, imposed_values: typing.Optional[typing.Sequence[builtins.str]] = None, tol: typing.Optional[builtins.float] = None) -> Model:
@@ -2373,6 +2380,29 @@ def solve_eliminate(model: Model, matrix: Matrix, rhs: NodeField, method: typing
     `"lu"`). `cache` (default `True`) reuses the condensation stored transparently
     on the matrix, cleared when the matrix changes. `Ctrl+C` is honoured at phase
     boundaries.
+    """
+
+def solve_unilateral(model: Model, matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10) -> NodeField:
+    r"""
+    Solve `model`'s system with **unilateral** (inequality) constraints by the
+    active-set (status) method — the operator for constraints built with
+    `sense=">="` / `"<="` (Dirichlet, MPC).
+    
+    `model` is the constrained model; `matrix` is its assembled (saddle-point)
+    stiffness; `rhs` is the load field (the right-hand sides `g` live at the
+    multiplier nodes' imposed-value slots). The status loop starts with every
+    inequality active (or from the previous converged status when `cache` is
+    on — a warm start), solves, releases the relations whose reaction pulls,
+    activates the relations whose gap penetrates, and repeats until the status
+    is stable. Inactive relations report `λ = 0` in the solution.
+    
+    A model with no inequality relation falls back to a plain `solve`.
+    
+    `method` selects the direct back-end of each iteration (currently only
+    `"lu"`). `cache` (default `True`) stores the active-set state transparently
+    on the matrix (cleared when the matrix changes). `max_iter` (default `100`)
+    bounds the status loop; `tol` (default `1e-10`) is the sign tolerance on the
+    multiplier and the gap. `Ctrl+C` is honoured at each iteration boundary.
     """
 
 def sqrt(field: typing.Any) -> typing.Any:

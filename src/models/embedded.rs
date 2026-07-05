@@ -49,7 +49,9 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, NodeId, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{Constraint, ConstraintTerm, Contribution, Relation, SubModelKind};
+use crate::models::{
+    Constraint, ConstraintTerm, Contribution, Relation, RelationSense, SubModelKind,
+};
 use crate::ops::geom::locate_points;
 use crate::ops::mesher::barycenter;
 use crate::store::{read, Handle};
@@ -155,8 +157,7 @@ impl Embedded {
         // Immersed and host must live in the same Coords (node ids are relative).
         let coords = immersed.coords()?;
         let host_coords = host.coords()?;
-        if coords.index() != host_coords.index()
-            || coords.generation() != host_coords.generation()
+        if coords.index() != host_coords.index() || coords.generation() != host_coords.generation()
         {
             return Err(PyrucastError::Message(
                 "Embedded: immersed and host meshes must share a Coords".into(),
@@ -220,8 +221,12 @@ impl Embedded {
             Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords, &support_ids)?);
 
         // Materialise the components with their (defaulted) variable names.
-        let multipliers = multipliers
-            .unwrap_or_else(|| components.iter().map(|(v, _)| default_multiplier(v)).collect());
+        let multipliers = multipliers.unwrap_or_else(|| {
+            components
+                .iter()
+                .map(|(v, _)| default_multiplier(v))
+                .collect()
+        });
         let imposed_values = imposed_values.unwrap_or_else(|| {
             components
                 .iter()
@@ -232,12 +237,14 @@ impl Embedded {
             .into_iter()
             .zip(multipliers)
             .zip(imposed_values)
-            .map(|(((variable, target_dual), multiplier), imposed_value)| Component {
-                variable,
-                target_dual,
-                multiplier,
-                imposed_value,
-            })
+            .map(
+                |(((variable, target_dual), multiplier), imposed_value)| Component {
+                    variable,
+                    target_dual,
+                    multiplier,
+                    imposed_value,
+                },
+            )
             .collect();
 
         Ok(Self {
@@ -273,7 +280,10 @@ impl Embedded {
 
 impl SubModelKind for Embedded {
     fn primal_vars(&self) -> Vec<String> {
-        self.components.iter().map(|c| c.multiplier.clone()).collect()
+        self.components
+            .iter()
+            .map(|c| c.multiplier.clone())
+            .collect()
     }
 
     fn dual_vars(&self) -> Vec<String> {
@@ -400,6 +410,7 @@ impl Constraint for Embedded {
                     multiplier_node: m,
                     imposed_value: comp.imposed_value.clone(),
                     terms,
+                    sense: RelationSense::default(),
                 });
             }
         }

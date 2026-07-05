@@ -286,6 +286,7 @@ fn clamp(nodes: &[Node], variable: &str, dual: &str) -> Result<Model> {
         &multiplier,
         None,
         None,
+        Default::default(),
     )
 }
 

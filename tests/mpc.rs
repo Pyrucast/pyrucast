@@ -68,7 +68,15 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
     // Dirichlet T(node0) = 0.
     let imposed0 = poi1(&nodes[0])?;
     let mult0 = barycenter(&imposed0)?;
-    let dir = SubModel::dirichlet("T".into(), "q".into(), &imposed0, &mult0, None, None)?;
+    let dir = SubModel::dirichlet(
+        "T".into(),
+        "q".into(),
+        &imposed0,
+        &mult0,
+        None,
+        None,
+        Default::default(),
+    )?;
     let dir_mult = dir.multiplier_nodes()?[0];
     model.add_sub(insert(dir))?;
 
@@ -82,7 +90,7 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
         MpcTerm::new(&mesh_last, "T".into(), dual.clone(), 1.0)?,
         MpcTerm::new(&mesh_first, "T".into(), dual, -1.0)?,
     ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None)?;
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()?[0];
     model.add_sub(insert(mpc))?;
 
@@ -125,8 +133,24 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
         let right = poi1(&nodes[N_ELEMS])?;
         let mult_l = barycenter(&left)?;
         let mult_r = barycenter(&right)?;
-        let dl = SubModel::dirichlet("T".into(), "q".into(), &left, &mult_l, None, None)?;
-        let dr = SubModel::dirichlet("T".into(), "q".into(), &right, &mult_r, None, None)?;
+        let dl = SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &left,
+            &mult_l,
+            None,
+            None,
+            Default::default(),
+        )?;
+        let dr = SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &right,
+            &mult_r,
+            None,
+            None,
+            Default::default(),
+        )?;
         let (nl, nr) = (dl.multiplier_nodes()?[0], dr.multiplier_nodes()?[0]);
         model.add_sub(insert(dl))?;
         model.add_sub(insert(dr))?;
@@ -146,14 +170,22 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
         let left = poi1(&nodes[0])?;
         let mult_l = barycenter(&left)?;
-        let dl = SubModel::dirichlet("T".into(), "q".into(), &left, &mult_l, None, None)?;
+        let dl = SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &left,
+            &mult_l,
+            None,
+            None,
+            Default::default(),
+        )?;
         let nl = dl.multiplier_nodes()?[0];
         model.add_sub(insert(dl))?;
 
         let right = poi1(&nodes[N_ELEMS])?;
         let mult_mpc = barycenter(&right)?;
         let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
-        let mpc = SubModel::mpc(terms, &mult_mpc, None, None)?;
+        let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
         let nm = mpc.multiplier_nodes()?[0];
         model.add_sub(insert(mpc))?;
 
@@ -197,7 +229,15 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
     // Dirichlet T(node0) = 0.
     let imposed0 = poi1(&nodes[0])?;
     let mult0 = barycenter(&imposed0)?;
-    let dir = SubModel::dirichlet("T".into(), "q".into(), &imposed0, &mult0, None, None)?;
+    let dir = SubModel::dirichlet(
+        "T".into(),
+        "q".into(),
+        &imposed0,
+        &mult0,
+        None,
+        None,
+        Default::default(),
+    )?;
     let dir_mult = dir.multiplier_nodes()?[0];
     model.add_sub(insert(dir))?;
 
@@ -210,7 +250,7 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
         MpcTerm::new(&mesh4, "T".into(), dual.clone(), 2.0)?,
         MpcTerm::new(&mesh2, "T".into(), dual, -1.0)?,
     ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None)?;
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()?[0];
     model.add_sub(insert(mpc))?;
 
@@ -261,8 +301,24 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
         let right = poi1(&nodes[N_ELEMS])?;
         let mult_l = barycenter(&left)?;
         let mult_r = barycenter(&right)?;
-        let dl = SubModel::dirichlet("T".into(), "q".into(), &left, &mult_l, None, None)?;
-        let dr = SubModel::dirichlet("T".into(), "q".into(), &right, &mult_r, None, None)?;
+        let dl = SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &left,
+            &mult_l,
+            None,
+            None,
+            Default::default(),
+        )?;
+        let dr = SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &right,
+            &mult_r,
+            None,
+            None,
+            Default::default(),
+        )?;
         let (nl, nr) = (dl.multiplier_nodes()?[0], dr.multiplier_nodes()?[0]);
         model.add_sub(insert(dl))?;
         model.add_sub(insert(dr))?;
@@ -282,14 +338,22 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
         let left = poi1(&nodes[0])?;
         let mult_l = barycenter(&left)?;
-        let dl = SubModel::dirichlet("T".into(), "q".into(), &left, &mult_l, None, None)?;
+        let dl = SubModel::dirichlet(
+            "T".into(),
+            "q".into(),
+            &left,
+            &mult_l,
+            None,
+            None,
+            Default::default(),
+        )?;
         let nl = dl.multiplier_nodes()?[0];
         model.add_sub(insert(dl))?;
 
         let right = poi1(&nodes[N_ELEMS])?;
         let mult_mpc = barycenter(&right)?;
         let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
-        let mpc = SubModel::mpc(terms, &mult_mpc, None, None)?;
+        let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
         let nm = mpc.multiplier_nodes()?[0];
         model.add_sub(insert(mpc))?;
 
@@ -330,8 +394,24 @@ fn elimination_recovers_reaction_equals_multiplier() -> Result<()> {
     let right = poi1(&nodes[N_ELEMS])?;
     let mult_l = barycenter(&left)?;
     let mult_r = barycenter(&right)?;
-    let dl = SubModel::dirichlet("T".into(), "q".into(), &left, &mult_l, None, None)?;
-    let dr = SubModel::dirichlet("T".into(), "q".into(), &right, &mult_r, None, None)?;
+    let dl = SubModel::dirichlet(
+        "T".into(),
+        "q".into(),
+        &left,
+        &mult_l,
+        None,
+        None,
+        Default::default(),
+    )?;
+    let dr = SubModel::dirichlet(
+        "T".into(),
+        "q".into(),
+        &right,
+        &mult_r,
+        None,
+        None,
+        Default::default(),
+    )?;
     let (nl, nr) = (dl.multiplier_nodes()?[0], dr.multiplier_nodes()?[0]);
     model.add_sub(insert(dl))?;
     model.add_sub(insert(dr))?;
@@ -380,7 +460,15 @@ fn elimination_periodicity_constant_field() -> Result<()> {
     // Dirichlet T(node1) = 0.5 (interior anchor).
     let anchor = poi1(&nodes[1])?;
     let mult_a = barycenter(&anchor)?;
-    let dir = SubModel::dirichlet("T".into(), "q".into(), &anchor, &mult_a, None, None)?;
+    let dir = SubModel::dirichlet(
+        "T".into(),
+        "q".into(),
+        &anchor,
+        &mult_a,
+        None,
+        None,
+        Default::default(),
+    )?;
     let dir_mult = dir.multiplier_nodes()?[0];
     model.add_sub(insert(dir))?;
 
@@ -393,7 +481,7 @@ fn elimination_periodicity_constant_field() -> Result<()> {
         MpcTerm::new(&mesh4, "T".into(), dual.clone(), 1.0)?,
         MpcTerm::new(&mesh0, "T".into(), dual, -1.0)?,
     ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None)?;
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()?[0];
     model.add_sub(insert(mpc))?;
 
@@ -429,7 +517,15 @@ fn elimination_rejects_chaining() -> Result<()> {
 
     let imposed0 = poi1(&nodes[0])?;
     let mult0 = barycenter(&imposed0)?;
-    let dir = SubModel::dirichlet("T".into(), "q".into(), &imposed0, &mult0, None, None)?;
+    let dir = SubModel::dirichlet(
+        "T".into(),
+        "q".into(),
+        &imposed0,
+        &mult0,
+        None,
+        None,
+        Default::default(),
+    )?;
     let dir_mult = dir.multiplier_nodes()?[0];
     model.add_sub(insert(dir))?;
 
@@ -437,7 +533,7 @@ fn elimination_rejects_chaining() -> Result<()> {
     let mesh0 = poi1(&nodes[0])?;
     let mult_mpc_mesh = barycenter(&mesh0)?;
     let terms = vec![MpcTerm::new(&mesh0, "T".into(), "q".into(), 1.0)?];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None)?;
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()?[0];
     model.add_sub(insert(mpc))?;
 
@@ -464,7 +560,7 @@ fn elimination_rejects_zero_coefficient() -> Result<()> {
     let mesh4 = poi1(&nodes[N_ELEMS])?;
     let mult_mpc_mesh = barycenter(&mesh4)?;
     let terms = vec![MpcTerm::new(&mesh4, "T".into(), "q".into(), 0.0)?];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None)?;
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()?[0];
     model.add_sub(insert(mpc))?;
 
@@ -487,14 +583,22 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
 
     let left = poi1(&nodes[0])?;
     let mult_l = barycenter(&left)?;
-    let dl = SubModel::dirichlet("T".into(), "q".into(), &left, &mult_l, None, None)?;
+    let dl = SubModel::dirichlet(
+        "T".into(),
+        "q".into(),
+        &left,
+        &mult_l,
+        None,
+        None,
+        Default::default(),
+    )?;
     let nl = dl.multiplier_nodes()?[0];
     model.add_sub(insert(dl))?;
 
     let right = poi1(&nodes[N_ELEMS])?;
     let mult_mpc = barycenter(&right)?;
     let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
-    let mpc = SubModel::mpc(terms, &mult_mpc, None, None)?;
+    let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
     let nm = mpc.multiplier_nodes()?[0];
     model.add_sub(insert(mpc))?;
 

@@ -262,8 +262,16 @@ mod tests {
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
         model
             .add_sub(insert(
-                SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
-                    .unwrap(),
+                SubModel::dirichlet(
+                    "T".into(),
+                    "q".into(),
+                    &imposed,
+                    &multiplier,
+                    None,
+                    None,
+                    Default::default(),
+                )
+                .unwrap(),
             ))
             .unwrap();
         model
@@ -305,8 +313,16 @@ mod tests {
         let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
         model
             .add_sub(insert(
-                SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None)
-                    .unwrap(),
+                SubModel::dirichlet(
+                    "T".into(),
+                    "q".into(),
+                    &imposed,
+                    &multiplier,
+                    None,
+                    None,
+                    Default::default(),
+                )
+                .unwrap(),
             ))
             .unwrap();
 
