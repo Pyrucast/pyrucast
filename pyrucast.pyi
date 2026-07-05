@@ -952,6 +952,36 @@ class Model:
         tolerance (default `1e-6`). The right-hand side `g` defaults to `0` (a
         rigid tie). See the constraints chapter of the book.
         """
+    @classmethod
+    def contact(cls, slave: Mesh, master: Mesh, components: typing.Sequence[tuple[builtins.str, builtins.str]], multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
+        r"""
+        `Model.contact(slave, master, components, multiplier=None,
+        imposed_value=None)` — node-to-surface contact (a single sub-model):
+        prevent the nodes of `slave` from penetrating the oriented `master`
+        surface mesh, one **unilateral** relation (`≥`) per slave node.
+        
+        Each slave node is paired at build with its closest master facet
+        (projection weights, facet normal, initial signed gap); the pairing is
+        then fixed (linearised, frictionless contact). The master surface must
+        be consistently oriented with its normal pointing toward the slave
+        body. `components` is a list of `(variable, target_dual)` pairs — one
+        per space dimension, in ambient order (e.g.
+        `[("u_x","f_x"), ("u_y","f_y")]`); find each `target_dual` with
+        `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
+        derived names `lambda_contact` / `contact_gap`.
+        
+        Solve with `solve_unilateral`; build the initial-gap right-hand side
+        with `contact_gaps()`. See the contact chapter of the book.
+        """
+    def contact_gaps(self) -> NodeField:
+        r"""
+        `Model.contact_gaps()` — the contact right-hand side `−g₀`: a
+        `NodeField` carrying, at each contact multiplier node's `imposed_value`
+        slot, minus the initial signed gap of its relation, so that
+        non-penetration reads `g₀ + C·u ≥ 0`. Merge it into the global load
+        with `|`. The model must hold exactly one contact sub-model; omitting
+        this helper treats every pair as initially touching (`g₀ = 0`).
+        """
     def primal_vars(self) -> builtins.list[builtins.str]:
         r"""
         Names of the primal (primary) variables across the whole model.

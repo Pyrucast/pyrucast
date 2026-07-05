@@ -25,5 +25,7 @@ Python**.
   multiplicateurs de Lagrange :
   - [Dirichlet](contraintes/dirichlet.md)
   - [Multi-points (MPC)](contraintes/mpc.md)
+  - [Baignage (embedded)](contraintes/embedded.md)
+  - [Contact (nœud-surface)](contraintes/contact.md)
 
 Pour **ajouter** une physique, voir [Ajouter une physique](ajouter-une-physique.md).

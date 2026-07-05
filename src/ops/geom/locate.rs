@@ -347,7 +347,7 @@ fn invert_cell(
 
 /// Solve the (possibly rectangular) system `J·δ = r` via normal equations
 /// `(JᵀJ)·δ = Jᵀr`, with `J` stored row-major `sdim × tdim`. `tdim ≤ 3`.
-fn solve_normal(jac: &[f64], r: &[f64], sdim: usize, tdim: usize) -> Result<Vec<f64>> {
+pub(super) fn solve_normal(jac: &[f64], r: &[f64], sdim: usize, tdim: usize) -> Result<Vec<f64>> {
     // A = JᵀJ (tdim × tdim), b = Jᵀr (tdim).
     let mut a = vec![0.0; tdim * tdim];
     let mut b = vec![0.0; tdim];
@@ -428,7 +428,7 @@ fn bbox_scale(coords: &[Vec<f64>]) -> f64 {
 
 /// The interpolation whose degree matches `element_type` (linear ↔ Lagrange-1,
 /// quadratic ↔ Lagrange-2).
-fn interpolation_for(element_type: ElementType) -> Interpolation {
+pub(super) fn interpolation_for(element_type: ElementType) -> Interpolation {
     if Interpolation::Lagrange2.is_compatible_with(element_type) {
         Interpolation::Lagrange2
     } else {
@@ -437,7 +437,7 @@ fn interpolation_for(element_type: ElementType) -> Interpolation {
 }
 
 /// A reference-domain interior point used as the Newton starting guess.
-fn reference_centroid(element_type: ElementType) -> Vec<f64> {
+pub(super) fn reference_centroid(element_type: ElementType) -> Vec<f64> {
     use ElementType::*;
     match element_type {
         SEG2 | SEG3 => vec![0.0],

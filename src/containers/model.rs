@@ -122,8 +122,8 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
-    dirichlet, elasticity, embedded, frame, frame3d, heat_conduction, mazars, mpc, plasticity,
-    timoshenko, truss, Constraint, RelationSense, SubModelKind,
+    contact, dirichlet, elasticity, embedded, frame, frame3d, heat_conduction, mazars, mpc,
+    plasticity, timoshenko, truss, Constraint, RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -177,6 +177,9 @@ pub enum SubModel {
     /// Embedded (immersed) constraint tying immersed nodes to a host
     /// interpolation — see [`embedded::Embedded`].
     Embedded(embedded::Embedded),
+    /// Node-to-surface contact (unilateral, frictionless) — see
+    /// [`contact::Contact`].
+    Contact(contact::Contact),
     /// Truss / bar (axial-force) element — see [`truss::Truss`].
     Truss(truss::Truss),
     /// Linear elasticity (2-D plane / 3-D solid) — see [`elasticity::Elasticity`].
@@ -204,6 +207,7 @@ impl SubModel {
             SubModel::Dirichlet(p) => p,
             SubModel::Mpc(p) => p,
             SubModel::Embedded(p) => p,
+            SubModel::Contact(p) => p,
             SubModel::Truss(p) => p,
             SubModel::Elasticity(p) => p,
             SubModel::Plasticity(p) => p,
@@ -370,6 +374,34 @@ impl SubModel {
             multipliers,
             imposed_values,
             tol,
+        )?))
+    }
+
+    /// Node-to-surface contact sub-model: prevent the nodes of `slave` from
+    /// penetrating the oriented `master` surface mesh — one **unilateral**
+    /// relation (`≥`) per slave node, paired at build with its closest master
+    /// facet ([`crate::ops::geom::project_points`]).
+    ///
+    /// `components` couples the displacement components through the facet
+    /// normal: one `(variable, target_dual)` pair per space dimension, in
+    /// ambient order (e.g. `[("u_x","f_x"), ("u_y","f_y")]`). `multiplier` /
+    /// `imposed_value` default to `lambda_contact` / `contact_gap`. Solve with
+    /// [`unilateral`](crate::ops::solver::unilateral); build the `−g₀`
+    /// right-hand side with [`Model::contact_gaps`]. See
+    /// [`contact::Contact::new`].
+    pub fn contact(
+        slave: &Mesh,
+        master: &Mesh,
+        components: Vec<(String, String)>,
+        multiplier: Option<String>,
+        imposed_value: Option<String>,
+    ) -> Result<Self> {
+        Ok(SubModel::Contact(contact::Contact::new(
+            slave,
+            master,
+            components,
+            multiplier,
+            imposed_value,
         )?))
     }
 
@@ -902,6 +934,66 @@ impl Model {
             tol,
         )?))?;
         Ok(model)
+    }
+
+    /// Node-to-surface contact `Model` (a single sub-model) preventing the
+    /// nodes of `slave` from penetrating the oriented `master` surface.
+    /// Parent-level named constructor — see [`SubModel::contact`] and
+    /// [`contact::Contact::new`] for the pairing, the normal coupling and the
+    /// errors. Solve with [`unilateral`](crate::ops::solver::unilateral).
+    pub fn contact(
+        slave: &Mesh,
+        master: &Mesh,
+        components: Vec<(String, String)>,
+        multiplier: Option<String>,
+        imposed_value: Option<String>,
+    ) -> Result<Self> {
+        let mut model = Self::empty();
+        model.add_sub(insert(SubModel::contact(
+            slave,
+            master,
+            components,
+            multiplier,
+            imposed_value,
+        )?))?;
+        Ok(model)
+    }
+
+    /// The contact right-hand side `−g₀`: a [`NodeField`] carrying, at each
+    /// contact multiplier node's `imposed_value` slot, minus the initial signed
+    /// gap of its relation — the load a contact model needs so that
+    /// non-penetration reads `g₀ + C·u ≥ 0`. Merge it into the global load with
+    /// `|`. The model must hold **exactly one** [`SubModel::Contact`]; pairs
+    /// initially touching contribute `0` (omitting this helper entirely treats
+    /// *every* pair as touching).
+    pub fn contact_gaps(&self) -> Result<NodeField> {
+        let mut found: Option<Handle<SubModel>> = None;
+        for h in self {
+            if matches!(&*read(h)?, SubModel::Contact(_)) {
+                if found.is_some() {
+                    return Err(PyrucastError::Message(
+                        "contact_gaps: model holds several contact sub-models; call it on \
+                         a single-contact model (the `contact` object)"
+                            .into(),
+                    ));
+                }
+                found = Some(h.clone());
+            }
+        }
+        let handle = found.ok_or_else(|| {
+            PyrucastError::Message("contact_gaps: model holds no contact sub-model".into())
+        })?;
+        let sub = read(&handle)?;
+        let SubModel::Contact(c) = &*sub else {
+            unreachable!("filtered on Contact above");
+        };
+        let pairs: Vec<(usize, f64)> = c
+            .gaps()
+            .iter()
+            .enumerate()
+            .map(|(i, &g0)| (i, -g0))
+            .collect();
+        sub.constraint_rhs_by_index(&pairs)
     }
 
     /// POI1 [`Mesh`] of every constraint multiplier node across the model

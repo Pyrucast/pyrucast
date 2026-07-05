@@ -38,7 +38,7 @@ SubModelKind  (trait de base — le dénominateur commun, co-localisé par physi
 
 Capacités (sous-traits, miroir des natures ; une struct n'a que la sienne) :
 ├── Domain      # matériau + comportement (heat, elasticity, poutres, …)
-└── Constraint  # multiplicateurs de Lagrange (Dirichlet, MPC, futur contact)
+└── Constraint  # multiplicateurs de Lagrange (Dirichlet, MPC, embedded, contact)
 ```
 
 L'énum `SubModel` ne sert qu'au **stockage** et à la **sérialisation**
@@ -104,11 +104,14 @@ constructeurs et les variables, vus du `Model` :
 | `frame3d(fes)` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Cadre 3D](mecanique/cadre3d.md) |
 | `dirichlet(…)` | `lambda_<v>` | `imposed_<v>` | — | [Dirichlet](contraintes/dirichlet.md) |
 | `mpc(…)` | `lambda_mpc` | `mpc_rhs` | — | [Multi-points](contraintes/mpc.md) |
+| `embedded(…)` | `lambda_<v>` | `imposed_<v>` | — | [Baignage](contraintes/embedded.md) |
+| `contact(…)` | `lambda_contact` | `contact_gap` | — | [Contact](contraintes/contact.md) |
 
 Toutes balaient **tous** les sous-espaces du `fes` (une zone par sous-espace),
-sauf `dirichlet` et `mpc` qui sont des [contraintes](contraintes.md) portées par
-des maillages fournis par l'utilisateur. Le matériau est toujours fourni **à
-l'assemblage**, pas au modèle (cf. ci-dessous).
+sauf `dirichlet`, `mpc`, `embedded` et `contact` qui sont des
+[contraintes](contraintes.md) portées par des maillages fournis par
+l'utilisateur. Le matériau est toujours fourni **à l'assemblage**, pas au
+modèle (cf. ci-dessous).
 
 Pour **ajouter** une physique, voir [Ajouter une physique](ajouter-une-physique.md).
 

@@ -343,6 +343,55 @@ impl PyModel {
         Ok(Self { inner })
     }
 
+    /// `Model.contact(slave, master, components, multiplier=None,
+    /// imposed_value=None)` — node-to-surface contact (a single sub-model):
+    /// prevent the nodes of `slave` from penetrating the oriented `master`
+    /// surface mesh, one **unilateral** relation (`≥`) per slave node.
+    ///
+    /// Each slave node is paired at build with its closest master facet
+    /// (projection weights, facet normal, initial signed gap); the pairing is
+    /// then fixed (linearised, frictionless contact). The master surface must
+    /// be consistently oriented with its normal pointing toward the slave
+    /// body. `components` is a list of `(variable, target_dual)` pairs — one
+    /// per space dimension, in ambient order (e.g.
+    /// `[("u_x","f_x"), ("u_y","f_y")]`); find each `target_dual` with
+    /// `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
+    /// derived names `lambda_contact` / `contact_gap`.
+    ///
+    /// Solve with `solve_unilateral`; build the initial-gap right-hand side
+    /// with `contact_gaps()`. See the contact chapter of the book.
+    #[classmethod]
+    #[pyo3(signature = (slave, master, components, multiplier=None, imposed_value=None))]
+    fn contact(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        slave: PyRef<'_, PyMesh>,
+        master: PyRef<'_, PyMesh>,
+        components: Vec<(String, String)>,
+        multiplier: Option<String>,
+        imposed_value: Option<String>,
+    ) -> PyResult<Self> {
+        let inner = Model::contact(
+            &slave.inner,
+            &master.inner,
+            components,
+            multiplier,
+            imposed_value,
+        )?;
+        Ok(Self { inner })
+    }
+
+    /// `Model.contact_gaps()` — the contact right-hand side `−g₀`: a
+    /// `NodeField` carrying, at each contact multiplier node's `imposed_value`
+    /// slot, minus the initial signed gap of its relation, so that
+    /// non-penetration reads `g₀ + C·u ≥ 0`. Merge it into the global load
+    /// with `|`. The model must hold exactly one contact sub-model; omitting
+    /// this helper treats every pair as initially touching (`g₀ = 0`).
+    fn contact_gaps(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: self.inner.contact_gaps()?,
+        })
+    }
+
     /// Names of the primal (primary) variables across the whole model.
     fn primal_vars(&self) -> PyResult<Vec<String>> {
         Ok(self.inner.primal_vars()?)

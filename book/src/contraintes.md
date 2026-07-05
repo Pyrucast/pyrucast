@@ -162,7 +162,12 @@ un index dépasse le nombre de relations.
   (`u_c(p) = Σᵢ Nᵢ(ξ_p)·u_c(hôteᵢ)`) : une barre baignée dans un volume. Les
   poids `Nᵢ` sont calculés par **localisation de point** à la construction ; c'est
   une MPC dont les coefficients **varient par nœud**.
+- [Contact (nœud-surface)](contraintes/contact.md) — empêche les nœuds d'un
+  maillage **esclave** de pénétrer une surface **maître** : une relation
+  **unilatérale** (`≥`) par nœud esclave, à coefficients `n·Nᵢ` calculés par
+  **projection** à la construction (petits glissements, sans frottement).
+  Résolu par `solve_unilateral`.
 
-D'autres contraintes (contact linéarisé…) suivront le même patron : une struct
+D'autres contraintes suivront le même patron : une struct
 implémentant `SubModelKind`, des blocs `C`/`Cᵀ` littéraux. Voir [Ajouter une
 physique](ajouter-une-physique.md).

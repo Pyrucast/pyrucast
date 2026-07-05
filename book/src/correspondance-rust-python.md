@@ -178,8 +178,10 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `set_swap_dir(path: PathBuf)` | `set_swap_dir(path) -> None` |
 | `swap_dir() -> PathBuf` | `swap_dir() -> Path` |
 
-> `ops::geom` (mesures géométriques) est réservé mais encore vide ; aucune
-> fonction exposée pour l'instant.
+> `ops::geom` héberge `locate_points` (mapping iso-paramétrique inverse, sous
+> le [baignage](contraintes/embedded.md)) et `project_points` (projection au
+> point le plus proche sur une surface, sous le [contact](contraintes/contact.md)) ;
+> ces primitives sont internes (API Rust), pas encore exposées en Python.
 
 ## Opérateurs (dunders ↔ traits Rust)
 

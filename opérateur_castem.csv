@@ -55,6 +55,8 @@ Conditions limites / chargement;BLOQ;Blocage de degrés de liberté (Dirichlet);
 Conditions limites / chargement;DEPI;Impose une valeur (déplacement) à un blocage;flux / second membre Dirichlet
 Conditions limites / chargement;RELA;Relation linéaire entre DDL;Model.mpc
 Conditions limites / chargement;RELA INEG;Relation unilatérale (inégalité) entre DDL;Model.dirichlet / Model.mpc (sense=">=")
+Contact;IMPO;Contact unilatéral nœud-surface entre deux maillages;Model.contact
+Contact;JEU;Jeu initial entre surfaces en contact;Model.contact_gaps
 Conditions limites / chargement;FORC;Force nodale appliquée;NodeField (second membre)
 Conditions limites / chargement;PRES;Chargement de pression sur une surface;—
 Conditions limites / chargement;FLUX;Flux surfacique/volumique imposé (thermique);flux

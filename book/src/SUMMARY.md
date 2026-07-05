@@ -36,6 +36,7 @@
     - [Dirichlet](contraintes/dirichlet.md)
     - [Multi-points (MPC)](contraintes/mpc.md)
     - [Baignage (embedded)](contraintes/embedded.md)
+    - [Contact (nœud-surface)](contraintes/contact.md)
 
 # Détail des opérateurs
 
