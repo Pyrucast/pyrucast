@@ -86,6 +86,64 @@ examples/           # scripts Python complets (thermique, treillis, poutres…)
 book/               # cette documentation (mdbook)
 ```
 
+## Graphe des dépendances externes
+
+Les crates tierces (`Cargo.toml`) et, pour chacune, le module où elle est
+**confinée** — une des règles du projet est qu'une dépendance ne fuit pas hors
+de son étage. Les arêtes pleines sont toujours liées ; les arêtes pointillées
+ne le sont que si la **feature** correspondante est activée. Le `cargo build`
+par défaut est **Rust pur** : rien de pointillé n'est compilé.
+
+```mermaid
+flowchart LR
+    pc(["pyrucast"])
+
+    subgraph core["Toujours actives — build Rust pur par défaut"]
+        direction TB
+        nalgebra["nalgebra<br/><small>primitives — mesh, ops, viz</small>"]
+        nsparse["nalgebra-sparse<br/><small>creux CSR/CSC — matrix, assemble</small>"]
+        faer["faer<br/><small>LU creux — ops::solver</small>"]
+        rayon["rayon<br/><small>parallel/, models::kernel</small>"]
+        parking["parking_lot<br/><small>guards owned — store/</small>"]
+        serde["serde<br/><small>Persist — persist/ (+ derive)</small>"]
+        bincode["bincode<br/><small>format binaire — persist/</small>"]
+        paste["paste<br/><small>macros — aggregate/</small>"]
+    end
+
+    subgraph pyfeat["feature python-api / extension-module"]
+        pyo3["pyo3<br/><small>binding — py/</small>"]
+    end
+    subgraph stubfeat["feature stub-gen"]
+        stubgen["pyo3-stub-gen<br/><small>pyrucast.pyi — bin/, py/</small>"]
+    end
+    subgraph vizfeat["feature viz / viz-interactive"]
+        plotters["plotters<br/><small>rendu PNG/SVG — viz/</small>"]
+        winit["winit<br/><small>fenêtre — viz::window</small>"]
+        softbuffer["softbuffer<br/><small>framebuffer — viz::window</small>"]
+    end
+    subgraph devfeat["dev-dependencies"]
+        criterion["criterion<br/><small>bench — benches/</small>"]
+    end
+
+    pc --> nalgebra & nsparse & faer & rayon & parking & serde & bincode & paste
+    nsparse --> nalgebra
+    bincode --> serde
+
+    pc -. "python-api" .-> pyo3
+    pc -. "stub-gen" .-> stubgen
+    stubgen --> pyo3
+    pc -. "viz" .-> plotters
+    pc -. "viz-interactive" .-> winit & softbuffer
+    pc -. "dev" .-> criterion
+```
+
+Les implications de features (`Cargo.toml`) : `extension-module` ⊃
+`python-api` (active `pyo3`, mais demande à pyo3 de **ne pas** lier
+`libpython` — l'interpréteur hôte le fournit) ; `viz-interactive` ⊃ `viz` ;
+`stub-gen` ⊃ `python-api`. Le confinement annoté ci-dessus est la raison pour
+laquelle le cœur de calcul reste compilable et testable sans aucune de ces
+crates optionnelles.
+
 ## Les trois couches, et pourquoi
 
 | Couche | Rôle | Ne dépend pas de |

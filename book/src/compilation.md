@@ -12,6 +12,7 @@ documentation. Pour le **simple usage en Python** (quatre commandes), voir
 | Rust (via `rustup`) | stable récent, édition 2021 | Compilation du cœur |
 | Python | ≥ 3.9 (3.13 testé) | API Python et `maturin` |
 | `mdbook` | ≥ 0.4 | Génération de cette documentation |
+| `mdbook-mermaid` | ≥ 0.14 | Rendu des graphes (ex. [graphe des dépendances](developper/arborescence.md#graphe-des-dépendances-externes)) |
 
 Système (uniquement pour **builds avec l'API Python**, voir features plus bas) :
 
@@ -248,3 +249,6 @@ publication **automatique** via Forgejo Actions :
   `maturin develop`.
 - *`mdbook: command not found`* : installer `mdbook` via `cargo install mdbook`
   ou un binaire publié.
+- *`The "mermaid" preprocessor exited unsuccessfully`* (ou graphes affichés en
+  bloc de code brut) : installer le préprocesseur via `cargo install
+  mdbook-mermaid`. Il doit être sur le `PATH` au moment de `mdbook build`.
