@@ -42,6 +42,6 @@ pub use integral::{integral, integral_element};
 pub use interp_to_gauss::interp_to_gauss;
 pub use mask::{mask_cells, mask_nodes, mask_sub_cells, mask_sub_nodes};
 pub use merge::merge;
-pub use restrict::restrict;
+pub use restrict::{restrict, restrict_like};
 pub use select::{select_cells, select_nodes, select_sub_cells, select_sub_nodes};
 pub use thermal_strain::thermal_strain;

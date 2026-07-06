@@ -183,5 +183,6 @@ nœuds **à travers les zones** (règle premier-trouvé) :
 | `divergence(F)` | adjoint de `gradient` : champ vectoriel par éléments → `NodeField` (`div`), accumulé par nœud (`d_i = ∫ ∇N_i·F`) |
 | `solve(matrix, rhs)` | second membre lu par DOF (absent ⇒ `0.0`) ; solution mono-zone sur les nœuds colonnes |
 | `restrict(f, mesh)` | une zone par submesh cible, `0.0` pour les nœuds non couverts |
+| `restrict_like(f, target)` | reprojette sur le support **et** les composantes de `target` (mêmes slots) ⇒ combinable par `+ - * /` avec `target` ; nœuds/composantes hors de `target` abandonnés, `0.0` si non couverts |
 | `merge(a, b)` | union structurelle consolidée (conflit de valeur ⇒ erreur) |
 | `consolidate(f)` | fusion par jeu de composantes après vérification de cohérence |

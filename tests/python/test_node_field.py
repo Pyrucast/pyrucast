@@ -554,6 +554,34 @@ def test_restrict_to_mesh_subset():
     assert r.value(nodes[2], "T") == 3.0
 
 
+def test_restrict_like_lands_on_target_support():
+    c, nodes, sm = _poi1_with(3)
+
+    # Target: nodes[0], nodes[1], components [u_x, u_y].
+    tmesh = pyrucast.Mesh(c, "POI1")
+    tmesh.unit().add_cell([nodes[0]])
+    tmesh.unit().add_cell([nodes[1]])
+    target = pyrucast.NodeField(tmesh, ["u_x", "u_y"])
+
+    # Source (`du`-like): all 3 nodes, extra `lambda` component (multiplier).
+    source = pyrucast.NodeField(sm, ["u_x", "u_y", "lambda"])
+    source[0].set_value(nodes[0], "u_x", 1.0)
+    source[0].set_value(nodes[1], "u_y", 2.0)
+    source[0].set_value(nodes[2], "u_x", 9.0)  # node dropped
+    source[0].set_value(nodes[0], "lambda", 7.0)  # component dropped
+
+    r = pyrucast.restrict_like(source, target)
+    assert r.node_count() == 2
+    assert r.value(nodes[0], "u_x") == 1.0
+    assert r.value(nodes[1], "u_y") == 2.0
+    assert r.value(nodes[1], "u_x") == 0.0  # absent → 0
+
+    # Lands on target's own support ⇒ the `+` operator applies directly.
+    s = target + r
+    assert s.value(nodes[0], "u_x") == 1.0
+    assert s.value(nodes[1], "u_y") == 2.0
+
+
 # ─── min / max ───────────────────────────────────────────────────────────────
 
 

@@ -21,14 +21,20 @@
 //!   retour radial, qui rend `σ` et l'état plastique mis à jour
 //!   (`VAR0` → `VAR1`) ;
 //! - [`internal_forces`] (Cast3m `BSIG`) : les forces internes `∫ Bᵀ σ dΩ` ;
-//! - [`solve`] : la résolution linéaire (LU creux faer, factorisation en cache).
+//! - [`solve`] : la résolution linéaire (LU creux faer, factorisation en cache) ;
+//! - l'**arithmétique de champs** (`+ - * /`) et [`restrict_like`] (reprojection
+//!   d'un champ sur le support/composantes d'un autre), qui remplacent toute
+//!   boucle nodale : `residual = &f_ext - &f_int`, `u = (&u + &δu_reprojeté)?` ;
+//! - une [`Evolution`] à valeur champ pour l'**histoire de chargement** :
+//!   la charge de chaque pas est interpolée au pseudo-temps ([`Evolution::interpolate`]).
 //!
 //! **L'exemple** assemble sa propre boucle de Newton avec ces briques :
 //! résidu `r = F_ext − F_int`, incrément `δu = K⁻¹ r`, `u ← u + δu`, et le
 //! portage de l'état interne d'un pas de charge au suivant. C'est un **Newton
 //! modifié** (opérateur constant = `K` élastique) : `K` est assemblé et
 //! factorisé une seule fois, chaque itération ne refait qu'une descente/remontée
-//! (cache de factorisation de [`solve`]).
+//! (cache de factorisation de [`solve`]). Aucune boucle sur les nœuds : tout le
+//! bilan passe par les opérateurs de champ et les primitives de la librairie.
 //!
 //! Bench de parallélisme
 //! ---------------------
@@ -51,7 +57,8 @@ use std::collections::HashSet;
 
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::element_field::ElementField;
-use pyrucast::containers::field::SubField;
+use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue};
+use pyrucast::containers::field::{Field, SubField};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, SubMesh};
 use pyrucast::containers::model::Model;
@@ -60,7 +67,7 @@ use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::assemble::{flux, stiffness, FluxDensity};
 use pyrucast::ops::behavior::integrate;
 use pyrucast::ops::build::material_field;
-use pyrucast::ops::field::deformation;
+use pyrucast::ops::field::{deformation, mask_cells, restrict, restrict_like, Band};
 use pyrucast::ops::internal_forces::internal_forces;
 use pyrucast::ops::mesher::barycenter;
 use pyrucast::ops::solver::lu::solve;
@@ -130,11 +137,19 @@ fn main() -> Result<()> {
     }
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
-    // Ensembles de nœuds utiles : tous, bord gauche (encastré), bout (mi-hauteur).
-    let all_ids: Vec<NodeId> = grid.iter().flatten().map(Node::id).collect();
+    // Ensembles de nœuds utiles : bord gauche (encastré), bout (mi-hauteur), et
+    // un maillage POI1 des nœuds LIBRES (hors encastrement) — support cible pour
+    // mesurer la norme du résidu sur les seuls DDL libres (`restrict` + `xtx`).
     let left_nodes: Vec<Node> = grid.iter().map(|row| row[0].clone()).collect();
     let left_ids: HashSet<NodeId> = left_nodes.iter().map(Node::id).collect();
     let tip_id = grid[ny / 2][nx].id();
+    let free_nodes: Vec<Node> = grid
+        .iter()
+        .flatten()
+        .filter(|n| !left_ids.contains(&n.id()))
+        .cloned()
+        .collect();
+    let free_mesh = Mesh::from_submesh(SubMesh::poi1_from_nodes(&free_nodes)?);
 
     // ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
     let mut model = Model::plasticity(&fes, ElasticityModel::PlaneStress)?;
@@ -150,30 +165,34 @@ fn main() -> Result<()> {
 
     // ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     //    droite, réparti en efforts nodaux cohérents (∫ densité·N dΓ, op `flux`).
-    //    La charge du pas vaut `facteur · charge_unitaire`. ────────────────────
     let mut right_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for j in 0..ny {
         right_edge.add_cell(&[grid[j][nx].id(), grid[j + 1][nx].id()])?;
     }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    let load_unit =
-        NodeField::from_sub(flux(&right_fes.get(0)?, FluxDensity::Uniform(-1.0), "f_y")?);
-    // Norme de la charge unitaire (pour l'échelle relative du résidu).
-    let load_unit_sq: f64 = all_ids
-        .iter()
-        .map(|&nid| {
-            load_unit
-                .value_opt(nid, "f_y")
-                .unwrap_or(None)
-                .unwrap_or(0.0)
-        })
-        .map(|v| v * v)
-        .sum();
-    let load_unit_norm = load_unit_sq.sqrt();
+    let load_unit = flux(&right_fes.get(0)?, FluxDensity::Uniform(-1.0), "f_y")?;
+
+    // ── Histoire de chargement : une Evolution à valeur CHAMP, tabulée en
+    //    pseudo-temps t ∈ [0, 1]. Deux keyframes du champ d'effort nodal — nul en
+    //    t=0, complet (`p_max · charge_unitaire`) en t=1 — sur le MÊME support
+    //    (dérivés du même sous-champ, condition de l'interpolation). La charge de
+    //    chaque pas est lue par interpolation linéaire, `load_evo.interpolate(t)`.
+    //    Une histoire non linéaire n'ajouterait que des keyframes. ──────────────
+    let zero_frame = load_unit.map_all(|_| 0.0);
+    let full_frame = load_unit.map_all(|v| v * p_max);
+    let load_curve = SubEvolution::new(
+        vec![
+            (0.0, SubValue::Node(zero_frame)),
+            (1.0, SubValue::Node(full_frame)),
+        ],
+        OutOfRange::Clamp,
+    )?;
+    let mut load_evo = Evolution::default();
+    load_evo.add_sub(insert(load_curve))?;
 
     // ── État de la simulation (persistant entre les pas) ────────────────────
     // Déplacement cumulé u (u_x, u_y sur tous les nœuds), initialement nul.
-    let u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
+    let mut u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
     // État plastique VAR0 (nul au premier pas — la loi défaute à zéro).
     let mut state = ElementField::new(
         &fes,
@@ -194,9 +213,15 @@ fn main() -> Result<()> {
     let mut any_plasticity = false;
 
     for step in 1..=nsteps {
-        let load_p = p_max * step as f64 / nsteps as f64;
-        let factor = load_p; // densité −1 ⇒ effort total = −load_p (vers le bas)
-        let ext_norm = factor.abs() * load_unit_norm;
+        // Pseudo-temps du pas ∈ ]0, 1] ; la charge externe en découle par
+        // interpolation de l'Evolution (champ d'effort nodal du pas).
+        let t = step as f64 / nsteps as f64;
+        let load_p = p_max * t; // cisaillement nominal au bout (pour l'affichage)
+        let Interpolated::Node(load_scaled) = load_evo.interpolate(t, None)? else {
+            unreachable!("évolution à valeur nodale")
+        };
+        // Norme de la charge du pas (échelle relative du résidu) : xᵀx du champ.
+        let ext_norm = load_scaled.xtx()?.sqrt();
         let tol = 1e-6 * ext_norm + 1e-12;
 
         // Newton modifié : itère jusqu'à résidu (forces déséquilibrées aux DDL
@@ -214,19 +239,20 @@ fn main() -> Result<()> {
             // Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
             let f_int = internal_forces(&model, &out)?;
 
-            // Résidu r = F_ext − F_int, et sa norme sur les DDL LIBRES (les
-            // nœuds encastrés portent la réaction, hors bilan).
-            let (residual, free_res) =
-                build_residual(&mesh, &all_ids, &left_ids, &load_unit, factor, &f_int)?;
+            // Résidu r = F_ext − F_int (tout-opérateurs) ; norme sur les DDL LIBRES.
+            let (residual, free_res) = build_residual(&load_scaled, &f_int, &free_mesh)?;
             res_norm = free_res;
             last_state = Some(out);
 
             if res_norm <= tol {
                 break;
             }
-            // δu = K⁻¹ r (K élastique, factorisation en cache), puis u ← u + δu.
+            // δu = K⁻¹ r (K élastique, cache de factorisation). δu porte les DDL
+            // primaux ET duaux (multiplicateurs de Lagrange) sur un support neuf :
+            // on le reprojette sur le support/composantes de u (`restrict_like`),
+            // puis u ← u + δu par l'opérateur `+`.
             let du = solve(&k, &residual)?;
-            add_increment(&u, &du, &all_ids)?;
+            u = (&u + &restrict_like(&du, &u)?)?;
             iters += 1;
         }
         let converged = res_norm <= tol;
@@ -346,73 +372,35 @@ fn extract_state(out: &ElementField, fes: &FiniteElementSpace) -> Result<Element
     Ok(state)
 }
 
-/// Construit le résidu `r = F_ext − F_int` (NodeField `f_x, f_y` sur tous les
-/// nœuds) et renvoie sa norme euclidienne sur les DDL **libres** (hors nœuds
-/// encastrés, où le résidu est la réaction et n'entre pas dans le bilan).
-/// `F_ext` = `factor · charge_unitaire` (composante `f_y` sur la face droite).
+/// Construit le résidu `r = F_ext − F_int` et sa norme sur les DDL **libres**,
+/// **sans aucune boucle nodale** — tout par les opérateurs et primitives de la
+/// librairie :
+///
+/// - `f_ext` = charge externe du pas (`load_scaled`, déjà à l'échelle sur `f_y`)
+///   reprojetée sur le support ET les composantes de `f_int`
+///   ([`restrict_like`]) : composantes `f_x` (=0) et `f_y` ;
+/// - `residual = f_ext − f_int` via l'opérateur `-` (mêmes support/composantes) ;
+/// - la norme se lit sur les seuls nœuds libres : `residual` [`restrict`]é à
+///   `free_mesh` puis `xtx` (les nœuds encastrés portent la réaction, hors bilan).
 fn build_residual(
-    mesh: &Mesh,
-    all_ids: &[NodeId],
-    left_ids: &HashSet<NodeId>,
-    load_unit: &NodeField,
-    factor: f64,
+    load_scaled: &NodeField,
     f_int: &NodeField,
+    free_mesh: &Mesh,
 ) -> Result<(NodeField, f64)> {
-    let residual = NodeField::new(mesh, vec!["f_x".into(), "f_y".into()])?;
-    let res_h = residual.get(0)?;
-    let mut res_sub = write(&res_h)?;
-
-    let mut free_sq = 0.0_f64;
-    for &nid in all_ids {
-        let fext_x = 0.0;
-        let fext_y = factor * load_unit.value_opt(nid, "f_y")?.unwrap_or(0.0);
-        let rx = fext_x - f_int.value(nid, "f_x")?;
-        let ry = fext_y - f_int.value(nid, "f_y")?;
-        res_sub.set_value(nid, "f_x", rx)?;
-        res_sub.set_value(nid, "f_y", ry)?;
-        if !left_ids.contains(&nid) {
-            free_sq += rx * rx + ry * ry;
-        }
-    }
-    drop(res_sub);
-    Ok((residual, free_sq.sqrt()))
-}
-
-/// Ajoute l'incrément de déplacement `du` (issu de `solve`) au déplacement
-/// cumulé `u`, nœud par nœud (`u_x, u_y`). Les valeurs de `du` sont lues avant
-/// d'écrire `u` pour ne jamais tenir deux verrous à la fois.
-fn add_increment(u: &NodeField, du: &NodeField, all_ids: &[NodeId]) -> Result<()> {
-    let increments: Vec<(NodeId, f64, f64)> = all_ids
-        .iter()
-        .map(|&nid| Ok((nid, du.value(nid, "u_x")?, du.value(nid, "u_y")?)))
-        .collect::<Result<_>>()?;
-    let u_h = u.get(0)?;
-    let mut u_sub = write(&u_h)?;
-    for (nid, dx, dy) in increments {
-        let x = u_sub.value(nid, "u_x")?;
-        let y = u_sub.value(nid, "u_y")?;
-        u_sub.set_value(nid, "u_x", x + dx)?;
-        u_sub.set_value(nid, "u_y", y + dy)?;
-    }
-    drop(u_sub);
-    Ok(())
+    let f_ext = restrict_like(load_scaled, f_int)?;
+    let residual = (&f_ext - f_int)?;
+    let res_norm = restrict(&residual, free_mesh)?.xtx()?.sqrt();
+    Ok((residual, res_norm))
 }
 
 /// `(p_max, nombre de points de Gauss plastifiés)` de l'état courant
-/// (`p > 0` marque un point plastique).
+/// (`p > 0` marque un point plastique). Sans boucle : `p_max` par [`Field::max`],
+/// le comptage en masquant la composante `p` en 0/1 (bande « > 1e-12 ») puis en
+/// la sommant ([`Field::sum`]).
 fn plastic_diagnostics(state: &ElementField) -> Result<(f64, usize)> {
-    let sub = read(&state.get(0)?)?;
-    let (n_cells, n_gauss) = (sub.cell_count(), sub.gauss_count());
-    let mut p_max = 0.0_f64;
-    let mut n_plastic = 0;
-    for cell in 0..n_cells {
-        for g in 0..n_gauss {
-            let p = sub.value(cell, g, "p")?;
-            if p > 1e-12 {
-                n_plastic += 1;
-            }
-            p_max = p_max.max(p);
-        }
-    }
+    let p_max = Field::max(state, "p")?;
+    let band = Band::new(None, Some(1e-12), None, None)?;
+    let masked = mask_cells(state, &band, Some(vec!["p".to_string()]))?;
+    let n_plastic = Field::sum(&masked, "p")?.round() as usize;
     Ok((p_max, n_plastic))
 }

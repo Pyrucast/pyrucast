@@ -80,6 +80,7 @@ Champs - extraction;DEPL;Extrait le champ de déplacement;NodeField
 Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / consolidate
 Champs - extraction;ELNO;Passe un champ des points de Gauss aux nœuds;divergence (partiel)
 Champs - extraction;REDU;Restreint un champ à un sous-maillage;restrict
+Champs - extraction;;Reprojette un champ sur le support et les composantes d'un champ cible (combinable par + - * /);restrict_like
 Champs - assemblage;NOMC;Renomme les composantes;—
 Champs - assemblage;PLUS (chp);Fusionne / additionne des champs;merge / union (|)
 Champs - réduction;INTG;Intégrale d'un champ sur un domaine;—

@@ -71,6 +71,25 @@ pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNo
     })
 }
 
+/// Reproject `field` onto the exact support and components of `target`,
+/// zone by zone.
+///
+/// Unlike `restrict` (which lands on a fresh support materialised from a
+/// mesh, carrying the union of `field`'s components), this reuses each zone
+/// of `target` as-is — same support, same component list — so the result is
+/// on the very same support as `target` and combines with it directly by the
+/// arithmetic operators (`target + restrict_like(field, target)`). A
+/// `(node, component)` pair is filled from `field` when it covers it, `0.0`
+/// otherwise; nodes and components of `field` absent from `target` are dropped.
+/// Errors if `target` and `field` are attached to different `Coords`s.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn restrict_like(field: PyRef<PyNodeField>, target: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
+    Ok(PyNodeField {
+        inner: crate::ops::field::restrict_like(&field.inner, &target.inner)?,
+    })
+}
+
 /// Merge two node fields « au plus juste »: structural union of their
 /// zones, consolidated — zones sharing a component set are fused, the
 /// others stay separate (nothing is densified).

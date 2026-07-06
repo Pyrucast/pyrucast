@@ -27,6 +27,7 @@ configuration déformée).
 | Python | Effet |
 |---|---|
 | `restrict(field, mesh)` | restreint un `NodeField` aux nœuds de `mesh` (une zone par sous-maillage cible ; `0.0` pour les nœuds non couverts ; nœuds hors de `mesh` abandonnés). Erreur si `mesh` n'est pas sur le même `Coords`. |
+| `restrict_like(field, target)` | reprojette `field` sur le support **et** les composantes de `target`, zone par zone (mêmes slots que `target`) ⇒ le résultat se combine directement avec `target` par les opérateurs `+ - * /`. Nœuds/composantes de `field` absents de `target` abandonnés ; `0.0` si non couverts. Typiquement pour replier un incrément de `solve` (qui porte aussi les multiplicateurs) dans une solution courante. Erreur si `Coords` différents. |
 | `merge(a, b)` | union structurelle de deux `NodeField`, consolidée — c'est l'**alias nommé** de `a \| b`. |
 | `consolidate(obj)` | dispatch par type : sur un `NodeField`, fusionne les zones de **même support** (handle identique) en vérifiant la cohérence des valeurs partagées ; sur un `Mesh`, fusionne les sous-maillages de même type. |
 

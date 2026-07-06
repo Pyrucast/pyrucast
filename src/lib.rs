@@ -119,6 +119,7 @@ fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::field::set_coordinates, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::displace, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::restrict, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::restrict_like, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::select, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::mask, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::merge, m)?)?;

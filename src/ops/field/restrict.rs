@@ -1,9 +1,25 @@
 use crate::aggregate::Aggregate;
-use crate::containers::field::Field;
+use crate::containers::field::{Field, SubField};
 use crate::containers::mesh::Mesh;
-use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::containers::node_field::{NodeField, NodeFieldView, SubNodeField};
 use crate::error::{PyrucastError, Result};
-use crate::store::insert;
+use crate::store::{insert, read};
+
+/// Fill `sub` (already on its target support) with the values of `source`,
+/// component by component, node by node: a `(node, component)` pair that
+/// `source` covers is copied, one it does not is left at `0.0`. Shared by
+/// [`restrict`] and [`restrict_like`].
+fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) -> Result<()> {
+    let components = sub.components().to_vec();
+    for nid in sub.nodes().to_vec() {
+        for comp in &components {
+            if let Some(v) = source.value_opt(nid, comp) {
+                sub.set_value(nid, comp, v)?;
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Restrict `field` to the nodes used by `mesh`.
 ///
@@ -32,14 +48,49 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
     let mut out = NodeField::default();
     for sm in mesh {
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
-        let nodes = sub.nodes().to_vec();
-        for nid in nodes {
-            for comp in &components {
-                if let Some(v) = view.value_opt(nid, comp) {
-                    sub.set_value(nid, comp, v)?;
-                }
-            }
-        }
+        fill_from(&mut sub, &view)?;
+        out.add_sub(insert(sub))?;
+    }
+    Ok(out)
+}
+
+/// Reproject `field` onto the **exact support and components of `target`**,
+/// zone by zone.
+///
+/// Unlike [`restrict`] (which lands on a *fresh* support materialised from a
+/// mesh, carrying the union of `field`'s components), this reuses each zone of
+/// `target` **as-is** — same store slot, same component list — so the result is
+/// on the very same support as `target` and can be combined with it directly by
+/// the arithmetic operators (`&target + &field.restrict_like(target)`). Each
+/// `(node, component)` pair is filled from `field` when it covers it, `0.0`
+/// otherwise; nodes and components of `field` absent from `target` are dropped.
+///
+/// The typical use is folding a solver increment back into a running solution:
+/// a `solve` result carries the primal *and* dual (Lagrange multiplier) DOFs on
+/// a fresh support, whereas the running field carries only the primal DOFs —
+/// `restrict_like` keeps exactly the latter, on the running field's own support.
+///
+/// Errors if `target` is attached to a different `Coords` than `field`.
+pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField> {
+    let target_coords = target.coords()?;
+    let field_coords = field.coords()?;
+    if target_coords.index() != field_coords.index()
+        || target_coords.generation() != field_coords.generation()
+    {
+        return Err(PyrucastError::Message(
+            "restrict_like: target is not attached to the same Coords".into(),
+        ));
+    }
+
+    let view = field.view()?;
+    let mut out = NodeField::default();
+    for h in target.iter() {
+        let zone = read(h)?;
+        // `from_support` on the zone's own support handle shares its slot (POI1
+        // supports are shared as-is), so the output pairs with `target` under
+        // `same_support` — the precondition of the field operators.
+        let mut sub = SubNodeField::from_support(&zone.support(), zone.components().to_vec())?;
+        fill_from(&mut sub, &view)?;
         out.add_sub(insert(sub))?;
     }
     Ok(out)
@@ -125,6 +176,57 @@ mod tests {
         }
         let r = restrict(&f, &mesh).unwrap();
         assert_eq!(r.len(), 2, "one zone per submesh of the target mesh");
+    }
+
+    #[test]
+    fn restrict_like_lands_on_target_support_and_components() {
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap(); // only in source
+
+        // Target: POI1 on {n0, n1}, components [u_x, u_y].
+        let mut sm_t = SubMesh::new(coords.clone(), ElementType::POI1);
+        sm_t.add_cell(&[n0.id()]).unwrap();
+        sm_t.add_cell(&[n1.id()]).unwrap();
+        let target = NodeField::from_sub(
+            SubNodeField::from_poi1(&insert(sm_t), vec!["u_x".into(), "u_y".into()]).unwrap(),
+        );
+
+        // Source (`du`-like): superset nodes, extra `lambda` component.
+        let mut sm_s = SubMesh::new(coords.clone(), ElementType::POI1);
+        for n in [&n0, &n1, &n2] {
+            sm_s.add_cell(&[n.id()]).unwrap();
+        }
+        let mut ss = SubNodeField::from_poi1(
+            &insert(sm_s),
+            vec!["u_x".into(), "u_y".into(), "lambda".into()],
+        )
+        .unwrap();
+        ss.set_value(n0.id(), "u_x", 1.0).unwrap();
+        ss.set_value(n1.id(), "u_y", 2.0).unwrap();
+        ss.set_value(n2.id(), "u_x", 9.0).unwrap(); // node dropped
+        ss.set_value(n0.id(), "lambda", 7.0).unwrap(); // component dropped
+        let source = NodeField::from_sub(ss);
+
+        let out = restrict_like(&source, &target).unwrap();
+        assert_eq!(Field::components(&out).unwrap(), vec!["u_x", "u_y"]);
+        assert_eq!(out.node_count().unwrap(), 2); // n2 dropped
+        assert_eq!(out.value(n0.id(), "u_x").unwrap(), 1.0);
+        assert_eq!(out.value(n1.id(), "u_y").unwrap(), 2.0);
+        assert_eq!(out.value(n1.id(), "u_x").unwrap(), 0.0); // absent → 0
+
+        // Lands on `target`'s own support ⇒ the arithmetic operator applies.
+        let sum = (&target + &out).unwrap();
+        assert_eq!(sum.value(n0.id(), "u_x").unwrap(), 1.0);
+        assert_eq!(sum.value(n1.id(), "u_y").unwrap(), 2.0);
+    }
+
+    #[test]
+    fn restrict_like_incompatible_cfg_errors() {
+        let (_c1, _n1, f) = poi1_field(1, vec!["T".into()]);
+        let (_c2, _n2, target) = poi1_field(1, vec!["T".into()]); // different Coords
+        assert!(restrict_like(&f, &target).is_err());
     }
 
     #[test]

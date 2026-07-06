@@ -63,6 +63,7 @@ __all__ = [
     "read_gmsh",
     "read_gmsh_str",
     "restrict",
+    "restrict_like",
     "rotate",
     "select",
     "set_coordinates",
@@ -2310,6 +2311,21 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     carrying the union of `field`'s components. Nodes of `mesh` absent
     from `field` are assigned `0.0`. Errors if `mesh` and `field` are
     attached to different `Coords`s.
+    """
+
+def restrict_like(field: NodeField, target: NodeField) -> NodeField:
+    r"""
+    Reproject `field` onto the exact support and components of `target`,
+    zone by zone.
+    
+    Unlike `restrict` (which lands on a fresh support materialised from a
+    mesh, carrying the union of `field`'s components), this reuses each zone
+    of `target` as-is — same support, same component list — so the result is
+    on the very same support as `target` and combines with it directly by the
+    arithmetic operators (`target + restrict_like(field, target)`). A
+    `(node, component)` pair is filled from `field` when it covers it, `0.0`
+    otherwise; nodes and components of `field` absent from `target` are dropped.
+    Errors if `target` and `field` are attached to different `Coords`s.
     """
 
 def rotate(mesh: Mesh, angle: builtins.float, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:

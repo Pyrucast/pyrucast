@@ -112,6 +112,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `divergence(field: &ElementField) -> NodeField` | `divergence(field) -> NodeField` |
 | `integral(field: &NodeField, fespace, component) -> f64` / `integral_element(field: &ElementField, component) -> f64` | `integral(field, component, fespace=None) -> float` (dispatch par type ; `∫ f dΩ`, `fespace` requis pour un `NodeField`) |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
+| `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
 | `select_nodes(field: &NodeField, band: &Band, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type) |
 | `mask_nodes(field: &NodeField, band: &Band, …) -> NodeField` / `mask_cells(field: &ElementField, …) -> ElementField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> field` (dispatch par type ; champ `0/1` de même structure). Sucre : `field >= x` / `> x` / `<= x` / `< x` → masque |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
