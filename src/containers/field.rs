@@ -457,6 +457,101 @@ macro_rules! __subfield_scalar_op {
     };
 }
 
+// ─── Field-by-field operator macros ─────────────────────────────────────────
+
+/// Generate `Add/Sub/Mul/Div` between two [`SubField`] containers of the same
+/// type, delegating to [`SubField::combine`] (element-by-element, strict on
+/// support and components). Combining can fail (mismatched support or
+/// components), so — like the crate's other fallible operators (e.g.
+/// `&Matrix * &NodeField`) — the output is a [`Result`]: `(&a + &b)?`. Division
+/// does **not** guard against zero (numpy-like `inf`/`nan`).
+///
+/// # Usage
+/// ```ignore
+/// impl_subfield_field_ops!(SubNodeField);
+/// ```
+#[macro_export]
+macro_rules! impl_subfield_field_ops {
+    ($T:ty) => {
+        $crate::__subfield_field_op!($T, Add, add, +);
+        $crate::__subfield_field_op!($T, Sub, sub, -);
+        $crate::__subfield_field_op!($T, Mul, mul, *);
+        $crate::__subfield_field_op!($T, Div, div, /);
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __subfield_field_op {
+    ($T:ty, $Trait:ident, $method:ident, $op:tt) => {
+        impl std::ops::$Trait<&$T> for &$T {
+            type Output = $crate::error::Result<$T>;
+            fn $method(self, rhs: &$T) -> Self::Output {
+                $crate::containers::field::SubField::combine(self, rhs, |a, b| a $op b)
+            }
+        }
+        impl std::ops::$Trait<$T> for $T {
+            type Output = $crate::error::Result<$T>;
+            fn $method(self, rhs: $T) -> Self::Output {
+                $crate::containers::field::SubField::combine(&self, &rhs, |a, b| a $op b)
+            }
+        }
+    };
+}
+
+/// Generate `Add/Sub/Mul/Div` for an aggregate [`Field`], both **field ∘ field**
+/// (via [`Field::combine_field`], zone-by-zone on the same decomposition) and
+/// **field ∘ scalar** (via [`Field::combine_scalar`], broadcast over every
+/// value). Both go through the store (fallible reads) so the output is a
+/// [`Result`]: `(&a + &b)?`, `(&a * 2.0)?`.
+///
+/// # Usage
+/// ```ignore
+/// impl_field_ops!(NodeField);
+/// ```
+#[macro_export]
+macro_rules! impl_field_ops {
+    ($T:ty) => {
+        $crate::__field_op!($T, Add, add, +);
+        $crate::__field_op!($T, Sub, sub, -);
+        $crate::__field_op!($T, Mul, mul, *);
+        $crate::__field_op!($T, Div, div, /);
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __field_op {
+    ($T:ty, $Trait:ident, $method:ident, $op:tt) => {
+        // field ∘ field
+        impl std::ops::$Trait<&$T> for &$T {
+            type Output = $crate::error::Result<$T>;
+            fn $method(self, rhs: &$T) -> Self::Output {
+                $crate::containers::field::Field::combine_field(self, rhs, |a, b| a $op b)
+            }
+        }
+        impl std::ops::$Trait<$T> for $T {
+            type Output = $crate::error::Result<$T>;
+            fn $method(self, rhs: $T) -> Self::Output {
+                $crate::containers::field::Field::combine_field(&self, &rhs, |a, b| a $op b)
+            }
+        }
+        // field ∘ scalar
+        impl std::ops::$Trait<f64> for &$T {
+            type Output = $crate::error::Result<$T>;
+            fn $method(self, rhs: f64) -> Self::Output {
+                $crate::containers::field::Field::combine_scalar(self, |a, b| a $op b, rhs)
+            }
+        }
+        impl std::ops::$Trait<f64> for $T {
+            type Output = $crate::error::Result<$T>;
+            fn $method(self, rhs: f64) -> Self::Output {
+                $crate::containers::field::Field::combine_scalar(&self, |a, b| a $op b, rhs)
+            }
+        }
+    };
+}
+
 // ─── Field (aggregate level) ────────────────────────────────────────────────
 
 /// Aggregate-level view of a field.
@@ -1433,5 +1528,93 @@ mod tests {
         let other = ElementField::new(&one_tri3_fes(), vec!["k".into()]).unwrap();
         let sub = (*read(&other.get(0).unwrap()).unwrap()).clone();
         assert!(ef.combine_subfield(&sub, |a, b| a + b).is_err());
+    }
+
+    // ─── Arithmetic operator sugar (`+ - * /`) ───────────────────────────────
+
+    #[test]
+    fn subfield_operators_field_and_scalar() {
+        let (sm, _) = poi1_support(2);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        f.set(0, 0, 1.0).unwrap();
+        f.set(1, 0, 2.0).unwrap();
+        let mut g = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        g.set(0, 0, 10.0).unwrap();
+        g.set(1, 0, 20.0).unwrap();
+
+        // field ∘ field (returns Result) — every operator.
+        let add = (&f + &g).unwrap();
+        assert_eq!(add.get(0, 0).unwrap(), 11.0);
+        assert_eq!(add.get(1, 0).unwrap(), 22.0);
+        let sub = (&g - &f).unwrap();
+        assert_eq!(sub.get(1, 0).unwrap(), 18.0);
+        let mul = (&f * &g).unwrap();
+        assert_eq!(mul.get(1, 0).unwrap(), 40.0);
+        let div = (&g / &f).unwrap();
+        assert_eq!(div.get(1, 0).unwrap(), 10.0);
+
+        // Owned operands also work (`a + b`).
+        let owned = (f.clone() + g.clone()).unwrap();
+        assert_eq!(owned.get(0, 0).unwrap(), 11.0);
+
+        // field ∘ scalar (pre-existing infallible sugar) stays usable.
+        let plus_ten = &f + 10.0;
+        assert_eq!(plus_ten.get(1, 0).unwrap(), 12.0);
+    }
+
+    #[test]
+    fn subfield_operator_mismatched_support_errors() {
+        let (sm_a, _) = poi1_support(1);
+        let (sm_b, _) = poi1_support(1);
+        let f = SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
+        let g = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
+        assert!((&f + &g).is_err());
+    }
+
+    #[test]
+    fn node_field_operators_field_and_scalar() {
+        use crate::containers::node_field::NodeField;
+        let (sm, nodes) = poi1_support(2);
+        let mut fa = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        fa.set(0, 0, 3.0).unwrap();
+        fa.set(1, 0, 4.0).unwrap();
+        let mut fb = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        fb.set(0, 0, 1.0).unwrap();
+        fb.set(1, 0, 2.0).unwrap();
+        let a = NodeField::from_sub(fa);
+        let b = NodeField::from_sub(fb);
+
+        // field ∘ field, zone by zone.
+        let sum = (&a + &b).unwrap();
+        let view = sum.view().unwrap();
+        assert_eq!(view.value(nodes[0].id(), "T").unwrap(), 4.0);
+
+        // field ∘ scalar broadcast.
+        let doubled = (&a * 2.0).unwrap();
+        let v2 = doubled.view().unwrap();
+        assert_eq!(v2.value(nodes[0].id(), "T").unwrap(), 6.0);
+    }
+
+    #[test]
+    fn element_field_operators_field_and_scalar() {
+        let fes = one_tri3_fes();
+        let f = ElementField::new(&fes, vec!["E".into()]).unwrap();
+        let g = ElementField::new(&fes, vec!["E".into()]).unwrap();
+        write(&f.get(0).unwrap())
+            .unwrap()
+            .set_uniform("E", 3.0)
+            .unwrap();
+        write(&g.get(0).unwrap())
+            .unwrap()
+            .set_uniform("E", 4.0)
+            .unwrap();
+
+        let s = (&f + &g).unwrap();
+        let z = read(&s.get(0).unwrap()).unwrap();
+        assert_eq!(z.value(0, 0, "E").unwrap(), 7.0);
+
+        let scaled = (&f - 1.0).unwrap();
+        let zs = read(&scaled.get(0).unwrap()).unwrap();
+        assert_eq!(zs.value(0, 0, "E").unwrap(), 2.0);
     }
 }

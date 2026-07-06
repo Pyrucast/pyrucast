@@ -372,6 +372,13 @@ impl crate::dump::Dump for SubElementField {
 
 crate::impl_subfield_scalar_ops!(SubElementField);
 
+// ─── Operators field OP field (same support) ───────────────────────────────
+//
+// `&a + &b` (and `a + b`) delegate to `SubField::combine`; fallible (same
+// support & components required) ⇒ output `Result<SubElementField>`.
+
+crate::impl_subfield_field_ops!(SubElementField);
+
 // ─── ElementField (aggregate) ──────────────────────────────────────────────
 
 /// Aggregate of [`SubElementField`] — one per subspace of a
@@ -396,6 +403,14 @@ crate::impl_aggregate!(ElementField, SubElementField, subfield, "subfield(s)", {
     }
 });
 crate::impl_aggregate_dump!(ElementField);
+
+// ─── Operators ElementField OP {ElementField, f64} ─────────────────────────
+//
+// `&a + &b` (zone by zone, same decomposition) via `Field::combine_field`;
+// `&a + 2.0` (scalar broadcast) via `Field::combine_scalar`. Fallible (store
+// reads, zone pairing) ⇒ output `Result<ElementField>`.
+
+crate::impl_field_ops!(ElementField);
 
 impl ElementField {
     /// Build an `ElementField` on `fespace` with the **same** `components`

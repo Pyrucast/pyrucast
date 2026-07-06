@@ -477,6 +477,13 @@ impl Clone for SubNodeField {
 
 crate::impl_subfield_scalar_ops!(SubNodeField);
 
+// ─── Opérateurs field OP field (même support) ───────────────────────────────
+//
+// `&a + &b` (et `a + b`) délèguent à `SubField::combine` ; faillible (même
+// support & mêmes composantes exigés) ⇒ sortie `Result<SubNodeField>`.
+
+crate::impl_subfield_field_ops!(SubNodeField);
+
 // ─── NodeField (aggregate) ──────────────────────────────────────────────────
 
 /// Aggregate of [`SubNodeField`] — one per zone.
@@ -520,6 +527,14 @@ crate::impl_aggregate!(NodeField, SubNodeField, subfield, "subfield(s)", {
     }
 });
 crate::impl_aggregate_dump!(NodeField);
+
+// ─── Opérateurs NodeField OP {NodeField, f64} ───────────────────────────────
+//
+// `&a + &b` (zone par zone, même décomposition) via `Field::combine_field` ;
+// `&a + 2.0` (diffusion scalaire) via `Field::combine_scalar`. Faillibles
+// (lecture dans le store, appariement des zones) ⇒ sortie `Result<NodeField>`.
+
+crate::impl_field_ops!(NodeField);
 
 impl NodeField {
     /// One zero-initialized [`SubNodeField`] per submesh of `mesh`, all
