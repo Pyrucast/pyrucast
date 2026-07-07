@@ -73,7 +73,7 @@ use pyrucast::ops::field::{deformation, mask_cells, restrict, restrict_like, Ban
 use pyrucast::ops::internal_forces::internal_forces;
 use pyrucast::ops::mesher::barycenter;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::{insert, read, write};
+use pyrucast::store::insert;
 use pyrucast::Result;
 
 /// Composantes de l'état interne plastique portées d'un pas au suivant
@@ -236,7 +236,7 @@ fn main() -> Result<()> {
         for _ in 0..max_newton {
             // ε(u) → entrée de comportement (ε + VAR0) → σ, VAR1 (COMP).
             let strain = deformation(&u, &fes)?;
-            let behavior_input = build_behavior_input(&strain, &state, &fes)?;
+            let behavior_input = build_behavior_input(&strain, &state)?;
             let out = integrate(&model, &behavior_input, &materials)?;
             // Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
             let f_int = internal_forces(&model, &out)?;
@@ -259,8 +259,12 @@ fn main() -> Result<()> {
         }
         let converged = res_norm <= tol;
 
-        // Commit de l'état : VAR0 ← VAR1 (extrait de la sortie convergée).
-        state = extract_state(last_state.as_ref().expect("au moins une itération"), &fes)?;
+        // Commit de l'état : VAR0 ← VAR1. La sortie de comportement convergée
+        // porte, en plus de l'état plastique (`eps_p_*`, `p`), les contraintes
+        // (`sig_*`) ; on la reporte telle quelle comme nouveau VAR0. La loi lit
+        // ses entrées par nom, donc les composantes surnuméraires sont ignorées
+        // au pas suivant — inutile de projeter sur les seules composantes d'état.
+        state = last_state.take().expect("au moins une itération");
 
         // Diagnostics du pas.
         let (p_max_val, n_plastic) = plastic_diagnostics(&state)?;
@@ -318,60 +322,15 @@ fn clamp(nodes: &[Node], variable: &str, dual: &str) -> Result<Model> {
     )
 }
 
-/// Assemble l'entrée de comportement en fusionnant, point de Gauss par point de
-/// Gauss, la déformation totale `ε` (de `deformation`) et l'état plastique
-/// `VAR0` (`state`). La loi lit `ε` et `VAR0` par nom ; l'ordre est indifférent.
-fn build_behavior_input(
-    strain: &ElementField,
-    state: &ElementField,
-    fes: &FiniteElementSpace,
-) -> Result<ElementField> {
-    let strain_sub = read(&strain.get(0)?)?;
-    let state_sub = read(&state.get(0)?)?;
-    let strain_comps: Vec<String> = strain_sub.components().to_vec();
-    let state_comps: Vec<String> = state_sub.components().to_vec();
-
-    let mut all_comps = strain_comps.clone();
-    all_comps.extend(state_comps.clone());
-    let input = ElementField::new(fes, all_comps)?;
-
-    let (n_cells, n_gauss) = (strain_sub.cell_count(), strain_sub.gauss_count());
-    let input_h = input.get(0)?;
-    let mut input_sub = write(&input_h)?;
-    for cell in 0..n_cells {
-        for g in 0..n_gauss {
-            for c in &strain_comps {
-                input_sub.set_value(cell, g, c, strain_sub.value(cell, g, c)?)?;
-            }
-            for c in &state_comps {
-                input_sub.set_value(cell, g, c, state_sub.value(cell, g, c)?)?;
-            }
-        }
-    }
-    drop(input_sub);
-    Ok(input)
-}
-
-/// Extrait le nouvel état plastique `VAR1` (les composantes [`STATE_COMPONENTS`])
-/// de la sortie de comportement convergée — le `VAR0` du pas suivant.
-fn extract_state(out: &ElementField, fes: &FiniteElementSpace) -> Result<ElementField> {
-    let out_sub = read(&out.get(0)?)?;
-    let state = ElementField::new(
-        fes,
-        STATE_COMPONENTS.iter().map(|s| s.to_string()).collect(),
-    )?;
-    let (n_cells, n_gauss) = (out_sub.cell_count(), out_sub.gauss_count());
-    let state_h = state.get(0)?;
-    let mut state_sub = write(&state_h)?;
-    for cell in 0..n_cells {
-        for g in 0..n_gauss {
-            for c in STATE_COMPONENTS {
-                state_sub.set_value(cell, g, c, out_sub.value(cell, g, c)?)?;
-            }
-        }
-    }
-    drop(state_sub);
-    Ok(state)
+/// Assemble l'entrée de comportement en fusionnant la déformation totale `ε`
+/// (de `deformation`) et l'état plastique `VAR0` (`state`). Les deux champs
+/// vivent sur le **même** espace EF (mêmes handles de sous-espace) et portent
+/// des composantes disjointes (`eps_*` vs `eps_p_*`, `p`) : l'union `strain |
+/// state` les fusionne en une seule zone via `consolidate_element` (déclenché
+/// par la finalisation de l'agrégat), sans boucle nodale. La loi lit `ε` et
+/// `VAR0` par nom ; l'ordre des composantes est indifférent.
+fn build_behavior_input(strain: &ElementField, state: &ElementField) -> Result<ElementField> {
+    strain.union(state)
 }
 
 /// Construit le résidu `r = F_ext − F_int` et sa norme sur les DDL **libres**,
