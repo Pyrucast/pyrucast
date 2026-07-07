@@ -58,7 +58,9 @@ use crate::aggregate::Aggregate;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, write, Handle};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
+use std::sync::OnceLock;
 
 // ─── SubMesh ────────────────────────────────────────────────────────────────
 
@@ -88,6 +90,16 @@ pub struct SubMesh {
     /// `serde(default)` keeps older snapshots (without the field) readable.
     #[serde(default)]
     sealed: bool,
+    /// Lazily-built `NodeId → index` map over the **distinct** nodes of the
+    /// connectivity, in first-appearance order. Consumers that need a node
+    /// lookup (node fields, …) read it in place while holding their store
+    /// guard on this submesh — no copy — so the O(n) build is paid once and
+    /// mutualised across every field on this support. Not serialized — it is
+    /// derived from `connectivity` and rebuilt on demand after a reload. Only
+    /// ever populated once the submesh is sealed (its connectivity frozen),
+    /// so it can never go stale.
+    #[serde(skip)]
+    node_index: OnceLock<HashMap<NodeId, usize>>,
 }
 
 impl SubMesh {
@@ -99,12 +111,32 @@ impl SubMesh {
             connectivity: Vec::new(),
             face_color: RgbColor::default(),
             sealed: false,
+            node_index: OnceLock::new(),
         }
     }
 
     /// Whether this submesh is sealed (connectivity frozen).
     pub fn is_sealed(&self) -> bool {
         self.sealed
+    }
+
+    /// `NodeId → index` map over the **distinct** nodes of the connectivity,
+    /// in first-appearance order (the order [`SubNodeField`] snapshots its
+    /// support in). Built once and cached; callers keep their read guard on
+    /// this submesh while using the returned reference — no copy.
+    ///
+    /// Meant for sealed supports: the map is derived from `connectivity`, and
+    /// a sealed submesh can no longer grow, so the cache can never go stale.
+    /// (It is only ever queried through a sealed support in practice.)
+    pub fn node_index(&self) -> &HashMap<NodeId, usize> {
+        self.node_index.get_or_init(|| {
+            let mut map = HashMap::with_capacity(self.connectivity.len());
+            for &nid in &self.connectivity {
+                let next = map.len();
+                map.entry(nid).or_insert(next);
+            }
+            map
+        })
     }
 
     /// Seal this submesh: freeze its connectivity permanently. After this,
@@ -699,6 +731,34 @@ mod tests {
             assert_eq!(cf.refcount(b.id()), 1);
             assert_eq!(cf.refcount(c.id()), 1);
         }
+    }
+
+    #[test]
+    fn node_index_maps_distinct_nodes_in_first_appearance_order() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+
+        // Two QUA4 cells sharing the edge (b, c): b and c appear twice.
+        let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
+        sm.add_cell(&[a.id(), b.id(), c.id(), d.id()]).unwrap();
+        let e = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
+        let f = Node::create_in(coords.clone(), &[2.0, 1.0]).unwrap();
+        sm.add_cell(&[b.id(), e.id(), f.id(), c.id()]).unwrap();
+
+        let map = sm.node_index();
+        // Distinct nodes, indexed by first appearance in the connectivity.
+        assert_eq!(map.len(), 6);
+        assert_eq!(map[&a.id()], 0);
+        assert_eq!(map[&b.id()], 1);
+        assert_eq!(map[&c.id()], 2);
+        assert_eq!(map[&d.id()], 3);
+        assert_eq!(map[&e.id()], 4);
+        assert_eq!(map[&f.id()], 5);
+        // Cached: a second call returns the same populated map.
+        assert_eq!(sm.node_index().len(), 6);
     }
 
     #[test]

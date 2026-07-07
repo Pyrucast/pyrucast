@@ -18,7 +18,7 @@
 //! instead — see [`crate::containers::field::Field::sum`].
 
 use crate::containers::element_field::ElementField;
-use crate::containers::field::{Field, SubField};
+use crate::containers::field::SubField;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::mesh::NodeId;
 use crate::containers::node_field::NodeField;

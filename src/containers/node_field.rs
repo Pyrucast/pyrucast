@@ -59,7 +59,7 @@
 //! ```
 
 use crate::aggregate::Aggregate;
-use crate::containers::field::{Field, SubField};
+use crate::containers::field::SubField;
 use crate::containers::mesh::ElementType;
 use crate::containers::mesh::{Coords, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
@@ -306,8 +306,15 @@ impl SubNodeField {
 
     pub(crate) fn component_value_opt(&self, nid: NodeId, comp: &str) -> Option<f64> {
         let ni = self.index_of(nid)?;
+        self.component_value_at(ni, comp)
+    }
+
+    /// Value at an **already-resolved** node index and a named component, or
+    /// `None` if the component is absent. Used by [`NodeFieldView`], which
+    /// resolves the node index through the support's cached map.
+    pub(crate) fn component_value_at(&self, node_idx: usize, comp: &str) -> Option<f64> {
         let ci = self.component_index(comp)?;
-        Some(self.values[ni * self.components.len() + ci])
+        Some(self.values[node_idx * self.components.len() + ci])
     }
 
     // ── Accès idiomatique ───────────────────────────────────────────────────
@@ -537,6 +544,17 @@ crate::impl_aggregate_dump!(NodeField);
 crate::impl_field_ops!(NodeField);
 
 impl NodeField {
+    /// Zero-copy view of this field's zones for read-heavy operators
+    /// (`deformation`, `restrict`, viz, …). One read guard per zone **and**
+    /// per zone support is held for the view's lifetime, so every
+    /// `(node, component)` lookup resolves through the support's cached
+    /// `NodeId → index` map in O(1). Shadows the generic
+    /// [`crate::containers::field::Field::view`] to return the node-specific
+    /// [`NodeFieldView`].
+    pub(crate) fn view(&self) -> Result<NodeFieldView> {
+        NodeFieldView::new(self)
+    }
+
     /// One zero-initialized [`SubNodeField`] per submesh of `mesh`, all
     /// sharing the same `components`. Each sub is supported on the
     /// distinct nodes of its submesh — interface nodes shared by several
@@ -767,13 +785,37 @@ impl NodeField {
     }
 }
 
-/// Zero-copy view of a [`NodeField`]'s zones — the
-/// [`crate::containers::field::FieldView`] aggregate view specialised
-/// to node fields (built by `Field::view`). Reads mirror the
-/// aggregate: first zone defining `(node, component)` wins.
-pub(crate) type NodeFieldView = crate::containers::field::FieldView<SubNodeField>;
+/// Zero-copy view of a [`NodeField`]'s zones, specialised to node fields
+/// (built by [`NodeField::view`]). Reads mirror the aggregate: first zone
+/// defining `(node, component)` wins.
+///
+/// On top of the generic [`FieldView`] zone guards, this holds **one read
+/// guard on each zone's support [`SubMesh`]** for the whole lifetime of the
+/// view. The guard keeps the support's `NodeId → index` map alive and lets
+/// every `(node, component)` lookup hit it in O(1) — no per-access lock, no
+/// snapshot copy. A view is short-lived (one operator call), so holding a
+/// long shared read lock on the supports is cheaper than repeatedly locking
+/// or duplicating the map.
+pub(crate) struct NodeFieldView {
+    inner: crate::containers::field::FieldView<SubNodeField>,
+    /// One shared read guard per zone, aligned with `inner.zones`, over the
+    /// zone's support `SubMesh`. Held for the view's lifetime.
+    supports: Vec<crate::store::ReadGuard<SubMesh>>,
+}
 
 impl NodeFieldView {
+    /// Build the view: read every zone in place, and open a read guard on
+    /// each zone's support so its node-index map can be queried lock-free.
+    pub(crate) fn new(field: &NodeField) -> Result<Self> {
+        let inner = crate::containers::field::Field::view(field)?;
+        let supports = inner
+            .zones
+            .iter()
+            .map(|z| read(&z.support))
+            .collect::<Result<_>>()?;
+        Ok(Self { inner, supports })
+    }
+
     /// Value at `(node, component)` — first zone wins; errors if absent.
     pub(crate) fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
         self.value_opt(nid, component).ok_or_else(|| {
@@ -784,11 +826,19 @@ impl NodeFieldView {
         })
     }
 
-    /// Like [`NodeFieldView::value`], `None` when absent.
+    /// Like [`NodeFieldView::value`], `None` when absent. Each zone's node
+    /// lookup goes through its support's cached `NodeId → index` map (held
+    /// open by `supports`), so the scan that used to dominate `deformation`
+    /// is now O(1).
     pub(crate) fn value_opt(&self, nid: NodeId, component: &str) -> Option<f64> {
-        self.zones
+        self.inner
+            .zones
             .iter()
-            .find_map(|z| z.component_value_opt(nid, component))
+            .zip(&self.supports)
+            .find_map(|(zone, support)| {
+                let ni = *support.node_index().get(&nid)?;
+                zone.component_value_at(ni, component)
+            })
     }
 }
 

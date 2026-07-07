@@ -258,7 +258,7 @@ pub fn element_pointwise(
 /// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient),
 /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation) and
 /// [`crate::ops::field::interp_to_gauss`](fn@crate::ops::field::interp_to_gauss).
-pub fn nodal_pointwise(
+pub(crate) fn nodal_pointwise(
     fespace: &Handle<SubFiniteElementSpace>,
     field: &NodeFieldView,
     out_components: Vec<String>,
