@@ -868,9 +868,13 @@ mod tests {
         // Schur: fresh matrix, only the base is factorized (1 call).
         let (model_s, _m2, k_schur, rhs_s, _n2) = two_loose_bounds(5.0);
         FACTORIZE_CALLS.store(0, Ordering::Relaxed);
-        let sol_schur =
-            solve_with_options(&model_s, &k_schur, &rhs_s, &opts(ActiveSetMethod::SchurComplement))
-                .unwrap();
+        let sol_schur = solve_with_options(
+            &model_s,
+            &k_schur,
+            &rhs_s,
+            &opts(ActiveSetMethod::SchurComplement),
+        )
+        .unwrap();
         let n_schur = FACTORIZE_CALLS.load(Ordering::Relaxed);
         assert_eq!(n_schur, 1, "schur factorizes only the inequality-free base");
 

@@ -84,7 +84,10 @@ pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNo
 /// Errors if `target` and `field` are attached to different `Coords`s.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn restrict_like(field: PyRef<PyNodeField>, target: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
+pub fn restrict_like(
+    field: PyRef<PyNodeField>,
+    target: PyRef<PyNodeField>,
+) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
         inner: crate::ops::field::restrict_like(&field.inner, &target.inner)?,
     })
