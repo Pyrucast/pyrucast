@@ -345,10 +345,17 @@ méthode, à côté de `min` / `max` :
 | `field.min(comp)` / `field.max(comp)` | une composante | un `float` (exact) |
 | `field.sum(comp)` | une composante (`Σ` nœuds/points) | un `float` |
 | `xtx(field)` | toutes les valeurs au carré (`Σ v²`, `XTX`) | un `float` |
+| `xtx(field, components=[…])` | seules ces composantes au carré | un `float` |
 
 `sum` et `xtx` regroupent la somme en parallèle : dépendantes du nombre de
 threads au dernier ULP (contrairement à `min` / `max`, exactes quel que soit
 l'ordre).
+
+Par défaut `xtx` somme **toutes** les composantes. En passant `components`, on
+restreint la somme à celles-là (les autres sont ignorées) — utile pour mesurer
+la norme d'un résidu sur un sous-jeu de degrés de liberté. Une composante
+absente d'une zone y est simplement ignorée ; l'appel n'échoue que si **aucune**
+zone ne porte l'une des composantes demandées.
 
 ```python
 import pyrucast
@@ -358,6 +365,8 @@ rx = forces.sum("f_x")
 ry = forces.sum("f_y")
 # Norme du résidu au carré, pour un test de convergence.
 r2 = pyrucast.xtx(residu)
+# Même norme, restreinte aux seules composantes de translation.
+r2_uy = pyrucast.xtx(residu, components=["f_y"])
 ```
 
 ## À venir dans `ops::field`

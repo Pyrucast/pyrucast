@@ -384,6 +384,35 @@ pub trait SubField {
             .map(|v| v * v)
             .sum()
     }
+
+    /// Squared Euclidean norm restricted to the named `components` — `Σ v²`
+    /// over the selected components only, the rest ignored. Components this
+    /// sub-field does not carry are silently skipped (an aggregate may spread
+    /// them across zones); errors only if **none** of them is present here.
+    /// Like [`SubField::xtx`], thread-count-dependent to the last ULP.
+    fn xtx_components(&self, components: &[&str]) -> Result<f64> {
+        let nc = self.component_count();
+        let indices: Vec<usize> = components
+            .iter()
+            .filter_map(|c| self.component_index(c))
+            .collect();
+        if indices.is_empty() {
+            return Err(PyrucastError::Message(format!(
+                "xtx_components: none of {:?} present in this sub-field",
+                components
+            )));
+        }
+        // Fast path: every component selected ⇒ the whole flat buffer.
+        if indices.len() == nc {
+            return Ok(self.xtx());
+        }
+        Ok(self
+            .values()
+            .par_chunks(nc.max(1))
+            .with_min_len((MIN_PARALLEL_LEN / nc.max(1)).max(1))
+            .map(|row| indices.iter().map(|&ci| row[ci] * row[ci]).sum::<f64>())
+            .sum())
+    }
 }
 
 /// Fold `op` over every value of one component of a [`SubField`].
@@ -626,6 +655,32 @@ where
         let mut acc = 0.0;
         for h in self.iter() {
             acc += SubField::xtx(&*read(h)?);
+        }
+        Ok(acc)
+    }
+
+    /// Squared Euclidean norm restricted to the named `components`, summed over
+    /// every zone that carries any of them (the aggregate twin of
+    /// [`SubField::xtx_components`]). A component may be spread across zones;
+    /// each zone contributes the squares of whichever selected components it
+    /// holds. Errors if **no** zone defines **any** of `components`.
+    fn xtx_components(&self, components: &[&str]) -> Result<f64> {
+        let mut acc = 0.0;
+        let mut any = false;
+        for h in self.iter() {
+            let s = read(h)?;
+            // A zone missing all selected components contributes nothing;
+            // one carrying some contributes their squares.
+            if components.iter().any(|c| s.component_index(c).is_some()) {
+                acc += s.xtx_components(components)?;
+                any = true;
+            }
+        }
+        if !any {
+            return Err(PyrucastError::Message(format!(
+                "xtx_components: no zone defines any of {:?}",
+                components
+            )));
         }
         Ok(acc)
     }
@@ -1169,6 +1224,60 @@ mod tests {
         let x1 = SubField::xtx(&*read(&ef.get(1).unwrap()).unwrap());
         assert!((Field::xtx(&ef).unwrap() - (x0 + x1)).abs() < 1e-9);
         assert!(Field::sum(&ef, "missing").is_err());
+    }
+
+    #[test]
+    fn subfield_xtx_components_selects_a_subset() {
+        let (sm, _) = poi1_support(2);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
+        f.set(0, 0, 3.0).unwrap(); // U
+        f.set(0, 1, 4.0).unwrap(); // V
+        f.set(1, 0, 0.0).unwrap();
+        f.set(1, 1, 12.0).unwrap();
+        // Whole field: 3² + 4² + 0² + 12² = 169.
+        assert_eq!(SubField::xtx(&f), 169.0);
+        // U only: 3² + 0² = 9.
+        assert_eq!(f.xtx_components(&["U"]).unwrap(), 9.0);
+        // V only: 4² + 12² = 160.
+        assert_eq!(f.xtx_components(&["V"]).unwrap(), 160.0);
+        // Both selected ⇒ same as the whole field.
+        assert_eq!(f.xtx_components(&["U", "V"]).unwrap(), 169.0);
+        // An unknown component alongside a known one is ignored, not an error.
+        assert_eq!(f.xtx_components(&["U", "nope"]).unwrap(), 9.0);
+        // None present ⇒ error.
+        assert!(f.xtx_components(&["nope"]).is_err());
+    }
+
+    #[test]
+    fn field_xtx_components_folds_selected_across_zones() {
+        let ef = make_two_zone_element_field(); // zone0: [k], zone1: [E, k]
+        write(&ef.get(0).unwrap())
+            .unwrap()
+            .set_uniform("k", 3.0)
+            .unwrap();
+        {
+            let mut s = write(&ef.get(1).unwrap()).unwrap();
+            s.set_uniform("k", -2.0).unwrap();
+            s.set_uniform("E", 5.0).unwrap();
+        }
+        // "k" lives on both zones: Σ of the per-zone k-only xtx.
+        let k0 = read(&ef.get(0).unwrap())
+            .unwrap()
+            .xtx_components(&["k"])
+            .unwrap();
+        let k1 = read(&ef.get(1).unwrap())
+            .unwrap()
+            .xtx_components(&["k"])
+            .unwrap();
+        assert!((ef.xtx_components(&["k"]).unwrap() - (k0 + k1)).abs() < 1e-9);
+        // "E" lives on zone 1 only; zone 0 (no E) is skipped, not an error.
+        let e1 = read(&ef.get(1).unwrap())
+            .unwrap()
+            .xtx_components(&["E"])
+            .unwrap();
+        assert!((ef.xtx_components(&["E"]).unwrap() - e1).abs() < 1e-9);
+        // No zone defines "missing" ⇒ error.
+        assert!(ef.xtx_components(&["missing"]).is_err());
     }
 
     // ─── SubField::combine (binary, strict) ──────────────────────────────────

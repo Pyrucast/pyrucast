@@ -242,21 +242,44 @@ pub fn integral(
 /// Squared Euclidean norm `xᵀx = Σ v²` of a field (Cast3M `XTX`) — the sum of
 /// squares over every value of every zone. Accepts a `NodeField`,
 /// `SubNodeField`, `ElementField` or `SubElementField`.
+///
+/// With `components` given, the sum is restricted to those components only
+/// (the rest ignored); by default every component is taken.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn xtx(x: &Bound<'_, PyAny>) -> PyResult<f64> {
+#[pyo3(signature = (x, components = None))]
+pub fn xtx(x: &Bound<'_, PyAny>, components: Option<Vec<String>>) -> PyResult<f64> {
     use crate::containers::field::{Field, SubField};
+    let refs: Option<Vec<&str>> = components
+        .as_ref()
+        .map(|v| v.iter().map(String::as_str).collect());
+    macro_rules! aggregate {
+        ($inner:expr) => {
+            match &refs {
+                Some(c) => $inner.xtx_components(c)?,
+                None => $inner.xtx()?,
+            }
+        };
+    }
+    macro_rules! sub {
+        ($guard:expr) => {
+            match &refs {
+                Some(c) => $guard.xtx_components(c)?,
+                None => $guard.xtx(),
+            }
+        };
+    }
     if let Ok(a) = x.extract::<PyRef<PyNodeField>>() {
-        return Ok(a.inner.xtx()?);
+        return Ok(aggregate!(a.inner));
     }
     if let Ok(a) = x.extract::<PyRef<PyElementField>>() {
-        return Ok(a.inner.xtx()?);
+        return Ok(aggregate!(a.inner));
     }
     if let Ok(a) = x.extract::<PyRef<PySubNodeField>>() {
-        return Ok(read(&a.handle)?.xtx());
+        return Ok(sub!(read(&a.handle)?));
     }
     if let Ok(a) = x.extract::<PyRef<PySubElementField>>() {
-        return Ok(read(&a.handle)?.xtx());
+        return Ok(sub!(read(&a.handle)?));
     }
     Err(PyTypeError::new_err(
         "expected a NodeField, SubNodeField, ElementField or SubElementField",

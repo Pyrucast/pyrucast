@@ -2567,11 +2567,14 @@ def volume(envelope: Mesh, size: typing.Optional[builtins.float] = None) -> Mesh
     targets convex or mildly concave envelopes.
     """
 
-def xtx(x: typing.Any) -> builtins.float:
+def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
     r"""
     Squared Euclidean norm `xᵀx = Σ v²` of a field (Cast3M `XTX`) — the sum of
     squares over every value of every zone. Accepts a `NodeField`,
     `SubNodeField`, `ElementField` or `SubElementField`.
+    
+    With `components` given, the sum is restricted to those components only
+    (the rest ignored); by default every component is taken.
     """
 
 def xty(x: typing.Any, y: typing.Any) -> builtins.float:
