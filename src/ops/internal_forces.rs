@@ -100,7 +100,6 @@ pub fn internal_forces_continuum(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::field::Field;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
     use crate::containers::model::SubModel;

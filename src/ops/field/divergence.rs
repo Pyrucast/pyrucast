@@ -96,7 +96,6 @@ fn divergence_element(geoms: &[CellGeom], field: &SubElementField, fe: &mut [f64
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::field::Field;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 

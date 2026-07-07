@@ -70,26 +70,20 @@ fn subspace_frame_deformation(
     view: &NodeFieldView,
     components: &[String],
 ) -> Result<SubElementField> {
-    let (space_dim, n_nodes, n_g, dofs, out_comps) = {
-        let s = read(fespace)?;
-        let space_dim = s.space_dim();
-        let (dofs, out_comps): (&[&str], &[&str]) = match space_dim {
-            2 => (DOFS_2D, COMPONENTS_2D),
-            3 => (DOFS_3D, COMPONENTS_3D),
-            d => {
-                return Err(PyrucastError::Message(format!(
+    // One read guard on the subspace, held for every property we read off it.
+    let s = read(fespace)?;
+    let space_dim = s.space_dim();
+    let (dofs, out_comps): (&[&str], &[&str]) = match space_dim {
+        2 => (DOFS_2D, COMPONENTS_2D),
+        3 => (DOFS_3D, COMPONENTS_3D),
+        d => {
+            return Err(PyrucastError::Message(format!(
                 "frame_deformation: frame element requires a 2-D or 3-D configuration, got {d}-D"
             )))
-            }
-        };
-        (
-            space_dim,
-            s.nodes_per_cell()?,
-            s.gauss_count(),
-            dofs,
-            out_comps,
-        )
+        }
     };
+    let n_nodes = s.nodes_per_cell()?;
+    let n_g = s.gauss_count();
     if n_nodes != 2 {
         return Err(PyrucastError::Message(format!(
             "frame_deformation: frame element must be SEG2 (2 nodes/cell), got {n_nodes}"
@@ -106,9 +100,12 @@ fn subspace_frame_deformation(
         }
     }
 
-    let submesh = read(fespace)?.submesh();
-    let conn = read(&submesh)?.connectivity().to_vec();
-    let coords_h: Handle<Coords> = read(&submesh)?.coords();
+    // Hold the mesh guard over the whole loop and read the connectivity in
+    // place (sequential loop ⇒ no need to copy it out).
+    let submesh = s.submesh();
+    let mesh = read(&submesh)?;
+    let conn = mesh.connectivity();
+    let coords_h: Handle<Coords> = mesh.coords();
     let coords = read(&coords_h)?;
 
     let n_comp = out_comps.len();
