@@ -113,6 +113,11 @@ fn main() -> Result<()> {
     println!("Chargement : 0 → {p_max} en {nsteps} pas (Newton modifié, K élastique)\n");
 
     // ── Maillage : grille de nœuds (j en hauteur, i en long), cellules QUA4 ──
+    println!(
+        "▸ Maillage : {} nœuds, {} cellules QUA4…",
+        (nx + 1) * (ny + 1),
+        nx * ny
+    );
     let coords = insert(Coords::new(2)?);
     // grid[j][i] : nœud à (x = i·L/nx, y = j·H/ny).
     let mut grid: Vec<Vec<Node>> = Vec::with_capacity(ny + 1);
@@ -154,6 +159,7 @@ fn main() -> Result<()> {
     let free_mesh = Mesh::from_submesh(SubMesh::poi1_from_nodes(&free_nodes)?);
 
     // ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
+    println!("▸ Modèle : plasticité J2 (contraintes planes) + encastrement…");
     let mut model = Model::plasticity(&fes, ElasticityModel::PlaneStress)?;
     model = model.union(&clamp(&left_nodes, "u_x", "f_x")?)?;
     model = model.union(&clamp(&left_nodes, "u_y", "f_y")?)?;
@@ -163,10 +169,12 @@ fn main() -> Result<()> {
     // Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée
     // une fois ; `solve` met la factorisation en cache et la réutilise à chaque
     // descente/remontée.
+    println!("▸ Assemblage de la rigidité élastique K…");
     let k = stiffness(&model, &materials)?;
 
     // ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     //    droite, réparti en efforts nodaux cohérents (∫ densité·N dΓ, op `flux`).
+    println!("▸ Charge de référence + histoire de chargement…");
     let mut right_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for j in 0..ny {
         right_edge.add_cell(&[grid[j][nx].id(), grid[j + 1][nx].id()])?;
@@ -206,6 +214,7 @@ fn main() -> Result<()> {
     // lente sur la branche plastique. On plafonne haut les itérations et on
     // vise un résidu relatif de 1e-6 (largement suffisant ici).
     let max_newton = 200;
+    println!("▸ Résolution : {nsteps} pas de charge (Newton modifié)\n");
     println!(
         "{:>4} {:>8} {:>6} {:>14} {:>14} {:>8}",
         "pas", "P", "iter", "flèche u_y", "p_max", "n_plast"
