@@ -212,8 +212,25 @@ impl SubNodeField {
     }
 
     /// Position of a NodeId in the support, or `None` if absent.
+    ///
+    /// The support is a sealed POI1 SubMesh, so its `NodeId → index` map is
+    /// cached and consistent with `self.nodes` (same first-appearance order).
+    /// We consult that map for an O(1) lookup instead of the linear scan that
+    /// used to dominate the hot write paths (`set_value`, arithmetic, …). A
+    /// short read guard on the support is opened and released here; callers
+    /// looping over many nodes should hoist it with [`index_of_with`].
+    ///
+    /// [`index_of_with`]: SubNodeField::index_of_with
     pub fn index_of(&self, nid: NodeId) -> Option<usize> {
-        self.nodes.iter().position(|&n| n == nid)
+        let support = read(&self.support).ok()?;
+        self.index_of_with(&support, nid)
+    }
+
+    /// Position of a NodeId in the support using a caller-held read guard on
+    /// the support SubMesh — the O(1) map lookup without re-locking. Meant for
+    /// tight loops (per-node writes) that resolve many ids under one guard.
+    pub fn index_of_with(&self, support: &SubMesh, nid: NodeId) -> Option<usize> {
+        support.node_index().get(&nid).copied()
     }
 
     /// Build a new POI1 [`SubMesh`] whose cells are exactly the support nodes
@@ -763,14 +780,18 @@ impl NodeField {
                 values.len()
             )));
         }
-        // Distinct nodes and components, first-seen order.
+        // Distinct nodes and components, first-seen order. O(n) dedup via
+        // seen-sets (the previous `Vec::contains` was O(n²), a profiler hotspot
+        // on the `solve` output reprojected every Newton iteration).
+        let mut seen_nodes: std::collections::HashSet<NodeId> = std::collections::HashSet::new();
+        let mut seen_components: std::collections::HashSet<&str> = std::collections::HashSet::new();
         let mut unique_nodes: Vec<NodeId> = Vec::new();
         let mut unique_components: Vec<String> = Vec::new();
         for (nid, name) in dofs {
-            if !unique_nodes.contains(nid) {
+            if seen_nodes.insert(*nid) {
                 unique_nodes.push(*nid);
             }
-            if !unique_components.contains(name) {
+            if seen_components.insert(name.as_str()) {
                 unique_components.push(name.clone());
             }
         }
@@ -778,8 +799,25 @@ impl NodeField {
         // in the store and cascade-decref their nodes on drop.
         let sm_h = insert(SubMesh::poi1_from_node_ids(coords, &unique_nodes)?);
         let mut sub = SubNodeField::from_poi1(&sm_h, unique_components)?;
-        for ((nid, name), &v) in dofs.iter().zip(values) {
-            sub.set_value(*nid, name, v)?;
+        // Resolve component indices once and hoist one read guard on the
+        // support over the whole write loop (O(1) node lookups, no re-locking).
+        let comp_idx: std::collections::HashMap<&str, usize> = sub
+            .components
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.as_str(), i))
+            .collect();
+        {
+            let support = read(&sub.support)?;
+            let ncomp = sub.components.len();
+            for ((nid, name), &v) in dofs.iter().zip(values) {
+                let ni = *support
+                    .node_index()
+                    .get(nid)
+                    .expect("node just inserted into support");
+                let ci = comp_idx[name.as_str()];
+                sub.values[ni * ncomp + ci] = v;
+            }
         }
         Ok(Self::from_sub(sub))
     }
