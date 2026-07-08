@@ -14,7 +14,7 @@ par module, plus la visualisation (qui vit sous `src/viz/`).
 |---|---|---|
 | `ops::mesher` | [Maillage](operateurs/maillage.md) | `line_seg2`, `circle_seg2`, `extrude`, `sweep_qua4`, `sweep_solid`, `translate`, `rotate`, `fill_surface`, `surface`, `volume`, `contour`, `elements_on`, `merge_nodes`, `read_gmsh`, `to_poi1`, `to_quadratic`, `barycenter`, `consolidate`… |
 | `ops::build` | [Construction](operateurs/construction.md) | champs matériau (`material_field`…) |
-| `ops::geom` | [Géométrie](operateurs/geometrie.md) | `locate_points` (mapping inverse, baignage), `project_points` (projection sur surface, contact) |
+| `ops::geom` | [Géométrie](operateurs/geometrie.md) | `locate_points` (mapping inverse, baignage), `project_points` (projection sur surface, contact), `nearest_node` (nœud le plus proche d'un point) |
 | `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `interp_to_gauss` (nœuds → Gauss), `thermal_strain` (déformation thermique `EPTH`), `restrict`, `restrict_like` (reprojection sur le support d'un champ cible), `select`, `mask`, `merge`, `consolidate`, `integral` / `integral_element` (intégrale `∫ f dΩ`), `xty` / `xtx` (produits scalaires globaux) / `psca` (produit scalaire nœud par nœud), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
 | `ops::assemble` | [Assemblage](operateurs/assemblage.md) | `stiffness`, `mass`, chargement réparti `flux` |
 | `ops::behavior` / `ops::internal_forces` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`), `internal_forces` / `internal_forces_continuum` (le `BSIG`, `∫ Bᵀ σ`) |

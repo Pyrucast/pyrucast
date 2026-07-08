@@ -21,6 +21,17 @@ sous les contraintes qui les consomment) :
   clamp), poids `Nᵢ(ξ)`, **normale** orientée et **jeu signé** `(x − p)·n`.
   C'est la brique du [contact](../contraintes/contact.md).
 
+## Nœud le plus proche
+
+- **`nearest_node(mesh, point)`** — le **nœud** du maillage le plus proche
+  (distance euclidienne) de `point`. Question purement nodale, complémentaire de
+  `locate_points` (qui, elle, renvoie la *maille* contenant le point) : seuls les
+  nœuds effectivement référencés par une maille sont candidats, et les ex-æquo
+  sont départagés par le plus petit identifiant (résultat déterministe). Pratique
+  pour cibler un nœud où poser une condition aux limites ou lire un résultat quand
+  on connaît sa position approximative mais pas son id. Exposée côté Python
+  (`mesh.nearest_node([x, y])`).
+
 Sont encore prévus, au fil des besoins : boîtes englobantes (AABB), centroïdes,
 aires/volumes, métriques de **qualité** d'élément. Les briques de Jacobien
 existantes vivent aujourd'hui sur le

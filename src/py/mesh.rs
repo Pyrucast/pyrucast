@@ -312,6 +312,15 @@ impl PyMesh {
         Ok(PyNode::from_node(node))
     }
 
+    /// The mesh node closest (Euclidean distance) to `point`.
+    ///
+    /// `point` must have the mesh coordinate dimension. Only nodes referenced
+    /// by a cell are considered; ties break to the smaller node id.
+    fn nearest_node(&self, point: Vec<f64>) -> PyResult<PyNode> {
+        let node = crate::ops::geom::nearest_node(&self.inner, &point)?;
+        Ok(PyNode::from_node(node))
+    }
+
     /// `mesh.cell(submesh_idx, cell_idx)` → `Cell` view; same thing
     /// as `mesh[submesh_idx][cell_idx]`.
     fn cell(&self, submesh_idx: usize, cell_idx: usize) -> PyResult<crate::py::cell::PyCell> {

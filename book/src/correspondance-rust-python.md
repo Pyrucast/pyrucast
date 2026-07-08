@@ -185,7 +185,9 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 > `ops::geom` héberge `locate_points` (mapping iso-paramétrique inverse, sous
 > le [baignage](contraintes/embedded.md)) et `project_points` (projection au
 > point le plus proche sur une surface, sous le [contact](contraintes/contact.md)) ;
-> ces primitives sont internes (API Rust), pas encore exposées en Python.
+> ces deux primitives sont internes (API Rust), pas encore exposées en Python.
+> `nearest_node(mesh, point)` (nœud le plus proche d'un point) est en revanche
+> exposée comme méthode : `mesh.nearest_node([x, y])`.
 
 ## Opérateurs (dunders ↔ traits Rust)
 
