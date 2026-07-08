@@ -47,8 +47,6 @@
 //! deux**. Anderson ne peut donc jamais dégrader la convergence par rapport au
 //! Newton modifié d'origine ; s'il est rejeté, on vide l'historique.
 
-use std::collections::HashSet;
-
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::element_field::ElementField;
 use pyrucast::containers::evolution::{
@@ -56,16 +54,19 @@ use pyrucast::containers::evolution::{
 };
 use pyrucast::containers::field::{Field, SubField};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, SubMesh};
+use pyrucast::containers::mesh::{Coords, Mesh, Node};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::assemble::{flux, stiffness, FluxDensity};
 use pyrucast::ops::behavior::integrate;
 use pyrucast::ops::build::material_field;
-use pyrucast::ops::field::{deformation, mask_cells, restrict, restrict_like, Band};
+use pyrucast::ops::field::{
+    coordinates, deformation, mask_cells, restrict, restrict_like, select_nodes, Band,
+};
+use pyrucast::ops::geom::nearest_node;
 use pyrucast::ops::internal_forces::internal_forces;
-use pyrucast::ops::mesher::barycenter;
+use pyrucast::ops::mesher::{line_seg2, sweep_qua4, to_poi1, translate};
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
 use pyrucast::Result;
@@ -118,50 +119,50 @@ fn main() -> Result<()> {
         nx * ny
     );
     let coords = insert(Coords::new(2)?);
-    // grid[j][i] : nœud à (x = i·L/nx, y = j·H/ny).
-    let mut grid: Vec<Vec<Node>> = Vec::with_capacity(ny + 1);
-    for j in 0..=ny {
-        let mut row = Vec::with_capacity(nx + 1);
-        for i in 0..=nx {
-            let x = i as f64 * length / nx as f64;
-            let y = j as f64 * height / ny as f64;
-            row.push(Node::create_in(coords.clone(), &[x, y])?);
-        }
-        grid.push(row);
-    }
-
-    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
-    for j in 0..ny {
-        for i in 0..nx {
-            mesh.add_cell(&[
-                grid[j][i].id(),
-                grid[j][i + 1].id(),
-                grid[j + 1][i + 1].id(),
-                grid[j + 1][i].id(),
-            ])?;
-        }
-    }
+    let pt_a = Node::create_in(coords.clone(), &[0., 0.])?;
+    let pt_b = Node::create_in(coords.clone(), &[0., height])?;
+    let pt_c = Node::create_in(coords.clone(), &[length, 0.])?;
+    let pt_d = Node::create_in(coords.clone(), &[length, height])?;
+    let left_edge = line_seg2(&pt_a, &pt_b, ny)?;
+    let right_edge = line_seg2(&pt_c, &pt_d, ny)?;
+    let mesh = sweep_qua4(&left_edge, &right_edge, nx)?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
-    // Ensembles de nœuds utiles : bord gauche (encastré), bout (mi-hauteur), et
-    // un maillage POI1 des nœuds LIBRES (hors encastrement) — support cible pour
-    // mesurer la norme du résidu sur les seuls DDL libres (`restrict` + `xtx`).
-    let left_nodes: Vec<Node> = grid.iter().map(|row| row[0].clone()).collect();
-    let left_ids: HashSet<NodeId> = left_nodes.iter().map(Node::id).collect();
-    let tip_id = grid[ny / 2][nx].id();
-    let free_nodes: Vec<Node> = grid
-        .iter()
-        .flatten()
-        .filter(|n| !left_ids.contains(&n.id()))
-        .cloned()
-        .collect();
-    let free_mesh = Mesh::from_submesh(SubMesh::poi1_from_nodes(&free_nodes)?);
+    // Ensembles de nœuds utiles : bout (mi-hauteur), et un maillage POI1 des
+    // nœuds LIBRES (hors encastrement) — support cible pour mesurer la norme du
+    // résidu sur les seuls DDL libres (`restrict` + `xtx`). Les nœuds libres sont
+    // ceux de coordonnée X strictement positive (bande sur le champ `coordinates`).
+    let tip = nearest_node(&mesh, &[length, height / 2.])?;
+    let coords_field = coordinates(&mesh, Some(vec!["X".into()]))?;
+    let free_mesh = select_nodes(
+        &coords_field,
+        &Band::new(Some(length / nx as f64 / 2.), None, None, None)?,
+        None,
+    )?;
 
     // ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
     println!("▸ Modèle : plasticité J2 (contraintes planes) + encastrement…");
     let mut model = Model::plasticity(&fes, ElasticityModel::PlaneStress)?;
-    model = model.union(&clamp(&left_nodes, "u_x", "f_x")?)?;
-    model = model.union(&clamp(&left_nodes, "u_y", "f_y")?)?;
+    let imposed_mesh = to_poi1(&left_edge)?;
+    let multiplier = translate(&imposed_mesh, &[0., 0.])?;
+    model = model.union(&Model::dirichlet(
+        "u_x".into(),
+        "f_x".into(),
+        &imposed_mesh,
+        &multiplier,
+        None,
+        None,
+        Default::default(),
+    )?)?;
+    model = model.union(&Model::dirichlet(
+        "u_y".into(),
+        "f_y".into(),
+        &imposed_mesh,
+        &multiplier,
+        None,
+        None,
+        Default::default(),
+    )?)?;
 
     let materials = material_field(&model, &[("E", young), ("nu", nu), ("sigma_y", sigma_y)])?;
 
@@ -174,10 +175,6 @@ fn main() -> Result<()> {
     // ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     //    droite, réparti en efforts nodaux cohérents (∫ densité·N dΓ, op `flux`).
     println!("▸ Charge de référence + histoire de chargement…");
-    let mut right_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
-    for j in 0..ny {
-        right_edge.add_cell(&[grid[j][nx].id(), grid[j + 1][nx].id()])?;
-    }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
     let load_unit = flux(&right_fes.get(0)?, FluxDensity::Uniform(-1.0), "f_y")?;
 
@@ -244,11 +241,16 @@ fn main() -> Result<()> {
         // ε(u) → COMP → BSIG → r = F_ext − F_int, plus la norme sur les DDL libres.
         // Aucune boucle nodale (opérateurs de champ uniquement).
         let residual_at = |u: &NodeField| -> Result<(NodeField, f64, ElementField)> {
+            // ε(u) → entrée de comportement (ε | VAR0) → σ, VAR1 (COMP) → F_int (BSIG).
             let strain = deformation(u, &fes)?;
-            let behavior_input = build_behavior_input(&strain, &state)?;
+            let behavior_input = strain.union(&state)?;
             let out = integrate(&model, &behavior_input, &materials)?;
             let f_int = internal_forces(&model, &out)?;
-            let (residual, free_res) = build_residual(&load_scaled, &f_int, &free_mesh)?;
+            // Résidu r = F_ext − F_int et sa norme sur les DDL libres (opérateurs
+            // de champ uniquement : `restrict_like`, `-`, `restrict`, `xtx`).
+            let f_ext = restrict_like(&load_scaled, &f_int)?;
+            let residual = (&f_ext - &f_int)?;
+            let free_res = restrict(&residual, &free_mesh)?.xtx()?.sqrt();
             Ok((residual, free_res, out))
         };
 
@@ -317,7 +319,7 @@ fn main() -> Result<()> {
 
         // Diagnostics du pas.
         let (p_max_val, n_plastic) = plastic_diagnostics(&state)?;
-        let defl = u.value(tip_id, "u_y")?;
+        let defl = u.value(tip.id(), "u_y")?;
         any_plasticity |= n_plastic > 0;
         let flag = if converged {
             ""
@@ -352,23 +354,6 @@ fn main() -> Result<()> {
         println!("\nOK : réponse restée élastique (P_max={p_max} ≤ ≈{p_first_yield:.2}).");
     }
     Ok(())
-}
-
-/// Sous-modèle Dirichlet encastrant `variable` (dual `dual`) sur `nodes` :
-/// un POI1 des nœuds imposés, des multiplicateurs de Lagrange portés par les
-/// barycentres (un par nœud). Miroir du `_clamp` de l'exemple Python.
-fn clamp(nodes: &[Node], variable: &str, dual: &str) -> Result<Model> {
-    let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    let multiplier = barycenter(&imposed)?;
-    Model::dirichlet(
-        variable.to_string(),
-        dual.to_string(),
-        &imposed,
-        &multiplier,
-        None,
-        None,
-        Default::default(),
-    )
 }
 
 /// Pas d'accélération d'Anderson : à partir du déplacement courant `u`, de sa
@@ -491,27 +476,6 @@ fn solve_small_spd(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
         x[i] = s / a[i][i];
     }
     Some(x)
-}
-
-/// Assemble l'entrée de comportement en fusionnant la déformation totale `ε`
-/// (de `deformation`) et l'état plastique `VAR0` (`state`). Les deux champs
-/// vivent sur le **même** espace EF et portent des composantes disjointes :
-/// l'union `strain | state` les fusionne en une seule zone, sans boucle nodale.
-fn build_behavior_input(strain: &ElementField, state: &ElementField) -> Result<ElementField> {
-    strain.union(state)
-}
-
-/// Construit le résidu `r = F_ext − F_int` et sa norme sur les DDL **libres**,
-/// sans aucune boucle nodale — tout par les opérateurs de la librairie.
-fn build_residual(
-    load_scaled: &NodeField,
-    f_int: &NodeField,
-    free_mesh: &Mesh,
-) -> Result<(NodeField, f64)> {
-    let f_ext = restrict_like(load_scaled, f_int)?;
-    let residual = (&f_ext - f_int)?;
-    let res_norm = restrict(&residual, free_mesh)?.xtx()?.sqrt();
-    Ok((residual, res_norm))
 }
 
 /// `(p_max, nombre de points de Gauss plastifiés)` de l'état courant
