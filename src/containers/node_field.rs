@@ -854,6 +854,13 @@ impl NodeFieldView {
         Ok(Self { inner, supports })
     }
 
+    /// Union of the zones' component names, first-seen order.
+    // Consumed by the viz layer (feature-gated).
+    #[allow(dead_code)]
+    pub(crate) fn components(&self) -> &[String] {
+        self.inner.components()
+    }
+
     /// Value at `(node, component)` — first zone wins; errors if absent.
     pub(crate) fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
         self.value_opt(nid, component).ok_or_else(|| {
