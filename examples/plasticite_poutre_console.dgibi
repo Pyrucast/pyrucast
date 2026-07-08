@@ -1,0 +1,147 @@
+**----------------------------------------------------------------------
+** Poutre console elasto-plastique -- equivalent Cast3M (GIBIANE) de
+** l'exemple plasticite_poutre_console.
+**
+** Physique
+** --------
+** Continuum 2-D en contraintes planes, petites deformations. Plasticite de
+** von Mises PARFAITE (retour radial J2, sans ecrouissage) : la contrainte
+** equivalente est plafonnee a SIGY. Poutre encastree a gauche (UX = UY = 0),
+** cisaillee vers le bas sur la face droite. La charge monte par increments ;
+** au-dela de la premiere plastification une zone plastique se developpe pres
+** de l'encastrement et la fleche s'ecarte de la reponse lineaire.
+**
+** Cast3M vs. pyrucast
+** -------------------
+** La version pyrucast recode un Newton modifie (operateur = K elastique) au
+** dessus d'operateurs ponctuels. Cast3M sait faire le pilotage incremental
+** non lineaire nativement : on decrit le modele, le materiau, les conditions
+** aux limites et l'histoire de chargement, et PASAPAS integre la loi de
+** comportement pas a pas (Newton complet, matrice tangente).
+**
+** Parametres (identiques a l'exemple) :
+**   E = 210000, nu = 0.3, SIGY = 250
+**   L = 10, H = 1, maillage NX x NY en QUA4
+**   chargement : effort tranchant surfacique -1 sur la face droite,
+**                amplifie de 0 a PMAX en NSTEPS pas.
+**----------------------------------------------------------------------
+
+OPTI ECHO -1 ;
+OPTI DIME 2 ELEM QUA4 MODE PLAN CONT ;
+
+**--- Parametres (memes valeurs que l'exemple) ---------------------------
+YOUNG = 210000. ;
+NU    = 0.3 ;
+SIGY  = 250. ;
+
+LONG = 10. ;
+HAUT = 1. ;
+
+NX     = 200 ;
+NY     = 40 ;
+NSTEPS = 10 ;
+PMAX   = 5. ;
+
+**--- Maillage : grille NX x NY de QUA4 ---------------------------------
+** Coins de la poutre.
+P1 = 0.   0.   ;
+P2 = LONG 0.   ;
+P3 = LONG HAUT ;
+P4 = 0.   HAUT ;
+
+** Aretes (DROI D <densite> A B decoupe le segment en D elements).
+BAS   = DROI NX P1 P2 ;
+DROIT = DROI NY P2 P3 ;
+HAULT = DROI NX P3 P4 ;
+GAUCH = DROI NY P4 P1 ;
+
+** Surface reglee a partir des 4 aretes -> maillage QUA4 structure.
+POUTRE = DALL BAS DROIT HAULT GAUCH PLAN ;
+
+**--- Modele : elasto-plasticite von Mises parfaite, contraintes planes --
+MOD1 = MODE POUTRE MECANIQUE ELASTIQUE ISOTROPE
+       PLASTIQUE PARFAIT ;
+
+** Materiau : elasticite + limite elastique (ecrouissage nul => parfait).
+MAT1 = MATE MOD1 'YOUN' YOUNG 'NU' NU 'SIGY' SIGY ;
+
+**--- Rigidite elastique (pour info / reactions) ------------------------
+RIG1 = RIGI MOD1 MAT1 ;
+
+**--- Conditions aux limites : encastrement du bord gauche --------------
+CL1 = BLOQ UX GAUCH ;
+CL2 = BLOQ UY GAUCH ;
+CLTOT = CL1 ET CL2 ;
+
+**--- Charge de reference : cisaillement surfacique -1 (vers le bas) sur
+**    la face droite, reparti en efforts nodaux coherents (PRES avec une
+**    composante suivant Y). PMAX l'amplifie a la charge finale. ---------
+** Effort surfacique -1 selon Y sur l'arete droite -> chargement nodal.
+FORC1 = FSUR MASS MOD1 (0. -1.) DROIT ;
+CHA1  = CHAR MECA FORC1 ;
+
+**--- Histoire de chargement : rampe lineaire de 0 a PMAX en pseudo-temps
+**    t dans [0, 1], NSTEPS pas egaux. L'amplitude du chargement suit
+**    F(t) = PMAX * t. --------------------------------------------------
+LTPS0 = PROG 0. PAS (1. / NSTEPS) 1. ;
+LTPS = PROG 0.  1. ;
+LAMP = PROG 0. PMAX ;
+EVOL1 = EVOL MANU 't' LTPS 'F' LAMP ;
+CHA1 = CHAR 'MECA' FORC1 EVOL1 ;
+
+**--- Table de pilotage incremental (PASAPAS) ---------------------------
+TAB1 = TABLE ;
+TAB1 . 'MODELE'      = MOD1 ;
+TAB1 . 'CARACTERISTIQUES' = MAT1 ;
+TAB1 . 'BLOCAGES_MECANIQUES' = CLTOT ;
+TAB1 . 'CHARGEMENT'  = CHA1 ;
+TAB1 . 'TEMPS_CALCULES' = LTPS0 ;
+
+** Integration pas a pas de la loi de comportement.
+PASAPAS TAB1 ;
+
+**--- Post-traitement : fleche au bout (mi-hauteur) et plastification ----
+** Noeud du bout, a mi-hauteur (tip).
+PTIP = LONG (HAUT / 2.) ;
+PTIP = poutre poin proc ptip ; 
+MESS ' ' ;
+MESS ' pas       P      fleche u_y       eps_p_max ' ;
+
+NPAS = (DIME (TAB1 . 'TEMPS')) - 1 ;
+
+REPE BOUCPAS NPAS ;
+  IP = &BOUCPAS ;
+  TCUR =  TAB1 . 'TEMPS' . IP ;
+  PCUR = PMAX * TCUR ;
+
+*  * Champ de deplacement cumule a ce pas.
+  UP = TAB1 . 'DEPLACEMENTS' . IP ;
+  DEFL = EXTR UP UY PTIP ;
+
+*  * Deformation plastique cumulee (EPSE) : max sur la structure.
+*  * VARIABLES_INTERNES . IP contient l'etat plastique (dont EPSE).
+  VARP = TAB1 . 'VARIABLES_INTERNES' . IP ;
+  EPMAX = MAXI (EXCO VARP EPSE) ;
+
+  MESS IP '  ' PCUR '  ' DEFL '  ' EPMAX ;
+FIN BOUCPAS;
+
+**--- Bornes elastiques : premiere plastification vers P ~ SIGY*I/(c*L) --
+PFIRST = SIGY * ((HAUT * HAUT) / 6.) / LONG ;
+MESS ' ' ;
+MESS ' Premiere plastification estimee vers P = ' PFIRST ;
+
+** Trace de la fleche au bout en fonction de la charge (optionnel).
+LDEF = PROG ;
+LP   = PROG ;
+REPE BOUCPO NPAS ;
+  IP2 = &BOUCPO ;
+  UP2 = TAB1 . 'DEPLACEMENTS' . IP2 ;
+  LDEF = LDEF ET  (ABS (EXTR UP2 UY PTIP)) ;
+  LP   = LP   ET  (PMAX * TAB1 . 'TEMPS' . IP2) ;
+REPE FIN ;
+EVDEF = EVOL MANU 'P' LP 'fleche |u_y|' LDEF ;
+** DESS EVDEF ;
+
+FIN ;
+FIN ;

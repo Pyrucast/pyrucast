@@ -282,3 +282,6 @@ tags
 book/.recall/history.md
 book/.recall/.capture.json
 book/.recall/.capture-paused
+
+# Cast3M : fichiers de trace generes a l'execution
+*.trace
