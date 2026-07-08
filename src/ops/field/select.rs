@@ -26,6 +26,27 @@
 //!
 //! Within a retained point/cell the bounds are combined with **AND**: the
 //! point is kept only if *each* tested component lies in the band.
+//!
+//! # Example
+//!
+//! Isolate the plastified region of a beam — the cells whose cumulated
+//! plastic strain `p` exceeds a threshold — by building a one-sided
+//! [`Band`] (`p > 0.02`, upper side left open) and handing it to
+//! [`select_cells`]:
+//!
+//! ```ignore
+//! use pyrucast::ops::field::band::Band;
+//! use pyrucast::ops::field::select::select_cells;
+//!
+//! // `p > 0.02`, no upper bound: `gt = Some(0.02)`, everything else `None`.
+//! let band = Band::new(None, Some(0.02), None, None)?;
+//!
+//! // Test only the `p` component; zones lacking it are skipped.
+//! let plastified = select_cells(&state, &band, Some(vec!["p".into()]))?;
+//! ```
+//!
+//! Use `ge`/`le` for inclusive bounds and give both sides for a closed
+//! band, e.g. `Band::new(Some(0.0), None, Some(1.0), None)` for `0 <= v <= 1`.
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
