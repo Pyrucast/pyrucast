@@ -28,8 +28,7 @@ pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
 /// whose behaviour consumes a gradient (heat conduction).
 ///
 /// `∇f = Σ_i f_i ∇N_i` evaluated cell-by-cell, Gauss point by Gauss point, via
-/// the shared parallel driver
-/// [`crate::models::kernel::nodal_pointwise`](fn@crate::models::kernel::nodal_pointwise).
+/// the shared parallel driver `models::kernel::nodal_pointwise`.
 pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(field)?;
     let view = field.view()?;

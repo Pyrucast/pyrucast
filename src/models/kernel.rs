@@ -5,7 +5,7 @@
 //! supplies two kinds of **pure, sequential kernels**:
 //!
 //! - a **point kernel** at one Gauss point, driven either over an element-field
-//!   input ([`element_pointwise`]) or a nodal-field input ([`nodal_pointwise`]).
+//!   input ([`element_pointwise`]) or a nodal-field input (`nodal_pointwise`).
 //!   The constitutive law is one such kernel — read the deformation (+ `VAR0`)
 //!   and material, write the flux/stress (+ `VAR1`) — but the same driver also
 //!   powers point maps like the thermal strain;
@@ -191,7 +191,7 @@ impl<'a> CellGeom<'a> {
 /// the `out_components.len()` output values into `out`. `material` is `Some` iff
 /// the physics declared a material FE subspace.
 ///
-/// The **element-field-input** driver, mirrored by [`nodal_pointwise`] (which
+/// The **element-field-input** driver, mirrored by `nodal_pointwise` (which
 /// reads a nodal field instead). Backs the constitutive integration
 /// [`crate::ops::behavior::integrate`] and the thermal strain
 /// [`crate::ops::field::thermal_strain`](fn@crate::ops::field::thermal_strain).

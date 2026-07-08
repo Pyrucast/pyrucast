@@ -22,8 +22,7 @@ use crate::store::insert;
 ///
 /// The result is an [`ElementField`] carrying the **same component names** as
 /// the input, one value per `(cell, Gauss point)`. Runs on the shared parallel
-/// driver
-/// [`crate::models::kernel::nodal_pointwise`](fn@crate::models::kernel::nodal_pointwise).
+/// driver `models::kernel::nodal_pointwise`.
 pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(field)?;
     let view = field.view()?;

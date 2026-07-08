@@ -121,7 +121,7 @@ impl SubMesh {
     }
 
     /// `NodeId → index` map over the **distinct** nodes of the connectivity,
-    /// in first-appearance order (the order [`SubNodeField`] snapshots its
+    /// in first-appearance order (the order [`SubNodeField`](crate::containers::node_field::SubNodeField) snapshots its
     /// support in). Built once and cached; callers keep their read guard on
     /// this submesh while using the returned reference — no copy.
     ///

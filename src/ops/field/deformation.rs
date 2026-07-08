@@ -26,8 +26,7 @@ use crate::store::{insert, read};
 /// shear `γ`), with one component `eps_<ai><aj>` per independent entry
 /// `i ≤ j`, in order `eps_xx, eps_xy, …, eps_yy, …`.
 ///
-/// Runs on the shared parallel driver
-/// [`crate::models::kernel::nodal_pointwise`](fn@crate::models::kernel::nodal_pointwise),
+/// Runs on the shared parallel driver `models::kernel::nodal_pointwise`,
 /// like [`crate::ops::field::gradient`](fn@crate::ops::field::gradient).
 pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(u)?;
