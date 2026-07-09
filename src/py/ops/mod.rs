@@ -27,7 +27,7 @@ use pyo3::prelude::*;
 ///
 /// - `Mesh` → `ops::mesher::consolidate`: fuse submeshes of the same
 ///   element type, drop duplicate cells;
-/// - `NodeField` → `ops::field::consolidate`: fuse zones with the same
+/// - `NodeField` → `ops::field::consolidate_node`: fuse zones with the same
 ///   component set, dedupe interface nodes after a coherence check.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -37,7 +37,7 @@ pub fn consolidate(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>
         return Ok(Py::new(py, PyMesh { inner: result })?.into_any());
     }
     if let Ok(field) = obj.extract::<PyRef<PyNodeField>>() {
-        let result = crate::ops::field::consolidate(&field.inner)?;
+        let result = crate::ops::field::consolidate_node(&field.inner)?;
         return Ok(Py::new(py, PyNodeField { inner: result })?.into_any());
     }
     Err(PyTypeError::new_err("expected a Mesh or a NodeField"))

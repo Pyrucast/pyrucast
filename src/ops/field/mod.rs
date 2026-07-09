@@ -12,8 +12,8 @@
 
 pub mod band;
 pub mod beam_deformation;
-pub mod consolidate;
 pub mod consolidate_element;
+pub mod consolidate_node;
 pub mod coordinates;
 pub mod deformation;
 pub mod divergence;
@@ -30,8 +30,8 @@ pub mod thermal_strain;
 
 pub use band::Band;
 pub use beam_deformation::beam_deformation;
-pub use consolidate::consolidate;
 pub use consolidate_element::{check_unique_component_per_support, consolidate_element};
+pub use consolidate_node::consolidate_node;
 pub use coordinates::{coordinates, displace, set_coordinates};
 pub use deformation::deformation;
 pub use divergence::divergence;

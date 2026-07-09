@@ -116,7 +116,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `select_nodes(field: &NodeField, band: &Band, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type) |
 | `mask_nodes(field: &NodeField, band: &Band, …) -> NodeField` / `mask_cells(field: &ElementField, …) -> ElementField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> field` (dispatch par type ; champ `0/1` de même structure). Sucre : `field >= x` / `> x` / `<= x` / `< x` → masque |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
-| `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` (dispatch par type, partagé avec `Mesh`) |
+| `consolidate_node(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` (dispatch par type, partagé avec `Mesh`) |
 | `SubField::dot(&self, other) -> f64` / `Field::dot_field(&self, other) -> f64` | `xty(x, y) -> float` (dispatch par type ; produit scalaire **global** de deux champs) |
 | `SubField::xtx(&self) -> f64` / `Field::xtx(&self) -> f64` | `xtx(x) -> float` (dispatch par type ; `Σ v²`, norme au carré `XTX`) |
 | `SubField::xtx_components(&self, &[&str]) -> Result<f64>` / `Field::xtx_components(&self, &[&str]) -> Result<f64>` | `xtx(x, components=[…]) -> float` (norme au carré restreinte à ces composantes) |
@@ -286,7 +286,7 @@ sous-champs définis sur le **même support** (même `Handle<SubMesh>` pour
   partagé par des zones de supports différents s'accorde sur toute composante
   commune.
 
-Ces opérations sont aussi exposées en Rust : `ops::field::consolidate`
+Ces opérations sont aussi exposées en Rust : `ops::field::consolidate_node`
 (`NodeField`) et `ops::field::consolidate_element` (`ElementField`).
 
 #### `+` est réservé à l'arithmétique de champ

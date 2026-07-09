@@ -9,7 +9,8 @@
 //!
 //! This is the finalization step of the node-field union (`a | b`,
 //! [`crate::aggregate::Aggregate::merge`]): after the union deduplicates by
-//! handle, `consolidate` collapses the remaining zones that share a support.
+//! handle, `consolidate_node` collapses the remaining zones that share a
+//! support.
 //!
 //! Beyond per-support fusion, a final cross-zone check runs
 //! ([`NodeField::check`]): a node shared by sub-fields on *different*
@@ -30,7 +31,7 @@ use crate::store::{insert, read, Handle};
 /// See the module documentation. Errors if two zones on the same support
 /// disagree on a shared `(node, component)` value, or if the global
 /// cross-zone check fails.
-pub fn consolidate(field: &NodeField) -> Result<NodeField> {
+pub fn consolidate_node(field: &NodeField) -> Result<NodeField> {
     // Snapshot every sub once (one lock each, never nested), keeping its
     // support handle for grouping and the singleton-sharing case.
     struct Snap {
@@ -145,7 +146,7 @@ mod tests {
     }
 
     /// Two-zone field built **without** triggering the union's finalize, so
-    /// `consolidate` can be exercised directly. Each sub is a fresh handle.
+    /// `consolidate_node` can be exercised directly. Each sub is a fresh handle.
     fn two_zone(a: &NodeField, b: &NodeField) -> NodeField {
         let mut f = NodeField::default();
         f.add_sub(a.get(0).unwrap()).unwrap();
@@ -180,7 +181,7 @@ mod tests {
             .set_value(n1.id(), "P", 9.0)
             .unwrap();
 
-        let c = consolidate(&two_zone(&a, &b)).unwrap();
+        let c = consolidate_node(&two_zone(&a, &b)).unwrap();
         assert_eq!(c.len(), 1, "same support ⇒ one fused zone");
         assert_eq!(Field::components(&c).unwrap(), vec!["T", "P"]);
         assert_eq!(c.value(n0.id(), "T").unwrap(), 5.0);
@@ -238,7 +239,7 @@ mod tests {
         let a = field_on(&sm_a, vec!["T".into()]);
         let b = field_on(&sm_b, vec!["P".into()]);
         let f = two_zone(&a, &b);
-        let c = consolidate(&f).unwrap();
+        let c = consolidate_node(&f).unwrap();
         assert_eq!(c.len(), 2);
         // Singleton groups: handles shared, not copied.
         assert_eq!(c.get(0).unwrap().index(), f.get(0).unwrap().index());
@@ -271,7 +272,7 @@ mod tests {
 
     #[test]
     fn empty_field_consolidates_to_empty() {
-        let c = consolidate(&NodeField::default()).unwrap();
+        let c = consolidate_node(&NodeField::default()).unwrap();
         assert!(c.is_empty());
     }
 }

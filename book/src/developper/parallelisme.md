@@ -91,7 +91,7 @@ l'ancien LU dense). Tous dans les tolérances numériques.
 
 ## Ce qui reste séquentiel (et pourquoi)
 
-- **Fusion de champs** — `consolidate` / `consolidate_element` (dédup et
+- **Fusion de champs** — `consolidate_node` / `consolidate_element` (dédup et
   vérification de cohérence entre zones).
 - **Mailleurs** — les noyaux séquentiels par nature (Bowyer–Watson, front
   avançant) restent séquentiels.
