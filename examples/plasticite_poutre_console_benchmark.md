@@ -7,14 +7,22 @@ cisaillement −1 sur la face droite amplifié de 0 à `PMAX`) :
 | Méthode | Fichier | Solveur non linéaire | Opérateur d'itération |
 |---|---|---|---|
 | **Cast3M** (`PASAPAS`) | [`plasticite_poutre_console.dgibi`](plasticite_poutre_console.dgibi) | Newton **modifié** | `K` **élastique** constant (factorisation recyclée) |
-| **pyrucast** (référence) | [`plasticite_poutre_console.rs`](plasticite_poutre_console.rs) | Newton **modifié** | `K` **élastique** constant (factorisation en cache) |
-| **pyrucast + Anderson** | [`plasticite_poutre_console_anderson.rs`](plasticite_poutre_console_anderson.rs) | Newton modifié **+ accélération d'Anderson (m=3)** | `K` élastique + extrapolation sur les 3 derniers `(u, g=K⁻¹r)` |
+| **pyrucast** (référence) | [`plasticite_poutre_console.rs`](plasticite_poutre_console.rs) · [`.py`](plasticite_poutre_console.py) | Newton **modifié** | `K` **élastique** constant (factorisation en cache) |
+| **pyrucast + Anderson** | [`plasticite_poutre_console_anderson.rs`](plasticite_poutre_console_anderson.rs) · [`.py`](plasticite_poutre_console_anderson.py) | Newton modifié **+ accélération d'Anderson (m=3)** | `K` élastique + extrapolation sur les 3 derniers `(u, g=K⁻¹r)` |
 
 Les **trois méthodes utilisent le même Newton modifié** : opérateur d'itération =
 matrice **élastique** constante, factorisation **recyclée** d'un pas/itération à
 l'autre (par défaut `PASAPAS` ne réactualise pas la matrice tangente). Les
 itérations sont donc directement comparables. Anderson accélère exactement cette
 même méthode en extrapolant sur l'historique récent des itérés.
+
+Les deux variantes pyrucast (référence, Anderson) existent en **Rust** et en
+**Python** : mêmes opérateurs natifs sous le capot, seule la boucle de pilotage
+diffère. Les résultats numériques (flèche, plasticité, nombre d'itérations) sont
+**identiques au bit près** entre Rust et Python
+(`|flèche_Rust − flèche_Python| = 0` à tous les pas) — les tables de résultats
+ci-dessous valent donc pour les deux, et seuls les temps distinguent Rust de
+Python.
 
 Paramètres communs : `E = 210000`, `ν = 0.3`, `σy = 250`, `L = 10`, `H = 1`,
 `NSTEPS = 10`, `PMAX = 5`.
@@ -76,11 +84,11 @@ d'itérations de Cast3M.
 
 ### Temps d'exécution (wall-clock médian, exécution isolée, multithreadé)
 
-| Méthode | temps |
-|---|---:|
-| Cast3M `PASAPAS` | ~3,27 s |
-| pyrucast référence | ~2,34 s |
-| pyrucast + Anderson | **~1,65 s** |
+| Méthode | Rust | Python |
+|---|---:|---:|
+| Cast3M `PASAPAS` | ~3,27 s | — |
+| pyrucast référence | ~2,34 s | ~2,50 s |
+| pyrucast + Anderson | **~1,65 s** | **~1,73 s** |
 
 ---
 
@@ -131,11 +139,11 @@ compte Cast3M ↔ pyrucast vient des critères de convergence, pas de l'opérate
 
 ### Temps d'exécution (wall-clock médian, exécution isolée, multithreadé)
 
-| Méthode | temps |
-|---|---:|
-| Cast3M `PASAPAS` | ~16,78 s |
-| pyrucast référence | ~17,27 s |
-| pyrucast + Anderson | **~10,55 s** |
+| Méthode | Rust | Python |
+|---|---:|---:|
+| Cast3M `PASAPAS` | ~16,78 s | — |
+| pyrucast référence | ~17,27 s | ~16,96 s |
+| pyrucast + Anderson | **~10,55 s** | **~10,47 s** |
 
 ---
 
@@ -158,8 +166,16 @@ compte Cast3M ↔ pyrucast vient des critères de convergence, pas de l'opérate
   un verdict d'algorithme (la même méthode de Newton modifié est utilisée
   partout), mais une mesure d'implémentation sur cette machine — Cast3M reste plus
   frugal en itérations grâce à ses tolérances plus lâches.
+- **Rust vs Python** : résultats identiques au bit près, et **temps quasi
+  identiques** (écart ≤ ~7 % en 200×40, négligeable en 400×80). Le coût réel est
+  dans les opérateurs pyrucast natifs (déformation, comportement, forces
+  internes, solve) — la boucle de pilotage, seule partie interprétée en Python,
+  pèse d'autant moins que le maillage grandit. Python est donc une façade sans
+  pénalité notable ici.
 
-_Reproduction : les binaires pyrucast lisent `PYRUCAST_NX`, `PYRUCAST_NY`,
-`PYRUCAST_NSTEPS`, `PYRUCAST_PMAX` ; le script Cast3M code ces valeurs en tête de
-fichier (`NX`, `NY`, `NSTEPS`, `PMAX`). Lancer chaque exécution seule pour un
-temps fiable._
+_Reproduction. **Rust** : `PYO3_PYTHON=/usr/bin/python3.13 cargo build --release
+--example …`, puis les binaires lisent `PYRUCAST_NX/NY/NSTEPS/PMAX`. **Python** :
+`maturin develop --release` (Python 3.13), puis
+`python examples/plasticite_poutre_console[_anderson].py` avec les mêmes
+variables. **Cast3M** : les valeurs `NX/NY/NSTEPS/PMAX` sont codées en tête du
+`.dgibi`. Lancer chaque exécution seule (machine au repos) pour un temps fiable._
