@@ -394,12 +394,15 @@ pub struct ElementField {
 }
 
 crate::impl_aggregate!(ElementField, SubElementField, subfield, "subfield(s)", {
-    /// Fuse zones sharing the same support `SubFiniteElementSpace` (union of
-    /// components, shared values verified). Runs at the end of every union
-    /// (`a | b`). See [`crate::ops::field::consolidate_element`](fn@crate::ops::field::consolidate_element).
+    /// Validate the zone decomposition after a union (`a | b`): **no component
+    /// may be carried by two zones on the same support**. Zones on the same
+    /// support with disjoint components are kept side by side (no fusion, no new
+    /// `SubElementField`); a duplicated component is an error. To fuse zones that
+    /// legitimately share a support, call
+    /// [`crate::ops::field::consolidate_element`](fn@crate::ops::field::consolidate_element)
+    /// explicitly.
     fn finalize(&mut self) -> Result<()> {
-        *self = crate::ops::field::consolidate_element(self)?;
-        Ok(())
+        crate::ops::field::check_unique_component_per_support(self)
     }
 });
 crate::impl_aggregate_dump!(ElementField);

@@ -31,7 +31,7 @@ pub mod thermal_strain;
 pub use band::Band;
 pub use beam_deformation::beam_deformation;
 pub use consolidate::consolidate;
-pub use consolidate_element::consolidate_element;
+pub use consolidate_element::{check_unique_component_per_support, consolidate_element};
 pub use coordinates::{coordinates, displace, set_coordinates};
 pub use deformation::deformation;
 pub use divergence::divergence;

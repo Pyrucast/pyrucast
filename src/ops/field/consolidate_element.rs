@@ -119,6 +119,42 @@ pub fn consolidate_element(field: &ElementField) -> Result<ElementField> {
     Ok(out)
 }
 
+/// Validate an [`ElementField`]'s zone decomposition: **no component may be
+/// carried by more than one zone on the same support**.
+///
+/// This is the invariant a union (`a | b`) now enforces instead of fusing
+/// zones. Two zones on the same support are allowed as long as their component
+/// sets are disjoint — they stay side by side, no new [`SubElementField`] is
+/// built. A component appearing twice on one support is a genuine duplicate
+/// (readers resolve one zone per `(support, component)`; folding consumers such
+/// as the VTK export or [`crate::ops::field::integral_element`] would otherwise
+/// double-count), so it is rejected. Call
+/// [`consolidate_element`] explicitly to fuse zones instead.
+pub fn check_unique_component_per_support(field: &ElementField) -> Result<()> {
+    // (support slot, generation, component) already seen.
+    let mut seen: Vec<(u32, u32, String)> = Vec::new();
+    for h in field {
+        let s = read(h)?;
+        let support = s.support();
+        for comp in s.components() {
+            let key = (support.index(), support.generation(), comp.clone());
+            if seen.contains(&key) {
+                return Err(PyrucastError::Message(format!(
+                    "ElementField: component {} is carried by two zones on the \
+                     same support (slot {}, generation {}). Component fields must \
+                     be unique per support; call consolidate_element to fuse zones \
+                     that legitimately share a support.",
+                    comp,
+                    support.index(),
+                    support.generation(),
+                )));
+            }
+            seen.push(key);
+        }
+    }
+    Ok(())
+}
+
 // ─── Unit tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -176,7 +212,20 @@ mod tests {
     }
 
     #[test]
-    fn same_support_shared_component_must_agree() {
+    fn union_same_support_distinct_components_stays_separate() {
+        // New convention: a union no longer fuses zones. Two zones on the same
+        // support carrying disjoint components are kept side by side.
+        let fes = one_tri3_fes();
+        let a = field_on(&fes, vec!["E".into()]);
+        let b = field_on(&fes, vec!["nu".into()]);
+        let c = a.union(&b).unwrap();
+        assert_eq!(c.len(), 2, "same support, disjoint components ⇒ two zones");
+    }
+
+    #[test]
+    fn union_same_support_shared_component_is_rejected() {
+        // Same component on the same support is a duplicate ⇒ union errors,
+        // regardless of whether the values agree.
         let fes = one_tri3_fes();
         let a = field_on(&fes, vec!["E".into()]);
         let b = field_on(&fes, vec!["E".into()]);
@@ -186,9 +235,9 @@ mod tests {
             .unwrap();
         crate::store::write(&b.get(0).unwrap())
             .unwrap()
-            .set_uniform("E", 2.0)
+            .set_uniform("E", 1.0)
             .unwrap();
-        // The union's finalize fuses and detects the conflict → `|` errors.
+        // Even with identical values, the duplicate component is rejected.
         assert!(a.union(&b).is_err());
     }
 
@@ -200,5 +249,17 @@ mod tests {
         let b = field_on(&fes_b, vec!["nu".into()]);
         let c = a.union(&b).unwrap();
         assert_eq!(c.len(), 2);
+    }
+
+    #[test]
+    fn check_unique_accepts_disjoint_rejects_duplicate() {
+        let fes = one_tri3_fes();
+        let a = field_on(&fes, vec!["E".into()]);
+        let b = field_on(&fes, vec!["nu".into()]);
+        let dup = field_on(&fes, vec!["E".into()]);
+        // Disjoint components on the same support: valid.
+        check_unique_component_per_support(&two_zone(&a, &b)).unwrap();
+        // Same component twice on the same support: rejected.
+        assert!(check_unique_component_per_support(&two_zone(&a, &dup)).is_err());
     }
 }

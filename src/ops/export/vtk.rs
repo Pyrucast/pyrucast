@@ -39,11 +39,11 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
 use crate::containers::field::{Field, SubField};
-use crate::containers::mesh::{ElementType, Mesh, NodeId};
+use crate::containers::mesh::{ElementType, Mesh, NodeId, SubMesh};
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::parallel::*;
-use crate::store::read;
+use crate::store::{read, Handle};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::Path;
@@ -212,20 +212,85 @@ pub fn vtk_node_field_string(mesh: &Mesh, field: &NodeField) -> Result<String> {
 }
 
 /// Legacy-VTK text for `mesh` carrying `field` as `CELL_DATA`.
+///
+/// The cells are written submesh by submesh, in the mesh's order (matching
+/// [`geometry`]). A field zone is resolved from the submesh through its FE
+/// support; several zones may share a support (they carry disjoint components,
+/// per the union invariant), so the value for a `(submesh, component)` comes
+/// from the **unique** zone on that support carrying the component — the field
+/// must not fold cells across zones.
 pub fn vtk_element_field_string(mesh: &Mesh, field: &ElementField) -> Result<String> {
     let geo = geometry(mesh)?;
 
-    // The field's cells must line up with the mesh's, one-to-one.
-    let mut field_cells = 0usize;
-    for sub_h in field.iter() {
-        field_cells += read(sub_h)?.cell_count();
-    }
-    if field_cells != geo.cells.len() {
-        return Err(PyrucastError::Message(format!(
-            "vtk: element field has {field_cells} cell(s) but the mesh has {} — \
-             the field must come from a space built on this mesh",
-            geo.cells.len()
-        )));
+    // Zones grouped by their support's submesh, so a submesh can be served by
+    // several zones carrying disjoint components.
+    let zones: Vec<Handle<crate::containers::element_field::SubElementField>> =
+        field.iter().cloned().collect();
+    // The value of `component` on `submesh`'s cells, or `None` if no zone on
+    // that submesh carries it. Errors on a duplicate `(submesh, component)`.
+    let cell_value =
+        |submesh: &Handle<SubMesh>, component: &str, cell: usize| -> Result<Option<f64>> {
+            let mut found: Option<f64> = None;
+            for z in &zones {
+                let sub = read(z)?;
+                let sm = read(&sub.support())?.submesh();
+                if sm.index() != submesh.index() || sm.generation() != submesh.generation() {
+                    continue;
+                }
+                if !sub.components().iter().any(|c| c == component) {
+                    continue;
+                }
+                if found.is_some() {
+                    return Err(PyrucastError::Message(format!(
+                        "vtk: component {component} is carried by two zones on the \
+                     same support — consolidate the field first"
+                    )));
+                }
+                let ng = sub.gauss_count();
+                let v = if ng > 0 {
+                    let mut acc = 0.0;
+                    for g in 0..ng {
+                        acc += sub.value(cell, g, component)?;
+                    }
+                    acc / ng as f64
+                } else {
+                    0.0
+                };
+                found = Some(v);
+            }
+            Ok(found)
+        };
+
+    // The mesh cells must line up with a zone's cells, submesh by submesh:
+    // every mesh submesh must be covered by a zone built on it, with a matching
+    // cell count. A field from a space built on a *different* mesh leaves some
+    // submesh uncovered → error.
+    for sm_h in mesh {
+        let submesh_cells = read(sm_h)?.cell_count();
+        let mut covered = false;
+        for z in &zones {
+            let sub = read(z)?;
+            let sm = read(&sub.support())?.submesh();
+            if sm.index() == sm_h.index() && sm.generation() == sm_h.generation() {
+                if sub.cell_count() != submesh_cells {
+                    return Err(PyrucastError::Message(format!(
+                        "vtk: element field has {} cell(s) on a submesh with {} — \
+                         the field must come from a space built on this mesh",
+                        sub.cell_count(),
+                        submesh_cells
+                    )));
+                }
+                covered = true;
+                break;
+            }
+        }
+        if !covered {
+            return Err(PyrucastError::Message(
+                "vtk: a mesh submesh carries no element-field zone — \
+                 the field must come from a space built on this mesh"
+                    .into(),
+            ));
+        }
     }
 
     let mut out = String::new();
@@ -235,20 +300,10 @@ pub fn vtk_element_field_string(mesh: &Mesh, field: &ElementField) -> Result<Str
     for comp in field.components()? {
         let _ = writeln!(out, "SCALARS {} double 1", sanitize(&comp));
         out.push_str("LOOKUP_TABLE default\n");
-        for sub_h in field.iter() {
-            let sub = read(sub_h)?;
-            let has = sub.components().iter().any(|c| c == &comp);
-            let ng = sub.gauss_count();
-            for cell in 0..sub.cell_count() {
-                let v = if has && ng > 0 {
-                    let mut acc = 0.0;
-                    for g in 0..ng {
-                        acc += sub.value(cell, g, &comp)?;
-                    }
-                    acc / ng as f64
-                } else {
-                    0.0
-                };
+        for sm_h in mesh {
+            let n = read(sm_h)?.cell_count();
+            for cell in 0..n {
+                let v = cell_value(sm_h, &comp, cell)?.unwrap_or(0.0);
                 let _ = writeln!(out, "{v}");
             }
         }
