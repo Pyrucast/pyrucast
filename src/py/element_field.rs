@@ -241,7 +241,7 @@ impl PySubElementField {
             let a = (*read(&self.handle)?).clone();
             let b = (*read(&other.handle)?).clone();
             Ok(PySubElementField {
-                handle: insert(a.combine(&b, op)?),
+                handle: insert(a.merge_components(&b, op)?),
             })
         } else {
             Err(PyTypeError::new_err(

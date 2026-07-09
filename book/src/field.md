@@ -96,16 +96,10 @@ mat.mul_to_component("E", 0.95)  # ne met à l'échelle que "E"
 
 Combiner **deux champs** valeur à valeur se décline selon le niveau.
 
-Au niveau **zone** (`SubField::combine`) l'opération reste **stricte** : les deux
-opérandes doivent être sur le **même support** (`same_support`) **et** porter le
-**même jeu de composantes** (alignées **par nom**, l'ordre peut différer). Les
-lignes s'alignent positionnellement (même support ⇒ mêmes lignes dans le même
-ordre). C'est ce que fait le `**` de zone à zone en Python.
-
-Au niveau **agrégat** (`combine_field`, dunders Python `ElementField op
-ElementField` / `NodeField op NodeField`) l'opération est **par (support,
-composante)**, en **union avec passthrough** — les deux champs n'ont **pas**
-besoin de la même décomposition :
+Les **opérateurs** `+ - * /` (et `**`), aussi bien de **zone à zone**
+(`SubField`) que d'**agrégat à agrégat** (`combine_field`), sont **par (support,
+composante)** en **union avec passthrough** — les deux opérandes n'ont **pas**
+besoin du même jeu de composantes ni de la même décomposition :
 
 - la sortie couvre l'**union** des supports des deux opérandes ;
 - sur un support porté des deux côtés, les zones sont fusionnées composante par
@@ -116,9 +110,12 @@ besoin de la même décomposition :
 - un support porté d'un **seul** côté voit sa (ses) zone(s) passer **inchangées**.
 
 Cela suppose l'invariant de champ (au plus une zone par `(support, composante)`,
-garanti par l'union `|`) ; la sortie l'hérite par construction. `combine_subfield`
-reste, lui, ciblé et strict : il combine une zone donnée dans la (les) zone(s) de
-même support, laissant les autres inchangées.
+garanti par l'union `|`) ; la sortie l'hérite par construction.
+
+La méthode nommée `SubField::combine` reste, elle, **stricte** (même support **et**
+même jeu de composantes) : c'est la primitive de mise à jour ciblée derrière
+`combine_subfield` (combine une zone dans la/les zone(s) de même support, laissant
+les autres inchangées). Les opérateurs, eux, passent par `merge_components`.
 
 La même mécanique vaut pour `field ** field` (puissance élément par élément,
 exposant pris dans le second champ). La division — et la puissance à exposant
@@ -155,11 +152,12 @@ logique nouvelle.
 | zone & agrégat | `min(c)` / `max(c)` | extrema d'une composante |
 | zone | `set_uniform(c, v)` | force `c` à `v` |
 | zone & agrégat | `f + s`, `f - s`, `f * s`, `f / s` | scalaire, nouveau champ |
-| zone & agrégat | `f ** s`, `f ** g` | puissance élément par élément (Python `**` ; Rust : `combine`) |
+| zone & agrégat | `f ** s`, `f ** g` | puissance élément par élément (Python `**` ; Rust : `merge_components`) |
 | zone & agrégat | `add_to_component(c, s)` … | scalaire sur une composante, en place |
-| zone | `combine(other, op)` | binaire strict, même support + mêmes composantes |
-| zone | `merge_components(other, op)` | union par composante, passthrough brut |
-| agrégat | `combine_field(other, op)` | binaire par `(support, composante)`, union/passthrough |
+| zone & agrégat | `f + g`, `f - g`, `f * g`, `f / g` | opérateurs binaires : union par `(support, composante)`, passthrough brut |
+| zone | `merge_components(other, op)` | primitive des opérateurs de zone : union par composante, passthrough brut |
+| zone | `combine(other, op)` | primitive **stricte** (même support + mêmes composantes), derrière `combine_subfield` |
+| agrégat | `combine_field(other, op)` | primitive des opérateurs d'agrégat : union par `(support, composante)` |
 | agrégat | `combine_subfield(sub, op)` | binaire ciblé sur une zone (strict) |
 
 Les deux familles concrètes ajoutent leurs accès indexés et leurs

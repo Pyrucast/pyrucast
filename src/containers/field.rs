@@ -203,6 +203,11 @@ pub trait SubField {
     /// **by name** (order may differ); same support ⇒ same rows in the same
     /// order, so values line up positionally. Division does **not** guard
     /// against zero (numpy-like `inf`/`nan`).
+    ///
+    /// This is the **targeted** primitive behind [`Field::combine_subfield`]
+    /// (update the zone(s) matching a given sub). The zone-level *operators*
+    /// (`&a + &b`, …) use [`SubField::merge_components`] instead (union of
+    /// components, passthrough).
     fn combine(&self, other: &Self, op: fn(f64, f64) -> f64) -> Result<Self>
     where
         Self: Sized + Clone,
@@ -244,7 +249,8 @@ pub trait SubField {
     }
 
     /// Component-wise **union** combination with another same-support
-    /// sub-field. Unlike [`SubField::combine`] (strict: identical component
+    /// sub-field — the primitive behind the zone-level operators
+    /// (`&a + &b`, …). Unlike [`SubField::combine`] (strict: identical component
     /// sets), the output carries the **union** of the two component sets
     /// (`self`'s first, then `other`'s extras, first-seen order). For a
     /// component defined on **both** sides, the value is `op(self, other)`; for
@@ -573,13 +579,13 @@ macro_rules! __subfield_field_op {
         impl std::ops::$Trait<&$T> for &$T {
             type Output = $crate::error::Result<$T>;
             fn $method(self, rhs: &$T) -> Self::Output {
-                $crate::containers::field::SubField::combine(self, rhs, |a, b| a $op b)
+                $crate::containers::field::SubField::merge_components(self, rhs, |a, b| a $op b)
             }
         }
         impl std::ops::$Trait<$T> for $T {
             type Output = $crate::error::Result<$T>;
             fn $method(self, rhs: $T) -> Self::Output {
-                $crate::containers::field::SubField::combine(&self, &rhs, |a, b| a $op b)
+                $crate::containers::field::SubField::merge_components(&self, &rhs, |a, b| a $op b)
             }
         }
     };
@@ -1392,6 +1398,48 @@ mod tests {
         let g = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap(); // zero
         let s = f.combine(&g, |a, b| a / b).unwrap();
         assert!(s.get(0, 0).unwrap().is_infinite());
+    }
+
+    #[test]
+    fn subfield_merge_components_unions_with_passthrough() {
+        // f has [U, V], g has [V, W] on the same support: V combines, U and W
+        // pass through raw.
+        let (sm, nodes) = poi1_support(1);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
+        f.set_value(nodes[0].id(), "U", 1.0).unwrap();
+        f.set_value(nodes[0].id(), "V", 2.0).unwrap();
+        let mut g = SubNodeField::from_poi1(&sm, vec!["V".into(), "W".into()]).unwrap();
+        g.set_value(nodes[0].id(), "V", 20.0).unwrap();
+        g.set_value(nodes[0].id(), "W", 7.0).unwrap();
+        let s = f.merge_components(&g, |a, b| a + b).unwrap();
+        assert_eq!(s.components(), &["U".to_string(), "V".into(), "W".into()]);
+        assert_eq!(s.value(nodes[0].id(), "U").unwrap(), 1.0, "f-only: raw");
+        assert_eq!(s.value(nodes[0].id(), "V").unwrap(), 22.0, "shared: op");
+        assert_eq!(s.value(nodes[0].id(), "W").unwrap(), 7.0, "g-only: raw");
+    }
+
+    #[test]
+    fn subfield_operator_uses_union_passthrough() {
+        // The zone-level `&f + &g` operator is now union/passthrough, no longer
+        // strict on component sets.
+        let (sm, nodes) = poi1_support(1);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
+        f.set_value(nodes[0].id(), "T", 5.0).unwrap();
+        let mut g = SubNodeField::from_poi1(&sm, vec!["P".into()]).unwrap();
+        g.set_value(nodes[0].id(), "P", 9.0).unwrap();
+        // Disjoint components: both pass through, no error.
+        let s = (&f + &g).unwrap();
+        assert_eq!(s.value(nodes[0].id(), "T").unwrap(), 5.0);
+        assert_eq!(s.value(nodes[0].id(), "P").unwrap(), 9.0);
+    }
+
+    #[test]
+    fn subfield_merge_components_mismatched_support_errors() {
+        let (sm_a, _) = poi1_support(1);
+        let (sm_b, _) = poi1_support(1);
+        let f = SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
+        let g = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
+        assert!(f.merge_components(&g, |a, b| a + b).is_err());
     }
 
     // ─── SubField::dot (scalar product, strict) ──────────────────────────────
