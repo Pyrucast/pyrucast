@@ -79,9 +79,10 @@ sigma_xx = state[0].value(0, 0, "sigma_xx")
 p = state[0].value(0, 0, "p")  # déformation plastique cumulée
 ```
 
-Pour réinjecter l'état au pas suivant, on fusionne `eps_p_*` / `p` de `state`
-avec la nouvelle déformation (op [`merge`](../operateurs/champs.md)) avant
-d'appeler de nouveau `integrate_behavior`.
+Pour réinjecter l'état au pas suivant, on unit `eps_p_*` / `p` de `state`
+avec la nouvelle déformation (opérateur d'union `|`, voir
+[champs](../operateurs/champs.md)) avant d'appeler de nouveau
+`integrate_behavior`.
 
 La **boucle de Newton complète** (pas de charge, résidu, résolution, portage de
 l'état) est écrite dans `examples/plasticite_poutre_console.py` — voir la

@@ -22,7 +22,12 @@ pyrucast ne connaît PAS Newton. Il fournit les opérateurs ponctuels :
 - `integrate_behavior` (Cast3m `COMP`) : la loi au point — retour radial, qui
   rend `σ` et l'état plastique mis à jour (`VAR0` → `VAR1`) ;
 - `internal_forces` (Cast3m `BSIG`) : les forces internes `∫ Bᵀ σ dΩ` ;
-- `solve` : la résolution linéaire (LU creux, factorisation en cache).
+- `solve` : la résolution linéaire (LU creux, factorisation en cache) ;
+- l'**arithmétique de champs** (`+ - *`), l'**union** (`|`) et `restrict_like`
+  (reprojection d'un champ sur le support/composantes d'un autre), qui
+  remplacent toute boucle nodale : `residual = f_ext - f_int`, `u = u + du` ;
+- une `Evolution` à valeur champ pour l'**histoire de chargement** : la charge
+  de chaque pas est interpolée au pseudo-temps (`load_evo.interpolate(t)`).
 
 L'exemple assemble sa propre boucle de Newton : résidu `r = F_ext − F_int`,
 incrément `δu = K⁻¹ r`, `u ← u + δu`, et le portage de l'état interne d'un pas
@@ -55,53 +60,14 @@ STATE_COMPONENTS = [
 ]
 
 
-def _clamp(nodes, variable, dual):
-    """Sous-modèle Dirichlet encastrant `variable` (dual `dual`) sur `nodes`."""
-    imposed = pyrucast.poi1_from_nodes(nodes)
-    multiplier = pyrucast.barycenter(imposed)
-    return pyrucast.Model.dirichlet(variable, dual, imposed, multiplier)
-
-
-def _behavior_input(strain, state, fes):
-    """Fusionne, point de Gauss par point, la déformation totale `ε` et l'état
-    plastique `VAR0` en une entrée pour `integrate_behavior`."""
-    strain_sub, state_sub = strain[0], state[0]
-    strain_comps = strain_sub.components()
-    state_comps = state_sub.components()
-    inp = pyrucast.ElementField(fes, strain_comps + state_comps)
-    inp_sub = inp[0]
-    for cell in range(inp_sub.cell_count()):
-        for g in range(inp_sub.gauss_count()):
-            for name in strain_comps:
-                inp_sub[cell, g, name] = strain_sub[cell, g, name]
-            for name in state_comps:
-                inp_sub[cell, g, name] = state_sub[cell, g, name]
-    return inp
-
-
-def _extract_state(out, fes):
-    """Nouvel état plastique `VAR1` (les `STATE_COMPONENTS`) extrait de la sortie
-    de comportement convergée — le `VAR0` du pas suivant."""
-    out_sub = out[0]
-    state = pyrucast.ElementField(fes, STATE_COMPONENTS)
-    state_sub = state[0]
-    for cell in range(out_sub.cell_count()):
-        for g in range(out_sub.gauss_count()):
-            for name in STATE_COMPONENTS:
-                state_sub[cell, g, name] = out_sub[cell, g, name]
-    return state
-
-
 def _plastic_diagnostics(state):
-    """(p_max, nombre de points de Gauss plastifiés) — `p > 0` marque un point."""
-    sub = state[0]
-    p_max, n_plastic = 0.0, 0
-    for cell in range(sub.cell_count()):
-        for g in range(sub.gauss_count()):
-            p = sub[cell, g, "p"]
-            if p > 1e-12:
-                n_plastic += 1
-            p_max = max(p_max, p)
+    """(p_max, nombre de points de Gauss plastifiés) — `p > 0` marque un point.
+
+    Sans boucle : `p_max` par `max`, le comptage en masquant la composante `p`
+    en 0/1 (bande « > 1e-12 ») puis en la sommant."""
+    p_max = state.max("p")
+    masked = pyrucast.mask(state, gt=1e-12, components=["p"])
+    n_plastic = round(masked.sum("p"))
     return p_max, n_plastic
 
 
@@ -122,35 +88,29 @@ def main():
         f"Chargement : 0 → {p_max_load} en {nsteps} pas (Newton modifié, K élastique)\n"
     )
 
-    # ── Maillage : grille de nœuds (j en hauteur, i en long), cellules QUA4 ──
+    # ── Maillage : bords SEG2 gauche/droit puis balayage en QUA4 ────────────
     c = pyrucast.Coords(2)
-    grid = [
-        [c.add_node([i * length / nx, j * height / ny]) for i in range(nx + 1)]
-        for j in range(ny + 1)
-    ]
-    mesh = pyrucast.Mesh(c, "QUA4")
-    cells = mesh.unit()
-    for j in range(ny):
-        for i in range(nx):
-            cells.add_cell(
-                [
-                    grid[j][i],
-                    grid[j][i + 1],
-                    grid[j + 1][i + 1],
-                    grid[j + 1][i],
-                ]
-            )
+    pt_a = c.add_node([0.0, 0.0])
+    pt_b = c.add_node([0.0, height])
+    pt_c = c.add_node([length, 0.0])
+    pt_d = c.add_node([length, height])
+    left_edge = pyrucast.line_seg2(pt_a, pt_b, ny)
+    right_edge = pyrucast.line_seg2(pt_c, pt_d, ny)
+    mesh = pyrucast.sweep_qua4(left_edge, right_edge, nx)
     fes = pyrucast.FiniteElementSpace(mesh)
 
-    # Ensembles de nœuds : bord gauche (encastré), bout (mi-hauteur).
-    left_nodes = [grid[j][0] for j in range(ny + 1)]
-    right_nodes = [grid[j][nx] for j in range(ny + 1)]
-    tip = grid[ny // 2][nx]
+    # Nœud du bout (mi-hauteur) et maillage POI1 des nœuds LIBRES (X > 0) —
+    # support cible pour la norme du résidu sur les seuls DDL libres.
+    tip = mesh.nearest_node([length, height / 2.0])
+    coords_field = pyrucast.coordinates(mesh, ["X"])
+    free_mesh = pyrucast.select(coords_field, ge=length / nx / 2.0)
+    imposed_mesh = pyrucast.to_poi1(left_edge)
+    multiplier = pyrucast.translate(imposed_mesh, [0.0, 0.0])
 
     # ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
     model = pyrucast.Model.plasticity(fes, "plane_stress")
-    model = model | _clamp(left_nodes, "u_x", "f_x")
-    model = model | _clamp(left_nodes, "u_y", "f_y")
+    model = model | pyrucast.Model.dirichlet("u_x", "f_x", imposed_mesh, multiplier)
+    model = model | pyrucast.Model.dirichlet("u_y", "f_y", imposed_mesh, multiplier)
     materials = pyrucast.material_field(
         model, [("E", young), ("nu", nu), ("sigma_y", sigma_y)]
     )
@@ -161,17 +121,21 @@ def main():
 
     # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     #    droite, réparti en efforts nodaux cohérents (op `flux`). ──────────────
-    right_edge = pyrucast.Mesh(c, "SEG2")
-    edge_cells = right_edge.unit()
-    for j in range(ny):
-        edge_cells.add_cell([grid[j][nx], grid[j + 1][nx]])
     right_fes = pyrucast.FiniteElementSpace(right_edge)
     load_unit = pyrucast.flux(right_fes[0], -1.0, "f_y")
-    load_unit_norm = sum(load_unit.value(n, "f_y") ** 2 for n in right_nodes) ** 0.5
+
+    # ── Histoire de chargement : une Evolution à valeur CHAMP, tabulée en
+    #    pseudo-temps t ∈ [0, 1]. Deux keyframes du champ d'effort nodal — nul en
+    #    t=0, complet (`p_max · charge_unitaire`) en t=1 — sur le MÊME support.
+    #    La charge de chaque pas est lue par interpolation linéaire. ────────────
+    zero_frame = load_unit * 0.0
+    full_frame = load_unit * p_max_load
+    load_evo = pyrucast.Evolution(
+        [(0.0, zero_frame), (1.0, full_frame)], out_of_range="clamp"
+    )
 
     # ── État de la simulation (persistant entre les pas) ────────────────────
     u = pyrucast.NodeField(mesh, ["u_x", "u_y"])  # déplacement cumulé, nul au départ
-    u_sub = u[0]
     state = pyrucast.ElementField(fes, STATE_COMPONENTS)  # VAR0, nul au premier pas
 
     # ── Boucle sur les pas de charge ────────────────────────────────────────
@@ -186,9 +150,13 @@ def main():
     any_plasticity = False
 
     for step in range(1, nsteps + 1):
-        load_p = p_max_load * step / nsteps
-        factor = load_p  # densité −1 ⇒ effort total = −load_p (vers le bas)
-        ext_norm = abs(factor) * load_unit_norm
+        # Pseudo-temps du pas ∈ ]0, 1] ; la charge externe en découle par
+        # interpolation de l'Evolution (champ d'effort nodal du pas).
+        t = step / nsteps
+        load_p = p_max_load * t  # cisaillement nominal au bout (pour l'affichage)
+        load_scaled = load_evo.interpolate(t)
+        # Norme de la charge du pas (échelle relative du résidu) : xᵀx du champ.
+        ext_norm = pyrucast.xtx(load_scaled) ** 0.5
         tol = 1e-6 * ext_norm + 1e-12
 
         iters = 0
@@ -196,46 +164,40 @@ def main():
         res_norm = float("inf")
 
         for _ in range(max_newton):
-            # ε(u) → entrée de comportement (ε + VAR0) → σ, VAR1 (COMP).
+            # ε(u) → entrée de comportement (ε | VAR0) → σ, VAR1 (COMP).
             strain = pyrucast.deformation(u, fes)
-            out = pyrucast.integrate_behavior(
-                model, _behavior_input(strain, state, fes), materials
-            )
+            out = pyrucast.integrate_behavior(model, strain | state, materials)
             # Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
             f_int = pyrucast.internal_forces(model, out)
 
-            # Résidu r = F_ext − F_int (F_ext = facteur · charge sur la face droite),
-            # et sa norme sur les DDL LIBRES (les nœuds encastrés portent la réaction).
-            residual = pyrucast.NodeField(mesh, ["f_x", "f_y"])
-            r_sub = residual[0]
-            free_sq = 0.0
-            for j in range(ny + 1):
-                for i in range(nx + 1):
-                    node = grid[j][i]
-                    rx = -f_int.value(node, "f_x")
-                    fext_y = factor * load_unit.value(node, "f_y") if i == nx else 0.0
-                    ry = fext_y - f_int.value(node, "f_y")
-                    r_sub[node, "f_x"] = rx
-                    r_sub[node, "f_y"] = ry
-                    if i != 0:
-                        free_sq += rx * rx + ry * ry
-            res_norm = free_sq**0.5
+            # Résidu r = F_ext − F_int et sa norme sur les DDL **libres**, sans
+            # aucune boucle nodale — tout par les opérateurs et primitives :
+            # - `f_ext` = charge externe du pas reprojetée sur le support ET les
+            #   composantes de `f_int` (`restrict_like`) : `f_x` (=0) et `f_y` ;
+            # - `residual = f_ext − f_int` via l'opérateur `-` ;
+            # - la norme se lit sur les seuls nœuds libres : `residual` `restrict`é
+            #   à `free_mesh` puis `xtx` (les nœuds encastrés portent la réaction).
+            f_ext = pyrucast.restrict_like(load_scaled, f_int)
+            residual = f_ext - f_int
+            res_norm = pyrucast.xtx(pyrucast.restrict(residual, free_mesh)) ** 0.5
             last_out = out
 
             if res_norm <= tol:
                 break
-            # δu = K⁻¹ r (K élastique, factorisation en cache), puis u ← u + δu.
+            # δu = K⁻¹ r (K élastique, factorisation en cache). δu porte les DDL
+            # primaux ET duaux (multiplicateurs) sur un support neuf : on le
+            # reprojette sur le support/composantes de u, puis u ← u + δu.
             du = pyrucast.solve(k, residual)
-            for row in grid:
-                for node in row:
-                    u_sub[node, "u_x"] = u_sub[node, "u_x"] + du.value(node, "u_x")
-                    u_sub[node, "u_y"] = u_sub[node, "u_y"] + du.value(node, "u_y")
+            u = u + pyrucast.restrict_like(du, u)
             iters += 1
 
         converged = res_norm <= tol
 
-        # Commit de l'état : VAR0 ← VAR1 (extrait de la sortie convergée).
-        state = _extract_state(last_out, fes)
+        # Commit de l'état : VAR0 ← VAR1. La sortie de comportement convergée
+        # porte, en plus de l'état plastique (`eps_p_*`, `p`), les contraintes
+        # (`sig_*`) ; on la reporte telle quelle comme nouveau VAR0. La loi lit
+        # ses entrées par nom, donc les composantes surnuméraires sont ignorées.
+        state = last_out
 
         # Diagnostics du pas.
         p_max_val, n_plastic = _plastic_diagnostics(state)
