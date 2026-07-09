@@ -133,8 +133,8 @@ impl PySubElementField {
     // ── Arithmetic operators (return a new sub-field) ───────────────────
     //
     // `rhs` may be a float (scalar broadcast over every point × component) or
-    // another `SubElementField` (element-by-element, strict: same support and
-    // same components). Division does not guard against zero (inf/nan).
+    // another `SubElementField` (per-component union with passthrough on a
+    // shared support). Division does not guard against zero (inf/nan).
 
     fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubElementField> {
         self.scalar_or_combine(rhs, |a, b| a + b)
@@ -226,7 +226,7 @@ impl PySubElementField {
 
 impl PySubElementField {
     /// Dispatch an arithmetic operator: float → scalar broadcast,
-    /// `SubElementField` → strict element-by-element `combine`.
+    /// `SubElementField` → `merge_components` (union of components, passthrough).
     fn scalar_or_combine(
         &self,
         rhs: &Bound<'_, PyAny>,
@@ -452,8 +452,8 @@ impl PyElementField {
 
 impl PyElementField {
     /// Dispatch an arithmetic operator: float → scalar, `ElementField` →
-    /// `combine_field` (same decomposition), `SubElementField` →
-    /// `combine_subfield` (targeted zone update).
+    /// `merge_field` (per `(support, component)`, union/passthrough),
+    /// `SubElementField` → `merge_subfield` (targeted zone update).
     fn binary(&self, rhs: &Bound<'_, PyAny>, op: fn(f64, f64) -> f64) -> PyResult<PyElementField> {
         use crate::containers::field::Field;
         if let Ok(s) = rhs.extract::<f64>() {
@@ -462,12 +462,12 @@ impl PyElementField {
             })
         } else if let Ok(other) = rhs.extract::<PyRef<PyElementField>>() {
             Ok(PyElementField {
-                inner: self.inner.combine_field(&other.inner, op)?,
+                inner: self.inner.merge_field(&other.inner, op)?,
             })
         } else if let Ok(sub) = rhs.extract::<PyRef<PySubElementField>>() {
             let s = (*read(&sub.handle)?).clone();
             Ok(PyElementField {
-                inner: self.inner.combine_subfield(&s, op)?,
+                inner: self.inner.merge_subfield(&s, op)?,
             })
         } else {
             Err(PyTypeError::new_err(

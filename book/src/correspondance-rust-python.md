@@ -207,10 +207,10 @@ valeur).
 | Classe | Opérateurs / méthodes Python | Sémantique | Backing Rust |
 |---|---|---|---|
 | `SubNodeField` / `SubElementField` | `f + s`, `f - s`, `f * s`, `f / s`, `f ** s` | broadcast scalaire, nouveau champ | `Add`/`Sub`/`Mul`/`Div<f64>`, `map_all` |
-| `SubNodeField` / `SubElementField` | `f + g`, `f - g`, `f * g`, `f / g`, `f ** g` | champ + champ **strict** (même support, mêmes composantes), nouveau champ | `SubField::combine` |
+| `SubNodeField` / `SubElementField` | `f + g`, `f - g`, `f * g`, `f / g`, `f ** g` | champ + champ **par composante**, union/passthrough (même support), nouveau champ | `SubField::merge_components` |
 | `NodeField` / `ElementField` | `f + s`, `f - s`, `f * s`, `f / s`, `f ** s` | broadcast scalaire sur toutes les zones | `Field::combine_scalar` |
-| `NodeField` / `ElementField` | `f + g`, `f - g`, `f * g`, `f / g`, `f ** g` | champ + champ, **même décomposition** (chaque zone appariée par support) | `Field::combine_field` |
-| `NodeField` / `ElementField` | `f + sub`, `f - sub`, … (`sub` = sous-champ) | maj **ciblée** de la (des) zone(s) de même support | `Field::combine_subfield` |
+| `NodeField` / `ElementField` | `f + g`, `f - g`, `f * g`, `f / g`, `f ** g` | champ + champ **par `(support, composante)`**, union/passthrough | `Field::merge_field` |
+| `NodeField` / `ElementField` | `f + sub`, `f - sub`, … (`sub` = sous-champ) | maj **ciblée** de la (des) zone(s) de même support (union/passthrough) | `Field::merge_subfield` |
 | zone & agrégat | `add_to_component(c, s)`, `sub_/mul_/div_to_component` | scalaire sur **une** composante, en place | `SubField`/`Field::map_component` |
 | zone | `set_uniform(c, v)` | force une composante à `v` | `SubField::set_uniform` |
 
@@ -218,7 +218,7 @@ valeur).
 > **composition** de zones n'est **pas** sur `+` : c'est l'union `|` (`union`
 > en Rust, cf. ci-dessous). L'opérateur `+` est entièrement réservé à
 > l'**arithmétique de champ** — scalaire (`f + 1.0`) **et** champ + champ valeur
-> à valeur (`f + g` via `combine`/`combine_field`) ; p. ex. deux champs
+> à valeur (`f + g` via `merge_components`/`merge_field`) ; p. ex. deux champs
 > constants valant 1 s'additionnent en un champ constant valant 2. Pour
 > fusionner des zones avec vérification (et non additionner) : `merge(a, b)`
 > ≡ `a | b`.

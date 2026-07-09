@@ -18,8 +18,8 @@
 //!   (or, for scalars, a plain `Vec<f64>` — there is no aggregate of floats).
 //!
 //! The blend between two bracketing field samples reuses the field arithmetic
-//! of [`crate::containers::field`] (`map_all` + `combine`), so no numerics are
-//! duplicated here.
+//! of [`crate::containers::field`] (`map_all` + `merge_components`, guarded by
+//! `check_same_components`), so no numerics are duplicated here.
 //!
 //! # Out-of-range policy
 //!
@@ -152,20 +152,24 @@ impl SubValue {
 }
 
 /// Linear blend `lo*(1-t) + hi*t` of two values of the **same** kind. For
-/// fields the per-value arithmetic of [`SubField`] (`map_all` + `combine`)
-/// is reused; `combine` enforces same support and components.
+/// fields the per-value arithmetic of [`SubField`] (`map_all` +
+/// `merge_components`) is reused; interpolating between two tabulated values of
+/// the *same* field, a mismatched support or component set is a genuine error,
+/// so [`SubField::check_same_components`] guards the merge up front.
 fn lerp(lo: &SubValue, hi: &SubValue, t: f64) -> Result<SubValue> {
     match (lo, hi) {
         (SubValue::Scalar(a), SubValue::Scalar(b)) => Ok(SubValue::Scalar(a * (1.0 - t) + b * t)),
         (SubValue::Node(a), SubValue::Node(b)) => {
+            a.check_same_components(b)?;
             let la = a.map_all(|v| v * (1.0 - t));
             let lb = b.map_all(|v| v * t);
-            Ok(SubValue::Node(la.combine(&lb, |x, y| x + y)?))
+            Ok(SubValue::Node(la.merge_components(&lb, |x, y| x + y)?))
         }
         (SubValue::Element(a), SubValue::Element(b)) => {
+            a.check_same_components(b)?;
             let la = a.map_all(|v| v * (1.0 - t));
             let lb = b.map_all(|v| v * t);
-            Ok(SubValue::Element(la.combine(&lb, |x, y| x + y)?))
+            Ok(SubValue::Element(la.merge_components(&lb, |x, y| x + y)?))
         }
         _ => Err(PyrucastError::Message(
             "evolution: cannot interpolate between values of different kinds".into(),
@@ -239,7 +243,8 @@ impl SubEvolution {
             }
         }
         // For field values, every sample must share the first's support and
-        // component count, so the blend (which uses `combine`) is well-defined.
+        // component count, so the blend (guarded by `check_same_components`)
+        // is well-defined.
         check_same_support(&samples)?;
 
         let (abscissas, values): (Vec<f64>, Vec<SubValue>) = samples.into_iter().unzip();

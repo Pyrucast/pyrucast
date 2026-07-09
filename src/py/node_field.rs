@@ -171,8 +171,8 @@ impl PySubNodeField {
     // ── Arithmetic operators (return a new sub-field) ───────────────────
     //
     // `rhs` may be a float (scalar broadcast over every node × component) or
-    // another `SubNodeField` (element-by-element, strict: same support and
-    // same components). Division does not guard against zero (inf/nan).
+    // another `SubNodeField` (per-component union with passthrough on a shared
+    // support). Division does not guard against zero (inf/nan).
 
     fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
         self.scalar_or_combine(rhs, |a, b| a + b)
@@ -262,7 +262,7 @@ impl PySubNodeField {
 
 impl PySubNodeField {
     /// Dispatch an arithmetic operator: float → scalar broadcast,
-    /// `SubNodeField` → strict element-by-element `combine`.
+    /// `SubNodeField` → `merge_components` (union of components, passthrough).
     fn scalar_or_combine(
         &self,
         rhs: &Bound<'_, PyAny>,
@@ -534,8 +534,8 @@ impl PyNodeField {
 
 impl PyNodeField {
     /// Dispatch an arithmetic operator: float → scalar, `NodeField` →
-    /// `combine_field` (same decomposition), `SubNodeField` →
-    /// `combine_subfield` (targeted zone update).
+    /// `merge_field` (per `(support, component)`, union/passthrough),
+    /// `SubNodeField` → `merge_subfield` (targeted zone update).
     fn binary(&self, rhs: &Bound<'_, PyAny>, op: fn(f64, f64) -> f64) -> PyResult<PyNodeField> {
         use crate::containers::field::Field;
         if let Ok(s) = rhs.extract::<f64>() {
@@ -544,12 +544,12 @@ impl PyNodeField {
             })
         } else if let Ok(other) = rhs.extract::<PyRef<PyNodeField>>() {
             Ok(PyNodeField {
-                inner: self.inner.combine_field(&other.inner, op)?,
+                inner: self.inner.merge_field(&other.inner, op)?,
             })
         } else if let Ok(sub) = rhs.extract::<PyRef<PySubNodeField>>() {
             let s = (*read(&sub.handle)?).clone();
             Ok(PyNodeField {
-                inner: self.inner.combine_subfield(&s, op)?,
+                inner: self.inner.merge_subfield(&s, op)?,
             })
         } else {
             Err(PyTypeError::new_err(

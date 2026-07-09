@@ -77,7 +77,7 @@ energy = u**2.0  # puissance élément par élément (exposant fractionnaire OK)
 > `+`/`-`/`*`/`/` passent par `Add/Sub/Mul/Div`, mais `**` est exposé par le seul
 > dunder `__pow__`. Côté Rust, faire une puissance via les primitives génériques :
 > `combine_scalar(|a, b| a.powf(b), s)` (scalaire) ou
-> `combine(other, |a, b| a.powf(b))` (binaire). La forme ternaire `pow(x, y, z)`
+> `merge_components(other, |a, b| a.powf(b))` (binaire). La forme ternaire `pow(x, y, z)`
 > (modulo) est refusée — elle n'a pas de sens sur des flottants.
 
 ### 2. Par composante (en place)
@@ -97,7 +97,7 @@ mat.mul_to_component("E", 0.95)  # ne met à l'échelle que "E"
 Combiner **deux champs** valeur à valeur se décline selon le niveau.
 
 Les **opérateurs** `+ - * /` (et `**`), aussi bien de **zone à zone**
-(`SubField`) que d'**agrégat à agrégat** (`combine_field`), sont **par (support,
+(`merge_components`) que d'**agrégat à agrégat** (`merge_field`), sont **par (support,
 composante)** en **union avec passthrough** — les deux opérandes n'ont **pas**
 besoin du même jeu de composantes ni de la même décomposition :
 
@@ -112,10 +112,12 @@ besoin du même jeu de composantes ni de la même décomposition :
 Cela suppose l'invariant de champ (au plus une zone par `(support, composante)`,
 garanti par l'union `|`) ; la sortie l'hérite par construction.
 
-La méthode nommée `SubField::combine` reste, elle, **stricte** (même support **et**
-même jeu de composantes) : c'est la primitive de mise à jour ciblée derrière
-`combine_subfield` (combine une zone dans la/les zone(s) de même support, laissant
-les autres inchangées). Les opérateurs, eux, passent par `merge_components`.
+Tous les opérateurs passent par `merge_components` (zone) / `merge_field`
+(agrégat) / `merge_subfield` (maj ciblée d'une zone). Là où un jeu de composantes
+divergent est une **erreur** plutôt qu'un passthrough (p. ex. l'interpolation
+`Evolution` entre deux valeurs tabulées du *même* champ), on garde `merge_components`
+mais précédé du garde-fou `SubField::check_same_components` (même support **et**
+même jeu de composantes, sinon erreur).
 
 La même mécanique vaut pour `field ** field` (puissance élément par élément,
 exposant pris dans le second champ). La division — et la puissance à exposant
@@ -156,9 +158,9 @@ logique nouvelle.
 | zone & agrégat | `add_to_component(c, s)` … | scalaire sur une composante, en place |
 | zone & agrégat | `f + g`, `f - g`, `f * g`, `f / g` | opérateurs binaires : union par `(support, composante)`, passthrough brut |
 | zone | `merge_components(other, op)` | primitive des opérateurs de zone : union par composante, passthrough brut |
-| zone | `combine(other, op)` | primitive **stricte** (même support + mêmes composantes), derrière `combine_subfield` |
-| agrégat | `combine_field(other, op)` | primitive des opérateurs d'agrégat : union par `(support, composante)` |
-| agrégat | `combine_subfield(sub, op)` | binaire ciblé sur une zone (strict) |
+| zone | `check_same_components(other)` | garde-fou : erreur si support/composantes divergent (à appeler avant `merge_components` quand un écart est un bug) |
+| agrégat | `merge_field(other, op)` | primitive des opérateurs d'agrégat : union par `(support, composante)` |
+| agrégat | `merge_subfield(sub, op)` | binaire ciblé sur une zone (union/passthrough) |
 
 Les deux familles concrètes ajoutent leurs accès indexés et leurs
 constructeurs propres :

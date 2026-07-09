@@ -273,8 +273,9 @@ Côté Python, toutes les fonctions des thèmes ci-dessous sont **à plat**
   en union/passthrough (composante ou support d'un seul côté = valeur brute
   inchangée) ; les opérandes n'ont pas besoin du même jeu de composantes ni de
   la même décomposition. Primitives : `SubField::merge_components` (zone) /
-  `Field::combine_field` (agrégat). `SubField::combine` reste strict (derrière
-  `combine_subfield`).
+  `Field::merge_field` (agrégat), `Field::merge_subfield` (maj ciblée d'une zone).
+  Là où un écart de composantes doit être une erreur (interpolation `Evolution`),
+  `SubField::check_same_components` garde `merge_components` en amont.
 - `stiffness(model, mat)`, `mass(model)` → **`ops::assemble`** (famille
   assembleur ; `mass` suit `stiffness`, elles ne se séparent pas).
 - `consolidate(mesh)`, `to_poi1(mesh)` → **`ops::mesher`** (famille des

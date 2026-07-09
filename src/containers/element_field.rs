@@ -374,8 +374,9 @@ crate::impl_subfield_scalar_ops!(SubElementField);
 
 // ─── Operators field OP field (same support) ───────────────────────────────
 //
-// `&a + &b` (and `a + b`) delegate to `SubField::combine`; fallible (same
-// support & components required) ⇒ output `Result<SubElementField>`.
+// `&a + &b` (and `a + b`) delegate to `SubField::merge_components` (union of
+// components with passthrough); fallible (same support required) ⇒ output
+// `Result<SubElementField>`.
 
 crate::impl_subfield_field_ops!(SubElementField);
 
@@ -409,7 +410,7 @@ crate::impl_aggregate_dump!(ElementField);
 
 // ─── Operators ElementField OP {ElementField, f64} ─────────────────────────
 //
-// `&a + &b` (zone by zone, same decomposition) via `Field::combine_field`;
+// `&a + &b` (zone by zone, same decomposition) via `Field::merge_field`;
 // `&a + 2.0` (scalar broadcast) via `Field::combine_scalar`. Fallible (store
 // reads, zone pairing) ⇒ output `Result<ElementField>`.
 

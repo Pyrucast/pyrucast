@@ -5,7 +5,7 @@
 //! strain that is subtracted from the total strain, `σ = D:(ε − ε_th)`. This
 //! operator only builds `ε_th`; the caller composes the rest with the existing
 //! bricks (`integrate_behavior`, `internal_forces`, `deformation`,
-//! `combine_field`).
+//! `merge_field`).
 //!
 //! The temperature is taken **already at the Gauss points** (an
 //! [`ElementField`], e.g. produced by

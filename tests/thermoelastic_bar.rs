@@ -116,7 +116,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
         disp.set_value(n.id(), "u_y", solution.value(n.id(), "u_y")?)?;
     }
     let eps = deformation(&NodeField::from_sub(disp), &fes)?;
-    let eps_mech = eps.combine_field(&eps_th, |a, b| a - b)?;
+    let eps_mech = eps.merge_field(&eps_th, |a, b| a - b)?;
     let sigma = behavior::integrate(&model, &eps_mech, &materials)?;
 
     // ── Vérification : σ_xx = −E·α·ΔT, σ_yy = 0 ────────────────────────────

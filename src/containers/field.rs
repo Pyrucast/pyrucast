@@ -197,61 +197,40 @@ pub trait SubField {
         out
     }
 
-    /// Element-by-element binary combination with another sub-field, **strict**:
-    /// both must be on the same support ([`SubField::same_support`]) and carry
-    /// the same set of components — otherwise an error. Components are aligned
-    /// **by name** (order may differ); same support ⇒ same rows in the same
-    /// order, so values line up positionally. Division does **not** guard
-    /// against zero (numpy-like `inf`/`nan`).
-    ///
-    /// This is the **targeted** primitive behind [`Field::combine_subfield`]
-    /// (update the zone(s) matching a given sub). The zone-level *operators*
-    /// (`&a + &b`, …) use [`SubField::merge_components`] instead (union of
-    /// components, passthrough).
-    fn combine(&self, other: &Self, op: fn(f64, f64) -> f64) -> Result<Self>
-    where
-        Self: Sized + Clone,
-    {
+    /// Check that `self` and `other` share the **same support** and the **same
+    /// set of components** (aligned by name, order may differ) — otherwise an
+    /// error. A standalone coherence guard: call it *before*
+    /// [`SubField::merge_components`] where a mismatched component set is a
+    /// genuine error rather than a passthrough (e.g. interpolating between two
+    /// tabulated values of the *same* field). When it returns `Ok`, the union
+    /// `merge_components` produces equals the strict element-by-element
+    /// combination (identical sets ⇒ no passthrough branch fires).
+    fn check_same_components(&self, other: &Self) -> Result<()> {
         if !self.same_support(other) {
             return Err(PyrucastError::Message(
-                "combine: operands are not on the same support".into(),
+                "check_same_components: operands are not on the same support".into(),
             ));
         }
-        let nc = self.component_count();
-        if other.component_count() != nc {
+        if self.component_count() != other.component_count()
+            || self
+                .components()
+                .iter()
+                .any(|c| other.component_index(c).is_none())
+        {
             return Err(PyrucastError::Message(format!(
-                "combine: mismatched components ({} vs {})",
-                nc,
-                other.component_count()
+                "check_same_components: mismatched components ({:?} vs {:?})",
+                self.components(),
+                other.components()
             )));
         }
-        // self's components, mapped to other's indices (by name).
-        let other_idx = self
-            .components()
-            .iter()
-            .map(|c| other.component_index_or_err(c))
-            .collect::<Result<Vec<usize>>>()?;
-        let ov = other.values();
-        let mut out = self.clone();
-        // Per-row in parallel: every output slot written once (no race), and
-        // the row layout is identical on both operands (same support) so values
-        // line up positionally after the by-name component remap.
-        out.values_mut()
-            .par_chunks_mut(nc)
-            .with_min_len((MIN_PARALLEL_LEN / nc).max(1))
-            .enumerate()
-            .for_each(|(row, chunk)| {
-                for ci in 0..nc {
-                    chunk[ci] = op(chunk[ci], ov[row * nc + other_idx[ci]]);
-                }
-            });
-        Ok(out)
+        Ok(())
     }
 
     /// Component-wise **union** combination with another same-support
     /// sub-field — the primitive behind the zone-level operators
-    /// (`&a + &b`, …). Unlike [`SubField::combine`] (strict: identical component
-    /// sets), the output carries the **union** of the two component sets
+    /// (`&a + &b`, …). Unlike a strict combination (identical component sets,
+    /// guarded by [`SubField::check_same_components`]), the output carries the
+    /// **union** of the two component sets
     /// (`self`'s first, then `other`'s extras, first-seen order). For a
     /// component defined on **both** sides, the value is `op(self, other)`; for
     /// a component defined on **only one** side, that side's value **passes
@@ -355,12 +334,17 @@ pub trait SubField {
     }
 
     /// Per-row scalar product `∑_c selfᵣ,c · otherᵣ,c`, one value per row —
-    /// Cast3M's `PSCA`. Unlike [`SubField::dot`] (which reduces the whole
-    /// field to a single number), this reduces **over components only**,
-    /// keeping the support: the result is a fresh single-component field
-    /// (component `"psca"`) on the same support, holding the node-by-node
-    /// (or point-by-point) scalar product. Strict, same contract as `dot`:
-    /// same support and same components (aligned by name).
+    /// Cast3M's `PSCA`. Unlike [`SubField::dot`] (which reduces the whole field
+    /// to a single number), this reduces **over components only**, keeping the
+    /// support: the result is a fresh single-component field (component
+    /// `"psca"`) on the same support, holding the node-by-node (or
+    /// point-by-point) scalar product.
+    ///
+    /// Same union spirit as [`SubField::dot`]: the sum runs over the components
+    /// **shared** by both sides (aligned by name); a component present on only
+    /// one side has no counterpart and contributes nothing (rows with no shared
+    /// component are `0`). Both must be on the same support
+    /// ([`SubField::same_support`]).
     fn pscal(&self, other: &Self) -> Result<Self>
     where
         Self: Sized,
@@ -370,20 +354,15 @@ pub trait SubField {
                 "pscal: operands are not on the same support".into(),
             ));
         }
-        let nc = self.component_count();
-        if other.component_count() != nc {
-            return Err(PyrucastError::Message(format!(
-                "pscal: mismatched components ({} vs {})",
-                nc,
-                other.component_count()
-            )));
-        }
-        // self's components, mapped to other's indices (by name).
-        let other_idx = self
+        let self_nc = self.component_count();
+        let other_nc = other.component_count();
+        // Shared components: (self column, other column) for each name in both.
+        let pairs: Vec<(usize, usize)> = self
             .components()
             .iter()
-            .map(|c| other.component_index_or_err(c))
-            .collect::<Result<Vec<usize>>>()?;
+            .enumerate()
+            .filter_map(|(si, name)| other.component_index(name).map(|oi| (si, oi)))
+            .collect();
         let sv = self.values();
         let ov = other.values();
         // Same support ⇒ identical row layout on both operands and on the
@@ -396,8 +375,8 @@ pub trait SubField {
             .enumerate()
             .for_each(|(row, o)| {
                 let mut acc = 0.0;
-                for ci in 0..nc {
-                    acc += sv[row * nc + ci] * ov[row * nc + other_idx[ci]];
+                for &(si, oi) in &pairs {
+                    acc += sv[row * self_nc + si] * ov[row * other_nc + oi];
                 }
                 *o = acc;
             });
@@ -552,11 +531,11 @@ macro_rules! __subfield_scalar_op {
 // ─── Field-by-field operator macros ─────────────────────────────────────────
 
 /// Generate `Add/Sub/Mul/Div` between two [`SubField`] containers of the same
-/// type, delegating to [`SubField::combine`] (element-by-element, strict on
-/// support and components). Combining can fail (mismatched support or
-/// components), so — like the crate's other fallible operators (e.g.
-/// `&Matrix * &NodeField`) — the output is a [`Result`]: `(&a + &b)?`. Division
-/// does **not** guard against zero (numpy-like `inf`/`nan`).
+/// type, delegating to [`SubField::merge_components`] (per-component union with
+/// passthrough on a shared support). Combining can fail (different support), so
+/// — like the crate's other fallible operators (e.g. `&Matrix * &NodeField`) —
+/// the output is a [`Result`]: `(&a + &b)?`. Division does **not** guard against
+/// zero (numpy-like `inf`/`nan`).
 ///
 /// # Usage
 /// ```ignore
@@ -592,7 +571,7 @@ macro_rules! __subfield_field_op {
 }
 
 /// Generate `Add/Sub/Mul/Div` for an aggregate [`Field`], both **field ∘ field**
-/// (via [`Field::combine_field`], zone-by-zone on the same decomposition) and
+/// (via [`Field::merge_field`], per `(support, component)` with passthrough) and
 /// **field ∘ scalar** (via [`Field::combine_scalar`], broadcast over every
 /// value). Both go through the store (fallible reads) so the output is a
 /// [`Result`]: `(&a + &b)?`, `(&a * 2.0)?`.
@@ -619,13 +598,13 @@ macro_rules! __field_op {
         impl std::ops::$Trait<&$T> for &$T {
             type Output = $crate::error::Result<$T>;
             fn $method(self, rhs: &$T) -> Self::Output {
-                $crate::containers::field::Field::combine_field(self, rhs, |a, b| a $op b)
+                $crate::containers::field::Field::merge_field(self, rhs, |a, b| a $op b)
             }
         }
         impl std::ops::$Trait<$T> for $T {
             type Output = $crate::error::Result<$T>;
             fn $method(self, rhs: $T) -> Self::Output {
-                $crate::containers::field::Field::combine_field(&self, &rhs, |a, b| a $op b)
+                $crate::containers::field::Field::merge_field(&self, &rhs, |a, b| a $op b)
             }
         }
         // field ∘ scalar
@@ -868,7 +847,7 @@ where
     /// `(support, component)`, as a union enforces), so each support pairs at
     /// most one zone per side; the result inherits the invariant by
     /// construction.
-    fn combine_field(&self, other: &Self, op: fn(f64, f64) -> f64) -> Result<Self>
+    fn merge_field(&self, other: &Self, op: fn(f64, f64) -> f64) -> Result<Self>
     where
         Self: Sized,
         Self::Sub: Clone,
@@ -918,7 +897,7 @@ where
         Self::Sub: Clone,
     {
         // Snapshot other's zones so we never hold two guards at once — safe
-        // even when `other` shares handles with `self` (mirrors combine_field).
+        // even when `other` shares handles with `self` (mirrors merge_field).
         let others: Vec<Self::Sub> = other
             .iter()
             .map(|h| read(h).map(|g| (*g).clone()))
@@ -934,60 +913,39 @@ where
         Ok(acc)
     }
 
-    /// Per-node/-point scalar product of two fields on the **same
-    /// decomposition** — Cast3M's `PSCA`. Each zone of `self` is paired with
-    /// the zone of `other` on the same support and reduced over components
-    /// ([`SubField::pscal`]); the result is a new field with one `"psca"`
-    /// component per zone. **Every** zone on both sides must pair exactly once.
+    /// Per-node/-point scalar product of two fields — Cast3M's `PSCA`. Each zone
+    /// of `self` carried on a support **shared** with `other` is reduced over
+    /// its shared components ([`SubField::pscal`]); the result is a new field
+    /// with one `"psca"` zone per shared support. Mirrors [`Field::dot_field`]'s
+    /// union spirit: a support (or component) present on only one side has no
+    /// counterpart and yields no contribution.
     fn pscal_field(&self, other: &Self) -> Result<Self>
     where
         Self: Sized,
         Self::Sub: Clone,
     {
         // Snapshot other's zones so we never hold two guards at once — safe
-        // even when `other` shares handles with `self` (mirrors combine_field).
+        // even when `other` shares handles with `self` (mirrors merge_field).
         let others: Vec<Self::Sub> = other
             .iter()
             .map(|h| read(h).map(|g| (*g).clone()))
             .collect::<Result<_>>()?;
-        let mut used = vec![false; others.len()];
         let mut out = Self::default();
         for h in self.iter() {
             let s = read(h)?;
-            let mut matched = false;
-            for (j, os) in others.iter().enumerate() {
-                if used[j] {
-                    continue;
-                }
-                if s.same_support(os) {
-                    out.add_sub(insert(s.pscal(os)?))?;
-                    used[j] = true;
-                    matched = true;
-                    break;
-                }
+            // At most one right zone shares the support (field invariant).
+            if let Some(os) = others.iter().find(|os| s.same_support(os)) {
+                out.add_sub(insert(s.pscal(os)?))?;
             }
-            if !matched {
-                return Err(PyrucastError::Message(
-                    "pscal_field: a zone of the left field has no matching \
-                     zone (same support) in the right field"
-                        .into(),
-                ));
-            }
-        }
-        if used.iter().any(|&u| !u) {
-            return Err(PyrucastError::Message(
-                "pscal_field: a zone of the right field has no matching \
-                 zone in the left field"
-                    .into(),
-            ));
         }
         Ok(out)
     }
 
-    /// Targeted update: combine `sub` into the zone(s) of `self` sharing its
-    /// support ([`SubField::combine`], strict on components); every other zone
-    /// is carried **unchanged**. Errors if no zone shares the support.
-    fn combine_subfield(&self, sub: &Self::Sub, op: fn(f64, f64) -> f64) -> Result<Self>
+    /// Targeted update: merge `sub` into the zone(s) of `self` sharing its
+    /// support ([`SubField::merge_components`], union of components with
+    /// passthrough); every other zone is carried **unchanged**. Errors if no
+    /// zone shares the support.
+    fn merge_subfield(&self, sub: &Self::Sub, op: fn(f64, f64) -> f64) -> Result<Self>
     where
         Self: Sized,
         Self::Sub: Clone,
@@ -997,7 +955,7 @@ where
         for h in self.iter() {
             let s = read(h)?;
             if s.same_support(sub) {
-                out.add_sub(insert(s.combine(sub, op)?))?;
+                out.add_sub(insert(s.merge_components(sub, op)?))?;
                 matched = true;
             } else {
                 out.add_sub(insert((*s).clone()))?;
@@ -1005,7 +963,7 @@ where
         }
         if !matched {
             return Err(PyrucastError::Message(
-                "combine_subfield: no zone shares the sub-field's support".into(),
+                "merge_subfield: no zone shares the sub-field's support".into(),
             ));
         }
         Ok(out)
@@ -1326,7 +1284,7 @@ mod tests {
         assert!(ef.xtx_components(&["missing"]).is_err());
     }
 
-    // ─── SubField::combine (binary, strict) ──────────────────────────────────
+    // ─── SubField::merge_components / check_same_components ────────────────────
 
     /// POI1 support over `n` nodes, plus the nodes (for `value(nid, …)`).
     fn poi1_support(n: usize) -> (Handle<SubMesh>, Vec<Node>) {
@@ -1345,7 +1303,7 @@ mod tests {
     }
 
     #[test]
-    fn subfield_combine_adds_same_support() {
+    fn subfield_merge_adds_same_support() {
         let (sm, _) = poi1_support(2);
         let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         f.set(0, 0, 1.0).unwrap();
@@ -1353,13 +1311,13 @@ mod tests {
         let mut g = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         g.set(0, 0, 10.0).unwrap();
         g.set(1, 0, 20.0).unwrap();
-        let s = f.combine(&g, |a, b| a + b).unwrap();
+        let s = f.merge_components(&g, |a, b| a + b).unwrap();
         assert_eq!(s.get(0, 0).unwrap(), 11.0);
         assert_eq!(s.get(1, 0).unwrap(), 22.0);
     }
 
     #[test]
-    fn subfield_combine_aligns_components_by_name() {
+    fn subfield_merge_aligns_components_by_name() {
         let (sm, nodes) = poi1_support(1);
         let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
         f.set_value(nodes[0].id(), "U", 1.0).unwrap();
@@ -1368,36 +1326,44 @@ mod tests {
         let mut g = SubNodeField::from_poi1(&sm, vec!["V".into(), "U".into()]).unwrap();
         g.set_value(nodes[0].id(), "U", 40.0).unwrap();
         g.set_value(nodes[0].id(), "V", 30.0).unwrap();
-        let s = f.combine(&g, |a, b| a + b).unwrap();
+        let s = f.merge_components(&g, |a, b| a + b).unwrap();
         assert_eq!(s.value(nodes[0].id(), "U").unwrap(), 41.0);
         assert_eq!(s.value(nodes[0].id(), "V").unwrap(), 32.0);
     }
 
     #[test]
-    fn subfield_combine_mismatched_support_errors() {
+    fn subfield_merge_mismatched_support_errors() {
         let (sm_a, _) = poi1_support(1);
         let (sm_b, _) = poi1_support(1);
         let f = SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
         let g = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
-        assert!(f.combine(&g, |a, b| a + b).is_err());
+        assert!(f.merge_components(&g, |a, b| a + b).is_err());
     }
 
     #[test]
-    fn subfield_combine_mismatched_components_errors() {
-        let (sm, _) = poi1_support(1);
-        let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
-        let g = SubNodeField::from_poi1(&sm, vec!["P".into()]).unwrap();
-        assert!(f.combine(&g, |a, b| a + b).is_err());
-    }
-
-    #[test]
-    fn subfield_combine_div_by_zero_is_inf() {
+    fn subfield_merge_div_by_zero_is_inf() {
         let (sm, _) = poi1_support(1);
         let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         f.set(0, 0, 1.0).unwrap();
         let g = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap(); // zero
-        let s = f.combine(&g, |a, b| a / b).unwrap();
+        let s = f.merge_components(&g, |a, b| a / b).unwrap();
         assert!(s.get(0, 0).unwrap().is_infinite());
+    }
+
+    #[test]
+    fn check_same_components_accepts_equal_rejects_mismatch() {
+        let (sm, _) = poi1_support(1);
+        let (sm_b, _) = poi1_support(1);
+        let f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
+        // Same support, same set (order differs): ok.
+        let g = SubNodeField::from_poi1(&sm, vec!["V".into(), "U".into()]).unwrap();
+        f.check_same_components(&g).unwrap();
+        // Same support, different set: error.
+        let h = SubNodeField::from_poi1(&sm, vec!["U".into()]).unwrap();
+        assert!(f.check_same_components(&h).is_err());
+        // Different support: error.
+        let k = SubNodeField::from_poi1(&sm_b, vec!["U".into(), "V".into()]).unwrap();
+        assert!(f.check_same_components(&k).is_err());
     }
 
     #[test]
@@ -1588,6 +1554,21 @@ mod tests {
     }
 
     #[test]
+    fn subfield_pscal_uses_shared_components_only() {
+        // f has [U, V], g has [V, W] on the same support: only V contributes.
+        let (sm, nodes) = poi1_support(1);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
+        f.set_value(nodes[0].id(), "U", 2.0).unwrap();
+        f.set_value(nodes[0].id(), "V", 3.0).unwrap();
+        let mut g = SubNodeField::from_poi1(&sm, vec!["V".into(), "W".into()]).unwrap();
+        g.set_value(nodes[0].id(), "V", 10.0).unwrap();
+        g.set_value(nodes[0].id(), "W", 5.0).unwrap();
+        let p = f.pscal(&g).unwrap();
+        // Only V: 3·10 = 30 (U and W have no counterpart).
+        assert_eq!(p.value(nodes[0].id(), "psca").unwrap(), 30.0);
+    }
+
+    #[test]
     fn field_pscal_field_one_zone_per_zone() {
         use crate::containers::node_field::NodeField;
         let coords = insert(Coords::new(1).unwrap());
@@ -1677,7 +1658,7 @@ mod tests {
     }
 
     #[test]
-    fn field_combine_field_same_decomposition() {
+    fn field_merge_field_same_decomposition() {
         let fes = one_tri3_fes();
         let f = ElementField::new(&fes, vec!["E".into()]).unwrap();
         let g = ElementField::new(&fes, vec!["E".into()]).unwrap();
@@ -1689,7 +1670,7 @@ mod tests {
             .unwrap()
             .set_uniform("E", 4.0)
             .unwrap();
-        let s = f.combine_field(&g, |a, b| a + b).unwrap();
+        let s = f.merge_field(&g, |a, b| a + b).unwrap();
         let z = read(&s.get(0).unwrap()).unwrap();
         for gp in 0..z.gauss_count() {
             assert_eq!(z.value(0, gp, "E").unwrap(), 7.0);
@@ -1697,7 +1678,7 @@ mod tests {
     }
 
     #[test]
-    fn field_combine_field_disjoint_supports_unions() {
+    fn field_merge_field_disjoint_supports_unions() {
         // Distinct supports ⇒ union: both zones pass through unchanged.
         let f = ElementField::new(&one_tri3_fes(), vec!["E".into()]).unwrap();
         let g = ElementField::new(&one_tri3_fes(), vec!["E".into()]).unwrap();
@@ -1709,7 +1690,7 @@ mod tests {
             .unwrap()
             .set_uniform("E", 4.0)
             .unwrap();
-        let s = f.combine_field(&g, |a, b| a + b).unwrap();
+        let s = f.merge_field(&g, |a, b| a + b).unwrap();
         assert_eq!(s.len(), 2, "distinct supports ⇒ two zones");
         assert_eq!(
             read(&s.get(0).unwrap()).unwrap().value(0, 0, "E").unwrap(),
@@ -1722,7 +1703,7 @@ mod tests {
     }
 
     #[test]
-    fn field_combine_field_partial_components_passes_through() {
+    fn field_merge_field_partial_components_passes_through() {
         // Same support: f has [E], g has [E, nu]. E combines, nu passes through.
         let fes = one_tri3_fes();
         let f = ElementField::new(&fes, vec!["E".into()]).unwrap();
@@ -1736,7 +1717,7 @@ mod tests {
             z.set_uniform("E", 4.0).unwrap();
             z.set_uniform("nu", 0.3).unwrap();
         }
-        let s = f.combine_field(&g, |a, b| a + b).unwrap();
+        let s = f.merge_field(&g, |a, b| a + b).unwrap();
         assert_eq!(s.len(), 1);
         let z = read(&s.get(0).unwrap()).unwrap();
         assert_eq!(z.components(), &["E".to_string(), "nu".to_string()]);
@@ -1745,7 +1726,7 @@ mod tests {
     }
 
     #[test]
-    fn field_combine_field_subtraction_passthrough_is_raw() {
+    fn field_merge_field_subtraction_passthrough_is_raw() {
         // b-only component under subtraction passes through raw (b, not -b).
         let fes = one_tri3_fes();
         let a = ElementField::new(&fes, vec!["E".into()]).unwrap();
@@ -1759,7 +1740,7 @@ mod tests {
             z.set_uniform("E", 4.0).unwrap();
             z.set_uniform("nu", 0.3).unwrap();
         }
-        let s = a.combine_field(&b, |x, y| x - y).unwrap();
+        let s = a.merge_field(&b, |x, y| x - y).unwrap();
         let z = read(&s.get(0).unwrap()).unwrap();
         assert_eq!(z.value(0, 0, "E").unwrap(), 6.0);
         assert_eq!(
@@ -1770,7 +1751,7 @@ mod tests {
     }
 
     #[test]
-    fn field_combine_subfield_targets_matching_zone() {
+    fn field_merge_subfield_targets_matching_zone() {
         let ef = make_two_zone_element_field(); // zone0 ["k"], zone1 ["E","k"]
         write(&ef.get(0).unwrap())
             .unwrap()
@@ -1784,7 +1765,7 @@ mod tests {
         // A sub on zone 0's support, k = 10.
         let mut sub = (*read(&ef.get(0).unwrap()).unwrap()).clone();
         sub.set_uniform("k", 10.0).unwrap();
-        let out = ef.combine_subfield(&sub, |a, b| a + b).unwrap();
+        let out = ef.merge_subfield(&sub, |a, b| a + b).unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(
             read(&out.get(0).unwrap())
@@ -1799,12 +1780,12 @@ mod tests {
     }
 
     #[test]
-    fn field_combine_subfield_no_match_errors() {
+    fn field_merge_subfield_no_match_errors() {
         let ef = make_two_zone_element_field();
         // A sub on a brand-new, unrelated FE support.
         let other = ElementField::new(&one_tri3_fes(), vec!["k".into()]).unwrap();
         let sub = (*read(&other.get(0).unwrap()).unwrap()).clone();
-        assert!(ef.combine_subfield(&sub, |a, b| a + b).is_err());
+        assert!(ef.merge_subfield(&sub, |a, b| a + b).is_err());
     }
 
     // ─── Arithmetic operator sugar (`+ - * /`) ───────────────────────────────

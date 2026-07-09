@@ -32,7 +32,8 @@ Elle suit la même grammaire d'agrégat que tous les conteneurs de pyrucast (cf.
 
 Entre deux échantillons encadrants `x_lo ≤ x ≤ x_hi`, le résultat est le mélange
 `v_lo·(1−t) + v_hi·t` avec `t = (x − x_lo) / (x_hi − x_lo)`. Pour les champs, le
-mélange **réutilise l'arithmétique de champs** (`map_all` + `combine`, cf.
+mélange **réutilise l'arithmétique de champs** (`map_all` + `merge_components`
+précédé de `check_same_components`, cf.
 [Champ](field.md)) : aucune logique numérique n'est dupliquée, et la
 compatibilité des supports/composantes des deux champs encadrants est vérifiée à
 ce moment-là. Une abscisse tombant exactement sur un échantillon rend la valeur
