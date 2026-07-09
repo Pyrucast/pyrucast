@@ -258,11 +258,16 @@ réduit** et donc par le **type du résultat** :
 | `xty(x, y)` | `XTY` | tout (nœuds/points × composantes) | un `float` |
 | `psca(x, y)` | `PSCA` | les composantes seules, nœud par nœud | un **champ** à une composante `"psca"` |
 
-Les deux ont le **même contrat strict** sur les opérandes : même saveur
-(`NodeField`, `SubNodeField`, `ElementField`, `SubElementField`), même support
-(même décomposition en zones), même jeu de composantes — alignées **par nom**,
-l'ordre pouvant différer (sinon erreur, comme l'arithmétique stricte de
-[Champ](../field.md)).
+Les deux exigent la **même saveur** d'opérandes (`NodeField`, `SubNodeField`,
+`ElementField`, `SubElementField`) et alignent les composantes **par nom**
+(l'ordre peut différer), mais diffèrent sur la tolérance à la décomposition :
+
+- `xty` (produit scalaire **global**, `dot` / `dot_field`) somme sur les
+  `(support, composante)` **partagés** par les deux champs ; un support ou une
+  composante d'un seul côté n'a pas de vis-à-vis et **ne contribue pas**
+  (mêmes principes d'union que l'arithmétique de [Champ](../field.md)) ;
+- `psca` (`pscal` / `pscal_field`) reste **strict** : même support, même jeu de
+  composantes, chaque zone appariée exactement une fois (sinon erreur).
 
 ### `xty(x, y)` → `float`
 

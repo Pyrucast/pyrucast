@@ -92,28 +92,38 @@ v)` force une composante à une valeur constante.
 mat.mul_to_component("E", 0.95)  # ne met à l'échelle que "E"
 ```
 
-### 3. Binaire entre champs (strict)
+### 3. Binaire entre champs
 
-Combiner **deux champs** valeur à valeur (`combine`, et au niveau agrégat
-`combine_field` / `combine_subfield`) est **strict** :
+Combiner **deux champs** valeur à valeur se décline selon le niveau.
 
-- les deux opérandes doivent être sur le **même support**
-  (`same_support`) — donc mêmes lignes dans le même ordre, les valeurs
-  s'alignent positionnellement ;
-- ils doivent porter le **même jeu de composantes** (alignées **par nom**,
-  l'ordre peut différer) ;
-- `combine_field` exige en plus que **chaque** zone d'un côté s'apparie
-  exactement à une zone de même support de l'autre (même **décomposition**) ;
-- `combine_subfield` cible : il combine une zone donnée dans la (les) zone(s)
-  de même support, laissant les autres inchangées.
+Au niveau **zone** (`SubField::combine`) l'opération reste **stricte** : les deux
+opérandes doivent être sur le **même support** (`same_support`) **et** porter le
+**même jeu de composantes** (alignées **par nom**, l'ordre peut différer). Les
+lignes s'alignent positionnellement (même support ⇒ mêmes lignes dans le même
+ordre). C'est ce que fait le `**` de zone à zone en Python.
+
+Au niveau **agrégat** (`combine_field`, dunders Python `ElementField op
+ElementField` / `NodeField op NodeField`) l'opération est **par (support,
+composante)**, en **union avec passthrough** — les deux champs n'ont **pas**
+besoin de la même décomposition :
+
+- la sortie couvre l'**union** des supports des deux opérandes ;
+- sur un support porté des deux côtés, les zones sont fusionnées composante par
+  composante (`merge_components`) : une composante définie **des deux côtés**
+  devient `op(a, b)` ; une composante d'un **seul** côté **passe telle quelle**
+  (passthrough **brut**, pour tous les opérateurs — donc `a - b` sur une
+  composante propre à `b` vaut `b`, pas `-b`) ;
+- un support porté d'un **seul** côté voit sa (ses) zone(s) passer **inchangées**.
+
+Cela suppose l'invariant de champ (au plus une zone par `(support, composante)`,
+garanti par l'union `|`) ; la sortie l'hérite par construction. `combine_subfield`
+reste, lui, ciblé et strict : il combine une zone donnée dans la (les) zone(s) de
+même support, laissant les autres inchangées.
 
 La même mécanique vaut pour `field ** field` (puissance élément par élément,
-exposant pris dans le second champ) : même support, mêmes composantes alignées
-par nom. La division — et la puissance à exposant fractionnaire sur base
-négative — ne se protègent **pas** des cas limites à ce niveau (sémantique
-numpy : `inf` / `nan`). Cette stricte symétrie est volontaire : combiner deux
-champs définis sur des décompositions différentes est presque toujours un bug,
-pas une intention.
+exposant pris dans le second champ). La division — et la puissance à exposant
+fractionnaire sur base négative — ne se protègent **pas** des cas limites à ce
+niveau (sémantique numpy : `inf` / `nan`).
 
 ### 4. Fonctions unaires (`cos`, `exp`, …)
 
@@ -147,9 +157,10 @@ logique nouvelle.
 | zone & agrégat | `f + s`, `f - s`, `f * s`, `f / s` | scalaire, nouveau champ |
 | zone & agrégat | `f ** s`, `f ** g` | puissance élément par élément (Python `**` ; Rust : `combine`) |
 | zone & agrégat | `add_to_component(c, s)` … | scalaire sur une composante, en place |
-| zone | `combine(other, op)` | binaire strict, même support |
-| agrégat | `combine_field(other, op)` | binaire, même décomposition |
-| agrégat | `combine_subfield(sub, op)` | binaire ciblé sur une zone |
+| zone | `combine(other, op)` | binaire strict, même support + mêmes composantes |
+| zone | `merge_components(other, op)` | union par composante, passthrough brut |
+| agrégat | `combine_field(other, op)` | binaire par `(support, composante)`, union/passthrough |
+| agrégat | `combine_subfield(sub, op)` | binaire ciblé sur une zone (strict) |
 
 Les deux familles concrètes ajoutent leurs accès indexés et leurs
 constructeurs propres :
@@ -160,7 +171,10 @@ constructeurs propres :
   `(cellule, point de Gauss)`.
 
 > **Et l'union `|` ?** L'union compose des **zones** (structure), l'arithmétique
-> combine des **valeurs**. Pour les champs, l'union finalise en plus en
-> fusionnant les zones de même support (et lève si elles divergent sur une
-> valeur partagée) — c'est le rôle des opérateurs `consolidate` /
-> `consolidate_element` (cf. [Opérateurs sur les champs](operateurs/champs.md)).
+> combine des **valeurs**. Pour un `ElementField`, l'union ne **fusionne plus**
+> les zones : elle **valide** simplement qu'aucune composante n'est portée deux
+> fois sur le même support (deux zones de même support à composantes disjointes
+> restent côte à côte). Pour un `NodeField`, l'union finalise encore en fusionnant
+> les zones de même support (et lève si elles divergent sur une valeur partagée).
+> La fusion explicite reste offerte par `consolidate_node` / `consolidate_element`
+> (cf. [Opérateurs sur les champs](operateurs/champs.md)).

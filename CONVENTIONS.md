@@ -267,8 +267,11 @@ Côté Python, toutes les fonctions des thèmes ci-dessous sont **à plat**
 - `restrict(field, mesh)` → **`ops::field`** (field + mesh en pairs).
 - `merge(a, b)` → **`ops::field`** (deux fields en pairs) ; alias nommé de
   l'union `a | b` (`Aggregate::union`), fusion non arithmétique.
-- addition field+field → **opérateur `+`** (réservé : arithmétique au nœud,
-  pas la composition de zones), pas une `ops::field::add`.
+- addition field+field → **opérateur `+`** (arithmétique de valeurs, pas la
+  composition de zones), pas une `ops::field::add`. Au niveau agrégat, `+ - * /`
+  combinent **par `(support, composante)`** en union/passthrough (composante ou
+  support d'un seul côté = valeur brute inchangée) ; les deux champs n'ont pas
+  besoin de la même décomposition.
 - `stiffness(model, mat)`, `mass(model)` → **`ops::assemble`** (famille
   assembleur ; `mass` suit `stiffness`, elles ne se séparent pas).
 - `consolidate(mesh)`, `to_poi1(mesh)` → **`ops::mesher`** (famille des

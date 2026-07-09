@@ -213,8 +213,8 @@ pub fn vtk_node_field_string(mesh: &Mesh, field: &NodeField) -> Result<String> {
 
 /// Legacy-VTK text for `mesh` carrying `field` as `CELL_DATA`.
 ///
-/// The cells are written submesh by submesh, in the mesh's order (matching
-/// [`geometry`]). A field zone is resolved from the submesh through its FE
+/// The cells are written submesh by submesh, in the mesh's order (matching the
+/// geometry writer). A field zone is resolved from the submesh through its FE
 /// support; several zones may share a support (they carry disjoint components,
 /// per the union invariant), so the value for a `(submesh, component)` comes
 /// from the **unique** zone on that support carrying the component — the field

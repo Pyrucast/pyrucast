@@ -1,6 +1,6 @@
 //! Consolidate an [`ElementField`]: fuse zones sharing the **same support**.
 //!
-//! The element-field twin of [`crate::ops::field::consolidate`](fn@crate::ops::field::consolidate). Sub-fields
+//! The element-field twin of [`crate::ops::field::consolidate_node`](fn@crate::ops::field::consolidate_node). Sub-fields
 //! defined on the *same* `SubFiniteElementSpace` (matched by handle identity,
 //! [`crate::store::Handle::same_slot`]) are fused into a single
 //! [`SubElementField`] carrying the **union of their components**. A
