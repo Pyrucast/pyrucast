@@ -124,8 +124,10 @@ let y = k.mul_dense(&[1.0, 1.0]).unwrap();
 
 // Produit matrice · champ : `x` est lu aux DOFs *colonnes* (vars **primales** ;
 // une entrée qu'aucune zone ne définit vaut 0), le résultat est un `NodeField`
-// neuf sur les DOFs *lignes* (vars **duales**) — `K · u = f`. L'opérateur `*`
-// (`&k * &x`) est le sucre syntaxique de `mul_field`. C'est le miroir exact de
+// sur les DOFs *lignes* (vars **duales**) — `K · u = f` — avec une zone par
+// support **ligne** des blocs, sur le handle du bloc lui-même (`same_support`
+// garanti avec tout champ posé sur ces supports). L'opérateur `*` (`&k * &x`)
+// est le sucre syntaxique de `mul_field`. C'est le miroir exact de
 // `solver::solve`, qui lit un champ dual aux lignes et rend un champ primal aux colonnes.
 let y: NodeField = k.mul_field(&x).unwrap();
 let y: NodeField = (&k * &x).unwrap();

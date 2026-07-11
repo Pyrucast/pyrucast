@@ -182,7 +182,6 @@ impl Default for SolveOptions {
 pub struct Factorization {
     lu: SparseLu,
     row_dofs: Vec<(NodeId, String)>,
-    col_dofs: Vec<(NodeId, String)>,
 }
 
 impl Factorization {
@@ -198,11 +197,7 @@ impl Factorization {
             )));
         }
         let lu = factorize_csc(&matrix.to_csc()?)?;
-        Ok(Self {
-            lu,
-            row_dofs,
-            col_dofs,
-        })
+        Ok(Self { lu, row_dofs })
     }
 
     /// Solve `A·x = b` for one right-hand side (descent/back-substitution only).
@@ -218,9 +213,13 @@ impl Factorization {
 /// defining the pair wins); missing entries (no zone defines that
 /// `(node, component)`) default to `0.0`.
 ///
-/// The returned `NodeField` is a single zone living on the column-DOF nodes of
-/// the matrix (a POI1 submesh built on the fly), with one component per distinct
-/// column field name.
+/// The returned `NodeField` has one zone per distinct **column support** of the
+/// matrix's blocks, each zone sharing that block's own POI1 support handle and
+/// carrying its primal variables (see [`Matrix::field_from_col_values`]) — no
+/// support submesh is rebuilt, and the output aligns by
+/// [`same_support`](pyrucast::containers::field::SubField::same_support) with
+/// any other field on those supports. On a Lagrange-constrained model this
+/// includes a zone for the multipliers (the reactions).
 ///
 /// Uninterruptible convenience form; see [`solve_cancellable`].
 pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
@@ -305,10 +304,11 @@ fn solve_inner(
     }
     cancel.check()?;
 
-    // ── Step 4 — wrap the solution into a fresh single-zone NodeField ──
-    // A POI1 support over the distinct column nodes, one component per distinct
-    // column field name (see [`NodeField::from_dof_values`]).
-    NodeField::from_dof_values(rhs.coords()?, &fact.col_dofs, &x)
+    // ── Step 4 — wrap the solution into a NodeField on the blocks' supports ──
+    // One zone per distinct column support, sharing the block's own POI1 handle
+    // (no submesh rebuilt); `x` is in `fact.col_dofs` order, which is the
+    // assembled column order (`Factorization::new` reads `matrix.col_dofs()`).
+    matrix.field_from_col_values(&x)
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
@@ -463,6 +463,89 @@ mod tests {
             NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm_h, vec!["q".into()]).unwrap());
         // K is singular ⇒ solve must err.
         assert!(solve(&k, &rhs).is_err());
+    }
+
+    /// The solution's zones live on the matrix blocks' **own** column supports
+    /// (`same_slot`), so consecutive solves — and any block-shaped field —
+    /// align by support instead of falling into merge passthrough. Two solves
+    /// on the same matrix share the very same support handles.
+    #[test]
+    fn solution_zones_share_the_blocks_column_supports() {
+        // 1-D Poisson with one Dirichlet end (multi-block: K + C/Cᵀ).
+        let coords = insert(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = (0..3)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        for i in 0..2 {
+            mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
+        }
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let sub = fes.get(0).unwrap();
+        let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
+        mat.set_uniform("k", 1.0).unwrap();
+        let mut materials = crate::containers::element_field::ElementField::empty();
+        materials.add_sub(insert(mat)).unwrap();
+        let mut model = Model::empty();
+        model
+            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+            .unwrap();
+        // Ground both ends so K-with-constraints is nonsingular.
+        for end in [0usize, 2] {
+            let imposed = Mesh::from_submesh(
+                SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[end])).unwrap(),
+            );
+            let mult = crate::ops::mesher::barycenter(&imposed).unwrap();
+            model
+                .add_sub(insert(
+                    SubModel::dirichlet(
+                        "T".into(),
+                        "q".into(),
+                        &imposed,
+                        &mult,
+                        None,
+                        None,
+                        Default::default(),
+                    )
+                    .unwrap(),
+                ))
+                .unwrap();
+        }
+        let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
+        let rhs_sm = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[nodes[0].id()]).unwrap();
+            insert(sm)
+        };
+        let rhs =
+            NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["q".into()]).unwrap());
+
+        let sol_a = solve(&k, &rhs).unwrap();
+        let sol_b = solve(&k, &rhs).unwrap();
+        sol_a.check().unwrap();
+
+        // Each zone's support is one of the blocks' column supports.
+        let block_col_supports: Vec<_> = k
+            .iter()
+            .map(|h| crate::store::read(h).unwrap().col_support().clone())
+            .collect();
+        assert!(sol_a.len() > 1, "multi-block model ⇒ multi-zone solution");
+        for zh in &sol_a {
+            let zone_support = crate::store::read(zh).unwrap().support();
+            assert!(
+                block_col_supports
+                    .iter()
+                    .any(|bs| bs.same_slot(&zone_support)),
+                "zone support must be one of the blocks' col supports"
+            );
+        }
+        // Consecutive solves share the same support handles (same_slot),
+        // so their arithmetic aligns by support.
+        for (za, zb) in sol_a.iter().zip(sol_b.iter()) {
+            let sa = crate::store::read(za).unwrap().support();
+            let sb = crate::store::read(zb).unwrap().support();
+            assert!(sa.same_slot(&sb));
+        }
     }
 
     #[test]

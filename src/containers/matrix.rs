@@ -78,9 +78,9 @@ use crate::containers::mesh::Coords;
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::SubModel;
-use crate::containers::node_field::NodeField;
+use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
-use crate::store::{read, Handle};
+use crate::store::{insert, read, Handle};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use rayon::prelude::*;
@@ -1286,10 +1286,111 @@ impl Matrix {
         Ok(y_vec.iter().copied().collect())
     }
 
+    /// Wrap a flat **column-ordered** vector (`assembled.col_dofs` order — the
+    /// layout a solver's solution comes in) into a [`NodeField`] whose zones
+    /// **share the blocks' `col_support` handles**: one zone per distinct
+    /// column support, carrying the union of the primal variables the blocks
+    /// declare on it. No support `SubMesh` is materialised — the zones sit on
+    /// the very POI1 supports the sub-models built once at construction, so
+    /// the output satisfies [`same_support`](crate::containers::field::SubField::same_support)
+    /// with any other field on those supports, across solves and re-assemblies.
+    ///
+    /// A `(node, variable)` pair a support carries but the DOF table does not
+    /// reads as `0.0` (the [`NodeField::gather`] convention). Interface nodes
+    /// shared by several supports are stored once per zone, with equal values
+    /// by construction (they come from the same vector).
+    ///
+    /// Requires [`finalize`](Self::finalize).
+    pub fn field_from_col_values(&self, x: &[f64]) -> Result<NodeField> {
+        self.field_from_flat_values(x, false)
+    }
+
+    /// Row-side twin of [`field_from_col_values`](Self::field_from_col_values):
+    /// wrap a flat **row-ordered** vector (`assembled.row_dofs` order — the
+    /// layout `A · x` comes in) into a [`NodeField`] whose zones share the
+    /// blocks' `row_support` handles and carry their dual variables.
+    pub fn field_from_row_values(&self, y: &[f64]) -> Result<NodeField> {
+        self.field_from_flat_values(y, true)
+    }
+
+    /// Shared body of `field_from_{col,row}_values` (`rows` picks the side).
+    fn field_from_flat_values(&self, values: &[f64], rows: bool) -> Result<NodeField> {
+        let a = self.assembled_or_err()?;
+        let dofs = if rows { &a.row_dofs } else { &a.col_dofs };
+        if values.len() != dofs.len() {
+            return Err(PyrucastError::Message(format!(
+                "field_from_{}_values: {} value(s) for {} DOF(s)",
+                if rows { "row" } else { "col" },
+                values.len(),
+                dofs.len()
+            )));
+        }
+        // Global (node, variable) → flat index, one hash pass.
+        let index: HashMap<(NodeId, &str), usize> = dofs
+            .iter()
+            .enumerate()
+            .map(|(i, (nid, name))| ((*nid, name.as_str()), i))
+            .collect();
+
+        // Group the blocks by support slot; union their variables per group.
+        // Same slot ⇒ same sealed POI1 ⇒ same node list, snapshot it once.
+        struct Group {
+            support: Handle<SubMesh>,
+            nodes: Vec<NodeId>,
+            vars: Vec<String>,
+        }
+        let mut groups: Vec<Group> = Vec::new();
+        for h in self {
+            let s = read(h)?;
+            let (support, nodes, vars) = if rows {
+                (s.row_support.clone(), &s.row_nodes, s.dual_vars())
+            } else {
+                (s.col_support.clone(), &s.col_nodes, s.primal_vars())
+            };
+            match groups.iter_mut().find(|g| g.support.same_slot(&support)) {
+                Some(g) => {
+                    for v in vars {
+                        if !g.vars.contains(v) {
+                            g.vars.push(v.clone());
+                        }
+                    }
+                }
+                None => groups.push(Group {
+                    support,
+                    nodes: nodes.clone(),
+                    vars: vars.to_vec(),
+                }),
+            }
+        }
+
+        // One zone per group, on the block's own support handle. The field's
+        // row order is the support's cell order — exactly `group.nodes` (both
+        // snapshot the same sealed connectivity) — so values are written
+        // positionally, no per-node lookup.
+        let mut out = NodeField::default();
+        for g in &groups {
+            use crate::containers::field::SubField;
+            let mut sub = SubNodeField::from_poi1(&g.support, g.vars.clone())?;
+            let ncomp = g.vars.len();
+            let vals = sub.values_mut();
+            for (ni, nid) in g.nodes.iter().enumerate() {
+                for (ci, var) in g.vars.iter().enumerate() {
+                    if let Some(&gi) = index.get(&(*nid, var.as_str())) {
+                        vals[ni * ncomp + ci] = values[gi];
+                    }
+                }
+            }
+            out.add_sub(insert(sub))?;
+        }
+        Ok(out)
+    }
+
     /// `y = A · x` against a [`NodeField`]. The column vector `x` is read from
     /// `x_field` at the matrix's **column** DOFs (aggregate resolution, first
     /// zone wins; a DOF no zone defines reads as `0.0`); the result `y` is a
-    /// fresh single-zone `NodeField` over the matrix's **row** DOF nodes.
+    /// `NodeField` whose zones **share the blocks' row supports**
+    /// ([`field_from_row_values`](Self::field_from_row_values)) and carry
+    /// their dual variables.
     ///
     /// Columns carry the **primal** variables and rows the **dual** ones
     /// (`K · u = f`), so this maps a *primal* field (e.g. `"T"`, `"u"`) to a
@@ -1303,7 +1404,7 @@ impl Matrix {
     pub fn mul_field(&self, x_field: &NodeField) -> Result<NodeField> {
         let x = x_field.gather(&self.col_dofs()?)?;
         let y = self.mul_dense(&x)?;
-        NodeField::from_dof_values(x_field.coords()?, &self.row_dofs()?, &y)
+        self.field_from_row_values(&y)
     }
 }
 
@@ -2124,5 +2225,194 @@ mod tests {
         assert!(s.contains("Matrix"));
         assert!(s.contains("1 row"));
         assert!(s.contains("symmetric"));
+    }
+
+    // ── field_from_{col,row}_values ─────────────────────────────────────────
+
+    /// Saddle-point-shaped aggregate (K, C, Cᵀ): the output has one zone per
+    /// distinct column support, **sharing the blocks' own handles**, and every
+    /// column DOF reads back its slot in the flat vector.
+    #[test]
+    fn field_from_col_values_shares_block_supports_and_orders_values() {
+        // Two supports on one Coords: phys (2 nodes) and mult (1 node).
+        let coords = insert(Coords::new(1).unwrap());
+        let phys_nodes: Vec<Node> = (0..2)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let mult_node = Node::create_in(coords.clone(), &[10.0]).unwrap();
+        let phys = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            for n in &phys_nodes {
+                sm.add_cell(&[n.id()]).unwrap();
+            }
+            insert(sm)
+        };
+        let mult = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[mult_node.id()]).unwrap();
+            insert(sm)
+        };
+
+        // K (phys × phys), C (mult × phys), Cᵀ (phys × mult).
+        let mut k = SubMatrix::new(
+            phys.clone(),
+            phys.clone(),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        k.add_entry(phys_nodes[0].id(), "q", phys_nodes[0].id(), "T", 1.0)
+            .unwrap();
+        let mut c = SubMatrix::new(
+            mult.clone(),
+            phys.clone(),
+            vec!["imposed_T".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        c.add_entry(mult_node.id(), "imposed_T", phys_nodes[0].id(), "T", 1.0)
+            .unwrap();
+        let mut ct = SubMatrix::new(
+            phys.clone(),
+            mult.clone(),
+            vec!["q".into()],
+            vec!["lambda_T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        ct.add_entry(phys_nodes[0].id(), "q", mult_node.id(), "lambda_T", 1.0)
+            .unwrap();
+
+        let mut m = Matrix::empty();
+        m.add_sub(insert(k)).unwrap();
+        m.add_sub(insert(c)).unwrap();
+        m.add_sub(insert(ct)).unwrap();
+
+        // Not finalized yet ⇒ error.
+        assert!(m.field_from_col_values(&[0.0]).is_err());
+        m.finalize().unwrap();
+
+        // x holds its own flat index at every column DOF.
+        let col_dofs = m.col_dofs().unwrap();
+        let x: Vec<f64> = (0..col_dofs.len()).map(|i| i as f64).collect();
+        let f = m.field_from_col_values(&x).unwrap();
+
+        // One zone per distinct column support (phys ← K+C, mult ← Cᵀ),
+        // each sharing the block's own handle — nothing rebuilt.
+        assert_eq!(f.len(), 2);
+        assert!(read(&f.get(0).unwrap())
+            .unwrap()
+            .support()
+            .same_slot(&phys));
+        assert!(read(&f.get(1).unwrap())
+            .unwrap()
+            .support()
+            .same_slot(&mult));
+
+        // Every column DOF reads back its slot; the aggregate is coherent.
+        for (i, (nid, var)) in col_dofs.iter().enumerate() {
+            assert_eq!(f.value(*nid, var).unwrap(), i as f64);
+        }
+        f.check().unwrap();
+
+        // Wrong vector length is rejected.
+        assert!(m.field_from_col_values(&x[..1]).is_err());
+    }
+
+    /// Two blocks on the **same** column support with different primal vars:
+    /// one output zone carrying the union of the variables.
+    #[test]
+    fn field_from_col_values_unions_vars_on_a_shared_support() {
+        use crate::containers::field::SubField;
+        let (_cfg, nodes, sup) = make_poi1(2);
+        let mut a = SubMatrix::new(
+            sup.clone(),
+            sup.clone(),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        a.add_entry(nodes[0].id(), "q", nodes[0].id(), "T", 1.0)
+            .unwrap();
+        let mut b = SubMatrix::new(
+            sup.clone(),
+            sup.clone(),
+            vec!["r".into()],
+            vec!["P".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        b.add_entry(nodes[1].id(), "r", nodes[1].id(), "P", 1.0)
+            .unwrap();
+
+        let mut m = Matrix::empty();
+        m.add_sub(insert(a)).unwrap();
+        m.add_sub(insert(b)).unwrap();
+        m.finalize().unwrap();
+
+        let col_dofs = m.col_dofs().unwrap();
+        let x: Vec<f64> = (0..col_dofs.len()).map(|i| 10.0 + i as f64).collect();
+        let f = m.field_from_col_values(&x).unwrap();
+
+        assert_eq!(f.len(), 1, "same support ⇒ one zone");
+        {
+            let z = read(&f.get(0).unwrap()).unwrap();
+            assert!(z.support().same_slot(&sup));
+            assert_eq!(SubField::components(&*z), &["T", "P"]);
+        }
+        for (i, (nid, var)) in col_dofs.iter().enumerate() {
+            assert_eq!(f.value(*nid, var).unwrap(), 10.0 + i as f64);
+        }
+    }
+
+    /// Row-side twin: zones on the blocks' row supports, dual variables.
+    #[test]
+    fn field_from_row_values_uses_row_supports_and_dual_vars() {
+        let coords = insert(Coords::new(1).unwrap());
+        let r0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let r1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let c0 = Node::create_in(coords.clone(), &[2.0]).unwrap();
+        let sup_r = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[r0.id()]).unwrap();
+            sm.add_cell(&[r1.id()]).unwrap();
+            insert(sm)
+        };
+        let sup_c = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[c0.id()]).unwrap();
+            insert(sm)
+        };
+        let mut blk = SubMatrix::new(
+            sup_r.clone(),
+            sup_c,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        blk.add_entry(r0.id(), "q", c0.id(), "T", 1.0).unwrap();
+
+        let mut m = Matrix::empty();
+        m.add_sub(insert(blk)).unwrap();
+        m.finalize().unwrap();
+
+        let f = m.field_from_row_values(&[3.0, 7.0]).unwrap();
+        assert_eq!(f.len(), 1);
+        assert!(read(&f.get(0).unwrap())
+            .unwrap()
+            .support()
+            .same_slot(&sup_r));
+        assert_eq!(f.value(r0.id(), "q").unwrap(), 3.0);
+        assert_eq!(f.value(r1.id(), "q").unwrap(), 7.0);
     }
 }

@@ -19,6 +19,15 @@ Résout `A x = b` où `A` est la [`Matrice`](../matrix.md) assemblée et `b` le
 4. emballe la solution dans un `NodeField` indexé sur les **colonnes** de la
    matrice (les primales : déplacements, températures, multiplicateurs…).
 
+La solution a **une zone par support colonne des blocs** de la matrice, chaque
+zone vivant sur le handle POI1 **du bloc lui-même** (aucun support n'est
+reconstruit — ces supports sont créés une fois à la construction des
+sous-modèles et réutilisés d'assemblage en assemblage). Elle est donc
+`same_support` avec tout champ posé sur ces supports, et deux résolutions
+successives partagent les mêmes supports : leur arithmétique (`a - b`, …)
+s'aligne zone à zone. Sur un modèle contraint (Lagrange), une zone porte les
+multiplicateurs — les réactions s'y lisent directement.
+
 Une matrice singulière (p. ex. conditions aux limites oubliées) produit un pivot
 nul ⇒ solution non finie ⇒ erreur explicite.
 

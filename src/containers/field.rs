@@ -261,11 +261,7 @@ pub trait SubField {
         let sv = self.values();
         let ov = other.values();
         // Same support ⇒ identical row count on every operand.
-        let rows = if out_nc == 0 {
-            0
-        } else {
-            out.values().len() / out_nc
-        };
+        let rows = out.values().len().checked_div(out_nc).unwrap_or(0);
         // Precompute, per output component, the source column on each side.
         let src: Vec<(usize, Option<usize>, Option<usize>)> = components
             .iter()
@@ -314,7 +310,7 @@ pub trait SubField {
         }
         let sv = self.values();
         let ov = other.values();
-        let rows = if self_nc == 0 { 0 } else { sv.len() / self_nc };
+        let rows = sv.len().checked_div(self_nc).unwrap_or(0);
         // Per-row product-sum in parallel, then an associative reduction.
         // Same support ⇒ identical row layout on both sides. Floating-point
         // `+` is not associative, so the total is thread-count-dependent to

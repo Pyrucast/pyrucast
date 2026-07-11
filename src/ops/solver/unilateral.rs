@@ -152,9 +152,10 @@ enum SchurSlot {
 /// any matrix mutation). Holds the resolved layout plus, per method, the warm
 /// start and cached factors.
 struct ActiveSetState {
-    /// The matrix DOF layout (rows gather the rhs, columns name the solution).
+    /// The matrix row layout (gathers the rhs; the solution is wrapped by
+    /// [`Matrix::field_from_col_values`], which reads the column layout from
+    /// the assembled matrix itself).
     row_dofs: Vec<NamedDof>,
-    col_dofs: Vec<NamedDof>,
     /// The resolved inequality relations, in model order (deterministic).
     inequalities: Vec<Inequality>,
     /// [`Refactorize`](ActiveSetMethod::Refactorize) warm start: last converged
@@ -253,11 +254,11 @@ fn solve_inner(
     // The Schur path reuses one base factorization; it falls back to the
     // refactorizing path (Ok(None)) when the base is singular.
     if options.active_set == ActiveSetMethod::SchurComplement {
-        if let Some(solution) = solve_schur(&state, &csc, &b_full, rhs, options, cancel)? {
+        if let Some(solution) = solve_schur(&state, &csc, &b_full, matrix, options, cancel)? {
             return Ok(solution);
         }
     }
-    solve_refactorize(&state, &csc, &b_full, rhs, options, cancel)
+    solve_refactorize(&state, &csc, &b_full, matrix, options, cancel)
 }
 
 /// The KKT sign test on one status's solution `x`: release every active relation
@@ -308,7 +309,7 @@ fn solve_refactorize(
     state: &ActiveSetState,
     csc: &nalgebra_sparse::CscMatrix<f64>,
     b_full: &[f64],
-    rhs: &NodeField,
+    matrix: &Matrix,
     options: &UnilateralOptions,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
@@ -352,7 +353,9 @@ fn solve_refactorize(
                 *state.last.lock() = Some((status, lu));
             }
             debug_assert_eq!(x.len(), n);
-            return NodeField::from_dof_values(rhs.coords()?, &state.col_dofs, &x);
+            // One zone per column support, on the blocks' own POI1 handles
+            // (`x` is in `state.col_dofs` order = the assembled column order).
+            return matrix.field_from_col_values(&x);
         }
     }
 
@@ -374,7 +377,7 @@ fn solve_schur(
     state: &ActiveSetState,
     csc: &nalgebra_sparse::CscMatrix<f64>,
     b_full: &[f64],
-    rhs: &NodeField,
+    matrix: &Matrix,
     options: &UnilateralOptions,
     cancel: &dyn Cancel,
 ) -> Result<Option<NodeField>> {
@@ -438,7 +441,8 @@ fn solve_schur(
             if options.cache {
                 cache.warm = Some(status);
             }
-            let field = NodeField::from_dof_values(rhs.coords()?, &state.col_dofs, &x)?;
+            // Same wrapping as `solve_refactorize`: blocks' own column supports.
+            let field = matrix.field_from_col_values(&x)?;
             return Ok(Some(field));
         }
     }
@@ -676,7 +680,6 @@ fn build_state(model: &Model, matrix: &Matrix) -> Result<ActiveSetState> {
 
     Ok(ActiveSetState {
         row_dofs,
-        col_dofs,
         inequalities,
         last: Mutex::new(None),
         schur: Mutex::new(SchurSlot::Untried),

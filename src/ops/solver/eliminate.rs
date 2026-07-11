@@ -203,6 +203,12 @@ fn solve_inner(
     // ── Step 6 — assemble the solution NodeField ───────────────────────
     // Primal u at every physics node, plus each slave's reaction in its dual row
     // (same shape as the Lagrange solution: primal field + a dual reaction).
+    //
+    // Unlike `lu`/`unilateral`, this output cannot be wrapped by
+    // `Matrix::field_from_col_values`: its DOF set is not the matrix columns
+    // (multiplier columns are condensed out, and the reactions land on **dual**
+    // variables at the slave nodes — row-flavoured DOFs). Keep the explicit
+    // materialised support here.
     let mut out_dofs = cond.phys_col_dofs.clone();
     let mut out_vals: Vec<f64> = u_phys.iter().copied().collect();
     for s in &cond.slaves {
