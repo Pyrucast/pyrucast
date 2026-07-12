@@ -63,6 +63,7 @@ Elles sont presque toujours **différentes** :
 | Physique           | Primales (cols)    | Duales (rows)      |
 |---|---|---|
 | `HeatConduction`   | `T` (température)  | `q` (flux de chaleur) |
+| `Convection` (film) | `T` (partagée avec `HeatConduction`) | `q` (partagée) |
 | `Truss` / `LinearElasticity` | `u_x`, `u_y`, …   | `f_x`, `f_y`, …    |
 | `Dirichlet { imposed_variable: "T" }` | `lambda_T`         | `imposed_T`         |
 
@@ -99,6 +100,7 @@ constructeurs et les variables, vus du `Model` :
 | Constructeur (`Model::…`) | Primales | Duales | Matériau | Chapitre |
 |---|---|---|---|---|
 | `heat_conduction(fes)` | `T` | `q` | `k` | [Thermique](thermique.md) |
+| `convection(fes)` | `T` | `q` | `h` | [Thermique](thermique.md#convection-de-surface-robin--film) |
 | `truss(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
 | `elasticity(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` | [Élasticité](mecanique/elasticite.md) |
 | `timoshenko(fes)` | `w, theta` | `f_w, m_theta` | `E, I, G, A_s` | [Timoshenko](mecanique/timoshenko.md) |
@@ -126,7 +128,7 @@ de physique » là où les capacités répondent à « domaine ou contrainte » 
 | Nature (`Physics`) | Physiques |
 |---|---|
 | `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `timoshenko`, `frame`, `frame3d` |
-| `Thermal`    | `heat_conduction` |
+| `Thermal`    | `heat_conduction`, `convection` |
 | `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` |
 | `Other`      | nature « autre / rien » explicite (aucune physique de base ne la déclare) |
 
@@ -259,6 +261,6 @@ lecture des inconnues et des réactions) sont déroulés dans
 ## Limitations actuelles
 
 - **Mass non assemblée** : `assemble::mass(model)` retourne une matrice vide en v0. L'intégrande `∫ ρc_p · N_i N_j dx` (et son équivalent pour les autres physiques) est additif et sera ajouté quand le besoin transient se présentera.
-- **Physiques disponibles** : `HeatConduction` ([thermique](thermique.md)), `Truss`, `LinearElasticity`, `Timoshenko`, `Frame`, `Frame3d` ([mécanique](mecanique.md)) et les contraintes `Dirichlet` et `Mpc` ([contraintes](contraintes.md)). Toute nouvelle physique est une struct implémentant `SubModelKind` (une variante de l'énum `SubModel` + un bras de `as_kind`, rien d'autre — cf. [Ajouter une physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier, indépendant du nombre de physiques existantes.
+- **Physiques disponibles** : `HeatConduction` et `Convection` (échange de surface / film) ([thermique](thermique.md)), `Truss`, `LinearElasticity`, `Timoshenko`, `Frame`, `Frame3d` ([mécanique](mecanique.md)) et les contraintes `Dirichlet` et `Mpc` ([contraintes](contraintes.md)). Toute nouvelle physique est une struct implémentant `SubModelKind` (une variante de l'énum `SubModel` + un bras de `as_kind`, rien d'autre — cf. [Ajouter une physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier, indépendant du nombre de physiques existantes.
 - **Pas de check de cohérence pré-assemblage** : la consistance (matériau définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre sub-models, etc.) est vérifiée au moment de `assemble::stiffness` / `assemble::mass`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose problème, un check eager est facile à ajouter.
 - **Solveur dense seulement** : le `solve` fourni est un harnais de test (LU dense via `nalgebra`). Pour les vrais problèmes Phase 3 introduira un trait `LinearSolver` enfichable (itératifs, direct creux, factorisation Cholesky pour les cas symétriques détectés via le drapeau de la `Matrix`).

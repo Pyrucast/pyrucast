@@ -62,7 +62,7 @@ Conditions limites / chargement;FORC;Force nodale appliquée;NodeField (second m
 Conditions limites / chargement;PRES;Chargement de pression sur une surface;—
 Conditions limites / chargement;FLUX;Flux surfacique/volumique imposé (thermique);flux
 Conditions limites / chargement;SOUR;Source volumique (thermique);flux (densité)
-Conditions limites / chargement;CONV;Échange par convection;—
+Conditions limites / chargement;CONV;Échange par convection (Robin / film);Model.convection (matrice de film h∫NiNj) + flux (charge h·T_ext)
 Conditions limites / chargement;CHAR;Définit un chargement (évolution temporelle);NodeField
 Résolution;RESO;Résout un système linéaire K.u = f;solve
 Résolution;PASAPAS;Procédure pas à pas (transitoire / non-linéaire);—

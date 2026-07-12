@@ -126,3 +126,60 @@ coin \\(Q\,h/2\\) (somme \\(Q\\)) — mais on n'a plus à le calculer à la main
 
 > Version Python : `examples/thermal_square_2d.py` (lancer avec
 > `python examples/thermal_square_2d.py` après `maturin develop`).
+
+## Convection de surface (Robin / film)
+
+Le modèle `Convection` (`src/models/convection.rs`) ajoute un **échange
+convectif** avec un fluide à température ambiante \\(T_\text{ext}\\) sur un
+bord : la loi de Newton du refroidissement
+
+\\[
+q\cdot n = h\,\big(T - T_\text{ext}\big)
+\\]
+
+où \\(h\\) est le **coefficient d'échange** (film). Injectée dans le terme de
+bord de la forme faible de la conduction, elle se scinde en deux ingrédients :
+
+\\[
+\underbrace{K_{ij} = h \int_\Gamma N_i\,N_j\,d\Gamma}_{\text{matrice de film (raideur)}}
+\qquad
+\underbrace{f_i = h\,T_\text{ext} \int_\Gamma N_i\,d\Gamma}_{\text{charge (second membre)}}
+\\]
+
+Le modèle partage les variables **`"T"`** / **`"q"`** de la conduction, donc un
+sous-modèle `Convection` sur un maillage de bord **se couple directement** dans
+la raideur d'un `HeatConduction`. Le coefficient `h` voyage dans le champ
+matériau comme `k` (composante **`"h"`**).
+
+| | nom | rôle |
+|---|---|---|
+| **primale** | `"T"` | température (partagée avec `HeatConduction`) |
+| **duale** | `"q"` | flux de chaleur (partagé) |
+| **matériau** | `"h"` | coefficient d'échange (film) |
+
+**Aucune normale à choisir.** La normale est déjà « consommée » en passant de
+\\(q\cdot n\\) à \\(h(T-T_\text{ext})\\) ; ce qui reste sous l'intégrale est un
+**scalaire** fois la mesure de surface \\(d\Gamma = |J| = \sqrt{\det(J^\top J)}\\),
+une magnitude **indépendante de l'orientation** du maillage de bord (contrairement
+à une pression ou à un flux signé).
+
+**Mise en donnée.** Le modèle fournit la matrice de film ; la part externe
+\\(h\,T_\text{ext}\\) est un **chargement**, bâti avec le **même** opérateur
+[`flux`](#exemple--un-carré) que la source (densité \\(h\,T_\text{ext}\\)). Le
+terme de film rend la matrice **définie** : un problème purement Neumann +
+convection est bien posé **sans Dirichlet**.
+
+**Exemple.** Une dalle \\([0,1]^2\\) chauffée par un flux \\(Q\\) sur le bord
+gauche et refroidie par convection sur le bord droit (haut/bas isolés). Tout le
+flux ressort par convection, d'où le profil linéaire
+
+\\[
+T(x) = T_\text{ext} + \frac{Q}{h} + \frac{Q}{k}\,(1 - x).
+\\]
+
+```rust,ignore
+{{#include ../../tests/thermal_convection.rs:convection}}
+```
+
+> Version Python : `examples/thermal_convection_2d.py` (lancer avec
+> `python examples/thermal_convection_2d.py` après `maturin develop`).

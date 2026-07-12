@@ -11,7 +11,9 @@ Cette partie décrit, physique par physique : les **équations résolues**, la
 **mise en donnée** (exemple Rust testé via `{{#include}}`), et un **exemple
 Python**.
 
-- [Conduction thermique](thermique.md) — `-∇·(k∇T) = 0`, l'exemple canonique.
+- [Conduction thermique](thermique.md) — `-∇·(k∇T) = 0`, l'exemple canonique,
+  et la [convection de surface](thermique.md#convection-de-surface-robin--film)
+  (Robin / film, `q·n = h(T − T_ext)`).
 - [Mécanique](mecanique.md) — barre, élasticité linéaire, poutres et
   portiques :
   - [Barre / treillis](mecanique/truss.md)
