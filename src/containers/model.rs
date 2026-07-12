@@ -240,7 +240,8 @@ impl SubModel {
     /// the conduction stiffness. The film coefficient `"h"` is supplied at
     /// assembly time via [`crate::ops::assemble::stiffness`]; the external
     /// temperature enters as a load (`h·T_ext ∫N_i dΓ`) built with
-    /// [`crate::ops::assemble::flux`]. See [`convection::Convection::new`].
+    /// [`flux`](fn@crate::ops::assemble::flux). See
+    /// [`convection::Convection::new`].
     pub fn convection(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         Ok(SubModel::Convection(convection::Convection::new(fespace)?))
     }
