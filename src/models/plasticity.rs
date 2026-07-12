@@ -7,11 +7,19 @@
 //! `sigma_y` (yield stress). The flow rule is associated J2 with **no
 //! hardening**, so the equivalent stress is capped at `sigma_y`.
 //!
-//! The integration is history-dependent: the **internal state** (plastic
-//! strain tensor `eps_p_*` and cumulated plastic strain `p`) flows in as `VAR0`
-//! (defaulting to zero on the first step) and out as the updated `VAR1`. State
-//! is always carried in **full 3-D** (six `eps_p_*` components) regardless of
-//! the 2-D/3-D model, which keeps the radial return identical across plane
+//! The integration is history-dependent and uses the **incremental montage**
+//! A → B: the end-of-step strain `ε(B)` comes in as `deformation`, while the
+//! converged state at the start of the step A — the stress `σ(A)`, the plastic
+//! strain `ε_p(A)`, the cumulated `p(A)` and the strain `ε(A)` — comes in as
+//! `prev` (the previous step's output; `None` on the first step, where A is the
+//! reference configuration). The elastic predictor is `σ_trial = σ(A) + C:Δε`
+//! with `Δε = ε(B) − ε(A)` — algebraically identical to `C:(ε(B) − ε_p(A))` in
+//! small strain, but the form that carries `σ(A)` explicitly, ready for a
+//! large-strain law. The output echoes the full-3-D `ε(B)` (and, in 2-D, the
+//! out-of-plane `σ_zz`) so it is a complete `prev` for the next step.
+//!
+//! State is always carried in **full 3-D** (six `eps_p_*` components) regardless
+//! of the 2-D/3-D model, which keeps the radial return identical across plane
 //! stress / plane strain / solid; only the input strain reconstruction and the
 //! output stress projection differ.
 //!
@@ -73,6 +81,19 @@ fn state_names() -> Vec<String> {
         .map(|s| format!("eps_p_{s}"))
         .collect();
     v.push("p".into());
+    v
+}
+
+/// Extra state echoed for the incremental montage so the output is a **complete
+/// `prev`**: the full-3-D end-of-step strain `ε(B)` (six `eps_*`, so `ε(A)` is
+/// recoverable next step) and — in 2-D only — the out-of-plane stress `sigma_zz`
+/// that the Voigt dual omits (so `σ(A)` is fully recoverable). In 3-D the Voigt
+/// dual already carries all six stresses.
+fn echo_names(space_dim: usize) -> Vec<String> {
+    let mut v: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
+    if space_dim == 2 {
+        v.push("sigma_zz".into());
+    }
     v
 }
 
@@ -194,17 +215,19 @@ impl Domain for Plasticity {
     fn behavior_output_components(&self) -> Result<Vec<String>> {
         let mut comps = stress_names(self.space_dim);
         comps.extend(state_names());
+        comps.extend(echo_names(self.space_dim));
         Ok(comps)
     }
 
-    /// Radial-return at one Gauss point. Output layout = stress (Voigt, `v`) +
-    /// plastic strain `eps_p` (full 3-D tensor, 6) + cumulated plastic strain
-    /// `p` (1), matching `stress_names ++ state_names`.
+    /// Incremental radial-return at one Gauss point. Output layout =
+    /// stress (Voigt, `v`) + plastic strain `eps_p` (full 3-D tensor, 6) +
+    /// cumulated plastic strain `p` (1) + echoed strain `ε(B)` (full 3-D, 6)
+    /// [+ `sigma_zz` in 2-D], matching `stress_names ++ state_names ++ echo_names`.
     fn integrate_point(
         &self,
         geom: &CellGeom,
-        input: &SubElementField,
-        _prev: Option<&SubElementField>,
+        deformation: &SubElementField,
+        prev: Option<&SubElementField>,
         material: Option<&SubElementField>,
         g: usize,
         _dt: Option<f64>,
@@ -215,21 +238,33 @@ impl Domain for Plasticity {
         let (lambda, mu) = lame(mat.value(cell, 0, "E")?, mat.value(cell, 0, "nu")?);
         let sigma_y = mat.value(cell, 0, "sigma_y")?;
 
-        // Total strain (tensor) and previous plastic state (VAR0).
-        let eps_total = read_strain(input, cell, g, d)?;
-        let eps_p_old = read_state_strain(input, cell, g);
-        let p_old = read_opt(input, cell, g, "p");
+        // End-of-step strain ε(B).
+        let eps_b = read_strain(deformation, cell, g, d)?;
+        // Converged state at A from `prev` (all zero on the first step, where A
+        // is the reference configuration: σ(A)=0, ε(A)=0, ε_p(A)=0, p(A)=0).
+        let prev_state = PrevState {
+            eps: read_prev_strain(prev, cell, g),
+            sigma: read_prev_stress(prev, cell, g),
+            eps_p: read_prev_plastic_strain(prev, cell, g),
+            p: prev_opt(prev, cell, g, "p"),
+        };
 
-        let (sigma, eps_p_new, p_new) = radial_return(
-            &eps_total, &eps_p_old, p_old, lambda, mu, sigma_y, self.model,
-        );
+        let (sigma, eps_p_new, p_new, eps_b_full) =
+            radial_return_incremental(&eps_b, &prev_state, lambda, mu, sigma_y, self.model);
 
         let v = stress_names(d).len();
         for r in 0..v {
             out[r] = voigt_stress(&sigma, d, r);
         }
-        out[v..v + 6].copy_from_slice(&eps_p_new);
-        out[v + 6] = p_new;
+        out[v..v + 6].copy_from_slice(&eps_p_new); // ε_p(B)
+        out[v + 6] = p_new; // p(B)
+        // Echo the full-3-D end-of-step strain ε(B), so `prev` carries ε(A) next
+        // step (in plane stress this includes the solved out-of-plane ε_zz).
+        out[v + 7..v + 13].copy_from_slice(&eps_b_full);
+        // In 2-D the Voigt dual omits σ_zz; echo it so σ(A) is fully recoverable.
+        if d == 2 {
+            out[v + 13] = sigma[2];
+        }
         Ok(())
     }
 }
@@ -274,43 +309,43 @@ fn von_mises(sigma: &[f64; 6]) -> f64 {
     (1.5 * ss).sqrt()
 }
 
-/// Radial return for **one** Gauss point. Given the total tensor strain, the
-/// previous plastic strain and cumulated `p`, returns the updated
-/// `(stress, eps_p, p)` (all full 3-D). For plane stress the out-of-plane
-/// normal strain `eps[2]` is solved so that `σ_zz = 0`.
-fn radial_return(
-    eps_total: &[f64; 6],
-    eps_p_old: &[f64; 6],
-    p_old: f64,
-    lambda: f64,
-    mu: f64,
-    sigma_y: f64,
-    model: ElasticityModel,
-) -> ([f64; 6], [f64; 6], f64) {
-    if model == ElasticityModel::PlaneStress {
-        return plane_stress_return(eps_total, eps_p_old, p_old, lambda, mu, sigma_y);
-    }
-    // Solid / plane strain: eps_total is fully prescribed (plane strain has
-    // eps_zz = eps_yz = eps_xz = 0 already).
-    return_map_3d(eps_total, eps_p_old, p_old, lambda, mu, sigma_y)
+/// The converged state at the **start of the step A**, read from `prev` — the
+/// input to the incremental montage. All full 3-D.
+struct PrevState {
+    /// Strain `ε(A)`.
+    eps: [f64; 6],
+    /// Stress `σ(A)`.
+    sigma: [f64; 6],
+    /// Plastic strain `ε_p(A)`.
+    eps_p: [f64; 6],
+    /// Cumulated plastic strain `p(A)`.
+    p: f64,
 }
 
-/// Classic 3-D radial return with a fully prescribed strain.
-fn return_map_3d(
-    eps_total: &[f64; 6],
-    eps_p_old: &[f64; 6],
-    p_old: f64,
-    lambda: f64,
+/// Elastic predictor of the **incremental** montage: `σ_trial = σ(A) + C:Δε`
+/// with `Δε = ε(B) − ε(A)` (all full 3-D). Algebraically identical to
+/// `C:(ε(B) − ε_p(A))` in small strain — since `σ(A) = C:(ε(A) − ε_p(A))` after
+/// a converged return — but this is the form that carries the previous stress
+/// explicitly, the shape a large-strain law reuses (with `σ(A)` rotated and
+/// `Δε` an objective increment).
+fn elastic_predictor(eps_b: &[f64; 6], prev: &PrevState, lambda: f64, mu: f64) -> [f64; 6] {
+    let deps: [f64; 6] = std::array::from_fn(|i| eps_b[i] - prev.eps[i]);
+    let c_deps = elastic_stress(&deps, lambda, mu);
+    std::array::from_fn(|i| prev.sigma[i] + c_deps[i])
+}
+
+/// Project a trial stress onto the yield surface (perfect J2), returning the
+/// updated `(stress, eps_p, p)` (all full 3-D).
+fn return_map_from_trial(
+    sig_trial: &[f64; 6],
+    prev: &PrevState,
     mu: f64,
     sigma_y: f64,
 ) -> ([f64; 6], [f64; 6], f64) {
-    // Elastic trial.
-    let eps_e: [f64; 6] = std::array::from_fn(|i| eps_total[i] - eps_p_old[i]);
-    let sig_trial = elastic_stress(&eps_e, lambda, mu);
-    let q = von_mises(&sig_trial);
+    let q = von_mises(sig_trial);
     let f = q - sigma_y;
     if f <= 0.0 || q == 0.0 {
-        return (sig_trial, *eps_p_old, p_old); // elastic
+        return (*sig_trial, prev.eps_p, prev.p); // elastic
     }
     // Perfect plasticity: Δp = f / (3μ); deviator scales by σ_y / q.
     let dp = f / (3.0 * mu);
@@ -327,7 +362,7 @@ fn return_map_3d(
     // Flow direction n = (3/2) s_trial / q ; Δε_p = Δp · n.
     let factor = 1.5 * dp / q;
     let mut sigma = [0.0; 6];
-    let mut eps_p = *eps_p_old;
+    let mut eps_p = prev.eps_p;
     for i in 0..6 {
         let s_new = s_trial[i] * scale;
         sigma[i] = if i < 3 { s_new + mean } else { s_new };
@@ -336,32 +371,56 @@ fn return_map_3d(
         // tensor, so Δε_p_ij = factor · s_trial_ij directly.
         eps_p[i] += factor * s_trial[i];
     }
-    (sigma, eps_p, p_old + dp)
+    (sigma, eps_p, prev.p + dp)
 }
 
-/// Plane-stress return: solve the scalar condition `σ_zz(eps_zz) = 0` by the
-/// secant method, each evaluation running a full 3-D radial return. The in-plane
-/// strains `eps[0], eps[1], eps[5]` are fixed; `eps[3] = eps[4] = 0`.
-fn plane_stress_return(
-    eps_in: &[f64; 6],
-    eps_p_old: &[f64; 6],
-    p_old: f64,
+/// Incremental radial return A → B for **one** Gauss point. Given the
+/// end-of-step strain `ε(B)`, the start-of-step state `prev` (`ε(A)`, `σ(A)`,
+/// `ε_p(A)`, `p(A)`) and the material, returns the updated
+/// `(σ(B), ε_p(B), p(B), ε(B))` — all full 3-D. The returned `ε(B)` carries the
+/// solved out-of-plane strain in plane stress (for the echo). For plane stress
+/// the out-of-plane normal strain `ε_zz(B)` is solved so that `σ_zz(B) = 0`.
+fn radial_return_incremental(
+    eps_b: &[f64; 6],
+    prev: &PrevState,
     lambda: f64,
     mu: f64,
     sigma_y: f64,
-) -> ([f64; 6], [f64; 6], f64) {
+    model: ElasticityModel,
+) -> ([f64; 6], [f64; 6], f64, [f64; 6]) {
+    if model == ElasticityModel::PlaneStress {
+        return plane_stress_incremental(eps_b, prev, lambda, mu, sigma_y);
+    }
+    // Solid / plane strain: ε(B) fully prescribed (plane strain has
+    // ε_zz = ε_yz = ε_xz = 0 already).
+    let sig_trial = elastic_predictor(eps_b, prev, lambda, mu);
+    let (sigma, eps_p, p) = return_map_from_trial(&sig_trial, prev, mu, sigma_y);
+    (sigma, eps_p, p, *eps_b)
+}
+
+/// Plane-stress incremental return: solve `σ_zz(B) = 0` for `ε_zz(B)` by the
+/// secant method, each evaluation running a full 3-D incremental return. The
+/// in-plane strains `ε_xx(B), ε_yy(B), ε_xy(B)` are fixed; `ε_yz(B) = ε_xz(B) = 0`.
+fn plane_stress_incremental(
+    eps_in_b: &[f64; 6],
+    prev: &PrevState,
+    lambda: f64,
+    mu: f64,
+    sigma_y: f64,
+) -> ([f64; 6], [f64; 6], f64, [f64; 6]) {
     let eval = |ezz: f64| {
-        let mut eps = *eps_in;
-        eps[2] = ezz;
-        eps[3] = 0.0;
-        eps[4] = 0.0;
-        return_map_3d(&eps, eps_p_old, p_old, lambda, mu, sigma_y)
+        let mut eps_b = *eps_in_b;
+        eps_b[2] = ezz;
+        eps_b[3] = 0.0;
+        eps_b[4] = 0.0;
+        let sig_trial = elastic_predictor(&eps_b, prev, lambda, mu);
+        let (sigma, eps_p, p) = return_map_from_trial(&sig_trial, prev, mu, sigma_y);
+        (sigma, eps_p, p, eps_b)
     };
-    // Initial guess: the elastic plane-stress out-of-plane strain
-    // ε_zz = -λ/(λ+2μ)·(ε_e,xx + ε_e,yy) (= -ν/(1-ν)·…), added back to the
-    // stored plastic ε_p,zz.
-    let nu_term = lambda / (lambda + 2.0 * mu); // = ν/(1-ν)
-    let mut z0 = eps_p_old[2] - nu_term * (eps_in[0] - eps_p_old[0] + eps_in[1] - eps_p_old[1]);
+    // Initial guess: previous ε_zz(A) plus the elastic plane-stress out-of-plane
+    // increment −ν/(1−ν)·(Δε_xx + Δε_yy).
+    let nu_term = lambda / (lambda + 2.0 * mu); // = ν/(1−ν)
+    let mut z0 = prev.eps[2] - nu_term * (eps_in_b[0] - prev.eps[0] + eps_in_b[1] - prev.eps[1]);
     let mut z1 = z0 + 1e-6_f64.max(z0.abs() * 1e-3);
     let mut f0 = eval(z0).0[2];
     let mut f1 = eval(z1).0[2];
@@ -411,9 +470,28 @@ fn read_strain(f: &SubElementField, cell: usize, g: usize, space_dim: usize) -> 
     Ok(eps)
 }
 
-/// Read the previous plastic strain tensor (VAR0), defaulting to zero.
-fn read_state_strain(f: &SubElementField, cell: usize, g: usize) -> [f64; 6] {
-    std::array::from_fn(|k| read_opt(f, cell, g, &format!("eps_p_{}", TENSOR_SUFFIXES[k])))
+/// Read a component from the optional previous-state field `prev`, defaulting to
+/// `0.0` when there is no previous step (`None`) or the component is absent.
+fn prev_opt(prev: Option<&SubElementField>, cell: usize, g: usize, name: &str) -> f64 {
+    prev.map_or(0.0, |f| read_opt(f, cell, g, name))
+}
+
+/// Full 3-D strain `ε(A)` echoed by the previous step (zero on the first step).
+fn read_prev_strain(prev: Option<&SubElementField>, cell: usize, g: usize) -> [f64; 6] {
+    std::array::from_fn(|k| prev_opt(prev, cell, g, &format!("eps_{}", TENSOR_SUFFIXES[k])))
+}
+
+/// Full 3-D stress `σ(A)` from the previous step. Each Voigt slot is read by
+/// name: `sigma_zz` comes from the 2-D echo (or the 3-D dual), and the shear
+/// `sigma_yz`/`sigma_xz` are absent in 2-D (⇒ `0.0`), exactly the plane
+/// assumptions.
+fn read_prev_stress(prev: Option<&SubElementField>, cell: usize, g: usize) -> [f64; 6] {
+    std::array::from_fn(|k| prev_opt(prev, cell, g, &format!("sigma_{}", TENSOR_SUFFIXES[k])))
+}
+
+/// Previous plastic strain tensor `ε_p(A)` (VAR0), defaulting to zero.
+fn read_prev_plastic_strain(prev: Option<&SubElementField>, cell: usize, g: usize) -> [f64; 6] {
+    std::array::from_fn(|k| prev_opt(prev, cell, g, &format!("eps_p_{}", TENSOR_SUFFIXES[k])))
 }
 
 /// Project the full 3-D stress to the model's Voigt slot `r`.
@@ -586,38 +664,116 @@ mod tests {
         }
     }
 
-    /// Internal state round-trips: feeding VAR0 back changes the result
-    /// (history dependence) and `p` is monotone non-decreasing.
+    /// Build a uniaxial-strain deformation field `ε_xx = val` (full 3-D tensor
+    /// component names) on a `unit_hex`.
+    fn uniaxial(pl: &Plasticity, val: f64) -> Handle<SubElementField> {
+        let comps: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
+        let mut s = SubElementField::new(pl.fespace.clone(), comps).unwrap();
+        s.set_uniform("eps_xx", val).unwrap();
+        insert(s)
+    }
+
+    /// Internal state round-trips through `prev`: feeding the previous step's
+    /// output back changes the result (history dependence) and `p` grows.
     #[test]
     fn state_round_trip_is_history_dependent() {
         let pl = unit_hex();
         let (e, nu, sy) = (210_000.0, 0.3, 250.0);
         let mat = material(&pl, e, nu, sy);
-        let comps: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
-        // First load past yield.
-        let mut s1 = SubElementField::new(pl.fespace.clone(), comps.clone()).unwrap();
-        s1.set_uniform("eps_xx", 5e-3).unwrap();
-        let s1 = insert(s1);
-        let st1 = pl.integrate_behavior(&s1, None, Some(&mat), None).unwrap();
+        // First load past yield (prev = None ⇒ reference config A).
+        let st1 = pl
+            .integrate_behavior(&uniaxial(&pl, 5e-3), None, Some(&mat), None)
+            .unwrap();
         let p1 = st1.value(0, 0, "p").unwrap();
         assert!(p1 > 0.0);
 
-        // Build a second input that carries strain + the state from step 1.
-        let mut merged = state_names();
-        merged.extend(comps.iter().cloned());
-        let mut s2 = SubElementField::new(pl.fespace.clone(), merged).unwrap();
-        for g in 0..s2.gauss_count() {
-            s2.set_value(0, g, "eps_xx", 6e-3).unwrap();
-            for suf in TENSOR_SUFFIXES {
-                let v = st1.value(0, g, &format!("eps_p_{suf}")).unwrap();
-                s2.set_value(0, g, &format!("eps_p_{suf}"), v).unwrap();
-            }
-            s2.set_value(0, g, "p", p1).unwrap();
-        }
-        let s2 = insert(s2);
-        let st2 = pl.integrate_behavior(&s2, None, Some(&mat), None).unwrap();
+        // Second step: larger ε(B); the state of A is fed via `prev` (the step-1
+        // output), *not* merged into the deformation field.
+        let prev = insert(st1);
+        let st2 = pl
+            .integrate_behavior(&uniaxial(&pl, 6e-3), Some(&prev), Some(&mat), None)
+            .unwrap();
         // Cumulated plastic strain only grows.
         assert!(st2.value(0, 0, "p").unwrap() >= p1);
+    }
+
+    /// Iso-result: on a **proportional** (monotone uniaxial) path, the
+    /// incremental montage in N steps — threading `prev` — reproduces the
+    /// single-step total-strain integration to round-off. Guards the whole
+    /// prev-threading + `σ(A) + C:Δε` predictor.
+    #[test]
+    fn incremental_matches_single_step_on_proportional_path() {
+        let pl = unit_hex();
+        let (e, nu, sy) = (210_000.0, 0.3, 250.0);
+        let mat = material(&pl, e, nu, sy);
+        let eps_final = 1e-2; // well past yield
+
+        // Single step 0 → ε_final.
+        let single = pl
+            .integrate_behavior(&uniaxial(&pl, eps_final), None, Some(&mat), None)
+            .unwrap();
+
+        // Ten proportional increments, threading `prev`.
+        let nsteps = 10;
+        let mut prev: Option<Handle<SubElementField>> = None;
+        for i in 1..=nsteps {
+            let val = eps_final * i as f64 / nsteps as f64;
+            let out = pl
+                .integrate_behavior(&uniaxial(&pl, val), prev.as_ref(), Some(&mat), None)
+                .unwrap();
+            prev = Some(insert(out));
+        }
+        let multi = read(&prev.unwrap()).unwrap();
+        for comp in ["sigma_xx", "sigma_yy", "sigma_zz", "p", "eps_p_xx", "eps_p_yy"] {
+            let a = single.value(0, 0, comp).unwrap();
+            let b = multi.value(0, 0, comp).unwrap();
+            assert!((a - b).abs() < 1e-9, "{comp}: single={a} multi={b}");
+        }
+    }
+
+    /// History dependence: after loading past yield, a small **partial** unload
+    /// is elastic — `p` does not grow and the stress drops *off* the yield
+    /// plateau (`q < σ_y`), following the elastic slope. Impossible without
+    /// threaded state: the old bug integrated the unloaded step from zero, so at
+    /// a still-past-yield strain it would sit back on the plateau (`q = σ_y`)
+    /// with a fresh `p`.
+    #[test]
+    fn partial_unload_is_elastic_and_leaves_yield_surface() {
+        let pl = unit_hex();
+        let (e, nu, sy) = (210_000.0, 0.3, 250.0);
+        let mat = material(&pl, e, nu, sy);
+
+        // Load well past yield.
+        let loaded = insert(
+            pl.integrate_behavior(&uniaxial(&pl, 1e-2), None, Some(&mat), None)
+                .unwrap(),
+        );
+        let p1 = read(&loaded).unwrap().value(0, 0, "p").unwrap();
+        assert!(p1 > 0.0);
+
+        // Small unload (still far past yield), threading the loaded state as `prev`.
+        let unloaded = pl
+            .integrate_behavior(&uniaxial(&pl, 9.9e-3), Some(&loaded), Some(&mat), None)
+            .unwrap();
+        // Elastic: p unchanged.
+        assert!(
+            (unloaded.value(0, 0, "p").unwrap() - p1).abs() < 1e-12,
+            "p must not grow on elastic unload"
+        );
+        // Stress has left the yield plateau (q < σ_y) — the history signature.
+        let s = [
+            unloaded.value(0, 0, "sigma_xx").unwrap(),
+            unloaded.value(0, 0, "sigma_yy").unwrap(),
+            unloaded.value(0, 0, "sigma_zz").unwrap(),
+            unloaded.value(0, 0, "sigma_yz").unwrap(),
+            unloaded.value(0, 0, "sigma_xz").unwrap(),
+            unloaded.value(0, 0, "sigma_xy").unwrap(),
+        ];
+        assert!(
+            von_mises(&s) < sy - 1.0,
+            "elastic unload must drop below σ_y, got q = {}",
+            von_mises(&s)
+        );
     }
 
     /// The elastic stiffness block is reused from elasticity: symmetric.

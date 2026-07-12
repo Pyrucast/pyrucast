@@ -20,8 +20,11 @@
 //! ```
 //!
 //! Material components `E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`. The
-//! single internal variable `kappa` flows in as `VAR0` (defaulting to `eps_d0`
-//! on the first step) and out as `VAR1`, alongside the scalar `damage`.
+//! single internal variable `kappa` comes in as the previous-step state `prev`
+//! (`κ(A)`, floored at `eps_d0` in the update, so `None` on the first step is
+//! fine) and out as the updated `VAR1`, alongside the scalar `damage`. The
+//! effective stress is a function of the current total strain `ε(B)` — damage
+//! mechanics has no strain increment; only `κ` is history.
 //!
 //! As for plasticity, the Newton loop driving the load increments lives in
 //! Python (see `ROADMAP.md`); this module provides the point-wise update only.
@@ -192,8 +195,8 @@ impl Domain for Mazars {
     fn integrate_point(
         &self,
         geom: &CellGeom,
-        input: &SubElementField,
-        _prev: Option<&SubElementField>,
+        deformation: &SubElementField,
+        prev: Option<&SubElementField>,
         material: Option<&SubElementField>,
         g: usize,
         _dt: Option<f64>,
@@ -210,8 +213,10 @@ impl Domain for Mazars {
             a_c: mat.value(cell, 0, "A_c")?,
             b_c: mat.value(cell, 0, "B_c")?,
         };
-        let eps = read_strain(input, cell, g, d, p.nu, self.model)?;
-        let kappa_old = read_opt(input, cell, g, "kappa");
+        // End-of-step strain ε(B); history variable κ(A) from `prev` (floored at
+        // `eps_d0` in the update, so `None`/absent — the first step — is fine).
+        let eps = read_strain(deformation, cell, g, d, p.nu, self.model)?;
+        let kappa_old = prev_opt(prev, cell, g, "kappa");
         let (sigma, damage, kappa) = mazars_update(&eps, kappa_old, &p);
         let v = stress_names(d).len();
         for r in 0..v {
@@ -337,6 +342,12 @@ fn read_opt(f: &SubElementField, cell: usize, g: usize, name: &str) -> f64 {
     } else {
         0.0
     }
+}
+
+/// Read a component from the optional previous-state field `prev`, defaulting to
+/// `0.0` when there is no previous step (`None`) or the component is absent.
+fn prev_opt(prev: Option<&SubElementField>, cell: usize, g: usize, name: &str) -> f64 {
+    prev.map_or(0.0, |f| read_opt(f, cell, g, name))
 }
 
 /// Reconstruct the full 3-D tensor strain. Plane strain forces `ε_zz = 0`;
@@ -483,27 +494,17 @@ mod tests {
         let s1 = strain_field(&mz, 5e-4);
         let st1 = mz.integrate_behavior(&s1, None, Some(&mat), None).unwrap();
         let k1 = st1.value(0, 0, "kappa").unwrap();
+        let d1 = st1.value(0, 0, "damage").unwrap();
 
-        // Unload to 2e-4, feeding κ from step 1.
-        let mut s2 = SubElementField::new(
-            mz.fespace.clone(),
-            vec![
-                "eps_xx".into(),
-                "eps_xy".into(),
-                "eps_yy".into(),
-                "kappa".into(),
-            ],
-        )
-        .unwrap();
-        s2.set_uniform("eps_xx", 2e-4).unwrap();
-        s2.set_uniform("kappa", k1).unwrap();
-        let s2 = insert(s2);
-        let st2 = mz.integrate_behavior(&s2, None, Some(&mat), None).unwrap();
+        // Unload to 2e-4, feeding the step-1 state (κ) via `prev`.
+        let prev = insert(st1);
+        let s2 = strain_field(&mz, 2e-4);
+        let st2 = mz
+            .integrate_behavior(&s2, Some(&prev), Some(&mat), None)
+            .unwrap();
         assert!((st2.value(0, 0, "kappa").unwrap() - k1).abs() < 1e-12);
         // Damage unchanged on unloading (same κ).
-        assert!(
-            (st2.value(0, 0, "damage").unwrap() - st1.value(0, 0, "damage").unwrap()).abs() < 1e-9
-        );
+        assert!((st2.value(0, 0, "damage").unwrap() - d1).abs() < 1e-9);
     }
 
     /// Solid 3-D uniaxial tension also triggers tensile damage.
