@@ -5,32 +5,59 @@ Le module `ops::behavior` **intègre la loi de comportement** d'un
 module `ops::internal_forces` en calcule les **forces internes** — le `BSIG` de
 cast3m (`∫ Bᵀ σ`).
 
-## `integrate_behavior(model, deformation, materials)` → `ElementField`
+## `integrate_behavior(model, deformation, materials, prev=None, dt=None)` → `ElementField`
 
 Là où [`stiffness`](assemblage.md) produit la **linéarisation** du modèle (une
 matrice), `integrate_behavior` produit la **réponse ponctuelle exacte** comme
 [champ aux points de Gauss](../element-field.md).
 
-Le découpage est volontaire :
+C'est un **montage incrémental A → B** : la loi intègre le comportement entre
+l'état convergé du **début de pas A** et la déformation de **fin de pas B**.
 
-1. l'**entrée de déformation** est construite **séparément et géométriquement**
-   par [`gradient`](champs.md) (`∇T`…), [`deformation`](champs.md) (`ε`) ou
-   [`beam_deformation`](champs.md) (`κ, γ`) — ces opérateurs ne dépendent que de
-   l'espace EF, pas du modèle ; le choix de *quelle* déformation nourrir reste
-   donc à l'appelant ;
-2. `integrate_behavior` prend cette déformation (plus, optionnellement, l'état
-   interne d'entrée `VAR0`) et le **matériau par zone**, et applique la loi de
-   chaque physique **point par point** ;
-3. il renvoie l'**état matériau** : le flux / la contrainte dual(e) plus les
-   variables internes mises à jour `VAR1`.
+1. l'**entrée de déformation** `ε(B)` est construite **séparément et
+   géométriquement** par [`gradient`](champs.md) (`∇T`…), [`deformation`](champs.md)
+   (`ε`) ou [`beam_deformation`](champs.md) (`κ, γ`) — ces opérateurs ne dépendent
+   que de l'espace EF, pas du modèle ; le choix de *quelle* déformation nourrir
+   reste donc à l'appelant ;
+2. `prev` est l'**état convergé de A** — la **sortie du pas précédent** : la
+   contrainte `σ(A)`, les variables internes `VAR(A)` et la déformation `ε(A)`.
+   Il vaut `None` au **premier pas**, où A est la configuration de référence
+   (`σ(A)=0`, `ε(A)=0`) ;
+3. `dt` est l'**incrément de temps**, `None` pour une loi indépendante du temps
+   (une loi visqueuse future erreurera s'il vaut `None`) ;
+4. `integrate_behavior` prend ces entrées plus le **matériau par zone** et
+   applique la loi de chaque physique **point par point** ;
+5. il renvoie l'**état matériau de B** : le flux / la contrainte dual(e) plus les
+   variables internes mises à jour `VAR1` — le champ à **réinjecter comme `prev`
+   au pas suivant**.
 
 Les sous-modèles de **contrainte** (Dirichlet…) sont ignorés : un sous-modèle
-participe ssi il déclare un espace EF de comportement. Les zones de déformation
-et de matériau sont appariées par sous-espace EF.
+participe ssi il déclare un espace EF de comportement. Les zones de déformation,
+de matériau et d'état précédent sont appariées par sous-espace EF.
+
+> **Pourquoi le montage incrémental ?** Fournir l'état de A séparément de la
+> déformation de B (plutôt que fusionnés dans un même champ) rend le fil d'état
+> robuste — un `ElementField` = une zone par support, sans ambiguïté — et ouvre
+> les **grandes déformations** et les **lois visqueuses** : elles exigent l'accès
+> à `σ(A)` et à un incrément daté, que cette interface porte déjà. En petites
+> déformations le prédicteur incrémental `σ_trial = σ(A) + C:Δε` est
+> rigoureusement identique à la forme en déformation totale.
 
 Pour une loi **linéaire**, le résultat est cohérent avec `stiffness`
 (`∫ Bᵀ·flux = K·u`) ; une loi **non linéaire** s'écarte de cette tangente — c'est
 tout l'intérêt d'intégrer le comportement exactement.
+
+### Boucle multi-pas (fil d'état)
+
+```python
+state = None                      # VAR0 = prev ; None au premier pas
+for step in range(1, nsteps + 1):
+    ...                           # charge du pas → boucle de Newton sur u
+    eps  = pyrucast.deformation(u, fes)                     # ε(B)
+    out  = pyrucast.integrate_behavior(model, eps, materials, prev=state)
+    ...                           # F_int (BSIG), résidu, correction de u
+    state = out                   # commit : prev ← VAR1 pour le pas suivant
+```
 
 ## Exemple : efforts de section d'une poutre
 

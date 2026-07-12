@@ -51,12 +51,15 @@ retour radial.
 
 - **primal** : `u_x, u_y(, u_z)` — **dual** : `f_x, f_y(, f_z)`.
 - **matériau** : `E` (Young), `nu` (Poisson), `sigma_y` (limite d'élasticité).
-- **état interne** (`VAR0` → `VAR1`, transitant par le champ d'entrée/sortie du
-  `COMP`) : tenseur de déformation plastique `eps_p_xx … eps_p_xy` (toujours
-  **6 composantes 3-D**) et déformation plastique cumulée `p`. Absent au
-  premier pas, il est pris **nul** par défaut.
-- **sortie du `COMP`** : contrainte (`sigma_*` dans l'ordre de Voigt du modèle)
-  suivie de l'état mis à jour.
+- **état de début de pas A** (entrée `prev`, montage incrémental) : contrainte
+  `σ(A)`, tenseur de déformation plastique `eps_p_xx … eps_p_xy` (toujours
+  **6 composantes 3-D**), déformation plastique cumulée `p`, et déformation
+  `ε(A)`. C'est la **sortie du pas précédent** ; `None` au premier pas (A =
+  configuration de référence, tout à zéro).
+- **sortie du `COMP`** (état de B, = `prev` du pas suivant) : contrainte
+  (`sigma_*` dans l'ordre de Voigt du modèle) suivie de l'état mis à jour et de
+  l'échO de `ε(B)` full-3-D (plus `sigma_zz` en 2-D) pour que `prev` soit
+  complet. Le prédicteur élastique est `σ_trial = σ(A) + C:(ε(B) − ε(A))`.
 
 ## Exemple Python (la brique `COMP`)
 
@@ -71,18 +74,17 @@ materials = pyrucast.material_field(
     model, [("E", 210_000.0), ("nu", 0.3), ("sigma_y", 250.0)]
 )
 
-# Déformation issue du champ de déplacement courant (op géométrique).
+# Déformation ε(B) issue du champ de déplacement courant (op géométrique).
 strain = pyrucast.deformation(u, fes)
-# Intégration du comportement : contrainte + état plastique mis à jour.
-state = pyrucast.integrate_behavior(model, strain, materials)
+# Intégration A→B : `prev` = sortie du pas précédent (None au premier pas).
+state = pyrucast.integrate_behavior(model, strain, materials, prev=prev_state)
 sigma_xx = state[0].value(0, 0, "sigma_xx")
 p = state[0].value(0, 0, "p")  # déformation plastique cumulée
 ```
 
-Pour réinjecter l'état au pas suivant, on unit `eps_p_*` / `p` de `state`
-avec la nouvelle déformation (opérateur d'union `|`, voir
-[champs](../operateurs/champs.md)) avant d'appeler de nouveau
-`integrate_behavior`.
+Pour réinjecter l'état au pas suivant, il suffit de **passer `state` comme
+`prev`** au prochain appel — la sortie porte déjà l'état complet de B (σ, `VAR1`,
+`ε(B)`). Aucune fusion de champs n'est nécessaire.
 
 La **boucle de Newton complète** (pas de charge, résidu, résolution, portage de
 l'état) est écrite dans `examples/plasticite_poutre_console.py` — voir la

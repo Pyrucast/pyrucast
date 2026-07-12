@@ -416,11 +416,12 @@ class ElementField:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. The fields additionally
-        fuse zones sharing a support (see their `finalize`), so
-        `|` may raise on incoherent values. Returns
-        `NotImplemented` for any other type so Python can fall
-        back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Union does **not** fuse
+        zones sharing a support — they are kept side by side; the
+        fields' `finalize` only rejects a component carried by two
+        zones on one support (call `consolidate_element` to fuse).
+        Returns `NotImplemented` for any other type so Python can
+        fall back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -511,11 +512,12 @@ class Evolution:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. The fields additionally
-        fuse zones sharing a support (see their `finalize`), so
-        `|` may raise on incoherent values. Returns
-        `NotImplemented` for any other type so Python can fall
-        back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Union does **not** fuse
+        zones sharing a support — they are kept side by side; the
+        fields' `finalize` only rejects a component carried by two
+        zones on one support (call `consolidate_element` to fuse).
+        Returns `NotImplemented` for any other type so Python can
+        fall back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -588,11 +590,12 @@ class FiniteElementSpace:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. The fields additionally
-        fuse zones sharing a support (see their `finalize`), so
-        `|` may raise on incoherent values. Returns
-        `NotImplemented` for any other type so Python can fall
-        back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Union does **not** fuse
+        zones sharing a support — they are kept side by side; the
+        fields' `finalize` only rejects a component carried by two
+        zones on one support (call `consolidate_element` to fuse).
+        Returns `NotImplemented` for any other type so Python can
+        fall back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -628,6 +631,20 @@ class Matrix:
         r"""
         Build the global DOF table and CSR. Must be called before any
         solver-facing method (`dense`, `mul_dense`, …).
+        """
+    def filter(self, physics: builtins.str) -> Matrix:
+        r"""
+        `Matrix.filter(physics)` — a new `Matrix` holding only the blocks **whose
+        nature set contains** the given physics (`"mechanical"`, `"thermal"`,
+        `"constraint"`, `"other"`). The result is **not** finalized — call
+        `assemble` (or `finalize` for literal-only blocks) before solving.
+        """
+    def physics(self) -> builtins.list[builtins.str]:
+        r"""
+        `Matrix.physics()` — the list of physics natures present across the
+        matrix's blocks (first-seen, deduplicated). Empty if no block is tagged;
+        several tags when the matrix aggregates several physics (e.g. a heat model
+        with a Dirichlet → `["thermal", "constraint"]`).
         """
     def n_rows(self) -> builtins.int:
         r"""
@@ -707,11 +724,12 @@ class Matrix:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. The fields additionally
-        fuse zones sharing a support (see their `finalize`), so
-        `|` may raise on incoherent values. Returns
-        `NotImplemented` for any other type so Python can fall
-        back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Union does **not** fuse
+        zones sharing a support — they are kept side by side; the
+        fields' `finalize` only rejects a component carried by two
+        zones on one support (call `consolidate_element` to fuse).
+        Returns `NotImplemented` for any other type so Python can
+        fall back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -745,6 +763,13 @@ class Mesh:
     def node(self, submesh_idx: builtins.int, cell_idx: builtins.int, node_idx: builtins.int) -> Node:
         r"""
         The `node_idx`-th node of cell `cell_idx` in submesh `submesh_idx`.
+        """
+    def nearest_node(self, point: typing.Sequence[builtins.float]) -> Node:
+        r"""
+        The mesh node closest (Euclidean distance) to `point`.
+        
+        `point` must have the mesh coordinate dimension. Only nodes referenced
+        by a cell are considered; ties break to the smaller node id.
         """
     def cell(self, submesh_idx: builtins.int, cell_idx: builtins.int) -> Cell:
         r"""
@@ -803,11 +828,12 @@ class Mesh:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. The fields additionally
-        fuse zones sharing a support (see their `finalize`), so
-        `|` may raise on incoherent values. Returns
-        `NotImplemented` for any other type so Python can fall
-        back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Union does **not** fuse
+        zones sharing a support — they are kept side by side; the
+        fields' `finalize` only rejects a component carried by two
+        zones on one support (call `consolidate_element` to fuse).
+        Returns `NotImplemented` for any other type so Python can
+        fall back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -997,6 +1023,13 @@ class Model:
         primal `variable` (e.g. `"u_x" -> "f_x"`, `"T" -> "q"`), searched across
         all sub-models, or `None`. A helper to fill an MPC term's `target_dual`.
         """
+    def filter(self, physics: builtins.str) -> Model:
+        r"""
+        `Model.filter(physics)` — a new `Model` holding only the sub-models **whose
+        nature set contains** the given physics. `physics` is a tag: `"mechanical"`,
+        `"thermal"`, `"constraint"` or `"other"`. Sub-model order is preserved; the
+        result may be empty.
+        """
     def multiplier_mesh(self) -> Mesh:
         r"""
         `Model.multiplier_mesh()` — POI1 `Mesh` of the constraint multiplier
@@ -1065,11 +1098,12 @@ class Model:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. The fields additionally
-        fuse zones sharing a support (see their `finalize`), so
-        `|` may raise on incoherent values. Returns
-        `NotImplemented` for any other type so Python can fall
-        back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Union does **not** fuse
+        zones sharing a support — they are kept side by side; the
+        fields' `finalize` only rejects a component carried by two
+        zones on one support (call `consolidate_element` to fuse).
+        Returns `NotImplemented` for any other type so Python can
+        fall back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -1258,11 +1292,12 @@ class NodeField:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. The fields additionally
-        fuse zones sharing a support (see their `finalize`), so
-        `|` may raise on incoherent values. Returns
-        `NotImplemented` for any other type so Python can fall
-        back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Union does **not** fuse
+        zones sharing a support — they are kept side by side; the
+        fields' `finalize` only rejects a component carried by two
+        zones on one support (call `consolidate_element` to fuse).
+        Returns `NotImplemented` for any other type so Python can
+        fall back to the right operand's `__ror__`.
         """
 
 @typing.final
@@ -1615,6 +1650,13 @@ class SubMatrix:
         r"""
         Number of stored COO entries.
         """
+    def physics(self) -> builtins.list[builtins.str]:
+        r"""
+        The physics nature(s) of the sub-model that produced this block, as a list
+        of tags (`"mechanical"`, `"thermal"`, `"constraint"`, `"other"`). **Empty**
+        for a block built outside assembly (the "rien" case), or several tags for a
+        coupled physics. Set by the assembler; used by `Matrix.filter`.
+        """
     def field_names(self) -> builtins.list[builtins.str]:
         r"""
         Variable (field) names this block addresses.
@@ -1772,6 +1814,12 @@ class SubModel:
     def dual_vars(self) -> builtins.list[builtins.str]:
         r"""
         Names of the dual variables of this sub-model.
+        """
+    def physics(self) -> builtins.list[builtins.str]:
+        r"""
+        The physics nature(s) of this sub-model as a list of tags (`"mechanical"`,
+        `"thermal"`, `"constraint"`, `"other"`). Determined entirely by the physics
+        kind — one tag for a plain physics, several for a coupled one.
         """
     def multiplier_mesh(self) -> Mesh:
         r"""
@@ -1974,7 +2022,7 @@ def consolidate(obj: typing.Any) -> typing.Any:
     
     - `Mesh` → `ops::mesher::consolidate`: fuse submeshes of the same
       element type, drop duplicate cells;
-    - `NodeField` → `ops::field::consolidate`: fuse zones with the same
+    - `NodeField` → `ops::field::consolidate_node`: fuse zones with the same
       component set, dedupe interface nodes after a coherence check.
     """
 
@@ -2123,15 +2171,18 @@ def integral(field: typing.Any, component: builtins.str, fespace: typing.Optiona
     sum instead: `field.sum(component)`.
     """
 
-def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField) -> ElementField:
+def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> ElementField:
     r"""
-    Integrate the constitutive law of `model` (Cast3m `COMP`).
+    Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
     
-    `deformation` is the behaviour-input field (from `gradient(field,
-    fespace)` or `deformation(u, fespace)`); `materials` supplies the
-    per-zone material data. Returns the material-state field (dual
-    flux/stress + updated internal variables) of every behaviour-bearing
-    sub-model.
+    `deformation` is the **end-of-step** behaviour input ε(B) (from
+    `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
+    **converged output of the previous step** (the state at A — stress,
+    internal variables and start-of-step strain), or `None` on the first step;
+    `materials` supplies the per-zone material data; `dt` is the time increment
+    (`None` if the law is rate-independent). Returns the material-state field at
+    B (dual flux/stress + updated internal variables) of every behaviour-bearing
+    sub-model — feed it back as `prev` at the next step.
     
     For a linear law the result is consistent with the assembled stiffness
     (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.

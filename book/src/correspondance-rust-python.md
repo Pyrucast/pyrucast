@@ -150,7 +150,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 | Rust (`ops::behavior::…`) | Python (`pyrucast.…`) |
 |---|---|
-| `integrate(model: &Model, deformation: &ElementField, materials: &ElementField) -> ElementField` | `integrate_behavior(model, deformation, materials) -> ElementField` |
+| `integrate(model: &Model, deformation: &ElementField, prev: Option<&ElementField>, materials: &ElementField, dt: Option<f64>) -> ElementField` | `integrate_behavior(model, deformation, materials, prev=None, dt=None) -> ElementField` |
 
 ### `ops::internal_forces` — forces internes (`BSIG`, `∫ Bᵀ σ`)
 

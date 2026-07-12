@@ -455,11 +455,12 @@ macro_rules! impl_aggregate_pymethods {
                 /// may be another aggregate of the same type or a single
                 /// sub-object. Sub-objects already present (same store slot)
                 /// are not added twice; remaining handles are **shared**
-                /// (refcount bump), not deep-copied. The fields additionally
-                /// fuse zones sharing a support (see their `finalize`), so
-                /// `|` may raise on incoherent values. Returns
-                /// `NotImplemented` for any other type so Python can fall
-                /// back to the right operand's `__ror__`.
+                /// (refcount bump), not deep-copied. Union does **not** fuse
+                /// zones sharing a support — they are kept side by side; the
+                /// fields' `finalize` only rejects a component carried by two
+                /// zones on one support (call `consolidate_element` to fuse).
+                /// Returns `NotImplemented` for any other type so Python can
+                /// fall back to the right operand's `__ror__`.
                 fn __or__(
                     &self,
                     py: pyo3::Python<'_>,

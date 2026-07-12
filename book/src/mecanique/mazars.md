@@ -51,10 +51,13 @@ facteur `(1−D)` se simplifie dans `σ_zz = 0`).
 - **primal** : `u_x, u_y(, u_z)` — **dual** : `f_x, f_y(, f_z)`.
 - **matériau** : `E`, `nu`, `eps_d0` (seuil), `A_t, B_t` (traction),
   `A_c, B_c` (compression).
-- **état interne** (`VAR0` → `VAR1`) : la variable scalaire d'historique
-  `kappa`. Absente au premier pas, elle vaut `eps_d0` par défaut.
-- **sortie du `COMP`** : contrainte (`sigma_*`), `damage` (le scalaire `D`),
-  et `kappa` mis à jour.
+- **état de début de pas A** (entrée `prev`) : la variable scalaire d'historique
+  `kappa`. `None` au premier pas — elle est plafonnée à `eps_d0` dans la mise à
+  jour, donc l'absence est correcte. La contrainte effective ne dépend que de la
+  déformation totale `ε(B)` : la mécanique de l'endommagement n'a pas
+  d'incrément, seul `kappa` est historique.
+- **sortie du `COMP`** (= `prev` du pas suivant) : contrainte (`sigma_*`),
+  `damage` (le scalaire `D`), et `kappa` mis à jour.
 
 ## Exemple Python (la brique `COMP`)
 
@@ -72,10 +75,10 @@ materials = pyrucast.material_field(
 )
 
 strain = pyrucast.deformation(u, fes)
-state = pyrucast.integrate_behavior(model, strain, materials)
+state = pyrucast.integrate_behavior(model, strain, materials, prev=prev_state)
 d = state[0].value(0, 0, "damage")  # endommagement scalaire D
 kappa = state[0].value(0, 0, "kappa")  # variable d'historique
 ```
 
-L'historique `kappa` se réinjecte au pas suivant (op
-[`merge`](../operateurs/champs.md)) pour garantir l'irréversibilité.
+L'historique `kappa` se réinjecte au pas suivant en **passant `state` comme
+`prev`** — la sortie le porte déjà —, ce qui garantit l'irréversibilité.
