@@ -24,7 +24,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, Physics, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -104,6 +104,10 @@ impl SubModelKind for Frame3d {
             material.expect("Frame3d requires a material field"),
             ke,
         )
+    }
+
+    fn physics(&self) -> Physics {
+        Physics::Mechanical
     }
 
     fn label(&self) -> &'static str {

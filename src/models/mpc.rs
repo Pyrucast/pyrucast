@@ -44,8 +44,8 @@ use crate::containers::mesh::{ElementType, Mesh, NodeId};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
-    constraint_block_pair, Constraint, ConstraintTerm, Contribution, Relation, RelationSense,
-    SubModelKind,
+    constraint_block_pair, Constraint, ConstraintTerm, Contribution, Physics, Relation,
+    RelationSense, SubModelKind,
 };
 use crate::store::read;
 use serde::{Deserialize, Serialize};
@@ -257,6 +257,10 @@ impl SubModelKind for Mpc {
             }
         }
         Ok(vec![Contribution::Literal(blocks)])
+    }
+
+    fn physics(&self) -> Physics {
+        Physics::Constraint
     }
 
     fn label(&self) -> &'static str {

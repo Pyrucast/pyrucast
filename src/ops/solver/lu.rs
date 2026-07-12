@@ -217,7 +217,7 @@ impl Factorization {
 /// matrix's blocks, each zone sharing that block's own POI1 support handle and
 /// carrying its primal variables (see [`Matrix::field_from_col_values`]) — no
 /// support submesh is rebuilt, and the output aligns by
-/// [`same_support`](pyrucast::containers::field::SubField::same_support) with
+/// [`same_support`](crate::containers::field::SubField::same_support) with
 /// any other field on those supports. On a Lagrange-constrained model this
 /// includes a zone for the multipliers (the reactions).
 ///

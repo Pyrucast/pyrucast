@@ -123,7 +123,7 @@ use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
     contact, dirichlet, elasticity, embedded, frame, frame3d, heat_conduction, mazars, mpc,
-    plasticity, timoshenko, truss, Constraint, RelationSense, SubModelKind,
+    plasticity, timoshenko, truss, Constraint, Physics, RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -646,6 +646,14 @@ impl SubModel {
         self.as_kind().dual_vars()
     }
 
+    /// This sub-model's [`Physics`] nature (mechanical / thermal / constraint) —
+    /// a per-variant constant, determined entirely by the variant. Feeds
+    /// [`Model::filter`] and travels with each assembled block onto the
+    /// [`SubMatrix`](crate::containers::matrix::SubMatrix).
+    pub fn physics(&self) -> Physics {
+        self.as_kind().physics()
+    }
+
     /// Whether this sub-model carries a constitutive behaviour that can be
     /// integrated via `integrate_behavior` from a
     /// deformation field. `true` for volumetric physics, `false` for
@@ -697,7 +705,8 @@ impl SubModel {
 impl fmt::Debug for SubModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SubModel")
-            .field("physics", &self.as_kind().label())
+            .field("kind", &self.as_kind().label())
+            .field("physics", &self.as_kind().physics())
             .finish()
     }
 }
@@ -1086,6 +1095,23 @@ impl Model {
         }
         Ok(union_names(all))
     }
+
+    /// A fresh [`Model`] holding only the sub-models of the given [`Physics`]
+    /// nature (`model.filter(Physics::Mechanical)` → the mechanical sub-models).
+    ///
+    /// Sub-model order is preserved and the handles are **shared** (refcount
+    /// bump, no deep copy) via [`Aggregate::subset`];
+    /// the result may be empty. The matrix-side counterpart is
+    /// [`Matrix::filter`](crate::containers::matrix::Matrix::filter).
+    pub fn filter(&self, physics: Physics) -> Result<Model> {
+        let mut indices: Vec<usize> = Vec::new();
+        for (i, h) in self.iter().enumerate() {
+            if read(h)?.physics() == physics {
+                indices.push(i);
+            }
+        }
+        self.subset(indices)
+    }
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -1182,6 +1208,65 @@ mod tests {
             model.dual_vars().unwrap(),
             vec!["q".to_string(), "imposed_T".to_string()]
         );
+    }
+
+    #[test]
+    fn physics_nature_per_submodel() {
+        // Heat conduction (Thermal) + a Dirichlet constraint (Constraint).
+        let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
+        let natures: Vec<Physics> = model
+            .iter()
+            .map(|h| read(h).unwrap().physics())
+            .collect();
+        assert_eq!(natures, vec![Physics::Thermal, Physics::Constraint]);
+    }
+
+    #[test]
+    fn filter_selects_submodels_by_physics() {
+        let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
+        assert_eq!(model.len(), 2);
+
+        let thermal = model.filter(Physics::Thermal).unwrap();
+        assert_eq!(thermal.len(), 1);
+        assert_eq!(read(&thermal.get(0).unwrap()).unwrap().physics(), Physics::Thermal);
+
+        let constraint = model.filter(Physics::Constraint).unwrap();
+        assert_eq!(constraint.len(), 1);
+        assert_eq!(
+            read(&constraint.get(0).unwrap()).unwrap().physics(),
+            Physics::Constraint
+        );
+
+        // A nature no sub-model has yields an empty model.
+        let mechanical = model.filter(Physics::Mechanical).unwrap();
+        assert_eq!(mechanical.len(), 0);
+    }
+
+    #[test]
+    fn assembled_blocks_carry_physics_and_matrix_filters() {
+        use crate::store::read as store_read;
+        // Heat conduction (one computed block) + Dirichlet (a literal C/Cᵀ pair).
+        let (_cfg, _, _, model, materials) = build_seg2_heat_model(1.0, 1.0, true);
+        let k = assemble::stiffness(&model, &materials).unwrap();
+
+        // Every assembled block is tagged, computed and literal alike.
+        let tags: Vec<Physics> = k
+            .iter()
+            .map(|h| store_read(h).unwrap().physics().expect("assembled block is tagged"))
+            .collect();
+        assert!(tags.contains(&Physics::Thermal));
+        assert!(tags.contains(&Physics::Constraint));
+
+        // The constraint filter keeps only the Dirichlet C/Cᵀ pair.
+        let constraint = k.filter(Physics::Constraint).unwrap();
+        assert_eq!(constraint.len(), 2);
+        for h in &constraint {
+            assert_eq!(store_read(h).unwrap().physics(), Some(Physics::Constraint));
+        }
+
+        // The thermal filter keeps only the heat-conduction block.
+        let thermal = k.filter(Physics::Thermal).unwrap();
+        assert_eq!(thermal.len(), 1);
     }
 
     /// Heat conduction on `[0, L]` with one SEG2 of length L and k = 1:

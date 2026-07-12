@@ -14,7 +14,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, Physics, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -152,6 +152,10 @@ impl SubModelKind for Elasticity {
         let geom = &geoms[0];
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
         element_stiffness(geom, mat, self.model, ke)
+    }
+
+    fn physics(&self) -> Physics {
+        Physics::Mechanical
     }
 
     fn label(&self) -> &'static str {

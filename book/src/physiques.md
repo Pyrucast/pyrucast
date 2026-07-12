@@ -28,4 +28,11 @@ Python**.
   - [Baignage (embedded)](contraintes/embedded.md)
   - [Contact (nœud-surface)](contraintes/contact.md)
 
+Ce regroupement est la **nature physique** (`Physics`) que chaque variante
+déclare : `Thermal` (conduction), `Mechanical` (barre → cadre 3D) et
+`Constraint` (les contraintes de Lagrange). On sélectionne les sous-modèles
+d'une nature avec `model.filter(Physics::Mechanical)` (et les blocs d'une
+matrice avec `k.filter(...)`) — voir
+[Nature physique et filtrage](model.md#nature-physique-et-filtrage).
+
 Pour **ajouter** une physique, voir [Ajouter une physique](ajouter-une-physique.md).

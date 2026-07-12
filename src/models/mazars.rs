@@ -34,7 +34,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, Physics, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use nalgebra::Matrix3;
 use serde::{Deserialize, Serialize};
@@ -145,6 +145,10 @@ impl SubModelKind for Mazars {
         // elasticity element kernel; it reads only `E` and `nu`.
         let mat = material.expect("Mazars requires a material field");
         elasticity::element_stiffness(geom, mat, self.model, ke)
+    }
+
+    fn physics(&self) -> Physics {
+        Physics::Mechanical
     }
 
     fn label(&self) -> &'static str {

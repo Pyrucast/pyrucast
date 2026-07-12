@@ -19,7 +19,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
-use crate::models::{CellGeom, Domain, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, Physics, StiffnessLayout, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -135,6 +135,10 @@ impl SubModelKind for Truss {
             fe[d + a] = n * c[a]; // node B
         }
         Ok(())
+    }
+
+    fn physics(&self) -> Physics {
+        Physics::Mechanical
     }
 
     fn label(&self) -> &'static str {

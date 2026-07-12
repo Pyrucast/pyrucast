@@ -51,7 +51,7 @@ use crate::containers::mesh::{Mesh, NodeId, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
-    Constraint, ConstraintTerm, Contribution, Relation, RelationSense, SubModelKind,
+    Constraint, ConstraintTerm, Contribution, Physics, Relation, RelationSense, SubModelKind,
 };
 use crate::ops::geom::project_points;
 use crate::ops::mesher::barycenter;
@@ -310,6 +310,10 @@ impl SubModelKind for Contact {
             }
         }
         Ok(vec![Contribution::Literal(vec![c, ct])])
+    }
+
+    fn physics(&self) -> Physics {
+        Physics::Constraint
     }
 
     fn label(&self) -> &'static str {

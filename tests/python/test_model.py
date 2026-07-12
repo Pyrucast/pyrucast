@@ -139,6 +139,57 @@ def test_mass_is_empty_in_v0():
     assert M.n_cols() == 0
 
 
+# ─── Physics nature + filtering ─────────────────────────────────────────────
+
+
+def test_submodel_physics_nature():
+    _, _, _, _, _, model, *_ = _seg2_heat_model(dirichlet_left=True)
+    assert [model[i].physics() for i in range(len(model))] == [
+        "thermal",
+        "constraint",
+    ]
+
+
+def test_model_filter_by_physics():
+    _, _, _, _, _, model, *_ = _seg2_heat_model(dirichlet_left=True)
+    assert len(model) == 2
+
+    thermal = model.filter("thermal")
+    assert len(thermal) == 1 and thermal[0].physics() == "thermal"
+
+    constraint = model.filter("constraint")
+    assert len(constraint) == 1 and constraint[0].physics() == "constraint"
+
+    # A nature no sub-model has yields an empty model.
+    assert len(model.filter("mechanical")) == 0
+
+
+def test_model_filter_unknown_tag_raises():
+    _, _, _, _, _, model, *_ = _seg2_heat_model()
+    try:
+        model.filter("bogus")
+    except ValueError as err:
+        assert "bogus" in str(err)
+    else:
+        raise AssertionError("expected ValueError for unknown physics tag")
+
+
+def test_assembled_blocks_carry_physics_and_matrix_filter():
+    _, _, _, _, materials, model, *_ = _seg2_heat_model(dirichlet_left=True)
+    K = pyrucast.stiffness(model, materials)
+
+    # Every assembled block is tagged (computed heat block + literal C/Cᵀ).
+    tags = {K[i].physics() for i in range(len(K))}
+    assert "thermal" in tags and "constraint" in tags
+
+    kc = K.filter("constraint")
+    assert len(kc) == 2  # the Dirichlet C / Cᵀ pair
+    assert all(kc[i].physics() == "constraint" for i in range(len(kc)))
+
+    kt = K.filter("thermal")
+    assert len(kt) == 1
+
+
 # ─── repr / str ─────────────────────────────────────────────────────────────
 
 

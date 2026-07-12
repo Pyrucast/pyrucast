@@ -25,6 +25,25 @@ Une `Matrix` est un **agrégat de blocs** `SubMatrix`, et un bloc est de l'un de
 
 Un bloc calculé garde son lien vers sa physique **via la recette** ; la `Matrix`, elle, reste un simple sac de blocs et **ne référence pas le `Model`**.
 
+### Étiquette de nature physique (`physics`)
+
+Chaque bloc porte en plus une **nature physique** `Option<Physics>` (`Mechanical`,
+`Thermal`, `Constraint`) — l'assembleur la pose sur **tout** bloc qu'il émet, sur
+les deux chemins (calculé **et** littéral), donc le couple `C`/`Cᵀ` d'un Dirichlet
+est étiqueté lui aussi. C'est ce qui rend l'étiquette utilisable là où la recette
+manque (blocs littéraux). Un bloc monté à la main, hors assemblage, n'est pas
+étiqueté (`None`).
+
+Elle alimente `Matrix::filter(Physics)` — le miroir de
+[`Model::filter`](model.md#nature-physique-et-filtrage) — qui renvoie une `Matrix`
+ne gardant que les blocs d'une nature donnée (handles partagés, pas de copie). Le
+résultat n'est **pas** assemblé : relancer `ops::assemble::assemble` avant de
+résoudre.
+
+```rust,ignore
+let k_meca = k.filter(Physics::Mechanical)?;   // que les blocs mécaniques
+```
+
 ## Assemblage : motif + scatter
 
 Passer d'un agrégat de blocs à une matrice utilisable se fait en deux temps :

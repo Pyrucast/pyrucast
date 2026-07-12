@@ -50,7 +50,7 @@ use crate::containers::mesh::{Mesh, NodeId, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
-    Constraint, ConstraintTerm, Contribution, Relation, RelationSense, SubModelKind,
+    Constraint, ConstraintTerm, Contribution, Physics, Relation, RelationSense, SubModelKind,
 };
 use crate::ops::geom::locate_points;
 use crate::ops::mesher::barycenter;
@@ -348,6 +348,10 @@ impl SubModelKind for Embedded {
             blocks.push(ct);
         }
         Ok(vec![Contribution::Literal(blocks)])
+    }
+
+    fn physics(&self) -> Physics {
+        Physics::Constraint
     }
 
     fn label(&self) -> &'static str {

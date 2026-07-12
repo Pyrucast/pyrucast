@@ -109,6 +109,56 @@ pub enum Contribution {
     Literal(Vec<SubMatrix>),
 }
 
+/// The **nature** of a physics — its coarse classification, orthogonal to the
+/// `Domain` / `Constraint` capability axis. It answers « quel champ de physique »
+/// where the capability seams answer « domaine ou contrainte ».
+///
+/// Fully determined by the [`SubModel`](crate::containers::model::SubModel)
+/// variant, so it is a per-physics **constant** exposed through
+/// [`SubModelKind::physics`] (like [`label`](SubModelKind::label)) rather than a
+/// stored field. It travels with each assembled block onto the
+/// [`SubMatrix`], and feeds the
+/// [`Model::filter`](crate::containers::model::Model::filter) /
+/// [`Matrix::filter`](crate::containers::matrix::Matrix::filter) selectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Physics {
+    /// Solid mechanics — elasticity, plasticity, damage, bars, beams, frames.
+    Mechanical,
+    /// Heat conduction (and future thermal physics).
+    Thermal,
+    /// A Lagrange constraint — Dirichlet, MPC, embedded, contact.
+    Constraint,
+}
+
+impl Physics {
+    /// Parse from a lowercase tag (`"mechanical"`, `"thermal"`, `"constraint"`) —
+    /// the Python-facing spelling, mirroring
+    /// [`ElasticityModel::from_tag`](crate::models::elasticity::ElasticityModel::from_tag).
+    pub fn from_tag(tag: &str) -> Option<Self> {
+        match tag {
+            "mechanical" => Some(Self::Mechanical),
+            "thermal" => Some(Self::Thermal),
+            "constraint" => Some(Self::Constraint),
+            _ => None,
+        }
+    }
+
+    /// The lowercase tag for this nature (the inverse of [`from_tag`](Self::from_tag)).
+    pub fn to_tag(self) -> &'static str {
+        match self {
+            Self::Mechanical => "mechanical",
+            Self::Thermal => "thermal",
+            Self::Constraint => "constraint",
+        }
+    }
+}
+
+impl std::fmt::Display for Physics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.to_tag())
+    }
+}
+
 /// The behaviour contract of one physics, co-located with its data struct.
 ///
 /// Generic code calls these through
@@ -124,6 +174,12 @@ pub trait SubModelKind: Sync {
 
     /// Dual variable names introduced by this physics (row labels).
     fn dual_vars(&self) -> Vec<String>;
+
+    /// This physics' [`Physics`] nature (mechanical / thermal / constraint) — a
+    /// per-variant constant, the classification counterpart of
+    /// [`label`](Self::label). Required so every physics declares its nature
+    /// explicitly at its definition site.
+    fn physics(&self) -> Physics;
 
     /// Borrow this sub-model as a [`Domain`] capability, or `None` (default) if
     /// it is not a domain physics (a constraint such as `Dirichlet`). A domain

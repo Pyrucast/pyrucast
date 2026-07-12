@@ -3,6 +3,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+use crate::models::Physics;
 use crate::py::mesh::submesh_handle;
 use crate::py::node::PyNode;
 use crate::py::node_field::PyNodeField;
@@ -73,6 +74,13 @@ impl PySubMatrix {
     #[getter]
     fn symmetric(&self) -> PyResult<bool> {
         Ok(read(&self.handle)?.symmetric())
+    }
+
+    /// The physics nature of the sub-model that produced this block as a tag
+    /// (`"mechanical"`, `"thermal"`, `"constraint"`), or `None` for a block built
+    /// outside assembly. Set by the assembler; used by `Matrix.filter`.
+    fn physics(&self) -> PyResult<Option<String>> {
+        Ok(read(&self.handle)?.physics().map(|p| p.to_tag().to_string()))
     }
 
     /// Variable (field) names this block addresses.
@@ -196,6 +204,21 @@ impl PyMatrix {
     fn finalize(&mut self) -> PyResult<()> {
         self.inner.finalize()?;
         Ok(())
+    }
+
+    /// `Matrix.filter(physics)` — a new `Matrix` holding only the blocks whose
+    /// producing sub-model has the given physics nature (`"mechanical"`,
+    /// `"thermal"`, `"constraint"`). The result is **not** finalized — call
+    /// `assemble` (or `finalize` for literal-only blocks) before solving.
+    fn filter(&self, physics: &str) -> PyResult<Self> {
+        let p = Physics::from_tag(physics).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "filter: unknown physics '{physics}' (expected mechanical|thermal|constraint)"
+            ))
+        })?;
+        Ok(Self {
+            inner: self.inner.filter(p)?,
+        })
     }
 
     /// Total number of rows of the (finalized) global matrix.

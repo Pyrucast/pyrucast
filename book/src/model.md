@@ -14,7 +14,8 @@ Physique          Model / SubModel / SubModelKind      (loi, matériaux, assembl
 Model
 ├── sub_models: Vec<SubModel>
 ├── primal_vars(): Vec<String>      # union — colonnes des matrices
-└── dual_vars():   Vec<String>      # union — lignes des matrices
+├── dual_vars():   Vec<String>      # union — lignes des matrices
+└── filter(Physics) -> Model        # sous-modèles d'une nature donnée
 
 ops::assemble (opérateurs, pas des méthodes de Model)
 ├── stiffness(model, materials) -> Matrix   # K  (assemblé sur demande)
@@ -28,6 +29,7 @@ SubModel  (énum de stockage + dispatch — AUCUNE logique)
 
 SubModelKind  (trait de base — le dénominateur commun, co-localisé par physique)
 ├── primal_vars / dual_vars
+├── physics       # nature : Mechanical | Thermal | Constraint (constante par variante)
 ├── as_domain / as_constraint  # seams de capacité (None par défaut) — cf. ci-dessous
 ├── element_matrix          # noyau élémentaire (une cellule) — pur & séquentiel
 ├── stiffness_layout        # Some ⇒ bloc CALCULÉ (scatter parallèle) ; None ⇒ littéral
@@ -114,6 +116,37 @@ l'utilisateur. Le matériau est toujours fourni **à l'assemblage**, pas au
 modèle (cf. ci-dessous).
 
 Pour **ajouter** une physique, voir [Ajouter une physique](ajouter-une-physique.md).
+
+## Nature physique et filtrage
+
+Chaque physique déclare sa **nature** — sa classification grossière, orthogonale
+à l'axe de capacité `Domain`/`Constraint`. Elle répond à « quel champ de
+physique » là où les capacités répondent à « domaine ou contrainte » :
+
+| Nature (`Physics`) | Physiques |
+|---|---|
+| `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `timoshenko`, `frame`, `frame3d` |
+| `Thermal`    | `heat_conduction` |
+| `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` |
+
+La nature est **entièrement déterminée par la variante** : c'est une constante
+par physique, exposée par `SubModelKind::physics()` (comme `label()`), et non un
+champ stocké. Elle voyage avec chaque bloc assemblé jusqu'à la
+[`SubMatrix`](matrix.md) (posée par l'assembleur sur les deux chemins, calculé et
+littéral, donc le couple C/Cᵀ d'un Dirichlet est étiqueté aussi).
+
+Deux sélecteurs symétriques en découlent, tous deux à partage par compteur de
+références (pas de copie profonde) :
+
+- `model.filter(Physics::Mechanical)` → un `Model` ne contenant que les
+  sous-modèles mécaniques ;
+- `k.filter(Physics::Mechanical)` → une `Matrix` ne contenant que les blocs
+  mécaniques (non assemblée — relancer `assemble::assemble` avant de résoudre).
+
+```rust,ignore
+let meca = model.filter(Physics::Mechanical)?;   // sous-modèles mécaniques
+let k_meca = k.filter(Physics::Mechanical)?;      // blocs mécaniques (non assemblés)
+```
 
 ## Règle invariante : un Model = une Matrice
 

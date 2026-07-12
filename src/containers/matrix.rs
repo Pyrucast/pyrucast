@@ -80,6 +80,7 @@ use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::SubModel;
 use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::models::Physics;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 use nalgebra::{DMatrix, DVector};
@@ -192,6 +193,13 @@ pub struct SubMatrix {
     /// behaviour, unchanged).
     #[serde(default)]
     recipe: Option<ComputedRecipe>,
+    /// The [`Physics`] nature of the sub-model that produced this block, set by
+    /// the assembler ([`crate::ops::assemble`]) for **both** the computed and the
+    /// literal path (so a Dirichlet C/Cᵀ pair is tagged too). `None` for a block
+    /// built directly, outside assembly. Consumed by
+    /// [`Matrix::filter`](Matrix::filter).
+    #[serde(default)]
+    physics: Option<Physics>,
     /// `NodeId → local position` for O(1) `add_entry`, derived from
     /// `row_nodes` / `col_nodes`. Not serialized; built lazily on first use
     /// (the support is fixed at construction).
@@ -233,6 +241,7 @@ impl SubMatrix {
             coo: CooMatrix::new(nrows, ncols),
             symmetric,
             recipe: None,
+            physics: None,
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
@@ -271,6 +280,7 @@ impl SubMatrix {
             coo: CooMatrix::new(nrows, ncols),
             symmetric,
             recipe: Some(recipe),
+            physics: None,
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
@@ -318,6 +328,7 @@ impl SubMatrix {
             coo,
             symmetric,
             recipe: None,
+            physics: None,
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
@@ -332,6 +343,20 @@ impl SubMatrix {
     /// The block's [`ComputedRecipe`], or `None` for a literal block.
     pub fn recipe(&self) -> Option<&ComputedRecipe> {
         self.recipe.as_ref()
+    }
+
+    /// The [`Physics`] nature of the sub-model that produced this block, or `None`
+    /// for a block built outside assembly. Set by the assembler on every block it
+    /// emits (see [`crate::ops::assemble`]).
+    pub fn physics(&self) -> Option<Physics> {
+        self.physics
+    }
+
+    /// Tag this block with the [`Physics`] nature of its producing sub-model — the
+    /// assembler calls this on each emitted block so [`Matrix::filter`] can select
+    /// by nature.
+    pub fn set_physics(&mut self, physics: Physics) {
+        self.physics = Some(physics);
     }
 
     /// Whether the assembler declared this block numerically symmetric.
@@ -668,13 +693,18 @@ impl fmt::Display for SubMatrix {
         } else {
             format!("{} entries", self.coo.nnz()).into()
         };
+        let physics: std::borrow::Cow<str> = match self.physics {
+            Some(p) => format!(", {p}").into(),
+            None => "".into(),
+        };
         write!(
             f,
-            "SubMatrix: {} row(s) × {} col(s), {}{}",
+            "SubMatrix: {} row(s) × {} col(s), {}{}{}",
             self.coo.nrows(),
             self.coo.ncols(),
             entries,
-            if self.symmetric { ", symmetric" } else { "" }
+            if self.symmetric { ", symmetric" } else { "" },
+            physics,
         )
     }
 }
@@ -1310,6 +1340,26 @@ impl Matrix {
         self.support_mesh(false)
     }
 
+    /// A fresh [`Matrix`] holding only the blocks whose producing sub-model has
+    /// the given [`Physics`] nature (`k.filter(Physics::Mechanical)` → the
+    /// mechanical blocks). The matrix-side twin of
+    /// [`Model::filter`](crate::containers::model::Model::filter).
+    ///
+    /// Block order is preserved and handles are **shared** (refcount bump) via
+    /// [`Aggregate::subset`]. Blocks with no physics tag (built outside assembly)
+    /// are never selected. The result is **not assembled** — like any matrix with
+    /// freshly added blocks, call [`crate::ops::assemble::assemble`] before
+    /// handing it to a solver.
+    pub fn filter(&self, physics: Physics) -> Result<Matrix> {
+        let mut indices: Vec<usize> = Vec::new();
+        for (i, h) in self.iter().enumerate() {
+            if read(h)?.physics() == Some(physics) {
+                indices.push(i);
+            }
+        }
+        self.subset(indices)
+    }
+
     /// Shared body of `row_mesh` / `col_mesh`.
     fn support_mesh(&self, rows: bool) -> Result<Mesh> {
         let mut out = Mesh::empty();
@@ -1782,6 +1832,7 @@ mod tests {
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", b, "T", 2.0).unwrap();
+        m.set_physics(Physics::Thermal);
         use crate::persist::Persist;
         let bytes = m.to_bytes().unwrap();
         let m2 = SubMatrix::from_bytes(&bytes).unwrap();
@@ -1789,6 +1840,8 @@ mod tests {
         assert_eq!(m2.n_cols(), 2);
         assert!(m2.symmetric());
         assert_eq!(m2.get(a, "q", a, "T"), 2.0);
+        // The physics tag survives the round trip.
+        assert_eq!(m2.physics(), Some(Physics::Thermal));
     }
 
     #[test]

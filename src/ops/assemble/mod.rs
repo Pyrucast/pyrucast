@@ -131,7 +131,7 @@ fn build_contribution(
     sub_h: &Handle<SubModel>,
     material: Option<Handle<SubElementField>>,
 ) -> Result<Vec<SubMatrix>> {
-    Ok(match contribution {
+    let mut blocks = match contribution {
         Contribution::Computed(layout) => {
             let recipe = ComputedRecipe {
                 submodel: sub_h.clone(),
@@ -149,7 +149,14 @@ fn build_contribution(
             )?]
         }
         Contribution::Literal(blocks) => blocks,
-    })
+    };
+    // Tag every emitted block with its sub-model's physics nature — computed and
+    // literal alike (so a Dirichlet C/Cᵀ pair is tagged too) — for Matrix::filter.
+    let physics = read(sub_h)?.physics();
+    for b in &mut blocks {
+        b.set_physics(physics);
+    }
+    Ok(blocks)
 }
 
 /// Assemble the mass matrix `M` for `model`.

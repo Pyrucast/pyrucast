@@ -4,7 +4,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::mesh::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::models::elasticity::ElasticityModel;
-use crate::models::{mpc, RelationSense};
+use crate::models::{mpc, Physics, RelationSense};
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
@@ -33,6 +33,12 @@ impl PySubModel {
     /// Names of the dual variables of this sub-model.
     fn dual_vars(&self) -> PyResult<Vec<String>> {
         Ok(read(&self.handle)?.dual_vars())
+    }
+
+    /// The physics nature of this sub-model as a tag: `"mechanical"`,
+    /// `"thermal"` or `"constraint"`. Determined entirely by the physics kind.
+    fn physics(&self) -> PyResult<String> {
+        Ok(read(&self.handle)?.physics().to_tag().to_string())
     }
 
     /// POI1 `Mesh` of the multiplier nodes (Lagrange physics only — empty
@@ -407,6 +413,20 @@ impl PyModel {
     /// all sub-models, or `None`. A helper to fill an MPC term's `target_dual`.
     fn dual_of(&self, variable: &str) -> PyResult<Option<String>> {
         Ok(self.inner.dual_of(variable)?)
+    }
+
+    /// `Model.filter(physics)` — a new `Model` holding only the sub-models of the
+    /// given physics nature. `physics` is a tag: `"mechanical"`, `"thermal"` or
+    /// `"constraint"`. Sub-model order is preserved; the result may be empty.
+    fn filter(&self, physics: &str) -> PyResult<Self> {
+        let p = Physics::from_tag(physics).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "filter: unknown physics '{physics}' (expected mechanical|thermal|constraint)"
+            ))
+        })?;
+        Ok(Self {
+            inner: self.inner.filter(p)?,
+        })
     }
 
     /// `Model.multiplier_mesh()` — POI1 `Mesh` of the constraint multiplier
