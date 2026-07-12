@@ -859,6 +859,17 @@ class Model:
         `Model.heat_conduction(fes) | Model.dirichlet(...)`.
         """
     @classmethod
+    def convection(cls, fespace: FiniteElementSpace) -> Model:
+        r"""
+        `Model.convection(fespace)` — surface-convection (Robin / film) model
+        spanning **every** subspace of a *boundary* `fespace` (edge mesh in 2-D,
+        surface mesh in 3-D). Same DOFs (`"T"`/`"q"`) as `heat_conduction`, so
+        it couples in with `|`:
+        `Model.heat_conduction(bulk) | Model.convection(boundary)`.
+        The film coefficient `"h"` is supplied at assembly time; the external
+        temperature enters as a load `h·T_ext·∫N_i dΓ`, built with `flux(...)`.
+        """
+    @classmethod
     def truss(cls, fespace: FiniteElementSpace) -> Model:
         r"""
         `Model.truss(fespace)` — truss / bar (axial-force) model spanning
