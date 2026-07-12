@@ -122,8 +122,8 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
-    contact, dirichlet, elasticity, embedded, frame, frame3d, heat_conduction, mazars, mpc,
-    plasticity, timoshenko, truss, Constraint, Physics, RelationSense, SubModelKind,
+    contact, convection, dirichlet, elasticity, embedded, frame, frame3d, heat_conduction, mazars,
+    mpc, plasticity, timoshenko, truss, Constraint, Physics, RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -168,6 +168,9 @@ fn insert_relation_value(
 pub enum SubModel {
     /// Linear heat conduction — see [`heat_conduction::HeatConduction`].
     HeatConduction(heat_conduction::HeatConduction),
+    /// Surface convection (Robin / film) boundary — see
+    /// [`convection::Convection`].
+    Convection(convection::Convection),
     /// Dirichlet constraint via Lagrange multipliers — see
     /// [`dirichlet::Dirichlet`].
     Dirichlet(dirichlet::Dirichlet),
@@ -204,6 +207,7 @@ impl SubModel {
     pub fn as_kind(&self) -> &dyn SubModelKind {
         match self {
             SubModel::HeatConduction(p) => p,
+            SubModel::Convection(p) => p,
             SubModel::Dirichlet(p) => p,
             SubModel::Mpc(p) => p,
             SubModel::Embedded(p) => p,
@@ -228,6 +232,17 @@ impl SubModel {
         Ok(SubModel::HeatConduction(
             heat_conduction::HeatConduction::new(fespace)?,
         ))
+    }
+
+    /// Surface-convection (Robin / film) sub-model on a boundary FE subspace.
+    ///
+    /// Same DOFs (`"T"`/`"q"`) as [`Self::heat_conduction`], so it couples into
+    /// the conduction stiffness. The film coefficient `"h"` is supplied at
+    /// assembly time via [`crate::ops::assemble::stiffness`]; the external
+    /// temperature enters as a load (`h·T_ext ∫N_i dΓ`) built with
+    /// [`crate::ops::assemble::flux`]. See [`convection::Convection::new`].
+    pub fn convection(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        Ok(SubModel::Convection(convection::Convection::new(fespace)?))
     }
 
     /// Truss / bar sub-model on a `SEG2` FE subspace. Material data (`E`, `A`)
@@ -793,6 +808,20 @@ impl Model {
         let mut model = Self::empty();
         for sub in fes {
             model.add_sub(insert(SubModel::heat_conduction(sub.clone())?))?;
+        }
+        Ok(model)
+    }
+
+    /// Surface-convection (Robin / film) `Model` spanning **every** subspace of
+    /// a *boundary* `fes` — one [`SubModel::Convection`] per
+    /// [`SubFiniteElementSpace`]. Parent-level named constructor; the film
+    /// coefficient `"h"` is supplied at assembly time. Couples into a heat
+    /// conduction model on the shared `"T"`/`"q"` DOFs:
+    /// `Model::heat_conduction(&bulk)?.union(&Model::convection(&boundary)?)?`.
+    pub fn convection(fes: &FiniteElementSpace) -> Result<Self> {
+        let mut model = Self::empty();
+        for sub in fes {
+            model.add_sub(insert(SubModel::convection(sub.clone())?))?;
         }
         Ok(model)
     }

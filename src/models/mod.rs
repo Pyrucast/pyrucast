@@ -34,6 +34,7 @@ use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
 pub mod contact;
+pub mod convection;
 pub mod dirichlet;
 pub mod elasticity;
 pub mod embedded;

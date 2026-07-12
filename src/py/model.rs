@@ -114,6 +114,22 @@ impl PyModel {
         Ok(Self { inner })
     }
 
+    /// `Model.convection(fespace)` — surface-convection (Robin / film) model
+    /// spanning **every** subspace of a *boundary* `fespace` (edge mesh in 2-D,
+    /// surface mesh in 3-D). Same DOFs (`"T"`/`"q"`) as `heat_conduction`, so
+    /// it couples in with `|`:
+    /// `Model.heat_conduction(bulk) | Model.convection(boundary)`.
+    /// The film coefficient `"h"` is supplied at assembly time; the external
+    /// temperature enters as a load `h·T_ext·∫N_i dΓ`, built with `flux(...)`.
+    #[classmethod]
+    fn convection(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+    ) -> PyResult<Self> {
+        let inner = Model::convection(&fespace.inner)?;
+        Ok(Self { inner })
+    }
+
     /// `Model.truss(fespace)` — truss / bar (axial-force) model spanning
     /// **every** subspace of `fespace` (SEG2 elements). DOFs are the vector
     /// displacement `u_x, u_y(, u_z)`; the orientation is taken from the node
