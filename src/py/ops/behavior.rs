@@ -10,23 +10,36 @@ use crate::py::element_field::PyElementField;
 use crate::py::model::PyModel;
 use pyo3::prelude::*;
 
-/// Integrate the constitutive law of `model` (Cast3m `COMP`).
+/// Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
 ///
-/// `deformation` is the behaviour-input field (from `gradient(field,
-/// fespace)` or `deformation(u, fespace)`); `materials` supplies the
-/// per-zone material data. Returns the material-state field (dual
-/// flux/stress + updated internal variables) of every behaviour-bearing
-/// sub-model.
+/// `deformation` is the **end-of-step** behaviour input ε(B) (from
+/// `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
+/// **converged output of the previous step** (the state at A — stress,
+/// internal variables and start-of-step strain), or `None` on the first step;
+/// `materials` supplies the per-zone material data; `dt` is the time increment
+/// (`None` if the law is rate-independent). Returns the material-state field at
+/// B (dual flux/stress + updated internal variables) of every behaviour-bearing
+/// sub-model — feed it back as `prev` at the next step.
 ///
 /// For a linear law the result is consistent with the assembled stiffness
 /// (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
+#[pyo3(signature = (model, deformation, materials, prev=None, dt=None))]
 pub fn integrate_behavior(
     model: PyRef<PyModel>,
     deformation: PyRef<PyElementField>,
     materials: PyRef<PyElementField>,
+    prev: Option<PyRef<PyElementField>>,
+    dt: Option<f64>,
 ) -> PyResult<PyElementField> {
-    let ef = crate::ops::behavior::integrate(&model.inner, &deformation.inner, &materials.inner)?;
+    let prev_inner = prev.as_ref().map(|p| &p.inner);
+    let ef = crate::ops::behavior::integrate(
+        &model.inner,
+        &deformation.inner,
+        prev_inner,
+        &materials.inner,
+        dt,
+    )?;
     Ok(PyElementField { inner: ef })
 }

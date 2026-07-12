@@ -204,8 +204,10 @@ impl Domain for Plasticity {
         &self,
         geom: &CellGeom,
         input: &SubElementField,
+        _prev: Option<&SubElementField>,
         material: Option<&SubElementField>,
         g: usize,
+        _dt: Option<f64>,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Plasticity declares a material_fespace ⇒ material is supplied");
@@ -516,7 +518,7 @@ mod tests {
         .unwrap();
         strain.set_uniform("eps_xx", 1e-4).unwrap();
         let strain = insert(strain);
-        let out = pl.integrate_behavior(&strain, Some(&mat)).unwrap();
+        let out = pl.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
         // Confined uniaxial *strain* (only ε_xx ≠ 0): σ_xx = (λ+2μ)·ε.
         let (lambda, mu) = lame(e, nu);
         for g in 0..out.gauss_count() {
@@ -542,7 +544,7 @@ mod tests {
         .unwrap();
         strain.set_uniform("eps_xx", 1e-2).unwrap();
         let strain = insert(strain);
-        let out = pl.integrate_behavior(&strain, Some(&mat)).unwrap();
+        let out = pl.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
         for g in 0..out.gauss_count() {
             let s = [
                 out.value(0, g, "sigma_xx").unwrap(),
@@ -572,7 +574,7 @@ mod tests {
         .unwrap();
         strain.set_uniform("eps_xx", eps0).unwrap();
         let strain = insert(strain);
-        let out = pl.integrate_behavior(&strain, Some(&mat)).unwrap();
+        let out = pl.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
         // Linear plane stress uniaxial-strain: σ_xx = E/(1-ν²)·ε, σ_yy = ν·σ_xx.
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {
@@ -596,7 +598,7 @@ mod tests {
         let mut s1 = SubElementField::new(pl.fespace.clone(), comps.clone()).unwrap();
         s1.set_uniform("eps_xx", 5e-3).unwrap();
         let s1 = insert(s1);
-        let st1 = pl.integrate_behavior(&s1, Some(&mat)).unwrap();
+        let st1 = pl.integrate_behavior(&s1, None, Some(&mat), None).unwrap();
         let p1 = st1.value(0, 0, "p").unwrap();
         assert!(p1 > 0.0);
 
@@ -613,7 +615,7 @@ mod tests {
             s2.set_value(0, g, "p", p1).unwrap();
         }
         let s2 = insert(s2);
-        let st2 = pl.integrate_behavior(&s2, Some(&mat)).unwrap();
+        let st2 = pl.integrate_behavior(&s2, None, Some(&mat), None).unwrap();
         // Cumulated plastic strain only grows.
         assert!(st2.value(0, 0, "p").unwrap() >= p1);
     }

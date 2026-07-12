@@ -81,13 +81,6 @@ use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
 use pyrucast::Result;
 
-/// Composantes de l'état interne plastique portées d'un pas au suivant
-/// (`VAR`) : déformation plastique 3-D (tenseur, 6) + déformation plastique
-/// cumulée `p`. Mêmes noms que la sortie de la loi (`models::plasticity`).
-const STATE_COMPONENTS: [&str; 7] = [
-    "eps_p_xx", "eps_p_yy", "eps_p_zz", "eps_p_yz", "eps_p_xz", "eps_p_xy", "p",
-];
-
 /// Profondeur de l'historique d'Anderson (nombre de couples `(u, g)` gardés).
 const ANDERSON_DEPTH: usize = 3;
 
@@ -104,7 +97,6 @@ static T_ANDERSON: AtomicU64 = AtomicU64::new(0);
 static T_FIELDOPS: AtomicU64 = AtomicU64::new(0); // restrict_like, map_all, +/- de champs
 static T_DIAG: AtomicU64 = AtomicU64::new(0); // plastic_diagnostics
 static T_RESID_WALL: AtomicU64 = AtomicU64::new(0); // residual_at bout à bout
-static T_UNION: AtomicU64 = AtomicU64::new(0); // build_behavior_input (strain | state)
 static N_RESID_EVAL: AtomicU64 = AtomicU64::new(0);
 
 fn tic<T>(acc: &AtomicU64, f: impl FnOnce() -> T) -> T {
@@ -233,11 +225,8 @@ fn main() -> Result<()> {
     // ── État de la simulation (persistant entre les pas) ────────────────────
     // Déplacement cumulé u (u_x, u_y sur tous les nœuds), initialement nul.
     let mut u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
-    // État plastique VAR0 (nul au premier pas — la loi défaute à zéro).
-    let mut state = ElementField::new(
-        &fes,
-        STATE_COMPONENTS.iter().map(|s| s.to_string()).collect(),
-    )?;
+    // État convergé du pas précédent (VAR0 = `prev`) : `None` au premier pas.
+    let mut state: Option<ElementField> = None;
 
     // ── Boucle sur les pas de charge ────────────────────────────────────────
     let max_newton = 200;
@@ -282,10 +271,9 @@ fn main() -> Result<()> {
             tic(&T_RESID_WALL, || {
                 N_RESID_EVAL.fetch_add(1, Ordering::Relaxed);
                 let strain = tic(&T_DEFORM, || deformation(u, &fes))?;
-                // Entrée de comportement : ε | VAR0 (union, composantes disjointes).
-                let behavior_input = tic(&T_UNION, || strain.union(&state))?;
+                // Comportement A→B : ε(B) direct, état de A dans `prev`.
                 let out = tic(&T_BEHAVIOR, || {
-                    integrate(&model, &behavior_input, &materials)
+                    integrate(&model, &strain, state.as_ref(), &materials, None)
                 })?;
                 let f_int = tic(&T_FINT, || internal_forces(&model, &out))?;
                 // Résidu r = F_ext − F_int et sa norme sur les DDL libres.
@@ -356,16 +344,15 @@ fn main() -> Result<()> {
         }
         let converged = res_norm <= tol;
 
-        // Commit de l'état : VAR0 ← VAR1. La sortie de comportement convergée
-        // porte l'état plastique (`eps_p_*`, `p`) et les contraintes (`sig_*`) ;
-        // on la reporte telle quelle comme nouveau VAR0 (la loi lit ses entrées
-        // par nom, les composantes surnuméraires sont ignorées).
-        state = last_state
+        // Commit de l'état : `prev` ← VAR1. La sortie convergée porte l'état
+        // complet de B et devient le `prev` (état de A) du pas suivant.
+        let committed = last_state
             .take()
             .expect("au moins une évaluation de résidu");
 
         // Diagnostics du pas.
-        let (p_max_val, n_plastic) = tic(&T_DIAG, || plastic_diagnostics(&state))?;
+        let (p_max_val, n_plastic) = tic(&T_DIAG, || plastic_diagnostics(&committed))?;
+        state = Some(committed);
         let defl = u.value(tip.id(), "u_y")?;
         any_plasticity |= n_plastic > 0;
         let flag = if converged {
@@ -398,9 +385,8 @@ fn main() -> Result<()> {
     let andr = T_ANDERSON.load(Ordering::Relaxed);
     let fops = T_FIELDOPS.load(Ordering::Relaxed);
     let diag = T_DIAG.load(Ordering::Relaxed);
-    let union = T_UNION.load(Ordering::Relaxed);
     let resid_wall = T_RESID_WALL.load(Ordering::Relaxed);
-    let resid_total = deform + union + behav + fint + resid;
+    let resid_total = deform + behav + fint + resid;
     let resid_inner_gap = resid_wall.saturating_sub(resid_total);
     let accounted = resid_wall + slv + andr + fops + diag;
     let unaccounted = (t_loop.as_nanos() as u64).saturating_sub(accounted);
@@ -423,8 +409,8 @@ fn main() -> Result<()> {
         ms(resid_wall)
     );
     println!(
-        "        └ deform {:.0} + union {:.0} + comport {:.0} + f_int {:.0} + résidu {:.0} + gap interne {:.0}",
-        ms(deform), ms(union), ms(behav), ms(fint), ms(resid), ms(resid_inner_gap)
+        "        └ deform {:.0} + comport {:.0} + f_int {:.0} + résidu {:.0} + gap interne {:.0}",
+        ms(deform), ms(behav), ms(fint), ms(resid), ms(resid_inner_gap)
     );
     println!("     solve K⁻¹r           : {:>9.1} ms", ms(slv));
     println!("     anderson_step        : {:>9.1} ms", ms(andr));

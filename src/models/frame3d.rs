@@ -157,8 +157,10 @@ impl Domain for Frame3d {
         &self,
         geom: &CellGeom,
         input: &SubElementField,
+        _prev: Option<&SubElementField>,
         material: Option<&SubElementField>,
         g: usize,
+        _dt: Option<f64>,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Frame3d declares a material_fespace ⇒ material is supplied");

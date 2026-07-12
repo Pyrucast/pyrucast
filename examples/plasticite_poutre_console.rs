@@ -77,13 +77,6 @@ use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
 use pyrucast::Result;
 
-/// Composantes de l'état interne plastique portées d'un pas au suivant
-/// (`VAR`) : déformation plastique 3-D (tenseur, 6) + déformation plastique
-/// cumulée `p`. Mêmes noms que la sortie de la loi (`models::plasticity`).
-const STATE_COMPONENTS: [&str; 7] = [
-    "eps_p_xx", "eps_p_yy", "eps_p_zz", "eps_p_yz", "eps_p_xz", "eps_p_xy", "p",
-];
-
 fn env_usize(key: &str, default: usize) -> usize {
     std::env::var(key)
         .ok()
@@ -202,11 +195,9 @@ fn main() -> Result<()> {
     // ── État de la simulation (persistant entre les pas) ────────────────────
     // Déplacement cumulé u (u_x, u_y sur tous les nœuds), initialement nul.
     let mut u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
-    // État plastique VAR0 (nul au premier pas — la loi défaute à zéro).
-    let mut state = ElementField::new(
-        &fes,
-        STATE_COMPONENTS.iter().map(|s| s.to_string()).collect(),
-    )?;
+    // État convergé du pas précédent (VAR0 = `prev`) : `None` au premier pas —
+    // A est alors la configuration de référence (σ(A)=0, ε(A)=0).
+    let mut state: Option<ElementField> = None;
 
     // ── Boucle sur les pas de charge ────────────────────────────────────────
     // Newton modifié (opérateur = K élastique) : convergence linéaire, donc
@@ -242,10 +233,9 @@ fn main() -> Result<()> {
         let mut res_norm = f64::INFINITY;
 
         for _ in 0..max_newton {
-            // ε(u) → entrée de comportement (ε + VAR0) → σ, VAR1 (COMP).
+            // ε(u) = ε(B), état de A dans `prev` → σ, VAR1 (COMP), montage A→B.
             let strain = deformation(&u, &fes)?;
-            let behavior_input = strain.union(&state)?;
-            let out = integrate(&model, &behavior_input, &materials)?;
+            let out = integrate(&model, &strain, state.as_ref(), &materials, None)?;
             // Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
             let f_int = internal_forces(&model, &out)?;
 
@@ -275,15 +265,15 @@ fn main() -> Result<()> {
         }
         let converged = res_norm <= tol;
 
-        // Commit de l'état : VAR0 ← VAR1. La sortie de comportement convergée
-        // porte, en plus de l'état plastique (`eps_p_*`, `p`), les contraintes
-        // (`sig_*`) ; on la reporte telle quelle comme nouveau VAR0. La loi lit
-        // ses entrées par nom, donc les composantes surnuméraires sont ignorées
-        // au pas suivant — inutile de projeter sur les seules composantes d'état.
-        state = last_state.take().expect("au moins une itération");
+        // Commit de l'état : `prev` ← VAR1. La sortie de comportement convergée
+        // porte l'état complet de B (σ(B), ε_p(B), p(B), ε(B)) et devient le
+        // `prev` (état de A) du pas suivant. La loi lit ses entrées par nom, donc
+        // les composantes surnuméraires sont ignorées.
+        let committed = last_state.take().expect("au moins une itération");
 
         // Diagnostics du pas.
-        let (p_max_val, n_plastic) = plastic_diagnostics(&state)?;
+        let (p_max_val, n_plastic) = plastic_diagnostics(&committed)?;
+        state = Some(committed);
         let defl = u.value(tip_id.id(), "u_y")?;
         any_plasticity |= n_plastic > 0;
         let flag = if converged {

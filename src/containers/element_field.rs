@@ -438,31 +438,62 @@ impl ElementField {
         Ok(Self { subs })
     }
 
-    /// The [`SubElementField`] whose FE subspace handle matches `fespace`.
+    /// Every [`SubElementField`] living on `fespace`, in aggregate order.
     ///
-    /// The per-zone field-matching primitive shared by the assembly and
-    /// behaviour operators. Errors if no sub-field of the aggregate lives on
-    /// `fespace` (a missing per-zone material / deformation is always a
-    /// caller error, never a silent skip).
-    pub(crate) fn sub_for_fespace(
+    /// The honest multi-zone accessor: a union (`a | b`) may leave several
+    /// **component-disjoint** zones on one support (see
+    /// [`crate::ops::field::check_unique_component_per_support`]); this returns
+    /// all of them. Empty when none match. Prefer this whenever a support may
+    /// legitimately carry more than one zone.
+    pub(crate) fn subs_for_fespace(
         &self,
         fespace: &Handle<SubFiniteElementSpace>,
-    ) -> Result<Handle<SubElementField>> {
+    ) -> Result<Vec<Handle<SubElementField>>> {
+        let mut out = Vec::new();
         for h in self {
             let matches = {
                 let f = read(h)?.support();
                 f.index() == fespace.index() && f.generation() == fespace.generation()
             };
             if matches {
-                return Ok(h.clone());
+                out.push(h.clone());
             }
         }
-        Err(PyrucastError::Message(format!(
-            "no SubElementField in this ElementField matches the \
-             SubFiniteElementSpace at slot {} (generation {})",
-            fespace.index(),
-            fespace.generation()
-        )))
+        Ok(out)
+    }
+
+    /// The **unique** [`SubElementField`] on `fespace`.
+    ///
+    /// The per-zone field-matching primitive shared by the assembly and
+    /// behaviour operators, for the common case of one zone per support. Errors
+    /// if no sub-field of the aggregate lives on `fespace` (a missing per-zone
+    /// material / deformation is always a caller error, never a silent skip),
+    /// **and also if more than one zone lives on the support** — it never
+    /// silently returns the first of many (that footgun once let `strain | state`
+    /// drop the state). When a support may carry several zones, use
+    /// [`subs_for_fespace`](Self::subs_for_fespace) or fuse them with
+    /// [`crate::ops::field::consolidate_element`].
+    pub(crate) fn sub_for_fespace(
+        &self,
+        fespace: &Handle<SubFiniteElementSpace>,
+    ) -> Result<Handle<SubElementField>> {
+        let mut zones = self.subs_for_fespace(fespace)?;
+        match zones.len() {
+            1 => Ok(zones.pop().expect("length checked to be 1")),
+            0 => Err(PyrucastError::Message(format!(
+                "no SubElementField in this ElementField matches the \
+                 SubFiniteElementSpace at slot {} (generation {})",
+                fespace.index(),
+                fespace.generation()
+            ))),
+            n => Err(PyrucastError::Message(format!(
+                "{n} SubElementFields live on the SubFiniteElementSpace at slot {} \
+                 (generation {}); sub_for_fespace needs a unique zone. Use \
+                 subs_for_fespace, or consolidate_element to fuse the zones.",
+                fespace.index(),
+                fespace.generation()
+            ))),
+        }
     }
 
     /// Build an `ElementField` with an explicit `components` list per

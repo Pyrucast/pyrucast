@@ -617,22 +617,37 @@ pub trait Domain: Sync {
     fn behavior_output_components(&self) -> Result<Vec<String>>;
 
     /// Constitutive law at **one Gauss point** — the pure, sequential kernel a
-    /// physics author writes. For cell `geom.cell` at Gauss point `g`, read the
-    /// deformation (+ `VAR0`) from `input` and the material from `material`
-    /// (both borrowed in place), and write the
-    /// [`behavior_output_components`](Self::behavior_output_components) values
-    /// into `out`. `material` is `Some(_)` iff the domain declares a
-    /// [`material_fespace`](Self::material_fespace).
+    /// physics author writes. Integrates the step **A → B** for cell `geom.cell`
+    /// at Gauss point `g`:
     ///
-    /// It **never sees rayon, the store, or a lock**:
+    /// - `deformation` is the **end-of-step** kinematics ε(B) (the strain, the
+    ///   temperature gradient `∇T`, …) produced by a *geometric* operator;
+    /// - `prev` is the **converged state at the start of the step A** — the
+    ///   dual flux/stress σ(A), the internal variables `VAR(A)`, and (for laws
+    ///   that form an increment) the start-of-step kinematics ε(A) — read by
+    ///   component name. It is `None` on the first step, where A is the reference
+    ///   configuration (σ(A) = 0, ε(A) = 0);
+    /// - `material` is the per-zone material data, `Some(_)` iff the domain
+    ///   declares a [`material_fespace`](Self::material_fespace);
+    /// - `dt` is the time increment, `None` for a rate-independent law (a
+    ///   rate/viscous law errors when it is `None`).
+    ///
+    /// Write the [`behavior_output_components`](Self::behavior_output_components)
+    /// values — the material state at B (σ(B), `VAR(B)`, and any echoed ε(B)) —
+    /// into `out`. It **never sees rayon, the store, or a lock**:
     /// [`integrate_behavior`](Self::integrate_behavior) drives it in parallel
     /// over all cells.
+    // A constitutive kernel legitimately needs its geometry, the A→B kinematics
+    // (`deformation`, `prev`), material, Gauss index, time step and output slot.
+    #[allow(clippy::too_many_arguments)]
     fn integrate_point(
         &self,
         geom: &CellGeom,
-        input: &SubElementField,
+        deformation: &SubElementField,
+        prev: Option<&SubElementField>,
         material: Option<&SubElementField>,
         g: usize,
+        dt: Option<f64>,
         out: &mut [f64],
     ) -> Result<()>;
 
@@ -640,27 +655,36 @@ pub trait Domain: Sync {
     /// point kernel [`integrate_point`](Self::integrate_point) in parallel over
     /// the behaviour FE subspace via [`kernel::element_pointwise`].
     ///
-    /// `input` carries, at every `(cell, Gauss)` point, the deformation measure
-    /// (the temperature gradient `∇T` for heat conduction, the strain `ε` for
-    /// elasticity, …) produced by a *geometric* operator, followed by the input
-    /// internal-state variables (`VAR0`). Returns the **material-state** field:
-    /// the dual flux/stress followed by the updated internal-state variables
-    /// (`VAR1`). Where [`SubModelKind::build_stiffness_blocks`] is the *linearization*
-    /// of the law, this is its *exact* response: for a linear law the two agree
+    /// This is the **incremental montage** A → B: `deformation` carries the
+    /// end-of-step kinematics ε(B) alone, and `prev` — the *converged output of
+    /// the previous step* — carries the whole state at A (σ(A), `VAR(A)`, ε(A)).
+    /// `prev` is `None` on the first step. Returns the **material-state** field
+    /// at B: the dual flux/stress followed by the updated internal-state
+    /// variables (`VAR1`), which becomes the next step's `prev`. Where
+    /// [`SubModelKind::build_stiffness_blocks`] is the *linearization* of the
+    /// law, this is its *exact* response: for a linear law the two agree
     /// (`∫ Bᵀ·flux = K·u`); a non-linear law departs from that tangent.
+    ///
+    /// `prev`/`dt` are captured by the point closure (the `prev` guard is held
+    /// for the whole parallel region), so [`kernel::element_pointwise`] stays a
+    /// generic single-input driver.
     fn integrate_behavior(
         &self,
-        input: &Handle<SubElementField>,
+        deformation: &Handle<SubElementField>,
+        prev: Option<&Handle<SubElementField>>,
         material: Option<&Handle<SubElementField>>,
+        dt: Option<f64>,
     ) -> Result<SubElementField> {
         let fespace = self.behavior_fespace();
         let out_components = self.behavior_output_components()?;
+        let prev_guard = prev.map(read).transpose()?;
+        let prev_ref = prev_guard.as_deref();
         kernel::element_pointwise(
             &fespace,
-            input,
+            deformation,
             material,
             out_components,
-            |geom, inp, mat, g, out| self.integrate_point(geom, inp, mat, g, out),
+            |geom, def, mat, g, out| self.integrate_point(geom, def, prev_ref, mat, g, dt, out),
         )
     }
 }

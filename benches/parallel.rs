@@ -143,7 +143,7 @@ fn bench_assembly(c: &mut Criterion) {
         b.iter(|| black_box(assemble::stiffness(&model, &materials).unwrap()))
     });
     c.bench_function("integrate elasticity 40x40 QUA4", |b| {
-        b.iter(|| black_box(behavior::integrate(&model, &strain, &materials).unwrap()))
+        b.iter(|| black_box(behavior::integrate(&model, &strain, None, &materials, None).unwrap()))
     });
 }
 

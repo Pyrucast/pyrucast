@@ -671,14 +671,19 @@ impl SubModel {
         self.as_kind().as_domain().map(|d| d.behavior_fespace())
     }
 
-    /// Integrate this sub-model's constitutive law (Cast3m `COMP`). The
-    /// caller ([`crate::ops::behavior::integrate`]) supplies the matching
-    /// per-zone deformation `input` (from [`crate::ops::field::gradient`] /
-    /// [`crate::ops::field::deformation`]) and `material`.
+    /// Integrate this sub-model's constitutive law (Cast3m `COMP`), stepping
+    /// A → B. The caller ([`crate::ops::behavior::integrate`]) supplies the
+    /// matching per-zone end-of-step `deformation` ε(B) (from
+    /// [`crate::ops::field::gradient`] / [`crate::ops::field::deformation`]),
+    /// the previous converged state `prev` (state at A, `None` on the first
+    /// step), the `material`, and the time increment `dt` (`None` if
+    /// rate-independent).
     pub(crate) fn integrate_behavior(
         &self,
-        input: &Handle<SubElementField>,
+        deformation: &Handle<SubElementField>,
+        prev: Option<&Handle<SubElementField>>,
         material: Option<&Handle<SubElementField>>,
+        dt: Option<f64>,
     ) -> Result<SubElementField> {
         self.as_kind()
             .as_domain()
@@ -688,7 +693,7 @@ impl SubModel {
                     self.as_kind().label()
                 ))
             })?
-            .integrate_behavior(input, material)
+            .integrate_behavior(deformation, prev, material, dt)
     }
 
     /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this sub-model (Cast3m `BSIG`).

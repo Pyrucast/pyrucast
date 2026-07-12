@@ -149,7 +149,7 @@ fn main() {
         let materials = &materials;
         let strain = &strain;
         move || {
-            black_box(behavior::integrate(model, strain, materials).unwrap());
+            black_box(behavior::integrate(model, strain, None, materials, None).unwrap());
         }
     };
     run_op("behavior::integrate", &threads, reps, &integrate);

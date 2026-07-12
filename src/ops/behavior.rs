@@ -29,20 +29,25 @@ use crate::containers::model::Model;
 use crate::error::Result;
 use crate::store::{insert, read};
 
-/// Integrate the constitutive law of `model` (Cast3m `COMP`).
+/// Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
 ///
-/// `deformation` is the behaviour-input aggregate (from
-/// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) / [`crate::ops::field::deformation`](fn@crate::ops::field::deformation),
-/// optionally carrying the input state `VAR0`); `materials` supplies the
-/// per-zone material data. For each behaviour-bearing sub-model, the matching
-/// deformation and material sub-fields are paired by FE subspace, and the
-/// physics's law is integrated point-by-point. Returns the material-state
-/// aggregate (dual flux/stress + updated state `VAR1`), one sub-field per
-/// behaviour-bearing sub-model in model order.
+/// `deformation` is the **end-of-step** behaviour input ε(B) (from
+/// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) / [`crate::ops::field::deformation`](fn@crate::ops::field::deformation));
+/// `prev` is the **converged output of the previous step** (the state at A —
+/// σ(A), `VAR(A)`, ε(A)), or `None` on the first step; `materials` supplies the
+/// per-zone material data; `dt` is the time increment (`None` if
+/// rate-independent). For each behaviour-bearing sub-model, the matching
+/// deformation, previous-state and material sub-fields are paired by FE
+/// subspace, and the physics's law is integrated point-by-point. Returns the
+/// material-state aggregate at B (dual flux/stress + updated state `VAR1`), one
+/// sub-field per behaviour-bearing sub-model in model order — the aggregate to
+/// feed back as `prev` at the next step.
 pub fn integrate(
     model: &Model,
     deformation: &ElementField,
+    prev: Option<&ElementField>,
     materials: &ElementField,
+    dt: Option<f64>,
 ) -> Result<ElementField> {
     let mut out = ElementField::empty();
     for h in model {
@@ -57,14 +62,24 @@ pub fn integrate(
         };
 
         // Pair the per-zone fields by FE subspace (locks SubElementField,
-        // outside the sub-model lock).
+        // outside the sub-model lock). The previous state is paired on the
+        // behaviour subspace, exactly like the deformation.
         let input = deformation.sub_for_fespace(&beh_fespace)?;
+        let prev_zone = match prev {
+            Some(p) => Some(p.sub_for_fespace(&beh_fespace)?),
+            None => None,
+        };
         let material = match mat_fespace {
             Some(fe) => Some(materials.sub_for_fespace(&fe)?),
             None => None,
         };
 
-        let state = read(h)?.integrate_behavior(&input, material.as_ref())?;
+        let state = read(h)?.integrate_behavior(
+            &input,
+            prev_zone.as_ref(),
+            material.as_ref(),
+            dt,
+        )?;
         out.add_sub(insert(state))?;
     }
     Ok(out)
@@ -135,7 +150,7 @@ mod tests {
         let def = gradient(&sol, &fes).unwrap();
         let materials = material_field(&model, &[("k", 1.5)]).unwrap();
 
-        let state = integrate(&model, &def, &materials).unwrap();
+        let state = integrate(&model, &def, None, &materials, None).unwrap();
         assert_eq!(state.len(), 1, "only the HC sub-model carries a behaviour");
         {
             let s = read(&state.get(0).unwrap()).unwrap();
@@ -152,7 +167,7 @@ mod tests {
         let (model, fes, sol) = seg2(1.0, 1.0, false);
         let def = gradient(&sol, &fes).unwrap();
         let empty = ElementField::empty();
-        let err = integrate(&model, &def, &empty).unwrap_err();
+        let err = integrate(&model, &def, None, &empty, None).unwrap_err();
         assert!(format!("{err}").contains("no SubElementField"));
     }
 
@@ -195,7 +210,7 @@ mod tests {
         let def = gradient(&sol, &fes).unwrap();
         let materials =
             material_field_per_sub_model(&model, &[&[("k", 1.0)], &[("k", 4.0)]]).unwrap();
-        let state = integrate(&model, &def, &materials).unwrap();
+        let state = integrate(&model, &def, None, &materials, None).unwrap();
         assert_eq!(state.len(), 2);
         // Zone A: k = 1 ⇒ flux = 1; zone B: k = 4 ⇒ flux = 4.
         {
@@ -247,7 +262,7 @@ mod tests {
         )
         .unwrap();
 
-        let state = integrate(&model, &def, &materials).unwrap();
+        let state = integrate(&model, &def, None, &materials, None).unwrap();
         assert_eq!(state.len(), 1);
         let s = read(&state.get(0).unwrap()).unwrap();
         assert_eq!(

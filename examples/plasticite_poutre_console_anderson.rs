@@ -71,13 +71,6 @@ use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
 use pyrucast::Result;
 
-/// Composantes de l'état interne plastique portées d'un pas au suivant
-/// (`VAR`) : déformation plastique 3-D (tenseur, 6) + déformation plastique
-/// cumulée `p`. Mêmes noms que la sortie de la loi (`models::plasticity`).
-const STATE_COMPONENTS: [&str; 7] = [
-    "eps_p_xx", "eps_p_yy", "eps_p_zz", "eps_p_yz", "eps_p_xz", "eps_p_xy", "p",
-];
-
 /// Profondeur de l'historique d'Anderson (nombre de couples `(u, g)` gardés).
 const ANDERSON_DEPTH: usize = 3;
 
@@ -196,11 +189,9 @@ fn main() -> Result<()> {
     // ── État de la simulation (persistant entre les pas) ────────────────────
     // Déplacement cumulé u (u_x, u_y sur tous les nœuds), initialement nul.
     let mut u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
-    // État plastique VAR0 (nul au premier pas — la loi défaute à zéro).
-    let mut state = ElementField::new(
-        &fes,
-        STATE_COMPONENTS.iter().map(|s| s.to_string()).collect(),
-    )?;
+    // État convergé du pas précédent (VAR0 = `prev`) : `None` au premier pas —
+    // A est alors la configuration de référence (σ(A)=0, ε(A)=0).
+    let mut state: Option<ElementField> = None;
 
     // ── Boucle sur les pas de charge ────────────────────────────────────────
     let max_newton = 200;
@@ -241,10 +232,9 @@ fn main() -> Result<()> {
         // ε(u) → COMP → BSIG → r = F_ext − F_int, plus la norme sur les DDL libres.
         // Aucune boucle nodale (opérateurs de champ uniquement).
         let residual_at = |u: &NodeField| -> Result<(NodeField, f64, ElementField)> {
-            // ε(u) → entrée de comportement (ε | VAR0) → σ, VAR1 (COMP) → F_int (BSIG).
+            // ε(u)=ε(B), état de A dans `prev` → σ, VAR1 (COMP) → F_int (BSIG).
             let strain = deformation(u, &fes)?;
-            let behavior_input = strain.union(&state)?;
-            let out = integrate(&model, &behavior_input, &materials)?;
+            let out = integrate(&model, &strain, state.as_ref(), &materials, None)?;
             let f_int = internal_forces(&model, &out)?;
             // Résidu r = F_ext − F_int et sa norme sur les DDL libres (opérateurs
             // de champ uniquement : `restrict_like`, `-`, `restrict`, `xtx`).
@@ -309,16 +299,16 @@ fn main() -> Result<()> {
         }
         let converged = res_norm <= tol;
 
-        // Commit de l'état : VAR0 ← VAR1. La sortie de comportement convergée
-        // porte l'état plastique (`eps_p_*`, `p`) et les contraintes (`sig_*`) ;
-        // on la reporte telle quelle comme nouveau VAR0 (la loi lit ses entrées
-        // par nom, les composantes surnuméraires sont ignorées).
-        state = last_state
+        // Commit de l'état : `prev` ← VAR1. La sortie convergée porte l'état
+        // complet de B (σ(B), ε_p(B), p(B), ε(B)) et devient le `prev` (état de
+        // A) du pas suivant (la loi lit ses entrées par nom).
+        let committed = last_state
             .take()
             .expect("au moins une évaluation de résidu");
 
         // Diagnostics du pas.
-        let (p_max_val, n_plastic) = plastic_diagnostics(&state)?;
+        let (p_max_val, n_plastic) = plastic_diagnostics(&committed)?;
+        state = Some(committed);
         let defl = u.value(tip.id(), "u_y")?;
         any_plasticity |= n_plastic > 0;
         let flag = if converged {

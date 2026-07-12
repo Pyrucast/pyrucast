@@ -204,8 +204,10 @@ impl Domain for Elasticity {
         &self,
         geom: &CellGeom,
         input: &SubElementField,
+        _prev: Option<&SubElementField>,
         material: Option<&SubElementField>,
         g: usize,
+        _dt: Option<f64>,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
@@ -427,7 +429,7 @@ mod tests {
         strain.set_uniform("eps_xx", eps0).unwrap();
         let strain = insert(strain);
 
-        let out = el.integrate_behavior(&strain, Some(&mat)).unwrap();
+        let out = el.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {
             assert!((out.value(0, g, "sigma_xx").unwrap() - c * eps0).abs() < 1e-9);

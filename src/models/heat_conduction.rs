@@ -185,8 +185,10 @@ impl Domain for HeatConduction {
         &self,
         geom: &CellGeom,
         input: &SubElementField,
+        _prev: Option<&SubElementField>,
         material: Option<&SubElementField>,
         g: usize,
+        _dt: Option<f64>,
         out: &mut [f64],
     ) -> Result<()> {
         let mat =
@@ -279,7 +281,7 @@ mod tests {
         mat.set_uniform(MATERIAL_COMPONENT, k).unwrap();
         let mat = insert(mat);
 
-        let flux = hc.integrate_behavior(&def, Some(&mat)).unwrap();
+        let flux = hc.integrate_behavior(&def, None, Some(&mat), None).unwrap();
         assert_eq!(flux.components(), &["flux_x".to_string()]);
         let expected = k * grad;
         for g in 0..flux.gauss_count() {

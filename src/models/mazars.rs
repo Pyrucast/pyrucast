@@ -193,8 +193,10 @@ impl Domain for Mazars {
         &self,
         geom: &CellGeom,
         input: &SubElementField,
+        _prev: Option<&SubElementField>,
         material: Option<&SubElementField>,
         g: usize,
+        _dt: Option<f64>,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Mazars declares a material_fespace ⇒ material is supplied");
@@ -442,7 +444,7 @@ mod tests {
         let mat = material(&mz);
         let eps0 = 1e-5; // < eps_d0 = 1e-4
         let strain = strain_field(&mz, eps0);
-        let out = mz.integrate_behavior(&strain, Some(&mat)).unwrap();
+        let out = mz.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
         let (e, nu) = (30_000.0, 0.2);
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {
@@ -459,7 +461,7 @@ mod tests {
         let mat = material(&mz);
         let eps0 = 5e-4; // > eps_d0
         let strain = strain_field(&mz, eps0);
-        let out = mz.integrate_behavior(&strain, Some(&mat)).unwrap();
+        let out = mz.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
         let (e, nu) = (30_000.0, 0.2);
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {
@@ -479,7 +481,7 @@ mod tests {
         let mat = material(&mz);
         // Load to 5e-4.
         let s1 = strain_field(&mz, 5e-4);
-        let st1 = mz.integrate_behavior(&s1, Some(&mat)).unwrap();
+        let st1 = mz.integrate_behavior(&s1, None, Some(&mat), None).unwrap();
         let k1 = st1.value(0, 0, "kappa").unwrap();
 
         // Unload to 2e-4, feeding κ from step 1.
@@ -496,7 +498,7 @@ mod tests {
         s2.set_uniform("eps_xx", 2e-4).unwrap();
         s2.set_uniform("kappa", k1).unwrap();
         let s2 = insert(s2);
-        let st2 = mz.integrate_behavior(&s2, Some(&mat)).unwrap();
+        let st2 = mz.integrate_behavior(&s2, None, Some(&mat), None).unwrap();
         assert!((st2.value(0, 0, "kappa").unwrap() - k1).abs() < 1e-12);
         // Damage unchanged on unloading (same κ).
         assert!(
@@ -535,7 +537,7 @@ mod tests {
         .unwrap();
         s.set_uniform("eps_xx", 5e-4).unwrap();
         let s = insert(s);
-        let out = mz.integrate_behavior(&s, Some(&mat)).unwrap();
+        let out = mz.integrate_behavior(&s, None, Some(&mat), None).unwrap();
         for g in 0..out.gauss_count() {
             assert!(out.value(0, g, "damage").unwrap() > 0.0);
         }

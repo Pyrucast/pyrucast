@@ -102,7 +102,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
 
     // ── Charge thermique f_th = ∫ Bᵀ D ε_th (BSIG de σ_th = D:ε_th) ─────────
     let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF)?;
-    let sig_th = behavior::integrate(&model, &eps_th, &materials)?;
+    let sig_th = behavior::integrate(&model, &eps_th, None, &materials, None)?;
     let f_th = internal_forces(&model, &sig_th)?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
@@ -117,7 +117,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     }
     let eps = deformation(&NodeField::from_sub(disp), &fes)?;
     let eps_mech = eps.merge_field(&eps_th, |a, b| a - b)?;
-    let sigma = behavior::integrate(&model, &eps_mech, &materials)?;
+    let sigma = behavior::integrate(&model, &eps_mech, None, &materials, None)?;
 
     // ── Vérification : σ_xx = −E·α·ΔT, σ_yy = 0 ────────────────────────────
     let expected = -E * ALPHA * DT;

@@ -140,7 +140,7 @@ mod tests {
 
         // f_int = ∫ Bᵀ σ  vs  K·u.
         let strain = deformation(&u, &fes).unwrap();
-        let stress = integrate(&model, &strain, &materials).unwrap();
+        let stress = integrate(&model, &strain, None, &materials, None).unwrap();
         let f_int = internal_forces(&model, &stress).unwrap();
 
         let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
@@ -187,7 +187,7 @@ mod tests {
         let u = NodeField::from_sub(u);
 
         let strain = deformation(&u, &fes).unwrap();
-        let stress = integrate(&model, &strain, &materials).unwrap();
+        let stress = integrate(&model, &strain, None, &materials, None).unwrap();
 
         let via_model = internal_forces(&model, &stress).unwrap();
         let via_fespace = internal_forces_continuum(&stress, &fes).unwrap();
@@ -233,7 +233,7 @@ mod tests {
         let u = NodeField::from_sub(u);
 
         let strain = deformation(&u, &fes).unwrap();
-        let stress = integrate(&model, &strain, &materials).unwrap();
+        let stress = integrate(&model, &strain, None, &materials, None).unwrap();
         let f_int = internal_forces(&model, &stress).unwrap();
 
         let n = e * area * eps; // axial force
@@ -271,7 +271,7 @@ mod tests {
         let u = NodeField::from_sub(u);
 
         let sect = beam_deformation(&u, &fes).unwrap();
-        let stress = integrate(&model, &sect, &materials).unwrap();
+        let stress = integrate(&model, &sect, None, &materials, None).unwrap();
         let f_int = internal_forces(&model, &stress).unwrap();
 
         let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
