@@ -131,6 +131,17 @@ let y = k.mul_dense(&[1.0, 1.0]).unwrap();
 // `solver::solve`, qui lit un champ dual aux lignes et rend un champ primal aux colonnes.
 let y: NodeField = k.mul_field(&x).unwrap();
 let y: NodeField = (&k * &x).unwrap();
+
+// Maillages des supports des blocs (handles partagés, dédupliqués ; disponibles
+// avant `finalize`) : `row_mesh` côté dual (lignes), `col_mesh` côté primal
+// (colonnes). Cible de projection pour poser un champ sur les supports mêmes
+// des sorties de `mul_field` / `solve` et le combiner zone à zone :
+let f_ext_r = restrict(&f_ext, &k.row_mesh().unwrap()).unwrap();
+let r = (&f_ext_r - &y).unwrap();     // s'aligne par support, pas de passthrough de zone
+// ⚠ une composante absente d'un côté passe brute (union) ; pour un résidu
+// strict (toute composante soustraite, absente lue à 0), reprojeter sur le
+// support ET les composantes de l'autre opérande :
+let r = (&restrict_like(&f_ext, &y).unwrap() - &y).unwrap();
 ```
 
 ## API Python

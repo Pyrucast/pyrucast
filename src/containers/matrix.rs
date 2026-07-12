@@ -75,6 +75,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::mesh::Coords;
+use crate::containers::mesh::Mesh;
 use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::SubModel;
@@ -1286,6 +1287,46 @@ impl Matrix {
         Ok(y_vec.iter().copied().collect())
     }
 
+    /// [`Mesh`] over the blocks' distinct **row** supports (the dual side:
+    /// where a right-hand side is read and where `A · x` lands) — one POI1
+    /// submesh per distinct support, **sharing the blocks' own handles**
+    /// (nothing copied, first-seen order).
+    ///
+    /// The projection target for building a field that combines with this
+    /// matrix's row-side fields: `restrict(&f_ext, &k.row_mesh()?)` lands the
+    /// external forces on the very supports [`mul_field`](Self::mul_field)
+    /// (internal forces `K·u`) lives on, so `&f_ext_r - &f_int` aligns zone by
+    /// zone instead of passing through. Available before
+    /// [`finalize`](Self::finalize) (the supports are structural).
+    pub fn row_mesh(&self) -> Result<Mesh> {
+        self.support_mesh(true)
+    }
+
+    /// [`Mesh`] over the blocks' distinct **column** supports (the primal
+    /// side: where a `solve` solution lives). Column twin of
+    /// [`row_mesh`](Self::row_mesh) — e.g. to project an initial or imposed
+    /// field onto the exact supports of the solution before combining.
+    pub fn col_mesh(&self) -> Result<Mesh> {
+        self.support_mesh(false)
+    }
+
+    /// Shared body of `row_mesh` / `col_mesh`.
+    fn support_mesh(&self, rows: bool) -> Result<Mesh> {
+        let mut out = Mesh::empty();
+        for h in self {
+            let s = read(h)?;
+            let sup = if rows {
+                s.row_support.clone()
+            } else {
+                s.col_support.clone()
+            };
+            if !out.iter().any(|m| m.same_slot(&sup)) {
+                out.add_sub(sup)?;
+            }
+        }
+        Ok(out)
+    }
+
     /// Wrap a flat **column-ordered** vector (`assembled.col_dofs` order — the
     /// layout a solver's solution comes in) into a [`NodeField`] whose zones
     /// **share the blocks' `col_support` handles**: one zone per distinct
@@ -2371,6 +2412,116 @@ mod tests {
         for (i, (nid, var)) in col_dofs.iter().enumerate() {
             assert_eq!(f.value(*nid, var).unwrap(), 10.0 + i as f64);
         }
+    }
+
+    /// `row_mesh` / `col_mesh` expose the blocks' supports (shared handles,
+    /// deduplicated); a field `restrict`ed onto them lands on those very
+    /// supports, so it combines zone by zone with `mul_field`'s output —
+    /// the external-forces-minus-internal-forces pattern.
+    #[test]
+    fn row_mesh_enables_zone_aligned_residual() {
+        use crate::containers::node_field::SubNodeField;
+        // Saddle-point shape: phys (2 nodes) and mult (1 node) supports.
+        let coords = insert(Coords::new(1).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let nm = Node::create_in(coords.clone(), &[10.0]).unwrap();
+        let phys = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[n0.id()]).unwrap();
+            sm.add_cell(&[n1.id()]).unwrap();
+            insert(sm)
+        };
+        let mult = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[nm.id()]).unwrap();
+            insert(sm)
+        };
+        // K (phys × phys) and C (mult × phys): row supports {phys, mult},
+        // col supports {phys} — K and C share the phys column support.
+        let mut k = SubMatrix::new(
+            phys.clone(),
+            phys.clone(),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        k.add_entry(n0.id(), "q", n0.id(), "T", 2.0).unwrap();
+        k.add_entry(n1.id(), "q", n1.id(), "T", 2.0).unwrap();
+        let mut c = SubMatrix::new(
+            mult.clone(),
+            phys.clone(),
+            vec!["imposed_T".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            false,
+        )
+        .unwrap();
+        c.add_entry(nm.id(), "imposed_T", n0.id(), "T", 1.0)
+            .unwrap();
+        let mut m = Matrix::empty();
+        m.add_sub(insert(k)).unwrap();
+        m.add_sub(insert(c)).unwrap();
+
+        // Meshes: available pre-finalize, deduplicated, sharing the handles.
+        let rm = m.row_mesh().unwrap();
+        assert_eq!(rm.len(), 2);
+        assert!(rm.get(0).unwrap().same_slot(&phys));
+        assert!(rm.get(1).unwrap().same_slot(&mult));
+        let cm = m.col_mesh().unwrap();
+        assert_eq!(cm.len(), 1, "K and C share the phys column support");
+        assert!(cm.get(0).unwrap().same_slot(&phys));
+
+        m.finalize().unwrap();
+
+        // f_int = A · x with x: T = [1, 1] on phys.
+        let x = NodeField::from_sub(
+            SubNodeField::from_poi1(&phys, vec!["T".into()])
+                .map(|mut s| {
+                    s.set_value(n0.id(), "T", 1.0).unwrap();
+                    s.set_value(n1.id(), "T", 1.0).unwrap();
+                    s
+                })
+                .unwrap(),
+        );
+        let f_int = m.mul_field(&x).unwrap();
+
+        // External forces on their own support (as `flux` would build them),
+        // projected onto the matrix's row mesh: lands on the blocks' handles.
+        let f_ext = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[n0.id()]).unwrap();
+            sm.add_cell(&[n1.id()]).unwrap();
+            let mut s = SubNodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap();
+            s.set_value(n0.id(), "q", 5.0).unwrap();
+            s.set_value(n1.id(), "q", 5.0).unwrap();
+            NodeField::from_sub(s)
+        };
+        let f_ext_r = crate::ops::field::restrict(&f_ext, &rm).unwrap();
+        for (za, zb) in f_ext_r.iter().zip(f_int.iter()) {
+            let sa = read(za).unwrap().support();
+            let sb = read(zb).unwrap().support();
+            assert!(sa.same_slot(&sb), "restrict must land on the block supports");
+        }
+
+        // Zone-aligned residual: q combines (not passthrough) on phys.
+        // K·x: q = 2 at n0 and n1; C·x contributes imposed_T = 1 at nm.
+        let r = (&f_ext_r - &f_int).unwrap();
+        assert_eq!(r.value(n0.id(), "q").unwrap(), 3.0); // 5 − 2 ⇒ aligned
+        assert_eq!(r.value(n1.id(), "q").unwrap(), 3.0);
+        // `imposed_T` exists on the f_int side only (restrict carries the
+        // source field's components) ⇒ union semantics pass it through RAW
+        // (+1, not −1) — the documented `merge_components` behaviour.
+        assert_eq!(r.value(nm.id(), "imposed_T").unwrap(), 1.0);
+
+        // Strict residual (every component subtracted, missing read as 0):
+        // reproject onto f_int's exact supports AND components.
+        let f_ext_like = crate::ops::field::restrict_like(&f_ext, &f_int).unwrap();
+        let r2 = (&f_ext_like - &f_int).unwrap();
+        assert_eq!(r2.value(n0.id(), "q").unwrap(), 3.0);
+        assert_eq!(r2.value(nm.id(), "imposed_T").unwrap(), -1.0); // 0 − 1
     }
 
     /// Row-side twin: zones on the blocks' row supports, dual variables.

@@ -28,6 +28,15 @@ successives partagent les mêmes supports : leur arithmétique (`a - b`, …)
 s'aligne zone à zone. Sur un modèle contraint (Lagrange), une zone porte les
 multiplicateurs — les réactions s'y lisent directement.
 
+Pour poser un **autre** champ sur ces mêmes supports (p. ex. projeter les
+forces externes avant de calculer un résidu `f_ext − K·u`), la matrice expose
+ses supports en maillages : `k.row_mesh()` (côté dual, où vivent le second
+membre et `mul_field`) et `k.col_mesh()` (côté primal, où vit la solution) —
+handles partagés, dédupliqués. `restrict(&f_ext, &k.row_mesh()?)` s'aligne
+alors zone à zone avec `K·u` ; pour un résidu **strict** (toute composante
+soustraite, absente lue à `0` — et non passée brute par l'union),
+`restrict_like(&f_ext, &f_int)` reprojette aussi sur les composantes.
+
 Une matrice singulière (p. ex. conditions aux limites oubliées) produit un pivot
 nul ⇒ solution non finie ⇒ erreur explicite.
 
