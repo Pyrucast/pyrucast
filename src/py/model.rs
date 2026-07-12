@@ -35,10 +35,15 @@ impl PySubModel {
         Ok(read(&self.handle)?.dual_vars())
     }
 
-    /// The physics nature of this sub-model as a tag: `"mechanical"`,
-    /// `"thermal"` or `"constraint"`. Determined entirely by the physics kind.
-    fn physics(&self) -> PyResult<String> {
-        Ok(read(&self.handle)?.physics().to_tag().to_string())
+    /// The physics nature(s) of this sub-model as a list of tags (`"mechanical"`,
+    /// `"thermal"`, `"constraint"`, `"other"`). Determined entirely by the physics
+    /// kind — one tag for a plain physics, several for a coupled one.
+    fn physics(&self) -> PyResult<Vec<String>> {
+        Ok(read(&self.handle)?
+            .physics()
+            .iter()
+            .map(|p| p.to_tag().to_string())
+            .collect())
     }
 
     /// POI1 `Mesh` of the multiplier nodes (Lagrange physics only — empty
@@ -415,13 +420,14 @@ impl PyModel {
         Ok(self.inner.dual_of(variable)?)
     }
 
-    /// `Model.filter(physics)` — a new `Model` holding only the sub-models of the
-    /// given physics nature. `physics` is a tag: `"mechanical"`, `"thermal"` or
-    /// `"constraint"`. Sub-model order is preserved; the result may be empty.
+    /// `Model.filter(physics)` — a new `Model` holding only the sub-models **whose
+    /// nature set contains** the given physics. `physics` is a tag: `"mechanical"`,
+    /// `"thermal"`, `"constraint"` or `"other"`. Sub-model order is preserved; the
+    /// result may be empty.
     fn filter(&self, physics: &str) -> PyResult<Self> {
         let p = Physics::from_tag(physics).ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err(format!(
-                "filter: unknown physics '{physics}' (expected mechanical|thermal|constraint)"
+                "filter: unknown physics '{physics}' (expected mechanical|thermal|constraint|other)"
             ))
         })?;
         Ok(Self {

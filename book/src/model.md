@@ -29,7 +29,7 @@ SubModel  (énum de stockage + dispatch — AUCUNE logique)
 
 SubModelKind  (trait de base — le dénominateur commun, co-localisé par physique)
 ├── primal_vars / dual_vars
-├── physics       # nature : Mechanical | Thermal | Constraint (constante par variante)
+├── physics       # ensemble de natures : &[Physics] (Mechanical|Thermal|Constraint|Other)
 ├── as_domain / as_constraint  # seams de capacité (None par défaut) — cf. ci-dessous
 ├── element_matrix          # noyau élémentaire (une cellule) — pur & séquentiel
 ├── stiffness_layout        # Some ⇒ bloc CALCULÉ (scatter parallèle) ; None ⇒ littéral
@@ -119,33 +119,52 @@ Pour **ajouter** une physique, voir [Ajouter une physique](ajouter-une-physique.
 
 ## Nature physique et filtrage
 
-Chaque physique déclare sa **nature** — sa classification grossière, orthogonale
-à l'axe de capacité `Domain`/`Constraint`. Elle répond à « quel champ de
-physique » là où les capacités répondent à « domaine ou contrainte » :
+Chaque physique déclare un **ensemble de natures** — sa classification grossière,
+orthogonale à l'axe de capacité `Domain`/`Constraint`. Elle répond à « quel champ
+de physique » là où les capacités répondent à « domaine ou contrainte » :
 
 | Nature (`Physics`) | Physiques |
 |---|---|
 | `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `timoshenko`, `frame`, `frame3d` |
 | `Thermal`    | `heat_conduction` |
 | `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` |
+| `Other`      | nature « autre / rien » explicite (aucune physique de base ne la déclare) |
 
-La nature est **entièrement déterminée par la variante** : c'est une constante
-par physique, exposée par `SubModelKind::physics()` (comme `label()`), et non un
-champ stocké. Elle voyage avec chaque bloc assemblé jusqu'à la
-[`SubMatrix`](matrix.md) (posée par l'assembleur sur les deux chemins, calculé et
-littéral, donc le couple C/Cᵀ d'un Dirichlet est étiqueté aussi).
+La nature d'une physique de base est **entièrement déterminée par la variante** :
+c'est une constante par physique, exposée par `SubModelKind::physics()` — un
+**slice** `&'static [Physics]` (comme `label()`), pas un champ stocké. Le type est
+un **ensemble** pour deux raisons :
 
-Deux sélecteurs symétriques en découlent, tous deux à partage par compteur de
-références (pas de copie profonde) :
+- une physique **couplée** (par ex. un futur élément thermo-mécanique) porte
+  *plusieurs* natures — `[Mechanical, Thermal]` ;
+- un bloc de matrice monté à la main, hors assemblage, n'en porte **aucune** —
+  l'ensemble vide, le cas « rien ». `Physics::Other` est la nature « autre »
+  *explicite*, pour un bloc qu'on veut classer plutôt que laisser sans étiquette.
 
-- `model.filter(Physics::Mechanical)` → un `Model` ne contenant que les
-  sous-modèles mécaniques ;
-- `k.filter(Physics::Mechanical)` → une `Matrix` ne contenant que les blocs
+L'ensemble voyage avec chaque bloc assemblé jusqu'à la [`SubMatrix`](matrix.md)
+(posé par l'assembleur sur les deux chemins, calculé et littéral, donc le couple
+C/Cᵀ d'un Dirichlet est étiqueté aussi).
+
+Deux sélecteurs symétriques en découlent — ils gardent les entités dont
+l'ensemble **contient** la nature (une physique couplée apparaît donc sous
+chacune) — tous deux à partage par compteur de références (pas de copie
+profonde) :
+
+- `model.filter(Physics::Mechanical)` → un `Model` ne gardant que les
+  sous-modèles au moins mécaniques ;
+- `k.filter(Physics::Mechanical)` → une `Matrix` ne gardant que les blocs au moins
   mécaniques (non assemblée — relancer `assemble::assemble` avant de résoudre).
 
+`k.physics()` renvoie l'ensemble des natures **présentes** dans la matrice
+(dédupliqué) : une matrice agrégeant plusieurs physiques y expose plusieurs tags
+(par ex. `[Thermal, Constraint]`). Un bloc à l'ensemble vide n'est jamais
+sélectionné par une nature concrète — l'étiqueter `Physics::Other` le rend
+atteignable par `filter(Physics::Other)`.
+
 ```rust,ignore
-let meca = model.filter(Physics::Mechanical)?;   // sous-modèles mécaniques
-let k_meca = k.filter(Physics::Mechanical)?;      // blocs mécaniques (non assemblés)
+let meca = model.filter(Physics::Mechanical)?;   // sous-modèles au moins mécaniques
+let k_meca = k.filter(Physics::Mechanical)?;      // blocs au moins mécaniques (non assemblés)
+let natures = k.physics()?;                        // ex. [Thermal, Constraint]
 ```
 
 ## Règle invariante : un Model = une Matrice

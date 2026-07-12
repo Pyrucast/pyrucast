@@ -95,8 +95,8 @@ impl SubModelKind for Frame {
         element_stiffness(geom, material.expect("Frame requires a material field"), ke)
     }
 
-    fn physics(&self) -> Physics {
-        Physics::Mechanical
+    fn physics(&self) -> &'static [Physics] {
+        &[Physics::Mechanical]
     }
 
     fn label(&self) -> &'static str {

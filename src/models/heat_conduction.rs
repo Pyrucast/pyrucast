@@ -142,8 +142,8 @@ impl SubModelKind for HeatConduction {
         Ok(())
     }
 
-    fn physics(&self) -> Physics {
-        Physics::Thermal
+    fn physics(&self) -> &'static [Physics] {
+        &[Physics::Thermal]
     }
 
     fn label(&self) -> &'static str {

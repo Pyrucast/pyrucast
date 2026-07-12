@@ -646,11 +646,12 @@ impl SubModel {
         self.as_kind().dual_vars()
     }
 
-    /// This sub-model's [`Physics`] nature (mechanical / thermal / constraint) —
-    /// a per-variant constant, determined entirely by the variant. Feeds
-    /// [`Model::filter`] and travels with each assembled block onto the
+    /// This sub-model's set of [`Physics`] natures — a per-variant constant
+    /// slice, determined entirely by the variant (a single nature today; several
+    /// for a future coupled physics). Feeds [`Model::filter`] and travels with
+    /// each assembled block onto the
     /// [`SubMatrix`](crate::containers::matrix::SubMatrix).
-    pub fn physics(&self) -> Physics {
+    pub fn physics(&self) -> &'static [Physics] {
         self.as_kind().physics()
     }
 
@@ -1096,8 +1097,9 @@ impl Model {
         Ok(union_names(all))
     }
 
-    /// A fresh [`Model`] holding only the sub-models of the given [`Physics`]
-    /// nature (`model.filter(Physics::Mechanical)` → the mechanical sub-models).
+    /// A fresh [`Model`] holding only the sub-models **whose nature set contains**
+    /// the given [`Physics`] (`model.filter(Physics::Mechanical)` → every
+    /// sub-model that is at least mechanical, including a coupled one).
     ///
     /// Sub-model order is preserved and the handles are **shared** (refcount
     /// bump, no deep copy) via [`Aggregate::subset`];
@@ -1106,7 +1108,7 @@ impl Model {
     pub fn filter(&self, physics: Physics) -> Result<Model> {
         let mut indices: Vec<usize> = Vec::new();
         for (i, h) in self.iter().enumerate() {
-            if read(h)?.physics() == physics {
+            if read(h)?.physics().contains(&physics) {
                 indices.push(i);
             }
         }
@@ -1214,11 +1216,14 @@ mod tests {
     fn physics_nature_per_submodel() {
         // Heat conduction (Thermal) + a Dirichlet constraint (Constraint).
         let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
-        let natures: Vec<Physics> = model
+        let natures: Vec<Vec<Physics>> = model
             .iter()
-            .map(|h| read(h).unwrap().physics())
+            .map(|h| read(h).unwrap().physics().to_vec())
             .collect();
-        assert_eq!(natures, vec![Physics::Thermal, Physics::Constraint]);
+        assert_eq!(
+            natures,
+            vec![vec![Physics::Thermal], vec![Physics::Constraint]]
+        );
     }
 
     #[test]
@@ -1228,13 +1233,16 @@ mod tests {
 
         let thermal = model.filter(Physics::Thermal).unwrap();
         assert_eq!(thermal.len(), 1);
-        assert_eq!(read(&thermal.get(0).unwrap()).unwrap().physics(), Physics::Thermal);
+        assert_eq!(
+            read(&thermal.get(0).unwrap()).unwrap().physics(),
+            &[Physics::Thermal]
+        );
 
         let constraint = model.filter(Physics::Constraint).unwrap();
         assert_eq!(constraint.len(), 1);
         assert_eq!(
             read(&constraint.get(0).unwrap()).unwrap().physics(),
-            Physics::Constraint
+            &[Physics::Constraint]
         );
 
         // A nature no sub-model has yields an empty model.
@@ -1249,19 +1257,23 @@ mod tests {
         let (_cfg, _, _, model, materials) = build_seg2_heat_model(1.0, 1.0, true);
         let k = assemble::stiffness(&model, &materials).unwrap();
 
-        // Every assembled block is tagged, computed and literal alike.
-        let tags: Vec<Physics> = k
-            .iter()
-            .map(|h| store_read(h).unwrap().physics().expect("assembled block is tagged"))
-            .collect();
-        assert!(tags.contains(&Physics::Thermal));
-        assert!(tags.contains(&Physics::Constraint));
+        // Every assembled block is tagged (non-empty), computed and literal alike.
+        for h in &k {
+            assert!(
+                !store_read(h).unwrap().physics().is_empty(),
+                "assembled block is tagged"
+            );
+        }
+        // The matrix as a whole reports both natures present.
+        let present = k.physics().unwrap();
+        assert!(present.contains(&Physics::Thermal));
+        assert!(present.contains(&Physics::Constraint));
 
         // The constraint filter keeps only the Dirichlet C/Cᵀ pair.
         let constraint = k.filter(Physics::Constraint).unwrap();
         assert_eq!(constraint.len(), 2);
         for h in &constraint {
-            assert_eq!(store_read(h).unwrap().physics(), Some(Physics::Constraint));
+            assert_eq!(store_read(h).unwrap().physics(), &[Physics::Constraint]);
         }
 
         // The thermal filter keeps only the heat-conduction block.

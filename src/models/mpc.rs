@@ -259,8 +259,8 @@ impl SubModelKind for Mpc {
         Ok(vec![Contribution::Literal(blocks)])
     }
 
-    fn physics(&self) -> Physics {
-        Physics::Constraint
+    fn physics(&self) -> &'static [Physics] {
+        &[Physics::Constraint]
     }
 
     fn label(&self) -> &'static str {

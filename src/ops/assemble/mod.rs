@@ -150,11 +150,12 @@ fn build_contribution(
         }
         Contribution::Literal(blocks) => blocks,
     };
-    // Tag every emitted block with its sub-model's physics nature — computed and
-    // literal alike (so a Dirichlet C/Cᵀ pair is tagged too) — for Matrix::filter.
-    let physics = read(sub_h)?.physics();
+    // Tag every emitted block with its sub-model's physics nature set — computed
+    // and literal alike (so a Dirichlet C/Cᵀ pair is tagged too) — for
+    // Matrix::filter.
+    let physics = read(sub_h)?.physics().to_vec();
     for b in &mut blocks {
-        b.set_physics(physics);
+        b.set_physics(physics.clone());
     }
     Ok(blocks)
 }

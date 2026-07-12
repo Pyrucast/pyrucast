@@ -113,14 +113,22 @@ pub enum Contribution {
 /// `Domain` / `Constraint` capability axis. It answers « quel champ de physique »
 /// where the capability seams answer « domaine ou contrainte ».
 ///
-/// Fully determined by the [`SubModel`](crate::containers::model::SubModel)
-/// variant, so it is a per-physics **constant** exposed through
-/// [`SubModelKind::physics`] (like [`label`](SubModelKind::label)) rather than a
-/// stored field. It travels with each assembled block onto the
-/// [`SubMatrix`], and feeds the
+/// A physics declares a **set** of natures (usually one): a plain physics is
+/// single-natured, a coupled physics (e.g. a future thermo-mechanical element)
+/// spans several, and a block that belongs to none is left **untagged** (an empty
+/// set — the « rien » case for hand-built / other matrices). [`Other`](Self::Other)
+/// is the explicit odd-one-out nature, for a block one *wants* classified as
+/// « autre » rather than merely untagged.
+///
+/// A single nature is fully determined by the
+/// [`SubModel`](crate::containers::model::SubModel) variant, so
+/// [`SubModelKind::physics`] returns a per-physics **constant** slice (like
+/// [`label`](SubModelKind::label)) rather than a stored field. The set travels
+/// with each assembled block onto the [`SubMatrix`], and feeds the
 /// [`Model::filter`](crate::containers::model::Model::filter) /
-/// [`Matrix::filter`](crate::containers::matrix::Matrix::filter) selectors.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// [`Matrix::filter`](crate::containers::matrix::Matrix::filter) selectors
+/// (which match by **containment**).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Physics {
     /// Solid mechanics — elasticity, plasticity, damage, bars, beams, frames.
     Mechanical,
@@ -128,17 +136,21 @@ pub enum Physics {
     Thermal,
     /// A Lagrange constraint — Dirichlet, MPC, embedded, contact.
     Constraint,
+    /// « Autre / rien » — a nature for a block that fits none of the above but is
+    /// still explicitly classified (as opposed to simply untagged).
+    Other,
 }
 
 impl Physics {
-    /// Parse from a lowercase tag (`"mechanical"`, `"thermal"`, `"constraint"`) —
-    /// the Python-facing spelling, mirroring
+    /// Parse from a lowercase tag (`"mechanical"`, `"thermal"`, `"constraint"`,
+    /// `"other"`) — the Python-facing spelling, mirroring
     /// [`ElasticityModel::from_tag`](crate::models::elasticity::ElasticityModel::from_tag).
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
             "mechanical" => Some(Self::Mechanical),
             "thermal" => Some(Self::Thermal),
             "constraint" => Some(Self::Constraint),
+            "other" => Some(Self::Other),
             _ => None,
         }
     }
@@ -149,6 +161,7 @@ impl Physics {
             Self::Mechanical => "mechanical",
             Self::Thermal => "thermal",
             Self::Constraint => "constraint",
+            Self::Other => "other",
         }
     }
 }
@@ -175,11 +188,12 @@ pub trait SubModelKind: Sync {
     /// Dual variable names introduced by this physics (row labels).
     fn dual_vars(&self) -> Vec<String>;
 
-    /// This physics' [`Physics`] nature (mechanical / thermal / constraint) — a
-    /// per-variant constant, the classification counterpart of
-    /// [`label`](Self::label). Required so every physics declares its nature
-    /// explicitly at its definition site.
-    fn physics(&self) -> Physics;
+    /// This physics' set of [`Physics`] natures — a per-variant **constant**
+    /// slice, the classification counterpart of [`label`](Self::label). A plain
+    /// physics returns a single-element slice; a coupled physics returns several.
+    /// Required so every physics declares its nature(s) explicitly at its
+    /// definition site. Matched by containment in the `filter` selectors.
+    fn physics(&self) -> &'static [Physics];
 
     /// Borrow this sub-model as a [`Domain`] capability, or `None` (default) if
     /// it is not a domain physics (a constraint such as `Dirichlet`). A domain

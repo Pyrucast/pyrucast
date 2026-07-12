@@ -76,11 +76,16 @@ impl PySubMatrix {
         Ok(read(&self.handle)?.symmetric())
     }
 
-    /// The physics nature of the sub-model that produced this block as a tag
-    /// (`"mechanical"`, `"thermal"`, `"constraint"`), or `None` for a block built
-    /// outside assembly. Set by the assembler; used by `Matrix.filter`.
-    fn physics(&self) -> PyResult<Option<String>> {
-        Ok(read(&self.handle)?.physics().map(|p| p.to_tag().to_string()))
+    /// The physics nature(s) of the sub-model that produced this block, as a list
+    /// of tags (`"mechanical"`, `"thermal"`, `"constraint"`, `"other"`). **Empty**
+    /// for a block built outside assembly (the "rien" case), or several tags for a
+    /// coupled physics. Set by the assembler; used by `Matrix.filter`.
+    fn physics(&self) -> PyResult<Vec<String>> {
+        Ok(read(&self.handle)?
+            .physics()
+            .iter()
+            .map(|p| p.to_tag().to_string())
+            .collect())
     }
 
     /// Variable (field) names this block addresses.
@@ -206,19 +211,32 @@ impl PyMatrix {
         Ok(())
     }
 
-    /// `Matrix.filter(physics)` — a new `Matrix` holding only the blocks whose
-    /// producing sub-model has the given physics nature (`"mechanical"`,
-    /// `"thermal"`, `"constraint"`). The result is **not** finalized — call
+    /// `Matrix.filter(physics)` — a new `Matrix` holding only the blocks **whose
+    /// nature set contains** the given physics (`"mechanical"`, `"thermal"`,
+    /// `"constraint"`, `"other"`). The result is **not** finalized — call
     /// `assemble` (or `finalize` for literal-only blocks) before solving.
     fn filter(&self, physics: &str) -> PyResult<Self> {
         let p = Physics::from_tag(physics).ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err(format!(
-                "filter: unknown physics '{physics}' (expected mechanical|thermal|constraint)"
+                "filter: unknown physics '{physics}' (expected mechanical|thermal|constraint|other)"
             ))
         })?;
         Ok(Self {
             inner: self.inner.filter(p)?,
         })
+    }
+
+    /// `Matrix.physics()` — the list of physics natures present across the
+    /// matrix's blocks (first-seen, deduplicated). Empty if no block is tagged;
+    /// several tags when the matrix aggregates several physics (e.g. a heat model
+    /// with a Dirichlet → `["thermal", "constraint"]`).
+    fn physics(&self) -> PyResult<Vec<String>> {
+        Ok(self
+            .inner
+            .physics()?
+            .iter()
+            .map(|p| p.to_tag().to_string())
+            .collect())
     }
 
     /// Total number of rows of the (finalized) global matrix.

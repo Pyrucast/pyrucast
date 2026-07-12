@@ -147,8 +147,8 @@ impl SubModelKind for Mazars {
         elasticity::element_stiffness(geom, mat, self.model, ke)
     }
 
-    fn physics(&self) -> Physics {
-        Physics::Mechanical
+    fn physics(&self) -> &'static [Physics] {
+        &[Physics::Mechanical]
     }
 
     fn label(&self) -> &'static str {

@@ -193,13 +193,14 @@ pub struct SubMatrix {
     /// behaviour, unchanged).
     #[serde(default)]
     recipe: Option<ComputedRecipe>,
-    /// The [`Physics`] nature of the sub-model that produced this block, set by
-    /// the assembler ([`crate::ops::assemble`]) for **both** the computed and the
-    /// literal path (so a Dirichlet C/Cᵀ pair is tagged too). `None` for a block
-    /// built directly, outside assembly. Consumed by
+    /// The set of [`Physics`] natures of the sub-model that produced this block,
+    /// set by the assembler ([`crate::ops::assemble`]) for **both** the computed
+    /// and the literal path (so a Dirichlet C/Cᵀ pair is tagged too). **Empty**
+    /// for a block built directly, outside assembly (the « rien » case), or
+    /// carrying several natures for a coupled physics. Consumed by
     /// [`Matrix::filter`](Matrix::filter).
     #[serde(default)]
-    physics: Option<Physics>,
+    physics: Vec<Physics>,
     /// `NodeId → local position` for O(1) `add_entry`, derived from
     /// `row_nodes` / `col_nodes`. Not serialized; built lazily on first use
     /// (the support is fixed at construction).
@@ -241,7 +242,7 @@ impl SubMatrix {
             coo: CooMatrix::new(nrows, ncols),
             symmetric,
             recipe: None,
-            physics: None,
+            physics: Vec::new(),
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
@@ -280,7 +281,7 @@ impl SubMatrix {
             coo: CooMatrix::new(nrows, ncols),
             symmetric,
             recipe: Some(recipe),
-            physics: None,
+            physics: Vec::new(),
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
@@ -328,7 +329,7 @@ impl SubMatrix {
             coo,
             symmetric,
             recipe: None,
-            physics: None,
+            physics: Vec::new(),
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
@@ -345,18 +346,19 @@ impl SubMatrix {
         self.recipe.as_ref()
     }
 
-    /// The [`Physics`] nature of the sub-model that produced this block, or `None`
-    /// for a block built outside assembly. Set by the assembler on every block it
-    /// emits (see [`crate::ops::assemble`]).
-    pub fn physics(&self) -> Option<Physics> {
-        self.physics
+    /// The set of [`Physics`] natures of the sub-model that produced this block —
+    /// **empty** for a block built outside assembly (the « rien » case), one entry
+    /// for a plain physics, several for a coupled one. Set by the assembler on
+    /// every block it emits (see [`crate::ops::assemble`]).
+    pub fn physics(&self) -> &[Physics] {
+        &self.physics
     }
 
-    /// Tag this block with the [`Physics`] nature of its producing sub-model — the
-    /// assembler calls this on each emitted block so [`Matrix::filter`] can select
-    /// by nature.
-    pub fn set_physics(&mut self, physics: Physics) {
-        self.physics = Some(physics);
+    /// Tag this block with the [`Physics`] nature set of its producing sub-model —
+    /// the assembler calls this on each emitted block so [`Matrix::filter`] can
+    /// select by nature (matched by containment).
+    pub fn set_physics(&mut self, physics: Vec<Physics>) {
+        self.physics = physics;
     }
 
     /// Whether the assembler declared this block numerically symmetric.
@@ -693,9 +695,11 @@ impl fmt::Display for SubMatrix {
         } else {
             format!("{} entries", self.coo.nnz()).into()
         };
-        let physics: std::borrow::Cow<str> = match self.physics {
-            Some(p) => format!(", {p}").into(),
-            None => "".into(),
+        let physics: std::borrow::Cow<str> = if self.physics.is_empty() {
+            "".into()
+        } else {
+            let tags: Vec<&str> = self.physics.iter().map(|p| p.to_tag()).collect();
+            format!(", {}", tags.join("+")).into()
         };
         write!(
             f,
@@ -1340,24 +1344,41 @@ impl Matrix {
         self.support_mesh(false)
     }
 
-    /// A fresh [`Matrix`] holding only the blocks whose producing sub-model has
-    /// the given [`Physics`] nature (`k.filter(Physics::Mechanical)` → the
-    /// mechanical blocks). The matrix-side twin of
+    /// A fresh [`Matrix`] holding only the blocks **whose nature set contains** the
+    /// given [`Physics`] (`k.filter(Physics::Mechanical)` → every block that is at
+    /// least mechanical). The matrix-side twin of
     /// [`Model::filter`](crate::containers::model::Model::filter).
     ///
     /// Block order is preserved and handles are **shared** (refcount bump) via
-    /// [`Aggregate::subset`]. Blocks with no physics tag (built outside assembly)
-    /// are never selected. The result is **not assembled** — like any matrix with
-    /// freshly added blocks, call [`crate::ops::assemble::assemble`] before
-    /// handing it to a solver.
+    /// [`Aggregate::subset`]. Blocks with an **empty** nature set (built outside
+    /// assembly — the « rien » case) are never selected by a concrete nature; tag
+    /// them [`Physics::Other`] to reach them with `filter(Physics::Other)`. The
+    /// result is **not assembled** — like any matrix with freshly added blocks,
+    /// call [`crate::ops::assemble::assemble`] before handing it to a solver.
     pub fn filter(&self, physics: Physics) -> Result<Matrix> {
         let mut indices: Vec<usize> = Vec::new();
         for (i, h) in self.iter().enumerate() {
-            if read(h)?.physics() == Some(physics) {
+            if read(h)?.physics().contains(&physics) {
                 indices.push(i);
             }
         }
         self.subset(indices)
+    }
+
+    /// The set of [`Physics`] natures present across this matrix's blocks —
+    /// first-seen order, deduplicated. Empty if no block is tagged (« rien »).
+    /// A matrix aggregating several physics reports **several** tags here (e.g.
+    /// a heat model with a Dirichlet → `[Thermal, Constraint]`).
+    pub fn physics(&self) -> Result<Vec<Physics>> {
+        let mut out: Vec<Physics> = Vec::new();
+        for h in self {
+            for &p in read(h)?.physics() {
+                if !out.contains(&p) {
+                    out.push(p);
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// Shared body of `row_mesh` / `col_mesh`.
@@ -1832,7 +1853,7 @@ mod tests {
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", b, "T", 2.0).unwrap();
-        m.set_physics(Physics::Thermal);
+        m.set_physics(vec![Physics::Thermal]);
         use crate::persist::Persist;
         let bytes = m.to_bytes().unwrap();
         let m2 = SubMatrix::from_bytes(&bytes).unwrap();
@@ -1840,8 +1861,56 @@ mod tests {
         assert_eq!(m2.n_cols(), 2);
         assert!(m2.symmetric());
         assert_eq!(m2.get(a, "q", a, "T"), 2.0);
-        // The physics tag survives the round trip.
-        assert_eq!(m2.physics(), Some(Physics::Thermal));
+        // The physics tag set survives the round trip.
+        assert_eq!(m2.physics(), &[Physics::Thermal]);
+    }
+
+    #[test]
+    fn physics_tag_set_empty_multiple_and_other() {
+        let (_cfg, nodes, sup) = make_poi1(2);
+        let (a, _b) = (nodes[0].id(), nodes[1].id());
+        let make = || {
+            SubMatrix::new(
+                sup.clone(),
+                sup.clone(),
+                vec!["q".into()],
+                vec!["T".into()],
+                DofOrdering::NodesThenVars,
+                false,
+            )
+            .unwrap()
+        };
+
+        // A fresh block is untagged — the "rien" case.
+        let bare = make();
+        assert!(bare.physics().is_empty());
+
+        // A coupled block carries several natures; filter matches by containment.
+        let mut coupled = make();
+        coupled.set_physics(vec![Physics::Mechanical, Physics::Thermal]);
+        assert_eq!(coupled.physics(), &[Physics::Mechanical, Physics::Thermal]);
+
+        // An explicit "other" nature is filterable, unlike the empty set.
+        let mut other = make();
+        other.set_physics(vec![Physics::Other]);
+
+        let mut k = Matrix::empty();
+        k.add_sub(insert(bare)).unwrap();
+        k.add_sub(insert(coupled)).unwrap();
+        k.add_sub(insert(other)).unwrap();
+        let _ = a; // silence unused in some build configs
+
+        // Containment: the coupled block appears under both its natures.
+        assert_eq!(k.filter(Physics::Mechanical).unwrap().len(), 1);
+        assert_eq!(k.filter(Physics::Thermal).unwrap().len(), 1);
+        // Only the explicitly-tagged block is reached by Other; the bare one never.
+        assert_eq!(k.filter(Physics::Other).unwrap().len(), 1);
+        // The aggregate reports every distinct nature present (bare contributes none).
+        let present = k.physics().unwrap();
+        assert!(present.contains(&Physics::Mechanical));
+        assert!(present.contains(&Physics::Thermal));
+        assert!(present.contains(&Physics::Other));
+        assert_eq!(present.len(), 3);
     }
 
     #[test]

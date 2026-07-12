@@ -312,8 +312,8 @@ impl SubModelKind for Contact {
         Ok(vec![Contribution::Literal(vec![c, ct])])
     }
 
-    fn physics(&self) -> Physics {
-        Physics::Constraint
+    fn physics(&self) -> &'static [Physics] {
+        &[Physics::Constraint]
     }
 
     fn label(&self) -> &'static str {

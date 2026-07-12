@@ -144,9 +144,10 @@ def test_mass_is_empty_in_v0():
 
 def test_submodel_physics_nature():
     _, _, _, _, _, model, *_ = _seg2_heat_model(dirichlet_left=True)
+    # physics() is a list of nature tags (one per plain physics).
     assert [model[i].physics() for i in range(len(model))] == [
-        "thermal",
-        "constraint",
+        ["thermal"],
+        ["constraint"],
     ]
 
 
@@ -155,10 +156,10 @@ def test_model_filter_by_physics():
     assert len(model) == 2
 
     thermal = model.filter("thermal")
-    assert len(thermal) == 1 and thermal[0].physics() == "thermal"
+    assert len(thermal) == 1 and thermal[0].physics() == ["thermal"]
 
     constraint = model.filter("constraint")
-    assert len(constraint) == 1 and constraint[0].physics() == "constraint"
+    assert len(constraint) == 1 and constraint[0].physics() == ["constraint"]
 
     # A nature no sub-model has yields an empty model.
     assert len(model.filter("mechanical")) == 0
@@ -179,12 +180,14 @@ def test_assembled_blocks_carry_physics_and_matrix_filter():
     K = pyrucast.stiffness(model, materials)
 
     # Every assembled block is tagged (computed heat block + literal C/Cᵀ).
-    tags = {K[i].physics() for i in range(len(K))}
-    assert "thermal" in tags and "constraint" in tags
+    assert all(K[i].physics() for i in range(len(K)))
+    # The matrix as a whole reports both natures present.
+    present = set(K.physics())
+    assert {"thermal", "constraint"} <= present
 
     kc = K.filter("constraint")
     assert len(kc) == 2  # the Dirichlet C / Cᵀ pair
-    assert all(kc[i].physics() == "constraint" for i in range(len(kc)))
+    assert all(kc[i].physics() == ["constraint"] for i in range(len(kc)))
 
     kt = K.filter("thermal")
     assert len(kt) == 1
