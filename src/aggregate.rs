@@ -86,8 +86,12 @@ pub trait Aggregate: Default {
     /// not added twice. Order is first-seen. Domain constraints (e.g.
     /// `Coords` compatibility for `Mesh`) are enforced via
     /// [`Aggregate::try_extend_from`]. After the union, [`Aggregate::finalize`]
-    /// runs — a no-op for most aggregates, but the fields override it to fuse
-    /// zones sharing the same support.
+    /// runs — a no-op for most aggregates. The two field types override it
+    /// **asymmetrically**: `NodeField` *fuses* zones sharing the same support
+    /// (`consolidate_node`), whereas `ElementField` only *checks* that no
+    /// component is carried by two zones on one support
+    /// (`check_unique_component_per_support`) and leaves component-disjoint zones
+    /// side by side — fuse them explicitly with `consolidate_element`.
     fn merge(&self, other: &Self) -> Result<Self>
     where
         Self: Sized,
@@ -455,12 +459,15 @@ macro_rules! impl_aggregate_pymethods {
                 /// may be another aggregate of the same type or a single
                 /// sub-object. Sub-objects already present (same store slot)
                 /// are not added twice; remaining handles are **shared**
-                /// (refcount bump), not deep-copied. Union does **not** fuse
-                /// zones sharing a support — they are kept side by side; the
-                /// fields' `finalize` only rejects a component carried by two
-                /// zones on one support (call `consolidate_element` to fuse).
-                /// Returns `NotImplemented` for any other type so Python can
-                /// fall back to the right operand's `__ror__`.
+                /// (refcount bump), not deep-copied. Same-support zones are
+                /// handled **asymmetrically** by the two field types:
+                /// `NodeField` *fuses* them (union of components), whereas
+                /// `ElementField` keeps component-disjoint zones side by side
+                /// and only rejects a component carried by two zones on one
+                /// support — fuse those explicitly with `consolidate`
+                /// (`consolidate_element`). Returns `NotImplemented` for any
+                /// other type so Python can fall back to the right operand's
+                /// `__ror__`.
                 fn __or__(
                     &self,
                     py: pyo3::Python<'_>,
