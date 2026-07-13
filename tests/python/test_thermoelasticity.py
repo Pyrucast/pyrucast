@@ -17,8 +17,8 @@ NX, NY, L, H = 4, 2, 4.0, 1.0
 
 
 def _clamp(nodes, var, dual):
-    imposed = pyrucast.poi1_from_nodes(nodes)
-    multiplier = pyrucast.barycenter(imposed)
+    imposed = pyrucast.mesher.poi1_from_nodes(nodes)
+    multiplier = pyrucast.mesher.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -53,13 +53,13 @@ def _uniform_temperature(c, grid, fes, value):
     t_nodal = pyrucast.NodeField(t_mesh, ["T"])
     for node in grid:
         t_nodal[0].set_value(node, "T", value)
-    return pyrucast.interp_to_gauss(t_nodal, fes)
+    return pyrucast.field.interp_to_gauss(t_nodal, fes)
 
 
 def _thermal_load(model, materials, eps_th):
     """Equivalent nodal thermal load f_th = ∫ Bᵀ D ε_th (BSIG of σ_th = D:ε_th)."""
-    sig_th = pyrucast.integrate_behavior(model, eps_th, materials)
-    return pyrucast.internal_forces(model, sig_th)
+    sig_th = pyrucast.behavior.integrate_behavior(model, eps_th, materials)
+    return pyrucast.internal_forces.internal_forces(model, sig_th)
 
 
 def _displacement(solution, c, grid):
@@ -88,18 +88,18 @@ def test_fully_constrained_bar_thermal_stress():
     model = model | _clamp(right, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 
-    materials = pyrucast.material_field(model, [("E", E), ("nu", NU), ("alpha", ALPHA)])
-    eps_th = pyrucast.thermal_strain(
+    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU), ("alpha", ALPHA)])
+    eps_th = pyrucast.field.thermal_strain(
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
 
     f_th = _thermal_load(model, materials, eps_th)
-    solution = pyrucast.solve(pyrucast.stiffness(model, materials), f_th)
+    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), f_th)
     u = _displacement(solution, c, grid)
 
     # Real stress σ = D:(ε(u) − ε_th).
-    sigma = pyrucast.integrate_behavior(
-        model, pyrucast.deformation(u, fes) - eps_th, materials
+    sigma = pyrucast.behavior.integrate_behavior(
+        model, pyrucast.field.deformation(u, fes) - eps_th, materials
     )
     expected = -E * ALPHA * DT
     for zone in range(len(sigma)):
@@ -122,13 +122,13 @@ def test_free_bar_expands_without_stress():
     model = model | _clamp(left, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 
-    materials = pyrucast.material_field(model, [("E", E), ("nu", NU), ("alpha", ALPHA)])
-    eps_th = pyrucast.thermal_strain(
+    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU), ("alpha", ALPHA)])
+    eps_th = pyrucast.field.thermal_strain(
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
 
     f_th = _thermal_load(model, materials, eps_th)
-    solution = pyrucast.solve(pyrucast.stiffness(model, materials), f_th)
+    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), f_th)
     u = _displacement(solution, c, grid)
 
     hx, hy = L / NX, H / NY
@@ -139,8 +139,8 @@ def test_free_bar_expands_without_stress():
             assert abs(u.value(grid[idx(i, j)], "u_y") - ALPHA * DT * y) < 1e-9
 
     # Free expansion ⇒ (near) zero stress.
-    sigma = pyrucast.integrate_behavior(
-        model, pyrucast.deformation(u, fes) - eps_th, materials
+    sigma = pyrucast.behavior.integrate_behavior(
+        model, pyrucast.field.deformation(u, fes) - eps_th, materials
     )
     for zone in range(len(sigma)):
         sub = sigma[zone]

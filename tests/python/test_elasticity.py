@@ -5,8 +5,8 @@ import pyrucast
 
 def _clamp(nodes, var, dual):
     """Homogeneous Dirichlet (u = 0) on `var` over `nodes`."""
-    imposed = pyrucast.poi1_from_nodes(nodes)
-    multiplier = pyrucast.barycenter(imposed)
+    imposed = pyrucast.mesher.poi1_from_nodes(nodes)
+    multiplier = pyrucast.mesher.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -39,17 +39,17 @@ def test_plane_stress_uniaxial_tension():
     model = model | _clamp(left, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 
-    materials = pyrucast.material_field(model, [("E", E), ("nu", NU)])
+    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU)])
 
     # Traction S on the right edge → consistent nodal forces (op flux).
     right_edge = pyrucast.Mesh(c, "SEG2")
     for j in range(N):
         right_edge.unit().add_cell([grid[idx(N, j)], grid[idx(N, j + 1)]])
     right_fes = pyrucast.FiniteElementSpace(right_edge)
-    rhs = pyrucast.flux(right_fes[0], S, "f_x")
+    rhs = pyrucast.assemble.flux(right_fes[0], S, "f_x")
 
-    K = pyrucast.stiffness(model, materials)
-    solution = pyrucast.solve(K, rhs)
+    K = pyrucast.assemble.stiffness(model, materials)
+    solution = pyrucast.solver.solve(K, rhs)
 
     tol = 1e-10
     for j in range(N + 1):

@@ -1,21 +1,94 @@
 """pyrucast — librairie éléments finis en Rust, exposée à Python.
 
-Package *mixed Rust/Python* : l'extension compilée est le sous-module privé
-`_pyrucast` (tous les `#[pyfunction]`/`#[pyclass]`), ré-exportée ici pour que
-`import pyrucast` donne accès à l'ensemble de l'API Rust. S'y ajoute une couche
-Python pure de plus haut niveau (orchestration thermo-mécanique pas-à-pas).
+Package *mixed Rust/Python*. L'extension compilée est le sous-module privé
+`_pyrucast` (tous les `#[pyclass]`/`#[pyfunction]`). L'API publique est
+**rangée par thème**, en miroir de l'organisation Rust :
+
+- les **conteneurs** (`containers::…`) restent des classes au top-level :
+  `pyrucast.Coords`, `pyrucast.Mesh`, `pyrucast.Model`, … ;
+- les **verbes** (`ops::<thème>::f`) vivent dans le sous-module du thème :
+  `pyrucast.mesher.surface`, `pyrucast.field.gradient`,
+  `pyrucast.assemble.stiffness`, `pyrucast.solver.solve`, … ;
+- `pyrucast.consolidate` (dispatch mesh/champ) reste au top-level, comme au
+  niveau racine de `ops` ;
+- la couche Python pure de plus haut niveau vit dans ses propres sous-modules
+  (`pyrucast.thermomechanics`).
 """
 
-from ._pyrucast import *  # noqa: F401,F403  (ré-export de l'API Rust)
+# ── Conteneurs (nouns) : classes au top-level, même nom que la struct Rust ──
+from ._pyrucast import (
+    Cell as Cell,
+    Coords as Coords,
+    Element as Element,
+    ElementField as ElementField,
+    Evolution as Evolution,
+    FiniteElementSpace as FiniteElementSpace,
+    Matrix as Matrix,
+    Mesh as Mesh,
+    Model as Model,
+    Node as Node,
+    NodeField as NodeField,
+    SubElementField as SubElementField,
+    SubEvolution as SubEvolution,
+    SubFiniteElementSpace as SubFiniteElementSpace,
+    SubMatrix as SubMatrix,
+    SubMesh as SubMesh,
+    SubModel as SubModel,
+    SubNodeField as SubNodeField,
+)
+
+# ── Dispatcher à la racine de `ops` : reste au top-level ────────────────────
 from ._pyrucast import __doc__, __version__  # noqa: F401
+from ._pyrucast import consolidate as consolidate
 
-from .thermomechanics import mechanical_step, step_by_step, thermal_step
+# ── Verbes rangés par thème (miroir de `src/ops/*`) ─────────────────────────
+from . import (
+    assemble as assemble,
+    behavior as behavior,
+    build as build,
+    export as export,
+    field as field,
+    internal_forces as internal_forces,
+    mesher as mesher,
+    solver as solver,
+    store as store,
+)
 
-# `from ._pyrucast import *` lie aussi le nom `_pyrucast` dans les globals du
-# package (import du sous-module) : on peut donc lire son `__all__`.
+# ── Couche Python pure de plus haut niveau ──────────────────────────────────
+from . import thermomechanics as thermomechanics
+
 __all__ = [
-    *getattr(_pyrucast, "__all__", []),  # noqa: F405
-    "step_by_step",
-    "thermal_step",
-    "mechanical_step",
+    # conteneurs
+    "Cell",
+    "Coords",
+    "Element",
+    "ElementField",
+    "Evolution",
+    "FiniteElementSpace",
+    "Matrix",
+    "Mesh",
+    "Model",
+    "Node",
+    "NodeField",
+    "SubElementField",
+    "SubEvolution",
+    "SubFiniteElementSpace",
+    "SubMatrix",
+    "SubMesh",
+    "SubModel",
+    "SubNodeField",
+    # dispatcher racine
+    "consolidate",
+    # sous-modules de verbes
+    "assemble",
+    "behavior",
+    "build",
+    "export",
+    "field",
+    "internal_forces",
+    "mesher",
+    "solver",
+    "store",
+    # couche haut niveau
+    "thermomechanics",
 ]

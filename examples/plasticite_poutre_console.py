@@ -66,7 +66,7 @@ def _plastic_diagnostics(state):
     Sans boucle : `p_max` par `max`, le comptage en masquant la composante `p`
     en 0/1 (bande « > 1e-12 ») puis en la sommant."""
     p_max = state.max("p")
-    masked = pyrucast.mask(state, gt=1e-12, components=["p"])
+    masked = pyrucast.field.mask(state, gt=1e-12, components=["p"])
     n_plastic = round(masked.sum("p"))
     return p_max, n_plastic
 
@@ -94,35 +94,35 @@ def main():
     pt_b = c.add_node([0.0, height])
     pt_c = c.add_node([length, 0.0])
     pt_d = c.add_node([length, height])
-    left_edge = pyrucast.line_seg2(pt_a, pt_b, ny)
-    right_edge = pyrucast.line_seg2(pt_c, pt_d, ny)
-    mesh = pyrucast.sweep_qua4(left_edge, right_edge, nx)
+    left_edge = pyrucast.mesher.line_seg2(pt_a, pt_b, ny)
+    right_edge = pyrucast.mesher.line_seg2(pt_c, pt_d, ny)
+    mesh = pyrucast.mesher.sweep_qua4(left_edge, right_edge, nx)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     # Nœud du bout (mi-hauteur) et maillage POI1 des nœuds LIBRES (X > 0) —
     # support cible pour la norme du résidu sur les seuls DDL libres.
     tip = mesh.nearest_node([length, height / 2.0])
-    coords_field = pyrucast.coordinates(mesh, ["X"])
-    free_mesh = pyrucast.select(coords_field, ge=length / nx / 2.0)
-    imposed_mesh = pyrucast.to_poi1(left_edge)
-    multiplier = pyrucast.translate(imposed_mesh, [0.0, 0.0])
+    coords_field = pyrucast.field.coordinates(mesh, ["X"])
+    free_mesh = pyrucast.field.select(coords_field, ge=length / nx / 2.0)
+    imposed_mesh = pyrucast.mesher.to_poi1(left_edge)
+    multiplier = pyrucast.mesher.translate(imposed_mesh, [0.0, 0.0])
 
     # ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
     model = pyrucast.Model.plasticity(fes, "plane_stress")
     model = model | pyrucast.Model.dirichlet("u_x", "f_x", imposed_mesh, multiplier)
     model = model | pyrucast.Model.dirichlet("u_y", "f_y", imposed_mesh, multiplier)
-    materials = pyrucast.material_field(
+    materials = pyrucast.build.material_field(
         model, [("E", young), ("nu", nu), ("sigma_y", sigma_y)]
     )
 
     # Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée une
     # fois ; `solve` met la factorisation en cache et la réutilise.
-    k = pyrucast.stiffness(model, materials)
+    k = pyrucast.assemble.stiffness(model, materials)
 
     # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     #    droite, réparti en efforts nodaux cohérents (op `flux`). ──────────────
     right_fes = pyrucast.FiniteElementSpace(right_edge)
-    load_unit = pyrucast.flux(right_fes[0], -1.0, "f_y")
+    load_unit = pyrucast.assemble.flux(right_fes[0], -1.0, "f_y")
 
     # ── Histoire de chargement : une Evolution à valeur CHAMP, tabulée en
     #    pseudo-temps t ∈ [0, 1]. Deux keyframes du champ d'effort nodal — nul en
@@ -156,7 +156,7 @@ def main():
         load_p = p_max_load * t  # cisaillement nominal au bout (pour l'affichage)
         load_scaled = load_evo.interpolate(t)
         # Norme de la charge du pas (échelle relative du résidu) : xᵀx du champ.
-        ext_norm = pyrucast.xtx(load_scaled) ** 0.5
+        ext_norm = pyrucast.field.xtx(load_scaled) ** 0.5
         tol = 1e-6 * ext_norm + 1e-12
 
         iters = 0
@@ -165,10 +165,10 @@ def main():
 
         for _ in range(max_newton):
             # ε(u) → entrée de comportement (ε | VAR0) → σ, VAR1 (COMP).
-            strain = pyrucast.deformation(u, fes)
-            out = pyrucast.integrate_behavior(model, strain | state, materials)
+            strain = pyrucast.field.deformation(u, fes)
+            out = pyrucast.behavior.integrate_behavior(model, strain | state, materials)
             # Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
-            f_int = pyrucast.internal_forces(model, out)
+            f_int = pyrucast.internal_forces.internal_forces(model, out)
 
             # Résidu r = F_ext − F_int et sa norme sur les DDL **libres**, sans
             # aucune boucle nodale — tout par les opérateurs et primitives :
@@ -177,9 +177,9 @@ def main():
             # - `residual = f_ext − f_int` via l'opérateur `-` ;
             # - la norme se lit sur les seuls nœuds libres : `residual` `restrict`é
             #   à `free_mesh` puis `xtx` (les nœuds encastrés portent la réaction).
-            f_ext = pyrucast.restrict_like(load_scaled, f_int)
+            f_ext = pyrucast.field.restrict_like(load_scaled, f_int)
             residual = f_ext - f_int
-            res_norm = pyrucast.xtx(pyrucast.restrict(residual, free_mesh)) ** 0.5
+            res_norm = pyrucast.field.xtx(pyrucast.field.restrict(residual, free_mesh)) ** 0.5
             last_out = out
 
             if res_norm <= tol:
@@ -187,8 +187,8 @@ def main():
             # δu = K⁻¹ r (K élastique, factorisation en cache). δu porte les DDL
             # primaux ET duaux (multiplicateurs) sur un support neuf : on le
             # reprojette sur le support/composantes de u, puis u ← u + δu.
-            du = pyrucast.solve(k, residual)
-            u = u + pyrucast.restrict_like(du, u)
+            du = pyrucast.solver.solve(k, residual)
+            u = u + pyrucast.field.restrict_like(du, u)
             iters += 1
 
         converged = res_norm <= tol

@@ -250,7 +250,7 @@ def test_coordinates_poi1_mesh_xyz():
     mesh.unit().add_cell([a])
     mesh.unit().add_cell([b])
 
-    f = pyrucast.coordinates(mesh)
+    f = pyrucast.field.coordinates(mesh)
     assert f.components() == ["X", "Y", "Z"]
     assert f.node_count() == 2
     assert f.value(a, "X") == 1.0
@@ -270,7 +270,7 @@ def test_coordinates_converts_non_poi1_and_deduplicates():
     tri.unit().add_cell([a, b, cc])
     tri.unit().add_cell([b, d, cc])
 
-    f = pyrucast.coordinates(tri)
+    f = pyrucast.field.coordinates(tri)
     assert f.components() == ["X", "Y"]  # 2-D ⇒ X, Y only
     assert f.node_count() == 4  # shared nodes appear once
     assert f.value(cc, "X") == 0.5
@@ -283,7 +283,7 @@ def test_coordinates_component_subset():
     mesh = pyrucast.Mesh(c, "POI1")
     mesh.unit().add_cell([a])
 
-    f = pyrucast.coordinates(mesh, ["X", "Z"])
+    f = pyrucast.field.coordinates(mesh, ["X", "Z"])
     assert f.components() == ["X", "Z"]
     assert f.value(a, "X") == 1.0
     assert f.value(a, "Z") == 3.0
@@ -295,7 +295,7 @@ def test_coordinates_rejects_axis_beyond_dimension():
     mesh = pyrucast.Mesh(c, "POI1")
     mesh.unit().add_cell([a])
     try:
-        pyrucast.coordinates(mesh, ["Z"])  # no Z in 2-D
+        pyrucast.field.coordinates(mesh, ["Z"])  # no Z in 2-D
     except RuntimeError:
         pass
     else:
@@ -311,10 +311,10 @@ def test_set_coordinates_writes_positions():
     mesh.unit().add_cell([b])
 
     # Read current positions into a field, move node a, write it all back.
-    f = pyrucast.coordinates(mesh)  # components X, Y
+    f = pyrucast.field.coordinates(mesh)  # components X, Y
     f[0][a, "X"] = 10.0
     f[0][a, "Y"] = 20.0
-    pyrucast.set_coordinates(f)  # default components ["X", "Y"]
+    pyrucast.field.set_coordinates(f)  # default components ["X", "Y"]
     assert a.coord() == [10.0, 20.0]
     assert b.coord() == [1.0, 1.0]
 
@@ -331,7 +331,7 @@ def test_displace_adds_displacement():
     d[0][a, "ux"] = 5.0
     d[0][a, "uy"] = -1.0
     d[0][b, "ux"] = 2.0
-    pyrucast.displace(d)  # default components ["ux", "uy"]
+    pyrucast.field.displace(d)  # default components ["ux", "uy"]
     assert a.coord() == [5.0, -1.0]
     assert b.coord() == [3.0, 1.0]
 
@@ -424,17 +424,17 @@ def test_unary_math_on_aggregate_and_subfield():
     f[0].set_value(nodes[1], "T", math.pi)
     f[0].set_value(nodes[2], "T", 4.0)
 
-    cosf = pyrucast.cos(f)  # aggregate → aggregate
+    cosf = pyrucast.field.cos(f)  # aggregate → aggregate
     assert abs(cosf.value(nodes[0], "T") - 1.0) < 1e-12
     assert abs(cosf.value(nodes[1], "T") + 1.0) < 1e-12
     # Original is untouched.
     assert f.value(nodes[1], "T") == math.pi
 
-    assert abs(pyrucast.sqrt(f).value(nodes[2], "T") - 2.0) < 1e-12
-    assert abs(pyrucast.exp(f).value(nodes[0], "T") - 1.0) < 1e-12
+    assert abs(pyrucast.field.sqrt(f).value(nodes[2], "T") - 2.0) < 1e-12
+    assert abs(pyrucast.field.exp(f).value(nodes[0], "T") - 1.0) < 1e-12
 
     # Works on a single zone (SubNodeField) too.
-    g = pyrucast.sin(f[0])
+    g = pyrucast.field.sin(f[0])
     assert abs(g.value(nodes[1], "T") - math.sin(math.pi)) < 1e-12
 
 
@@ -444,12 +444,12 @@ def test_unary_math_log_unguarded_is_nan():
     c, nodes, sm = _poi1_with(1)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", -1.0)
-    assert math.isnan(pyrucast.log(f).value(nodes[0], "T"))
+    assert math.isnan(pyrucast.field.log(f).value(nodes[0], "T"))
 
 
 def test_unary_math_rejects_bad_operand():
     try:
-        pyrucast.cos("nope")
+        pyrucast.field.cos("nope")
     except TypeError:
         pass
     else:
@@ -521,7 +521,7 @@ def test_merge_compatible_and_conflict():
     b[0].set_value(n1, "T", 3.0)  # same value at the shared node → compatible
     b[0].set_value(n2, "T", 9.0)
 
-    m = pyrucast.merge(a, b)
+    m = pyrucast.field.merge(a, b)
     assert m.node_count() == 3
     assert m.value(n0, "T") == 5.0
     assert m.value(n1, "T") == 3.0
@@ -530,7 +530,7 @@ def test_merge_compatible_and_conflict():
     # Conflicting value at the shared node → error.
     b[0].set_value(n1, "T", 7.0)
     try:
-        pyrucast.merge(a, b)
+        pyrucast.field.merge(a, b)
     except RuntimeError:
         pass
     else:
@@ -548,7 +548,7 @@ def test_restrict_to_mesh_subset():
     mesh.unit().add_cell([nodes[0]])
     mesh.unit().add_cell([nodes[2]])
 
-    r = pyrucast.restrict(f, mesh)
+    r = pyrucast.field.restrict(f, mesh)
     assert r.node_count() == 2
     assert r.value(nodes[0], "T") == 1.0
     assert r.value(nodes[2], "T") == 3.0
@@ -570,7 +570,7 @@ def test_restrict_like_lands_on_target_support():
     source[0].set_value(nodes[2], "u_x", 9.0)  # node dropped
     source[0].set_value(nodes[0], "lambda", 7.0)  # component dropped
 
-    r = pyrucast.restrict_like(source, target)
+    r = pyrucast.field.restrict_like(source, target)
     assert r.node_count() == 2
     assert r.value(nodes[0], "u_x") == 1.0
     assert r.value(nodes[1], "u_y") == 2.0

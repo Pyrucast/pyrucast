@@ -21,8 +21,8 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
 
     model = pyrucast.Model.heat_conduction(fes)
     if dirichlet_left:
-        imposed = pyrucast.poi1_from_nodes([a])
-        multiplier = pyrucast.barycenter(imposed)
+        imposed = pyrucast.mesher.poi1_from_nodes([a])
+        multiplier = pyrucast.mesher.barycenter(imposed)
         model = model | pyrucast.Model.dirichlet("T", "q", imposed, multiplier)
     return c, mesh, fes, sub, materials, model, a, b
 
@@ -50,7 +50,7 @@ def test_heat_conduction_single_seg2_stiffness():
     length = 2.0
     k_val = 1.5
     _, _, _, _, materials, model, a, b = _seg2_heat_model(length=length, k=k_val)
-    K = pyrucast.stiffness(model, materials)
+    K = pyrucast.assemble.stiffness(model, materials)
     assert K.n_rows() == 2
     assert K.n_cols() == 2
     expected = k_val / length
@@ -74,7 +74,7 @@ def test_two_seg2_assembly_is_tridiagonal():
     materials[0].set_uniform("k", 1.0)
 
     model = pyrucast.Model.heat_conduction(fes)
-    K = pyrucast.stiffness(model, materials)
+    K = pyrucast.assemble.stiffness(model, materials)
     assert K.n_rows() == 3
     assert K.n_cols() == 3
 
@@ -101,7 +101,7 @@ def test_dirichlet_creates_multiplier_node_and_writes_both_blocks():
     # The Coords now has 3 live nodes (2 real + 1 multiplier).
     assert c.node_count() == 3
 
-    K = pyrucast.stiffness(model, materials)
+    K = pyrucast.assemble.stiffness(model, materials)
     assert K.n_rows() == 3
     assert K.n_cols() == 3
 
@@ -134,7 +134,7 @@ def test_dirichlet_empty_constraint_mesh_rejected():
 
 def test_mass_is_empty_in_v0():
     _, _, _, _, _, model, *_ = _seg2_heat_model()
-    M = pyrucast.mass(model)
+    M = pyrucast.assemble.mass(model)
     assert M.n_rows() == 0
     assert M.n_cols() == 0
 
@@ -177,7 +177,7 @@ def test_model_filter_unknown_tag_raises():
 
 def test_assembled_blocks_carry_physics_and_matrix_filter():
     _, _, _, _, materials, model, *_ = _seg2_heat_model(dirichlet_left=True)
-    K = pyrucast.stiffness(model, materials)
+    K = pyrucast.assemble.stiffness(model, materials)
 
     # Every assembled block is tagged (computed heat block + literal C/Cᵀ).
     assert all(K[i].physics() for i in range(len(K)))
@@ -237,9 +237,9 @@ def test_fespace_errors_without_domain_submodel():
     """A model with only constraints has nothing to integrate on."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    imposed = pyrucast.poi1_from_nodes([a])
+    imposed = pyrucast.mesher.poi1_from_nodes([a])
     only_constraint = pyrucast.Model.dirichlet(
-        "T", "q", imposed, pyrucast.barycenter(imposed)
+        "T", "q", imposed, pyrucast.mesher.barycenter(imposed)
     )
     try:
         only_constraint.fespace()

@@ -19,7 +19,7 @@ def _square():
 def test_export_mesh_only(tmp_path):
     _c, mesh, _n = _square()
     out = tmp_path / "mesh.vtk"
-    pyrucast.export_vtk(mesh, str(out))
+    pyrucast.export.export_vtk(mesh, str(out))
     text = out.read_text()
     assert text.startswith("# vtk DataFile Version 3.0")
     assert "DATASET UNSTRUCTURED_GRID" in text
@@ -39,7 +39,7 @@ def test_export_node_field_point_data(tmp_path):
         field[0].set_value(n, "T", float(i))
 
     out = tmp_path / "field.vtk"
-    pyrucast.export_vtk(mesh, str(out), field=field)
+    pyrucast.export.export_vtk(mesh, str(out), field=field)
     text = out.read_text()
     assert "POINT_DATA 4" in text
     assert "SCALARS T double 1" in text
@@ -49,4 +49,4 @@ def test_export_node_field_point_data(tmp_path):
 def test_export_rejects_non_field(tmp_path):
     _c, mesh, _n = _square()
     with pytest.raises(TypeError, match="NodeField or an ElementField"):
-        pyrucast.export_vtk(mesh, str(tmp_path / "x.vtk"), field=mesh)
+        pyrucast.export.export_vtk(mesh, str(tmp_path / "x.vtk"), field=mesh)

@@ -6,8 +6,8 @@ import pyrucast
 
 
 def _clamp(node, var, dual):
-    imposed = pyrucast.poi1_from_nodes([node])
-    multiplier = pyrucast.barycenter(imposed)
+    imposed = pyrucast.mesher.poi1_from_nodes([node])
+    multiplier = pyrucast.mesher.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -29,7 +29,7 @@ def test_inclined_cantilever_perpendicular_load():
     model = pyrucast.Model.frame(fes)
     for var, dual in (("u_x", "f_x"), ("u_y", "f_y"), ("rz", "m_z")):
         model = model | _clamp(nodes[0], var, dual)
-    materials = pyrucast.material_field(
+    materials = pyrucast.build.material_field(
         model, [("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)]
     )
 
@@ -38,7 +38,7 @@ def test_inclined_cantilever_perpendicular_load():
     rhs = pyrucast.NodeField(load, ["f_x", "f_y"])
     rhs[0].set_value(nodes[-1], "f_x", P * px)
     rhs[0].set_value(nodes[-1], "f_y", P * py)
-    solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
 
     delta = P * L**3 / (3.0 * E * I) + P * L / (G * A_S)
     ux = solution.value(nodes[-1], "u_x")

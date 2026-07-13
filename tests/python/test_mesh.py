@@ -21,14 +21,14 @@ def test_poi1_from_nodes_builds_points_mesh():
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     # Node-based: the Coords is taken from the nodes themselves.
-    m = pyrucast.poi1_from_nodes([a, b])
+    m = pyrucast.mesher.poi1_from_nodes([a, b])
     assert m.element_types() == ["POI1"]
     assert m.cell_count() == 2
 
 
 def test_poi1_from_nodes_empty_raises():
     try:
-        pyrucast.poi1_from_nodes([])
+        pyrucast.mesher.poi1_from_nodes([])
     except RuntimeError:
         pass
     else:
@@ -80,15 +80,15 @@ def test_aggregate_union_sub_and_sub_union_sub():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
-    s1 = pyrucast.poi1_from_nodes([a])[0]  # a PySubMesh
-    s2 = pyrucast.poi1_from_nodes([b])[0]
+    s1 = pyrucast.mesher.poi1_from_nodes([a])[0]  # a PySubMesh
+    s2 = pyrucast.mesher.poi1_from_nodes([b])[0]
 
     # sub + sub → Mesh
     m = s1 | s2
     assert len(m) == 2
 
     # mesh + sub → Mesh
-    s3 = pyrucast.poi1_from_nodes([a])[0]
+    s3 = pyrucast.mesher.poi1_from_nodes([a])[0]
     m2 = m | s3
     assert len(m2) == 3
 
@@ -281,7 +281,7 @@ def test_fill_surface_square_gives_two_triangles():
     for i in range(4):
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
-    tri = pyrucast.fill_surface(contour, "TRI3")
+    tri = pyrucast.mesher.fill_surface(contour, "TRI3")
     assert tri.element_types() == ["TRI3"]
     assert tri.cell_count() == 2  # n - 2
 
@@ -298,7 +298,7 @@ def test_fill_surface_unknown_element_type():
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 3]])
 
     try:
-        pyrucast.fill_surface(contour, "BOGUS")
+        pyrucast.mesher.fill_surface(contour, "BOGUS")
     except ValueError:
         pass
     else:
@@ -317,7 +317,7 @@ def test_fill_surface_rejects_unsupported_target_element():
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 3]])
 
     try:
-        pyrucast.fill_surface(contour, "QUA4")
+        pyrucast.mesher.fill_surface(contour, "QUA4")
     except RuntimeError:
         pass
     else:
@@ -342,7 +342,7 @@ def test_fill_surface_with_one_hole_2d():
     combined = outer | hole
     assert len(combined) == 2
 
-    tri = pyrucast.fill_surface(combined, "TRI3")
+    tri = pyrucast.mesher.fill_surface(combined, "TRI3")
     n_cells = tri.cell_count()
 
     # Triangulated area should equal outer 16 minus hole 4 = 12.
@@ -363,7 +363,7 @@ def test_fill_surface_outer_loop_autodetected():
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     combined = hole | outer
-    tri = pyrucast.fill_surface(combined, "TRI3")
+    tri = pyrucast.mesher.fill_surface(combined, "TRI3")
     n_cells = tri.cell_count()
 
     total = 0.0
@@ -382,7 +382,7 @@ def test_fill_surface_refined_creates_more_triangles():
     # triangles than the un-refined 2.
     c = pyrucast.Coords(2)
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
-    tri = pyrucast.fill_surface(outer, "TRI3", max_edge_length=1.5)
+    tri = pyrucast.mesher.fill_surface(outer, "TRI3", max_edge_length=1.5)
     assert tri.cell_count() > 2
 
     # Conservation of area: 4 × 4 = 16.
@@ -403,7 +403,7 @@ def test_fill_surface_refined_with_hole():
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
     hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
     combined = outer | hole
-    tri = pyrucast.fill_surface(combined, "TRI3", max_edge_length=1.0)
+    tri = pyrucast.mesher.fill_surface(combined, "TRI3", max_edge_length=1.0)
     total = 0.0
     for ci in range(tri.cell_count()):
         p0 = tri.node(0, ci, 0).coord()
@@ -420,7 +420,7 @@ def test_fill_surface_refined_angle_criterion():
     # somewhere; after refinement no triangle should be below ~19°.
     c = pyrucast.Coords(2)
     rect, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 1.0), (0.0, 1.0)])
-    tri = pyrucast.fill_surface(rect, "TRI3", min_angle_deg=20.0)
+    tri = pyrucast.mesher.fill_surface(rect, "TRI3", min_angle_deg=20.0)
     # Compute min angle across all triangles.
     import math
 
@@ -457,7 +457,7 @@ def test_fill_surface_3d_tilted_square():
     for i in range(4):
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
-    tri = pyrucast.fill_surface(contour, "TRI3")
+    tri = pyrucast.mesher.fill_surface(contour, "TRI3")
     assert tri.cell_count() == 2  # n - 2
 
 
@@ -476,7 +476,7 @@ def test_fill_surface_3d_rejects_non_planar_contour():
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
     try:
-        pyrucast.fill_surface(contour, "TRI3")
+        pyrucast.mesher.fill_surface(contour, "TRI3")
     except RuntimeError as e:
         assert "not planar" in str(e)
     else:
@@ -492,7 +492,7 @@ def test_fill_surface_rejects_non_seg2_contour():
     bogus.unit().add_cell([a, b, cc])
 
     try:
-        pyrucast.fill_surface(bogus, "TRI3")
+        pyrucast.mesher.fill_surface(bogus, "TRI3")
     except RuntimeError:
         pass
     else:
@@ -511,7 +511,7 @@ def test_to_poi1_converts_each_submesh_to_node_list():
     tri.unit().add_cell([a, b, cc])
     tri.unit().add_cell([b, d, cc])
 
-    poi = pyrucast.to_poi1(tri)
+    poi = pyrucast.mesher.to_poi1(tri)
     assert len(poi) == 1
     assert poi.element_types() == ["POI1"]
     assert poi.cell_count() == 4  # 6 connectivity entries, deduplicated
@@ -531,7 +531,7 @@ def test_to_poi1_preserves_submesh_count():
     tri.unit().add_cell([a, b, cc])
     mesh = pts | tri
 
-    poi = pyrucast.to_poi1(mesh)
+    poi = pyrucast.mesher.to_poi1(mesh)
     assert len(poi) == 2
     assert poi.element_types() == ["POI1", "POI1"]
     assert poi.cell_counts() == [1, 3]
@@ -551,7 +551,7 @@ def _mesh_with_n_zones(n):
     """A Mesh of `n` single-node POI1 zones sharing the same Coords."""
     c = pyrucast.Coords(2)
     subs = [
-        pyrucast.poi1_from_nodes([c.add_node([float(i), 0.0])])[0] for i in range(n)
+        pyrucast.mesher.poi1_from_nodes([c.add_node([float(i), 0.0])])[0] for i in range(n)
     ]
     mesh = subs[0]
     for s in subs[1:]:

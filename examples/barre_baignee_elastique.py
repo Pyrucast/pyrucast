@@ -41,8 +41,8 @@ def main():
     # Appuis de symétrie sur les trois faces passant par l'origine.
     def clamp(ids, var, dual):
         picked = [nodes[i] for i in ids]
-        imposed = pyrucast.poi1_from_nodes(picked)
-        mult = pyrucast.barycenter(imposed)
+        imposed = pyrucast.mesher.poi1_from_nodes(picked)
+        mult = pyrucast.mesher.barycenter(imposed)
         return pyrucast.Model.dirichlet(var, dual, imposed, mult)
 
     model = model | clamp([0, 3, 4, 7], "u_x", "f_x")  # face x = 0
@@ -52,7 +52,7 @@ def main():
     # Nœud immergé au cœur du cube, lié en u_x/u_y/u_z (liaison rigide, g = 0).
     pc = [0.4, 0.7, 0.2]
     p = c.add_node(pc)
-    bar = pyrucast.poi1_from_nodes([p])
+    bar = pyrucast.mesher.poi1_from_nodes([p])
     embedded = pyrucast.Model.embedded(
         bar,
         host,
@@ -60,15 +60,15 @@ def main():
     )
     model = model | embedded
 
-    materials = pyrucast.material_field(model, [("E", E), ("nu", NU)])
+    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU)])
 
     # Traction S sur la face x = 1 (QUA4 [1, 2, 6, 5]) → charges nodales cohérentes.
     face = pyrucast.Mesh(c, "QUA4")
     face.unit().add_cell([nodes[1], nodes[2], nodes[6], nodes[5]])
     face_fes = pyrucast.FiniteElementSpace(face)
-    rhs = pyrucast.flux(face_fes[0], S, "f_x")
+    rhs = pyrucast.assemble.flux(face_fes[0], S, "f_x")
 
-    solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
 
     ux = solution.value(p, "u_x")
     uy = solution.value(p, "u_y")

@@ -36,14 +36,14 @@ def _line(n_elems):
 
 def main() -> None:
     nodes, seg, fes = _line(N)
-    pts = pyrucast.poi1_from_nodes(nodes)  # support nodal (POI1) des mêmes nœuds
+    pts = pyrucast.mesher.poi1_from_nodes(nodes)  # support nodal (POI1) des mêmes nœuds
 
     # ── 1. Intégrale d'un champ *nodal* (via les fonctions de forme N_i) ─────
     # f ≡ 1  ⇒  ∫₀¹ 1 dx = longueur = 1.
     unite = pyrucast.NodeField(pts, ["f"])
     for n in nodes:
         unite[0].set_value(n, "f", 1.0)
-    mesure = pyrucast.integral(unite, "f", fespace=fes)
+    mesure = pyrucast.field.integral(unite, "f", fespace=fes)
     print(f"∫ 1 dx          = {mesure:.6f}   (attendu 1.0 = longueur)")
     assert abs(mesure - 1.0) < 1e-12
 
@@ -51,7 +51,7 @@ def main() -> None:
     rampe = pyrucast.NodeField(pts, ["f"])
     for i, n in enumerate(nodes):
         rampe[0].set_value(n, "f", i / N)
-    aire = pyrucast.integral(rampe, "f", fespace=fes)
+    aire = pyrucast.field.integral(rampe, "f", fespace=fes)
     print(f"∫ x dx          = {aire:.6f}   (attendu 0.5)")
     assert abs(aire - 0.5) < 1e-12
 
@@ -59,7 +59,7 @@ def main() -> None:
     # Densité constante c ≡ 3 ⇒ ∫₀¹ 3 dx = 3. Pas de fespace : quadrature directe.
     densite = pyrucast.ElementField(fes, ["c"])
     densite[0].set_uniform("c", 3.0)
-    total = pyrucast.integral(densite, "c")
+    total = pyrucast.field.integral(densite, "c")
     print(f"∫ 3 dx (Gauss)  = {total:.6f}   (attendu 3.0)")
     assert abs(total - 3.0) < 1e-12
 
@@ -73,7 +73,7 @@ def main() -> None:
     assert rx == 2.0 * (N + 1) and ry == -1.0 * (N + 1)
 
     # Norme au carré (p.ex. critère de convergence sur un résidu).
-    norme2 = pyrucast.xtx(forces)
+    norme2 = pyrucast.field.xtx(forces)
     print(f"‖forces‖²        = {norme2:.1f}")
     assert norme2 == (N + 1) * (2.0**2 + 1.0**2)
 

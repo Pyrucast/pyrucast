@@ -36,13 +36,13 @@ def _bounded_bar(q, bound, sense):
     """
     c, nodes, fes, materials = _heat_bar()
 
-    imposed0 = pyrucast.poi1_from_nodes([nodes[0]])
-    mult0 = pyrucast.barycenter(imposed0)
+    imposed0 = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult0 = pyrucast.mesher.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
     dir_mult = mult0.node(0, 0, 0)
 
-    imposed1 = pyrucast.poi1_from_nodes([nodes[-1]])
-    mult1 = pyrucast.barycenter(imposed1)
+    imposed1 = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
+    mult1 = pyrucast.mesher.barycenter(imposed1)
     unilateral = pyrucast.Model.dirichlet("T", "q", imposed1, mult1, sense=sense)
     uni_mult = mult1.node(0, 0, 0)
 
@@ -78,24 +78,24 @@ def _check(nodes, solution, uni_mult, slope, lam):
 def test_unilateral_bound_statuses(q, bound, sense, slope, lam):
     """The four sense × status cases of a bound `T(1) ⋈ a` under a flux `q`."""
     nodes, model, materials, rhs, uni_mult = _bounded_bar(q, bound, sense)
-    k = pyrucast.stiffness(model, materials)
-    solution = pyrucast.solve_unilateral(model, k, rhs)
+    k = pyrucast.assemble.stiffness(model, materials)
+    solution = pyrucast.solver.solve_unilateral(model, k, rhs)
     _check(nodes, solution, uni_mult, slope, lam)
 
 
 def test_warm_start_survives_a_status_flip():
     """Re-solving on the same matrix warm-starts; a load flip re-iterates."""
     nodes, model, materials, rhs, uni_mult = _bounded_bar(1.0, 2.0, ">=")
-    k = pyrucast.stiffness(model, materials)
-    first = pyrucast.solve_unilateral(model, k, rhs)
+    k = pyrucast.assemble.stiffness(model, materials)
+    first = pyrucast.solver.solve_unilateral(model, k, rhs)
     _check(nodes, first, uni_mult, 2.0, -1.0)
     # Identical re-solve: pure warm start (cached status + factorization).
-    again = pyrucast.solve_unilateral(model, k, rhs)
+    again = pyrucast.solver.solve_unilateral(model, k, rhs)
     _check(nodes, again, uni_mult, 2.0, -1.0)
     # Stronger push on the same matrix: the relation must release from the
     # warm-started (active) status.
     rhs[0].set_value(nodes[-1], "q", 5.0)
-    released = pyrucast.solve_unilateral(model, k, rhs)
+    released = pyrucast.solver.solve_unilateral(model, k, rhs)
     _check(nodes, released, uni_mult, 5.0, 0.0)
 
 
@@ -104,16 +104,16 @@ def test_unilateral_mpc_difference_relation():
     for g, slope in [(1.0, 1.0), (-1.0, 0.0)]:
         c, nodes, fes, materials = _heat_bar()
 
-        imposed0 = pyrucast.poi1_from_nodes([nodes[0]])
-        mult0 = pyrucast.barycenter(imposed0)
+        imposed0 = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+        mult0 = pyrucast.mesher.barycenter(imposed0)
         dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
         dir_mult = mult0.node(0, 0, 0)
 
         base = pyrucast.Model.heat_conduction(fes)
         dual = base.dual_of("T")
-        mesh_last = pyrucast.poi1_from_nodes([nodes[-1]])
-        mesh_first = pyrucast.poi1_from_nodes([nodes[0]])
-        mult_mpc = pyrucast.barycenter(mesh_last)
+        mesh_last = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
+        mesh_first = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+        mult_mpc = pyrucast.mesher.barycenter(mesh_last)
         mpc = pyrucast.Model.mpc(
             [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
             mult_mpc,
@@ -129,8 +129,8 @@ def test_unilateral_mpc_difference_relation():
         rhs[0].set_value(dir_mult, "imposed_T", 0.0)
         rhs[0].set_value(mpc_mult, "mpc_rhs", g)
 
-        solution = pyrucast.solve_unilateral(
-            model, pyrucast.stiffness(model, materials), rhs
+        solution = pyrucast.solver.solve_unilateral(
+            model, pyrucast.assemble.stiffness(model, materials), rhs
         )
         for i, node in enumerate(nodes):
             assert abs(solution.value(node, "T") - slope * i * H) < TOL
@@ -144,9 +144,9 @@ def test_unilateral_mpc_difference_relation():
 def test_all_equality_model_falls_back_to_plain_solve():
     """No inequality: `solve_unilateral` agrees with the plain `solve`."""
     nodes, model, materials, rhs, _ = _bounded_bar(3.0, 0.5, "=")
-    k = pyrucast.stiffness(model, materials)
-    a = pyrucast.solve_unilateral(model, k, rhs)
-    b = pyrucast.solve(k, rhs)
+    k = pyrucast.assemble.stiffness(model, materials)
+    a = pyrucast.solver.solve_unilateral(model, k, rhs)
+    b = pyrucast.solver.solve(k, rhs)
     for node in nodes:
         assert abs(a.value(node, "T") - b.value(node, "T")) < TOL
 
@@ -154,15 +154,15 @@ def test_all_equality_model_falls_back_to_plain_solve():
 def test_eliminate_rejects_unilateral_relations():
     """`solve_eliminate` must reject a unilateral model with a clear error."""
     _, model, materials, rhs, _ = _bounded_bar(1.0, 2.0, ">=")
-    k = pyrucast.stiffness(model, materials)
+    k = pyrucast.assemble.stiffness(model, materials)
     with pytest.raises(Exception, match="solve_unilateral"):
-        pyrucast.solve_eliminate(model, k, rhs)
+        pyrucast.solver.solve_eliminate(model, k, rhs)
 
 
 def test_unknown_sense_rejected():
     """An unknown `sense` string raises a clear error at model build."""
     _, nodes, _, _ = _heat_bar()
-    imposed = pyrucast.poi1_from_nodes([nodes[0]])
-    mult = pyrucast.barycenter(imposed)
+    imposed = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult = pyrucast.mesher.barycenter(imposed)
     with pytest.raises(Exception, match="sense"):
         pyrucast.Model.dirichlet("T", "q", imposed, mult, sense="~")

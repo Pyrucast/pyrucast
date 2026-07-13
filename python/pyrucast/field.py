@@ -1,0 +1,71 @@
+"""Opérateurs de champ sur maillage — miroir de ``ops::field`` (Rust).
+
+Champ-sur-maillage : lecture/écriture de coordonnées, restrictions et
+sélections, gradient/divergence/déformation, interpolation aux points de
+Gauss, dilatation thermique, intégrales et produits, plus les fonctions
+scalaires point-à-point (abs, sqrt, exp, trigonométrie…).
+"""
+
+from ._pyrucast import (
+    abs as abs,
+    beam_deformation as beam_deformation,
+    coordinates as coordinates,
+    cos as cos,
+    cosh as cosh,
+    deformation as deformation,
+    displace as displace,
+    divergence as divergence,
+    exp as exp,
+    gradient as gradient,
+    integral as integral,
+    interp_to_gauss as interp_to_gauss,
+    log as log,
+    log10 as log10,
+    mask as mask,
+    merge as merge,
+    psca as psca,
+    restrict as restrict,
+    restrict_like as restrict_like,
+    select as select,
+    set_coordinates as set_coordinates,
+    sin as sin,
+    sinh as sinh,
+    sqrt as sqrt,
+    tan as tan,
+    tanh as tanh,
+    thermal_strain as thermal_strain,
+    xtx as xtx,
+    xty as xty,
+)
+
+__all__ = [
+    "abs",
+    "beam_deformation",
+    "coordinates",
+    "cos",
+    "cosh",
+    "deformation",
+    "displace",
+    "divergence",
+    "exp",
+    "gradient",
+    "integral",
+    "interp_to_gauss",
+    "log",
+    "log10",
+    "mask",
+    "merge",
+    "psca",
+    "restrict",
+    "restrict_like",
+    "select",
+    "set_coordinates",
+    "sin",
+    "sinh",
+    "sqrt",
+    "tan",
+    "tanh",
+    "thermal_strain",
+    "xtx",
+    "xty",
+]

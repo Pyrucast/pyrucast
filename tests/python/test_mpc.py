@@ -40,16 +40,16 @@ def test_mpc_difference_relation_recovers_linear_solution():
     """`1·T(node4) − 1·T(node0) = 1` with Dirichlet `T(node0) = 0` gives u(x)=x."""
     c, nodes, fes, materials = _heat_bar()
 
-    imposed0 = pyrucast.poi1_from_nodes([nodes[0]])
-    mult0 = pyrucast.barycenter(imposed0)
+    imposed0 = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult0 = pyrucast.mesher.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
     dir_mult = mult0.node(0, 0, 0)
 
     base = pyrucast.Model.heat_conduction(fes)
     dual = base.dual_of("T")  # "q"
-    mesh_last = pyrucast.poi1_from_nodes([nodes[-1]])
-    mesh_first = pyrucast.poi1_from_nodes([nodes[0]])
-    mult_mpc = pyrucast.barycenter(mesh_last)
+    mesh_last = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
+    mesh_first = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult_mpc = pyrucast.mesher.barycenter(mesh_last)
     mpc = pyrucast.Model.mpc(
         [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
         mult_mpc,
@@ -65,7 +65,7 @@ def test_mpc_difference_relation_recovers_linear_solution():
     rhs[0].set_value(dir_mult, "imposed_T", 0.0)
     rhs[0].set_value(mpc_mult, "mpc_rhs", 1.0)
 
-    solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
 
     for i, node in enumerate(nodes):
         assert abs(solution.value(node, "T") - i * H) < TOL
@@ -79,9 +79,9 @@ def test_single_term_mpc_matches_dirichlet():
 
     def solve_dirichlet():
         c, nodes, fes, materials = _heat_bar()
-        left = pyrucast.poi1_from_nodes([nodes[0]])
-        right = pyrucast.poi1_from_nodes([nodes[-1]])
-        ml, mr = pyrucast.barycenter(left), pyrucast.barycenter(right)
+        left = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+        right = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
+        ml, mr = pyrucast.mesher.barycenter(left), pyrucast.mesher.barycenter(right)
         model = (
             pyrucast.Model.heat_conduction(fes)
             | pyrucast.Model.dirichlet("T", "q", left, ml)
@@ -93,14 +93,14 @@ def test_single_term_mpc_matches_dirichlet():
         rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T"])
         rhs[0].set_value(ml.node(0, 0, 0), "imposed_T", 0.0)
         rhs[0].set_value(mr.node(0, 0, 0), "imposed_T", 1.0)
-        return nodes, pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+        return nodes, pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
 
     def solve_mpc():
         c, nodes, fes, materials = _heat_bar()
-        left = pyrucast.poi1_from_nodes([nodes[0]])
-        ml = pyrucast.barycenter(left)
-        right = pyrucast.poi1_from_nodes([nodes[-1]])
-        mm = pyrucast.barycenter(right)
+        left = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+        ml = pyrucast.mesher.barycenter(left)
+        right = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
+        mm = pyrucast.mesher.barycenter(right)
         model = (
             pyrucast.Model.heat_conduction(fes)
             | pyrucast.Model.dirichlet("T", "q", left, ml)
@@ -112,7 +112,7 @@ def test_single_term_mpc_matches_dirichlet():
         rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T", "mpc_rhs"])
         rhs[0].set_value(ml.node(0, 0, 0), "imposed_T", 0.0)
         rhs[0].set_value(mm.node(0, 0, 0), "mpc_rhs", 1.0)
-        return nodes, pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+        return nodes, pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
 
     nodes, dir_sol = solve_dirichlet()
     _, mpc_sol = solve_mpc()
@@ -126,15 +126,15 @@ def test_constraint_rhs_helper_builds_second_member():
     solve recovers u(x)=x."""
     _, nodes, fes, materials = _heat_bar()
 
-    imposed0 = pyrucast.poi1_from_nodes([nodes[0]])
-    mult0 = pyrucast.barycenter(imposed0)
+    imposed0 = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult0 = pyrucast.mesher.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
 
     base = pyrucast.Model.heat_conduction(fes)
     dual = base.dual_of("T")
-    mesh_last = pyrucast.poi1_from_nodes([nodes[-1]])
-    mesh_first = pyrucast.poi1_from_nodes([nodes[0]])
-    mult_mpc = pyrucast.barycenter(mesh_last)
+    mesh_last = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
+    mesh_first = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult_mpc = pyrucast.mesher.barycenter(mesh_last)
     mpc = pyrucast.Model.mpc(
         [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
         mult_mpc,
@@ -150,7 +150,7 @@ def test_constraint_rhs_helper_builds_second_member():
     assert abs(rhs.value(mult_mpc.node(0, 0, 0), "mpc_rhs") - 1.0) < TOL
     assert abs(rhs.value(mult0.node(0, 0, 0), "imposed_T") - 0.0) < TOL
 
-    solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
     for i, node in enumerate(nodes):
         assert abs(solution.value(node, "T") - i * H) < TOL
 
@@ -161,9 +161,9 @@ def test_constraint_rhs_by_index_matches_node_keying():
     _, nodes, fes, _ = _heat_bar()
     base = pyrucast.Model.heat_conduction(fes)
     dual = base.dual_of("T")
-    mesh_last = pyrucast.poi1_from_nodes([nodes[-1]])
-    mesh_first = pyrucast.poi1_from_nodes([nodes[0]])
-    mult_mpc = pyrucast.barycenter(mesh_last)
+    mesh_last = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
+    mesh_first = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult_mpc = pyrucast.mesher.barycenter(mesh_last)
     mpc = pyrucast.Model.mpc(
         [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
         mult_mpc,
@@ -186,8 +186,8 @@ def test_constraint_rhs_rejects_bad_input():
     with pytest.raises(Exception):
         base.constraint_rhs([(nodes[0], 0.0)])
 
-    imposed0 = pyrucast.poi1_from_nodes([nodes[0]])
-    mult0 = pyrucast.barycenter(imposed0)
+    imposed0 = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult0 = pyrucast.mesher.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
     with pytest.raises(Exception):
         dirichlet.constraint_rhs([(nodes[-1], 0.0)])
@@ -199,14 +199,14 @@ def test_mpc_elimination_matches_lagrange():
     (disjoint slaves). Both fields coincide and the relation holds exactly."""
     c, nodes, fes, materials = _heat_bar()
 
-    imposed0 = pyrucast.poi1_from_nodes([nodes[0]])
-    mult0 = pyrucast.barycenter(imposed0)
+    imposed0 = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult0 = pyrucast.mesher.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
     dir_mult = mult0.node(0, 0, 0)
 
-    mesh4 = pyrucast.poi1_from_nodes([nodes[4]])
-    mesh2 = pyrucast.poi1_from_nodes([nodes[2]])
-    mult_mpc = pyrucast.barycenter(mesh4)
+    mesh4 = pyrucast.mesher.poi1_from_nodes([nodes[4]])
+    mesh2 = pyrucast.mesher.poi1_from_nodes([nodes[2]])
+    mult_mpc = pyrucast.mesher.barycenter(mesh4)
     mpc = pyrucast.Model.mpc(
         [(mesh4, "T", "q", 2.0), (mesh2, "T", "q", -1.0)],
         mult_mpc,
@@ -222,9 +222,9 @@ def test_mpc_elimination_matches_lagrange():
     rhs[0].set_value(dir_mult, "imposed_T", 0.0)
     rhs[0].set_value(mpc_mult, "mpc_rhs", 1.5)
 
-    k = pyrucast.stiffness(model, materials)
-    lagrange = pyrucast.solve(k, rhs)
-    elim = pyrucast.solve_eliminate(model, k, rhs)
+    k = pyrucast.assemble.stiffness(model, materials)
+    lagrange = pyrucast.solver.solve(k, rhs)
+    elim = pyrucast.solver.solve_eliminate(model, k, rhs)
 
     for node in nodes:
         assert abs(lagrange.value(node, "T") - elim.value(node, "T")) < TOL

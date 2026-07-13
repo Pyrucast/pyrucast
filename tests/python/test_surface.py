@@ -1,4 +1,4 @@
-"""Python tests for the frontal surface mesher `pyrucast.surface`."""
+"""Python tests for the frontal surface mesher `pyrucast.mesher.surface`."""
 
 import math
 
@@ -34,7 +34,7 @@ def _total_area(tri):
 def test_surface_square_two_triangles():
     c = pyrucast.Coords(2)
     contour = _contour(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
-    tri = pyrucast.surface(contour, "TRI3", 10.0)
+    tri = pyrucast.mesher.surface(contour, "TRI3", 10.0)
     assert tri.element_types() == ["TRI3"]
     assert tri.cell_count() == 2
     assert abs(_total_area(tri) - 1.0) < 1e-12
@@ -48,7 +48,7 @@ def test_surface_circle_fills_interior_and_conserves_area():
         for i in range(nseg)
     ]
     contour = _contour(c, pts)
-    tri = pyrucast.surface(contour, "TRI3", 0.8)
+    tri = pyrucast.mesher.surface(contour, "TRI3", 0.8)
     assert tri.cell_count() > nseg  # interior nodes were created
     poly_area = 0.5 * nseg * r * r * math.sin(2 * math.pi / nseg)
     assert abs(_total_area(tri) - poly_area) < 1e-6
@@ -57,14 +57,14 @@ def test_surface_circle_fills_interior_and_conserves_area():
 def test_surface_default_size():
     c = pyrucast.Coords(2)
     contour = _contour(c, [(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
-    tri = pyrucast.surface(contour, "TRI3")
+    tri = pyrucast.mesher.surface(contour, "TRI3")
     assert abs(_total_area(tri) - 4.0) < 1e-12
 
 
 def test_surface_qua4_square_is_one_quad():
     c = pyrucast.Coords(2)
     contour = _contour(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
-    q = pyrucast.surface(contour, "QUA4", 10.0)
+    q = pyrucast.mesher.surface(contour, "QUA4", 10.0)
     assert q.element_types() == ["QUA4"]
     assert q.cell_count() == 1
 
@@ -77,7 +77,7 @@ def test_surface_qua4_circle_quad_dominant():
         for i in range(nseg)
     ]
     contour = _contour(c, pts)
-    mesh = pyrucast.surface(contour, "QUA4", 0.8)
+    mesh = pyrucast.mesher.surface(contour, "QUA4", 0.8)
     types = mesh.element_types()
     assert "QUA4" in types
 
@@ -91,7 +91,7 @@ def test_surface_3d_square_in_plane():
     n = len(nodes)
     for i in range(n):
         sm.add_cell([nodes[i], nodes[(i + 1) % n]])
-    tri = pyrucast.surface(mesh, "TRI3", 1.0)
+    tri = pyrucast.mesher.surface(mesh, "TRI3", 1.0)
     # Every output node stays on the plane z = 2.
     for ci in range(tri.cell_count()):
         for ni in range(3):
@@ -102,7 +102,7 @@ def test_surface_rejects_unsupported_element():
     c = pyrucast.Coords(2)
     contour = _contour(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
     try:
-        pyrucast.surface(contour, "TET4")
+        pyrucast.mesher.surface(contour, "TET4")
     except RuntimeError:
         pass
     else:

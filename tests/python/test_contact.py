@@ -40,8 +40,8 @@ def _block(c, mesh, y0):
 
 
 def _clamp(nodes, var, dual):
-    imposed = pyrucast.poi1_from_nodes(nodes)
-    mult = pyrucast.barycenter(imposed)
+    imposed = pyrucast.mesher.poi1_from_nodes(nodes)
+    mult = pyrucast.mesher.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, mult)
 
 
@@ -59,7 +59,7 @@ def _two_blocks():
     for i in reversed(range(N)):
         master.unit().add_cell([bottom[idx(i + 1, N)], bottom[idx(i, N)]])
     # Slave: bottom edge nodes of the top block.
-    slave = pyrucast.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
+    slave = pyrucast.mesher.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
     contact = pyrucast.Model.contact(
         slave, master, [("u_x", "f_x"), ("u_y", "f_y")]
     )
@@ -69,7 +69,7 @@ def _two_blocks():
     model = model | _clamp([bottom[idx(i, 0)] for i in range(N + 1)], "u_y", "f_y")
     model = model | contact
 
-    materials = pyrucast.material_field(model, [("E", E), ("nu", 0.0)])
+    materials = pyrucast.build.material_field(model, [("E", E), ("nu", 0.0)])
     return c, bottom, top, model, contact, materials
 
 
@@ -82,11 +82,11 @@ def test_patch_test_uniform_pressure_through_contact():
     for i in range(N):
         top_edge.unit().add_cell([top[idx(i, N)], top[idx(i + 1, N)]])
     edge_fes = pyrucast.FiniteElementSpace(top_edge)
-    traction = pyrucast.flux(edge_fes[0], -S, "f_y")
+    traction = pyrucast.assemble.flux(edge_fes[0], -S, "f_y")
     rhs = traction | model.contact_gaps()
 
-    k = pyrucast.stiffness(model, materials)
-    solution = pyrucast.solve_unilateral(model, k, rhs)
+    k = pyrucast.assemble.stiffness(model, materials)
+    solution = pyrucast.solver.solve_unilateral(model, k, rhs)
 
     for j in range(N + 1):
         for i in range(N + 1):
@@ -114,13 +114,13 @@ def test_separation_releases_every_pair():
     top_edge_nodes = [top[idx(i, N)] for i in range(N + 1)]
     lift_model = _clamp(top_edge_nodes, "u_y", "f_y")
     model = model | lift_model
-    materials = pyrucast.material_field(model, [("E", E), ("nu", 0.0)])
+    materials = pyrucast.build.material_field(model, [("E", E), ("nu", 0.0)])
 
     rhs = lift_model.constraint_rhs([(n, lift) for n in top_edge_nodes])
     rhs = rhs | model.contact_gaps()
 
-    k = pyrucast.stiffness(model, materials)
-    solution = pyrucast.solve_unilateral(model, k, rhs)
+    k = pyrucast.assemble.stiffness(model, materials)
+    solution = pyrucast.solver.solve_unilateral(model, k, rhs)
 
     for j in range(N + 1):
         for i in range(N + 1):
@@ -151,6 +151,6 @@ def test_components_must_match_dimension():
     s = c.add_node([0.5, 0.5])
     master = pyrucast.Mesh(c, "SEG2")
     master.unit().add_cell([a, b])
-    slave = pyrucast.poi1_from_nodes([s])
+    slave = pyrucast.mesher.poi1_from_nodes([s])
     with pytest.raises(Exception, match="component"):
         pyrucast.Model.contact(slave, master, [("u_y", "f_y")])

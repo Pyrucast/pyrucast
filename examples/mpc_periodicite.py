@@ -44,14 +44,14 @@ def main():
     dual = base.dual_of("T")  # "q"
 
     # Dirichlet T(0) = 0.
-    imposed0 = pyrucast.poi1_from_nodes([nodes[0]])
-    mult0 = pyrucast.barycenter(imposed0)
+    imposed0 = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult0 = pyrucast.mesher.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", dual, imposed0, mult0)
 
     # MPC 1·T(node_last) − 1·T(node_0) = 1.
-    mesh_last = pyrucast.poi1_from_nodes([nodes[-1]])
-    mesh_first = pyrucast.poi1_from_nodes([nodes[0]])
-    mult_mpc = pyrucast.barycenter(mesh_last)
+    mesh_last = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
+    mesh_first = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    mult_mpc = pyrucast.mesher.barycenter(mesh_last)
     mpc = pyrucast.Model.mpc(
         [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
         mult_mpc,
@@ -68,7 +68,7 @@ def main():
         [(nodes[-1], 1.0)]
     )
 
-    solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
 
     print("x      T(x)   attendu")
     for i, node in enumerate(nodes):

@@ -1,6 +1,6 @@
 """Thermo-mécanique **pas-à-pas** au-dessus de la couche Python haut niveau.
 
-Démo bout-en-bout de :func:`pyrucast.step_by_step` : une plaque plane est chauffée
+Démo bout-en-bout de :func:`pyrucast.thermomechanics.step_by_step` : une plaque plane est chauffée
 progressivement (histoire de température) et se dilate librement (appuis simples).
 À chaque instant, ``step_by_step`` résout la thermique (stationnaire) puis la
 mécanique non linéaire (Newton modifié + accélération d'Anderson), le couplage
@@ -67,15 +67,15 @@ def main():
     bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
 
     def clamp(nodes, var, dual):
-        imposed = pc.poi1_from_nodes(nodes)
-        return pc.Model.dirichlet(var, dual, imposed, pc.barycenter(imposed))
+        imposed = pc.mesher.poi1_from_nodes(nodes)
+        return pc.Model.dirichlet(var, dual, imposed, pc.mesher.barycenter(imposed))
 
     # ── Modèle : conduction + élasticité (contraintes planes) + Dirichlet ────
     # Thermique : température imposée sur les bords gauche/droit (un
     # multiplicateur par nœud ⇒ champ uniforme). Mécanique : appuis simples
     # (u_x=0 à gauche, u_y=0 en bas) ⇒ dilatation libre, sans contrainte.
-    th_imposed = pc.poi1_from_nodes(left + right)
-    th_mult = pc.translate(th_imposed, [0.0, 0.0])
+    th_imposed = pc.mesher.poi1_from_nodes(left + right)
+    th_mult = pc.mesher.translate(th_imposed, [0.0, 0.0])
     model = (
         pc.Model.heat_conduction(fes)
         | pc.Model.elasticity(fes, "plane_stress")
@@ -83,7 +83,7 @@ def main():
         | clamp(left, "u_x", "f_x")
         | clamp(bottom, "u_y", "f_y")
     )
-    materials = pc.material_field(
+    materials = pc.build.material_field(
         model, [("k", K_COND), ("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
 
@@ -105,7 +105,7 @@ def main():
     }
 
     # ── Calcul pas-à-pas ────────────────────────────────────────────────────
-    pc.step_by_step(data)
+    pc.thermomechanics.step_by_step(data)
 
     # ── Résultats ───────────────────────────────────────────────────────────
     tip = grid[idx(NX, NY)]
@@ -129,7 +129,7 @@ def main():
     import tempfile
 
     out = os.path.join(tempfile.gettempdir(), "thermomecanique_pas_a_pas.vtk")
-    pc.export_vtk(mesh, out, data["results"][-1]["displacement"])
+    pc.export.export_vtk(mesh, out, data["results"][-1]["displacement"])
     print(f"Dernier pas exporté : {out}")
 
 

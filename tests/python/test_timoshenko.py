@@ -4,8 +4,8 @@ import pyrucast
 
 
 def _clamp(node, var, dual):
-    imposed = pyrucast.poi1_from_nodes([node])
-    multiplier = pyrucast.barycenter(imposed)
+    imposed = pyrucast.mesher.poi1_from_nodes([node])
+    multiplier = pyrucast.mesher.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -24,7 +24,7 @@ def test_cantilever_converges_without_locking():
     model = model | _clamp(nodes[0], "w", "f_w")
     model = model | _clamp(nodes[0], "theta", "m_theta")
 
-    materials = pyrucast.material_field(
+    materials = pyrucast.build.material_field(
         model, [("E", E), ("I", I), ("G", G), ("A_s", A_S)]
     )
 
@@ -33,8 +33,8 @@ def test_cantilever_converges_without_locking():
     rhs = pyrucast.NodeField(load_mesh, ["f_w"])
     rhs[0].set_value(nodes[N], "f_w", P)
 
-    K = pyrucast.stiffness(model, materials)
-    solution = pyrucast.solve(K, rhs)
+    K = pyrucast.assemble.stiffness(model, materials)
+    solution = pyrucast.solver.solve(K, rhs)
 
     w_tip = solution.value(nodes[N], "w")
     analytical = P * L**3 / (3.0 * E * I) + P * L / (G * A_S)
@@ -55,7 +55,7 @@ def test_section_forces_cantilever():
     model = pyrucast.Model.timoshenko(fes)
     model = model | _clamp(nodes[0], "w", "f_w")
     model = model | _clamp(nodes[0], "theta", "m_theta")
-    materials = pyrucast.material_field(
+    materials = pyrucast.build.material_field(
         model, [("E", E), ("I", I), ("G", G), ("A_s", A_S)]
     )
 
@@ -63,11 +63,11 @@ def test_section_forces_cantilever():
     load.unit().add_cell([nodes[-1]])
     rhs = pyrucast.NodeField(load, ["f_w"])
     rhs[0].set_value(nodes[-1], "f_w", P)
-    solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
 
     # (κ, γ) puis efforts de section M, V.
-    deformation = pyrucast.beam_deformation(solution, fes)
-    forces = pyrucast.integrate_behavior(model, deformation, materials)
+    deformation = pyrucast.field.beam_deformation(solution, fes)
+    forces = pyrucast.behavior.integrate_behavior(model, deformation, materials)
     sub = forces[0]
     for cell in range(sub.cell_count()):
         assert abs(abs(sub.value(cell, 0, "V")) - P) < 2e-2 * P  # V ≈ ±P (constant)

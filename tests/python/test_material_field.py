@@ -23,8 +23,8 @@ def _two_zone_model():
     mesh = zone_a | zone_b
     fes = pyrucast.FiniteElementSpace(mesh)
 
-    imposed = pyrucast.poi1_from_nodes([nodes[0]])
-    multiplier = pyrucast.barycenter(imposed)
+    imposed = pyrucast.mesher.poi1_from_nodes([nodes[0]])
+    multiplier = pyrucast.mesher.barycenter(imposed)
     model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
         "T", "q", imposed, multiplier
     )
@@ -43,7 +43,7 @@ def test_sub_model_build_material_field_uniform_value():
     fes = pyrucast.FiniteElementSpace(mesh)
     hc = pyrucast.Model.heat_conduction(fes)[0]
 
-    sub = pyrucast.sub_material_field(hc, [("k", 2.5)])
+    sub = pyrucast.build.sub_material_field(hc, [("k", 2.5)])
     # Pre-filled uniformly at every (cell, gauss).
     for g in range(fes[0].gauss_count()):
         assert sub.value(0, g, "k") == pytest.approx(2.5)
@@ -52,11 +52,11 @@ def test_sub_model_build_material_field_uniform_value():
 def test_sub_model_build_material_field_errors_on_dirichlet():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    imposed = pyrucast.poi1_from_nodes([a])
-    multiplier = pyrucast.barycenter(imposed)
+    imposed = pyrucast.mesher.poi1_from_nodes([a])
+    multiplier = pyrucast.mesher.barycenter(imposed)
     dir_sub = pyrucast.Model.dirichlet("T", "q", imposed, multiplier)[0]
     with pytest.raises(RuntimeError):
-        pyrucast.sub_material_field(dir_sub, [("k", 1.0)])
+        pyrucast.build.sub_material_field(dir_sub, [("k", 1.0)])
 
 
 def test_sub_model_build_material_field_errors_on_empty_list():
@@ -68,7 +68,7 @@ def test_sub_model_build_material_field_errors_on_empty_list():
     fes = pyrucast.FiniteElementSpace(mesh)
     hc = pyrucast.Model.heat_conduction(fes)[0]
     with pytest.raises(RuntimeError):
-        pyrucast.sub_material_field(hc, [])
+        pyrucast.build.sub_material_field(hc, [])
 
 
 # ─── material_field (uniform over the whole model) ──────────────────────────
@@ -76,12 +76,12 @@ def test_sub_model_build_material_field_errors_on_empty_list():
 
 def test_model_build_material_field_uniform_skips_dirichlet():
     _, nodes, _, model = _two_zone_model()
-    materials = pyrucast.material_field(model, [("k", 1.5)])
+    materials = pyrucast.build.material_field(model, [("k", 1.5)])
     # 2 HC + 1 Dirichlet ⇒ only 2 sub-fields kept.
     assert len(materials) == 2
 
     # Assemble and verify k/h = 1.5/1 = 1.5 on each side of the shared node.
-    K = pyrucast.stiffness(model, materials)
+    K = pyrucast.assemble.stiffness(model, materials)
     tol = 1e-12
 
     def v(i, j):
@@ -99,7 +99,7 @@ def test_model_build_material_field_uniform_skips_dirichlet():
 
 def test_model_build_material_field_per_sub_model_different_zones():
     _, nodes, _, model = _two_zone_model()
-    materials = pyrucast.material_field_per_sub_model(
+    materials = pyrucast.build.material_field_per_sub_model(
         model,
         [
             [("k", 1.0)],  # zone A (model[0])
@@ -109,7 +109,7 @@ def test_model_build_material_field_per_sub_model_different_zones():
     )
     assert len(materials) == 2  # only the two HC slots
 
-    K = pyrucast.stiffness(model, materials)
+    K = pyrucast.assemble.stiffness(model, materials)
     n0, n1, n2 = nodes
     tol = 1e-12
 
@@ -125,7 +125,7 @@ def test_model_build_material_field_per_sub_model_different_zones():
 def test_model_build_material_field_per_sub_model_length_mismatch_errors():
     _, _, _, model = _two_zone_model()
     with pytest.raises(RuntimeError):
-        pyrucast.material_field_per_sub_model(model, [[("k", 1.0)]])
+        pyrucast.build.material_field_per_sub_model(model, [[("k", 1.0)]])
 
 
 def test_sub_model_material_components_lists_required_components():
@@ -138,8 +138,8 @@ def test_sub_model_material_components_lists_required_components():
     hc = pyrucast.Model.heat_conduction(fes)[0]
     assert hc.material_components() == ["k"]
 
-    imposed = pyrucast.poi1_from_nodes([a])
-    multiplier = pyrucast.barycenter(imposed)
+    imposed = pyrucast.mesher.poi1_from_nodes([a])
+    multiplier = pyrucast.mesher.barycenter(imposed)
     dir_sub = pyrucast.Model.dirichlet("T", "q", imposed, multiplier)[0]
     assert dir_sub.material_components() is None
 
@@ -154,14 +154,14 @@ def test_sub_model_build_material_field_filters_extras_and_errors_on_missing():
     hc = pyrucast.Model.heat_conduction(fes)[0]
 
     # Extras are kept silent — only the declared component ("k") survives.
-    mat = pyrucast.sub_material_field(hc, [("k", 2.0), ("rho", 7.0)])
+    mat = pyrucast.build.sub_material_field(hc, [("k", 2.0), ("rho", 7.0)])
     assert mat.value(0, 0, "k") == pytest.approx(2.0)
     with pytest.raises(RuntimeError):
         mat.value(0, 0, "rho")
 
     # Missing required component → error.
     with pytest.raises(RuntimeError):
-        pyrucast.sub_material_field(hc, [("rho", 1.0)])
+        pyrucast.build.sub_material_field(hc, [("rho", 1.0)])
 
 
 def test_model_indexed_sub_model_builds_its_own_material_field():
@@ -170,15 +170,15 @@ def test_model_indexed_sub_model_builds_its_own_material_field():
     _, _, fes, model = _two_zone_model()
     # model[0] = HC zone A. Building its material there gives a
     # SubElementField on the corresponding FE subspace.
-    sub_a_mat = pyrucast.sub_material_field(model[0], [("k", 7.0)])
+    sub_a_mat = pyrucast.build.sub_material_field(model[0], [("k", 7.0)])
     for g in range(fes[0].gauss_count()):
         assert sub_a_mat.value(0, g, "k") == pytest.approx(7.0)
 
     # model[1] = HC zone B.
-    sub_b_mat = pyrucast.sub_material_field(model[1], [("k", 3.0)])
+    sub_b_mat = pyrucast.build.sub_material_field(model[1], [("k", 3.0)])
     for g in range(fes[1].gauss_count()):
         assert sub_b_mat.value(0, g, "k") == pytest.approx(3.0)
 
     # model[2] is the Dirichlet sub-model — no material to build.
     with pytest.raises(RuntimeError):
-        pyrucast.sub_material_field(model[2], [("k", 1.0)])
+        pyrucast.build.sub_material_field(model[2], [("k", 1.0)])

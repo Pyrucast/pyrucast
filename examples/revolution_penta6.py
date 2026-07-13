@@ -29,18 +29,18 @@ def main() -> None:
     # A flat TRI3 surface in the plane y = 0, offset from the z axis so a
     # rotation about z sweeps a genuine wedge of material.
     center = coords.add_node([1.5, 0.0, 0.5])
-    contour = pc.circle_seg2(center, [0.0, 1.0, 0.0], 0.5, 24)
-    face = pc.surface(contour, "TRI3", 0.25)
+    contour = pc.mesher.circle_seg2(center, [0.0, 1.0, 0.0], 0.5, 24)
+    face = pc.mesher.surface(contour, "TRI3", 0.25)
     print("face  :", face.element_types(), face.cell_count(), "cells")
 
     # One 15° slice of a solid of revolution about the z axis.
-    rotated = pc.rotate(face, math.radians(15.0), [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
-    wedge = pc.sweep_solid(face, rotated, 2)
+    rotated = pc.mesher.rotate(face, math.radians(15.0), [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    wedge = pc.mesher.sweep_solid(face, rotated, 2)
     print("wedge :", wedge.element_types(), wedge.cell_count(), "cells")
 
     # A straight prism block: sweep the face onto a translated copy.
-    shifted = pc.translate(face, [0.0, 3.0, 0.0])
-    block = pc.sweep_solid(face, shifted, 3)
+    shifted = pc.mesher.translate(face, [0.0, 3.0, 0.0])
+    block = pc.mesher.sweep_solid(face, shifted, 3)
     print("block :", block.element_types(), block.cell_count(), "cells")
 
     # The source face is untouched by either copy.

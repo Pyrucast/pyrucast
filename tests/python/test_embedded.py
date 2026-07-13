@@ -40,13 +40,13 @@ def test_immersed_node_follows_host_interpolation():
     base = pyrucast.Model.heat_conduction(fes)
 
     # Dirichlet pinning all eight corners to the linear field.
-    corner_mesh = pyrucast.poi1_from_nodes(corners)
-    corner_mult = pyrucast.barycenter(corner_mesh)
+    corner_mesh = pyrucast.mesher.poi1_from_nodes(corners)
+    corner_mult = pyrucast.mesher.barycenter(corner_mesh)
     dirichlet = pyrucast.Model.dirichlet("T", "q", corner_mesh, corner_mult)
 
     # Immersed node inside the cube, tied to the host.
     p = c.add_node([0.3, 0.6, 0.2])
-    bar = pyrucast.poi1_from_nodes([p])
+    bar = pyrucast.mesher.poi1_from_nodes([p])
     embedded = pyrucast.Model.embedded(bar, host, [("T", "q")])
     emb_mult = embedded.multiplier_mesh().node(0, 0, 0)
 
@@ -62,7 +62,7 @@ def test_immersed_node_follows_host_interpolation():
         rhs[0].set_value(corner_mult.node(0, i, 0), "imposed_T", _field(x))
     rhs[0].set_value(emb_mult, "imposed_T", 0.0)
 
-    solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
 
     for node, x in zip(corners, CORNERS):
         assert abs(solution.value(node, "T") - _field(x)) < TOL
@@ -78,7 +78,7 @@ def test_node_outside_host_is_rejected():
     host.unit().add_cell(corners)
 
     outside = c.add_node([5.0, 5.0, 5.0])
-    bar = pyrucast.poi1_from_nodes([outside])
+    bar = pyrucast.mesher.poi1_from_nodes([outside])
     try:
         pyrucast.Model.embedded(bar, host, [("T", "q")])
         assert False, "expected an error for a node outside the host"

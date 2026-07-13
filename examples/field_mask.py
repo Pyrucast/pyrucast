@@ -46,7 +46,7 @@ def main() -> None:
     temperature, nodes = _line_field(TEMPERATURES)
 
     # ── 1. Masque simple : nœuds « chauds » (T >= 50) ────────────────────────
-    chauds = pyrucast.mask(temperature, ge=50.0)
+    chauds = pyrucast.field.mask(temperature, ge=50.0)
     print(f"{'x':>4} {'T':>7} {'chaud':>7}")
     for i, n in enumerate(nodes):
         print(f"{i:4d} {TEMPERATURES[i]:7.1f} {chauds.value(n, 'T'):7.0f}")
@@ -72,11 +72,11 @@ def main() -> None:
 
     # ── 4. Bornes strictes vs inclusives ─────────────────────────────────────
     # Bande ouverte 10 < T < 90 (gt / lt) : exclut les deux extrémités.
-    milieu = pyrucast.mask(temperature, gt=10.0, lt=90.0)
+    milieu = pyrucast.field.mask(temperature, gt=10.0, lt=90.0)
     print("\n10 < T < 90 (strict) :", _values(milieu, nodes))
     assert _values(milieu, nodes) == [0.0, 1.0, 1.0, 1.0, 0.0]
     # Avec bornes inclusives (ge / le), les extrémités passent.
-    assert _values(pyrucast.mask(temperature, ge=10.0, le=90.0), nodes) == [
+    assert _values(pyrucast.field.mask(temperature, ge=10.0, le=90.0), nodes) == [
         1.0,
         1.0,
         1.0,
@@ -99,7 +99,7 @@ def main() -> None:
 
     # Masque « positif » sur UX seulement : UY reste à 1.0 (neutre du produit),
     # donc `depl * m` annule UX < 0 mais laisse UY intact.
-    m = pyrucast.mask(depl, ge=0.0, components=["UX"])
+    m = pyrucast.field.mask(depl, ge=0.0, components=["UX"])
     filtre = depl * m
     ux = [filtre.value(n, "UX") for n in vnodes]
     uy = [filtre.value(n, "UY") for n in vnodes]
