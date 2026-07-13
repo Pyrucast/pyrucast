@@ -7,6 +7,8 @@ name = "pyrucast"
 version = "0.0.0"
 description = "Finite-element library in Rust, inspired by cast3m, exposed to Python"
 requires-python = ">=3.9"
+license = "MPL-2.0"
+authors = [{ name = "Gauthier Folzan" }]
 
 [tool.maturin]
 # Pin the binding type. `pyo3` is an *optional* Cargo dependency (so a pure

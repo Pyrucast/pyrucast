@@ -80,3 +80,12 @@ bash script/check.sh        # enchaîne toutes les vérifications (formatage inc
 Le chapitre [Compilation et tests](book/src/compilation.md) du book détaille les
 features Cargo (`viz`, `viz-interactive`, `stub-gen`…), la génération du stub
 `pyrucast.pyi` et le dépannage courant.
+
+## Licence
+
+Distribué sous licence **[Mozilla Public License 2.0](LICENSE)** (MPL-2.0).
+
+C'est un copyleft *au fichier* : toute modification d'un fichier source de
+pyrucast doit être republiée sous MPL, mais on peut librement construire du code
+propriétaire **au-dessus** de la bibliothèque et l'y combiner. La MPL est par
+ailleurs compatible GPL/CeCILL (« Secondary Licenses », §3.3).

@@ -3,6 +3,8 @@ name = "pyrucast"
 version = "0.0.0"
 edition = "2021"
 description = "Finite-element library in Rust, inspired by cast3m, exposed to Python"
+authors = ["Gauthier Folzan"]
+license = "MPL-2.0"
 publish = false
 
 [lib]
