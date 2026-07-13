@@ -133,9 +133,9 @@ exposées **au top-level** côté Python :
 ```python
 import pyrucast as pc
 
-champ2 = pc.cos(champ1)  # cosinus de chaque valeur
-e = pc.exp(-pc.abs(u))  # elles se composent librement
-norme = pc.sqrt(sx**2.0 + sy**2.0)
+champ2 = pc.field.cos(champ1)  # cosinus de chaque valeur
+e = pc.field.exp(-pc.field.abs(u))  # elles se composent librement
+norme = pc.field.sqrt(sx**2.0 + sy**2.0)
 ```
 
 Jeu disponible : `abs`, `sqrt`, `exp`, `log` (népérien), `log10`, `cos`,

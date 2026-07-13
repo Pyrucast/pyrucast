@@ -65,7 +65,7 @@ facteur `(1−D)` se simplifie dans `σ_zz = 0`).
 import pyrucast
 
 model = pyrucast.Model.mazars(fes, "plane_stress")
-materials = pyrucast.material_field(
+materials = pyrucast.build.material_field(
     model,
     [
         ("E", 30_000.0), ("nu", 0.2), ("eps_d0", 1e-4),
@@ -74,8 +74,8 @@ materials = pyrucast.material_field(
     ],
 )
 
-strain = pyrucast.deformation(u, fes)
-state = pyrucast.integrate_behavior(model, strain, materials, prev=prev_state)
+strain = pyrucast.field.deformation(u, fes)
+state = pyrucast.behavior.integrate_behavior(model, strain, materials, prev=prev_state)
 d = state[0].value(0, 0, "damage")  # endommagement scalaire D
 kappa = state[0].value(0, 0, "kappa")  # variable d'historique
 ```

@@ -91,13 +91,13 @@ master = pyrucast.Mesh(c, "SEG2")
 for i in reversed(range(N)):
     master.unit().add_cell([bottom[idx(i + 1, N)], bottom[idx(i, N)]])
 # Esclave : nœuds du bord inférieur du bloc haut.
-slave = pyrucast.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
+slave = pyrucast.mesher.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
 
 contact = pyrucast.Model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
 model = elasticite | appuis | contact
 
-rhs = pyrucast.flux(edge_fes[0], -S, "f_y") | model.contact_gaps()
-solution = pyrucast.solve_unilateral(model, pyrucast.stiffness(model, materials), rhs)
+rhs = pyrucast.assemble.flux(edge_fes[0], -S, "f_y") | model.contact_gaps()
+solution = pyrucast.solver.solve_unilateral(model, pyrucast.assemble.stiffness(model, materials), rhs)
 
 reaction = solution.value(mult_node, "lambda_contact")   # ≤ 0 collé, 0 décollé
 ```

@@ -25,8 +25,8 @@ fonctions Python de plus haut niveau, sans distinction à l'usage :
 ```python
 import pyrucast as pc
 
-pc.stiffness(...)      # opérateur Rust (extension)
-pc.step_by_step(...)   # fonction Python pure (thermomechanics.py)
+pc.assemble.stiffness(...)      # opérateur Rust (extension)
+pc.thermomechanics.step_by_step(...)   # fonction Python pure (thermomechanics.py)
 ```
 
 Côté configuration, cela tient à trois lignes de `pyproject.toml`
@@ -114,7 +114,7 @@ data = {
     "t_ref": 20.0,
 }
 
-pc.step_by_step(data)
+pc.thermomechanics.step_by_step(data)
 
 for r in data["results"]:
     print(r["time"], r["mech_iters"], r["converged"])

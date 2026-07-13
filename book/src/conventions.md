@@ -17,19 +17,23 @@ une **fonction libre** d'un module `ops/` est figée dans le fichier
 Le binding Python est un **miroir 1:1** : une fonction Rust devient une
 fonction Python, une méthode reste une méthode. On vise le style
 numpy/scipy (et l'héritage cast3m) — des opérateurs **nommés** plutôt que
-des chaînes de méthodes. Côté Python elles sont exposées **à plat** au
-top-level (le rangement par thème `ops/<thème>` reste une organisation du
-code Rust ; pas de sous-modules `pyrucast.mesher.*`) :
+des chaînes de méthodes. Côté Python le rangement par thème `ops/<thème>`
+est **reflété par un sous-module** : une fonction libre `ops::<thème>::f`
+est exposée comme `pyrucast.<thème>.f`. Les conteneurs (`containers::…`)
+restent des classes au top-level (`pyrucast.Coords`, `pyrucast.Mesh`, …) :
 
 ```python
 import pyrucast
 
-# fonctions (opérateurs), pas des méthodes :
-poi = pyrucast.to_poi1(mesh)
-coords = pyrucast.coordinates(mesh)
-K = pyrucast.stiffness(model, materials)
-sol = pyrucast.solve(K, rhs)
+# fonctions (opérateurs), rangées par thème — pas des méthodes :
+poi = pyrucast.mesher.to_poi1(mesh)
+coords = pyrucast.field.coordinates(mesh)
+K = pyrucast.assemble.stiffness(model, materials)
+sol = pyrucast.solver.solve(K, rhs)
 ```
+
+Seul `pyrucast.consolidate` (dispatch mesh/champ) reste au top-level, à
+l'image du niveau racine de `ops`.
 
 ## Erreurs
 

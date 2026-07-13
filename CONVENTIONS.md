@@ -102,24 +102,28 @@ masquer un constructeur `Sub*` est le **seul** écart permis, et il doit rester
 limité à ce cas.
 
 Le style visé côté Python est celui de **numpy / scipy** (et l'héritage
-**cast3m**) : des opérateurs **nommés** (`pyrucast.to_poi1(mesh)`,
-`pyrucast.stiffness(model, mat)`) plutôt que des chaînes de méthodes, et
-des méthodes réservées aux accesseurs, mutations et vues dérivées.
+**cast3m**) : des opérateurs **nommés** (`pyrucast.mesher.to_poi1(mesh)`,
+`pyrucast.assemble.stiffness(model, mat)`) plutôt que des chaînes de
+méthodes, et des méthodes réservées aux accesseurs, mutations et vues
+dérivées.
 
-### Le thème vit côté Rust, pas dans la hiérarchie de modules Python
+### Le thème est reflété par un sous-module Python
 
-Le rangement par thème (`mesher`, `field`, `assemble`, `build`, `solver`)
-est une organisation **du code Rust** (`src/ops/<thème>/`). Côté Python,
-toutes les fonctions sont exposées **à plat** au top-level
-(`pyrucast.to_poi1`, `pyrucast.coordinates`, `pyrucast.stiffness`,
-`pyrucast.solve`, …), **pas** dans des sous-modules `pyrucast.mesher.*`.
+Le rangement par thème (`mesher`, `field`, `assemble`, `build`, `solver`,
+…) organise le code Rust (`src/ops/<thème>/`) **et** l'API Python : une
+fonction libre `ops::<thème>::f` est exposée comme `pyrucast.<thème>.f`
+(`pyrucast.mesher.to_poi1`, `pyrucast.field.coordinates`,
+`pyrucast.assemble.stiffness`, `pyrucast.solver.solve`, …). Les conteneurs
+(`containers::…`) restent des classes au top-level (`pyrucast.Coords`,
+`pyrucast.Mesh`, …), et `pyrucast.consolidate` (dispatch mesh/champ) reste
+au top-level à l'image du niveau racine de `ops`.
 
-Pourquoi : de vrais sous-modules Python typés imposeraient de passer le
-projet en *layout mixte* maturin (dossier `python/pyrucast/`, stubs en
-package) — `pyo3-stub-gen` en layout « Pure Rust » refuse explicitement
-plusieurs modules. On garde donc un seul `pyrucast.pyi` et un namespace
-plat. Si le besoin de sous-modules se confirme, c'est une migration
-packaging à part entière (voir l'historique de cette décision).
+C'est le passage au *layout mixte* maturin (dossier `python/pyrucast/`,
+extension privée `_pyrucast` + couche Python pure) qui débloque ce rangement :
+chaque thème est un vrai module `.py` ré-exportant, de façon typée, les
+symboles de l'extension plate. Un seul stub `_pyrucast/__init__.pyi` reste
+généré pour l'extension ; les sous-modules n'étant que de la ré-exportation,
+les types les suivent sans stub dédié.
 
 ### Les fichiers wrappers reflètent l'arborescence Rust
 
@@ -247,18 +251,19 @@ pour le câblage Python des wrappers non-agrégats.
 
 ## Table de projection (état cible)
 
-Côté Python, toutes les fonctions des thèmes ci-dessous sont **à plat**
-(`pyrucast.f(...)`) — voir la note sur le namespace plat plus haut.
+Côté Python, les fonctions des thèmes ci-dessous vivent dans le
+**sous-module du thème** (`pyrucast.<thème>.f(...)`) — voir la note sur les
+sous-modules plus haut. Seul `pyrucast.consolidate` reste au top-level.
 
-| Opération | Rust | Python (top-level) |
+| Opération | Rust | Python |
 |---|---|---|
 | accesseur / mutation mono-conteneur | méthode | méthode |
 | vue dérivée d'un seul conteneur | méthode | méthode |
-| transformation mesh→mesh | `ops::mesher::*` | `pyrucast.to_poi1`, `pyrucast.consolidate`, … |
-| construction de conteneur | `ops::build::*` | `pyrucast.material_field`, … |
-| opérateur sur field croisant un mesh/field | `ops::field::*` | `pyrucast.coordinates`, `pyrucast.restrict`, `pyrucast.merge` |
-| assemblage `Model` → `Matrix` | `ops::assemble::*` | `pyrucast.stiffness`, `pyrucast.mass` |
-| résolution `A·x = b` | `ops::solver::*` | `pyrucast.solve` |
+| transformation mesh→mesh | `ops::mesher::*` | `pyrucast.mesher.to_poi1`, `pyrucast.consolidate` *(top-level)*, … |
+| construction de conteneur | `ops::build::*` | `pyrucast.build.material_field`, … |
+| opérateur sur field croisant un mesh/field | `ops::field::*` | `pyrucast.field.coordinates`, `pyrucast.field.restrict`, `pyrucast.field.merge` |
+| assemblage `Model` → `Matrix` | `ops::assemble::*` | `pyrucast.assemble.stiffness`, `pyrucast.assemble.mass` |
+| résolution `A·x = b` | `ops::solver::*` | `pyrucast.solver.solve` |
 | arithmétique (`+ - * /`, indexation) | `impl` d'opérateur | dunder |
 | constructeur nommé | fn associée | `classmethod` |
 

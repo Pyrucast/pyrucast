@@ -25,10 +25,10 @@ comme Dirichlet).
 import pyrucast
 
 # Thermique : conductivité uniforme.
-materials = pyrucast.material_field(model, [("k", 1.0)])
+materials = pyrucast.build.material_field(model, [("k", 1.0)])
 
 # Élasticité : deux propriétés.
-materials = pyrucast.material_field(model, [("E", 210e9), ("nu", 0.3)])
+materials = pyrucast.build.material_field(model, [("E", 210e9), ("nu", 0.3)])
 ```
 
 Le champ produit est ensuite passé tel quel à

@@ -87,10 +87,10 @@ n'est moyenné ni fusionné).
 
 ```python
 # Nœuds dont la température est entre 20 et 80 °C (bornes inclusives).
-chauds = pyrucast.select(temperature, ge=20.0, le=80.0)
+chauds = pyrucast.field.select(temperature, ge=20.0, le=80.0)
 
 # Cellules dont la contrainte de von Mises dépasse un seuil (borne basse seule).
-critiques = pyrucast.select(sigma, ge=250e6, components=["vm"])
+critiques = pyrucast.field.select(sigma, ge=250e6, components=["vm"])
 ```
 
 ## Masque par valeur
@@ -115,7 +115,7 @@ Gauss.
 
 ```python
 # Remet à zéro les valeurs négatives d'un champ, composante par composante.
-positif = champ * pyrucast.mask(champ, ge=0.0)
+positif = champ * pyrucast.field.mask(champ, ge=0.0)
 
 # Sucre : les comparaisons construisent directement un masque.
 positif = champ * (champ >= 0.0)   # même chose
@@ -246,10 +246,10 @@ cf. [Champ](../field.md)) pour bâtir des expressions par composante.
 import pyrucast
 
 # Atténuation exponentielle d'un champ de température.
-attenue = pyrucast.exp(temperature * -0.1)
+attenue = pyrucast.field.exp(temperature * -0.1)
 
 # Magnitude d'un champ (combiné à l'arithmétique scalaire de champ).
-amplitude = pyrucast.abs(signal)
+amplitude = pyrucast.field.abs(signal)
 ```
 
 ## Réduction
@@ -292,7 +292,7 @@ import pyrucast
 
 # Énergie de déformation externe : travail des efforts nodaux dans le champ
 # de déplacement (mêmes composantes, même maillage).
-energie = pyrucast.xty(forces, deplacements)
+energie = pyrucast.field.xty(forces, deplacements)
 ```
 
 ### `psca(x, y)` → champ (même saveur que les entrées)
@@ -312,7 +312,7 @@ sortie est écrite une fois (par nœud) ⇒ indépendant du nombre de threads.
 import pyrucast
 
 # Norme au carré d'un champ vectoriel, nœud par nœud.
-norme2 = pyrucast.psca(vitesse, vitesse)  # champ à une composante "psca"
+norme2 = pyrucast.field.psca(vitesse, vitesse)  # champ à une composante "psca"
 ```
 
 ### `integral(field, component, fespace=None)` → `float`
@@ -338,9 +338,9 @@ En interne, la réduction parallèle sur les cellules passe par le driver
 import pyrucast
 
 # Résultante d'une densité de force surfacique f_y sur une plaque (via N_i).
-r_y = pyrucast.integral(densite, "f_y", fespace=fes)
+r_y = pyrucast.field.integral(densite, "f_y", fespace=fes)
 # Mesure du domaine : ∫ 1 dΩ.
-aire = pyrucast.integral(champ_unite, "u", fespace=fes)
+aire = pyrucast.field.integral(champ_unite, "u", fespace=fes)
 ```
 
 ### Somme et `xtx`
@@ -373,9 +373,9 @@ import pyrucast
 rx = forces.sum("f_x")
 ry = forces.sum("f_y")
 # Norme du résidu au carré, pour un test de convergence.
-r2 = pyrucast.xtx(residu)
+r2 = pyrucast.field.xtx(residu)
 # Même norme, restreinte aux seules composantes de translation.
-r2_uy = pyrucast.xtx(residu, components=["f_y"])
+r2_uy = pyrucast.field.xtx(residu, components=["f_y"])
 ```
 
 ## À venir dans `ops::field`

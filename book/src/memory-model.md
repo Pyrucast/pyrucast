@@ -182,11 +182,11 @@ import pyrucast
 import pathlib
 
 # Vérifier le répertoire de swap actuel (par défaut : répertoire temporaire OS).
-print(pyrucast.swap_dir())
+print(pyrucast.store.swap_dir())
 
 # Pointer vers un répertoire dédié (SSD NVMe, espace garanti).
-pyrucast.set_swap_dir(pathlib.Path("/data/pyrucast_swap"))
-print(pyrucast.swap_dir())  # /data/pyrucast_swap
+pyrucast.store.set_swap_dir(pathlib.Path("/data/pyrucast_swap"))
+print(pyrucast.store.swap_dir())  # /data/pyrucast_swap
 ```
 
 > `swap_out` sur un objet individuel reste côté Rust pour l'instant. L'API Python exposera une fonction de haut niveau (Phase 5) pour déclencher l'éviction depuis un script.

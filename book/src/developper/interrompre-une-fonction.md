@@ -120,7 +120,7 @@ pub fn surface(py: Python<'_>, contour: PyRef<PyMesh>, /* … */) -> PyResult<Py
 ```
 
 Le paramètre `py: Python<'_>` est injecté par PyO3 et **n'apparaît pas** dans la
-signature Python : `pyrucast.surface(contour, element_type, size=None)` reste
+signature Python : `pyrucast.mesher.surface(contour, element_type, size=None)` reste
 inchangée, mais un `Ctrl+C` l'interrompt désormais.
 
 ## Lien avec le parallélisme

@@ -328,14 +328,14 @@ d'*export* (`src/ops/export`), pendant « écriture » du lecteur `read_gmsh`.
 import pyrucast
 
 # Géométrie seule.
-pyrucast.export_vtk(mesh, "maillage.vtk")
+pyrucast.export.export_vtk(mesh, "maillage.vtk")
 
 # Géométrie + champ aux nœuds (POINT_DATA).
-pyrucast.export_vtk(mesh, "solution.vtk", field=temperature)
+pyrucast.export.export_vtk(mesh, "solution.vtk", field=temperature)
 
 # Géométrie + champ aux points de Gauss (CELL_DATA) : une valeur par
 # cellule = moyenne intra-élément des points de Gauss de la cellule.
-pyrucast.export_vtk(mesh, "contraintes.vtk", field=stresses)
+pyrucast.export.export_vtk(mesh, "contraintes.vtk", field=stresses)
 ```
 
 - Chaque sous-maillage est écrit ; les types d'éléments se traduisent un pour

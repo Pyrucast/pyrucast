@@ -5,7 +5,7 @@ des conteneurs** (maillage + champ, espace EF + champ…) ou appartiennent à un
 famille d'opérateurs, par opposition aux **méthodes** qui restent sur un seul
 conteneur (cf. [Conventions](conventions.md)). Côté Rust elles vivent sous
 `src/ops/<thème>` ; côté Python elles sont exposées **à plat** au top-level
-(`pyrucast.coordinates`, `pyrucast.stiffness`, …).
+(`pyrucast.field.coordinates`, `pyrucast.assemble.stiffness`, …).
 
 Cette partie suit **exactement les thèmes des modules `ops/`** : un chapitre
 par module, plus la visualisation (qui vit sous `src/viz/`).

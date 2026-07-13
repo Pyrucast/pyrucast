@@ -3,7 +3,7 @@
 Les **mesher** (`ops::mesher`) construisent et transforment des
 [maillages](../mesh.md). Chacun prend ses conteneurs par référence et renvoie
 un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
-(`pyrucast.line_seg2`, …).
+(`pyrucast.mesher.line_seg2`, …).
 
 ## Inventaire
 
@@ -43,11 +43,11 @@ a = c.add_node([0.0, 0.0])
 b = c.add_node([4.0, 0.0])
 
 # Ligne de 4 SEG2 entre a et b (3 nœuds intermédiaires créés).
-line = pyrucast.line_seg2(a, b, 4)
+line = pyrucast.mesher.line_seg2(a, b, 4)
 print(line)  # Mesh: 1 submesh(es), 4 cell(s) total
 
 # Extrusion en QUA4 sur 2 couches selon +y.
-surf = pyrucast.extrude(line, [0.0, 1.0], 2)
+surf = pyrucast.mesher.extrude(line, [0.0, 1.0], 2)
 print(surf.element_types())  # ['QUA4']
 ```
 
@@ -80,10 +80,10 @@ face.unit().add_cell([
 ])
 
 # Copie translatée de 5 selon +z (nœuds neufs ; `face` reste intacte).
-haut = pyrucast.translate(face, [0.0, 0.0, 5.0])
+haut = pyrucast.mesher.translate(face, [0.0, 0.0, 5.0])
 
 # Copie tournée de 30° autour de l'axe z passant par l'origine.
-tournee = pyrucast.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+tournee = pyrucast.mesher.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
 ```
 
 ## Tissage d'un solide entre deux surfaces : `sweep_solid`
@@ -105,7 +105,7 @@ surface et sa copie déplacée :
 
 ```python
 # `face` et `tournee` : la face TRI3 ci-dessus et sa copie tournée de 30°.
-solide = pyrucast.sweep_solid(face, tournee, 1)
+solide = pyrucast.mesher.sweep_solid(face, tournee, 1)
 print(solide.element_types())  # ['PENTA6']
 ```
 
@@ -126,8 +126,8 @@ Le maillage obtenu se calcule avec l'interpolation `LAGRANGE2` (cf.
 [Espace éléments finis](../fe-space.md)) :
 
 ```python
-lin = pyrucast.surface(contour, "TRI3", 1.0)   # maillage TRI3
-quad = pyrucast.to_quadratic(lin)              # copie TRI6
+lin = pyrucast.mesher.surface(contour, "TRI3", 1.0)   # maillage TRI3
+quad = pyrucast.mesher.to_quadratic(lin)              # copie TRI6
 print(quad.element_types())                    # ['TRI6']
 
 fes = pyrucast.FiniteElementSpace(quad, interpolation="LAGRANGE2")
@@ -231,7 +231,7 @@ contour = pyrucast.Mesh(c, "SEG2")
 for i in range(4):
     contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
-surface = pyrucast.fill_surface(contour, "TRI3")
+surface = pyrucast.mesher.fill_surface(contour, "TRI3")
 print(surface)  # Mesh: 1 submesh(es), 2 cell(s) total
 ```
 
@@ -262,10 +262,10 @@ for i in range(4):
 combined = outer | hole
 
 # Sans raffinement : 6 triangles « bruts ».
-brut = pyrucast.fill_surface(combined, "TRI3")
+brut = pyrucast.mesher.fill_surface(combined, "TRI3")
 
 # Avec raffinement : arête max 1.0 + angle min 20° → maillage fin et de qualité.
-fin = pyrucast.fill_surface(combined, "TRI3", max_edge_length=1.0, min_angle_deg=20.0)
+fin = pyrucast.mesher.fill_surface(combined, "TRI3", max_edge_length=1.0, min_angle_deg=20.0)
 # Aire triangulée = 16 - 4 = 12, mais bien plus de cellules.
 ```
 
@@ -337,11 +337,11 @@ for i in range(40):
     sm.add_cell([nodes[i], nodes[(i + 1) % 40]])
 
 # Maillage frontal en triangles de taille ~1.0 (nœuds internes créés).
-tri = pyrucast.surface(contour, "TRI3", 1.0)
+tri = pyrucast.mesher.surface(contour, "TRI3", 1.0)
 print(tri.element_types(), tri.cell_count())
 
 # Variante quad-dominante.
-quad = pyrucast.surface(contour, "QUA4", 1.0)
+quad = pyrucast.mesher.surface(contour, "QUA4", 1.0)
 print(quad.element_types())  # ['QUA4', 'TRI3'] en général
 ```
 
@@ -408,7 +408,7 @@ import pyrucast
 env = construire_enveloppe_cube()  # Mesh TRI3 fermé sur un Coords 3D
 
 # Remplissage en tétraèdres de taille ~0,5.
-tet = pyrucast.volume(env, 0.5)
+tet = pyrucast.mesher.volume(env, 0.5)
 print(tet.element_types())  # ['TET4']
 ```
 
@@ -464,11 +464,11 @@ import pyrucast
 
 c = pyrucast.Coords(dim=2)
 center = c.add_node([0.0, 0.0])
-disc = pyrucast.fill_surface(
-    pyrucast.circle_seg2(center, [0.0, 0.0, 1.0], 2.0, 16), "TRI3"
+disc = pyrucast.mesher.fill_surface(
+    pyrucast.mesher.circle_seg2(center, [0.0, 0.0, 1.0], 2.0, 16), "TRI3"
 )
 
-bord = pyrucast.contour(disc)
+bord = pyrucast.mesher.contour(disc)
 print(len(bord))  # 1  (domaine simplement connexe)
 print(bord.element_types())  # ['SEG2']
 print(bord.cell_counts())  # [16]
@@ -520,12 +520,12 @@ mesh.unit().add_cell([nodes[0], nodes[1], nodes[2]])  # cellule 0
 mesh.unit().add_cell([nodes[1], nodes[3], nodes[2]])  # cellule 1
 
 # Points = {0, 1, 2} : seule la cellule 0 a tous ses nœuds dedans.
-pts = pyrucast.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
+pts = pyrucast.mesher.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
 
-strict = pyrucast.elements_on(mesh, pts, strict=True)
+strict = pyrucast.mesher.elements_on(mesh, pts, strict=True)
 print(strict.cell_count())  # 1  (cellule 0)
 
-loose = pyrucast.elements_on(mesh, pts, strict=False)
+loose = pyrucast.mesher.elements_on(mesh, pts, strict=False)
 print(loose.cell_count())  # 2  (les deux touchent un nœud de pts)
 ```
 
@@ -573,7 +573,7 @@ mesh = pyrucast.Mesh(c, "SEG2")
 mesh.unit().add_cell([a, b])
 mesh.unit().add_cell([b2, d])
 
-joined = pyrucast.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
+joined = pyrucast.mesher.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
 ```
 
 > `merge_nodes` opère **au sein d'une même `Coords`** (l'invariant du `Mesh`
@@ -595,7 +595,7 @@ laquelle lire (il garde ainsi la main sur les nœuds) ; le résultat est un
 import pyrucast
 
 coords = pyrucast.Coords(dim=2)
-regions = pyrucast.read_gmsh(coords, "piece.msh")
+regions = pyrucast.mesher.read_gmsh(coords, "piece.msh")
 # {'plate': Mesh<…>, 'bottom': Mesh<…>, …}  — ordre du fichier préservé
 
 plate = regions["plate"]
@@ -616,7 +616,7 @@ print(plate.cell_count())
 
   ```python
   coords = pyrucast.Coords(dim=2)
-  regions = pyrucast.read_gmsh(coords, "piece.msh")
+  regions = pyrucast.mesher.read_gmsh(coords, "piece.msh")
   plate = regions["plate"]
   bottom = regions["bottom"]            # même Coords que plate
 

@@ -41,13 +41,13 @@ Une matrice singulière (p. ex. conditions aux limites oubliées) produit un piv
 nul ⇒ solution non finie ⇒ erreur explicite.
 
 ```python
-K = pyrucast.stiffness(model, materials)
-solution = pyrucast.solve(K, rhs)                 # factorise puis résout
+K = pyrucast.assemble.stiffness(model, materials)
+solution = pyrucast.solver.solve(K, rhs)                 # factorise puis résout
 T = solution.value(some_node, "T")
 
 # Résolutions ultérieures sur la MÊME matrice : la factorisation est réutilisée.
-sol2 = pyrucast.solve(K, autre_rhs)               # descente/remontée seulement
-sol3 = pyrucast.solve(K, autre_rhs, cache=False)  # refactorise, sans toucher le cache
+sol2 = pyrucast.solver.solve(K, autre_rhs)               # descente/remontée seulement
+sol3 = pyrucast.solver.solve(K, autre_rhs, cache=False)  # refactorise, sans toucher le cache
 ```
 
 ## Factorisation réutilisable (cache transparent)
@@ -92,9 +92,9 @@ esclave distinct, jamais réutilisé comme maître ni esclave ailleurs (couvre l
 périodicité ; erreur explicite sinon).
 
 ```python
-K = pyrucast.stiffness(model, materials)
-lagrange = pyrucast.solve(K, rhs)                    # système augmenté
-condense = pyrucast.solve_eliminate(model, K, rhs)   # système réduit — même champ
+K = pyrucast.assemble.stiffness(model, materials)
+lagrange = pyrucast.solver.solve(K, rhs)                    # système augmenté
+condense = pyrucast.solver.solve_eliminate(model, K, rhs)   # système réduit — même champ
 ```
 
 Voir l'exemple `examples/mpc_condensation.py` et la page
@@ -197,12 +197,12 @@ erreur, la non-singularité du socle est confirmée par un **aller-retour**
 possible : le résultat est le même, seul le coût change.
 
 ```python
-K = pyrucast.stiffness(model, materials)              # modèle avec sense=">="
-solution = pyrucast.solve_unilateral(model, K, rhs)   # "schur" par défaut
+K = pyrucast.assemble.stiffness(model, materials)              # modèle avec sense=">="
+solution = pyrucast.solver.solve_unilateral(model, K, rhs)   # "schur" par défaut
 reaction = solution.value(mult_node, "lambda_u_y")    # 0 si la butée est relâchée
 
 # Forcer l'ancienne méthode (refactorisation à chaque pas) :
-sol2 = pyrucast.solve_unilateral(model, K, rhs, active_set="refactorize")
+sol2 = pyrucast.solver.solve_unilateral(model, K, rhs, active_set="refactorize")
 ```
 
 Voir la section « Relations unilatérales » de la page

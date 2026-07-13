@@ -102,18 +102,18 @@ fes = pyrucast.FiniteElementSpace(host)
 base = pyrucast.Model.heat_conduction(fes)
 
 # Coins fixés au champ linéaire (Dirichlet).
-corner_mesh = pyrucast.poi1_from_nodes(corner_nodes)
-corner_mult = pyrucast.barycenter(corner_mesh)
+corner_mesh = pyrucast.mesher.poi1_from_nodes(corner_nodes)
+corner_mult = pyrucast.mesher.barycenter(corner_mesh)
 dirichlet = pyrucast.Model.dirichlet("T", "q", corner_mesh, corner_mult)
 
 # Nœud immergé, lié à l'hôte.
 p = c.add_node([0.3, 0.6, 0.2])
-bar = pyrucast.poi1_from_nodes([p])
+bar = pyrucast.mesher.poi1_from_nodes([p])
 embedded = pyrucast.Model.embedded(bar, host, [("T", "q")])
 emb_mult = embedded.multiplier_mesh().node(0, 0, 0)
 
 model = base | dirichlet | embedded
-materials = pyrucast.material_field(model, [("k", 1.0)])
+materials = pyrucast.build.material_field(model, [("k", 1.0)])
 
 # Chargement : valeur du champ à chaque coin, g = 0 (tie) au nœud immergé.
 rhs = dirichlet.constraint_rhs(
@@ -121,7 +121,7 @@ rhs = dirichlet.constraint_rhs(
 )
 rhs = rhs | embedded.constraint_rhs([(p, 0.0)])
 
-solution = pyrucast.solve(pyrucast.stiffness(model, materials), rhs)
+solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
 assert abs(solution.value(p, "T") - field([0.3, 0.6, 0.2])) < 1e-9  # 4.2
 ```
 

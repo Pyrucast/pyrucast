@@ -53,8 +53,8 @@ tout l'intérêt d'intégrer le comportement exactement.
 state = None                      # VAR0 = prev ; None au premier pas
 for step in range(1, nsteps + 1):
     ...                           # charge du pas → boucle de Newton sur u
-    eps  = pyrucast.deformation(u, fes)                     # ε(B)
-    out  = pyrucast.integrate_behavior(model, eps, materials, prev=state)
+    eps  = pyrucast.field.deformation(u, fes)                     # ε(B)
+    out  = pyrucast.behavior.integrate_behavior(model, eps, materials, prev=state)
     ...                           # F_int (BSIG), résidu, correction de u
     state = out                   # commit : prev ← VAR1 pour le pas suivant
 ```
@@ -63,8 +63,8 @@ for step in range(1, nsteps + 1):
 
 ```python
 # Solution (w, theta) déjà obtenue par le solveur.
-eps = pyrucast.beam_deformation(solution, fes)  # (κ, γ) par élément
-forces = pyrucast.integrate_behavior(model, eps, materials)
+eps = pyrucast.field.beam_deformation(solution, fes)  # (κ, γ) par élément
+forces = pyrucast.behavior.integrate_behavior(model, eps, materials)
 # forces porte le moment M = E·I·κ et l'effort tranchant V = G·A_s·γ.
 ```
 
@@ -98,9 +98,9 @@ sorte que `r = f_ext − f_int` est le **résidu** d'équilibre.
 
 ```python
 # Solution déjà obtenue par le solveur.
-eps    = pyrucast.deformation(solution, fes)          # ε = B·u
-sig    = pyrucast.integrate_behavior(model, eps, materials)  # COMP : σ
-f_int  = pyrucast.internal_forces(model, sig)         # BSIG : ∫ Bᵀ σ
+eps    = pyrucast.field.deformation(solution, fes)          # ε = B·u
+sig    = pyrucast.behavior.integrate_behavior(model, eps, materials)  # COMP : σ
+f_int  = pyrucast.internal_forces.internal_forces(model, sig)         # BSIG : ∫ Bᵀ σ
 residu = f_ext - f_int                                # équilibre
 ```
 

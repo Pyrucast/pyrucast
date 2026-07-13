@@ -6,9 +6,12 @@ Python). Elle matérialise la règle de [Conventions](conventions.md) :
 
 - une structure `containers::…::Foo` est exposée sous le **même nom**
   `pyrucast.Foo` (le wrapper PyO3 interne `PyFoo` est masqué) ;
-- une fonction libre `ops::<thème>::f` est exposée **à plat** comme
-  `pyrucast.f` (le rangement par thème reste une organisation du code
-  Rust, pas une hiérarchie de modules Python) ;
+- une fonction libre `ops::<thème>::f` est exposée dans le **sous-module du
+  thème** : `pyrucast.<thème>.f` (le rangement par thème du code Rust est
+  reflété par une hiérarchie de modules Python : `mesher`, `field`,
+  `assemble`, `behavior`, `solver`, `export`, `build`, `internal_forces`,
+  plus `store`). Seul `pyrucast.consolidate` (dispatch mesh/champ) reste au
+  top-level, à l'image du niveau racine de `ops` ;
 - une surcharge d'opérateur Rust devient un dunder Python (`Add` →
   `__add__`, `Index` → `__getitem__`, …) ;
 - un constructeur nommé Rust devient un `classmethod` / constructeur
@@ -73,7 +76,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 ### `ops::mesher` — construction et transformation de maillages
 
-| Rust (`ops::mesher::…`) | Python (`pyrucast.…`) |
+| Rust (`ops::mesher::…`) | Python (`pyrucast.mesher.…`) |
 |---|---|
 | `from_live_nodes(coords: Handle<Coords>) -> Mesh` | `from_live_nodes(coords) -> Mesh` |
 | `SubMesh::poi1_from_nodes(nodes: &[Node]) -> SubMesh` | `poi1_from_nodes(nodes) -> Mesh` |
@@ -95,11 +98,11 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `merge_nodes(mesh: &Mesh, tol: f64) -> Mesh` | `merge_nodes(mesh, tol) -> Mesh` |
 | `read_gmsh(coords: Handle<Coords>, path: &Path) -> Vec<(String, Mesh)>` | `read_gmsh(coords, path) -> dict[str, Mesh]` |
 | `read_gmsh_str(coords: Handle<Coords>, text: &str) -> Vec<(String, Mesh)>` | `read_gmsh_str(coords, text) -> dict[str, Mesh]` |
-| `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` (dispatch par type, partagé avec `NodeField`) |
+| `consolidate(mesh: &Mesh) -> Mesh` | `pyrucast.consolidate(mesh) -> Mesh` (**top-level** ; dispatch par type, partagé avec `NodeField`) |
 
 ### `ops::field` — opérateurs sur les champs
 
-| Rust (`ops::field::…`) | Python (`pyrucast.…`) |
+| Rust (`ops::field::…`) | Python (`pyrucast.field.…`) |
 |---|---|
 | `coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `coordinates(mesh, components=None) -> NodeField` |
 | `set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> ()` | `set_coordinates(field, components=None) -> None` |
@@ -116,13 +119,13 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `select_nodes(field: &NodeField, band: &Band, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type) |
 | `mask_nodes(field: &NodeField, band: &Band, …) -> NodeField` / `mask_cells(field: &ElementField, …) -> ElementField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> field` (dispatch par type ; champ `0/1` de même structure). Sucre : `field >= x` / `> x` / `<= x` / `< x` → masque |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
-| `consolidate_node(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` (dispatch par type, partagé avec `Mesh`) |
-| `consolidate_element(field: &ElementField) -> ElementField` | `consolidate(field) -> ElementField` (dispatch par type ; fusionne les zones d'une même fespace) |
+| `consolidate_node(field: &NodeField) -> NodeField` | `pyrucast.consolidate(field) -> NodeField` (**top-level** ; dispatch par type, partagé avec `Mesh`) |
+| `consolidate_element(field: &ElementField) -> ElementField` | `pyrucast.consolidate(field) -> ElementField` (**top-level** ; dispatch par type ; fusionne les zones d'une même fespace) |
 | `SubField::dot(&self, other) -> f64` / `Field::dot_field(&self, other) -> f64` | `xty(x, y) -> float` (dispatch par type ; produit scalaire **global** de deux champs) |
 | `SubField::xtx(&self) -> f64` / `Field::xtx(&self) -> f64` | `xtx(x) -> float` (dispatch par type ; `Σ v²`, norme au carré `XTX`) |
 | `SubField::xtx_components(&self, &[&str]) -> Result<f64>` / `Field::xtx_components(&self, &[&str]) -> Result<f64>` | `xtx(x, components=[…]) -> float` (norme au carré restreinte à ces composantes) |
 | `SubField::pscal(&self, other) -> Self` / `Field::pscal_field(&self, other) -> Self` | `psca(x, y) -> field` (dispatch par type ; produit scalaire **nœud par nœud**, champ à une composante `"psca"`) |
-| `abs` / `sqrt` / `exp` / `log` / `log10` / `cos` / `sin` / `tan` / `sinh` / `cosh` / `tanh` `(field) -> Field` | mêmes noms `pyrucast.…(field)` — maths **élément par élément** (style numpy), un champ neuf du même type ; acceptent les quatre saveurs de champ (`NodeField` / `SubNodeField` / `ElementField` / `SubElementField`). Résultats non bornés : `log` de ≤ 0 → `-inf`/`nan` |
+| `abs` / `sqrt` / `exp` / `log` / `log10` / `cos` / `sin` / `tan` / `sinh` / `cosh` / `tanh` `(field) -> Field` | mêmes noms `pyrucast.field.…(field)` — maths **élément par élément** (style numpy), un champ neuf du même type ; acceptent les quatre saveurs de champ (`NodeField` / `SubNodeField` / `ElementField` / `SubElementField`). Résultats non bornés : `log` de ≤ 0 → `-inf`/`nan` |
 
 > La composition de zones passe par l'**union** (`|` Python / `union` Rust) ;
 > l'arithmétique champ + scalaire **et** champ + champ par les **opérateurs**
@@ -132,7 +135,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 ### `ops::build` — construction de champs matériau
 
-| Rust (`ops::build::…`) | Python (`pyrucast.…`) |
+| Rust (`ops::build::…`) | Python (`pyrucast.build.…`) |
 |---|---|
 | `sub_material_field(sub: &SubModel, pairs: &[(&str, f64)]) -> SubElementField` | `sub_material_field(sub_model, components_and_values) -> SubElementField` |
 | `material_field(model: &Model, pairs: &[(&str, f64)]) -> ElementField` | `material_field(model, components_and_values) -> ElementField` |
@@ -140,7 +143,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 ### `ops::assemble` — assemblage des matrices
 
-| Rust (`ops::assemble::…`) | Python (`pyrucast.…`) |
+| Rust (`ops::assemble::…`) | Python (`pyrucast.assemble.…`) |
 |---|---|
 | `stiffness(model: &Model, materials: &ElementField) -> Matrix` | `stiffness(model, materials) -> Matrix` |
 | `mass(model: &Model) -> Matrix` | `mass(model) -> Matrix` |
@@ -149,20 +152,20 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 ### `ops::behavior` — intégration du comportement (`COMP`)
 
-| Rust (`ops::behavior::…`) | Python (`pyrucast.…`) |
+| Rust (`ops::behavior::…`) | Python (`pyrucast.behavior.…`) |
 |---|---|
 | `integrate(model: &Model, deformation: &ElementField, prev: Option<&ElementField>, materials: &ElementField, dt: Option<f64>) -> ElementField` | `integrate_behavior(model, deformation, materials, prev=None, dt=None) -> ElementField` |
 
 ### `ops::internal_forces` — forces internes (`BSIG`, `∫ Bᵀ σ`)
 
-| Rust (`ops::internal_forces::…`) | Python (`pyrucast.…`) |
+| Rust (`ops::internal_forces::…`) | Python (`pyrucast.internal_forces.…`) |
 |---|---|
 | `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(model, stresses) -> NodeField` |
 | `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
 
 ### `ops::solver` — résolution
 
-| Rust (`ops::solver::…`) | Python (`pyrucast.…`) |
+| Rust (`ops::solver::…`) | Python (`pyrucast.solver.…`) |
 |---|---|
 | `lu::solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs) -> NodeField` |
 | `eliminate::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_eliminate(model, matrix, rhs) -> NodeField` |
@@ -170,7 +173,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 ### `ops::export` — export vers des formats externes
 
-| Rust (`ops::export::…`) | Python (`pyrucast.…`) |
+| Rust (`ops::export::…`) | Python (`pyrucast.export.…`) |
 |---|---|
 | `write_vtk_mesh(mesh: &Mesh, path: &Path)` | `export_vtk(mesh, path) -> None` |
 | `write_vtk_node_field(mesh: &Mesh, field: &NodeField, path: &Path)` | `export_vtk(mesh, path, field=node_field) -> None` |
@@ -178,7 +181,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 ### Utilitaires de `store` (swap disque)
 
-| Rust (`store::…`) | Python (`pyrucast.…`) |
+| Rust (`store::…`) | Python (`pyrucast.store.…`) |
 |---|---|
 | `set_swap_dir(path: PathBuf)` | `set_swap_dir(path) -> None` |
 | `swap_dir() -> PathBuf` | `swap_dir() -> Path` |

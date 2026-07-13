@@ -21,8 +21,8 @@ sous-modèle qui en a besoin, l'assembleur sélectionne la zone dont le
 sous-modèles sans matériau (Dirichlet…) ignorent ce champ.
 
 ```python
-materials = pyrucast.material_field(model, [("k", 1.0)])
-K = pyrucast.stiffness(model, materials)
+materials = pyrucast.build.material_field(model, [("k", 1.0)])
+K = pyrucast.assemble.stiffness(model, materials)
 print(K)  # Matrix: n row(s) × n col(s), …
 ```
 
@@ -72,7 +72,7 @@ avec le reste du chargement par l'union `|`.
 
 ```python
 # Flux uniforme Q sur le bord gauche (maillage SEG2), composante duale "q".
-load = pyrucast.flux(edge_fes.unit(), Q, "q")
+load = pyrucast.assemble.flux(edge_fes.unit(), Q, "q")
 rhs = load | other_loads
 ```
 
