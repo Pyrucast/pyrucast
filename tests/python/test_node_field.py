@@ -710,16 +710,18 @@ def test_subfield_plus_subfield_same_support():
     assert s.value(nodes[1], "T") == 22.0
 
 
-def test_subfield_plus_subfield_mismatched_components_raises():
+def test_subfield_plus_subfield_disjoint_components_passes_through():
+    # Union/passthrough arithmetic: disjoint components each pass through raw,
+    # no error (mirrors the Rust `subfield_operator_uses_union_passthrough`).
     c, nodes, sm = _poi1_with(1)
     a = pyrucast.NodeField(sm, ["T"])[0]
+    a.set_value(nodes[0], "T", 5.0)
     b = pyrucast.NodeField(sm, ["P"])[0]
-    try:
-        a + b
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("expected RuntimeError on mismatched components")
+    b.set_value(nodes[0], "P", 9.0)
+    s = a + b
+    assert s.components() == ["T", "P"]
+    assert s.value(nodes[0], "T") == 5.0
+    assert s.value(nodes[0], "P") == 9.0
 
 
 def test_field_plus_field_same_decomposition():

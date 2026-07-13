@@ -11,7 +11,7 @@ pyrucast est un package *mixed Rust/Python* (maturin) : l'extension compilée es
 le sous-module privé `_pyrucast` (tous les `#[pyfunction]`/`#[pyclass]`), et le
 package public `pyrucast` la ré-exporte tout en ajoutant des modules Python purs.
 
-```
+```text
 python/pyrucast/
 ├── __init__.py          # from ._pyrucast import *  + ré-export du haut niveau
 ├── py.typed             # PEP 561

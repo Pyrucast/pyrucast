@@ -273,19 +273,20 @@ def test_union_distinct_supports_stay_separate():
     assert len(f) == 2
 
 
-def test_union_same_support_fuses_components():
-    # Two fields on the *same* subspace, different components → fused into
-    # one zone carrying the union of the components.
+def test_union_same_support_keeps_zones_separate():
+    # Unlike NodeField (which fuses), ElementField union verifies rather than
+    # merges: two fields on the *same* subspace with different components
+    # aggregate into two zones, each keeping its own component.
     _, _, fes = _tri3_subspace()
     a = pyrucast.ElementField(fes, ["E"])
     b = pyrucast.ElementField(fes, ["nu"])
     a[0].set_uniform("E", 210.0)
     b[0].set_uniform("nu", 0.3)
     f = a | b
-    assert len(f) == 1
+    assert len(f) == 2
     assert f.components() == ["E", "nu"]
     assert f[0].value(0, 0, "E") == 210.0
-    assert f[0].value(0, 0, "nu") == 0.3
+    assert f[1].value(0, 0, "nu") == 0.3
 
 
 def test_union_same_support_conflict_raises():
@@ -328,16 +329,18 @@ def test_subfield_plus_subfield_same_support():
     assert a.value(0, 0, "E") == 3.0
 
 
-def test_subfield_plus_subfield_mismatched_components_raises():
+def test_subfield_plus_subfield_disjoint_components_passes_through():
+    # Union/passthrough arithmetic: disjoint components each pass through raw,
+    # no error (mirrors the Rust `subfield_operator_uses_union_passthrough`).
     _, _, fes = _tri3_subspace()
     a = pyrucast.ElementField(fes, ["E"])[0]
+    a.set_uniform("E", 210.0)
     b = pyrucast.ElementField(fes, ["nu"])[0]
-    try:
-        a + b
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("expected RuntimeError on mismatched components")
+    b.set_uniform("nu", 0.3)
+    s = a + b
+    assert s.components() == ["E", "nu"]
+    assert s.value(0, 0, "E") == 210.0
+    assert s.value(0, 0, "nu") == 0.3
 
 
 def test_subfield_plus_subfield_distinct_support_raises():
@@ -387,17 +390,17 @@ def test_field_plus_field_same_decomposition():
     assert s[0].value(0, 0, "E") == 7.0
 
 
-def test_field_plus_field_mismatched_decomposition_raises():
+def test_field_plus_field_distinct_decomposition_aggregates():
+    # Field-level union/passthrough: two fields over distinct supports do not
+    # overlap, so they aggregate into a two-zone field (no error).
     _, _, fa = _tri3_subspace()
     _, _, fb = _tri3_subspace()
     a = pyrucast.ElementField(fa, ["E"])
+    a[0].set_uniform("E", 3.0)
     b = pyrucast.ElementField(fb, ["E"])
-    try:
-        a + b
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("expected RuntimeError on mismatched decomposition")
+    b[0].set_uniform("E", 4.0)
+    s = a + b
+    assert len(s) == 2
 
 
 def test_field_plus_subfield_targets_matching_zone():
