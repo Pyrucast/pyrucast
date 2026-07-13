@@ -416,12 +416,15 @@ class ElementField:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Union does **not** fuse
-        zones sharing a support — they are kept side by side; the
-        fields' `finalize` only rejects a component carried by two
-        zones on one support (call `consolidate_element` to fuse).
-        Returns `NotImplemented` for any other type so Python can
-        fall back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Same-support zones are
+        handled **asymmetrically** by the two field types:
+        `NodeField` *fuses* them (union of components), whereas
+        `ElementField` keeps component-disjoint zones side by side
+        and only rejects a component carried by two zones on one
+        support — fuse those explicitly with `consolidate`
+        (`consolidate_element`). Returns `NotImplemented` for any
+        other type so Python can fall back to the right operand's
+        `__ror__`.
         """
 
 @typing.final
@@ -512,12 +515,15 @@ class Evolution:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Union does **not** fuse
-        zones sharing a support — they are kept side by side; the
-        fields' `finalize` only rejects a component carried by two
-        zones on one support (call `consolidate_element` to fuse).
-        Returns `NotImplemented` for any other type so Python can
-        fall back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Same-support zones are
+        handled **asymmetrically** by the two field types:
+        `NodeField` *fuses* them (union of components), whereas
+        `ElementField` keeps component-disjoint zones side by side
+        and only rejects a component carried by two zones on one
+        support — fuse those explicitly with `consolidate`
+        (`consolidate_element`). Returns `NotImplemented` for any
+        other type so Python can fall back to the right operand's
+        `__ror__`.
         """
 
 @typing.final
@@ -596,12 +602,15 @@ class FiniteElementSpace:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Union does **not** fuse
-        zones sharing a support — they are kept side by side; the
-        fields' `finalize` only rejects a component carried by two
-        zones on one support (call `consolidate_element` to fuse).
-        Returns `NotImplemented` for any other type so Python can
-        fall back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Same-support zones are
+        handled **asymmetrically** by the two field types:
+        `NodeField` *fuses* them (union of components), whereas
+        `ElementField` keeps component-disjoint zones side by side
+        and only rejects a component carried by two zones on one
+        support — fuse those explicitly with `consolidate`
+        (`consolidate_element`). Returns `NotImplemented` for any
+        other type so Python can fall back to the right operand's
+        `__ror__`.
         """
 
 @typing.final
@@ -730,12 +739,15 @@ class Matrix:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Union does **not** fuse
-        zones sharing a support — they are kept side by side; the
-        fields' `finalize` only rejects a component carried by two
-        zones on one support (call `consolidate_element` to fuse).
-        Returns `NotImplemented` for any other type so Python can
-        fall back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Same-support zones are
+        handled **asymmetrically** by the two field types:
+        `NodeField` *fuses* them (union of components), whereas
+        `ElementField` keeps component-disjoint zones side by side
+        and only rejects a component carried by two zones on one
+        support — fuse those explicitly with `consolidate`
+        (`consolidate_element`). Returns `NotImplemented` for any
+        other type so Python can fall back to the right operand's
+        `__ror__`.
         """
 
 @typing.final
@@ -834,12 +846,15 @@ class Mesh:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Union does **not** fuse
-        zones sharing a support — they are kept side by side; the
-        fields' `finalize` only rejects a component carried by two
-        zones on one support (call `consolidate_element` to fuse).
-        Returns `NotImplemented` for any other type so Python can
-        fall back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Same-support zones are
+        handled **asymmetrically** by the two field types:
+        `NodeField` *fuses* them (union of components), whereas
+        `ElementField` keeps component-disjoint zones side by side
+        and only rejects a component carried by two zones on one
+        support — fuse those explicitly with `consolidate`
+        (`consolidate_element`). Returns `NotImplemented` for any
+        other type so Python can fall back to the right operand's
+        `__ror__`.
         """
 
 @typing.final
@@ -1123,12 +1138,15 @@ class Model:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Union does **not** fuse
-        zones sharing a support — they are kept side by side; the
-        fields' `finalize` only rejects a component carried by two
-        zones on one support (call `consolidate_element` to fuse).
-        Returns `NotImplemented` for any other type so Python can
-        fall back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Same-support zones are
+        handled **asymmetrically** by the two field types:
+        `NodeField` *fuses* them (union of components), whereas
+        `ElementField` keeps component-disjoint zones side by side
+        and only rejects a component carried by two zones on one
+        support — fuse those explicitly with `consolidate`
+        (`consolidate_element`). Returns `NotImplemented` for any
+        other type so Python can fall back to the right operand's
+        `__ror__`.
         """
 
 @typing.final
@@ -1317,12 +1335,15 @@ class NodeField:
         may be another aggregate of the same type or a single
         sub-object. Sub-objects already present (same store slot)
         are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Union does **not** fuse
-        zones sharing a support — they are kept side by side; the
-        fields' `finalize` only rejects a component carried by two
-        zones on one support (call `consolidate_element` to fuse).
-        Returns `NotImplemented` for any other type so Python can
-        fall back to the right operand's `__ror__`.
+        (refcount bump), not deep-copied. Same-support zones are
+        handled **asymmetrically** by the two field types:
+        `NodeField` *fuses* them (union of components), whereas
+        `ElementField` keeps component-disjoint zones side by side
+        and only rejects a component carried by two zones on one
+        support — fuse those explicitly with `consolidate`
+        (`consolidate_element`). Returns `NotImplemented` for any
+        other type so Python can fall back to the right operand's
+        `__ror__`.
         """
 
 @typing.final

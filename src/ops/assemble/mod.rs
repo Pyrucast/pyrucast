@@ -24,10 +24,9 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
-use crate::containers::field::SubField;
 use crate::containers::matrix::{ComputedRecipe, Matrix, SubMatrix};
 use crate::containers::model::{Model, SubModel};
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::models::Contribution;
 use crate::store::{insert, read, Handle};
 
@@ -63,10 +62,17 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
             // declares a material FE subspace. No per-variant match.
             let material = match sub.material_fespace() {
                 Some(fespace) => {
-                    let m = materials.sub_for_fespace(&fespace)?;
-                    if let Some(required) = sub.material_components() {
-                        validate_material(&m, required)?;
-                    }
+                    // Resolve the material zone by the components this physics
+                    // needs, so a shared fespace carrying several
+                    // component-disjoint material zones (e.g. thermal `k` +
+                    // mechanical `E`/`nu` on one mesh) resolves each physics'
+                    // own zone without an explicit consolidate.
+                    let m = match sub.material_components() {
+                        Some(required) => {
+                            materials.sub_for_fespace_with(&fespace, required)?
+                        }
+                        None => materials.sub_for_fespace(&fespace)?,
+                    };
                     Some(m)
                 }
                 None => None,
@@ -172,23 +178,6 @@ pub fn mass(model: &Model) -> Result<Matrix> {
     let mut m = Matrix::empty();
     m.finalize()?;
     Ok(m)
-}
-
-/// Ensure `material` carries every component declared as required by
-/// the physics. Errors with both lists for a clear message.
-fn validate_material(material: &Handle<SubElementField>, required: &[&str]) -> Result<()> {
-    let have: Vec<String> = read(material)?.components().to_vec();
-    for req in required {
-        if !have.iter().any(|c| c == req) {
-            return Err(PyrucastError::Message(format!(
-                "assemble::stiffness: required material component '{}' missing on \
-                 SubElementField (has: [{}])",
-                req,
-                have.join(", ")
-            )));
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

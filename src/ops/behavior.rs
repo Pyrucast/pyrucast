@@ -53,9 +53,13 @@ pub fn integrate(
     for h in model {
         // Cheap read under the sub-model lock: which FE subspaces this
         // sub-model wants for its deformation and its material.
-        let (beh_fespace, mat_fespace) = {
+        let (beh_fespace, mat_fespace, mat_components) = {
             let sub = read(h)?;
-            (sub.behavior_fespace(), sub.material_fespace())
+            (
+                sub.behavior_fespace(),
+                sub.material_fespace(),
+                sub.material_components(),
+            )
         };
         let Some(beh_fespace) = beh_fespace else {
             continue; // constraint sub-model — no behaviour
@@ -69,8 +73,14 @@ pub fn integrate(
             Some(p) => Some(p.sub_for_fespace(&beh_fespace)?),
             None => None,
         };
+        // Resolve the material zone by the components this physics needs, so a
+        // shared fespace carrying several component-disjoint material zones
+        // resolves each physics' own zone without an explicit consolidate.
         let material = match mat_fespace {
-            Some(fe) => Some(materials.sub_for_fespace(&fe)?),
+            Some(fe) => Some(match mat_components {
+                Some(required) => materials.sub_for_fespace_with(&fe, required)?,
+                None => materials.sub_for_fespace(&fe)?,
+            }),
             None => None,
         };
 

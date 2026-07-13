@@ -85,8 +85,12 @@ Chaque étape ne lit du champ unioné que ce dont elle a besoin : `solve`
 n'échantillonne le second membre qu'aux DDL de sa matrice et ignore les
 composantes surnuméraires ; `material_field` remplit par nom les composantes de
 chaque physique. Comme thermique et mécanique partagent la fespace, le champ
-matériau porte deux zones sur le même support : `step_by_step` les fusionne avec
-[`consolidate`](operateurs/champs.md) en une zone lue par les deux physiques.
+matériau porte **deux zones** (aux composantes disjointes) sur le même support ;
+nul besoin de les fusionner : les opérateurs (`stiffness`, `integrate_behavior`,
+`thermal_strain`) résolvent leur zone matière **par les composantes qu'ils
+requièrent** (`k` pour la conduction, `E`/`nu` pour l'élasticité, `alpha` pour la
+dilatation). Pour fusionner explicitement des zones qui partagent légitimement un
+support, [`consolidate`](operateurs/champs.md) reste disponible.
 
 En sortie, `data["results"]` est une liste (un élément par instant) :
 

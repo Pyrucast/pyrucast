@@ -57,10 +57,15 @@ pub fn thermal_strain(
     let mut out = ElementField::empty();
     for sub in fespace {
         let temp_sub = temperature.sub_for_fespace(sub)?;
-        let mat_sub = material.sub_for_fespace(sub)?;
+        // Resolve the material zone by `alpha`, so a shared fespace carrying
+        // several component-disjoint material zones (e.g. thermal `k` +
+        // mechanical `E`/`nu`/`alpha`) resolves the expansion zone without an
+        // explicit consolidate.
+        let mat_sub = material.sub_for_fespace_with(sub, &[ALPHA])?;
         let space_dim = read(sub)?.space_dim();
 
-        // Fail fast with an actionable message if the fields lack their component.
+        // Fail fast with an actionable message if the temperature lacks its
+        // component (the material zone was already selected on `alpha`).
         if !read(&temp_sub)?
             .components()
             .iter()
@@ -68,11 +73,6 @@ pub fn thermal_strain(
         {
             return Err(PyrucastError::Message(format!(
                 "thermal_strain: the temperature field carries no '{TEMPERATURE}' component"
-            )));
-        }
-        if !read(&mat_sub)?.components().iter().any(|c| c == ALPHA) {
-            return Err(PyrucastError::Message(format!(
-                "thermal_strain: material has no '{ALPHA}' component — supply it via material_field"
             )));
         }
 

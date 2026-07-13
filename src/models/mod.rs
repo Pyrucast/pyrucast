@@ -595,8 +595,9 @@ pub trait Domain: Sync {
     /// Material component names this domain **accepts but does not require**:
     /// passed through the material channel if supplied (kept by
     /// [`material_field`](fn@crate::ops::build::material_field)), never demanded
-    /// at assembly (not checked by `validate_material`). Read by an ancillary
-    /// operator — e.g. `alpha` (thermal expansion) consumed by
+    /// at assembly (only the *required* components discriminate the material
+    /// zone). Read by an ancillary operator — e.g. `alpha` (thermal expansion)
+    /// consumed by
     /// [`crate::ops::field::thermal_strain`](fn@crate::ops::field::thermal_strain).
     /// Default: `&[]`.
     fn optional_material_components(&self) -> &'static [&'static str] {

@@ -441,3 +441,24 @@ def test_op_bad_operand_raises_type_error():
             pass
         else:
             raise AssertionError("expected TypeError for str operand")
+
+
+def test_consolidate_fuses_component_disjoint_zones():
+    """`consolidate(ElementField)` fuses same-support, component-disjoint zones
+    (e.g. per-physics material zones left side by side by a union) into one zone
+    carrying the union of their components."""
+    _, _, fes = _tri3_subspace()
+    a = pyrucast.ElementField(fes, ["k"])
+    a[0].set_uniform("k", 2.0)
+    b = pyrucast.ElementField(fes, ["E"])
+    b[0].set_uniform("E", 5.0)
+
+    union = a | b
+    assert len(union) == 2  # two zones side by side (ElementField union does not fuse)
+
+    fused = pyrucast.consolidate(union)
+    assert len(fused) == 1
+    sub = fused[0]
+    assert set(sub.components()) == {"k", "E"}
+    assert sub.value(0, 0, "k") == 2.0
+    assert sub.value(0, 0, "E") == 5.0

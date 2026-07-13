@@ -118,19 +118,19 @@ def test_step_by_step_free_thermal_expansion():
             assert abs(displacement.value(node, "u_x") - ALPHA * dT * x) < 1e-7
             assert abs(displacement.value(node, "u_y") - ALPHA * dT * y) < 1e-7
 
-    # Contrainte quasi nulle (dilatation libre). Matériaux consolidés (zones
-    # thermique + mécanique fusionnées sur la fespace partagée).
-    mats = pc.consolidate(materials)
+    # Contrainte quasi nulle (dilatation libre). Les matériaux gardent leurs deux
+    # zones (thermique + mécanique) : chaque opérateur résout la sienne par
+    # composante, sans consolidation.
     sigma = pc.integrate_behavior(
         model.filter("mechanical"),
         pc.deformation(displacement, fes)
         - pc.thermal_strain(
             pc.interp_to_gauss(pc.restrict(temperature, mesh), fes),
-            mats,
+            materials,
             fes,
             T_REF,
         ),
-        mats,
+        materials,
     )
     for zone in range(len(sigma)):
         sub = sigma[zone]

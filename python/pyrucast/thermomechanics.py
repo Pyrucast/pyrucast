@@ -345,12 +345,12 @@ def step_by_step(data):
     prev_t = times[0] if times else 0.0
     for i, t in enumerate(times):
         dt = t - prev_t
-        # Matériaux du pas, **consolidés** : `material_field` produit une zone par
-        # sous-modèle, donc thermique et mécanique bâtis sur la même fespace créent
-        # deux zones sur ce support — que `stiffness` ne saurait départager.
-        # `consolidate` les fusionne en une zone portant l'union des composantes
-        # (`k` + `E`/`nu`/`alpha`), lue par chaque physique selon ses besoins.
-        materials_t = pc.consolidate(_interpolate(materials_spec, t))
+        # `material_field` produit une zone par sous-modèle : thermique et
+        # mécanique bâtis sur la même fespace laissent deux zones (composantes
+        # disjointes) côte à côte. Pas besoin de les fusionner — les opérateurs
+        # (`stiffness`, `integrate_behavior`, `thermal_strain`) résolvent leur
+        # zone matière par les composantes qu'ils requièrent.
+        materials_t = _interpolate(materials_spec, t)
         loads_t = _interpolate(loads_spec, t)
 
         temperature = (

@@ -496,6 +496,57 @@ impl ElementField {
         }
     }
 
+    /// The **unique** [`SubElementField`] on `fespace` that carries **every**
+    /// component in `required`.
+    ///
+    /// Like [`sub_for_fespace`](Self::sub_for_fespace) but discriminates zones by
+    /// their component set, not by support alone. A support may then legitimately
+    /// hold several **component-disjoint** zones — e.g. the per-physics material
+    /// zones a union leaves side by side (`k` for conduction, `E`/`nu` for
+    /// elasticity on one shared mesh) — and each caller resolves *its own* zone by
+    /// naming the components it needs, without an explicit
+    /// [`consolidate_element`](crate::ops::field::consolidate_element). It stays
+    /// safe: it never silently returns the first of several — it errors if **no**
+    /// zone carries the full set, or if **more than one** does (a genuine
+    /// ambiguity the caller must resolve). `required` must be non-empty (an empty
+    /// set matches every zone and is a caller error).
+    pub(crate) fn sub_for_fespace_with(
+        &self,
+        fespace: &Handle<SubFiniteElementSpace>,
+        required: &[&str],
+    ) -> Result<Handle<SubElementField>> {
+        let mut matching: Vec<Handle<SubElementField>> = Vec::new();
+        for h in self.subs_for_fespace(fespace)? {
+            let carries_all = {
+                let comps = read(&h)?.components().to_vec();
+                required
+                    .iter()
+                    .all(|&r| comps.iter().any(|c| c.as_str() == r))
+            };
+            if carries_all {
+                matching.push(h);
+            }
+        }
+        match matching.len() {
+            1 => Ok(matching.pop().expect("length checked to be 1")),
+            0 => Err(PyrucastError::Message(format!(
+                "no SubElementField on the SubFiniteElementSpace at slot {} \
+                 (generation {}) carries all of {:?} — supply it via material_field",
+                fespace.index(),
+                fespace.generation(),
+                required
+            ))),
+            n => Err(PyrucastError::Message(format!(
+                "{n} SubElementFields on the SubFiniteElementSpace at slot {} \
+                 (generation {}) each carry all of {:?}; the zone is ambiguous — \
+                 fuse them with consolidate_element or narrow the components",
+                fespace.index(),
+                fespace.generation(),
+                required
+            ))),
+        }
+    }
+
     /// Build an `ElementField` with an explicit `components` list per
     /// subspace. `components_per_subspace.len()` must equal
     /// `fespace.len()`.
