@@ -5,7 +5,7 @@ use crate::containers::mesh::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{mpc, Physics, RelationSense};
-use crate::py::finite_element_space::PyFiniteElementSpace;
+use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
 use crate::py::node_field::PyNodeField;
@@ -33,6 +33,16 @@ impl PySubModel {
     /// Names of the dual variables of this sub-model.
     fn dual_vars(&self) -> PyResult<Vec<String>> {
         Ok(read(&self.handle)?.dual_vars())
+    }
+
+    /// `sub.fespace()` — the `SubFiniteElementSpace` this sub-model integrates
+    /// its behaviour on, or `None` for a constraint sub-model (Dirichlet, MPC…,
+    /// which integrate nothing). The per-sub-model counterpart of
+    /// `Model.fespace()`.
+    fn fespace(&self) -> PyResult<Option<PySubFiniteElementSpace>> {
+        Ok(read(&self.handle)?
+            .behavior_fespace()
+            .map(|handle| PySubFiniteElementSpace { handle }))
     }
 
     /// The physics nature(s) of this sub-model as a list of tags (`"mechanical"`,

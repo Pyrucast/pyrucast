@@ -1133,19 +1133,20 @@ impl Model {
     }
 
     /// Rebuild the [`FiniteElementSpace`] this model integrates on: the
-    /// behaviour subspaces of its domain sub-models (constraints, which have
-    /// none, are skipped), deduplicated by store slot in first-seen order —
-    /// subspace handles are **shared**, not copied. Errors if the model has no
-    /// domain sub-model (nothing to integrate on). Lets a caller recover the FE
-    /// space (and, through [`FiniteElementSpace::mesh`], the mesh) from the model
-    /// alone.
+    /// behaviour subspace of each domain sub-model (constraints, which have
+    /// none, are skipped), in order — **one subspace per domain sub-model**, a
+    /// 1-to-1 correspondence (no deduplication). Subspace handles are **shared**,
+    /// not copied. This is the exact inverse of the per-subspace constructors
+    /// (`Model::elasticity(fes)` and friends build one sub-model per subspace).
+    /// Errors if the model has no domain sub-model (nothing to integrate on).
+    /// Combined with [`FiniteElementSpace::mesh`], lets a caller recover the FE
+    /// space (and mesh) from the model alone; a single sub-model's own subspace
+    /// is [`SubModel::behavior_fespace`].
     pub fn fespace(&self) -> Result<FiniteElementSpace> {
         let mut fes = FiniteElementSpace::empty();
         for h in self {
             if let Some(sub) = read(h)?.behavior_fespace() {
-                if !fes.items().iter().any(|s| s.same_slot(&sub)) {
-                    fes.add_sub(sub)?;
-                }
+                fes.add_sub(sub)?;
             }
         }
         if fes.is_empty() {

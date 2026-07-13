@@ -16,7 +16,8 @@ Model
 ├── primal_vars(): Vec<String>      # union — colonnes des matrices
 ├── dual_vars():   Vec<String>      # union — lignes des matrices
 ├── filter(Physics) -> Model        # sous-modèles d'une nature donnée
-└── fespace() -> FiniteElementSpace # sous-espaces des domaines (contraintes exclues)
+└── fespace() -> FiniteElementSpace # 1 sous-espace par sous-modèle de domaine
+                                     # (contraintes exclues, sans dédup)
 
 ops::assemble (opérateurs, pas des méthodes de Model)
 ├── stiffness(model, materials) -> Matrix   # K  (assemblé sur demande)
@@ -26,6 +27,7 @@ SubModel  (énum de stockage + dispatch — AUCUNE logique)
 ├── HeatConduction(HeatConduction)    # chaque variante enveloppe une struct…
 ├── Dirichlet(Dirichlet)             # …qui porte ses données + impl SubModelKind
 ├── Mpc(Mpc)                         # contrainte multi-points (relations linéaires)
+├── fespace() -> Option<SubFiniteElementSpace>  # sous-espace intégré (None si contrainte)
 └── as_kind(&self) -> &dyn SubModelKind   # l'unique match du module modèle
 
 SubModelKind  (trait de base — le dénominateur commun, co-localisé par physique)

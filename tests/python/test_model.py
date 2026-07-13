@@ -197,17 +197,40 @@ def test_assembled_blocks_carry_physics_and_matrix_filter():
 
 
 def test_fespace_and_mesh_recovered_from_model():
-    """`Model.fespace()` rebuilds the FE space (constraints skipped) and
+    """`Model.fespace()` rebuilds the FE space **one subspace per domain
+    sub-model** (constraints skipped, no deduplication) and
     `FiniteElementSpace.mesh()` the mesh — both from the model alone."""
     _, mesh, fes, _, _, model, *_ = _seg2_heat_model(dirichlet_left=True)
 
     recovered = model.fespace()
-    assert len(recovered) == len(fes)  # the Dirichlet sub-model adds no subspace
+    # 1-to-1 with the domain sub-models (the Dirichlet adds no subspace).
+    n_domain = sum(1 for i in range(len(model)) if model[i].fespace() is not None)
+    assert len(recovered) == n_domain == len(fes)
     assert recovered[0].element_type == fes[0].element_type
 
     m2 = recovered.mesh()
     assert len(m2) == len(mesh)
     assert m2.unit().cell_count() == mesh.unit().cell_count()
+
+
+def test_fespace_one_to_one_no_dedup():
+    """Two domain sub-models on the same FE space ⇒ two subspaces (no dedup),
+    a 1-to-1 correspondence with the sub-models."""
+    c = pyrucast.Coords(2)
+    n = [c.add_node([i * 1.0, j * 1.0]) for j in range(2) for i in range(2)]
+    mesh = pyrucast.Mesh(c, "QUA4")
+    mesh.unit().add_cell([n[0], n[1], n[3], n[2]])
+    fes = pyrucast.FiniteElementSpace(mesh)
+
+    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.elasticity(
+        fes, "plane_stress"
+    )
+    assert len(model) == 2
+    assert len(model.fespace()) == 2  # heat + elasticity, both kept
+
+    # Each sub-model exposes its own subspace; a constraint has none.
+    assert model[0].fespace() is not None
+    assert model[1].fespace() is not None
 
 
 def test_fespace_errors_without_domain_submodel():

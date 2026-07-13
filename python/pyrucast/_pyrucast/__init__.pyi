@@ -1840,6 +1840,13 @@ class SubModel:
         r"""
         Names of the dual variables of this sub-model.
         """
+    def fespace(self) -> typing.Optional[SubFiniteElementSpace]:
+        r"""
+        `sub.fespace()` — the `SubFiniteElementSpace` this sub-model integrates
+        its behaviour on, or `None` for a constraint sub-model (Dirichlet, MPC…,
+        which integrate nothing). The per-sub-model counterpart of
+        `Model.fespace()`.
+        """
     def physics(self) -> builtins.list[builtins.str]:
         r"""
         The physics nature(s) of this sub-model as a list of tags (`"mechanical"`,
