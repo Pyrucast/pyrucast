@@ -23,7 +23,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::field::{deformation, interp_to_gauss, thermal_strain};
-use pyrucast::ops::internal_forces::internal_forces;
+use pyrucast::ops::assemble::internal_forces;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::ops::{assemble, behavior, build, mesher};
 use pyrucast::store::{insert, read};

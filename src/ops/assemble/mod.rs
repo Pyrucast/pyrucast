@@ -32,8 +32,10 @@ use crate::store::{insert, read, Handle};
 
 pub mod coloring;
 pub mod flux;
+pub mod internal_forces;
 pub mod scatter;
 pub use flux::{flux, FluxDensity};
+pub use internal_forces::{internal_forces, internal_forces_continuum};
 
 /// Assemble the stiffness matrix `K` for `model`.
 ///

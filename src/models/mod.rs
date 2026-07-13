@@ -696,7 +696,7 @@ pub trait Domain: Sync {
 /// per row of the symmetric stress tensor `σ` (read in Voigt naming). Backs both
 /// the [`SubModelKind::internal_force_element`] default (elasticity, Mazars,
 /// plasticity) and the model-free
-/// [`crate::ops::internal_forces::internal_forces_continuum`] operator. Fills
+/// [`crate::ops::assemble::internal_forces_continuum`] operator. Fills
 /// `fe` node-major / axis-minor (`fe[i * space_dim + a]`).
 pub(crate) fn continuum_internal_force_element(
     geoms: &[CellGeom],

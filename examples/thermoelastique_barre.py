@@ -92,7 +92,7 @@ def _solve_thermal(model, materials, fes, c, grid):
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
     sig_th = pyrucast.behavior.integrate_behavior(model, eps_th, materials)
-    f_th = pyrucast.internal_forces.internal_forces(model, sig_th)
+    f_th = pyrucast.assemble.internal_forces(model, sig_th)
     solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), f_th)
     u = _displacement(solution, c, grid)
     sigma = pyrucast.behavior.integrate_behavior(

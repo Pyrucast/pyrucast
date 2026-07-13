@@ -1,9 +1,9 @@
 # Opérateurs de comportement
 
 Le module `ops::behavior` **intègre la loi de comportement** d'un
-[`Model`](../model.md) — le `COMP` de cast3m (« intégrer le comportement ») ; le
-module `ops::internal_forces` en calcule les **forces internes** — le `BSIG` de
-cast3m (`∫ Bᵀ σ`).
+[`Model`](../model.md) — le `COMP` de cast3m (« intégrer le comportement ») ;
+l'opérateur `ops::assemble::internal_forces` en calcule les **forces internes** —
+le `BSIG` de cast3m (`∫ Bᵀ σ`).
 
 ## `integrate_behavior(model, deformation, materials, prev=None, dt=None)` → `ElementField`
 
@@ -100,7 +100,7 @@ sorte que `r = f_ext − f_int` est le **résidu** d'équilibre.
 # Solution déjà obtenue par le solveur.
 eps    = pyrucast.field.deformation(solution, fes)          # ε = B·u
 sig    = pyrucast.behavior.integrate_behavior(model, eps, materials)  # COMP : σ
-f_int  = pyrucast.internal_forces.internal_forces(model, sig)         # BSIG : ∫ Bᵀ σ
+f_int  = pyrucast.assemble.internal_forces(model, sig)         # BSIG : ∫ Bᵀ σ
 residu = f_ext - f_int                                # équilibre
 ```
 

@@ -1,13 +1,22 @@
 """Assemblage de matrices/seconds membres — miroir de ``ops::assemble`` (Rust).
 
-Construit une matrice (rigidité, masse) ou un flux nodal à partir d'un
-``Model`` en câblant les intégrandes par physique.
+Construit une matrice (rigidité, masse), un flux nodal, ou les forces internes
+nodales (`BSIG`, ``∫ Bᵀ σ``) à partir d'un ``Model`` en câblant les intégrandes
+par physique.
 """
 
 from ._pyrucast import (
     flux as flux,
+    internal_forces as internal_forces,
+    internal_forces_continuum as internal_forces_continuum,
     mass as mass,
     stiffness as stiffness,
 )
 
-__all__ = ["flux", "mass", "stiffness"]
+__all__ = [
+    "flux",
+    "internal_forces",
+    "internal_forces_continuum",
+    "mass",
+    "stiffness",
+]

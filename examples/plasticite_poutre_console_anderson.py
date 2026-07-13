@@ -250,7 +250,7 @@ def main():
         def residual_at(u):
             strain = pyrucast.field.deformation(u, fes)
             out = pyrucast.behavior.integrate_behavior(model, strain | state, materials)
-            f_int = pyrucast.internal_forces.internal_forces(model, out)
+            f_int = pyrucast.assemble.internal_forces(model, out)
             f_ext = pyrucast.field.restrict_like(load_scaled, f_int)
             residual = f_ext - f_int
             free_res = pyrucast.field.xtx(pyrucast.field.restrict(residual, free_mesh)) ** 0.5

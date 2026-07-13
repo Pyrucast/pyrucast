@@ -13,9 +13,12 @@
 //! - [`field`]: field-on-mesh operations (gradient, divergence,
 //!   interpolation, projection, restriction).
 //! - [`assemble`]: build a [`crate::containers::matrix::Matrix`] /
-//!   [`crate::containers::node_field::SubNodeField`] from a `Model`. The per-physics
-//!   integrands live under [`crate::models`]; this layer wires them
-//!   together.
+//!   [`crate::containers::node_field::SubNodeField`] from a `Model` —
+//!   stiffness, mass, flux RHS, and the internal nodal forces
+//!   [`assemble::internal_forces`](fn@assemble::internal_forces) (Cast3m
+//!   `BSIG`, `∫ Bᵀ σ`). The
+//!   per-physics integrands live under [`crate::models`]; this layer
+//!   wires them together.
 //! - [`behavior`]: integrate the constitutive law of a `Model` (Cast3m
 //!   `COMP`) — the exact, possibly non-linear counterpart of the
 //!   `assemble::stiffness` linearization.
@@ -34,6 +37,5 @@ pub mod build;
 pub mod export;
 pub mod field;
 pub mod geom;
-pub mod internal_forces;
 pub mod mesher;
 pub mod solver;

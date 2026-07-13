@@ -63,7 +63,7 @@ la connectivité, ces éléments empruntent le **même** chemin de scatter paral
 sans machinerie supplémentaire : seul le noyau numérique lit plusieurs géométries.
 
 Les **scatters nodaux** — les opérateurs `Bᵀ` (`ops::field::divergence` et les
-forces internes `ops::internal_forces`, Cast3m `BSIG`) et la charge répartie
+forces internes `ops::assemble::internal_forces`, Cast3m `BSIG`) et la charge répartie
 `ops::assemble::flux` (`∫ φ N`) — dispersent tous de la même façon : chaque
 cellule calcule sa contribution locale, puis l'accumule dans ses nœuds. Ils
 passent tous par le **même driver** `kernel::scatter_to_nodes` (« intègre un

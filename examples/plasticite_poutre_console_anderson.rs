@@ -65,7 +65,7 @@ use pyrucast::ops::field::{
     coordinates, deformation, mask_cells, restrict, restrict_like, select_nodes, Band,
 };
 use pyrucast::ops::geom::nearest_node;
-use pyrucast::ops::internal_forces::internal_forces;
+use pyrucast::ops::assemble::internal_forces;
 use pyrucast::ops::mesher::{line_seg2, sweep_qua4, to_poi1, translate};
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;

@@ -713,7 +713,7 @@ impl SubModel {
     }
 
     /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this sub-model (Cast3m `BSIG`).
-    /// The caller ([`crate::ops::internal_forces::internal_forces`]) supplies the
+    /// The caller ([`crate::ops::assemble::internal_forces`]) supplies the
     /// matching per-zone `stress` (this sub-model's
     /// [`integrate_behavior`](Self::integrate_behavior) output).
     pub(crate) fn build_internal_forces(

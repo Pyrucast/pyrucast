@@ -9,8 +9,9 @@ Python). Elle matérialise la règle de [Conventions](conventions.md) :
 - une fonction libre `ops::<thème>::f` est exposée dans le **sous-module du
   thème** : `pyrucast.<thème>.f` (le rangement par thème du code Rust est
   reflété par une hiérarchie de modules Python : `mesher`, `field`,
-  `assemble`, `behavior`, `solver`, `export`, `build`, `internal_forces`,
-  plus `store`). Seul `pyrucast.consolidate` (dispatch mesh/champ) reste au
+  `assemble` (dont les forces internes `BSIG`), `behavior`, `solver`,
+  `export`, `build`, plus `store`). Seul `pyrucast.consolidate` (dispatch
+  mesh/champ) reste au
   top-level, à l'image du niveau racine de `ops` ;
 - une surcharge d'opérateur Rust devient un dunder Python (`Add` →
   `__add__`, `Index` → `__getitem__`, …) ;
@@ -141,7 +142,11 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `material_field(model: &Model, pairs: &[(&str, f64)]) -> ElementField` | `material_field(model, components_and_values) -> ElementField` |
 | `material_field_per_sub_model(model: &Model, per: &[&[(&str, f64)]]) -> ElementField` | `material_field_per_sub_model(model, components_and_values_per_sub_model) -> ElementField` |
 
-### `ops::assemble` — assemblage des matrices
+### `ops::assemble` — assemblage des matrices et forces internes
+
+`internal_forces` (`BSIG`, `∫ Bᵀ σ`) fait partie de la famille assemblage
+(`Model` → vecteur nodal, comme `flux`) et vit sous `ops::assemble` /
+`pyrucast.assemble`.
 
 | Rust (`ops::assemble::…`) | Python (`pyrucast.assemble.…`) |
 |---|---|
@@ -149,19 +154,14 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `mass(model: &Model) -> Matrix` | `mass(model) -> Matrix` |
 | `assemble(k: &mut Matrix) -> Result<()>` | — (Rust : (ré)assemble une matrice depuis ses blocs seuls, sans `Model` — chemin de composition) |
 | `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
+| `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(model, stresses) -> NodeField` |
+| `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
 
 ### `ops::behavior` — intégration du comportement (`COMP`)
 
 | Rust (`ops::behavior::…`) | Python (`pyrucast.behavior.…`) |
 |---|---|
 | `integrate(model: &Model, deformation: &ElementField, prev: Option<&ElementField>, materials: &ElementField, dt: Option<f64>) -> ElementField` | `integrate_behavior(model, deformation, materials, prev=None, dt=None) -> ElementField` |
-
-### `ops::internal_forces` — forces internes (`BSIG`, `∫ Bᵀ σ`)
-
-| Rust (`ops::internal_forces::…`) | Python (`pyrucast.internal_forces.…`) |
-|---|---|
-| `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(model, stresses) -> NodeField` |
-| `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
 
 ### `ops::solver` — résolution
 
