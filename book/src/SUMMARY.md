@@ -51,6 +51,10 @@
   - [Solveur](operateurs/solveur.md)
   - [Visualisation](visualization.md)
 
+# Couche Python haut niveau
+
+- [Thermo-mécanique pas-à-pas](thermomecanique-pas-a-pas.md)
+
 # Développer
 
 - [Vue d'ensemble](developper.md)

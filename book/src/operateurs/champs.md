@@ -29,7 +29,7 @@ configuration déformée).
 | `restrict(field, mesh)` | restreint un `NodeField` aux nœuds de `mesh` (une zone par sous-maillage cible ; `0.0` pour les nœuds non couverts ; nœuds hors de `mesh` abandonnés). Erreur si `mesh` n'est pas sur le même `Coords`. |
 | `restrict_like(field, target)` | reprojette `field` sur le support **et** les composantes de `target`, zone par zone (mêmes slots que `target`) ⇒ le résultat se combine directement avec `target` par les opérateurs `+ - * /`. Nœuds/composantes de `field` absents de `target` abandonnés ; `0.0` si non couverts. Typiquement pour replier un incrément de `solve` (qui porte aussi les multiplicateurs) dans une solution courante. Erreur si `Coords` différents. |
 | `merge(a, b)` | union structurelle de deux `NodeField`, consolidée — c'est l'**alias nommé** de `a \| b`. |
-| `consolidate(obj)` | dispatch par type : sur un `NodeField`, fusionne les zones de **même support** (handle identique) en vérifiant la cohérence des valeurs partagées ; sur un `Mesh`, fusionne les sous-maillages de même type. |
+| `consolidate(obj)` | dispatch par type : sur un `NodeField`, fusionne les zones de **même support** (handle identique) en vérifiant la cohérence des valeurs partagées ; sur un `ElementField`, fusionne de même les zones d'une même `FiniteElementSpace` (union des composantes) ; sur un `Mesh`, fusionne les sous-maillages de même type. |
 
 La consolidation d'un `NodeField` est exactement la **finalisation** de l'union
 `|` : après déduplication par handle, les zones définies sur le même `SubMesh`
@@ -37,7 +37,11 @@ deviennent une seule zone portant l'union de leurs composantes — une composant
 définie par plusieurs zones doit y avoir la **même valeur** partout (sinon
 erreur). Une vérification inter-supports finale impose qu'un nœud partagé par
 des zones de supports différents s'accorde sur toute composante commune.
-(L'équivalent côté `ElementField` est `consolidate_element`.)
+Le même `consolidate` accepte un `ElementField` (opération `consolidate_element`) :
+les sous-champs d'une même `FiniteElementSpace` fusionnent en une zone portant
+l'union de leurs composantes — utile pour réunir des zones matériau bâties par
+physique sur une fespace partagée (`k` thermique + `E`/`nu`/`alpha` mécanique) en
+un champ matériau unique lu par chaque physique.
 
 ## Bande de valeurs (`ge` / `gt` / `le` / `lt`)
 

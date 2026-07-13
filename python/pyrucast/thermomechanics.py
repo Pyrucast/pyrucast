@@ -202,8 +202,10 @@ def mechanical_step(
     ``prev`` — prédicteur incrémental ``σ(A) + C:Δε``. ``out`` (contraintes + VAR + ε)
     convergé est renvoyé pour servir de ``prev`` au pas suivant.
     """
-    k = stiffness_matrix if stiffness_matrix is not None else pc.stiffness(
-        mechanical_model, materials
+    k = (
+        stiffness_matrix
+        if stiffness_matrix is not None
+        else pc.stiffness(mechanical_model, materials)
     )
     support = free_mesh if free_mesh is not None else mesh
 
