@@ -84,12 +84,8 @@ pub fn integrate(
             None => None,
         };
 
-        let state = read(h)?.integrate_behavior(
-            &input,
-            prev_zone.as_ref(),
-            material.as_ref(),
-            dt,
-        )?;
+        let state =
+            read(h)?.integrate_behavior(&input, prev_zone.as_ref(), material.as_ref(), dt)?;
         out.add_sub(insert(state))?;
     }
     Ok(out)

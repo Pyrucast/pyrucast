@@ -258,8 +258,8 @@ impl Domain for Plasticity {
         }
         out[v..v + 6].copy_from_slice(&eps_p_new); // ε_p(B)
         out[v + 6] = p_new; // p(B)
-        // Echo the full-3-D end-of-step strain ε(B), so `prev` carries ε(A) next
-        // step (in plane stress this includes the solved out-of-plane ε_zz).
+                            // Echo the full-3-D end-of-step strain ε(B), so `prev` carries ε(A) next
+                            // step (in plane stress this includes the solved out-of-plane ε_zz).
         out[v + 7..v + 13].copy_from_slice(&eps_b_full);
         // In 2-D the Voigt dual omits σ_zz; echo it so σ(A) is fully recoverable.
         if d == 2 {
@@ -596,7 +596,9 @@ mod tests {
         .unwrap();
         strain.set_uniform("eps_xx", 1e-4).unwrap();
         let strain = insert(strain);
-        let out = pl.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
+        let out = pl
+            .integrate_behavior(&strain, None, Some(&mat), None)
+            .unwrap();
         // Confined uniaxial *strain* (only ε_xx ≠ 0): σ_xx = (λ+2μ)·ε.
         let (lambda, mu) = lame(e, nu);
         for g in 0..out.gauss_count() {
@@ -622,7 +624,9 @@ mod tests {
         .unwrap();
         strain.set_uniform("eps_xx", 1e-2).unwrap();
         let strain = insert(strain);
-        let out = pl.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
+        let out = pl
+            .integrate_behavior(&strain, None, Some(&mat), None)
+            .unwrap();
         for g in 0..out.gauss_count() {
             let s = [
                 out.value(0, g, "sigma_xx").unwrap(),
@@ -652,7 +656,9 @@ mod tests {
         .unwrap();
         strain.set_uniform("eps_xx", eps0).unwrap();
         let strain = insert(strain);
-        let out = pl.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
+        let out = pl
+            .integrate_behavior(&strain, None, Some(&mat), None)
+            .unwrap();
         // Linear plane stress uniaxial-strain: σ_xx = E/(1-ν²)·ε, σ_yy = ν·σ_xx.
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {
@@ -724,7 +730,9 @@ mod tests {
             prev = Some(insert(out));
         }
         let multi = read(&prev.unwrap()).unwrap();
-        for comp in ["sigma_xx", "sigma_yy", "sigma_zz", "p", "eps_p_xx", "eps_p_yy"] {
+        for comp in [
+            "sigma_xx", "sigma_yy", "sigma_zz", "p", "eps_p_xx", "eps_p_yy",
+        ] {
             let a = single.value(0, 0, comp).unwrap();
             let b = multi.value(0, 0, comp).unwrap();
             assert!((a - b).abs() < 1e-9, "{comp}: single={a} multi={b}");

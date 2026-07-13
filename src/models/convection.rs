@@ -261,7 +261,8 @@ mod tests {
 
     fn material(conv: &Convection, h: f64) -> Handle<SubElementField> {
         let mut m =
-            SubElementField::new(conv.fespace.clone(), vec![MATERIAL_COMPONENT.to_string()]).unwrap();
+            SubElementField::new(conv.fespace.clone(), vec![MATERIAL_COMPONENT.to_string()])
+                .unwrap();
         m.set_uniform(MATERIAL_COMPONENT, h).unwrap();
         insert(m)
     }
@@ -312,7 +313,9 @@ mod tests {
         input.set_uniform(INPUT_COMPONENT, temp).unwrap();
         let input = insert(input);
 
-        let out = conv.integrate_behavior(&input, None, Some(&mat), None).unwrap();
+        let out = conv
+            .integrate_behavior(&input, None, Some(&mat), None)
+            .unwrap();
         assert_eq!(out.components(), &[OUTPUT_COMPONENT.to_string()]);
         for g in 0..out.gauss_count() {
             assert!((out.value(0, g, OUTPUT_COMPONENT).unwrap() - h * temp).abs() < 1e-12);

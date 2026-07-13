@@ -88,13 +88,17 @@ def test_fully_constrained_bar_thermal_stress():
     model = model | _clamp(right, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 
-    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU), ("alpha", ALPHA)])
+    materials = pyrucast.build.material_field(
+        model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
+    )
     eps_th = pyrucast.field.thermal_strain(
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
 
     f_th = _thermal_load(model, materials, eps_th)
-    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), f_th)
+    solution = pyrucast.solver.solve(
+        pyrucast.assemble.stiffness(model, materials), f_th
+    )
     u = _displacement(solution, c, grid)
 
     # Real stress σ = D:(ε(u) − ε_th).
@@ -122,13 +126,17 @@ def test_free_bar_expands_without_stress():
     model = model | _clamp(left, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 
-    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU), ("alpha", ALPHA)])
+    materials = pyrucast.build.material_field(
+        model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
+    )
     eps_th = pyrucast.field.thermal_strain(
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
 
     f_th = _thermal_load(model, materials, eps_th)
-    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), f_th)
+    solution = pyrucast.solver.solve(
+        pyrucast.assemble.stiffness(model, materials), f_th
+    )
     u = _displacement(solution, c, grid)
 
     hx, hy = L / NX, H / NY

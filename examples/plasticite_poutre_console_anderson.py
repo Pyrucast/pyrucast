@@ -253,7 +253,9 @@ def main():
             f_int = pyrucast.assemble.internal_forces(model, out)
             f_ext = pyrucast.field.restrict_like(load_scaled, f_int)
             residual = f_ext - f_int
-            free_res = pyrucast.field.xtx(pyrucast.field.restrict(residual, free_mesh)) ** 0.5
+            free_res = (
+                pyrucast.field.xtx(pyrucast.field.restrict(residual, free_mesh)) ** 0.5
+            )
             return residual, free_res, out
 
         iters = 0

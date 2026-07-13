@@ -41,7 +41,9 @@ def main() -> None:
     coords = pyrucast.Coords(2)
     base = coords.add_node([0.0, 0.0])
     tip = coords.add_node([L * c, L * s])
-    mesh = pyrucast.mesher.line_seg2(base, tip, N)  # ligne de N SEG2 à 45° (`line_seg2`)
+    mesh = pyrucast.mesher.line_seg2(
+        base, tip, N
+    )  # ligne de N SEG2 à 45° (`line_seg2`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.frame(fes)

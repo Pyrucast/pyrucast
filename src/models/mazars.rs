@@ -455,7 +455,9 @@ mod tests {
         let mat = material(&mz);
         let eps0 = 1e-5; // < eps_d0 = 1e-4
         let strain = strain_field(&mz, eps0);
-        let out = mz.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
+        let out = mz
+            .integrate_behavior(&strain, None, Some(&mat), None)
+            .unwrap();
         let (e, nu) = (30_000.0, 0.2);
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {
@@ -472,7 +474,9 @@ mod tests {
         let mat = material(&mz);
         let eps0 = 5e-4; // > eps_d0
         let strain = strain_field(&mz, eps0);
-        let out = mz.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
+        let out = mz
+            .integrate_behavior(&strain, None, Some(&mat), None)
+            .unwrap();
         let (e, nu) = (30_000.0, 0.2);
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {

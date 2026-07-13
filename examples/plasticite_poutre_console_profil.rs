@@ -68,6 +68,7 @@ use pyrucast::containers::mesh::{Coords, Mesh, Node};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::ops::assemble::internal_forces;
 use pyrucast::ops::assemble::{flux, stiffness, FluxDensity};
 use pyrucast::ops::behavior::integrate;
 use pyrucast::ops::build::material_field;
@@ -75,7 +76,6 @@ use pyrucast::ops::field::{
     coordinates, deformation, mask_cells, restrict, restrict_like, select_nodes, Band,
 };
 use pyrucast::ops::geom::nearest_node;
-use pyrucast::ops::assemble::internal_forces;
 use pyrucast::ops::mesher::{line_seg2, sweep_qua4, to_poi1, translate};
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
@@ -410,7 +410,11 @@ fn main() -> Result<()> {
     );
     println!(
         "        └ deform {:.0} + comport {:.0} + f_int {:.0} + résidu {:.0} + gap interne {:.0}",
-        ms(deform), ms(behav), ms(fint), ms(resid), ms(resid_inner_gap)
+        ms(deform),
+        ms(behav),
+        ms(fint),
+        ms(resid),
+        ms(resid_inner_gap)
     );
     println!("     solve K⁻¹r           : {:>9.1} ms", ms(slv));
     println!("     anderson_step        : {:>9.1} ms", ms(andr));

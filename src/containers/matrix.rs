@@ -80,8 +80,8 @@ use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::SubModel;
 use crate::containers::node_field::{NodeField, SubNodeField};
-use crate::models::Physics;
 use crate::error::{PyrucastError, Result};
+use crate::models::Physics;
 use crate::store::{insert, read, Handle};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
@@ -2468,14 +2468,8 @@ mod tests {
         // One zone per distinct column support (phys ← K+C, mult ← Cᵀ),
         // each sharing the block's own handle — nothing rebuilt.
         assert_eq!(f.len(), 2);
-        assert!(read(&f.get(0).unwrap())
-            .unwrap()
-            .support()
-            .same_slot(&phys));
-        assert!(read(&f.get(1).unwrap())
-            .unwrap()
-            .support()
-            .same_slot(&mult));
+        assert!(read(&f.get(0).unwrap()).unwrap().support().same_slot(&phys));
+        assert!(read(&f.get(1).unwrap()).unwrap().support().same_slot(&mult));
 
         // Every column DOF reads back its slot; the aggregate is coherent.
         for (i, (nid, var)) in col_dofs.iter().enumerate() {
@@ -2625,7 +2619,10 @@ mod tests {
         for (za, zb) in f_ext_r.iter().zip(f_int.iter()) {
             let sa = read(za).unwrap().support();
             let sb = read(zb).unwrap().support();
-            assert!(sa.same_slot(&sb), "restrict must land on the block supports");
+            assert!(
+                sa.same_slot(&sb),
+                "restrict must land on the block supports"
+            );
         }
 
         // Zone-aligned residual: q combines (not passthrough) on phys.

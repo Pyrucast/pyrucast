@@ -93,7 +93,9 @@ def test_single_term_mpc_matches_dirichlet():
         rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T"])
         rhs[0].set_value(ml.node(0, 0, 0), "imposed_T", 0.0)
         rhs[0].set_value(mr.node(0, 0, 0), "imposed_T", 1.0)
-        return nodes, pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
+        return nodes, pyrucast.solver.solve(
+            pyrucast.assemble.stiffness(model, materials), rhs
+        )
 
     def solve_mpc():
         c, nodes, fes, materials = _heat_bar()
@@ -112,7 +114,9 @@ def test_single_term_mpc_matches_dirichlet():
         rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T", "mpc_rhs"])
         rhs[0].set_value(ml.node(0, 0, 0), "imposed_T", 0.0)
         rhs[0].set_value(mm.node(0, 0, 0), "mpc_rhs", 1.0)
-        return nodes, pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
+        return nodes, pyrucast.solver.solve(
+            pyrucast.assemble.stiffness(model, materials), rhs
+        )
 
     nodes, dir_sol = solve_dirichlet()
     _, mpc_sol = solve_mpc()

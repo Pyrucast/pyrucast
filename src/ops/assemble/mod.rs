@@ -70,9 +70,7 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
                     // mechanical `E`/`nu` on one mesh) resolves each physics'
                     // own zone without an explicit consolidate.
                     let m = match sub.material_components() {
-                        Some(required) => {
-                            materials.sub_for_fespace_with(&fespace, required)?
-                        }
+                        Some(required) => materials.sub_for_fespace_with(&fespace, required)?,
                         None => materials.sub_for_fespace(&fespace)?,
                     };
                     Some(m)

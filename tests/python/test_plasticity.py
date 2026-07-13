@@ -46,7 +46,9 @@ def test_plasticity_caps_at_yield_plane_stress():
     E, NU, SY = 210_000.0, 0.3, 250.0
     c, nodes, fes = _unit_quad()
     model = pyrucast.Model.plasticity(fes, "plane_stress")
-    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU), ("sigma_y", SY)])
+    materials = pyrucast.build.material_field(
+        model, [("E", E), ("nu", NU), ("sigma_y", SY)]
+    )
 
     # Strain well past yield.
     u = _uniform_strain(c, nodes, 1e-2)
@@ -71,7 +73,9 @@ def test_plasticity_elastic_below_yield():
     E, NU, SY = 210_000.0, 0.3, 250.0
     c, nodes, fes = _unit_quad()
     model = pyrucast.Model.plasticity(fes, "plane_stress")
-    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU), ("sigma_y", SY)])
+    materials = pyrucast.build.material_field(
+        model, [("E", E), ("nu", NU), ("sigma_y", SY)]
+    )
 
     # ε small ⇒ σ ≈ E·ε (plane-stress uniaxial-strain) well under yield.
     u = _uniform_strain(c, nodes, 1e-4)

@@ -517,8 +517,7 @@ mod tests {
             sm.add_cell(&[nodes[0].id()]).unwrap();
             insert(sm)
         };
-        let rhs =
-            NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["q".into()]).unwrap());
+        let rhs = NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["q".into()]).unwrap());
 
         let sol_a = solve(&k, &rhs).unwrap();
         let sol_b = solve(&k, &rhs).unwrap();

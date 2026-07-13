@@ -429,7 +429,9 @@ mod tests {
         strain.set_uniform("eps_xx", eps0).unwrap();
         let strain = insert(strain);
 
-        let out = el.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
+        let out = el
+            .integrate_behavior(&strain, None, Some(&mat), None)
+            .unwrap();
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {
             assert!((out.value(0, g, "sigma_xx").unwrap() - c * eps0).abs() < 1e-9);

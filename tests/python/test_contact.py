@@ -21,9 +21,7 @@ TOL = 1e-9
 
 def _block(c, mesh, y0):
     """Add an N×N QUA4 block `[0,1] × [y0, y0+1]` as a new unit of `mesh`."""
-    grid = [
-        c.add_node([i * H, y0 + j * H]) for j in range(N + 1) for i in range(N + 1)
-    ]
+    grid = [c.add_node([i * H, y0 + j * H]) for j in range(N + 1) for i in range(N + 1)]
     idx = lambda i, j: j * (N + 1) + i
     unit = mesh.unit()
     for j in range(N):
@@ -60,9 +58,7 @@ def _two_blocks():
         master.unit().add_cell([bottom[idx(i + 1, N)], bottom[idx(i, N)]])
     # Slave: bottom edge nodes of the top block.
     slave = pyrucast.mesher.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
-    contact = pyrucast.Model.contact(
-        slave, master, [("u_x", "f_x"), ("u_y", "f_y")]
-    )
+    contact = pyrucast.Model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
 
     model = pyrucast.Model.elasticity(fes, "plane_stress")
     model = model | _clamp(bottom + top, "u_x", "f_x")

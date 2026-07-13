@@ -72,7 +72,9 @@ def test_rotate_via_sweep_builds_a_solid_of_revolution_slice():
     """rotate + sweep_solid together: sweep a face onto its rotated copy."""
     c = pyrucast.Coords(3)
     face, _ = _tri3(c, [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [1.0, 0.0, 1.0]])
-    rotated = pyrucast.mesher.rotate(face, math.pi / 6.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    rotated = pyrucast.mesher.rotate(
+        face, math.pi / 6.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]
+    )
     solid = pyrucast.mesher.sweep_solid(face, rotated, 1)
     assert solid.element_types() == ["PENTA6"]
     assert solid.cell_counts() == [1]

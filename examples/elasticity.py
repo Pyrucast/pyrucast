@@ -39,7 +39,9 @@ def main() -> None:
         return j * (N + 1) + i
 
     # Grille N×N de QUA4 par balayage de deux lignes SEG2 (`sweep_qua4`).
-    bottom = pyrucast.mesher.line_seg2(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
+    bottom = pyrucast.mesher.line_seg2(
+        c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N
+    )
     top = pyrucast.mesher.line_seg2(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
     mesh = pyrucast.mesher.sweep_qua4(bottom, top, N)
 

@@ -146,7 +146,9 @@ def test_step_by_step_returns_history_per_time():
     left = [grid[idx(0, j)] for j in range(NY + 1)]
     bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
 
-    th_imposed = pc.mesher.poi1_from_nodes(left + [grid[idx(NX, j)] for j in range(NY + 1)])
+    th_imposed = pc.mesher.poi1_from_nodes(
+        left + [grid[idx(NX, j)] for j in range(NY + 1)]
+    )
     th_mult = pc.mesher.translate(th_imposed, [0.0, 0.0])
     model = (
         pc.Model.heat_conduction(fes)

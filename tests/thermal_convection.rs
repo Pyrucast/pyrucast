@@ -100,8 +100,11 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
 
     // Convection : la part externe h·T_ext du flux de Robin est un second membre,
     // bâti avec le MÊME opérateur `flux` (densité h·T_ext) — aucune normale.
-    let conv_load =
-        assemble::flux(&right_fes.get(0)?, assemble::FluxDensity::Uniform(H * T_EXT), "q")?;
+    let conv_load = assemble::flux(
+        &right_fes.get(0)?,
+        assemble::FluxDensity::Uniform(H * T_EXT),
+        "q",
+    )?;
 
     let rhs = NodeField::from_sub(source).union(&NodeField::from_sub(conv_load))?;
 

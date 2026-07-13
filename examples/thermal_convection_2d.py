@@ -53,7 +53,9 @@ def main() -> None:
 
     # ── Maillage : grille N×N de QUA4 sur [0,1]², par balayage de deux lignes ─
     c = pyrucast.Coords(2)
-    bottom = pyrucast.mesher.line_seg2(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
+    bottom = pyrucast.mesher.line_seg2(
+        c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N
+    )
     top = pyrucast.mesher.line_seg2(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
     mesh = pyrucast.mesher.sweep_qua4(bottom, top, N)
 

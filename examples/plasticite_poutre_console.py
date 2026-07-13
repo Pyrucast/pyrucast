@@ -179,7 +179,9 @@ def main():
             #   à `free_mesh` puis `xtx` (les nœuds encastrés portent la réaction).
             f_ext = pyrucast.field.restrict_like(load_scaled, f_int)
             residual = f_ext - f_int
-            res_norm = pyrucast.field.xtx(pyrucast.field.restrict(residual, free_mesh)) ** 0.5
+            res_norm = (
+                pyrucast.field.xtx(pyrucast.field.restrict(residual, free_mesh)) ** 0.5
+            )
             last_out = out
 
             if res_norm <= tol:

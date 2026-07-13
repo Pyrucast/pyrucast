@@ -34,7 +34,9 @@ def main() -> None:
     print("face  :", face.element_types(), face.cell_count(), "cells")
 
     # One 15° slice of a solid of revolution about the z axis.
-    rotated = pc.mesher.rotate(face, math.radians(15.0), [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    rotated = pc.mesher.rotate(
+        face, math.radians(15.0), [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]
+    )
     wedge = pc.mesher.sweep_solid(face, rotated, 2)
     print("wedge :", wedge.element_types(), wedge.cell_count(), "cells")
 

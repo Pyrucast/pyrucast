@@ -551,7 +551,8 @@ def _mesh_with_n_zones(n):
     """A Mesh of `n` single-node POI1 zones sharing the same Coords."""
     c = pyrucast.Coords(2)
     subs = [
-        pyrucast.mesher.poi1_from_nodes([c.add_node([float(i), 0.0])])[0] for i in range(n)
+        pyrucast.mesher.poi1_from_nodes([c.add_node([float(i), 0.0])])[0]
+        for i in range(n)
     ]
     mesh = subs[0]
     for s in subs[1:]:

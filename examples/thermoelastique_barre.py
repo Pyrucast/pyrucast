@@ -93,7 +93,9 @@ def _solve_thermal(model, materials, fes, c, grid):
     )
     sig_th = pyrucast.behavior.integrate_behavior(model, eps_th, materials)
     f_th = pyrucast.assemble.internal_forces(model, sig_th)
-    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), f_th)
+    solution = pyrucast.solver.solve(
+        pyrucast.assemble.stiffness(model, materials), f_th
+    )
     u = _displacement(solution, c, grid)
     sigma = pyrucast.behavior.integrate_behavior(
         model, pyrucast.field.deformation(u, fes) - eps_th, materials
@@ -115,7 +117,9 @@ def main() -> None:
         | _clamp(right, "u_x", "f_x")
         | _clamp(bottom, "u_y", "f_y")
     )
-    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU), ("alpha", ALPHA)])
+    materials = pyrucast.build.material_field(
+        model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
+    )
 
     _u, sigma = _solve_thermal(model, materials, fes, c, grid)
     expected = -E * ALPHA * DT
@@ -131,7 +135,9 @@ def main() -> None:
 
     model = pyrucast.Model.elasticity(fes, "plane_stress")
     model = model | _clamp(left, "u_x", "f_x") | _clamp(bottom, "u_y", "f_y")
-    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU), ("alpha", ALPHA)])
+    materials = pyrucast.build.material_field(
+        model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
+    )
 
     u, sigma = _solve_thermal(model, materials, fes, c, grid)
     tip = grid[idx(NX, NY)]

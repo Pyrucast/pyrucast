@@ -105,7 +105,6 @@ pub fn internal_forces_continuum(
     stresses: PyRef<PyElementField>,
     fespace: PyRef<PyFiniteElementSpace>,
 ) -> PyResult<PyNodeField> {
-    let nf =
-        crate::ops::assemble::internal_forces_continuum(&stresses.inner, &fespace.inner)?;
+    let nf = crate::ops::assemble::internal_forces_continuum(&stresses.inner, &fespace.inner)?;
     Ok(PyNodeField { inner: nf })
 }

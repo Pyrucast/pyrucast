@@ -325,7 +325,9 @@ mod tests {
         strain.set_uniform("eps_yy", eps0 * c[1] * c[1]).unwrap();
         let strain = insert(strain);
 
-        let out = truss.integrate_behavior(&strain, None, Some(&mat), None).unwrap();
+        let out = truss
+            .integrate_behavior(&strain, None, Some(&mat), None)
+            .unwrap();
         assert_eq!(out.components(), &["n".to_string()]);
         let expected = e * area * eps0;
         for g in 0..out.gauss_count() {
