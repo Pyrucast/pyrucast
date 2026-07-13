@@ -436,6 +436,17 @@ impl PyModel {
         Ok(self.inner.dual_of(variable)?)
     }
 
+    /// `Model.fespace()` — the `FiniteElementSpace` this model integrates on,
+    /// rebuilt from the behaviour subspaces of its domain sub-models (constraints
+    /// skipped), deduplicated in first-seen order (shared handles). Raises if the
+    /// model has no domain sub-model. Combined with `FiniteElementSpace.mesh()`,
+    /// lets a caller recover the FE space and mesh from the model alone.
+    fn fespace(&self) -> PyResult<PyFiniteElementSpace> {
+        Ok(PyFiniteElementSpace {
+            inner: self.inner.fespace()?,
+        })
+    }
+
     /// `Model.filter(physics)` — a new `Model` holding only the sub-models **whose
     /// nature set contains** the given physics. `physics` is a tag: `"mechanical"`,
     /// `"thermal"`, `"constraint"` or `"other"`. Sub-model order is preserved; the

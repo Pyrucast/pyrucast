@@ -83,11 +83,10 @@ def test_step_by_step_free_thermal_expansion():
     loads = pc.NodeField(th_mult, ["imposed_T"])
     loads[0].add_to_component("imposed_T", T_HOT)
 
+    # fespace et maillage sont déduits du modèle : seul `model` est requis.
     data = {
         "times": [0.0, 1.0],
         "model": model,
-        "fespace": fes,
-        "mesh": mesh,
         "loads": loads,
         "materials": materials,
         "t_ref": T_REF,
@@ -171,8 +170,6 @@ def test_step_by_step_returns_history_per_time():
     data = {
         "times": times,
         "model": model,
-        "fespace": fes,
-        "mesh": mesh,
         "loads": loads,
         "materials": materials,
         "t_ref": T_REF,

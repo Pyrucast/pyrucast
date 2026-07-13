@@ -250,6 +250,15 @@ impl PyFiniteElementSpace {
         let iter = self.inner.elements(sub_idx)?;
         Ok(iter.map(|el| PyElement { inner: el }).collect())
     }
+
+    /// `fes.mesh()` — the `Mesh` this space spans: one submesh per subspace, in
+    /// order (shared handles, sealed while captured). The reverse of building a
+    /// `FiniteElementSpace(mesh)`.
+    fn mesh(&self) -> PyResult<PyMesh> {
+        Ok(PyMesh {
+            inner: self.inner.mesh()?,
+        })
+    }
 }
 
 crate::impl_aggregate_pymethods!(

@@ -94,12 +94,11 @@ def main():
     hot[0].add_to_component("imposed_T", T_HOT)
     loads = pc.Evolution([(0.0, cold), (1.0, hot)], out_of_range="clamp")
 
-    # ── Mise en donnée : un seul dictionnaire ───────────────────────────────
+    # ── Mise en donnée : un seul dictionnaire (fespace + maillage déduits du
+    #    modèle) ───────────────────────────────────────────────────────────────
     data = {
         "times": [step / NSTEPS for step in range(NSTEPS + 1)],
         "model": model,
-        "fespace": fes,
-        "mesh": mesh,
         "loads": loads,
         "materials": materials,
         "t_ref": T_REF,

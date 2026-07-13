@@ -70,14 +70,16 @@ thermique, `u_*` → mécanique).
 | Clé | Type | Rôle |
 |---|---|---|
 | `times` | `list[float]` | instants de calcul |
-| `model` | `Model` | modèle complet (thermique + mécanique + Dirichlet), sur `fespace` |
-| `fespace` | `FiniteElementSpace` | espace EF continu partagé thermique / mécanique |
-| `mesh` | `Mesh` | maillage continu (support du déplacement cumulé) |
+| `model` | `Model` | modèle complet (thermique + mécanique + Dirichlet). L'espace EF et le maillage en sont **déduits** — voir ci-dessous |
 | `loads` | `NodeField` \| `Evolution` | **un seul champ unioné** : `q`/`imposed_T` (thermique) + `f_*`/`imposed_u` (mécanique) |
 | `materials` | `ElementField` \| `Evolution` | **un seul champ unioné** : `k`/`h` + `E`/`nu`/`alpha` |
 | `t_ref` | `float` (opt.) | température de référence pour `ε_th` |
 | `free_mesh` | `Mesh` (opt.) | DDL libres pour la norme de résidu (recommandé avec Dirichlet) |
 | `anderson_depth` / `max_newton` / `tol_rel` | (opt.) | réglages du solveur mécanique |
+
+Seul le `model` porte la donnée EF : `step_by_step` en déduit l'espace et le
+maillage mécaniques par [`Model.fespace()`](model.md) (les sous-espaces des
+sous-modèles de domaine, contraintes exclues) puis `FiniteElementSpace.mesh()`.
 
 Chaque étape ne lit du champ unioné que ce dont elle a besoin : `solve`
 n'échantillonne le second membre qu'aux DDL de sa matrice et ignore les
@@ -102,9 +104,7 @@ import pyrucast as pc
 
 data = {
     "times": [0.0, 0.25, 0.5, 0.75, 1.0],
-    "model": model,
-    "fespace": fes,
-    "mesh": mesh,
+    "model": model,          # fespace + maillage déduits du modèle
     "loads": loads,          # NodeField unioné ou Evolution de champ
     "materials": materials,  # ElementField unioné ou Evolution de champ
     "t_ref": 20.0,

@@ -492,6 +492,20 @@ impl FiniteElementSpace {
         let n = read(&sub)?.cell_count()?;
         Ok(ElementIter::new(sub, n))
     }
+
+    /// Rebuild the [`Mesh`] this space spans: one submesh per subspace, in
+    /// order, deduplicated by store slot. Submesh handles are **shared** (no
+    /// copy); they are sealed (frozen) as long as this space captures them.
+    pub fn mesh(&self) -> Result<Mesh> {
+        let mut mesh = Mesh::empty();
+        for sub in self.iter() {
+            let submesh = read(sub)?.submesh();
+            if !mesh.items().iter().any(|h| h.same_slot(&submesh)) {
+                mesh.add_sub(submesh)?;
+            }
+        }
+        Ok(mesh)
+    }
 }
 
 // ─── Numerical helpers ─────────────────────────────────────────────────────

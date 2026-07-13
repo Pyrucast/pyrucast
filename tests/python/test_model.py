@@ -193,6 +193,39 @@ def test_assembled_blocks_carry_physics_and_matrix_filter():
     assert len(kt) == 1
 
 
+# ─── fespace / mesh recovery from the model ─────────────────────────────────
+
+
+def test_fespace_and_mesh_recovered_from_model():
+    """`Model.fespace()` rebuilds the FE space (constraints skipped) and
+    `FiniteElementSpace.mesh()` the mesh — both from the model alone."""
+    _, mesh, fes, _, _, model, *_ = _seg2_heat_model(dirichlet_left=True)
+
+    recovered = model.fespace()
+    assert len(recovered) == len(fes)  # the Dirichlet sub-model adds no subspace
+    assert recovered[0].element_type == fes[0].element_type
+
+    m2 = recovered.mesh()
+    assert len(m2) == len(mesh)
+    assert m2.unit().cell_count() == mesh.unit().cell_count()
+
+
+def test_fespace_errors_without_domain_submodel():
+    """A model with only constraints has nothing to integrate on."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    imposed = pyrucast.poi1_from_nodes([a])
+    only_constraint = pyrucast.Model.dirichlet(
+        "T", "q", imposed, pyrucast.barycenter(imposed)
+    )
+    try:
+        only_constraint.fespace()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError: no domain sub-model")
+
+
 # ─── repr / str ─────────────────────────────────────────────────────────────
 
 

@@ -1132,6 +1132,30 @@ impl Model {
         Ok(union_names(all))
     }
 
+    /// Rebuild the [`FiniteElementSpace`] this model integrates on: the
+    /// behaviour subspaces of its domain sub-models (constraints, which have
+    /// none, are skipped), deduplicated by store slot in first-seen order —
+    /// subspace handles are **shared**, not copied. Errors if the model has no
+    /// domain sub-model (nothing to integrate on). Lets a caller recover the FE
+    /// space (and, through [`FiniteElementSpace::mesh`], the mesh) from the model
+    /// alone.
+    pub fn fespace(&self) -> Result<FiniteElementSpace> {
+        let mut fes = FiniteElementSpace::empty();
+        for h in self {
+            if let Some(sub) = read(h)?.behavior_fespace() {
+                if !fes.items().iter().any(|s| s.same_slot(&sub)) {
+                    fes.add_sub(sub)?;
+                }
+            }
+        }
+        if fes.is_empty() {
+            return Err(PyrucastError::Message(
+                "Model::fespace: model has no domain sub-model to integrate on".into(),
+            ));
+        }
+        Ok(fes)
+    }
+
     /// A fresh [`Model`] holding only the sub-models **whose nature set contains**
     /// the given [`Physics`] (`model.filter(Physics::Mechanical)` → every
     /// sub-model that is at least mechanical, including a coupled one).

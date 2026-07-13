@@ -297,14 +297,14 @@ def step_by_step(data):
     ``data`` est un dictionnaire :
 
     ``times``      liste des instants (``list[float]``).
-    ``model``      ``Model`` complet (thermique + mécanique + Dirichlet), sur ``fespace``.
-    ``fespace``    ``FiniteElementSpace`` continu partagé thermique / mécanique.
-    ``mesh``       ``Mesh`` continu (support du déplacement cumulé).
+    ``model``      ``Model`` complet (thermique + mécanique + Dirichlet). La fespace
+                   et le maillage en sont **déduits** (``Model.fespace()`` /
+                   ``FiniteElementSpace.mesh()``) — inutile de les fournir.
     ``loads``      ``NodeField`` ou ``Evolution`` unioné (``q``/``imposed_T`` + ``f_*``/``imposed_u``).
     ``materials``  ``ElementField`` ou ``Evolution`` unioné (``k``/``h`` + ``E``/``nu``/``alpha``).
     ``t_ref``      (opt.) température de référence pour ``ε_th`` (défaut ``0.0``).
     ``free_mesh``  (opt.) ``Mesh`` des DDL libres pour la norme de résidu (recommandé
-                   en présence de Dirichlet ; défaut : ``mesh`` complet).
+                   en présence de Dirichlet ; défaut : maillage mécanique complet).
     ``anderson_depth`` / ``max_newton`` / ``tol_rel`` — (opt.) réglages du solveur méca.
 
     En retour, ``data["results"]`` est une liste (un élément par instant) de dicts
@@ -312,8 +312,6 @@ def step_by_step(data):
     "mech_anderson", "converged"}``. ``data`` (le même objet) est renvoyé.
     """
     model = data["model"]
-    fespace = data["fespace"]
-    mesh = data["mesh"]
     times = list(data["times"])
     loads_spec = data["loads"]
     materials_spec = data["materials"]
@@ -326,14 +324,20 @@ def step_by_step(data):
 
     thermal_model, mechanical_model = _split_model(model)
     has_thermal = len(thermal_model) > 0
-    # Composantes de déplacement (domaine mécanique seul, **avant** contraintes :
-    # `primal_vars` d'un modèle avec Dirichlet inclut les multiplicateurs
-    # `lambda_*` que `deformation` refuse).
-    displacement_vars = model.filter("mechanical").primal_vars()
+    # Domaine mécanique seul (sans les contraintes) : `primal_vars` d'un modèle
+    # avec Dirichlet inclut les multiplicateurs `lambda_*` que `deformation`
+    # refuse. Fespace et maillage sont déduits de ce domaine.
+    mechanical_domain = model.filter("mechanical")
+    displacement_vars = mechanical_domain.primal_vars()
     has_mechanical = len(displacement_vars) > 0
 
-    # État persistant entre les pas.
-    u = pc.NodeField(mesh, displacement_vars) if has_mechanical else None
+    # Fespace / maillage déduits du modèle (aucun argument séparé requis).
+    if has_mechanical:
+        fespace = mechanical_domain.fespace()
+        mesh = fespace.mesh()
+        u = pc.NodeField(mesh, displacement_vars)  # déplacement cumulé, nul au départ
+    else:
+        fespace = mesh = u = None
     state_prev = None
     reference = 0.0  # échelle de résidu (max courant), partagée entre les pas
 

@@ -558,6 +558,12 @@ class FiniteElementSpace:
         `fes.elements(sub_idx)` — list of every Element in subspace `sub_idx`.
         Mirrors `Mesh.cells(sub_idx)`.
         """
+    def mesh(self) -> Mesh:
+        r"""
+        `fes.mesh()` — the `Mesh` this space spans: one submesh per subspace, in
+        order (shared handles, sealed while captured). The reverse of building a
+        `FiniteElementSpace(mesh)`.
+        """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, key: typing.Any) -> typing.Any:
         r"""
@@ -1033,6 +1039,14 @@ class Model:
         `Model.dual_of(variable)` — the dual (residual) variable conjugate to a
         primal `variable` (e.g. `"u_x" -> "f_x"`, `"T" -> "q"`), searched across
         all sub-models, or `None`. A helper to fill an MPC term's `target_dual`.
+        """
+    def fespace(self) -> FiniteElementSpace:
+        r"""
+        `Model.fespace()` — the `FiniteElementSpace` this model integrates on,
+        rebuilt from the behaviour subspaces of its domain sub-models (constraints
+        skipped), deduplicated in first-seen order (shared handles). Raises if the
+        model has no domain sub-model. Combined with `FiniteElementSpace.mesh()`,
+        lets a caller recover the FE space and mesh from the model alone.
         """
     def filter(self, physics: builtins.str) -> Model:
         r"""

@@ -15,7 +15,8 @@ Model
 ├── sub_models: Vec<SubModel>
 ├── primal_vars(): Vec<String>      # union — colonnes des matrices
 ├── dual_vars():   Vec<String>      # union — lignes des matrices
-└── filter(Physics) -> Model        # sous-modèles d'une nature donnée
+├── filter(Physics) -> Model        # sous-modèles d'une nature donnée
+└── fespace() -> FiniteElementSpace # sous-espaces des domaines (contraintes exclues)
 
 ops::assemble (opérateurs, pas des méthodes de Model)
 ├── stiffness(model, materials) -> Matrix   # K  (assemblé sur demande)
