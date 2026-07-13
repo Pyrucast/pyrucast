@@ -1,6 +1,6 @@
-//! Generate `pyrucast.pyi` — Python stub file with signatures and
-//! docstrings — so IDEs (Pylance/Pyright/PyCharm) can show typed
-//! completion and hover docs for the compiled extension module.
+//! Generate the Python stub file with signatures and docstrings — so IDEs
+//! (Pylance/Pyright/PyCharm) can show typed completion and hover docs for the
+//! compiled extension module.
 //!
 //! Run with:
 //!
@@ -9,7 +9,9 @@
 //!     cargo run --bin stub_gen --features stub-gen
 //! ```
 //!
-//! Output: `pyrucast.pyi` at the repository root.
+//! Output (mixed layout): `python/pyrucast/_pyrucast/__init__.pyi`. The path is
+//! derived by pyo3-stub-gen from `[tool.maturin] python-source` + `module-name`
+//! in `pyproject.toml`.
 
 #[cfg(feature = "stub-gen")]
 fn main() -> pyo3_stub_gen::Result<()> {

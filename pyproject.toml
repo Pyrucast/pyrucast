@@ -17,6 +17,13 @@ requires-python = ">=3.9"
 bindings = "pyo3"
 # Enable the Cargo `extension-module` feature (correct Python linkage).
 features = ["extension-module"]
+# Mixed Rust/Python layout: the pure-Python sources live in `python/` (package
+# `python/pyrucast/`) and the compiled extension is placed inside that package
+# as the private submodule `_pyrucast`. `pyrucast/__init__.py` re-exports it
+# (`from ._pyrucast import *`) and adds the high-level Python layer, so
+# `import pyrucast` keeps exposing every Rust symbol unchanged.
+python-source = "python"
+module-name = "pyrucast._pyrucast"
 
 [tool.ruff]
 # Style standard ruff (≈ black). On épingle la cible de version ; le reste
@@ -24,9 +31,9 @@ features = ["extension-module"]
 # et la suite de tests Python ; `ruff format --check` garde le standard (cf.
 # script/check.sh).
 target-version = "py39"
-# `pyrucast.pyi` est généré par `stub_gen` (cargo) : le laisser hors de ruff,
-# sinon il dériverait à chaque régénération.
-extend-exclude = ["pyrucast.pyi"]
+# Le stub de l'extension est généré par `stub_gen` (cargo) : le laisser hors de
+# ruff, sinon il dériverait à chaque régénération.
+extend-exclude = ["python/pyrucast/_pyrucast/__init__.pyi"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]

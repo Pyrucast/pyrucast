@@ -69,7 +69,7 @@ step "pytest (Python test suite)"                    ; python -m pytest
 
 # ── 4. Documentation ────────────────────────────────────────────────────────
 step "cargo doc (Rust API reference)"                ; cargo doc --no-deps --lib
-step "Regenerating the Python stub (pyrucast.pyi)"   ; cargo run --quiet --bin stub_gen --features stub-gen
+step "Regenerating the Python stub (.pyi)"           ; cargo run --quiet --bin stub_gen --features stub-gen
 step "mdbook build (theory book)"                    ; mdbook build book
 step "mdbook test (book doctests / includes)"        ; mdbook test book
 
@@ -110,7 +110,7 @@ Documentation produite :
   - Théorie (mdbook)  : file://$ROOT/book/book/index.html
   - API Rust (rustdoc): file://$ROOT/target/doc/pyrucast/index.html
   - API Python (pydoc): file://$ROOT/target/python-doc/pyrucast.html
-  - Stub typé (.pyi)  : $ROOT/pyrucast.pyi
+  - Stub typé (.pyi)  : $ROOT/python/pyrucast/_pyrucast/__init__.pyi
 
 Ouvrir le livre :
   xdg-open "$ROOT/book/book/index.html"

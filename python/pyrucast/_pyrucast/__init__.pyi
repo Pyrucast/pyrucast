@@ -2035,6 +2035,11 @@ def consolidate(obj: typing.Any) -> typing.Any:
       element type, drop duplicate cells;
     - `NodeField` → `ops::field::consolidate_node`: fuse zones with the same
       component set, dedupe interface nodes after a coherence check.
+    - `ElementField` → `ops::field::consolidate_element`: fuse zones sharing the
+      same `FiniteElementSpace` support into a single zone carrying the union of
+      their components (shared components must agree value-by-value). Useful to
+      merge per-physics material zones built on one shared fespace into a single
+      material field readable by every physics.
     """
 
 def contour(mesh: Mesh) -> Mesh:

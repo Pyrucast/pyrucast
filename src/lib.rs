@@ -83,10 +83,12 @@ fn swap_dir() -> PyResult<std::path::PathBuf> {
 pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 
 /// Python extension module. Built only under maturin (feature
-/// `extension-module`).
+/// `extension-module`). Named `_pyrucast` (private): the public `pyrucast`
+/// package (see `python/pyrucast/__init__.py`) re-exports it with
+/// `from ._pyrucast import *` and adds the pure-Python high-level layer.
 #[cfg(feature = "python-api")]
 #[pymodule]
-fn pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", VERSION)?;
     m.add_function(wrap_pyfunction!(set_swap_dir, m)?)?;
     m.add_function(wrap_pyfunction!(swap_dir, m)?)?;

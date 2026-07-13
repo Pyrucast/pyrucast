@@ -15,6 +15,7 @@ pub mod internal_forces;
 pub mod mesher;
 pub mod solver;
 
+use crate::py::element_field::PyElementField;
 use crate::py::mesh::PyMesh;
 use crate::py::node_field::PyNodeField;
 use pyo3::exceptions::PyTypeError;
@@ -29,6 +30,11 @@ use pyo3::prelude::*;
 ///   element type, drop duplicate cells;
 /// - `NodeField` → `ops::field::consolidate_node`: fuse zones with the same
 ///   component set, dedupe interface nodes after a coherence check.
+/// - `ElementField` → `ops::field::consolidate_element`: fuse zones sharing the
+///   same `FiniteElementSpace` support into a single zone carrying the union of
+///   their components (shared components must agree value-by-value). Useful to
+///   merge per-physics material zones built on one shared fespace into a single
+///   material field readable by every physics.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn consolidate(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
@@ -40,5 +46,11 @@ pub fn consolidate(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>
         let result = crate::ops::field::consolidate_node(&field.inner)?;
         return Ok(Py::new(py, PyNodeField { inner: result })?.into_any());
     }
-    Err(PyTypeError::new_err("expected a Mesh or a NodeField"))
+    if let Ok(field) = obj.extract::<PyRef<PyElementField>>() {
+        let result = crate::ops::field::consolidate_element(&field.inner)?;
+        return Ok(Py::new(py, PyElementField { inner: result })?.into_any());
+    }
+    Err(PyTypeError::new_err(
+        "expected a Mesh, a NodeField or an ElementField",
+    ))
 }
