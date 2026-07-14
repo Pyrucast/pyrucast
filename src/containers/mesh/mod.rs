@@ -332,7 +332,7 @@ impl SubMesh {
     /// node fields that project this submesh to its nodes pair under
     /// [`same_support`](crate::containers::field::SubField::same_support): a
     /// stiffness block's support (built this way in every physics' `new`), a
-    /// [`restrict`](crate::ops::field::restrict) onto this mesh, and a
+    /// [`restrict`](fn@crate::ops::field::restrict) onto this mesh, and a
     /// `divergence`/`flux`/`internal_forces` output over it all share one handle
     /// and combine directly by the field operators. This is what lets
     /// `solve(K, f) - restrict(g, mesh)` and `&K * &restrict(f, mesh)` line up.

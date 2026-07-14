@@ -451,6 +451,72 @@ pub trait SubField {
             .map(|row| indices.iter().map(|&ci| row[ci] * row[ci]).sum::<f64>())
             .sum())
     }
+
+    /// A fresh sub-field on the **same support**, carrying only the components
+    /// of `self` that appear in `wanted` — kept in `self`'s **own** order, with
+    /// their values copied. The rows line up positionally with `self` (same
+    /// support), so the result pairs with it under [`SubField::same_support`].
+    ///
+    /// A `wanted` entry this sub-field does not carry is silently ignored;
+    /// errors only if **none** of `wanted` is present (a sub-field must keep at
+    /// least one component). Used at the aggregate level by
+    /// [`Field::filter_components`], which additionally **shares this sub's
+    /// handle** untouched when the filter would keep every component.
+    fn select_components(&self, wanted: &[String]) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        // Columns of `self` to keep, in self's order.
+        let keep: Vec<usize> = self
+            .components()
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| wanted.iter().any(|w| w == *c))
+            .map(|(i, _)| i)
+            .collect();
+        if keep.is_empty() {
+            return Err(PyrucastError::Message(format!(
+                "select_components: this sub-field carries none of {:?}",
+                wanted
+            )));
+        }
+        let names: Vec<String> = keep.iter().map(|&i| self.components()[i].clone()).collect();
+        let mut out = self.same_support_with(names)?;
+        let in_nc = self.component_count();
+        let out_nc = keep.len();
+        let sv = self.values();
+        let rows = sv.len().checked_div(in_nc.max(1)).unwrap_or(0);
+        let outv = out.values_mut();
+        for row in 0..rows {
+            for (oc, &si) in keep.iter().enumerate() {
+                outv[row * out_nc + oc] = sv[row * in_nc + si];
+            }
+        }
+        Ok(out)
+    }
+
+    /// A fresh sub-field on the **same support** with component `from` renamed
+    /// to `to`; every value is preserved (rename is metadata only, no value
+    /// moves). Errors if `from` is absent or `to` already names another
+    /// component of this sub-field.
+    fn rename_component(&self, from: &str, to: &str) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let i = self.component_index_or_err(from)?;
+        if from != to && self.component_index(to).is_some() {
+            return Err(PyrucastError::Message(format!(
+                "rename_component: target `{}` already names another component",
+                to
+            )));
+        }
+        let mut names = self.components().to_vec();
+        names[i] = to.to_string();
+        let mut out = self.same_support_with(names)?;
+        // Same component count ⇒ identical buffer layout; copy values verbatim.
+        out.values_mut().copy_from_slice(self.values());
+        Ok(out)
+    }
 }
 
 /// Fold `op` over every value of one component of a [`SubField`].
@@ -964,6 +1030,80 @@ where
         }
         Ok(out)
     }
+
+    /// A new field keeping, in every zone, only the components named in
+    /// `wanted` (each zone keeps its matches in its **own** order). A zone is
+    /// processed independently:
+    ///
+    /// - a zone carrying **none** of `wanted` is **dropped**;
+    /// - a zone carrying **only** requested components (nothing to strip) has
+    ///   its handle **shared** as-is — no sub-field is duplicated;
+    /// - a zone carrying some requested and some other components is rebuilt on
+    ///   the same support with just the requested ones ([`SubField::select_components`]).
+    ///
+    /// `wanted` accepts a superset of the field's components (extras are
+    /// ignored), so passing `model.primal_vars()` to strip a solver result of
+    /// its dual (Lagrange) unknowns is the intended use. Errors if **no** zone
+    /// carries any of `wanted`.
+    fn filter_components(&self, wanted: &[String]) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let mut out = Self::default();
+        for h in self.iter() {
+            let s = read(h)?;
+            let n_present = s
+                .components()
+                .iter()
+                .filter(|c| wanted.iter().any(|w| w == *c))
+                .count();
+            if n_present == 0 {
+                continue; // zone carries nothing requested → dropped
+            }
+            if n_present == s.component_count() {
+                // Filter is a no-op on this zone: share the handle untouched.
+                out.add_sub(h.clone())?;
+            } else {
+                out.add_sub(insert(s.select_components(wanted)?))?;
+            }
+        }
+        if out.is_empty() {
+            return Err(PyrucastError::Message(format!(
+                "filter_components: no zone carries any of {:?}",
+                wanted
+            )));
+        }
+        Ok(out)
+    }
+
+    /// A new field with component `from` renamed to `to` in every zone carrying
+    /// it. A zone without `from` is carried **unchanged** (handle shared); a
+    /// zone with it is rebuilt on the same support ([`SubField::rename_component`],
+    /// values preserved). Errors if **no** zone carries `from`, or if a zone
+    /// carrying `from` already has a component named `to`.
+    fn rename_component(&self, from: &str, to: &str) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let mut out = Self::default();
+        let mut found = false;
+        for h in self.iter() {
+            let s = read(h)?;
+            if s.component_index(from).is_some() {
+                out.add_sub(insert(s.rename_component(from, to)?))?;
+                found = true;
+            } else {
+                out.add_sub(h.clone())?;
+            }
+        }
+        if !found {
+            return Err(PyrucastError::Message(format!(
+                "rename_component: no zone carries component `{}`",
+                from
+            )));
+        }
+        Ok(out)
+    }
 }
 
 impl<A: Aggregate> Field for A where A::Sub: SubField {}
@@ -1278,6 +1418,91 @@ mod tests {
         assert!((ef.xtx_components(&["E"]).unwrap() - e1).abs() < 1e-9);
         // No zone defines "missing" ⇒ error.
         assert!(ef.xtx_components(&["missing"]).is_err());
+    }
+
+    // ─── SubField::select_components / rename_component ───────────────────────
+
+    #[test]
+    fn subfield_select_components_keeps_subset_in_self_order() {
+        let (sm, nodes) = poi1_support(1);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into(), "W".into()]).unwrap();
+        f.set_value(nodes[0].id(), "U", 1.0).unwrap();
+        f.set_value(nodes[0].id(), "V", 2.0).unwrap();
+        f.set_value(nodes[0].id(), "W", 3.0).unwrap();
+        // Keep V and W; the request order ["W","V"] is ignored — self's order wins.
+        let g = f.select_components(&["W".into(), "V".into()]).unwrap();
+        assert_eq!(g.components(), &["V".to_string(), "W".into()]);
+        assert_eq!(g.value(nodes[0].id(), "V").unwrap(), 2.0);
+        assert_eq!(g.value(nodes[0].id(), "W").unwrap(), 3.0);
+        // Same support ⇒ pairs under the operators.
+        assert!(f.same_support(&g));
+        // Unknown names ignored; none present ⇒ error.
+        assert!(f.select_components(&["nope".into()]).is_err());
+    }
+
+    #[test]
+    fn subfield_rename_component_preserves_values() {
+        let (sm, nodes) = poi1_support(1);
+        let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
+        f.set_value(nodes[0].id(), "U", 5.0).unwrap();
+        f.set_value(nodes[0].id(), "V", 6.0).unwrap();
+        let g = f.rename_component("U", "DX").unwrap();
+        assert_eq!(g.components(), &["DX".to_string(), "V".into()]);
+        assert_eq!(g.value(nodes[0].id(), "DX").unwrap(), 5.0);
+        assert_eq!(g.value(nodes[0].id(), "V").unwrap(), 6.0);
+        // Absent source, or collision with an existing name ⇒ error.
+        assert!(f.rename_component("nope", "X").is_err());
+        assert!(f.rename_component("U", "V").is_err());
+    }
+
+    #[test]
+    fn field_filter_components_shares_or_rebuilds_and_drops() {
+        // zone0: [k], zone1: [E, k]
+        let ef = make_two_zone_element_field();
+        // Keep only "k": zone0 is a no-op (shares its handle), zone1 is rebuilt.
+        let out = ef.filter_components(&["k".into()]).unwrap();
+        assert_eq!(out.len(), 2);
+        assert_eq!(Field::components(&out).unwrap(), vec!["k"]);
+        // zone0 handle shared untouched; zone1 rebuilt (fresh slot).
+        assert!(out.get(0).unwrap().same_slot(&ef.get(0).unwrap()));
+        assert!(!out.get(1).unwrap().same_slot(&ef.get(1).unwrap()));
+
+        // Keep only "E": zone0 (no E) is dropped, zone1 kept.
+        let only_e = ef.filter_components(&["E".into()]).unwrap();
+        assert_eq!(only_e.len(), 1);
+        assert_eq!(Field::components(&only_e).unwrap(), vec!["E"]);
+
+        // No zone carries any requested component ⇒ error.
+        assert!(ef.filter_components(&["missing".into()]).is_err());
+    }
+
+    #[test]
+    fn field_filter_components_accepts_superset_request() {
+        // A solver-result-like field: primal [u_x,u_y] plus dual [lambda].
+        let (sm, nodes) = poi1_support(1);
+        let mut s = SubNodeField::from_poi1(&sm, vec!["u_x".into(), "u_y".into(), "lambda".into()])
+            .unwrap();
+        s.set_value(nodes[0].id(), "u_x", 1.0).unwrap();
+        s.set_value(nodes[0].id(), "lambda", 9.0).unwrap();
+        let f = NodeField::from_sub(s);
+        // primal_vars() may name components the field lacks — extras are ignored.
+        let primal = f
+            .filter_components(&["u_x".into(), "u_y".into(), "T".into()])
+            .unwrap();
+        assert_eq!(Field::components(&primal).unwrap(), vec!["u_x", "u_y"]);
+        assert_eq!(primal.value(nodes[0].id(), "u_x").unwrap(), 1.0);
+        assert!(primal.value_opt(nodes[0].id(), "lambda").unwrap().is_none());
+    }
+
+    #[test]
+    fn field_rename_component_renames_matching_zones_only() {
+        let ef = make_two_zone_element_field(); // zone0: [k], zone1: [E, k]
+        let out = ef.rename_component("E", "young").unwrap();
+        // zone0 has no E ⇒ handle shared; zone1 rebuilt with the new name.
+        assert!(out.get(0).unwrap().same_slot(&ef.get(0).unwrap()));
+        assert_eq!(Field::components(&out).unwrap(), vec!["k", "young"]);
+        // No zone carries the source ⇒ error.
+        assert!(ef.rename_component("missing", "x").is_err());
     }
 
     // ─── SubField::merge_components / check_same_components ────────────────────

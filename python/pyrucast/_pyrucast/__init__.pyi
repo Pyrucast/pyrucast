@@ -41,6 +41,7 @@ __all__ = [
     "export_vtk",
     "extrude",
     "fill_surface",
+    "filter_components",
     "flux",
     "from_live_nodes",
     "gradient",
@@ -62,6 +63,7 @@ __all__ = [
     "psca",
     "read_gmsh",
     "read_gmsh_str",
+    "rename_component",
     "restrict",
     "restrict_like",
     "rotate",
@@ -2186,6 +2188,23 @@ def fill_surface(contour: Mesh, element_type: builtins.str, max_edge_length: typ
     the result.
     """
 
+def filter_components(field: typing.Any, components: typing.Any) -> typing.Any:
+    r"""
+    Keep only the named `components` of a field, zone by zone — Cast3M's `EXCO`
+    (component extraction).
+    
+    `components` is a single name or a list of names; a list `model.primal_vars()`
+    is the intended input (strip a `solve` result of its dual/Lagrange unknowns).
+    In each zone the requested components are kept in the zone's **own** order;
+    a zone carrying **none** of them is dropped, and a zone carrying **only**
+    requested components has its sub-field **shared** (handle copied, not
+    duplicated). Names the field does not carry are ignored; errors if no zone
+    carries any of `components`.
+    
+    Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`
+    and returns the same flavour.
+    """
+
 def flux(fespace: SubFiniteElementSpace, density: typing.Any, component: builtins.str) -> NodeField:
     r"""
     Consistent nodal loads of a distributed flux over `fespace` — the analogue
@@ -2412,14 +2431,36 @@ def read_gmsh_str(coords: Coords, text: builtins.str) -> dict:
     instead of reading from a path. Same `dict[str, Mesh]` result.
     """
 
+def rename_component(field: typing.Any, old: builtins.str, new: builtins.str) -> typing.Any:
+    r"""
+    Rename component `old` to `new` in a field, zone by zone — the renaming half
+    of Cast3M's `EXCO`. Values are preserved (metadata-only change). A zone
+    without `old` is carried unchanged; errors if no zone carries `old`, or if a
+    zone already has a component named `new`.
+    
+    Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`
+    and returns the same flavour.
+    """
+
 def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     r"""
     Restrict `field` to the nodes used by `mesh`.
     
-    Returns a new `NodeField` with one zone per submesh of `mesh`,
-    carrying the union of `field`'s components. Nodes of `mesh` absent
-    from `field` are assigned `0.0`. Errors if `mesh` and `field` are
-    attached to different `Coords`s.
+    Returns a new `NodeField` with one zone per submesh of `mesh`, each
+    supported on the submesh's canonical POI1 node cloud (its distinct nodes,
+    materialised once and cached). Two restrictions onto the **same** `mesh`
+    share that support, so they combine directly: `restrict(a, mesh) -
+    restrict(b, mesh)` is the node-by-node difference. That support is also the
+    one a stiffness block over `mesh` uses, so `K * restrict(f, mesh)` and
+    `solve(K, f) - restrict(g, mesh)` line up too.
+    
+    Each zone carries the union of `field`'s components; nodes of `mesh` absent
+    from `field` are assigned `0.0`. Element operations on the region
+    (`gradient`, `integral`, `deformation`, `interp_to_gauss`) take `mesh` as a
+    separate argument and read the field by node id. Use `restrict_like` to
+    land on the exact support of an existing field instead of a mesh.
+    
+    Errors if `mesh` and `field` are attached to different `Coords`s.
     """
 
 def restrict_like(field: NodeField, target: NodeField) -> NodeField:

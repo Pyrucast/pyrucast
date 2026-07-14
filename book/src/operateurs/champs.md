@@ -129,6 +129,43 @@ scalaire de droite. `==` / `!=` gardent leur sens Python habituel (identité).
 > Exemple complet et exécutable : `examples/field_mask.py` (lancer avec
 > `python examples/field_mask.py` après `maturin develop`).
 
+## Extraction et renommage de composantes (`EXCO`)
+
+Deux opérateurs travaillent sur le **jeu de composantes** d'un champ, sans
+toucher au support ni aux valeurs — l'équivalent de `EXCO` de Cast3M. Tous deux
+acceptent les quatre saveurs (`NodeField`, `SubNodeField`, `ElementField`,
+`SubElementField`) et renvoient la même saveur.
+
+| Python | Effet |
+|---|---|
+| `filter_components(field, components)` | ne garde que les composantes nommées, zone par zone. `components` est un **nom** (`str`) ou une **liste** de noms — typiquement le résultat de `model.primal_vars()`. |
+| `rename_component(field, old, new)` | renomme la composante `old` en `new` (métadonnée seule, aucune valeur déplacée). |
+
+`filter_components` traite chaque zone indépendamment :
+
+- une zone ne portant **aucune** des composantes demandées est **abandonnée** ;
+- une zone ne portant **que** des composantes demandées (rien à retirer) voit
+  son sous-champ **partagé tel quel** (handle copié, pas de duplication) ;
+- une zone mixte est reconstruite sur le même support avec les seules
+  composantes demandées, dans **son propre** ordre.
+
+`components` peut être un **sur-ensemble** des composantes du champ (les noms
+absents sont ignorés) : passer `model.primal_vars()` à un résultat de `solve`
+pour en retirer les inconnues duales (multiplicateurs de Lagrange) est l'usage
+visé. Erreur si aucune zone ne porte l'une des composantes demandées.
+
+`rename_component` laisse **inchangée** (handle partagé) toute zone ne portant
+pas `old`. Erreur si aucune zone ne porte `old`, ou si une zone concernée a déjà
+une composante nommée `new`.
+
+```python
+# Retire les multiplicateurs de Lagrange d'un résultat de solve.
+u = pyrucast.field.filter_components(solution, model.primal_vars())
+
+# Renomme une composante avant export.
+export = pyrucast.field.rename_component(u, "u_x", "DX")
+```
+
 ## Dérivation géométrique (vers les points de Gauss)
 
 Ces opérateurs ne dépendent **que** de l'espace EF et du champ — aucune

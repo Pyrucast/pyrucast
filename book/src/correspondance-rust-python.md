@@ -119,6 +119,8 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
 | `select_nodes(field: &NodeField, band: &Band, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type) |
 | `mask_nodes(field: &NodeField, band: &Band, …) -> NodeField` / `mask_cells(field: &ElementField, …) -> ElementField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> field` (dispatch par type ; champ `0/1` de même structure). Sucre : `field >= x` / `> x` / `<= x` / `< x` → masque |
+| `Field::filter_components(&self, wanted: &[String]) -> Self` / `SubField::select_components(&self, wanted) -> Self` | `filter_components(field, components) -> field` (dispatch par type ; `components` est un `str` ou une liste — p. ex. `model.primal_vars()` ; `EXCO`) |
+| `Field::rename_component(&self, from, to) -> Self` / `SubField::rename_component(&self, from, to) -> Self` | `rename_component(field, old, new) -> field` (dispatch par type ; renommage sans déplacement de valeur) |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate_node(field: &NodeField) -> NodeField` | `pyrucast.consolidate(field) -> NodeField` (**top-level** ; dispatch par type, partagé avec `Mesh`) |
 | `consolidate_element(field: &ElementField) -> ElementField` | `pyrucast.consolidate(field) -> ElementField` (**top-level** ; dispatch par type ; fusionne les zones d'une même fespace) |

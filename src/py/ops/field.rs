@@ -410,6 +410,124 @@ pub fn mask(
     }
 }
 
+/// Keep only the named `components` of a field, zone by zone — Cast3M's `EXCO`
+/// (component extraction).
+///
+/// `components` is a single name or a list of names; a list `model.primal_vars()`
+/// is the intended input (strip a `solve` result of its dual/Lagrange unknowns).
+/// In each zone the requested components are kept in the zone's **own** order;
+/// a zone carrying **none** of them is dropped, and a zone carrying **only**
+/// requested components has its sub-field **shared** (handle copied, not
+/// duplicated). Names the field does not carry are ignored; errors if no zone
+/// carries any of `components`.
+///
+/// Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`
+/// and returns the same flavour.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn filter_components(
+    py: Python<'_>,
+    field: &Bound<'_, PyAny>,
+    components: &Bound<'_, PyAny>,
+) -> PyResult<Py<PyAny>> {
+    use crate::containers::field::{Field, SubField};
+    let wanted = extract_names(components)?;
+    if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
+        let inner = f.inner.filter_components(&wanted)?;
+        return Ok(Py::new(py, PyNodeField { inner })?.into_any());
+    }
+    if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
+        let inner = f.inner.filter_components(&wanted)?;
+        return Ok(Py::new(py, PyElementField { inner })?.into_any());
+    }
+    if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
+        let out = read(&f.handle)?.select_components(&wanted)?;
+        return Ok(Py::new(
+            py,
+            PySubNodeField {
+                handle: insert(out),
+            },
+        )?
+        .into_any());
+    }
+    if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
+        let out = read(&f.handle)?.select_components(&wanted)?;
+        return Ok(Py::new(
+            py,
+            PySubElementField {
+                handle: insert(out),
+            },
+        )?
+        .into_any());
+    }
+    Err(PyTypeError::new_err(
+        "expected a NodeField, SubNodeField, ElementField or SubElementField",
+    ))
+}
+
+/// Rename component `old` to `new` in a field, zone by zone — the renaming half
+/// of Cast3M's `EXCO`. Values are preserved (metadata-only change). A zone
+/// without `old` is carried unchanged; errors if no zone carries `old`, or if a
+/// zone already has a component named `new`.
+///
+/// Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`
+/// and returns the same flavour.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn rename_component(
+    py: Python<'_>,
+    field: &Bound<'_, PyAny>,
+    old: &str,
+    new: &str,
+) -> PyResult<Py<PyAny>> {
+    use crate::containers::field::{Field, SubField};
+    if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
+        let inner = f.inner.rename_component(old, new)?;
+        return Ok(Py::new(py, PyNodeField { inner })?.into_any());
+    }
+    if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
+        let inner = f.inner.rename_component(old, new)?;
+        return Ok(Py::new(py, PyElementField { inner })?.into_any());
+    }
+    if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
+        let out = read(&f.handle)?.rename_component(old, new)?;
+        return Ok(Py::new(
+            py,
+            PySubNodeField {
+                handle: insert(out),
+            },
+        )?
+        .into_any());
+    }
+    if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
+        let out = read(&f.handle)?.rename_component(old, new)?;
+        return Ok(Py::new(
+            py,
+            PySubElementField {
+                handle: insert(out),
+            },
+        )?
+        .into_any());
+    }
+    Err(PyTypeError::new_err(
+        "expected a NodeField, SubNodeField, ElementField or SubElementField",
+    ))
+}
+
+/// Extract a component-name argument that is either a single `str` or a list of
+/// `str` (e.g. the result of `model.primal_vars()`) into a `Vec<String>`.
+fn extract_names(arg: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    if let Ok(name) = arg.extract::<String>() {
+        return Ok(vec![name]);
+    }
+    if let Ok(names) = arg.extract::<Vec<String>>() {
+        return Ok(names);
+    }
+    Err(PyTypeError::new_err(
+        "components: expected a str or a list of str",
+    ))
+}
+
 /// Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields — Cast3M's `XTY`.
 ///
 /// `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
