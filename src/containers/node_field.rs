@@ -129,31 +129,23 @@ impl SubNodeField {
         })
     }
 
-    /// Build a SubNodeField on the distinct nodes of **any** [`SubMesh`]
-    /// (first-appearance order in the connectivity). A POI1 support is
-    /// shared as-is (same handle, no extra per-node refcounts); any other
-    /// element type gets a fresh POI1 support materialised from its
-    /// distinct nodes.
+    /// Build a SubNodeField on the distinct nodes of **any** [`SubMesh`]. A
+    /// POI1 support is shared as-is (same handle); any other element type lands
+    /// on the submesh's **canonical POI1 companion** ([`SubMesh::to_poi1`]) —
+    /// materialised once and cached, so every field restricted to this submesh
+    /// (and the stiffness block / `divergence` / `flux` output over it) shares
+    /// one support slot and pairs under `same_support`.
     pub fn from_support(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
         let element_type = read(submesh)?.element_type();
         if element_type == ElementType::POI1 {
             return Self::from_poi1(submesh, components);
         }
-        crate::containers::field::check_components("SubNodeField", &components)?;
-        let (coords, nodes) = {
-            let sm = read(submesh)?;
-            let mut nodes: Vec<NodeId> = Vec::new();
-            for &nid in sm.connectivity() {
-                if !nodes.contains(&nid) {
-                    nodes.push(nid);
-                }
-            }
-            (sm.coords(), nodes)
-        };
-        // The field snapshots the distinct nodes of this source submesh;
-        // freeze the source so later `add_cell`s cannot leave it behind.
+        // Freeze the source (so later `add_cell`s cannot leave it behind, and so
+        // `to_poi1` may memoize the companion), then share that cached POI1
+        // support. `from_poi1` validates `components`.
         crate::containers::mesh::seal(submesh)?;
-        Self::new_with_nodes(coords, nodes, components)
+        let poi = read(submesh)?.to_poi1()?;
+        Self::from_poi1(&poi, components)
     }
 
     /// Number of nodes in the support.
@@ -292,31 +284,6 @@ impl SubNodeField {
         }
         let ncomp = self.components.len();
         Ok(&self.values[node_idx * ncomp..(node_idx + 1) * ncomp])
-    }
-
-    // ── Constructeur interne ────────────────────────────────────────────────
-
-    /// Builds a SubNodeField from an explicit node list, with all values at 0.0.
-    /// Materialises a fresh POI1 SubMesh holding the per-node refcounts:
-    /// if any `add_cell` fails, the partial SubMesh's `Drop` rolls back
-    /// the increfs already done.
-    pub(crate) fn new_with_nodes(
-        coords: Handle<Coords>,
-        nodes: Vec<NodeId>,
-        components: Vec<String>,
-    ) -> Result<Self> {
-        let n_nodes = nodes.len();
-        let n_comp = components.len();
-        let mut sm = SubMesh::poi1_from_node_ids(coords, &nodes)?;
-        // Freshly materialised support, owned by this field: seal it so a
-        // handle handed out via `support()` cannot mutate it under the field.
-        sm.seal();
-        Ok(SubNodeField {
-            support: insert(sm),
-            nodes,
-            components,
-            values: vec![0.0; n_nodes * n_comp],
-        })
     }
 
     // ── Helpers privés ──────────────────────────────────────────────────────

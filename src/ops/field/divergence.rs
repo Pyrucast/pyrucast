@@ -59,7 +59,7 @@ fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> 
 
     // The field guard is captured by the element closure (borrowed in place) and
     // held across the parallel scatter.
-    let support = insert(read(&submesh)?.to_poi1()?);
+    let support = read(&submesh)?.to_poi1()?;
     kernel::scatter_to_nodes(
         std::slice::from_ref(&fespace),
         &support,

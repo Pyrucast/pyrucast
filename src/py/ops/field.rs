@@ -59,10 +59,21 @@ pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> P
 
 /// Restrict `field` to the nodes used by `mesh`.
 ///
-/// Returns a new `NodeField` with one zone per submesh of `mesh`,
-/// carrying the union of `field`'s components. Nodes of `mesh` absent
-/// from `field` are assigned `0.0`. Errors if `mesh` and `field` are
-/// attached to different `Coords`s.
+/// Returns a new `NodeField` with one zone per submesh of `mesh`, each
+/// supported on the submesh's canonical POI1 node cloud (its distinct nodes,
+/// materialised once and cached). Two restrictions onto the **same** `mesh`
+/// share that support, so they combine directly: `restrict(a, mesh) -
+/// restrict(b, mesh)` is the node-by-node difference. That support is also the
+/// one a stiffness block over `mesh` uses, so `K * restrict(f, mesh)` and
+/// `solve(K, f) - restrict(g, mesh)` line up too.
+///
+/// Each zone carries the union of `field`'s components; nodes of `mesh` absent
+/// from `field` are assigned `0.0`. Element operations on the region
+/// (`gradient`, `integral`, `deformation`, `interp_to_gauss`) take `mesh` as a
+/// separate argument and read the field by node id. Use `restrict_like` to
+/// land on the exact support of an existing field instead of a mesh.
+///
+/// Errors if `mesh` and `field` are attached to different `Coords`s.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {

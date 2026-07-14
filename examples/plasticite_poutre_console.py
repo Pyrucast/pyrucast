@@ -187,8 +187,11 @@ def main():
             if res_norm <= tol:
                 break
             # δu = K⁻¹ r (K élastique, factorisation en cache). δu porte les DDL
-            # primaux ET duaux (multiplicateurs) sur un support neuf : on le
-            # reprojette sur le support/composantes de u, puis u ← u + δu.
+            # primaux ET duaux (multiplicateurs). Son support coïncide déjà avec
+            # celui de u (même compagnon POI1 caché de `to_poi1`, partagé par `solve`
+            # et `NodeField(mesh)`) ; `restrict_like` ne sert qu'à filtrer les
+            # composantes duales — sinon `u + δu` recopierait les multiplicateurs
+            # dans u par union. Puis u ← u + δu.
             du = pyrucast.solver.solve(k, residual)
             u = u + pyrucast.field.restrict_like(du, u)
             iters += 1

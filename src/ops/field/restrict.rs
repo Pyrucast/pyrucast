@@ -23,12 +23,28 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) -> Result<()> {
 
 /// Restrict `field` to the nodes used by `mesh`.
 ///
-/// Returns a new [`NodeField`] with one zone per submesh of `mesh`, each
-/// supported on the distinct nodes of its zone, carrying the union of
-/// `field`'s components. Values are read through the aggregate (first
-/// zone of `field` defining the pair wins); a node of `mesh` that
-/// `field` does not cover is assigned `0.0`; a node of `field` absent
-/// from `mesh` is dropped.
+/// Returns a new [`NodeField`] with one zone per submesh of `mesh`. Each zone
+/// is supported on the submesh's **canonical POI1 node cloud** — its distinct
+/// nodes, via [`SubMesh::to_poi1`](crate::containers::mesh::SubMesh::to_poi1),
+/// which is materialised once and cached. Two restrictions onto the **same**
+/// `mesh` therefore land on the **same support slot** and combine directly by
+/// the arithmetic operators: `restrict(a, mesh) - restrict(b, mesh)` is the
+/// node-by-node difference. That cached support is also the one a stiffness
+/// block over `mesh` uses, so `&K * &restrict(f, mesh)` and
+/// `solve(K, f) - restrict(g, mesh)` line up too.
+///
+/// Each zone carries the union of `field`'s components. Values are read
+/// through the aggregate (first zone of `field` defining the pair wins); a
+/// node of `mesh` that `field` does not cover is assigned `0.0`; a node of
+/// `field` absent from `mesh` is dropped.
+///
+/// Element operations on the region — [`gradient`](fn@crate::ops::field::gradient),
+/// [`integral`](fn@crate::ops::field::integral),
+/// [`deformation`](fn@crate::ops::field::deformation),
+/// [`interp_to_gauss`](fn@crate::ops::field::interp_to_gauss) — take the mesh /
+/// finite-element space as a **separate argument** and read the field by node
+/// id. To land instead on the *exact* support of an **existing field** (rather
+/// than a mesh), use [`restrict_like`].
 ///
 /// Errors if `mesh` is attached to a different `Coords` than
 /// `field`.
@@ -238,5 +254,87 @@ mod tests {
         let mut m2 = Mesh::from_submesh(SubMesh::new(cfg2.clone(), ElementType::POI1));
         m2.add_cell(&[n2.id()]).unwrap();
         assert!(restrict(&f, &m2).is_err());
+    }
+
+    /// Two restrictions onto the **same element mesh** land on its cached POI1
+    /// companion (one shared slot), so they subtract node-by-node instead of
+    /// passing through as two disjoint zones.
+    #[test]
+    fn restrict_twice_to_element_mesh_shares_support_and_subtracts() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+
+        // A genuine element mesh (TRI3), not a POI1 cloud.
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let mesh = Mesh::from_submesh(sm);
+
+        // Two source node fields carrying "v" on the same nodes.
+        let mk = |va: f64, vb: f64, vc: f64| {
+            let mut psm = SubMesh::new(coords.clone(), ElementType::POI1);
+            for nd in [&a, &b, &c] {
+                psm.add_cell(&[nd.id()]).unwrap();
+            }
+            let mut f = SubNodeField::from_poi1(&insert(psm), vec!["v".into()]).unwrap();
+            f.set_value(a.id(), "v", va).unwrap();
+            f.set_value(b.id(), "v", vb).unwrap();
+            f.set_value(c.id(), "v", vc).unwrap();
+            NodeField::from_sub(f)
+        };
+        let a2 = restrict(&mk(1.0, 2.0, 3.0), &mesh).unwrap();
+        let b2 = restrict(&mk(0.5, 0.5, 0.5), &mesh).unwrap();
+
+        // Same canonical support slot ⇒ the operators pair the zones.
+        let sa = read(&a2.get(0).unwrap()).unwrap().support();
+        let sb = read(&b2.get(0).unwrap()).unwrap().support();
+        assert!(
+            sa.same_slot(&sb),
+            "both restricts share the cached POI1 support"
+        );
+
+        let diff = (&a2 - &b2).unwrap();
+        assert_eq!(diff.len(), 1, "one fused zone, not two pass-through zones");
+        assert_eq!(diff.value(a.id(), "v").unwrap(), 0.5);
+        assert_eq!(diff.value(b.id(), "v").unwrap(), 1.5);
+        assert_eq!(diff.value(c.id(), "v").unwrap(), 2.5);
+    }
+
+    /// Regression: restricting a field whose support **is** the mesh's cached
+    /// POI1 companion must not deadlock. `restrict` holds a `view` (read guard)
+    /// over that support across the loop, while `from_poi1` re-`seal`s it — and
+    /// `seal`'s already-sealed read fast-path is what stops that from
+    /// write-locking against the held reader. Before the fix this hung.
+    #[test]
+    fn restrict_onto_own_cached_companion_does_not_deadlock() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let mesh = Mesh::from_submesh(sm);
+
+        let mut psm = SubMesh::new(coords.clone(), ElementType::POI1);
+        for nd in [&a, &b, &c] {
+            psm.add_cell(&[nd.id()]).unwrap();
+        }
+        let mut f = SubNodeField::from_poi1(&insert(psm), vec!["v".into()]).unwrap();
+        f.set_value(a.id(), "v", 5.0).unwrap();
+        let base = NodeField::from_sub(f);
+
+        // `on_companion` lives on the mesh's cached POI1 companion.
+        let on_companion = restrict(&base, &mesh).unwrap();
+        // Restricting it onto the same mesh reuses that very support slot.
+        let again = restrict(&on_companion, &mesh).unwrap();
+        assert_eq!(again.value(a.id(), "v").unwrap(), 5.0);
+
+        let s1 = read(&on_companion.get(0).unwrap()).unwrap().support();
+        let s2 = read(&again.get(0).unwrap()).unwrap().support();
+        assert!(
+            s1.same_slot(&s2),
+            "both land on the shared cached companion"
+        );
     }
 }

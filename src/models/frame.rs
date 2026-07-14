@@ -19,7 +19,7 @@ use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{CellGeom, Domain, Physics, StiffnessLayout, SubModelKind};
-use crate::store::{insert, read, Handle};
+use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
 const MATERIAL_COMPONENTS: &[&str] = &["E", "A", "I", "G", "A_s"];
@@ -56,7 +56,7 @@ impl Frame {
                 "Frame: planar frame requires a 2-D configuration, got {space_dim}-D"
             )));
         }
-        let support = insert(read(&submesh)?.to_poi1()?);
+        let support = read(&submesh)?.to_poi1()?;
         Ok(Self { fespace, support })
     }
 }

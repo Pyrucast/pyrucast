@@ -182,7 +182,7 @@ nœuds **à travers les zones** (règle premier-trouvé) :
 | `gradient(f, fes)` / `deformation(u, fes)` | lookups par nœud × Gauss via un snapshot des zones |
 | `divergence(F)` | adjoint de `gradient` : champ vectoriel par éléments → `NodeField` (`div`), accumulé par nœud (`d_i = ∫ ∇N_i·F`) |
 | `solve(matrix, rhs)` | second membre lu par DOF (absent ⇒ `0.0`) ; solution : une zone par support **colonne** des blocs de la matrice, sur le handle même du bloc — `same_support` avec tout champ posé sur ces supports, stable d'une résolution à l'autre |
-| `restrict(f, mesh)` | une zone par submesh cible, `0.0` pour les nœuds non couverts |
+| `restrict(f, mesh)` | une zone par submesh cible, sur le **nuage POI1 canonique caché** du sous-maillage (`to_poi1`) ⇒ deux restrictions sur le même `mesh` partagent le support et sont soustractibles (et s'alignent avec `K·x`/`solve`) ; `0.0` pour les nœuds non couverts |
 | `restrict_like(f, target)` | reprojette sur le support **et** les composantes de `target` (mêmes slots) ⇒ combinable par `+ - * /` avec `target` ; nœuds/composantes hors de `target` abandonnés, `0.0` si non couverts |
 | `merge(a, b)` | union structurelle consolidée (conflit de valeur ⇒ erreur) |
 | `consolidate(f)` | fusion par jeu de composantes après vérification de cohérence |

@@ -554,6 +554,37 @@ def test_restrict_to_mesh_subset():
     assert r.value(nodes[2], "T") == 3.0
 
 
+def test_restrict_twice_to_element_mesh_is_subtractable():
+    """Two restricts onto the *same* element (TRI3) mesh land on its cached
+    POI1 companion, so they subtract node-by-node rather than passing through
+    as two disjoint zones."""
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    d = c.add_node([0.0, 1.0])
+    tri = pyrucast.Mesh(c, "TRI3")
+    tri.unit().add_cell([a, b, d])
+
+    def field(va, vb, vd):
+        sm = pyrucast.Mesh(c, "POI1")
+        for n in (a, b, d):
+            sm.unit().add_cell([n])
+        f = pyrucast.NodeField(sm, ["v"])
+        f[0].set_value(a, "v", va)
+        f[0].set_value(b, "v", vb)
+        f[0].set_value(d, "v", vd)
+        return f
+
+    a2 = pyrucast.field.restrict(field(1.0, 2.0, 3.0), tri)
+    b2 = pyrucast.field.restrict(field(0.5, 0.5, 0.5), tri)
+
+    # Shared support ⇒ genuine difference (else a2's values would pass through).
+    diff = a2 - b2
+    assert diff.value(a, "v") == 0.5
+    assert diff.value(b, "v") == 1.5
+    assert diff.value(d, "v") == 2.5
+
+
 def test_restrict_like_lands_on_target_support():
     c, nodes, sm = _poi1_with(3)
 

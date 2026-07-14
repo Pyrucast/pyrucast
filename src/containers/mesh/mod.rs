@@ -100,6 +100,18 @@ pub struct SubMesh {
     /// so it can never go stale.
     #[serde(skip)]
     node_index: OnceLock<HashMap<NodeId, usize>>,
+    /// Lazily-built **canonical POI1 companion**: the node cloud of this
+    /// submesh's distinct nodes, materialised once and shared. Every consumer
+    /// that projects this submesh to its nodes ([`SubMesh::to_poi1`]) gets the
+    /// *same* store slot, so their node fields pair under
+    /// [`same_support`](crate::containers::field::SubField::same_support) — a
+    /// stiffness block's support, a `restrict` onto this mesh, and a
+    /// `divergence`/`flux` output over it all land on one handle and combine
+    /// directly. Not serialized (derived from `connectivity`, rebuilt on
+    /// demand). Only ever populated once the submesh is sealed, so it can never
+    /// go stale.
+    #[serde(skip)]
+    poi1_companion: OnceLock<Handle<SubMesh>>,
 }
 
 impl SubMesh {
@@ -112,6 +124,7 @@ impl SubMesh {
             face_color: RgbColor::default(),
             sealed: false,
             node_index: OnceLock::new(),
+            poi1_companion: OnceLock::new(),
         }
     }
 
@@ -310,22 +323,52 @@ impl SubMesh {
         Ok(sm)
     }
 
-    /// Build a fresh POI1 submesh holding this submesh's nodes,
-    /// **de-duplicated in order of first appearance** (one POI1 cell per
-    /// unique node). Each referenced node is increfed afresh by the new
-    /// submesh; `self` is left untouched.
+    /// Canonical POI1 node cloud of this submesh — its nodes **de-duplicated in
+    /// order of first appearance** (one POI1 cell per unique node), as a sealed
+    /// [`SubMesh`] handle.
     ///
-    /// Shared building block: [`crate::ops::mesher::to_poi1()`] applies it
-    /// submesh-by-submesh, and the physics that need a stable node support
-    /// (e.g. heat conduction) use it directly.
-    pub fn to_poi1(&self) -> Result<SubMesh> {
+    /// **Cached, per submesh.** Once `self` is sealed the companion is built at
+    /// most once and every later call returns the *same* store slot, so all the
+    /// node fields that project this submesh to its nodes pair under
+    /// [`same_support`](crate::containers::field::SubField::same_support): a
+    /// stiffness block's support (built this way in every physics' `new`), a
+    /// [`restrict`](crate::ops::field::restrict) onto this mesh, and a
+    /// `divergence`/`flux`/`internal_forces` output over it all share one handle
+    /// and combine directly by the field operators. This is what lets
+    /// `solve(K, f) - restrict(g, mesh)` and `&K * &restrict(f, mesh)` line up.
+    ///
+    /// On an **unsealed** submesh nothing is cached — a fresh cloud is returned
+    /// each call (the old behaviour), since the connectivity could still change
+    /// and stale the companion. Shared building block:
+    /// [`crate::ops::mesher::to_poi1()`] applies it submesh-by-submesh.
+    pub fn to_poi1(&self) -> Result<Handle<SubMesh>> {
+        if let Some(h) = self.poi1_companion.get() {
+            return Ok(h.clone());
+        }
         let mut seen: Vec<NodeId> = Vec::new();
         for &nid in &self.connectivity {
             if !seen.contains(&nid) {
                 seen.push(nid);
             }
         }
-        SubMesh::poi1_from_node_ids(self.coords.clone(), &seen)
+        // Build (write-locks `Coords`) and seal the companion. `self` is behind
+        // the caller's read guard on this submesh — a different slot than the
+        // POI1 companion and `Coords` — so no lock inversion (same discipline
+        // the previous `insert(read(sm)?.to_poi1()?)` idiom already relied on).
+        let handle = insert(SubMesh::poi1_from_node_ids(self.coords.clone(), &seen)?);
+        seal(&handle)?;
+        if self.sealed {
+            // Frozen source ⇒ safe to memoize. On a race the loser drops its
+            // build and everyone reads the winner's slot.
+            let _ = self.poi1_companion.set(handle);
+            Ok(self
+                .poi1_companion
+                .get()
+                .expect("populated on this path")
+                .clone())
+        } else {
+            Ok(handle)
+        }
     }
 
     /// Visualize this submesh.
@@ -369,9 +412,19 @@ impl SubMesh {
 /// cell-indexed view can never go stale. Idempotent; returns the same handle
 /// (cloned) for ergonomic chaining at a constructor's capture site.
 ///
-/// Must not be called while another guard on the same submesh is held (the
-/// slot lock is not reentrant — see [`crate::store`]).
+/// **Already-sealed fast path takes only a read lock.** This matters now that
+/// [`SubMesh::to_poi1`] is cached: a `restrict` onto a mesh can land on the very
+/// support a source field already sits on (the shared POI1 companion), so
+/// `from_poi1` may `seal` a support while the caller still holds a *read* guard
+/// on it (a field `view`). Sealing is idempotent, so when the submesh is already
+/// sealed we skip the write entirely — a read lock coexists with that reader,
+/// whereas a write lock would deadlock against it. Taking a write lock while a
+/// **write** guard on the same slot is held is still a deadlock (the slot lock is
+/// not reentrant — see [`crate::store`]); only the sealed-read case is relaxed.
 pub fn seal(handle: &Handle<SubMesh>) -> Result<Handle<SubMesh>> {
+    if read(handle)?.is_sealed() {
+        return Ok(handle.clone());
+    }
     write(handle)?.seal();
     Ok(handle.clone())
 }
@@ -1058,5 +1111,33 @@ mod tests {
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         // Non-POI1 → error.
         assert!(tri.union_node(&a).is_err());
+    }
+
+    #[test]
+    fn to_poi1_caches_companion_on_a_sealed_submesh() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let h = insert(sm);
+
+        // Unsealed: nothing memoized — a fresh cloud each call.
+        let u1 = read(&h).unwrap().to_poi1().unwrap();
+        let u2 = read(&h).unwrap().to_poi1().unwrap();
+        assert!(!u1.same_slot(&u2), "unsealed submesh is not memoized");
+
+        // Sealed: the companion is built once and every call shares its slot.
+        seal(&h).unwrap();
+        let p1 = read(&h).unwrap().to_poi1().unwrap();
+        let p2 = read(&h).unwrap().to_poi1().unwrap();
+        assert!(
+            p1.same_slot(&p2),
+            "sealed submesh memoizes its POI1 companion"
+        );
+        assert_eq!(read(&p1).unwrap().element_type(), ElementType::POI1);
+        assert_eq!(read(&p1).unwrap().cell_count(), 3); // three distinct nodes
     }
 }

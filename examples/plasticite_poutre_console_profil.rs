@@ -297,8 +297,10 @@ fn main() -> Result<()> {
                 break;
             }
 
-            // Direction résidu g = K⁻¹ r (K élastique, cache de factorisation),
-            // reprojetée sur le support/composantes de u.
+            // Direction résidu g = K⁻¹ r (K élastique, cache de factorisation). Le
+            // support de δu coïncide déjà avec celui de u (même compagnon POI1 caché
+            // de `to_poi1`) ; `restrict_like` ne filtre que les composantes duales
+            // (multiplicateurs) — sinon elles se recopieraient dans u par union.
             let du = tic(&T_SOLVE, || solve(&k, &residual))?;
             let g = tic(&T_FIELDOPS, || restrict_like(&du, &u))?;
 

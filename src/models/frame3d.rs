@@ -25,7 +25,7 @@ use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{CellGeom, Domain, Physics, StiffnessLayout, SubModelKind};
-use crate::store::{insert, read, Handle};
+use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
 const MATERIAL_COMPONENTS: &[&str] = &["E", "A", "I_y", "I_z", "J", "G", "A_sy", "A_sz"];
@@ -63,7 +63,7 @@ impl Frame3d {
                 "Frame3d: space frame requires a 3-D configuration, got {space_dim}-D"
             )));
         }
-        let support = insert(read(&submesh)?.to_poi1()?);
+        let support = read(&submesh)?.to_poi1()?;
         Ok(Self { fespace, support })
     }
 }

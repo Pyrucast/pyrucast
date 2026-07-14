@@ -20,7 +20,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::models::{CellGeom, Domain, Physics, StiffnessLayout, SubModelKind};
-use crate::store::{insert, read, Handle};
+use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
@@ -70,7 +70,7 @@ impl Truss {
             let s = read(&fespace)?;
             (s.submesh(), s.space_dim())
         };
-        let support = insert(read(&submesh)?.to_poi1()?);
+        let support = read(&submesh)?.to_poi1()?;
         Ok(Self {
             fespace,
             support,

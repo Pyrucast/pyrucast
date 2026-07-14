@@ -587,4 +587,53 @@ mod tests {
         }
         assert!(k.finalize().is_err());
     }
+
+    /// The support a stiffness block carries (its `col_support`) is the cached
+    /// `to_poi1` of its fespace submesh — the very slot `restrict` onto the same
+    /// mesh lands on. So a solve/`K·x` output and a `restrict` onto that mesh
+    /// share one support and combine directly by the field operators.
+    #[test]
+    fn stiffness_support_matches_restrict_onto_the_same_mesh() {
+        use crate::aggregate::Aggregate;
+        use crate::containers::node_field::{NodeField, SubNodeField};
+        use crate::ops::field::restrict;
+
+        let coords = insert(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = (0..=2)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        sm.add_cell(&[nodes[0].id(), nodes[1].id()]).unwrap();
+        sm.add_cell(&[nodes[1].id(), nodes[2].id()]).unwrap();
+        let mesh = Mesh::from_submesh(sm);
+
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let mut model = Model::empty();
+        model
+            .add_sub(insert(
+                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+            ))
+            .unwrap();
+        let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)]]).unwrap();
+        let k = stiffness(&model, &materials).unwrap();
+
+        // A field restricted onto the very same mesh.
+        let mut psm = SubMesh::new(coords.clone(), ElementType::POI1);
+        for nd in &nodes {
+            psm.add_cell(&[nd.id()]).unwrap();
+        }
+        let f =
+            NodeField::from_sub(SubNodeField::from_poi1(&insert(psm), vec!["T".into()]).unwrap());
+        let r = restrict(&f, &mesh).unwrap();
+
+        let col = read(k.iter().next().unwrap())
+            .unwrap()
+            .col_support()
+            .clone();
+        let rsup = read(&r.get(0).unwrap()).unwrap().support();
+        assert!(
+            col.same_slot(&rsup),
+            "block support and restrict onto the same mesh share one slot"
+        );
+    }
 }

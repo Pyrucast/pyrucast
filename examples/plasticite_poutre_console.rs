@@ -256,9 +256,11 @@ fn main() -> Result<()> {
                 break;
             }
             // δu = K⁻¹ r (K élastique, cache de factorisation). δu porte les DDL
-            // primaux ET duaux (multiplicateurs de Lagrange) sur un support neuf :
-            // on le reprojette sur le support/composantes de u (`restrict_like`),
-            // puis u ← u + δu par l'opérateur `+`.
+            // primaux ET duaux (multiplicateurs de Lagrange). Son support coïncide
+            // déjà avec celui de u (même compagnon POI1 caché de `to_poi1`, partagé
+            // par `solve` et `NodeField::new(&mesh)`) ; `restrict_like` ne sert donc
+            // qu'à **filtrer les composantes duales** — sinon `u + δu` recopierait
+            // les multiplicateurs dans u par union. Puis u ← u + δu par `+`.
             let du = solve(&k, &residual)?;
             u = (&u + &restrict_like(&du, &u)?)?;
             iters += 1;

@@ -15,7 +15,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{CellGeom, Domain, Physics, StiffnessLayout, SubModelKind};
-use crate::store::{insert, read, Handle};
+use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
@@ -109,7 +109,7 @@ impl Elasticity {
                  (2-D ⇒ plane_stress|plane_strain, 3-D ⇒ solid)"
             )));
         }
-        let support = insert(read(&submesh)?.to_poi1()?);
+        let support = read(&submesh)?.to_poi1()?;
         Ok(Self {
             fespace,
             support,

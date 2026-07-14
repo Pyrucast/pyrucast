@@ -1,7 +1,7 @@
 use crate::aggregate::Aggregate;
 use crate::containers::mesh::Mesh;
 use crate::error::Result;
-use crate::store::{insert, read};
+use crate::store::read;
 
 /// Convert a mesh to POI1, **submesh by submesh**.
 ///
@@ -17,8 +17,7 @@ use crate::store::{insert, read};
 pub fn to_poi1(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_handle in mesh {
-        let poi = read(sm_handle)?.to_poi1()?;
-        result.add_sub(insert(poi))?;
+        result.add_sub(read(sm_handle)?.to_poi1()?)?;
     }
     Ok(result)
 }

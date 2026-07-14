@@ -24,7 +24,7 @@ use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::node_field::SubNodeField;
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
-use crate::store::{insert, read, Handle};
+use crate::store::{read, Handle};
 
 /// Per-Gauss flux density consumed by [`flux`].
 pub enum FluxDensity<'a> {
@@ -78,7 +78,7 @@ pub fn flux(
     // by the element closure (a plain snapshot, borrowed in place) and the shared
     // driver owns the colour-parallel scatter — this is a mass-like `N`-weighted
     // instance of the same nodal integrate-and-scatter as the `Bᵀ` operators.
-    let support = insert(read(&submesh)?.to_poi1()?);
+    let support = read(&submesh)?.to_poi1()?;
     kernel::scatter_to_nodes(
         std::slice::from_ref(fespace),
         &support,

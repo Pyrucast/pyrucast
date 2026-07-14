@@ -79,7 +79,7 @@ impl Timoshenko {
             Interpolation::Lagrange1,
             QuadratureRule::Reduced,
         )?);
-        let support = insert(read(&submesh)?.to_poi1()?);
+        let support = read(&submesh)?.to_poi1()?;
         Ok(Self {
             bending,
             shear,
