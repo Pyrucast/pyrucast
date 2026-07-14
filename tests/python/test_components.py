@@ -134,3 +134,35 @@ def test_filter_and_rename_on_subnodefield():
     assert g.components() == ["U", "W"]
     r = pyrucast.field.rename_component(sub, "V", "VV")
     assert r.components() == ["U", "VV", "W"]
+
+
+# ─── __getitem__ sugar on sub-fields ─────────────────────────────────────────
+
+
+def test_subnodefield_getitem_value_still_works():
+    f, nodes = _poi1_field([[5.0, 6.0]], components=("U", "V"))
+    sub = f[0]
+    # (node, component) → the scalar value (unchanged behaviour).
+    assert sub[nodes[0], "U"] == 5.0
+    assert sub[nodes[0], "V"] == 6.0
+
+
+def test_subnodefield_getitem_string_and_list_filter():
+    f, _ = _poi1_field([[1.0, 2.0, 3.0]], components=("U", "V", "W"))
+    sub = f[0]
+    assert isinstance(sub["V"], pyrucast.SubNodeField)
+    assert sub["V"].components() == ["V"]
+    assert sub[["U", "W"]].components() == ["U", "W"]
+
+
+def test_u1_indexed_by_u2_components():
+    # The target idiom: reproject u1 onto the components of u2 — both flavours.
+    f, nodes = _poi1_field([[1.0, 2.0, 9.0]], components=("u_x", "u_y", "lambda"))
+    u2, _ = _poi1_field([[0.0, 0.0]], components=("u_x", "u_y"))
+    # aggregate[list]
+    agg = f[u2.components()]
+    assert agg.components() == ["u_x", "u_y"]
+    # sub[list]
+    sub = f[0][u2.components()]
+    assert sub.components() == ["u_x", "u_y"]
+    assert sub[nodes[0], "u_x"] == 1.0

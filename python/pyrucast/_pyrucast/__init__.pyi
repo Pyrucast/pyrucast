@@ -1465,10 +1465,13 @@ class SubElementField:
         element-by-element). The ternary `pow(x, y, z)` modulo form is
         rejected (meaningless on floats).
         """
-    def __getitem__(self, key: tuple[builtins.int, builtins.int, builtins.str]) -> builtins.float:
+    def __getitem__(self, key: typing.Any) -> typing.Any:
         r"""
-        `field[cell, gauss, "name"]` — raises ValueError if the component
-        is unknown.
+        Indexing dispatches on the key:
+        - `field[cell, gauss, "name"]` → the **value** (ValueError if unknown);
+        - `field["name"]` or `field[["a", "b"]]` → a **new sub-field** with only
+          those components (`filter_components`), so `u1[u2.components()]`
+          reprojects `u1` onto `u2`'s component set.
         """
     def __setitem__(self, key: tuple[builtins.int, builtins.int, builtins.str], value: builtins.float) -> None:
         r"""
@@ -2029,9 +2032,13 @@ class SubNodeField:
         element-by-element). The ternary `pow(x, y, z)` modulo form is
         rejected (meaningless on floats).
         """
-    def __getitem__(self, key: tuple[Node, builtins.str]) -> builtins.float:
+    def __getitem__(self, key: typing.Any) -> typing.Any:
         r"""
-        `subfield[node, "UX"]` — raises if the node or component is absent.
+        Indexing dispatches on the key:
+        - `subfield[node, "UX"]` → the **value** (raises if node/component absent);
+        - `subfield["UX"]` or `subfield[["UX", "UY"]]` → a **new sub-field** with
+          only those components (`filter_components`), so `u1[u2.components()]`
+          reprojects `u1` onto `u2`'s component set.
         """
     def __setitem__(self, key: tuple[Node, builtins.str], value: builtins.float) -> None:
         r"""

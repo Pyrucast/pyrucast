@@ -169,13 +169,30 @@ impl PySubElementField {
         self.scalar_or_combine(exponent, |a, b| a.powf(b))
     }
 
-    /// `field[cell, gauss, "name"]` — raises ValueError if the component
-    /// is unknown.
-    fn __getitem__(&self, key: (usize, usize, String)) -> PyResult<f64> {
-        let (cell, gauss, comp) = key;
-        read(&self.handle)?
-            .value(cell, gauss, &comp)
-            .map_err(|e| PyValueError::new_err(e.to_string()))
+    /// Indexing dispatches on the key:
+    /// - `field[cell, gauss, "name"]` → the **value** (ValueError if unknown);
+    /// - `field["name"]` or `field[["a", "b"]]` → a **new sub-field** with only
+    ///   those components (`filter_components`), so `u1[u2.components()]`
+    ///   reprojects `u1` onto `u2`'s component set.
+    fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        // (cell, gauss, component) → scalar value.
+        if let Ok((cell, gauss, comp)) = key.extract::<(usize, usize, String)>() {
+            let v = read(&self.handle)?
+                .value(cell, gauss, &comp)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            return Ok(v.into_pyobject(py)?.into_any().unbind());
+        }
+        // "name" or ["a", …] → component selection (a new sub-field).
+        let names = crate::py::ops::field::extract_names(key)?;
+        let out =
+            crate::containers::field::SubField::select_components(&*read(&self.handle)?, names)?;
+        Ok(Py::new(
+            py,
+            PySubElementField {
+                handle: insert(out),
+            },
+        )?
+        .into_any())
     }
 
     /// `field[cell, gauss, "name"] = value`.

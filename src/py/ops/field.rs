@@ -516,7 +516,7 @@ pub fn rename_component(
 
 /// Extract a component-name argument that is either a single `str` or a list of
 /// `str` (e.g. the result of `model.primal_vars()`) into a `Vec<String>`.
-fn extract_names(arg: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+pub(crate) fn extract_names(arg: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     if let Ok(name) = arg.extract::<String>() {
         return Ok(vec![name]);
     }

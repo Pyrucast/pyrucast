@@ -207,11 +207,29 @@ impl PySubNodeField {
         self.scalar_or_combine(exponent, |a, b| a.powf(b))
     }
 
-    /// `subfield[node, "UX"]` — raises if the node or component is absent.
-    fn __getitem__(&self, key: (PyRef<'_, PyNode>, String)) -> PyResult<f64> {
-        let (node, comp) = key;
-        let nid = node.as_node().id();
-        Ok(read(&self.handle)?.value(nid, &comp)?)
+    /// Indexing dispatches on the key:
+    /// - `subfield[node, "UX"]` → the **value** (raises if node/component absent);
+    /// - `subfield["UX"]` or `subfield[["UX", "UY"]]` → a **new sub-field** with
+    ///   only those components (`filter_components`), so `u1[u2.components()]`
+    ///   reprojects `u1` onto `u2`'s component set.
+    fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        // (node, component) → scalar value.
+        if let Ok((node, comp)) = key.extract::<(PyRef<'_, PyNode>, String)>() {
+            let nid = node.as_node().id();
+            let v = read(&self.handle)?.value(nid, &comp)?;
+            return Ok(v.into_pyobject(py)?.into_any().unbind());
+        }
+        // "comp" or ["comp", …] → component selection (a new sub-field).
+        let names = crate::py::ops::field::extract_names(key)?;
+        let out =
+            crate::containers::field::SubField::select_components(&*read(&self.handle)?, names)?;
+        Ok(Py::new(
+            py,
+            PySubNodeField {
+                handle: insert(out),
+            },
+        )?
+        .into_any())
     }
 
     /// `subfield[node, "UX"] = v` — raises if the node or component is absent.

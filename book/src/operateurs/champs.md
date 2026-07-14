@@ -166,14 +166,26 @@ u = pyrucast.field.filter_components(solution, model.primal_vars())
 export = pyrucast.field.rename_component(u, "u_x", "DX")
 ```
 
-**Sucre d'indexation** (façon pandas/numpy) : sur un `NodeField` ou un
-`ElementField`, une clé **chaîne** ou **liste de chaînes** appelle
-`filter_components`. Les clés `int` et `slice` gardent l'accès aux zones.
+**Sucre d'indexation** (façon pandas/numpy) : sur **les quatre saveurs**
+(`NodeField`, `SubNodeField`, `ElementField`, `SubElementField`), une clé
+**chaîne** ou **liste de chaînes** appelle `filter_components` et renvoie la
+même saveur. Les autres clés gardent leur sens : `int`/`slice` → accès aux
+zones sur un agrégat ; le tuple d'accès à une valeur sur un sous-champ
+(`sub[node, "UX"]`, `sub[cell, gauss, "E"]`) est inchangé.
 
 ```python
 ux   = champ["u_x"]            # == filter_components(champ, "u_x")
 depl = champ[["u_x", "u_y"]]   # == filter_components(champ, ["u_x", "u_y"])
 zone = champ[0]                # inchangé : la zone (SubNodeField)
+val  = champ[0][node, "u_x"]   # inchangé : la valeur au nœud
+```
+
+L'accesseur `champ.components()` (présent sur les quatre saveurs) donne la
+liste des composantes, d'où l'idiome **« reprojeter `u1` sur les composantes
+de `u2` »** :
+
+```python
+u = u1[u2.components()]        # u1 réduit au jeu de composantes de u2
 ```
 
 Côté Rust, `filter_components` / `select_components` acceptent indifféremment
