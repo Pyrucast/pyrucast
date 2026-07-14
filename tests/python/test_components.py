@@ -90,6 +90,39 @@ def test_rename_collision_errors():
         pyrucast.field.rename_component(f, "U", "V")
 
 
+# ─── __getitem__ sugar (numpy/pandas-style) ─────────────────────────────────
+
+
+def test_getitem_string_selects_one_component():
+    f, _ = _poi1_field([[1.0, 2.0, 3.0]], components=("U", "V", "W"))
+    g = f["V"]
+    assert isinstance(g, pyrucast.NodeField)
+    assert g.components() == ["V"]
+    assert g[0].get(0, 0) == 2.0
+
+
+def test_getitem_list_selects_subset():
+    f, _ = _poi1_field([[1.0, 2.0, 3.0]], components=("U", "V", "W"))
+    assert f[["U", "W"]].components() == ["U", "W"]
+    # A tuple key works too.
+    assert f["U", "W"].components() == ["U", "W"]
+
+
+def test_getitem_int_and_slice_unchanged():
+    f, _ = _poi1_field([[1.0], [2.0]], components=("T",))
+    # int → the zone (a SubNodeField), not a filtered field.
+    assert isinstance(f[0], pyrucast.SubNodeField)
+    # slice → a fresh aggregate.
+    assert isinstance(f[0:1], pyrucast.NodeField)
+    assert len(f[0:1]) == 1
+
+
+def test_getitem_unknown_component_raises():
+    f, _ = _poi1_field([[1.0]], components=("T",))
+    with pytest.raises(RuntimeError):
+        _ = f["nope"]
+
+
 # ─── sub-field flavour ───────────────────────────────────────────────────────
 
 

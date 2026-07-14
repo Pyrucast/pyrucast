@@ -433,15 +433,15 @@ pub fn filter_components(
     use crate::containers::field::{Field, SubField};
     let wanted = extract_names(components)?;
     if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
-        let inner = f.inner.filter_components(&wanted)?;
+        let inner = f.inner.filter_components(wanted.as_slice())?;
         return Ok(Py::new(py, PyNodeField { inner })?.into_any());
     }
     if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
-        let inner = f.inner.filter_components(&wanted)?;
+        let inner = f.inner.filter_components(wanted.as_slice())?;
         return Ok(Py::new(py, PyElementField { inner })?.into_any());
     }
     if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        let out = read(&f.handle)?.select_components(&wanted)?;
+        let out = read(&f.handle)?.select_components(wanted.as_slice())?;
         return Ok(Py::new(
             py,
             PySubNodeField {
@@ -451,7 +451,7 @@ pub fn filter_components(
         .into_any());
     }
     if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        let out = read(&f.handle)?.select_components(&wanted)?;
+        let out = read(&f.handle)?.select_components(wanted.as_slice())?;
         return Ok(Py::new(
             py,
             PySubElementField {

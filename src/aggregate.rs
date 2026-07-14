@@ -353,7 +353,7 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 #[cfg(feature = "python-api")]
 #[macro_export]
 macro_rules! impl_aggregate_pymethods {
-    ($T:ident, $Sub:ident, $name:literal, $sub:ident, $Inner:ty) => {
+    ($T:ident, $Sub:ident, $name:literal, $sub:ident, $Inner:ty $(, $components:ident)?) => {
         paste::paste! {
             #[cfg_attr(
                 feature = "stub-gen",
@@ -368,8 +368,11 @@ macro_rules! impl_aggregate_pymethods {
                 /// `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
                 /// negative indices supported); `agg[i:j:k]` → a **fresh
                 /// aggregate** of the same type holding the sliced zones
-                /// (Python slicing: step, negative bounds). Other key types
-                /// raise `TypeError`.
+                /// (Python slicing: step, negative bounds). For field
+                /// aggregates, a **string** key `agg["u_x"]` or a **list** key
+                /// `agg[["u_x", "u_y"]]` returns a fresh field keeping only
+                /// those components (`filter_components`). Other key types raise
+                /// `TypeError`.
                 fn __getitem__(
                     &self,
                     py: pyo3::Python<'_>,
@@ -396,6 +399,25 @@ macro_rules! impl_aggregate_pymethods {
                         let inner = $crate::aggregate::Aggregate::subset(&self.inner, idxs)?;
                         return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
                     }
+
+                    $(
+                        // Component key(s) — only for field aggregates (the
+                        // `$components` flag). `agg["u_x"]` (a single name) or
+                        // `agg[["u_x", "u_y"]]` (a list) → filter_components.
+                        // Checked before the integer branch; ints never extract
+                        // as `String`/`Vec<String>`, so `agg[0]` still works.
+                        let _ = stringify!($components);
+                        if let Ok(name) = key.extract::<String>() {
+                            let inner =
+                                $crate::containers::field::Field::filter_components(&self.inner, name)?;
+                            return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
+                        }
+                        if let Ok(names) = key.extract::<Vec<String>>() {
+                            let inner =
+                                $crate::containers::field::Field::filter_components(&self.inner, names)?;
+                            return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
+                        }
+                    )?
 
                     // Integer: agg[0], agg[-1]
                     let idx: isize = key.extract().map_err(|_| {

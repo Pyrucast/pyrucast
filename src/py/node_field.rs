@@ -564,5 +564,6 @@ crate::impl_aggregate_pymethods!(
     PySubNodeField,
     "NodeField",
     subfield,
-    NodeField
+    NodeField,
+    field_components
 );

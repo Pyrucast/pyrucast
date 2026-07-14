@@ -63,6 +63,57 @@ pub(crate) fn check_components(kind: &str, components: &[String]) -> Result<()> 
     Ok(())
 }
 
+/// Accepts either a **single** component name or a **collection** of names, so
+/// the component operators read the same both ways:
+/// `field.filter_components("u_x")` and `field.filter_components(["u_x", "u_y"])`
+/// (and `field.filter_components(model.primal_vars())`, a `Vec<String>`). It is
+/// the Rust twin of the Python `str | list[str]` argument.
+pub trait IntoComponentNames {
+    /// The requested component names, as an owned list.
+    fn into_names(self) -> Vec<String>;
+}
+
+impl IntoComponentNames for Vec<String> {
+    fn into_names(self) -> Vec<String> {
+        self
+    }
+}
+impl IntoComponentNames for &[String] {
+    fn into_names(self) -> Vec<String> {
+        self.to_vec()
+    }
+}
+impl IntoComponentNames for String {
+    fn into_names(self) -> Vec<String> {
+        vec![self]
+    }
+}
+impl IntoComponentNames for &str {
+    fn into_names(self) -> Vec<String> {
+        vec![self.to_string()]
+    }
+}
+impl IntoComponentNames for &String {
+    fn into_names(self) -> Vec<String> {
+        vec![self.clone()]
+    }
+}
+impl IntoComponentNames for Vec<&str> {
+    fn into_names(self) -> Vec<String> {
+        self.into_iter().map(str::to_string).collect()
+    }
+}
+impl IntoComponentNames for &[&str] {
+    fn into_names(self) -> Vec<String> {
+        self.iter().map(|s| s.to_string()).collect()
+    }
+}
+impl<const N: usize> IntoComponentNames for [&str; N] {
+    fn into_names(self) -> Vec<String> {
+        self.iter().map(|s| s.to_string()).collect()
+    }
+}
+
 /// Zero-copy view of a field aggregate's zones: one owned read guard
 /// per sub-field plus the union of the component names, built by
 /// [`Field::view`]. Holding the view keeps a shared lock on every sub:
@@ -459,13 +510,15 @@ pub trait SubField {
     ///
     /// A `wanted` entry this sub-field does not carry is silently ignored;
     /// errors only if **none** of `wanted` is present (a sub-field must keep at
-    /// least one component). Used at the aggregate level by
+    /// least one component). `wanted` is a single name or a list
+    /// ([`IntoComponentNames`]). Used at the aggregate level by
     /// [`Field::filter_components`], which additionally **shares this sub's
     /// handle** untouched when the filter would keep every component.
-    fn select_components(&self, wanted: &[String]) -> Result<Self>
+    fn select_components(&self, wanted: impl IntoComponentNames) -> Result<Self>
     where
         Self: Sized,
     {
+        let wanted = wanted.into_names();
         // Columns of `self` to keep, in self's order.
         let keep: Vec<usize> = self
             .components()
@@ -1041,14 +1094,16 @@ where
     /// - a zone carrying some requested and some other components is rebuilt on
     ///   the same support with just the requested ones ([`SubField::select_components`]).
     ///
-    /// `wanted` accepts a superset of the field's components (extras are
-    /// ignored), so passing `model.primal_vars()` to strip a solver result of
-    /// its dual (Lagrange) unknowns is the intended use. Errors if **no** zone
-    /// carries any of `wanted`.
-    fn filter_components(&self, wanted: &[String]) -> Result<Self>
+    /// `wanted` is a single name or a list ([`IntoComponentNames`]) and accepts
+    /// a superset of the field's components (extras are ignored), so passing
+    /// `model.primal_vars()` to strip a solver result of its dual (Lagrange)
+    /// unknowns is the intended use. Errors if **no** zone carries any of
+    /// `wanted`.
+    fn filter_components(&self, wanted: impl IntoComponentNames) -> Result<Self>
     where
         Self: Sized,
     {
+        let wanted = wanted.into_names();
         let mut out = Self::default();
         for h in self.iter() {
             let s = read(h)?;
@@ -1064,7 +1119,7 @@ where
                 // Filter is a no-op on this zone: share the handle untouched.
                 out.add_sub(h.clone())?;
             } else {
-                out.add_sub(insert(s.select_components(wanted)?))?;
+                out.add_sub(insert(s.select_components(wanted.as_slice())?))?;
             }
         }
         if out.is_empty() {
@@ -1430,14 +1485,18 @@ mod tests {
         f.set_value(nodes[0].id(), "V", 2.0).unwrap();
         f.set_value(nodes[0].id(), "W", 3.0).unwrap();
         // Keep V and W; the request order ["W","V"] is ignored — self's order wins.
-        let g = f.select_components(&["W".into(), "V".into()]).unwrap();
+        // Ergonomic input: a plain `[&str; N]` array (IntoComponentNames).
+        let g = f.select_components(["W", "V"]).unwrap();
         assert_eq!(g.components(), &["V".to_string(), "W".into()]);
         assert_eq!(g.value(nodes[0].id(), "V").unwrap(), 2.0);
         assert_eq!(g.value(nodes[0].id(), "W").unwrap(), 3.0);
         // Same support ⇒ pairs under the operators.
         assert!(f.same_support(&g));
+        // A single &str selects one component.
+        let just_u = f.select_components("U").unwrap();
+        assert_eq!(just_u.components(), &["U".to_string()]);
         // Unknown names ignored; none present ⇒ error.
-        assert!(f.select_components(&["nope".into()]).is_err());
+        assert!(f.select_components("nope").is_err());
     }
 
     #[test]
@@ -1460,7 +1519,8 @@ mod tests {
         // zone0: [k], zone1: [E, k]
         let ef = make_two_zone_element_field();
         // Keep only "k": zone0 is a no-op (shares its handle), zone1 is rebuilt.
-        let out = ef.filter_components(&["k".into()]).unwrap();
+        // Single-name ergonomic input.
+        let out = ef.filter_components("k").unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(Field::components(&out).unwrap(), vec!["k"]);
         // zone0 handle shared untouched; zone1 rebuilt (fresh slot).
@@ -1468,12 +1528,12 @@ mod tests {
         assert!(!out.get(1).unwrap().same_slot(&ef.get(1).unwrap()));
 
         // Keep only "E": zone0 (no E) is dropped, zone1 kept.
-        let only_e = ef.filter_components(&["E".into()]).unwrap();
+        let only_e = ef.filter_components("E").unwrap();
         assert_eq!(only_e.len(), 1);
         assert_eq!(Field::components(&only_e).unwrap(), vec!["E"]);
 
         // No zone carries any requested component ⇒ error.
-        assert!(ef.filter_components(&["missing".into()]).is_err());
+        assert!(ef.filter_components("missing").is_err());
     }
 
     #[test]
@@ -1486,8 +1546,9 @@ mod tests {
         s.set_value(nodes[0].id(), "lambda", 9.0).unwrap();
         let f = NodeField::from_sub(s);
         // primal_vars() may name components the field lacks — extras are ignored.
+        // A Vec<String> (as primal_vars() returns) flows in directly.
         let primal = f
-            .filter_components(&["u_x".into(), "u_y".into(), "T".into()])
+            .filter_components(vec!["u_x".to_string(), "u_y".to_string(), "T".to_string()])
             .unwrap();
         assert_eq!(Field::components(&primal).unwrap(), vec!["u_x", "u_y"]);
         assert_eq!(primal.value(nodes[0].id(), "u_x").unwrap(), 1.0);

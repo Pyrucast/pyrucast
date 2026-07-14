@@ -392,8 +392,11 @@ class ElementField:
         `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
         negative indices supported); `agg[i:j:k]` → a **fresh
         aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). Other key types
-        raise `TypeError`.
+        (Python slicing: step, negative bounds). For field
+        aggregates, a **string** key `agg["u_x"]` or a **list** key
+        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
+        those components (`filter_components`). Other key types raise
+        `TypeError`.
         """
     def unit(self) -> SubElementField:
         r"""
@@ -491,8 +494,11 @@ class Evolution:
         `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
         negative indices supported); `agg[i:j:k]` → a **fresh
         aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). Other key types
-        raise `TypeError`.
+        (Python slicing: step, negative bounds). For field
+        aggregates, a **string** key `agg["u_x"]` or a **list** key
+        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
+        those components (`filter_components`). Other key types raise
+        `TypeError`.
         """
     def unit(self) -> SubEvolution:
         r"""
@@ -578,8 +584,11 @@ class FiniteElementSpace:
         `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
         negative indices supported); `agg[i:j:k]` → a **fresh
         aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). Other key types
-        raise `TypeError`.
+        (Python slicing: step, negative bounds). For field
+        aggregates, a **string** key `agg["u_x"]` or a **list** key
+        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
+        those components (`filter_components`). Other key types raise
+        `TypeError`.
         """
     def unit(self) -> SubFiniteElementSpace:
         r"""
@@ -715,8 +724,11 @@ class Matrix:
         `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
         negative indices supported); `agg[i:j:k]` → a **fresh
         aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). Other key types
-        raise `TypeError`.
+        (Python slicing: step, negative bounds). For field
+        aggregates, a **string** key `agg["u_x"]` or a **list** key
+        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
+        those components (`filter_components`). Other key types raise
+        `TypeError`.
         """
     def unit(self) -> SubMatrix:
         r"""
@@ -822,8 +834,11 @@ class Mesh:
         `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
         negative indices supported); `agg[i:j:k]` → a **fresh
         aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). Other key types
-        raise `TypeError`.
+        (Python slicing: step, negative bounds). For field
+        aggregates, a **string** key `agg["u_x"]` or a **list** key
+        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
+        those components (`filter_components`). Other key types raise
+        `TypeError`.
         """
     def unit(self) -> SubMesh:
         r"""
@@ -1114,8 +1129,11 @@ class Model:
         `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
         negative indices supported); `agg[i:j:k]` → a **fresh
         aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). Other key types
-        raise `TypeError`.
+        (Python slicing: step, negative bounds). For field
+        aggregates, a **string** key `agg["u_x"]` or a **list** key
+        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
+        those components (`filter_components`). Other key types raise
+        `TypeError`.
         """
     def unit(self) -> SubModel:
         r"""
@@ -1311,8 +1329,11 @@ class NodeField:
         `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
         negative indices supported); `agg[i:j:k]` → a **fresh
         aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). Other key types
-        raise `TypeError`.
+        (Python slicing: step, negative bounds). For field
+        aggregates, a **string** key `agg["u_x"]` or a **list** key
+        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
+        those components (`filter_components`). Other key types raise
+        `TypeError`.
         """
     def unit(self) -> SubNodeField:
         r"""

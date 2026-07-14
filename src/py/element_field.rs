@@ -482,6 +482,7 @@ crate::impl_aggregate_pymethods!(
     PySubElementField,
     "ElementField",
     subfield,
-    ElementField
+    ElementField,
+    field_components
 );
 crate::impl_dump_pymethod!(handle PySubElementField, handle);
