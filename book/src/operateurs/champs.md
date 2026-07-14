@@ -166,6 +166,21 @@ u = pyrucast.field.filter_components(solution, model.primal_vars())
 export = pyrucast.field.rename_component(u, "u_x", "DX")
 ```
 
+**Sucre d'indexation** (façon pandas/numpy) : sur un `NodeField` ou un
+`ElementField`, une clé **chaîne** ou **liste de chaînes** appelle
+`filter_components`. Les clés `int` et `slice` gardent l'accès aux zones.
+
+```python
+ux   = champ["u_x"]            # == filter_components(champ, "u_x")
+depl = champ[["u_x", "u_y"]]   # == filter_components(champ, ["u_x", "u_y"])
+zone = champ[0]                # inchangé : la zone (SubNodeField)
+```
+
+Côté Rust, `filter_components` / `select_components` acceptent indifféremment
+un `&str`, un tableau `["u_x", "u_y"]` ou un `Vec<String>` (trait
+`IntoComponentNames`) — donc `field.filter_components(model.primal_vars())`
+passe directement.
+
 ## Dérivation géométrique (vers les points de Gauss)
 
 Ces opérateurs ne dépendent **que** de l'espace EF et du champ — aucune
