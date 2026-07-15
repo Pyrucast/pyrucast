@@ -115,6 +115,34 @@ impl SubModelKind for Timoshenko {
         })
     }
 
+    /// The consistent mass needs a single (full-Gauss) subspace — the linear
+    /// element mass has no reduced-integration term. No geometric stiffness: a
+    /// pure `(w, θ)` beam carries no axial force.
+    fn mass_layout(&self) -> Option<MatrixLayout> {
+        Some(MatrixLayout {
+            fespaces: vec![self.bending.clone()],
+            support: self.support.clone(),
+            dual_vars: self.dual_vars(),
+            primal_vars: self.primal_vars(),
+            ordering: DofOrdering::NodesThenVars,
+            symmetric: true,
+        })
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        element_mass(
+            geom,
+            material.expect("Timoshenko requires a material field"),
+            ke,
+        )
+    }
+
     /// `K_b + K_s` of one beam element. `geoms[0]` is the full-Gauss bending
     /// subspace, `geoms[1]` the reduced 1-point shear subspace (same cell, same
     /// nodes). DOF vector `d = [w_0, θ_0, w_1, θ_1]`; bending strain
@@ -212,6 +240,12 @@ impl Domain for Timoshenko {
         Some(MATERIAL_COMPONENTS)
     }
 
+    /// `A` (full section area) and `rho` (density) — required only by the mass
+    /// matrix (the stiffness uses the shear area `A_s`, not `A`).
+    fn optional_material_components(&self) -> &'static [&'static str] {
+        &["A", "rho"]
+    }
+
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.bending.clone()
     }
@@ -239,6 +273,35 @@ impl Domain for Timoshenko {
         out[1] = gas * input.value(cell, g, "gamma")?;
         Ok(())
     }
+}
+
+/// Element kernel: local **consistent mass** of one linear Timoshenko beam,
+///   `w`  translations: `(ρAL/6)[[2,1],[1,2]]`,
+///   `θ`  rotations (rotary inertia): `(ρIL/6)[[2,1],[1,2]]`,
+/// written into the flat 4×4 `ke` (DOF order `[w0, θ0, w1, θ1]`). Reads density
+/// `rho`, full area `A` and second moment `I`.
+pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
+    let cell = geom.cell;
+    let xa = geom.node_coord(0)?;
+    let xb = geom.node_coord(1)?;
+    let l = (xb[0] - xa[0]).abs();
+    let rho = material.value(cell, 0, "rho").map_err(|_| {
+        PyrucastError::Message(
+            "Timoshenko mass matrix: material component `rho` (density) is required".into(),
+        )
+    })?;
+    let ma = rho * material.value(cell, 0, "A")? * l / 6.0;
+    let mi = rho * material.value(cell, 0, "I")? * l / 6.0;
+    // Per-node DOF `var` (0 = w with ma, 1 = θ with mi); node A at `var`, node B
+    // at `var + 2`; each gets (coef/6-scaled) [[2,1],[1,2]].
+    for (var, coef) in [(0usize, ma), (1usize, mi)] {
+        let (i, j) = (var, var + 2);
+        ke[i * 4 + i] += 2.0 * coef;
+        ke[j * 4 + j] += 2.0 * coef;
+        ke[i * 4 + j] += coef;
+        ke[j * 4 + i] += coef;
+    }
+    Ok(())
 }
 
 /// `Ke += coef · (B ⊗ B)` on the flat 4×4 element matrix (row-major,

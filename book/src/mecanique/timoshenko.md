@@ -58,3 +58,10 @@ moment `M = E·I·κ` et l'effort tranchant `V = G·A_s·γ`. Sur la console :
 ```python
 {{#include ../../../examples/timoshenko.py}}
 ```
+
+## Masse
+
+La poutre assemble la **masse consistante** — translation `ρA` (composante `A`
+optionnelle, en plus de `A_s`) et rotation (inertie rotatoire) `ρI`, `rho`
+optionnel — via `pyrucast.assemble.mass`. Pas de rigidité géométrique : une
+poutre `(w, θ)` pure ne porte pas d'effort axial.

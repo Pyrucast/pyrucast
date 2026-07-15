@@ -41,3 +41,12 @@ axiale `F` au bout ⇒ `u_x = F·L/(E·A)`. Le code est le test d'intégration
 ```python
 {{#include ../../../examples/truss.py}}
 ```
+
+## Masse & rigidité géométrique
+
+En plus de la rigidité, la barre assemble :
+
+- **masse consistante** `M = (ρAL/6)[[2,1],[1,2]]` sur chaque composante de
+  translation (`rho` composante matériau optionnelle) — `pyrucast.assemble.mass` ;
+- **rigidité géométrique** `K_g = (N/L)·(I − c⊗c)` transverse, sous l'effort
+  axial `N` (sortie `n` du comportement) — `pyrucast.assemble.geometric`.

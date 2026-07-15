@@ -16,7 +16,10 @@
 //! symmetric sections (`I_y = I_z`).
 //!
 //! Primal `u_x, u_y, u_z, r_x, r_y, r_z`; dual `f_x, f_y, f_z, m_x, m_y, m_z`.
-//! Material components `E, A, I_y, I_z, J, G, A_sy, A_sz`. v0: stiffness only.
+//! Material components `E, A, I_y, I_z, J, G, A_sy, A_sz`. Besides the stiffness
+//! it assembles the consistent **mass** (translational `ρA` + rotary
+//! `ρI_p`/`ρI_y`/`ρI_z`, optional `rho`) and the **geometric stiffness** under
+//! the axial force `N` — linear-element forms, rotated `Tᵀ·T`.
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
@@ -92,6 +95,15 @@ impl SubModelKind for Frame3d {
         })
     }
 
+    /// Mass and geometric-stiffness blocks share the stiffness layout.
+    fn mass_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
+    fn geometric_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
@@ -104,6 +116,32 @@ impl SubModelKind for Frame3d {
             material.expect("Frame3d requires a material field"),
             ke,
         )
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        element_mass(
+            geom,
+            material.expect("Frame3d requires a material field"),
+            ke,
+        )
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: Option<&SubElementField>,
+        state: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let stress = state.expect("frame3d geometric stiffness requires the axial force `N`");
+        element_geometric(geom, stress, ke)
     }
 
     fn physics(&self) -> &'static [Physics] {
@@ -130,6 +168,11 @@ impl Domain for Frame3d {
 
     fn material_components(&self) -> Option<&'static [&'static str]> {
         Some(MATERIAL_COMPONENTS)
+    }
+
+    /// `rho` (density) — required only by the mass matrix.
+    fn optional_material_components(&self) -> &'static [&'static str] {
+        &["rho"]
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
@@ -357,6 +400,93 @@ pub fn element_stiffness(
         }
     }
     Ok(())
+}
+
+/// Local 12×12 **consistent mass** (linear element): `(ρAL/6)[[2,1],[1,2]]` on
+/// each translation `u',v',w'`, and rotary inertia `(ρI L/6)[[2,1],[1,2]]` on
+/// each rotation — polar `I_p = I_y + I_z` for the torsion `θx'`, `I_y` for
+/// `θy'`, `I_z` for `θz'`. No translation–rotation coupling for the linear
+/// kinematics.
+fn local_mass(rho: f64, area: f64, iy: f64, iz: f64, l: f64) -> [[f64; 12]; 12] {
+    let mut m = [[0.0_f64; 12]; 12];
+    // (local dof, rotary second-moment) for each of the six per-node DOFs.
+    let inertia = [area, area, area, iy + iz, iy, iz];
+    for (var, &sec) in inertia.iter().enumerate() {
+        let ms = rho * sec * l / 6.0;
+        let (i, j) = (var, var + 6); // node A / node B
+        m[i][i] += 2.0 * ms;
+        m[j][j] += 2.0 * ms;
+        m[i][j] += ms;
+        m[j][i] += ms;
+    }
+    m
+}
+
+/// Local 12×12 **geometric stiffness** under axial force `N`:
+/// `(N/L)[[1,−1],[−1,1]]` on each transverse translation `v'` (1, 7) and `w'`
+/// (2, 8); the axial, torsion and bending-rotation DOFs carry no term for the
+/// linear element.
+fn local_geometric(n: f64, l: f64) -> [[f64; 12]; 12] {
+    let mut k = [[0.0_f64; 12]; 12];
+    let g = n / l;
+    for &(i, j) in &[(1usize, 7usize), (2, 8)] {
+        k[i][i] += g;
+        k[j][j] += g;
+        k[i][j] -= g;
+        k[j][i] -= g;
+    }
+    k
+}
+
+/// Element kernel: local 3-D frame **consistent mass** `M = Tᵀ M_loc T` (Cast3M
+/// `MASS`), from density `rho`, area `A` and second moments `I_y`, `I_z`. Same
+/// `ke` layout as [`element_stiffness`].
+pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
+    let cell = geom.cell;
+    let xa = geom.node_coord(0)?;
+    let xb = geom.node_coord(1)?;
+    let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
+    let l = norm(d);
+    let rho = material.value(cell, 0, "rho").map_err(|_| {
+        PyrucastError::Message(
+            "Frame3d mass matrix: material component `rho` (density) is required".into(),
+        )
+    })?;
+    let ml = local_mass(
+        rho,
+        material.value(cell, 0, "A")?,
+        material.value(cell, 0, "I_y")?,
+        material.value(cell, 0, "I_z")?,
+        l,
+    );
+    let t = rotation(&local_axes(d));
+    write_12x12(ke, &matmul(&transpose(&t), &matmul(&ml, &t)));
+    Ok(())
+}
+
+/// Element kernel: local 3-D frame **geometric stiffness** `K_g = Tᵀ K_loc T`
+/// (Cast3M `KSIG`), from the axial force `N` (state component `N`). Same `ke`
+/// layout as [`element_stiffness`].
+pub fn element_geometric(geom: &CellGeom, state: &SubElementField, ke: &mut [f64]) -> Result<()> {
+    let cell = geom.cell;
+    let xa = geom.node_coord(0)?;
+    let xb = geom.node_coord(1)?;
+    let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
+    let l = norm(d);
+    let n = state.value(cell, 0, "N")?;
+    let kl = local_geometric(n, l);
+    let t = rotation(&local_axes(d));
+    write_12x12(ke, &matmul(&transpose(&t), &matmul(&kl, &t)));
+    Ok(())
+}
+
+/// Scatter a 12×12 matrix into the flat row-major `ke` (accumulating).
+fn write_12x12(ke: &mut [f64], m: &[[f64; 12]; 12]) {
+    for (r, row) in m.iter().enumerate() {
+        for (col, v) in row.iter().enumerate() {
+            ke[r * 12 + col] += v;
+        }
+    }
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────

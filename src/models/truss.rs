@@ -103,6 +103,16 @@ impl SubModelKind for Truss {
         })
     }
 
+    /// Mass and geometric-stiffness blocks share the stiffness layout (same
+    /// SEG2 fespace, node support, translational DOFs).
+    fn mass_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
+    fn geometric_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
@@ -111,6 +121,28 @@ impl SubModelKind for Truss {
     ) -> Result<()> {
         let geom = &geoms[0];
         element_stiffness(geom, material.expect("Truss requires a material field"), ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        element_mass(geom, material.expect("Truss requires a material field"), ke)
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: Option<&SubElementField>,
+        state: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let stress = state.expect("truss geometric stiffness requires the axial force `n`");
+        element_geometric(geom, stress, ke)
     }
 
     /// Internal forces `f = Bᵀ N` of one bar. `B` projects the nodal
@@ -163,6 +195,11 @@ impl Domain for Truss {
 
     fn material_components(&self) -> Option<&'static [&'static str]> {
         Some(MATERIAL_COMPONENTS)
+    }
+
+    /// `rho` (density) — required only by the mass matrix.
+    fn optional_material_components(&self) -> &'static [&'static str] {
+        &["rho"]
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
@@ -243,6 +280,69 @@ pub fn element_stiffness(
             for a in 0..sd {
                 for b in 0..sd {
                     ke[(ii * sd + a) * side + (jj * sd + b)] = sign * k_ax * c[a] * c[b];
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Length of one `SEG2` cell from its two node coordinates.
+fn cell_length(geom: &CellGeom, space_dim: usize) -> Result<f64> {
+    let xa = geom.node_coord(0)?;
+    let xb = geom.node_coord(1)?;
+    Ok((0..space_dim)
+        .map(|a| (xb[a] - xa[a]).powi(2))
+        .sum::<f64>()
+        .sqrt())
+}
+
+/// Element kernel: local **consistent mass** of one bar,
+///   `M[(i,a),(j,b)] = δ_ab · (ρ A L / 6) · (2 if i==j else 1)`
+/// (the linear-element mass `(ρAL/6)[[2,1],[1,2]]` on each translation
+/// component), written into `ke` (same layout as [`element_stiffness`]). Reads
+/// density `rho` and area `A`.
+pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
+    let sd = geom.space_dim;
+    let side = 2 * sd;
+    let len = cell_length(geom, sd)?;
+    let rho = material.value(geom.cell, 0, "rho").map_err(|_| {
+        crate::error::PyrucastError::Message(
+            "Truss mass matrix: material component `rho` (density) is required".into(),
+        )
+    })?;
+    let a = material.value(geom.cell, 0, "A")?;
+    let m = rho * a * len / 6.0;
+    for ii in 0..2 {
+        for jj in 0..2 {
+            let coef = m * if ii == jj { 2.0 } else { 1.0 };
+            for aa in 0..sd {
+                ke[(ii * sd + aa) * side + (jj * sd + aa)] += coef;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Element kernel: local **geometric (initial-stress) stiffness** of one bar
+/// under axial force `N`,
+///   `K_g = (N / L) · [[P, −P], [−P, P]]`,   `P = I − c⊗c`
+/// (the transverse projector, so only motion perpendicular to the bar axis is
+/// stiffened). `N` is read from the state component `n`. Same `ke` layout as
+/// [`element_stiffness`].
+pub fn element_geometric(geom: &CellGeom, state: &SubElementField, ke: &mut [f64]) -> Result<()> {
+    let sd = geom.space_dim;
+    let side = 2 * sd;
+    let c = cell_cosine(geom, sd)?;
+    let len = cell_length(geom, sd)?;
+    let k = state.value(geom.cell, 0, "n")? / len;
+    for ii in 0..2 {
+        for jj in 0..2 {
+            let sign = if ii == jj { 1.0 } else { -1.0 };
+            for a in 0..sd {
+                for b in 0..sd {
+                    let p = (if a == b { 1.0 } else { 0.0 }) - c[a] * c[b];
+                    ke[(ii * sd + a) * side + (jj * sd + b)] += sign * k * p;
                 }
             }
         }
