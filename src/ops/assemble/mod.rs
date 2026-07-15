@@ -29,6 +29,7 @@ use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
 use crate::models::{Contribution, MatrixKind};
 use crate::store::{insert, read, Handle};
+use nalgebra_sparse::{CooMatrix, CsrMatrix};
 
 pub mod coloring;
 pub mod flux;
@@ -216,6 +217,46 @@ fn build_contribution(
 /// like [`stiffness`].
 pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
     assemble_kind(model, materials, MatrixKind::Mass, None)
+}
+
+/// **Lump** an assembled matrix into a diagonal one by **row-sum concentration**
+/// (Cast3M `LUMP`): each diagonal entry becomes the sum of its row, every
+/// off-diagonal is dropped. Applied to a consistent mass / heat-capacity matrix
+/// it yields the diagonal (lumped) mass, which conserves the total mass
+/// (`Σ_i M_lumped[i,i] = Σ_ij M[i,j]`) — the cheap, decoupled form used by
+/// explicit transient schemes and simple eigen estimates.
+///
+/// The input must be assembled and square (row and column DOFs coincide
+/// position-for-position, as they do for a mass/capacity matrix). The result is
+/// a new assembled [`Matrix`] with the same DOF layout; the input is untouched.
+pub fn lump(m: &Matrix) -> Result<Matrix> {
+    let csr = m.to_csr()?;
+    let row_dofs = m.row_dofs()?;
+    let col_dofs = m.col_dofs()?;
+    let n = csr.nrows();
+    if csr.ncols() != n {
+        return Err(crate::error::PyrucastError::Message(format!(
+            "lump: matrix must be square, got {}×{}",
+            n,
+            csr.ncols()
+        )));
+    }
+    // Diagonal = per-row sum, assembled straight into a diagonal CSR.
+    let (mut rows, mut cols, mut vals) = (Vec::new(), Vec::new(), Vec::new());
+    for (i, row) in csr.row_iter().enumerate() {
+        let s: f64 = row.values().iter().sum();
+        if s != 0.0 {
+            rows.push(i);
+            cols.push(i);
+            vals.push(s);
+        }
+    }
+    let coo = CooMatrix::try_from_triplets(n, n, rows, cols, vals)
+        .map_err(|e| crate::error::PyrucastError::Message(format!("lump: invalid COO: {e}")))?;
+    let diag = CsrMatrix::from(&coo);
+    let mut out = Matrix::empty();
+    out.set_assembled(row_dofs, col_dofs, diag);
+    Ok(out)
 }
 
 #[cfg(test)]

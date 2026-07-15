@@ -9,6 +9,7 @@ from ._pyrucast import (
     flux as flux,
     internal_forces as internal_forces,
     internal_forces_continuum as internal_forces_continuum,
+    lump as lump,
     mass as mass,
     stiffness as stiffness,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "flux",
     "internal_forces",
     "internal_forces_continuum",
+    "lump",
     "mass",
     "stiffness",
 ]

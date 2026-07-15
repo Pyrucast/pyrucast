@@ -44,6 +44,20 @@ materials = pyrucast.build.material_field(model, [("E", 210.0), ("nu", 0.3), ("r
 M = pyrucast.assemble.mass(model, materials)
 ```
 
+## `lump(matrix)` → `Matrix`
+
+**Concentre** (lumping, Cast3M `LUMP`) une matrice assemblée en une matrice
+**diagonale** par **somme de lignes** : chaque terme diagonal devient la somme de
+sa ligne, les extra-diagonaux sont supprimés. Appliqué à une matrice de masse /
+capacité consistante, on obtient la masse **diagonale (lumpée)**, qui conserve la
+masse totale (`Σ_i M_lump[i,i] = Σ_ij M[i,j]`) — la forme découplée bon marché des
+schémas explicites. La matrice d'entrée doit être assemblée et carrée.
+
+```python
+M = pyrucast.assemble.mass(model, materials)
+M_lumped = pyrucast.assemble.lump(M)  # diagonale
+```
+
 ## Composition : `assemble(&mut Matrix)` (Rust)
 
 `stiffness` produit une matrice portant des blocs **calculés** (recette, valeurs

@@ -122,7 +122,7 @@ Non-linéaire / transitoire;PERT;Perturbation pour matrice tangente par différe
 Non-linéaire / transitoire;ADVE;Matrice d'advection (transport convectif);—
 Non-linéaire / transitoire;KEQU;Matrice équivalente (combinaison pondérée pour le transitoire);—
 Non-linéaire / transitoire;PJBA;Projette un champ sur une base de modes;—
-Non-linéaire / transitoire;LUMP;Concentration (lumping) d'une matrice masse/capacité;—
+Non-linéaire / transitoire;LUMP;Concentration (lumping) d'une matrice masse/capacité;lump
 Non-linéaire / transitoire;PHAJ;Changement de phase / chaleur latente (thermique);—
 Non-linéaire / transitoire;EPTH;Déformation thermique (dilatation libre);thermal_strain
 Non-linéaire / transitoire;PRIN;Valeurs et directions principales (contraintes/déformations);—

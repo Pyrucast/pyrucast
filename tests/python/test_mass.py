@@ -53,6 +53,22 @@ def test_heat_capacity_of_unit_quad():
     assert abs(c.get(n[0], "q", n[1], "T") - rc * 2.0 / 36.0) < tol
 
 
+def test_lumped_mass_is_diagonal():
+    rho = 2.0
+    fes, n = _unit_quad()
+    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    materials = pyrucast.build.material_field(
+        model, [("E", 1.0), ("nu", 0.3), ("rho", rho)]
+    )
+
+    m = pyrucast.assemble.mass(model, materials)
+    lumped = pyrucast.assemble.lump(m)
+    tol = 1e-12
+    # Diagonal = consistent-mass row sum = ρ/4; off-diagonals vanish.
+    assert abs(lumped.get(n[0], "f_x", n[0], "u_x") - rho / 4.0) < tol
+    assert abs(lumped.get(n[0], "f_x", n[1], "u_x")) < tol
+
+
 def test_mass_requires_density():
     fes, _ = _unit_quad()
     model = pyrucast.Model.elasticity(fes, "plane_stress")

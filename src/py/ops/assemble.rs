@@ -38,6 +38,16 @@ pub fn mass(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult
     Ok(PyMatrix { inner: m })
 }
 
+/// Lump an assembled matrix into a diagonal one by row-sum concentration
+/// (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
+/// diagonal (lumped) mass, conserving the total mass.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn lump(matrix: PyRef<PyMatrix>) -> PyResult<PyMatrix> {
+    let m = crate::ops::assemble::lump(&matrix.inner)?;
+    Ok(PyMatrix { inner: m })
+}
+
 /// Consistent nodal loads of a distributed flux over `fespace` — the analogue
 /// of Cast3m `FLUX` / `PRES`: `∫ density · N_i dΓ`, returned as a `NodeField`
 /// carrying the single component `component` (the model's dual variable, e.g.

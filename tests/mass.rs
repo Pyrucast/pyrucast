@@ -87,6 +87,29 @@ fn heat_capacity_of_unit_quad_matches_closed_form() -> Result<()> {
 }
 
 #[test]
+fn lumped_mass_is_diagonal_and_conserves_total() -> Result<()> {
+    const RHO: f64 = 2.0;
+    let (fes, n) = unit_quad()?;
+    let model = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+    let materials = build::material_field(&model, &[("E", 1.0), ("nu", 0.3), ("rho", RHO)])?;
+
+    let m = assemble::mass(&model, &materials)?;
+    let lumped = assemble::lump(&m)?;
+    let tol = 1e-12;
+
+    // Each diagonal = its consistent-mass row sum = ρ·(4+2+1+2)/36 = ρ/4.
+    assert!((lumped.get(n[0].id(), "f_x", n[0].id(), "u_x")? - RHO / 4.0).abs() < tol);
+    // Off-diagonals vanish.
+    assert!(lumped.get(n[0].id(), "f_x", n[1].id(), "u_x")?.abs() < tol);
+
+    // Total mass is conserved by row-sum lumping.
+    let (mc, ml): (f64, f64) = (m.to_dmatrix()?.sum(), lumped.to_dmatrix()?.sum());
+    assert!((mc - ml).abs() < 1e-10, "consistent {mc} vs lumped {ml}");
+    assert!((ml - 2.0 * RHO).abs() < 1e-10);
+    Ok(())
+}
+
+#[test]
 fn mass_requires_density() -> Result<()> {
     let (fes, _) = unit_quad()?;
     let model = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
