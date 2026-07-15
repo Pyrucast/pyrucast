@@ -26,10 +26,14 @@ Conformément au découpage du cœur (voir
 expose deux briques :
 
 - **rigidité** (`build_stiffness_blocks`) : la **rigidité élastique**
-  `K = ∫ Bᵀ D B dΩ`, utilisée comme opérateur d'itération (la matrice
-  tangente cohérente `KTAN` viendra plus tard) ;
+  `K = ∫ Bᵀ D B dΩ`, opérateur d'itération simple (Newton modifié) ;
+- **tangente cohérente** (`KTAN`, [`assemble.tangent`](../operateurs/assemblage.md)) :
+  `K_t = ∫ Bᵀ D_alg B` avec le module algorithmique `D_alg` du retour radial J2
+  (dérivée exacte, condensation contrainte-plane incluse) — émis par le
+  comportement, relu par l'assembleur, pour un **Newton complet** à convergence
+  quadratique ;
 - **comportement** (`COMP`, `integrate_behavior`) : le **retour radial**
-  exact, point de Gauss par point de Gauss.
+  exact, point de Gauss par point de Gauss, qui produit aussi `D_alg`.
 
 ### Retour radial (algorithme)
 

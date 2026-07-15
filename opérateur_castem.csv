@@ -117,7 +117,7 @@ Visualisation;EVOL;Crée une courbe d'évolution (X-Y);Evolution / SubEvolution 
 Visualisation;DESS;Dessine une courbe d'évolution;Evolution.plot (courbe X-Y ; champ + slider de valeur tabulée)
 Visualisation;OEIL;Définit le point de vue 3D;camera (viz)
 Visualisation;ZOOM;Cadrage / zoom du tracé;viz (caméra)
-Non-linéaire / transitoire;KTAN;Matrice de rigidité tangente (Newton non-linéaire);—
+Non-linéaire / transitoire;KTAN;Matrice de rigidité tangente (Newton non-linéaire);tangent
 Non-linéaire / transitoire;PERT;Perturbation pour matrice tangente par différences finies;—
 Non-linéaire / transitoire;ADVE;Matrice d'advection (transport convectif);—
 Non-linéaire / transitoire;KEQU;Matrice équivalente (combinaison pondérée pour le transitoire);—

@@ -156,6 +156,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `mass(model: &Model, materials: &ElementField) -> Matrix` | `mass(model, materials) -> Matrix` |
 | `lump(m: &Matrix) -> Matrix` | `lump(matrix) -> Matrix` |
 | `geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Matrix` | `geometric(model, materials, stress) -> Matrix` |
+| `tangent(model: &Model, materials: &ElementField, state: &ElementField) -> Matrix` | `tangent(model, materials, state) -> Matrix` |
 | `assemble(k: &mut Matrix) -> Result<()>` | — (Rust : (ré)assemble une matrice depuis ses blocs seuls, sans `Model` — chemin de composition) |
 | `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
 | `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(model, stresses) -> NodeField` |

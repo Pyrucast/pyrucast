@@ -62,6 +62,20 @@ pub fn geometric(
     Ok(PyMatrix { inner: m })
 }
 
+/// Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
+/// (Cast3M `KTAN`), from the behaviour `state` (which carries `D_alg` besides the
+/// stress). `materials` resolves each zone, like [`stiffness`].
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn tangent(
+    model: PyRef<PyModel>,
+    materials: PyRef<PyElementField>,
+    state: PyRef<PyElementField>,
+) -> PyResult<PyMatrix> {
+    let m = crate::ops::assemble::tangent(&model.inner, &materials.inner, &state.inner)?;
+    Ok(PyMatrix { inner: m })
+}
+
 /// Consistent nodal loads of a distributed flux over `fespace` — the analogue
 /// of Cast3m `FLUX` / `PRES`: `∫ density · N_i dΓ`, returned as a `NodeField`
 /// carrying the single component `component` (the model's dual variable, e.g.

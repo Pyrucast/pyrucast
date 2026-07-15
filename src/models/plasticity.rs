@@ -24,8 +24,10 @@
 //! output stress projection differ.
 //!
 //! Following the locked architecture decision (see `ROADMAP.md`), the Newton
-//! loop driving these increments lives in Python; this module only provides the
-//! point-wise constitutive update.
+//! loop driving these increments lives in Python; this module provides the
+//! point-wise constitutive update **and** the consistent algorithmic tangent
+//! `D_alg` (emitted alongside the stress, consumed by
+//! [`crate::ops::assemble::tangent`]) for quadratic convergence.
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
@@ -184,9 +186,11 @@ impl SubModelKind for Plasticity {
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        // Iteration operator = elastic stiffness (no tangent KTAN yet — the
-        // Newton loop is orchestrated in Python). Reuse the elasticity element
-        // kernel verbatim; it reads only `E` and `nu` from the material.
+        // The plain "stiffness" kernel is the *elastic* stiffness (the simple
+        // iteration operator). The consistent algorithmic tangent `K_t` is a
+        // separate operator — see [`element_tangent`](Self::element_tangent) and
+        // [`crate::ops::assemble::tangent`]. Reuse the elasticity element kernel
+        // verbatim; it reads only `E` and `nu` from the material.
         let mat = material.expect("Plasticity requires a material field");
         elasticity::element_stiffness(geom, mat, self.model, ke)
     }
@@ -212,6 +216,25 @@ impl SubModelKind for Plasticity {
         let geom = &geoms[0];
         let stress = state.expect("geometric stiffness requires the current stress field");
         elasticity::element_geometric(geom, stress, ke)
+    }
+
+    /// The consistent tangent shares the stiffness layout; the algorithmic
+    /// modulus `D_alg` (emitted by [`Domain::integrate_point`]) is read from the
+    /// behaviour state.
+    fn tangent_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
+    fn element_tangent(
+        &self,
+        geoms: &[CellGeom],
+        _material: Option<&SubElementField>,
+        state: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let st = state.expect("consistent tangent requires the behaviour state (D_alg)");
+        elasticity::element_tangent_from_state(geom, st, ke)
     }
 
     fn physics(&self) -> &'static [Physics] {
@@ -257,6 +280,9 @@ impl Domain for Plasticity {
         let mut comps = stress_names(self.space_dim);
         comps.extend(state_names());
         comps.extend(echo_names(self.space_dim));
+        // Consistent algorithmic tangent D_alg (upper triangle) — consumed by
+        // the tangent assembler (`assemble::tangent`).
+        comps.extend(elasticity::tangent_component_names(self.space_dim));
         Ok(comps)
     }
 
@@ -305,6 +331,21 @@ impl Domain for Plasticity {
         // In 2-D the Voigt dual omits σ_zz; echo it so σ(A) is fully recoverable.
         if d == 2 {
             out[v + 13] = sigma[2];
+        }
+
+        // Consistent tangent D_alg at the converged step, from the trial stress
+        // recomputed at the solved ε(B) (which carries the plane-stress ε_zz).
+        // Emitted (upper triangle) right after the state, in `ktan_i_j` order.
+        let sig_trial = elastic_predictor(&eps_b_full, &prev_state, lambda, mu);
+        let d3 = consistent_tangent_3d(&sig_trial, lambda, mu, sigma_y);
+        let dv = tangent_matrix_model(&d3, self.model);
+        let base = v + 13 + if d == 2 { 1 } else { 0 };
+        let mut idx = base;
+        for i in 0..dv.len() {
+            for j in i..dv.len() {
+                out[idx] = dv[i][j];
+                idx += 1;
+            }
         }
         Ok(())
     }
@@ -480,6 +521,99 @@ fn plane_stress_incremental(
         f1 = eval(z1).0[2];
     }
     eval(z1)
+}
+
+/// Full-3-D engineering-Voigt (order `[xx, yy, zz, yz, xz, xy]`) **consistent
+/// tangent** `D_alg = ∂σ(B)/∂ε(B)` of the perfect-J2 radial return, evaluated at
+/// the trial stress `σ_trial` (the elastic predictor at the converged `ε(B)`).
+///
+/// Exact derivative of the return-mapped stress: elastic (`q_trial ≤ σ_y`) gives
+/// the elastic modulus `C`; plastic gives `K·1⊗1 + a·(I_dev − n⊗n)` with
+/// `a = 2μ σ_y / q_trial`, `n` the unit deviatoric flow direction, `K = λ + 2μ/3`.
+fn consistent_tangent_3d(
+    sig_trial: &[f64; 6],
+    lambda: f64,
+    mu: f64,
+    sigma_y: f64,
+) -> [[f64; 6]; 6] {
+    let k = lambda + 2.0 * mu / 3.0;
+    let q = von_mises(sig_trial);
+    let plastic = q > sigma_y && q > 0.0;
+    // Deviatoric coefficient: 2μ when elastic, 2μ σ_y/q when plastic.
+    let coef = if plastic {
+        2.0 * mu * sigma_y / q
+    } else {
+        2.0 * mu
+    };
+
+    let mut d = [[0.0_f64; 6]; 6];
+    // K·1⊗1 on the normal (top-left 3×3) block.
+    for row in d.iter_mut().take(3) {
+        for e in row.iter_mut().take(3) {
+            *e += k;
+        }
+    }
+    // coef · I_dev (engineering: normal block ⅔/−⅓, shear diagonal ½).
+    for (i, row) in d.iter_mut().enumerate().take(3) {
+        for (j, e) in row.iter_mut().enumerate().take(3) {
+            *e += coef * if i == j { 2.0 / 3.0 } else { -1.0 / 3.0 };
+        }
+    }
+    for i in 3..6 {
+        d[i][i] += coef * 0.5;
+    }
+    // − coef · n⊗n (plastic only), n the unit deviatoric flow direction.
+    if plastic {
+        let mean = (sig_trial[0] + sig_trial[1] + sig_trial[2]) / 3.0;
+        let s = [
+            sig_trial[0] - mean,
+            sig_trial[1] - mean,
+            sig_trial[2] - mean,
+            sig_trial[3],
+            sig_trial[4],
+            sig_trial[5],
+        ];
+        let s_norm = (s[0] * s[0]
+            + s[1] * s[1]
+            + s[2] * s[2]
+            + 2.0 * (s[3] * s[3] + s[4] * s[4] + s[5] * s[5]))
+            .sqrt();
+        if s_norm > 0.0 {
+            let nv: [f64; 6] = std::array::from_fn(|i| s[i] / s_norm);
+            for i in 0..6 {
+                for j in 0..6 {
+                    d[i][j] -= coef * nv[i] * nv[j];
+                }
+            }
+        }
+    }
+    d
+}
+
+/// Reduce the full-3-D consistent tangent to the model's `v×v` engineering-Voigt
+/// matrix: the `[xx, yy, xy]` block for plane strain, its **static condensation**
+/// on `ε_zz` (so `σ_zz = 0`) for plane stress, the full `6×6` for the solid.
+fn tangent_matrix_model(d3: &[[f64; 6]; 6], model: ElasticityModel) -> Vec<Vec<f64>> {
+    match model {
+        ElasticityModel::Solid => d3.iter().map(|r| r.to_vec()).collect(),
+        ElasticityModel::PlaneStrain => {
+            let idx = [0usize, 1, 5];
+            idx.iter()
+                .map(|&i| idx.iter().map(|&j| d3[i][j]).collect())
+                .collect()
+        }
+        ElasticityModel::PlaneStress => {
+            // Condense the out-of-plane normal `zz` (index 2) so σ_zz = 0:
+            // D2[i][j] = D3[i][j] − D3[i][2]·D3[2][j]/D3[2][2].
+            let z = 2usize;
+            let dzz = d3[z][z];
+            let cond = |i: usize, j: usize| d3[i][j] - d3[i][z] * d3[z][j] / dzz;
+            let idx = [0usize, 1, 5];
+            idx.iter()
+                .map(|&i| idx.iter().map(|&j| cond(i, j)).collect())
+                .collect()
+        }
+    }
 }
 
 // ─── Field <-> array plumbing ────────────────────────────────────────────────

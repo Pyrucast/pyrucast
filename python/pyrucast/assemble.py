@@ -13,6 +13,7 @@ from ._pyrucast import (
     lump as lump,
     mass as mass,
     stiffness as stiffness,
+    tangent as tangent,
 )
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "lump",
     "mass",
     "stiffness",
+    "tangent",
 ]

@@ -231,6 +231,20 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
     assemble_kind(model, materials, MatrixKind::Geometric, Some(stress))
 }
 
+/// Assemble the **consistent (algorithmic) tangent** `K_t = ∫ Bᵀ D_alg B` for
+/// `model` (Cast3M `KTAN`) — the operator that gives quadratic Newton
+/// convergence for a non-linear law.
+///
+/// `state` is the behaviour field produced by [`crate::ops::behavior::integrate`]
+/// at the current iterate: besides the stress it carries the per-Gauss
+/// algorithmic modulus `D_alg` (the `ktan_*` components), which this assembler
+/// reads back. For a **linear** physics (elasticity) the tangent is the elastic
+/// stiffness and `state` is ignored. `materials` resolves each zone like
+/// [`stiffness`].
+pub fn tangent(model: &Model, materials: &ElementField, state: &ElementField) -> Result<Matrix> {
+    assemble_kind(model, materials, MatrixKind::Tangent, Some(state))
+}
+
 /// **Lump** an assembled matrix into a diagonal one by **row-sum concentration**
 /// (Cast3M `LUMP`): each diagonal entry becomes the sum of its row, every
 /// off-diagonal is dropped. Applied to a consistent mass / heat-capacity matrix

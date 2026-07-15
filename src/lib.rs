@@ -152,6 +152,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::assemble::mass, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::lump, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::geometric, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::assemble::tangent, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::flux, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::assemble::internal_forces, m)?)?;
     m.add_function(wrap_pyfunction!(

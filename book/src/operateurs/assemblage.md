@@ -73,6 +73,25 @@ pour le flambement et les analyses précontraintes. Le noyau
 Kg = pyrucast.assemble.geometric(model, materials, stress)
 ```
 
+## `tangent(model, materials, state)` → `Matrix`
+
+Assemble la **matrice tangente cohérente (algorithmique)** `K_t = ∫ Bᵀ D_alg B`
+(Cast3M `KTAN`), qui donne la convergence quadratique du Newton non-linéaire.
+
+`state` est le champ de comportement produit par `behavior.integrate` à l'itéré
+courant : en plus de la contrainte, il porte le module algorithmique `D_alg` par
+point de Gauss (les composantes `ktan_*`), que cet assembleur relit. Pour une
+physique **linéaire** (élasticité) la tangente vaut la rigidité élastique et
+`state` est ignoré. Le module cohérent est le **producteur/consommateur** :
+`integrate_point` (plasticité J2, Mazars) émet `D_alg`, cet opérateur le
+consomme. `materials` résout chaque zone comme `stiffness`.
+
+```python
+strain = pyrucast.field.deformation(u, fes)
+state = pyrucast.behavior.integrate_behavior(model, strain, materials)
+Kt = pyrucast.assemble.tangent(model, materials, state)
+```
+
 ## Composition : `assemble(&mut Matrix)` (Rust)
 
 `stiffness` produit une matrice portant des blocs **calculés** (recette, valeurs

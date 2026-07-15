@@ -166,6 +166,23 @@ impl SubModelKind for Elasticity {
         element_geometric(geom, stress, ke)
     }
 
+    /// Linear elasticity: the consistent tangent **is** the elastic stiffness.
+    fn tangent_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
+    fn element_tangent(
+        &self,
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        _state: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
+        element_stiffness(geom, mat, self.model, ke)
+    }
+
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
@@ -456,6 +473,84 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
                 for a in 0..d {
                     ke[(i * d + a) * dofs + (j * d + a)] += gij;
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Names of the **consistent-tangent** state components a non-linear physics
+/// (plasticity, Mazars) emits: the upper triangle of the symmetric `v×v`
+/// algorithmic modulus `D_alg` in the model's engineering-Voigt order, named
+/// `ktan_{i}_{j}` for `i ≤ j`. `v = 3` in 2-D, `6` in 3-D — so 6 or 21 names.
+/// The tangent assembler reads them back with [`read_tangent_matrix`].
+pub fn tangent_component_names(space_dim: usize) -> Vec<String> {
+    let v = voigt_size(space_dim);
+    let mut names = Vec::with_capacity(v * (v + 1) / 2);
+    for i in 0..v {
+        for j in i..v {
+            names.push(format!("ktan_{i}_{j}"));
+        }
+    }
+    names
+}
+
+/// Reconstruct the symmetric `v×v` consistent tangent `D_alg` at `(cell, g)` from
+/// the `ktan_{i}_{j}` state components emitted by the constitutive integrator.
+pub fn read_tangent_matrix(
+    state: &SubElementField,
+    cell: usize,
+    g: usize,
+    space_dim: usize,
+) -> Result<Vec<Vec<f64>>> {
+    let v = voigt_size(space_dim);
+    let mut d = vec![vec![0.0; v]; v];
+    for i in 0..v {
+        for j in i..v {
+            let val = state.value(cell, g, &format!("ktan_{i}_{j}"))?;
+            d[i][j] = val;
+            d[j][i] = val;
+        }
+    }
+    Ok(d)
+}
+
+/// Element kernel: local **consistent tangent** `K_t = Σ_g Bᵀ D_alg B |J| w` of
+/// one cell, with the per-Gauss algorithmic modulus `D_alg` read from `state`
+/// (the constitutive integrator's `ktan_*` output). Same `ke` layout as
+/// [`element_stiffness`]; law-independent given `D_alg`, so plasticity and Mazars
+/// share it — only the `D_alg` they produce differs.
+pub fn element_tangent_from_state(
+    geom: &CellGeom,
+    state: &SubElementField,
+    ke: &mut [f64],
+) -> Result<()> {
+    let n_nodes = geom.n_nodes;
+    let space_dim = geom.space_dim;
+    let dofs = space_dim * n_nodes;
+    let v = voigt_size(space_dim);
+    for g in 0..geom.n_gauss {
+        let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim);
+        let d = read_tangent_matrix(state, geom.cell, g, space_dim)?;
+        // DB = D·B (voigt × dofs), then Kᵉ += Bᵀ (DB) · |J| w.
+        let mut db = vec![vec![0.0; dofs]; v];
+        for (r, dbr) in db.iter_mut().enumerate() {
+            for (c, dbrc) in dbr.iter_mut().enumerate() {
+                let mut acc = 0.0;
+                for w in 0..v {
+                    acc += d[r][w] * b[w][c];
+                }
+                *dbrc = acc;
+            }
+        }
+        let w = geom.det_j_w(g)?;
+        for r in 0..dofs {
+            for c in 0..dofs {
+                let mut acc = 0.0;
+                for vv in 0..v {
+                    acc += b[vv][r] * db[vv][c];
+                }
+                ke[r * dofs + c] += acc * w;
             }
         }
     }
