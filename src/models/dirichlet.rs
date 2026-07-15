@@ -42,7 +42,7 @@ use crate::containers::mesh::{ElementType, Mesh, NodeId};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
-    constraint_block_pair, Constraint, ConstraintTerm, Contribution, Physics, Relation,
+    constraint_block_pair, Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation,
     RelationSense, SubModelKind,
 };
 use crate::store::read;
@@ -198,8 +198,14 @@ impl SubModelKind for Dirichlet {
     /// special case.
     fn contributions(
         &self,
+        kind: MatrixKind,
         _material: Option<&crate::store::Handle<SubElementField>>,
     ) -> Result<Vec<Contribution>> {
+        // A constraint only enters the global (stiffness) matrix — no
+        // mass/geometric/tangent term.
+        if kind != MatrixKind::Stiffness {
+            return Ok(Vec::new());
+        }
         // One C / Cᵀ pair per submesh pair — the user's submeshes are used
         // directly as row/col supports (no flattening), so the submesh structure
         // carried through `barycenter` is preserved. Dirichlet is the single-term

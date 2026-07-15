@@ -81,7 +81,7 @@ use crate::containers::mesh::SubMesh;
 use crate::containers::model::SubModel;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
-use crate::models::Physics;
+use crate::models::{MatrixKind, Physics};
 use crate::store::{insert, read, Handle};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
@@ -165,6 +165,16 @@ pub struct ComputedRecipe {
     pub fespaces: Vec<Handle<SubFiniteElementSpace>>,
     /// Material field for the kernel; `Some` iff the physics declares one.
     pub material: Option<Handle<SubElementField>>,
+    /// Which element matrix this recipe produces — the discriminant the scatter
+    /// dispatches on to pick the sub-model's kernel
+    /// ([`SubModelKind::matrix_element`](crate::models::SubModelKind::matrix_element)).
+    /// Defaults to [`MatrixKind::Stiffness`] for backward-compatible deserialization.
+    #[serde(default)]
+    pub kind: MatrixKind,
+    /// Current stress / algorithmic-tangent field the kernel reads — `Some` only
+    /// for the state-dependent kinds (geometric stiffness, consistent tangent).
+    #[serde(default)]
+    pub state: Option<Handle<SubElementField>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -850,7 +860,7 @@ pub type NamedDof = (NodeId, String);
 /// values — so it can be built once and reused across assemblies of the same
 /// model (materials change, sparsity does not). The assembler
 /// ([`crate::ops::assemble`]) builds it from a [`Matrix`]'s blocks and caches it
-/// on the model (see `Model::stiffness_pattern`); the numeric scatter then only
+/// on the model (see `Model::matrix_pattern`); the numeric scatter then only
 /// fills the values at each entry's fixed slot.
 #[derive(Clone)]
 pub struct AssemblyPattern {

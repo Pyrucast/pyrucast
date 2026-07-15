@@ -51,7 +51,8 @@ use crate::containers::mesh::{Mesh, NodeId, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
-    Constraint, ConstraintTerm, Contribution, Physics, Relation, RelationSense, SubModelKind,
+    Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation, RelationSense,
+    SubModelKind,
 };
 use crate::ops::geom::project_points;
 use crate::ops::mesher::barycenter;
@@ -266,8 +267,14 @@ impl SubModelKind for Contact {
     /// master node `−Nᵢ·n_c`.
     fn contributions(
         &self,
+        kind: MatrixKind,
         _material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<Contribution>> {
+        // A constraint only enters the global (stiffness) matrix — no
+        // mass/geometric/tangent term.
+        if kind != MatrixKind::Stiffness {
+            return Ok(Vec::new());
+        }
         let mult_sm = self.multiplier_sm()?;
         let support_sm = self.support_sm()?;
         let variables: Vec<String> = self.components.iter().map(|c| c.variable.clone()).collect();

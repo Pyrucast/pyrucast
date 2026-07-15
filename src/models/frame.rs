@@ -18,7 +18,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Domain, Physics, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -74,8 +74,8 @@ impl SubModelKind for Frame {
         Some(self)
     }
 
-    fn stiffness_layout(&self) -> Option<StiffnessLayout> {
-        Some(StiffnessLayout {
+    fn stiffness_layout(&self) -> Option<MatrixLayout> {
+        Some(MatrixLayout {
             fespaces: vec![self.fespace.clone()],
             support: self.support.clone(),
             dual_vars: self.dual_vars(),

@@ -54,6 +54,35 @@ pub use kernel::CellGeom;
 /// Voigt-named stress components (`sigma_xx`, `sigma_xy`, …).
 const VOIGT_AXES: [&str; 3] = ["x", "y", "z"];
 
+/// The kind of element matrix a physics contributes — the discriminant that
+/// makes the whole assembly pipeline (recipe → scatter → per-kind pattern cache)
+/// matrix-agnostic. One `assemble_*` entry point per variant
+/// ([`crate::ops::assemble`]) drives the **same** machinery with a different
+/// per-element kernel; a physics that has no term for a given kind contributes
+/// nothing (its [`matrix_layout`](SubModelKind::matrix_layout) returns `None`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MatrixKind {
+    /// Stiffness / conductivity `K` — `∫ Bᵀ D B` (Cast3M `RIGI` / `COND`).
+    #[default]
+    Stiffness,
+    /// Mass / capacity `M` — `∫ ρ Nᵀ N` (Cast3M `MASS` / `CAPA`).
+    Mass,
+    /// Geometric (initial-stress) stiffness `K_g` — `∫ Gᵀ σ̂ G` (Cast3M `KSIG`).
+    Geometric,
+    /// Consistent tangent `K_t` — `∫ Bᵀ D_alg B` (Cast3M `KTAN`).
+    Tangent,
+}
+
+impl MatrixKind {
+    /// Number of variants — the width of the per-kind pattern cache.
+    pub const COUNT: usize = 4;
+
+    /// Dense index in `0..COUNT`, for indexing per-kind caches.
+    pub const fn index(self) -> usize {
+        self as usize
+    }
+}
+
 /// Structural declaration a volumetric physics gives so the **global**
 /// assembler ([`crate::ops::assemble::stiffness`]) can build its stiffness
 /// contribution as a *computed* [`SubMatrix`] — a recipe, no eagerly
@@ -65,7 +94,7 @@ const VOIGT_AXES: [&str; 3] = ["x", "y", "z"];
 /// literal `build_stiffness_blocks` is **kept** alongside it as the bit-for-bit
 /// equivalence reference. Volumetric blocks are square on a single support, so
 /// one [`SubMesh`] gives both the row and column node sequence.
-pub struct StiffnessLayout {
+pub struct MatrixLayout {
     /// FE subspaces the element kernel integrates over. **Give a `Vec`**: a
     /// single subspace for a plain volumetric physics, or several — sharing one
     /// submesh, differing only by quadrature — for a multi-quadrature element
@@ -103,8 +132,8 @@ pub enum Contribution {
     /// A block integrated on the fly and scattered straight into the global CSR
     /// (no values materialised): the fast path of every volumetric physics. The
     /// assembler resolves the material and wraps this
-    /// [`StiffnessLayout`] into a computed [`SubMatrix`].
-    Computed(StiffnessLayout),
+    /// [`MatrixLayout`] into a computed [`SubMatrix`].
+    Computed(MatrixLayout),
     /// One-or-more blocks whose values the sub-model has already filled in
     /// (`Dirichlet`'s C / Cᵀ, MPC, …). Scattered by the literal path.
     Literal(Vec<SubMatrix>),
@@ -243,33 +272,109 @@ pub trait SubModelKind: Sync {
         )))
     }
 
-    /// This sub-model's stiffness contributions, as the global assembler
-    /// consumes them. **Default**: derived from
-    /// [`stiffness_layout`](Self::stiffness_layout) — `Some(layout)` yields a
-    /// single [`Contribution::Computed`] (a volumetric physics, integrated
-    /// straight into the CSR), `None` falls back to a
+    /// Local element **mass** matrix of one cell (`∫ ρ Nᵀ N` for mechanics,
+    /// `∫ ρ c Nᵀ N` for the thermal capacity) — the mass counterpart of
+    /// [`element_matrix`](Self::element_matrix). Default errors (a physics with
+    /// no mass term). See [`matrix_element`](Self::matrix_element).
+    fn element_mass(
+        &self,
+        _geoms: &[CellGeom],
+        _material: Option<&SubElementField>,
+        _ke: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(format!(
+            "{}: no mass kernel — element_mass is undefined",
+            self.label()
+        )))
+    }
+
+    /// Local element **geometric (initial-stress) stiffness** of one cell
+    /// (`∫ Gᵀ σ̂ G`). `state` carries this physics' current stress field (the
+    /// [`Domain::integrate_behavior`] output, Voigt-named). Default errors.
+    fn element_geometric(
+        &self,
+        _geoms: &[CellGeom],
+        _material: Option<&SubElementField>,
+        _state: Option<&SubElementField>,
+        _ke: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(format!(
+            "{}: no geometric-stiffness kernel — element_geometric is undefined",
+            self.label()
+        )))
+    }
+
+    /// Local element **consistent tangent** of one cell (`∫ Bᵀ D_alg B`).
+    /// `state` carries the algorithmic tangent moduli produced by
+    /// [`Domain::integrate_point`]. Default errors.
+    fn element_tangent(
+        &self,
+        _geoms: &[CellGeom],
+        _material: Option<&SubElementField>,
+        _state: Option<&SubElementField>,
+        _ke: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(format!(
+            "{}: no tangent kernel — element_tangent is undefined",
+            self.label()
+        )))
+    }
+
+    /// Dispatch the per-cell element kernel for `kind` — the single seam the
+    /// global assembler drives (via a [`ComputedRecipe`](crate::containers::matrix::ComputedRecipe)),
+    /// routing to [`element_matrix`](Self::element_matrix) /
+    /// [`element_mass`](Self::element_mass) /
+    /// [`element_geometric`](Self::element_geometric) /
+    /// [`element_tangent`](Self::element_tangent). `state` is `Some(_)` only for
+    /// the kinds that consume the current stress/tangent field (geometric,
+    /// tangent); the others ignore it.
+    fn matrix_element(
+        &self,
+        kind: MatrixKind,
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        state: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        match kind {
+            MatrixKind::Stiffness => self.element_matrix(geoms, material, ke),
+            MatrixKind::Mass => self.element_mass(geoms, material, ke),
+            MatrixKind::Geometric => self.element_geometric(geoms, material, state, ke),
+            MatrixKind::Tangent => self.element_tangent(geoms, material, state, ke),
+        }
+    }
+
+    /// This sub-model's contributions of a given [`MatrixKind`], as the global
+    /// assembler consumes them. **Default**: derived from
+    /// [`matrix_layout`](Self::matrix_layout) — `Some(layout)` yields a single
+    /// [`Contribution::Computed`] (a volumetric physics, integrated straight
+    /// into the CSR); `None` falls back — **only for `Stiffness`** — to a
     /// [`Contribution::Literal`] built from
-    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks).
+    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks), and yields
+    /// nothing for the other kinds (a physics with no term for that kind).
     ///
-    /// A volumetric physics writes only `element_matrix` + `stiffness_layout`
+    /// A volumetric physics writes only its per-kind `element_*` + `*_layout`
     /// and takes the default. A sub-model whose blocks are *not* a single
-    /// layout-driven integral (a constraint such as `Dirichlet`, or a future
-    /// coupling/contact sub-model) overrides **this** method to return its
-    /// blocks directly — that override is the extension seam, not a special case
-    /// buried in the assembler.
+    /// layout-driven integral (a constraint such as `Dirichlet`, which only
+    /// contributes to `Stiffness`) overrides **this** method — that override is
+    /// the extension seam, not a special case buried in the assembler.
     ///
     /// `material` is `Some(_)` iff [`Domain::material_fespace`] is declared
     /// (the assembler guarantees it); it is only consulted on the literal path —
     /// the computed path resolves material itself from the layout.
     fn contributions(
         &self,
+        kind: MatrixKind,
         material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<Contribution>> {
-        Ok(match self.stiffness_layout() {
+        Ok(match self.matrix_layout(kind) {
             Some(layout) => vec![Contribution::Computed(layout)],
-            None => vec![Contribution::Literal(
-                self.build_stiffness_blocks(material)?,
-            )],
+            None if kind == MatrixKind::Stiffness => {
+                vec![Contribution::Literal(
+                    self.build_stiffness_blocks(material)?,
+                )]
+            }
+            None => Vec::new(),
         })
     }
 
@@ -306,7 +411,8 @@ pub trait SubModelKind: Sync {
             layout.ordering,
             layout.symmetric,
             material,
-            |geoms, m, ke| self.element_matrix(geoms, m, ke),
+            None,
+            |geoms, m, _state, ke| self.element_matrix(geoms, m, ke),
         )?;
         Ok(vec![block])
     }
@@ -320,17 +426,42 @@ pub trait SubModelKind: Sync {
     /// straight into the CSR (never materialising values), and the default
     /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) produces the
     /// *literal* equivalent from the same layout + kernel.
-    fn stiffness_layout(&self) -> Option<StiffnessLayout> {
+    fn stiffness_layout(&self) -> Option<MatrixLayout> {
         None
     }
 
-    /// Build and fill the mass [`SubMatrix`] block(s) of this physics.
-    /// Default: no mass term (empty).
-    fn build_mass_blocks(
-        &self,
-        _material: Option<&Handle<SubElementField>>,
-    ) -> Result<Vec<SubMatrix>> {
-        Ok(Vec::new())
+    /// Structural layout of this physics' **mass / capacity** block, or `None`
+    /// (default: no mass term). A continuum physics returns the same layout as
+    /// its stiffness (same fespaces / support / vars) — only the kernel differs.
+    fn mass_layout(&self) -> Option<MatrixLayout> {
+        None
+    }
+
+    /// Structural layout of this physics' **geometric-stiffness** block, or
+    /// `None` (default: none).
+    fn geometric_layout(&self) -> Option<MatrixLayout> {
+        None
+    }
+
+    /// Structural layout of this physics' **consistent-tangent** block, or
+    /// `None` (default: none).
+    fn tangent_layout(&self) -> Option<MatrixLayout> {
+        None
+    }
+
+    /// Dispatch to the per-kind layout ([`stiffness_layout`](Self::stiffness_layout)
+    /// / [`mass_layout`](Self::mass_layout) /
+    /// [`geometric_layout`](Self::geometric_layout) /
+    /// [`tangent_layout`](Self::tangent_layout)). This is the seam
+    /// [`contributions`](Self::contributions) and the global assembler drive; a
+    /// physics implements the per-kind primitives, not this dispatcher.
+    fn matrix_layout(&self, kind: MatrixKind) -> Option<MatrixLayout> {
+        match kind {
+            MatrixKind::Stiffness => self.stiffness_layout(),
+            MatrixKind::Mass => self.mass_layout(),
+            MatrixKind::Geometric => self.geometric_layout(),
+            MatrixKind::Tangent => self.tangent_layout(),
+        }
     }
 
     /// Local internal-force vector of one cell — the pure, sequential kernel

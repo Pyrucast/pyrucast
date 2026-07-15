@@ -316,7 +316,14 @@ pub fn assemble_block(
     ordering: DofOrdering,
     symmetric: bool,
     material: Option<&Handle<SubElementField>>,
-    element: impl Fn(&[CellGeom], Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
+    state: Option<&Handle<SubElementField>>,
+    element: impl Fn(
+            &[CellGeom],
+            Option<&SubElementField>,
+            Option<&SubElementField>,
+            &mut [f64],
+        ) -> Result<()>
+        + Sync,
 ) -> Result<SubMatrix> {
     let (nrows, ncols, trips) = element_block_triplets(
         fespaces,
@@ -326,6 +333,7 @@ pub fn assemble_block(
         primal_vars.len(),
         ordering,
         material,
+        state,
         element,
     )?;
     let mut rows = Vec::with_capacity(trips.len());
@@ -372,7 +380,14 @@ pub fn element_block_triplets(
     n_primal: usize,
     ordering: DofOrdering,
     material: Option<&Handle<SubElementField>>,
-    element: impl Fn(&[CellGeom], Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
+    state: Option<&Handle<SubElementField>>,
+    element: impl Fn(
+            &[CellGeom],
+            Option<&SubElementField>,
+            Option<&SubElementField>,
+            &mut [f64],
+        ) -> Result<()>
+        + Sync,
 ) -> Result<BlockTriplets> {
     let (nrows, ncols, per_cell) = element_block_triplets_per_cell(
         fespaces,
@@ -382,6 +397,7 @@ pub fn element_block_triplets(
         n_primal,
         ordering,
         material,
+        state,
         element,
     )?;
     let total: usize = per_cell.iter().map(|v| v.len()).sum();
@@ -418,7 +434,14 @@ pub fn element_block_triplets_per_cell(
     n_primal: usize,
     ordering: DofOrdering,
     material: Option<&Handle<SubElementField>>,
-    element: impl Fn(&[CellGeom], Option<&SubElementField>, &mut [f64]) -> Result<()> + Sync,
+    state: Option<&Handle<SubElementField>>,
+    element: impl Fn(
+            &[CellGeom],
+            Option<&SubElementField>,
+            Option<&SubElementField>,
+            &mut [f64],
+        ) -> Result<()>
+        + Sync,
 ) -> Result<BlockTripletsPerCell> {
     let primary = fespaces.first().ok_or_else(|| {
         PyrucastError::Message("element_block_triplets_per_cell: no FE subspace".into())
@@ -429,6 +452,7 @@ pub fn element_block_triplets_per_cell(
     let coords_h = sm.coords();
     let coords = read(&coords_h)?;
     let mat_guard = material.map(read).transpose()?;
+    let state_guard = state.map(read).transpose()?;
 
     // Reference data of every subspace, snapshotted once (they share the submesh
     // ⇒ one connectivity + coords drive every CellGeom; only quadrature differs).
@@ -451,6 +475,7 @@ pub fn element_block_triplets_per_cell(
     let rds_ref: &[RefData] = &rds;
     let coords_ref: &Coords = &coords;
     let mat_ref: Option<&SubElementField> = mat_guard.as_deref();
+    let state_ref: Option<&SubElementField> = state_guard.as_deref();
 
     let n_cols_loc = n_nodes * n_primal;
     let ke_len = (n_nodes * n_dual) * n_cols_loc;
@@ -487,7 +512,7 @@ pub fn element_block_triplets_per_cell(
                 .map(|rd| CellGeom::new(rd, coords_ref, conn, cell))
                 .collect::<Result<_>>()?;
             let mut ke = vec![0.0_f64; ke_len];
-            element(&geoms, mat_ref, &mut ke)?;
+            element(&geoms, mat_ref, state_ref, &mut ke)?;
 
             let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
             let mut rpos = Vec::with_capacity(n_nodes);

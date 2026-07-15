@@ -27,7 +27,7 @@ use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::matrix::{ComputedRecipe, Matrix, SubMatrix};
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::models::Contribution;
+use crate::models::{Contribution, MatrixKind};
 use crate::store::{insert, read, Handle};
 
 pub mod coloring;
@@ -48,13 +48,36 @@ pub use internal_forces::{internal_forces, internal_forces_continuum};
 /// (`HeatConduction` → 1 block, `Dirichlet` → C + Cᵀ).
 /// The aggregate is finalized before being returned.
 pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
+    assemble_kind(model, materials, MatrixKind::Stiffness, None)
+}
+
+/// Assemble the element matrix of a given [`MatrixKind`] for `model` — the
+/// shared engine behind [`stiffness`] (and, for the state-dependent kinds, the
+/// geometric-stiffness and consistent-tangent assemblers).
+///
+/// The whole *computed → scatter → pattern* pipeline is matrix-agnostic: it
+/// only needs, per sub-model, the block layout and the per-cell kernel to drive.
+/// This function selects both by `kind` (via
+/// [`SubModelKind::contributions`](crate::models::SubModelKind::contributions))
+/// and threads the resolved material and — for `Geometric` / `Tangent` — the
+/// per-sub-model `state` sub-field into each block's
+/// [`ComputedRecipe`]. `state` is an [`ElementField`] aggregate (current stress
+/// / algorithmic tangent) resolved zone-wise like `materials`, or `None` for the
+/// state-free kinds.
+pub fn assemble_kind(
+    model: &Model,
+    materials: &ElementField,
+    kind: MatrixKind,
+    state: Option<&ElementField>,
+) -> Result<Matrix> {
     let mut k = Matrix::empty();
 
     // Pass 1 — add every block. Each sub-model declares its
-    // [`Contribution`](crate::models::Contribution)s; the assembler folds them
-    // in without a per-type `match`. A `Computed` contribution (volumetric
-    // physics) becomes a recipe-carrying block scattered straight into the CSR;
-    // a `Literal` one (Dirichlet, any multi-block physics) carries its values.
+    // [`Contribution`](crate::models::Contribution)s for this `kind`; the
+    // assembler folds them in without a per-type `match`. A `Computed`
+    // contribution (volumetric physics) becomes a recipe-carrying block
+    // scattered straight into the CSR; a `Literal` one (Dirichlet, any
+    // multi-block physics — stiffness only) carries its values.
     for sub_h in model {
         // Build the contribution(s) under a read guard, then drop it before
         // `add_sub` (which takes the store write lock).
@@ -77,9 +100,22 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
                 }
                 None => None,
             };
+            // Resolve the sub-model's own state sub-field (stress / tangent) the
+            // same way, when a state aggregate is supplied and the physics reads
+            // material on a cell fespace.
+            let state_sub = match (state, sub.material_fespace()) {
+                (Some(sf), Some(fespace)) => Some(sf.sub_for_fespace(&fespace)?),
+                _ => None,
+            };
             let mut blocks = Vec::new();
-            for c in sub.as_kind().contributions(material.as_ref())? {
-                blocks.extend(build_contribution(c, sub_h, material.clone())?);
+            for c in sub.as_kind().contributions(kind, material.as_ref())? {
+                blocks.extend(build_contribution(
+                    c,
+                    sub_h,
+                    material.clone(),
+                    kind,
+                    state_sub.clone(),
+                )?);
             }
             blocks
         };
@@ -91,10 +127,10 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     // Pass 2 — global assembly, injected via `set_assembled` (Option B: the
     // global assembler lives here, not in `Matrix`, so there is no
     // matrix↔kernel cycle). The CSR sparsity ([`scatter::build_pattern`]) is a
-    // function of the model's block topology, so it is memoised on the model and
-    // reused across assemblies; the values are scattered into it in parallel by
-    // cell colour ([`scatter::scatter_parallel`]).
-    let pattern = model.stiffness_pattern(|| scatter::build_pattern(&k))?;
+    // function of the model's block topology for this `kind`, so it is memoised
+    // per kind on the model and reused across assemblies; the values are
+    // scattered into it in parallel by cell colour ([`scatter::scatter_parallel`]).
+    let pattern = model.matrix_pattern(kind, || scatter::build_pattern(&k))?;
     let csr = scatter::scatter_parallel(&k, pattern.as_ref())?;
     k.set_assembled(pattern.row_dofs.clone(), pattern.col_dofs.clone(), csr);
     Ok(k)
@@ -136,6 +172,8 @@ fn build_contribution(
     contribution: Contribution,
     sub_h: &Handle<SubModel>,
     material: Option<Handle<SubElementField>>,
+    kind: MatrixKind,
+    state: Option<Handle<SubElementField>>,
 ) -> Result<Vec<SubMatrix>> {
     let mut blocks = match contribution {
         Contribution::Computed(layout) => {
@@ -143,6 +181,8 @@ fn build_contribution(
                 submodel: sub_h.clone(),
                 fespaces: layout.fespaces,
                 material,
+                kind,
+                state,
             };
             vec![SubMatrix::computed(
                 layout.support.clone(),
@@ -205,12 +245,12 @@ mod tests {
                     Some(fespace) => Some(materials.sub_for_fespace(&fespace)?),
                     None => None,
                 };
-                let kind = sub.as_kind();
+                let phys = sub.as_kind();
                 let mut blocks = Vec::new();
-                for c in kind.contributions(material.as_ref())? {
+                for c in phys.contributions(MatrixKind::Stiffness, material.as_ref())? {
                     match c {
                         Contribution::Computed(_) => {
-                            blocks.extend(kind.build_stiffness_blocks(material.as_ref())?);
+                            blocks.extend(phys.build_stiffness_blocks(material.as_ref())?);
                         }
                         Contribution::Literal(bs) => blocks.extend(bs),
                     }
@@ -368,8 +408,15 @@ mod tests {
                     .material_fespace()
                     .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
                 let mut blocks = Vec::new();
-                for c in sub.as_kind().contributions(material.as_ref()).unwrap() {
-                    blocks.extend(build_contribution(c, sub_h, material.clone()).unwrap());
+                for c in sub
+                    .as_kind()
+                    .contributions(MatrixKind::Stiffness, material.as_ref())
+                    .unwrap()
+                {
+                    blocks.extend(
+                        build_contribution(c, sub_h, material.clone(), MatrixKind::Stiffness, None)
+                            .unwrap(),
+                    );
                 }
                 blocks
             };
@@ -576,6 +623,8 @@ mod tests {
                             submodel: sub_h.clone(),
                             fespaces: layout.fespaces,
                             material,
+                            kind: MatrixKind::Stiffness,
+                            state: None,
                         },
                     )
                     .unwrap()

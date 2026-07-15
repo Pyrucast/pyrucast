@@ -176,7 +176,8 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                     blk.primal_vars().len(),
                     blk.ordering(),
                     recipe.material.as_ref(),
-                    |geoms, m, ke| phys.element_matrix(geoms, m, ke),
+                    recipe.state.as_ref(),
+                    |geoms, m, state, ke| phys.matrix_element(recipe.kind, geoms, m, state, ke),
                 )?;
                 let slots = match &pattern.block_slots[bi] {
                     BlockSlots::Computed(s) => s,
@@ -265,7 +266,8 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                     blk.primal_vars().len(),
                     blk.ordering(),
                     recipe.material.as_ref(),
-                    |geoms, m, ke| phys.element_matrix(geoms, m, ke),
+                    recipe.state.as_ref(),
+                    |geoms, m, state, ke| phys.matrix_element(recipe.kind, geoms, m, state, ke),
                 )?;
                 let slots = match &pattern.block_slots[bi] {
                     BlockSlots::Computed(s) => s,

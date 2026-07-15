@@ -29,7 +29,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::{ElementType, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Domain, Physics, StiffnessLayout, SubModelKind};
+use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
 
@@ -101,11 +101,11 @@ impl SubModelKind for Timoshenko {
         Some(self)
     }
 
-    fn stiffness_layout(&self) -> Option<StiffnessLayout> {
+    fn stiffness_layout(&self) -> Option<MatrixLayout> {
         // Two-quadrature element: bending (full Gauss) + shear (reduced), two FE
         // subspaces over the same mesh. The multi-fespace layout drives both the
         // computed (parallel scatter) and literal paths from this one description.
-        Some(StiffnessLayout {
+        Some(MatrixLayout {
             fespaces: vec![self.bending.clone(), self.shear.clone()],
             support: self.support.clone(),
             dual_vars: self.dual_vars(),

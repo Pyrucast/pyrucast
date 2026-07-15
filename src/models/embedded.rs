@@ -50,7 +50,8 @@ use crate::containers::mesh::{Mesh, NodeId, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
-    Constraint, ConstraintTerm, Contribution, Physics, Relation, RelationSense, SubModelKind,
+    Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation, RelationSense,
+    SubModelKind,
 };
 use crate::ops::geom::locate_points;
 use crate::ops::mesher::barycenter;
@@ -305,8 +306,14 @@ impl SubModelKind for Embedded {
     /// `−Nᵢ`, so every relation reads `u_c(p) − Σᵢ Nᵢ·u_c(hostᵢ) = g_c`.
     fn contributions(
         &self,
+        kind: MatrixKind,
         _material: Option<&Handle<SubElementField>>,
     ) -> Result<Vec<Contribution>> {
+        // A constraint only enters the global (stiffness) matrix — no
+        // mass/geometric/tangent term.
+        if kind != MatrixKind::Stiffness {
+            return Ok(Vec::new());
+        }
         let mult_sm = self.multiplier_sm()?;
         let support_sm = self.support_sm()?;
         let n = self.hosts.len();
@@ -533,7 +540,7 @@ mod tests {
         }
 
         // Two block pairs (one per component).
-        let contribs = emb.contributions(None).unwrap();
+        let contribs = emb.contributions(MatrixKind::Stiffness, None).unwrap();
         match &contribs[0] {
             Contribution::Literal(blocks) => assert_eq!(blocks.len(), 4),
             _ => panic!("expected literal blocks"),

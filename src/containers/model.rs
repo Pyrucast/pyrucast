@@ -123,7 +123,8 @@ use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{
     contact, convection, dirichlet, elasticity, embedded, frame, frame3d, heat_conduction, mazars,
-    mpc, plasticity, timoshenko, truss, Constraint, Physics, RelationSense, SubModelKind,
+    mpc, plasticity, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense,
+    SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -757,40 +758,43 @@ impl crate::dump::Dump for SubModel {
 #[derive(Serialize, Deserialize, Default)]
 pub struct Model {
     subs: Vec<Handle<SubModel>>,
-    /// Memoised global CSR sparsity of this model's stiffness (see
-    /// [`Model::stiffness_pattern`]). Derived state: never serialized, and
-    /// cleared whenever the model changes (`add_sub` → `post_push`), since a new
-    /// sub-model changes the DOF layout and the sparsity.
+    /// Memoised global CSR sparsity, **one slot per [`MatrixKind`]** (see
+    /// [`Model::matrix_pattern`]). Each kind has its own block topology (mass and
+    /// stiffness may span different sub-models), hence its own sparsity. Derived
+    /// state: never serialized, and cleared whenever the model changes
+    /// (`add_sub` → `post_push`), since a new sub-model changes the DOF layout.
     #[serde(skip)]
-    stiffness_pattern: OnceLock<Arc<AssemblyPattern>>,
+    matrix_patterns: [OnceLock<Arc<AssemblyPattern>>; MatrixKind::COUNT],
 }
 
 crate::impl_aggregate!(Model, SubModel, sub_model, "sub-model(s)", {
     fn post_push(&mut self) {
-        // The block set changed ⇒ any cached sparsity is stale.
-        self.stiffness_pattern = OnceLock::new();
+        // The block set changed ⇒ every cached sparsity is stale.
+        self.matrix_patterns = Default::default();
     }
 });
 crate::impl_aggregate_dump!(Model);
 
 impl Model {
-    /// The model's stiffness [`AssemblyPattern`], built once and reused. On the
+    /// The model's [`AssemblyPattern`] for `kind`, built once and reused. On the
     /// first call `build` runs and its result is cached; later calls (same
-    /// model, e.g. a Newton loop re-assembling with new materials) return the
-    /// cached pattern without touching the store — this is what makes repeated
-    /// assembly scale, the sparsity being material-independent. The cache is
-    /// cleared by `add_sub` (via `post_push`).
-    pub(crate) fn stiffness_pattern(
+    /// model + kind, e.g. a Newton loop re-assembling with new materials) return
+    /// the cached pattern without touching the store — this is what makes
+    /// repeated assembly scale, the sparsity being material-independent. The
+    /// cache is cleared by `add_sub` (via `post_push`).
+    pub(crate) fn matrix_pattern(
         &self,
+        kind: MatrixKind,
         build: impl FnOnce() -> Result<AssemblyPattern>,
     ) -> Result<Arc<AssemblyPattern>> {
-        if let Some(p) = self.stiffness_pattern.get() {
+        let cell = &self.matrix_patterns[kind.index()];
+        if let Some(p) = cell.get() {
             return Ok(p.clone());
         }
         let p = Arc::new(build()?);
         // A concurrent first caller may have won the race; either Arc is a valid
         // pattern for this (unchanged) model, so keep whichever landed.
-        let _ = self.stiffness_pattern.set(p.clone());
+        let _ = cell.set(p.clone());
         Ok(p)
     }
 }
