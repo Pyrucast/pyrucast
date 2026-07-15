@@ -7,9 +7,21 @@ orchestre, mais ne porte aucune logique physique — voir
 [Modèle physique](model.md) pour la mécanique générique (DOFs, assemblage,
 chargements, solveur).
 
-Cette partie décrit, physique par physique : les **équations résolues**, la
-**mise en donnée** (exemple Rust testé via `{{#include}}`), et un **exemple
-Python**.
+Chaque page suit le **même plan standard**, dans cet ordre :
+
+1. **Introduction** — nature du modèle, éléments et degrés de liberté.
+2. **Équations continues résolues** — forme forte (et faible) du problème.
+3. **Forme discrétisée** — opérateurs discrets (`B`, `N`) et expressions des
+   matrices élémentaires (`K`, masse/capacité, tangente…).
+4. **Variables et matériau** — noms primal/dual, composantes matériau,
+   comportement (`COMP`) et, le cas échéant, état interne.
+5. **Mise en donnée (Rust, testé)** — exemple Rust exécuté via `{{#include}}`.
+6. **Exemple Python** — l'équivalent haut niveau.
+7. **Compléments** (facultatif) — extensions propres au modèle (masse &
+   rigidité géométrique, thermomécanique, convection, régime transitoire…).
+
+Certaines physiques omettent une rubrique sans objet (p. ex. pas d'exemple Rust
+dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
 
 - [Conduction thermique](thermique.md) — `-∇·(k∇T) = 0`, l'exemple canonique,
   et la [convection de surface](thermique.md#convection-de-surface-robin--film)

@@ -38,6 +38,24 @@
     - [Baignage (embedded)](contraintes/embedded.md)
     - [Contact (nœud-surface)](contraintes/contact.md)
 
+# Éléments finis supportés
+
+- [Catalogue](elements/index.md)
+  - [SEG2 — segment linéaire](elements/seg2.md)
+  - [TRI3 — triangle linéaire](elements/tri3.md)
+  - [QUA4 — quadrangle bilinéaire](elements/qua4.md)
+  - [TET4 — tétraèdre linéaire](elements/tet4.md)
+  - [PENTA6 — prisme linéaire](elements/penta6.md)
+  - [HEX8 — hexaèdre trilinéaire](elements/hex8.md)
+  - [SEG3 — segment quadratique](elements/seg3.md)
+  - [TRI6 — triangle quadratique](elements/tri6.md)
+  - [QUA8 — quadrangle sérendipité](elements/qua8.md)
+  - [QUA9 — quadrangle biquadratique](elements/qua9.md)
+  - [TET10 — tétraèdre quadratique](elements/tet10.md)
+  - [PENTA15 — prisme sérendipité](elements/penta15.md)
+  - [HEX20 — hexaèdre sérendipité](elements/hex20.md)
+  - [HEX27 — hexaèdre tri-quadratique](elements/hex27.md)
+
 # Détail des opérateurs
 
 - [Vue d'ensemble](operateurs.md)

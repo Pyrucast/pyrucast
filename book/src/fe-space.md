@@ -18,6 +18,8 @@ Mesh                                  FiniteElementSpace
 
 `POI1` n'est pas un élément fini au sens classique : un sous-maillage `POI1` est rejeté à la construction d'un `SubFiniteElementSpace`.
 
+> Le catalogue détaillé — fonctions de forme, dérivées et quadrature de **chaque** type — est en section [Éléments finis supportés](elements/index.md). Ce chapitre-ci décrit la machinerie **commune** (mapping isoparamétrique, Jacobien, gradients physiques) partagée par tous.
+
 ## Conventions de l'élément de référence
 
 Chaque `ElementType` fixe son repère de référence \\( \xi \\) et la numérotation locale de ses nœuds. Ces conventions sont aussi documentées dans le rustdoc de [`ElementType`](https://docs.rs/) et reproduites ici pour référence centrale.

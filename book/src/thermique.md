@@ -1,42 +1,72 @@
 # Conduction thermique
 
-Cette page décrit la physique de **conduction thermique** (`HeatConduction`),
-sa **mise en donnée**, et la déroule sur un exemple complet — une ligne
-chauffée par une source à une extrémité et maintenue à température fixe à
-l'autre — dont le résultat est comparé à la **solution analytique**.
+Cette page décrit la physique de **conduction thermique** (`HeatConduction`) et
+la convection de surface associée. Elle suit le plan standard des physiques puis
+la déroule sur un exemple complet — une ligne chauffée par une source à une
+extrémité et maintenue à température fixe à l'autre — comparé à la **solution
+analytique**.
 
 Pour la mécanique générique du `Model` (orchestration, DOFs, assemblage), voir
 [Modèle physique](model.md). Ici on se concentre sur le cas thermique.
 
-## Le modèle `HeatConduction`
+## Équations continues résolues
 
-Régime stationnaire, forme forte :
+En **régime stationnaire**, la forme forte est
 
 \\[
--\nabla\cdot\big(k\,\nabla T\big) = 0
+-\nabla\cdot\big(k\,\nabla T\big) = 0,
 \\]
 
-La forme variationnelle de Galerkine donne, cellule par cellule, la matrice de
-rigidité :
+et en **régime transitoire**, l'équation de la chaleur porte un terme de
+stockage :
 
 \\[
-K_{ij}^{(\text{loc})} = \int_K k(x)\,\nabla N_i\cdot\nabla N_j\,dx
+\rho\,c_p\,\frac{\partial T}{\partial t} - \nabla\cdot(k\,\nabla T) = Q.
+\\]
+
+La forme variationnelle de Galerkine (multiplication par une température
+virtuelle, intégration par parties) fait apparaître la **rigidité** (conduction)
+et, en transitoire, la **capacité** (stockage) — leurs formes discrètes
+ci-dessous.
+
+## Forme discrétisée
+
+La conductivité donne, cellule par cellule, la matrice de **rigidité** :
+
+\\[
+K_{ij} = \int_K k(x)\,\nabla N_i\cdot\nabla N_j\,dx
 \quad\approx\quad \sum_g k(\xi_g)\,(\nabla N_i\cdot\nabla N_j)\big|_g\,|J|_g\,w_g
 \\]
 
-(implémenté dans `src/models/heat_conduction.rs`). Les conventions de nommage :
+(implémentée dans `src/models/heat_conduction.rs`). En notant
+\\( B = [\nabla N_1, \dots, \nabla N_n] \\) la matrice des gradients de forme
+(taille \\( d\times n \\)), on a aussi \\( K = \int_\Omega k\, B^\top B\, d\Omega \\).
+Le bloc local est écrit aux positions `row = (NodeId_i, "q")`,
+`col = (NodeId_j, "T")`. Pour un SEG2 de longueur \\(L\\) et \\(k\\) uniforme on
+retrouve la matrice analytique \\((k/L)\,[[1,-1],[-1,1]]\\).
+
+En transitoire, le terme de stockage discrétise en une **matrice de capacité**
+(l'analogue thermique de la matrice de masse, Cast3M `CAPA`) :
+
+\\[
+C_{ij} = \int_\Omega \rho\,c_p\,N_i\,N_j\,d\Omega
+\;\approx\; \sum_g \rho\,c_p\,N_i(\xi_g)\,N_j(\xi_g)\,|J|_g\,w_g,
+\\]
+
+assemblée par [`assemble.mass`](operateurs/assemblage.md) (matériau `rho`, `cp`)
+et concentrable en diagonale par [`lump`](operateurs/assemblage.md). Le système
+semi-discret est \\( C\,\dot T + K\,T = F \\) ; l'intégration en temps
+(θ-schéma, Euler implicite `(C/\Delta t + K)`) se pilote dans la couche Python.
+
+## Variables et matériau
 
 | | nom | rôle |
 |---|---|---|
 | **primale** (colonnes, inconnue) | `"T"` | température |
 | **duale** (lignes, second membre) | `"q"` | flux de chaleur |
-| **matériau** | `"k"` | conductivité (au point de Gauss) |
+| **matériau** | `"k"` | conductivité (au point de Gauss) ; `rho`, `cp` **facultatifs** (capacité) |
 
-Le bloc local est écrit aux positions `row = (NodeId_i, "q")`,
-`col = (NodeId_j, "T")`. Pour un SEG2 de longueur \\(L\\) et \\(k\\) uniforme on
-retrouve la matrice analytique \\((k/L)\,[[1,-1],[-1,1]]\\).
-
-## Mise en donnée
+## Mise en donnée (Rust, testé)
 
 Le pipeline est toujours le même :
 
@@ -64,7 +94,7 @@ Le pipeline est toujours le même :
 7. **Assemblage + résolution** — `assemble::stiffness` puis le solveur dense
    `solve` (voir [Modèle physique](model.md)).
 
-## Exemple : ligne chauffée
+### Exemple : ligne chauffée
 
 **Problème.** Sur \\([0,1]\\), une source de chaleur (flux de Neumann \\(Q\\)) est
 appliquée en \\(x=0\\), et la température est imposée à \\(T=20\\) en \\(x=1\\).
@@ -88,11 +118,16 @@ donc garanti à jour avec l'API.
 {{#include ../../tests/thermal_line.rs:example}}
 ```
 
-> La **version Python** équivalente et documentée est dans le dépôt :
-> `examples/thermal_line_1d.py` (lancer avec
-> `python examples/thermal_line_1d.py` après `maturin develop`).
+## Exemple Python
 
-## Exemple : un carré
+La **version Python** équivalente et documentée est dans le dépôt :
+`examples/thermal_line_1d.py` (lancer avec `python examples/thermal_line_1d.py`
+après `maturin develop`). Les compléments 2-D ci-dessous ont eux aussi leur
+variante Python (`thermal_square_2d.py`, `thermal_convection_2d.py`).
+
+## Compléments
+
+### Exemple : un carré
 
 La généralisation 2-D du cas précédent : un **carré** \\([0,1]^2\\) (grille
 structurée de `QUA4`), chauffé par une source répartie sur le bord **gauche**
@@ -127,7 +162,7 @@ coin \\(Q\,h/2\\) (somme \\(Q\\)) — mais on n'a plus à le calculer à la main
 > Version Python : `examples/thermal_square_2d.py` (lancer avec
 > `python examples/thermal_square_2d.py` après `maturin develop`).
 
-## Convection de surface (Robin / film)
+### Convection de surface (Robin / film)
 
 Le modèle `Convection` (`src/models/convection.rs`) ajoute un **échange
 convectif** avec un fluide à température ambiante \\(T_\text{ext}\\) sur un

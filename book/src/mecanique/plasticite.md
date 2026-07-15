@@ -5,7 +5,7 @@ critère de **von Mises** (J2), écoulement associé. Mêmes éléments et même
 degrés de liberté que l'[élasticité linéaire](elasticite.md) : 2-D (`TRI3` /
 `QUA4`) ou 3-D (`TET4` / `HEX8`).
 
-## Équations résolues
+## Équations continues résolues
 
 - **équilibre** : `∇·σ + b = 0` ;
 - **partition** : `ε = εᵉ + εᵖ` (déformation élastique + plastique) ;
@@ -18,12 +18,12 @@ degrés de liberté que l'[élasticité linéaire](elasticite.md) : 2-D (`TRI3` 
 Sans écrouissage, `σ_y` est constant : la contrainte équivalente est
 **plafonnée** à `σ_y` (plateau parfaitement plastique).
 
-## Linéarisation et comportement
+## Forme discrétisée
 
 Conformément au découpage du cœur (voir
 [Comportement](../operateurs/comportement.md) — la boucle de Newton est
 **pilotée en Python**, le cœur Rust ne fournit que les briques), cette physique
-expose deux briques :
+expose :
 
 - **rigidité** (`build_stiffness_blocks`) : la **rigidité élastique**
   `K = ∫ Bᵀ D B dΩ`, opérateur d'itération simple (Newton modifié) ;
@@ -34,6 +34,21 @@ expose deux briques :
   quadratique ;
 - **comportement** (`COMP`, `integrate_behavior`) : le **retour radial**
   exact, point de Gauss par point de Gauss, qui produit aussi `D_alg`.
+
+À chaque itération, avec la même matrice \\( B \\) qu'en
+[élasticité](elasticite.md#forme-discrétisée), on résout la correction
+\\( \delta u \\) du système linéarisé
+
+\\[
+K_t\,\delta u = F_{\text{ext}} - F_{\text{int}}, \qquad
+F_{\text{int}} = \int_\Omega B^\top \sigma\, d\Omega \;(\text{`BSIG`}),
+\\]
+
+où la contrainte \\( \sigma \\) au point de Gauss sort du retour radial. La
+tangente cohérente \\( K_t = \int_\Omega B^\top D_{\text{alg}} B\, d\Omega \\)
+utilise le **module algorithmique** \\( D_{\text{alg}} = \partial\sigma/\partial\varepsilon \\)
+(dérivée exacte de l'application de retour), garantissant la convergence
+quadratique — au lieu de la rigidité élastique \\( D \\) du Newton modifié.
 
 ### Retour radial (algorithme)
 
@@ -51,7 +66,7 @@ Le calcul interne est mené en **3-D** quel que soit le modèle. La
 résout la condition `σ_zz = 0` par une méthode de la sécante locale autour du
 retour radial.
 
-## Variables, matériau, état
+## Variables et matériau
 
 - **primal** : `u_x, u_y(, u_z)` — **dual** : `f_x, f_y(, f_z)`.
 - **matériau** : `E` (Young), `nu` (Poisson), `sigma_y` (limite d'élasticité).
@@ -62,42 +77,13 @@ retour radial.
   configuration de référence, tout à zéro).
 - **sortie du `COMP`** (état de B, = `prev` du pas suivant) : contrainte
   (`sigma_*` dans l'ordre de Voigt du modèle) suivie de l'état mis à jour et de
-  l'échO de `ε(B)` full-3-D (plus `sigma_zz` en 2-D) pour que `prev` soit
+  l'écho de `ε(B)` full-3-D (plus `sigma_zz` en 2-D) pour que `prev` soit
   complet. Le prédicteur élastique est `σ_trial = σ(A) + C:(ε(B) − ε(A))`.
 
-## Exemple Python (la brique `COMP`)
-
-La boucle de Newton (assemblage du résidu, résolution, mise à jour de l'état)
-s'écrit en Python ; voici l'usage **d'un pas** de la brique d'intégration :
-
-```python
-import pyrucast
-
-model = pyrucast.Model.plasticity(fes, "plane_stress")
-materials = pyrucast.build.material_field(
-    model, [("E", 210_000.0), ("nu", 0.3), ("sigma_y", 250.0)]
-)
-
-# Déformation ε(B) issue du champ de déplacement courant (op géométrique).
-strain = pyrucast.field.deformation(u, fes)
-# Intégration A→B : `prev` = sortie du pas précédent (None au premier pas).
-state = pyrucast.behavior.integrate_behavior(model, strain, materials, prev=prev_state)
-sigma_xx = state[0].value(0, 0, "sigma_xx")
-p = state[0].value(0, 0, "p")  # déformation plastique cumulée
-```
-
-Pour réinjecter l'état au pas suivant, il suffit de **passer `state` comme
-`prev`** au prochain appel — la sortie porte déjà l'état complet de B (σ, `VAR1`,
-`ε(B)`). Aucune fusion de champs n'est nécessaire.
-
-La **boucle de Newton complète** (pas de charge, résidu, résolution, portage de
-l'état) est écrite dans `examples/plasticite_poutre_console.py` — voir la
-section Rust ci-dessous pour son architecture, identique.
-
-## Exemple Rust : poutre console, boucle de Newton complète
+## Mise en donnée (Rust) : poutre console, boucle de Newton complète
 
 `examples/plasticite_poutre_console.rs` déroule un **Newton complet** (et non
-un seul pas) autour des mêmes briques, côté API Rust : une poutre encastrée
+un seul pas) autour des briques ci-dessus, côté API Rust : une poutre encastrée
 cisaillée au bout, chargée par incréments jusqu'à développer une zone plastique
 à l'encastrement.
 
@@ -121,3 +107,31 @@ RAYON_NUM_THREADS=1 PYRUCAST_NX=200 PYRUCAST_NY=40 \
 
 Variables d'environnement : `PYRUCAST_NX` / `PYRUCAST_NY` (mailles),
 `PYRUCAST_NSTEPS` (pas de charge), `PYRUCAST_PMAX` (charge finale).
+
+## Exemple Python
+
+La boucle de Newton (assemblage du résidu, résolution, mise à jour de l'état)
+s'écrit en Python ; voici l'usage **d'un pas** de la brique d'intégration :
+
+```python
+import pyrucast
+
+model = pyrucast.Model.plasticity(fes, "plane_stress")
+materials = pyrucast.build.material_field(
+    model, [("E", 210_000.0), ("nu", 0.3), ("sigma_y", 250.0)]
+)
+
+# Déformation ε(B) issue du champ de déplacement courant (op géométrique).
+strain = pyrucast.field.deformation(u, fes)
+# Intégration A→B : `prev` = sortie du pas précédent (None au premier pas).
+state = pyrucast.behavior.integrate_behavior(model, strain, materials, prev=prev_state)
+sigma_xx = state[0].value(0, 0, "sigma_xx")
+p = state[0].value(0, 0, "p")  # déformation plastique cumulée
+```
+
+Pour réinjecter l'état au pas suivant, il suffit de **passer `state` comme
+`prev`** au prochain appel — la sortie porte déjà l'état complet de B (σ, `VAR1`,
+`ε(B)`). Aucune fusion de champs n'est nécessaire. La **boucle de Newton
+complète** (pas de charge, résidu, résolution, portage de l'état) est écrite
+dans `examples/plasticite_poutre_console.py` — même architecture que la mise en
+donnée Rust ci-dessus.

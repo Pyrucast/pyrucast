@@ -6,7 +6,7 @@ Modèle d'**endommagement isotrope** du béton (Mazars, 1986), formulation
 Mêmes éléments et degrés de liberté que l'[élasticité linéaire](elasticite.md)
 (2-D `TRI3` / `QUA4`, 3-D `TET4` / `HEX8`).
 
-## Équations résolues
+## Équations continues résolues
 
 - **contrainte** : `σ = (1 − D) · D_el : ε` ;
 - **déformation équivalente** : `ε̃ = √(Σ ⟨ε_I⟩₊²)`, somme sur les parts
@@ -32,7 +32,7 @@ négative, on en déduit les déformations associées `εᵗ, εᶜ`, puis
 
 La décomposition spectrale (déformations principales) utilise `nalgebra`.
 
-## Linéarisation et comportement
+## Forme discrétisée
 
 Comme la [plasticité](plasticite.md), Mazars expose deux briques, la boucle de
 Newton restant **pilotée en Python** (voir
@@ -42,11 +42,24 @@ Newton restant **pilotée en Python** (voir
   `K = ∫ Bᵀ D_el B dΩ`, opérateur d'itération ;
 - **comportement** (`COMP`) : la mise à jour `σ`, `D`, `κ` point par point.
 
+La boucle de Newton résout \\( K\,\delta u = F_{\text{ext}} - F_{\text{int}} \\)
+avec les **forces internes** endommagées
+
+\\[
+F_{\text{int}} = \int_\Omega B^\top \sigma\, d\Omega, \qquad
+\sigma = (1 - D)\,D_{\text{el}} : \varepsilon,
+\\]
+
+où \\( B \\) est la matrice déformation-déplacement de
+l'[élasticité](elasticite.md#forme-discrétisée). La rigidité **sécante**
+(élastique non endommagée) sert d'opérateur d'itération ; la loi étant *sécante*
+et non incrémentale, seule la variable d'historique `κ` porte l'irréversibilité.
+
 Le calcul interne est mené en **3-D**. La **déformation plane** impose
 `ε_zz = 0` ; la **contrainte plane** pose `ε_zz = −ν/(1−ν)(ε_xx+ε_yy)` (le
 facteur `(1−D)` se simplifie dans `σ_zz = 0`).
 
-## Variables, matériau, état
+## Variables et matériau
 
 - **primal** : `u_x, u_y(, u_z)` — **dual** : `f_x, f_y(, f_z)`.
 - **matériau** : `E`, `nu`, `eps_d0` (seuil), `A_t, B_t` (traction),
@@ -59,7 +72,7 @@ facteur `(1−D)` se simplifie dans `σ_zz = 0`).
 - **sortie du `COMP`** (= `prev` du pas suivant) : contrainte (`sigma_*`),
   `damage` (le scalaire `D`), et `kappa` mis à jour.
 
-## Exemple Python (la brique `COMP`)
+## Exemple Python
 
 ```python
 import pyrucast
