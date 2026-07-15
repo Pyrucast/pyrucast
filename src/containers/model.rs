@@ -1524,7 +1524,7 @@ mod tests {
         let model = Model::empty();
         assert_eq!(model.primal_vars().unwrap(), Vec::<String>::new());
         assert_eq!(model.dual_vars().unwrap(), Vec::<String>::new());
-        let m = assemble::mass(&model).unwrap();
+        let m = assemble::mass(&model, &ElementField::empty()).unwrap();
         assert_eq!(m.n_rows().unwrap(), 0);
         assert_eq!(m.n_cols().unwrap(), 0);
     }

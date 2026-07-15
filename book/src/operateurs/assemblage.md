@@ -26,11 +26,23 @@ K = pyrucast.assemble.stiffness(model, materials)
 print(K)  # Matrix: n row(s) × n col(s), …
 ```
 
-## `mass(model)` → `Matrix`
+## `mass(model, materials)` → `Matrix`
 
-Assemble la **matrice de masse** `M`. **Stub en v0** : retourne une matrice
-vide. L'intégrande `∫ ρ c_p · N_i N_j dx` (et ses équivalents mécaniques) est
-additif et sera branché quand le besoin transitoire / dynamique se présentera.
+Assemble la **matrice de masse consistante** `M` (Cast3M `MASS`), ou la
+**matrice de capacité thermique** `C` pour un modèle thermique (Cast3M `CAPA`).
+La mécanique assemble `M = ∫ ρ · N_i N_j dx` (matériau `rho`) ; la conduction
+assemble `C = ∫ ρ c_p · N_i N_j dx` (matériau `rho`, `cp`). Une physique sans
+terme de masse (bord de convection, contrainte de Lagrange) ne contribue rien.
+
+`materials` fournit les coefficients par zone, exactement comme `stiffness`. La
+densité `rho` est une composante **facultative** des physiques mécaniques (comme
+`alpha`), `rho` et `cp` des physiques thermiques : la raideur / conductivité
+n'en a pas besoin, mais la masse / capacité les exige (erreur claire sinon).
+
+```python
+materials = pyrucast.build.material_field(model, [("E", 210.0), ("nu", 0.3), ("rho", 7800.0)])
+M = pyrucast.assemble.mass(model, materials)
+```
 
 ## Composition : `assemble(&mut Matrix)` (Rust)
 

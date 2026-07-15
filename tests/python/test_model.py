@@ -129,16 +129,6 @@ def test_dirichlet_empty_constraint_mesh_rejected():
         raise AssertionError("expected error for empty constraint mesh")
 
 
-# ─── Mass (v0: empty stub) ──────────────────────────────────────────────────
-
-
-def test_mass_is_empty_in_v0():
-    _, _, _, _, _, model, *_ = _seg2_heat_model()
-    M = pyrucast.assemble.mass(model)
-    assert M.n_rows() == 0
-    assert M.n_cols() == 0
-
-
 # ─── Physics nature + filtering ─────────────────────────────────────────────
 
 

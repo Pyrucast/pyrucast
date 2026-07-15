@@ -206,18 +206,16 @@ fn build_contribution(
     Ok(blocks)
 }
 
-/// Assemble the mass matrix `M` for `model`.
+/// Assemble the consistent **mass** matrix `M` for `model` (Cast3M `MASS`), or
+/// the **heat-capacity** matrix `C` for a thermal model (Cast3M `CAPA`).
 ///
-/// v0 stub: no physics has a mass term yet, so this returns an empty
-/// finalized [`Matrix`] with the model's DOF layout. Kept alongside
-/// [`stiffness`] so the assembler family lives in one place.
-pub fn mass(model: &Model) -> Result<Matrix> {
-    // `model` is unused until a physics introduces a mass term; binding it
-    // documents the intended signature (assemble over the model's DOFs).
-    let _ = model;
-    let mut m = Matrix::empty();
-    m.finalize()?;
-    Ok(m)
+/// Mechanics contributes `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
+/// contributes `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). A physics with no mass
+/// term (a boundary Robin/convection term, or a Lagrange constraint) contributes
+/// nothing. `materials` supplies the density/heat coefficients zone-wise, exactly
+/// like [`stiffness`].
+pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
+    assemble_kind(model, materials, MatrixKind::Mass, None)
 }
 
 #[cfg(test)]

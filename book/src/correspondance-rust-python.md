@@ -153,7 +153,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | Rust (`ops::assemble::…`) | Python (`pyrucast.assemble.…`) |
 |---|---|
 | `stiffness(model: &Model, materials: &ElementField) -> Matrix` | `stiffness(model, materials) -> Matrix` |
-| `mass(model: &Model) -> Matrix` | `mass(model) -> Matrix` |
+| `mass(model: &Model, materials: &ElementField) -> Matrix` | `mass(model, materials) -> Matrix` |
 | `assemble(k: &mut Matrix) -> Result<()>` | — (Rust : (ré)assemble une matrice depuis ses blocs seuls, sans `Model` — chemin de composition) |
 | `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
 | `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(model, stresses) -> NodeField` |

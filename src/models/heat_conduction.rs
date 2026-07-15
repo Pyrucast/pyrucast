@@ -24,6 +24,10 @@ pub const DUAL_VAR: &str = "q";
 pub const MATERIAL_COMPONENT: &str = "k";
 /// Material contract returned by [`SubModelKind::material_components`].
 const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
+/// Extra material components consumed **only** by the heat-capacity (mass)
+/// matrix: density `rho` and specific heat `cp` (so the volumetric heat capacity
+/// is `ρ·cp`). Optional — the conductivity assembly does not need them.
+const CAPACITY_COMPONENTS: &[&str] = &["rho", "cp"];
 
 /// Axis suffixes for the vector components of the deformation / flux at a
 /// Gauss point, indexed by spatial direction (`x`, `y`, `z`).
@@ -100,6 +104,12 @@ impl SubModelKind for HeatConduction {
         })
     }
 
+    /// The heat-capacity (mass) matrix shares the conductivity layout (same
+    /// fespace, support, single `T` DOF per node) — only the kernel differs.
+    fn mass_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
@@ -108,6 +118,20 @@ impl SubModelKind for HeatConduction {
     ) -> Result<()> {
         let geom = &geoms[0];
         element_stiffness(
+            geom,
+            material.expect("HeatConduction requires a material field"),
+            ke,
+        )
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        element_capacity(
             geom,
             material.expect("HeatConduction requires a material field"),
             ke,
@@ -170,6 +194,12 @@ impl Domain for HeatConduction {
         Some(MATERIAL_COMPONENTS)
     }
 
+    /// `rho` + `cp` — required only by the heat-capacity (mass) matrix, never by
+    /// the conductivity assembly.
+    fn optional_material_components(&self) -> &'static [&'static str] {
+        CAPACITY_COMPONENTS
+    }
+
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
@@ -226,6 +256,36 @@ pub fn element_stiffness(
                     grad_dot += dn[i * space_dim + a] * dn[j * space_dim + a];
                 }
                 ke[i * n_nodes + j] += k * grad_dot * det_j_w;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Element kernel: local **heat-capacity** (mass) matrix of one cell,
+///   `C_local[i, j] = Σ_g ρ·cp · N_i N_j · |J|_g · w_g`,
+/// written into `ke` (flat row-major, side `n_nodes`, `ke[i * n_nodes + j]`).
+/// Density `rho` and specific heat `cp` are read per cell. Pure and sequential.
+pub fn element_capacity(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
+    let n_nodes = geom.n_nodes;
+    let rho = material.value(geom.cell, 0, "rho").map_err(|_| {
+        crate::error::PyrucastError::Message(
+            "HeatConduction capacity matrix: material component `rho` (density) is required".into(),
+        )
+    })?;
+    let cp = material.value(geom.cell, 0, "cp").map_err(|_| {
+        crate::error::PyrucastError::Message(
+            "HeatConduction capacity matrix: material component `cp` (specific heat) is required"
+                .into(),
+        )
+    })?;
+    let rho_cp = rho * cp;
+    for g in 0..geom.n_gauss {
+        let n = geom.n_at_g(g)?;
+        let w = geom.det_j_w(g)? * rho_cp;
+        for i in 0..n_nodes {
+            for j in 0..n_nodes {
+                ke[i * n_nodes + j] += n[i] * n[j] * w;
             }
         }
     }

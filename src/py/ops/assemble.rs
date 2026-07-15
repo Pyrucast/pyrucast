@@ -25,14 +25,16 @@ pub fn stiffness(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyR
     Ok(PyMatrix { inner: k })
 }
 
-/// Assemble the mass matrix `M` of `model`.
+/// Assemble the consistent mass matrix `M` of `model` (Cast3M `MASS`), or the
+/// heat-capacity matrix `C` for a thermal model (Cast3M `CAPA`).
 ///
-/// v0 stub: no physics has a mass term yet, so this returns an empty
-/// finalized `Matrix` with the model's DOF layout.
+/// Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
+/// assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
+/// per-zone coefficients, exactly like [`stiffness`].
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn mass(model: PyRef<PyModel>) -> PyResult<PyMatrix> {
-    let m = crate::ops::assemble::mass(&model.inner)?;
+pub fn mass(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
+    let m = crate::ops::assemble::mass(&model.inner, &materials.inner)?;
     Ok(PyMatrix { inner: m })
 }
 

@@ -219,10 +219,20 @@ mod tests {
     #[test]
     fn sub_filters_extra_components() {
         let (_cfg, hc) = single_hc_sub();
-        let mat = sub_material_field(&hc, &[("k", 2.0), ("rho", 7.0), ("cp", 9.0)]).unwrap();
-        assert_eq!(mat.components(), &["k".to_string()]);
+        // `k` required; `rho`/`cp` optional (heat-capacity) kept because
+        // supplied; a genuinely unknown component is dropped.
+        let mat = sub_material_field(
+            &hc,
+            &[("k", 2.0), ("rho", 7.0), ("cp", 9.0), ("bogus", 1.0)],
+        )
+        .unwrap();
+        assert_eq!(
+            mat.components(),
+            &["k".to_string(), "rho".to_string(), "cp".to_string()]
+        );
         assert!((mat.value(0, 0, "k").unwrap() - 2.0).abs() < 1e-12);
-        assert!(mat.value(0, 0, "rho").is_err());
+        assert!((mat.value(0, 0, "rho").unwrap() - 7.0).abs() < 1e-12);
+        assert!(mat.value(0, 0, "bogus").is_err());
     }
 
     // ── optional material components (e.g. elasticity `alpha`) ──────────────
@@ -264,17 +274,17 @@ mod tests {
     #[test]
     fn unknown_component_still_dropped_with_optionals() {
         let (_cfg, el) = single_elasticity_sub();
-        // "rho" is neither required nor optional ⇒ dropped; alpha kept.
+        // "bogus" is neither required nor optional ⇒ dropped; alpha kept.
         let mat = sub_material_field(
             &el,
-            &[("E", 1.0), ("nu", 0.2), ("alpha", 3.0), ("rho", 7.0)],
+            &[("E", 1.0), ("nu", 0.2), ("alpha", 3.0), ("bogus", 7.0)],
         )
         .unwrap();
         assert_eq!(
             mat.components(),
             &["E".to_string(), "nu".to_string(), "alpha".to_string()]
         );
-        assert!(mat.value(0, 0, "rho").is_err());
+        assert!(mat.value(0, 0, "bogus").is_err());
     }
 
     // ── material_field (uniform over the whole model) ───────────────────

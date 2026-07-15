@@ -143,6 +143,12 @@ impl SubModelKind for Elasticity {
         })
     }
 
+    /// The consistent mass matrix shares the stiffness layout (same fespace,
+    /// support, DOF numbering) — only the kernel differs.
+    fn mass_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
@@ -152,6 +158,17 @@ impl SubModelKind for Elasticity {
         let geom = &geoms[0];
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
         element_stiffness(geom, mat, self.model, ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
+        element_mass(geom, mat, ke)
     }
 
     fn physics(&self) -> &'static [Physics] {
@@ -188,7 +205,7 @@ impl Domain for Elasticity {
     /// assembly. Consumed by
     /// [`crate::ops::field::thermal_strain`](fn@crate::ops::field::thermal_strain).
     fn optional_material_components(&self) -> &'static [&'static str] {
-        &["alpha"]
+        &["alpha", "rho"]
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
@@ -353,6 +370,39 @@ pub fn element_stiffness(
                     acc += b[vv][r] * db[vv][c];
                 }
                 ke[r * dofs + c] += acc * w;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Element kernel: local **consistent mass** `M_e = Σ_g ρ (Nᵀ N) |J| w` of one
+/// cell, written into `ke` (same flat row-major, **node-major / component-minor**
+/// dof order as [`element_stiffness`]). The vector shape-function matrix is
+/// block-diagonal, so `M[(i,a),(j,b)] = δ_ab ρ ∫ N_i N_j`. Density `ρ` is read
+/// from the material component `rho` (constant per cell). Pure and sequential,
+/// law-independent — reused as-is by [`crate::models::plasticity`] and
+/// [`crate::models::mazars`].
+pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
+    let n_nodes = geom.n_nodes;
+    let space_dim = geom.space_dim;
+    let dofs = space_dim * n_nodes;
+    let rho = material.value(geom.cell, 0, "rho").map_err(|_| {
+        PyrucastError::Message(
+            "Elasticity mass matrix: material component `rho` (density) is required".into(),
+        )
+    })?;
+    for g in 0..geom.n_gauss {
+        let n = geom.n_at_g(g)?;
+        let w = geom.det_j_w(g)? * rho;
+        for i in 0..n_nodes {
+            for j in 0..n_nodes {
+                let m = n[i] * n[j] * w;
+                for a in 0..space_dim {
+                    let r = i * space_dim + a;
+                    let c = j * space_dim + a;
+                    ke[r * dofs + c] += m;
+                }
             }
         }
     }

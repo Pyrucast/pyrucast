@@ -153,11 +153,15 @@ def test_sub_model_build_material_field_filters_extras_and_errors_on_missing():
     fes = pyrucast.FiniteElementSpace(mesh)
     hc = pyrucast.Model.heat_conduction(fes)[0]
 
-    # Extras are kept silent — only the declared component ("k") survives.
-    mat = pyrucast.build.sub_material_field(hc, [("k", 2.0), ("rho", 7.0)])
+    # Unknown extras are dropped silently; the required "k" and the optional
+    # heat-capacity components ("rho", "cp") survive when supplied.
+    mat = pyrucast.build.sub_material_field(
+        hc, [("k", 2.0), ("rho", 7.0), ("bogus", 1.0)]
+    )
     assert mat.value(0, 0, "k") == pytest.approx(2.0)
+    assert mat.value(0, 0, "rho") == pytest.approx(7.0)
     with pytest.raises(RuntimeError):
-        mat.value(0, 0, "rho")
+        mat.value(0, 0, "bogus")
 
     # Missing required component → error.
     with pytest.raises(RuntimeError):

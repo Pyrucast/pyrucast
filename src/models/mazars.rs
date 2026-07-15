@@ -137,6 +137,12 @@ impl SubModelKind for Mazars {
         })
     }
 
+    /// The consistent mass matrix shares the stiffness layout (mass is
+    /// law-independent).
+    fn mass_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
@@ -148,6 +154,17 @@ impl SubModelKind for Mazars {
         // elasticity element kernel; it reads only `E` and `nu`.
         let mat = material.expect("Mazars requires a material field");
         elasticity::element_stiffness(geom, mat, self.model, ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material.expect("Mazars requires a material field");
+        elasticity::element_mass(geom, mat, ke)
     }
 
     fn physics(&self) -> &'static [Physics] {
@@ -177,6 +194,11 @@ impl Domain for Mazars {
 
     fn material_components(&self) -> Option<&'static [&'static str]> {
         Some(MATERIAL_COMPONENTS)
+    }
+
+    /// `rho` (density) — required only by the mass matrix.
+    fn optional_material_components(&self) -> &'static [&'static str] {
+        &["rho"]
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
