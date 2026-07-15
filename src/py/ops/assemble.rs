@@ -48,6 +48,20 @@ pub fn lump(matrix: PyRef<PyMatrix>) -> PyResult<PyMatrix> {
     Ok(PyMatrix { inner: m })
 }
 
+/// Assemble the geometric (initial-stress) stiffness `K_g` of `model` (Cast3M
+/// `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
+/// `materials` resolves each mechanical zone, exactly like [`stiffness`].
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn geometric(
+    model: PyRef<PyModel>,
+    materials: PyRef<PyElementField>,
+    stress: PyRef<PyElementField>,
+) -> PyResult<PyMatrix> {
+    let m = crate::ops::assemble::geometric(&model.inner, &materials.inner, &stress.inner)?;
+    Ok(PyMatrix { inner: m })
+}
+
 /// Consistent nodal loads of a distributed flux over `fespace` — the analogue
 /// of Cast3m `FLUX` / `PRES`: `∫ density · N_i dΓ`, returned as a `NodeField`
 /// carrying the single component `component` (the model's dual variable, e.g.

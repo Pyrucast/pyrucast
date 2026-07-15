@@ -58,6 +58,21 @@ M = pyrucast.assemble.mass(model, materials)
 M_lumped = pyrucast.assemble.lump(M)  # diagonale
 ```
 
+## `geometric(model, materials, stress)` → `Matrix`
+
+Assemble la **matrice de rigidité géométrique** (initial-stress) `K_g`
+(Cast3M `KSIG`) : `K_g = ∫ Gᵀ σ̂ G`, le terme de raidissement sous précontrainte,
+pour le flambement et les analyses précontraintes. Le noyau
+`K_g[(i,a),(j,b)] = δ_ab ∫ ∇N_i · σ · ∇N_j` est indépendant de la loi.
+
+`stress` est le champ de contrainte de Cauchy courant (composantes Voigt
+`sigma_*`, typiquement la sortie de `behavior.integrate`), résolu par zone comme
+`materials`. `materials` sert encore à résoudre chaque zone mécanique (`E`, `nu`).
+
+```python
+Kg = pyrucast.assemble.geometric(model, materials, stress)
+```
+
 ## Composition : `assemble(&mut Matrix)` (Rust)
 
 `stiffness` produit une matrice portant des blocs **calculés** (recette, valeurs

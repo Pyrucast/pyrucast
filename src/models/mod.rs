@@ -859,7 +859,7 @@ pub(crate) fn continuum_internal_force_element(
 /// matrix `[a * d + b]`. Backs the continuum-mechanics
 /// [`SubModelKind::internal_force_element`] default; reads by component name, so a
 /// state field carrying extra `VAR1` components (Mazars) is handled transparently.
-fn voigt_stress_matrix(
+pub(crate) fn voigt_stress_matrix(
     stress: &SubElementField,
     cell: usize,
     g: usize,

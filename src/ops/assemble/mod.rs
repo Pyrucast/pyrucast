@@ -219,6 +219,18 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
     assemble_kind(model, materials, MatrixKind::Mass, None)
 }
 
+/// Assemble the **geometric (initial-stress) stiffness** `K_g` for `model`
+/// (Cast3M `KSIG`): `K_g = ∫ Gᵀ σ̂ G`, the stress-stiffening term for buckling
+/// and prestress analyses.
+///
+/// `stress` is the current Cauchy-stress [`ElementField`] (Voigt-named
+/// `sigma_*`, e.g. the output of [`crate::ops::behavior::integrate`]), resolved
+/// zone-wise like `materials`; the kernel is law-independent given it. `materials`
+/// is still used to resolve each mechanical zone (its `E`/`nu`).
+pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Result<Matrix> {
+    assemble_kind(model, materials, MatrixKind::Geometric, Some(stress))
+}
+
 /// **Lump** an assembled matrix into a diagonal one by **row-sum concentration**
 /// (Cast3M `LUMP`): each diagonal entry becomes the sum of its row, every
 /// off-diagonal is dropped. Applied to a consistent mass / heat-capacity matrix

@@ -171,6 +171,12 @@ impl SubModelKind for Plasticity {
         self.stiffness_layout()
     }
 
+    /// The geometric stiffness shares the stiffness layout (initial-stress term
+    /// is law-independent given the current stress).
+    fn geometric_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
@@ -194,6 +200,18 @@ impl SubModelKind for Plasticity {
         let geom = &geoms[0];
         let mat = material.expect("Plasticity requires a material field");
         elasticity::element_mass(geom, mat, ke)
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: Option<&SubElementField>,
+        state: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let stress = state.expect("geometric stiffness requires the current stress field");
+        elasticity::element_geometric(geom, stress, ke)
     }
 
     fn physics(&self) -> &'static [Physics] {

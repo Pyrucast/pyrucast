@@ -149,6 +149,23 @@ impl SubModelKind for Elasticity {
         self.stiffness_layout()
     }
 
+    /// The geometric (initial-stress) stiffness shares the stiffness layout.
+    fn geometric_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: Option<&SubElementField>,
+        state: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let stress = state.expect("geometric stiffness requires the current stress field");
+        element_geometric(geom, stress, ke)
+    }
+
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
@@ -402,6 +419,42 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
                     let r = i * space_dim + a;
                     let c = j * space_dim + a;
                     ke[r * dofs + c] += m;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Element kernel: local **geometric (initial-stress) stiffness**
+///   `Kg[(i,a),(j,b)] = δ_ab Σ_g Σ_cd (∂N_i/∂x_c) σ_cd (∂N_j/∂x_e) |J| w`
+/// of one cell, written into `ke` (same flat, node-major / component-minor dof
+/// order as [`element_stiffness`]). The scalar `∇N_i·σ·∇N_j` is applied to each
+/// displacement component's diagonal block (`δ_ab`). The current Cauchy stress
+/// `σ` (Voigt-named) is read from `state` per Gauss point. Pure and sequential,
+/// law-independent — reused as-is by [`crate::models::plasticity`] and
+/// [`crate::models::mazars`].
+pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f64]) -> Result<()> {
+    let n_nodes = geom.n_nodes;
+    let d = geom.space_dim;
+    let dofs = d * n_nodes;
+    for g in 0..geom.n_gauss {
+        let dn = geom.dn_dx(g)?; // [i * d + c]
+        let w = geom.det_j_w(g)?;
+        let sig = crate::models::voigt_stress_matrix(stress, geom.cell, g, d)?; // [c * d + e]
+        for i in 0..n_nodes {
+            for j in 0..n_nodes {
+                // Scalar gᵢⱼ = Σ_{c,e} (∂N_i/∂x_c) σ_ce (∂N_j/∂x_e).
+                let mut gij = 0.0;
+                for c in 0..d {
+                    for e in 0..d {
+                        gij += dn[i * d + c] * sig[c * d + e] * dn[j * d + e];
+                    }
+                }
+                gij *= w;
+                // Same scalar on every component's diagonal block (δ_ab).
+                for a in 0..d {
+                    ke[(i * d + a) * dofs + (j * d + a)] += gij;
                 }
             }
         }

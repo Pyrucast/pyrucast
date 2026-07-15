@@ -7,6 +7,7 @@ par physique.
 
 from ._pyrucast import (
     flux as flux,
+    geometric as geometric,
     internal_forces as internal_forces,
     internal_forces_continuum as internal_forces_continuum,
     lump as lump,
@@ -16,6 +17,7 @@ from ._pyrucast import (
 
 __all__ = [
     "flux",
+    "geometric",
     "internal_forces",
     "internal_forces_continuum",
     "lump",
