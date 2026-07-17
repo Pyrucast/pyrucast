@@ -73,6 +73,16 @@
 
 - [Thermo-mécanique pas-à-pas](thermomecanique-pas-a-pas.md)
 
+# Formations
+
+- [Formation débutant](formation/debutant.md)
+  - [Présentation de pyrucast](formation/presentation.md)
+  - [Python & conventions pyrucast](formation/langage-python.md)
+  - [Maillage](formation/maillage.md)
+  - [Calcul thermique](formation/thermique.md)
+  - [Calcul mécanique](formation/mecanique.md)
+  - [Compléments](formation/complements.md)
+
 # Développer
 
 - [Vue d'ensemble](developper.md)
