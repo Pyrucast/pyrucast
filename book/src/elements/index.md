@@ -75,6 +75,45 @@ Les éléments **sérendipité** (QUA8, HEX20, PENTA15) ne portent que des nœud
 d'arête ; les **complets** (SEG3, TRI6, TET10, QUA9, HEX27) portent en plus les
 nœuds de face et/ou de volume nécessaires au produit tensoriel \\( Q2 \\) complet.
 
+## Catalogue de quadrature
+
+Le catalogue ci-dessus ne montre, par élément, que la règle **par défaut**
+(`GAUSS`). Une deuxième règle existe — `REDUCED` (intégration réduite : un seul
+point au centroïde, poids = mesure du domaine de référence, exacte pour les
+constantes seulement ; utilisée par exemple pour désamorcer le verrouillage en
+cisaillement de la [poutre de Timoshenko](../mecanique/timoshenko.md)). Le
+tableau croisé suivant donne, pour chaque couple (élément, règle), le nombre de
+points d'intégration \\( n_g \\) si le couple est supporté :
+
+| Élément | GAUSS | REDUCED |
+|---|:---:|:---:|
+| [SEG2](seg2.md) | ✓ (2) | ✓ (1) |
+| [TRI3](tri3.md) | ✓ (3) | ✓ (1) |
+| [QUA4](qua4.md) | ✓ (4) | ✓ (1) |
+| [TET4](tet4.md) | ✓ (4) | ✓ (1) |
+| [PENTA6](penta6.md) | ✓ (6) | ✓ (1) |
+| [HEX8](hex8.md) | ✓ (8) | ✓ (1) |
+| [SEG3](seg3.md) | ✓ (3) | ✓ (1) |
+| [TRI6](tri6.md) | ✓ (6) | ✓ (1) |
+| [QUA8](qua8.md) | ✓ (9) | ✓ (1) |
+| [QUA9](qua9.md) | ✓ (9) | ✓ (1) |
+| [TET10](tet10.md) | ✓ (11) | ✓ (1) |
+| [PENTA15](penta15.md) | ✓ (18) | ✓ (1) |
+| [HEX20](hex20.md) | ✓ (27) | ✓ (1) |
+| [HEX27](hex27.md) | ✓ (27) | ✓ (1) |
+| POI1 | — | — |
+
+`POI1` n'a pas de repère de référence (ce n'est pas un élément fini) : les deux
+règles y sont rejetées (`QuadratureRule::is_compatible_with` renvoie `false`,
+`points`/`point_count` renvoient une erreur). Pour tout autre `ElementType`,
+les deux règles sont actuellement définies — le tableau est donc plein sauf
+sur cette ligne. Il est conservé tel quel pour documenter la compatibilité au
+fur et à mesure que de nouvelles règles (ordres supérieurs, quadratures
+spécialisées) seront ajoutées : celles-ci pourront être incompatibles avec
+certains éléments (p. ex. une règle calibrée pour un degré d'exactitude
+indisponible sur un élément sérendipité), et ce tableau sera le seul endroit à
+mettre à jour.
+
 ## Propriétés communes (vérifiées par les tests)
 
 Toutes les interpolations Lagrange satisfont, à tout point de référence :
