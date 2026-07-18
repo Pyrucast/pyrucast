@@ -79,7 +79,9 @@ def construire_plaque_trouee():
     # par coordonnée, comme pour la bande centrale — pas d'index à la main.
     x = pc.field.coordinates(bord_bas, ["X"])
     noeuds_convection = pc.field.select(x, gt=1e-6)
-    bord_bas_convection = pc.mesher.elements_on(bord_bas, noeuds_convection, strict=True)
+    bord_bas_convection = pc.mesher.elements_on(
+        bord_bas, noeuds_convection, strict=True
+    )
 
     return coords, plaque, bord_bas_convection, bord_gauche, trou
 

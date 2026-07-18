@@ -37,9 +37,7 @@ def bloc(coords: pc.Coords, y0: float):
     (`line_seg2` pour les bords bas/haut, `sweep_qua4` entre les deux, comme
     dans `formation/maillage.py`). Renvoie `(mesh, grille)`, `grille[idx(i,j)]`
     étant le nœud `(i,j)` (`i` : abscisse, `j` : ordonnée)."""
-    bas = pc.mesher.line_seg2(
-        coords.add_node([0.0, y0]), coords.add_node([1.0, y0]), N
-    )
+    bas = pc.mesher.line_seg2(coords.add_node([0.0, y0]), coords.add_node([1.0, y0]), N)
     haut = pc.mesher.line_seg2(
         coords.add_node([0.0, y0 + 1.0]), coords.add_node([1.0, y0 + 1.0]), N
     )
@@ -131,7 +129,9 @@ def main() -> None:
 
     out = os.environ.get("PYRUCAST_FORMATION_IMG_DIR", tempfile.gettempdir())
     chemin = os.path.join(out, "contact.svg")
-    maillage_mult.plot(save=chemin, field=solution, component="lambda_contact", cmap="viridis")
+    maillage_mult.plot(
+        save=chemin, field=solution, component="lambda_contact", cmap="viridis"
+    )
     print(f"Réaction de contact (λ) écrite dans {chemin}")
 
 

@@ -127,7 +127,9 @@ def main() -> None:
 
     out = os.environ.get("PYRUCAST_FORMATION_IMG_DIR", tempfile.gettempdir())
     chemin = os.path.join(out, "plasticite.svg")
-    plaque.plot(save=chemin, field=dernier["state"], component="p", cmap="viridis", smooth=0)
+    plaque.plot(
+        save=chemin, field=dernier["state"], component="p", cmap="viridis", smooth=0
+    )
     print(f"Zone plastique (p) écrite dans {chemin}")
 
 

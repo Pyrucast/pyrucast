@@ -111,7 +111,9 @@ def main() -> None:
     modele = pc.Model.elasticity(fes, "plane_stress")
     modele = modele | pc.Model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
     modele = modele | pc.Model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
-    materiaux = pc.build.material_field(modele, [("E", E), ("nu", NU), ("alpha", ALPHA)])
+    materiaux = pc.build.material_field(
+        modele, [("E", E), ("nu", NU), ("alpha", ALPHA)]
+    )
 
     # Effort de la masse suspendue, réparti sur la moitié basse du trou —
     # analogue de FSUR 'MASS' / PRES 'MASS' (Cast3M section 6).
