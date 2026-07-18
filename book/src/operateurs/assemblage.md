@@ -92,13 +92,15 @@ state = pyrucast.behavior.integrate_behavior(model, strain, materials)
 Kt = pyrucast.assemble.tangent(model, materials, state)
 ```
 
-## Composition : `assemble(&mut Matrix)` (Rust)
+## Composition : `assemble(&mut Matrix)`
 
 `stiffness` produit une matrice portant des blocs **calculés** (recette, valeurs
 produites au scatter) que `Matrix::finalize` ne sait pas assembler seul. Pour
 **recomposer** — ajouter une `SubMatrix` de provenance quelconque à une matrice
-existante puis réassembler — `ops::assemble::assemble(&mut m)` reconstruit le
-motif creux depuis les **blocs seuls** (sans `Model`) et redisperse les valeurs :
+existante (ou combiner plusieurs `Matrix` déjà assemblées via l'union `|`) puis
+réassembler — `ops::assemble::assemble(&mut m)` (Rust) / `pyrucast.assemble.assemble(m)`
+(Python, mutation en place) reconstruit le motif creux depuis les **blocs seuls**
+(sans `Model`) et redisperse les valeurs :
 
 ```rust,ignore
 let mut k = assemble::stiffness(&model, &materials)?;
@@ -106,10 +108,28 @@ k.add_sub(insert(bloc_supplementaire))?;   // invalide l'état assemblé
 assemble::assemble(&mut k)?;                // réassemble, nouveau bloc inclus
 ```
 
+```python
+k = pyrucast.assemble.stiffness(model, materials)
+k.add_sub(bloc_supplementaire)
+pyrucast.assemble.assemble(k)
+```
+
 Contrairement à `stiffness`, ce chemin ne consulte pas le motif mémoïsé sur le
 `Model` (il n'y a pas de `Model` ici) et reconstruit la sparsité à chaque appel —
 adapté à la composition ponctuelle ; le réassemblage à chaud d'un modèle fixe
 reste sur `stiffness`.
+
+C'est aussi le chemin de composition pour la dynamique : chaque `SubMatrix`
+porte un **facteur scalaire** paresseux (`bloc * s` / `bloc / s`, `1.0` par
+défaut — voir [Matrice creuse](../matrix.md#facteur-scalaire-mulf64--divf64-et-combinaison-de-matrices)),
+et l'assembleur somme déjà les contributions d'un même DOF, donc `M/dt + K`
+s'obtient sans opérateur dédié :
+
+```python
+sys = (m / dt) | k
+pyrucast.assemble.assemble(sys)
+u = pyrucast.solver.solve(sys, rhs)
+```
 
 ## Chargement réparti : `flux(fespace, density, component)` → `NodeField`
 

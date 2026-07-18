@@ -38,6 +38,20 @@ pub fn mass(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult
     Ok(PyMatrix { inner: m })
 }
 
+/// Re-assemble `matrix` **from its blocks alone** — no `Model` — mutating it in
+/// place. The composition path: after combining blocks of any provenance (via
+/// `matrix * scalar` / `matrix / scalar`, `|` union, `add_sub`, `filter`, …),
+/// including *computed* ones (which `Matrix.finalize()` refuses — the element
+/// kernel lives outside `containers`), call this to fold everything into one
+/// CSR. Needed, for instance, to solve `(M/dt + K) u = …`:
+/// `sys = (m / dt) | k; assemble(sys); solver.solve(sys, rhs)`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn assemble(mut matrix: PyRefMut<'_, PyMatrix>) -> PyResult<()> {
+    crate::ops::assemble::assemble(&mut matrix.inner)?;
+    Ok(())
+}
+
 /// Lump an assembled matrix into a diagonal one by row-sum concentration
 /// (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
 /// diagonal (lumped) mass, conserving the total mass.

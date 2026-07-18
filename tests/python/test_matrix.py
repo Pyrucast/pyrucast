@@ -47,6 +47,13 @@ def test_sub_matrix_symmetric_flag():
     assert m.symmetric is True
 
 
+def test_sub_matrix_factor_defaults_to_one():
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    m = _make_block(c, [a], [a], ["q"], ["T"])
+    assert m.factor == 1.0
+
+
 # ─── SubMatrix — add_entry / get ────────────────────────────────────────────
 
 
@@ -271,6 +278,100 @@ def test_matrix_entries_concatenates_blocks():
     assert len(entries) == 2
     assert entries[0] == (a.id, "q", a.id, "T", 1.0)
     assert entries[1] == (b.id, "q", b.id, "T", 2.0)
+
+
+def test_matrix_mul_field_returns_matrix_vector_product():
+    """`matrix * NodeField` (unchanged despite `__mul__` now also accepting a
+    `float` — the two are dispatched by `extract`)."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    block = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetric=True)
+    block.add_entry(a, "q", a, "T", 2.0)
+    block.add_entry(a, "q", b, "T", -1.0)
+    block.add_entry(b, "q", a, "T", -1.0)
+    block.add_entry(b, "q", b, "T", 2.0)
+    k = pyrucast.Matrix()
+    k.add_sub(block)
+    k.finalize()
+
+    x_mesh = pyrucast.Mesh(c, "POI1")
+    x_mesh.unit().add_cell([a])
+    x_mesh.unit().add_cell([b])
+    x = pyrucast.NodeField(x_mesh, ["T"])
+    x[0].set_value(a, "T", 1.0)
+    x[0].set_value(b, "T", 1.0)
+
+    y = k * x
+    assert y.value(a, "q") == 1.0
+    assert y.value(b, "q") == 1.0
+
+
+def test_matrix_mul_and_truediv_scale_by_factor():
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    block = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetric=True)
+    block.add_entry(a, "q", a, "T", 2.0)
+    block.add_entry(b, "q", b, "T", 4.0)
+    k = pyrucast.Matrix()
+    k.add_sub(block)
+
+    scaled = k * 2.5
+    assert scaled[0].factor == 2.5
+    assert k[0].factor == 1.0, "k must be untouched by scaling"
+    scaled.finalize()
+    assert scaled.get(a, "q", a, "T") == 5.0
+    assert scaled.get(b, "q", b, "T") == 10.0
+
+    halved = scaled / 2.0
+    assert halved[0].factor == 1.25
+    assert scaled[0].factor == 2.5, "/ must not mutate its source either"
+    halved.finalize()
+    assert halved.get(a, "q", a, "T") == 2.5
+    assert halved.get(b, "q", b, "T") == 5.0
+
+
+def test_assemble_reassembles_scaled_mass_union_stiffness():
+    """`M/dt + K` via `(mass / dt) | stiffness` then `pyrucast.assemble.assemble`
+    — the dynamics idiom documented in book/src/matrix.md. `K` carries the
+    Dirichlet multiplier DOF that `M` doesn't (a constraint only ever enters
+    the stiffness matrix); the union/reassembly must still work and leave
+    that DOF's entries untouched by `M`."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    mesh = pyrucast.Mesh(c, "SEG2")
+    mesh.unit().add_cell([a, b])
+    fes = pyrucast.FiniteElementSpace(mesh)
+
+    imposed = pyrucast.mesher.poi1_from_nodes([a])
+    mult_mesh = pyrucast.mesher.barycenter(imposed)
+    mult = mult_mesh.node(0, 0, 0)
+    dirichlet = pyrucast.Model.dirichlet("T", "q", imposed, mult_mesh)
+    model = pyrucast.Model.heat_conduction(fes) | dirichlet
+    materials = pyrucast.build.material_field(
+        model, [("k", 1.0), ("rho", 2.0), ("cp", 3.0)]
+    )
+
+    k = pyrucast.assemble.stiffness(model, materials)
+    m = pyrucast.assemble.mass(model, materials)
+
+    dt = 0.5
+    m_dt = m / dt
+    sys = m_dt | k
+    pyrucast.assemble.assemble(sys)
+
+    tol = 1e-12
+    # K_e = k/h·[[1,-1],[-1,1]] = [[1,-1],[-1,1]] (h=1); C_e = ρcp·h/6·[[2,1],[1,2]]
+    # = [[2,1],[1,2]] (ρ=2, cp=3); M/dt = C/0.5 = [[4,2],[2,4]].
+    assert abs(sys.get(a, "q", a, "T") - (1.0 + 4.0)) < tol
+    assert abs(sys.get(a, "q", b, "T") - (-1.0 + 2.0)) < tol
+    assert abs(sys.get(b, "q", a, "T") - (-1.0 + 2.0)) < tol
+    assert abs(sys.get(b, "q", b, "T") - (1.0 + 4.0)) < tol
+    # The multiplier row/col is K's alone — M never carries it.
+    assert sys.get(mult, "T", a, "T") == k.get(mult, "T", a, "T")
+    assert sys.get(a, "q", mult, "T") == k.get(a, "q", mult, "T")
 
 
 def test_matrix_repr_and_str():

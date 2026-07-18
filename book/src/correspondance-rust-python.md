@@ -157,7 +157,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `lump(m: &Matrix) -> Matrix` | `lump(matrix) -> Matrix` |
 | `geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Matrix` | `geometric(model, materials, stress) -> Matrix` |
 | `tangent(model: &Model, materials: &ElementField, state: &ElementField) -> Matrix` | `tangent(model, materials, state) -> Matrix` |
-| `assemble(k: &mut Matrix) -> Result<()>` | — (Rust : (ré)assemble une matrice depuis ses blocs seuls, sans `Model` — chemin de composition) |
+| `assemble(k: &mut Matrix) -> Result<()>` | `assemble(matrix) -> None` (mutation en place — (ré)assemble une matrice depuis ses blocs seuls, sans `Model` : chemin de composition, ex. `M/dt + K`) |
 | `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
 | `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(model, stresses) -> NodeField` |
 | `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
@@ -231,6 +231,22 @@ valeur).
 > constants valant 1 s'additionnent en un champ constant valant 2. Pour
 > fusionner des zones avec vérification (et non additionner) : `merge(a, b)`
 > ≡ `a | b`.
+
+### Facteur scalaire et produit matrice-vecteur sur `Matrix` / `SubMatrix`
+
+`Matrix.__mul__` **dispatche selon l'opérande droite**, comme l'arithmétique de
+champ ci-dessus : un `NodeField` déclenche le produit matrice-vecteur
+(`mul_field`), un `float` la mise à l'échelle **paresseuse** du facteur (voir
+[Matrice creuse](../matrix.md#facteur-scalaire-mulf64--divf64-et-combinaison-de-matrices)).
+`/` n'existe que pour le facteur (`Matrix` n'a pas de division matrice-vecteur).
+Comme pour les champs, `*`/`/` renvoient une **nouvelle** `Matrix` — jamais de
+mutation en place — et ne sont **pas** la composition (`|`, ci-dessous).
+
+| Classe | Opérateurs / méthodes Python | Sémantique | Backing Rust |
+|---|---|---|---|
+| `Matrix` | `k * field` | produit matrice-vecteur `A·x`, `NodeField` neuf | `Matrix::mul_field`, `Mul<&NodeField>` |
+| `Matrix` | `k * s`, `k / s` (`s`: `float`) | facteur scalaire, blocs clonés dans de nouveaux slots (aucune valeur réécrite), `k` inchangée | `Mul`/`Div<f64> for &Matrix` |
+| `SubMatrix` | `.factor` (lecture seule) | facteur courant du bloc (`1.0` par défaut) | `SubMatrix::factor` |
 
 ### Indexation par clé
 

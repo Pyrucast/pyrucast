@@ -76,6 +76,13 @@ impl PySubMatrix {
         Ok(read(&self.handle)?.symmetric())
     }
 
+    /// The scalar factor applied to every value this block emits (`1.0` unless
+    /// the parent `Matrix` was built via `matrix * scalar` / `matrix / scalar`).
+    #[getter]
+    fn factor(&self) -> PyResult<f64> {
+        Ok(read(&self.handle)?.factor())
+    }
+
     /// The physics nature(s) of the sub-model that produced this block, as a list
     /// of tags (`"mechanical"`, `"thermal"`, `"constraint"`, `"other"`). **Empty**
     /// for a block built outside assembly (the "rien" case), or several tags for a
@@ -307,11 +314,28 @@ impl PyMatrix {
         Ok(self.inner.mul_dense(&x)?)
     }
 
-    /// `y = A · x` against a `NodeField` (`matrix * field`). `x` is read at the
-    /// matrix's column DOFs; the result is a fresh `NodeField` over its row DOFs.
-    fn __mul__(&self, rhs: PyRef<'_, PyNodeField>) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: self.inner.mul_field(&rhs.inner)?,
+    /// `matrix * x` — either a matrix-vector product against a `NodeField` (`x`
+    /// read at the matrix's column DOFs, result a fresh `NodeField` over its row
+    /// DOFs) or, for a `float`, a scalar scale: a fresh `Matrix` whose blocks
+    /// carry the scaled `factor` (lazy — no value is rewritten). The scaled
+    /// result is **not** finalized; call `finalize()` (or `assemble` for computed
+    /// blocks) before solving or querying it.
+    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let py = rhs.py();
+        if let Ok(field) = rhs.extract::<PyRef<'_, PyNodeField>>() {
+            let inner = self.inner.mul_field(&field.inner)?;
+            return Ok(Py::new(py, PyNodeField { inner })?.into_any());
+        }
+        let s: f64 = rhs.extract()?;
+        let inner = (&self.inner * s)?;
+        Ok(Py::new(py, PyMatrix { inner })?.into_any())
+    }
+
+    /// `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
+    /// `factor` (lazy). Not finalized; see `__mul__`.
+    fn __truediv__(&self, rhs: f64) -> PyResult<PyMatrix> {
+        Ok(PyMatrix {
+            inner: (&self.inner / rhs)?,
         })
     }
 

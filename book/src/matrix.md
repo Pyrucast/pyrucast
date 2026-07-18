@@ -71,6 +71,50 @@ Les opérations qui profitent du creux (matrice-vecteur, factorisation directe) 
 - [`Matrix::to_coo`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CooMatrix<f64>`
 - [`Matrix::to_dmatrix`](#api-rust--accès-en-lecture) → `nalgebra::DMatrix<f64>`
 
+## Facteur scalaire (`Mul<f64>` / `Div<f64>`) et combinaison de matrices
+
+Chaque `SubMatrix` porte un **facteur** `f64`, `1.0` par défaut, multiplié ou divisé par
+`bloc * s` / `bloc / s`. Le facteur ne touche **que** ce champ — jamais les valeurs
+stockées (`coo`) — ce qui le rend utilisable aussi bien sur un bloc **littéral** que sur
+un bloc **calculé** (dont les valeurs n'existent qu'à l'assemblage, produites par le
+noyau élémentaire). Il est pris en compte partout où une valeur du bloc est lue ou
+émise : les accesseurs directs (`get`, `dense`, `to_dmatrix`, `to_coo`, `to_csr`,
+`to_csc`, `mul_dense`) et les deux passes d'assemblage global (`Matrix::finalize` et
+`ops::assemble::scatter`, calculé comme littéral). Seules les formes **locales** brutes
+(`local_triplets`, `local_coo_arrays`) restent non mises à l'échelle — ce sont des vues
+internes destinées au remappage global, chaque consommateur y applique le facteur
+lui-même.
+
+`&Matrix * s` / `&Matrix / s` mettent à l'échelle une matrice entière : chaque bloc est
+**cloné** dans un nouveau slot de store avec son facteur ajusté — jamais muté en place.
+C'est nécessaire car `add_sub`/`union`/`filter`/`subset` **partagent** les
+`Handle<SubMatrix>` (refcount, même slot) plutôt que de les copier ; muter le facteur
+en place risquerait de rescaler silencieusement toute autre `Matrix` référençant le
+même bloc. Comme pour `filter`, le résultat n'est **pas assemblé** — `finalize()` ou
+`ops::assemble::assemble()` avant de résoudre.
+
+```rust,ignore
+let m_dt = (&m / dt)?;      // facteur = 1/dt sur chaque bloc de M, aucune valeur réécrite
+assert_eq!(m.get(a, "q", a, "T"), m_dt.get(a, "q", a, "T") * dt); // m inchangée
+```
+
+**Pas d'opérateur `Matrix + Matrix`** : l'assembleur somme déjà les contributions qui
+tombent sur le même `(row, col)` global (`build_global_triplets`,
+`scatter_serial`/`scatter_parallel`). `M/dt + K` s'obtient donc avec les primitives
+existantes — l'union `|` (partage de blocs, pas de copie) suivie d'un réassemblage :
+
+```rust,ignore
+let mut sys = (&(&m / dt)? | &k)?;
+ops::assemble::assemble(&mut sys)?;   // requis dès qu'un bloc calculé est présent
+let rhs = (&f_ext + &(&m_dt * &u0)?)?;
+let u = solver::lu::solve(&sys, &rhs)?;
+```
+
+Aucun traitement particulier n'est nécessaire quand `K` et `M` n'ont pas le même
+ensemble de DOFs (cas courant : un Dirichlet/MPC n'entre que dans la matrice de
+raideur, jamais dans la masse) — l'union prend simplement l'union des DOFs des deux
+côtés, et les blocs de `M` ne contribuent rien aux DOFs qu'ils ne portent pas.
+
 ## Drapeau `symmetric`
 
 `Matrix::new(symmetric: bool)` accepte un drapeau qui déclare l'intention de l'assembleur :
@@ -204,6 +248,20 @@ y_field = k * x  # x: pyrucast.NodeField
 # Itération brute sur les triplets (ordre d'insertion).
 for row_node, row_field, col_node, col_field, value in k.entries():
     pass
+
+# Facteur scalaire — chaque bloc a un `.factor` en lecture seule (1.0 par défaut).
+assert k[0].factor == 1.0
+
+# `matrix * scalaire` / `matrix / scalaire` : une Matrix neuve, blocs clonés avec
+# leur facteur ajusté (aucune valeur réécrite) ; k reste inchangée.
+m_dt = m / dt
+assert m[0].factor == 1.0          # m inchangée
+assert m_dt[0].factor == 1.0 / dt
+
+# `matrix * NodeField` (produit matrice-vecteur) coexiste avec `matrix * scalaire` :
+# le type de l'opérande de droite détermine laquelle des deux opérations s'exécute.
+sys = m_dt | k
+sys.finalize()   # (ou `pyrucast.assemble.assemble(sys)` si des blocs sont calculés)
 ```
 
 ## Sérialisation

@@ -510,6 +510,30 @@ mod tests {
         assert_eq!(csr.values(), csr_ref.values());
     }
 
+    /// `SubMatrix::factor` scales every entry the **serial** scatter emits, on
+    /// both branches: the computed heat-conduction blocks and the literal
+    /// Dirichlet C/Cᵀ block (`assemble_computed_blocks` mixes both, per its doc).
+    #[test]
+    fn scatter_serial_applies_factor_to_computed_and_literal_blocks() {
+        let (model, materials) = chain_heat_with_dirichlet(6);
+        let k = assemble_computed_blocks(&model, &materials);
+        let pattern = scatter::build_pattern(&k).unwrap();
+        let csr_unscaled = scatter::scatter_serial(&k, &pattern).unwrap();
+
+        let scaled = (&k * 3.0).unwrap();
+        let pattern_scaled = scatter::build_pattern(&scaled).unwrap();
+        let csr_scaled = scatter::scatter_serial(&scaled, &pattern_scaled).unwrap();
+
+        assert_eq!(csr_scaled.row_offsets(), csr_unscaled.row_offsets());
+        assert_eq!(csr_scaled.col_indices(), csr_unscaled.col_indices());
+        for (x, y) in csr_scaled.values().iter().zip(csr_unscaled.values()) {
+            assert!(
+                (x - 3.0 * y).abs() <= 1e-9 * (1.0 + y.abs()),
+                "value mismatch: {x} vs 3×{y}"
+            );
+        }
+    }
+
     /// The **parallel** colour-driven scatter (`stiffness`) matches the literal
     /// reference to floating tolerance — the sparsity is identical, the values
     /// agree up to the reordered summation the colouring induces (so *not*
@@ -528,6 +552,34 @@ mod tests {
             assert!(
                 (x - y).abs() <= 1e-12 * (1.0 + y.abs()),
                 "value mismatch: {x} vs {y}"
+            );
+        }
+    }
+
+    /// Scaling the real production `stiffness()` output (computed volumetric
+    /// blocks + literal Dirichlet block) with `Matrix * f64`, then re-assembling
+    /// with `ops::assemble::assemble` (required: `finalize` refuses a computed
+    /// block), matches the literal reference scaled by hand.
+    #[test]
+    fn scaled_stiffness_matches_scaled_literal_reference() {
+        let (model, materials) = chain_heat_with_dirichlet(6);
+        let k = stiffness(&model, &materials).unwrap();
+        let mut scaled = (&k * 2.5).unwrap();
+        assert!(
+            scaled.finalize().is_err(),
+            "finalize must still refuse a computed block after scaling"
+        );
+        assemble(&mut scaled).unwrap();
+
+        let k_ref = assemble_literal_reference(&model, &materials).unwrap();
+        let csr_new = scaled.to_csr().unwrap();
+        let csr_ref = k_ref.to_csr().unwrap();
+        assert_eq!(csr_new.row_offsets(), csr_ref.row_offsets());
+        assert_eq!(csr_new.col_indices(), csr_ref.col_indices());
+        for (x, y) in csr_new.values().iter().zip(csr_ref.values()) {
+            assert!(
+                (x - 2.5 * y).abs() <= 1e-9 * (1.0 + y.abs()),
+                "value mismatch: {x} vs 2.5×{y}"
             );
         }
     }

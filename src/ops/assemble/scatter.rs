@@ -187,14 +187,16 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                         ))
                     }
                 };
+                let factor = blk.factor();
                 for (cell, cell_slots) in per_cell.iter().zip(slots) {
                     for (&(_, _, v), &slot) in cell.iter().zip(cell_slots) {
-                        values[slot] += v;
+                        values[slot] += v * factor;
                     }
                 }
             }
             None => {
                 let (_, _, lv) = blk.local_coo_arrays();
+                let factor = blk.factor();
                 let slots = match &pattern.block_slots[bi] {
                     BlockSlots::Literal(s) => s,
                     BlockSlots::Computed(_) => {
@@ -204,7 +206,7 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                     }
                 };
                 for (&slot, &v) in slots.iter().zip(lv) {
-                    values[slot] += v;
+                    values[slot] += v * factor;
                 }
             }
         }
@@ -291,16 +293,18 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                 // Scatter colour by colour: within a colour, cells write disjoint
                 // slots ⇒ the parallel atomic stores never race. Slots are
                 // precomputed (indexed cell-for-cell, entry-for-entry).
+                let factor = blk.factor();
                 for color in coloring {
                     color.par_iter().for_each(|&cell| {
                         for (&(_, _, v), &slot) in per_cell[cell].iter().zip(&slots[cell]) {
-                            add_atomic(&values[slot], v);
+                            add_atomic(&values[slot], v * factor);
                         }
                     });
                 }
             }
             None => {
                 let (_, _, lv) = blk.local_coo_arrays();
+                let factor = blk.factor();
                 let slots = match &pattern.block_slots[bi] {
                     BlockSlots::Literal(s) => s,
                     BlockSlots::Computed(_) => {
@@ -310,7 +314,7 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                     }
                 };
                 for (&slot, &v) in slots.iter().zip(lv) {
-                    add_atomic(&values[slot], v);
+                    add_atomic(&values[slot], v * factor);
                 }
             }
         }

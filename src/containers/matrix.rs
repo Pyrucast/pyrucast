@@ -177,7 +177,13 @@ pub struct ComputedRecipe {
     pub state: Option<Handle<SubElementField>>,
 }
 
-#[derive(Serialize, Deserialize)]
+/// Default value of [`SubMatrix::factor`] for pre-existing serialized data
+/// that predates the field.
+fn default_factor() -> f64 {
+    1.0
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SubMatrix {
     /// POI1 mesh: cell `k` holds the k-th row-support node.
     row_support: Handle<SubMesh>,
@@ -211,6 +217,16 @@ pub struct SubMatrix {
     /// [`Matrix::filter`](Matrix::filter).
     #[serde(default)]
     physics: Vec<Physics>,
+    /// Lazy scalar scale applied to every value this block emits — at direct
+    /// accessors (`get`, `dense`, …) and at global assembly (`build_global_triplets`,
+    /// [`crate::ops::assemble::scatter`]) alike. Defaults to `1.0`; set via
+    /// `Mul<f64>`/`Div<f64>` ([`std::ops::Mul`], [`std::ops::Div`]) rather than
+    /// eagerly rewriting `coo`, so it works for a **computed** block too (its
+    /// values don't exist until assembly evaluates the recipe). Never touches
+    /// `local_coo_arrays`/`local_triplets`, which stay raw — every consumer of
+    /// those applies the factor itself.
+    #[serde(default = "default_factor")]
+    factor: f64,
     /// `NodeId → local position` for O(1) `add_entry`, derived from
     /// `row_nodes` / `col_nodes`. Not serialized; built lazily on first use
     /// (the support is fixed at construction).
@@ -253,6 +269,7 @@ impl SubMatrix {
             symmetric,
             recipe: None,
             physics: Vec::new(),
+            factor: 1.0,
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
@@ -292,6 +309,7 @@ impl SubMatrix {
             symmetric,
             recipe: Some(recipe),
             physics: Vec::new(),
+            factor: 1.0,
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
@@ -340,6 +358,7 @@ impl SubMatrix {
             symmetric,
             recipe: None,
             physics: Vec::new(),
+            factor: 1.0,
             row_index: HashMap::new(),
             col_index: HashMap::new(),
         })
@@ -369,6 +388,13 @@ impl SubMatrix {
     /// select by nature (matched by containment).
     pub fn set_physics(&mut self, physics: Vec<Physics>) {
         self.physics = physics;
+    }
+
+    /// The scalar factor applied to every value this block emits (`1.0` unless
+    /// scaled via `Mul<f64>`/`Div<f64>`) — see the struct-level field doc for
+    /// exactly where it is and isn't applied.
+    pub fn factor(&self) -> f64 {
+        self.factor
     }
 
     /// Whether the assembler declared this block numerically symmetric.
@@ -534,14 +560,16 @@ impl SubMatrix {
 
     /// COO entries in **local** index form `(row, col, value)` — the block's own
     /// numbering. Used by the aggregate to scatter into the global matrix via a
-    /// per-block translation table.
+    /// per-block translation table. **Not** scaled by [`SubMatrix::factor`]: the
+    /// caller applies it (every consumer inside `containers`/`ops::assemble` does).
     pub fn local_triplets(&self) -> impl Iterator<Item = (usize, usize, f64)> + '_ {
         self.coo.triplet_iter().map(|(r, c, &v)| (r, c, v))
     }
 
     /// The block's COO as raw parallel slices `(rows, cols, values)`, in
     /// **local** index form. Same data as [`local_triplets`](Self::local_triplets)
-    /// but indexable, so the aggregate can remap the entries in parallel.
+    /// but indexable, so the aggregate can remap the entries in parallel. **Not**
+    /// scaled by [`SubMatrix::factor`] — see [`local_triplets`](Self::local_triplets).
     pub fn local_coo_arrays(&self) -> (&[usize], &[usize], &[f64]) {
         (
             self.coo.row_indices(),
@@ -584,14 +612,16 @@ impl SubMatrix {
         let ri = self.ordering.to_index(rnl, rvi, n_rn, n_dv);
         let ci = self.ordering.to_index(cnl, cvi, n_cn, n_pv);
 
-        self.coo
+        let raw: f64 = self
+            .coo
             .row_indices()
             .iter()
             .zip(self.coo.col_indices())
             .zip(self.coo.values())
             .filter(|&((&r, &c), _)| r == ri && c == ci)
             .map(|(_, &v)| v)
-            .sum()
+            .sum();
+        raw * self.factor
     }
 
     /// All COO triplets, in insertion order, with DOFs materialised as
@@ -615,7 +645,7 @@ impl SubMatrix {
                     self.dual_vars[rvi].clone(),
                     self.col_nodes[cnl],
                     self.primal_vars[cvi].clone(),
-                    v,
+                    v * self.factor,
                 )
             })
             .collect()
@@ -646,24 +676,32 @@ impl SubMatrix {
             .zip(self.coo.col_indices())
             .zip(self.coo.values())
         {
-            out[(r, c)] += v;
+            out[(r, c)] += v * self.factor;
         }
         out
     }
 
-    /// The internal COO matrix (cloned).
+    /// The internal COO matrix, with [`SubMatrix::factor`] baked in (cloned as-is
+    /// when the factor is `1.0`, rebuilt with scaled values otherwise).
     pub fn to_coo(&self) -> CooMatrix<f64> {
-        self.coo.clone()
+        if self.factor == 1.0 {
+            return self.coo.clone();
+        }
+        let mut out = CooMatrix::new(self.coo.nrows(), self.coo.ncols());
+        for (r, c, &v) in self.coo.triplet_iter() {
+            out.push(r, c, v * self.factor);
+        }
+        out
     }
 
-    /// Convert this block to a [`nalgebra_sparse::CsrMatrix`].
+    /// Convert this block to a [`nalgebra_sparse::CsrMatrix`] (factor applied).
     pub fn to_csr(&self) -> CsrMatrix<f64> {
-        CsrMatrix::from(&self.coo)
+        CsrMatrix::from(&self.to_coo())
     }
 
-    /// Convert this block to a [`nalgebra_sparse::CscMatrix`].
+    /// Convert this block to a [`nalgebra_sparse::CscMatrix`] (factor applied).
     pub fn to_csc(&self) -> CscMatrix<f64> {
-        CscMatrix::from(&self.coo)
+        CscMatrix::from(&self.to_coo())
     }
 
     /// `y = A · x` (dense). Returns an error if `x.len() != n_cols`.
@@ -682,6 +720,43 @@ impl SubMatrix {
     }
 }
 
+// ─── SubMatrix scalar operators ─────────────────────────────────────────────
+//
+// `blk * s` / `blk / s` only touch `factor` — never the stored `coo` — so they
+// are zero-copy and work identically for a literal block (values live in `coo`)
+// and a computed one (values don't exist until assembly evaluates the recipe).
+// No `Add`/`Sub<f64>`: shifting a matrix by a constant has no physical meaning.
+
+impl std::ops::Mul<f64> for SubMatrix {
+    type Output = SubMatrix;
+    fn mul(mut self, rhs: f64) -> SubMatrix {
+        self.factor *= rhs;
+        self
+    }
+}
+
+impl std::ops::Mul<f64> for &SubMatrix {
+    type Output = SubMatrix;
+    fn mul(self, rhs: f64) -> SubMatrix {
+        self.clone() * rhs
+    }
+}
+
+impl std::ops::Div<f64> for SubMatrix {
+    type Output = SubMatrix;
+    fn div(mut self, rhs: f64) -> SubMatrix {
+        self.factor /= rhs;
+        self
+    }
+}
+
+impl std::ops::Div<f64> for &SubMatrix {
+    type Output = SubMatrix;
+    fn div(self, rhs: f64) -> SubMatrix {
+        self.clone() / rhs
+    }
+}
+
 impl fmt::Debug for SubMatrix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SubMatrix")
@@ -692,6 +767,7 @@ impl fmt::Debug for SubMatrix {
             .field("dual_vars", &self.dual_vars)
             .field("primal_vars", &self.primal_vars)
             .field("ordering", &self.ordering)
+            .field("factor", &self.factor)
             .finish()
     }
 }
@@ -711,14 +787,20 @@ impl fmt::Display for SubMatrix {
             let tags: Vec<&str> = self.physics.iter().map(|p| p.to_tag()).collect();
             format!(", {}", tags.join("+")).into()
         };
+        let factor: std::borrow::Cow<str> = if self.factor == 1.0 {
+            "".into()
+        } else {
+            format!(", ×{}", self.factor).into()
+        };
         write!(
             f,
-            "SubMatrix: {} row(s) × {} col(s), {}{}{}",
+            "SubMatrix: {} row(s) × {} col(s), {}{}{}{}",
             self.coo.nrows(),
             self.coo.ncols(),
             entries,
             if self.symmetric { ", symmetric" } else { "" },
             physics,
+            factor,
         )
     }
 }
@@ -1152,9 +1234,10 @@ impl Matrix {
             let trow: Vec<usize> = sub.row_dofs().iter().map(|d| row_map[d]).collect();
             let tcol: Vec<usize> = sub.col_dofs().iter().map(|d| col_map[d]).collect();
             let (lr, lc, lv) = sub.local_coo_arrays();
+            let factor = sub.factor();
             let block: Vec<(usize, usize, f64)> = (0..lv.len())
                 .into_par_iter()
-                .map(|k| (trow[lr[k]], tcol[lc[k]], lv[k]))
+                .map(|k| (trow[lr[k]], tcol[lc[k]], lv[k] * factor))
                 .collect();
             if out.is_empty() {
                 out = block;
@@ -1528,6 +1611,23 @@ impl Matrix {
         let y = self.mul_dense(&x)?;
         self.field_from_row_values(&y)
     }
+
+    /// A fresh [`Matrix`] with every block replaced by `f(block.clone())`, each
+    /// re-inserted under a **new store slot**. Backs the scalar operators
+    /// (`Mul<f64>`/`Div<f64>`, which only touch each clone's `factor`). Never
+    /// mutates `self` or any of its blocks in place: `add_sub`/`union`/`filter`
+    /// share `Handle<SubMatrix>`s (same store slot, refcount bump — see
+    /// [`Aggregate::subset`]), so scaling in place would silently rescale every
+    /// other `Matrix` aliasing the same block. Like [`filter`](Self::filter), the
+    /// result is **not assembled**.
+    fn map_blocks(&self, f: impl Fn(SubMatrix) -> SubMatrix) -> Result<Matrix> {
+        let mut out = Matrix::empty();
+        for h in self {
+            let scaled = f((*read(h)?).clone());
+            out.add_sub(insert(scaled))?;
+        }
+        Ok(out)
+    }
 }
 
 impl std::ops::Mul<&NodeField> for &Matrix {
@@ -1543,6 +1643,43 @@ impl std::ops::Mul<&NodeField> for Matrix {
     type Output = Result<NodeField>;
     fn mul(self, rhs: &NodeField) -> Self::Output {
         self.mul_field(rhs)
+    }
+}
+
+// ─── Matrix scalar operators ────────────────────────────────────────────────
+//
+// `&matrix * s` / `&matrix / s` — a fresh `Matrix` whose blocks are scaled
+// clones of `self`'s (see `map_blocks`). Fallible (store reads), like the
+// crate's other `Matrix` operators. No `Matrix + Matrix`: the assembler already
+// sums contributions landing on the same global `(row, col)`
+// ([`crate::ops::assemble::assemble`]), so `M/dt + K` is `(&(&m / dt)? | &k)?`
+// followed by `ops::assemble::assemble(&mut sys)` — see `book/src/matrix.md`.
+
+impl std::ops::Mul<f64> for &Matrix {
+    type Output = Result<Matrix>;
+    fn mul(self, rhs: f64) -> Self::Output {
+        self.map_blocks(|b| b * rhs)
+    }
+}
+
+impl std::ops::Mul<f64> for Matrix {
+    type Output = Result<Matrix>;
+    fn mul(self, rhs: f64) -> Self::Output {
+        (&self).mul(rhs)
+    }
+}
+
+impl std::ops::Div<f64> for &Matrix {
+    type Output = Result<Matrix>;
+    fn div(self, rhs: f64) -> Self::Output {
+        self.map_blocks(|b| b / rhs)
+    }
+}
+
+impl std::ops::Div<f64> for Matrix {
+    type Output = Result<Matrix>;
+    fn div(self, rhs: f64) -> Self::Output {
+        (&self).div(rhs)
     }
 }
 
@@ -1876,6 +2013,69 @@ mod tests {
     }
 
     #[test]
+    fn sub_round_trip_serde_with_non_default_factor() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let a = nodes[0].id();
+        let mut m = SubMatrix::new(
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        m.add_entry(a, "q", a, "T", 2.0).unwrap();
+        let m = m * 2.5;
+        use crate::persist::Persist;
+        let bytes = m.to_bytes().unwrap();
+        let m2 = SubMatrix::from_bytes(&bytes).unwrap();
+        assert_eq!(m2.factor(), 2.5);
+        assert_eq!(m2.get(a, "q", a, "T"), 5.0);
+    }
+
+    #[test]
+    fn sub_matrix_mul_and_div_scale_only_the_factor() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let a = nodes[0].id();
+        let mut m = SubMatrix::new(
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        m.add_entry(a, "q", a, "T", 2.0).unwrap();
+        assert_eq!(m.factor(), 1.0);
+
+        // Reference version clones, leaving `m` untouched.
+        let scaled = &m * 3.0;
+        assert_eq!(scaled.factor(), 3.0);
+        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        assert_eq!(scaled.dense(), vec![6.0]);
+        assert_eq!(scaled.iter_entries()[0].4, 6.0);
+        assert_eq!(
+            m.get(a, "q", a, "T"),
+            2.0,
+            "reference Mul must not mutate m"
+        );
+
+        // Consuming version chains: ×3 then ÷2 ⇒ factor 1.5.
+        let halved = scaled / 2.0;
+        assert_eq!(halved.factor(), 1.5);
+        assert_eq!(halved.get(a, "q", a, "T"), 3.0);
+        assert_eq!(halved.to_coo().values(), &[3.0]);
+        assert_eq!(halved.to_csr().values(), &[3.0]);
+        assert_eq!(halved.to_csc().values(), &[3.0]);
+        assert_eq!(halved.to_dmatrix()[(0, 0)], 3.0);
+        assert_eq!(halved.mul_dense(&[1.0]).unwrap(), vec![3.0]);
+        // The raw local form is untouched by the factor.
+        assert_eq!(halved.local_coo_arrays().2, &[2.0]);
+    }
+
+    #[test]
     fn physics_tag_set_empty_multiple_and_other() {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, _b) = (nodes[0].id(), nodes[1].id());
@@ -2104,6 +2304,115 @@ mod tests {
         k.add_sub(insert(a)).unwrap();
         k.add_sub(insert(b)).unwrap();
         assert!(!k.symmetric().unwrap());
+    }
+
+    #[test]
+    fn aggregate_scale_is_isolated_from_the_source_matrix() {
+        let (_cfg, nodes, sup) = make_poi1(2);
+        let (a, b) = (nodes[0].id(), nodes[1].id());
+        let mut blk = SubMatrix::new(
+            sup.clone(),
+            sup,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        blk.add_entry(a, "q", a, "T", 2.0).unwrap();
+        blk.add_entry(b, "q", b, "T", 3.0).unwrap();
+        let mut orig = Matrix::empty();
+        orig.add_sub(insert(blk)).unwrap();
+
+        let scaled = (&orig * 10.0).unwrap();
+
+        // A new store slot per block — no aliasing with the source's blocks.
+        let orig_h = orig.iter().next().unwrap();
+        let scaled_h = scaled.iter().next().unwrap();
+        assert!(!orig_h.same_slot(scaled_h));
+
+        // Values diverge accordingly: the source is untouched.
+        assert_eq!(orig.get(a, "q", a, "T").unwrap(), 2.0);
+        assert_eq!(orig.get(b, "q", b, "T").unwrap(), 3.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 20.0);
+        assert_eq!(scaled.get(b, "q", b, "T").unwrap(), 30.0);
+
+        // `/` divides the factor, chaining from the already-scaled matrix.
+        let halved = (&scaled / 2.0).unwrap();
+        assert_eq!(halved.get(a, "q", a, "T").unwrap(), 10.0);
+        assert_eq!(
+            scaled.get(a, "q", a, "T").unwrap(),
+            20.0,
+            "/ must not mutate its source either"
+        );
+    }
+
+    /// `M/dt + K` ≡ `(M/dt) | K` followed by `ops::assemble::assemble` — no
+    /// dedicated `Matrix + Matrix` operator is needed, because the assembler
+    /// already sums contributions landing on the same global `(row, col)`.
+    /// `K` carries a DOF (`c`) that `M` doesn't (mirroring a Dirichlet
+    /// multiplier row/column, which only ever enters the stiffness matrix) —
+    /// the union must still assemble correctly, leaving that entry untouched by
+    /// `M`'s contribution.
+    #[test]
+    fn union_and_reassemble_combines_scaled_mass_with_stiffness() {
+        let (coords, nodes, _) = make_poi1(3);
+        let (a, b, c) = (nodes[0].id(), nodes[1].id(), nodes[2].id());
+
+        let mut sup_k = SubMesh::new(coords.clone(), ElementType::POI1);
+        sup_k.add_cell(&[a]).unwrap();
+        sup_k.add_cell(&[b]).unwrap();
+        sup_k.add_cell(&[c]).unwrap();
+        let sup_k = insert(sup_k);
+        let mut k_blk = SubMatrix::new(
+            sup_k.clone(),
+            sup_k,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        k_blk.add_entry(a, "q", a, "T", 2.0).unwrap();
+        k_blk.add_entry(a, "q", b, "T", -1.0).unwrap();
+        k_blk.add_entry(b, "q", a, "T", -1.0).unwrap();
+        k_blk.add_entry(b, "q", b, "T", 2.0).unwrap();
+        k_blk.add_entry(c, "q", c, "T", 5.0).unwrap(); // Lagrange-only DOF
+        let mut k = Matrix::empty();
+        k.add_sub(insert(k_blk)).unwrap();
+
+        let mut sup_m = SubMesh::new(coords.clone(), ElementType::POI1);
+        sup_m.add_cell(&[a]).unwrap();
+        sup_m.add_cell(&[b]).unwrap();
+        let sup_m = insert(sup_m);
+        let mut m_blk = SubMatrix::new(
+            sup_m.clone(),
+            sup_m,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        )
+        .unwrap();
+        m_blk.add_entry(a, "q", a, "T", 4.0).unwrap();
+        m_blk.add_entry(b, "q", b, "T", 4.0).unwrap();
+        let mut m = Matrix::empty();
+        m.add_sub(insert(m_blk)).unwrap();
+
+        let dt = 0.5;
+        let m_dt = (&m / dt).unwrap(); // factor = 1/0.5 = 2 ⇒ diag(8, 8)
+
+        let mut sys = m_dt.union(&k).unwrap();
+        crate::ops::assemble::assemble(&mut sys).unwrap();
+
+        assert_eq!(sys.n_rows().unwrap(), 3);
+        assert_eq!(sys.n_cols().unwrap(), 3);
+        assert_eq!(sys.get(a, "q", a, "T").unwrap(), 2.0 + 8.0);
+        assert_eq!(sys.get(a, "q", b, "T").unwrap(), -1.0);
+        assert_eq!(sys.get(b, "q", a, "T").unwrap(), -1.0);
+        assert_eq!(sys.get(b, "q", b, "T").unwrap(), 2.0 + 8.0);
+        // Untouched by M (which doesn't carry the c DOF at all).
+        assert_eq!(sys.get(c, "q", c, "T").unwrap(), 5.0);
     }
 
     #[test]

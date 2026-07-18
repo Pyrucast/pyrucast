@@ -6,6 +6,7 @@ par physique.
 """
 
 from ._pyrucast import (
+    assemble as assemble,
     flux as flux,
     geometric as geometric,
     internal_forces as internal_forces,
@@ -17,6 +18,7 @@ from ._pyrucast import (
 )
 
 __all__ = [
+    "assemble",
     "flux",
     "geometric",
     "internal_forces",
