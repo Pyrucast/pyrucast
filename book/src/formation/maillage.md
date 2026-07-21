@@ -19,7 +19,7 @@ Méthode, identique dans l'esprit à Cast3M (1. placer des points guides, 2.
 mailler le contour fermé, 3. remplir par triangulation) :
 
 1. construire le contour extérieur (une boucle fermée de `SEG2`) ;
-2. construire le contour du trou (`pyrucast.mesher.circle_seg2`) ;
+2. construire le contour du trou (`pyrucast.mesher.circle`) ;
 3. unir les deux boucles (`|`) — la plus grande, par aire signée, est
    traitée comme le contour extérieur, les autres comme des trous ;
 4. remplir par triangulation de Delaunay contrainte, raffinée à une taille

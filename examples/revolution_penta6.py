@@ -29,7 +29,7 @@ def main() -> None:
     # A flat TRI3 surface in the plane y = 0, offset from the z axis so a
     # rotation about z sweeps a genuine wedge of material.
     center = coords.add_node([1.5, 0.0, 0.5])
-    contour = pc.mesher.circle_seg2(center, [0.0, 1.0, 0.0], 0.5, 24)
+    contour = pc.mesher.circle(center, [0.0, 1.0, 0.0], 0.5, 24)
     face = pc.mesher.surface(contour, "TRI3", 0.25)
     print("face  :", face.element_types(), face.cell_count(), "cells")
 

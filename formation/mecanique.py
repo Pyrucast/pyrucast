@@ -39,7 +39,7 @@ K_COND = 50.0  # W/m/K
 # ANCHOR: construction
 def construire_plaque_trouee():
     """Plaque rectangulaire trouée, construite bord par bord avec les
-    mailleurs dédiés (`line`, `circle_seg2`), fusionnés en un seul
+    mailleurs dédiés (`line`, `circle`), fusionnés en un seul
     sous-maillage par `pyrucast.consolidate` avant `fill_surface` — comme
     dans `formation/maillage.py`. Renvoie aussi les sous-maillages utiles à
     la mécanique et à la thermique : bord gauche (encastrement), moitié
@@ -58,7 +58,7 @@ def construire_plaque_trouee():
     boucle_ext = pc.consolidate(bas | droit | haut | gauche)
 
     centre = coords.add_node(list(CENTRE_TROU))
-    trou = pc.mesher.circle_seg2(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
+    trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
 
     contour = boucle_ext | trou
     plaque = pc.mesher.fill_surface(contour, "TRI3", max_edge_length=0.02)

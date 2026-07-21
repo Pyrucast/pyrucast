@@ -172,7 +172,8 @@ fn fill_surface_from_circle_contour() -> Result<()> {
     // (n - 2 with n = 8) and a total area close to π·r².
     let coords = insert(Coords::new(2)?);
     let center = Node::create_in(coords.clone(), &[0.0, 0.0])?;
-    let circle = pyrucast::ops::mesher::circle_seg2(&center, &[0.0, 0.0, 1.0], 1.0, 8)?;
+    let circle =
+        pyrucast::ops::mesher::circle(&center, &[0.0, 0.0, 1.0], 1.0, 8, ElementType::SEG2)?;
     let tri = pyrucast::ops::mesher::fill_surface(&circle, ElementType::TRI3, None)?;
     assert_eq!(tri.element_types()?, vec![ElementType::TRI3]);
     assert_eq!(tri.cell_count()?, 6);

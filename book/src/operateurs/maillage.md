@@ -12,7 +12,8 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `from_live_nodes(coords)` | un `Mesh` POI1 de **tous** les nœuds vivants d'un `Coords` |
 | `poi1_from_nodes(nodes)` | un `Mesh` POI1 sur une liste de nœuds donnée |
 | `line(a, b, n_elems, element_type="SEG2")` | une ligne de `n_elems` éléments (`SEG2` ou `SEG3`) entre deux nœuds (nœuds intermédiaires créés) |
-| `circle_seg2(center, normal, radius, n_elems)` | un cercle de `SEG2` (plan défini par `normal`) |
+| `circle(center, normal, radius, n_elems, element_type="SEG2")` | un cercle fermé (`SEG2` ou `SEG3`, plan défini par `normal`) |
+| `circle(node_a, center, node_b, n_elems, element_type="SEG2")` | **même nom, autre appel** : un arc de `node_a` à `node_b` sur le cercle de centre `center` passant par les deux (dispatch sur le type du 2ᵉ argument — `Node` ⇒ arc, sinon cercle complet) |
 | `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, TRI3→PENTA6, QUA4→HEX8) |
 | `sweep(mesh_a, mesh_b, n_layers, element_type="QUA4")` | tisse `QUA4`/`TRI3`/`QUA8`/`QUA9`/`TRI6` entre deux lignes `SEG2` (un `QUA4` est toujours construit d'abord, puis converti) |
 | `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
@@ -493,7 +494,7 @@ import pyrucast
 c = pyrucast.Coords(dim=2)
 center = c.add_node([0.0, 0.0])
 disc = pyrucast.mesher.fill_surface(
-    pyrucast.mesher.circle_seg2(center, [0.0, 0.0, 1.0], 2.0, 16), "TRI3"
+    pyrucast.mesher.circle(center, [0.0, 0.0, 1.0], 2.0, 16), "TRI3"
 )
 
 bord = pyrucast.mesher.contour(disc)

@@ -28,7 +28,7 @@ __all__ = [
     "assemble",
     "barycenter",
     "beam_deformation",
-    "circle_seg2",
+    "circle",
     "consolidate",
     "contour",
     "coordinates",
@@ -2120,10 +2120,18 @@ def beam_deformation(field: NodeField, fespace: FiniteElementSpace) -> ElementFi
     `M = E·I·κ` and `V = G·A_s·γ`.
     """
 
-def circle_seg2(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int) -> Mesh:
+def circle(a: typing.Any, b: typing.Any, c: typing.Any, d: typing.Any, element_type: builtins.str = 'SEG2') -> Mesh:
     r"""
-    Build a closed circle of `n_elems` SEG2 elements, centred on `center`
-    in the plane defined by `normal`, with the given `radius`.
+    Build a circle mesh of `n_elems` elements, of the given `element_type`
+    (`SEG2` by default, or `SEG3`).
+    
+    Two call forms, told apart by the type of the second argument:
+    - `circle(center, normal, radius, n_elems, element_type="SEG2")` — a
+      closed circle centred on `center`, lying in the plane defined by the
+      3-component `normal`, with the given `radius`.
+    - `circle(node_a, center, node_b, n_elems, element_type="SEG2")` — an
+      open arc from `node_a` to `node_b`, following the circle centred on
+      `center` that passes through both (the shorter arc is built).
     """
 
 def consolidate(obj: typing.Any) -> typing.Any:

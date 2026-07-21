@@ -21,11 +21,11 @@ def main() -> None:
     coords = pc.Coords(2)
     center = coords.add_node([0.0, 0.0])
 
-    # `circle_seg2` always takes a 3-D normal, even for a 2-D config:
+    # `circle` always takes a 3-D normal, even for a 2-D config:
     # (0, 0, 1) means "circle in the XY plane".
     normal = [0.0, 0.0, 1.0]
-    inner_mesh = pc.mesher.circle_seg2(center, normal, 1.0, 12)
-    outer_mesh = pc.mesher.circle_seg2(center, normal, 2.0, 12)
+    inner_mesh = pc.mesher.circle(center, normal, 1.0, 12)
+    outer_mesh = pc.mesher.circle(center, normal, 2.0, 12)
 
     # Contour for fill_surface: a Mesh holding both SEG2 loops. The CDT
     # detects the outer loop automatically (largest signed area) and

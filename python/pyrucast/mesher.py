@@ -7,7 +7,7 @@ surfaciques/volumiques, lecture gmsh, mesures géométriques dérivées.
 
 from ._pyrucast import (
     barycenter as barycenter,
-    circle_seg2 as circle_seg2,
+    circle as circle,
     contour as contour,
     elements_on as elements_on,
     extrude as extrude,
@@ -30,7 +30,7 @@ from ._pyrucast import (
 
 __all__ = [
     "barycenter",
-    "circle_seg2",
+    "circle",
     "contour",
     "elements_on",
     "extrude",

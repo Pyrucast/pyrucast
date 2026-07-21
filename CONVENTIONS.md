@@ -139,7 +139,7 @@ couche FFI suivent le même découpage que Rust — `containers/` (data) vs
 
 C'est un **repère de navigation**, pas un changement de surface : depuis un
 wrapper on retrouve l'impl Rust par parité de chemin —
-`py/ops/mesher.rs` ↔ `ops/mesher/`, et `line_seg2` ↔ `ops/mesher/line_seg2.rs`.
+`py/ops/mesher.rs` ↔ `ops/mesher/`, et `line` ↔ `ops/mesher/line.rs`.
 Corollaire : une fonction libre se range par sa **famille `ops`** (cf. table
 de projection et cas tranchés ci-dessous), jamais par son type d'entrée ni
 de sortie.

@@ -1,8 +1,8 @@
 Thématique;Opérateur Cast3M;Description courte;Équivalent pyrucast
 Maillage - création;POIN;Crée un point (nœud) à des coordonnées données;Node / poi1_from_nodes
-Maillage - création;DROI;Maille une droite en n segments SEG2;line_seg2
-Maillage - création;CERC;Maille un arc de cercle en SEG2;circle_seg2
-Maillage - création;C (CERC);Arc de cercle par 3 points;circle_seg2 (partiel)
+Maillage - création;DROI;Maille une droite en n segments SEG2;line
+Maillage - création;CERC;Maille un cercle fermé en SEG2/SEG3;circle
+Maillage - création;C (CERC);Arc de cercle par 3 points;circle (nodeA, center, nodeB, n_elems)
 Maillage - création;COUR;Maille une courbe quelconque;—
 Maillage - création;CONT;Extrait le contour (frontière) d'une surface;contour
 Maillage - création;SURF;Maille une surface délimitée par un contour fermé;surface / fill_surface
@@ -13,8 +13,8 @@ Maillage - création;MANU;Maillage manuel (élément défini nœud par nœud);Me
 Maillage - création;LIRE;Lit un maillage depuis un fichier externe (gmsh .msh, ASCII/binaire);read_gmsh / read_gmsh_str
 Maillage - génération;TRAN;Translation/extrusion d'un maillage (engendre la dimension supérieure);extrude / translate
 Maillage - génération;ROTA;Rotation / révolution d'un maillage;rotate / sweep_solid
-Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep_qua4 / sweep_solid / volume
-Maillage - génération;GENE;Génère un maillage par balayage entre deux lignes;sweep_qua4
+Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep / sweep_solid / volume
+Maillage - génération;GENE;Génère un maillage par balayage entre deux lignes;sweep
 Maillage - génération;SYME;Symétrie d'un maillage;—
 Maillage - génération;HOMO;Homothétie d'un maillage;—
 Maillage - génération;AFFI;Affinité (mise à l'échelle anisotrope);—

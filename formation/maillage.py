@@ -39,7 +39,7 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
     """Contour fermé (boucle extérieure + boucle du trou), en SEG2.
 
     La boucle extérieure est construite bord par bord avec les mailleurs
-    dédiés (`line` par côté, `circle_seg2` pour le trou) — jamais de
+    dédiés (`line` par côté, `circle` pour le trou) — jamais de
     nœud ou de maille ajoutés à la main. `fill_surface` exige qu'une boucle
     fermée tienne dans **un seul** sous-maillage : `pyrucast.consolidate`
     fusionne les quatre côtés (chacun son propre sous-maillage `SEG2`) en un
@@ -57,7 +57,7 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
     boucle_ext = pc.consolidate(bas | droit | haut | gauche)
 
     centre = coords.add_node(list(CENTRE_TROU))
-    boucle_trou = pc.mesher.circle_seg2(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
+    boucle_trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
 
     return boucle_ext | boucle_trou
 

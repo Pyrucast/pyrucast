@@ -21,7 +21,7 @@ def main() -> None:
     center = coords.add_node([0.0, 0.0])
 
     # Circular contour: radius 5, 48 segments, in the XY plane.
-    contour = pc.mesher.circle_seg2(center, [0.0, 0.0, 1.0], 5.0, 48)
+    contour = pc.mesher.circle(center, [0.0, 0.0, 1.0], 5.0, 48)
 
     # Triangles of edge length ~0.8 (interior nodes are created).
     tri = pc.mesher.surface(contour, "TRI3", 0.8)

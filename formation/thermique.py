@@ -51,7 +51,7 @@ T_IMPOSEE = 250.0  # °C, bord du trou
 # ANCHOR: construction
 def construire_plaque_trouee():
     """Plaque rectangulaire trouée, construite bord par bord avec les
-    mailleurs dédiés (`line`, `circle_seg2` — jamais de nœud ou de
+    mailleurs dédiés (`line`, `circle` — jamais de nœud ou de
     maille ajoutés à la main). `pyrucast.consolidate` fusionne les quatre
     côtés en un seul sous-maillage, requis par `fill_surface` pour former
     une boucle fermée (Cast3M : `cex = l12 ET c23 ET ...` fait le même
@@ -69,7 +69,7 @@ def construire_plaque_trouee():
     boucle_ext = pc.consolidate(bord_bas | bord_droit | bord_haut | bord_gauche)
 
     centre = coords.add_node(list(CENTRE_TROU))
-    trou = pc.mesher.circle_seg2(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
+    trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
 
     contour = boucle_ext | trou
     plaque = pc.mesher.fill_surface(contour, "TRI3", max_edge_length=0.02)
