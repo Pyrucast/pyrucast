@@ -13,7 +13,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `poi1_from_nodes(nodes)` | un `Mesh` POI1 sur une liste de nœuds donnée |
 | `line(a, b, n_elems, element_type="SEG2")` | une ligne de `n_elems` éléments (`SEG2` ou `SEG3`) entre deux nœuds (nœuds intermédiaires créés) |
 | `circle(center, normal, radius, n_elems, element_type="SEG2")` | un cercle fermé (`SEG2` ou `SEG3`, plan défini par `normal`) |
-| `circle(node_a, center, node_b, n_elems, element_type="SEG2")` | **même nom, autre appel** : un arc de `node_a` à `node_b` sur le cercle de centre `center` passant par les deux (dispatch sur le type du 2ᵉ argument — `Node` ⇒ arc, sinon cercle complet) |
+| `arc(a, center, b, n_elems, element_type="SEG2")` | un arc de `a` à `b` sur le cercle de centre `center` passant par les deux (le plus court des deux arcs) |
 | `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, TRI3→PENTA6, QUA4→HEX8) |
 | `sweep(mesh_a, mesh_b, n_layers, element_type="QUA4")` | tisse `QUA4`/`TRI3`/`QUA8`/`QUA9`/`TRI6` entre deux lignes `SEG2` (un `QUA4` est toujours construit d'abord, puis converti) |
 | `transfinite(side1, side2, side3, side4, element_type="QUA4")` | **généralisation de `sweep` à 4 côtés** (l'équivalent Cast3M de `DALL`) : interpolation transfinie (patch de Coons) entre quatre lignes `SEG2` formant un contour fermé (voir plus bas) |

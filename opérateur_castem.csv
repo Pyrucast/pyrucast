@@ -2,7 +2,7 @@ Thématique;Opérateur Cast3M;Description courte;Équivalent pyrucast
 Maillage - création;POIN;Crée un point (nœud) à des coordonnées données;Node / poi1_from_nodes
 Maillage - création;DROI;Maille une droite en n segments SEG2;line
 Maillage - création;CERC;Maille un cercle fermé en SEG2/SEG3;circle
-Maillage - création;C (CERC);Arc de cercle par 3 points;circle (nodeA, center, nodeB, n_elems)
+Maillage - création;C (CERC);Arc de cercle par 3 points;arc
 Maillage - création;COUR;Maille une courbe quelconque;—
 Maillage - création;CONT;Extrait le contour (frontière) d'une surface;contour
 Maillage - création;SURF;Maille une surface délimitée par un contour fermé;surface / fill_surface

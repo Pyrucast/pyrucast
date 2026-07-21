@@ -25,6 +25,7 @@ __all__ = [
     "SubModel",
     "SubNodeField",
     "abs",
+    "arc",
     "assemble",
     "barycenter",
     "beam_deformation",
@@ -2090,6 +2091,15 @@ def abs(field: typing.Any) -> typing.Any:
     Element-wise absolute value of a field.
     """
 
+def arc(a: Node, center: Node, b: Node, n_elems: builtins.int, element_type: builtins.str = 'SEG2') -> Mesh:
+    r"""
+    Build an open arc of `n_elems` elements from `a` to `b`, following the
+    circle centred on `center` that passes through both (the shorter arc is
+    built).
+    
+    `element_type` is `"SEG2"` (default) or `"SEG3"`.
+    """
+
 def assemble(matrix: Matrix) -> None:
     r"""
     Re-assemble `matrix` **from its blocks alone** — no `Model` — mutating it in
@@ -2121,18 +2131,13 @@ def beam_deformation(field: NodeField, fespace: FiniteElementSpace) -> ElementFi
     `M = E·I·κ` and `V = G·A_s·γ`.
     """
 
-def circle(a: typing.Any, b: typing.Any, c: typing.Any, d: typing.Any, element_type: builtins.str = 'SEG2') -> Mesh:
+def circle(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int, element_type: builtins.str = 'SEG2') -> Mesh:
     r"""
-    Build a circle mesh of `n_elems` elements, of the given `element_type`
-    (`SEG2` by default, or `SEG3`).
+    Build a closed circle mesh of `n_elems` elements, centred on `center`,
+    lying in the plane defined by the 3-component `normal`, with the given
+    `radius`.
     
-    Two call forms, told apart by the type of the second argument:
-    - `circle(center, normal, radius, n_elems, element_type="SEG2")` — a
-      closed circle centred on `center`, lying in the plane defined by the
-      3-component `normal`, with the given `radius`.
-    - `circle(node_a, center, node_b, n_elems, element_type="SEG2")` — an
-      open arc from `node_a` to `node_b`, following the circle centred on
-      `center` that passes through both (the shorter arc is built).
+    `element_type` is `"SEG2"` (default) or `"SEG3"`.
     """
 
 def consolidate(obj: typing.Any) -> typing.Any:

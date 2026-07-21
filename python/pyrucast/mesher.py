@@ -6,6 +6,7 @@ surfaciques/volumiques, lecture gmsh, mesures géométriques dérivées.
 """
 
 from ._pyrucast import (
+    arc as arc,
     barycenter as barycenter,
     circle as circle,
     contour as contour,
@@ -30,6 +31,7 @@ from ._pyrucast import (
 )
 
 __all__ = [
+    "arc",
     "barycenter",
     "circle",
     "contour",

@@ -133,48 +133,45 @@ pub fn line(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Build a circle mesh of `n_elems` elements, of the given `element_type`
-/// (`SEG2` by default, or `SEG3`).
+/// Build a closed circle mesh of `n_elems` elements, centred on `center`,
+/// lying in the plane defined by the 3-component `normal`, with the given
+/// `radius`.
 ///
-/// Two call forms, told apart by the type of the second argument:
-/// - `circle(center, normal, radius, n_elems, element_type="SEG2")` — a
-///   closed circle centred on `center`, lying in the plane defined by the
-///   3-component `normal`, with the given `radius`.
-/// - `circle(node_a, center, node_b, n_elems, element_type="SEG2")` — an
-///   open arc from `node_a` to `node_b`, following the circle centred on
-///   `center` that passes through both (the shorter arc is built).
+/// `element_type` is `"SEG2"` (default) or `"SEG3"`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (a, b, c, d, element_type="SEG2"))]
+#[pyo3(signature = (center, normal, radius, n_elems, element_type="SEG2"))]
 pub fn circle(
-    a: &Bound<'_, PyAny>,
-    b: &Bound<'_, PyAny>,
-    c: &Bound<'_, PyAny>,
-    d: &Bound<'_, PyAny>,
+    center: PyRef<PyNode>,
+    normal: Vec<f64>,
+    radius: f64,
+    n_elems: usize,
     element_type: &str,
 ) -> PyResult<PyMesh> {
     let et = ElementType::from_name(element_type)
         .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
-
-    if let Ok(center) = b.extract::<PyRef<PyNode>>() {
-        let node_a = a.extract::<PyRef<PyNode>>()?;
-        let node_b = c.extract::<PyRef<PyNode>>()?;
-        let n_elems: usize = d.extract()?;
-        let mesh = crate::ops::mesher::arc(
-            node_a.as_node(),
-            center.as_node(),
-            node_b.as_node(),
-            n_elems,
-            et,
-        )?;
-        return Ok(PyMesh { inner: mesh });
-    }
-
-    let center = a.extract::<PyRef<PyNode>>()?;
-    let normal: Vec<f64> = b.extract()?;
-    let radius: f64 = c.extract()?;
-    let n_elems: usize = d.extract()?;
     let mesh = crate::ops::mesher::circle(center.as_node(), &normal, radius, n_elems, et)?;
+    Ok(PyMesh { inner: mesh })
+}
+
+/// Build an open arc of `n_elems` elements from `a` to `b`, following the
+/// circle centred on `center` that passes through both (the shorter arc is
+/// built).
+///
+/// `element_type` is `"SEG2"` (default) or `"SEG3"`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (a, center, b, n_elems, element_type="SEG2"))]
+pub fn arc(
+    a: PyRef<PyNode>,
+    center: PyRef<PyNode>,
+    b: PyRef<PyNode>,
+    n_elems: usize,
+    element_type: &str,
+) -> PyResult<PyMesh> {
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
+    let mesh = crate::ops::mesher::arc(a.as_node(), center.as_node(), b.as_node(), n_elems, et)?;
     Ok(PyMesh { inner: mesh })
 }
 

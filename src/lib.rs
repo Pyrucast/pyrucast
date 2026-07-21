@@ -99,6 +99,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesher::poi1_from_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::line, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::circle, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::arc, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::sweep, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::transfinite, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::sweep_solid, m)?)?;
