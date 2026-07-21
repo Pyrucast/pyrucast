@@ -4,7 +4,7 @@ Meshes a small surface, then shows the three new mesh-transform operators:
 
 - `translate` / `rotate` return a fresh copy of a mesh with its own new
   nodes (the source is left untouched);
-- `sweep_solid` is the 3-D companion of `sweep_qua4`: it links two matching
+- `sweep_solid` is the 3-D companion of `sweep`: it links two matching
   surfaces into a solid — TRI3 faces become PENTA6 prisms, QUA4 faces HEX8.
 
 Combining `rotate` with `sweep_solid` builds one angular slice of a solid

@@ -16,7 +16,7 @@ use crate::error::Result;
 /// - PENTA6: `bot[0..3], top[0..3]`
 /// - HEX8: `bot[0..4], top[0..4]`
 pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> {
-    crate::ops::mesher::sweep::extrude(mesh, direction, n_layers)
+    crate::ops::mesher::sweep_kernel::extrude(mesh, direction, n_layers)
 }
 
 #[cfg(test)]
@@ -26,7 +26,7 @@ mod tests {
     use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
-    use crate::ops::mesher::line_seg2::line_seg2;
+    use crate::ops::mesher::line::line;
     use crate::store::insert;
 
     #[test]
@@ -34,7 +34,7 @@ mod tests {
         let coords = insert(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
-        let seg = line_seg2(&a, &b, 2).unwrap();
+        let seg = line(&a, &b, 2, ElementType::SEG2).unwrap();
 
         let qua = extrude(&seg, &[0.0, 3.0], 3).unwrap();
         assert_eq!(qua.element_types().unwrap(), vec![ElementType::QUA4]);
@@ -52,7 +52,7 @@ mod tests {
         let coords = insert(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
-        let seg = line_seg2(&a, &b, 2).unwrap();
+        let seg = line(&a, &b, 2, ElementType::SEG2).unwrap();
 
         let qua = extrude(&seg, &[0.0, 1.0], 1).unwrap();
         let mid_cell0 = qua.node(0, 0, 1).unwrap();
@@ -111,7 +111,7 @@ mod tests {
         let coords = insert(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
-        let seg = line_seg2(&a, &b, 1).unwrap();
+        let seg = line(&a, &b, 1, ElementType::SEG2).unwrap();
         assert!(extrude(&seg, &[0.0, 1.0], 0).is_err());
     }
 
@@ -120,7 +120,7 @@ mod tests {
         let coords = insert(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
-        let seg = line_seg2(&a, &b, 1).unwrap();
+        let seg = line(&a, &b, 1, ElementType::SEG2).unwrap();
         assert!(extrude(&seg, &[0.0, 1.0, 0.0], 1).is_err());
     }
 

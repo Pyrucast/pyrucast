@@ -185,9 +185,9 @@ def main():
     pt_b = c.add_node([0.0, height])
     pt_c = c.add_node([length, 0.0])
     pt_d = c.add_node([length, height])
-    left_edge = pyrucast.mesher.line_seg2(pt_a, pt_b, ny)
-    right_edge = pyrucast.mesher.line_seg2(pt_c, pt_d, ny)
-    mesh = pyrucast.mesher.sweep_qua4(left_edge, right_edge, nx)
+    left_edge = pyrucast.mesher.line(pt_a, pt_b, ny)
+    right_edge = pyrucast.mesher.line(pt_c, pt_d, ny)
+    mesh = pyrucast.mesher.sweep(left_edge, right_edge, nx)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     # Nœud du bout (mi-hauteur) et maillage POI1 des nœuds LIBRES (X > 0).

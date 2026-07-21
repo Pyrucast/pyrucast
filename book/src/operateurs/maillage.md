@@ -3,7 +3,7 @@
 Les **mesher** (`ops::mesher`) construisent et transforment des
 [maillages](../mesh.md). Chacun prend ses conteneurs par référence et renvoie
 un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
-(`pyrucast.mesher.line_seg2`, …).
+(`pyrucast.mesher.line`, …).
 
 ## Inventaire
 
@@ -11,11 +11,11 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 |---|---|
 | `from_live_nodes(coords)` | un `Mesh` POI1 de **tous** les nœuds vivants d'un `Coords` |
 | `poi1_from_nodes(nodes)` | un `Mesh` POI1 sur une liste de nœuds donnée |
-| `line_seg2(a, b, n_elems)` | une ligne de `n_elems` `SEG2` entre deux nœuds (nœuds intermédiaires créés) |
+| `line(a, b, n_elems, element_type="SEG2")` | une ligne de `n_elems` éléments (`SEG2` ou `SEG3`) entre deux nœuds (nœuds intermédiaires créés) |
 | `circle_seg2(center, normal, radius, n_elems)` | un cercle de `SEG2` (plan défini par `normal`) |
 | `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, TRI3→PENTA6, QUA4→HEX8) |
-| `sweep_qua4(mesh_a, mesh_b, n_layers)` | tisse des `QUA4` entre deux lignes `SEG2` |
-| `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep_qua4` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
+| `sweep(mesh_a, mesh_b, n_layers, element_type="QUA4")` | tisse `QUA4`/`TRI3`/`QUA8`/`QUA9`/`TRI6` entre deux lignes `SEG2` (un `QUA4` est toujours construit d'abord, puis converti) |
+| `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
 | `translate(mesh, vector)` | **copie** du maillage translatée de `vector` (nœuds neufs, original intact) |
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `fill_surface(contour, type, …)` | triangule l'intérieur d'un contour fermé (voir plus bas) |
@@ -43,12 +43,40 @@ a = c.add_node([0.0, 0.0])
 b = c.add_node([4.0, 0.0])
 
 # Ligne de 4 SEG2 entre a et b (3 nœuds intermédiaires créés).
-line = pyrucast.mesher.line_seg2(a, b, 4)
+line = pyrucast.mesher.line(a, b, 4)
 print(line)  # Mesh: 1 submesh(es), 4 cell(s) total
 
 # Extrusion en QUA4 sur 2 couches selon +y.
 surf = pyrucast.mesher.extrude(line, [0.0, 1.0], 2)
 print(surf.element_types())  # ['QUA4']
+
+# Ligne quadratique : SEG3 (nœud de milieu d'arête par élément).
+line3 = pyrucast.mesher.line(a, b, 4, "SEG3")
+print(line3.element_types())  # ['SEG3']
+```
+
+## `sweep` : QUA4 par défaut, ou toute variante dérivée
+
+`sweep(mesh_a, mesh_b, n_layers, element_type="QUA4")` tisse `n_layers`
+couches entre deux lignes `SEG2`. Un maillage `QUA4` est **toujours construit
+en premier** (le cœur géométrique du tissage) ; si `element_type` demande
+autre chose, il est ensuite **converti** :
+
+- `"TRI3"` — chaque `QUA4` est coupé en deux `TRI3` le long de la diagonale
+  `(0, 2)` (pas de nœud créé) ;
+- `"QUA8"` — promotion quadratique via `to_quadratic` (nœuds de milieu
+  d'arête) ;
+- `"QUA9"` — comme `QUA8`, puis un **nœud central** neuf est ajouté par
+  cellule (moyenne des 4 coins) — `to_quadratic` ne produit que le `QUA8`
+  sérendipité, sans nœud central ;
+- `"TRI6"` — coupe en `TRI3` puis promotion quadratique (mêmes deux étapes
+  composées).
+
+```python
+tri = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "TRI3")   # 2× plus de cellules que QUA4
+qua8 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "QUA8")
+qua9 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "QUA9")
+tri6 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "TRI6")
 ```
 
 ## Copies rigides : `translate` et `rotate`
@@ -88,7 +116,7 @@ tournee = pyrucast.mesher.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 
 
 ## Tissage d'un solide entre deux surfaces : `sweep_solid`
 
-`sweep_solid(mesh_a, mesh_b, n_layers)` est le **compagnon 3D** de `sweep_qua4` :
+`sweep_solid(mesh_a, mesh_b, n_layers)` est le **compagnon 3D** de `sweep` :
 là où ce dernier relie deux lignes `SEG2` par une bande de `QUA4`, `sweep_solid`
 relie deux **surfaces** par un solide. Les faces `TRI3` deviennent des prismes
 `PENTA6`, les faces `QUA4` des hexaèdres `HEX8`.

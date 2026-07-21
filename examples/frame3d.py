@@ -41,7 +41,7 @@ def main() -> None:
     c = pyrucast.Coords(3)
     base = c.add_node([0.0, 0.0, 0.0])
     tip = c.add_node([L, 0.0, 0.0])
-    mesh = pyrucast.mesher.line_seg2(base, tip, N)  # console le long de X (`line_seg2`)
+    mesh = pyrucast.mesher.line(base, tip, N)  # console le long de X (`line`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.frame3d(fes)

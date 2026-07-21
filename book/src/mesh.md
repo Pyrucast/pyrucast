@@ -14,7 +14,7 @@ aux [`NodeField`](node-field.md).
 
 > Ce chapitre décrit l'**objet** maillage (structure, types d'éléments,
 > refcount). La **construction** de maillages par des générateurs
-> (`line_seg2`, `fill_surface`, `extrude`…) relève des
+> (`line`, `fill_surface`, `extrude`…) relève des
 > [opérateurs de maillage](operateurs/maillage.md).
 
 ## Types d'éléments

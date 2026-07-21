@@ -81,9 +81,9 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 |---|---|
 | `from_live_nodes(coords: Handle<Coords>) -> Mesh` | `from_live_nodes(coords) -> Mesh` |
 | `SubMesh::poi1_from_nodes(nodes: &[Node]) -> SubMesh` | `poi1_from_nodes(nodes) -> Mesh` |
-| `line_seg2(a: &Node, b: &Node, n_elems: usize) -> Mesh` | `line_seg2(a, b, n_elems) -> Mesh` |
+| `line(a: &Node, b: &Node, n_elems: usize, element_type: ElementType) -> Mesh` | `line(a, b, n_elems, element_type="SEG2") -> Mesh` |
 | `circle_seg2(center: &Node, normal: &[f64], radius: f64, n_elems: usize) -> Mesh` | `circle_seg2(center, normal, radius, n_elems) -> Mesh` |
-| `sweep_qua4(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_qua4(mesh_a, mesh_b, n_layers) -> Mesh` |
+| `sweep(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize, element_type: ElementType) -> Mesh` | `sweep(mesh_a, mesh_b, n_layers, element_type="QUA4") -> Mesh` |
 | `sweep_solid(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_solid(mesh_a, mesh_b, n_layers) -> Mesh` |
 | `extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Mesh` | `extrude(mesh, direction, n_layers) -> Mesh` |
 | `to_quadratic(mesh: &Mesh) -> Mesh` | `to_quadratic(mesh) -> Mesh` |

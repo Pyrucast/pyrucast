@@ -53,10 +53,10 @@ def construire_plaque_trouee():
     p3 = coords.add_node([LONGUEUR, HAUTEUR])
     p4 = coords.add_node([0.0, HAUTEUR])
 
-    bas = pc.mesher.line_seg2(p1, p2, 10)
-    droit = pc.mesher.line_seg2(p2, p3, 4)
-    haut = pc.mesher.line_seg2(p3, p4, 10)
-    bord_gauche = pc.mesher.line_seg2(p4, p1, 4)
+    bas = pc.mesher.line(p1, p2, 10)
+    droit = pc.mesher.line(p2, p3, 4)
+    haut = pc.mesher.line(p3, p4, 10)
+    bord_gauche = pc.mesher.line(p4, p1, 4)
     boucle_ext = pc.consolidate(bas | droit | haut | bord_gauche)
 
     centre = coords.add_node(list(CENTRE_TROU))

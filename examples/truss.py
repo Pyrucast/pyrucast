@@ -36,7 +36,7 @@ def main() -> None:
     c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([L, 0.0])
-    mesh = pyrucast.mesher.line_seg2(n0, n1, 1)  # un seul SEG2 (mailleur `line_seg2`)
+    mesh = pyrucast.mesher.line(n0, n1, 1)  # un seul SEG2 (mailleur `line`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.truss(fes)

@@ -38,12 +38,10 @@ def main() -> None:
     def idx(i, j):
         return j * (N + 1) + i
 
-    # Grille N×N de QUA4 par balayage de deux lignes SEG2 (`sweep_qua4`).
-    bottom = pyrucast.mesher.line_seg2(
-        c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N
-    )
-    top = pyrucast.mesher.line_seg2(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
-    mesh = pyrucast.mesher.sweep_qua4(bottom, top, N)
+    # Grille N×N de QUA4 par balayage de deux lignes SEG2 (`sweep`).
+    bottom = pyrucast.mesher.line(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
+    top = pyrucast.mesher.line(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
+    mesh = pyrucast.mesher.sweep(bottom, top, N)
 
     # Nœuds rangés par idx(i, j) (i selon x, j selon y) en relisant la
     # connectivité QUA4 : maille (cy, cx) = cy*N + cx, nœuds locaux 0..3.

@@ -8,7 +8,7 @@ comparés sur la même géométrie :
 - **non structuré** (`pyrucast.mesher.fill_surface`) : contour fermé (loi
   extérieure + trou), remplissage par triangulation de Delaunay contrainte,
   taille de maille cible ;
-- **structuré** (`pyrucast.mesher.sweep_qua4`) : balayage entre deux lignes
+- **structuré** (`pyrucast.mesher.sweep`) : balayage entre deux lignes
   opposées, nombre d'éléments imposé. pyrucast n'a pas encore l'équivalent de
   la surface réglée `REGL` de Cast3M pour mailler *proprement* autour d'un
   trou en structuré ; la version structurée ci-dessous reste donc une grille
@@ -39,7 +39,7 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
     """Contour fermé (boucle extérieure + boucle du trou), en SEG2.
 
     La boucle extérieure est construite bord par bord avec les mailleurs
-    dédiés (`line_seg2` par côté, `circle_seg2` pour le trou) — jamais de
+    dédiés (`line` par côté, `circle_seg2` pour le trou) — jamais de
     nœud ou de maille ajoutés à la main. `fill_surface` exige qu'une boucle
     fermée tienne dans **un seul** sous-maillage : `pyrucast.consolidate`
     fusionne les quatre côtés (chacun son propre sous-maillage `SEG2`) en un
@@ -50,10 +50,10 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
     p3 = coords.add_node([LONGUEUR, HAUTEUR])
     p4 = coords.add_node([0.0, HAUTEUR])
 
-    bas = pc.mesher.line_seg2(p1, p2, 10)
-    droit = pc.mesher.line_seg2(p2, p3, 4)
-    haut = pc.mesher.line_seg2(p3, p4, 10)
-    gauche = pc.mesher.line_seg2(p4, p1, 4)
+    bas = pc.mesher.line(p1, p2, 10)
+    droit = pc.mesher.line(p2, p3, 4)
+    haut = pc.mesher.line(p3, p4, 10)
+    gauche = pc.mesher.line(p4, p1, 4)
     boucle_ext = pc.consolidate(bas | droit | haut | gauche)
 
     centre = coords.add_node(list(CENTRE_TROU))
@@ -83,13 +83,13 @@ def maillage_structure() -> tuple[pc.Coords, pc.Mesh]:
     coords = pc.Coords(2)
     bas_gauche = coords.add_node([0.0, 0.0])
     haut_gauche = coords.add_node([0.0, HAUTEUR])
-    bord_gauche = pc.mesher.line_seg2(bas_gauche, haut_gauche, 4)
+    bord_gauche = pc.mesher.line(bas_gauche, haut_gauche, 4)
 
     bas_droit = coords.add_node([LONGUEUR, 0.0])
     haut_droit = coords.add_node([LONGUEUR, HAUTEUR])
-    bord_droit = pc.mesher.line_seg2(bas_droit, haut_droit, 4)
+    bord_droit = pc.mesher.line(bas_droit, haut_droit, 4)
 
-    grille = pc.mesher.sweep_qua4(bord_gauche, bord_droit, 12)
+    grille = pc.mesher.sweep(bord_gauche, bord_droit, 12)
     return coords, grille
 
 

@@ -39,11 +39,11 @@ N_ELEMS = 4
 def main() -> None:
     h = 1.0 / N_ELEMS
 
-    # ── Maillage : une ligne de N_ELEMS SEG2 sur [0, 1] (mailleur `line_seg2`) ─
+    # ── Maillage : une ligne de N_ELEMS SEG2 sur [0, 1] (mailleur `line`) ─
     c = pyrucast.Coords(1)
     x0 = c.add_node([0.0])
     x1 = c.add_node([1.0])
-    mesh = pyrucast.mesher.line_seg2(x0, x1, N_ELEMS)
+    mesh = pyrucast.mesher.line(x0, x1, N_ELEMS)
     # Nœuds ordonnés le long de la ligne : x0, intérieurs…, x1.
     nodes = [mesh.node(0, i, 0) for i in range(N_ELEMS)] + [x1]
     fes = pyrucast.FiniteElementSpace(mesh)

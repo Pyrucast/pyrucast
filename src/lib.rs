@@ -97,9 +97,9 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_unilateral, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::from_live_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::poi1_from_nodes, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::mesher::line_seg2, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::line, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::circle_seg2, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::mesher::sweep_qua4, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::sweep, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::sweep_solid, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::extrude, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::translate, m)?)?;

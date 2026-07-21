@@ -115,11 +115,21 @@ pub fn contour(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Build a line of `n_elems` SEG2 elements from node `a` to node `b`.
+/// Build a line of `n_elems` elements from node `a` to node `b`.
+///
+/// `element_type` is `"SEG2"` (default) or `"SEG3"`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn line_seg2(a: PyRef<PyNode>, b: PyRef<PyNode>, n_elems: usize) -> PyResult<PyMesh> {
-    let mesh = crate::ops::mesher::line_seg2(a.as_node(), b.as_node(), n_elems)?;
+#[pyo3(signature = (a, b, n_elems, element_type="SEG2"))]
+pub fn line(
+    a: PyRef<PyNode>,
+    b: PyRef<PyNode>,
+    n_elems: usize,
+    element_type: &str,
+) -> PyResult<PyMesh> {
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
+    let mesh = crate::ops::mesher::line(a.as_node(), b.as_node(), n_elems, et)?;
     Ok(PyMesh { inner: mesh })
 }
 
@@ -137,16 +147,24 @@ pub fn circle_seg2(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Sweep two SEG2 line meshes into a QUA4 mesh, building `n_layers` layers
-/// of quads between `mesh_a` and `mesh_b`.
+/// Sweep two SEG2 line meshes into a mesh of `element_type`, building
+/// `n_layers` layers between `mesh_a` and `mesh_b`.
+///
+/// `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
+/// `"TRI6"` — a `QUA4` mesh is always built first, then converted (diagonal
+/// split for the triangles, promoted to quadratic for `QUA8`/`QUA9`/`TRI6`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn sweep_qua4(
+#[pyo3(signature = (mesh_a, mesh_b, n_layers, element_type="QUA4"))]
+pub fn sweep(
     mesh_a: PyRef<PyMesh>,
     mesh_b: PyRef<PyMesh>,
     n_layers: usize,
+    element_type: &str,
 ) -> PyResult<PyMesh> {
-    let mesh = crate::ops::mesher::sweep_qua4(&mesh_a.inner, &mesh_b.inner, n_layers)?;
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
+    let mesh = crate::ops::mesher::sweep(&mesh_a.inner, &mesh_b.inner, n_layers, et)?;
     Ok(PyMesh { inner: mesh })
 }
 
@@ -160,7 +178,7 @@ pub fn extrude(mesh: PyRef<PyMesh>, direction: Vec<f64>, n_layers: usize) -> PyR
 }
 
 /// Sweep two matching surface meshes into a solid mesh, building `n_layers`
-/// layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep_qua4`:
+/// layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep`:
 /// TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

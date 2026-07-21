@@ -51,7 +51,7 @@ d'importance, seule leur aire relative compte.
 
 Méthode Cast3M : placer des points guides, mailler des lignes opposées,
 mailler la surface réglée entre elles. pyrucast condense les deux dernières
-étapes en un seul opérateur, `pyrucast.mesher.sweep_qua4` :
+étapes en un seul opérateur, `pyrucast.mesher.sweep` :
 
 ```python
 {{#include ../../../formation/maillage.py:structure}}
@@ -59,8 +59,8 @@ mailler la surface réglée entre elles. pyrucast condense les deux dernières
 
 ![Maillage structuré (balayage, sans trou)](img/maillage-structure.svg)
 
-`line_seg2(a, b, n)` maille un segment en `n` éléments (Cast3M `DROI n a b`)
-; `sweep_qua4(bord_a, bord_b, n)` relie deux lignes discrétisées par des
+`line(a, b, n)` maille un segment en `n` éléments (Cast3M `DROI n a b`)
+; `sweep(bord_a, bord_b, n)` relie deux lignes discrétisées par des
 `QUA4`, `n` couches entre elles (Cast3M : surface réglée `REGL` + maillage).
 
 > **Différence avec Cast3M.** pyrucast n'a pas encore l'équivalent de la

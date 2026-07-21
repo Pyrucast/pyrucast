@@ -60,6 +60,7 @@ use pyrucast::containers::evolution::{
 };
 use pyrucast::containers::field::{Field, SubField};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
+use pyrucast::containers::mesh::ElementType;
 use pyrucast::containers::mesh::{Coords, Node};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
@@ -72,7 +73,7 @@ use pyrucast::ops::field::{
     coordinates, deformation, mask_cells, restrict, restrict_like, select_nodes, Band,
 };
 use pyrucast::ops::geom::nearest_node;
-use pyrucast::ops::mesher::{line_seg2, sweep_qua4, to_poi1, translate};
+use pyrucast::ops::mesher::{line, sweep, to_poi1, translate};
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
 use pyrucast::Result;
@@ -117,9 +118,9 @@ fn main() -> Result<()> {
     let pt_b = Node::create_in(coords.clone(), &[0., height])?;
     let pt_c = Node::create_in(coords.clone(), &[length, 0.])?;
     let pt_d = Node::create_in(coords.clone(), &[length, height])?;
-    let left_edge = line_seg2(&pt_a, &pt_b, ny)?;
-    let right_edge = line_seg2(&pt_c, &pt_d, ny)?;
-    let mesh = sweep_qua4(&left_edge, &right_edge, nx)?;
+    let left_edge = line(&pt_a, &pt_b, ny, ElementType::SEG2)?;
+    let right_edge = line(&pt_c, &pt_d, ny, ElementType::SEG2)?;
+    let mesh = sweep(&left_edge, &right_edge, nx, ElementType::QUA4)?;
 
     // grid[j][i] : nœud à (x = i·L/nx, y = j·H/ny).
     let fes = FiniteElementSpace::lagrange1(&mesh)?;

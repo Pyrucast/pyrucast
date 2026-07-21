@@ -2,8 +2,8 @@
 //! containers.
 //!
 //! Will host (as legacy code migrates):
-//! - `mesh::fill_surface`, `mesh::extrude`, `mesh::sweep_qua4`,
-//!   `mesh::line_seg2`, `mesh::circle_seg2`, …
+//! - `mesh::fill_surface`, `mesh::extrude`, `mesh::sweep`,
+//!   `mesh::line`, `mesh::circle_seg2`, …
 //! - any future remeshing / refinement helpers.
 
 pub mod material_field;

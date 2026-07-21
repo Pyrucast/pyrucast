@@ -36,7 +36,7 @@ def tip_deflection(n_elems: int) -> float:
     c = pyrucast.Coords(1)
     base = c.add_node([0.0])
     tip = c.add_node([L])
-    mesh = pyrucast.mesher.line_seg2(base, tip, n_elems)  # console 1-D (`line_seg2`)
+    mesh = pyrucast.mesher.line(base, tip, n_elems)  # console 1-D (`line`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.timoshenko(fes)

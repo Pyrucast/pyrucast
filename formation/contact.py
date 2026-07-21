@@ -34,14 +34,14 @@ def idx(i, j):
 
 def bloc(coords: pc.Coords, y0: float):
     """Bloc `[0,1] × [y0, y0+1]`, grille N×N de QUA4 — mailleurs dédiés
-    (`line_seg2` pour les bords bas/haut, `sweep_qua4` entre les deux, comme
+    (`line` pour les bords bas/haut, `sweep` entre les deux, comme
     dans `formation/maillage.py`). Renvoie `(mesh, grille)`, `grille[idx(i,j)]`
     étant le nœud `(i,j)` (`i` : abscisse, `j` : ordonnée)."""
-    bas = pc.mesher.line_seg2(coords.add_node([0.0, y0]), coords.add_node([1.0, y0]), N)
-    haut = pc.mesher.line_seg2(
+    bas = pc.mesher.line(coords.add_node([0.0, y0]), coords.add_node([1.0, y0]), N)
+    haut = pc.mesher.line(
         coords.add_node([0.0, y0 + 1.0]), coords.add_node([1.0, y0 + 1.0]), N
     )
-    mesh = pc.mesher.sweep_qua4(bas, haut, N)
+    mesh = pc.mesher.sweep(bas, haut, N)
 
     grille = [None] * ((N + 1) * (N + 1))
     for cy in range(N):
@@ -63,7 +63,7 @@ def clamp(nodes, var, dual):
 def bord_horizontal(mesh: pc.Mesh, y: float) -> pc.Mesh:
     """Extrait, parmi les segments de bord de `mesh` (`pyrucast.mesher.contour`,
     l'équivalent Cast3M `CONTOUR`), ceux d'ordonnée `y` — un bord existant du
-    maillage, pas une ligne recréée à côté (`line_seg2` fabriquerait de
+    maillage, pas une ligne recréée à côté (`line` fabriquerait de
     nouveaux nœuds, disjoints de `mesh`)."""
     frontiere = pc.mesher.contour(mesh)
     ordonnee = pc.field.coordinates(frontiere, ["Y"])

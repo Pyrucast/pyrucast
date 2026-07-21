@@ -3,7 +3,7 @@ import pyrucast as pc
 c = pc.Coords(1)
 a = c.add_node([0.0])
 b = c.add_node([1.0])
-lab = pc.mesher.line_seg2(a, b, 10)
+lab = pc.mesher.line(a, b, 10)
 print(lab)
 # lab.plot()
 xc = pc.field.coordinates(lab)

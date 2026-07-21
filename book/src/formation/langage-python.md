@@ -53,7 +53,7 @@ l'arborescence Rust (`src/ops/<thème>/`) :
 
 | pyrucast (Python) | thème | Cast3M (le plus proche) |
 |---|---|---|
-| `pc.mesher.line_seg2`, `pc.mesher.surface`, `pc.mesher.sweep_qua4`… | maillage | `DROITE`, `SURF`, `VOLU`, `TRAN` |
+| `pc.mesher.line`, `pc.mesher.surface`, `pc.mesher.sweep`… | maillage | `DROITE`, `SURF`, `VOLU`, `TRAN` |
 | `pc.field.gradient`, `pc.field.select`, `pc.field.mask`… | champs | `GRAD`, `MASQUE` |
 | `pc.assemble.stiffness`, `pc.assemble.mass`, `pc.assemble.flux`… | assemblage | `RIGI`, `MASS`, `FLUX`/`PRES` |
 | `pc.behavior.integrate_behavior` | comportement | `COMP` |

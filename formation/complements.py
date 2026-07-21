@@ -31,7 +31,7 @@ def main() -> None:
     coords = pc.Coords(2)
     n0 = coords.add_node([0.0, 0.0])
     n1 = coords.add_node([L, 0.0])
-    mesh = pc.mesher.line_seg2(n0, n1, 1)
+    mesh = pc.mesher.line(n0, n1, 1)
     fes = pc.FiniteElementSpace(mesh)
 
     modele = pc.Model.truss(fes)

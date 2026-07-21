@@ -49,13 +49,11 @@ def main() -> None:
         return j * (N + 1) + i
 
     # ── Maillage : grille N×N de QUA4 sur [0,1]², par balayage de deux lignes ─
-    # SEG2 (bas → haut) avec le mailleur `sweep_qua4` (Cast3m « regle »).
+    # SEG2 (bas → haut) avec le mailleur `sweep` (Cast3m « regle »).
     c = pyrucast.Coords(2)
-    bottom = pyrucast.mesher.line_seg2(
-        c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N
-    )
-    top = pyrucast.mesher.line_seg2(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
-    mesh = pyrucast.mesher.sweep_qua4(bottom, top, N)
+    bottom = pyrucast.mesher.line(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
+    top = pyrucast.mesher.line(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
+    mesh = pyrucast.mesher.sweep(bottom, top, N)
 
     # Nœuds rangés par idx(i, j) (i selon x, j selon y) en relisant la
     # connectivité QUA4 : maille (cy, cx) = cy*N + cx, nœuds locaux 0..3.

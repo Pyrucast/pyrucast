@@ -25,6 +25,7 @@ __all__ = [
     "SubModel",
     "SubNodeField",
     "abs",
+    "assemble",
     "barycenter",
     "beam_deformation",
     "circle_seg2",
@@ -44,15 +45,17 @@ __all__ = [
     "filter_components",
     "flux",
     "from_live_nodes",
+    "geometric",
     "gradient",
     "integral",
     "integrate_behavior",
     "internal_forces",
     "internal_forces_continuum",
     "interp_to_gauss",
-    "line_seg2",
+    "line",
     "log",
     "log10",
+    "lump",
     "mask",
     "mass",
     "material_field",
@@ -80,9 +83,10 @@ __all__ = [
     "sub_material_field",
     "surface",
     "swap_dir",
-    "sweep_qua4",
+    "sweep",
     "sweep_solid",
     "tan",
+    "tangent",
     "tanh",
     "thermal_strain",
     "to_poi1",
@@ -708,10 +712,19 @@ class Matrix:
         r"""
         `y = A · x` against a dense vector `x`.
         """
-    def __mul__(self, rhs: NodeField) -> NodeField:
+    def __mul__(self, rhs: typing.Any) -> typing.Any:
         r"""
-        `y = A · x` against a `NodeField` (`matrix * field`). `x` is read at the
-        matrix's column DOFs; the result is a fresh `NodeField` over its row DOFs.
+        `matrix * x` — either a matrix-vector product against a `NodeField` (`x`
+        read at the matrix's column DOFs, result a fresh `NodeField` over its row
+        DOFs) or, for a `float`, a scalar scale: a fresh `Matrix` whose blocks
+        carry the scaled `factor` (lazy — no value is rewritten). The scaled
+        result is **not** finalized; call `finalize()` (or `assemble` for computed
+        blocks) before solving or querying it.
+        """
+    def __truediv__(self, rhs: builtins.float) -> Matrix:
+        r"""
+        `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
+        `factor` (lazy). Not finalized; see `__mul__`.
         """
     def entries(self) -> builtins.list[tuple[builtins.int, builtins.str, builtins.int, builtins.str, builtins.float]]:
         r"""
@@ -1701,6 +1714,12 @@ class SubMatrix:
         r"""
         Whether this block is declared symmetric.
         """
+    @property
+    def factor(self) -> builtins.float:
+        r"""
+        The scalar factor applied to every value this block emits (`1.0` unless
+        the parent `Matrix` was built via `matrix * scalar` / `matrix / scalar`).
+        """
     def add_entry(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str, value: builtins.float) -> None:
         r"""
         Accumulate `value` at row `(row_node, row_field)`, column
@@ -2070,6 +2089,17 @@ def abs(field: typing.Any) -> typing.Any:
     Element-wise absolute value of a field.
     """
 
+def assemble(matrix: Matrix) -> None:
+    r"""
+    Re-assemble `matrix` **from its blocks alone** — no `Model` — mutating it in
+    place. The composition path: after combining blocks of any provenance (via
+    `matrix * scalar` / `matrix / scalar`, `|` union, `add_sub`, `filter`, …),
+    including *computed* ones (which `Matrix.finalize()` refuses — the element
+    kernel lives outside `containers`), call this to fold everything into one
+    CSR. Needed, for instance, to solve `(M/dt + K) u = …`:
+    `sys = (m / dt) | k; assemble(sys); solver.solve(sys, rhs)`.
+    """
+
 def barycenter(mesh: Mesh) -> Mesh:
     r"""
     Build a POI1 mesh of per-element centroids (centres of gravity), submesh
@@ -2251,6 +2281,13 @@ def from_live_nodes(coords: Coords) -> Mesh:
     Build a points (POI1) mesh holding every live node of `coords`.
     """
 
+def geometric(model: Model, materials: ElementField, stress: ElementField) -> Matrix:
+    r"""
+    Assemble the geometric (initial-stress) stiffness `K_g` of `model` (Cast3M
+    `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
+    `materials` resolves each mechanical zone, exactly like [`stiffness`].
+    """
+
 def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     r"""
     Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
@@ -2328,9 +2365,11 @@ def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementFie
     (nodes → Gauss).
     """
 
-def line_seg2(a: Node, b: Node, n_elems: builtins.int) -> Mesh:
+def line(a: Node, b: Node, n_elems: builtins.int, element_type: builtins.str = 'SEG2') -> Mesh:
     r"""
-    Build a line of `n_elems` SEG2 elements from node `a` to node `b`.
+    Build a line of `n_elems` elements from node `a` to node `b`.
+    
+    `element_type` is `"SEG2"` (default) or `"SEG3"`.
     """
 
 def log(field: typing.Any) -> typing.Any:
@@ -2341,6 +2380,13 @@ def log(field: typing.Any) -> typing.Any:
 def log10(field: typing.Any) -> typing.Any:
     r"""
     Element-wise base-10 logarithm of a field.
+    """
+
+def lump(matrix: Matrix) -> Matrix:
+    r"""
+    Lump an assembled matrix into a diagonal one by row-sum concentration
+    (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
+    diagonal (lumped) mass, conserving the total mass.
     """
 
 def mask(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
@@ -2365,12 +2411,14 @@ def mask(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typi
     or the lower one exceeds the upper.
     """
 
-def mass(model: Model) -> Matrix:
+def mass(model: Model, materials: ElementField) -> Matrix:
     r"""
-    Assemble the mass matrix `M` of `model`.
+    Assemble the consistent mass matrix `M` of `model` (Cast3M `MASS`), or the
+    heat-capacity matrix `C` for a thermal model (Cast3M `CAPA`).
     
-    v0 stub: no physics has a mass term yet, so this returns an empty
-    finalized `Matrix` with the model's DOF layout.
+    Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
+    assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
+    per-zone coefficients, exactly like [`stiffness`].
     """
 
 def material_field(model: Model, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
@@ -2674,22 +2722,33 @@ def swap_dir() -> pathlib.Path:
     Return the effective swap directory (creating it if necessary).
     """
 
-def sweep_qua4(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
+def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: builtins.str = 'QUA4') -> Mesh:
     r"""
-    Sweep two SEG2 line meshes into a QUA4 mesh, building `n_layers` layers
-    of quads between `mesh_a` and `mesh_b`.
+    Sweep two SEG2 line meshes into a mesh of `element_type`, building
+    `n_layers` layers between `mesh_a` and `mesh_b`.
+    
+    `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
+    `"TRI6"` — a `QUA4` mesh is always built first, then converted (diagonal
+    split for the triangles, promoted to quadratic for `QUA8`/`QUA9`/`TRI6`).
     """
 
 def sweep_solid(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
     r"""
     Sweep two matching surface meshes into a solid mesh, building `n_layers`
-    layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep_qua4`:
+    layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep`:
     TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
     """
 
 def tan(field: typing.Any) -> typing.Any:
     r"""
     Element-wise tangent of a field (radians).
+    """
+
+def tangent(model: Model, materials: ElementField, state: ElementField) -> Matrix:
+    r"""
+    Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
+    (Cast3M `KTAN`), from the behaviour `state` (which carries `D_alg` besides the
+    stress). `materials` resolves each zone, like [`stiffness`].
     """
 
 def tanh(field: typing.Any) -> typing.Any:
