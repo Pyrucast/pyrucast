@@ -78,5 +78,11 @@ viz = ["dep:plotters"]
 viz-interactive = ["viz", "dep:winit", "dep:softbuffer"]
 # Generate the `pyrucast.pyi` stub file (see `src/bin/stub_gen.rs`).
 # Pulls in the bindings but does NOT enable extension-module — the
-# binary links to libpython like any other Rust program.
-stub-gen = ["python-api", "dep:pyo3-stub-gen"]
+# binary links to libpython like any other Rust program. Implies `viz`:
+# `pyo3-stub-gen`'s `gen_stub_pymethods` reads every method in a
+# `#[pymethods]` block regardless of its own `#[cfg(feature = "viz")]`
+# (the outer attribute macro sees the raw tokens before cfg-stripping),
+# so without `viz` truly active here the `.pyi` would document `plot`
+# methods that a plain `python-api`/`extension-module` build (no `viz`)
+# doesn't actually compile in.
+stub-gen = ["python-api", "dep:pyo3-stub-gen", "viz"]
