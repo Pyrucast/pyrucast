@@ -16,6 +16,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `circle(node_a, center, node_b, n_elems, element_type="SEG2")` | **même nom, autre appel** : un arc de `node_a` à `node_b` sur le cercle de centre `center` passant par les deux (dispatch sur le type du 2ᵉ argument — `Node` ⇒ arc, sinon cercle complet) |
 | `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, TRI3→PENTA6, QUA4→HEX8) |
 | `sweep(mesh_a, mesh_b, n_layers, element_type="QUA4")` | tisse `QUA4`/`TRI3`/`QUA8`/`QUA9`/`TRI6` entre deux lignes `SEG2` (un `QUA4` est toujours construit d'abord, puis converti) |
+| `transfinite(side1, side2, side3, side4, element_type="QUA4")` | **généralisation de `sweep` à 4 côtés** (l'équivalent Cast3M de `DALL`) : interpolation transfinie (patch de Coons) entre quatre lignes `SEG2` formant un contour fermé (voir plus bas) |
 | `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
 | `translate(mesh, vector)` | **copie** du maillage translatée de `vector` (nœuds neufs, original intact) |
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
@@ -79,6 +80,54 @@ qua8 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "QUA8")
 qua9 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "QUA9")
 tri6 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "TRI6")
 ```
+
+## Surface entre 4 côtés : `transfinite`
+
+`transfinite(side1, side2, side3, side4, element_type="QUA4")` maille une
+surface **structurée** délimitée par quatre lignes `SEG2` — l'équivalent
+Cast3M de l'opérateur `DALL(er)`, généralisant `sweep` (2 lignes) à 4 lignes.
+`side1`/`side3` et `side2`/`side4` sont les deux paires de côtés
+**opposés** ; chaque paire doit avoir le **même nombre d'éléments**. Les
+quatre côtés doivent former un **contour fermé, orienté de façon
+cohérente** :
+
+```text
+side4 dernier nœud == side1 premier nœud
+side1 dernier nœud == side2 premier nœud
+side2 dernier nœud == side3 premier nœud
+side3 dernier nœud == side4 premier nœud
+```
+
+Les nœuds des quatre côtés (coins compris) sont **réutilisés** ; seuls les
+nœuds intérieurs sont créés, par **interpolation transfinie discrète**
+(patch de Coons bilinéaire) : mélange des deux côtés opposés à chaque
+direction, corrigé par les quatre coins pour reproduire les côtés **exactement**
+sur le bord, quelle que soit leur forme (pas seulement des droites). Comme
+`sweep`, un `QUA4` est toujours construit d'abord, puis converti pour
+`"TRI3"`/`"QUA8"`/`"QUA9"`/`"TRI6"`.
+
+```python
+c = pyrucast.Coords(dim=2)
+p0 = c.add_node([0.0, 0.0])
+p1 = c.add_node([2.0, 0.0])
+p2 = c.add_node([2.0, 1.0])
+p3 = c.add_node([0.0, 1.0])
+
+side1 = pyrucast.mesher.line(p0, p1, 4)  # bas,   4 éléments
+side2 = pyrucast.mesher.line(p1, p2, 2)  # droite, 2 éléments
+side3 = pyrucast.mesher.line(p2, p3, 4)  # haut,  4 éléments (= side1)
+side4 = pyrucast.mesher.line(p3, p0, 2)  # gauche, 2 éléments (= side2)
+
+surf = pyrucast.mesher.transfinite(side1, side2, side3, side4)
+print(surf.element_types(), surf.cell_count())  # ['QUA4'] 8
+```
+
+> **Différence avec Cast3M.** `DALL` accepte des côtés opposés avec un
+> nombre de points **différent** (algorithme de pavage plus général,
+> documenté mais non détaillé dans la notice officielle). `transfinite`
+> se limite au cas standard de l'interpolation transfinie — côtés opposés
+> de **même** nombre d'éléments — largement suffisant en pratique et
+> implémentable simplement.
 
 ## Copies rigides : `translate` et `rotate`
 

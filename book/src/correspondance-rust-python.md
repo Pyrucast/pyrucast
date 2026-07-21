@@ -85,6 +85,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `circle(center: &Node, normal: &[f64], radius: f64, n_elems: usize, element_type: ElementType) -> Mesh` | `circle(center, normal, radius, n_elems, element_type="SEG2") -> Mesh` (dispatch par type du 2ᵉ argument, partagé avec `arc`) |
 | `arc(node_a: &Node, center: &Node, node_b: &Node, n_elems: usize, element_type: ElementType) -> Mesh` | `circle(node_a, center, node_b, n_elems, element_type="SEG2") -> Mesh` (pas de nom Python séparé) |
 | `sweep(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize, element_type: ElementType) -> Mesh` | `sweep(mesh_a, mesh_b, n_layers, element_type="QUA4") -> Mesh` |
+| `transfinite(side1: &Mesh, side2: &Mesh, side3: &Mesh, side4: &Mesh, element_type: ElementType) -> Mesh` | `transfinite(side1, side2, side3, side4, element_type="QUA4") -> Mesh` |
 | `sweep_solid(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_solid(mesh_a, mesh_b, n_layers) -> Mesh` |
 | `extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Mesh` | `extrude(mesh, direction, n_layers) -> Mesh` |
 | `to_quadratic(mesh: &Mesh) -> Mesh` | `to_quadratic(mesh) -> Mesh` |

@@ -91,6 +91,7 @@ __all__ = [
     "thermal_strain",
     "to_poi1",
     "to_quadratic",
+    "transfinite",
     "translate",
     "volume",
     "xtx",
@@ -2791,6 +2792,19 @@ def to_quadratic(mesh: Mesh) -> Mesh:
     type is bumped to its quadratic sibling (TRI3→TRI6, HEX8→HEX20, …). Corner
     nodes are re-used; one mid-edge node is created per edge (at the midpoint)
     and shared between the cells that use it. The original mesh is untouched.
+    """
+
+def transfinite(side1: Mesh, side2: Mesh, side3: Mesh, side4: Mesh, element_type: builtins.str = 'QUA4') -> Mesh:
+    r"""
+    Build a structured surface bounded by four `SEG2` sides, by transfinite
+    interpolation (the Coons-patch generalization of `sweep` from two lines
+    to four). `side1`/`side3` and `side2`/`side4` are the two pairs of
+    **opposite** sides and must each have the same element count; the four
+    sides must form a closed contour, `side1 → side2 → side3 → side4 →
+    side1`, each sharing its end node with the next side's start node.
+    
+    `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
+    `"TRI6"` — same conversion path as `sweep`.
     """
 
 def translate(mesh: Mesh, vector: typing.Sequence[builtins.float]) -> Mesh:

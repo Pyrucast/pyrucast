@@ -199,6 +199,37 @@ pub fn sweep(
     Ok(PyMesh { inner: mesh })
 }
 
+/// Build a structured surface bounded by four `SEG2` sides, by transfinite
+/// interpolation (the Coons-patch generalization of `sweep` from two lines
+/// to four). `side1`/`side3` and `side2`/`side4` are the two pairs of
+/// **opposite** sides and must each have the same element count; the four
+/// sides must form a closed contour, `side1 → side2 → side3 → side4 →
+/// side1`, each sharing its end node with the next side's start node.
+///
+/// `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
+/// `"TRI6"` — same conversion path as `sweep`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (side1, side2, side3, side4, element_type="QUA4"))]
+pub fn transfinite(
+    side1: PyRef<PyMesh>,
+    side2: PyRef<PyMesh>,
+    side3: PyRef<PyMesh>,
+    side4: PyRef<PyMesh>,
+    element_type: &str,
+) -> PyResult<PyMesh> {
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
+    let mesh = crate::ops::mesher::transfinite(
+        &side1.inner,
+        &side2.inner,
+        &side3.inner,
+        &side4.inner,
+        et,
+    )?;
+    Ok(PyMesh { inner: mesh })
+}
+
 /// Extrude `mesh` by `n_layers` layers along `direction` (the total
 /// displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]

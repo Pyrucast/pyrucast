@@ -45,7 +45,10 @@ pub fn sweep(
 
 /// Split each QUA4 cell into two TRI3 cells along the `(0, 2)` diagonal:
 /// `(0, 1, 2)` and `(0, 2, 3)`. Nodes are re-used, no new node is created.
-fn qua4_to_tri3(mesh: &Mesh) -> Result<Mesh> {
+///
+/// Shared with [`super::transfinite`], which derives `TRI3`/`TRI6` from a
+/// QUA4 grid the same way [`sweep`] does.
+pub(super) fn qua4_to_tri3(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let mut result = Mesh::empty();
     for sm_h in mesh {
@@ -67,7 +70,9 @@ fn qua4_to_tri3(mesh: &Mesh) -> Result<Mesh> {
 /// Promote each QUA8 cell to QUA9 by adding a fresh center node (node 8, the
 /// mean of the 4 corners) — [`super::to_quadratic`] only produces the
 /// serendipity QUA8, which has no center node to re-use.
-fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
+///
+/// Shared with [`super::transfinite`] (see [`qua4_to_tri3`]).
+pub(super) fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let mut result = Mesh::empty();
     for sm_h in mesh {

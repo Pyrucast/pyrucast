@@ -24,6 +24,7 @@ from ._pyrucast import (
     sweep_solid as sweep_solid,
     to_poi1 as to_poi1,
     to_quadratic as to_quadratic,
+    transfinite as transfinite,
     translate as translate,
     volume as volume,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "sweep_solid",
     "to_poi1",
     "to_quadratic",
+    "transfinite",
     "translate",
     "volume",
 ]
