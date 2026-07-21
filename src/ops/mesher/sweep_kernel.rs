@@ -27,18 +27,16 @@ use crate::store::{insert, read};
 /// `[k][j]`, `[k][j+1]`, `[k+1][j+1]`, `[k+1][j]`.
 pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mesh> {
     if n_layers == 0 {
-        return Err(PyrucastError::Message(
-            "sweep_qua4: n_layers must be ≥ 1".into(),
-        ));
+        return Err(PyrucastError::Message("sweep: n_layers must be ≥ 1".into()));
     }
     if mesh_a.len() != 1 {
         return Err(PyrucastError::Message(
-            "sweep_qua4: mesh_a must have exactly one submesh".into(),
+            "sweep: mesh_a must have exactly one submesh".into(),
         ));
     }
     if mesh_b.len() != 1 {
         return Err(PyrucastError::Message(
-            "sweep_qua4: mesh_b must have exactly one submesh".into(),
+            "sweep: mesh_b must have exactly one submesh".into(),
         ));
     }
     let sm_a = mesh_a.get(0)?;
@@ -47,7 +45,7 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
     let coords_b = read(&sm_b)?.coords();
     if coords_a.index() != coords_b.index() || coords_a.generation() != coords_b.generation() {
         return Err(PyrucastError::Message(
-            "sweep_qua4: meshes are attached to different Coords".into(),
+            "sweep: meshes are attached to different Coords".into(),
         ));
     }
 
@@ -62,17 +60,17 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
 
     if et_a != ElementType::SEG2 {
         return Err(PyrucastError::Message(
-            "sweep_qua4: mesh_a must be a SEG2 mesh".into(),
+            "sweep: mesh_a must be a SEG2 mesh".into(),
         ));
     }
     if et_b != ElementType::SEG2 {
         return Err(PyrucastError::Message(
-            "sweep_qua4: mesh_b must be a SEG2 mesh".into(),
+            "sweep: mesh_b must be a SEG2 mesh".into(),
         ));
     }
     if n_elems != n_elems_b {
         return Err(PyrucastError::Message(format!(
-            "sweep_qua4: mesh_a has {} elements but mesh_b has {}",
+            "sweep: mesh_a has {} elements but mesh_b has {}",
             n_elems, n_elems_b
         )));
     }
