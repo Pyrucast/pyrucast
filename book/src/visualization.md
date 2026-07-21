@@ -61,6 +61,8 @@ Toute la sortie passe par la même méthode `plot(view, save)` exposée sur `Sub
 
 Tout autre extension est rejetée avec une erreur explicite. Le format vectoriel est ce qui rend ce socle particulièrement utile pour les figures de rapport : on conserve un trait propre quel que soit le zoom.
 
+Dans la fenêtre interactive uniquement, le point de vue courant `view=(yaw, pitch, scale)` s'affiche en permanence en haut à droite — le même ordre que le tuple accepté par `view=`, pour recopier tel quel l'angle atteint à la souris/molette dans un appel `plot()` ultérieur.
+
 Exemple Rust :
 
 ```rust,ignore

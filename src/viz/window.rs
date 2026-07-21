@@ -176,6 +176,7 @@ impl<'a, D: Drawable> App<'a, D> {
                 if self.show_axes {
                     let _ = crate::viz::axes::draw_gizmo(&area, &view);
                 }
+                let _ = overlay::draw_view_readout(&area, &view);
                 let _ = area.present();
             }
         }

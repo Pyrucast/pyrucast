@@ -151,6 +151,52 @@ where
     Ok(())
 }
 
+// ─── View readout (interactive window only) ─────────────────────────────────
+
+#[cfg(any(test, feature = "viz-interactive"))]
+const READOUT_WIDTH: i32 = 210;
+#[cfg(any(test, feature = "viz-interactive"))]
+const READOUT_HEIGHT: i32 = 26;
+
+/// Draw the current `(yaw, pitch, scale)` — same order as the `view=`
+/// tuple accepted by `plot()` — as small text pinned to the top-right
+/// corner. Interactive window only: it lets the user read back a camera
+/// angle they rotated/zoomed to, to reuse as `view=(...)` later.
+#[cfg(any(test, feature = "viz-interactive"))]
+pub(crate) fn draw_view_readout<DB: DrawingBackend>(
+    area: &DrawingArea<DB, Shift>,
+    view: &crate::viz::View,
+) -> Result<()>
+where
+    DB::ErrorType: 'static,
+{
+    let (w, _) = area.dim_in_pixel();
+    let x = (w as i32 - READOUT_WIDTH - BUTTON_MARGIN).max(BUTTON_MARGIN);
+    let y = BUTTON_MARGIN;
+
+    // Filled background + border, same look as the field button, so the
+    // text stays legible over any mesh colour behind it.
+    area.draw(&Rectangle::new(
+        [(x, y), (x + READOUT_WIDTH - 1, y + READOUT_HEIGHT - 1)],
+        ShapeStyle::from(&BUTTON_FILL).filled(),
+    ))
+    .map_err(pl_err)?;
+    area.draw(&Rectangle::new(
+        [(x, y), (x + READOUT_WIDTH - 1, y + READOUT_HEIGHT - 1)],
+        ShapeStyle::from(&BUTTON_BORDER),
+    ))
+    .map_err(pl_err)?;
+
+    let label = format!(
+        "view=({:.1}, {:.1}, {:.2})",
+        view.yaw, view.pitch, view.scale
+    );
+    let text_style = TextStyle::from(("sans-serif", 13).into_font()).color(&BUTTON_TEXT);
+    area.draw_text(&label, &text_style, (x + 6, y + 5))
+        .map_err(pl_err)?;
+    Ok(())
+}
+
 // ─── Frame slider (evolution plots) ─────────────────────────────────────────
 //
 // The slider is drawn and grabbed only in the interactive window (file export
@@ -363,6 +409,26 @@ mod tests {
         }
         assert!(buf.contains("frame 2/4"));
         assert!(buf.contains("x=2.5000"));
+    }
+
+    #[test]
+    fn draw_view_readout_renders_values_in_svg() {
+        let mut buf = String::new();
+        {
+            let backend = SVGBackend::with_string(&mut buf, (400, 100));
+            let area = backend.into_drawing_area();
+            area.fill(&WHITE).unwrap();
+            let view = crate::viz::View {
+                yaw: 45.0,
+                pitch: 35.264_389_682_754_654,
+                scale: 1.0,
+                target: None,
+                show_axes: true,
+            };
+            draw_view_readout(&area, &view).unwrap();
+            area.present().unwrap();
+        }
+        assert!(buf.contains("view=(45.0, 35.3, 1.00)"));
     }
 
     #[test]
