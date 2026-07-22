@@ -30,7 +30,7 @@
 use super::{cross2, point_in_triangle};
 use crate::containers::mesh::{Point2, Vector2};
 use crate::error::{PyrucastError, Result};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// Refinement criteria applied after the constrained Delaunay
 /// triangulation is built.
@@ -127,7 +127,7 @@ impl Cdt {
             let a = self.points[t.v[0]];
             let b = self.points[t.v[1]];
             let c = self.points[t.v[2]];
-            if in_circle(a, b, c, p) > 0.0 {
+            if in_circle_tolerant(a, b, c, p) {
                 bad.push(t_idx);
             }
         }
@@ -422,7 +422,7 @@ impl Cdt {
     fn insert_point_constrained(
         &mut self,
         p_idx: usize,
-        constrained_edges: &HashSet<(usize, usize)>,
+        constrained_edges: &BTreeSet<(usize, usize)>,
     ) -> Result<()> {
         let p = self.points[p_idx];
 
@@ -448,7 +448,15 @@ impl Cdt {
         })?;
 
         // 2. BFS from `seed`, only crossing non-constrained edges and only
-        //    when in_circle > 0.
+        //    when in_circle > 0. `seed` itself is exempt from that test: `p`
+        //    was located strictly inside it (`point_in_triangle`), which
+        //    mathematically guarantees `p` is inside its circumcircle too —
+        //    but with near-cocircular input (e.g. several points sampled on
+        //    the same construction circle, as `arc`/`circle` produce), plain
+        //    floating-point `in_circle` can land it right on that boundary
+        //    and misreport ≤ 0. Trusting the exact containment test instead
+        //    of the numerically fragile one avoids a spurious "did not
+        //    produce a cavity" failure.
         let mut bad: Vec<usize> = Vec::new();
         let mut visited = vec![false; self.triangles.len()];
         let mut queue = vec![seed];
@@ -461,7 +469,7 @@ impl Cdt {
             let a = self.points[t.v[0]];
             let b = self.points[t.v[1]];
             let c = self.points[t.v[2]];
-            if in_circle(a, b, c, p) <= 0.0 {
+            if t_idx != seed && !in_circle_tolerant(a, b, c, p) {
                 continue;
             }
             bad.push(t_idx);
@@ -538,6 +546,24 @@ impl Cdt {
         ab.max(bc).max(ca)
     }
 
+    /// The two point indices spanning the longest edge of triangle `t_idx`.
+    fn triangle_longest_edge(&self, t_idx: usize) -> (usize, usize) {
+        let t = self.triangles[t_idx];
+        let a = self.points[t.v[0]];
+        let b = self.points[t.v[1]];
+        let c = self.points[t.v[2]];
+        let ab = (b - a).norm_squared();
+        let bc = (c - b).norm_squared();
+        let ca = (a - c).norm_squared();
+        if ab >= bc && ab >= ca {
+            (t.v[0], t.v[1])
+        } else if bc >= ca {
+            (t.v[1], t.v[2])
+        } else {
+            (t.v[2], t.v[0])
+        }
+    }
+
     /// Squared length of the shortest edge of triangle `t_idx`.
     fn triangle_shortest_edge_sq(&self, t_idx: usize) -> f64 {
         let t = self.triangles[t_idx];
@@ -598,7 +624,7 @@ impl Cdt {
     /// three super-triangle vertices.
     fn first_encroached_constraint(
         &self,
-        constrained_edges: &HashSet<(usize, usize)>,
+        constrained_edges: &BTreeSet<(usize, usize)>,
     ) -> Option<(usize, usize)> {
         for &(a, b) in constrained_edges {
             if self.constraint_has_encroaching_point(a, b, None) {
@@ -648,7 +674,7 @@ impl Cdt {
     fn encroached_constraint_by(
         &self,
         p: Point2,
-        constrained_edges: &HashSet<(usize, usize)>,
+        constrained_edges: &BTreeSet<(usize, usize)>,
     ) -> Option<(usize, usize)> {
         let strict = 1e-12;
         for &(a, b) in constrained_edges {
@@ -671,7 +697,7 @@ impl Cdt {
         &mut self,
         a: usize,
         b: usize,
-        constrained_edges: &mut HashSet<(usize, usize)>,
+        constrained_edges: &mut BTreeSet<(usize, usize)>,
     ) -> Result<usize> {
         let pa = self.points[a];
         let pb = self.points[b];
@@ -709,7 +735,7 @@ impl Cdt {
     pub(super) fn refine(
         &mut self,
         opts: &RefinementOptions,
-        constrained_edges: &mut HashSet<(usize, usize)>,
+        constrained_edges: &mut BTreeSet<(usize, usize)>,
     ) -> Result<()> {
         if !opts.is_active() {
             return Ok(());
@@ -749,10 +775,24 @@ impl Cdt {
             };
 
             let Some(cc) = self.triangle_circumcenter(t_idx) else {
-                return Err(PyrucastError::Message(format!(
-                    "cdt::refine: triangle {} has no circumcenter",
-                    t_idx
-                )));
+                // Near-zero-area (collinear) triangle: its circumcenter is
+                // undefined, but cocircular input (`circle`/`arc`-built
+                // contours routinely produce many points on one circle) can
+                // transiently create these during refinement. Splitting its
+                // longest edge still shrinks it — the same remedy already
+                // used for an encroached constraint, just for a free edge
+                // when it isn't one.
+                let (ea, eb) = self.triangle_longest_edge(t_idx);
+                let key = if ea < eb { (ea, eb) } else { (eb, ea) };
+                if constrained_edges.contains(&key) {
+                    self.split_constraint(ea, eb, constrained_edges)?;
+                } else {
+                    let mid = Point2::from((self.points[ea].coords + self.points[eb].coords) * 0.5);
+                    let new_idx = self.points.len();
+                    self.points.push(mid);
+                    self.insert_point_constrained(new_idx, constrained_edges)?;
+                }
+                continue;
             };
 
             // If the circumcenter would encroach a constraint, split
@@ -801,7 +841,7 @@ impl Cdt {
     /// can ignore them uniformly.
     fn flood_fill_outside(
         &self,
-        constrained_edges: &std::collections::HashSet<(usize, usize)>,
+        constrained_edges: &std::collections::BTreeSet<(usize, usize)>,
     ) -> Vec<bool> {
         let n = self.triangles.len();
         // None ⇒ not visited; Some(true) ⇒ outside; Some(false) ⇒ inside.
@@ -853,7 +893,7 @@ impl Cdt {
     /// outer loop nor inside any hole).
     pub(super) fn extract_interior_with_constraints(
         &self,
-        constrained_edges: &std::collections::HashSet<(usize, usize)>,
+        constrained_edges: &std::collections::BTreeSet<(usize, usize)>,
     ) -> Vec<[usize; 3]> {
         let outside = self.flood_fill_outside(constrained_edges);
         let mut out = Vec::new();
@@ -969,6 +1009,31 @@ fn in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
     let cm = vc.norm_squared();
     va.x * (vb.y * cm - bm * vc.y) - va.y * (vb.x * cm - bm * vc.x)
         + am * (vb.x * vc.y - vb.y * vc.x)
+}
+
+/// `in_circle(a, b, c, d) > 0`, but tolerant of points that are meant to be
+/// exactly cocircular — `circle`/`arc`-built contours routinely hand the
+/// triangulator dozens of points sampled on the very same circle. In exact
+/// arithmetic every triangle formed from three such points has that same
+/// circle as its own circumcircle, so a fourth one is mathematically
+/// borderline (`in_circle == 0`); plain `f64` rounding then decides the sign
+/// arbitrarily, triangle by triangle. Left as a strict `> 0.0` test, this
+/// turns the *initial* Delaunay triangulation of a cocircular point set into
+/// an essentially random pick among many degenerate options — often skinny —
+/// and later drives `refine` into a cascade of near-useless single-triangle
+/// insertions trying to fix them up one at a time. Treating "borderline" as
+/// "inside" instead makes Bowyer-Watson grow the full cavity across a
+/// cocircular cluster in one step, the well-conditioned choice.
+#[inline]
+fn in_circle_tolerant(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
+    let scale = a
+        .coords
+        .norm_squared()
+        .max(b.coords.norm_squared())
+        .max(c.coords.norm_squared())
+        .max(d.coords.norm_squared())
+        .max(1.0);
+    in_circle(a, b, c, d) > -1e-9 * scale * scale
 }
 
 /// Delaunay triangulation of a 2-D point set by Bowyer-Watson.
@@ -1172,8 +1237,8 @@ pub fn triangulate_polygon_with_holes(
     for i in 0..n_total {
         cdt.insert_point(i)?;
     }
-    let mut edge_set: std::collections::HashSet<(usize, usize)> =
-        std::collections::HashSet::with_capacity(constraints.len());
+    let mut edge_set: std::collections::BTreeSet<(usize, usize)> =
+        std::collections::BTreeSet::new();
     for &(a, b) in &constraints {
         cdt.insert_constraint(a, b)?;
         edge_set.insert(if a < b { (a, b) } else { (b, a) });
@@ -1277,7 +1342,7 @@ pub fn triangulate_polygon_with_holes_refined(
     for i in 0..n_total {
         cdt.insert_point(i)?;
     }
-    let mut edge_set: HashSet<(usize, usize)> = HashSet::with_capacity(constraints.len());
+    let mut edge_set: BTreeSet<(usize, usize)> = BTreeSet::new();
     for &(a, b) in &constraints {
         cdt.insert_constraint(a, b)?;
         edge_set.insert(if a < b { (a, b) } else { (b, a) });
@@ -1456,14 +1521,24 @@ mod tests {
     fn cdt_forces_long_rectangle_diagonal() {
         let pts = vec![p2(0.0, 0.0), p2(2.0, 0.0), p2(2.0, 1.0), p2(0.0, 1.0)];
         let unconstrained = delaunay_2d(&pts).unwrap();
-        assert!(triangulation_has_edge(&unconstrained, 0, 2));
-        assert!(!triangulation_has_edge(&unconstrained, 1, 3));
+        // A rectangle's two diagonals are equal length, so its 4 corners are
+        // exactly cocircular: either diagonal is an equally valid choice for
+        // the unconstrained triangulation (which one comes out is
+        // floating-point tie-breaking, not a quality difference). The test
+        // forces whichever one didn't come out on its own.
+        let has_02 = triangulation_has_edge(&unconstrained, 0, 2);
+        let has_13 = triangulation_has_edge(&unconstrained, 1, 3);
+        assert!(
+            has_02 ^ has_13,
+            "expected exactly one diagonal, got (0,2)={has_02} (1,3)={has_13}"
+        );
+        let (forced_a, forced_b) = if has_02 { (1, 3) } else { (0, 2) };
 
-        let constrained = constrained_delaunay_2d(&pts, &[(1, 3)]).unwrap();
+        let constrained = constrained_delaunay_2d(&pts, &[(forced_a, forced_b)]).unwrap();
         assert_eq!(constrained.len(), 2);
         assert!(
-            triangulation_has_edge(&constrained, 1, 3),
-            "forced edge (1, 3) missing: {:?}",
+            triangulation_has_edge(&constrained, forced_a, forced_b),
+            "forced edge ({forced_a}, {forced_b}) missing: {:?}",
             constrained
         );
         assert_all_ccw(&constrained, &pts);
@@ -1656,6 +1731,39 @@ mod tests {
         assert!(max_edge_length(&tris, &pts) <= 1.0 + 1e-9);
         // Total area = 16 - 4 = 12.
         assert!((total_area(&tris, &pts) - 12.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn refine_cocircular_boundary_converges() {
+        // Every point of a regular polygon lies on the same circle by
+        // construction — exactly what `circle`/`arc`-built contours hand the
+        // mesher. Any three of them share that circle as their circumcircle,
+        // so `in_circle` is mathematically borderline for a fourth: without
+        // tolerance for that, the initial Delaunay triangulation used to
+        // come out arbitrarily skinny and drive `refine` into thousands of
+        // near-useless single-triangle insertions instead of converging.
+        let n = 20;
+        let r = 1.0;
+        let outer: Vec<Point2> = (0..n)
+            .map(|i| {
+                let t = 2.0 * std::f64::consts::PI * i as f64 / n as f64;
+                p2(r * t.cos(), r * t.sin())
+            })
+            .collect();
+        let opts = RefinementOptions {
+            max_edge_length: Some(0.3),
+            min_angle_deg: None,
+        };
+        let (pts, tris) = triangulate_polygon_with_holes_refined(&outer, &[], opts).unwrap();
+        assert_all_ccw(&tris, &pts);
+        assert!(max_edge_length(&tris, &pts) <= 0.3 + 1e-9);
+        let poly_area = 0.5 * n as f64 * r * r * (2.0 * std::f64::consts::PI / n as f64).sin();
+        assert!(
+            (total_area(&tris, &pts) - poly_area).abs() < 1e-6,
+            "area drift: got {}, expected {}",
+            total_area(&tris, &pts),
+            poly_area
+        );
     }
 
     #[test]
