@@ -53,7 +53,7 @@ def construire_plaque_trouee():
     """Plaque rectangulaire trouée, construite bord par bord avec les
     mailleurs dédiés (`line`, `circle` — jamais de nœud ou de
     maille ajoutés à la main). `pyrucast.consolidate` fusionne les quatre
-    côtés en un seul sous-maillage, requis par `fill_surface` pour former
+    côtés en un seul sous-maillage, requis par `triangulate_surface` pour former
     une boucle fermée (Cast3M : `cex = l12 ET c23 ET ...` fait le même
     travail implicitement)."""
     coords = pc.Coords(2)
@@ -72,7 +72,7 @@ def construire_plaque_trouee():
     trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
 
     contour = boucle_ext | trou
-    plaque = pc.mesher.fill_surface(contour, "TRI3", max_edge_length=0.02)
+    plaque = pc.mesher.triangulate_surface(contour, "TRI3", max_edge_length=0.02)
 
     # Bord bas SANS le coin partagé avec le bord gauche (x = 0) : les charges
     # doivent rester sur des supports disjoints (voir plus bas). Sélection

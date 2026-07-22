@@ -40,7 +40,7 @@ K_COND = 50.0  # W/m/K
 def construire_plaque_trouee():
     """Plaque rectangulaire trouée, construite bord par bord avec les
     mailleurs dédiés (`line`, `circle`), fusionnés en un seul
-    sous-maillage par `pyrucast.consolidate` avant `fill_surface` — comme
+    sous-maillage par `pyrucast.consolidate` avant `triangulate_surface` — comme
     dans `formation/maillage.py`. Renvoie aussi les sous-maillages utiles à
     la mécanique et à la thermique : bord gauche (encastrement), moitié
     basse du trou (chargement) et le trou complet (température imposée,
@@ -61,7 +61,7 @@ def construire_plaque_trouee():
     trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
 
     contour = boucle_ext | trou
-    plaque = pc.mesher.fill_surface(contour, "TRI3", max_edge_length=0.02)
+    plaque = pc.mesher.triangulate_surface(contour, "TRI3", max_edge_length=0.02)
 
     # Moitié basse du trou (y < centre) : support de l'effort de la masse
     # suspendue, comme le `PRES 'MASS'` de Cast3M sur une moitié du cercle.

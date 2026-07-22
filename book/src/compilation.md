@@ -131,7 +131,7 @@ pyrucast = { path = "…", default-features = false }   # Rust pur, pas de pyo3
 use pyrucast::containers::mesh::ElementType;
 use pyrucast::ops::mesher;
 
-let mesh = mesher::surface(&contour, ElementType::TRI3, Some(1.0))?;
+let mesh = mesher::pave_surface(&contour, ElementType::TRI3, Some(1.0))?;
 ```
 
 Tout le cœur (`containers`, `ops`, `interrupt`, `store`, …) est disponible et

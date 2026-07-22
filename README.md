@@ -25,7 +25,7 @@ pyrucast = { git = "…", default-features = false }   # pas de pyo3, pas de lib
 
 ```rust
 use pyrucast::containers::mesh::ElementType;
-let mesh = pyrucast::ops::mesher::surface(&contour, ElementType::TRI3, Some(1.0))?;
+let mesh = pyrucast::ops::mesher::pave_surface(&contour, ElementType::TRI3, Some(1.0))?;
 ```
 
 `cargo build` / `cargo test` (sans feature) compilent le cœur en Rust pur —

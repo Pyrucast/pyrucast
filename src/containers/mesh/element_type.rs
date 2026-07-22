@@ -51,7 +51,7 @@
 //!
 //! These conventions are compatible with the orientations already enforced
 //! elsewhere in the codebase (CCW filling in
-//! [`crate::ops::mesher::fill_surface()`], HEX8 node ordering in
+//! [`crate::ops::mesher::triangulate_surface()`], HEX8 node ordering in
 //! [`crate::ops::mesher::extrude()`]).
 
 use serde::{Deserialize, Serialize};

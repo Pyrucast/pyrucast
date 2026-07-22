@@ -63,7 +63,7 @@ def construire_plaque_trouee():
     trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
 
     contour = boucle_ext | trou
-    plaque = pc.mesher.fill_surface(contour, "TRI3", max_edge_length=0.02)
+    plaque = pc.mesher.triangulate_surface(contour, "TRI3", max_edge_length=0.02)
 
     y = pc.field.coordinates(trou, ["Y"])
     noeuds_bas_trou = pc.field.select(y, lt=CENTRE_TROU[1])

@@ -1,9 +1,9 @@
 //! Frontal surface mesher: fill the interior of a closed contour with a
 //! size-controlled, node-creating advancing front.
 //!
-//! Unlike [`crate::ops::mesher::fill_surface()`] — which triangulates the
+//! Unlike [`crate::ops::mesher::triangulate_surface()`] — which triangulates the
 //! contour nodes themselves (ear clipping / constrained Delaunay, plus an
-//! optional refinement pass) — [`surface()`] generates **interior nodes**
+//! optional refinement pass) — [`pave_surface()`] generates **interior nodes**
 //! to honour a target element size, the way a classic surface operator
 //! does. The method:
 //!
@@ -58,7 +58,7 @@ const LAYER_OFFSET: f64 = 0.85;
 /// `contour` is a [`Mesh`] with **one or more** SEG2 submeshes, attached to
 /// a **2-D** `Coords`: one closed simple loop each. With more than one loop,
 /// the **outer boundary** is auto-detected as the one with the largest
-/// (absolute) area — exactly as [`crate::ops::mesher::fill_surface()`] does
+/// (absolute) area — exactly as [`crate::ops::mesher::triangulate_surface()`] does
 /// — and every other loop is treated as a **hole**; each hole is bridged
 /// into the outer loop (a zero-width "keyhole" cut to the nearest point)
 /// before paving, so the existing single-front algorithm handles it
@@ -72,20 +72,20 @@ const LAYER_OFFSET: f64 = 0.85;
 /// (quad-dominant with a few triangles).
 ///
 /// This is the uninterruptible convenience form; for a long mesh that a
-/// caller may want to stop early, use [`surface_cancellable`].
-pub fn surface(
+/// caller may want to stop early, use [`pave_surface_cancellable`].
+pub fn pave_surface(
     contour: &Mesh,
     element_type: ElementType,
     target_size: Option<f64>,
 ) -> Result<Mesh> {
-    surface_cancellable(contour, element_type, target_size, &NoCancel)
+    pave_surface_cancellable(contour, element_type, target_size, &NoCancel)
 }
 
-/// Like [`surface`], but polls `cancel` periodically so the paving can be
+/// Like [`pave_surface`], but polls `cancel` periodically so the paving can be
 /// stopped early (returning [`PyrucastError::Interrupted`]). The frontend
 /// chooses what `cancel` means — a timeout, an external flag, or, in the
 /// Python binding, a `Ctrl+C` via `Python::check_signals`.
-pub fn surface_cancellable(
+pub fn pave_surface_cancellable(
     contour: &Mesh,
     element_type: ElementType,
     target_size: Option<f64>,
@@ -96,7 +96,7 @@ pub fn surface_cancellable(
         ElementType::QUA4 => 4usize,
         other => {
             return Err(PyrucastError::Message(format!(
-                "surface: only TRI3 and QUA4 are supported, got {}",
+                "pave_surface: only TRI3 and QUA4 are supported, got {}",
                 other
             )))
         }
@@ -104,7 +104,7 @@ pub fn surface_cancellable(
     if let Some(h) = target_size {
         if h <= 0.0 || h.is_nan() {
             return Err(PyrucastError::Message(format!(
-                "surface: target_size must be > 0, got {}",
+                "pave_surface: target_size must be > 0, got {}",
                 h
             )));
         }
@@ -112,7 +112,7 @@ pub fn surface_cancellable(
     let n_sub = contour.len();
     if n_sub == 0 {
         return Err(PyrucastError::Message(
-            "surface: contour must contain at least one SEG2 submesh".into(),
+            "pave_surface: contour must contain at least one SEG2 submesh".into(),
         ));
     }
 
@@ -120,7 +120,7 @@ pub fn surface_cancellable(
     let dim = read(&coords)?.dim();
     if dim != 2 && dim != 3 {
         return Err(PyrucastError::Message(format!(
-            "surface: contour must be 2-D or 3-D, got dim={}",
+            "pave_surface: contour must be 2-D or 3-D, got dim={}",
             dim
         )));
     }
@@ -142,7 +142,7 @@ pub fn surface_cancellable(
     // 2. Collect 2-D points to pave. In 2-D, the coordinates directly; in
     //    3-D, every loop must be (nearly) co-planar — project onto the
     //    best-fit plane (Newell normal through the centroid, from whichever
-    //    loop isn't collinear), exactly as `fill_surface` does, and remember
+    //    loop isn't collinear), exactly as `triangulate_surface` does, and remember
     //    the mapping to lift interior points back to 3-D.
     let mut projection: Option<Projection3D> = None;
     let mut points: Vec<Point2> = if dim == 2 {
@@ -169,7 +169,9 @@ pub fn surface_cancellable(
                 crate::ops::mesher::triangulation::newell_normal(slice)
             })
             .ok_or_else(|| {
-                PyrucastError::Message("surface: every 3-D loop is collinear or zero-area".into())
+                PyrucastError::Message(
+                    "pave_surface: every 3-D loop is collinear or zero-area".into(),
+                )
             })?;
         let origin: Point3 = {
             let sum: Vector3 = pts3.iter().map(|p| p.coords).sum();
@@ -187,7 +189,7 @@ pub fn surface_cancellable(
         let tol = 1e-6 * diag;
         if max_dev > tol {
             return Err(PyrucastError::Message(format!(
-                "surface: contour is not planar — max deviation {:.3e} exceeds tolerance {:.3e} (1e-6 × diag={:.3e})",
+                "pave_surface: contour is not planar — max deviation {:.3e} exceeds tolerance {:.3e} (1e-6 × diag={:.3e})",
                 max_dev, tol, diag
             )));
         }
@@ -306,7 +308,7 @@ pub fn surface_cancellable(
     }
     if parts.is_empty() {
         return Err(PyrucastError::Message(
-            "surface: paving produced no element".into(),
+            "pave_surface: paving produced no element".into(),
         ));
     }
     let mut mesh = parts.remove(0);
@@ -318,7 +320,7 @@ pub fn surface_cancellable(
 
 /// Trace the single closed loop of submesh `sm_idx` of a SEG2 contour into
 /// the ordered list of node ids it visits. Mirrors the validation done by
-/// [`crate::ops::mesher::fill_surface()`] for one loop.
+/// [`crate::ops::mesher::triangulate_surface()`] for one loop.
 fn trace_loop(sm: &crate::store::Handle<SubMesh>, sm_idx: usize) -> Result<Vec<NodeId>> {
     let (et, n_elems, conn) = {
         let s = read(sm)?;
@@ -326,13 +328,13 @@ fn trace_loop(sm: &crate::store::Handle<SubMesh>, sm_idx: usize) -> Result<Vec<N
     };
     if et != ElementType::SEG2 {
         return Err(PyrucastError::Message(format!(
-            "surface: submesh #{} must be SEG2, got {}",
+            "pave_surface: submesh #{} must be SEG2, got {}",
             sm_idx, et
         )));
     }
     if n_elems < 3 {
         return Err(PyrucastError::Message(format!(
-            "surface: submesh #{} must have ≥ 3 segments, got {}",
+            "pave_surface: submesh #{} must have ≥ 3 segments, got {}",
             sm_idx, n_elems
         )));
     }
@@ -343,7 +345,7 @@ fn trace_loop(sm: &crate::store::Handle<SubMesh>, sm_idx: usize) -> Result<Vec<N
         let b = conn[2 * i + 1];
         if next_node.insert(a, b).is_some() {
             return Err(PyrucastError::Message(format!(
-                "surface: submesh #{}: node {} starts more than one segment",
+                "pave_surface: submesh #{}: node {} starts more than one segment",
                 sm_idx, a
             )));
         }
@@ -353,28 +355,28 @@ fn trace_loop(sm: &crate::store::Handle<SubMesh>, sm_idx: usize) -> Result<Vec<N
     chain.push(start);
     let mut current = *next_node.get(&start).ok_or_else(|| {
         PyrucastError::Message(format!(
-            "surface: submesh #{}: node {} has no outgoing segment",
+            "pave_surface: submesh #{}: node {} has no outgoing segment",
             sm_idx, start
         ))
     })?;
     while current != start {
         if chain.len() > n_elems {
             return Err(PyrucastError::Message(format!(
-                "surface: submesh #{}: contour is not a closed simple loop",
+                "pave_surface: submesh #{}: contour is not a closed simple loop",
                 sm_idx
             )));
         }
         chain.push(current);
         current = *next_node.get(&current).ok_or_else(|| {
             PyrucastError::Message(format!(
-                "surface: submesh #{}: node {} has no outgoing segment",
+                "pave_surface: submesh #{}: node {} has no outgoing segment",
                 sm_idx, current
             ))
         })?;
     }
     if chain.len() != n_elems {
         return Err(PyrucastError::Message(format!(
-            "surface: submesh #{}: contour has multiple disjoint loops ({} nodes traced out of {})",
+            "pave_surface: submesh #{}: contour has multiple disjoint loops ({} nodes traced out of {})",
             sm_idx,
             chain.len(),
             n_elems
@@ -459,13 +461,13 @@ fn pave_single(
     let n0 = points.len();
     if n0 < 3 {
         return Err(PyrucastError::Message(format!(
-            "surface: ring must have ≥ 3 points, got {}",
+            "pave_surface: ring must have ≥ 3 points, got {}",
             n0
         )));
     }
     if xmoy <= 0.0 || xmoy.is_nan() {
         return Err(PyrucastError::Message(format!(
-            "surface: target_size must be > 0, got {}",
+            "pave_surface: target_size must be > 0, got {}",
             xmoy
         )));
     }
@@ -481,7 +483,7 @@ fn pave_single(
     let area = front_area(&pts, &front);
     if area.abs() < 1e-15 {
         return Err(PyrucastError::Message(
-            "surface: contour has zero (or near-zero) area — degenerate".into(),
+            "pave_surface: contour has zero (or near-zero) area — degenerate".into(),
         ));
     }
     if area < 0.0 {
@@ -501,7 +503,8 @@ fn pave_single(
         guard += 1;
         if guard > cap {
             return Err(PyrucastError::Message(
-                "surface: frontal paving did not converge (possibly non-simple contour)".into(),
+                "pave_surface: frontal paving did not converge (possibly non-simple contour)"
+                    .into(),
             ));
         }
         // Cooperative cancellation point. Each iteration is a coarse event
@@ -520,7 +523,7 @@ fn pave_single(
         }
         if m < 3 {
             return Err(PyrucastError::Message(
-                "surface: front collapsed to fewer than 3 nodes".into(),
+                "pave_surface: front collapsed to fewer than 3 nodes".into(),
             ));
         }
         // Close a convex 4-node front directly as one quad in QUA4 mode.
@@ -549,7 +552,7 @@ fn pave_single(
         }
 
         return Err(PyrucastError::Message(
-            "surface: no ear found — contour is likely non-simple".into(),
+            "pave_surface: no ear found — contour is likely non-simple".into(),
         ));
     }
 
@@ -1019,7 +1022,7 @@ mod tests {
     }
 
     #[test]
-    fn surface_heterogeneous_boundary_spacing_avoids_slivers() {
+    fn pave_surface_heterogeneous_boundary_spacing_avoids_slivers() {
         // Before `advance_layer` scaled its inward offset to the local front
         // spacing, a front with one side much coarser than the rest (as a
         // `line`/`arc` mix on the same contour easily produces) degraded
@@ -1031,7 +1034,7 @@ mod tests {
             coords.clone(),
             &square_boundary_heterogeneous(4.0, 0.2, 1.0),
         );
-        let tri = surface(&contour, ElementType::TRI3, Some(0.2)).unwrap();
+        let tri = pave_surface(&contour, ElementType::TRI3, Some(0.2)).unwrap();
         assert!((total_ccw_area(&tri) - 16.0).abs() < 1e-6);
         let worst = min_angle_deg(&tri);
         assert!(worst > 5.0, "sliver triangle: min angle {worst} deg");
@@ -1071,27 +1074,27 @@ mod tests {
     }
 
     #[test]
-    fn surface_square_peels_to_two_triangles() {
+    fn pave_surface_square_peels_to_two_triangles() {
         let coords = insert(Coords::new(2).unwrap());
         let contour = build_contour_2d(
             coords.clone(),
             &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
         );
-        let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
+        let tri = pave_surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
         assert_eq!(tri.cell_count().unwrap(), 2);
         assert!((total_ccw_area(&tri) - 1.0).abs() < 1e-12);
     }
 
     #[test]
-    fn surface_rejects_unsupported_element() {
+    fn pave_surface_rejects_unsupported_element() {
         let coords = insert(Coords::new(2).unwrap());
         let contour = build_contour_2d(coords, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
-        assert!(surface(&contour, ElementType::TET4, None).is_err());
+        assert!(pave_surface(&contour, ElementType::TET4, None).is_err());
     }
 
     #[test]
-    fn surface_with_one_hole_conserves_area() {
+    fn pave_surface_with_one_hole_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
         let outer = build_contour_2d(
             coords.clone(),
@@ -1100,7 +1103,7 @@ mod tests {
         let hole = build_contour_2d(coords, &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]);
         let combined = outer.union(&hole).unwrap();
         assert_eq!(combined.len(), 2);
-        let tri = surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
+        let tri = pave_surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
         assert!(
             (total_ccw_area(&tri) - 12.0).abs() < 1e-6,
             "area drift: got {}",
@@ -1109,7 +1112,7 @@ mod tests {
     }
 
     #[test]
-    fn surface_hole_outer_loop_is_autodetected() {
+    fn pave_surface_hole_outer_loop_is_autodetected() {
         // Same geometry as above, but the hole submesh comes first — the
         // outer boundary must still be found by area, not by input order.
         let coords = insert(Coords::new(2).unwrap());
@@ -1119,7 +1122,7 @@ mod tests {
         );
         let outer = build_contour_2d(coords, &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
         let combined = hole.union(&outer).unwrap();
-        let tri = surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
+        let tri = pave_surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
         assert!(
             (total_ccw_area(&tri) - 12.0).abs() < 1e-6,
             "area drift: got {}",
@@ -1128,7 +1131,7 @@ mod tests {
     }
 
     #[test]
-    fn surface_with_two_holes_conserves_area() {
+    fn pave_surface_with_two_holes_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
         let outer = build_contour_2d(
             coords.clone(),
@@ -1141,7 +1144,7 @@ mod tests {
         let h2 = build_contour_2d(coords, &[(4.0, 2.0), (5.0, 2.0), (5.0, 3.0), (4.0, 3.0)]);
         let combined = outer.union(&h1).unwrap().union(&h2).unwrap();
         assert_eq!(combined.len(), 3);
-        let tri = surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
+        let tri = pave_surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
         assert!(
             (total_ccw_area(&tri) - 22.0).abs() < 1e-6,
             "area drift: got {}",
@@ -1150,7 +1153,7 @@ mod tests {
     }
 
     #[test]
-    fn surface_with_hole_no_target_size_uses_outer_mean_edge() {
+    fn pave_surface_with_hole_no_target_size_uses_outer_mean_edge() {
         // `None` should fall back to the *outer* loop's mean edge length,
         // not blow up trying to average across outer + hole segments of
         // very different scale.
@@ -1161,7 +1164,7 @@ mod tests {
         );
         let hole = build_contour_2d(coords, &[(1.5, 1.5), (2.5, 1.5), (2.5, 2.5), (1.5, 2.5)]);
         let combined = outer.union(&hole).unwrap();
-        let tri = surface(&combined, ElementType::TRI3, None).unwrap();
+        let tri = pave_surface(&combined, ElementType::TRI3, None).unwrap();
         assert!(
             (total_ccw_area(&tri) - 15.0).abs() < 1e-6,
             "area drift: got {}",
@@ -1170,14 +1173,14 @@ mod tests {
     }
 
     #[test]
-    fn surface_square_refined_conserves_area_and_size() {
+    fn pave_surface_square_refined_conserves_area_and_size() {
         let coords = insert(Coords::new(2).unwrap());
         // Boundary already discretized at the target size: interior gets
         // filled. The mesher does not subdivide boundary segments (the input
         // discretization fixes boundary spacing), so we discretize here.
         let contour = build_contour_2d(coords.clone(), &square_boundary(4.0, 1.0));
         let h = 1.0;
-        let tri = surface(&contour, ElementType::TRI3, Some(h)).unwrap();
+        let tri = pave_surface(&contour, ElementType::TRI3, Some(h)).unwrap();
         let n = tri.cell_count().unwrap();
         assert!(n > 2, "expected interior nodes/refinement, got {} cells", n);
         assert!((total_ccw_area(&tri) - 16.0).abs() < 1e-9);
@@ -1200,12 +1203,12 @@ mod tests {
     }
 
     #[test]
-    fn surface_circle_conserves_area() {
+    fn pave_surface_circle_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
         let r = 5.0;
         let nseg = 40;
         let contour = build_contour_2d(coords.clone(), &regular_polygon(nseg, r));
-        let tri = surface(&contour, ElementType::TRI3, Some(1.0)).unwrap();
+        let tri = pave_surface(&contour, ElementType::TRI3, Some(1.0)).unwrap();
         let n = tri.cell_count().unwrap();
         assert!(n > nseg, "circle should be filled with interior nodes");
         let poly_area =
@@ -1219,7 +1222,7 @@ mod tests {
     }
 
     #[test]
-    fn surface_concave_l_shape_conserves_area() {
+    fn pave_surface_concave_l_shape_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
         let l = [
             (0.0, 0.0),
@@ -1230,56 +1233,56 @@ mod tests {
             (0.0, 3.0),
         ];
         let contour = build_contour_2d(coords.clone(), &l);
-        let tri = surface(&contour, ElementType::TRI3, Some(0.75)).unwrap();
+        let tri = pave_surface(&contour, ElementType::TRI3, Some(0.75)).unwrap();
         assert!((total_ccw_area(&tri) - 5.0).abs() < 1e-9);
     }
 
     #[test]
-    fn surface_works_with_cw_contour() {
+    fn pave_surface_works_with_cw_contour() {
         let coords = insert(Coords::new(2).unwrap());
         let contour = build_contour_2d(
             coords.clone(),
             &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)],
         );
-        let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
+        let tri = pave_surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
         assert!((total_ccw_area(&tri) - 1.0).abs() < 1e-12);
     }
 
     #[test]
-    fn surface_reuses_contour_nodes() {
+    fn pave_surface_reuses_contour_nodes() {
         let coords = insert(Coords::new(2).unwrap());
         let contour = build_contour_2d(
             coords.clone(),
             &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
         );
         let before = read(&coords).unwrap().node_count();
-        let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
+        let tri = pave_surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
         let after = read(&coords).unwrap().node_count();
         assert_eq!(before, after, "no interior node expected for coarse square");
         assert_eq!(tri.cell_count().unwrap(), 2);
     }
 
     #[test]
-    fn surface_qua4_square_is_one_quad() {
+    fn pave_surface_qua4_square_is_one_quad() {
         let coords = insert(Coords::new(2).unwrap());
         let contour = build_contour_2d(
             coords.clone(),
             &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
         );
-        let q = surface(&contour, ElementType::QUA4, Some(10.0)).unwrap();
+        let q = pave_surface(&contour, ElementType::QUA4, Some(10.0)).unwrap();
         assert_eq!(q.element_types().unwrap(), vec![ElementType::QUA4]);
         assert_eq!(q.cell_count().unwrap(), 1);
         assert!((total_ccw_area(&q) - 1.0).abs() < 1e-12);
     }
 
     #[test]
-    fn surface_qua4_circle_is_quad_dominant_and_conserves_area() {
+    fn pave_surface_qua4_circle_is_quad_dominant_and_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
         let r = 5.0;
         let nseg = 40;
         let contour = build_contour_2d(coords.clone(), &regular_polygon(nseg, r));
-        let mesh = surface(&contour, ElementType::QUA4, Some(1.0)).unwrap();
+        let mesh = pave_surface(&contour, ElementType::QUA4, Some(1.0)).unwrap();
         let types = mesh.element_types().unwrap();
         assert!(types.contains(&ElementType::QUA4), "no quads produced");
         // Quad-dominant: quads outnumber any triangles.
@@ -1312,7 +1315,7 @@ mod tests {
     }
 
     #[test]
-    fn surface_qua4_with_hole_conserves_area() {
+    fn pave_surface_qua4_with_hole_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
         let outer = build_contour_2d(
             coords.clone(),
@@ -1320,7 +1323,7 @@ mod tests {
         );
         let hole = build_contour_2d(coords, &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]);
         let combined = outer.union(&hole).unwrap();
-        let mesh = surface(&combined, ElementType::QUA4, Some(0.5)).unwrap();
+        let mesh = pave_surface(&combined, ElementType::QUA4, Some(0.5)).unwrap();
         assert!(
             (total_ccw_area(&mesh) - 12.0).abs() < 1e-6,
             "area drift: got {}",
@@ -1329,11 +1332,11 @@ mod tests {
     }
 
     #[test]
-    fn surface_qua4_refined_square_conserves_area() {
+    fn pave_surface_qua4_refined_square_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
         let mesh = {
             let contour = build_contour_2d(coords.clone(), &square_boundary(4.0, 1.0));
-            surface(&contour, ElementType::QUA4, Some(1.0)).unwrap()
+            pave_surface(&contour, ElementType::QUA4, Some(1.0)).unwrap()
         };
         assert!((total_ccw_area(&mesh) - 16.0).abs() < 1e-9);
     }
@@ -1385,7 +1388,7 @@ mod tests {
     }
 
     #[test]
-    fn surface_3d_square_in_z_plane_conserves_area() {
+    fn pave_surface_3d_square_in_z_plane_conserves_area() {
         let coords = insert(Coords::new(3).unwrap());
         let contour = build_contour_3d(
             coords.clone(),
@@ -1396,7 +1399,7 @@ mod tests {
                 (0.0, 4.0, 5.0),
             ],
         );
-        let tri = surface(&contour, ElementType::TRI3, Some(1.0)).unwrap();
+        let tri = pave_surface(&contour, ElementType::TRI3, Some(1.0)).unwrap();
         let n = tri.cell_count().unwrap();
         // Every node sits on the plane z = 5.
         for ci in 0..n {
@@ -1409,20 +1412,20 @@ mod tests {
     }
 
     #[test]
-    fn surface_3d_tilted_square_conserves_area() {
+    fn pave_surface_3d_tilted_square_conserves_area() {
         let s = 1.0_f64 / 2.0_f64.sqrt();
         let coords = insert(Coords::new(3).unwrap());
         let contour = build_contour_3d(
             coords.clone(),
             &[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, s, s), (0.0, s, s)],
         );
-        let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
+        let tri = pave_surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
         assert!((total_area_3d(&tri) - 1.0).abs() < 1e-12);
     }
 
     #[test]
-    fn surface_3d_with_hole_conserves_area() {
+    fn pave_surface_3d_with_hole_conserves_area() {
         let coords = insert(Coords::new(3).unwrap());
         let outer = build_contour_3d(
             coords.clone(),
@@ -1443,7 +1446,7 @@ mod tests {
             ],
         );
         let combined = outer.union(&hole).unwrap();
-        let tri = surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
+        let tri = pave_surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
         let n = tri.cell_count().unwrap();
         for ci in 0..n {
             for ni in 0..3 {
@@ -1459,29 +1462,30 @@ mod tests {
     }
 
     #[test]
-    fn surface_cancellable_stops_on_preset_flag() {
+    fn pave_surface_cancellable_stops_on_preset_flag() {
         use std::sync::atomic::AtomicBool;
         let coords = insert(Coords::new(2).unwrap());
         // A contour big enough to take several paving iterations.
         let contour = build_contour_2d(coords.clone(), &regular_polygon(64, 5.0));
         // Already-cancelled token: the first poll trips.
         let flag = AtomicBool::new(true);
-        let err = surface_cancellable(&contour, ElementType::TRI3, Some(0.2), &flag).unwrap_err();
+        let err =
+            pave_surface_cancellable(&contour, ElementType::TRI3, Some(0.2), &flag).unwrap_err();
         assert!(matches!(err, PyrucastError::Interrupted));
     }
 
     #[test]
-    fn surface_cancellable_completes_when_not_cancelled() {
+    fn pave_surface_cancellable_completes_when_not_cancelled() {
         use std::sync::atomic::AtomicBool;
         let coords = insert(Coords::new(2).unwrap());
         let contour = build_contour_2d(coords.clone(), &regular_polygon(24, 3.0));
         let flag = AtomicBool::new(false);
-        let tri = surface_cancellable(&contour, ElementType::TRI3, Some(1.0), &flag).unwrap();
+        let tri = pave_surface_cancellable(&contour, ElementType::TRI3, Some(1.0), &flag).unwrap();
         assert!(tri.cell_count().unwrap() > 0);
     }
 
     #[test]
-    fn surface_3d_rejects_non_planar() {
+    fn pave_surface_3d_rejects_non_planar() {
         let coords = insert(Coords::new(3).unwrap());
         let contour = build_contour_3d(
             coords.clone(),
@@ -1492,7 +1496,7 @@ mod tests {
                 (0.0, 1.0, 0.0),
             ],
         );
-        let err = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap_err();
+        let err = pave_surface(&contour, ElementType::TRI3, Some(10.0)).unwrap_err();
         assert!(format!("{}", err).contains("not planar"));
     }
 }

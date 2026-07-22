@@ -19,7 +19,7 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
 
     La boucle extérieure est construite bord par bord avec les mailleurs
     dédiés (`line` par côté, `circle` pour le trou) — jamais de
-    nœud ou de maille ajoutés à la main. `fill_surface` exige qu'une boucle
+    nœud ou de maille ajoutés à la main. `triangulate_surface` exige qu'une boucle
     fermée tienne dans **un seul** sous-maillage : `pyrucast.consolidate`
     fusionne les quatre côtés (chacun son propre sous-maillage `SEG2`) en un
     seul, sans changer leur connectivité (Cast3M : `cex = l12 ET c23 ET ...`
@@ -31,7 +31,7 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
     p5 = coords.add_node([0.0, 0.0, HAUTEUR])
     p6 = coords.add_node([LONGUEUR, 0.0, HAUTEUR / 2.0])
     # Maillage du contour / Contour mesh
-    # `fill_surface` (triangulation contrainte) redécoupe librement l'intérieur
+    # `triangulate_surface` (triangulation contrainte) redécoupe librement l'intérieur
     # comme les côtés selon `max_edge_length` : pas besoin de pré-discrétiser
     # finement les côtés droits ici, un seul segment par côté suffit et laisse
     # le raffineur poser ses propres nœuds - une discrétisation fine d'entrée
@@ -56,14 +56,14 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
 # ── Maillage non structuré (triangulation contrainte, avec trou) ───────────
 # ANCHOR: non_structure
 def maillage_non_structure(contour) -> tuple[pc.Coords, pc.Mesh]:
-    # `fill_surface` gère nativement le trou (boucle extérieure + boucle du
+    # `triangulate_surface` gère nativement le trou (boucle extérieure + boucle du
     # trou en une seule passe, Delaunay contraint) — contrairement à
-    # `surface` (mailleur frontal) qui ne prend qu'une seule boucle pour
+    # `pave_surface` (mailleur frontal) qui ne prend qu'une seule boucle pour
     # l'instant. `max_edge_length=0.025` : en dessous (contour plus finement
     # discrétisé en entrée, ou taille cible plus petite), le raffineur a
     # besoin de bien plus d'insertions de Steiner que son plafond n'en
     # autorise pour cette taille de contour.
-    plaque = pc.mesher.fill_surface(contour, "TRI3", max_edge_length=0.025)
+    plaque = pc.mesher.triangulate_surface(contour, "TRI3", max_edge_length=0.025)
     # plaque.plot(view=(-45, 25, 1.0))
     return coords, plaque
 

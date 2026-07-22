@@ -5,7 +5,7 @@ rectangulaire percée d'un trou circulaire (l'équivalent pyrucast de la pièce
 « structure avec un trou » de la formation Cast3M). Deux mailleurs sont
 comparés sur la même géométrie :
 
-- **non structuré** (`pyrucast.mesher.fill_surface`) : contour fermé (loi
+- **non structuré** (`pyrucast.mesher.triangulate_surface`) : contour fermé (loi
   extérieure + trou), remplissage par triangulation de Delaunay contrainte,
   taille de maille cible ;
 - **structuré** (`pyrucast.mesher.sweep`) : balayage entre deux lignes
@@ -40,7 +40,7 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
 
     La boucle extérieure est construite bord par bord avec les mailleurs
     dédiés (`line` par côté, `circle` pour le trou) — jamais de
-    nœud ou de maille ajoutés à la main. `fill_surface` exige qu'une boucle
+    nœud ou de maille ajoutés à la main. `triangulate_surface` exige qu'une boucle
     fermée tienne dans **un seul** sous-maillage : `pyrucast.consolidate`
     fusionne les quatre côtés (chacun son propre sous-maillage `SEG2`) en un
     seul, sans changer leur connectivité (Cast3M : `cex = l12 ET c23 ET ...`
@@ -70,7 +70,7 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
 def maillage_non_structure() -> tuple[pc.Coords, pc.Mesh]:
     coords = pc.Coords(2)
     contour = contour_plaque_trouee(coords)
-    plaque = pc.mesher.fill_surface(contour, "TRI3", max_edge_length=0.02)
+    plaque = pc.mesher.triangulate_surface(contour, "TRI3", max_edge_length=0.02)
     return coords, plaque
 
 

@@ -20,8 +20,8 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
 | `translate(mesh, vector)` | **copie** du maillage translatée de `vector` (nœuds neufs, original intact) |
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
-| `fill_surface(contour, type, …)` | triangule l'intérieur d'un contour fermé (voir plus bas) |
-| `surface(contour, type, size=None)` | maille l'intérieur d'un contour par **front avançant** avec création de nœuds internes (voir plus bas) |
+| `triangulate_surface(contour, type, …)` | triangule l'intérieur d'un contour fermé (voir plus bas) |
+| `pave_surface(contour, type, size=None)` | maille l'intérieur d'un contour par **front avançant** avec création de nœuds internes (voir plus bas) |
 | `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
 | `contour(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
 | `elements_on(mesh, points, strict=True)` | les **éléments** de `mesh` qui s'**appuient** sur les nœuds de `points` (voir plus bas) |
@@ -204,16 +204,16 @@ Le maillage obtenu se calcule avec l'interpolation `LAGRANGE2` (cf.
 [Espace éléments finis](../fe-space.md)) :
 
 ```python
-lin = pyrucast.mesher.surface(contour, "TRI3", 1.0)   # maillage TRI3
+lin = pyrucast.mesher.pave_surface(contour, "TRI3", 1.0)   # maillage TRI3
 quad = pyrucast.mesher.to_quadratic(lin)              # copie TRI6
 print(quad.element_types())                    # ['TRI6']
 
 fes = pyrucast.FiniteElementSpace(quad, interpolation="LAGRANGE2")
 ```
 
-## Triangulation d'un contour fermé : `fill_surface`
+## Triangulation d'un contour fermé : `triangulate_surface`
 
-`fill_surface(contour, element_type, max_edge_length=None, min_angle_deg=None)`
+`triangulate_surface(contour, element_type, max_edge_length=None, min_angle_deg=None)`
 prend un `Mesh` contenant **un ou plusieurs sous-maillages SEG2** (chacun une
 boucle fermée) et remplit la surface ainsi définie avec des éléments 2D. La
 configuration peut être en dimension **2** (cas direct) ou **3** (boucles
@@ -224,7 +224,7 @@ Pour l'instant un seul type cible est supporté : **`TRI3`**.
 Les fondements mathématiques (aire signée, ear clipping, Newell, Delaunay /
 Bowyer-Watson, CDT, Ruppert) sont rassemblés dans
 [Triangulation : briques mathématiques](../triangulation.md). Cette page-ci
-décrit le **comportement** de `fill_surface`.
+décrit le **comportement** de `triangulate_surface`.
 
 ### Cas d'un seul contour (sans trous)
 
@@ -249,7 +249,7 @@ soit le sens du contour d'entrée.
 
 ### Cas avec trous (plusieurs contours)
 
-Quand `contour` contient deux sous-maillages SEG2 ou plus, `fill_surface`
+Quand `contour` contient deux sous-maillages SEG2 ou plus, `triangulate_surface`
 bascule sur une **triangulation de Delaunay contrainte (CDT)** maison :
 
 1. chaque sous-maillage est traité comme une boucle fermée indépendante ;
@@ -270,7 +270,7 @@ les besoins indépendants du système `Mesh`.
 
 En 3D, la déviation maximale d'un nœud du contour au plan moyen doit rester
 inférieure à `1e-6 × diag` (`diag` = diagonale de la boîte englobante). Au-delà,
-`fill_surface` retourne une erreur claire indiquant la déviation observée et la
+`triangulate_surface` retourne une erreur claire indiquant la déviation observée et la
 tolérance. Ce seuil relatif tolère le bruit numérique tout en refusant les
 vrais contours gauches.
 
@@ -309,7 +309,7 @@ contour = pyrucast.Mesh(c, "SEG2")
 for i in range(4):
     contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
-surface = pyrucast.mesher.fill_surface(contour, "TRI3")
+surface = pyrucast.mesher.triangulate_surface(contour, "TRI3")
 print(surface)  # Mesh: 1 submesh(es), 2 cell(s) total
 ```
 
@@ -340,14 +340,14 @@ for i in range(4):
 combined = outer | hole
 
 # Sans raffinement : 6 triangles « bruts ».
-brut = pyrucast.mesher.fill_surface(combined, "TRI3")
+brut = pyrucast.mesher.triangulate_surface(combined, "TRI3")
 
 # Avec raffinement : arête max 1.0 + angle min 20° → maillage fin et de qualité.
-fin = pyrucast.mesher.fill_surface(combined, "TRI3", max_edge_length=1.0, min_angle_deg=20.0)
+fin = pyrucast.mesher.triangulate_surface(combined, "TRI3", max_edge_length=1.0, min_angle_deg=20.0)
 # Aire triangulée = 16 - 4 = 12, mais bien plus de cellules.
 ```
 
-Côté Rust, `ops::mesher::fill_surface(&combined, ElementType::TRI3, Some(opts))`
+Côté Rust, `ops::mesher::triangulate_surface(&combined, ElementType::TRI3, Some(opts))`
 prend un `Option<RefinementOptions>` (`max_edge_length`, `min_angle_deg`). Le module
 `pyrucast::ops::mesher::triangulation` regroupe les briques géométriques
 (`signed_area`, `ear_clip_2d`, `newell_normal`, `in_plane_basis`,
@@ -355,22 +355,22 @@ prend un `Option<RefinementOptions>` (`max_edge_length`, `min_angle_deg`). Le mo
 toutes opèrent sur des tableaux bruts, réutilisables indépendamment du système
 `Mesh` (voir [Triangulation](../triangulation.md)).
 
-## Mailleur frontal : `surface`
+## Mailleur frontal : `pave_surface`
 
-`surface(contour, element_type, size=None)` remplit l'intérieur d'un contour
+`pave_surface(contour, element_type, size=None)` remplit l'intérieur d'un contour
 fermé par un **front avançant** qui **crée des nœuds internes** pour respecter
-une taille de maille cible — là où `fill_surface` ne triangule que les nœuds
+une taille de maille cible — là où `triangulate_surface` ne triangule que les nœuds
 du bord. C'est l'analogue de l'opérateur `SURF` historique.
 
 `element_type` vaut `"TRI3"` ou `"QUA4"` ; `size` fixe la longueur d'arête
 visée (par défaut : longueur moyenne des segments de la boucle **extérieure**).
 Le contour peut être en 2D, ou une boucle **quasi planaire** en 3D (projetée
 sur son plan de meilleure approximation, maillée, puis relevée — même contrôle
-de planéité que `fill_surface`).
+de planéité que `triangulate_surface`).
 
 `contour` peut porter **plusieurs** sous-maillages `SEG2` : la boucle
 extérieure est alors auto-détectée (aire la plus grande, comme
-`fill_surface`) et chaque autre boucle traitée comme un **trou**. Chaque trou
+`triangulate_surface`) et chaque autre boucle traitée comme un **trou**. Chaque trou
 est greffé sur le front par une coupure de largeur nulle (« trou de serrure »,
 vers le point du front le plus proche) avant le pavage, ce qui laisse
 l'algorithme à front unique inchangé — voir `splice_hole_into_front` côté
@@ -411,12 +411,12 @@ Lawson (`improve_triangulation_by_flips`) corrige, arête par arête, tout
 triangle dont l'autre diagonale du quadrilatère voisin donnerait un meilleur
 angle minimal.
 
-> **`surface` vs `fill_surface`.** `fill_surface` triangule les nœuds donnés
-> (ear clipping / Delaunay contraint, raffinement optionnel). `surface` crée
+> **`pave_surface` vs `triangulate_surface`.** `triangulate_surface` triangule les nœuds donnés
+> (ear clipping / Delaunay contraint, raffinement optionnel). `pave_surface` crée
 > des nœuds internes pour une taille contrôlée façon front avançant ; les deux
 > gèrent les **trous** (boucles multiples, boucle extérieure auto-détectée).
-> Choisir `surface` pour un maillage de taille homogène imposée ;
-> `fill_surface` pour trianguler un contour ou raffiner par critère
+> Choisir `pave_surface` pour un maillage de taille homogène imposée ;
+> `triangulate_surface` pour trianguler un contour ou raffiner par critère
 > d'arête/angle — et pour un trou proche du bord (canal étroit), plus robuste
 > côté convergence.
 
@@ -439,19 +439,19 @@ for i in range(40):
     sm.add_cell([nodes[i], nodes[(i + 1) % 40]])
 
 # Maillage frontal en triangles de taille ~1.0 (nœuds internes créés).
-tri = pyrucast.mesher.surface(contour, "TRI3", 1.0)
+tri = pyrucast.mesher.pave_surface(contour, "TRI3", 1.0)
 print(tri.element_types(), tri.cell_count())
 
 # Variante quad-dominante.
-quad = pyrucast.mesher.surface(contour, "QUA4", 1.0)
+quad = pyrucast.mesher.pave_surface(contour, "QUA4", 1.0)
 print(quad.element_types())  # ['QUA4', 'TRI3'] en général
 ```
 
 ### Interruption
 
-Un maillage trop long s'**interrompt** par `Ctrl+C` : `surface` sonde les
+Un maillage trop long s'**interrompt** par `Ctrl+C` : `pave_surface` sonde les
 signaux à chaque couche/oreille et lève une `KeyboardInterrupt`. Côté Rust,
-`surface_cancellable(contour, type, size, &cancel)` accepte un jeton
+`pave_surface_cancellable(contour, type, size, &cancel)` accepte un jeton
 d'interruption (timeout, drapeau partagé…) — voir
 [Interrompre une fonction](../developper/interrompre-une-fonction.md).
 
@@ -469,13 +469,13 @@ d'interruption (timeout, drapeau partagé…) — voir
   incidence pour un trou de taille modeste dans un contour normalement
   discrétisé.
 
-Côté Rust, `ops::mesher::surface(&contour, ElementType::TRI3, Some(1.0))`. Le
+Côté Rust, `ops::mesher::pave_surface(&contour, ElementType::TRI3, Some(1.0))`. Le
 cœur géométrique (`pave_single`) opère sur de simples `Vec<Point2>` sans
 toucher au store — frontière nette pour un futur parallélisme intra-opérateur.
 
 ## Mailleur frontal volumique : `volume`
 
-`volume(envelope, size=None)` est le **compagnon 3D** de `surface` : il remplit
+`volume(envelope, size=None)` est le **compagnon 3D** de `pave_surface` : il remplit
 l'intérieur d'une **enveloppe surfacique fermée** avec des tétraèdres `TET4`, à
 taille de maille imposée, en créant les nœuds internes nécessaires. Le
 remplissage d'un intérieur vide est précisément ce que fait un opérateur de
@@ -521,7 +521,7 @@ print(tet.element_types())  # ['TET4']
 
 ### Interruption
 
-Comme `surface`, un maillage trop long s'**interrompt** par `Ctrl+C` : `volume`
+Comme `pave_surface`, un maillage trop long s'**interrompt** par `Ctrl+C` : `volume`
 sonde les signaux pendant la génération des points et l'insertion Delaunay, et
 lève une `KeyboardInterrupt`. Côté Rust,
 `volume_cancellable(envelope, size, &cancel)` accepte un jeton
@@ -549,21 +549,21 @@ frontière nette pour un futur parallélisme intra-opérateur.
 
 ## Bord d'une surface : `contour`
 
-`contour(mesh)` est l'**inverse** de `fill_surface` / `surface` : il prend un
+`contour(mesh)` est l'**inverse** de `triangulate_surface` / `pave_surface` : il prend un
 maillage de surface (cellules `TRI3` / `QUA4`) et renvoie son **bord** sous
 forme de boucles `SEG2` fermées.
 
 Une arête de cellule utilisée par **exactement une** cellule est une arête de
 bord ; les arêtes intérieures sont partagées par deux cellules (orientations
 opposées) et s'annulent. Les arêtes de bord de **tous** les sous-maillages de
-surface sont regroupées — la sortie `QUA4` + `TRI3` de `surface` donne donc un
+surface sont regroupées — la sortie `QUA4` + `TRI3` de `pave_surface` donne donc un
 bord commun unique — puis chaînées en boucles fermées.
 
 Le résultat est un `Mesh` avec **un sous-maillage SEG2 par boucle** : une seule
 boucle pour un domaine simplement connexe, plusieurs quand le domaine a des
 trous ou des morceaux disjoints — d'où les « n contours ». Chaque boucle garde
 l'orientation CCW du bord (boucle extérieure CCW, trous CW) : le résultat peut
-donc **réalimenter directement** `surface` / `fill_surface`. Les nœuds d'origine
+donc **réalimenter directement** `pave_surface` / `triangulate_surface`. Les nœuds d'origine
 sont réutilisés (et re-référencés).
 
 ```python
@@ -571,7 +571,7 @@ import pyrucast
 
 c = pyrucast.Coords(dim=2)
 center = c.add_node([0.0, 0.0])
-disc = pyrucast.mesher.fill_surface(
+disc = pyrucast.mesher.triangulate_surface(
     pyrucast.mesher.circle(center, [0.0, 0.0, 1.0], 2.0, 16), "TRI3"
 )
 

@@ -23,7 +23,7 @@ mailler le contour fermé, 3. remplir par triangulation) :
 3. unir les deux boucles (`|`) — la plus grande, par aire signée, est
    traitée comme le contour extérieur, les autres comme des trous ;
 4. remplir par triangulation de Delaunay contrainte, raffinée à une taille
-   de maille cible (`pyrucast.mesher.fill_surface`).
+   de maille cible (`pyrucast.mesher.triangulate_surface`).
 
 ```python
 {{#include ../../../formation/maillage.py:geometrie}}
@@ -35,15 +35,15 @@ mailler le contour fermé, 3. remplir par triangulation) :
 
 ![Maillage non structuré (triangulation avec trou)](img/maillage-non-structure.svg)
 
-`fill_surface` est l'équivalent de la triangulation Cast3M avec trou (une
+`triangulate_surface` est l'équivalent de la triangulation Cast3M avec trou (une
 combinaison de `SURF ... 'PLAN'` sur un contour incluant un trou inversé) —
 sans étape d'inversion manuelle : l'orientation des boucles n'a pas
 d'importance, seule leur aire relative compte.
 
 > **Différence avec Cast3M.** Le mailleur frontal à taille imposée
-> (`pyrucast.mesher.surface`, l'équivalent de Cast3M `SURF` avec un
+> (`pyrucast.mesher.pave_surface`, l'équivalent de Cast3M `SURF` avec un
 > paramètre de taille) ne prend en charge, à ce jour, qu'un contour à
-> **une seule boucle** — pas de trou. C'est `fill_surface`
+> **une seule boucle** — pas de trou. C'est `triangulate_surface`
 > (triangulation de Delaunay contrainte, avec raffinement) qui sait
 > mailler un domaine à trous ; c'est elle qu'on utilise ici.
 

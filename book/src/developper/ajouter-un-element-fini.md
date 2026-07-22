@@ -41,7 +41,7 @@ référence** (comme dans le tableau de [Espace éléments finis](../fe-space.md
 - l'**orientation** (CCW pour les faces, ordre des faces pour les volumes).
 
 Cette convention doit être **cohérente** avec le reste du code (orientation des
-triangles de `fill_surface`, ordre des nœuds produits par `extrude`…). Elle se
+triangles de `triangulate_surface`, ordre des nœuds produits par `extrude`…). Elle se
 documente dans le rustdoc d'`ElementType` **et** dans le tableau du chapitre
 [Espace éléments finis](../fe-space.md).
 

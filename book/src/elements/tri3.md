@@ -46,7 +46,7 @@ w_g = \tfrac{1}{6}, \qquad \sum_g w_g = \tfrac12.
 ## Notes
 
 - Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \{2, 3\} \\) (triangle plan
-  ou plongé dans l'espace — c'est ce que produit `fill_surface` sur un contour
+  ou plongé dans l'espace — c'est ce que produit `triangulate_surface` sur un contour
   3-D).
 - Gradient constant : un seul point de Gauss suffirait pour un champ affine,
   mais la règle à 3 points intègre exactement la masse (\\( \int N_i N_j \\), de

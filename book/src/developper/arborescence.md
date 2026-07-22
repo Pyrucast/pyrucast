@@ -49,7 +49,7 @@ src/
 │
 ├── ops/                # LES OPÉRATEURS (fonctions libres, par thème)
 │   ├── mod.rs
-│   ├── mesher/         # construction de maillages (line, fill_surface, …)
+│   ├── mesher/         # construction de maillages (line, triangulate_surface, …)
 │   │   └── triangulation/  # briques 2D (ear clipping, CDT, Ruppert)
 │   ├── build/          # construction de champs (material_field)
 │   ├── geom/           # mesures géométriques (réservé)

@@ -1,4 +1,4 @@
-"""Python tests for the frontal surface mesher `pyrucast.mesher.surface`."""
+"""Python tests for the frontal surface mesher `pyrucast.mesher.pave_surface`."""
 
 import math
 
@@ -31,16 +31,16 @@ def _total_area(tri):
     return total
 
 
-def test_surface_square_two_triangles():
+def test_pave_surface_square_two_triangles():
     c = pyrucast.Coords(2)
     contour = _contour(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
-    tri = pyrucast.mesher.surface(contour, "TRI3", 10.0)
+    tri = pyrucast.mesher.pave_surface(contour, "TRI3", 10.0)
     assert tri.element_types() == ["TRI3"]
     assert tri.cell_count() == 2
     assert abs(_total_area(tri) - 1.0) < 1e-12
 
 
-def test_surface_circle_fills_interior_and_conserves_area():
+def test_pave_surface_circle_fills_interior_and_conserves_area():
     c = pyrucast.Coords(2)
     nseg, r = 32, 4.0
     pts = [
@@ -48,28 +48,28 @@ def test_surface_circle_fills_interior_and_conserves_area():
         for i in range(nseg)
     ]
     contour = _contour(c, pts)
-    tri = pyrucast.mesher.surface(contour, "TRI3", 0.8)
+    tri = pyrucast.mesher.pave_surface(contour, "TRI3", 0.8)
     assert tri.cell_count() > nseg  # interior nodes were created
     poly_area = 0.5 * nseg * r * r * math.sin(2 * math.pi / nseg)
     assert abs(_total_area(tri) - poly_area) < 1e-6
 
 
-def test_surface_default_size():
+def test_pave_surface_default_size():
     c = pyrucast.Coords(2)
     contour = _contour(c, [(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
-    tri = pyrucast.mesher.surface(contour, "TRI3")
+    tri = pyrucast.mesher.pave_surface(contour, "TRI3")
     assert abs(_total_area(tri) - 4.0) < 1e-12
 
 
-def test_surface_qua4_square_is_one_quad():
+def test_pave_surface_qua4_square_is_one_quad():
     c = pyrucast.Coords(2)
     contour = _contour(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
-    q = pyrucast.mesher.surface(contour, "QUA4", 10.0)
+    q = pyrucast.mesher.pave_surface(contour, "QUA4", 10.0)
     assert q.element_types() == ["QUA4"]
     assert q.cell_count() == 1
 
 
-def test_surface_qua4_circle_quad_dominant():
+def test_pave_surface_qua4_circle_quad_dominant():
     c = pyrucast.Coords(2)
     nseg, r = 32, 4.0
     pts = [
@@ -77,12 +77,12 @@ def test_surface_qua4_circle_quad_dominant():
         for i in range(nseg)
     ]
     contour = _contour(c, pts)
-    mesh = pyrucast.mesher.surface(contour, "QUA4", 0.8)
+    mesh = pyrucast.mesher.pave_surface(contour, "QUA4", 0.8)
     types = mesh.element_types()
     assert "QUA4" in types
 
 
-def test_surface_3d_square_in_plane():
+def test_pave_surface_3d_square_in_plane():
     c = pyrucast.Coords(3)
     pts = [(0.0, 0.0, 2.0), (4.0, 0.0, 2.0), (4.0, 4.0, 2.0), (0.0, 4.0, 2.0)]
     nodes = [c.add_node(list(p)) for p in pts]
@@ -91,18 +91,18 @@ def test_surface_3d_square_in_plane():
     n = len(nodes)
     for i in range(n):
         sm.add_cell([nodes[i], nodes[(i + 1) % n]])
-    tri = pyrucast.mesher.surface(mesh, "TRI3", 1.0)
+    tri = pyrucast.mesher.pave_surface(mesh, "TRI3", 1.0)
     # Every output node stays on the plane z = 2.
     for ci in range(tri.cell_count()):
         for ni in range(3):
             assert abs(tri.node(0, ci, ni).coord()[2] - 2.0) < 1e-9
 
 
-def test_surface_rejects_unsupported_element():
+def test_pave_surface_rejects_unsupported_element():
     c = pyrucast.Coords(2)
     contour = _contour(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
     try:
-        pyrucast.mesher.surface(contour, "TET4")
+        pyrucast.mesher.pave_surface(contour, "TET4")
     except RuntimeError:
         pass
     else:

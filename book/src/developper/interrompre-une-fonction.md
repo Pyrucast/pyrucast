@@ -75,11 +75,11 @@ pub fn pave(/* … */, cancel: &dyn Cancel) -> Result<…> {
 ne pas imposer un jeton aux appelants qui n'en veulent pas :
 
 ```rust,ignore
-pub fn surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Result<Mesh> {
-    surface_cancellable(contour, et, size, &NoCancel)
+pub fn pave_surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Result<Mesh> {
+    pave_surface_cancellable(contour, et, size, &NoCancel)
 }
 
-pub fn surface_cancellable(
+pub fn pave_surface_cancellable(
     contour: &Mesh, et: ElementType, size: Option<f64>, cancel: &dyn Cancel,
 ) -> Result<Mesh> { /* … boucle qui sonde `cancel` … */ }
 ```
@@ -95,7 +95,7 @@ let stop = Arc::new(AtomicBool::new(false));
 let s = stop.clone();
 ctrlc::set_handler(move || s.store(true, Ordering::Relaxed)).ok();
 
-let mesh = surface_cancellable(&contour, ElementType::TRI3, Some(0.5), &*stop)?;
+let mesh = pave_surface_cancellable(&contour, ElementType::TRI3, Some(0.5), &*stop)?;
 // `Deadline::after(Duration::from_secs(10))` marcherait tout aussi bien.
 ```
 
@@ -113,14 +113,14 @@ impl Cancel for PySignals<'_> {
 }
 
 #[pyfunction]
-pub fn surface(py: Python<'_>, contour: PyRef<PyMesh>, /* … */) -> PyResult<PyMesh> {
-    let mesh = ops::mesher::surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
+pub fn pave_surface(py: Python<'_>, contour: PyRef<PyMesh>, /* … */) -> PyResult<PyMesh> {
+    let mesh = ops::mesher::pave_surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
     Ok(PyMesh { inner: mesh })
 }
 ```
 
 Le paramètre `py: Python<'_>` est injecté par PyO3 et **n'apparaît pas** dans la
-signature Python : `pyrucast.mesher.surface(contour, element_type, size=None)` reste
+signature Python : `pyrucast.mesher.pave_surface(contour, element_type, size=None)` reste
 inchangée, mais un `Ctrl+C` l'interrompt désormais.
 
 ## Lien avec le parallélisme

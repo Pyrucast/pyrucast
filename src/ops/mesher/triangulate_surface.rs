@@ -39,28 +39,28 @@ use crate::store::read;
 ///
 /// Triangles are oriented **CCW** in the projection plane regardless
 /// of the input contour's orientation.
-pub fn fill_surface(
+pub fn triangulate_surface(
     contour: &Mesh,
     element_type: ElementType,
     refinement: Option<crate::ops::mesher::triangulation::RefinementOptions>,
 ) -> Result<Mesh> {
     if element_type != ElementType::TRI3 {
         return Err(PyrucastError::Message(format!(
-            "fill_surface: only TRI3 is supported for now, got {}",
+            "triangulate_surface: only TRI3 is supported for now, got {}",
             element_type
         )));
     }
     let n_sub = contour.len();
     if n_sub == 0 {
         return Err(PyrucastError::Message(
-            "fill_surface: contour must contain at least one SEG2 submesh".into(),
+            "triangulate_surface: contour must contain at least one SEG2 submesh".into(),
         ));
     }
     let coords = contour.coords()?;
     let dim = read(&coords)?.dim();
     if dim != 2 && dim != 3 {
         return Err(PyrucastError::Message(format!(
-            "fill_surface: contour configuration must be 2-D or 3-D, got dim={}",
+            "triangulate_surface: contour configuration must be 2-D or 3-D, got dim={}",
             dim
         )));
     }
@@ -75,13 +75,13 @@ pub fn fill_surface(
         };
         if et != ElementType::SEG2 {
             return Err(PyrucastError::Message(format!(
-                "fill_surface: submesh #{} must be SEG2, got {}",
+                "triangulate_surface: submesh #{} must be SEG2, got {}",
                 sm_idx, et
             )));
         }
         if n_elems < 3 {
             return Err(PyrucastError::Message(format!(
-                "fill_surface: submesh #{} must have ≥ 3 segments, got {}",
+                "triangulate_surface: submesh #{} must have ≥ 3 segments, got {}",
                 sm_idx, n_elems
             )));
         }
@@ -92,7 +92,7 @@ pub fn fill_surface(
             let b = conn[2 * i + 1];
             if next_node.insert(a, b).is_some() {
                 return Err(PyrucastError::Message(format!(
-                    "fill_surface: submesh #{}: node {} starts more than one segment",
+                    "triangulate_surface: submesh #{}: node {} starts more than one segment",
                     sm_idx, a
                 )));
             }
@@ -102,28 +102,28 @@ pub fn fill_surface(
         chain.push(start);
         let mut current = *next_node.get(&start).ok_or_else(|| {
             PyrucastError::Message(format!(
-                "fill_surface: submesh #{}: node {} has no outgoing segment",
+                "triangulate_surface: submesh #{}: node {} has no outgoing segment",
                 sm_idx, start
             ))
         })?;
         while current != start {
             if chain.len() > n_elems {
                 return Err(PyrucastError::Message(format!(
-                    "fill_surface: submesh #{}: contour is not a closed simple loop",
+                    "triangulate_surface: submesh #{}: contour is not a closed simple loop",
                     sm_idx
                 )));
             }
             chain.push(current);
             current = *next_node.get(&current).ok_or_else(|| {
                 PyrucastError::Message(format!(
-                    "fill_surface: submesh #{}: node {} has no outgoing segment",
+                    "triangulate_surface: submesh #{}: node {} has no outgoing segment",
                     sm_idx, current
                 ))
             })?;
         }
         if chain.len() != n_elems {
             return Err(PyrucastError::Message(format!(
-                "fill_surface: submesh #{}: contour has multiple disjoint loops ({} nodes traced out of {})",
+                "triangulate_surface: submesh #{}: contour has multiple disjoint loops ({} nodes traced out of {})",
                 sm_idx, chain.len(), n_elems
             )));
         }
@@ -178,7 +178,7 @@ pub fn fill_surface(
             })
             .ok_or_else(|| {
                 PyrucastError::Message(
-                    "fill_surface: every 3-D loop is collinear or zero-area".into(),
+                    "triangulate_surface: every 3-D loop is collinear or zero-area".into(),
                 )
             })?;
 
@@ -202,7 +202,7 @@ pub fn fill_surface(
         let tol = 1e-6 * diag;
         if max_dev > tol {
             return Err(PyrucastError::Message(format!(
-                "fill_surface: contour is not planar — max deviation {:.3e} exceeds tolerance {:.3e} (1e-6 × diag={:.3e})",
+                "triangulate_surface: contour is not planar — max deviation {:.3e} exceeds tolerance {:.3e} (1e-6 × diag={:.3e})",
                 max_dev, tol, diag
             )));
         }
@@ -344,14 +344,14 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_square_gives_two_triangles() {
+    fn triangulate_surface_square_gives_two_triangles() {
         let coords = insert(Coords::new(2).unwrap());
         let (contour, nodes) = build_contour_2d(
             coords.clone(),
             &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
         );
 
-        let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
         assert_eq!(tri.cell_count().unwrap(), 2);
 
@@ -369,7 +369,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_triangles_sum_to_polygon_area() {
+    fn triangulate_surface_triangles_sum_to_polygon_area() {
         let coords = insert(Coords::new(2).unwrap());
         let l = [
             (0.0, 0.0),
@@ -381,7 +381,7 @@ mod tests {
         ];
         let (contour, _nodes) = build_contour_2d(coords.clone(), &l);
 
-        let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 4);
 
         let mut total = 0.0;
@@ -397,7 +397,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_increfs_contour_nodes() {
+    fn triangulate_surface_increfs_contour_nodes() {
         let coords = insert(Coords::new(2).unwrap());
         let (contour, nodes) = build_contour_2d(
             coords.clone(),
@@ -412,7 +412,7 @@ mod tests {
             }
         }
 
-        let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&contour, ElementType::TRI3, None).unwrap();
 
         let mut extra = [0u32; 4];
         for ci in 0..2 {
@@ -431,26 +431,26 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_rejects_non_tri3() {
+    fn triangulate_surface_rejects_non_tri3() {
         let coords = insert(Coords::new(2).unwrap());
         let (contour, _n) =
             build_contour_2d(coords, &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
-        assert!(fill_surface(&contour, ElementType::QUA4, None).is_err());
+        assert!(triangulate_surface(&contour, ElementType::QUA4, None).is_err());
     }
 
     #[test]
-    fn fill_surface_rejects_non_seg2_contour() {
+    fn triangulate_surface_rejects_non_seg2_contour() {
         let coords = insert(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
         let mut bogus = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         bogus.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        assert!(fill_surface(&bogus, ElementType::TRI3, None).is_err());
+        assert!(triangulate_surface(&bogus, ElementType::TRI3, None).is_err());
     }
 
     #[test]
-    fn fill_surface_rejects_dim_above_three() {
+    fn triangulate_surface_rejects_dim_above_three() {
         let coords = insert(Coords::new(4).unwrap());
         let nodes: Vec<Node> = (0..4)
             .map(|i| {
@@ -464,11 +464,11 @@ mod tests {
                 .add_cell(&[nodes[i].id(), nodes[(i + 1) % 4].id()])
                 .unwrap();
         }
-        assert!(fill_surface(&contour, ElementType::TRI3, None).is_err());
+        assert!(triangulate_surface(&contour, ElementType::TRI3, None).is_err());
     }
 
     #[test]
-    fn fill_surface_3d_square_in_z_plane() {
+    fn triangulate_surface_3d_square_in_z_plane() {
         let coords = insert(Coords::new(3).unwrap());
         let (contour, _nodes) = build_contour_3d(
             coords.clone(),
@@ -480,7 +480,7 @@ mod tests {
             ],
         );
 
-        let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
 
         for ci in 0..2 {
@@ -508,14 +508,14 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_3d_tilted_square() {
+    fn triangulate_surface_3d_tilted_square() {
         let s = 1.0_f64 / 2.0_f64.sqrt();
         let coords = insert(Coords::new(3).unwrap());
         let (contour, _nodes) = build_contour_3d(
             coords.clone(),
             &[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, s, s), (0.0, s, s)],
         );
-        let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
 
         let mut total = 0.0;
@@ -536,7 +536,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_3d_rejects_non_planar_contour() {
+    fn triangulate_surface_3d_rejects_non_planar_contour() {
         let coords = insert(Coords::new(3).unwrap());
         let (contour, _nodes) = build_contour_3d(
             coords.clone(),
@@ -547,13 +547,13 @@ mod tests {
                 (0.0, 1.0, 0.0),
             ],
         );
-        let err = fill_surface(&contour, ElementType::TRI3, None).unwrap_err();
+        let err = triangulate_surface(&contour, ElementType::TRI3, None).unwrap_err();
         let msg = format!("{}", err);
         assert!(msg.contains("not planar"), "unexpected message: {}", msg);
     }
 
     #[test]
-    fn fill_surface_3d_accepts_tiny_numerical_noise() {
+    fn triangulate_surface_3d_accepts_tiny_numerical_noise() {
         let coords = insert(Coords::new(3).unwrap());
         let (contour, _nodes) = build_contour_3d(
             coords.clone(),
@@ -564,12 +564,12 @@ mod tests {
                 (0.0, 1.0, 0.0),
             ],
         );
-        let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
     }
 
     #[test]
-    fn fill_surface_rejects_empty_submesh() {
+    fn triangulate_surface_rejects_empty_submesh() {
         let coords = insert(Coords::new(2).unwrap());
         let (mut contour, _n) = build_contour_2d(
             coords.clone(),
@@ -577,11 +577,11 @@ mod tests {
         );
         let extra = insert(SubMesh::new(coords, ElementType::SEG2));
         contour.add_sub(extra).unwrap();
-        assert!(fill_surface(&contour, ElementType::TRI3, None).is_err());
+        assert!(triangulate_surface(&contour, ElementType::TRI3, None).is_err());
     }
 
     #[test]
-    fn fill_surface_with_one_hole_2d() {
+    fn triangulate_surface_with_one_hole_2d() {
         let coords = insert(Coords::new(2).unwrap());
         let (outer, _no) = build_contour_2d(
             coords.clone(),
@@ -594,7 +594,7 @@ mod tests {
         let combined = outer.union(&hole).unwrap();
         assert_eq!(combined.len(), 2);
 
-        let tri = fill_surface(&combined, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&combined, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
 
         let n_cells = tri.cell_count().unwrap();
@@ -611,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_outer_loop_is_autodetected() {
+    fn triangulate_surface_outer_loop_is_autodetected() {
         let coords = insert(Coords::new(2).unwrap());
         let (hole, _) = build_contour_2d(
             coords.clone(),
@@ -622,7 +622,7 @@ mod tests {
             &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
         );
         let combined = hole.union(&outer).unwrap();
-        let tri = fill_surface(&combined, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
         let mut total = 0.0;
         for ci in 0..n_cells {
@@ -635,7 +635,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_with_two_holes_2d() {
+    fn triangulate_surface_with_two_holes_2d() {
         let coords = insert(Coords::new(2).unwrap());
         let (outer, _) = build_contour_2d(
             coords.clone(),
@@ -651,7 +651,7 @@ mod tests {
         );
         let combined = outer.union(&h1).unwrap().union(&h2).unwrap();
         assert_eq!(combined.len(), 3);
-        let tri = fill_surface(&combined, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&combined, ElementType::TRI3, None).unwrap();
         let n_cells = tri.cell_count().unwrap();
         let mut total = 0.0;
         for ci in 0..n_cells {
@@ -664,7 +664,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_with_one_hole_3d() {
+    fn triangulate_surface_with_one_hole_3d() {
         let coords = insert(Coords::new(3).unwrap());
         let (outer, _) = build_contour_3d(
             coords.clone(),
@@ -686,7 +686,7 @@ mod tests {
         );
         let combined = outer.union(&hole).unwrap();
 
-        let tri = fill_surface(&combined, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&combined, ElementType::TRI3, None).unwrap();
 
         let n_cells = tri.cell_count().unwrap();
         for ci in 0..n_cells {
@@ -713,7 +713,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_with_hole_rejects_different_coords() {
+    fn triangulate_surface_with_hole_rejects_different_coords() {
         let cfg1 = insert(Coords::new(2).unwrap());
         let cfg2 = insert(Coords::new(2).unwrap());
         let (outer, _) = build_contour_2d(
@@ -725,7 +725,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_rejects_open_contour() {
+    fn triangulate_surface_rejects_open_contour() {
         let coords = insert(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -733,11 +733,11 @@ mod tests {
         let mut open = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         open.add_cell(&[a.id(), b.id()]).unwrap();
         open.add_cell(&[b.id(), c.id()]).unwrap();
-        assert!(fill_surface(&open, ElementType::TRI3, None).is_err());
+        assert!(triangulate_surface(&open, ElementType::TRI3, None).is_err());
     }
 
     #[test]
-    fn fill_surface_refined_2d_square_creates_steiner_nodes() {
+    fn triangulate_surface_refined_2d_square_creates_steiner_nodes() {
         let coords = insert(Coords::new(2).unwrap());
         let (contour, contour_nodes) = build_contour_2d(
             coords.clone(),
@@ -749,7 +749,7 @@ mod tests {
             max_edge_length: Some(1.5),
             min_angle_deg: None,
         };
-        let tri = fill_surface(&contour, ElementType::TRI3, Some(opts)).unwrap();
+        let tri = triangulate_surface(&contour, ElementType::TRI3, Some(opts)).unwrap();
 
         let new_node_count = read(&coords).unwrap().node_count();
         assert!(
@@ -788,21 +788,22 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_refined_inactive_options_is_noop() {
+    fn triangulate_surface_refined_inactive_options_is_noop() {
         let coords = insert(Coords::new(2).unwrap());
         let (contour, _nodes) = build_contour_2d(
             coords.clone(),
             &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
         );
         let initial_count = read(&coords).unwrap().node_count();
-        let tri = fill_surface(&contour, ElementType::TRI3, Some(Default::default())).unwrap();
+        let tri =
+            triangulate_surface(&contour, ElementType::TRI3, Some(Default::default())).unwrap();
         let final_count = read(&coords).unwrap().node_count();
         assert_eq!(tri.cell_count().unwrap(), 2);
         assert_eq!(initial_count, final_count, "no Steiner expected");
     }
 
     #[test]
-    fn fill_surface_refined_3d_keeps_steiner_in_plane() {
+    fn triangulate_surface_refined_3d_keeps_steiner_in_plane() {
         let coords = insert(Coords::new(3).unwrap());
         let (contour, _) = build_contour_3d(
             coords.clone(),
@@ -817,7 +818,7 @@ mod tests {
             max_edge_length: Some(1.5),
             min_angle_deg: None,
         };
-        let tri = fill_surface(&contour, ElementType::TRI3, Some(opts)).unwrap();
+        let tri = triangulate_surface(&contour, ElementType::TRI3, Some(opts)).unwrap();
         let n_cells = tri.cell_count().unwrap();
         assert!(
             n_cells > 2,
@@ -837,7 +838,7 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_refined_with_hole_conserves_area() {
+    fn triangulate_surface_refined_with_hole_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
         let (outer, _) = build_contour_2d(
             coords.clone(),
@@ -852,7 +853,7 @@ mod tests {
             max_edge_length: Some(1.0),
             min_angle_deg: None,
         };
-        let tri = fill_surface(&combined, ElementType::TRI3, Some(opts)).unwrap();
+        let tri = triangulate_surface(&combined, ElementType::TRI3, Some(opts)).unwrap();
         let n_cells = tri.cell_count().unwrap();
         let mut total = 0.0;
         for ci in 0..n_cells {
@@ -865,11 +866,11 @@ mod tests {
     }
 
     #[test]
-    fn fill_surface_works_with_cw_contour() {
+    fn triangulate_surface_works_with_cw_contour() {
         let coords = insert(Coords::new(2).unwrap());
         let (contour, _n) =
             build_contour_2d(coords, &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)]);
-        let tri = fill_surface(&contour, ElementType::TRI3, None).unwrap();
+        let tri = triangulate_surface(&contour, ElementType::TRI3, None).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
 
         for ci in 0..2 {

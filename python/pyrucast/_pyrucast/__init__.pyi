@@ -42,7 +42,6 @@ __all__ = [
     "exp",
     "export_vtk",
     "extrude",
-    "fill_surface",
     "filter_components",
     "flux",
     "from_live_nodes",
@@ -63,6 +62,7 @@ __all__ = [
     "material_field_per_sub_model",
     "merge",
     "merge_nodes",
+    "pave_surface",
     "poi1_from_nodes",
     "psca",
     "read_gmsh",
@@ -82,7 +82,6 @@ __all__ = [
     "sqrt",
     "stiffness",
     "sub_material_field",
-    "surface",
     "swap_dir",
     "sweep",
     "sweep_solid",
@@ -94,6 +93,7 @@ __all__ = [
     "to_quadratic",
     "transfinite",
     "translate",
+    "triangulate_surface",
     "volume",
     "xtx",
     "xty",
@@ -2167,7 +2167,7 @@ def contour(mesh: Mesh) -> Mesh:
     Returns a Mesh with one SEG2 submesh per loop — a single loop for a
     simply-connected domain, several when the domain has holes or disjoint
     pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
-    CW), so the result can feed straight back into `surface` / `fill_surface`.
+    CW), so the result can feed straight back into `pave_surface` / `triangulate_surface`.
     """
 
 def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
@@ -2251,13 +2251,6 @@ def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: bu
     r"""
     Extrude `mesh` by `n_layers` layers along `direction` (the total
     displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
-    """
-
-def fill_surface(contour: Mesh, element_type: builtins.str, max_edge_length: typing.Optional[builtins.float] = None, min_angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
-    r"""
-    Fill the interior of a closed SEG2 `contour` with `element_type` cells
-    (triangulation). `max_edge_length` / `min_angle_deg` optionally refine
-    the result.
     """
 
 def filter_components(field: typing.Any, components: typing.Any) -> typing.Any:
@@ -2471,6 +2464,21 @@ def merge_nodes(mesh: Mesh, tol: builtins.float) -> Mesh:
     averaging). Cells that collapse onto a repeated node (a degenerate segment,
     triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
     coincident nodes. `mesh` itself is left untouched.
+    """
+
+def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Mesh the interior of a closed SEG2 `contour` with `element_type` cells
+    using a size-controlled advancing front that **creates interior nodes**
+    (unlike `triangulate_surface`, which only triangulates the contour nodes).
+    
+    `contour` may hold **one or more** SEG2 submeshes: with more than one,
+    the outer boundary is auto-detected (largest area) and every other loop
+    is treated as a hole. `size` sets the target element edge length; `None`
+    uses the mean length of the *outer* loop's segments. `element_type` is
+    "TRI3" or "QUA4" (QUA4 is quad-dominant: the result may also carry a few
+    triangles). The contour may be 2-D or a nearly planar loop in 3-D
+    (projected, paved, lifted back).
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
@@ -2718,21 +2726,6 @@ def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequen
     need no material (e.g. Dirichlet).
     """
 
-def surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
-    r"""
-    Mesh the interior of a closed SEG2 `contour` with `element_type` cells
-    using a size-controlled advancing front that **creates interior nodes**
-    (unlike `fill_surface`, which only triangulates the contour nodes).
-    
-    `contour` may hold **one or more** SEG2 submeshes: with more than one,
-    the outer boundary is auto-detected (largest area) and every other loop
-    is treated as a hole. `size` sets the target element edge length; `None`
-    uses the mean length of the *outer* loop's segments. `element_type` is
-    "TRI3" or "QUA4" (QUA4 is quad-dominant: the result may also carry a few
-    triangles). The contour may be 2-D or a nearly planar loop in 3-D
-    (projected, paved, lifted back).
-    """
-
 def swap_dir() -> pathlib.Path:
     r"""
     Return the effective swap directory (creating it if necessary).
@@ -2820,11 +2813,18 @@ def translate(mesh: Mesh, vector: typing.Sequence[builtins.float]) -> Mesh:
     (the original is left untouched). `vector` matches the mesh dimension.
     """
 
+def triangulate_surface(contour: Mesh, element_type: builtins.str, max_edge_length: typing.Optional[builtins.float] = None, min_angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Fill the interior of a closed SEG2 `contour` with `element_type` cells
+    (triangulation). `max_edge_length` / `min_angle_deg` optionally refine
+    the result.
+    """
+
 def volume(envelope: Mesh, size: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
     Fill the interior of a closed **TRI3** surface `envelope` with TET4 cells
     using a size-controlled **Delaunay** fill that **creates interior nodes** —
-    the 3-D companion of `surface`.
+    the 3-D companion of `pave_surface`.
     
     `size` sets the target element edge length; `None` uses the mean edge
     length of the envelope's faces. The envelope must be a closed,

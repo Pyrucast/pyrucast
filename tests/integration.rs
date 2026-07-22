@@ -166,7 +166,7 @@ fn submesh_protects_nodes_via_refcount() -> Result<()> {
 }
 
 #[test]
-fn fill_surface_from_circle_contour() -> Result<()> {
+fn triangulate_surface_from_circle_contour() -> Result<()> {
     // Build a closed SEG2 circle (8 segments) and fill it with TRI3
     // through the public API. The result must have 6 triangles
     // (n - 2 with n = 8) and a total area close to π·r².
@@ -174,7 +174,7 @@ fn fill_surface_from_circle_contour() -> Result<()> {
     let center = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let circle =
         pyrucast::ops::mesher::circle(&center, &[0.0, 0.0, 1.0], 1.0, 8, ElementType::SEG2)?;
-    let tri = pyrucast::ops::mesher::fill_surface(&circle, ElementType::TRI3, None)?;
+    let tri = pyrucast::ops::mesher::triangulate_surface(&circle, ElementType::TRI3, None)?;
     assert_eq!(tri.element_types()?, vec![ElementType::TRI3]);
     assert_eq!(tri.cell_count()?, 6);
 

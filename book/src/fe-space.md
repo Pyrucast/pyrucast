@@ -48,7 +48,7 @@ Les types **quadratiques** partagent le repère et la numérotation des sommets 
 
 `QUA8`, `HEX20`, `PENTA15` sont **sérendipité** (arêtes seulement) ; `SEG3`, `TRI6`, `TET10`, `QUA9`, `HEX27` sont des Lagrange complets (`QUA9`/`HEX27` = tenseurs `Q2` complets, avec nœuds de face et central).
 
-Ces conventions sont cohérentes avec celles déjà imposées ailleurs dans le code : orientation CCW des triangles produits par `fill_surface`, ordre HEX8/PENTA6 utilisé par `extrude` et `sweep_solid`, ordre des nœuds de milieu d'arête aligné sur VTK (export verbatim) et réaligné à la lecture gmsh.
+Ces conventions sont cohérentes avec celles déjà imposées ailleurs dans le code : orientation CCW des triangles produits par `triangulate_surface`, ordre HEX8/PENTA6 utilisé par `extrude` et `sweep_solid`, ordre des nœuds de milieu d'arête aligné sur VTK (export verbatim) et réaligné à la lecture gmsh.
 
 ## Théorie : élément isoparamétrique
 
@@ -203,7 +203,7 @@ La dérivation des fonctions de forme par rapport aux coordonnées physiques uti
 
 ### Cas manifold : \\( d_s > d_r \\)
 
-Un sous-maillage peut être **plongé** dans un espace de dimension supérieure : SEG2 dans une `Coords` 2D ou 3D (contour, courbe), TRI3 dans une `Coords` 3D (surface plongée). C'est exactement ce que produit `fill_surface` quand on lui donne un contour 3D plan.
+Un sous-maillage peut être **plongé** dans un espace de dimension supérieure : SEG2 dans une `Coords` 2D ou 3D (contour, courbe), TRI3 dans une `Coords` 3D (surface plongée). C'est exactement ce que produit `triangulate_surface` quand on lui donne un contour 3D plan.
 
 Dans ce cas, \\( J \\) est rectangulaire (taille \\( d_s \times d_r \\)). Le déterminant standard n'a plus de sens, mais on peut définir la **métrique tirée en arrière** :
 \\[

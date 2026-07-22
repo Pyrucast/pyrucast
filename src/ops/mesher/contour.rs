@@ -1,7 +1,7 @@
 //! Boundary-extraction operator: the contour(s) of a surface mesh.
 //!
 //! [`contour`] is the inverse companion of
-//! [`crate::ops::mesher::surface()`] / [`crate::ops::mesher::fill_surface()`]
+//! [`crate::ops::mesher::pave_surface()`] / [`crate::ops::mesher::triangulate_surface()`]
 //! (whose input is exactly one closed SEG2 loop): it takes a surface mesh
 //! (TRI3 / QUA4 cells) and returns its boundary as one or more closed SEG2
 //! loops, one per submesh.
@@ -35,14 +35,14 @@ fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
 /// by exactly one cell is a *boundary* edge (interior edges appear twice,
 /// with opposite orientations, and cancel). Boundary edges from all surface
 /// submeshes are pooled together — so the QUA4 + TRI3 output of
-/// [`surface()`](fn@crate::ops::mesher::surface) yields a single shared
+/// [`pave_surface()`](fn@crate::ops::mesher::pave_surface) yields a single shared
 /// boundary — then chained into closed loops.
 ///
 /// The result is a [`Mesh`] with **one SEG2 submesh per loop**: one submesh
 /// for a simply-connected domain, several when the domain has holes or
 /// disjoint components. Each loop keeps the CCW boundary orientation, so the
 /// outer loop runs counter-clockwise and hole loops clockwise — the
-/// orientation [`surface()`](fn@crate::ops::mesher::surface) expects of its
+/// orientation [`pave_surface()`](fn@crate::ops::mesher::pave_surface) expects of its
 /// input contour. The original nodes are reused (and re-referenced).
 ///
 /// POI1 submeshes are ignored (a point has no edge). Errors if the mesh has

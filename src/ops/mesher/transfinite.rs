@@ -8,7 +8,7 @@ use crate::store::{read, Handle};
 
 /// Build a structured surface bounded by four `SEG2` sides, by (discrete)
 /// transfinite interpolation — the Coons-patch generalization of
-/// [`super::sweep`] from two lines to four.
+/// [`super::sweep()`] from two lines to four.
 ///
 /// `side1`/`side3` and `side2`/`side4` are the two pairs of **opposite**
 /// sides; each pair must have the same element count. The four sides must
@@ -17,7 +17,7 @@ use crate::store::{read, Handle};
 /// first of `side3`, and so on around `side3 → side4 → side1`.
 ///
 /// A `QUA4` mesh is always built first; `TRI3`/`QUA8`/`QUA9`/`TRI6` are
-/// then derived from it, exactly as in [`super::sweep`]. Every boundary
+/// then derived from it, exactly as in [`super::sweep()`]. Every boundary
 /// node (all four sides, corners included) is re-used (refcount
 /// incremented); interior nodes are newly created by bilinear blending of
 /// the four boundary curves, corrected against the four corners (discrete

@@ -2,7 +2,7 @@
 //! containers.
 //!
 //! Will host (as legacy code migrates):
-//! - `mesh::fill_surface`, `mesh::extrude`, `mesh::sweep`,
+//! - `mesh::triangulate_surface`, `mesh::extrude`, `mesh::sweep`,
 //!   `mesh::line`, `mesh::circle`, …
 //! - any future remeshing / refinement helpers.
 

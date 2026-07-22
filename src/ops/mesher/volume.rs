@@ -1,7 +1,7 @@
 //! Volumetric mesher: fill the interior of a closed triangular surface
 //! envelope with size-controlled tetrahedra.
 //!
-//! This is the 3-D companion of [`crate::ops::mesher::surface()`] (which paves
+//! This is the 3-D companion of [`crate::ops::mesher::pave_surface()`] (which paves
 //! the interior of a closed 2-D contour). Filling the empty interior of a
 //! surface is what a volume operator does; here it is built on a robust
 //! **Delaunay** core rather than an advancing front:
