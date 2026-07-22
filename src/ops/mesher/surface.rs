@@ -568,7 +568,15 @@ fn advance_layer(
             off.push(cur);
             continue;
         }
-        off.push(cur + dir * (d / nrm));
+        // Never push a node in further than its own local front spacing
+        // supports: the strip cell it forms is as wide as `d_local` and as
+        // long as the front edges around it, so a fixed, spacing-agnostic
+        // `d` turns an unevenly discretised front (e.g. a coarse `arc`
+        // sitting next to a much finer `line`) into elongated sliver
+        // triangles right where the front is locally dense.
+        let local_scale = 0.5 * (l1 + l2);
+        let d_local = d.min(LAYER_OFFSET * local_scale);
+        off.push(cur + dir * (d_local / nrm));
     }
 
     let cur_area = front_area(pts, front);
@@ -712,6 +720,75 @@ mod tests {
             pts.push((0.0, s - i as f64 * step));
         }
         pts
+    }
+
+    /// Square `[0, s]²` boundary discretized at `fine` spacing on three
+    /// sides and at `coarse` spacing on the fourth (bottom) — mimicking a
+    /// `line`/`arc` density mismatch on the same contour.
+    fn square_boundary_heterogeneous(s: f64, fine: f64, coarse: f64) -> Vec<(f64, f64)> {
+        let m_coarse = (s / coarse).round() as usize;
+        let m_fine = (s / fine).round() as usize;
+        let mut pts = Vec::new();
+        for i in 0..m_coarse {
+            pts.push((i as f64 * coarse, 0.0));
+        }
+        for i in 0..m_fine {
+            pts.push((s, i as f64 * fine));
+        }
+        for i in 0..m_fine {
+            pts.push((s - i as f64 * fine, s));
+        }
+        for i in 0..m_fine {
+            pts.push((0.0, s - i as f64 * fine));
+        }
+        pts
+    }
+
+    /// Smallest interior angle, in degrees, over every triangle of a TRI3
+    /// mesh (assumes a single submesh).
+    fn min_angle_deg(mesh: &Mesh) -> f64 {
+        let n = mesh.cell_count().unwrap();
+        let mut worst = 180.0_f64;
+        for ci in 0..n {
+            let p: Vec<Vec<f64>> = (0..3)
+                .map(|ni| mesh.node(0, ci, ni).unwrap().coord().unwrap())
+                .collect();
+            for k in 0..3 {
+                let a = &p[k];
+                let b = &p[(k + 1) % 3];
+                let c = &p[(k + 2) % 3];
+                let u = [a[0] - b[0], a[1] - b[1]];
+                let v = [c[0] - b[0], c[1] - b[1]];
+                let dot = u[0] * v[0] + u[1] * v[1];
+                let nu = (u[0] * u[0] + u[1] * u[1]).sqrt();
+                let nv = (v[0] * v[0] + v[1] * v[1]).sqrt();
+                let cos_t = (dot / (nu * nv)).clamp(-1.0, 1.0);
+                let deg = cos_t.acos().to_degrees();
+                if deg < worst {
+                    worst = deg;
+                }
+            }
+        }
+        worst
+    }
+
+    #[test]
+    fn surface_heterogeneous_boundary_spacing_avoids_slivers() {
+        // Before `advance_layer` scaled its inward offset to the local front
+        // spacing, a front with one side much coarser than the rest (as a
+        // `line`/`arc` mix on the same contour easily produces) degraded
+        // into elongated sliver triangles — legal (positive area) but with
+        // interior angles down near a few degrees. This is a coarse
+        // regression floor, not a tight quality bound.
+        let coords = insert(Coords::new(2).unwrap());
+        let contour = build_contour_2d(
+            coords.clone(),
+            &square_boundary_heterogeneous(4.0, 0.2, 1.0),
+        );
+        let tri = surface(&contour, ElementType::TRI3, Some(0.2)).unwrap();
+        assert!((total_ccw_area(&tri) - 16.0).abs() < 1e-6);
+        let worst = min_angle_deg(&tri);
+        assert!(worst > 5.0, "sliver triangle: min angle {worst} deg");
     }
 
     #[test]
