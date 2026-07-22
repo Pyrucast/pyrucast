@@ -38,6 +38,7 @@ use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use crate::ops::mesher::triangulation::{cross2, point_in_triangle, signed_area};
 use crate::store::read;
+use std::collections::HashMap;
 
 /// Geometric tolerance factor applied to the model size to decide
 /// degeneracy (zero-length edges, collapsed directions).
@@ -427,11 +428,105 @@ fn pave_single(
         ));
     }
 
+    // Post-pass: local quality-improving edge flips. Peeling, layer
+    // splitting and fan closure each choose a triangulation greedily and
+    // locally; whichever one produced the eventual worst sliver, a flip
+    // pass catches it uniformly by looking only at the final triangle
+    // shapes, regardless of which stage created them.
+    improve_triangulation_by_flips(&pts, &mut tris);
+
     Ok(Paved {
         points: pts,
         tris,
         quads,
     })
+}
+
+/// Smallest interior angle of triangle `(a, b, c)`, in radians.
+fn min_angle(a: Point2, b: Point2, c: Point2) -> f64 {
+    let angle_at = |p: Point2, q: Point2, r: Point2| -> f64 {
+        let u: Vector2 = q - p;
+        let v: Vector2 = r - p;
+        u.angle(&v)
+    };
+    angle_at(a, b, c)
+        .min(angle_at(b, c, a))
+        .min(angle_at(c, a, b))
+}
+
+/// Repeatedly flip interior edges of a pure-triangle mesh when doing so
+/// strictly improves the worst angle of the two triangles it borders — a
+/// Lawson-style local quality pass. Only ever touches an edge shared by
+/// exactly two triangles whose four vertices form a convex quad (so the
+/// flip is always a valid re-triangulation); the outer boundary is never a
+/// shared edge and so is never touched. Runs to a fixed point (bounded by a
+/// small pass cap — each pass strictly increases the mesh's worst angle
+/// somewhere, so it cannot cycle).
+fn improve_triangulation_by_flips(pts: &[Point2], tris: &mut [[usize; 3]]) {
+    const MAX_PASSES: usize = 8;
+    for _ in 0..MAX_PASSES {
+        // edge (min, max) -> (triangle index, position of the edge's start
+        // vertex within that triangle, in CCW order).
+        let mut edge_owner: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
+        let mut any_flip = false;
+        for (t_idx, t) in tris.iter().enumerate() {
+            for k in 0..3 {
+                let a = t[k];
+                let b = t[(k + 1) % 3];
+                let key = if a < b { (a, b) } else { (b, a) };
+                edge_owner.entry(key).or_insert((t_idx, k));
+            }
+        }
+        for t_idx in 0..tris.len() {
+            for k in 0..3 {
+                // Re-read fresh each iteration: an earlier (t_idx, k) or an
+                // earlier t_idx in this same pass may have already flipped
+                // this very triangle as someone else's owner.
+                let t = tris[t_idx];
+                let u = t[k];
+                let v = t[(k + 1) % 3];
+                let c1 = t[(k + 2) % 3];
+                let key = if u < v { (u, v) } else { (v, u) };
+                let Some(&(owner_idx, owner_k)) = edge_owner.get(&key) else {
+                    continue;
+                };
+                if owner_idx == t_idx {
+                    continue; // this triangle is the (u, v)-direction owner
+                }
+                let ot = tris[owner_idx];
+                // `ot` holds the edge as (v, u) in its own CCW order. If a
+                // flip already touched `owner_idx` or `t_idx` this pass, the
+                // map entry is stale — this check catches that and skips
+                // rather than acting on it; the next pass rebuilds it fresh.
+                if ot[owner_k] != v || ot[(owner_k + 1) % 3] != u {
+                    continue; // boundary edge, or stale/inconsistent map entry
+                }
+                let c2 = ot[(owner_k + 2) % 3];
+
+                // Candidate CCW quad around the shared edge: u, c2, v, c1.
+                if cross2(pts[u], pts[c2], pts[v]) <= 0.0
+                    || cross2(pts[c2], pts[v], pts[c1]) <= 0.0
+                    || cross2(pts[v], pts[c1], pts[u]) <= 0.0
+                    || cross2(pts[c1], pts[u], pts[c2]) <= 0.0
+                {
+                    continue; // not convex: flipping would invert a triangle
+                }
+
+                let current_worst =
+                    min_angle(pts[u], pts[v], pts[c1]).min(min_angle(pts[v], pts[u], pts[c2]));
+                let flipped_worst =
+                    min_angle(pts[u], pts[c2], pts[c1]).min(min_angle(pts[c2], pts[v], pts[c1]));
+                if flipped_worst > current_worst + 1e-9 {
+                    tris[t_idx] = [u, c2, c1];
+                    tris[owner_idx] = [c2, v, c1];
+                    any_flip = true;
+                }
+            }
+        }
+        if !any_flip {
+            break;
+        }
+    }
 }
 
 /// Signed area of the polygon described by `front` (indices into `pts`).
@@ -608,8 +703,21 @@ fn advance_layer(
         if nbnn == 4 {
             quads.push([o, p, q, r]);
         } else {
-            tris.push([o, p, q]);
-            tris.push([o, q, r]);
+            // A strip cell along curved (or unevenly spaced) front is
+            // rarely a nice parallelogram, so the two ways to cut it into
+            // triangles — diagonal (o, q) or diagonal (p, r) — are not
+            // equivalent: one routinely leaves a sliver the other avoids.
+            // Pick whichever split has the better worst angle instead of
+            // always cutting along (o, q).
+            let split_oq = min_angle(pts[o], pts[p], pts[q]).min(min_angle(pts[o], pts[q], pts[r]));
+            let split_pr = min_angle(pts[o], pts[p], pts[r]).min(min_angle(pts[p], pts[q], pts[r]));
+            if split_oq >= split_pr {
+                tris.push([o, p, q]);
+                tris.push([o, q, r]);
+            } else {
+                tris.push([o, p, r]);
+                tris.push([p, q, r]);
+            }
         }
     }
     *front = inner;
@@ -789,6 +897,39 @@ mod tests {
         assert!((total_ccw_area(&tri) - 16.0).abs() < 1e-6);
         let worst = min_angle_deg(&tri);
         assert!(worst > 5.0, "sliver triangle: min angle {worst} deg");
+    }
+
+    #[test]
+    fn improve_triangulation_flips_bad_diagonal() {
+        // A trapezoid (not a rectangle: its two diagonals aren't symmetric,
+        // so one triangulation is genuinely better than the other). Split
+        // along diagonal (0, 2), the worse of the two choices.
+        let pts = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(5.0, 0.0),
+            Point2::new(5.0, 1.0),
+            Point2::new(1.0, 1.0),
+        ];
+        let mut tris = vec![[0usize, 1, 2], [0, 2, 3]];
+        let before = min_angle(pts[0], pts[1], pts[2]).min(min_angle(pts[0], pts[2], pts[3]));
+
+        improve_triangulation_by_flips(&pts, &mut tris);
+
+        let after = min_angle(pts[tris[0][0]], pts[tris[0][1]], pts[tris[0][2]]).min(min_angle(
+            pts[tris[1][0]],
+            pts[tris[1][1]],
+            pts[tris[1][2]],
+        ));
+        assert!(
+            after > before,
+            "flip did not improve worst angle: before={before} after={after}"
+        );
+        for t in &tris {
+            assert!(
+                !t.contains(&0) || !t.contains(&2),
+                "still split along (0, 2): {t:?}"
+            );
+        }
     }
 
     #[test]
