@@ -296,6 +296,25 @@ impl Cdt {
             return Ok(());
         }
 
+        // Collinear-overlap case. The Delaunay triangulation of collinear
+        // points (a whole straight boundary side pre-discretized into many
+        // segments) is degenerate: the wanted edge (a, b) may run *along*
+        // longer existing edges rather than crossing any triangle, so the
+        // crossing walk finds no start. Two sub-cases, both resolved by
+        // splitting at the collinear vertex nearest `a`:
+        //  - a vertex `c` lies strictly on the open segment (a, b): enforce
+        //    (a, c) then (c, b);
+        //  - an existing edge (a, c) is collinear with (a, b) and reaches
+        //    *past* `b` (so (a, b) is a prefix of it): flip that edge so a
+        //    shorter one toward `b` can form, then retry.
+        if let Some(c) = self.vertex_on_segment(a, b) {
+            self.insert_constraint(a, c)?;
+            return self.insert_constraint(c, b);
+        }
+        if self.split_overlapping_collinear_edge(a, b)? {
+            return self.insert_constraint(a, b);
+        }
+
         let crossed = self.triangles_crossing_segment(a, b)?;
         let crossed_set: std::collections::HashSet<usize> = crossed.iter().copied().collect();
 
@@ -380,6 +399,133 @@ impl Cdt {
             }
         }
         false
+    }
+
+    /// Handle a wanted edge (a, b) that is the *prefix* of a longer
+    /// existing edge (a, c): `b` lies strictly on the interior of edge
+    /// (a, c). Split each of the (at most two) triangles incident to edge
+    /// (a, c) at `b`, so edges (a, b) and (b, c) replace (a, c). Returns
+    /// `true` if such an edge was found and split.
+    ///
+    /// This unblocks constraint enforcement along a collinear boundary,
+    /// where Delaunay of the collinear points may connect `a` directly to
+    /// a vertex beyond `b`.
+    fn split_overlapping_collinear_edge(&mut self, a: usize, b: usize) -> Result<bool> {
+        let pa = self.points[a];
+        let pb = self.points[b];
+        let ab = pb - pa;
+        let len2 = ab.norm_squared();
+        if len2 == 0.0 {
+            return Ok(false);
+        }
+
+        // Find an alive triangle with an edge (a, c) collinear with (a, b)
+        // where `b` lies strictly between `a` and `c`.
+        let mut target_c: Option<usize> = None;
+        'search: for t in &self.triangles {
+            if !t.alive {
+                continue;
+            }
+            let Some(pos) = t.v.iter().position(|&v| v == a) else {
+                continue;
+            };
+            for &c in [t.v[(pos + 1) % 3], t.v[(pos + 2) % 3]].iter() {
+                if c == b {
+                    continue;
+                }
+                let pc = self.points[c] - pa;
+                // Collinear with a→b, same direction, and reaching past b.
+                if orient2d(pa, pb, self.points[c]).abs() > 1e-9 * len2 {
+                    continue;
+                }
+                let t_along = pc.dot(&ab) / len2;
+                if t_along > 1.0 + 1e-12 {
+                    target_c = Some(c);
+                    break 'search;
+                }
+            }
+        }
+        let Some(c) = target_c else {
+            return Ok(false);
+        };
+
+        // Retire both triangles on edge (a, c) and split each at `b`. `b`
+        // lies on segment (a, c), so for a triangle (a, c, apex) the two
+        // halves (a, b, apex) and (b, c, apex) preserve the winding.
+        let incident: Vec<usize> = self
+            .triangles
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.alive && edge_in_triangle(t, a, c))
+            .map(|(i, _)| i)
+            .collect();
+        if incident.is_empty() {
+            return Ok(false);
+        }
+        for t_idx in incident {
+            let t = self.triangles[t_idx];
+            // Apex = the vertex that is neither a nor c.
+            let apex = *t.v.iter().find(|&&v| v != a && v != c).unwrap();
+            // Preserve orientation: find a/c order as they appear CCW.
+            let pos_a = t.v.iter().position(|&v| v == a).unwrap();
+            let next = t.v[(pos_a + 1) % 3];
+            self.triangles[t_idx].alive = false;
+            let (first, second) = if next == c {
+                // ... a, c, apex ... → (a,b,apex),(b,c,apex)
+                ([a, b, apex], [b, c, apex])
+            } else {
+                // ... a, apex, c ... → (a,apex,b),(b,apex,c)
+                ([a, apex, b], [b, apex, c])
+            };
+            self.triangles.push(Triangle {
+                v: first,
+                n: [NO_NEIGHBOUR; 3],
+                alive: true,
+            });
+            self.triangles.push(Triangle {
+                v: second,
+                n: [NO_NEIGHBOUR; 3],
+                alive: true,
+            });
+        }
+        self.rebuild_neighbours();
+        Ok(true)
+    }
+
+    /// The input vertex nearest `a` that lies strictly on the open
+    /// segment `(a, b)` (collinear and strictly between the endpoints),
+    /// or `None`. Used to split a constraint that overlaps other vertices
+    /// — the degenerate collinear-boundary case.
+    fn vertex_on_segment(&self, a: usize, b: usize) -> Option<usize> {
+        let pa = self.points[a];
+        let pb = self.points[b];
+        let ab = pb - pa;
+        let len2 = ab.norm_squared();
+        if len2 == 0.0 {
+            return None;
+        }
+        let mut best: Option<(usize, f64)> = None;
+        for (i, q) in self.points.iter().enumerate() {
+            if i == a || i == b {
+                continue;
+            }
+            // Super-triangle sentinels are never on a real constraint.
+            if i >= self.n_input && i < self.n_input + 3 {
+                continue;
+            }
+            // `orient2d` is twice the (a, b, q) area = len(ab) · perp_dist,
+            // so `|orient2d| < 1e-9 · len²` means `perp_dist < 1e-9 · len`:
+            // collinear to a length-relative tolerance.
+            if orient2d(pa, pb, *q).abs() > 1e-9 * len2 {
+                continue;
+            }
+            // Parametric position along a→b, strictly inside (0, 1).
+            let t = (q - pa).dot(&ab) / len2;
+            if t > 1e-12 && t < 1.0 - 1e-12 && best.map(|(_, bt)| t < bt).unwrap_or(true) {
+                best = Some((i, t));
+            }
+        }
+        best.map(|(i, _)| i)
     }
 
     /// Walk the triangles strictly crossed by the open segment `(a, b)`,
@@ -1196,6 +1342,13 @@ fn build_chain(edges: &[(usize, usize)], start: usize, end: usize) -> Result<Vec
 #[inline]
 fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
     cross2(a, b, c)
+}
+
+/// True iff triangle `t` has both `a` and `b` as vertices (i.e. `(a, b)`
+/// is one of its three edges).
+#[inline]
+fn edge_in_triangle(t: &Triangle, a: usize, b: usize) -> bool {
+    t.v.contains(&a) && t.v.contains(&b)
 }
 
 /// Circumcenter of the triangle `(a, b, c)`. Returns `None` if the
@@ -2070,13 +2223,11 @@ mod tests {
         );
     }
 
-    #[test]
-    fn refine_plate_with_hole_finely_discretized_contour_converges() {
-        // Same plate + hole as `refine_plate_with_hole_stays_inside_contour`,
-        // but the straight sides are pre-discretized into 10 segments each
-        // (as `line(.., 10)` produces) — many boundary vertices far finer
-        // than the 0.025 target. The refiner must still converge and stay
-        // inside the contour, not explode into a Steiner cascade.
+    /// Build the `maillage_test.py` plate + concentric hole with each
+    /// straight side pre-discretized into `n_side` segments (as
+    /// `line(.., n_side)` produces), refine to `max_edge_length = 0.025`,
+    /// and check the result stays inside the contour (area = outer − hole).
+    fn check_plate_with_hole_refines(n_side: usize) {
         let cx = 0.30_f64;
         let cy = 0.05_f64;
         let r_arc = 0.05_f64;
@@ -2087,14 +2238,14 @@ mod tests {
         // start point and its interior points but not its end point, which
         // is the next side's start.
         let mut outer: Vec<Point2> = Vec::new();
-        // Bottom edge p1(0,0) → p2(0.3,0), 10 segments.
-        for i in 0..10 {
-            let t = i as f64 / 10.0;
+        // Bottom edge p1(0,0) → p2(0.3,0).
+        for i in 0..n_side {
+            let t = i as f64 / n_side as f64;
             outer.push(p2(0.3 * t, 0.0));
         }
         // Two arcs around (cx, cy): p2 → p3 → p4, 6 segments each. Start p2
-        // is already in the list; push interior points and the endpoint,
-        // dropping the last (p4) which the top edge re-adds as its start.
+        // is already in the list; the last pushed point is p4, dropped
+        // below so the top edge re-adds it exactly once.
         for (a0, a1) in [(-90.0_f64, 0.0_f64), (0.0, 90.0)] {
             for i in 1..=6 {
                 let t = i as f64 / 6.0;
@@ -2102,17 +2253,15 @@ mod tests {
                 outer.push(p2(cx + r_arc * phi.cos(), cy + r_arc * phi.sin()));
             }
         }
-        // The arcs pushed p4=(0.3,0.1) as their final point; drop it so the
-        // top edge below re-introduces it exactly once.
-        outer.pop();
-        // Top edge p4(0.3,0.1) → p5(0,0.1), 10 segments.
-        for i in 0..10 {
-            let t = i as f64 / 10.0;
+        outer.pop(); // drop p4; the top edge re-introduces it.
+                     // Top edge p4(0.3,0.1) → p5(0,0.1).
+        for i in 0..n_side {
+            let t = i as f64 / n_side as f64;
             outer.push(p2(0.3 - 0.3 * t, 0.1));
         }
-        // Left edge p5(0,0.1) → p1(0,0), 10 segments.
-        for i in 0..10 {
-            let t = i as f64 / 10.0;
+        // Left edge p5(0,0.1) → p1(0,0).
+        for i in 0..n_side {
+            let t = i as f64 / n_side as f64;
             outer.push(p2(0.0, 0.1 - 0.1 * t));
         }
 
@@ -2127,8 +2276,8 @@ mod tests {
             max_edge_length: Some(0.025),
             min_angle_deg: None,
         };
-        let (pts, tris) =
-            triangulate_polygon_with_holes_refined(&outer, &[hole.clone()], opts).unwrap();
+        let (pts, tris) = triangulate_polygon_with_holes_refined(&outer, &[hole.clone()], opts)
+            .unwrap_or_else(|e| panic!("n_side={n_side}: {e}"));
         assert_all_ccw(&tris, &pts);
 
         let poly_area = |loop_pts: &[Point2]| -> f64 {
@@ -2145,10 +2294,20 @@ mod tests {
         let got = total_area(&tris, &pts);
         assert!(
             (got - expected).abs() < 1e-9,
-            "area mismatch: got {}, expected {}",
-            got,
-            expected
+            "n_side={n_side}: area mismatch: got {got}, expected {expected}",
         );
+    }
+
+    #[test]
+    fn refine_plate_with_hole_finely_discretized_contour_converges() {
+        // Same plate + hole as `refine_plate_with_hole_stays_inside_contour`,
+        // but with the straight sides pre-discretized (as `line(.., n)`
+        // produces) — many boundary vertices far finer than the 0.025
+        // target. The refiner must converge and stay inside the contour at
+        // every discretization, not explode or fail the constraint walk.
+        for n_side in [10usize, 20, 40] {
+            check_plate_with_hole_refines(n_side);
+        }
     }
 
     #[test]
