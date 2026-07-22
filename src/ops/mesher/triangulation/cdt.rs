@@ -138,9 +138,61 @@ impl Cdt {
             )));
         }
 
+        // 1b. Enforce a star-shaped cavity. `in_circle_tolerant` treats
+        //     cocircular points (which `arc`/`circle` contours produce by
+        //     the dozen) as "inside" to grow the cavity in one step, but
+        //     that tolerance can wrongly pull in a triangle the point does
+        //     not actually see, making the cavity non-star-shaped. The fan
+        //     fill below would then emit overlapping/inverted triangles,
+        //     which the next insertion sees as even more "bad" ones — an
+        //     exponential blow-up. Drop any cavity triangle exposing a
+        //     boundary edge the point cannot see (`orient2d <= 0`) until
+        //     the cavity is star-shaped about `p`. Retain the triangle that
+        //     geometrically contains `p` as a seed anchor.
+        let mut bad_set: std::collections::HashSet<usize> = bad.iter().copied().collect();
+        let anchor = bad
+            .iter()
+            .copied()
+            .find(|&t_idx| {
+                let t = self.triangles[t_idx];
+                point_in_triangle(
+                    p,
+                    self.points[t.v[0]],
+                    self.points[t.v[1]],
+                    self.points[t.v[2]],
+                )
+            })
+            .or_else(|| bad.first().copied());
+        loop {
+            let mut to_remove: Option<usize> = None;
+            'outer: for &t_idx in &bad {
+                if Some(t_idx) == anchor {
+                    continue;
+                }
+                let t = self.triangles[t_idx];
+                for k in 0..3 {
+                    let nb = t.n[k];
+                    if nb == NO_NEIGHBOUR || !bad_set.contains(&nb) {
+                        let va = t.v[(k + 1) % 3];
+                        let vb = t.v[(k + 2) % 3];
+                        if orient2d(self.points[va], self.points[vb], p) <= 0.0 {
+                            to_remove = Some(t_idx);
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+            match to_remove {
+                Some(t_idx) => {
+                    bad_set.remove(&t_idx);
+                    bad.retain(|&x| x != t_idx);
+                }
+                None => break,
+            }
+        }
+
         // 2. Boundary of the cavity = edges of bad triangles whose opposite
         //    neighbour is NOT itself bad.
-        let bad_set: std::collections::HashSet<usize> = bad.iter().copied().collect();
         let mut cavity_edges: Vec<(usize, usize)> = Vec::new();
         for &t_idx in &bad {
             let t = self.triangles[t_idx];
@@ -2013,6 +2065,87 @@ mod tests {
         assert!(
             (got - expected).abs() < 1e-9,
             "area mismatch: got {}, expected {} (spills outside contour / into hole)",
+            got,
+            expected
+        );
+    }
+
+    #[test]
+    fn refine_plate_with_hole_finely_discretized_contour_converges() {
+        // Same plate + hole as `refine_plate_with_hole_stays_inside_contour`,
+        // but the straight sides are pre-discretized into 10 segments each
+        // (as `line(.., 10)` produces) — many boundary vertices far finer
+        // than the 0.025 target. The refiner must still converge and stay
+        // inside the contour, not explode into a Steiner cascade.
+        let cx = 0.30_f64;
+        let cy = 0.05_f64;
+        let r_arc = 0.05_f64;
+        let r_hole = 0.035_f64;
+
+        // Each vertex appears exactly once (as `consolidate` merges the
+        // shared endpoints of adjacent edges): every side contributes its
+        // start point and its interior points but not its end point, which
+        // is the next side's start.
+        let mut outer: Vec<Point2> = Vec::new();
+        // Bottom edge p1(0,0) → p2(0.3,0), 10 segments.
+        for i in 0..10 {
+            let t = i as f64 / 10.0;
+            outer.push(p2(0.3 * t, 0.0));
+        }
+        // Two arcs around (cx, cy): p2 → p3 → p4, 6 segments each. Start p2
+        // is already in the list; push interior points and the endpoint,
+        // dropping the last (p4) which the top edge re-adds as its start.
+        for (a0, a1) in [(-90.0_f64, 0.0_f64), (0.0, 90.0)] {
+            for i in 1..=6 {
+                let t = i as f64 / 6.0;
+                let phi = (a0 + t * (a1 - a0)).to_radians();
+                outer.push(p2(cx + r_arc * phi.cos(), cy + r_arc * phi.sin()));
+            }
+        }
+        // The arcs pushed p4=(0.3,0.1) as their final point; drop it so the
+        // top edge below re-introduces it exactly once.
+        outer.pop();
+        // Top edge p4(0.3,0.1) → p5(0,0.1), 10 segments.
+        for i in 0..10 {
+            let t = i as f64 / 10.0;
+            outer.push(p2(0.3 - 0.3 * t, 0.1));
+        }
+        // Left edge p5(0,0.1) → p1(0,0), 10 segments.
+        for i in 0..10 {
+            let t = i as f64 / 10.0;
+            outer.push(p2(0.0, 0.1 - 0.1 * t));
+        }
+
+        let hole: Vec<Point2> = (0..10)
+            .map(|i| {
+                let phi = (i as f64 / 10.0) * std::f64::consts::TAU;
+                p2(cx + r_hole * phi.cos(), cy + r_hole * phi.sin())
+            })
+            .collect();
+
+        let opts = RefinementOptions {
+            max_edge_length: Some(0.025),
+            min_angle_deg: None,
+        };
+        let (pts, tris) =
+            triangulate_polygon_with_holes_refined(&outer, &[hole.clone()], opts).unwrap();
+        assert_all_ccw(&tris, &pts);
+
+        let poly_area = |loop_pts: &[Point2]| -> f64 {
+            let n = loop_pts.len();
+            let mut a = 0.0;
+            for i in 0..n {
+                let p = loop_pts[i];
+                let q = loop_pts[(i + 1) % n];
+                a += p.x * q.y - q.x * p.y;
+            }
+            0.5 * a.abs()
+        };
+        let expected = poly_area(&outer) - poly_area(&hole);
+        let got = total_area(&tris, &pts);
+        assert!(
+            (got - expected).abs() < 1e-9,
+            "area mismatch: got {}, expected {}",
             got,
             expected
         );
