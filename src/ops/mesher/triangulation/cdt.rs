@@ -424,28 +424,53 @@ impl Cdt {
         p_idx: usize,
         constrained_edges: &BTreeSet<(usize, usize)>,
     ) -> Result<()> {
+        self.insert_point_constrained_seeded(p_idx, None, constrained_edges)
+    }
+
+    /// Insert `p_idx` into the constrained triangulation.
+    ///
+    /// `seed_hint`, when given, is used as the cavity BFS seed instead of
+    /// searching for the triangle geometrically containing the point.
+    /// The refiner uses this when it knows exactly which triangle a new
+    /// point is meant to retire: the geometric seed search returns the
+    /// *first* triangle containing the point, and with an inclusive
+    /// point-in-triangle test (a point on a shared edge counts as inside
+    /// both) it can pick a neighbour that a constraint then walls off
+    /// from the intended triangle — leaving that triangle alive and the
+    /// refiner looping on it.
+    fn insert_point_constrained_seeded(
+        &mut self,
+        p_idx: usize,
+        seed_hint: Option<usize>,
+        constrained_edges: &BTreeSet<(usize, usize)>,
+    ) -> Result<()> {
         let p = self.points[p_idx];
 
-        // 1. Locate a triangle containing `p`.
-        let mut seed: Option<usize> = None;
-        for (idx, t) in self.triangles.iter().enumerate() {
-            if !t.alive {
-                continue;
+        // 1. Locate a triangle containing `p` (or use the caller's hint).
+        let seed = match seed_hint.filter(|&s| self.triangles[s].alive) {
+            Some(s) => s,
+            None => {
+                let mut seed: Option<usize> = None;
+                for (idx, t) in self.triangles.iter().enumerate() {
+                    if !t.alive {
+                        continue;
+                    }
+                    let a = self.points[t.v[0]];
+                    let b = self.points[t.v[1]];
+                    let c = self.points[t.v[2]];
+                    if point_in_triangle(p, a, b, c) {
+                        seed = Some(idx);
+                        break;
+                    }
+                }
+                seed.ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "cdt::insert_point_constrained: no triangle contains point #{}",
+                        p_idx
+                    ))
+                })?
             }
-            let a = self.points[t.v[0]];
-            let b = self.points[t.v[1]];
-            let c = self.points[t.v[2]];
-            if point_in_triangle(p, a, b, c) {
-                seed = Some(idx);
-                break;
-            }
-        }
-        let seed = seed.ok_or_else(|| {
-            PyrucastError::Message(format!(
-                "cdt::insert_point_constrained: no triangle contains point #{}",
-                p_idx
-            ))
-        })?;
+        };
 
         // 2. BFS from `seed`, only crossing non-constrained edges and only
         //    when in_circle > 0. `seed` itself is exempt from that test: `p`
@@ -496,9 +521,47 @@ impl Cdt {
             )));
         }
 
+        // 2b. Enforce a star-shaped cavity. The fan fill below builds a
+        //     triangle (a, b, p) for each cavity boundary edge (a, b),
+        //     which is only valid (CCW, non-overlapping) when `p` sees
+        //     every boundary edge — i.e. the cavity is star-shaped about
+        //     `p`. `in_circle` growth stopped at constraints can leave it
+        //     otherwise, spawning inverted triangles. Iteratively drop any
+        //     cavity triangle that exposes a boundary edge `p` does not see
+        //     (`orient2d(pa, pb, p) <= 0`); the `seed` is kept always
+        //     (`p` lies inside it, so it is always visible). Repeat until
+        //     every boundary edge is visible.
+        let mut bad_set: HashSet<usize> = bad.iter().copied().collect();
+        loop {
+            let mut to_remove: Option<usize> = None;
+            'outer: for &t_idx in &bad {
+                if t_idx == seed {
+                    continue;
+                }
+                let t = self.triangles[t_idx];
+                for k in 0..3 {
+                    let nb = t.n[k];
+                    if nb == NO_NEIGHBOUR || !bad_set.contains(&nb) {
+                        let va = t.v[(k + 1) % 3];
+                        let vb = t.v[(k + 2) % 3];
+                        if orient2d(self.points[va], self.points[vb], p) <= 0.0 {
+                            to_remove = Some(t_idx);
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+            match to_remove {
+                Some(t_idx) => {
+                    bad_set.remove(&t_idx);
+                    bad.retain(|&x| x != t_idx);
+                }
+                None => break,
+            }
+        }
+
         // 3. Cavity boundary: edges of bad triangles whose opposite
         //    neighbour is not itself bad.
-        let bad_set: HashSet<usize> = bad.iter().copied().collect();
         let mut cavity_edges: Vec<(usize, usize)> = Vec::new();
         for &t_idx in &bad {
             let t = self.triangles[t_idx];
@@ -544,24 +607,6 @@ impl Cdt {
         let bc = (c - b).norm_squared();
         let ca = (a - c).norm_squared();
         ab.max(bc).max(ca)
-    }
-
-    /// The two point indices spanning the longest edge of triangle `t_idx`.
-    fn triangle_longest_edge(&self, t_idx: usize) -> (usize, usize) {
-        let t = self.triangles[t_idx];
-        let a = self.points[t.v[0]];
-        let b = self.points[t.v[1]];
-        let c = self.points[t.v[2]];
-        let ab = (b - a).norm_squared();
-        let bc = (c - b).norm_squared();
-        let ca = (a - c).norm_squared();
-        if ab >= bc && ab >= ca {
-            (t.v[0], t.v[1])
-        } else if bc >= ca {
-            (t.v[1], t.v[2])
-        } else {
-            (t.v[2], t.v[0])
-        }
     }
 
     /// Squared length of the shortest edge of triangle `t_idx`.
@@ -625,8 +670,16 @@ impl Cdt {
     fn first_encroached_constraint(
         &self,
         constrained_edges: &BTreeSet<(usize, usize)>,
+        min_split_len_sq: f64,
     ) -> Option<(usize, usize)> {
         for &(a, b) in constrained_edges {
+            // Never split a subsegment already shorter than the floor: doing
+            // so would recurse forever where two constraints meet at a small
+            // angle (Ruppert's classic non-termination). At that size the
+            // subsegment is already far finer than the target anyway.
+            if (self.points[b] - self.points[a]).norm_squared() <= min_split_len_sq {
+                continue;
+            }
             if self.constraint_has_encroaching_point(a, b, None) {
                 return Some((a, b));
             }
@@ -675,11 +728,17 @@ impl Cdt {
         &self,
         p: Point2,
         constrained_edges: &BTreeSet<(usize, usize)>,
+        min_split_len_sq: f64,
     ) -> Option<(usize, usize)> {
         let strict = 1e-12;
         for &(a, b) in constrained_edges {
             let pa = self.points[a];
             let pb = self.points[b];
+            // Do not report an already-tiny subsegment as encroached — see
+            // `first_encroached_constraint` for why splitting it loops.
+            if (pb - pa).norm_squared() <= min_split_len_sq {
+                continue;
+            }
             let mid = Point2::from((pa.coords + pb.coords) * 0.5);
             let r2 = (pb - pa).norm_squared() * 0.25;
             if (p - mid).norm_squared() < r2 - strict {
@@ -751,6 +810,29 @@ impl Cdt {
         let max_inserts = self.n_input * 50 + 1000;
         let initial_points = self.points.len();
 
+        // Floor on subsegment splitting. Two constraints meeting at a small
+        // angle make Ruppert recurse forever, each split shrinking the
+        // subsegment without ever clearing the encroachment. Refuse to split
+        // any subsegment already much finer than the target size (or, absent a
+        // size target, than the shortest initial constraint). This trades the
+        // formal angle guarantee — unattainable for arbitrary input angles
+        // anyway — for guaranteed termination; the few triangles left near a
+        // sharp corner stay a touch coarse.
+        let mut shortest_input_sq = f64::INFINITY;
+        for &(a, b) in constrained_edges.iter() {
+            let l2 = (self.points[b] - self.points[a]).norm_squared();
+            if l2 > 0.0 && l2 < shortest_input_sq {
+                shortest_input_sq = l2;
+            }
+        }
+        if !shortest_input_sq.is_finite() {
+            shortest_input_sq = 0.0;
+        }
+        let min_split_len_sq = match opts.max_edge_length {
+            Some(h) => (h / 8.0).powi(2).min(shortest_input_sq * 0.25),
+            None => shortest_input_sq * 0.0625,
+        };
+
         loop {
             if self.points.len() >= initial_points + max_inserts {
                 return Err(PyrucastError::Message(format!(
@@ -761,7 +843,9 @@ impl Cdt {
             }
 
             // 1. Encroached constraint?
-            if let Some((a, b)) = self.first_encroached_constraint(constrained_edges) {
+            if let Some((a, b)) =
+                self.first_encroached_constraint(constrained_edges, min_split_len_sq)
+            {
                 self.split_constraint(a, b, constrained_edges)?;
                 continue;
             }
@@ -778,34 +862,133 @@ impl Cdt {
                 // Near-zero-area (collinear) triangle: its circumcenter is
                 // undefined, but cocircular input (`circle`/`arc`-built
                 // contours routinely produce many points on one circle) can
-                // transiently create these during refinement. Splitting its
-                // longest edge still shrinks it — the same remedy already
-                // used for an encroached constraint, just for a free edge
-                // when it isn't one.
-                let (ea, eb) = self.triangle_longest_edge(t_idx);
-                let key = if ea < eb { (ea, eb) } else { (eb, ea) };
-                if constrained_edges.contains(&key) {
-                    self.split_constraint(ea, eb, constrained_edges)?;
-                } else {
-                    let mid = Point2::from((self.points[ea].coords + self.points[eb].coords) * 0.5);
-                    let new_idx = self.points.len();
-                    self.points.push(mid);
-                    self.insert_point_constrained(new_idx, constrained_edges)?;
-                }
+                // transiently create these during refinement. Fall back to
+                // the same in-domain split used when a circumcenter cannot
+                // be inserted (constrained edge → split it, else centroid).
+                self.split_triangle_longest_edge(t_idx, min_split_len_sq, constrained_edges)?;
                 continue;
             };
 
             // If the circumcenter would encroach a constraint, split
             // that constraint instead.
-            if let Some((a, b)) = self.encroached_constraint_by(cc, constrained_edges) {
+            if let Some((a, b)) =
+                self.encroached_constraint_by(cc, constrained_edges, min_split_len_sq)
+            {
                 self.split_constraint(a, b, constrained_edges)?;
+                continue;
+            }
+
+            // The circumcenter of an obtuse boundary triangle can fall
+            // *outside* the domain (past the outer loop or inside a hole)
+            // without lying in any constrained edge's diametral disk.
+            // Inserting it there would not improve the bad triangle. The
+            // circumcenter can also lie inside the domain yet be separated
+            // from the bad triangle by a hole boundary, so that the
+            // constrained cavity BFS never reaches — and never retires —
+            // the bad triangle. In both cases the refiner would pick the
+            // same triangle again forever. Fall back to bisecting the bad
+            // triangle's longest edge, which always shrinks it and
+            // terminates for a size criterion.
+            let bad_tri_vertices = self.triangles[t_idx].v;
+            if !self.centroid_inside_constraints(cc, constrained_edges) {
+                self.split_triangle_longest_edge(t_idx, min_split_len_sq, constrained_edges)?;
                 continue;
             }
 
             let new_idx = self.points.len();
             self.points.push(cc);
             self.insert_point_constrained(new_idx, constrained_edges)?;
+
+            // Did the insertion actually retire the bad triangle? The
+            // geometric seed search starts from whatever triangle contains
+            // `cc`; a constraint can wall that triangle off from the bad
+            // one, so the cavity BFS never reaches — never retires — it,
+            // and the refiner would loop on the same triangle forever.
+            // Fall back to a guaranteed-interior centroid split, seeded
+            // directly from the bad triangle.
+            if self.triangle_alive_with_vertices(bad_tri_vertices) {
+                self.points.pop();
+                self.split_triangle_longest_edge(t_idx, min_split_len_sq, constrained_edges)?;
+            }
         }
+    }
+
+    /// Shrink triangle `t_idx` by longest-edge bisection (Rivara) when its
+    /// circumcenter cannot be used — because it lies outside the domain, or
+    /// is walled off from `t_idx` by a constraint so the cavity BFS never
+    /// retires the triangle.
+    ///
+    /// The longest edge drives the split:
+    /// - a **constrained** longest edge → [`split_constraint`], which
+    ///   subdivides the boundary (the Ruppert response to an encroached
+    ///   subsegment);
+    /// - a **free** longest edge → a point at its midpoint nudged a hair
+    ///   toward the opposite vertex, so it is *strictly interior* to
+    ///   `t_idx`. Inserted seeded from `t_idx`, it always retires the
+    ///   triangle while keeping the Bowyer-Watson cavity star-shaped — a
+    ///   point placed exactly *on* the edge (or the raw centroid seeded
+    ///   across a constraint) can instead invert neighbouring triangles.
+    ///
+    /// Splitting toward the longest edge shrinks it and terminates for a
+    /// size criterion, unlike a plain centroid insertion (which leaves a
+    /// long-edged child and cascades).
+    ///
+    /// An edge already at or below `min_split_len_sq` is never chosen (that
+    /// would recurse forever near a small input angle); if every edge is
+    /// that fine, split toward the first edge anyway — the nudged point is
+    /// still strictly interior and still retires the triangle.
+    fn split_triangle_longest_edge(
+        &mut self,
+        t_idx: usize,
+        min_split_len_sq: f64,
+        constrained_edges: &mut BTreeSet<(usize, usize)>,
+    ) -> Result<()> {
+        // Longest edge of the triangle above the split floor.
+        let t = self.triangles[t_idx];
+        let mut best: Option<((usize, usize), f64)> = None;
+        for k in 0..3 {
+            let a = t.v[k];
+            let b = t.v[(k + 1) % 3];
+            let len2 = (self.points[b] - self.points[a]).norm_squared();
+            if len2 > min_split_len_sq && best.map(|(_, l)| len2 > l).unwrap_or(true) {
+                best = Some(((a, b), len2));
+            }
+        }
+
+        if let Some(((a, b), _)) = best {
+            let key = if a < b { (a, b) } else { (b, a) };
+            if constrained_edges.contains(&key) {
+                self.split_constraint(a, b, constrained_edges)?;
+                return Ok(());
+            }
+        }
+        let (a, b) = best.map(|(e, _)| e).unwrap_or((t.v[0], t.v[1]));
+        // Opposite vertex (the one not on the chosen edge).
+        let opp = *t.v.iter().find(|&&v| v != a && v != b).unwrap();
+        let edge_mid = (self.points[a].coords + self.points[b].coords) * 0.5;
+        let toward_opp = self.points[opp].coords - edge_mid;
+        // 1e-3 of the way to the opposite vertex: safely interior, yet
+        // still essentially bisecting the long edge.
+        let p = Point2::from(edge_mid + toward_opp * 1e-3);
+        let new_idx = self.points.len();
+        self.points.push(p);
+        self.insert_point_constrained_seeded(new_idx, Some(t_idx), constrained_edges)?;
+        Ok(())
+    }
+
+    /// True iff some alive triangle has exactly the vertex set `v` (in any
+    /// rotation/orientation).
+    fn triangle_alive_with_vertices(&self, v: [usize; 3]) -> bool {
+        let mut target = v;
+        target.sort_unstable();
+        self.triangles.iter().any(|t| {
+            if !t.alive {
+                return false;
+            }
+            let mut w = t.v;
+            w.sort_unstable();
+            w == target
+        })
     }
 
     /// Return every alive triangle whose three vertices are all input
@@ -824,34 +1007,37 @@ impl Cdt {
         out
     }
 
-    /// Colour every triangle "outside" or "inside" by parity of the
-    /// number of constrained edges crossed on any walk from the
-    /// super-triangle.
+    /// Classify every triangle as "outside" or "inside" the region
+    /// enclosed by the constrained edges.
     ///
-    /// Triangles touching the super-triangle are seeded as **outside**.
-    /// Crossing a constrained edge flips the colour; crossing a non-
-    /// constrained edge preserves it. This is the standard "two-
-    /// colouring across constraints" for polygon-with-holes flood-fill:
-    /// 0 constraints crossed ⇒ outside the outer loop, 1 ⇒ inside the
-    /// outer loop and outside every hole, 2 ⇒ inside a hole, etc.
+    /// The constrained edges form the closed loops of the outer boundary
+    /// and every hole. A triangle is **inside** iff its centroid lies
+    /// inside the outer loop and outside every hole — decided by the
+    /// even-odd (ray-crossing) rule against the constrained edges taken
+    /// as a soup of line segments: a horizontal ray cast from the
+    /// centroid crosses an odd number of constrained edges iff the
+    /// centroid is inside.
+    ///
+    /// This is a purely geometric test, independent of the triangle
+    /// adjacency graph. An earlier version flood-filled a two-colouring
+    /// across the constraints, but that is fragile: refinement (boundary
+    /// edge splitting, Steiner insertion) can leave a constrained loop
+    /// that is not a clean wall in the neighbour graph, and the parity
+    /// then leaks into interior pockets (or out through the boundary).
     ///
     /// Returns a `Vec<bool>` of length `self.triangles.len()` where
-    /// `true` marks a triangle to drop (outside the outer loop or
-    /// inside a hole). Dead triangles are marked `true` so the caller
-    /// can ignore them uniformly.
+    /// `true` marks a triangle to drop (outside the outer loop, inside a
+    /// hole, dead, or still touching the super-triangle).
     fn flood_fill_outside(
         &self,
         constrained_edges: &std::collections::BTreeSet<(usize, usize)>,
     ) -> Vec<bool> {
         let n = self.triangles.len();
-        // None ⇒ not visited; Some(true) ⇒ outside; Some(false) ⇒ inside.
-        let mut colour: Vec<Option<bool>> = vec![None; n];
-        let mut queue: Vec<usize> = Vec::new();
+        let mut outside = vec![true; n];
 
         for (idx, t) in self.triangles.iter().enumerate() {
             if !t.alive {
-                colour[idx] = Some(true); // dead = drop
-                continue;
+                continue; // dead = drop
             }
             // Super-triangle sentinels live at indices [n_input, n_input + 3);
             // anything past that is a Steiner point added by refinement.
@@ -859,33 +1045,43 @@ impl Cdt {
                 .iter()
                 .any(|&v| v >= self.n_input && v < self.n_input + 3)
             {
-                colour[idx] = Some(true);
-                queue.push(idx);
+                continue; // touches the super-triangle = drop
             }
+            let a = self.points[t.v[0]];
+            let b = self.points[t.v[1]];
+            let c = self.points[t.v[2]];
+            let centroid = Point2::from((a.coords + b.coords + c.coords) / 3.0);
+            outside[idx] = !self.centroid_inside_constraints(centroid, constrained_edges);
         }
 
-        while let Some(t_idx) = queue.pop() {
-            let t = self.triangles[t_idx];
-            let c = colour[t_idx].unwrap();
-            for k in 0..3 {
-                let nb = t.n[k];
-                if nb == NO_NEIGHBOUR || colour[nb].is_some() {
-                    continue;
+        outside
+    }
+
+    /// Even-odd test: `true` iff `p` lies inside the region bounded by
+    /// the constrained edges. A ray is cast in the `+x` direction and the
+    /// number of constrained edges it crosses is counted modulo two.
+    fn centroid_inside_constraints(
+        &self,
+        p: Point2,
+        constrained_edges: &std::collections::BTreeSet<(usize, usize)>,
+    ) -> bool {
+        let mut inside = false;
+        for &(a, b) in constrained_edges {
+            let pa = self.points[a];
+            let pb = self.points[b];
+            // Half-open in y ([min, max)) so a vertex shared by two edges is
+            // counted exactly once; guards against the ray grazing a vertex.
+            let (y0, y1) = (pa.y, pb.y);
+            if (y0 <= p.y) != (y1 <= p.y) {
+                // x-coordinate of the edge at height p.y.
+                let t = (p.y - y0) / (y1 - y0);
+                let x_cross = pa.x + t * (pb.x - pa.x);
+                if x_cross > p.x {
+                    inside = !inside;
                 }
-                let a = t.v[(k + 1) % 3];
-                let b = t.v[(k + 2) % 3];
-                let key = if a < b { (a, b) } else { (b, a) };
-                let next_c = if constrained_edges.contains(&key) {
-                    !c
-                } else {
-                    c
-                };
-                colour[nb] = Some(next_c);
-                queue.push(nb);
             }
         }
-
-        colour.into_iter().map(|c| c.unwrap_or(true)).collect()
+        inside
     }
 
     /// Return every triangle judged to be **inside** the polygon
@@ -1763,6 +1959,62 @@ mod tests {
             "area drift: got {}, expected {}",
             total_area(&tris, &pts),
             poly_area
+        );
+    }
+
+    #[test]
+    fn refine_plate_with_hole_stays_inside_contour() {
+        // Reproduces the `maillage_test.py` geometry: a plate whose right
+        // edge is a half-circle bulge (radius 0.05 around (0.3,0.05)), with a
+        // concentric circular hole (radius 0.035). Both boundaries are built
+        // from cocircular arc/circle points. The refined mesh must stay
+        // strictly inside the outer loop and outside the hole.
+        let cx = 0.30_f64;
+        let cy = 0.05_f64;
+        let r_arc = 0.05_f64;
+        let r_hole = 0.035_f64;
+        let mut outer: Vec<Point2> = vec![p2(0.0, 0.0), p2(0.30, 0.0)];
+        for (a0, a1) in [(-90.0_f64, 0.0_f64), (0.0, 90.0)] {
+            for i in 1..=6 {
+                let t = i as f64 / 6.0;
+                let phi = (a0 + t * (a1 - a0)).to_radians();
+                outer.push(p2(cx + r_arc * phi.cos(), cy + r_arc * phi.sin()));
+            }
+        }
+        outer.push(p2(0.0, 0.10));
+        let hole: Vec<Point2> = (0..10)
+            .map(|i| {
+                let phi = (i as f64 / 10.0) * std::f64::consts::TAU;
+                p2(cx + r_hole * phi.cos(), cy + r_hole * phi.sin())
+            })
+            .collect();
+
+        let opts = RefinementOptions {
+            max_edge_length: Some(0.025),
+            min_angle_deg: None,
+        };
+        let (pts, tris) =
+            triangulate_polygon_with_holes_refined(&outer, &[hole.clone()], opts).unwrap();
+        assert_all_ccw(&tris, &pts);
+
+        // Total triangle area must equal outer polygon area minus hole area.
+        let poly_area = |loop_pts: &[Point2]| -> f64 {
+            let n = loop_pts.len();
+            let mut a = 0.0;
+            for i in 0..n {
+                let p = loop_pts[i];
+                let q = loop_pts[(i + 1) % n];
+                a += p.x * q.y - q.x * p.y;
+            }
+            0.5 * a.abs()
+        };
+        let expected = poly_area(&outer) - poly_area(&hole);
+        let got = total_area(&tris, &pts);
+        assert!(
+            (got - expected).abs() < 1e-9,
+            "area mismatch: got {}, expected {} (spills outside contour / into hole)",
+            got,
+            expected
         );
     }
 
