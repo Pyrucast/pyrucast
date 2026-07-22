@@ -55,11 +55,16 @@ const LAYER_OFFSET: f64 = 0.85;
 /// Fill the interior of a closed **SEG2** contour using the frontal method
 /// described in the module docs.
 ///
-/// `contour` must currently be a [`Mesh`] with **exactly one** SEG2 submesh
-/// forming a single closed simple loop, attached to a **2-D** `Coords`.
-/// `element_type` is [`ElementType::TRI3`] or [`ElementType::QUA4`];
-/// `target_size` sets the desired element edge length, `None` uses the mean
-/// length of the contour's segments.
+/// `contour` is a [`Mesh`] with **one or more** SEG2 submeshes, attached to
+/// a **2-D** `Coords`: one closed simple loop each. With more than one loop,
+/// the **outer boundary** is auto-detected as the one with the largest
+/// (absolute) area — exactly as [`crate::ops::mesher::fill_surface()`] does
+/// — and every other loop is treated as a **hole**; each hole is bridged
+/// into the outer loop (a zero-width "keyhole" cut to the nearest point)
+/// before paving, so the existing single-front algorithm handles it
+/// unchanged. `element_type` is [`ElementType::TRI3`] or
+/// [`ElementType::QUA4`]; `target_size` sets the desired element edge
+/// length, `None` uses the mean length of the *outer* loop's segments.
 ///
 /// The original contour nodes are reused (and re-referenced); interior
 /// nodes are created in the same `Coords`. Output elements are oriented
@@ -104,11 +109,11 @@ pub fn surface_cancellable(
             )));
         }
     }
-    if contour.len() != 1 {
-        return Err(PyrucastError::Message(format!(
-            "surface: exactly one contour (SEG2 submesh) is supported for now, got {}",
-            contour.len()
-        )));
+    let n_sub = contour.len();
+    if n_sub == 0 {
+        return Err(PyrucastError::Message(
+            "surface: contour must contain at least one SEG2 submesh".into(),
+        ));
     }
 
     let coords = contour.coords()?;
@@ -120,20 +125,30 @@ pub fn surface_cancellable(
         )));
     }
 
-    // 1. Validate the submesh and trace its ordered closed chain of nodes.
-    let chain = trace_single_loop(contour)?;
-    let n0 = chain.len();
+    // 1. Validate every submesh and trace its ordered closed chain of nodes.
+    let mut chains: Vec<Vec<NodeId>> = Vec::with_capacity(n_sub);
+    for sm_idx in 0..n_sub {
+        chains.push(trace_loop(&contour.get(sm_idx)?, sm_idx)?);
+    }
+    let mut chain_offsets: Vec<usize> = Vec::with_capacity(n_sub + 1);
+    chain_offsets.push(0);
+    let mut flat_nodes: Vec<NodeId> = Vec::new();
+    for chain in &chains {
+        flat_nodes.extend_from_slice(chain);
+        chain_offsets.push(flat_nodes.len());
+    }
+    let n0 = flat_nodes.len();
 
     // 2. Collect 2-D points to pave. In 2-D, the coordinates directly; in
-    //    3-D, the contour must be (nearly) planar — project it onto the
-    //    best-fit plane (Newell normal through the centroid), exactly as
-    //    `fill_surface` does, and remember the mapping to lift interior
-    //    points back to 3-D.
+    //    3-D, every loop must be (nearly) co-planar — project onto the
+    //    best-fit plane (Newell normal through the centroid, from whichever
+    //    loop isn't collinear), exactly as `fill_surface` does, and remember
+    //    the mapping to lift interior points back to 3-D.
     let mut projection: Option<Projection3D> = None;
-    let points: Vec<Point2> = if dim == 2 {
+    let mut points: Vec<Point2> = if dim == 2 {
         let c = read(&coords)?;
         let mut pts = Vec::with_capacity(n0);
-        for &id in &chain {
+        for &id in &flat_nodes {
             let s = c.coord(id)?;
             pts.push(Point2::new(s[0], s[1]));
         }
@@ -142,15 +157,20 @@ pub fn surface_cancellable(
         let pts3: Vec<Point3> = {
             let c = read(&coords)?;
             let mut v = Vec::with_capacity(n0);
-            for &id in &chain {
+            for &id in &flat_nodes {
                 let s = c.coord(id)?;
                 v.push(Point3::new(s[0], s[1], s[2]));
             }
             v
         };
-        let normal = crate::ops::mesher::triangulation::newell_normal(&pts3).ok_or_else(|| {
-            PyrucastError::Message("surface: 3-D contour is collinear or zero-area".into())
-        })?;
+        let normal = (0..n_sub)
+            .find_map(|i| {
+                let slice = &pts3[chain_offsets[i]..chain_offsets[i + 1]];
+                crate::ops::mesher::triangulation::newell_normal(slice)
+            })
+            .ok_or_else(|| {
+                PyrucastError::Message("surface: every 3-D loop is collinear or zero-area".into())
+            })?;
         let origin: Point3 = {
             let sum: Vector3 = pts3.iter().map(|p| p.coords).sum();
             Point3::from(sum / pts3.len() as f64)
@@ -183,13 +203,72 @@ pub fn surface_cancellable(
         pts2
     };
 
-    // 3. Pave.
-    let paved = pave_single(&points, target_size, nbnn, cancel)?;
+    // 3. Single loop: pave it directly. Multiple loops: auto-detect the
+    //    outer boundary (largest absolute area), orient it CCW and every
+    //    hole CW, then bridge each hole into the (growing) front in turn.
+    let (initial_front, xmoy_fallback): (Vec<usize>, f64) = if n_sub == 1 {
+        let slice = &points[chain_offsets[0]..chain_offsets[1]];
+        let mut perim = 0.0;
+        let m = slice.len();
+        for i in 0..m {
+            perim += (slice[(i + 1) % m] - slice[i]).norm();
+        }
+        ((0..n0).collect(), perim / m as f64)
+    } else {
+        let mut areas: Vec<f64> = Vec::with_capacity(n_sub);
+        for i in 0..n_sub {
+            let slice = &points[chain_offsets[i]..chain_offsets[i + 1]];
+            areas.push(signed_area(slice));
+        }
+        let outer_idx = (0..n_sub)
+            .max_by(|&a, &b| {
+                areas[a]
+                    .abs()
+                    .partial_cmp(&areas[b].abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap();
 
-    // 4. Create one node per interior (Steiner) point; map every point
+        // Orient the outer loop CCW (positive) and every hole CW (negative)
+        // in place, so the merged front's winding is consistent everywhere.
+        // `points` and `flat_nodes` must be reversed together — reversing
+        // one but not the other would silently reattach every point in
+        // that loop to the wrong `NodeId`.
+        if areas[outer_idx] < 0.0 {
+            points[chain_offsets[outer_idx]..chain_offsets[outer_idx + 1]].reverse();
+            flat_nodes[chain_offsets[outer_idx]..chain_offsets[outer_idx + 1]].reverse();
+        }
+        let mut perim = 0.0;
+        let outer_slice = &points[chain_offsets[outer_idx]..chain_offsets[outer_idx + 1]];
+        let m = outer_slice.len();
+        for i in 0..m {
+            perim += (outer_slice[(i + 1) % m] - outer_slice[i]).norm();
+        }
+        let xmoy_fallback = perim / m as f64;
+
+        let mut front: Vec<usize> =
+            (chain_offsets[outer_idx]..chain_offsets[outer_idx + 1]).collect();
+        for i in 0..n_sub {
+            if i == outer_idx {
+                continue;
+            }
+            if areas[i] > 0.0 {
+                points[chain_offsets[i]..chain_offsets[i + 1]].reverse();
+                flat_nodes[chain_offsets[i]..chain_offsets[i + 1]].reverse();
+            }
+            splice_hole_into_front(&mut front, chain_offsets[i], chain_offsets[i + 1], &points);
+        }
+        (front, xmoy_fallback)
+    };
+    let xmoy = target_size.unwrap_or(xmoy_fallback);
+
+    // 4. Pave.
+    let paved = pave_single(&points, initial_front, xmoy, nbnn, cancel)?;
+
+    // 5. Create one node per interior (Steiner) point; map every point
     //    index to a NodeId. Lift back to 3-D through the projection when set.
     let mut flat_to_node: Vec<NodeId> = Vec::with_capacity(paved.points.len());
-    flat_to_node.extend_from_slice(&chain);
+    flat_to_node.extend_from_slice(&flat_nodes);
     let mut _steiner: Vec<Node> = Vec::with_capacity(paved.points.len() - n0);
     for p in &paved.points[n0..] {
         let coord: Vec<f64> = match &projection {
@@ -204,7 +283,7 @@ pub fn surface_cancellable(
         _steiner.push(node);
     }
 
-    // 5. Build the mesh — a QUA4 submesh and/or a TRI3 submesh.
+    // 6. Build the mesh — a QUA4 submesh and/or a TRI3 submesh.
     let mut parts: Vec<Mesh> = Vec::with_capacity(2);
     if !paved.quads.is_empty() {
         let mut qm = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
@@ -237,25 +316,24 @@ pub fn surface_cancellable(
     Ok(mesh)
 }
 
-/// Trace the single closed loop of a one-submesh SEG2 contour into the
-/// ordered list of node ids it visits. Mirrors the validation done by
+/// Trace the single closed loop of submesh `sm_idx` of a SEG2 contour into
+/// the ordered list of node ids it visits. Mirrors the validation done by
 /// [`crate::ops::mesher::fill_surface()`] for one loop.
-fn trace_single_loop(contour: &Mesh) -> Result<Vec<NodeId>> {
-    let sm = contour.get(0)?;
+fn trace_loop(sm: &crate::store::Handle<SubMesh>, sm_idx: usize) -> Result<Vec<NodeId>> {
     let (et, n_elems, conn) = {
-        let s = read(&sm)?;
+        let s = read(sm)?;
         (s.element_type(), s.cell_count(), s.connectivity().to_vec())
     };
     if et != ElementType::SEG2 {
         return Err(PyrucastError::Message(format!(
-            "surface: contour submesh must be SEG2, got {}",
-            et
+            "surface: submesh #{} must be SEG2, got {}",
+            sm_idx, et
         )));
     }
     if n_elems < 3 {
         return Err(PyrucastError::Message(format!(
-            "surface: contour must have ≥ 3 segments, got {}",
-            n_elems
+            "surface: submesh #{} must have ≥ 3 segments, got {}",
+            sm_idx, n_elems
         )));
     }
     let mut next_node: std::collections::HashMap<NodeId, NodeId> =
@@ -265,8 +343,8 @@ fn trace_single_loop(contour: &Mesh) -> Result<Vec<NodeId>> {
         let b = conn[2 * i + 1];
         if next_node.insert(a, b).is_some() {
             return Err(PyrucastError::Message(format!(
-                "surface: node {} starts more than one segment",
-                a
+                "surface: submesh #{}: node {} starts more than one segment",
+                sm_idx, a
             )));
         }
     }
@@ -274,27 +352,70 @@ fn trace_single_loop(contour: &Mesh) -> Result<Vec<NodeId>> {
     let mut chain = Vec::with_capacity(n_elems);
     chain.push(start);
     let mut current = *next_node.get(&start).ok_or_else(|| {
-        PyrucastError::Message(format!("surface: node {} has no outgoing segment", start))
+        PyrucastError::Message(format!(
+            "surface: submesh #{}: node {} has no outgoing segment",
+            sm_idx, start
+        ))
     })?;
     while current != start {
         if chain.len() > n_elems {
-            return Err(PyrucastError::Message(
-                "surface: contour is not a closed simple loop".into(),
-            ));
+            return Err(PyrucastError::Message(format!(
+                "surface: submesh #{}: contour is not a closed simple loop",
+                sm_idx
+            )));
         }
         chain.push(current);
         current = *next_node.get(&current).ok_or_else(|| {
-            PyrucastError::Message(format!("surface: node {} has no outgoing segment", current))
+            PyrucastError::Message(format!(
+                "surface: submesh #{}: node {} has no outgoing segment",
+                sm_idx, current
+            ))
         })?;
     }
     if chain.len() != n_elems {
         return Err(PyrucastError::Message(format!(
-            "surface: contour has multiple disjoint loops ({} nodes traced out of {})",
+            "surface: submesh #{}: contour has multiple disjoint loops ({} nodes traced out of {})",
+            sm_idx,
             chain.len(),
             n_elems
         )));
     }
     Ok(chain)
+}
+
+/// Bridge a hole loop into a (possibly already keyhole-bridged) front: find
+/// the closest pair between a `front` point and a point of the hole
+/// (`points[hole_start..hole_end]`, already oriented CW), then splice the
+/// hole in as `..., front[p], hole[h], hole[h+1], ..., hole[h-1], hole[h],
+/// front[p], ...` — a zero-width "keyhole" cut, so the merged sequence is
+/// still a single (self-touching) ring the existing single-front algorithm
+/// can pave unchanged.
+fn splice_hole_into_front(
+    front: &mut Vec<usize>,
+    hole_start: usize,
+    hole_end: usize,
+    points: &[Point2],
+) {
+    let hole_len = hole_end - hole_start;
+    let mut best: (f64, usize, usize) = (f64::INFINITY, 0, 0);
+    for (p, &fi) in front.iter().enumerate() {
+        let fp = points[fi];
+        for h0 in 0..hole_len {
+            let hp = points[hole_start + h0];
+            let d = (fp - hp).norm_squared();
+            if d < best.0 {
+                best = (d, p, h0);
+            }
+        }
+    }
+    let (_, p, h0) = best;
+    let mut insertion: Vec<usize> = Vec::with_capacity(hole_len + 2);
+    for k in 0..hole_len {
+        insertion.push(hole_start + (h0 + k) % hole_len);
+    }
+    insertion.push(hole_start + h0);
+    insertion.push(front[p]);
+    front.splice(p + 1..p + 1, insertion);
 }
 
 /// Mapping from the paving plane back to 3-D, for a projected contour:
@@ -313,56 +434,60 @@ struct Paved {
     quads: Vec<[usize; 4]>,
 }
 
-/// Core 2-D frontal mesher for a single closed ring.
+/// Core 2-D frontal mesher for a single closed ring, or for an outer ring
+/// with holes bridged in (see [`splice_hole_into_front`]).
 ///
-/// `ring` lists the ring points in order (the loop closes implicitly from
-/// the last back to the first; the last point must not repeat the first).
-/// `nbnn` is 3 (TRI3) or 4 (QUA4). The returned [`Paved::points`] starts
-/// with the input points **unchanged and in order**, followed by the
-/// interior points created during paving; all elements are CCW.
+/// `points` lists every **distinct** boundary point once — the returned
+/// [`Paved::points`] starts with them **unchanged and in order**, followed
+/// by the interior points created during paving. `initial_front` is the
+/// (possibly keyhole-bridged) sequence of indices into `points` the paving
+/// starts from: a plain `0..points.len()` for a single loop, or a merged
+/// outer+hole sequence with each bridge point repeated once. `xmoy` is the
+/// already-resolved target element size (never `None` — the caller picks a
+/// fallback, since with multiple loops there is no single "ring" to average
+/// edge lengths over). `nbnn` is 3 (TRI3) or 4 (QUA4); all elements are CCW.
 ///
 /// Operates purely on plain vectors — no store access — so it stays a clean
 /// target for future intra-operator parallelism.
 fn pave_single(
-    ring: &[Point2],
-    target_size: Option<f64>,
+    points: &[Point2],
+    initial_front: Vec<usize>,
+    xmoy: f64,
     nbnn: usize,
     cancel: &dyn Cancel,
 ) -> Result<Paved> {
-    let n0 = ring.len();
+    let n0 = points.len();
     if n0 < 3 {
         return Err(PyrucastError::Message(format!(
             "surface: ring must have ≥ 3 points, got {}",
             n0
         )));
     }
-    let area = signed_area(ring);
+    if xmoy <= 0.0 || xmoy.is_nan() {
+        return Err(PyrucastError::Message(format!(
+            "surface: target_size must be > 0, got {}",
+            xmoy
+        )));
+    }
+
+    let mut pts: Vec<Point2> = points.to_vec();
+    let mut front = initial_front;
+
+    // Defensive normalisation to CCW — mirrors the single-loop contract
+    // (either winding is accepted); a caller that merged holes in has
+    // already given each sub-loop the right *relative* orientation
+    // (outer positive, holes negative), so this only ever fires for an
+    // overall-reversed input, exactly as for a single loop.
+    let area = front_area(&pts, &front);
     if area.abs() < 1e-15 {
         return Err(PyrucastError::Message(
             "surface: contour has zero (or near-zero) area — degenerate".into(),
         ));
     }
-
-    let mut pts: Vec<Point2> = ring.to_vec();
-
-    // Front as a ring of indices into `pts`, normalised to CCW.
-    let mut front: Vec<usize> = if area < 0.0 {
-        (0..n0).rev().collect()
-    } else {
-        (0..n0).collect()
-    };
-
-    // Uniform target size: given, else the mean contour edge length.
-    let mut perim = 0.0;
-    for i in 0..n0 {
-        perim += (ring[(i + 1) % n0] - ring[i]).norm();
+    if area < 0.0 {
+        front.reverse();
     }
-    let xmoy = target_size.unwrap_or(perim / n0 as f64);
-    if xmoy <= 0.0 || xmoy.is_nan() {
-        return Err(PyrucastError::Message(
-            "surface: could not determine a positive element size".into(),
-        ));
-    }
+
     let eps = xmoy * EPS_FACTOR;
 
     let mut tris: Vec<[usize; 3]> = Vec::new();
@@ -405,7 +530,7 @@ fn pave_single(
         }
 
         // 1. Sharp peel: clip the sharpest convex ear (θ < SHARP_PEEL_ANGLE).
-        if let Some(i) = sharpest_ear(&pts, &front, SHARP_PEEL_ANGLE) {
+        if let Some(i) = sharpest_ear(&pts, &front, SHARP_PEEL_ANGLE, eps) {
             peel_or_bisect(&mut pts, &mut front, &mut tris, i, xmoy);
             continue;
         }
@@ -418,7 +543,7 @@ fn pave_single(
 
         // 3. Concave front, no sharp ear: fall back to plain ear clipping
         //    (any convex corner), which triangulates any simple polygon.
-        if let Some(i) = sharpest_ear(&pts, &front, std::f64::consts::PI) {
+        if let Some(i) = sharpest_ear(&pts, &front, std::f64::consts::PI, eps) {
             peel_or_bisect(&mut pts, &mut front, &mut tris, i, xmoy);
             continue;
         }
@@ -553,7 +678,7 @@ fn is_convex(pts: &[Point2], front: &[usize], eps: f64) -> bool {
 /// Find the sharpest convex ear of the front whose interior angle is below
 /// `max_angle` and whose triangle is empty of other front vertices.
 /// Returns the position in `front`, or `None`.
-fn sharpest_ear(pts: &[Point2], front: &[usize], max_angle: f64) -> Option<usize> {
+fn sharpest_ear(pts: &[Point2], front: &[usize], max_angle: f64, eps: f64) -> Option<usize> {
     let m = front.len();
     let mut best: Option<(f64, usize)> = None;
     for i in 0..m {
@@ -572,13 +697,26 @@ fn sharpest_ear(pts: &[Point2], front: &[usize], max_angle: f64) -> Option<usize
         if theta >= max_angle {
             continue;
         }
-        // Empty-triangle test: no other front vertex inside (a, b, c).
+        // Empty-triangle test: no other front vertex inside (a, b, c). A
+        // hole loop bridged into the front (see `splice_hole_into_front`)
+        // repeats its bridge point's *coordinates* at another front
+        // position; without excluding that by position, a bridge point
+        // would spuriously "contain" every ear built on top of its own
+        // other occurrence (a point sits inside its own triangle's
+        // vertex-touching boundary), permanently blocking those ears.
         let mut empty = true;
         for (j, &idx) in front.iter().enumerate() {
             if j == ip || j == i || j == in_ {
                 continue;
             }
-            if point_in_triangle(pts[idx], a, b, c) {
+            let candidate = pts[idx];
+            if (candidate - a).norm_squared() < eps * eps
+                || (candidate - b).norm_squared() < eps * eps
+                || (candidate - c).norm_squared() < eps * eps
+            {
+                continue;
+            }
+            if point_in_triangle(candidate, a, b, c) {
                 empty = false;
                 break;
             }
@@ -953,7 +1091,7 @@ mod tests {
     }
 
     #[test]
-    fn surface_rejects_multiple_contours() {
+    fn surface_with_one_hole_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
         let outer = build_contour_2d(
             coords.clone(),
@@ -961,7 +1099,74 @@ mod tests {
         );
         let hole = build_contour_2d(coords, &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]);
         let combined = outer.union(&hole).unwrap();
-        assert!(surface(&combined, ElementType::TRI3, None).is_err());
+        assert_eq!(combined.len(), 2);
+        let tri = surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
+        assert!(
+            (total_ccw_area(&tri) - 12.0).abs() < 1e-6,
+            "area drift: got {}",
+            total_ccw_area(&tri)
+        );
+    }
+
+    #[test]
+    fn surface_hole_outer_loop_is_autodetected() {
+        // Same geometry as above, but the hole submesh comes first — the
+        // outer boundary must still be found by area, not by input order.
+        let coords = insert(Coords::new(2).unwrap());
+        let hole = build_contour_2d(
+            coords.clone(),
+            &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)],
+        );
+        let outer = build_contour_2d(coords, &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]);
+        let combined = hole.union(&outer).unwrap();
+        let tri = surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
+        assert!(
+            (total_ccw_area(&tri) - 12.0).abs() < 1e-6,
+            "area drift: got {}",
+            total_ccw_area(&tri)
+        );
+    }
+
+    #[test]
+    fn surface_with_two_holes_conserves_area() {
+        let coords = insert(Coords::new(2).unwrap());
+        let outer = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0.0, 4.0)],
+        );
+        let h1 = build_contour_2d(
+            coords.clone(),
+            &[(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)],
+        );
+        let h2 = build_contour_2d(coords, &[(4.0, 2.0), (5.0, 2.0), (5.0, 3.0), (4.0, 3.0)]);
+        let combined = outer.union(&h1).unwrap().union(&h2).unwrap();
+        assert_eq!(combined.len(), 3);
+        let tri = surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
+        assert!(
+            (total_ccw_area(&tri) - 22.0).abs() < 1e-6,
+            "area drift: got {}",
+            total_ccw_area(&tri)
+        );
+    }
+
+    #[test]
+    fn surface_with_hole_no_target_size_uses_outer_mean_edge() {
+        // `None` should fall back to the *outer* loop's mean edge length,
+        // not blow up trying to average across outer + hole segments of
+        // very different scale.
+        let coords = insert(Coords::new(2).unwrap());
+        let outer = build_contour_2d(
+            coords.clone(),
+            &square_boundary(4.0, 1.0), // finely discretised outer, edge ~1.0
+        );
+        let hole = build_contour_2d(coords, &[(1.5, 1.5), (2.5, 1.5), (2.5, 2.5), (1.5, 2.5)]);
+        let combined = outer.union(&hole).unwrap();
+        let tri = surface(&combined, ElementType::TRI3, None).unwrap();
+        assert!(
+            (total_ccw_area(&tri) - 15.0).abs() < 1e-6,
+            "area drift: got {}",
+            total_ccw_area(&tri)
+        );
     }
 
     #[test]
@@ -1107,6 +1312,23 @@ mod tests {
     }
 
     #[test]
+    fn surface_qua4_with_hole_conserves_area() {
+        let coords = insert(Coords::new(2).unwrap());
+        let outer = build_contour_2d(
+            coords.clone(),
+            &[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
+        );
+        let hole = build_contour_2d(coords, &[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]);
+        let combined = outer.union(&hole).unwrap();
+        let mesh = surface(&combined, ElementType::QUA4, Some(0.5)).unwrap();
+        assert!(
+            (total_ccw_area(&mesh) - 12.0).abs() < 1e-6,
+            "area drift: got {}",
+            total_ccw_area(&mesh)
+        );
+    }
+
+    #[test]
     fn surface_qua4_refined_square_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
         let mesh = {
@@ -1197,6 +1419,43 @@ mod tests {
         let tri = surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
         assert_eq!(tri.cell_count().unwrap(), 2);
         assert!((total_area_3d(&tri) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn surface_3d_with_hole_conserves_area() {
+        let coords = insert(Coords::new(3).unwrap());
+        let outer = build_contour_3d(
+            coords.clone(),
+            &[
+                (0.0, 0.0, 1.0),
+                (4.0, 0.0, 1.0),
+                (4.0, 4.0, 1.0),
+                (0.0, 4.0, 1.0),
+            ],
+        );
+        let hole = build_contour_3d(
+            coords,
+            &[
+                (1.0, 1.0, 1.0),
+                (3.0, 1.0, 1.0),
+                (3.0, 3.0, 1.0),
+                (1.0, 3.0, 1.0),
+            ],
+        );
+        let combined = outer.union(&hole).unwrap();
+        let tri = surface(&combined, ElementType::TRI3, Some(0.5)).unwrap();
+        let n = tri.cell_count().unwrap();
+        for ci in 0..n {
+            for ni in 0..3 {
+                let p = tri.node(0, ci, ni).unwrap().coord().unwrap();
+                assert!((p[2] - 1.0).abs() < 1e-9, "node off plane: z={}", p[2]);
+            }
+        }
+        assert!(
+            (total_area_3d(&tri) - 12.0).abs() < 1e-6,
+            "area drift: got {}",
+            total_area_3d(&tri)
+        );
     }
 
     #[test]

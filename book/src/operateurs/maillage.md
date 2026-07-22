@@ -363,10 +363,23 @@ une taille de maille cible — là où `fill_surface` ne triangule que les nœud
 du bord. C'est l'analogue de l'opérateur `SURF` historique.
 
 `element_type` vaut `"TRI3"` ou `"QUA4"` ; `size` fixe la longueur d'arête
-visée (par défaut : longueur moyenne des segments du contour). Le contour peut
-être en 2D, ou une boucle **quasi planaire** en 3D (projetée sur son plan de
-meilleure approximation, maillée, puis relevée — même contrôle de planéité que
-`fill_surface`).
+visée (par défaut : longueur moyenne des segments de la boucle **extérieure**).
+Le contour peut être en 2D, ou une boucle **quasi planaire** en 3D (projetée
+sur son plan de meilleure approximation, maillée, puis relevée — même contrôle
+de planéité que `fill_surface`).
+
+`contour` peut porter **plusieurs** sous-maillages `SEG2` : la boucle
+extérieure est alors auto-détectée (aire la plus grande, comme
+`fill_surface`) et chaque autre boucle traitée comme un **trou**. Chaque trou
+est greffé sur le front par une coupure de largeur nulle (« trou de serrure »,
+vers le point du front le plus proche) avant le pavage, ce qui laisse
+l'algorithme à front unique inchangé — voir `splice_hole_into_front` côté
+Rust. La qualité près de la coupure reste correcte pour un trou de taille
+raisonnable dans un contour normalement discrétisé ; un trou disproportionné
+par rapport à la taille cible peut dégrader la qualité sur une plus grande
+partie du maillage (le front reste non convexe tant que le trou n'est pas
+entièrement résorbé par épluchage, ce qui retarde le passage à la couche
+frontale plus régulière).
 
 ### Méthode
 
@@ -389,12 +402,23 @@ résultat peut porter à la fois un sous-maillage `QUA4` et un sous-maillage
 `TRI3` (coins aigus, repli concave, éventail de fermeture). Les éléments sont
 orientés **CCW**.
 
+Deux passes de qualité s'ajoutent au pavage lui-même : le décalage de couche
+est plafonné par l'espacement local du front (pas seulement par la taille
+cible globale, pour ne pas créer de mailles écrasées là où le contour est
+discrétisé de façon hétérogène — un `arc` bien plus grossier qu'une `line`
+adjacente, typiquement), et une passe finale de retournements locaux à la
+Lawson (`improve_triangulation_by_flips`) corrige, arête par arête, tout
+triangle dont l'autre diagonale du quadrilatère voisin donnerait un meilleur
+angle minimal.
+
 > **`surface` vs `fill_surface`.** `fill_surface` triangule les nœuds donnés
-> (ear clipping / Delaunay contraint, raffinement optionnel) et gère
-> nativement les **trous**. `surface` crée des nœuds internes pour une taille
-> contrôlée façon front avançant. Choisir `surface` pour un maillage de taille
-> homogène imposée ; `fill_surface` pour trianguler un contour (avec trous) ou
-> raffiner par critère d'arête/angle.
+> (ear clipping / Delaunay contraint, raffinement optionnel). `surface` crée
+> des nœuds internes pour une taille contrôlée façon front avançant ; les deux
+> gèrent les **trous** (boucles multiples, boucle extérieure auto-détectée).
+> Choisir `surface` pour un maillage de taille homogène imposée ;
+> `fill_surface` pour trianguler un contour ou raffiner par critère
+> d'arête/angle — et pour un trou proche du bord (canal étroit), plus robuste
+> côté convergence.
 
 ### Exemple Python
 
@@ -433,12 +457,17 @@ d'interruption (timeout, drapeau partagé…) — voir
 
 ### Limitations actuelles
 
-- **Un seul contour** (pas de trous) : pour mailler un domaine troué, utiliser
-  `fill_surface` (CDT) en attendant la séparation/fusion de contours.
 - **Taille uniforme** : le champ de densité par nœud (un `size` variable, façon
   `CHPO1`) n'est pas encore exposé.
 - Le pavage en couches utilise un décalage 1:1 sans rééchantillonnage
   circonférentiel : la qualité près du centre est correcte mais perfectible.
+- **Trou disproportionné** : tant qu'un trou n'est pas entièrement résorbé par
+  épluchage, le front reste globalement non convexe et ne peut pas basculer
+  sur la couche frontale (plus régulière) — pour un trou large relativement au
+  contour extérieur ou à la taille cible, cela peut dégrader la qualité sur
+  une portion notable du maillage, pas seulement près de la coupure. Sans
+  incidence pour un trou de taille modeste dans un contour normalement
+  discrétisé.
 
 Côté Rust, `ops::mesher::surface(&contour, ElementType::TRI3, Some(1.0))`. Le
 cœur géométrique (`pave_single`) opère sur de simples `Vec<Point2>` sans

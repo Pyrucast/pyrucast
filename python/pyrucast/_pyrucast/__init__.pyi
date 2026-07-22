@@ -2724,11 +2724,13 @@ def surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[bui
     using a size-controlled advancing front that **creates interior nodes**
     (unlike `fill_surface`, which only triangulates the contour nodes).
     
-    `size` sets the target element edge length; `None` uses the mean length
-    of the contour's segments. `element_type` is "TRI3" or "QUA4" (QUA4 is
-    quad-dominant: the result may also carry a few triangles). The contour
-    may be 2-D or a nearly planar loop in 3-D (projected, paved, lifted
-    back). A single contour is supported for now.
+    `contour` may hold **one or more** SEG2 submeshes: with more than one,
+    the outer boundary is auto-detected (largest area) and every other loop
+    is treated as a hole. `size` sets the target element edge length; `None`
+    uses the mean length of the *outer* loop's segments. `element_type` is
+    "TRI3" or "QUA4" (QUA4 is quad-dominant: the result may also carry a few
+    triangles). The contour may be 2-D or a nearly planar loop in 3-D
+    (projected, paved, lifted back).
     """
 
 def swap_dir() -> pathlib.Path:
