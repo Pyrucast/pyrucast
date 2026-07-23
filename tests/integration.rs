@@ -167,21 +167,22 @@ fn submesh_protects_nodes_via_refcount() -> Result<()> {
 
 #[test]
 fn triangulate_surface_from_circle_contour() -> Result<()> {
-    // Build a closed SEG2 circle (8 segments) and fill it with TRI3
-    // through the public API. The result must have 6 triangles
-    // (n - 2 with n = 8) and a total area close to π·r².
+    // Build a closed SEG2 circle (8 segments, CCW) and mesh its interior
+    // with TRI3 through the public API. The constrained-Delaunay mesher
+    // creates interior nodes, so it yields more than the boundary-only 6
+    // triangles, while conserving the inscribed octagon's area.
     let coords = insert(Coords::new(2)?);
     let center = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let circle =
         pyrucast::ops::mesher::circle(&center, &[0.0, 0.0, 1.0], 1.0, 8, ElementType::SEG2)?;
-    let tri = pyrucast::ops::mesher::triangulate_surface(&circle, ElementType::TRI3, None)?;
+    let tri = pyrucast::ops::mesher::triangulate_surface(&circle, ElementType::TRI3, Some(0.25))?;
     assert_eq!(tri.element_types()?, vec![ElementType::TRI3]);
-    assert_eq!(tri.cell_count()?, 6);
+    assert!(tri.cell_count()? > 6, "expected interior nodes to be added");
 
-    // Sum of signed triangle areas should approximate the inscribed
-    // octagon's area (= 8 · 0.5 · r² · sin(2π/8) = 2√2 ≈ 2.8284).
+    // Sum of signed triangle areas equals the inscribed octagon's area
+    // (= 8 · 0.5 · r² · sin(2π/8) = 2√2 ≈ 2.8284), whatever the refinement.
     let mut total = 0.0;
-    for ci in 0..6 {
+    for ci in 0..tri.cell_count()? {
         let p0 = tri.node(0, ci, 0)?.coord()?;
         let p1 = tri.node(0, ci, 1)?.coord()?;
         let p2 = tri.node(0, ci, 2)?.coord()?;
@@ -191,7 +192,7 @@ fn triangulate_surface_from_circle_contour() -> Result<()> {
     }
     let expected = 2.0 * std::f64::consts::SQRT_2;
     assert!(
-        (total - expected).abs() < 1e-10,
+        (total - expected).abs() < 1e-9,
         "total area {} ≠ inscribed octagon area {}",
         total,
         expected

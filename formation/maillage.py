@@ -44,7 +44,11 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
     fermée tienne dans **un seul** sous-maillage : `pyrucast.consolidate`
     fusionne les quatre côtés (chacun son propre sous-maillage `SEG2`) en un
     seul, sans changer leur connectivité (Cast3M : `cex = l12 ET c23 ET ...`
-    fait implicitement le même travail)."""
+    fait implicitement le même travail).
+
+    Convention d'orientation : la boucle extérieure tourne dans le sens
+    **antihoraire** (CCW), le trou dans le sens **horaire** (CW) — d'où
+    l'`invert` sur le cercle."""
     p1 = coords.add_node([0.0, 0.0])
     p2 = coords.add_node([LONGUEUR, 0.0])
     p3 = coords.add_node([LONGUEUR, HAUTEUR])
@@ -57,7 +61,9 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
     boucle_ext = pc.consolidate(bas | droit | haut | gauche)
 
     centre = coords.add_node(list(CENTRE_TROU))
-    boucle_trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
+    boucle_trou = pc.mesher.invert(
+        pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
+    )
 
     return boucle_ext | boucle_trou
 
@@ -70,7 +76,7 @@ def contour_plaque_trouee(coords: pc.Coords) -> pc.Mesh:
 def maillage_non_structure() -> tuple[pc.Coords, pc.Mesh]:
     coords = pc.Coords(2)
     contour = contour_plaque_trouee(coords)
-    plaque = pc.mesher.triangulate_surface(contour, "TRI3", max_edge_length=0.02)
+    plaque = pc.mesher.triangulate_surface(contour, "TRI3", size=0.02)
     return coords, plaque
 
 

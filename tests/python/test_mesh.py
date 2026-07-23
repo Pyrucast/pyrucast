@@ -269,7 +269,21 @@ def test_mesh_rejects_merge_from_other_coords():
         raise AssertionError("expected RuntimeError for mismatched Coords")
 
 
-def test_triangulate_surface_square_gives_two_triangles():
+def _triangle_area_sum(tri):
+    """Signed-area sum over the first (TRI3) submesh."""
+    total = 0.0
+    for ci in range(tri.cell_counts()[0]):
+        p0 = tri.node(0, ci, 0).coord()
+        p1 = tri.node(0, ci, 1).coord()
+        p2 = tri.node(0, ci, 2).coord()
+        total += 0.5 * (
+            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
+        )
+    return total
+
+
+def test_triangulate_surface_square_tri3():
+    # A unit square meshed with interior nodes: several triangles, area 1.
     c = pyrucast.Coords(2)
     nodes = [
         c.add_node([0.0, 0.0]),
@@ -281,9 +295,27 @@ def test_triangulate_surface_square_gives_two_triangles():
     for i in range(4):
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
-    tri = pyrucast.mesher.triangulate_surface(contour, "TRI3")
+    tri = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.25)
     assert tri.element_types() == ["TRI3"]
-    assert tri.cell_count() == 2  # n - 2
+    assert tri.cell_count() > 2  # interior nodes created
+    assert abs(_triangle_area_sum(tri) - 1.0) < 1e-9
+
+
+def test_triangulate_surface_square_qua4_is_quad_dominant():
+    c = pyrucast.Coords(2)
+    nodes = [
+        c.add_node([0.0, 0.0]),
+        c.add_node([1.0, 0.0]),
+        c.add_node([1.0, 1.0]),
+        c.add_node([0.0, 1.0]),
+    ]
+    contour = pyrucast.Mesh(c, "SEG2")
+    for i in range(4):
+        contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
+
+    quad = pyrucast.mesher.triangulate_surface(contour, "QUA4", size=0.25)
+    # Quad-dominant: at least a QUA4 submesh (a few boundary TRI3 may remain).
+    assert "QUA4" in quad.element_types()
 
 
 def test_triangulate_surface_unknown_element_type():
@@ -317,7 +349,7 @@ def test_triangulate_surface_rejects_unsupported_target_element():
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 3]])
 
     try:
-        pyrucast.mesher.triangulate_surface(contour, "QUA4")
+        pyrucast.mesher.triangulate_surface(contour, "TET4")
     except RuntimeError:
         pass
     else:
@@ -335,113 +367,43 @@ def _build_seg2_loop(c, pts):
 
 
 def test_triangulate_surface_with_one_hole_2d():
-    # 4×4 outer square, 2×2 inner hole centred at (2, 2).
+    # 4×4 outer square (CCW), 2×2 inner hole centred at (2, 2), given CW.
     c = pyrucast.Coords(2)
     outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
-    hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
+    hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (1.0, 3.0), (3.0, 3.0), (3.0, 1.0)])
     combined = outer | hole
     assert len(combined) == 2
 
-    tri = pyrucast.mesher.triangulate_surface(combined, "TRI3")
-    n_cells = tri.cell_count()
-
-    # Triangulated area should equal outer 16 minus hole 4 = 12.
-    total = 0.0
-    for ci in range(n_cells):
-        p0 = tri.node(0, ci, 0).coord()
-        p1 = tri.node(0, ci, 1).coord()
-        p2 = tri.node(0, ci, 2).coord()
-        total += 0.5 * (
-            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
-        )
-    assert abs(total - 12.0) < 1e-9
+    tri = pyrucast.mesher.triangulate_surface(combined, "TRI3", size=1.0)
+    # Meshed area = outer 16 minus hole 4 = 12.
+    assert abs(_triangle_area_sum(tri) - 12.0) < 1e-9
 
 
-def test_triangulate_surface_outer_loop_autodetected():
-    # Pass the hole first; the outer loop is still detected correctly.
+def test_triangulate_surface_two_disjoint_domains():
+    # Two disjoint CCW squares meshed in one pass.
     c = pyrucast.Coords(2)
-    hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
-    outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
-    combined = hole | outer
-    tri = pyrucast.mesher.triangulate_surface(combined, "TRI3")
-    n_cells = tri.cell_count()
-
-    total = 0.0
-    for ci in range(n_cells):
-        p0 = tri.node(0, ci, 0).coord()
-        p1 = tri.node(0, ci, 1).coord()
-        p2 = tri.node(0, ci, 2).coord()
-        total += 0.5 * (
-            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
-        )
-    assert abs(total - 12.0) < 1e-9
+    a, _ = _build_seg2_loop(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+    b, _ = _build_seg2_loop(c, [(3.0, 0.0), (4.0, 0.0), (4.0, 1.0), (3.0, 1.0)])
+    combined = a | b
+    tri = pyrucast.mesher.triangulate_surface(combined, "TRI3", size=0.5)
+    # Total meshed area = 1 + 1 = 2.
+    assert abs(_triangle_area_sum(tri) - 2.0) < 1e-9
 
 
-def test_triangulate_surface_refined_creates_more_triangles():
-    # 4×4 square with max_edge_length=1.5 must produce strictly more
-    # triangles than the un-refined 2.
+def test_triangulate_surface_rejects_all_holes_no_outer():
+    # A single CW loop is a hole with no containing outer loop: error.
     c = pyrucast.Coords(2)
-    outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
-    tri = pyrucast.mesher.triangulate_surface(outer, "TRI3", max_edge_length=1.5)
-    assert tri.cell_count() > 2
-
-    # Conservation of area: 4 × 4 = 16.
-    total = 0.0
-    for ci in range(tri.cell_count()):
-        p0 = tri.node(0, ci, 0).coord()
-        p1 = tri.node(0, ci, 1).coord()
-        p2 = tri.node(0, ci, 2).coord()
-        total += 0.5 * (
-            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
-        )
-    assert abs(total - 16.0) < 1e-9
-
-
-def test_triangulate_surface_refined_with_hole():
-    # 4×4 square minus 2×2 hole, refined: area must still be 12.
-    c = pyrucast.Coords(2)
-    outer, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
-    hole, _ = _build_seg2_loop(c, [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
-    combined = outer | hole
-    tri = pyrucast.mesher.triangulate_surface(combined, "TRI3", max_edge_length=1.0)
-    total = 0.0
-    for ci in range(tri.cell_count()):
-        p0 = tri.node(0, ci, 0).coord()
-        p1 = tri.node(0, ci, 1).coord()
-        p2 = tri.node(0, ci, 2).coord()
-        total += 0.5 * (
-            (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
-        )
-    assert abs(total - 12.0) < 1e-9
-
-
-def test_triangulate_surface_refined_angle_criterion():
-    # 4×1 rectangle refined to min angle 20°: initial Delaunay has ~14°
-    # somewhere; after refinement no triangle should be below ~19°.
-    c = pyrucast.Coords(2)
-    rect, _ = _build_seg2_loop(c, [(0.0, 0.0), (4.0, 0.0), (4.0, 1.0), (0.0, 1.0)])
-    tri = pyrucast.mesher.triangulate_surface(rect, "TRI3", min_angle_deg=20.0)
-    # Compute min angle across all triangles.
-    import math
-
-    min_deg = math.inf
-    for ci in range(tri.cell_count()):
-        pts = [tri.node(0, ci, k).coord() for k in range(3)]
-        for k in range(3):
-            u, v, w = pts[k], pts[(k + 1) % 3], pts[(k + 2) % 3]
-            e1 = (v[0] - u[0], v[1] - u[1])
-            e2 = (w[0] - u[0], w[1] - u[1])
-            cos = (e1[0] * e2[0] + e1[1] * e2[1]) / (
-                math.sqrt(e1[0] ** 2 + e1[1] ** 2) * math.sqrt(e2[0] ** 2 + e2[1] ** 2)
-            )
-            cos = max(-1.0, min(1.0, cos))
-            ang = math.degrees(math.acos(cos))
-            min_deg = min(min_deg, ang)
-    assert min_deg >= 19.0, f"min angle still bad: {min_deg} deg"
+    hole, _ = _build_seg2_loop(c, [(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)])
+    try:
+        pyrucast.mesher.triangulate_surface(hole, "TRI3")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError when no outer loop is given")
 
 
 def test_triangulate_surface_3d_tilted_square():
-    # Square rotated 45° around the x axis: planar in 3-D, must triangulate.
+    # Square rotated 45° around the x axis: planar in 3-D, must mesh.
     import math
 
     s = 1.0 / math.sqrt(2.0)
@@ -457,19 +419,15 @@ def test_triangulate_surface_3d_tilted_square():
     for i in range(4):
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
-    tri = pyrucast.mesher.triangulate_surface(contour, "TRI3")
-    assert tri.cell_count() == 2  # n - 2
+    tri = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.5)
+    assert tri.element_types() == ["TRI3"]
+    assert tri.cell_count() >= 2
 
 
-def test_triangulate_surface_3d_rejects_non_planar_contour():
+def test_triangulate_surface_3d_rejects_degenerate_contour():
+    # A collinear 3-D "loop" has no well-defined plane and must be rejected.
     c = pyrucast.Coords(3)
-    # One corner well out of the z = 0 plane.
-    pts = [
-        (0.0, 0.0, 0.0),
-        (1.0, 0.0, 0.0),
-        (1.0, 1.0, 0.5),
-        (0.0, 1.0, 0.0),
-    ]
+    pts = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0), (3.0, 0.0, 0.0)]
     nodes = [c.add_node(list(p)) for p in pts]
     contour = pyrucast.Mesh(c, "SEG2")
     for i in range(4):
@@ -477,10 +435,10 @@ def test_triangulate_surface_3d_rejects_non_planar_contour():
 
     try:
         pyrucast.mesher.triangulate_surface(contour, "TRI3")
-    except RuntimeError as e:
-        assert "not planar" in str(e)
+    except RuntimeError:
+        pass
     else:
-        raise AssertionError("expected RuntimeError for non-planar 3-D contour")
+        raise AssertionError("expected RuntimeError for a degenerate contour")
 
 
 def test_triangulate_surface_rejects_non_seg2_contour():

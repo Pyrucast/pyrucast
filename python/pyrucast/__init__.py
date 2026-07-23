@@ -7,7 +7,7 @@ Package *mixed Rust/Python*. L'extension compilée est le sous-module privé
 - les **conteneurs** (`containers::…`) restent des classes au top-level :
   `pyrucast.Coords`, `pyrucast.Mesh`, `pyrucast.Model`, … ;
 - les **verbes** (`ops::<thème>::f`) vivent dans le sous-module du thème :
-  `pyrucast.mesher.pave_surface`, `pyrucast.field.gradient`,
+  `pyrucast.mesher.triangulate_surface`, `pyrucast.field.gradient`,
   `pyrucast.assemble.stiffness`, `pyrucast.solver.solve`, … ;
 - `pyrucast.consolidate` (dispatch mesh/champ) reste au top-level, comme au
   niveau racine de `ops` ;

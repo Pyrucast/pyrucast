@@ -20,9 +20,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
 | `translate(mesh, vector)` | **copie** du maillage translatée de `vector` (nœuds neufs, original intact) |
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
-| `triangulate_surface(contour, type, …)` | triangule l'intérieur d'un contour fermé (voir plus bas) |
-| `pave_surface(contour, type, size=None)` | maille l'intérieur d'un contour par **front avançant** avec création de nœuds internes (voir plus bas) |
-| `mesh_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
+| `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
 | `contour(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
 | `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
@@ -207,287 +205,36 @@ Le maillage obtenu se calcule avec l'interpolation `LAGRANGE2` (cf.
 [Espace éléments finis](../fe-space.md)) :
 
 ```python
-lin = pyrucast.mesher.pave_surface(contour, "TRI3", 1.0)   # maillage TRI3
+lin = pyrucast.mesher.triangulate_surface(contour, "TRI3", 1.0)   # maillage TRI3
 quad = pyrucast.mesher.to_quadratic(lin)              # copie TRI6
 print(quad.element_types())                    # ['TRI6']
 
 fes = pyrucast.FiniteElementSpace(quad, interpolation="LAGRANGE2")
 ```
 
-## Triangulation d'un contour fermé : `triangulate_surface`
+## Maillage d'un contour fermé : `triangulate_surface`
 
-`triangulate_surface(contour, element_type, max_edge_length=None, min_angle_deg=None)`
-prend un `Mesh` contenant **un ou plusieurs sous-maillages SEG2** (chacun une
-boucle fermée) et remplit la surface ainsi définie avec des éléments 2D. La
-configuration peut être en dimension **2** (cas direct) ou **3** (boucles
-quasi co-planaires — voir plus bas).
+`triangulate_surface(contour, element_type, size=None)` remplit l'intérieur
+d'un contour par **triangulation de Delaunay contrainte (CDT)** puis
+**raffinement de Ruppert** à taille de maille cible, en créant les nœuds
+internes nécessaires. C'est l'équivalent de l'opérateur Cast3M `SURF`. Le
+mailleur est rapide (≈ 3·10⁵ mailles/s) et gère nativement les **trous** et
+**plusieurs domaines disjoints** en une passe.
 
-Pour l'instant un seul type cible est supporté : **`TRI3`**.
+`contour` est un `Mesh` contenant **une ou plusieurs boucles SEG2** fermées ;
+la configuration peut être en dimension **2** (cas direct) ou une boucle
+**plane en 3D** (voir *Contrôle de planéité* plus bas). `element_type` vaut
+`"TRI3"` ou `"QUA4"` ; `size` fixe la longueur d'arête visée (par défaut :
+longueur moyenne des segments de bord de chaque domaine).
 
-Les fondements mathématiques (aire signée, ear clipping, Newell, Delaunay /
-Bowyer-Watson, CDT, Ruppert) sont rassemblés dans
+Les fondements mathématiques (aire signée, Newell, Delaunay / Bowyer-Watson,
+CDT, Ruppert) sont rassemblés dans
 [Triangulation : briques mathématiques](../triangulation.md). Cette page-ci
 décrit le **comportement** de `triangulate_surface`.
 
-### Cas d'un seul contour (sans trous)
-
-Avec un unique sous-maillage SEG2, la fonction prend un chemin rapide via *ear
-clipping* :
-
-1. les segments sont chaînés dans l'ordre (un seul cycle, sinon erreur) ;
-2. en 3D, la normale du plan moyen est calculée par la **méthode de Newell** ;
-   les points sont projetés sur ce plan via une base orthonormée locale
-   `(u, v)` ;
-3. l'orientation du polygone est détectée (aire signée) ;
-4. à chaque itération on retire une **oreille** (sommet convexe dont le
-   triangle prev-curr-next ne contient aucun autre sommet) ;
-5. on recommence jusqu'à ne plus avoir que 3 sommets.
-
-Le résultat contient exactement `n − 2` triangles pour `n` nœuds de contour.
-**Aucun nœud interne n'est créé** (pas de raffinement). Les nœuds du contour
-sont réutilisés (refcount incrémenté). En 3D, les triangles vivent dans
-l'espace 3D global — seule la triangulation est faite dans le plan moyen. Les
-triangles produits sont orientés **CCW** dans le plan de projection, quel que
-soit le sens du contour d'entrée.
-
-### Cas avec trous (plusieurs contours)
-
-Quand `contour` contient deux sous-maillages SEG2 ou plus, `triangulate_surface`
-bascule sur une **triangulation de Delaunay contrainte (CDT)** maison :
-
-1. chaque sous-maillage est traité comme une boucle fermée indépendante ;
-2. la boucle d'aire absolue la plus grande est automatiquement désignée
-   **contour extérieur** ; les autres deviennent des **trous** ;
-3. les points sont insérés un à un par Bowyer-Watson (avec un super-triangle
-   englobant) ;
-4. chaque arête de boucle est ensuite **forcée** dans la triangulation ;
-5. un *flood-fill* par parité depuis le super-triangle retire l'extérieur et
-   l'intérieur des trous.
-
-L'orientation des boucles d'entrée n'a pas d'importance (détection par aire
-absolue). Aucun nœud interne n'est créé sans raffinement. L'algorithme
-géométrique est exposé via `triangulate_polygon_with_holes(outer, holes)` pour
-les besoins indépendants du système `Mesh`.
-
-### Contrôle de planéité (cas 3D)
-
-En 3D, la déviation maximale d'un nœud du contour au plan moyen doit rester
-inférieure à `1e-6 × diag` (`diag` = diagonale de la boîte englobante). Au-delà,
-`triangulate_surface` retourne une erreur claire indiquant la déviation observée et la
-tolérance. Ce seuil relatif tolère le bruit numérique tout en refusant les
-vrais contours gauches.
-
-### Raffinement — points Steiner
-
-Quand `max_edge_length` ou `min_angle_deg` est renseigné, l'algorithme bascule
-sur la CDT avec **raffinement de Ruppert** :
-
-- `max_edge_length` — longueur d'arête maximale tolérée ;
-- `min_angle_deg` — angle minimum garanti (en degrés).
-
-La convergence n'est théoriquement garantie que pour `min_angle_deg ≤ 20.7°`
-(Shewchuk). pyrucast plafonne le nombre d'insertions à `50 · n_contour + 1000`
-pour éviter les divergences ; l'erreur est explicite si la limite est atteinte.
-Les nouveaux nœuds (« Steiner ») sont créés dans la `Coords` du contour,
-exactement comme les nœuds utilisateur.
-
-### Limitations actuelles
-
-- seul `TRI3` est supporté en sortie ;
-- en 3D, l'algorithme refuse les contours franchement non plans ;
-- les boucles doivent être deux à deux disjointes (pas de trous emboîtés, pas
-  de croisements) ;
-- la fonction de taille reste **globale** (un seul `max_edge_length`) — une
-  carte de taille variable `h(x, y)` viendra plus tard.
-
-### Exemple Python (2D)
-
-```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-nodes = [c.add_node(p) for p in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]]
-
-contour = pyrucast.Mesh(c, "SEG2")
-for i in range(4):
-    contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
-
-surface = pyrucast.mesher.triangulate_surface(contour, "TRI3")
-print(surface)  # Mesh: 1 submesh(es), 2 cell(s) total
-```
-
-### Exemple Python (avec trou et raffinement)
-
-```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-
-# Contour extérieur : carré 4×4.
-outer = pyrucast.Mesh(c, "SEG2")
-outer_nodes = [
-    c.add_node(list(p)) for p in [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]
-]
-for i in range(4):
-    outer.unit().add_cell([outer_nodes[i], outer_nodes[(i + 1) % 4]])
-
-# Trou : carré 2×2 centré.
-hole = pyrucast.Mesh(c, "SEG2")
-hole_nodes = [
-    c.add_node(list(p)) for p in [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]
-]
-for i in range(4):
-    hole.unit().add_cell([hole_nodes[i], hole_nodes[(i + 1) % 4]])
-
-# Composer les deux contours par l'union | (jamais +).
-combined = outer | hole
-
-# Sans raffinement : 6 triangles « bruts ».
-brut = pyrucast.mesher.triangulate_surface(combined, "TRI3")
-
-# Avec raffinement : arête max 1.0 + angle min 20° → maillage fin et de qualité.
-fin = pyrucast.mesher.triangulate_surface(combined, "TRI3", max_edge_length=1.0, min_angle_deg=20.0)
-# Aire triangulée = 16 - 4 = 12, mais bien plus de cellules.
-```
-
-Côté Rust, `ops::mesher::triangulate_surface(&combined, ElementType::TRI3, Some(opts))`
-prend un `Option<RefinementOptions>` (`max_edge_length`, `min_angle_deg`). Le module
-`pyrucast::ops::mesher::triangulation` regroupe les briques géométriques
-(`signed_area`, `ear_clip_2d`, `newell_normal`, `in_plane_basis`,
-`delaunay_2d`, `constrained_delaunay_2d`, `triangulate_polygon_with_holes`) —
-toutes opèrent sur des tableaux bruts, réutilisables indépendamment du système
-`Mesh` (voir [Triangulation](../triangulation.md)).
-
-## Mailleur frontal : `pave_surface`
-
-`pave_surface(contour, element_type, size=None)` remplit l'intérieur d'un contour
-fermé par un **front avançant** qui **crée des nœuds internes** pour respecter
-une taille de maille cible — là où `triangulate_surface` ne triangule que les nœuds
-du bord. C'est l'analogue de l'opérateur `SURF` historique.
-
-`element_type` vaut `"TRI3"` ou `"QUA4"` ; `size` fixe la longueur d'arête
-visée (par défaut : longueur moyenne des segments de la boucle **extérieure**).
-Le contour peut être en 2D, ou une boucle **quasi planaire** en 3D (projetée
-sur son plan de meilleure approximation, maillée, puis relevée — même contrôle
-de planéité que `triangulate_surface`).
-
-`contour` peut porter **plusieurs** sous-maillages `SEG2` : la boucle
-extérieure est alors auto-détectée (aire la plus grande, comme
-`triangulate_surface`) et chaque autre boucle traitée comme un **trou**. Chaque trou
-est greffé sur le front par une coupure de largeur nulle (« trou de serrure »,
-vers le point du front le plus proche) avant le pavage, ce qui laisse
-l'algorithme à front unique inchangé — voir `splice_hole_into_front` côté
-Rust. La qualité près de la coupure reste correcte pour un trou de taille
-raisonnable dans un contour normalement discrétisé ; un trou disproportionné
-par rapport à la taille cible peut dégrader la qualité sur une plus grande
-partie du maillage (le front reste non convexe tant que le trou n'est pas
-entièrement résorbé par épluchage, ce qui retarde le passage à la couche
-frontale plus régulière).
-
-### Méthode
-
-1. **Épluchage des coins.** On retire itérativement le coin convexe le plus
-   aigu du front sous forme de triangle (« oreille ») ; une arête de fermeture
-   plus longue que `1.5 × size` est **bissectée** par un nœud neuf (deux
-   triangles) pour ne pas créer d'élément trop grand.
-2. **Couche frontale.** Quand aucun coin n'est assez aigu, tout le front est
-   **décalé vers l'intérieur** d'environ une taille de maille (bissectrice
-   intérieure), et une bande d'éléments est pavée entre le front et son
-   décalé ; le décalé devient le nouveau front et le procédé récurse. Une
-   cellule de bande est un quadrangle en mode QUA4, deux triangles en TRI3.
-3. **Fermeture par éventail.** Lorsque le front convexe s'est réduit à un
-   point, on le ferme par un éventail autour de son centroïde : triangles en
-   TRI3, éventail de quadrangles (avec au plus un triangle résiduel si le
-   nombre de nœuds est impair) en QUA4.
-
-Comme l'opérateur d'origine, un maillage **QUA4 est *quad-dominant*** : le
-résultat peut porter à la fois un sous-maillage `QUA4` et un sous-maillage
-`TRI3` (coins aigus, repli concave, éventail de fermeture). Les éléments sont
-orientés **CCW**.
-
-Deux passes de qualité s'ajoutent au pavage lui-même : le décalage de couche
-est plafonné par l'espacement local du front (pas seulement par la taille
-cible globale, pour ne pas créer de mailles écrasées là où le contour est
-discrétisé de façon hétérogène — un `arc` bien plus grossier qu'une `line`
-adjacente, typiquement), et une passe finale de retournements locaux à la
-Lawson (`improve_triangulation_by_flips`) corrige, arête par arête, tout
-triangle dont l'autre diagonale du quadrilatère voisin donnerait un meilleur
-angle minimal.
-
-> **`pave_surface` vs `triangulate_surface`.** `triangulate_surface` triangule les nœuds donnés
-> (ear clipping / Delaunay contraint, raffinement optionnel). `pave_surface` crée
-> des nœuds internes pour une taille contrôlée façon front avançant ; les deux
-> gèrent les **trous** (boucles multiples, boucle extérieure auto-détectée).
-> Choisir `pave_surface` pour un maillage de taille homogène imposée ;
-> `triangulate_surface` pour trianguler un contour ou raffiner par critère
-> d'arête/angle — et pour un trou proche du bord (canal étroit), plus robuste
-> côté convergence.
-
-### Exemple Python
-
-```python
-import pyrucast, math
-
-c = pyrucast.Coords(dim=2)
-# Contour : cercle discrétisé (rayon 5, 40 segments).
-nodes = [
-    c.add_node(
-        [5.0 * math.cos(2 * math.pi * i / 40), 5.0 * math.sin(2 * math.pi * i / 40)]
-    )
-    for i in range(40)
-]
-contour = pyrucast.Mesh(c, "SEG2")
-sm = contour[0]
-for i in range(40):
-    sm.add_cell([nodes[i], nodes[(i + 1) % 40]])
-
-# Maillage frontal en triangles de taille ~1.0 (nœuds internes créés).
-tri = pyrucast.mesher.pave_surface(contour, "TRI3", 1.0)
-print(tri.element_types(), tri.cell_count())
-
-# Variante quad-dominante.
-quad = pyrucast.mesher.pave_surface(contour, "QUA4", 1.0)
-print(quad.element_types())  # ['QUA4', 'TRI3'] en général
-```
-
-### Interruption
-
-Un maillage trop long s'**interrompt** par `Ctrl+C` : `pave_surface` sonde les
-signaux à chaque couche/oreille et lève une `KeyboardInterrupt`. Côté Rust,
-`pave_surface_cancellable(contour, type, size, &cancel)` accepte un jeton
-d'interruption (timeout, drapeau partagé…) — voir
-[Interrompre une fonction](../developper/interrompre-une-fonction.md).
-
-### Limitations actuelles
-
-- **Taille uniforme** : le champ de densité par nœud (un `size` variable, façon
-  `CHPO1`) n'est pas encore exposé.
-- Le pavage en couches utilise un décalage 1:1 sans rééchantillonnage
-  circonférentiel : la qualité près du centre est correcte mais perfectible.
-- **Trou disproportionné** : tant qu'un trou n'est pas entièrement résorbé par
-  épluchage, le front reste globalement non convexe et ne peut pas basculer
-  sur la couche frontale (plus régulière) — pour un trou large relativement au
-  contour extérieur ou à la taille cible, cela peut dégrader la qualité sur
-  une portion notable du maillage, pas seulement près de la coupure. Sans
-  incidence pour un trou de taille modeste dans un contour normalement
-  discrétisé.
-
-Côté Rust, `ops::mesher::pave_surface(&contour, ElementType::TRI3, Some(1.0))`. Le
-cœur géométrique (`pave_single`) opère sur de simples `Vec<Point2>` sans
-toucher au store — frontière nette pour un futur parallélisme intra-opérateur.
-
-## Mailleur Delaunay contraint : `mesh_surface`
-
-`mesh_surface(contour, element_type, size=None)` remplit l'intérieur d'un
-contour par **triangulation de Delaunay contrainte** puis **raffinement de
-Ruppert** à taille de maille cible, avec création de nœuds internes. C'est le
-mailleur le plus robuste et le plus rapide des trois (≈ 3·10⁵ mailles/s) ;
-il gère nativement les trous et plusieurs domaines disjoints.
-
 ### Convention d'orientation (à la charge de l'appelant)
 
-Contrairement à `pave_surface` (qui auto-détecte la boucle extérieure par
-l'aire), `mesh_surface` s'appuie sur l'**orientation** des boucles fournies :
+`triangulate_surface` s'appuie sur l'**orientation** des boucles fournies :
 
 - une boucle **antihoraire** (CCW, aire signée > 0) est la **frontière
   extérieure** d'un domaine ;
@@ -495,39 +242,111 @@ l'aire), `mesh_surface` s'appuie sur l'**orientation** des boucles fournies :
   une boucle extérieure ;
 - plusieurs boucles CCW disjointes maillent **plusieurs domaines** en une fois.
 
-C'est exactement l'orientation produite par [`contour`](#bord-dune-surface--contour) (extérieur CCW,
-trous CW), donc la sortie de `contour` réalimente directement `mesh_surface`.
+C'est exactement l'orientation produite par [`contour`](#bord-dune-surface--contour)
+(extérieur CCW, trous CW), donc la sortie de `contour` réalimente directement
+`triangulate_surface`.
+
+### Méthode
+
+1. les points de bord sont insérés un à un dans une triangulation de Delaunay
+   par Bowyer-Watson (super-triangle englobant) ;
+2. chaque arête de boucle absente est **récupérée** (retrait du corridor +
+   ear-clipping des deux polygones adjacents) puis marquée contrainte ;
+3. la triangulation est **légalisée** (flips de Delaunay ne traversant aucune
+   contrainte) ;
+4. **excavation** : un flood-fill depuis un triangle sûrement intérieur, ne
+   traversant jamais une arête contrainte, sépare l'intérieur du domaine des
+   trous et des poches hors d'un bord concave ;
+5. **raffinement de Ruppert** : les triangles trop plats/trop grands sont
+   coupés par insertion de leur circoncentre, ou une arête contrainte
+   empiétée est coupée en son milieu (règle de robustesse au bord) ;
+6. léger lissage laplacien, puis (pour `QUA4`) recombinaison gloutonne des
+   paires de triangles.
+
+En `QUA4` le résultat est donc **quad-dominant** : les triangles sont
+recombinés par paires en quadrangles, une poignée de triangles de bord pouvant
+subsister (sous-maillage `TRI3` annexe). Les éléments sont orientés **CCW**.
+
+### Contrôle de planéité (cas 3D)
+
+Une boucle 3D est ajustée à son plan de meilleure approximation (méthode de
+Newell), maillée dans ce repère 2D local, puis relevée dans l'espace 3D. La
+déviation maximale d'un nœud du contour à ce plan doit rester inférieure à
+`1e-6 × diag` (`diag` = diagonale de la boîte englobante) ; au-delà,
+`triangulate_surface` retourne une erreur indiquant la déviation observée et la
+tolérance. Ce seuil relatif tolère le bruit numérique tout en refusant les
+vrais contours gauches.
+
+### Raffinement — convergence
+
+Le raffinement de Ruppert garantit théoriquement sa convergence pour un angle
+minimal `≤ 20.7°` (Shewchuk) ; pyrucast vise 20° et plafonne le nombre
+d'insertions pour éviter les divergences (erreur explicite si la limite est
+atteinte). Les nouveaux nœuds (« Steiner ») sont créés dans la `Coords` du
+contour, exactement comme les nœuds utilisateur.
+
+### Exemple Python
 
 ```python
-contour = cex | cin   # cex : boucle extérieure CCW ; cin : trou CW
-tri  = pyrucast.mesher.mesh_surface(contour, "TRI3", size=0.01)
-quad = pyrucast.mesher.mesh_surface(contour, "QUA4", size=0.01)   # quad-dominant
+import pyrucast
+
+c = pyrucast.Coords(dim=2)
+
+# Contour extérieur : carré 4×4 (CCW).
+outer = pyrucast.Mesh(c, "SEG2")
+outer_nodes = [
+    c.add_node(list(p)) for p in [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]
+]
+for i in range(4):
+    outer.unit().add_cell([outer_nodes[i], outer_nodes[(i + 1) % 4]])
+
+# Trou : carré 2×2 centré, orienté CW.
+hole = pyrucast.Mesh(c, "SEG2")
+hole_nodes = [
+    c.add_node(list(p)) for p in [(1.0, 1.0), (1.0, 3.0), (3.0, 3.0), (3.0, 1.0)]
+]
+for i in range(4):
+    hole.unit().add_cell([hole_nodes[i], hole_nodes[(i + 1) % 4]])
+
+# Composer les deux contours par l'union | (jamais +).
+combined = outer | hole
+
+# Maillage TRI3 de taille ~0.5 (aire = 16 - 4 = 12).
+tri = pyrucast.mesher.triangulate_surface(combined, "TRI3", size=0.5)
+print(tri.element_types(), tri.cell_count())
+
+# Variante quad-dominante.
+quad = pyrucast.mesher.triangulate_surface(combined, "QUA4", size=0.5)
+print(quad.element_types())  # ['QUA4', 'TRI3'] en général
 ```
 
-`element_type` vaut `"TRI3"` ou `"QUA4"`. En `QUA4` le résultat est
-**quad-dominant** : les triangles sont recombinés par paires en quadrangles,
-une poignée de triangles de bord pouvant subsister (sous-maillage `TRI3`
-annexe). Le contour peut être 2-D ou une boucle **plane en 3-D** (maillée
-dans son plan de meilleur ajustement puis relevée).
+### Interruption
 
-Un maillage trop long s'**interrompt** par `Ctrl+C`. Côté Rust,
-`mesh_surface_cancellable(contour, type, size, &cancel)` accepte un jeton
-d'interruption — voir
+Un maillage trop long s'**interrompt** par `Ctrl+C` : `triangulate_surface`
+sonde les signaux et lève une `KeyboardInterrupt`. Côté Rust,
+`triangulate_surface_cancellable(contour, type, size, &cancel)` accepte un
+jeton d'interruption (timeout, drapeau partagé…) — voir
 [Interrompre une fonction](../developper/interrompre-une-fonction.md).
 
 ### Limitations actuelles
 
-- **Taille uniforme** : pas encore de champ de densité variable par nœud.
+- **Taille uniforme** : pas encore de champ de densité variable par nœud
+  (un `size` façon `CHPO1`).
 - L'orientation est à fournir par l'appelant ; une boucle mal orientée mène à
   une erreur (aucune boucle extérieure) ou à un domaine inattendu.
+- Les boucles doivent être deux à deux disjointes (pas de trous emboîtés, pas
+  de croisements).
 
-Côté Rust, `ops::mesher::mesh_surface(&contour, ElementType::TRI3, Some(0.01))`.
+Côté Rust, `ops::mesher::triangulate_surface(&contour, ElementType::TRI3, Some(0.5))`.
 Le cœur (CDT + raffinement) opère sur de simples `Vec<Point2>` sans toucher au
-store ; lissage et recombinaison QUA4 sont parallélisés (`rayon`).
+store ; lissage et recombinaison QUA4 sont parallélisés (`rayon`). Le module
+`pyrucast::ops::mesher::triangulation` regroupe par ailleurs les briques
+géométriques réutilisables indépendamment du système `Mesh`
+(voir [Triangulation](../triangulation.md)).
 
-## Mailleur frontal volumique : `volume`
+## Mailleur volumique : `volume`
 
-`volume(envelope, size=None)` est le **compagnon 3D** de `pave_surface` : il remplit
+`volume(envelope, size=None)` est le **compagnon 3D** de `triangulate_surface` : il remplit
 l'intérieur d'une **enveloppe surfacique fermée** avec des tétraèdres `TET4`, à
 taille de maille imposée, en créant les nœuds internes nécessaires. Le
 remplissage d'un intérieur vide est précisément ce que fait un opérateur de
@@ -573,7 +392,7 @@ print(tet.element_types())  # ['TET4']
 
 ### Interruption
 
-Comme `pave_surface`, un maillage trop long s'**interrompt** par `Ctrl+C` : `volume`
+Comme `triangulate_surface`, un maillage trop long s'**interrompt** par `Ctrl+C` : `volume`
 sonde les signaux pendant la génération des points et l'insertion Delaunay, et
 lève une `KeyboardInterrupt`. Côté Rust,
 `volume_cancellable(envelope, size, &cancel)` accepte un jeton
@@ -601,21 +420,21 @@ frontière nette pour un futur parallélisme intra-opérateur.
 
 ## Bord d'une surface : `contour`
 
-`contour(mesh)` est l'**inverse** de `triangulate_surface` / `pave_surface` : il prend un
+`contour(mesh)` est l'**inverse** de `triangulate_surface` : il prend un
 maillage de surface (cellules `TRI3` / `QUA4`) et renvoie son **bord** sous
 forme de boucles `SEG2` fermées.
 
 Une arête de cellule utilisée par **exactement une** cellule est une arête de
 bord ; les arêtes intérieures sont partagées par deux cellules (orientations
 opposées) et s'annulent. Les arêtes de bord de **tous** les sous-maillages de
-surface sont regroupées — la sortie `QUA4` + `TRI3` de `pave_surface` donne donc un
+surface sont regroupées — la sortie `QUA4` + `TRI3` de `triangulate_surface` donne donc un
 bord commun unique — puis chaînées en boucles fermées.
 
 Le résultat est un `Mesh` avec **un sous-maillage SEG2 par boucle** : une seule
 boucle pour un domaine simplement connexe, plusieurs quand le domaine a des
 trous ou des morceaux disjoints — d'où les « n contours ». Chaque boucle garde
 l'orientation CCW du bord (boucle extérieure CCW, trous CW) : le résultat peut
-donc **réalimenter directement** `pave_surface` / `triangulate_surface`. Les nœuds d'origine
+donc **réalimenter directement** `triangulate_surface`. Les nœuds d'origine
 sont réutilisés (et re-référencés).
 
 ```python
@@ -692,7 +511,7 @@ départ.
 import pyrucast
 
 # Une plaque trouée : contour extérieur + bord du trou, orientations quelconques.
-surf = pyrucast.mesher.mesh_surface(contour, "TRI3")
+surf = pyrucast.mesher.triangulate_surface(contour, "TRI3")
 
 propre = pyrucast.mesher.orient(surf)        # toutes les mailles cohérentes
 trou_dedans = pyrucast.mesher.invert(propre) # sens inversé (intérieur/extérieur)

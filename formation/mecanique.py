@@ -60,8 +60,10 @@ def construire_plaque_trouee():
     centre = coords.add_node(list(CENTRE_TROU))
     trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
 
-    contour = boucle_ext | trou
-    plaque = pc.mesher.triangulate_surface(contour, "TRI3", max_edge_length=0.02)
+    # Boucle extérieure CCW, trou horaire (CW) : orientation attendue par
+    # `triangulate_surface` (le trou est inversé, `trou` reste utilisable ci-dessous).
+    contour = boucle_ext | pc.mesher.invert(trou)
+    plaque = pc.mesher.triangulate_surface(contour, "TRI3", size=0.02)
 
     # Moitié basse du trou (y < centre) : support de l'effort de la masse
     # suspendue, comme le `PRES 'MASS'` de Cast3M sur une moitié du cercle.

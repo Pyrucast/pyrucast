@@ -52,6 +52,7 @@ __all__ = [
     "internal_forces",
     "internal_forces_continuum",
     "interp_to_gauss",
+    "invert",
     "line",
     "log",
     "log10",
@@ -62,8 +63,7 @@ __all__ = [
     "material_field_per_sub_model",
     "merge",
     "merge_nodes",
-    "mesh_surface",
-    "pave_surface",
+    "orient",
     "poi1_from_nodes",
     "psca",
     "read_gmsh",
@@ -2168,7 +2168,7 @@ def contour(mesh: Mesh) -> Mesh:
     Returns a Mesh with one SEG2 submesh per loop — a single loop for a
     simply-connected domain, several when the domain has holes or disjoint
     pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
-    CW), so the result can feed straight back into `pave_surface` / `triangulate_surface`.
+    CW), so the result can feed straight back into `triangulate_surface`.
     """
 
 def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
@@ -2373,6 +2373,16 @@ def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementFie
     (nodes → Gauss).
     """
 
+def invert(mesh: Mesh) -> Mesh:
+    r"""
+    Reverse the orientation of every cell of a mesh (cast3m `INVE`).
+    
+    Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
+    in any dimension. Combined with `orient`, this selects the inside/outside
+    sense of a closed contour or surface. Returns a fresh mesh sharing the
+    input's nodes.
+    """
+
 def line(a: Node, b: Node, n_elems: builtins.int, element_type: builtins.str = 'SEG2') -> Mesh:
     r"""
     Build a line of `n_elems` elements from node `a` to node `b`.
@@ -2467,34 +2477,17 @@ def merge_nodes(mesh: Mesh, tol: builtins.float) -> Mesh:
     coincident nodes. `mesh` itself is left untouched.
     """
 
-def mesh_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
+def orient(mesh: Mesh) -> Mesh:
     r"""
-    Mesh the interior of a closed SEG2 `contour` with `element_type` cells
-    using a constrained-Delaunay + Ruppert-refinement mesher.
+    Harmonise the orientation of a mesh's cells (cast3m `ORIE`).
     
-    `contour` holds **one or more** closed SEG2 loops, each oriented by the
-    caller: a **counter-clockwise** loop is a domain's outer boundary, a
-    **clockwise** loop is a hole (contained in an outer loop). Several
-    disjoint CCW loops mesh several independent domains at once. `size` sets
-    the target element edge length; `None` uses the mean boundary edge length
-    per domain. `element_type` is "TRI3" or "QUA4" (QUA4 is quad-dominant:
-    the result may also carry a few boundary triangles). The contour may be
-    2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
-    """
-
-def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
-    r"""
-    Mesh the interior of a closed SEG2 `contour` with `element_type` cells
-    using a size-controlled advancing front that **creates interior nodes**
-    (unlike `triangulate_surface`, which only triangulates the contour nodes).
-    
-    `contour` may hold **one or more** SEG2 submeshes: with more than one,
-    the outer boundary is auto-detected (largest area) and every other loop
-    is treated as a hole. `size` sets the target element edge length; `None`
-    uses the mean length of the *outer* loop's segments. `element_type` is
-    "TRI3" or "QUA4" (QUA4 is quad-dominant: the result may also carry a few
-    triangles). The contour may be 2-D or a nearly planar loop in 3-D
-    (projected, paved, lifted back).
+    Cells sharing a facet are made consistently oriented — all normals of a
+    surface point the same way, all segments of a curve run head-to-tail, all
+    volume cells share one handedness — in any dimension (SEG/TRI/QUA/TET/
+    PENTA/HEX, linear or quadratic). Each connected component is seeded by its
+    lowest-indexed cell, which keeps its orientation; the absolute sense is not
+    chosen (use `invert` to flip a whole mesh, e.g. a hole's boundary). Returns
+    a fresh mesh sharing the input's nodes.
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
@@ -2829,18 +2822,26 @@ def translate(mesh: Mesh, vector: typing.Sequence[builtins.float]) -> Mesh:
     (the original is left untouched). `vector` matches the mesh dimension.
     """
 
-def triangulate_surface(contour: Mesh, element_type: builtins.str, max_edge_length: typing.Optional[builtins.float] = None, min_angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
+def triangulate_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Fill the interior of a closed SEG2 `contour` with `element_type` cells
-    (triangulation). `max_edge_length` / `min_angle_deg` optionally refine
-    the result.
+    Mesh the interior of a closed SEG2 `contour` with `element_type` cells
+    using a constrained-Delaunay + Ruppert-refinement mesher.
+    
+    `contour` holds **one or more** closed SEG2 loops, each oriented by the
+    caller: a **counter-clockwise** loop is a domain's outer boundary, a
+    **clockwise** loop is a hole (contained in an outer loop). Several
+    disjoint CCW loops mesh several independent domains at once. `size` sets
+    the target element edge length; `None` uses the mean boundary edge length
+    per domain. `element_type` is "TRI3" or "QUA4" (QUA4 is quad-dominant:
+    the result may also carry a few boundary triangles). The contour may be
+    2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
     """
 
 def volume(envelope: Mesh, size: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
     Fill the interior of a closed **TRI3** surface `envelope` with TET4 cells
     using a size-controlled **Delaunay** fill that **creates interior nodes** —
-    the 3-D companion of `pave_surface`.
+    the 3-D companion of `triangulate_surface`.
     
     `size` sets the target element edge length; `None` uses the mean edge
     length of the envelope's faces. The envelope must be a closed,

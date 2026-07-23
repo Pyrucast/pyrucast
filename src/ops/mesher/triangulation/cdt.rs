@@ -2199,7 +2199,8 @@ mod tests {
             min_angle_deg: None,
         };
         let (pts, tris) =
-            triangulate_polygon_with_holes_refined(&outer, &[hole.clone()], opts).unwrap();
+            triangulate_polygon_with_holes_refined(&outer, std::slice::from_ref(&hole), opts)
+                .unwrap();
         assert_all_ccw(&tris, &pts);
 
         // Total triangle area must equal outer polygon area minus hole area.
@@ -2276,8 +2277,9 @@ mod tests {
             max_edge_length: Some(0.025),
             min_angle_deg: None,
         };
-        let (pts, tris) = triangulate_polygon_with_holes_refined(&outer, &[hole.clone()], opts)
-            .unwrap_or_else(|e| panic!("n_side={n_side}: {e}"));
+        let (pts, tris) =
+            triangulate_polygon_with_holes_refined(&outer, std::slice::from_ref(&hole), opts)
+                .unwrap_or_else(|e| panic!("n_side={n_side}: {e}"));
         assert_all_ccw(&tris, &pts);
 
         let poly_area = |loop_pts: &[Point2]| -> f64 {

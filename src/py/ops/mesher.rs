@@ -107,7 +107,7 @@ pub fn merge_nodes(mesh: PyRef<PyMesh>, tol: f64) -> PyResult<PyMesh> {
 /// Returns a Mesh with one SEG2 submesh per loop — a single loop for a
 /// simply-connected domain, several when the domain has holes or disjoint
 /// pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
-/// CW), so the result can feed straight back into `pave_surface` / `triangulate_surface`.
+/// CW), so the result can feed straight back into `triangulate_surface`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn contour(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
@@ -318,60 +318,6 @@ pub fn rotate(
     Ok(PyMesh { inner: result })
 }
 
-/// Fill the interior of a closed SEG2 `contour` with `element_type` cells
-/// (triangulation). `max_edge_length` / `min_angle_deg` optionally refine
-/// the result.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-#[pyo3(signature = (contour, element_type, max_edge_length=None, min_angle_deg=None))]
-pub fn triangulate_surface(
-    contour: PyRef<PyMesh>,
-    element_type: &str,
-    max_edge_length: Option<f64>,
-    min_angle_deg: Option<f64>,
-) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
-    let refinement = if max_edge_length.is_some() || min_angle_deg.is_some() {
-        Some(crate::ops::mesher::triangulation::RefinementOptions {
-            max_edge_length,
-            min_angle_deg,
-        })
-    } else {
-        None
-    };
-    let mesh = crate::ops::mesher::triangulate_surface(&contour.inner, et, refinement)?;
-    Ok(PyMesh { inner: mesh })
-}
-
-/// Mesh the interior of a closed SEG2 `contour` with `element_type` cells
-/// using a size-controlled advancing front that **creates interior nodes**
-/// (unlike `triangulate_surface`, which only triangulates the contour nodes).
-///
-/// `contour` may hold **one or more** SEG2 submeshes: with more than one,
-/// the outer boundary is auto-detected (largest area) and every other loop
-/// is treated as a hole. `size` sets the target element edge length; `None`
-/// uses the mean length of the *outer* loop's segments. `element_type` is
-/// "TRI3" or "QUA4" (QUA4 is quad-dominant: the result may also carry a few
-/// triangles). The contour may be 2-D or a nearly planar loop in 3-D
-/// (projected, paved, lifted back).
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-#[pyo3(signature = (contour, element_type, size=None))]
-pub fn pave_surface(
-    py: Python<'_>,
-    contour: PyRef<PyMesh>,
-    element_type: &str,
-    size: Option<f64>,
-) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
-    // Poll Python signals while paving so a long mesh stays Ctrl+C-able.
-    let mesh =
-        crate::ops::mesher::pave_surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
-    Ok(PyMesh { inner: mesh })
-}
-
 /// Mesh the interior of a closed SEG2 `contour` with `element_type` cells
 /// using a constrained-Delaunay + Ruppert-refinement mesher.
 ///
@@ -386,7 +332,7 @@ pub fn pave_surface(
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (contour, element_type, size=None))]
-pub fn mesh_surface(
+pub fn triangulate_surface(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
     element_type: &str,
@@ -395,14 +341,18 @@ pub fn mesh_surface(
     let et = ElementType::from_name(element_type)
         .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
     // Poll Python signals while meshing so a long run stays Ctrl+C-able.
-    let mesh =
-        crate::ops::mesher::mesh_surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
+    let mesh = crate::ops::mesher::triangulate_surface_cancellable(
+        &contour.inner,
+        et,
+        size,
+        &PySignals(py),
+    )?;
     Ok(PyMesh { inner: mesh })
 }
 
 /// Fill the interior of a closed **TRI3** surface `envelope` with TET4 cells
 /// using a size-controlled **Delaunay** fill that **creates interior nodes** —
-/// the 3-D companion of `pave_surface`.
+/// the 3-D companion of `triangulate_surface`.
 ///
 /// `size` sets the target element edge length; `None` uses the mean edge
 /// length of the envelope's faces. The envelope must be a closed,

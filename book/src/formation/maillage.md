@@ -18,10 +18,12 @@ deux bords, nombre d'éléments imposé).
 Méthode, identique dans l'esprit à Cast3M (1. placer des points guides, 2.
 mailler le contour fermé, 3. remplir par triangulation) :
 
-1. construire le contour extérieur (une boucle fermée de `SEG2`) ;
-2. construire le contour du trou (`pyrucast.mesher.circle`) ;
-3. unir les deux boucles (`|`) — la plus grande, par aire signée, est
-   traitée comme le contour extérieur, les autres comme des trous ;
+1. construire le contour extérieur (une boucle fermée de `SEG2`), orientée
+   **antihoraire** (CCW) ;
+2. construire le contour du trou (`pyrucast.mesher.circle`), orienté
+   **horaire** (CW) — d'où l'`invert` sur le cercle ;
+3. unir les deux boucles (`|`) — la boucle CCW est le contour extérieur, la
+   boucle CW est un trou ;
 4. remplir par triangulation de Delaunay contrainte, raffinée à une taille
    de maille cible (`pyrucast.mesher.triangulate_surface`).
 
@@ -35,17 +37,11 @@ mailler le contour fermé, 3. remplir par triangulation) :
 
 ![Maillage non structuré (triangulation avec trou)](img/maillage-non-structure.svg)
 
-`triangulate_surface` est l'équivalent de la triangulation Cast3M avec trou (une
-combinaison de `SURF ... 'PLAN'` sur un contour incluant un trou inversé) —
-sans étape d'inversion manuelle : l'orientation des boucles n'a pas
-d'importance, seule leur aire relative compte.
-
-> **Différence avec Cast3M.** Le mailleur frontal à taille imposée
-> (`pyrucast.mesher.pave_surface`, l'équivalent de Cast3M `SURF` avec un
-> paramètre de taille) ne prend en charge, à ce jour, qu'un contour à
-> **une seule boucle** — pas de trou. C'est `triangulate_surface`
-> (triangulation de Delaunay contrainte, avec raffinement) qui sait
-> mailler un domaine à trous ; c'est elle qu'on utilise ici.
+`triangulate_surface` est l'équivalent de la triangulation Cast3M avec trou
+(`SURF ... 'PLAN'` sur un contour incluant un trou) : la boucle extérieure est
+donnée dans le sens antihoraire, le trou dans le sens horaire (ici obtenu par
+`invert` sur le cercle), et le mailleur remplit l'intérieur par triangulation
+de Delaunay contrainte + raffinement de Ruppert à la taille cible.
 
 ## Maillage structuré : balayage entre deux bords
 
