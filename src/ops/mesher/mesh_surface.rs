@@ -1381,7 +1381,7 @@ impl Cdt {
                 queued[i] = true;
             }
         }
-        let max_new_points = (self.pts.len() * 100).max(2_000_000);
+        let max_new_points = (self.pts.len() * 100).max(20_000_000);
         let mut created = 0usize;
         while let Some(ti) = worklist.pop_front() {
             if ti < queued.len() {
