@@ -282,18 +282,29 @@ def _triangle_area_sum(tri):
     return total
 
 
+def _discretized_square(c, side=1.0, per_side=8):
+    # Square contour with `per_side` SEG2 per edge. `triangulate_surface`
+    # freezes the contour (never subdivides it), so a mesh finer than the input
+    # boundary requires a pre-discretized contour — as real usage does.
+    corners = [(0.0, 0.0), (side, 0.0), (side, side), (0.0, side)]
+    ids = []
+    for k in range(4):
+        x0, y0 = corners[k]
+        x1, y1 = corners[(k + 1) % 4]
+        for i in range(per_side):
+            t = i / per_side
+            ids.append(c.add_node([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]))
+    contour = pyrucast.Mesh(c, "SEG2")
+    n = len(ids)
+    for i in range(n):
+        contour.unit().add_cell([ids[i], ids[(i + 1) % n]])
+    return contour
+
+
 def test_triangulate_surface_square_tri3():
     # A unit square meshed with interior nodes: several triangles, area 1.
     c = pyrucast.Coords(2)
-    nodes = [
-        c.add_node([0.0, 0.0]),
-        c.add_node([1.0, 0.0]),
-        c.add_node([1.0, 1.0]),
-        c.add_node([0.0, 1.0]),
-    ]
-    contour = pyrucast.Mesh(c, "SEG2")
-    for i in range(4):
-        contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
+    contour = _discretized_square(c)
 
     tri = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.25)
     assert tri.element_types() == ["TRI3"]
@@ -303,19 +314,40 @@ def test_triangulate_surface_square_tri3():
 
 def test_triangulate_surface_square_qua4_is_quad_dominant():
     c = pyrucast.Coords(2)
-    nodes = [
-        c.add_node([0.0, 0.0]),
-        c.add_node([1.0, 0.0]),
-        c.add_node([1.0, 1.0]),
-        c.add_node([0.0, 1.0]),
-    ]
-    contour = pyrucast.Mesh(c, "SEG2")
-    for i in range(4):
-        contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
+    contour = _discretized_square(c, per_side=6)
 
     quad = pyrucast.mesher.triangulate_surface(contour, "QUA4", size=0.25)
     # Quad-dominant: at least a QUA4 submesh (a few boundary TRI3 may remain).
     assert "QUA4" in quad.element_types()
+
+
+def test_triangulate_surface_freezes_contour():
+    # The result reuses exactly the input contour nodes (same id + position)
+    # and adds no node on a contour edge.
+    c = pyrucast.Coords(2)
+    contour = _discretized_square(c, per_side=10)
+
+    def node_map(mesh):
+        s = {}
+        for si, cnt in enumerate(mesh.cell_counts()):
+            for ci in range(cnt):
+                for nd in mesh.cell(si, ci).nodes():
+                    s[nd.id] = tuple(nd.coord())
+        return s
+
+    before = node_map(contour)
+    mesh = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.05)
+    after = node_map(mesh)
+
+    for nid, pos in before.items():
+        assert nid in after, f"contour node {nid} dropped"
+        assert after[nid] == pos, f"contour node {nid} moved"
+    # No new node lies on an axis-aligned contour edge.
+    for nid, (x, y) in after.items():
+        if nid in before:
+            continue
+        on_edge = min(x, 1.0 - x, y, 1.0 - y) <= 1e-12
+        assert not on_edge, f"new node {nid} placed on a contour edge at ({x}, {y})"
 
 
 def test_triangulate_surface_unknown_element_type():

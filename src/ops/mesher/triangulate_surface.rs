@@ -1380,7 +1380,13 @@ impl Cdt {
     /// Ruppert refinement of every `inside` triangle: split by circumcenter
     /// insertion, or split an encroached constrained edge at its midpoint
     /// instead (never inserting a point that would violate a boundary).
-    fn refine(&mut self, h: f64, cancel: &dyn Cancel) -> Result<()> {
+    /// Ruppert refinement. When `freeze_boundary` is set, no constrained
+    /// (contour) edge is ever split: the boundary keeps exactly the input
+    /// nodes. Any refinement step that would have bisected a boundary
+    /// subsegment (a circumcenter encroaching it, or landing outside the
+    /// domain) is skipped instead — trading a slightly worse triangle near
+    /// that edge for an untouched contour.
+    fn refine(&mut self, h: f64, freeze_boundary: bool, cancel: &dyn Cancel) -> Result<()> {
         let min_angle_rad = MIN_ANGLE_DEG.to_radians();
         let edge_floor = h * 1e-2;
         let mut worklist: VecDeque<usize> = VecDeque::new();
@@ -1452,6 +1458,12 @@ impl Cdt {
             // edge whose circumcenter sits in its diametral circle gets
             // bisected). Scanned locally around `ti` and `land`.
             if let Some((cti, ce)) = self.find_encroached(cc, ti, land) {
+                if freeze_boundary {
+                    // Contour is frozen: never bisect the boundary. Drop this
+                    // circumcenter rather than splitting the subsegment it
+                    // encroaches.
+                    continue;
+                }
                 let ct = self.tris[cti];
                 let (u, v) = (ct.v[ce], ct.v[(ce + 1) % 3]);
                 let mid =
@@ -1527,6 +1539,10 @@ impl Cdt {
                         queued[idx] = true;
                     }
                 }
+            } else if freeze_boundary {
+                // Contour is frozen: a circumcenter outside the domain would
+                // normally split the boundary it hides behind. Skip it.
+                continue;
             } else {
                 // Circumcenter is outside the domain (a hole, the exterior, or
                 // beyond a concave boundary): it encroaches a boundary
@@ -1759,7 +1775,9 @@ fn mesh_domain(
         })?;
     cdt.flood_fill(seed, cancel)?;
 
-    cdt.refine(h, cancel)?;
+    // Freeze the contour: the returned mesh reuses exactly the input boundary
+    // nodes (same NodeId, same position) and never subdivides a contour edge.
+    cdt.refine(h, true, cancel)?;
 
     // Quality post-processing: alternate min-angle flips (dissolve slivers the
     // Delaunay mesh leaves near curved boundaries) with inversion-safe
@@ -2032,6 +2050,24 @@ mod tests {
         loop_mesh(coords, &[(0.0, 0.0), (s, 0.0), (s, s), (0.0, s)])
     }
 
+    /// A square with `n` segments per side. Since the contour is now frozen
+    /// (never subdivided by refinement), a mesh denser than the input contour
+    /// requires the boundary to be pre-discretized — exactly as real usage
+    /// does (`mesher::line(p1, p2, 15)`).
+    fn discretized_square(coords: Handle<Coords>, s: f64, n: usize) -> Mesh {
+        let mut pts = Vec::new();
+        let corners = [(0.0, 0.0), (s, 0.0), (s, s), (0.0, s)];
+        for k in 0..4 {
+            let (x0, y0) = corners[k];
+            let (x1, y1) = corners[(k + 1) % 4];
+            for i in 0..n {
+                let t = i as f64 / n as f64;
+                pts.push((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t));
+            }
+        }
+        loop_mesh(coords, &pts)
+    }
+
     fn cell_area(pts: &[Vec<f64>]) -> f64 {
         let n = pts.len();
         let mut a = 0.0;
@@ -2062,7 +2098,7 @@ mod tests {
     #[test]
     fn square_tri3_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
-        let contour = square(coords, 1.0);
+        let contour = discretized_square(coords, 1.0, 8);
         let mesh = triangulate_surface(&contour, ElementType::TRI3, Some(0.15)).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TRI3]);
         assert!(mesh.cell_count().unwrap() > 20);
@@ -2086,7 +2122,7 @@ mod tests {
     #[test]
     fn square_qua4_conserves_area() {
         let coords = insert(Coords::new(2).unwrap());
-        let contour = square(coords, 1.0);
+        let contour = discretized_square(coords, 1.0, 6);
         let mesh = triangulate_surface(&contour, ElementType::QUA4, Some(0.2)).unwrap();
         assert!(mesh.element_types().unwrap().contains(&ElementType::QUA4));
         assert!(
@@ -2123,6 +2159,53 @@ mod tests {
         contour.add_sub(other.get(0).unwrap()).unwrap();
         let mesh = triangulate_surface(&contour, ElementType::TRI3, Some(0.3)).unwrap();
         assert!((mesh_area(&mesh) - 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn contour_nodes_are_frozen() {
+        // The meshed result must reuse exactly the input contour nodes (same
+        // NodeId, same position) and add no node on a contour edge.
+        let coords = insert(Coords::new(2).unwrap());
+        let contour = discretized_square(coords.clone(), 1.0, 10);
+        let mut boundary: HashSet<NodeId> = HashSet::new();
+        for sm in &contour {
+            for &nid in read(sm).unwrap().connectivity() {
+                boundary.insert(nid);
+            }
+        }
+        let before: HashMap<NodeId, Vec<f64>> = boundary
+            .iter()
+            .map(|&nid| (nid, read(&coords).unwrap().coord(nid).unwrap().to_vec()))
+            .collect();
+
+        // A fine target size that would trigger heavy Ruppert refinement.
+        let mesh = triangulate_surface(&contour, ElementType::TRI3, Some(0.05)).unwrap();
+
+        let mut used: HashSet<NodeId> = HashSet::new();
+        for sm in &mesh {
+            for &nid in read(sm).unwrap().connectivity() {
+                used.insert(nid);
+            }
+        }
+        // Every input boundary node is still used, unmoved.
+        for (&nid, p0) in &before {
+            assert!(used.contains(&nid), "contour node {nid:?} dropped");
+            let p1 = read(&coords).unwrap().coord(nid).unwrap().to_vec();
+            assert_eq!(&p1, p0, "contour node {nid:?} moved");
+        }
+        // No new node sits on the (axis-aligned) contour edges.
+        for &nid in &used {
+            if boundary.contains(&nid) {
+                continue;
+            }
+            let p = read(&coords).unwrap().coord(nid).unwrap().to_vec();
+            let on_edge = (p[0] <= 1e-12 || (p[0] - 1.0).abs() <= 1e-12)
+                || (p[1] <= 1e-12 || (p[1] - 1.0).abs() <= 1e-12);
+            assert!(
+                !on_edge,
+                "new node {nid:?} at {p:?} was placed on a contour edge"
+            );
+        }
     }
 
     #[test]

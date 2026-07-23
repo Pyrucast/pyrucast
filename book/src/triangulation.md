@@ -364,6 +364,8 @@ boucle:
 
 L'insertion **contrainte** (Bowyer-Watson modifié) propage la cavité en BFS depuis le triangle contenant \\(C\\), **sans jamais franchir d'arête contrainte**. Cela préserve toutes les contraintes initiales et les nouvelles (milieux d'arêtes).
 
+> **Contour figé dans pyrucast.** L'algorithme de Ruppert ci-dessus coupe une arête de bord encroachée en son milieu (les deux étapes « couper AB en son milieu »). `triangulate_surface` **ne le fait pas** : le contour d'entrée doit être conservé à l'identique (mêmes `NodeId`, mêmes positions). Un point ou un circoncentre qui encroache une arête contrainte est donc simplement **abandonné** au lieu de la bissecter. Le raffinement ne pose que des Steiner **intérieurs** ; un bord finement maillé se prépare en amont (`mesher.line/arc/circle`).
+
 ### Convergence
 
 La preuve de **terminaison** de Ruppert (renforcée par Shewchuk en 1996) tient pour

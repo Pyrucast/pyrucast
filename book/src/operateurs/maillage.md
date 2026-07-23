@@ -221,6 +221,12 @@ internes nécessaires. C'est l'équivalent de l'opérateur Cast3M `SURF`. Le
 mailleur est rapide (≈ 3·10⁵ mailles/s) et gère nativement les **trous** et
 **plusieurs domaines disjoints** en une passe.
 
+Le **contour est figé** : le maillage produit réutilise exactement les nœuds
+d'entrée (mêmes identifiants, mêmes positions) et **n'ajoute aucun nœud sur une
+arête du contour**. Le raffinement n'insère donc que des nœuds *intérieurs* ;
+pour un bord plus fin, discrétisez le contour en amont (`mesher.line(a, b,
+15)`, `mesher.arc(...)`, `mesher.circle(...)`).
+
 `contour` est un `Mesh` contenant **une ou plusieurs boucles SEG2** fermées ;
 la configuration peut être en dimension **2** (cas direct) ou une boucle
 **plane en 3D** (voir *Contrôle de planéité* plus bas). `element_type` vaut
@@ -258,8 +264,10 @@ C'est exactement l'orientation produite par [`contour`](#bord-dune-surface--cont
    traversant jamais une arête contrainte, sépare l'intérieur du domaine des
    trous et des poches hors d'un bord concave ;
 5. **raffinement de Ruppert** : les triangles trop plats/trop grands sont
-   coupés par insertion de leur circoncentre, ou une arête contrainte
-   empiétée est coupée en son milieu (règle de robustesse au bord) ;
+   coupés par insertion de leur circoncentre. Le **contour restant figé**, un
+   circoncentre qui *empiéterait* une arête de bord (ou tomberait hors du
+   domaine) est **abandonné** plutôt que de couper cette arête — on préserve le
+   contour au prix d'un triangle un peu moins bon près du bord ;
 6. léger lissage laplacien, puis (pour `QUA4`) recombinaison gloutonne des
    paires de triangles.
 
@@ -282,8 +290,11 @@ vrais contours gauches.
 Le raffinement de Ruppert garantit théoriquement sa convergence pour un angle
 minimal `≤ 20.7°` (Shewchuk) ; pyrucast vise 20° et plafonne le nombre
 d'insertions pour éviter les divergences (erreur explicite si la limite est
-atteinte). Les nouveaux nœuds (« Steiner ») sont créés dans la `Coords` du
-contour, exactement comme les nœuds utilisateur.
+atteinte). Les nouveaux nœuds (« Steiner ») sont **strictement intérieurs** et
+créés dans la `Coords` du contour, exactement comme les nœuds utilisateur ;
+aucun n'est posé sur le contour, qui reste figé. Cette contrainte peut laisser
+subsister, contre un bord grossièrement discrétisé, un triangle plus plat que
+l'angle visé : affiner alors le contour d'entrée plutôt que la taille cible.
 
 ### Exemple Python
 
