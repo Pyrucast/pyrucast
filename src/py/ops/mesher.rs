@@ -343,6 +343,34 @@ pub fn pave_surface(
     Ok(PyMesh { inner: mesh })
 }
 
+/// Mesh the interior of a closed SEG2 `contour` with `element_type` cells
+/// using a constrained-Delaunay + Ruppert-refinement mesher.
+///
+/// `contour` holds **one or more** closed SEG2 loops, each oriented by the
+/// caller: a **counter-clockwise** loop is a domain's outer boundary, a
+/// **clockwise** loop is a hole (contained in an outer loop). Several
+/// disjoint CCW loops mesh several independent domains at once. `size` sets
+/// the target element edge length; `None` uses the mean boundary edge length
+/// per domain. `element_type` is "TRI3" or "QUA4" (QUA4 is quad-dominant:
+/// the result may also carry a few boundary triangles). The contour may be
+/// 2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (contour, element_type, size=None))]
+pub fn mesh_surface(
+    py: Python<'_>,
+    contour: PyRef<PyMesh>,
+    element_type: &str,
+    size: Option<f64>,
+) -> PyResult<PyMesh> {
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
+    // Poll Python signals while meshing so a long run stays Ctrl+C-able.
+    let mesh =
+        crate::ops::mesher::mesh_surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
+    Ok(PyMesh { inner: mesh })
+}
+
 /// Fill the interior of a closed **TRI3** surface `envelope` with TET4 cells
 /// using a size-controlled **Delaunay** fill that **creates interior nodes** —
 /// the 3-D companion of `pave_surface`.

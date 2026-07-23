@@ -22,6 +22,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `triangulate_surface(contour, type, …)` | triangule l'intérieur d'un contour fermé (voir plus bas) |
 | `pave_surface(contour, type, size=None)` | maille l'intérieur d'un contour par **front avançant** avec création de nœuds internes (voir plus bas) |
+| `mesh_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
 | `contour(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
 | `elements_on(mesh, points, strict=True)` | les **éléments** de `mesh` qui s'**appuient** sur les nœuds de `points` (voir plus bas) |
@@ -472,6 +473,55 @@ d'interruption (timeout, drapeau partagé…) — voir
 Côté Rust, `ops::mesher::pave_surface(&contour, ElementType::TRI3, Some(1.0))`. Le
 cœur géométrique (`pave_single`) opère sur de simples `Vec<Point2>` sans
 toucher au store — frontière nette pour un futur parallélisme intra-opérateur.
+
+## Mailleur Delaunay contraint : `mesh_surface`
+
+`mesh_surface(contour, element_type, size=None)` remplit l'intérieur d'un
+contour par **triangulation de Delaunay contrainte** puis **raffinement de
+Ruppert** à taille de maille cible, avec création de nœuds internes. C'est le
+mailleur le plus robuste et le plus rapide des trois (≈ 3·10⁵ mailles/s) ;
+il gère nativement les trous et plusieurs domaines disjoints.
+
+### Convention d'orientation (à la charge de l'appelant)
+
+Contrairement à `pave_surface` (qui auto-détecte la boucle extérieure par
+l'aire), `mesh_surface` s'appuie sur l'**orientation** des boucles fournies :
+
+- une boucle **antihoraire** (CCW, aire signée > 0) est la **frontière
+  extérieure** d'un domaine ;
+- une boucle **horaire** (CW, aire signée < 0) est un **trou**, contenu dans
+  une boucle extérieure ;
+- plusieurs boucles CCW disjointes maillent **plusieurs domaines** en une fois.
+
+C'est exactement l'orientation produite par [`contour`](#bord-dune-surface--contour) (extérieur CCW,
+trous CW), donc la sortie de `contour` réalimente directement `mesh_surface`.
+
+```python
+contour = cex | cin   # cex : boucle extérieure CCW ; cin : trou CW
+tri  = pyrucast.mesher.mesh_surface(contour, "TRI3", size=0.01)
+quad = pyrucast.mesher.mesh_surface(contour, "QUA4", size=0.01)   # quad-dominant
+```
+
+`element_type` vaut `"TRI3"` ou `"QUA4"`. En `QUA4` le résultat est
+**quad-dominant** : les triangles sont recombinés par paires en quadrangles,
+une poignée de triangles de bord pouvant subsister (sous-maillage `TRI3`
+annexe). Le contour peut être 2-D ou une boucle **plane en 3-D** (maillée
+dans son plan de meilleur ajustement puis relevée).
+
+Un maillage trop long s'**interrompt** par `Ctrl+C`. Côté Rust,
+`mesh_surface_cancellable(contour, type, size, &cancel)` accepte un jeton
+d'interruption — voir
+[Interrompre une fonction](../developper/interrompre-une-fonction.md).
+
+### Limitations actuelles
+
+- **Taille uniforme** : pas encore de champ de densité variable par nœud.
+- L'orientation est à fournir par l'appelant ; une boucle mal orientée mène à
+  une erreur (aucune boucle extérieure) ou à un domaine inattendu.
+
+Côté Rust, `ops::mesher::mesh_surface(&contour, ElementType::TRI3, Some(0.01))`.
+Le cœur (CDT + raffinement) opère sur de simples `Vec<Point2>` sans toucher au
+store ; lissage et recombinaison QUA4 sont parallélisés (`rayon`).
 
 ## Mailleur frontal volumique : `volume`
 

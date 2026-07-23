@@ -12,7 +12,7 @@ par module, plus la visualisation (qui vit sous `src/viz/`).
 
 | Module Rust | Chapitre | Contenu |
 |---|---|---|
-| `ops::mesher` | [Maillage](operateurs/maillage.md) | `line`, `circle`, `arc`, `extrude`, `sweep`, `transfinite` (DALL), `sweep_solid`, `translate`, `rotate`, `triangulate_surface`, `pave_surface`, `volume`, `contour`, `elements_on`, `merge_nodes`, `read_gmsh`, `to_poi1`, `to_quadratic`, `barycenter`, `consolidate`… |
+| `ops::mesher` | [Maillage](operateurs/maillage.md) | `line`, `circle`, `arc`, `extrude`, `sweep`, `transfinite` (DALL), `sweep_solid`, `translate`, `rotate`, `triangulate_surface`, `pave_surface`, `mesh_surface`, `volume`, `contour`, `elements_on`, `merge_nodes`, `read_gmsh`, `to_poi1`, `to_quadratic`, `barycenter`, `consolidate`… |
 | `ops::build` | [Construction](operateurs/construction.md) | champs matériau (`material_field`…) |
 | `ops::geom` | [Géométrie](operateurs/geometrie.md) | `locate_points` (mapping inverse, baignage), `project_points` (projection sur surface, contact), `nearest_node` (nœud le plus proche d'un point) |
 | `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `interp_to_gauss` (nœuds → Gauss), `thermal_strain` (déformation thermique `EPTH`), `restrict`, `restrict_like` (reprojection sur le support d'un champ cible), `select`, `mask`, `filter_components` / `rename_component` (extraction et renommage de composantes, `EXCO`), `merge`, `consolidate`, `integral` / `integral_element` (intégrale `∫ f dΩ`), `xty` / `xtx` (produits scalaires globaux) / `psca` (produit scalaire nœud par nœud), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
