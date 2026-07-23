@@ -29,6 +29,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `elements_on(mesh, points, strict=True)` | les **éléments** de `mesh` qui s'**appuient** sur les nœuds de `points` (voir plus bas) |
 | `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 ; nuage **canonique mis en cache** par sous-maillage (scellé) ⇒ handle reproductible, partagé par `restrict`/blocs de matrice/`divergence`/`flux` (supports appariables) |
 | `to_quadratic(mesh)` | la **copie quadratique** (Lagrange-2) d'un maillage linéaire : TRI3→TRI6, HEX8→HEX20, … (voir plus bas) |
+| `convert(mesh, element_type)` | **change le type d'élément** sans déplacer ni ajouter de nœud : identité, `QUA4`→`TRI3` (2 triangles), `HEX8`→`TET4` (6 tétraèdres) (voir plus bas) |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
 | `consolidate(mesh)` | fusionne les sous-maillages de même type (dispatch partagé avec `NodeField`) |
 | `merge_nodes(mesh, tol)` | **soude** les nœuds distants de moins de `tol` ; remappe la connectivité, abandonne les cellules dégénérées (voir plus bas) |
@@ -211,6 +212,34 @@ quad = pyrucast.mesher.to_quadratic(lin)              # copie TRI6
 print(quad.element_types())                    # ['TRI6']
 
 fes = pyrucast.FiniteElementSpace(quad, interpolation="LAGRANGE2")
+```
+
+## Changement de type d'élément : `convert`
+
+`convert(mesh, element_type)` **change le type d'élément** de chaque
+sous-maillage vers `element_type`, en découpant chaque cellule en cellules du
+type cible — **sans jamais déplacer ni ajouter de nœud** sur les sommets
+existants. Trois cas sont couverts :
+
+- **identité** — `element_type` est déjà le type du sous-maillage : celui-ci
+  est recopié tel quel ;
+- **`QUA4`→`TRI3`** — chaque quadrangle est coupé en deux triangles selon la
+  diagonale `(0, 2)` : `(0, 1, 2)` et `(0, 2, 3)` ;
+- **`HEX8`→`TET4`** — chaque hexaèdre est coupé en six tétraèdres partageant la
+  grande diagonale `(0, 6)` (subdivision de Freudenthal/Kuhn), un découpage
+  qui pave l'espace et reste **conforme** entre hexaèdres voisins (faces
+  coupées selon la même diagonale).
+
+Les **nœuds sommets sont réutilisés** (aucune création, aucun déplacement) et
+les **couleurs de face sont conservées**. Le maillage d'origine n'est pas
+modifié. Tout autre couple `(source, cible)` lève une erreur : passer à un type
+**quadratique** (`TRI3`→`TRI6`, …), qui crée des nœuds de milieu d'arête,
+relève de [`to_quadratic`](#passage-à-lordre-quadratique--to_quadratic).
+
+```python
+faces = pyrucast.mesher.skin(volume)         # peau en QUA4
+faces = pyrucast.mesher.convert(faces, "TRI3")   # QUA4 → TRI3
+print(faces.element_types())                 # ['TRI3']
 ```
 
 ## Maillage d'un contour fermé : `triangulate_surface`

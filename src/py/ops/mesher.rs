@@ -308,6 +308,23 @@ pub fn to_quadratic(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
+/// Convert every submesh of `mesh` to `element_type`, splitting each cell into
+/// cells of the target type **without moving or adding any node** on the
+/// existing corners. Supported: identity (already the target type — copied
+/// verbatim), `"QUA4"` → `"TRI3"` (two triangles per quad, `(0,2)` diagonal),
+/// and `"HEX8"` → `"TET4"` (six tetrahedra per hex, a conforming space-filling
+/// split). Corner nodes are re-used; face colours are preserved. To promote to
+/// a quadratic type (`TRI3`→`TRI6`, …), which creates mid-edge nodes, use
+/// `to_quadratic`. The original mesh is untouched.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn convert(mesh: PyRef<PyMesh>, element_type: &str) -> PyResult<PyMesh> {
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
+    let result = crate::ops::mesher::convert(&mesh.inner, et)?;
+    Ok(PyMesh { inner: result })
+}
+
 /// Translate `mesh` by `vector`, returning a fresh copy with its own nodes
 /// (the original is left untouched). `vector` matches the mesh dimension.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]

@@ -32,6 +32,7 @@ __all__ = [
     "border",
     "circle",
     "consolidate",
+    "convert",
     "coordinates",
     "cos",
     "cosh",
@@ -2170,6 +2171,18 @@ def consolidate(obj: typing.Any) -> typing.Any:
       their components (shared components must agree value-by-value). Useful to
       merge per-physics material zones built on one shared fespace into a single
       material field readable by every physics.
+    """
+
+def convert(mesh: Mesh, element_type: builtins.str) -> Mesh:
+    r"""
+    Convert every submesh of `mesh` to `element_type`, splitting each cell into
+    cells of the target type **without moving or adding any node** on the
+    existing corners. Supported: identity (already the target type — copied
+    verbatim), `"QUA4"` → `"TRI3"` (two triangles per quad, `(0,2)` diagonal),
+    and `"HEX8"` → `"TET4"` (six tetrahedra per hex, a conforming space-filling
+    split). Corner nodes are re-used; face colours are preserved. To promote to
+    a quadratic type (`TRI3`→`TRI6`, …), which creates mid-edge nodes, use
+    `to_quadratic`. The original mesh is untouched.
     """
 
 def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:

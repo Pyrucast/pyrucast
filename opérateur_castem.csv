@@ -24,7 +24,7 @@ Maillage - assemblage;ELIM;Élimine les nœuds doubles (fusion par tolérance);m
 Maillage - assemblage;ENLE;Enlève des éléments d'un maillage;—
 Maillage - assemblage;DIFF;Différence de maillages;—
 Maillage - assemblage;INTE;Intersection de maillages;—
-Maillage - transformation;CHAN;Change le type d'élément (POI1, passage quadratique…);to_poi1 (cas POI1) / to_quadratic (linéaire→quadratique)
+Maillage - transformation;CHAN;Change le type d'élément (POI1, passage quadratique…);to_poi1 (cas POI1) / to_quadratic (linéaire→quadratique) / convert (QUA4→TRI3, HEX8→TET4)
 Maillage - transformation;PLUS;Translate les coordonnées des nœuds;displace / set_coordinates
 Maillage - transformation;TOUR;Tourne (rotation) les coordonnées des nœuds;rotate
 Maillage - transformation;INVE;Inverse l'orientation des éléments;invert

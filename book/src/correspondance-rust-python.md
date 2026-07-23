@@ -89,6 +89,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `sweep_solid(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_solid(mesh_a, mesh_b, n_layers) -> Mesh` |
 | `extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Mesh` | `extrude(mesh, direction, n_layers) -> Mesh` |
 | `to_quadratic(mesh: &Mesh) -> Mesh` | `to_quadratic(mesh) -> Mesh` |
+| `convert(mesh: &Mesh, element_type: ElementType) -> Mesh` | `convert(mesh, element_type) -> Mesh` |
 | `translate(mesh: &Mesh, vector: &[f64]) -> Mesh` | `translate(mesh, vector) -> Mesh` |
 | `rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> Mesh` | `rotate(mesh, angle, center, axis=None) -> Mesh` |
 | `triangulate_surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Mesh` | `triangulate_surface(contour, element_type, size=None) -> Mesh` |

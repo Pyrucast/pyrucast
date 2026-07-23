@@ -660,3 +660,50 @@ def test_skin_rejects_surface_mesh():
         pass
     else:
         raise AssertionError("expected RuntimeError skinning a surface mesh")
+
+
+def _unit_quad():
+    """Unit QUA4 (CCW)."""
+    c = pyrucast.Coords(2)
+    ids = [c.add_node(p) for p in ([0, 0], [1, 0], [1, 1], [0, 1])]
+    m = pyrucast.Mesh(c, "QUA4")
+    m[0].add_cell(ids)
+    return m
+
+
+def test_convert_qua4_to_tri3_splits_each_quad():
+    tri = pyrucast.mesher.convert(_unit_quad(), "TRI3")
+    assert tri.element_types() == ["TRI3"]
+    assert tri.cell_count() == 2
+
+
+def test_convert_hex8_to_tet4_gives_six_tets():
+    tets = pyrucast.mesher.convert(_hex_cube(), "TET4")
+    assert tets.element_types() == ["TET4"]
+    assert tets.cell_count() == 6
+
+
+def test_convert_identity_is_noop_copy():
+    tri = pyrucast.mesher.convert(_unit_quad(), "TRI3")
+    same = pyrucast.mesher.convert(tri, "TRI3")
+    assert same.element_types() == ["TRI3"]
+    assert same.cell_count() == 2
+
+
+def test_convert_rejects_unsupported_pair():
+    tri = pyrucast.mesher.convert(_unit_quad(), "TRI3")
+    try:
+        pyrucast.mesher.convert(tri, "QUA4")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError converting TRI3 -> QUA4")
+
+
+def test_convert_unknown_element_type():
+    try:
+        pyrucast.mesher.convert(_unit_quad(), "NOPE")
+    except (RuntimeError, ValueError):
+        pass
+    else:
+        raise AssertionError("expected error for unknown element type")
