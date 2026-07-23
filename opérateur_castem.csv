@@ -26,8 +26,8 @@ Maillage - assemblage;INTE;Intersection de maillages;—
 Maillage - transformation;CHAN;Change le type d'élément (POI1, passage quadratique…);to_poi1 (cas POI1) / to_quadratic (linéaire→quadratique)
 Maillage - transformation;PLUS;Translate les coordonnées des nœuds;displace / set_coordinates
 Maillage - transformation;TOUR;Tourne (rotation) les coordonnées des nœuds;rotate
-Maillage - transformation;INVE;Inverse l'orientation des éléments;—
-Maillage - transformation;ORIE;Oriente les éléments d'une surface/ligne;—
+Maillage - transformation;INVE;Inverse l'orientation des éléments;invert
+Maillage - transformation;ORIE;Oriente les éléments d'une surface/ligne;orient
 Maillage - transformation;RACC;Raccorde deux maillages (collage);—
 Maillage - transformation;DENS;Fixe la densité (taille de maille) courante;refinement de surface (paramètre)
 Maillage - transformation;BARY;Barycentre d'un maillage / centres des éléments;barycenter

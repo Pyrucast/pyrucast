@@ -25,6 +25,8 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `mesh_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
 | `contour(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
+| `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
+| `invert(mesh)` | **inverse** l'orientation de toutes les cellules, toute dimension, équivalent Cast3M `INVE` (voir plus bas) |
 | `elements_on(mesh, points, strict=True)` | les **éléments** de `mesh` qui s'**appuient** sur les nœuds de `points` (voir plus bas) |
 | `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 ; nuage **canonique mis en cache** par sous-maillage (scellé) ⇒ handle reproductible, partagé par `restrict`/blocs de matrice/`divergence`/`flux` (supports appariables) |
 | `to_quadratic(mesh)` | la **copie quadratique** (Lagrange-2) d'un maillage linéaire : TRI3→TRI6, HEX8→HEX20, … (voir plus bas) |
@@ -638,6 +640,65 @@ gérés), ou si le bord n'est pas un ensemble propre de boucles fermées (arête
 ouverte ou non-manifold).
 
 Côté Rust, `ops::mesher::contour(&mesh)`.
+
+## Orientation des cellules : `orient` et `invert`
+
+`orient(mesh)` (Cast3M `ORIE`) **harmonise** l'orientation des cellules d'un
+maillage, et `invert(mesh)` (Cast3M `INVE`) l'**inverse**. Les deux travaillent
+en **toute dimension** — segments `SEG*` (1D), faces `TRI*`/`QUA*` (2D),
+volumes `TET*`/`PENTA*`/`HEX*` (3D), variantes linéaires **et quadratiques** — et
+renvoient un **maillage neuf** qui reflète l'entrée sous-maillage par
+sous-maillage (mêmes types, mêmes couleurs, mêmes nœuds partagés) ; l'entrée est
+laissée intacte.
+
+### Cadre unifié : facettes orientées
+
+Le bord orienté d'une cellule est une somme signée de ses **facettes de
+codimension 1** :
+
+- `SEG*` (d = 1) : les deux nœuds extrémité — queue (`−1`) et tête (`+1`) ;
+- `TRI*` / `QUA*` (d = 2) : les arêtes orientées ;
+- `TET*` / `PENTA*` / `HEX*` (d = 3) : les faces orientées sortantes.
+
+Chaque occurrence se réduit à un couple `(clé, signe)` où `clé` est la liste
+**triée** des nœuds (coins) de la facette et `signe ∈ {−1, +1}` encode son
+orientation par rapport à une orientation canonique de la clé. **Deux cellules
+partageant une facette sont cohérentes ssi elles lui donnent des signes
+opposés.** Les clés de dimensions différentes (1 / 2 / ≥ 3 nœuds) ne se
+confondent jamais : un maillage mixte se sépare en composantes par dimension.
+
+### `orient` — cohérence, pas de sens absolu
+
+`orient` propage une orientation cohérente à travers les facettes partagées par
+un parcours en largeur du graphe dual. Chaque **composante connexe** est amorcée
+par sa cellule d'indice le plus bas, qui **garde** son orientation (choix
+déterministe, reproductible bit à bit) ; les autres sont retournées au besoin.
+
+`orient` **ne choisit pas** de sens absolu « sortant » : pour une surface fermée
+il laisse le tout entièrement sortant *ou* entièrement rentrant selon la graine.
+Pour choisir le sens (p. ex. définir l'intérieur d'un trou), composer avec
+`invert`. Les facettes **non-manifold** (partagées par plus de deux cellules)
+n'imposent aucune contrainte et sont ignorées.
+
+### `invert` — retournement inconditionnel
+
+`invert` applique à **chaque** cellule sa permutation d'inversion
+(`ElementType::reversal_permutation`, la réflexion échangeant les deux premiers
+axes de référence — pour `SEG*` la négation de l'axe unique). Les `POI1` (sans
+orientation) sont inchangés. Appliqué deux fois, `invert` redonne le maillage de
+départ.
+
+```python
+import pyrucast
+
+# Une plaque trouée : contour extérieur + bord du trou, orientations quelconques.
+surf = pyrucast.mesher.mesh_surface(contour, "TRI3")
+
+propre = pyrucast.mesher.orient(surf)        # toutes les mailles cohérentes
+trou_dedans = pyrucast.mesher.invert(propre) # sens inversé (intérieur/extérieur)
+```
+
+Côté Rust, `ops::mesher::orient(&mesh)` et `ops::mesher::invert(&mesh)`.
 
 ## Éléments s'appuyant sur des nœuds : `elements_on`
 

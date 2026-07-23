@@ -184,6 +184,49 @@ impl ElementType {
         }
     }
 
+    /// Local-node permutation that **reverses the element's orientation**.
+    ///
+    /// Applying it to a cell's node list (output node `i` = input node
+    /// `reversal_permutation()[i]`) yields the same element with the opposite
+    /// orientation: a flipped winding for a surface cell, a reversed traversal
+    /// for a segment, a mirrored (negative-Jacobian) volume cell. The result is
+    /// always a **valid** cell of the same type — mid-edge, face-center and
+    /// body-center nodes of the quadratic variants are carried to their correct
+    /// slots, not just the corners.
+    ///
+    /// Geometrically the permutation is the orientation-reversing reflection
+    /// that swaps the first two reference axes, `(ξ, η, ζ) ↦ (η, ξ, ζ)` (for
+    /// `SEG*`, the single-axis flip `ξ ↦ -ξ`). `POI1` has no orientation, so its
+    /// permutation is the identity (reversal is a no-op).
+    ///
+    /// Shared building block of [`crate::ops::mesher::invert()`] (applied to
+    /// every cell) and [`crate::ops::mesher::orient()`] (applied to the cells a
+    /// consistency pass decides to flip).
+    pub fn reversal_permutation(self) -> &'static [usize] {
+        match self {
+            Self::POI1 => &[0],
+            Self::SEG2 => &[1, 0],
+            Self::SEG3 => &[1, 0, 2],
+            Self::TRI3 => &[0, 2, 1],
+            Self::TRI6 => &[0, 2, 1, 5, 4, 3],
+            Self::QUA4 => &[0, 3, 2, 1],
+            Self::QUA8 => &[0, 3, 2, 1, 7, 6, 5, 4],
+            Self::QUA9 => &[0, 3, 2, 1, 7, 6, 5, 4, 8],
+            Self::TET4 => &[0, 2, 1, 3],
+            Self::TET10 => &[0, 2, 1, 3, 6, 5, 4, 7, 9, 8],
+            Self::PENTA6 => &[0, 2, 1, 3, 5, 4],
+            Self::PENTA15 => &[0, 2, 1, 3, 5, 4, 8, 7, 6, 11, 10, 9, 12, 14, 13],
+            Self::HEX8 => &[0, 3, 2, 1, 4, 7, 6, 5],
+            Self::HEX20 => &[
+                0, 3, 2, 1, 4, 7, 6, 5, 11, 10, 9, 8, 15, 14, 13, 12, 16, 19, 18, 17,
+            ],
+            Self::HEX27 => &[
+                0, 3, 2, 1, 4, 7, 6, 5, 11, 10, 9, 8, 15, 14, 13, 12, 16, 19, 18, 17, 22, 23, 20,
+                21, 24, 25, 26,
+            ],
+        }
+    }
+
     /// Parse from a short name (case-insensitive).
     pub fn from_name(s: &str) -> Option<Self> {
         match s.to_ascii_uppercase().as_str() {
@@ -254,6 +297,30 @@ mod tests {
         assert_eq!(ElementType::QUA9.topological_dim(), 2);
         assert_eq!(ElementType::HEX27.nodes_per_cell(), 27);
         assert_eq!(ElementType::HEX27.topological_dim(), 3);
+    }
+
+    #[test]
+    fn reversal_permutation_is_an_involution_bijection() {
+        use ElementType::*;
+        for et in [
+            POI1, SEG2, TRI3, QUA4, TET4, PENTA6, HEX8, SEG3, TRI6, QUA8, TET10, PENTA15, HEX20,
+            QUA9, HEX27,
+        ] {
+            let p = et.reversal_permutation();
+            let npc = et.nodes_per_cell();
+            assert_eq!(p.len(), npc, "{et}: permutation length");
+            // A bijection of 0..npc (every slot hit exactly once).
+            let mut seen = vec![false; npc];
+            for &i in p {
+                assert!(i < npc, "{et}: index {i} out of range");
+                assert!(!seen[i], "{et}: index {i} repeated");
+                seen[i] = true;
+            }
+            // Reflection is its own inverse: reversing twice is the identity.
+            for i in 0..npc {
+                assert_eq!(p[p[i]], i, "{et}: not an involution at {i}");
+            }
+        }
     }
 
     #[test]

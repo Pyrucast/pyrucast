@@ -115,6 +115,35 @@ pub fn contour(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
+/// Harmonise the orientation of a mesh's cells (cast3m `ORIE`).
+///
+/// Cells sharing a facet are made consistently oriented — all normals of a
+/// surface point the same way, all segments of a curve run head-to-tail, all
+/// volume cells share one handedness — in any dimension (SEG/TRI/QUA/TET/
+/// PENTA/HEX, linear or quadratic). Each connected component is seeded by its
+/// lowest-indexed cell, which keeps its orientation; the absolute sense is not
+/// chosen (use `invert` to flip a whole mesh, e.g. a hole's boundary). Returns
+/// a fresh mesh sharing the input's nodes.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn orient(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::orient(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Reverse the orientation of every cell of a mesh (cast3m `INVE`).
+///
+/// Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
+/// in any dimension. Combined with `orient`, this selects the inside/outside
+/// sense of a closed contour or surface. Returns a fresh mesh sharing the
+/// input's nodes.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn invert(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::invert(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
 /// Build a line of `n_elems` elements from node `a` to node `b`.
 ///
 /// `element_type` is `"SEG2"` (default) or `"SEG3"`.
