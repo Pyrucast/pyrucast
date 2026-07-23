@@ -404,6 +404,21 @@ fn jitter2(i: usize) -> Vector2 {
     Vector2::new(h(1), h(2))
 }
 
+/// Minimum interior angle (radians) of triangle `(a, b, c)`; `0` if
+/// degenerate. Used by the angle-improvement flip pass.
+fn tri_min_angle(a: Point2, b: Point2, c: Point2) -> f64 {
+    let ab = (b - a).norm();
+    let bc = (c - b).norm();
+    let ca = (a - c).norm();
+    if ab == 0.0 || bc == 0.0 || ca == 0.0 {
+        return 0.0;
+    }
+    let cos_a = ((ab * ab + ca * ca - bc * bc) / (2.0 * ab * ca)).clamp(-1.0, 1.0);
+    let cos_b = ((ab * ab + bc * bc - ca * ca) / (2.0 * ab * bc)).clamp(-1.0, 1.0);
+    let cos_c = ((bc * bc + ca * ca - ab * ab) / (2.0 * bc * ca)).clamp(-1.0, 1.0);
+    cos_a.max(cos_b).max(cos_c).acos()
+}
+
 fn point_in_tri_strict(p: Point2, a: Point2, b: Point2, c: Point2) -> bool {
     let o1 = orient(a, b, p);
     let o2 = orient(b, c, p);
@@ -1169,6 +1184,103 @@ impl Cdt {
         (min_angle, max_edge, min_edge)
     }
 
+    /// Find a constrained subsegment that point `p` **encroaches** (lies
+    /// strictly inside its diametral circle, i.e. subtends an obtuse angle at
+    /// `p`), scanning the constrained edges of `seed_a`, `seed_b` and their
+    /// immediate neighbors. Returns the most deeply encroached one. Local by
+    /// design — a circumcenter only ever encroaches a subsegment bordering the
+    /// triangle it falls in or an adjacent one — so the scan stays O(1).
+    fn find_encroached(&self, p: Point2, seed_a: usize, seed_b: usize) -> Option<(usize, usize)> {
+        let mut best: Option<(usize, usize, f64)> = None;
+        let visit = |cti: usize, best: &mut Option<(usize, usize, f64)>| {
+            let t = self.tris[cti];
+            if t.dead {
+                return;
+            }
+            for e in 0..3 {
+                if !t.cons[e] {
+                    continue;
+                }
+                let pu = self.pts[t.v[e] as usize];
+                let pv = self.pts[t.v[(e + 1) % 3] as usize];
+                let dot = (p - pu).dot(&(p - pv));
+                if dot < 0.0 && best.map_or(true, |(_, _, d)| -dot > d) {
+                    *best = Some((cti, e, -dot));
+                }
+            }
+        };
+        for &s in &[seed_a, seed_b] {
+            if self.tris[s].dead {
+                continue;
+            }
+            visit(s, &mut best);
+            for nb in self.tris[s].nbr {
+                if nb >= 0 {
+                    visit(nb as usize, &mut best);
+                }
+            }
+        }
+        best.map(|(a, b, _)| (a, b))
+    }
+
+    /// Min-angle optimization: flip a non-constrained interior edge whenever
+    /// doing so raises the smaller of the two incident triangles' minimum
+    /// angles. Unlike Delaunay legalization (which optimizes the in-circle
+    /// criterion), this directly targets the worst angle, dissolving slivers
+    /// the Delaunay mesh leaves behind. Bounded pass count (flips can cycle
+    /// at ties, so a strict-improvement margin plus a cap guarantee halting).
+    fn improve_angles(&mut self, passes: usize) {
+        for _ in 0..passes {
+            let mut changed = false;
+            for ti in 0..self.tris.len() {
+                if self.tris[ti].dead || !self.inside[ti] {
+                    continue;
+                }
+                for e in 0..3 {
+                    if self.tris[ti].cons[e] {
+                        continue;
+                    }
+                    let nb = self.tris[ti].nbr[e];
+                    if nb < 0 {
+                        continue;
+                    }
+                    let nb = nb as usize;
+                    if self.tris[nb].dead || !self.inside[nb] {
+                        continue;
+                    }
+                    let t = self.tris[ti];
+                    let u = t.v[e];
+                    let v = t.v[(e + 1) % 3];
+                    let a = t.v[(e + 2) % 3];
+                    let ej = match self.local_edge_index(nb, v, u) {
+                        Some(x) => x,
+                        None => continue,
+                    };
+                    let b = self.tris[nb].v[(ej + 2) % 3];
+                    let (pu, pv, pa, pb) = (
+                        self.pts[u as usize],
+                        self.pts[v as usize],
+                        self.pts[a as usize],
+                        self.pts[b as usize],
+                    );
+                    // Flip only across a convex quad (else it would invert).
+                    if !(orient(pa, pu, pb) > 0.0 && orient(pa, pb, pv) > 0.0) {
+                        continue;
+                    }
+                    let cur = tri_min_angle(pu, pv, pa).min(tri_min_angle(pv, pu, pb));
+                    let flipped = tri_min_angle(pa, pu, pb).min(tri_min_angle(pa, pb, pv));
+                    if flipped > cur + 1e-6 {
+                        self.flip_edge(ti, e);
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+    }
+
     /// Split constrained edge `ti`'s local edge `e` at new point `m`,
     /// fanning both adjacent triangles into two. Returns the four new
     /// triangle indices `(a,m,p)`, `(m,b,p)`, `(b,m,q)`, `(m,a,q)`.
@@ -1307,12 +1419,126 @@ impl Cdt {
                 continue;
             }
 
-            // Walk from `ti` toward the circumcenter. If the path crosses a
-            // constrained edge, the circumcenter lies across a boundary and
-            // encroaches that subsegment — split it instead of inserting.
-            let walk = self.walk_toward(ti, cc);
+            // Where does the circumcenter land? `locate` is robust (edge walk
+            // plus a linear-scan fallback) and always returns a triangle of the
+            // covered region. `land_ok` = it sits in an interior triangle, i.e.
+            // strictly inside the domain.
+            let land = self.locate(ti, cc);
+            let land_ok = !self.tris[land].dead && self.inside[land] && {
+                let lt = self.tris[land];
+                let (a, b, c) = (
+                    self.pts[lt.v[0] as usize],
+                    self.pts[lt.v[1] as usize],
+                    self.pts[lt.v[2] as usize],
+                );
+                orient(a, b, cc) >= 0.0 && orient(b, c, cc) >= 0.0 && orient(c, a, cc) >= 0.0
+            };
 
-            if let WalkEnd::Blocked(cti, ce) = walk {
+            // Ruppert's rule: a circumcenter that **encroaches** a boundary
+            // subsegment (lies in its diametral circle) splits that subsegment
+            // rather than being inserted — even when it lands inside the
+            // domain. This is what refines the boundary itself (a long boundary
+            // edge whose circumcenter sits in its diametral circle gets
+            // bisected). Scanned locally around `ti` and `land`.
+            if let Some((cti, ce)) = self.find_encroached(cc, ti, land) {
+                let ct = self.tris[cti];
+                let (u, v) = (ct.v[ce], ct.v[(ce + 1) % 3]);
+                let mid =
+                    Point2::from((self.pts[u as usize].coords + self.pts[v as usize].coords) * 0.5);
+                let was_inside = self.inside[cti];
+                let m_idx = self.add_point(mid, true);
+                let (i1, i2, other) = self.split_constrained_edge(cti, ce, m_idx as u32);
+                self.inside[i1] = was_inside;
+                self.inside[i2] = was_inside;
+                let mut touched = vec![i1, i2];
+                if let Some((i3, i4)) = other {
+                    self.inside[i3] = !was_inside;
+                    self.inside[i4] = !was_inside;
+                    touched.push(i3);
+                    touched.push(i4);
+                }
+                // The triangle we were refining may still be bad — requeue it.
+                if !self.tris[ti].dead && self.inside[ti] {
+                    touched.push(ti);
+                }
+                created += 1;
+                for idx in touched {
+                    if self.inside[idx] {
+                        if idx >= queued.len() {
+                            queued.resize(idx + 1, false);
+                        }
+                        if !queued[idx] {
+                            worklist.push_back(idx);
+                            queued[idx] = true;
+                        }
+                    }
+                }
+            } else if land_ok {
+                // Circumcenter is inside the domain — insert it, unless it would
+                // sit too close to an existing vertex (Ruppert "concentric
+                // shell": near a small input angle this cascades into slivers).
+                let r = (cc - pa).norm();
+                let lt = self.tris[land];
+                let mut dmin = f64::INFINITY;
+                for ct in std::iter::once(land).chain(
+                    lt.nbr
+                        .iter()
+                        .copied()
+                        .filter(|&n| n >= 0)
+                        .map(|n| n as usize),
+                ) {
+                    if self.tris[ct].dead {
+                        continue;
+                    }
+                    for &vv in &self.tris[ct].v {
+                        let d = (cc - self.pts[vv as usize]).norm();
+                        if d < dmin {
+                            dmin = d;
+                        }
+                    }
+                }
+                if dmin < 0.5 * r {
+                    continue;
+                }
+                let p_idx = self.add_point(cc, false);
+                let new_tris = self.insert_point(p_idx, land, cancel)?;
+                created += 1;
+                for idx in new_tris {
+                    if self.tris[idx].dead {
+                        continue;
+                    }
+                    self.inside[idx] = true;
+                    if idx >= queued.len() {
+                        queued.resize(idx + 1, false);
+                    }
+                    if !queued[idx] {
+                        worklist.push_back(idx);
+                        queued[idx] = true;
+                    }
+                }
+            } else {
+                // Circumcenter is outside the domain (a hole, the exterior, or
+                // beyond a concave boundary): it encroaches a boundary
+                // subsegment. Split the constrained edge the straight path
+                // `ti -> cc` crosses; if the walk finds none, split `ti`'s
+                // longest constrained edge; if `ti` has none, skip.
+                let split = match self.walk_toward(ti, cc) {
+                    WalkEnd::Blocked(cti, ce) => Some((cti, ce)),
+                    WalkEnd::Inside => {
+                        let t = self.tris[ti];
+                        let elen = |e: usize| {
+                            (self.pts[t.v[e] as usize] - self.pts[t.v[(e + 1) % 3] as usize]).norm()
+                        };
+                        (0..3)
+                            .filter(|&e| t.cons[e])
+                            .max_by(|&a, &b| elen(a).total_cmp(&elen(b)))
+                            .map(|e| (ti, e))
+                    }
+                };
+                let (cti, ce) = match split {
+                    Some(x) => x,
+                    None => continue,
+                };
                 let ct = self.tris[cti];
                 let (u, v) = (ct.v[ce], ct.v[(ce + 1) % 3]);
                 let mid =
@@ -1331,82 +1557,6 @@ impl Cdt {
                 }
                 created += 1;
                 for idx in touched {
-                    if self.inside[idx] {
-                        if idx >= queued.len() {
-                            queued.resize(idx + 1, false);
-                        }
-                        if !queued[idx] {
-                            worklist.push_back(idx);
-                            queued[idx] = true;
-                        }
-                    }
-                }
-            } else {
-                let land = match walk {
-                    WalkEnd::Inside(t) => t,
-                    WalkEnd::Blocked(..) => unreachable!(),
-                };
-                // Insert the circumcenter only when it verifiably lands
-                // strictly inside an interior triangle. Otherwise it sits
-                // outside the domain (obtuse boundary triangle exiting through
-                // a hull edge) — fall back to bisecting `ti`'s longest edge,
-                // which is the safe, always-interior refinement move.
-                let cc_ok = !self.tris[land].dead && self.inside[land] && {
-                    let lt = self.tris[land];
-                    let (a, b, c) = (
-                        self.pts[lt.v[0] as usize],
-                        self.pts[lt.v[1] as usize],
-                        self.pts[lt.v[2] as usize],
-                    );
-                    orient(a, b, cc) > 0.0 && orient(b, c, cc) > 0.0 && orient(c, a, cc) > 0.0
-                };
-                // `interior_insert` = the new triangles are all interior and
-                // should be marked so; the constrained fallback sets `inside`
-                // itself and clears this.
-                let mut interior_insert = true;
-                let new_tris = if cc_ok {
-                    let p_idx = self.add_point(cc, false);
-                    self.insert_point(p_idx, land, cancel)?
-                } else {
-                    // Longest edge of `ti`.
-                    let t = self.tris[ti];
-                    let elen = |e: usize| {
-                        (self.pts[t.v[e] as usize] - self.pts[t.v[(e + 1) % 3] as usize]).norm()
-                    };
-                    let le = (0..3).max_by(|&a, &b| elen(a).total_cmp(&elen(b))).unwrap();
-                    let u = t.v[le];
-                    let v = t.v[(le + 1) % 3];
-                    let mid = Point2::from(
-                        (self.pts[u as usize].coords + self.pts[v as usize].coords) * 0.5,
-                    );
-                    if t.cons[le] {
-                        interior_insert = false;
-                        let was_inside = self.inside[ti];
-                        let m_idx = self.add_point(mid, true);
-                        let (i1, i2, other) = self.split_constrained_edge(ti, le, m_idx as u32);
-                        self.inside[i1] = was_inside;
-                        self.inside[i2] = was_inside;
-                        let mut v = vec![i1, i2];
-                        if let Some((i3, i4)) = other {
-                            self.inside[i3] = !was_inside;
-                            self.inside[i4] = !was_inside;
-                            v.push(i3);
-                            v.push(i4);
-                        }
-                        v
-                    } else {
-                        let m_idx = self.add_point(mid, false);
-                        self.insert_point(m_idx, ti, cancel)?
-                    }
-                };
-                created += 1;
-                for idx in new_tris {
-                    if self.tris[idx].dead {
-                        continue;
-                    }
-                    if interior_insert {
-                        self.inside[idx] = true;
-                    }
                     if self.inside[idx] {
                         if idx >= queued.len() {
                             queued.resize(idx + 1, false);
@@ -1448,7 +1598,7 @@ impl Cdt {
                 && orient(b, c, target) >= 0.0
                 && orient(c, a, target) >= 0.0
             {
-                return WalkEnd::Inside(cur);
+                return WalkEnd::Inside;
             }
             // Cross the edge whose far side the target lies on, stepping from
             // the triangle centroid toward the target.
@@ -1465,7 +1615,7 @@ impl Cdt {
                     }
                     let nb = t.nbr[e];
                     if nb < 0 {
-                        return WalkEnd::Inside(cur);
+                        return WalkEnd::Inside;
                     }
                     cur = nb as usize;
                     stepped = true;
@@ -1473,15 +1623,18 @@ impl Cdt {
                 }
             }
             if !stepped {
-                return WalkEnd::Inside(cur);
+                return WalkEnd::Inside;
             }
         }
-        WalkEnd::Inside(cur)
+        WalkEnd::Inside
     }
 }
 
 enum WalkEnd {
-    Inside(usize),
+    /// The straight path reached `target` without crossing a constraint (the
+    /// landing triangle is found separately via [`Cdt::locate`]).
+    Inside,
+    /// The path crosses the constrained edge `e` of triangle `ti`.
     Blocked(usize, usize),
 }
 
@@ -1597,13 +1750,24 @@ fn mesh_domain(
 
     cdt.refine(h, cancel)?;
 
+    // Quality post-processing: alternate min-angle flips (dissolve slivers the
+    // Delaunay mesh leaves near curved boundaries) with inversion-safe
+    // Laplacian smoothing (equalize interior node spacing). A few rounds bring
+    // the worst angles up without disturbing the boundary.
+    cdt.improve_angles(6);
+    for _ in 0..3 {
+        cancel.check()?;
+        let tris = collect_inside_tris(&cdt);
+        smooth(&mut cdt.pts, &cdt.is_boundary, &tris, 2);
+        cdt.improve_angles(4);
+    }
+
     let tris = collect_inside_tris(&cdt);
     if tris.is_empty() {
         return Err(PyrucastError::Message(
             "mesh_surface: produced no cell for a domain (degenerate contour?)".into(),
         ));
     }
-    smooth(&mut cdt.pts, &cdt.is_boundary, &tris, 2);
 
     let (quads, leftover_tris) = if element_type == ElementType::QUA4 {
         recombine_to_quads(&cdt.pts, &tris)
