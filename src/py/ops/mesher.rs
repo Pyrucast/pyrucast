@@ -115,6 +115,35 @@ pub fn contour(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
+/// Harmonise the orientation of a mesh's cells (cast3m `ORIE`).
+///
+/// Cells sharing a facet are made consistently oriented — all normals of a
+/// surface point the same way, all segments of a curve run head-to-tail, all
+/// volume cells share one handedness — in any dimension (SEG/TRI/QUA/TET/
+/// PENTA/HEX, linear or quadratic). Each connected component is seeded by its
+/// lowest-indexed cell, which keeps its orientation; the absolute sense is not
+/// chosen (use `invert` to flip a whole mesh, e.g. a hole's boundary). Returns
+/// a fresh mesh sharing the input's nodes.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn orient(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::orient(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Reverse the orientation of every cell of a mesh (cast3m `INVE`).
+///
+/// Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
+/// in any dimension. Combined with `orient`, this selects the inside/outside
+/// sense of a closed contour or surface. Returns a fresh mesh sharing the
+/// input's nodes.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn invert(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::invert(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
 /// Build a line of `n_elems` elements from node `a` to node `b`.
 ///
 /// `element_type` is `"SEG2"` (default) or `"SEG3"`.
@@ -340,6 +369,34 @@ pub fn pave_surface(
     // Poll Python signals while paving so a long mesh stays Ctrl+C-able.
     let mesh =
         crate::ops::mesher::pave_surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
+    Ok(PyMesh { inner: mesh })
+}
+
+/// Mesh the interior of a closed SEG2 `contour` with `element_type` cells
+/// using a constrained-Delaunay + Ruppert-refinement mesher.
+///
+/// `contour` holds **one or more** closed SEG2 loops, each oriented by the
+/// caller: a **counter-clockwise** loop is a domain's outer boundary, a
+/// **clockwise** loop is a hole (contained in an outer loop). Several
+/// disjoint CCW loops mesh several independent domains at once. `size` sets
+/// the target element edge length; `None` uses the mean boundary edge length
+/// per domain. `element_type` is "TRI3" or "QUA4" (QUA4 is quad-dominant:
+/// the result may also carry a few boundary triangles). The contour may be
+/// 2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (contour, element_type, size=None))]
+pub fn mesh_surface(
+    py: Python<'_>,
+    contour: PyRef<PyMesh>,
+    element_type: &str,
+    size: Option<f64>,
+) -> PyResult<PyMesh> {
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
+    // Poll Python signals while meshing so a long run stays Ctrl+C-able.
+    let mesh =
+        crate::ops::mesher::mesh_surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
     Ok(PyMesh { inner: mesh })
 }
 

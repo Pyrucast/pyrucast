@@ -93,8 +93,11 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> Mesh` | `rotate(mesh, angle, center, axis=None) -> Mesh` |
 | `triangulate_surface(contour: &Mesh, et: ElementType, refinement: Option<…>) -> Mesh` | `triangulate_surface(contour, element_type, max_edge_length=None, min_angle_deg=None) -> Mesh` |
 | `pave_surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Mesh` | `pave_surface(contour, element_type, size=None) -> Mesh` |
+| `mesh_surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Mesh` | `mesh_surface(contour, element_type, size=None) -> Mesh` |
 | `volume(envelope: &Mesh, size: Option<f64>) -> Mesh` | `volume(envelope, size=None) -> Mesh` |
 | `contour(mesh: &Mesh) -> Mesh` | `contour(mesh) -> Mesh` |
+| `orient(mesh: &Mesh) -> Mesh` | `orient(mesh) -> Mesh` |
+| `invert(mesh: &Mesh) -> Mesh` | `invert(mesh) -> Mesh` |
 | `barycenter(mesh: &Mesh) -> Mesh` | `barycenter(mesh) -> Mesh` |
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
 | `elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Mesh` | `elements_on(mesh, points, strict=True) -> Mesh` |

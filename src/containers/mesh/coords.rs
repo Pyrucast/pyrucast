@@ -59,7 +59,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Stable internal identifier of a node inside a `Coords`.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NodeId(pub u32);
 
 impl fmt::Debug for NodeId {

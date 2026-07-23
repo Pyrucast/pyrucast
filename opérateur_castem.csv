@@ -5,7 +5,7 @@ Maillage - création;CERC;Maille un cercle fermé en SEG2/SEG3;circle
 Maillage - création;C (CERC);Arc de cercle par 3 points;arc
 Maillage - création;COUR;Maille une courbe quelconque;—
 Maillage - création;CONT;Extrait le contour (frontière) d'une surface;contour
-Maillage - création;SURF;Maille une surface délimitée par un contour fermé;pave_surface / triangulate_surface
+Maillage - création;SURF;Maille une surface délimitée par un contour fermé;mesh_surface / pave_surface / triangulate_surface
 Maillage - création;DALL;Surface structurée entre 4 côtés (interpolation transfinie);transfinite
 Maillage - création;REGL;Surface réglée entre deux lignes;—
 Maillage - création;PAVE;Maille un pavé / bloc volumique structuré;—
@@ -26,8 +26,8 @@ Maillage - assemblage;INTE;Intersection de maillages;—
 Maillage - transformation;CHAN;Change le type d'élément (POI1, passage quadratique…);to_poi1 (cas POI1) / to_quadratic (linéaire→quadratique)
 Maillage - transformation;PLUS;Translate les coordonnées des nœuds;displace / set_coordinates
 Maillage - transformation;TOUR;Tourne (rotation) les coordonnées des nœuds;rotate
-Maillage - transformation;INVE;Inverse l'orientation des éléments;—
-Maillage - transformation;ORIE;Oriente les éléments d'une surface/ligne;—
+Maillage - transformation;INVE;Inverse l'orientation des éléments;invert
+Maillage - transformation;ORIE;Oriente les éléments d'une surface/ligne;orient
 Maillage - transformation;RACC;Raccorde deux maillages (collage);—
 Maillage - transformation;DENS;Fixe la densité (taille de maille) courante;refinement de surface (paramètre)
 Maillage - transformation;BARY;Barycentre d'un maillage / centres des éléments;barycenter

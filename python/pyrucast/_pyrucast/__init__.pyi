@@ -62,6 +62,7 @@ __all__ = [
     "material_field_per_sub_model",
     "merge",
     "merge_nodes",
+    "mesh_surface",
     "pave_surface",
     "poi1_from_nodes",
     "psca",
@@ -2464,6 +2465,21 @@ def merge_nodes(mesh: Mesh, tol: builtins.float) -> Mesh:
     averaging). Cells that collapse onto a repeated node (a degenerate segment,
     triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
     coincident nodes. `mesh` itself is left untouched.
+    """
+
+def mesh_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Mesh the interior of a closed SEG2 `contour` with `element_type` cells
+    using a constrained-Delaunay + Ruppert-refinement mesher.
+    
+    `contour` holds **one or more** closed SEG2 loops, each oriented by the
+    caller: a **counter-clockwise** loop is a domain's outer boundary, a
+    **clockwise** loop is a hole (contained in an outer loop). Several
+    disjoint CCW loops mesh several independent domains at once. `size` sets
+    the target element edge length; `None` uses the mean boundary edge length
+    per domain. `element_type` is "TRI3" or "QUA4" (QUA4 is quad-dominant:
+    the result may also carry a few boundary triangles). The contour may be
+    2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
     """
 
 def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:

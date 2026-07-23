@@ -109,10 +109,13 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesher::to_quadratic, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::triangulate_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::pave_surface, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::mesh_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::volume, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::to_poi1, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::barycenter, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::contour, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::orient, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::invert, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::merge_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::elements_on, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::read_gmsh, m)?)?;
