@@ -483,6 +483,164 @@ impl ProjPrim {
     }
 }
 
+// ─── Viewport clipping ──────────────────────────────────────────────────────
+//
+// `plotters`' cartesian coordinate maps a value *outside* the axis range onto
+// the range boundary (it clamps, it does not drop the point). Left as-is, a
+// node that leaves the visible window while zooming or panning gets pinned to
+// the window edge instead of disappearing — it looks like the mesh is being
+// dragged and deformed along the border. We therefore clip every primitive to
+// the visible rectangle *before* handing it to plotters: fully-outside
+// primitives are dropped, and segments / polygons are cut at the boundary.
+
+/// The visible rectangle in projected (screen) coordinates.
+#[derive(Debug, Clone, Copy)]
+struct Viewport {
+    xmin: f64,
+    xmax: f64,
+    ymin: f64,
+    ymax: f64,
+}
+
+impl Viewport {
+    fn contains(&self, (x, y): (f64, f64)) -> bool {
+        x >= self.xmin && x <= self.xmax && y >= self.ymin && y <= self.ymax
+    }
+
+    /// Liang–Barsky segment clip. Returns the visible sub-segment, or `None`
+    /// when the segment lies entirely outside the viewport.
+    fn clip_segment(&self, a: (f64, f64), b: (f64, f64)) -> Option<((f64, f64), (f64, f64))> {
+        let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+        let dx = b.0 - a.0;
+        let dy = b.1 - a.1;
+        // Each boundary as (p, q): the point is inside when p*t <= q.
+        let checks = [
+            (-dx, a.0 - self.xmin),
+            (dx, self.xmax - a.0),
+            (-dy, a.1 - self.ymin),
+            (dy, self.ymax - a.1),
+        ];
+        for (p, q) in checks {
+            if p == 0.0 {
+                // Line parallel to this boundary: reject if outside it.
+                if q < 0.0 {
+                    return None;
+                }
+            } else {
+                let r = q / p;
+                if p < 0.0 {
+                    if r > t1 {
+                        return None;
+                    }
+                    if r > t0 {
+                        t0 = r;
+                    }
+                } else {
+                    if r < t0 {
+                        return None;
+                    }
+                    if r < t1 {
+                        t1 = r;
+                    }
+                }
+            }
+        }
+        let ca = (a.0 + t0 * dx, a.1 + t0 * dy);
+        let cb = (a.0 + t1 * dx, a.1 + t1 * dy);
+        Some((ca, cb))
+    }
+
+    /// Is `p` on the kept side of boundary `b` (0=left, 1=right, 2=bottom,
+    /// 3=top)?
+    fn inside(&self, b: usize, p: (f64, f64)) -> bool {
+        match b {
+            0 => p.0 >= self.xmin,
+            1 => p.0 <= self.xmax,
+            2 => p.1 >= self.ymin,
+            _ => p.1 <= self.ymax,
+        }
+    }
+
+    /// Crossing point of edge `s`→`e` with boundary line `b`.
+    fn intersect(&self, b: usize, s: (f64, f64), e: (f64, f64)) -> (f64, f64) {
+        match b {
+            0 => intersect_x(s, e, self.xmin),
+            1 => intersect_x(s, e, self.xmax),
+            2 => intersect_y(s, e, self.ymin),
+            _ => intersect_y(s, e, self.ymax),
+        }
+    }
+
+    /// Sutherland–Hodgman polygon clip against the viewport rectangle.
+    /// Returns the (possibly empty) clipped polygon.
+    fn clip_polygon(&self, verts: &[(f64, f64)]) -> Vec<(f64, f64)> {
+        // Clip successively against each of the four half-planes (left, right,
+        // bottom, top).
+        let mut poly = verts.to_vec();
+        for b in 0..4 {
+            if poly.is_empty() {
+                break;
+            }
+            let mut out: Vec<(f64, f64)> = Vec::with_capacity(poly.len() + 1);
+            for i in 0..poly.len() {
+                let cur = poly[i];
+                let prev = poly[(i + poly.len() - 1) % poly.len()];
+                let cur_in = self.inside(b, cur);
+                let prev_in = self.inside(b, prev);
+                if cur_in {
+                    if !prev_in {
+                        out.push(self.intersect(b, prev, cur));
+                    }
+                    out.push(cur);
+                } else if prev_in {
+                    out.push(self.intersect(b, prev, cur));
+                }
+            }
+            poly = out;
+        }
+        poly
+    }
+}
+
+/// Intersection of segment `s`→`e` with the vertical line `x = xb`.
+fn intersect_x(s: (f64, f64), e: (f64, f64), xb: f64) -> (f64, f64) {
+    let dx = e.0 - s.0;
+    if dx == 0.0 {
+        return (xb, s.1);
+    }
+    let t = (xb - s.0) / dx;
+    (xb, s.1 + t * (e.1 - s.1))
+}
+
+/// Intersection of segment `s`→`e` with the horizontal line `y = yb`.
+fn intersect_y(s: (f64, f64), e: (f64, f64), yb: f64) -> (f64, f64) {
+    let dy = e.1 - s.1;
+    if dy == 0.0 {
+        return (s.0, yb);
+    }
+    let t = (yb - s.1) / dy;
+    (s.0 + t * (e.0 - s.0), yb)
+}
+
+/// Clip every edge of a closed vertex loop against the viewport, returning
+/// the visible sub-segments. Each edge is clipped on its own so an edge that
+/// leaves and re-enters the window doesn't get bridged by a false chord.
+fn clip_loop_edges(verts: &[(f64, f64)], vp: &Viewport) -> Vec<((f64, f64), (f64, f64))> {
+    let n = verts.len();
+    if n < 2 {
+        return Vec::new();
+    }
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let a = verts[i];
+        let b = verts[(i + 1) % n];
+        if let Some(seg) = vp.clip_segment(a, b) {
+            out.push(seg);
+        }
+    }
+    out
+}
+
 /// Common rendering core: project, sort far → near, draw points / segments
 /// / filled faces with black face boundaries on top. Shared by `SubMesh`
 /// and `Mesh`.
@@ -588,6 +746,12 @@ where
     let xmax = dx / 2.0;
     let ymin = -dy / 2.0;
     let ymax = dy / 2.0;
+    let viewport = Viewport {
+        xmin,
+        xmax,
+        ymin,
+        ymax,
+    };
 
     let mut chart = ChartBuilder::on(area)
         .margin(5)
@@ -606,6 +770,11 @@ where
     for p in &projected {
         match p {
             ProjPrim::Point { p, color, .. } => {
+                // A point has no extent to clip; just drop it when off-screen
+                // so it never gets pinned to the window border.
+                if !viewport.contains(*p) {
+                    continue;
+                }
                 let style = ShapeStyle {
                     color: RGBAColor(color.r, color.g, color.b, 1.0),
                     filled: true,
@@ -616,13 +785,16 @@ where
                     .map_err(pl_err)?;
             }
             ProjPrim::Segment { a, b, color, .. } => {
+                let Some((ca, cb)) = viewport.clip_segment(*a, *b) else {
+                    continue;
+                };
                 let style = ShapeStyle {
                     color: RGBAColor(color.r, color.g, color.b, 1.0),
                     filled: false,
                     stroke_width: 2,
                 };
                 chart
-                    .draw_series(LineSeries::new(vec![*a, *b], style))
+                    .draw_series(LineSeries::new(vec![ca, cb], style))
                     .map_err(pl_err)?;
             }
             ProjPrim::Face {
@@ -631,6 +803,12 @@ where
                 outline,
                 ..
             } => {
+                // Clip the polygon to the viewport so a partially-visible face
+                // stays inside the window instead of being clamped to the edge.
+                let clipped = viewport.clip_polygon(verts);
+                if clipped.len() < 3 {
+                    continue;
+                }
                 // Faces are opaque so the painter's pass performs hidden-
                 // surface removal: a near face fully overwrites the ones
                 // behind it. This is what makes a solid 3-D mesh read as a
@@ -642,27 +820,24 @@ where
                     stroke_width: 0,
                 };
                 chart
-                    .draw_series(std::iter::once(Polygon::new(verts.clone(), face_style)))
+                    .draw_series(std::iter::once(Polygon::new(clipped.clone(), face_style)))
                     .map_err(pl_err)?;
                 if *outline {
-                    // Close the loop for the wireframe overlay.
-                    let mut closed = verts.clone();
-                    if let Some(first) = verts.first() {
-                        closed.push(*first);
+                    // Draw the outline edge-by-edge, clipping each edge so the
+                    // boundary follows the window instead of the axis border.
+                    for (ca, cb) in clip_loop_edges(verts, &viewport) {
+                        chart
+                            .draw_series(LineSeries::new(vec![ca, cb], edge_style))
+                            .map_err(pl_err)?;
                     }
-                    chart
-                        .draw_series(LineSeries::new(closed, edge_style))
-                        .map_err(pl_err)?;
                 }
             }
             ProjPrim::Wire { verts, .. } => {
-                let mut closed = verts.clone();
-                if let Some(first) = verts.first() {
-                    closed.push(*first);
+                for (ca, cb) in clip_loop_edges(verts, &viewport) {
+                    chart
+                        .draw_series(LineSeries::new(vec![ca, cb], edge_style))
+                        .map_err(pl_err)?;
                 }
-                chart
-                    .draw_series(LineSeries::new(closed, edge_style))
-                    .map_err(pl_err)?;
             }
         }
     }
@@ -815,6 +990,77 @@ mod tests {
     use crate::containers::mesh::Coords;
     use crate::containers::mesh::Node;
     use crate::store::insert;
+
+    fn unit_viewport() -> Viewport {
+        Viewport {
+            xmin: 0.0,
+            xmax: 1.0,
+            ymin: 0.0,
+            ymax: 1.0,
+        }
+    }
+
+    #[test]
+    fn clip_segment_fully_inside_is_unchanged() {
+        let vp = unit_viewport();
+        let (a, b) = vp.clip_segment((0.2, 0.2), (0.8, 0.8)).unwrap();
+        assert_eq!(a, (0.2, 0.2));
+        assert_eq!(b, (0.8, 0.8));
+    }
+
+    #[test]
+    fn clip_segment_fully_outside_is_dropped() {
+        let vp = unit_viewport();
+        assert!(vp.clip_segment((2.0, 2.0), (3.0, 3.0)).is_none());
+        // Parallel to and outside a boundary (both endpoints left of xmin).
+        assert!(vp.clip_segment((-1.0, 0.2), (-1.0, 0.8)).is_none());
+    }
+
+    #[test]
+    fn clip_segment_crossing_is_cut_at_boundary() {
+        let vp = unit_viewport();
+        // From centre out through the right edge.
+        let (a, b) = vp.clip_segment((0.5, 0.5), (1.5, 0.5)).unwrap();
+        assert_eq!(a, (0.5, 0.5));
+        assert!((b.0 - 1.0).abs() < 1e-12);
+        assert!((b.1 - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn clip_polygon_keeps_inner_part() {
+        let vp = unit_viewport();
+        // A triangle poking out the top-right corner.
+        let tri = [(0.5, 0.5), (1.5, 0.5), (0.5, 1.5)];
+        let clipped = vp.clip_polygon(&tri);
+        // Clipped polygon stays within the viewport.
+        assert!(clipped.len() >= 3);
+        for p in &clipped {
+            assert!(p.0 >= vp.xmin - 1e-9 && p.0 <= vp.xmax + 1e-9);
+            assert!(p.1 >= vp.ymin - 1e-9 && p.1 <= vp.ymax + 1e-9);
+        }
+    }
+
+    #[test]
+    fn clip_polygon_fully_outside_is_empty() {
+        let vp = unit_viewport();
+        let tri = [(2.0, 2.0), (3.0, 2.0), (2.0, 3.0)];
+        assert!(vp.clip_polygon(&tri).len() < 3);
+    }
+
+    #[test]
+    fn world_per_pixel_scales_with_zoom() {
+        use crate::viz::camera::world_per_pixel;
+        let mut bb = Bbox3::empty();
+        bb.extend(Point3::new(0.0, 0.0, 0.0));
+        bb.extend(Point3::new(1.0, 1.0, 1.0));
+        let mut view = crate::viz::View::iso();
+        let wpp1 = world_per_pixel(&view, &bb, 800, 600);
+        view.scale = 2.0;
+        let wpp2 = world_per_pixel(&view, &bb, 800, 600);
+        // Zooming in (larger scale) shrinks the world span per pixel.
+        assert!(wpp2 < wpp1);
+        assert!((wpp1 / wpp2 - 2.0).abs() < 1e-9);
+    }
 
     #[test]
     fn bbox_covers_all_nodes_2d() {

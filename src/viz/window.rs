@@ -8,6 +8,8 @@
 //! Mouse mapping:
 //!
 //! - left-button drag → updates `yaw` (horizontal) and `pitch` (vertical),
+//! - right-button drag → pans (translates the camera target in the screen
+//!   plane),
 //! - mouse wheel → multiplies `scale` (zoom).
 //!
 //! `winit::EventLoop::new()` may be called at most once per process on
@@ -70,6 +72,9 @@ struct App<'a, D: Drawable> {
     sliding: bool,
     /// Cached so we don't recompute the bbox each frame.
     target: crate::containers::mesh::Point3,
+    /// Scene bounding box — kept so a pan drag can convert pixel deltas into a
+    /// world-space shift of `target` at the current zoom.
+    bbox: Bbox3,
     yaw: f64,
     pitch: f64,
     scale: f64,
@@ -84,6 +89,8 @@ struct App<'a, D: Drawable> {
     surface: Option<softbuffer::Surface<Rc<Window>, Rc<Window>>>,
 
     dragging: bool,
+    /// Whether a right-button pan drag is in progress (translates `target`).
+    panning: bool,
     last_mouse: Option<(f64, f64)>,
     /// Live cursor position — kept up to date by [`WindowEvent::CursorMoved`]
     /// so [`WindowEvent::MouseInput`] can test whether the click landed on
@@ -111,6 +118,7 @@ impl<'a, D: Drawable> App<'a, D> {
             frame_control: None,
             sliding: false,
             target,
+            bbox,
             yaw: view.yaw,
             pitch: view.pitch,
             scale: view.scale,
@@ -121,6 +129,7 @@ impl<'a, D: Drawable> App<'a, D> {
             window: None,
             surface: None,
             dragging: false,
+            panning: false,
             last_mouse: None,
             cursor: None,
         }
@@ -134,6 +143,19 @@ impl<'a, D: Drawable> App<'a, D> {
             target: Some(self.target),
             show_axes: self.show_axes,
         }
+    }
+
+    /// Translate the camera target in the screen plane by a pixel drag
+    /// `(dx, dy)`. Moving the cursor right/down drags the scene the same way
+    /// (grab-and-pull), so the target shifts opposite to the cursor along the
+    /// projector's `right` / `up` axes, scaled to world units at the current
+    /// zoom. Screen Y grows downward, hence the `+dy` on `up`.
+    fn pan(&mut self, dx: f64, dy: f64) {
+        let view = self.current_view();
+        let proj = crate::viz::camera::Projector::new(&view, self.target);
+        let wpp = crate::viz::camera::world_per_pixel(&view, &self.bbox, self.width, self.height);
+        let shift = proj.right * (-dx * wpp) + proj.up * (dy * wpp);
+        self.target += shift;
     }
 
     fn resize(&mut self, w: u32, h: u32) {
@@ -286,6 +308,20 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                     self.last_mouse = None;
                 }
             }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Right,
+                ..
+            } => {
+                // Right-drag pans (translates the camera target in the screen
+                // plane), complementing left-drag rotate and wheel zoom.
+                if state == ElementState::Pressed {
+                    self.panning = true;
+                } else {
+                    self.panning = false;
+                    self.last_mouse = None;
+                }
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 let (x, y) = (position.x, position.y);
                 self.cursor = Some((x, y));
@@ -304,6 +340,18 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                                     w.request_redraw();
                                 }
                             }
+                        }
+                    }
+                    self.last_mouse = Some((x, y));
+                    return;
+                }
+                if self.panning {
+                    if let Some((lx, ly)) = self.last_mouse {
+                        let dx = x - lx;
+                        let dy = y - ly;
+                        self.pan(dx, dy);
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
                         }
                     }
                     self.last_mouse = Some((x, y));

@@ -119,6 +119,36 @@ impl Projector {
     }
 }
 
+/// World-space length spanned by one screen pixel, given the current view, the
+/// scene bounding box and the pixel size of the drawing area. Mirrors the
+/// viewport sizing done by
+/// [`render_primitives`](crate::viz::mesh_draw::render_primitives): the visible
+/// half-height is `radius / scale`, times the `1 + 2*margin` padding, mapped
+/// onto `height` pixels. Used to translate a pixel-space pan drag into a
+/// world-space shift of the camera target.
+pub fn world_per_pixel(view: &View, bbox: &Bbox3, width: u32, height: u32) -> f64 {
+    const MARGIN: f64 = 0.05;
+    let diag = bbox.diagonal();
+    let radius = if diag.is_finite() && diag > 0.0 {
+        0.5 * diag
+    } else {
+        1.0
+    };
+    let w = width.max(1) as f64;
+    let h = height.max(1) as f64;
+    let aspect = w / h;
+    let scale = view.scale.max(1e-6);
+    let base = (2.0 * radius / scale).max(1e-9);
+    // Fit a square world window of side `base` into the drawing area. `dx` and
+    // `dy` start equal (ratio 1); when `1 > aspect` (a tall area) the height
+    // is stretched to `base / aspect`, otherwise it stays `base` and the width
+    // is stretched instead. Only the height matters for world-per-pixel.
+    let dy = if 1.0 > aspect { base / aspect } else { base } * (1.0 + 2.0 * MARGIN);
+    // The viewport height `dy` (world units) maps onto `h` pixels; `dx` maps
+    // onto `w` with the same ratio, so a single factor covers both axes.
+    dy / h
+}
+
 // ─── Unit tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
