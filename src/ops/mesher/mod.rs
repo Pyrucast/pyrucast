@@ -11,9 +11,9 @@
 
 pub mod arc;
 pub mod barycenter;
+pub mod border;
 pub mod circle;
 pub mod consolidate;
-pub mod contour;
 pub mod elements_on;
 pub mod extrude;
 pub mod from_live_nodes;
@@ -22,6 +22,7 @@ pub mod line;
 pub mod merge_nodes;
 pub mod orient;
 pub mod quadratic;
+pub mod skin;
 pub mod sweep;
 pub mod sweep_kernel;
 pub mod sweep_solid;
@@ -34,9 +35,9 @@ pub mod volume;
 
 pub use arc::arc;
 pub use barycenter::barycenter;
+pub use border::border;
 pub use circle::circle;
 pub use consolidate::consolidate;
-pub use contour::contour;
 pub use elements_on::elements_on;
 pub use extrude::extrude;
 pub use from_live_nodes::from_live_nodes;
@@ -45,6 +46,7 @@ pub use line::line;
 pub use merge_nodes::merge_nodes;
 pub use orient::{invert, orient};
 pub use quadratic::to_quadratic;
+pub use skin::skin;
 pub use sweep::sweep;
 pub use sweep_solid::sweep_solid;
 pub use to_poi1::to_poi1;

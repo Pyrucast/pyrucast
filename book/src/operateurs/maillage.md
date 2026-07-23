@@ -22,7 +22,8 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
-| `contour(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
+| `border(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
+| `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (TET4/PENTA6/HEX8) en faces `TRI3`/`QUA4`, **une par face plane** du solide (voir plus bas) |
 | `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
 | `invert(mesh)` | **inverse** l'orientation de toutes les cellules, toute dimension, équivalent Cast3M `INVE` (voir plus bas) |
 | `elements_on(mesh, points, strict=True)` | les **éléments** de `mesh` qui s'**appuient** sur les nœuds de `points` (voir plus bas) |
@@ -248,8 +249,8 @@ décrit le **comportement** de `triangulate_surface`.
   une boucle extérieure ;
 - plusieurs boucles CCW disjointes maillent **plusieurs domaines** en une fois.
 
-C'est exactement l'orientation produite par [`contour`](#bord-dune-surface--contour)
-(extérieur CCW, trous CW), donc la sortie de `contour` réalimente directement
+C'est exactement l'orientation produite par [`border`](#bord-dune-surface--border)
+(extérieur CCW, trous CW), donc la sortie de `border` réalimente directement
 `triangulate_surface`.
 
 ### Méthode
@@ -429,9 +430,9 @@ Côté Rust, `ops::mesher::volume(&envelope, Some(0.5))`. Le cœur géométrique
 (`pave_volume`) opère sur de simples `Vec<Point3>` sans toucher au store —
 frontière nette pour un futur parallélisme intra-opérateur.
 
-## Bord d'une surface : `contour`
+## Bord d'une surface : `border`
 
-`contour(mesh)` est l'**inverse** de `triangulate_surface` : il prend un
+`border(mesh)` est l'**inverse** de `triangulate_surface` : il prend un
 maillage de surface (cellules `TRI3` / `QUA4`) et renvoie son **bord** sous
 forme de boucles `SEG2` fermées.
 
@@ -443,7 +444,7 @@ bord commun unique — puis chaînées en boucles fermées.
 
 Le résultat est un `Mesh` avec **un sous-maillage SEG2 par boucle** : une seule
 boucle pour un domaine simplement connexe, plusieurs quand le domaine a des
-trous ou des morceaux disjoints — d'où les « n contours ». Chaque boucle garde
+trous ou des morceaux disjoints. Chaque boucle garde
 l'orientation CCW du bord (boucle extérieure CCW, trous CW) : le résultat peut
 donc **réalimenter directement** `triangulate_surface`. Les nœuds d'origine
 sont réutilisés (et re-référencés).
@@ -457,7 +458,7 @@ disc = pyrucast.mesher.triangulate_surface(
     pyrucast.mesher.circle(center, [0.0, 0.0, 1.0], 2.0, 16), "TRI3"
 )
 
-bord = pyrucast.mesher.contour(disc)
+bord = pyrucast.mesher.border(disc)
 print(len(bord))  # 1  (domaine simplement connexe)
 print(bord.element_types())  # ['SEG2']
 print(bord.cell_counts())  # [16]
@@ -465,11 +466,57 @@ print(bord.cell_counts())  # [16]
 
 Les sous-maillages POI1 (un point n'a pas d'arête) sont ignorés. La fonction
 lève une erreur si le maillage n'a aucune cellule de surface, s'il porte des
-cellules autres que POI1/TRI3/QUA4 (les bords 1D et 3D ne sont pas encore
-gérés), ou si le bord n'est pas un ensemble propre de boucles fermées (arête
-ouverte ou non-manifold).
+cellules autres que POI1/TRI3/QUA4 (les bords 1D et 3D ne sont pas gérés ici —
+voir [`skin`](#peau-dun-volume--skin) pour le bord d'un volume), ou si le bord
+n'est pas un ensemble propre de boucles fermées (arête ouverte ou non-manifold).
 
-Côté Rust, `ops::mesher::contour(&mesh)`.
+Côté Rust, `ops::mesher::border(&mesh)`.
+
+## Peau d'un volume : `skin`
+
+`skin(mesh, angle_deg=None)` est le pendant **3D** de `border` : il prend un
+maillage volumique (cellules `TET4` / `PENTA6` / `HEX8`) et renvoie sa **peau**
+— la surface extérieure — découpée en **faces planes**, un sous-maillage par
+face.
+
+Une facette d'élément volumique (une face de `TET4`, de `HEX8`, …) utilisée par
+**exactement une** cellule est une facette de bord ; les facettes intérieures
+sont partagées par deux cellules et s'annulent. Les facettes de bord de **tous**
+les sous-maillages volumiques sont regroupées, puis réparties en **faces
+planes** : deux facettes adjacentes (partageant une arête) appartiennent à la
+même face tant qu'elles restent **quasi coplanaires** — l'angle entre leurs
+normales sortantes est inférieur ou égal à `angle_deg` degrés (défaut **1°**).
+
+Chaque groupe devient un sous-maillage `TRI3` et/ou `QUA4` (une face mêlant
+triangles et quadrangles, p. ex. à une interface `TET4`/`HEX8`, en produit un de
+chaque). Un cube donne ainsi six sous-maillages, un prisme cinq (deux chapeaux
+triangulaires, trois flancs quadrangulaires). Les facettes conservent leur
+orientation sortante ; les nœuds d'origine sont réutilisés (et re-référencés).
+
+```python
+import pyrucast
+
+# Un pavé PENTA6 : carré triangulé, extrudé selon +z.
+c = pyrucast.Coords(dim=3)
+coins = [c.add_node(p) for p in [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]]
+contour = pyrucast.Mesh(c, "SEG2")
+for i in range(4):
+    contour[0].add_cell([coins[i], coins[(i + 1) % 4]])
+surf = pyrucast.mesher.triangulate_surface(contour, "TRI3", 0.34)
+solide = pyrucast.mesher.extrude(surf, [0.0, 0.0, 1.0], 3)  # TRI3 -> PENTA6
+
+peau = pyrucast.mesher.skin(solide)
+print(len(peau))  # 6  (deux chapeaux + quatre flancs)
+print(peau.element_types())  # ['TRI3', 'TRI3', 'QUA4', 'QUA4', 'QUA4', 'QUA4']
+```
+
+Un `angle_deg` plus grand regroupe des faces plus courbées (un cylindre facetté
+devient une seule paroi) ; un `angle_deg` proche de 0 isole chaque facette. Les
+sous-maillages POI1 sont ignorés. La fonction lève une erreur si le maillage n'a
+aucune cellule volumique, s'il porte des cellules autres que
+POI1/TET4/PENTA6/HEX8, ou si l'espace n'est pas 3D.
+
+Côté Rust, `ops::mesher::skin(&mesh, angle_deg)`.
 
 ## Orientation des cellules : `orient` et `invert`
 

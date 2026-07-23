@@ -44,7 +44,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 const MIN_ANGLE_DEG: f64 = 20.0;
 
 /// Mesh the interior of `contour` (one or more closed SEG2 loops, CCW
-/// outer / CW hole per [`crate::ops::mesher::contour`]'s convention) with
+/// outer / CW hole per [`crate::ops::mesher::border`]'s convention) with
 /// `element_type` (TRI3 or QUA4) cells. `target_size` sets the desired edge
 /// length; `None` uses the mean boundary edge length of each domain.
 ///

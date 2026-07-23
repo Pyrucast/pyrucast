@@ -601,3 +601,62 @@ def test_index_errors():
         pass
     else:
         raise AssertionError("expected TypeError for non-int/slice key")
+
+
+def _hex_cube():
+    """Unit HEX8 cube (bottom CCW then top CCW)."""
+    c = pyrucast.Coords(3)
+    pts = [
+        [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
+        [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1],
+    ]
+    ids = [c.add_node(p) for p in pts]
+    m = pyrucast.Mesh(c, "HEX8")
+    m[0].add_cell(ids)
+    return m
+
+
+def test_skin_hex_cube_gives_six_quad_faces():
+    sk = pyrucast.mesher.skin(_hex_cube())
+    assert sk.element_types() == ["QUA4"] * 6
+    assert sk.cell_count() == 6
+
+
+def test_skin_extruded_solid_merges_flat_faces():
+    # A triangulated square extruded into a PENTA6 box: skin must recover the
+    # six flat faces — two triangulated caps and four quadrilateral walls —
+    # regardless of how many cells tile each side.
+    c = pyrucast.Coords(3)
+    sq = [c.add_node(p) for p in [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]]
+    contour = pyrucast.Mesh(c, "SEG2")
+    for i in range(4):
+        contour[0].add_cell([sq[i], sq[(i + 1) % 4]])
+    surf = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.34)
+    solid = pyrucast.mesher.extrude(surf, [0, 0, 1], 3)
+
+    faces = list(pyrucast.mesher.skin(solid))
+    assert len(faces) == 6
+    n_tri = sum(1 for s in faces if s.element_type == "TRI3")
+    n_quad = sum(1 for s in faces if s.element_type == "QUA4")
+    assert (n_tri, n_quad) == (2, 4)
+
+
+def test_skin_large_angle_merges_all_faces():
+    sk = pyrucast.mesher.skin(_hex_cube(), angle_deg=180.0)
+    assert sk.element_types() == ["QUA4"]
+    assert sk.cell_count() == 6
+
+
+def test_skin_rejects_surface_mesh():
+    c = pyrucast.Coords(3)
+    a = c.add_node([0, 0, 0])
+    b = c.add_node([1, 0, 0])
+    d = c.add_node([0, 1, 0])
+    m = pyrucast.Mesh(c, "TRI3")
+    m[0].add_cell([a, b, d])
+    try:
+        pyrucast.mesher.skin(m)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError skinning a surface mesh")

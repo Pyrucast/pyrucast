@@ -29,9 +29,9 @@ __all__ = [
     "assemble",
     "barycenter",
     "beam_deformation",
+    "border",
     "circle",
     "consolidate",
-    "contour",
     "coordinates",
     "cos",
     "cosh",
@@ -77,6 +77,7 @@ __all__ = [
     "set_swap_dir",
     "sin",
     "sinh",
+    "skin",
     "solve",
     "solve_eliminate",
     "solve_unilateral",
@@ -2132,6 +2133,18 @@ def beam_deformation(field: NodeField, fespace: FiniteElementSpace) -> ElementFi
     `M = E·I·κ` and `V = G·A_s·γ`.
     """
 
+def border(mesh: Mesh) -> Mesh:
+    r"""
+    Extract the boundary of a surface mesh (TRI3/QUA4) as closed SEG2 loops.
+    
+    An element edge used by exactly one cell is a boundary edge; the boundary
+    edges (pooled across all surface submeshes) are chained into closed loops.
+    Returns a Mesh with one SEG2 submesh per loop — a single loop for a
+    simply-connected domain, several when the domain has holes or disjoint
+    pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
+    CW), so the result can feed straight back into `triangulate_surface`.
+    """
+
 def circle(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int, element_type: builtins.str = 'SEG2') -> Mesh:
     r"""
     Build a closed circle mesh of `n_elems` elements, centred on `center`,
@@ -2157,18 +2170,6 @@ def consolidate(obj: typing.Any) -> typing.Any:
       their components (shared components must agree value-by-value). Useful to
       merge per-physics material zones built on one shared fespace into a single
       material field readable by every physics.
-    """
-
-def contour(mesh: Mesh) -> Mesh:
-    r"""
-    Extract the boundary of a surface mesh (TRI3/QUA4) as closed SEG2 loops.
-    
-    An element edge used by exactly one cell is a boundary edge; the boundary
-    edges (pooled across all surface submeshes) are chained into closed loops.
-    Returns a Mesh with one SEG2 submesh per loop — a single loop for a
-    simply-connected domain, several when the domain has holes or disjoint
-    pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
-    CW), so the result can feed straight back into `triangulate_surface`.
     """
 
 def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
@@ -2641,6 +2642,20 @@ def sin(field: typing.Any) -> typing.Any:
 def sinh(field: typing.Any) -> typing.Any:
     r"""
     Element-wise hyperbolic sine of a field.
+    """
+
+def skin(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Extract the boundary surface (skin) of a volume mesh, split by flat face.
+    
+    A volume-element facet (TET4 → 4 triangles, HEX8 → 6 quads, PENTA6 → 2
+    triangles + 3 quads) used by exactly one cell lies on the boundary; the
+    boundary facets (pooled across all volume submeshes) are grouped into flat
+    faces by flooding across shared edges as long as neighbouring facets stay
+    coplanar (their normals differ by at most `angle_deg`, default 1°).
+    Returns a Mesh with one TRI3/QUA4 submesh per flat face — e.g. 6 submeshes
+    for a cube, 5 for a prism (2 caps + 3 sides). Facets keep their
+    outward orientation; the original nodes are reused.
     """
 
 def solve(matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:

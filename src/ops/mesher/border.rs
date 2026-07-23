@@ -1,6 +1,6 @@
-//! Boundary-extraction operator: the contour(s) of a surface mesh.
+//! Boundary-extraction operator: the border loop(s) of a surface mesh.
 //!
-//! [`contour`] is the inverse companion of
+//! [`border`] is the inverse companion of
 //! [`crate::ops::mesher::triangulate_surface()`]
 //! (whose input is one or more closed SEG2 loops): it takes a surface mesh
 //! (TRI3 / QUA4 cells) and returns its boundary as one or more closed SEG2
@@ -47,9 +47,11 @@ fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
 ///
 /// POI1 submeshes are ignored (a point has no edge). Errors if the mesh has
 /// no surface cells, if it carries cells that are neither POI1, TRI3 nor
-/// QUA4 (1-D and 3-D contours are not handled yet), or if the boundary is
-/// not a clean set of closed loops (an open or non-manifold edge).
-pub fn contour(mesh: &Mesh) -> Result<Mesh> {
+/// QUA4 (1-D and 3-D borders are not handled here — see
+/// [`skin()`](fn@crate::ops::mesher::skin) for the boundary of a volume),
+/// or if the boundary is not a clean set of closed loops (an open or
+/// non-manifold edge).
+pub fn border(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
 
     // 1. Count every element edge across all surface submeshes. A boundary
@@ -66,7 +68,7 @@ pub fn contour(mesh: &Mesh) -> Result<Mesh> {
             ElementType::TRI3 | ElementType::QUA4 => {}
             other => {
                 return Err(PyrucastError::Message(format!(
-                    "contour: only surface meshes (TRI3/QUA4) are supported, got {}",
+                    "border: only surface meshes (TRI3/QUA4) are supported, got {}",
                     other
                 )));
             }
@@ -82,7 +84,7 @@ pub fn contour(mesh: &Mesh) -> Result<Mesh> {
     }
     if !any_surface {
         return Err(PyrucastError::Message(
-            "contour: mesh has no surface cells (TRI3/QUA4)".into(),
+            "border: mesh has no surface cells (TRI3/QUA4)".into(),
         ));
     }
 
@@ -127,7 +129,7 @@ pub fn contour(mesh: &Mesh) -> Result<Mesh> {
                 .filter(|o| !o.is_empty())
                 .ok_or_else(|| {
                     PyrucastError::Message(format!(
-                        "contour: boundary is not a closed loop (open or non-manifold at node {})",
+                        "border: boundary is not a closed loop (open or non-manifold at node {})",
                         current
                     ))
                 })?;
@@ -185,7 +187,7 @@ mod tests {
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         m.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
-        let ct = contour(&m).unwrap();
+        let ct = border(&m).unwrap();
         assert_eq!(ct.len(), 1);
         assert_eq!(ct.element_types().unwrap(), vec![ElementType::SEG2]);
         assert_eq!(ct.cell_counts().unwrap(), vec![3]);
@@ -206,7 +208,7 @@ mod tests {
         m.add_cell(&[a.id(), b.id(), d.id()]).unwrap();
         m.add_cell(&[b.id(), c.id(), d.id()]).unwrap();
 
-        let ct = contour(&m).unwrap();
+        let ct = border(&m).unwrap();
         assert_eq!(ct.len(), 1);
         assert_eq!(ct.cell_counts().unwrap(), vec![4]);
     }
@@ -239,7 +241,7 @@ mod tests {
             }
         }
 
-        let ct = contour(&m).unwrap();
+        let ct = border(&m).unwrap();
         assert_eq!(ct.len(), 2, "outer loop + hole loop");
         let mut sizes = ct.cell_counts().unwrap();
         sizes.sort_unstable();
@@ -264,7 +266,7 @@ mod tests {
 
         // a: TRI3 + Node = 2 before contour.
         assert_eq!(read(&coords).unwrap().refcount(a.id()), 2);
-        let ct = contour(&m).unwrap();
+        let ct = border(&m).unwrap();
         // Boundary SEG2 references a in two segments (incoming + outgoing).
         assert_eq!(read(&coords).unwrap().refcount(a.id()), 4);
         drop(ct);
@@ -277,7 +279,7 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         m.add_cell(&[a.id()]).unwrap();
-        assert!(contour(&m).is_err());
+        assert!(border(&m).is_err());
     }
 
     #[test]
@@ -292,6 +294,6 @@ mod tests {
             .collect();
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TET4));
         m.add_cell(&ns).unwrap();
-        assert!(contour(&m).is_err());
+        assert!(border(&m).is_err());
     }
 }

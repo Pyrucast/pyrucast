@@ -110,8 +110,26 @@ pub fn merge_nodes(mesh: PyRef<PyMesh>, tol: f64) -> PyResult<PyMesh> {
 /// CW), so the result can feed straight back into `triangulate_surface`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn contour(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
-    let result = crate::ops::mesher::contour(&mesh.inner)?;
+pub fn border(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::border(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Extract the boundary surface (skin) of a volume mesh, split by flat face.
+///
+/// A volume-element facet (TET4 → 4 triangles, HEX8 → 6 quads, PENTA6 → 2
+/// triangles + 3 quads) used by exactly one cell lies on the boundary; the
+/// boundary facets (pooled across all volume submeshes) are grouped into flat
+/// faces by flooding across shared edges as long as neighbouring facets stay
+/// coplanar (their normals differ by at most `angle_deg`, default 1°).
+/// Returns a Mesh with one TRI3/QUA4 submesh per flat face — e.g. 6 submeshes
+/// for a cube, 5 for a prism (2 caps + 3 sides). Facets keep their
+/// outward orientation; the original nodes are reused.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, angle_deg=None))]
+pub fn skin(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::skin(&mesh.inner, angle_deg)?;
     Ok(PyMesh { inner: result })
 }
 

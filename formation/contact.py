@@ -61,11 +61,11 @@ def clamp(nodes, var, dual):
 
 
 def bord_horizontal(mesh: pc.Mesh, y: float) -> pc.Mesh:
-    """Extrait, parmi les segments de bord de `mesh` (`pyrucast.mesher.contour`,
+    """Extrait, parmi les segments de bord de `mesh` (`pyrucast.mesher.border`,
     l'équivalent Cast3M `CONTOUR`), ceux d'ordonnée `y` — un bord existant du
     maillage, pas une ligne recréée à côté (`line` fabriquerait de
     nouveaux nœuds, disjoints de `mesh`)."""
-    frontiere = pc.mesher.contour(mesh)
+    frontiere = pc.mesher.border(mesh)
     ordonnee = pc.field.coordinates(frontiere, ["Y"])
     noeuds = pc.field.select(ordonnee, ge=y - 1e-9, le=y + 1e-9)
     return pc.mesher.elements_on(frontiere, noeuds, strict=True)
