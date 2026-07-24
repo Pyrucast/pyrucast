@@ -20,7 +20,7 @@
 //! All in-circle/orientation decisions run on a tiny deterministic jitter of
 //! the coordinates (index-seeded, not random) so cocircular/collinear input
 //! never produces an ambiguous case — the same technique already used by
-//! [`crate::ops::mesher::volume`]. A 3-D contour is fit to its best plane
+//! [`crate::ops::mesher::volume()`]. A 3-D contour is fit to its best plane
 //! (Newell's method) and meshed in that local 2-D frame.
 //!
 //! Multiple disjoint outer loops are independent domains; each is meshed on
@@ -44,7 +44,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 const MIN_ANGLE_DEG: f64 = 20.0;
 
 /// Mesh the interior of `contour` (one or more closed SEG2 loops, CCW
-/// outer / CW hole per [`crate::ops::mesher::border`]'s convention) with
+/// outer / CW hole per [`crate::ops::mesher::border()`]'s convention) with
 /// `element_type` (TRI3 or QUA4) cells. `target_size` sets the desired edge
 /// length; `None` uses the mean boundary edge length of each domain.
 ///
@@ -402,7 +402,7 @@ fn bbox(pts: &[Point2]) -> (Point2, Point2) {
 
 /// Small deterministic per-index jitter (components in `[-0.5, 0.5]`), used
 /// to break cocircular/collinear ambiguities in connectivity decisions —
-/// the 2-D analogue of the jitter in [`crate::ops::mesher::volume`].
+/// the 2-D analogue of the jitter in [`crate::ops::mesher::volume()`].
 fn jitter2(i: usize) -> Vector2 {
     let h = |k: u64| -> f64 {
         let x = (i as u64).wrapping_mul(0x9E3779B97F4A7C15) ^ k.wrapping_mul(0x632BE5AB);
