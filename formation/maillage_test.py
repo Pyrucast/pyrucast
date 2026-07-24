@@ -93,10 +93,10 @@ def main() -> None:
     volume.plot(view=(-45, 25, 1.0))
     skin=pc.mesher.skin(volume)
     skin[0].face_color=(255,0,0)
-    skin.plot(view=(-45, 25, 1.0),wireframe=True)
     skin=pc.mesher.convert(skin,"TRI3")
-    volume2=pc.mesher.volume(skin,0.05)
-    volume2.plot(view=(-45, 25, 1.0))
+    skin.plot(view=(-45, 25, 1.0),wireframe=True)
+    volume2=pc.mesher.volume(skin,0.5)
+    volume2.plot(view=(45, 25, 1.0),wireframe=False)
 # ANCHOR_END: non_structure
 
 # ── Maillage structuré (grille QUA4, balayage entre deux bords) ────────────
