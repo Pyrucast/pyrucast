@@ -1,6 +1,6 @@
 //! Boundary-extraction operator: the skin of a volume mesh, split by face.
 //!
-//! [`skin`] is the 3-D companion of [`crate::ops::mesher::border`]: where
+//! [`skin`] is the 3-D companion of [`crate::ops::mesher::border()`]: where
 //! `border` returns the boundary *loops* of a surface mesh, `skin` returns the
 //! boundary *surface* of a volume mesh (TET4 / PENTA6 / HEX8 cells), grouped
 //! into the flat faces of the solid — one submesh per face.

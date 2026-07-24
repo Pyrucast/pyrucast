@@ -402,19 +402,35 @@ sont **réutilisés**, les nœuds internes créés dans le même `Coords`.
 
 ### Méthode
 
-1. **Points internes.** Une grille de nœuds candidats à la taille cible est
-   générée à l'intérieur de l'enveloppe (aucun nœud si la taille dépasse la
-   géométrie : le remplissage se fait alors avec les seuls nœuds de bord).
-2. **Tétraédrisation de Delaunay.** Les nœuds de bord et les nœuds internes
-   sont tétraédrisés par l'algorithme incrémental de **Bowyer–Watson**. Un
-   *jitter* déterministe minuscule est appliqué au calcul de **connectivité**
-   pour lever sans ambiguïté les dégénérescences cosphériques (les huit coins
-   d'un cube, par exemple) ; la sortie conserve les coordonnées exactes.
-3. **Découpe.** Les tétraèdres dont le centroïde tombe **hors** de l'enveloppe
-   d'origine sont écartés (test d'angle solide / *winding number*). Pour une
-   enveloppe convexe, tous les tétraèdres sont conservés et le remplissage pave
-   exactement le domaine ; pour une enveloppe peu concave, la découpe retire le
-   débord.
+Le remplissage est le pendant 3D du pipeline 2D de `triangulate_surface` :
+Delaunay du bord, puis **récupération contrainte de la peau** et **excavation
+par flood-fill** (au lieu d'une découpe par centroïde, qui laissait des
+tétraèdres traverser les concavités et les trous).
+
+1. **Delaunay du bord.** Les seuls nœuds de bord sont tétraédrisés par
+   l'algorithme incrémental de **Bowyer–Watson**. Un *jitter* déterministe
+   minuscule est appliqué au calcul de **connectivité** pour lever sans
+   ambiguïté les dégénérescences cosphériques (les huit coins d'un cube, par
+   exemple) ; la sortie conserve les coordonnées exactes.
+2. **Récupération de la peau.** Chaque face de peau absente du Delaunay (une
+   diagonale de quad prise « à l'envers », une arête de concavité) est
+   récupérée en re-tétraédrisant le petit corridor qu'elle traverse, puis
+   **marquée contrainte**. Toute face de peau qui resterait irrécupérable →
+   **erreur claire** (polyèdre de type Schönhardt), jamais un maillage faux.
+3. **Points internes.** Une grille de nœuds candidats à la taille cible est
+   insérée *dans le maillage déjà contraint* (aucun nœud si la taille dépasse
+   la géométrie), la cavité de Bowyer–Watson étant **coupée aux faces
+   contraintes** : un nœud interne ne peut jamais raboter une face de peau.
+4. **Excavation.** Un *flood-fill* depuis un tétraèdre intérieur garde
+   exactement ce que la peau enferme, sans jamais traverser la surface : les
+   concavités, les trous et l'autre côté d'une pièce mince sont creusés
+   exactement.
+
+> **Portée.** Les enveloppes convexes ou peu concaves sont maillées
+> directement. Les surfaces fortement non convexes riches en **arêtes réflexes**
+> (le pourtour d'un trou facetté, par exemple) peuvent encore déclencher
+> l'erreur de récupération : une récupération de bord 3D complète (prédicats
+> exacts) reste à faire.
 
 ### Exemple Python
 
