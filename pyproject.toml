@@ -4,11 +4,21 @@ build-backend = "maturin"
 
 [project]
 name = "pyrucast"
-version = "0.0.0"
+version = "0.1.0"
 description = "Finite-element library in Rust, inspired by cast3m, exposed to Python"
+readme = "README.md"
 requires-python = ">=3.9"
 license = "MPL-2.0"
 authors = [{ name = "Gauthier Folzan" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Rust",
+]
+
+[project.urls]
+Repository = "https://codeberg.org/gauthier/pyrucast"
 
 [tool.maturin]
 # Pin the binding type. `pyo3` is an *optional* Cargo dependency (so a pure
