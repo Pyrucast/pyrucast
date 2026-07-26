@@ -607,8 +607,14 @@ def _hex_cube():
     """Unit HEX8 cube (bottom CCW then top CCW)."""
     c = pyrucast.Coords(3)
     pts = [
-        [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
-        [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1],
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 0, 1],
+        [1, 1, 1],
+        [0, 1, 1],
     ]
     ids = [c.add_node(p) for p in pts]
     m = pyrucast.Mesh(c, "HEX8")
