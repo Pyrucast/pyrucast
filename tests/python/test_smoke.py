@@ -1,5 +1,7 @@
 """Smoke test for the pyrucast Python module (Phase 0)."""
 
+import re
+
 import pyrucast
 
 
@@ -8,4 +10,4 @@ def test_module_importable():
 
 
 def test_version_exposed():
-    assert pyrucast.__version__ == "0.0.0"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", pyrucast.__version__)
