@@ -63,7 +63,9 @@ try {
     $existing = Get-PyPiFiles $crateName $version
     $existing | ForEach-Object { Write-Host "  deja present : $_" }
 
-    Run "maturin build --release" { maturin build --release }
+    Run "maturin build --release --features extension-module,viz,viz-interactive" {
+        maturin build --release --features extension-module,viz,viz-interactive
+    }
 
     $wheel = Get-ChildItem "target\wheels\$crateName-$version-*.whl" |
         Where-Object { $_.Name -match 'win' } |

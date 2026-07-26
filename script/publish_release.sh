@@ -3,9 +3,19 @@
 #
 # 1. repère le dernier tag vX.Y.Z, checkout dessus (détaché) ;
 # 2. cargo publish sur crates.io (sauté si cette version y est déjà) ;
-# 3. build sdist + wheel Linux (manylinux2014 via --zig, sans Docker) et
-#    upload sur PyPI (fichiers déjà présents sautés individuellement) ;
+# 3. build sdist + wheel Linux (features extension-module,viz,viz-interactive)
+#    et upload sur PyPI (fichiers déjà présents sautés individuellement) ;
 # 4. revient sur la branche de départ.
+#
+# Tag manylinux : plotters (feature "ttf", pour le texte) tire font-kit/
+# fontconfig et libpng, liés dynamiquement contre les versions système de
+# ce poste. maturin (via patchelf) embarque ces .so dans le wheel
+# (pyrucast.libs/) — pas de dépendance runtime sur le système cible —
+# mais leur *version de compilation* fixe quand même le plancher glibc
+# du wheel. Sans Docker (pour builder dans le conteneur manylinux2014
+# officiel, aux libs plus anciennes), le tag reste manylinux_2_38 :
+# portable sur les distros Linux récentes (glibc >= 2.38, ~2023+), pas
+# sur les plus anciennes (Ubuntu 22.04, Debian 12…).
 #
 # Ne construit PAS le wheel Windows : voir script/publish_release.ps1,
 # à lancer depuis une machine Windows pour ce fichier-là.
@@ -66,12 +76,12 @@ try:
 except Exception:
     pass" 2>/dev/null || true)"
 
-python -m pip install --quiet --upgrade ziglang
+python -m pip install --quiet --upgrade ziglang patchelf
 
 step "maturin sdist"
 maturin sdist
-step "maturin build --release --zig --manylinux 2014"
-maturin build --release --zig --manylinux 2014
+step "maturin build --release --zig --manylinux 2_38 --features extension-module,viz,viz-interactive"
+maturin build --release --zig --manylinux 2_38 --features extension-module,viz,viz-interactive
 
 to_upload=()
 while IFS= read -r -d '' f; do
