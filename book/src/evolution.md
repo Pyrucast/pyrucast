@@ -53,7 +53,9 @@ Une évolution peut porter le **type physique** de ses axes :
   de champs est une erreur (un champ a déjà ses propres composantes).
 
 ```python
-se = pc.SubEvolution([(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young")
+se = pc.SubEvolution(
+    [(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young"
+)
 ```
 
 ## Interpoler un champ (courbe de transfert)
@@ -72,9 +74,11 @@ l'interpolation de la valeur d'entrée sur la courbe.
 
 ```python
 # Loi matériau E(T) : module d'Young fonction de la température.
-loi = pc.Evolution([(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young")
-young = loi.interpolate(temperature)   # temperature : NodeField de composante "T"
-                                       # young : NodeField de composante "young"
+loi = pc.Evolution(
+    [(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young"
+)
+young = loi.interpolate(temperature)  # temperature : NodeField de composante "T"
+# young : NodeField de composante "young"
 ```
 
 Côté `Evolution` (agrégat), l'appel exige **une seule courbe scalaire** (sans
@@ -166,7 +170,9 @@ ev = pc.Evolution([(0.0, champ_t0), (2.0, champ_t1)])
 champ = ev.interpolate(1.0)  # NodeField à mi-chemin
 
 # Courbe de transfert : passer un champ → champ (loi matériau E(T)).
-loi = pc.Evolution([(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young")
+loi = pc.Evolution(
+    [(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young"
+)
 young = loi.interpolate(temperature)  # composante "T" lue → composante "young"
 ```
 

@@ -40,7 +40,9 @@ densité `rho` est une composante **facultative** des physiques mécaniques (com
 n'en a pas besoin, mais la masse / capacité les exige (erreur claire sinon).
 
 ```python
-materials = pyrucast.build.material_field(model, [("E", 210.0), ("nu", 0.3), ("rho", 7800.0)])
+materials = pyrucast.build.material_field(
+    model, [("E", 210.0), ("nu", 0.3), ("rho", 7800.0)]
+)
 M = pyrucast.assemble.mass(model, materials)
 ```
 

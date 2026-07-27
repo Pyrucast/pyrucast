@@ -50,13 +50,13 @@ tout l'intérêt d'intégrer le comportement exactement.
 ### Boucle multi-pas (fil d'état)
 
 ```python
-state = None                      # VAR0 = prev ; None au premier pas
+state = None  # VAR0 = prev ; None au premier pas
 for step in range(1, nsteps + 1):
-    ...                           # charge du pas → boucle de Newton sur u
-    eps  = pyrucast.field.deformation(u, fes)                     # ε(B)
-    out  = pyrucast.behavior.integrate_behavior(model, eps, materials, prev=state)
-    ...                           # F_int (BSIG), résidu, correction de u
-    state = out                   # commit : prev ← VAR1 pour le pas suivant
+    ...  # charge du pas → boucle de Newton sur u
+    eps = pyrucast.field.deformation(u, fes)  # ε(B)
+    out = pyrucast.behavior.integrate_behavior(model, eps, materials, prev=state)
+    ...  # F_int (BSIG), résidu, correction de u
+    state = out  # commit : prev ← VAR1 pour le pas suivant
 ```
 
 ## Exemple : efforts de section d'une poutre
@@ -98,10 +98,10 @@ sorte que `r = f_ext − f_int` est le **résidu** d'équilibre.
 
 ```python
 # Solution déjà obtenue par le solveur.
-eps    = pyrucast.field.deformation(solution, fes)          # ε = B·u
-sig    = pyrucast.behavior.integrate_behavior(model, eps, materials)  # COMP : σ
-f_int  = pyrucast.assemble.internal_forces(model, sig)         # BSIG : ∫ Bᵀ σ
-residu = f_ext - f_int                                # équilibre
+eps = pyrucast.field.deformation(solution, fes)  # ε = B·u
+sig = pyrucast.behavior.integrate_behavior(model, eps, materials)  # COMP : σ
+f_int = pyrucast.assemble.internal_forces(model, sig)  # BSIG : ∫ Bᵀ σ
+residu = f_ext - f_int  # équilibre
 ```
 
 ### `internal_forces_continuum(stresses, fespace)` → `NodeField`

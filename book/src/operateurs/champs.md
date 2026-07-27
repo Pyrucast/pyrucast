@@ -118,8 +118,8 @@ Gauss.
 positif = champ * pyrucast.field.mask(champ, ge=0.0)
 
 # Sucre : les comparaisons construisent directement un masque.
-positif = champ * (champ >= 0.0)   # même chose
-chauds  = temperature > 80.0       # NodeField 0/1
+positif = champ * (champ >= 0.0)  # même chose
+chauds = temperature > 80.0  # NodeField 0/1
 ```
 
 Les opérateurs `>=`, `>`, `<=`, `<` sur un champ (`NodeField`, `SubNodeField`,
@@ -174,10 +174,10 @@ zones sur un agrégat ; le tuple d'accès à une valeur sur un sous-champ
 (`sub[node, "UX"]`, `sub[cell, gauss, "E"]`) est inchangé.
 
 ```python
-ux   = champ["u_x"]            # == filter_components(champ, "u_x")
-depl = champ[["u_x", "u_y"]]   # == filter_components(champ, ["u_x", "u_y"])
-zone = champ[0]                # inchangé : la zone (SubNodeField)
-val  = champ[0][node, "u_x"]   # inchangé : la valeur au nœud
+ux = champ["u_x"]  # == filter_components(champ, "u_x")
+depl = champ[["u_x", "u_y"]]  # == filter_components(champ, ["u_x", "u_y"])
+zone = champ[0]  # inchangé : la zone (SubNodeField)
+val = champ[0][node, "u_x"]  # inchangé : la valeur au nœud
 ```
 
 L'accesseur `champ.components()` (présent sur les quatre saveurs) donne la
@@ -185,7 +185,7 @@ liste des composantes, d'où l'idiome **« reprojeter `u1` sur les composantes
 de `u2` »** :
 
 ```python
-u = u1[u2.components()]        # u1 réduit au jeu de composantes de u2
+u = u1[u2.components()]  # u1 réduit au jeu de composantes de u2
 ```
 
 Côté Rust, `filter_components` / `select_components` acceptent indifféremment

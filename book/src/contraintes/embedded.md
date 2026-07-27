@@ -88,8 +88,14 @@ l'interpolation de l'hôte.
 import pyrucast
 
 corners = [
-    [0,0,0], [1,0,0], [1,1,0], [0,1,0],
-    [0,0,1], [1,0,1], [1,1,1], [0,1,1],
+    [0, 0, 0],
+    [1, 0, 0],
+    [1, 1, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+    [1, 0, 1],
+    [1, 1, 1],
+    [0, 1, 1],
 ]
 field = lambda c: 1.0 + 2.0 * c[0] + 3.0 * c[1] + 4.0 * c[2]
 
@@ -116,9 +122,7 @@ model = base | dirichlet | embedded
 materials = pyrucast.build.material_field(model, [("k", 1.0)])
 
 # Chargement : valeur du champ à chaque coin, g = 0 (tie) au nœud immergé.
-rhs = dirichlet.constraint_rhs(
-    [(n, field(x)) for n, x in zip(corner_nodes, corners)]
-)
+rhs = dirichlet.constraint_rhs([(n, field(x)) for n, x in zip(corner_nodes, corners)])
 rhs = rhs | embedded.constraint_rhs([(p, 0.0)])
 
 solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)

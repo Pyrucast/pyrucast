@@ -142,7 +142,7 @@ print(u.value(a, "UX"))  # 1.5
 
 # Lecture par lot : liste de nœuds (ou Mesh/SubMesh POI1) → liste ordonnée.
 print(u.values([a, b], "UX"))  # [1.5, 0.0]
-print(u.values(mesh, "UX"))    # [1.5, 0.0]  — points du maillage POI1
+print(u.values(mesh, "UX"))  # [1.5, 0.0]  — points du maillage POI1
 print(u.min("UX"), u.max("UX"))  # 0.0 1.5
 print(u.sum("UX"))  # 1.5  — Σ sur les nœuds (résultante d'un champ de forces)
 

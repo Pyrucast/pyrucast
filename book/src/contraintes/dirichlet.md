@@ -104,9 +104,7 @@ materials = pyrucast.build.material_field(model, [("k", 1.0)])
 # 4) Chargement : le helper `constraint_rhs` désigne chaque contrainte par son
 #    nœud contraint et écrit u_d au slot imposed_T du nœud-multiplicateur. On
 #    fusionne les deux avec `|`.
-rhs = left.constraint_rhs([(nodes[0], 0.0)]) | right.constraint_rhs(
-    [(nodes[-1], 1.0)]
-)
+rhs = left.constraint_rhs([(nodes[0], 0.0)]) | right.constraint_rhs([(nodes[-1], 1.0)])
 
 # 5) Assemblage + résolution.
 K = pyrucast.assemble.stiffness(model, materials)

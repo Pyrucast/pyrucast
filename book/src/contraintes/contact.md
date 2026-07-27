@@ -97,9 +97,11 @@ contact = pyrucast.Model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")]
 model = elasticite | appuis | contact
 
 rhs = pyrucast.assemble.flux(edge_fes[0], -S, "f_y") | model.contact_gaps()
-solution = pyrucast.solver.solve_unilateral(model, pyrucast.assemble.stiffness(model, materials), rhs)
+solution = pyrucast.solver.solve_unilateral(
+    model, pyrucast.assemble.stiffness(model, materials), rhs
+)
 
-reaction = solution.value(mult_node, "lambda_contact")   # ≤ 0 collé, 0 décollé
+reaction = solution.value(mult_node, "lambda_contact")  # ≤ 0 collé, 0 décollé
 ```
 
 Le déroulé complet (2D et 3D) est dans `tests/contact.rs` et

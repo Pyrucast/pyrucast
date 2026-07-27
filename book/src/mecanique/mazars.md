@@ -81,9 +81,13 @@ model = pyrucast.Model.mazars(fes, "plane_stress")
 materials = pyrucast.build.material_field(
     model,
     [
-        ("E", 30_000.0), ("nu", 0.2), ("eps_d0", 1e-4),
-        ("A_t", 0.8), ("B_t", 20_000.0),
-        ("A_c", 1.4), ("B_c", 1_900.0),
+        ("E", 30_000.0),
+        ("nu", 0.2),
+        ("eps_d0", 1e-4),
+        ("A_t", 0.8),
+        ("B_t", 20_000.0),
+        ("A_c", 1.4),
+        ("B_c", 1_900.0),
     ],
 )
 

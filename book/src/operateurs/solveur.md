@@ -42,12 +42,14 @@ nul ⇒ solution non finie ⇒ erreur explicite.
 
 ```python
 K = pyrucast.assemble.stiffness(model, materials)
-solution = pyrucast.solver.solve(K, rhs)                 # factorise puis résout
+solution = pyrucast.solver.solve(K, rhs)  # factorise puis résout
 T = solution.value(some_node, "T")
 
 # Résolutions ultérieures sur la MÊME matrice : la factorisation est réutilisée.
-sol2 = pyrucast.solver.solve(K, autre_rhs)               # descente/remontée seulement
-sol3 = pyrucast.solver.solve(K, autre_rhs, cache=False)  # refactorise, sans toucher le cache
+sol2 = pyrucast.solver.solve(K, autre_rhs)  # descente/remontée seulement
+sol3 = pyrucast.solver.solve(
+    K, autre_rhs, cache=False
+)  # refactorise, sans toucher le cache
 ```
 
 ## Factorisation réutilisable (cache transparent)
@@ -93,8 +95,8 @@ périodicité ; erreur explicite sinon).
 
 ```python
 K = pyrucast.assemble.stiffness(model, materials)
-lagrange = pyrucast.solver.solve(K, rhs)                    # système augmenté
-condense = pyrucast.solver.solve_eliminate(model, K, rhs)   # système réduit — même champ
+lagrange = pyrucast.solver.solve(K, rhs)  # système augmenté
+condense = pyrucast.solver.solve_eliminate(model, K, rhs)  # système réduit — même champ
 ```
 
 Voir l'exemple `examples/mpc_condensation.py` et la page
@@ -197,9 +199,9 @@ erreur, la non-singularité du socle est confirmée par un **aller-retour**
 possible : le résultat est le même, seul le coût change.
 
 ```python
-K = pyrucast.assemble.stiffness(model, materials)              # modèle avec sense=">="
-solution = pyrucast.solver.solve_unilateral(model, K, rhs)   # "schur" par défaut
-reaction = solution.value(mult_node, "lambda_u_y")    # 0 si la butée est relâchée
+K = pyrucast.assemble.stiffness(model, materials)  # modèle avec sense=">="
+solution = pyrucast.solver.solve_unilateral(model, K, rhs)  # "schur" par défaut
+reaction = solution.value(mult_node, "lambda_u_y")  # 0 si la butée est relâchée
 
 # Forcer l'ancienne méthode (refactorisation à chaque pas) :
 sol2 = pyrucast.solver.solve_unilateral(model, K, rhs, active_set="refactorize")

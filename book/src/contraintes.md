@@ -97,7 +97,9 @@ la **méthode du statut** (*active-set*), portée par l'opérateur
    de la méthode du statut classique, bornée par `max_iter`).
 
 ```python
-solution = pyrucast.solver.solve_unilateral(model, k, rhs)   # method, cache, max_iter, tol
+solution = pyrucast.solver.solve_unilateral(
+    model, k, rhs
+)  # method, cache, max_iter, tol
 ```
 
 Les relations inactives sortent avec `λ = 0` exact ; la solution a la même

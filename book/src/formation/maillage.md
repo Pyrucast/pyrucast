@@ -71,8 +71,8 @@ Une seule méthode, `plot(...)`, sur `Mesh`/`SubMesh` — l'équivalent de
 `TRAC` :
 
 ```python
-plaque.plot(save="plaque.svg")          # géométrie seule
-plaque.plot(save=None)                  # fenêtre interactive (souris)
+plaque.plot(save="plaque.svg")  # géométrie seule
+plaque.plot(save=None)  # fenêtre interactive (souris)
 ```
 
 `save=None` ouvre une fenêtre interactive (nécessite la feature Cargo

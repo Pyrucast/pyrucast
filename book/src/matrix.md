@@ -255,13 +255,13 @@ assert k[0].factor == 1.0
 # `matrix * scalaire` / `matrix / scalaire` : une Matrix neuve, blocs clonés avec
 # leur facteur ajusté (aucune valeur réécrite) ; k reste inchangée.
 m_dt = m / dt
-assert m[0].factor == 1.0          # m inchangée
+assert m[0].factor == 1.0  # m inchangée
 assert m_dt[0].factor == 1.0 / dt
 
 # `matrix * NodeField` (produit matrice-vecteur) coexiste avec `matrix * scalaire` :
 # le type de l'opérande de droite détermine laquelle des deux opérations s'exécute.
 sys = m_dt | k
-sys.finalize()   # (ou `pyrucast.assemble.assemble(sys)` si des blocs sont calculés)
+sys.finalize()  # (ou `pyrucast.assemble.assemble(sys)` si des blocs sont calculés)
 ```
 
 ## Sérialisation

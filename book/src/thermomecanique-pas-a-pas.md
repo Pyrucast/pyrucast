@@ -25,8 +25,8 @@ fonctions Python de plus haut niveau, sans distinction à l'usage :
 ```python
 import pyrucast as pc
 
-pc.assemble.stiffness(...)      # opérateur Rust (extension)
-pc.thermomechanics.step_by_step(...)   # fonction Python pure (thermomechanics.py)
+pc.assemble.stiffness(...)  # opérateur Rust (extension)
+pc.thermomechanics.step_by_step(...)  # fonction Python pure (thermomechanics.py)
 ```
 
 Côté configuration, cela tient à trois lignes de `pyproject.toml`
@@ -95,8 +95,15 @@ support, [`consolidate`](operateurs/champs.md) reste disponible.
 En sortie, `data["results"]` est une liste (un élément par instant) :
 
 ```python
-{"time", "temperature", "displacement", "state",
- "mech_iters", "mech_anderson", "converged"}
+{
+    "time",
+    "temperature",
+    "displacement",
+    "state",
+    "mech_iters",
+    "mech_anderson",
+    "converged",
+}
 ```
 
 ## Exemple
@@ -108,8 +115,8 @@ import pyrucast as pc
 
 data = {
     "times": [0.0, 0.25, 0.5, 0.75, 1.0],
-    "model": model,          # fespace + maillage déduits du modèle
-    "loads": loads,          # NodeField unioné ou Evolution de champ
+    "model": model,  # fespace + maillage déduits du modèle
+    "loads": loads,  # NodeField unioné ou Evolution de champ
     "materials": materials,  # ElementField unioné ou Evolution de champ
     "t_ref": 20.0,
 }

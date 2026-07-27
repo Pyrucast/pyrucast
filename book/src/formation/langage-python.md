@@ -21,7 +21,7 @@ de plus haut niveau (`pyrucast.thermomechanics`). À l'usage, aucune
 distinction n'est visible :
 
 ```python
-pc.assemble.stiffness(...)            # opérateur Rust (extension compilée)
+pc.assemble.stiffness(...)  # opérateur Rust (extension compilée)
 pc.thermomechanics.step_by_step(...)  # fonction Python pure
 ```
 
@@ -32,9 +32,9 @@ Chaque **conteneur** — l'équivalent des « objets » Gibiane (`MAILLAGE`,
 **même nom que la structure Rust** :
 
 ```python
-c = pc.Coords(2)              # Cast3M : OPTI 'DIME' 2
-n = c.add_node([0.0, 0.0])    # Cast3M : POIN 0. 0. ;
-mesh = pc.Mesh(c, "TRI3")     # Cast3M : MAILLAGE (implicite via un opérateur)
+c = pc.Coords(2)  # Cast3M : OPTI 'DIME' 2
+n = c.add_node([0.0, 0.0])  # Cast3M : POIN 0. 0. ;
+mesh = pc.Mesh(c, "TRI3")  # Cast3M : MAILLAGE (implicite via un opérateur)
 ```
 
 Onze conteneurs couvrent tout : `Coords`, `Node`, `Mesh`, `FiniteElementSpace`,
@@ -98,8 +98,8 @@ degré de liberté — `u_x`/`f_x` (déplacement/force), `T`/`q`
 Un blocage Dirichlet cible toujours la **variable duale** :
 
 ```python
-pc.Model.dirichlet("T", "q", impose, multiplicateur)     # Cast3M : BLOQ 'T' ...
-pc.Model.dirichlet("u_x", "f_x", impose, multiplicateur) # Cast3M : BLOQ 'UX' ...
+pc.Model.dirichlet("T", "q", impose, multiplicateur)  # Cast3M : BLOQ 'T' ...
+pc.Model.dirichlet("u_x", "f_x", impose, multiplicateur)  # Cast3M : BLOQ 'UX' ...
 ```
 
 `model.dual_of("u_x")` renvoie `"f_x"` sans avoir à la mémoriser — utile

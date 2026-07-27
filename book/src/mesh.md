@@ -103,11 +103,11 @@ seuls leurs refcounts augmentent).
 mesh = pyrucast.Mesh(c, "TRI3")
 mesh.unit().add_cell([a, b, n3])
 
-pyrucast.FiniteElementSpace(mesh)   # scelle mesh[0]
+pyrucast.FiniteElementSpace(mesh)  # scelle mesh[0]
 assert mesh[0].is_sealed
 # mesh[0].add_cell([...])           # → RuntimeError (MeshSealed)
 
-copie = mesh.duplicate()            # neuf, modifiable
+copie = mesh.duplicate()  # neuf, modifiable
 copie.unit().add_cell([b, n3, n4])  # OK
 ```
 

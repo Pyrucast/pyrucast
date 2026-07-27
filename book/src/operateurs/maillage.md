@@ -78,7 +78,7 @@ autre chose, il est ensuite **converti** :
   composées).
 
 ```python
-tri = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "TRI3")   # 2× plus de cellules que QUA4
+tri = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "TRI3")  # 2× plus de cellules que QUA4
 qua8 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "QUA8")
 qua9 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "QUA9")
 tri6 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "TRI6")
@@ -154,11 +154,13 @@ import pyrucast
 # Une face TRI3 (un seul triangle) dans le plan z = 0.
 c = pyrucast.Coords(dim=3)
 face = pyrucast.Mesh(c, "TRI3")
-face.unit().add_cell([
-    c.add_node([1.0, 0.0, 0.0]),
-    c.add_node([2.0, 0.0, 0.0]),
-    c.add_node([1.0, 0.0, 1.0]),
-])
+face.unit().add_cell(
+    [
+        c.add_node([1.0, 0.0, 0.0]),
+        c.add_node([2.0, 0.0, 0.0]),
+        c.add_node([1.0, 0.0, 1.0]),
+    ]
+)
 
 # Copie translatée de 5 selon +z (nœuds neufs ; `face` reste intacte).
 haut = pyrucast.mesher.translate(face, [0.0, 0.0, 5.0])
@@ -207,9 +209,9 @@ Le maillage obtenu se calcule avec l'interpolation `LAGRANGE2` (cf.
 [Espace éléments finis](../fe-space.md)) :
 
 ```python
-lin = pyrucast.mesher.triangulate_surface(contour, "TRI3", 1.0)   # maillage TRI3
-quad = pyrucast.mesher.to_quadratic(lin)              # copie TRI6
-print(quad.element_types())                    # ['TRI6']
+lin = pyrucast.mesher.triangulate_surface(contour, "TRI3", 1.0)  # maillage TRI3
+quad = pyrucast.mesher.to_quadratic(lin)  # copie TRI6
+print(quad.element_types())  # ['TRI6']
 
 fes = pyrucast.FiniteElementSpace(quad, interpolation="LAGRANGE2")
 ```
@@ -237,9 +239,9 @@ modifié. Tout autre couple `(source, cible)` lève une erreur : passer à un ty
 relève de [`to_quadratic`](#passage-à-lordre-quadratique--to_quadratic).
 
 ```python
-faces = pyrucast.mesher.skin(volume)         # peau en QUA4
-faces = pyrucast.mesher.convert(faces, "TRI3")   # QUA4 → TRI3
-print(faces.element_types())                 # ['TRI3']
+faces = pyrucast.mesher.skin(volume)  # peau en QUA4
+faces = pyrucast.mesher.convert(faces, "TRI3")  # QUA4 → TRI3
+print(faces.element_types())  # ['TRI3']
 ```
 
 ## Maillage d'un contour fermé : `triangulate_surface`
@@ -616,8 +618,8 @@ import pyrucast
 # Une plaque trouée : contour extérieur + bord du trou, orientations quelconques.
 surf = pyrucast.mesher.triangulate_surface(contour, "TRI3")
 
-propre = pyrucast.mesher.orient(surf)        # toutes les mailles cohérentes
-trou_dedans = pyrucast.mesher.invert(propre) # sens inversé (intérieur/extérieur)
+propre = pyrucast.mesher.orient(surf)  # toutes les mailles cohérentes
+trou_dedans = pyrucast.mesher.invert(propre)  # sens inversé (intérieur/extérieur)
 ```
 
 Côté Rust, `ops::mesher::orient(&mesh)` et `ops::mesher::invert(&mesh)`.
@@ -739,7 +741,7 @@ regions = pyrucast.mesher.read_gmsh(coords, "piece.msh")
 # {'plate': Mesh<…>, 'bottom': Mesh<…>, …}  — ordre du fichier préservé
 
 plate = regions["plate"]
-print(plate.element_types())   # p.ex. ['TRI3']
+print(plate.element_types())  # p.ex. ['TRI3']
 print(plate.cell_count())
 ```
 
@@ -758,7 +760,7 @@ print(plate.cell_count())
   coords = pyrucast.Coords(dim=2)
   regions = pyrucast.mesher.read_gmsh(coords, "piece.msh")
   plate = regions["plate"]
-  bottom = regions["bottom"]            # même Coords que plate
+  bottom = regions["bottom"]  # même Coords que plate
 
   fes = pyrucast.FiniteElementSpace(plate)
   # ... assemblage sur 'plate', blocage des nœuds de 'bottom', etc.
