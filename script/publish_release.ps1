@@ -3,6 +3,9 @@
 # crate n'est pas liee a une plateforme) ni le sdist (deja envoye cote
 # Linux par script/publish_release.sh).
 #
+# Feature abi3 : wheel cp39-abi3 valable pour tout Python >= 3.9 (un seul
+# wheel Windows au lieu d'un par version mineure de CPython).
+#
 # Run from a PowerShell prompt:   .\script\publish_release.ps1
 # (If scripts are blocked: powershell -ExecutionPolicy Bypass -File .\script\publish_release.ps1)
 
@@ -63,8 +66,8 @@ try {
     $existing = Get-PyPiFiles $crateName $version
     $existing | ForEach-Object { Write-Host "  deja present : $_" }
 
-    Run "maturin build --release --features extension-module,viz,viz-interactive" {
-        maturin build --release --features extension-module,viz,viz-interactive
+    Run "maturin build --release --features extension-module,viz,viz-interactive,abi3" {
+        maturin build --release --features extension-module,viz,viz-interactive,abi3
     }
 
     $wheel = Get-ChildItem "target\wheels\$crateName-$version-*.whl" |

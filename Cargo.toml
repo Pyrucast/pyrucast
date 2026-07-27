@@ -96,3 +96,11 @@ viz-interactive = ["viz", "dep:winit", "dep:softbuffer"]
 # methods that a plain `python-api`/`extension-module` build (no `viz`)
 # doesn't actually compile in.
 stub-gen = ["python-api", "dep:pyo3-stub-gen", "viz"]
+# Build against Python's stable/limited API (CPython >= 3.9) instead of a
+# specific CPython minor version. One published wheel then installs on any
+# supported interpreter, instead of `pip install` silently falling back to
+# recompiling the sdist when the local Python doesn't match the wheel's
+# exact cp3XX tag. Off by default: only script/publish_release.{sh,ps1} add
+# it — everyday `maturin develop` / `check.sh` / `build.sh` stay on pyo3's
+# full (non-limited) API.
+abi3 = ["pyo3/abi3-py39"]

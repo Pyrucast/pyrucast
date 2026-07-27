@@ -38,6 +38,8 @@ step "cargo clippy --features viz -D warnings"
 cargo clippy --all-targets --features viz -- -D warnings
 step "cargo clippy --features extension-module,viz -D warnings"
 cargo clippy --all-targets --features extension-module,viz -- -D warnings
+step "cargo clippy --features extension-module,viz,viz-interactive,abi3 -D warnings"
+cargo clippy --all-targets --features extension-module,viz,viz-interactive,abi3 -- -D warnings
 
 step "cargo test (défaut)"                                       ; cargo test
 step "cargo test --doc"                                          ; cargo test --doc

@@ -3,8 +3,10 @@
 #
 # 1. repère le dernier tag vX.Y.Z, checkout dessus (détaché) ;
 # 2. cargo publish sur crates.io (sauté si cette version y est déjà) ;
-# 3. build sdist + wheel Linux (features extension-module,viz,viz-interactive)
-#    et upload sur PyPI (fichiers déjà présents sautés individuellement) ;
+# 3. build sdist + wheel Linux (features extension-module,viz,viz-interactive,
+#    abi3 — un seul wheel cp39-abi3 valable pour tout Python >= 3.9, plutôt
+#    qu'un wheel lié à une version cp3XX précise) et upload sur PyPI
+#    (fichiers déjà présents sautés individuellement) ;
 # 4. revient sur la branche de départ.
 #
 # Tag manylinux : plotters (feature "ttf", pour le texte) tire font-kit/
@@ -80,8 +82,8 @@ python -m pip install --quiet --upgrade ziglang patchelf
 
 step "maturin sdist"
 maturin sdist
-step "maturin build --release --zig --manylinux 2_38 --features extension-module,viz,viz-interactive"
-maturin build --release --zig --manylinux 2_38 --features extension-module,viz,viz-interactive
+step "maturin build --release --zig --manylinux 2_38 --features extension-module,viz,viz-interactive,abi3"
+maturin build --release --zig --manylinux 2_38 --features extension-module,viz,viz-interactive,abi3
 
 to_upload=()
 while IFS= read -r -d '' f; do
