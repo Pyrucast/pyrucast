@@ -1,6 +1,6 @@
 [package]
 name = "pyrucast"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "Finite-element library in Rust, inspired by cast3m, exposed to Python"
 authors = ["Gauthier F"]
