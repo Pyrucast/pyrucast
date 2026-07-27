@@ -1,0 +1,81 @@
+name: Publier le book
+
+# Build du mdBook (book/) + de la référence rustdoc, puis déploiement sur
+# GitHub Pages (déploiement officiel par artifact, pas de branche `pages`).
+# Le site combiné place le book à la racine et la doc Rust sous `rust/`.
+#
+# Prérequis côté GitHub (UI, hors dépôt) :
+#   Settings > Pages > Build and deployment > Source: "GitHub Actions"
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'book/**'
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v4
+
+      - name: Installer mdBook
+        env:
+          MDBOOK_VERSION: '0.4.48'
+        run: |
+          url="https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sSL "$url" | tar -xz -C /usr/local/bin
+          mdbook --version
+
+      - name: Installer Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Builder le book
+        run: mdbook build book
+
+      - name: Builder la doc Rust (rustdoc)
+        # Rust pur (features par défaut) : ni pyo3 ni libpython requis.
+        run: cargo doc --no-deps --lib
+
+      - name: Assembler le site (book + rust/)
+        run: |
+          rm -rf _site
+          mkdir _site
+          cp -a book/book/. _site/
+          mkdir _site/rust
+          cp -a target/doc/. _site/rust/
+          # cargo doc ne génère pas d'index.html à la racine de target/doc :
+          # on dépose une redirection pour que /rust/ mène à la crate.
+          printf '<!doctype html><meta http-equiv="refresh" content="0; url=pyrucast/index.html">\n' \
+            > _site/rust/index.html
+
+      - name: Uploader l'artifact Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Déployer sur GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

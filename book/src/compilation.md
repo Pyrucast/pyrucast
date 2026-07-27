@@ -86,8 +86,8 @@ Rustdoc et mdbook sont complémentaires : rustdoc couvre la **référence par
 item** ; ce mdbook couvre les **principes, l'architecture et les exemples
 transverses**.
 
-La référence rustdoc est **publiée à côté du book** sur Codeberg Pages, à
-<https://gauthier.codeberg.page/pyrucast/rust/> (lien également présent en tête
+La référence rustdoc est **publiée à côté du book** sur GitHub Pages, à
+<https://pyrucast.github.io/pyrucast/rust/> (lien également présent en tête
 de l'[introduction](introduction.md)). Sa génération et son déploiement sont
 décrits dans [« Publication automatique du book »](#publication-automatique-du-book)
 ci-dessous.
@@ -212,32 +212,26 @@ visualisation interactive** : il suffit d'activer le venv et d'appeler
 
 ## Publication automatique du book
 
-Le book est publié sur **Codeberg Pages** à l'adresse
-<https://gauthier.codeberg.page/pyrucast/>, et la **référence rustdoc** à côté,
-sous <https://gauthier.codeberg.page/pyrucast/rust/>.
+Le book est publié sur **GitHub Pages** à l'adresse
+<https://pyrucast.github.io/pyrucast/>, et la **référence rustdoc** à côté,
+sous <https://pyrucast.github.io/pyrucast/rust/>.
 
-La publication est automatisée par un workflow **Forgejo Actions**
-(`.forgejo/workflows/pages.yml`) : à chaque push sur `master` qui touche au
+La publication est automatisée par un workflow **GitHub Actions**
+(`.github/workflows/pages.yml`) : à chaque push sur `master` qui touche au
 book ou aux sources Rust, le workflow build le book (`mdbook build book`) **et**
-la doc Rust (`cargo doc --no-deps --lib`), puis pousse sur la branche `pages` un
-site combiné — le book à la racine, la rustdoc sous `rust/` — branche que
-Codeberg Pages sert directement. Le workflow peut aussi être déclenché à la main
-(*workflow_dispatch*) depuis l'onglet *Actions*.
+la doc Rust (`cargo doc --no-deps --lib`), assemble un site combiné — le book à
+la racine, la rustdoc sous `rust/` — et le déploie directement sur GitHub Pages
+via `actions/deploy-pages` (pas de branche `pages`, pas de token à gérer : le
+déploiement utilise les permissions natives du workflow). Il peut aussi être
+déclenché à la main (*workflow_dispatch*) depuis l'onglet *Actions*.
 
-En attendant qu'un runner soit disponible, la publication peut se faire **à la
-main** avec `script/publish-book.sh` : il build le book **et** la rustdoc, puis
-pousse le site combiné sur la branche `pages` avec tes propres identifiants git
-(aucun token CI requis).
+Prérequis à configurer une fois côté GitHub (interface web) :
 
-Prérequis à configurer une fois côté Codeberg (interface web), pour la
-publication **automatique** via Forgejo Actions :
+1. **Settings → Pages → Build and deployment → Source** : sélectionner
+   *GitHub Actions*.
 
-1. **Activer les Actions** : Settings → *Units* (Overview) → cocher *Actions*.
-2. **Un runner** avec le label `docker` (les runners partagés Codeberg étant
-   limités, on enregistre généralement son propre *Forgejo Runner*).
-3. **Le secret `DEPLOY_TOKEN`** : Settings → Actions → Secrets, contenant un
-   *Access Token* Codeberg avec le scope `write:repository` (utilisé pour
-   pousser la branche `pages`).
+Les runners GitHub sont hébergés et gratuits sur dépôt public — pas de runner
+à enregistrer soi-même, contrairement à Codeberg.
 
 ## Dépannage rapide
 

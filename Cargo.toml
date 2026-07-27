@@ -6,15 +6,15 @@ description = "Finite-element library in Rust, inspired by cast3m, exposed to Py
 authors = ["Gauthier F"]
 license = "MPL-2.0"
 readme = "README.md"
-repository = "https://codeberg.org/gauthier/pyrucast"
+repository = "https://github.com/Pyrucast/pyrucast"
 # Only the Rust crate matters to crates.io consumers; the mdbook source,
 # the Python companion package and teaching material are irrelevant there.
 exclude = [
     "book/", "python/", "formation/", "tests/python/", "examples/*.py",
     "profile.json.gz", "opérateur_castem.csv",
     # Dev-only tooling and internal notes, irrelevant to a crates.io consumer.
-    ".claude/", ".recall/", ".forgejo/", "recall.config.json", "script/",
-    ".git-blame-ignore-revs", "a_verifier.md", "todo.md", "ROADMAP.md", "CONVENTIONS.md",
+    ".claude/", ".github/", "recall.config.json", "script/",
+    ".git-blame-ignore-revs", "ROADMAP.md", "CONVENTIONS.md",
 ]
 
 [lib]

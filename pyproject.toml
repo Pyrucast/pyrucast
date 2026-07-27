@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://codeberg.org/gauthier/pyrucast"
+Repository = "https://github.com/Pyrucast/pyrucast"
 
 [tool.maturin]
 # Pin the binding type. `pyo3` is an *optional* Cargo dependency (so a pure

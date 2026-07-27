@@ -5,7 +5,7 @@
 > 📖 **Référence API Rust (rustdoc).** Cette documentation couvre les principes,
 > l'architecture et les exemples ; la référence par item (signatures, types,
 > modules) est générée par rustdoc et publiée à côté de ce book :
-> <https://gauthier.codeberg.page/pyrucast/rust/>.
+> <https://pyrucast.github.io/pyrucast/rust/>.
 
 ## Philosophie
 

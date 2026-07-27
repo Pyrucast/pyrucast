@@ -1,0 +1,129 @@
+name: Publier une release
+
+# Déclenché par un tag vX.Y.Z (créé par script/set_new_version.sh).
+# Publie sur crates.io, construit sdist + wheels (Linux manylinux2014,
+# Windows, macOS universal2) et les publie sur PyPI.
+#
+# Prérequis (UI, hors dépôt) :
+#   - crates.io : secret CARGO_REGISTRY_TOKEN (Settings > Secrets and
+#     variables > Actions).
+#   - PyPI : Trusted Publisher enregistré sur le projet PyPI, pointant sur
+#     ce dépôt GitHub, workflow "release.yml", environment "pypi".
+#     Aucun token PyPI à gérer (OIDC).
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+env:
+  MATURIN_FEATURES: extension-module,viz,viz-interactive,abi3
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          file_version="$(sed -nE 's/^version = "(.*)"/\1/p' Cargo.toml | head -1)"
+          if [ "$file_version" != "$version" ]; then
+            echo "Cargo.toml annonce la version $file_version au tag $tag (attendu $version)" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  crates-io:
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Vérifier si déjà publié
+        id: check
+        run: |
+          crate="$(sed -nE 's/^name = "(.*)"/\1/p' Cargo.toml | head -1)"
+          version="${{ needs.check-version.outputs.version }}"
+          code="$(curl -s -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/$crate/$version")"
+          echo "already=$([ "$code" = 200 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: cargo publish
+        if: steps.check.outputs.already == 'false'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish
+
+  sdist:
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  wheels:
+    needs: check-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            manylinux: '2014'
+            name: linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows-x86_64
+          - os: macos-latest
+            target: universal2-apple-darwin
+            name: macos-universal2
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux || 'auto' }}
+          args: --release --features ${{ env.MATURIN_FEATURES }} --out dist
+          # plotters (feature viz, sous-feature ttf) a besoin des en-têtes
+          # fontconfig/freetype pour lier le rendu de texte.
+          before-script-linux: |
+            yum install -y fontconfig-devel freetype-devel expat-devel || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.name }}
+          path: dist/*.whl
+
+  publish-pypi:
+    needs: [sdist, wheels]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sdist
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - name: Publier sur PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true

@@ -9,7 +9,7 @@ percée d'un trou**, encastrée d'un côté, chargée de l'autre.
 Contrairement au support original, ce chapitre ne rejoue pas chaque
 diapositive : chaque section ci-dessous condense la construction pas à pas
 en un script complet, testé, rangé dans le dossier
-[`formation/`](https://codeberg.org/gauthier/pyrucast/src/branch/master/formation)
+[`formation/`](https://github.com/Pyrucast/pyrucast/tree/master/formation)
 du dépôt. Le code affiché dans le livre est **inclus directement depuis ces
 fichiers** (pas de copie manuelle) : ce que vous voyez est ce qui s'exécute.
 
