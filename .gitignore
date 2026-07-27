@@ -280,6 +280,7 @@ book/.recall/
 
 # Claude Code: local/per-developer settings, not versioned.
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Notes de travail personnelles, non destinées au dépôt public.
 a_verifier.md
