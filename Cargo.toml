@@ -100,7 +100,7 @@ stub-gen = ["python-api", "dep:pyo3-stub-gen", "viz"]
 # specific CPython minor version. One published wheel then installs on any
 # supported interpreter, instead of `pip install` silently falling back to
 # recompiling the sdist when the local Python doesn't match the wheel's
-# exact cp3XX tag. Off by default: only script/publish_release.{sh,ps1} add
-# it — everyday `maturin develop` / `check.sh` / `build.sh` stay on pyo3's
-# full (non-limited) API.
+# exact cp3XX tag. Off by default: only the release CI
+# (.github/workflows/release.yml) adds it — everyday `maturin develop` /
+# `check.sh` / `build.sh` stay on pyo3's full (non-limited) API.
 abi3 = ["pyo3/abi3-py39"]
