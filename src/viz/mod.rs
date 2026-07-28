@@ -223,17 +223,19 @@ pub(crate) fn render<D: Drawable>(
     object: &D,
     view: Option<View>,
     save: Option<&Path>,
+    title: Option<&str>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
     match save {
-        Some(path) => render_to_file(object, view, path),
+        Some(path) => render_to_file(object, view, path, title),
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive(object, view)
+                window::run_interactive(object, view, title)
             }
             #[cfg(not(feature = "viz-interactive"))]
             {
+                let _ = title;
                 Err(PyrucastError::Message(
                     "interactive viz disabled — recompile with --features viz-interactive \
                      or pass an output path to save a PNG/SVG"
@@ -252,10 +254,11 @@ pub(crate) fn render_submesh_styled(
     view: Option<View>,
     save: Option<&Path>,
     style: MeshStyle,
+    title: Option<&str>,
 ) -> Result<()> {
     match style {
-        MeshStyle::Surface => render(sm, view, save),
-        MeshStyle::Wireframe => render(&mesh_draw::SubMeshWire(sm), view, save),
+        MeshStyle::Surface => render(sm, view, save, title),
+        MeshStyle::Wireframe => render(&mesh_draw::SubMeshWire(sm), view, save, title),
     }
 }
 
@@ -266,10 +269,11 @@ pub(crate) fn render_mesh_styled(
     view: Option<View>,
     save: Option<&Path>,
     style: MeshStyle,
+    title: Option<&str>,
 ) -> Result<()> {
     match style {
-        MeshStyle::Surface => render(mesh, view, save),
-        MeshStyle::Wireframe => render(&mesh_draw::MeshWire(mesh), view, save),
+        MeshStyle::Surface => render(mesh, view, save, title),
+        MeshStyle::Wireframe => render(&mesh_draw::MeshWire(mesh), view, save, title),
     }
 }
 
@@ -303,6 +307,7 @@ pub(crate) fn render_mesh_with_field(
     smooth: usize,
     view: Option<View>,
     save: Option<&Path>,
+    title: Option<&str>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
     let data = field.data()?;
@@ -316,12 +321,14 @@ pub(crate) fn render_mesh_with_field(
                 scale,
                 smooth,
             };
-            render_to_file(&drawable, view, path)
+            render_to_file(&drawable, view, path, title)
         }
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_mesh_field(mesh, &data, resolved, scale, smooth, view)
+                window::run_interactive_mesh_field(
+                    mesh, &data, resolved, scale, smooth, view, title,
+                )
             }
             #[cfg(not(feature = "viz-interactive"))]
             {
@@ -346,6 +353,7 @@ pub fn render_submesh_with_field(
     smooth: usize,
     view: Option<View>,
     save: Option<&Path>,
+    title: Option<&str>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
     let data = field.data()?;
@@ -359,12 +367,14 @@ pub fn render_submesh_with_field(
                 scale,
                 smooth,
             };
-            render_to_file(&drawable, view, path)
+            render_to_file(&drawable, view, path, title)
         }
         None => {
             #[cfg(feature = "viz-interactive")]
             {
-                window::run_interactive_submesh_field(submesh, &data, resolved, scale, smooth, view)
+                window::run_interactive_submesh_field(
+                    submesh, &data, resolved, scale, smooth, view, title,
+                )
             }
             #[cfg(not(feature = "viz-interactive"))]
             {
@@ -423,6 +433,7 @@ pub(crate) fn render_node_field_points(
     scale: ColorScale,
     view: Option<View>,
     save: Option<&Path>,
+    title: Option<&str>,
 ) -> Result<()> {
     let data = field_color::FieldData::Node(field.view()?);
     let resolved = field_color::resolve_component(&data, component)?.to_string();
@@ -433,7 +444,7 @@ pub(crate) fn render_node_field_points(
         component: &resolved,
         scale,
     };
-    render(&drawable, view, save)
+    render(&drawable, view, save, title)
 }
 
 // ─── Evolution: per-frame field source ──────────────────────────────────────
@@ -480,7 +491,16 @@ pub(crate) fn render_evolution_field(
                     frames.len()
                 )));
             }
-            render_one_frame(mesh, &frames[k], component, scale, smooth, view, Some(path))
+            render_one_frame(
+                mesh,
+                &frames[k],
+                component,
+                scale,
+                smooth,
+                view,
+                Some(path),
+                None,
+            )
         }
         None => {
             #[cfg(feature = "viz-interactive")]
@@ -494,6 +514,7 @@ pub(crate) fn render_evolution_field(
                     scale,
                     smooth,
                     view.unwrap_or_default(),
+                    None,
                 )
             }
             #[cfg(not(feature = "viz-interactive"))]
@@ -511,6 +532,7 @@ pub(crate) fn render_evolution_field(
 
 /// Render a single evolution frame onto a mesh (or as a point cloud when
 /// `mesh` is `None` and the frame is a node field).
+#[allow(clippy::too_many_arguments)]
 fn render_one_frame(
     mesh: Option<&crate::containers::mesh::Mesh>,
     frame: &FrameField,
@@ -519,11 +541,19 @@ fn render_one_frame(
     smooth: usize,
     view: Option<View>,
     save: Option<&Path>,
+    title: Option<&str>,
 ) -> Result<()> {
     match (mesh, frame) {
-        (Some(m), FrameField::Node(f)) => {
-            render_mesh_with_field(m, FieldArg::Node(f), component, scale, smooth, view, save)
-        }
+        (Some(m), FrameField::Node(f)) => render_mesh_with_field(
+            m,
+            FieldArg::Node(f),
+            component,
+            scale,
+            smooth,
+            view,
+            save,
+            title,
+        ),
         (Some(m), FrameField::Element(f)) => render_mesh_with_field(
             m,
             FieldArg::Element(f),
@@ -532,8 +562,11 @@ fn render_one_frame(
             smooth,
             view,
             save,
+            title,
         ),
-        (None, FrameField::Node(f)) => render_node_field_points(f, component, scale, view, save),
+        (None, FrameField::Node(f)) => {
+            render_node_field_points(f, component, scale, view, save, title)
+        }
         (None, FrameField::Element(_)) => Err(PyrucastError::Message(
             "evolution plot: element-field frames require a mesh".into(),
         )),
@@ -559,10 +592,69 @@ pub(crate) fn render_curve(
     };
     let mut view = view.unwrap_or_default();
     view.show_axes = false;
-    render(&plot, Some(view), save)
+    // The curve's own caption already sits at the top of the chart, so we do
+    // not repeat it as a bottom figure title.
+    render(&plot, Some(view), save, None)
 }
 
-fn render_to_file<D: Drawable>(object: &D, view: View, path: &Path) -> Result<()> {
+/// Draw `object` (and its gizmo) onto `area`, mapping plotters errors.
+fn draw_object<DB, D>(
+    area: &plotters::drawing::DrawingArea<DB, plotters::coord::Shift>,
+    object: &D,
+    view: &View,
+) -> Result<()>
+where
+    DB: plotters::prelude::DrawingBackend,
+    DB::ErrorType: 'static,
+    D: Drawable,
+{
+    object.draw_on(area, view).map_err(|e| match e {
+        PyrucastError::Message(m) => PyrucastError::Message(format!("plotters: {m}")),
+        other => other,
+    })?;
+    if view.show_axes {
+        axes::draw_gizmo(area, view)?;
+    }
+    Ok(())
+}
+
+/// Fill `area` white, then draw `object` — reserving a bottom band for the
+/// figure `title` when one is given (drawn centred in the band).
+fn draw_root<DB, D>(
+    area: &plotters::drawing::DrawingArea<DB, plotters::coord::Shift>,
+    object: &D,
+    view: &View,
+    title: Option<&str>,
+) -> Result<()>
+where
+    DB: plotters::prelude::DrawingBackend,
+    DB::ErrorType: 'static,
+    D: Drawable,
+{
+    use plotters::prelude::*;
+    let map_err = |e: Box<dyn std::error::Error + Send + Sync>| {
+        PyrucastError::Message(format!("plotters: {e}"))
+    };
+    area.fill(&WHITE).map_err(|e| map_err(Box::new(e)))?;
+    match title {
+        Some(t) => {
+            let (_, h) = area.dim_in_pixel();
+            let split_at = h.saturating_sub(overlay::FIGURE_TITLE_BAND) as i32;
+            let (main, footer) = area.split_vertically(split_at);
+            draw_object(&main, object, view)?;
+            overlay::draw_figure_title(&footer, t)?;
+        }
+        None => draw_object(area, object, view)?,
+    }
+    Ok(())
+}
+
+fn render_to_file<D: Drawable>(
+    object: &D,
+    view: View,
+    path: &Path,
+    title: Option<&str>,
+) -> Result<()> {
     use plotters::prelude::*;
 
     let fmt = SaveFormat::from_path(path)?;
@@ -573,31 +665,20 @@ fn render_to_file<D: Drawable>(object: &D, view: View, path: &Path) -> Result<()
         PyrucastError::Message(format!("plotters: {e}"))
     };
 
+    // A blank title is treated as "no title" (full-height plot).
+    let title = title.filter(|t| !t.trim().is_empty());
+
     match fmt {
         SaveFormat::Png => {
             let backend = BitMapBackend::new(path, (w, h));
             let area = backend.into_drawing_area();
-            area.fill(&WHITE).map_err(|e| map_err(Box::new(e)))?;
-            object.draw_on(&area, &view).map_err(|e| match e {
-                PyrucastError::Message(m) => PyrucastError::Message(format!("plotters: {m}")),
-                other => other,
-            })?;
-            if view.show_axes {
-                axes::draw_gizmo(&area, &view)?;
-            }
+            draw_root(&area, object, &view, title)?;
             area.present().map_err(|e| map_err(Box::new(e)))?;
         }
         SaveFormat::Svg => {
             let backend = SVGBackend::new(path, (w, h));
             let area = backend.into_drawing_area();
-            area.fill(&WHITE).map_err(|e| map_err(Box::new(e)))?;
-            object.draw_on(&area, &view).map_err(|e| match e {
-                PyrucastError::Message(m) => PyrucastError::Message(format!("plotters: {m}")),
-                other => other,
-            })?;
-            if view.show_axes {
-                axes::draw_gizmo(&area, &view)?;
-            }
+            draw_root(&area, object, &view, title)?;
             area.present().map_err(|e| map_err(Box::new(e)))?;
         }
     }

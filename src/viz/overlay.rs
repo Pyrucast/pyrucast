@@ -10,6 +10,7 @@ use crate::error::Result;
 use crate::viz::drawable::pl_err;
 use plotters::coord::Shift;
 use plotters::prelude::*;
+use plotters::style::text_anchor::{HPos, Pos, VPos};
 
 const BUTTON_MARGIN: i32 = 10;
 const BUTTON_WIDTH: i32 = 260;
@@ -77,6 +78,33 @@ where
     let label = format!("[{}]  min={:.3}  max={:.3}", component, vmin, vmax);
     let text_style = TextStyle::from(("sans-serif", 13).into_font()).color(&BUTTON_TEXT);
     area.draw_text(&label, &text_style, (bx + 10, by + 5))
+        .map_err(pl_err)?;
+    Ok(())
+}
+
+// ─── Figure title (bottom caption of a file export) ─────────────────────────
+
+/// Height in pixels of the band reserved below a plot for its figure title.
+pub(crate) const FIGURE_TITLE_BAND: u32 = 40;
+
+/// Font size of the figure title.
+const FIGURE_TITLE_FONT: i32 = 18;
+
+/// Draw `title` centred (horizontally and vertically) in `area` — the band
+/// reserved at the bottom of a file export by the render dispatch. The window
+/// backend uses the same string as the OS window title instead.
+pub(crate) fn draw_figure_title<DB: DrawingBackend>(
+    area: &DrawingArea<DB, Shift>,
+    title: &str,
+) -> Result<()>
+where
+    DB::ErrorType: 'static,
+{
+    let (w, h) = area.dim_in_pixel();
+    let style = TextStyle::from(("sans-serif", FIGURE_TITLE_FONT).into_font())
+        .color(&BUTTON_TEXT)
+        .pos(Pos::new(HPos::Center, VPos::Center));
+    area.draw_text(title, &style, (w as i32 / 2, h as i32 / 2))
         .map_err(pl_err)?;
     Ok(())
 }
@@ -362,6 +390,19 @@ mod tests {
         assert!(buf.contains("[T]"));
         assert!(buf.contains("min=0.000"));
         assert!(buf.contains("max=1.500"));
+    }
+
+    #[test]
+    fn draw_figure_title_renders_text_in_svg() {
+        let mut buf = String::new();
+        {
+            let backend = SVGBackend::with_string(&mut buf, (400, 40));
+            let area = backend.into_drawing_area();
+            area.fill(&WHITE).unwrap();
+            draw_figure_title(&area, "beam L=2m").unwrap();
+            area.present().unwrap();
+        }
+        assert!(buf.contains("beam L=2m"));
     }
 
     #[test]

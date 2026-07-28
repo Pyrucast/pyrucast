@@ -22,7 +22,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
-| `border(mesh)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2`, une par sous-maillage (voir plus bas) |
+| `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (TET4/PENTA6/HEX8) en faces `TRI3`/`QUA4`, **une par face plane** du solide (voir plus bas) |
 | `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
 | `invert(mesh)` | **inverse** l'orientation de toutes les cellules, toute dimension, équivalent Cast3M `INVE` (voir plus bas) |
@@ -479,9 +479,9 @@ frontière nette pour un futur parallélisme intra-opérateur.
 
 ## Bord d'une surface : `border`
 
-`border(mesh)` est l'**inverse** de `triangulate_surface` : il prend un
-maillage de surface (cellules `TRI3` / `QUA4`) et renvoie son **bord** sous
-forme de boucles `SEG2` fermées.
+`border(mesh, angle_deg=None)` est l'**inverse** de `triangulate_surface` : il
+prend un maillage de surface (cellules `TRI3` / `QUA4`) et renvoie son **bord**
+sous forme de boucles `SEG2` fermées.
 
 Une arête de cellule utilisée par **exactement une** cellule est une arête de
 bord ; les arêtes intérieures sont partagées par deux cellules (orientations
@@ -511,13 +511,31 @@ print(bord.element_types())  # ['SEG2']
 print(bord.cell_counts())  # [16]
 ```
 
+### Découpe par angle (`angle_deg`)
+
+Avec un `angle_deg`, chaque boucle est en plus **découpée en arêtes ouvertes**
+à ses **coins** — le pendant 1D du découpage en faces planes de
+[`skin`](#peau-dun-volume--skin). Un nœud est un coin quand le bord y **tourne**
+de plus de `angle_deg` degrés (l'angle entre les directions des arêtes entrante
+et sortante). Chaque arête — une suite maximale de segments quasi alignés entre
+deux coins — devient son propre sous-maillage `SEG2` (un côté droit d'un carré,
+même subdivisé, reste **une** arête). Une boucle sans aucun coin (bord courbé
+dont tous les virages restent sous le seuil) est conservée comme une boucle
+fermée. `angle_deg=None` (défaut) garde chaque bord en une boucle fermée.
+
+```python
+carre = pyrucast.mesher.triangulate_surface(contour_carre, "TRI3", 0.5)
+aretes = pyrucast.mesher.border(carre, angle_deg=45.0)
+print(len(aretes))  # 4  (les quatre côtés, arêtes ouvertes)
+```
+
 Les sous-maillages POI1 (un point n'a pas d'arête) sont ignorés. La fonction
 lève une erreur si le maillage n'a aucune cellule de surface, s'il porte des
 cellules autres que POI1/TRI3/QUA4 (les bords 1D et 3D ne sont pas gérés ici —
 voir [`skin`](#peau-dun-volume--skin) pour le bord d'un volume), ou si le bord
 n'est pas un ensemble propre de boucles fermées (arête ouverte ou non-manifold).
 
-Côté Rust, `ops::mesher::border(&mesh)`.
+Côté Rust, `ops::mesher::border(&mesh, angle_deg)`.
 
 ## Peau d'un volume : `skin`
 

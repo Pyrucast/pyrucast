@@ -65,6 +65,18 @@ def test_plot_with_view(tmp_path):
     assert path.stat().st_size > 0
 
 
+def test_plot_title_is_engraved_at_the_bottom(tmp_path):
+    _, sm = _make_two_triangles()
+    titled = tmp_path / "titled.svg"
+    sm.plot(save=str(titled), title="cantilever-beam")
+    assert "cantilever-beam" in titled.read_text()
+
+    # No title → the caption is absent.
+    plain = tmp_path / "plain.svg"
+    sm.plot(save=str(plain))
+    assert "cantilever-beam" not in plain.read_text()
+
+
 def test_plot_unsupported_extension(tmp_path):
     _, sm = _make_two_triangles()
     path = tmp_path / "tri.jpg"

@@ -671,8 +671,9 @@ impl NodeField {
         save: Option<&std::path::Path>,
         component: Option<&str>,
         scale: crate::viz::ColorScale,
+        title: Option<&str>,
     ) -> Result<()> {
-        crate::viz::render_node_field_points(self, component, scale, view, save)
+        crate::viz::render_node_field_points(self, component, scale, view, save, title)
     }
 
     /// Verify zone coherence: every `(node, component)` stored by several

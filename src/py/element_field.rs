@@ -315,9 +315,9 @@ impl PyElementField {
     /// elements stay visible.
     ///
     /// Same `view` / `save` / `show_axes` / `component` / `vmin` /
-    /// `vmax` / `cmap` / `smooth` semantics as `Mesh.plot`.
+    /// `vmax` / `cmap` / `smooth` / `title` semantics as `Mesh.plot`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, component=None, vmin=None, vmax=None, cmap=None, smooth=4))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, component=None, vmin=None, vmax=None, cmap=None, smooth=4, title=None))]
     #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
@@ -329,6 +329,7 @@ impl PyElementField {
         vmax: Option<f64>,
         cmap: Option<String>,
         smooth: usize,
+        title: Option<String>,
     ) -> PyResult<()> {
         let mut view = view
             .map(|(yaw, pitch, scale)| crate::viz::View {
@@ -351,6 +352,7 @@ impl PyElementField {
             component.as_deref(),
             scale,
             smooth,
+            title.as_deref(),
         )?;
         Ok(())
     }

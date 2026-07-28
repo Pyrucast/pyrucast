@@ -589,6 +589,7 @@ impl ElementField {
         component: Option<&str>,
         scale: crate::viz::ColorScale,
         smooth: usize,
+        title: Option<&str>,
     ) -> Result<()> {
         let mut mesh = crate::containers::mesh::Mesh::empty();
         for h in self {
@@ -604,6 +605,7 @@ impl ElementField {
             smooth,
             view,
             save,
+            title,
         )
     }
 }

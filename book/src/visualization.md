@@ -104,6 +104,23 @@ mesh.unit().add_cell([a, b, c])
 mesh.plot(view=(45.0, 35.264, 1.0), save="triangle.svg")
 ```
 
+## Nom de figure / de fenêtre (`title`)
+
+Toutes les méthodes `plot(...)` — `Mesh`, `SubMesh`, `NodeField`, `ElementField` — acceptent un argument nommé optionnel `title`, qui sert de **nom de figure** :
+
+- en export fichier (PNG/SVG), il est gravé **centré en bas de l'image**, dans une bande réservée sous le tracé ;
+- en fenêtre interactive (`save=None`), il devient le **titre de la fenêtre** (barre de titre de l'OS).
+
+`title=None` (défaut) : aucune légende en bas et titre de fenêtre par défaut (`pyrucast`). Une chaîne vide vaut `None`.
+
+```python
+mesh.plot(save="piece.svg", title="poutre encastrée")  # légende centrée en bas du SVG
+mesh.plot(save="t.svg", field=t_field, title="température")  # combinable avec field
+mesh.plot(title="ma pièce")  # nomme la fenêtre interactive
+```
+
+> Pour les **courbes** d'`Evolution` / `SubEvolution`, le `title` existant reste la légende en haut du graphe (voir plus bas) ; il n'est pas repris en bas.
+
 ## Couleur de face par `SubMesh`
 
 Chaque `SubMesh` porte une propriété `face_color` (type `RgbColor`, format `(r, g, b)` sur 8 bits) utilisée par la couche viz pour remplir les facettes. Cette donnée n'a **aucun effet sur les calculs** ; elle est simplement persistée avec le maillage et consommée par `plot`. Couleur par défaut : un bleu clair (`180, 200, 230`).

@@ -413,9 +413,9 @@ impl PyNodeField {
     /// original mesh for surfaces.
     ///
     /// Same `view` / `save` / `show_axes` / `component` / `vmin` /
-    /// `vmax` / `cmap` semantics as `Mesh.plot`.
+    /// `vmax` / `cmap` / `title` semantics as `Mesh.plot`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, component=None, vmin=None, vmax=None, cmap=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, component=None, vmin=None, vmax=None, cmap=None, title=None))]
     #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
@@ -426,6 +426,7 @@ impl PyNodeField {
         vmin: Option<f64>,
         vmax: Option<f64>,
         cmap: Option<String>,
+        title: Option<String>,
     ) -> PyResult<()> {
         let mut view = view
             .map(|(yaw, pitch, scale)| crate::viz::View {
@@ -442,8 +443,13 @@ impl PyNodeField {
             vmin,
             vmax,
         };
-        self.inner
-            .plot(Some(view), save.as_deref(), component.as_deref(), scale)?;
+        self.inner.plot(
+            Some(view),
+            save.as_deref(),
+            component.as_deref(),
+            scale,
+            title.as_deref(),
+        )?;
         Ok(())
     }
 

@@ -169,8 +169,11 @@ impl PySubMesh {
     ///   (interior edges of volume cells included) instead of the opaque
     ///   outer skin. Geometry only — combining it with `field` raises
     ///   `ValueError`, since a field always colours the faces.
+    /// - `title`: optional figure name. It titles the interactive window
+    ///   and is drawn centred as a caption at the bottom of a saved
+    ///   PNG/SVG (default `None` ⇒ no caption, default window title).
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, wireframe=false))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, wireframe=false, title=None))]
     #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
@@ -184,6 +187,7 @@ impl PySubMesh {
         cmap: Option<String>,
         smooth: usize,
         wireframe: bool,
+        title: Option<String>,
     ) -> PyResult<()> {
         let style = mesh_style(wireframe, field.is_some())?;
         let mut view = view
@@ -202,6 +206,7 @@ impl PySubMesh {
             vmax,
         };
         let save_ref = save.as_deref();
+        let title_ref = title.as_deref();
         match field {
             Some(f) => {
                 let comp_ref = component.as_deref();
@@ -214,12 +219,13 @@ impl PySubMesh {
                         smooth,
                         Some(view),
                         save_ref,
+                        title_ref,
                     )?;
                     Ok(())
                 })?;
             }
             None => {
-                read(&self.handle)?.plot_styled(Some(view), save_ref, style)?;
+                read(&self.handle)?.plot_styled(Some(view), save_ref, style, title_ref)?;
             }
         }
         Ok(())
@@ -348,9 +354,9 @@ impl PyMesh {
     /// coloured by a `NodeField` / `ElementField` if `field` is
     /// supplied). See
     /// `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
-    /// `field`, `component` and `wireframe`.
+    /// `field`, `component`, `wireframe` and `title`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, wireframe=false))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, wireframe=false, title=None))]
     #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
@@ -364,6 +370,7 @@ impl PyMesh {
         cmap: Option<String>,
         smooth: usize,
         wireframe: bool,
+        title: Option<String>,
     ) -> PyResult<()> {
         let style = mesh_style(wireframe, field.is_some())?;
         let mut view = view
@@ -382,6 +389,7 @@ impl PyMesh {
             vmax,
         };
         let save_ref = save.as_deref();
+        let title_ref = title.as_deref();
         match field {
             Some(f) => {
                 let comp_ref = component.as_deref();
@@ -393,12 +401,14 @@ impl PyMesh {
                         comp_ref,
                         scale,
                         smooth,
+                        title_ref,
                     )?;
                     Ok(())
                 })?;
             }
             None => {
-                self.inner.plot_styled(Some(view), save_ref, style)?;
+                self.inner
+                    .plot_styled(Some(view), save_ref, style, title_ref)?;
             }
         }
         Ok(())

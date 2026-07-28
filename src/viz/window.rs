@@ -79,6 +79,8 @@ struct App<'a, D: Drawable> {
     pitch: f64,
     scale: f64,
     show_axes: bool,
+    /// Custom OS window title (`None` → the default "pyrucast").
+    title: Option<String>,
 
     width: u32,
     height: u32,
@@ -99,8 +101,8 @@ struct App<'a, D: Drawable> {
 }
 
 impl<'a, D: Drawable> App<'a, D> {
-    fn new(object: &'a D, view: View, bbox: Bbox3) -> Self {
-        Self::new_with_button(object, view, bbox, None)
+    fn new(object: &'a D, view: View, bbox: Bbox3, title: Option<&str>) -> Self {
+        Self::new_with_button(object, view, bbox, None, title)
     }
 
     fn new_with_button(
@@ -108,6 +110,7 @@ impl<'a, D: Drawable> App<'a, D> {
         view: View,
         bbox: Bbox3,
         field_button: Option<&'a dyn FieldButton>,
+        title: Option<&str>,
     ) -> Self {
         let target = view.target.unwrap_or_else(|| bbox.center());
         let w = INIT_WIDTH;
@@ -123,6 +126,7 @@ impl<'a, D: Drawable> App<'a, D> {
             pitch: view.pitch,
             scale: view.scale,
             show_axes: view.show_axes,
+            title: title.map(str::to_string),
             width: w,
             height: h,
             pixel_buf: vec![255; (w * h * 3) as usize],
@@ -225,7 +229,7 @@ impl<'a, D: Drawable> App<'a, D> {
 impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let attrs = WindowAttributes::default()
-            .with_title("pyrucast")
+            .with_title(self.title.as_deref().unwrap_or("pyrucast"))
             .with_inner_size(winit::dpi::PhysicalSize::new(self.width, self.height));
         let window = match event_loop.create_window(attrs) {
             Ok(w) => Rc::new(w),
@@ -545,6 +549,7 @@ pub(crate) fn run_interactive_mesh_field(
     scale: crate::viz::ColorScale,
     smooth: usize,
     view: View,
+    title: Option<&str>,
 ) -> Result<()> {
     let drawable = FieldDrawable::new(
         GeomSource::Mesh(mesh),
@@ -562,8 +567,13 @@ pub(crate) fn run_interactive_mesh_field(
         }
         let event_loop = slot.as_mut().expect("just initialised");
         event_loop.set_control_flow(ControlFlow::Wait);
-        let mut app =
-            App::new_with_button(&drawable, view, bbox, Some(&drawable as &dyn FieldButton));
+        let mut app = App::new_with_button(
+            &drawable,
+            view,
+            bbox,
+            Some(&drawable as &dyn FieldButton),
+            title,
+        );
         event_loop
             .run_app_on_demand(&mut app)
             .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?;
@@ -580,6 +590,7 @@ pub(crate) fn run_interactive_submesh_field(
     scale: crate::viz::ColorScale,
     smooth: usize,
     view: View,
+    title: Option<&str>,
 ) -> Result<()> {
     let drawable = FieldDrawable::new(
         GeomSource::SubMesh(submesh),
@@ -597,8 +608,13 @@ pub(crate) fn run_interactive_submesh_field(
         }
         let event_loop = slot.as_mut().expect("just initialised");
         event_loop.set_control_flow(ControlFlow::Wait);
-        let mut app =
-            App::new_with_button(&drawable, view, bbox, Some(&drawable as &dyn FieldButton));
+        let mut app = App::new_with_button(
+            &drawable,
+            view,
+            bbox,
+            Some(&drawable as &dyn FieldButton),
+            title,
+        );
         event_loop
             .run_app_on_demand(&mut app)
             .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?;
@@ -617,7 +633,11 @@ thread_local! {
 
 /// Run the interactive viewer on `object`. Returns when the user closes
 /// the window. Cancels with an error if winit fails to start.
-pub(crate) fn run_interactive<D: Drawable>(object: &D, view: View) -> Result<()> {
+pub(crate) fn run_interactive<D: Drawable>(
+    object: &D,
+    view: View,
+    title: Option<&str>,
+) -> Result<()> {
     let bbox = object.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();
@@ -627,7 +647,7 @@ pub(crate) fn run_interactive<D: Drawable>(object: &D, view: View) -> Result<()>
         }
         let event_loop = slot.as_mut().expect("just initialised");
         event_loop.set_control_flow(ControlFlow::Wait);
-        let mut app = App::new(object, view, bbox);
+        let mut app = App::new(object, view, bbox, title);
         event_loop
             .run_app_on_demand(&mut app)
             .map_err(|e| PyrucastError::Message(format!("winit: {e}")))?;
@@ -809,6 +829,7 @@ pub(crate) fn run_interactive_evolution(
     scale: crate::viz::ColorScale,
     smooth: usize,
     view: View,
+    title: Option<&str>,
 ) -> Result<()> {
     if frames.is_empty() {
         return Err(PyrucastError::Message(
@@ -838,8 +859,13 @@ pub(crate) fn run_interactive_evolution(
         }
         let event_loop = slot.as_mut().expect("just initialised");
         event_loop.set_control_flow(ControlFlow::Wait);
-        let mut app =
-            App::new_with_button(&drawable, view, bbox, Some(&drawable as &dyn FieldButton));
+        let mut app = App::new_with_button(
+            &drawable,
+            view,
+            bbox,
+            Some(&drawable as &dyn FieldButton),
+            title,
+        );
         app.frame_control = Some(&drawable as &dyn FrameControl);
         event_loop
             .run_app_on_demand(&mut app)

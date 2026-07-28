@@ -388,19 +388,22 @@ impl SubMesh {
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
     ) -> Result<()> {
-        self.plot_styled(view, save, crate::viz::MeshStyle::default())
+        self.plot_styled(view, save, crate::viz::MeshStyle::default(), None)
     }
 
     /// Like [`SubMesh::plot`] but choosing the [`crate::viz::MeshStyle`]:
     /// `Surface` (opaque skin) or `Wireframe` (all edges, see-through).
+    /// `title`, if given, names the interactive window and is drawn as a
+    /// caption at the bottom of a saved PNG/SVG.
     #[cfg(feature = "viz")]
     pub fn plot_styled(
         &self,
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
         style: crate::viz::MeshStyle,
+        title: Option<&str>,
     ) -> Result<()> {
-        crate::viz::render_submesh_styled(self, view, save, style)
+        crate::viz::render_submesh_styled(self, view, save, style, title)
     }
 }
 
@@ -671,20 +674,23 @@ impl Mesh {
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
     ) -> Result<()> {
-        self.plot_styled(view, save, crate::viz::MeshStyle::default())
+        self.plot_styled(view, save, crate::viz::MeshStyle::default(), None)
     }
 
     /// Like [`Mesh::plot`] but choosing the [`crate::viz::MeshStyle`]:
     /// `Surface` (opaque skin) or `Wireframe` (all edges, see-through).
-    /// Each submesh is drawn in its own `face_color`.
+    /// Each submesh is drawn in its own `face_color`. `title`, if given,
+    /// names the interactive window and is drawn as a caption at the bottom
+    /// of a saved PNG/SVG.
     #[cfg(feature = "viz")]
     pub fn plot_styled(
         &self,
         view: Option<crate::viz::View>,
         save: Option<&std::path::Path>,
         style: crate::viz::MeshStyle,
+        title: Option<&str>,
     ) -> Result<()> {
-        crate::viz::render_mesh_styled(self, view, save, style)
+        crate::viz::render_mesh_styled(self, view, save, style, title)
     }
 
     /// Visualize this mesh coloured by a field component — a
@@ -714,8 +720,9 @@ impl Mesh {
         component: Option<&str>,
         scale: crate::viz::ColorScale,
         smooth: usize,
+        title: Option<&str>,
     ) -> Result<()> {
-        crate::viz::render_mesh_with_field(self, field, component, scale, smooth, view, save)
+        crate::viz::render_mesh_with_field(self, field, component, scale, smooth, view, save, title)
     }
 }
 

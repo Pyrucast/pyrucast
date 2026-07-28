@@ -100,7 +100,7 @@ pub fn merge_nodes(mesh: PyRef<PyMesh>, tol: f64) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Extract the boundary of a surface mesh (TRI3/QUA4) as closed SEG2 loops.
+/// Extract the boundary of a surface mesh (TRI3/QUA4) as SEG2 loops.
 ///
 /// An element edge used by exactly one cell is a boundary edge; the boundary
 /// edges (pooled across all surface submeshes) are chained into closed loops.
@@ -108,10 +108,17 @@ pub fn merge_nodes(mesh: PyRef<PyMesh>, tol: f64) -> PyResult<PyMesh> {
 /// simply-connected domain, several when the domain has holes or disjoint
 /// pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
 /// CW), so the result can feed straight back into `triangulate_surface`.
+///
+/// With `angle_deg` given, each loop is further split into open **arêtes** at
+/// its corner nodes — where the boundary turns by more than `angle_deg`
+/// degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
+/// flat faces). A loop with no such corner stays a single closed loop.
+/// `angle_deg=None` (the default) keeps every boundary as one closed loop.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn border(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
-    let result = crate::ops::mesher::border(&mesh.inner)?;
+#[pyo3(signature = (mesh, angle_deg=None))]
+pub fn border(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::border(&mesh.inner, angle_deg)?;
     Ok(PyMesh { inner: result })
 }
 

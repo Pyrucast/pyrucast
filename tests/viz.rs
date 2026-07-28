@@ -235,6 +235,7 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
         None,
         ColorScale::default(),
         0,
+        None,
     )
     .unwrap();
 
@@ -288,6 +289,7 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
             ..Default::default()
         },
         0,
+        None,
     )
     .unwrap();
 
@@ -334,10 +336,43 @@ fn plot_with_field_explicit_component_choice() {
         0,
         Some(View::front()),
         Some(&path),
+        None,
     )
     .unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.contains("[UY]"));
+}
+
+#[test]
+fn figure_title_is_engraved_at_the_bottom_of_a_saved_image() {
+    let coords = insert(Coords::new(2).unwrap());
+    let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+    let mut sm = SubMesh::new(coords, ElementType::TRI3);
+    sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+
+    let dir = tmpdir();
+    let titled = dir.join("titled.svg");
+    sm.plot_styled(
+        Some(View::iso()),
+        Some(&titled),
+        MeshStyle::Surface,
+        Some("cantilever-beam"),
+    )
+    .unwrap();
+    let text = std::fs::read_to_string(&titled).unwrap();
+    assert!(
+        text.contains("cantilever-beam"),
+        "the figure title should be engraved in the saved SVG"
+    );
+
+    // No title → the caption text is absent (and the plot keeps full height).
+    let plain = dir.join("plain.svg");
+    sm.plot_styled(Some(View::iso()), Some(&plain), MeshStyle::Surface, None)
+        .unwrap();
+    let plain_text = std::fs::read_to_string(&plain).unwrap();
+    assert!(!plain_text.contains("cantilever-beam"));
 }
 
 #[test]
@@ -365,6 +400,7 @@ fn plot_with_field_unknown_component_errors() {
         0,
         None,
         Some(&path),
+        None,
     )
     .unwrap_err();
     let msg = format!("{err}");
@@ -415,6 +451,7 @@ fn plot_mesh_with_element_field_writes_svg() {
         None,
         ColorScale::default(),
         4,
+        None,
     )
     .unwrap();
 
@@ -449,6 +486,7 @@ fn node_field_standalone_plot_is_point_cloud() {
         Some(&path),
         None,
         ColorScale::default(),
+        None,
     )
     .unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
@@ -483,6 +521,7 @@ fn element_field_standalone_plot_reconstructs_mesh() {
         None,
         ColorScale::default(),
         3,
+        None,
     )
     .unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
@@ -516,9 +555,9 @@ fn mesh_wireframe_has_no_filled_faces() {
     let dir = tmpdir();
     let surface = dir.join("tet_surface.svg");
     let wire = dir.join("tet_wire.svg");
-    mesh.plot_styled(Some(View::iso()), Some(&surface), MeshStyle::Surface)
+    mesh.plot_styled(Some(View::iso()), Some(&surface), MeshStyle::Surface, None)
         .unwrap();
-    mesh.plot_styled(Some(View::iso()), Some(&wire), MeshStyle::Wireframe)
+    mesh.plot_styled(Some(View::iso()), Some(&wire), MeshStyle::Wireframe, None)
         .unwrap();
 
     let surface_svg = std::fs::read_to_string(&surface).unwrap();

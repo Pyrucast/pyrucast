@@ -337,7 +337,7 @@ class ElementField:
         r"""
         Union of the sub-fields' component names, first-seen order.
         """
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, title: typing.Optional[builtins.str] = None) -> None:
         r"""
         Visualize this field on its own support: each zone knows its
         submesh through its FE subspace, so the mesh is reconstructed
@@ -346,7 +346,7 @@ class ElementField:
         elements stay visible.
         
         Same `view` / `save` / `show_axes` / `component` / `vmin` /
-        `vmax` / `cmap` / `smooth` semantics as `Mesh.plot`.
+        `vmax` / `cmap` / `smooth` / `title` semantics as `Mesh.plot`.
         """
     def min(self, component: builtins.str) -> builtins.float:
         r"""
@@ -838,13 +838,13 @@ class Mesh:
         Python side — e.g. after `read_gmsh(coords, …)` if `coords` went out
         of scope. Raises if the mesh has no submesh yet (no `Coords` to take).
         """
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False, title: typing.Optional[builtins.str] = None) -> None:
         r"""
         Visualize this mesh (every submesh in its own colour, or
         coloured by a `NodeField` / `ElementField` if `field` is
         supplied). See
         `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
-        `field`, `component` and `wireframe`.
+        `field`, `component`, `wireframe` and `title`.
         """
     def __len__(self) -> builtins.int: ...
     def __getitem__(self, key: typing.Any) -> typing.Any:
@@ -1293,7 +1293,7 @@ class NodeField:
         Sum of `component` across the zones defining it (Σ over the whole field)
         — the resultant of a nodal force field, one component at a time.
         """
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, title: typing.Optional[builtins.str] = None) -> None:
         r"""
         Visualize this field alone, as a **coloured point cloud** over
         its support nodes — the POI1 support has no connectivity, so no
@@ -1301,7 +1301,7 @@ class NodeField:
         original mesh for surfaces.
         
         Same `view` / `save` / `show_axes` / `component` / `vmin` /
-        `vmax` / `cmap` semantics as `Mesh.plot`.
+        `vmax` / `cmap` / `title` semantics as `Mesh.plot`.
         """
     def support_mesh(self) -> Mesh:
         r"""
@@ -1836,7 +1836,7 @@ class SubMesh:
         Deep-copy into a fresh, **unsealed** SubMesh with the same
         connectivity — the way to keep editing after this one has been sealed.
         """
-    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False) -> None:
+    def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False, title: typing.Optional[builtins.str] = None) -> None:
         r"""
         Visualize this submesh.
         
@@ -1869,6 +1869,9 @@ class SubMesh:
           (interior edges of volume cells included) instead of the opaque
           outer skin. Geometry only — combining it with `field` raises
           `ValueError`, since a field always colours the faces.
+        - `title`: optional figure name. It titles the interactive window
+          and is drawn centred as a caption at the bottom of a saved
+          PNG/SVG (default `None` ⇒ no caption, default window title).
         """
     def __len__(self) -> builtins.int:
         r"""
@@ -2134,9 +2137,9 @@ def beam_deformation(field: NodeField, fespace: FiniteElementSpace) -> ElementFi
     `M = E·I·κ` and `V = G·A_s·γ`.
     """
 
-def border(mesh: Mesh) -> Mesh:
+def border(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Extract the boundary of a surface mesh (TRI3/QUA4) as closed SEG2 loops.
+    Extract the boundary of a surface mesh (TRI3/QUA4) as SEG2 loops.
     
     An element edge used by exactly one cell is a boundary edge; the boundary
     edges (pooled across all surface submeshes) are chained into closed loops.
@@ -2144,6 +2147,12 @@ def border(mesh: Mesh) -> Mesh:
     simply-connected domain, several when the domain has holes or disjoint
     pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
     CW), so the result can feed straight back into `triangulate_surface`.
+    
+    With `angle_deg` given, each loop is further split into open **arêtes** at
+    its corner nodes — where the boundary turns by more than `angle_deg`
+    degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
+    flat faces). A loop with no such corner stays a single closed loop.
+    `angle_deg=None` (the default) keeps every boundary as one closed loop.
     """
 
 def circle(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int, element_type: builtins.str = 'SEG2') -> Mesh:
