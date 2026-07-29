@@ -28,7 +28,7 @@
 //! four corners and every tetrahedron touching them are removed at the end.
 //! What survives triangulates the convex hull of the input.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::Cancel;
@@ -82,6 +82,9 @@ pub struct TetMesh {
     /// clearing.
     mark: Vec<u32>,
     stamp: u32,
+    /// One incident tetrahedron per vertex, so a star can be found without
+    /// scanning. Refreshed on every allocation.
+    vertex_tet: Vec<u32>,
 }
 
 impl TetMesh {
@@ -158,6 +161,7 @@ impl TetMesh {
             hint: 0,
             mark: vec![0; 1],
             stamp: 0,
+            vertex_tet: vec![0; (n + 4) as usize],
         }
     }
 
@@ -167,8 +171,90 @@ impl TetMesh {
         let p = self.points[p_idx as usize];
         let seed = self.locate(&p)?;
         let cavity = self.collect_cavity(&p, seed);
-        let boundary = self.cavity_boundary(&cavity);
-        self.refill(p_idx, &cavity, &boundary)
+        // Each boundary face is wound outwards from the cavity, so `p` lies
+        // below it; reversing two of its vertices makes the new cell
+        // positively oriented. A cavity that is not star-shaped shows up
+        // here as a non-positive cell, which `replace_region` rejects —
+        // exact predicates rule that out, so it would mean a bug.
+        let new: Vec<[u32; 4]> = self
+            .cavity_boundary(&cavity)
+            .into_iter()
+            .map(|f| [f[0], f[2], f[1], p_idx])
+            .collect();
+        let created = self.replace_region(&cavity, &new, "the Bowyer-Watson cavity")?;
+        self.hint = *created.last().unwrap_or(&self.hint);
+        Ok(())
+    }
+
+    /// Swap one set of tetrahedra for another covering the same region.
+    ///
+    /// This is the single primitive every structural change goes through —
+    /// point insertion, the flips, boundary recovery. It re-links the
+    /// adjacency from the faces alone, and in doing so **proves** the swap is
+    /// sound: the new cells must be positively oriented, and their outer
+    /// faces must match the old region's outer faces exactly. A replacement
+    /// that would leave a crack or an overlap cannot go through unnoticed.
+    ///
+    /// Returns the slots of the new tetrahedra.
+    pub(super) fn replace_region(
+        &mut self,
+        old: &[u32],
+        new: &[[u32; 4]],
+        what: &str,
+    ) -> Result<Vec<u32>> {
+        for v in new {
+            if self.orientation(v) <= 0.0 {
+                return Err(PyrucastError::Message(format!(
+                    "mesh_volume: replacing {what} would create an inverted or flat \
+                     tetrahedron (internal error)"
+                )));
+            }
+        }
+
+        // The region's outer faces, with whatever lies beyond each, captured
+        // before anything is torn down.
+        let in_old: HashSet<u32> = old.iter().copied().collect();
+        let mut outside: HashMap<[u32; 3], u32> = HashMap::with_capacity(2 * old.len() + 4);
+        for &t in old {
+            for i in 0..4 {
+                let n = self.tets[t as usize].nb[i];
+                if n != NO_TET && in_old.contains(&n) {
+                    continue; // interior to the region
+                }
+                outside.insert(sorted3(self.face(t as usize, i)), n);
+            }
+        }
+
+        for &t in old {
+            self.kill(t);
+        }
+        let created: Vec<u32> = new.iter().map(|&v| self.alloc(v)).collect();
+
+        let mut pending: HashMap<[u32; 3], (u32, usize)> = HashMap::with_capacity(new.len());
+        for &t in &created {
+            for i in 0..4 {
+                let key = sorted3(self.face(t as usize, i));
+                if let Some(&n) = outside.get(&key) {
+                    self.tets[t as usize].nb[i] = n;
+                    if n != NO_TET {
+                        self.relink(n, &key, t);
+                    }
+                } else if let Some((other, j)) = pending.remove(&key) {
+                    self.tets[t as usize].nb[i] = other;
+                    self.tets[other as usize].nb[j] = t;
+                } else {
+                    pending.insert(key, (t, i));
+                }
+            }
+        }
+        if !pending.is_empty() {
+            return Err(PyrucastError::Message(format!(
+                "mesh_volume: replacing {what} left {} unmatched face(s) — the new cells do \
+                 not tile the same region (internal error)",
+                pending.len()
+            )));
+        }
+        Ok(created)
     }
 
     /// Walk to the tetrahedron containing `p`.
@@ -259,9 +345,8 @@ impl TetMesh {
         cavity
     }
 
-    /// Faces of the cavity that face outwards, each with the tetrahedron
-    /// beyond it and which of that cell's faces it is.
-    fn cavity_boundary(&self, cavity: &[u32]) -> Vec<([u32; 3], u32)> {
+    /// Faces of the cavity that face outwards.
+    fn cavity_boundary(&self, cavity: &[u32]) -> Vec<[u32; 3]> {
         let stamp = self.stamp;
         let mut faces = Vec::with_capacity(2 * cavity.len() + 2);
         for &t in cavity {
@@ -270,53 +355,10 @@ impl TetMesh {
                 if n != NO_TET && self.mark[n as usize] == stamp {
                     continue; // interior to the cavity
                 }
-                faces.push((self.face(t as usize, i), n));
+                faces.push(self.face(t as usize, i));
             }
         }
         faces
-    }
-
-    /// Replace the cavity with one tetrahedron per boundary face, joining it
-    /// to the new point.
-    fn refill(&mut self, p_idx: u32, cavity: &[u32], boundary: &[([u32; 3], u32)]) -> Result<()> {
-        for &t in cavity {
-            self.kill(t);
-        }
-
-        // `f` is wound outwards from the cavity, so `p` lies below it;
-        // reversing two of its vertices makes the new cell positively
-        // oriented.
-        let mut created: Vec<u32> = Vec::with_capacity(boundary.len());
-        for &(f, outside) in boundary {
-            let v = [f[0], f[2], f[1], p_idx];
-            if orient3d(
-                &self.points[v[0] as usize],
-                &self.points[v[1] as usize],
-                &self.points[v[2] as usize],
-                &self.points[v[3] as usize],
-            ) <= 0.0
-            {
-                // Only reachable if the cavity was not star-shaped, which
-                // exact predicates rule out — so this is a bug, not bad input.
-                return Err(PyrucastError::Message(
-                    "mesh_volume: the Bowyer-Watson cavity was not star-shaped \
-                     (internal error)"
-                        .into(),
-                ));
-            }
-            let t = self.alloc(v);
-            // The face opposite the new point is `f` itself: it keeps the
-            // neighbour the cavity had there.
-            self.tets[t as usize].nb[3] = outside;
-            if outside != NO_TET {
-                self.relink(outside, &f, t);
-            }
-            created.push(t);
-        }
-
-        self.link_siblings(&created);
-        self.hint = *created.last().unwrap_or(&self.hint);
-        Ok(())
     }
 
     /// Point `outside`'s face matching `f` back at the new tetrahedron `t`.
@@ -329,31 +371,6 @@ impl TetMesh {
             }
         }
         debug_assert!(false, "the outside cell must own the boundary face");
-    }
-
-    /// Join the freshly created tetrahedra to each other: they meet along
-    /// the faces that contain the new point, two at a time.
-    fn link_siblings(&mut self, created: &[u32]) {
-        let mut seen: HashMap<[u32; 3], (u32, usize)> = HashMap::with_capacity(3 * created.len());
-        for &t in created {
-            // Face 3 is the one opposite the new point, already linked.
-            for i in 0..3 {
-                let key = sorted3(self.face(t as usize, i));
-                match seen.remove(&key) {
-                    Some((other, j)) => {
-                        self.tets[t as usize].nb[i] = other;
-                        self.tets[other as usize].nb[j] = t;
-                    }
-                    None => {
-                        seen.insert(key, (t, i));
-                    }
-                }
-            }
-        }
-        debug_assert!(
-            seen.is_empty(),
-            "every interior face of the refill is shared by exactly two cells"
-        );
     }
 
     /// Remove the bootstrap tetrahedron's corners and everything touching
@@ -381,6 +398,7 @@ impl TetMesh {
             self.kill(t);
         }
         self.points.truncate(first_corner as usize);
+        self.vertex_tet.truncate(first_corner as usize);
         self.hint = self.first_live().unwrap_or(0) as u32;
     }
 
@@ -392,7 +410,7 @@ impl TetMesh {
             nb: [NO_TET; 4],
             dead: false,
         };
-        match self.free.pop() {
+        let slot = match self.free.pop() {
             Some(i) => {
                 self.tets[i as usize] = tet;
                 i
@@ -402,7 +420,14 @@ impl TetMesh {
                 self.mark.push(0);
                 (self.tets.len() - 1) as u32
             }
+        };
+        for &x in &v {
+            if self.vertex_tet.len() <= x as usize {
+                self.vertex_tet.resize(x as usize + 1, NO_TET);
+            }
+            self.vertex_tet[x as usize] = slot;
         }
+        slot
     }
 
     fn kill(&mut self, t: u32) {
@@ -412,6 +437,97 @@ impl TetMesh {
 
     fn first_live(&self) -> Option<usize> {
         (0..self.tets.len()).find(|&t| !self.tets[t].dead)
+    }
+
+    // ─── Neighbourhood queries ──────────────────────────────────────────
+
+    /// A live tetrahedron having `v` as a vertex.
+    fn seed_tet_for(&self, v: u32) -> Option<u32> {
+        if let Some(&t) = self.vertex_tet.get(v as usize) {
+            if t != NO_TET && !self.tets[t as usize].dead && self.tets[t as usize].v.contains(&v) {
+                return Some(t);
+            }
+        }
+        // The hint only goes stale when every cell around `v` was replaced
+        // without `v` being reused, which the callers below never do.
+        (0..self.tets.len() as u32)
+            .find(|&t| !self.tets[t as usize].dead && self.tets[t as usize].v.contains(&v))
+    }
+
+    /// Every tetrahedron having `v` as a vertex.
+    ///
+    /// Found by walking outwards from one of them: crossing any face that
+    /// contains `v` lands on another cell that does too, and the star is
+    /// connected.
+    pub(super) fn tets_around_vertex(&self, v: u32) -> Vec<u32> {
+        let Some(seed) = self.seed_tet_for(v) else {
+            return Vec::new();
+        };
+        let mut star = vec![seed];
+        let mut seen: HashSet<u32> = HashSet::from([seed]);
+        let mut stack = vec![seed];
+        while let Some(t) = stack.pop() {
+            let cell = self.tets[t as usize];
+            let at = cell
+                .v
+                .iter()
+                .position(|&x| x == v)
+                .expect("star cell holds v");
+            for i in 0..4 {
+                if i == at {
+                    continue; // the one face that misses `v`
+                }
+                let n = cell.nb[i];
+                if n != NO_TET && seen.insert(n) {
+                    star.push(n);
+                    stack.push(n);
+                }
+            }
+        }
+        star
+    }
+
+    /// The closed ring of tetrahedra sharing edge `(u, v)`, in walking order.
+    ///
+    /// `None` when the edge is absent, or when its fan is open — which for
+    /// an interior edge means it reaches the outer boundary, and makes the
+    /// edge unflippable.
+    pub(super) fn tets_around_edge(&self, u: u32, v: u32) -> Option<Vec<u32>> {
+        let start = self
+            .tets_around_vertex(u)
+            .into_iter()
+            .find(|&t| self.tets[t as usize].v.contains(&v))?;
+
+        let mut ring = vec![start];
+        let mut prev = NO_TET;
+        let mut cur = start;
+        loop {
+            let cell = self.tets[cur as usize];
+            // The two faces holding the whole edge are those opposite the
+            // two vertices that are neither `u` nor `v`.
+            let next = (0..4)
+                .filter(|&i| cell.v[i] != u && cell.v[i] != v)
+                .map(|i| cell.nb[i])
+                .find(|&n| n != prev && n != NO_TET)?;
+            if next == start {
+                return Some(ring);
+            }
+            ring.push(next);
+            prev = cur;
+            cur = next;
+            if ring.len() > self.tets.len() {
+                return None; // not a ring; refuse rather than spin
+            }
+        }
+    }
+
+    /// The vertex of `t` that does not lie on face `f`.
+    pub(super) fn apex_beyond(&self, t: usize, f: &[u32; 3]) -> Option<u32> {
+        let cell = self.tets.get(t)?;
+        if cell.dead {
+            return None;
+        }
+        cell.v.iter().copied().find(|x| !f.contains(x))
     }
 
     // ─── Reading the mesh ───────────────────────────────────────────────

@@ -6,6 +6,8 @@
 //!
 //! - [`predicates`] — exact `orient3d` / `insphere`, the foundation every
 //!   other decision rests on.
+//! - [`flips`] — the 2-3 / 3-2 reconnections used to walk the envelope back
+//!   into the triangulation.
 //! - [`envelope`] — reading and validating the closed input surface.
 //! - [`delaunay`] — the incremental Delaunay kernel and its tetrahedron
 //!   adjacency structure.
@@ -14,5 +16,6 @@
 
 pub mod delaunay;
 pub mod envelope;
+pub mod flips;
 pub mod intersect;
 pub mod predicates;
