@@ -578,9 +578,37 @@ n'est donc pas un algorithme perfectible, c'est une question dont la réponse
 est parfois « il n'y en a pas ».
 
 La récupération procède obstacle par obstacle — bascules locales, puis
-reconstruction exhaustive de la poche qui bloque — et, quand elle n'y arrive
-pas, elle nomme l'arête ou la facette en cause plutôt que de rendre un
-maillage qui ne correspond pas à la surface reçue.
+reconstruction de la poche qui bloque — et, quand elle n'y arrive pas, elle
+nomme l'arête ou la facette en cause plutôt que de rendre un maillage qui ne
+correspond pas à la surface reçue.
+
+**Reconstruire une poche : deux remplisseurs.** Le premier *cherche*, en
+faisant croître un pavage cellule par cellule depuis la surface de la poche.
+Il est complet — lui seul peut prouver qu'*aucun* remplissage n'existe — mais
+il est exponentiel et s'arrête à quelques cellules. Le second ne cherche pas :
+il **calcule** l'unique candidat canonique, la triangulation de Delaunay des
+sommets de la poche, et lui pose une seule question — contient-elle chaque
+face de la surface de la poche ? Si oui, les cellules qui tombent à
+l'intérieur pavent exactement la poche, pour le prix d'une triangulation quel
+que soit son volume ; si non, il **nomme la face** sur laquelle il a buté.
+
+Ce nom est une instruction, pas un diagnostic : en absorbant la cellule située
+de l'autre côté de cette face, celle-ci cesse d'être sur la surface de la
+poche, et l'obstacle ne peut pas se représenter. On repose alors une question
+strictement plus grande, sans arbre de recherche ni retour arrière. C'est ce
+qui rend abordable la récupération d'une facette prise dans un plan interne —
+la diagonale d'un quadrilatère de paroi d'extrusion, par exemple — là où la
+recherche exhaustive renonçait. La facette à récupérer est passée comme un
+**mur à deux faces** : la poche est coupée en deux le long d'elle et chaque
+moitié est remplie depuis son propre côté, de sorte qu'une facette contenue
+dans la triangulation est une facette récupérée.
+
+> **Ce que cela ne fait pas.** Une triangulation de Delaunay est ce qu'elle
+> est : on ne peut pas lui *demander* une arête. Or une arête d'enveloppe
+> manquante est manquante précisément parce qu'elle n'est pas de Delaunay.
+> La retriangulation de cavité traite donc les **facettes**, pas les arêtes ;
+> une arête bloquée reste l'affaire des bascules, et si elles n'y suffisent
+> pas, du mode `allow_surface_nodes`.
 
 #### 4. Séparation matière / vide
 

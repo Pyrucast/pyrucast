@@ -24,9 +24,19 @@
 //! containing a cell made of four ring vertices, which on a box is exactly
 //! the one that works.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use crate::interrupt::NoCancel;
+
+use super::delaunay::TetMesh;
 use super::predicates::orient3d;
+
+/// Boundary faces up to which the exhaustive filler is worth trying.
+///
+/// It is complete, so it is the only one that can prove a small pocket has
+/// no filling — but it is exponential, so past this it costs more than it
+/// can return.
+pub const EXHAUSTIVE_LIMIT: usize = 12;
 
 /// Cells examined before a search gives up.
 ///
@@ -51,6 +61,180 @@ pub struct Constraints<'a> {
     pub with_faces: &'a [[u32; 3]],
     /// Each of these must end up an edge of the filling.
     pub with_edges: &'a [(u32, u32)],
+}
+
+/// Fill the region enclosed by `boundary` by triangulating its own vertices
+/// and keeping what lands inside.
+///
+/// The exhaustive search above is complete but exponential, so it runs out
+/// of road at half a dozen cells — and the pockets that matter are larger.
+/// This one does not search at all. It **computes** the one canonical
+/// candidate, the Delaunay triangulation of the region's vertices, and asks
+/// a single question of it: does it contain every face of the region's
+/// surface? If it does, the cells that fall inside tile the region exactly
+/// and the job is done in the time of one triangulation. If it does not,
+/// there is nothing to backtrack over — the caller widens the region and
+/// asks again, which is a different question rather than the same one
+/// retried.
+///
+/// Nothing here can be *asked* for, since a Delaunay triangulation is what
+/// it is: `want` is checked after the fact, not steered towards. A caller
+/// that needs a particular face or edge puts it in `boundary`, where it is
+/// part of the question instead of a hope.
+///
+/// The error reports **which faces of the surface the triangulation does not
+/// contain**. That is not a diagnostic but the next instruction: absorb the
+/// cells beyond them and ask again, and those faces stop being on the surface
+/// at all. Widening blindly instead almost never lands on a surface the
+/// triangulation happens to respect. It is empty when the refusal was for
+/// some other reason — one that widening will not mend.
+pub fn delaunay_fill(
+    points: &[[f64; 3]],
+    boundary: &[[u32; 3]],
+    want: Constraints<'_>,
+) -> Result<Vec<[u32; 4]>, Vec<[u32; 3]>> {
+    // The region's own vertices, renumbered from zero: the triangulation
+    // knows nothing of the mesh this pocket came out of.
+    let mut vs: Vec<u32> = boundary.iter().flatten().copied().collect();
+    vs.sort_unstable();
+    vs.dedup();
+    if vs.len() < 4 {
+        return Err(Vec::new());
+    }
+    let local: Vec<[f64; 3]> = vs.iter().map(|&i| points[i as usize]).collect();
+    let down = |g: u32| vs.binary_search(&g).ok().map(|i| i as u32);
+    let up = |l: u32| vs[l as usize];
+
+    let mut walls: Vec<[u32; 3]> = Vec::with_capacity(boundary.len());
+    for f in boundary {
+        let Some(w) = (|| Some([down(f[0])?, down(f[1])?, down(f[2])?]))() else {
+            return Err(Vec::new());
+        };
+        walls.push(w);
+    }
+    let Ok(mesh) = TetMesh::delaunay(&local, &NoCancel) else {
+        return Err(Vec::new());
+    };
+
+    // The one question worth asking. A surface the triangulation does not
+    // contain is a surface it cannot be cut along.
+    let missing: Vec<[u32; 3]> = walls
+        .iter()
+        .filter(|f| !mesh.has_face(f))
+        .map(|f| [up(f[0]), up(f[1]), up(f[2])])
+        .collect();
+    if !missing.is_empty() {
+        return Err(missing);
+    }
+    let barrier: HashSet<[u32; 3]> = walls.iter().map(key).collect();
+
+    // Inside is the side the surface faces away from, so each wall names the
+    // cell beyond it that belongs to the region.
+    let mut inside = vec![false; mesh.slot_count()];
+    let mut stack: Vec<usize> = Vec::new();
+    for f in &walls {
+        let Some(owners) = mesh.face_owners(f) else {
+            return Err(Vec::new());
+        };
+        for (t, i) in owners {
+            let Some(apex) = mesh.tet(t as usize).map(|c| c[i]) else {
+                return Err(Vec::new());
+            };
+            let p = mesh.points();
+            if orient3d(
+                &p[f[0] as usize],
+                &p[f[1] as usize],
+                &p[f[2] as usize],
+                &p[apex as usize],
+            ) < 0.0
+                && !inside[t as usize]
+            {
+                inside[t as usize] = true;
+                stack.push(t as usize);
+            }
+        }
+    }
+    if stack.is_empty() {
+        return Err(Vec::new());
+    }
+    while let Some(t) = stack.pop() {
+        for i in 0..4 {
+            if barrier.contains(&key(&mesh.face(t, i))) {
+                continue;
+            }
+            if let Some(n) = mesh.neighbour(t, i) {
+                if !inside[n] {
+                    inside[n] = true;
+                    stack.push(n);
+                }
+            }
+        }
+    }
+
+    let cells: Vec<[u32; 4]> = mesh
+        .iter()
+        .filter(|(t, _)| inside[*t])
+        .map(|(_, v)| [up(v[0]), up(v[1]), up(v[2]), up(v[3])])
+        .collect();
+    if cells.is_empty() {
+        return Err(Vec::new());
+    }
+
+    // Every wall being present does not make the flooded part *the region*.
+    // A pocket carved out of an existing mesh can have a surface that folds
+    // back on itself, and the flood then settles on a different solid with
+    // the same skin — cells that tile something the caller never asked to
+    // fill. Volume is what tells the two apart, and it is not expensive.
+    let enclosed = enclosed_volume(points, boundary);
+    let filled: f64 = cells
+        .iter()
+        .map(|c| {
+            let p = |i: u32| points[i as usize];
+            orient3d(&p(c[0]), &p(c[1]), &p(c[2]), &p(c[3])) / 6.0
+        })
+        .sum();
+    if enclosed <= 0.0 || (filled - enclosed).abs() > 1e-9 * enclosed {
+        return Err(Vec::new());
+    }
+
+    // Whatever the caller needed has to have come out of it anyway.
+    let ok = want.with_faces.iter().all(|f| {
+        cells
+            .iter()
+            .any(|c| faces_of(c).iter().any(|g| key(g) == key(f)))
+    }) && want
+        .with_edges
+        .iter()
+        .all(|&(u, v)| cells.iter().any(|c| c.contains(&u) && c.contains(&v)))
+        && !want
+            .without_edges
+            .iter()
+            .any(|&(u, v)| cells.iter().any(|c| c.contains(&u) && c.contains(&v)));
+    // A constraint the triangulation did not meet is not something growing
+    // will mend, so nothing is reported to grow across.
+    if ok {
+        Ok(cells)
+    } else {
+        Err(Vec::new())
+    }
+}
+
+/// The volume a closed, outward-wound surface encloses.
+///
+/// By the divergence theorem the sum over faces of the signed volume of
+/// `(face, o)` is the enclosed volume for **any** reference point `o`, inside
+/// the surface or not — the parts outside cancel. `o` is taken as the origin.
+fn enclosed_volume(points: &[[f64; 3]], boundary: &[[u32; 3]]) -> f64 {
+    const O: [f64; 3] = [0.0, 0.0, 0.0];
+    boundary
+        .iter()
+        .map(|f| {
+            let p = |i: u32| points[i as usize];
+            // An outward face and a point on the material side make a
+            // negatively oriented cell, so the sign is turned round here.
+            -orient3d(&p(f[0]), &p(f[1]), &p(f[2]), &O) / 6.0
+        })
+        .sum()
 }
 
 /// Fill the region enclosed by `boundary` with tetrahedra drawn from its own
@@ -564,6 +748,111 @@ mod tests {
                 reference
             );
         }
+    }
+
+    // ─── The Delaunay filler ────────────────────────────────────────────
+
+    /// Five points whose hull is a bipyramid, and that hull's six faces.
+    ///
+    /// A convex region's surface is the convex hull of its own vertices, and
+    /// the hull is always part of the Delaunay triangulation — so this is
+    /// the case the filler is bound to get right.
+    fn bipyramid() -> (Vec<[f64; 3]>, [[u32; 3]; 6]) {
+        let p = vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.2, 0.2, -1.0],
+            [0.2, 0.2, 1.0],
+        ];
+        let faces = [
+            [0, 1, 4],
+            [1, 2, 4],
+            [2, 0, 4],
+            [1, 0, 3],
+            [2, 1, 3],
+            [0, 2, 3],
+        ];
+        (p, faces)
+    }
+
+    #[test]
+    fn delaunay_fills_a_convex_region() {
+        let (p, faces) = bipyramid();
+        let cells = delaunay_fill(&p, &faces, Constraints::default())
+            .expect("a convex region's own hull is always in its triangulation");
+        check_tiles(&cells, &faces);
+        // The two pyramids, however the middle is cut.
+        assert!((volume_of(&p, &cells) - 1.0 / 3.0).abs() < 1e-14);
+    }
+
+    #[test]
+    fn delaunay_declines_the_diagonals_a_box_does_not_choose() {
+        // The eight corners of a box are cospherical, and the triangulation
+        // picks its own diagonals. Asked for the other ones, the filler says
+        // no rather than returning a surface that is not the one requested —
+        // which is the signal the caller needs in order to widen the region.
+        let p = cube();
+        let missing = delaunay_fill(&p, &ALTERNATING, Constraints::default())
+            .expect_err("the triangulation does not hold these diagonals");
+        assert!(!missing.is_empty(), "it must say which faces are missing");
+    }
+
+    #[test]
+    fn delaunay_declines_a_surface_wound_inwards() {
+        let p = cube();
+        let flipped: Vec<[u32; 3]> = ALTERNATING.iter().map(|f| [f[0], f[2], f[1]]).collect();
+        assert!(delaunay_fill(&p, &flipped, Constraints::default()).is_err());
+    }
+
+    #[test]
+    fn delaunay_fills_a_non_convex_region() {
+        // Two cells of a box, taken together: their union is not convex, so
+        // the triangulation of their corners covers more than the region and
+        // the surplus has to be dropped.
+        let p = cube();
+        let boundary = [
+            [0, 2, 1],
+            [0, 1, 5],
+            [0, 5, 2],
+            [1, 2, 5],
+            [0, 3, 2],
+            [0, 2, 7],
+            [0, 7, 3],
+            [2, 3, 7],
+        ];
+        // Whether it succeeds depends on the triangulation; what must never
+        // happen is a filling that does not tile the region.
+        if let Ok(cells) = delaunay_fill(&p, &boundary, Constraints::default()) {
+            check_tiles(&cells, &boundary);
+        }
+    }
+
+    #[test]
+    fn delaunay_honours_what_the_caller_needs() {
+        let (p, faces) = bipyramid();
+        let cells = delaunay_fill(&p, &faces, Constraints::default()).unwrap();
+        // An edge the filling does have can be asked for; one it does not
+        // want makes it decline rather than pretend.
+        let (u, v) = (cells[0][0], cells[0][1]);
+        assert!(delaunay_fill(
+            &p,
+            &faces,
+            Constraints {
+                with_edges: &[(u, v)],
+                ..Default::default()
+            }
+        )
+        .is_ok());
+        assert!(delaunay_fill(
+            &p,
+            &faces,
+            Constraints {
+                without_edges: &[(u, v)],
+                ..Default::default()
+            }
+        )
+        .is_err());
     }
 
     #[test]

@@ -31,7 +31,7 @@ use crate::interrupt::Cancel;
 
 use super::delaunay::TetMesh;
 use super::envelope::Envelope;
-use super::fill::{fill, Constraints, DEFAULT_BUDGET};
+use super::fill::{delaunay_fill, fill, Constraints, DEFAULT_BUDGET};
 use super::flips::{flip23, relevant, remove_edge};
 use super::intersect::{segment_hits_triangle, triangles_intersect};
 use super::predicates::{orient2d, orient3d};
@@ -513,6 +513,16 @@ fn recover_facet(
 /// wholesale, with the facet handed to the search as a wall it may not
 /// cross. It then either finds a filling that has the facet, or proves there
 /// is none.
+///
+/// This is the one place a Delaunay retriangulation of the pocket can stand
+/// in for the exhaustive search, and it is worth a great deal: the search is
+/// exponential and gives up at a handful of cells, while a triangulation
+/// costs the same whatever the pocket's size. The facet goes in as a wall
+/// with **both** its faces, so the pocket is cut in two along it and each
+/// half is filled from its own side — a facet the triangulation contains is
+/// a facet recovered. When the triangulation refuses, it names the face it
+/// stumbled on, and taking in the cell beyond that face makes the refusal
+/// impossible to repeat.
 fn rebuild_around(
     mesh: &mut TetMesh,
     f: &[u32; 3],
@@ -532,30 +542,80 @@ fn rebuild_around(
         if !want.contains(f) {
             want.push(*f);
         }
-        if let Some(cells) = fill(
+        // The facet, seen from both sides: to the triangulation it is a wall
+        // running through the pocket, and the flood fills up to it from
+        // either side rather than across it.
+        let mut split = boundary.clone();
+        split.push(*f);
+        split.push([f[0], f[2], f[1]]);
+
+        let outcome = delaunay_fill(
             mesh.points(),
-            &boundary,
+            &split,
             Constraints {
                 with_faces: &want,
                 ..Default::default()
             },
-            DEFAULT_BUDGET,
-        ) {
-            let snapshot = mesh.clone();
-            if mesh
-                .replace_region(&region, &cells, "a facet recovery")
-                .is_ok()
-            {
-                return Ok(());
+        )
+        .or_else(|missing| {
+            fill(
+                mesh.points(),
+                &boundary,
+                Constraints {
+                    with_faces: &want,
+                    ..Default::default()
+                },
+                DEFAULT_BUDGET,
+            )
+            .ok_or(missing)
+        });
+        let missing = match outcome {
+            Ok(cells) => {
+                let snapshot = mesh.clone();
+                if mesh
+                    .replace_region(&region, &cells, "a facet recovery")
+                    .is_ok()
+                {
+                    return Ok(());
+                }
+                *mesh = snapshot;
+                Vec::new()
             }
-            *mesh = snapshot;
+            Err(missing) => missing,
+        };
+
+        // Widening across what the triangulation stumbled on, when it said;
+        // a whole extra layer when it did not.
+        let mut wider = region.clone();
+        if !grow_across(mesh, &mut wider, &missing) {
+            wider = grow_region(mesh, &region);
         }
-        let wider = grow_region(mesh, &region);
         if wider.len() == region.len() || wider.len() > effort.max_region {
             return Ok(()); // caller reports the failure
         }
         region = wider;
     }
+}
+
+/// Take in the cells lying beyond `faces`, and say whether anything moved.
+///
+/// A face with nothing beyond it is on the outer surface of the mesh, so
+/// there is nothing to swallow and the pocket cannot be widened there.
+fn grow_across(mesh: &TetMesh, region: &mut Vec<u32>, faces: &[[u32; 3]]) -> bool {
+    let mut held: HashSet<u32> = region.iter().copied().collect();
+    let mut grew = false;
+    for f in faces {
+        let Some(owners) = mesh.face_owners(f) else {
+            continue;
+        };
+        for (t, _) in owners {
+            if held.insert(t) {
+                region.push(t);
+                grew = true;
+            }
+        }
+    }
+    grew
 }
 
 /// Cells whose closed shape meets the triangle `f`.

@@ -30,16 +30,28 @@
 //! well within reach. When it will not shrink far enough, the point stays —
 //! a mesh with a few more nodes than asked for, which is what the caller
 //! agreed to when it allowed the subdivision.
+//!
+//! Widening the star instead of shrinking it — swallowing the cell beyond
+//! whichever face the filler stumbled on — is the natural other move, and it
+//! is deliberately not made here. A wider pocket rebuilt under permission to
+//! re-cut the star's surface reshapes the mesh's outer skin over cells that
+//! have nothing to do with the vertex being removed; measured, it lost more
+//! subdivision points than it reclaimed. Widening belongs where the pocket's
+//! surface is held fixed, which is boundary recovery.
 
 use crate::error::Result;
 
 use super::delaunay::{Boundary, TetMesh};
-use super::fill::{fill, Constraints, DEFAULT_BUDGET};
+use super::fill::{delaunay_fill, fill, Constraints, DEFAULT_BUDGET, EXHAUSTIVE_LIMIT};
 use super::flips::{relevant, remove_edge};
 use super::recovery::Protected;
 
 /// Cells a star may hold for the rebuild to be attempted.
-const STAR_LIMIT: usize = 12;
+///
+/// Well past what the exhaustive filler can take: beyond that size the
+/// Delaunay filler carries the attempt, and it does not care how big the
+/// star is.
+const STAR_LIMIT: usize = 40;
 
 /// Attempts at shrinking one star before the vertex is left alone.
 const SHRINK_BUDGET: usize = 64;
@@ -122,15 +134,22 @@ fn rebuild_star(
         }
     }
 
-    let Some(cells) = fill(
-        mesh.points(),
-        &boundary,
-        Constraints {
-            with_faces: &required,
-            ..Default::default()
-        },
-        DEFAULT_BUDGET,
-    ) else {
+    // The Delaunay filler first: it costs one triangulation whatever the
+    // pocket's size, and is what makes a star of twenty cells worth
+    // attempting at all.
+    let want = Constraints {
+        with_faces: &required,
+        ..Default::default()
+    };
+    // The exhaustive filler is kept for the small pockets it can actually
+    // settle: it is the only one able to prove there is no filling at all,
+    // and it is not limited to Delaunay ones.
+    let Ok(cells) = delaunay_fill(mesh.points(), &boundary, want).or_else(|missing| {
+        (boundary.len() <= EXHAUSTIVE_LIMIT)
+            .then(|| fill(mesh.points(), &boundary, want, DEFAULT_BUDGET))
+            .flatten()
+            .ok_or(missing)
+    }) else {
         return Ok(false);
     };
     if cells.iter().any(|c| c.contains(&m)) {

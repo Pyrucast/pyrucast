@@ -27,7 +27,7 @@ use crate::containers::mesh::Point2;
 use crate::error::Result;
 
 use super::delaunay::{Boundary, TetMesh};
-use super::fill::{fill, Constraints, DEFAULT_BUDGET};
+use super::fill::{delaunay_fill, fill, Constraints, DEFAULT_BUDGET, EXHAUSTIVE_LIMIT};
 use super::predicates::{orient2d, orient3d};
 use super::recovery::Protected;
 use crate::ops::mesher::triangulation::{ear_clip_2d, signed_area};
@@ -83,31 +83,70 @@ pub fn recut_flat_strip(
         boundary.extend_from_slice(&new_faces);
 
         let keep = super::flips::relevant(mesh, &region, protect);
-        if let Some(cells) = fill(
-            mesh.points(),
-            &boundary,
-            Constraints {
-                with_faces: &keep,
-                ..Default::default()
-            },
-            DEFAULT_BUDGET,
-        ) {
-            let snapshot = mesh.clone();
-            if mesh
-                .replace_region_with(&region, &cells, "a surface re-cut", Boundary::MayRecutHull)
-                .is_ok()
-            {
-                return Ok(true);
+        let want = Constraints {
+            with_faces: &keep,
+            ..Default::default()
+        };
+        // The Delaunay filler first — one triangulation, whatever the size —
+        // then the exhaustive one on the small pockets it can settle.
+        let outcome = delaunay_fill(mesh.points(), &boundary, want).or_else(|missing| {
+            (boundary.len() <= EXHAUSTIVE_LIMIT)
+                .then(|| fill(mesh.points(), &boundary, want, DEFAULT_BUDGET))
+                .flatten()
+                .ok_or(missing)
+        });
+        let missing = match outcome {
+            Ok(cells) => {
+                let snapshot = mesh.clone();
+                if mesh
+                    .replace_region_with(
+                        &region,
+                        &cells,
+                        "a surface re-cut",
+                        Boundary::MayRecutHull,
+                    )
+                    .is_ok()
+                {
+                    return Ok(true);
+                }
+                *mesh = snapshot;
+                Vec::new()
             }
-            *mesh = snapshot;
-        }
+            Err(missing) => missing,
+        };
 
-        let wider = widen(mesh, &region);
+        // Widening across the faces the triangulation stumbled on turns them
+        // into interior faces, so the same obstruction cannot come back. Only
+        // when it says nothing usable — the missing face is on the mesh's
+        // outer surface, or the refusal was not about the surface at all — is
+        // a whole extra layer taken instead.
+        let mut wider = region.clone();
+        if !grow_across(mesh, &mut wider, &missing) {
+            wider = widen(mesh, &region);
+        }
         if wider.len() == region.len() || wider.len() > max_region {
             return Ok(false);
         }
         region = wider;
     }
+}
+
+/// Take in the cells lying beyond `faces`, and say whether anything moved.
+fn grow_across(mesh: &TetMesh, region: &mut Vec<u32>, faces: &[[u32; 3]]) -> bool {
+    let mut held: std::collections::HashSet<u32> = region.iter().copied().collect();
+    let mut grew = false;
+    for f in faces {
+        let Some(owners) = mesh.face_owners(f) else {
+            continue;
+        };
+        for (t, _) in owners {
+            if held.insert(t) {
+                region.push(t);
+                grew = true;
+            }
+        }
+    }
+    grew
 }
 
 /// The region plus every cell touching it through a face.

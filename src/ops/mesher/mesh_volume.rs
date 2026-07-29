@@ -924,25 +924,27 @@ mod tests {
     }
 
     #[test]
-    fn meshes_a_finer_extruded_plate_by_subdividing_it() {
-        // Strictly, the side-wall quadrilaterals defeat recovery; allowed to
-        // cut the envelope finer, the mesher gets through.
+    fn meshes_a_finer_extruded_plate_without_touching_its_skin() {
+        // The side-wall quadrilaterals of an extrusion used to defeat
+        // recovery outright, and the envelope had to be cut finer to get a
+        // mesh at all. Retriangulating the pocket around a stuck facet
+        // settles them, so the strict contract holds here: the envelope
+        // comes back exactly as it went in.
         let coords = insert(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 3, 0.35);
-        assert!(mesh_volume(&envelope, None, false).is_err());
 
-        let before = read(&coords).unwrap().node_count();
-        let mesh = mesh_volume(&envelope, None, true).unwrap();
+        let mesh = mesh_volume(&envelope, None, false).unwrap();
         let v = mesh_volume_of(&mesh);
         assert!((v - 0.4).abs() < 1e-12, "volume {v}");
 
-        // Nodes were added, and the shape is none the worse for it: the
-        // volume above is exact, and the skin still peels to a closed
-        // surface.
-        let added = read(&coords).unwrap().node_count() - before;
-        assert!(added > 0, "the strict run failed, so something had to give");
+        // Nodes were added — refinement fills the inside — but none of them
+        // on the envelope, which is what the strict contract is about.
         let peeled = super::super::skin(&mesh, None).unwrap();
-        assert!(peeled.cell_count().unwrap() > envelope.cell_count().unwrap());
+        assert_eq!(
+            peeled.cell_count().unwrap(),
+            envelope.cell_count().unwrap(),
+            "the skin is the envelope, facet for facet"
+        );
     }
 
     #[test]
