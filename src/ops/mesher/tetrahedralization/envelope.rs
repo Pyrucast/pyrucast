@@ -28,8 +28,10 @@ use std::collections::HashMap;
 use crate::aggregate::Aggregate;
 use crate::containers::mesh::{ElementType, Mesh, NodeId};
 use crate::error::{PyrucastError, Result};
+use crate::interrupt::Cancel;
 use crate::store::read;
 
+use super::intersect::first_self_intersection;
 use super::predicates::collinear3d;
 
 /// Two nodes closer than this fraction of the bounding-box diagonal are
@@ -59,7 +61,7 @@ impl Envelope {
     ///
     /// Errors carry the operator's name and, where a specific node or facet
     /// is at fault, its `NodeId`s.
-    pub fn extract(mesh: &Mesh) -> Result<Envelope> {
+    pub fn extract(mesh: &Mesh, cancel: &dyn Cancel) -> Result<Envelope> {
         if mesh.is_empty() {
             return Err(PyrucastError::Message(
                 "mesh_volume: the envelope is empty".into(),
@@ -117,12 +119,15 @@ impl Envelope {
             facets,
             volume: 0.0,
         };
-        envelope.validate()
+        envelope.validate(cancel)
     }
 
     /// Run every structural check, returning the envelope with its signed
     /// volume filled in.
-    fn validate(mut self) -> Result<Envelope> {
+    ///
+    /// The checks run cheapest first, and each one assumes the previous ones
+    /// passed — which is also what makes the diagnostics specific.
+    fn validate(mut self, cancel: &dyn Cancel) -> Result<Envelope> {
         if self.points.len() < 4 || self.facets.len() < 4 {
             return Err(PyrucastError::Message(format!(
                 "mesh_volume: a closed surface needs at least 4 nodes and 4 facets, got {} and {}",
@@ -130,9 +135,15 @@ impl Envelope {
                 self.facets.len()
             )));
         }
+        cancel.check()?;
         self.check_no_coincident_nodes()?;
+        cancel.check()?;
         self.check_facets_are_sound()?;
+        cancel.check()?;
         self.check_edges_pair_up()?;
+        cancel.check()?;
+        self.check_no_self_intersection()?;
+        cancel.check()?;
         self.volume = self.signed_volume();
         if self.volume <= 0.0 {
             return Err(PyrucastError::Message(format!(
@@ -258,6 +269,27 @@ impl Envelope {
         Ok(())
     }
 
+    /// Reject a surface that passes through itself.
+    ///
+    /// Run last: it is the only check whose cost is more than linear, and it
+    /// is also the only one that assumes the facets are already known to be
+    /// non-degenerate.
+    fn check_no_self_intersection(&self) -> Result<()> {
+        match first_self_intersection(&self.points, &self.facets) {
+            None => Ok(()),
+            Some((i, j)) => Err(PyrucastError::Message(format!(
+                "mesh_volume: facets {i} (nodes {}, {}, {}) and {j} (nodes {}, {}, {}) of the \
+                 envelope pass through each other, so the surface has no well-defined inside",
+                self.node_ids[self.facets[i][0] as usize].0,
+                self.node_ids[self.facets[i][1] as usize].0,
+                self.node_ids[self.facets[i][2] as usize].0,
+                self.node_ids[self.facets[j][0] as usize].0,
+                self.node_ids[self.facets[j][1] as usize].0,
+                self.node_ids[self.facets[j][2] as usize].0,
+            ))),
+        }
+    }
+
     /// Volume enclosed by the oriented surface, by the divergence theorem:
     /// the sum of the signed volumes of the tetrahedra joining each facet to
     /// a common apex.
@@ -336,6 +368,7 @@ impl Envelope {
 mod tests {
     use super::*;
     use crate::containers::mesh::{Coords, Node, SubMesh};
+    use crate::interrupt::NoCancel;
     use crate::store::insert;
     use crate::store::Handle;
 
@@ -394,7 +427,7 @@ mod tests {
     #[test]
     fn accepts_a_box_and_measures_its_volume() {
         let coords = insert(Coords::new(3).unwrap());
-        let env = Envelope::extract(&unit_box(&coords)).unwrap();
+        let env = Envelope::extract(&unit_box(&coords), &NoCancel).unwrap();
         assert_eq!(env.points().len(), 8);
         assert_eq!(env.facets().len(), 12);
         assert!((env.volume() - 1.0).abs() < 1e-15, "{}", env.volume());
@@ -407,7 +440,7 @@ mod tests {
         // sitting a long way out keeps its precision.
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [1e6, 1e6, 1e6], [1e6 + 2.0, 1e6 + 3.0, 1e6 + 4.0]);
-        let env = Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS)).unwrap();
+        let env = Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS), &NoCancel).unwrap();
         assert!((env.volume() - 24.0).abs() < 1e-9, "{}", env.volume());
     }
 
@@ -426,7 +459,7 @@ mod tests {
             sm.add_cell(&[inner[f[0]], inner[f[2]], inner[f[1]]])
                 .unwrap();
         }
-        let env = Envelope::extract(&Mesh::from_submesh(sm)).unwrap();
+        let env = Envelope::extract(&Mesh::from_submesh(sm), &NoCancel).unwrap();
         assert_eq!(env.facets().len(), 24);
         assert!(
             (env.volume() - (1.0 - 0.125)).abs() < 1e-15,
@@ -441,7 +474,7 @@ mod tests {
         let n = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
         sm.add_cell(&[n[0], n[1], n[2], n[3]]).unwrap();
-        let err = message(Envelope::extract(&Mesh::from_submesh(sm)).unwrap_err());
+        let err = message(Envelope::extract(&Mesh::from_submesh(sm), &NoCancel).unwrap_err());
         assert!(err.contains("TRI3"), "{err}");
         assert!(err.contains("QUA4"), "{err}");
     }
@@ -455,7 +488,7 @@ mod tests {
             .collect();
         let mut sm = SubMesh::new(coords, ElementType::TRI3);
         sm.add_cell(&ids).unwrap();
-        let err = message(Envelope::extract(&Mesh::from_submesh(sm)).unwrap_err());
+        let err = message(Envelope::extract(&Mesh::from_submesh(sm), &NoCancel).unwrap_err());
         assert!(err.contains("3-D"), "{err}");
     }
 
@@ -464,8 +497,9 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         // Drop one facet: the box now has a triangular hole.
-        let err =
-            message(Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS[1..])).unwrap_err());
+        let err = message(
+            Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS[1..]), &NoCancel).unwrap_err(),
+        );
         assert!(err.contains("not closed"), "{err}");
     }
 
@@ -475,7 +509,8 @@ mod tests {
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mut facets = BOX_FACETS.to_vec();
         facets[5].swap(1, 2); // one facet now faces the other way
-        let err = message(Envelope::extract(&surface(&coords, &nodes, &facets)).unwrap_err());
+        let err =
+            message(Envelope::extract(&surface(&coords, &nodes, &facets), &NoCancel).unwrap_err());
         assert!(err.contains("same direction"), "{err}");
     }
 
@@ -484,7 +519,8 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let flipped: Vec<[usize; 3]> = BOX_FACETS.iter().map(|f| [f[0], f[2], f[1]]).collect();
-        let err = message(Envelope::extract(&surface(&coords, &nodes, &flipped)).unwrap_err());
+        let err =
+            message(Envelope::extract(&surface(&coords, &nodes, &flipped), &NoCancel).unwrap_err());
         assert!(err.contains("invert()"), "{err}");
     }
 
@@ -494,7 +530,8 @@ mod tests {
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mut facets = BOX_FACETS.to_vec();
         facets.push(BOX_FACETS[0]);
-        let err = message(Envelope::extract(&surface(&coords, &nodes, &facets)).unwrap_err());
+        let err =
+            message(Envelope::extract(&surface(&coords, &nodes, &facets), &NoCancel).unwrap_err());
         assert!(err.contains("same three"), "{err}");
     }
 
@@ -504,7 +541,8 @@ mod tests {
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mut facets = BOX_FACETS.to_vec();
         facets[0] = [0, 3, 3];
-        let err = message(Envelope::extract(&surface(&coords, &nodes, &facets)).unwrap_err());
+        let err =
+            message(Envelope::extract(&surface(&coords, &nodes, &facets), &NoCancel).unwrap_err());
         assert!(err.contains("twice"), "{err}");
     }
 
@@ -520,7 +558,8 @@ mod tests {
         nodes.push(twin);
         let mut facets = BOX_FACETS.to_vec();
         facets[0] = [8, 3, 2];
-        let err = message(Envelope::extract(&surface(&coords, &nodes, &facets)).unwrap_err());
+        let err =
+            message(Envelope::extract(&surface(&coords, &nodes, &facets), &NoCancel).unwrap_err());
         assert!(err.contains("merge_nodes()"), "{err}");
     }
 
@@ -537,7 +576,8 @@ mod tests {
         );
         let mut facets = BOX_FACETS.to_vec();
         facets[0] = [0, 8, 1];
-        let err = message(Envelope::extract(&surface(&coords, &nodes, &facets)).unwrap_err());
+        let err =
+            message(Envelope::extract(&surface(&coords, &nodes, &facets), &NoCancel).unwrap_err());
         assert!(err.contains("flat"), "{err}");
     }
 
@@ -545,14 +585,60 @@ mod tests {
     fn rejects_an_envelope_too_small_to_close() {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
-        let err =
-            message(Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS[..2])).unwrap_err());
+        let err = message(
+            Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS[..2]), &NoCancel).unwrap_err(),
+        );
         assert!(err.contains("at least 4"), "{err}");
     }
 
     #[test]
+    fn rejects_a_self_intersecting_envelope() {
+        // Two boxes that overlap in space but share no node: closed,
+        // manifold, consistently oriented — and yet with no inside.
+        let coords = insert(Coords::new(3).unwrap());
+        let a = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let b = box_nodes(&coords, [0.5, 0.5, 0.5], [1.5, 1.5, 1.5]);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        for nodes in [&a, &b] {
+            for f in &BOX_FACETS {
+                sm.add_cell(&[nodes[f[0]], nodes[f[1]], nodes[f[2]]])
+                    .unwrap();
+            }
+        }
+        let err = message(Envelope::extract(&Mesh::from_submesh(sm), &NoCancel).unwrap_err());
+        assert!(err.contains("pass through each other"), "{err}");
+    }
+
+    #[test]
+    fn accepts_two_disjoint_bodies() {
+        // Nothing in the contract forbids meshing two separate solids at
+        // once: each is closed, and the volumes simply add up.
+        let coords = insert(Coords::new(3).unwrap());
+        let a = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let b = box_nodes(&coords, [5.0, 0.0, 0.0], [7.0, 1.0, 1.0]);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        for nodes in [&a, &b] {
+            for f in &BOX_FACETS {
+                sm.add_cell(&[nodes[f[0]], nodes[f[1]], nodes[f[2]]])
+                    .unwrap();
+            }
+        }
+        let env = Envelope::extract(&Mesh::from_submesh(sm), &NoCancel).unwrap();
+        assert!((env.volume() - 3.0).abs() < 1e-15, "{}", env.volume());
+    }
+
+    #[test]
+    fn stops_on_a_preset_cancellation_flag() {
+        use std::sync::atomic::AtomicBool;
+        let coords = insert(Coords::new(3).unwrap());
+        let flag = AtomicBool::new(true);
+        let err = Envelope::extract(&unit_box(&coords), &flag).unwrap_err();
+        assert!(matches!(err, PyrucastError::Interrupted));
+    }
+
+    #[test]
     fn rejects_an_empty_mesh() {
-        let err = message(Envelope::extract(&Mesh::empty()).unwrap_err());
+        let err = message(Envelope::extract(&Mesh::empty(), &NoCancel).unwrap_err());
         assert!(err.contains("empty"), "{err}");
     }
 
@@ -571,7 +657,7 @@ mod tests {
             }
             mesh.add_sub(insert(sm)).unwrap();
         }
-        let env = Envelope::extract(&mesh).unwrap();
+        let env = Envelope::extract(&mesh, &NoCancel).unwrap();
         assert_eq!(env.facets().len(), 12);
         assert_eq!(env.points().len(), 8);
         assert!((env.volume() - 1.0).abs() < 1e-15);
@@ -581,7 +667,7 @@ mod tests {
     fn local_indices_map_back_to_the_input_nodes() {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
-        let env = Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS)).unwrap();
+        let env = Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS), &NoCancel).unwrap();
         // Every envelope node is one of the input nodes, at its position.
         let c = read(&coords).unwrap();
         for (i, &nid) in env.node_ids().iter().enumerate() {
