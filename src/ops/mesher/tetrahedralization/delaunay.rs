@@ -38,6 +38,31 @@ use super::predicates::{insphere, orient3d};
 /// Sentinel for "no neighbour through this face".
 pub const NO_TET: u32 = u32::MAX;
 
+/// The cells around an edge and the ring of vertices left when it goes.
+#[derive(Debug, Clone)]
+pub struct EdgeFan {
+    /// Cells sharing the edge, in walking order.
+    pub cells: Vec<u32>,
+    /// Vertices facing the edge: a cycle when the fan is closed, a path
+    /// from one outer face to the other when it is open.
+    pub link: Vec<u32>,
+    /// Whether the fan wraps around the edge.
+    pub closed: bool,
+}
+
+/// What a region swap is allowed to do to the outer surface of the region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Boundary {
+    /// The new cells must present exactly the old outer faces. Anything else
+    /// is a crack or an overlap.
+    Preserved,
+    /// The outer faces may be re-cut, but only where the region met nothing
+    /// at all — the outer surface of the whole mesh. This is what lets the
+    /// 2-2 flip swap the diagonal of a flat quadrilateral on the hull; the
+    /// swept volume is checked instead.
+    MayRecutHull,
+}
+
 /// The face opposite each vertex, wound so that its normal points **out of**
 /// the tetrahedron.
 ///
@@ -202,6 +227,18 @@ impl TetMesh {
         new: &[[u32; 4]],
         what: &str,
     ) -> Result<Vec<u32>> {
+        self.replace_region_with(old, new, what, Boundary::Preserved)
+    }
+
+    /// [`Self::replace_region`], with control over what may happen to the
+    /// region's outer surface.
+    pub(super) fn replace_region_with(
+        &mut self,
+        old: &[u32],
+        new: &[[u32; 4]],
+        what: &str,
+        boundary: Boundary,
+    ) -> Result<Vec<u32>> {
         for v in new {
             if self.orientation(v) <= 0.0 {
                 return Err(PyrucastError::Message(format!(
@@ -248,11 +285,30 @@ impl TetMesh {
             }
         }
         if !pending.is_empty() {
-            return Err(PyrucastError::Message(format!(
-                "mesh_volume: replacing {what} left {} unmatched face(s) — the new cells do \
-                 not tile the same region (internal error)",
-                pending.len()
-            )));
+            // Faces the new cells do not present are a crack — unless the
+            // caller asked for the hull to be re-cut, in which case both the
+            // faces dropped and the faces gained must lie where the region
+            // met nothing at all, and the swept volume must be unchanged.
+            let new_faces: HashSet<[u32; 3]> = created
+                .iter()
+                .flat_map(|&t| (0..4).map(move |i| (t, i)))
+                .map(|(t, i)| sorted3(self.face(t as usize, i)))
+                .collect();
+            let dropped_faced_nothing = outside
+                .iter()
+                .all(|(key, &n)| new_faces.contains(key) || n == NO_TET);
+            let volume_kept = {
+                let before: f64 = old.iter().map(|&t| self.dead_orientation(t)).sum();
+                let after: f64 = new.iter().map(|v| self.orientation(v)).sum();
+                (after - before).abs() <= 1e-9 * before.abs().max(after.abs())
+            };
+            if boundary != Boundary::MayRecutHull || !dropped_faced_nothing || !volume_kept {
+                return Err(PyrucastError::Message(format!(
+                    "mesh_volume: replacing {what} left {} unmatched face(s) — the new cells \
+                     do not tile the same region (internal error)",
+                    pending.len()
+                )));
+            }
         }
         Ok(created)
     }
@@ -530,6 +586,152 @@ impl TetMesh {
         cell.v.iter().copied().find(|x| !f.contains(x))
     }
 
+    /// Temporary probe accessor.
+    pub fn has_edge_pub(&self, u: u32, v: u32) -> bool {
+        self.has_edge(u, v)
+    }
+
+    /// Whether `(u, v)` is an edge of some tetrahedron.
+    pub(super) fn has_edge(&self, u: u32, v: u32) -> bool {
+        self.tets_around_vertex(u)
+            .iter()
+            .any(|&t| self.tets[t as usize].v.contains(&v))
+    }
+
+    /// The cells around an edge, in walking order, with the ring of
+    /// vertices they leave behind once the edge is taken away.
+    ///
+    /// `cells[i]` and `cells[i + 1]` share the face holding the edge and
+    /// `link[i + 1]`. A **closed** fan wraps around, and `link` is a cycle of
+    /// `cells.len()` vertices; an **open** one stops at the outer surface,
+    /// and `link` is a path of `cells.len() + 1`.
+    pub(super) fn edge_fan(&self, u: u32, v: u32) -> Option<EdgeFan> {
+        let start = self
+            .tets_around_vertex(u)
+            .into_iter()
+            .find(|&t| self.tets[t as usize].v.contains(&v))?;
+
+        // Walk one way; if the surface stops us, walk the other way from the
+        // start and put the two halves together.
+        let (mut cells, closed) = self.walk_fan(u, v, start, NO_TET)?;
+        if !closed {
+            let mut back = self
+                .walk_fan(u, v, start, cells.get(1).copied().unwrap_or(NO_TET))?
+                .0;
+            back.reverse();
+            back.pop(); // `start` is in both halves
+            back.extend_from_slice(&cells);
+            cells = back;
+        }
+
+        // The vertex two consecutive cells share, besides the edge itself.
+        let others = |t: u32| -> Vec<u32> {
+            self.tets[t as usize]
+                .v
+                .iter()
+                .copied()
+                .filter(|&x| x != u && x != v)
+                .collect()
+        };
+        let mut link: Vec<u32> = Vec::with_capacity(cells.len() + 1);
+        if !closed {
+            let (a, b) = (others(cells[0]), others(cells[1 % cells.len()]));
+            link.push(if cells.len() == 1 {
+                a[0]
+            } else {
+                *a.iter().find(|x| !b.contains(x))?
+            });
+        }
+        for w in cells.windows(2) {
+            let (a, b) = (others(w[0]), others(w[1]));
+            link.push(*a.iter().find(|x| b.contains(x))?);
+        }
+        if !closed {
+            let last = others(*cells.last()?);
+            let prev = others(cells[cells.len().saturating_sub(2)]);
+            link.push(if cells.len() == 1 {
+                last[1]
+            } else {
+                *last.iter().find(|x| !prev.contains(x))?
+            });
+        }
+        Some(EdgeFan {
+            cells,
+            link,
+            closed,
+        })
+    }
+
+    /// Walk the cells around edge `(u, v)` from `start`, away from `avoid`.
+    ///
+    /// Returns the cells visited and whether the walk closed on itself.
+    fn walk_fan(&self, u: u32, v: u32, start: u32, avoid: u32) -> Option<(Vec<u32>, bool)> {
+        let mut cells = vec![start];
+        let mut prev = avoid;
+        let mut cur = start;
+        loop {
+            let cell = self.tets[cur as usize];
+            let next = (0..4)
+                .filter(|&i| cell.v[i] != u && cell.v[i] != v)
+                .map(|i| cell.nb[i])
+                .find(|&n| n != prev && n != NO_TET);
+            match next {
+                None => return Some((cells, false)),
+                Some(n) if n == start => return Some((cells, true)),
+                Some(n) => {
+                    cells.push(n);
+                    prev = cur;
+                    cur = n;
+                    if cells.len() > self.tets.len() {
+                        return None;
+                    }
+                }
+            }
+        }
+    }
+
+    /// The tetrahedra having both `u` and `v` as vertices — the fan around
+    /// the edge, whether or not it closes into a ring.
+    pub(super) fn tets_with_edge(&self, u: u32, v: u32) -> Vec<u32> {
+        let mut fan: Vec<u32> = self
+            .tets_around_vertex(u)
+            .into_iter()
+            .filter(|&t| self.tets[t as usize].v.contains(&v))
+            .collect();
+        fan.sort_unstable();
+        fan
+    }
+
+    /// Whether face `f` of cell `t` meets nothing — it is on the outer
+    /// surface of the whole mesh.
+    pub(super) fn face_is_free(&self, t: u32, f: &[u32; 3]) -> bool {
+        let key = sorted3(*f);
+        (0..4).any(|i| {
+            sorted3(self.face(t as usize, i)) == key && self.tets[t as usize].nb[i] == NO_TET
+        })
+    }
+
+    /// Whether `(a, b, c)` is a face of some tetrahedron.
+    pub(super) fn has_face(&self, f: &[u32; 3]) -> bool {
+        self.face_owners(f).is_some()
+    }
+
+    /// The tetrahedra owning face `f`, at most two, with which of their
+    /// faces it is.
+    pub(super) fn face_owners(&self, f: &[u32; 3]) -> Option<Vec<(u32, usize)>> {
+        let key = sorted3(*f);
+        let owners: Vec<(u32, usize)> = self
+            .tets_around_vertex(f[0])
+            .into_iter()
+            .filter_map(|t| {
+                (0..4)
+                    .find(|&i| sorted3(self.face(t as usize, i)) == key)
+                    .map(|i| (t, i))
+            })
+            .collect();
+        (!owners.is_empty()).then_some(owners)
+    }
+
     // ─── Reading the mesh ───────────────────────────────────────────────
 
     /// The vertices of face `i` of tetrahedron `t`, wound outwards.
@@ -576,6 +778,13 @@ impl TetMesh {
     /// Whether no tetrahedron is left.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Six times the signed volume of a slot's cell, live or just killed —
+    /// the vertices survive the kill, which is what lets a region swap
+    /// compare volumes after the fact.
+    fn dead_orientation(&self, t: u32) -> f64 {
+        self.orientation(&self.tets[t as usize].v)
     }
 
     /// Six times the signed volume of a tetrahedron — positive for every
