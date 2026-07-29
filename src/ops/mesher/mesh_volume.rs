@@ -39,9 +39,21 @@
 //! that cannot be fitted has, otherwise, no way out; subdivide it and the
 //! problem splits into two easier ones, and a segment closely enough
 //! surrounded by its own subdivisions is recovered by the Delaunay
-//! triangulation unaided. On the plate of `formation/maillage_test.py` —
-//! 3308 facets — this costs 15 added nodes and under a second, where the
-//! strict mode cannot finish at all.
+//! triangulation unaided.
+//!
+//! What is added is then handed back wherever the mesh will part with it
+//! ([`tetrahedralization::simplify`](crate::ops::mesher::tetrahedralization::simplify)).
+//! Asking *afterwards* is a far kinder question than asking recovery to
+//! manage without: there is already a valid mesh, and each point only needs
+//! its own neighbourhood rearranged. What comes back is the **collateral**
+//! subdivision — the cuts that other cuts made necessary — while the ones
+//! that were essential stay, as they must: removing them would put the mesh
+//! back in the situation that had no answer.
+//!
+//! On the plate of `formation/maillage_test.py`, 3308 facets, this is 15
+//! nodes added and 12 given back, leaving **3**, in under a second, where
+//! the strict mode cannot finish at all. On a small plate of flat panels
+//! nothing comes back, because every cut there was essential.
 //!
 //! Every geometric decision runs on exact predicates, so degenerate input —
 //! a box, a regular grid, cospherical corners — is decided rather than
@@ -88,6 +100,7 @@ use super::tetrahedralization::classify;
 use super::tetrahedralization::delaunay::TetMesh;
 use super::tetrahedralization::envelope::Envelope;
 use super::tetrahedralization::recovery;
+use super::tetrahedralization::simplify;
 
 /// How far the meshed volume may drift from the envelope's own, relative to
 /// it, before the result is refused.
@@ -155,9 +168,13 @@ pub fn mesh_volume_cancellable(
 
         if stuck.is_empty() {
             cancel.check()?;
+            // The subdivision points were the price of getting a mesh, not
+            // something wanted for itself: now that there is one, try to
+            // give them back.
+            reclaim(&mut mesh, &mut env, cancel)?;
             let inside = classify::interior(&mesh, &env, cancel)?;
             let cells = validate(&mesh, &env, &inside)?;
-            warn_if_subdivided(&env);
+            warn_if_subdivided(&env, &cells);
             return materialize(envelope, &env, &cells);
         }
         if !allow_surface_nodes {
@@ -175,6 +192,30 @@ pub fn mesh_volume_cancellable(
     )))
 }
 
+/// Take back every subdivision point the mesh will part with.
+///
+/// Asking now is a much kinder question than the one recovery faced. Recovery
+/// had to find, in a triangulation that did not suit it, some arrangement
+/// holding the envelope; here there already *is* a valid mesh, and each point
+/// only needs its own neighbourhood rearranged without it. A local repair on
+/// a sound structure succeeds far more often, and far faster, than a search
+/// forward from an unsuitable one.
+///
+/// Whatever will not come out simply stays. The caller allowed the envelope
+/// to be cut, so a few surviving points are a shortfall, not a failure.
+fn reclaim(mesh: &mut TetMesh, env: &mut Envelope, cancel: &dyn Cancel) -> Result<()> {
+    for (m, origin) in env.added_points() {
+        cancel.check()?;
+        let Some((dropped, merged)) = env.merge_around(m, origin) else {
+            continue;
+        };
+        if simplify::remove_vertex(mesh, m, &merged, env.facets())? {
+            env.unsplit(&dropped, &merged);
+        }
+    }
+    Ok(())
+}
+
 /// Tell the caller, on stderr, when the envelope had to be cut finer.
 ///
 /// Allowing it is a deliberate choice, but the consequence is easy to
@@ -182,8 +223,17 @@ pub fn mesh_volume_cancellable(
 /// matches the surface mesh that was handed in, so two solids meshed this
 /// way no longer share a conforming interface. Saying so out loud costs
 /// nothing and saves a puzzling afternoon.
-fn warn_if_subdivided(env: &Envelope) {
-    let added = env.points().len() - env.given_node_count();
+fn warn_if_subdivided(env: &Envelope, cells: &[[u32; 4]]) {
+    let given = env.given_node_count() as u32;
+    let mut kept: Vec<u32> = cells
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|&i| i >= given)
+        .collect();
+    kept.sort_unstable();
+    kept.dedup();
+    let added = kept.len();
     if added == 0 {
         return;
     }
@@ -270,13 +320,22 @@ fn materialize(envelope: &Mesh, env: &Envelope, cells: &[[u32; 4]]) -> Result<Me
     // on the envelope by a subdivision round and needs a node of its own.
     // The `Node` handles are held until the cells hold them, so the store
     // cannot collect a point between its creation and its first use.
+    // Only the subdivision points the cells actually use get a node: those
+    // that were handed back keep their slot in the envelope but must not
+    // leave anything behind in the store.
     let given = env.given_node_count();
-    let mut kept: Vec<Node> = Vec::with_capacity(env.points().len() - given);
     let mut ids: Vec<NodeId> = env.node_ids().to_vec();
-    for p in &env.points()[given..] {
-        let node = Node::create_in(coords.clone(), p)?;
-        ids.push(node.id());
-        kept.push(node);
+    ids.resize(env.points().len(), NodeId(u32::MAX));
+    let mut kept: Vec<Node> = Vec::new();
+    for v in cells {
+        for &i in v {
+            if (i as usize) < given || ids[i as usize] != NodeId(u32::MAX) {
+                continue;
+            }
+            let node = Node::create_in(coords.clone(), &env.points()[i as usize])?;
+            ids[i as usize] = node.id();
+            kept.push(node);
+        }
     }
 
     let mut sub = SubMesh::new(coords, ElementType::TET4);
@@ -729,6 +788,52 @@ mod tests {
         assert!(added > 0, "the strict run failed, so something had to give");
         let peeled = super::super::skin(&mesh, None).unwrap();
         assert!(peeled.cell_count().unwrap() > envelope.cell_count().unwrap());
+    }
+
+    #[test]
+    fn every_node_it_adds_lies_on_the_envelope() {
+        // The promise of the permissive mode is that the *shape* survives: a
+        // subdivision point sits on the edge it divides, so the surface is
+        // the same surface, cut finer. That is checked here node by node,
+        // rather than taken on trust.
+        let coords = insert(Coords::new(3).unwrap());
+        let envelope = extruded_plate(&coords, 4, 0.3);
+        let given: Vec<Vec<f64>> = {
+            let c = read(&coords).unwrap();
+            c.iter_live()
+                .map(|id| c.coord(id).unwrap().to_vec())
+                .collect()
+        };
+
+        let mesh = mesh_volume(&envelope, None, true).unwrap();
+        assert!((mesh_volume_of(&mesh) - 0.4).abs() < 1e-12);
+
+        let dist = |a: &[f64], b: &[f64]| -> f64 {
+            a.iter()
+                .zip(b)
+                .map(|(x, y)| (x - y) * (x - y))
+                .sum::<f64>()
+                .sqrt()
+        };
+        let mut checked = 0;
+        for ci in 0..mesh.cell_count().unwrap() {
+            for k in 0..4 {
+                let p = mesh.node(0, ci, k).unwrap().coord().unwrap();
+                if given.iter().any(|q| q == &p) {
+                    continue; // one of the caller's own nodes
+                }
+                // An added node has to sit on a segment between two of them.
+                let on_a_segment = given.iter().enumerate().any(|(i, a)| {
+                    given[i + 1..].iter().any(|b| {
+                        let len = dist(a, b);
+                        len > 0.0 && (dist(a, &p) + dist(&p, b) - len).abs() < 1e-12 * len
+                    })
+                });
+                assert!(on_a_segment, "added node {p:?} is off the envelope");
+                checked += 1;
+            }
+        }
+        assert!(checked > 0, "nothing was added, so nothing was checked");
     }
 
     #[test]

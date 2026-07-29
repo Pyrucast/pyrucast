@@ -55,6 +55,22 @@ pub struct Envelope {
     node_ids: Vec<NodeId>,
     facets: Vec<[u32; 3]>,
     volume: f64,
+    /// What each subdivision point was put there to cut, in the order they
+    /// were added. Kept so the operator can try to undo them afterwards.
+    added: Vec<Origin>,
+}
+
+/// The facets a subdivision point's neighbourhood would become without it:
+/// the halves that go away, and the whole pieces that replace them.
+pub type Merge = (Vec<[u32; 3]>, Vec<[u32; 3]>);
+
+/// The piece of the envelope a subdivision point was placed on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    /// The middle of this edge.
+    Edge(u32, u32),
+    /// The centre of this facet.
+    Facet([u32; 3]),
 }
 
 impl Envelope {
@@ -119,6 +135,7 @@ impl Envelope {
             node_ids,
             facets,
             volume: 0.0,
+            added: Vec::new(),
         };
         envelope.validate(cancel)
     }
@@ -372,6 +389,71 @@ impl Envelope {
         self.node_ids.len()
     }
 
+    /// The subdivision points, most recent first, with what each was cutting.
+    ///
+    /// Reverse order because a later point may sit on a facet an earlier one
+    /// created: undoing them the other way round would leave the envelope
+    /// referring to facets that no longer exist.
+    pub fn added_points(&self) -> Vec<(u32, Origin)> {
+        (0..self.added.len())
+            .rev()
+            .map(|i| ((self.node_ids.len() + i) as u32, self.added[i]))
+            .collect()
+    }
+
+    /// The facets that would take the place of those around `m` if it went
+    /// away, or `None` when its neighbourhood has moved on since it was put
+    /// there.
+    ///
+    /// A point in the middle of an edge is surrounded by pairs of facets that
+    /// were one facet before the cut; merging each pair back is exactly the
+    /// inverse of the cut.
+    pub fn merge_around(&self, m: u32, origin: Origin) -> Option<Merge> {
+        let Origin::Edge(u, v) = origin else {
+            return None; // a facet's centre has three neighbours, not two
+        };
+        let touching: Vec<[u32; 3]> = self
+            .facets
+            .iter()
+            .filter(|f| f.contains(&m))
+            .copied()
+            .collect();
+        if touching.len() != 4 {
+            return None; // cut again since, or already partly undone
+        }
+
+        // Pair up the halves: one holds `u`, its mate holds `v`, and they
+        // share the apex the original facet was pointing at.
+        let mut merged: Vec<[u32; 3]> = Vec::with_capacity(2);
+        for a in &touching {
+            let &apex = a.iter().find(|&&x| x != m && x != u && x != v)?;
+            if !a.contains(&u) {
+                continue;
+            }
+            // Rebuild the original winding by putting `v` where `m` was.
+            let whole: [u32; 3] = a.map(|x| if x == m { v } else { x });
+            if !touching
+                .iter()
+                .any(|b| b.contains(&v) && b.contains(&apex) && b != a)
+            {
+                return None;
+            }
+            merged.push(whole);
+        }
+        (merged.len() == 2).then_some((touching, merged))
+    }
+
+    /// Undo a subdivision: drop `m` and put the merged facets in place.
+    ///
+    /// The point keeps its slot in `points` — indices are handed out to the
+    /// mesh and must not shift — it simply stops being used.
+    pub fn unsplit(&mut self, dropped: &[[u32; 3]], merged: &[[u32; 3]]) {
+        self.facets
+            .retain(|f| !dropped.iter().any(|d| sorted(d) == sorted(f)));
+        self.facets.extend_from_slice(merged);
+        self.volume = self.signed_volume();
+    }
+
     /// Cut the envelope finer at the places named, keeping its shape.
     ///
     /// An **edge** is split at its middle, and both facets along it become
@@ -411,6 +493,7 @@ impl Envelope {
                 (a[2] + b[2]) / 2.0,
             ]);
             middle.insert((u, v), (self.points.len() - 1) as u32);
+            self.added.push(Origin::Edge(u, v));
         }
         let split_of = |u: u32, v: u32| -> Option<u32> {
             middle.get(&if u < v { (u, v) } else { (v, u) }).copied()
@@ -479,6 +562,7 @@ impl Envelope {
                 (a[2] + b[2] + c[2]) / 3.0,
             ]);
             let m = (self.points.len() - 1) as u32;
+            self.added.push(Origin::Facet(*f));
             self.facets.swap_remove(pos);
             self.facets.push([f[0], f[1], m]);
             self.facets.push([f[1], f[2], m]);
@@ -488,6 +572,12 @@ impl Envelope {
         self.volume = self.signed_volume();
         Ok(())
     }
+}
+
+fn sorted(f: &[u32; 3]) -> [u32; 3] {
+    let mut k = *f;
+    k.sort_unstable();
+    k
 }
 
 #[cfg(test)]
