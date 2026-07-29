@@ -22,6 +22,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
+| `mesh_volume(envelope, size=None, allow_surface_nodes=False)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` : Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (TET4/PENTA6/HEX8) en faces `TRI3`/`QUA4`, **une par face plane** du solide (voir plus bas) |
 | `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
@@ -476,6 +477,250 @@ d'interruption (timeout, drapeau partagé…) — voir
 Côté Rust, `ops::mesher::volume(&envelope, Some(0.5))`. Le cœur géométrique
 (`pave_volume`) opère sur de simples `Vec<Point3>` sans toucher au store —
 frontière nette pour un futur parallélisme intra-opérateur.
+
+## Mailleur volumique exact : `mesh_volume`
+
+```python
+solide = pyrucast.mesher.mesh_volume(enveloppe, size=None, allow_surface_nodes=False)
+```
+
+Remplit l'intérieur d'une **enveloppe fermée en TRI3** avec des `TET4`. Les
+normales de l'enveloppe doivent pointer **vers l'extérieur de la matière** ;
+une forme concave est admise, et une cavité interne n'est qu'une autre
+surface fermée dont les normales pointent vers le trou — elle se soustrait
+d'elle-même, sans argument dédié.
+
+```python
+peau = pyrucast.mesher.convert(pyrucast.mesher.skin(solide_penta6), "TRI3")
+peau = pyrucast.mesher.invert(peau)  # voir « pièges », plus bas
+volume = pyrucast.mesher.mesh_volume(peau, size=0.01)
+```
+
+L'enveloppe est **respectée exactement** : ses nœuds sont réutilisés tels
+quels (mêmes `NodeId`, mêmes positions), et aucun nœud n'est posé sur la
+surface — les nœuds ajoutés le sont strictement à l'intérieur. Ce n'est pas
+un effort au mieux : avant d'écrire quoi que ce soit, l'opérateur vérifie que
+le bord du maillage produit est *exactement* l'ensemble des facettes reçues.
+
+### Ce qui se passe, et pourquoi
+
+Le mailleur enchaîne cinq étapes. Chacune répond à une difficulté précise, et
+il vaut la peine de savoir laquelle, parce que les messages d'erreur les
+nomment.
+
+#### 1. Prédicats exacts
+
+Tout repose sur deux questions posées des millions de fois : *de quel côté du
+plan `(a, b, c)` se trouve `d` ?* et *le point `e` est-il dans la sphère
+passant par `a, b, c, d` ?* Ce sont les signes de deux déterminants :
+
+\\[
+\mathrm{orient3d}(a,b,c,d)=\begin{vmatrix}
+b_x-a_x & b_y-a_y & b_z-a_z\\\\
+c_x-a_x & c_y-a_y & c_z-a_z\\\\
+d_x-a_x & d_y-a_y & d_z-a_z
+\end{vmatrix}
+\qquad
+\mathrm{insphere}(a,b,c,d,e)=-\begin{vmatrix}
+a_x-e_x & a_y-e_y & a_z-e_z & \lVert a-e\rVert^2\\\\
+b_x-e_x & b_y-e_y & b_z-e_z & \lVert b-e\rVert^2\\\\
+c_x-e_x & c_y-e_y & c_z-e_z & \lVert c-e\rVert^2\\\\
+d_x-e_x & d_y-e_y & d_z-e_z & \lVert d-e\rVert^2
+\end{vmatrix}
+\\]
+
+`orient3d` vaut six fois le volume signé, et il est **positif** exactement
+quand le tétraèdre `(a,b,c,d)` est bien orienté au sens de `TET4` — face
+`0-1-2` vue en sens direct depuis le nœud 3.
+
+Ce qui compte n'est pas la précision de ces valeurs mais leur **cohérence** :
+si `orient3d(a,b,c,d)` répond « au-dessus », alors `orient3d(b,a,c,d)` doit
+répondre « en dessous », et un point ne peut pas être à la fois dans un
+tétraèdre et hors de ses quatre faces. En `f64` nu, près d'une
+dégénérescence, cette cohérence tombe — et une seule réponse contradictoire
+corrompt le graphe d'adjacence. C'est de cette façon qu'un mailleur
+incrémental tourne en boucle ou produit des cellules qui se recouvrent.
+
+Ni une tolérance ni un jitter n'y remédient : ils rendent le prédicat
+*généralement* juste, pas cohérent avec lui-même. `mesh_volume` calcule donc
+le **signe exact**, par la technique des expansions flottantes de Shewchuk :
+une estimation en `f64` comparée à une borne d'erreur rigoureuse, puis, dans
+le seul cas où le signe reste indécidable, une réévaluation en arithmétique
+exacte. Un cube, une grille régulière, des coins cosphériques sont ainsi
+**décidés** et non devinés.
+
+#### 2. Triangulation de Delaunay des nœuds de l'enveloppe
+
+Construite point par point selon **Bowyer-Watson** : on supprime tous les
+tétraèdres dont la sphère circonscrite contient le nouveau point `p`, puis on
+rebouche la cavité en joignant `p` à chaque face de son bord. L'appartenance
+à la cavité est `insphere > 0` et rien d'autre, ce qui garantit que la cavité
+reste **étoilée** — visible en entier depuis `p` — et donc que le
+rebouchage produit des cellules bien formées.
+
+Les points cosphériques ne sont pas perturbés : `insphere == 0` signifie
+simplement « hors cavité ». On obtient l'une des triangulations de Delaunay
+valides de la configuration dégénérée, choisie de façon cohérente.
+
+#### 3. Récupération du bord
+
+La triangulation précédente pave l'**enveloppe convexe** des nœuds et ne doit
+rien à la surface d'où ils viennent : une arête de l'enveloppe peut être
+traversée par un tétraèdre, une facette percée par une arête. Avant de
+pouvoir distinguer l'intérieur de l'extérieur, chacune doit *apparaître*
+dans la triangulation.
+
+C'est la partie difficile, et pour une raison de fond : **certains polyèdres
+n'admettent aucune tétraédrisation sur leurs propres sommets**. Le prisme
+tordu de Schönhardt est l'exemple d'école. Plus près de vous : sur les 64
+façons de trianguler le bord d'un cube, la plupart ne se remplissent pas. Ce
+n'est donc pas un algorithme perfectible, c'est une question dont la réponse
+est parfois « il n'y en a pas ».
+
+La récupération procède obstacle par obstacle — bascules locales, puis
+reconstruction exhaustive de la poche qui bloque — et, quand elle n'y arrive
+pas, elle nomme l'arête ou la facette en cause plutôt que de rendre un
+maillage qui ne correspond pas à la surface reçue.
+
+#### 4. Séparation matière / vide
+
+Les facettes de l'enveloppe deviennent des **murs**. Deux tétraèdres séparés
+par un mur sont de part et d'autre de la surface ; toute autre paire de
+voisins est du même côté. L'intérieur s'obtient donc par inondation depuis
+des cellules connues intérieures — et « connue intérieure » découle de
+l'orientation que vous avez fournie, la matière étant du côté opposé à la
+normale.
+
+L'inondation est menée **des deux côtés**, et les deux résultats doivent
+partitionner le maillage : chaque cellule intérieure ou extérieure, aucune
+les deux, aucune ni l'une ni l'autre. Une cellule qui échappe à cela est une
+fuite, signalée et non maillée en silence.
+
+#### 5. Qualité : raffinement puis chasse aux slivers
+
+Un maillage *valide* n'est pas un maillage *utilisable*. Une tétraédrisation
+des seuls nœuds d'une surface contient toujours des cellules dont les quatre
+coins sont presque coplanaires, et une poignée suffit à rendre une matrice
+élémentaire singulière.
+
+**Raffinement de Delaunay.** On prend la cellule la plus mal formée et on
+pose un nœud au centre de sa sphère circonscrite. Deux critères décident :
+
+- le **rapport rayon-arête** \\( \rho = R/\ell \\), rayon circonscrit sur
+  arête la plus courte. Un tétraèdre régulier vaut \\( \rho = \sqrt6/4
+  \approx 0{,}61 \\) ; une aiguille ou un coin en donne un grand. Découper
+  au-dessus d'un seuil \\( B \\) **termine pour tout \\( B > 2 \\)** — d'où
+  le seuil juste au-dessus de 2 ;
+- la **taille**, \\( R \\) comparé à `size`. Pour un tétraèdre régulier
+  d'arête \\( a \\), \\( R = a\sqrt6/4 \\), ce qui convertit la longueur
+  d'arête demandée en rayon visé.
+
+Une règle est indispensable à la terminaison : **l'empiètement**. Un nœud
+posé dans la sphère d'une facette du bord dégrade les cellules contre cette
+facette au lieu de les améliorer, et le raffinement le redemande sans fin. La
+réponse classique est de découper la facette ; l'enveloppe ne nous
+appartenant pas, la cellule est simplement laissée telle quelle.
+
+**C'est aussi ce qui borne `size` par le bas** : on ne peut pas mailler plus
+fin que la surface ne le permet. Sur un cube à huit coins, tout centre
+circonscrit empiète, et `size` n'a aucun effet ; il faut une enveloppe déjà
+discrétisée à la finesse voulue.
+
+**Chasse aux slivers.** Le raffinement ne peut rien contre le **sliver** :
+quatre coins proches d'un même plan, répartis régulièrement sur un cercle.
+Son arête la plus courte est honorable et sa sphère circonscrite petite —
+\\( \rho \\) ne voit rien d'anormal — alors que son volume est presque nul.
+C'est un théorème, pas une lacune d'implémentation : aucun nœud inséré ne le
+casse. Le maillage est donc *amélioré* plutôt que subdivisé, par les deux
+seuls mouvements qui ne changent pas ce qu'il remplit :
+
+- **reconnexion** : les mêmes nœuds, joints autrement ;
+- **relaxation** : les mêmes liens, un nœud déplacé — les nœuds **intérieurs**
+  seulement, jamais les vôtres.
+
+Les deux sont jugés sur le plus petit **angle dièdre** des cellules touchées
+et appliqués seulement s'ils l'améliorent, ce qui rend la passe monotone.
+
+Sur la plaque percée de `formation/maillage_test.py`, 28 000 mailles : la
+cellule la plus plate passe de \\( 8\cdot10^{-16} \\) du volume moyen à
+\\( 4\cdot10^{-2} \\), et la part de cellules sous 10° de 1,8 % à 0,5 %. Le
+premier chiffre est l'enjeu : \\( 10^{-16} \\), c'est une matrice singulière.
+
+### Quand l'enveloppe ne convient pas
+
+Deux refus vous sont rendus, tous deux avec un lieu et une action.
+
+**« cannot fit the envelope's edge/facet … »** — la surface ne peut pas être
+retrouvée dans la triangulation. Soit elle n'admet réellement aucun maillage
+sur ses nœuds, soit la récupération n'y arrive pas.
+
+**« the mesh has N flat cell(s) that cannot be improved … »** — un sliver
+dont les quatre coins sont des nœuds de l'enveloppe. Rien à insérer pour le
+casser, rien à bouger puisque ses coins sont les vôtres. La mesure est
+\\( \eta = 12\,(3V)^{2/3} / \sum \ell^2 \\), qui vaut 1 pour un tétraèdre
+régulier et 0 pour un plat ; le seuil de \\( 10^{-4} \\) est calibré et non
+choisi — les cellules saines restent au-dessus de \\( 4\cdot10^{-2} \\), une
+cellule réellement plate tombe sous \\( 10^{-7} \\).
+
+Dans les deux cas, la réponse est de **rediscrétiser la surface** à cet
+endroit — ou de laisser le mailleur le faire.
+
+### `allow_surface_nodes` : ce qu'on échange
+
+```python
+solide = pyrucast.mesher.mesh_volume(peau, allow_surface_nodes=True)
+```
+
+Autorise le mailleur à **couper l'enveloppe plus fin** là où il ne peut ni la
+retrouver ni la rendre utilisable.
+
+Ce qui est conservé : la **forme**. Chaque nœud ajouté est posé sur l'arête
+ou la facette qu'il divise, donc la surface reste la même surface, seule sa
+triangulation s'affine. Ce qui est perdu : la **discrétisation** — la peau du
+résultat ne coïncide plus avec le maillage surfacique fourni. Cela compte si
+deux solides doivent partager une interface conforme ; cela ne compte pas si
+l'enveloppe ne servait qu'à décrire une forme. Un avertissement sur `stderr`
+indique combien de nœuds ont été ajoutés.
+
+C'est aussi ce qui débloque. Une arête qu'on n'arrive pas à faire rentrer n'a
+autrement aucune issue ; la couper en deux scinde le problème en deux plus
+faciles, et une arête suffisamment entourée de ses propres subdivisions est
+récupérée par le Delaunay tout seul. Ce qui a été ajouté est ensuite **rendu**
+partout où le maillage veut bien s'en séparer : sur la plaque de la formation,
+15 nœuds posés, 12 repris, 3 restants.
+
+### Pièges
+
+**Orientation après `extrude`.** `extrude` ne vérifie pas que sa direction
+est du côté de la normale de la surface source. Un `skin` de son résultat
+revient donc souvent avec les normales **rentrantes**, et `mesh_volume` le
+refuse en vous renvoyant vers `invert`. C'est le cas du pipeline
+`triangulate_surface` → `extrude` → `skin` ci-dessus.
+
+**Uniquement du TRI3.** Un quadrangle n'a pas de plan unique à respecter ; il
+est refusé plutôt que découpé en silence. Passez par `convert(peau, "TRI3")`.
+
+**Nœuds confondus.** Deux nœuds distincts au même endroit déchirent la
+surface ; utilisez `merge_nodes` au préalable. Le mailleur le signale
+explicitement.
+
+### Coût
+
+Sur la plaque percée de la formation, extrudée puis pelée :
+
+| `size` | facettes | tétraèdres | temps |
+| --- | --- | --- | --- |
+| 0,01 | 3 308 | 28 081 | 1,9 s |
+| 0,006 | 8 032 | 117 245 | 7,0 s |
+| 0,004 | 17 144 | 405 400 | 24 s |
+| 0,003 | 29 604 | 984 415 | 57 s |
+
+Le coût est essentiellement **linéaire** en nombre de mailles produites.
+L'opération est interruptible : `Ctrl+C` pendant un long maillage lève
+`KeyboardInterrupt` sans rien laisser derrière.
+
+Côté Rust, `ops::mesher::mesh_volume(envelope, size, allow_surface_nodes)`,
+et `mesh_volume_cancellable(…, cancel)` pour la forme interruptible.
 
 ## Bord d'une surface : `border`
 

@@ -410,6 +410,39 @@ pub fn volume(py: Python<'_>, envelope: PyRef<PyMesh>, size: Option<f64>) -> PyR
     Ok(PyMesh { inner: mesh })
 }
 
+/// Fill the inside of a closed `TRI3` `envelope` with `TET4` cells.
+///
+/// The envelope's normals must point **out of the material**; a concave
+/// shape is fine, and an internal cavity is simply another closed surface
+/// whose normals point into the hole. Its nodes are reused as they are, and
+/// nodes are added inside the solid so the cells come out well shaped.
+///
+/// `size` is the target edge length; `None` takes the mean edge length of
+/// the envelope. `allow_surface_nodes` lets the mesher cut the envelope
+/// finer where it cannot otherwise fit it or make it usable: the shape is
+/// kept — every added node lies on the edge or facet it divides — but the
+/// skin of the result no longer matches the surface handed in, and a warning
+/// on stderr says how many were added. Without it, such a surface is
+/// refused rather than meshed badly.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (envelope, size=None, allow_surface_nodes=false))]
+pub fn mesh_volume(
+    py: Python<'_>,
+    envelope: PyRef<PyMesh>,
+    size: Option<f64>,
+    allow_surface_nodes: bool,
+) -> PyResult<PyMesh> {
+    // Poll Python signals while meshing so a long run stays Ctrl+C-able.
+    let mesh = crate::ops::mesher::mesh_volume_cancellable(
+        &envelope.inner,
+        size,
+        allow_surface_nodes,
+        &PySignals(py),
+    )?;
+    Ok(PyMesh { inner: mesh })
+}
+
 /// Turn an ordered list of `(group name, Mesh)` pairs into a `dict` that
 /// keeps the file order (Python dicts are insertion-ordered).
 fn groups_to_dict<'py>(

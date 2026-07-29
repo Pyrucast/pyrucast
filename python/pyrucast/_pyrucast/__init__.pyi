@@ -64,6 +64,7 @@ __all__ = [
     "material_field_per_sub_model",
     "merge",
     "merge_nodes",
+    "mesh_volume",
     "orient",
     "poi1_from_nodes",
     "psca",
@@ -2498,6 +2499,24 @@ def merge_nodes(mesh: Mesh, tol: builtins.float) -> Mesh:
     averaging). Cells that collapse onto a repeated node (a degenerate segment,
     triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
     coincident nodes. `mesh` itself is left untouched.
+    """
+
+def mesh_volume(envelope: Mesh, size: typing.Optional[builtins.float] = None, allow_surface_nodes: builtins.bool = False) -> Mesh:
+    r"""
+    Fill the inside of a closed `TRI3` `envelope` with `TET4` cells.
+    
+    The envelope's normals must point **out of the material**; a concave
+    shape is fine, and an internal cavity is simply another closed surface
+    whose normals point into the hole. Its nodes are reused as they are, and
+    nodes are added inside the solid so the cells come out well shaped.
+    
+    `size` is the target edge length; `None` takes the mean edge length of
+    the envelope. `allow_surface_nodes` lets the mesher cut the envelope
+    finer where it cannot otherwise fit it or make it usable: the shape is
+    kept — every added node lies on the edge or facet it divides — but the
+    skin of the result no longer matches the surface handed in, and a warning
+    on stderr says how many were added. Without it, such a surface is
+    refused rather than meshed badly.
     """
 
 def orient(mesh: Mesh) -> Mesh:
