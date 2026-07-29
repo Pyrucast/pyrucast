@@ -28,6 +28,7 @@
 //! four corners and every tetrahedron touching them are removed at the end.
 //! What survives triangulates the convex hull of the input.
 
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{PyrucastError, Result};
@@ -108,8 +109,10 @@ pub struct TetMesh {
     mark: Vec<u32>,
     stamp: u32,
     /// One incident tetrahedron per vertex, so a star can be found without
-    /// scanning. Refreshed on every allocation.
-    vertex_tet: Vec<u32>,
+    /// scanning. Refreshed on every allocation, and repaired in place by the
+    /// lookup itself when it turns out to be stale — hence the [`Cell`],
+    /// which lets a `&self` query mend its own index.
+    vertex_tet: Vec<Cell<u32>>,
 }
 
 impl TetMesh {
@@ -186,7 +189,7 @@ impl TetMesh {
             hint: 0,
             mark: vec![0; 1],
             stamp: 0,
-            vertex_tet: vec![0; (n + 4) as usize],
+            vertex_tet: vec![Cell::new(0); (n + 4) as usize],
         }
     }
 
@@ -262,6 +265,14 @@ impl TetMesh {
             }
         }
 
+        // The vertices about to lose their cells: their hints have to be
+        // pointed somewhere live again afterwards, or the next star walk
+        // falls back to scanning the whole mesh — which is O(n) per query
+        // and quietly turns the whole recovery quadratic.
+        let mut touched: Vec<u32> = old.iter().flat_map(|&t| self.tets[t as usize].v).collect();
+        touched.sort_unstable();
+        touched.dedup();
+
         for &t in old {
             self.kill(t);
         }
@@ -284,6 +295,24 @@ impl TetMesh {
                 }
             }
         }
+        // `alloc` has re-pointed every vertex the new cells use; the rest —
+        // vertices the region gave up — are found on the cells just outside
+        // it, which the region touched by definition.
+        for x in touched {
+            let hint = self.vertex_tet[x as usize].get();
+            let good = hint != NO_TET
+                && !self.tets[hint as usize].dead
+                && self.tets[hint as usize].v.contains(&x);
+            if good {
+                continue;
+            }
+            if let Some(&n) = outside.values().find(|&&n| {
+                n != NO_TET && !self.tets[n as usize].dead && self.tets[n as usize].v.contains(&x)
+            }) {
+                self.vertex_tet[x as usize].set(n);
+            }
+        }
+
         if !pending.is_empty() {
             // Faces the new cells do not present are a crack — unless the
             // caller asked for the hull to be re-cut, in which case both the
@@ -455,6 +484,22 @@ impl TetMesh {
         }
         self.points.truncate(first_corner as usize);
         self.vertex_tet.truncate(first_corner as usize);
+        // Wholesale demolition leaves most hints pointing at nothing. Since
+        // the fallback is a scan of the entire mesh, and nothing repairs a
+        // hint once it is stale, one bad hint costs a scan on *every* later
+        // query for that vertex — which is what turns recovery quadratic.
+        // One pass now fixes all of them.
+        for slot in &self.vertex_tet {
+            slot.set(NO_TET);
+        }
+        for t in 0..self.tets.len() {
+            if self.tets[t].dead {
+                continue;
+            }
+            for &x in &self.tets[t].v {
+                self.vertex_tet[x as usize].set(t as u32);
+            }
+        }
         self.hint = self.first_live().unwrap_or(0) as u32;
     }
 
@@ -479,9 +524,9 @@ impl TetMesh {
         };
         for &x in &v {
             if self.vertex_tet.len() <= x as usize {
-                self.vertex_tet.resize(x as usize + 1, NO_TET);
+                self.vertex_tet.resize(x as usize + 1, Cell::new(NO_TET));
             }
-            self.vertex_tet[x as usize] = slot;
+            self.vertex_tet[x as usize].set(slot);
         }
         slot
     }
@@ -499,15 +544,18 @@ impl TetMesh {
 
     /// A live tetrahedron having `v` as a vertex.
     fn seed_tet_for(&self, v: u32) -> Option<u32> {
-        if let Some(&t) = self.vertex_tet.get(v as usize) {
+        if let Some(slot) = self.vertex_tet.get(v as usize) {
+            let t = slot.get();
             if t != NO_TET && !self.tets[t as usize].dead && self.tets[t as usize].v.contains(&v) {
                 return Some(t);
             }
         }
-        // The hint only goes stale when every cell around `v` was replaced
-        // without `v` being reused, which the callers below never do.
-        (0..self.tets.len() as u32)
-            .find(|&t| !self.tets[t as usize].dead && self.tets[t as usize].v.contains(&v))
+        let found = (0..self.tets.len() as u32)
+            .find(|&t| !self.tets[t as usize].dead && self.tets[t as usize].v.contains(&v))?;
+        // Remember it: the fallback is a scan of the whole mesh, so paying
+        // it twice for the same vertex is pure waste.
+        self.vertex_tet[v as usize].set(found);
+        Some(found)
     }
 
     /// Every tetrahedron having `v` as a vertex.

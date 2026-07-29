@@ -36,6 +36,7 @@ use crate::error::Result;
 use super::delaunay::{Boundary, TetMesh};
 use super::fill::{fill, Constraints, DEFAULT_BUDGET};
 use super::flips::{relevant, remove_edge};
+use super::recovery::Protected;
 
 /// Cells a star may hold for the rebuild to be attempted.
 const STAR_LIMIT: usize = 12;
@@ -58,7 +59,7 @@ pub fn remove_vertex(
     mesh: &mut TetMesh,
     m: u32,
     merged: &[[u32; 3]],
-    protect: &[[u32; 3]],
+    protect: &Protected<'_>,
 ) -> Result<bool> {
     for _ in 0..SHRINK_BUDGET {
         let star = mesh.tets_around_vertex(m);
@@ -87,7 +88,7 @@ fn rebuild_star(
     m: u32,
     star: &[u32],
     merged: &[[u32; 3]],
-    protect: &[[u32; 3]],
+    protect: &Protected<'_>,
 ) -> Result<bool> {
     let mut boundary = mesh.region_boundary(star);
     let surfaced: Vec<[u32; 3]> = boundary
@@ -151,7 +152,7 @@ fn rebuild_star(
 /// Only edges away from the surface are eligible: removing one that lies on
 /// the envelope would change the surface, which is exactly what this whole
 /// exercise is trying to undo.
-fn thin_star(mesh: &mut TetMesh, m: u32, star: &[u32], protect: &[[u32; 3]]) -> Result<bool> {
+fn thin_star(mesh: &mut TetMesh, m: u32, star: &[u32], protect: &Protected<'_>) -> Result<bool> {
     let mut neighbours: Vec<u32> = star
         .iter()
         .filter_map(|&t| mesh.tet(t as usize))
@@ -162,7 +163,7 @@ fn thin_star(mesh: &mut TetMesh, m: u32, star: &[u32], protect: &[[u32; 3]]) -> 
     neighbours.dedup();
 
     for x in neighbours {
-        if protect.iter().any(|f| f.contains(&m) && f.contains(&x)) {
+        if !protect.on_edge(m, x).is_empty() {
             continue; // an edge of the envelope: not ours to remove
         }
         if remove_edge(mesh, m, x, protect, THINNING_REGION)?.is_some() {

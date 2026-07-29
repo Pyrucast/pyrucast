@@ -88,9 +88,27 @@
 //! exhaustive search, which is not. Until then, `allow_surface_nodes` is the
 //! answer for anything with large flat faces.
 //!
-//! Interior refinement — the sizing field and the removal of slivers — is not
-//! implemented yet either, which is why `target_size` is accepted and
-//! checked but not yet used.
+//! # Quality
+//!
+//! The mesh is **valid but not yet good**. Every cell has a strictly positive
+//! volume and the boundary is exactly the envelope, but no interior node is
+//! ever added, so what comes out is a tetrahedralization of the envelope's
+//! own nodes and nothing else. Such meshes always carry **slivers** — cells
+//! of four nearly coplanar nodes, with a decent radius-edge ratio and almost
+//! no volume — and no amount of care in the recovery removes them, because
+//! they are not a defect of the recovery.
+//!
+//! Measured on the plate of `formation/maillage_test.py` (4724 cells): the
+//! median smallest dihedral angle is 43°, which is fine, but 1.8 % of cells
+//! are under 10° and the flattest has a volume 10⁻¹⁵ of the average. On a
+//! small box of flat panels it is far worse: 14 % under 10°.
+//!
+//! A handful of flat cells is enough to make a finite-element matrix
+//! singular, so **the result is not yet usable for computation**. What is
+//! missing is the other half of a mesher: a sizing field, interior point
+//! insertion at the circumcentres of badly shaped cells, and a sliver pass
+//! (flips plus interior-node smoothing). `target_size` is accepted and
+//! checked against that future, and does nothing today.
 
 use crate::containers::mesh::{ElementType, Mesh, Node, NodeId, SubMesh};
 use crate::error::{PyrucastError, Result};
@@ -171,9 +189,20 @@ pub fn mesh_volume_cancellable(
             // The subdivision points were the price of getting a mesh, not
             // something wanted for itself: now that there is one, try to
             // give them back.
+            let t = std::time::Instant::now();
             reclaim(&mut mesh, &mut env, cancel)?;
+            let t1 = std::time::Instant::now();
             let inside = classify::interior(&mesh, &env, cancel)?;
+            let t2 = std::time::Instant::now();
             let cells = validate(&mesh, &env, &inside)?;
+            if std::env::var("PYRU_DEBUG").is_ok() {
+                eprintln!(
+                    "   reclaim {:?}, classify {:?}, validate {:?}",
+                    t1 - t,
+                    t2 - t1,
+                    t2.elapsed()
+                );
+            }
             warn_if_subdivided(&env, &cells);
             return materialize(envelope, &env, &cells);
         }
@@ -209,7 +238,13 @@ fn reclaim(mesh: &mut TetMesh, env: &mut Envelope, cancel: &dyn Cancel) -> Resul
         let Some((dropped, merged)) = env.merge_around(m, origin) else {
             continue;
         };
-        if simplify::remove_vertex(mesh, m, &merged, env.facets())? {
+        // The index has to be rebuilt each time: a successful removal changes
+        // the envelope's facets, and the next attempt must see them.
+        let taken = {
+            let protect = recovery::Protected::new(env.facets());
+            simplify::remove_vertex(mesh, m, &merged, &protect)?
+        };
+        if taken {
             env.unsplit(&dropped, &merged);
         }
     }

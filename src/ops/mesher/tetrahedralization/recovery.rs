@@ -24,7 +24,7 @@
 //! which edge or facet is stuck rather than returning a mesh that does not
 //! match the surface it was given.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::Cancel;
@@ -71,6 +71,74 @@ impl Effort {
     };
 }
 
+/// The envelope's facets, indexed for the questions recovery keeps asking of
+/// them.
+///
+/// Recovery consults the envelope constantly — *is this face one of yours?*,
+/// *does this edge belong to one of your facets?* — and answering by walking
+/// the list turns the whole phase quadratic: a scan of tens of thousands of
+/// facets, inside a loop, inside a loop. Indexing once costs one pass and
+/// makes every answer local.
+pub struct Protected<'a> {
+    facets: &'a [[u32; 3]],
+    by_key: HashSet<[u32; 3]>,
+    by_edge: HashMap<(u32, u32), Vec<[u32; 3]>>,
+    by_vertex: HashMap<u32, Vec<[u32; 3]>>,
+}
+
+impl<'a> Protected<'a> {
+    pub fn new(facets: &'a [[u32; 3]]) -> Protected<'a> {
+        let mut by_key = HashSet::with_capacity(facets.len());
+        let mut by_edge: HashMap<(u32, u32), Vec<[u32; 3]>> = HashMap::new();
+        let mut by_vertex: HashMap<u32, Vec<[u32; 3]>> = HashMap::new();
+        for f in facets {
+            by_key.insert(sorted(f));
+            for k in 0..3 {
+                let (a, b) = (f[k], f[(k + 1) % 3]);
+                by_edge
+                    .entry(if a < b { (a, b) } else { (b, a) })
+                    .or_default()
+                    .push(*f);
+                by_vertex.entry(f[k]).or_default().push(*f);
+            }
+        }
+        Protected {
+            facets,
+            by_key,
+            by_edge,
+            by_vertex,
+        }
+    }
+
+    /// Every facet, in the order they came.
+    pub fn all(&self) -> &[[u32; 3]] {
+        self.facets
+    }
+
+    /// Whether `f` is one of the envelope's facets.
+    pub fn holds(&self, f: &[u32; 3]) -> bool {
+        self.by_key.contains(&sorted(f))
+    }
+
+    /// The facets having `(p, q)` as a side — at most two.
+    pub fn on_edge(&self, p: u32, q: u32) -> &[[u32; 3]] {
+        self.by_edge
+            .get(&if p < q { (p, q) } else { (q, p) })
+            .map_or(&[][..], |v| v.as_slice())
+    }
+
+    /// The facets having `v` as a corner.
+    pub fn at(&self, v: u32) -> &[[u32; 3]] {
+        self.by_vertex.get(&v).map_or(&[][..], |v| v.as_slice())
+    }
+}
+
+fn sorted(f: &[u32; 3]) -> [u32; 3] {
+    let mut k = *f;
+    k.sort_unstable();
+    k
+}
+
 /// A piece of the envelope recovery could not fit into the mesh.
 ///
 /// A missing edge takes its facets down with it, so an edge is reported in
@@ -105,6 +173,7 @@ pub fn recover(
     }
     edges.sort_unstable();
     edges.dedup();
+    let protect = Protected::new(envelope.facets());
 
     // Recovering one facet can undo another, so the envelope is swept again
     // until nothing is missing — or until a sweep gains nothing, which is
@@ -117,13 +186,13 @@ pub fn recover(
         for &(u, v) in &edges {
             cancel.check()?;
             if !mesh.has_edge(u, v) {
-                recover_edge(mesh, u, v, envelope.facets(), effort)?;
+                recover_edge(mesh, u, v, &protect, effort)?;
             }
         }
         for f in envelope.facets() {
             cancel.check()?;
             if !mesh.has_face(f) {
-                recover_facet(mesh, f, envelope.facets(), effort)?;
+                recover_facet(mesh, f, &protect, effort)?;
             }
         }
         let missing = envelope
@@ -187,7 +256,7 @@ fn recover_edge(
     mesh: &mut TetMesh,
     u: u32,
     v: u32,
-    protect: &[[u32; 3]],
+    protect: &Protected<'_>,
     effort: Effort,
 ) -> Result<()> {
     for _ in 0..effort.flips {
@@ -220,7 +289,7 @@ fn rebuild_along(
     mesh: &mut TetMesh,
     u: u32,
     v: u32,
-    protect: &[[u32; 3]],
+    protect: &Protected<'_>,
     effort: Effort,
 ) -> Result<bool> {
     if effort.max_region == 0 {
@@ -269,7 +338,7 @@ fn clear_one_obstruction(
     mesh: &mut TetMesh,
     u: u32,
     v: u32,
-    protect: &[[u32; 3]],
+    protect: &Protected<'_>,
     effort: Effort,
 ) -> Result<bool> {
     let corridor = corridor(mesh, u, v);
@@ -285,7 +354,7 @@ fn clear_one_obstruction(
             // A 2-3 flip destroys the face it opens; an envelope facet
             // that has already been won must not be traded away for progress
             // elsewhere.
-            if protect.iter().any(|g| sorted(g) == sorted(&f)) {
+            if protect.holds(&f) {
                 continue;
             }
             if pierces_triangle_between(mesh, u, v, &f) && flip23(mesh, t as usize, i)?.is_some() {
@@ -377,16 +446,13 @@ fn retire_edge(
     mesh: &mut TetMesh,
     p: u32,
     q: u32,
-    protect: &[[u32; 3]],
+    protect: &Protected<'_>,
     effort: Effort,
 ) -> Result<bool> {
     // An edge that is a side of an envelope facet already in place cannot be
     // taken out without taking the facet with it. Refusing here is what keeps
     // recovery from trading one facet for its neighbour, over and over.
-    if protect
-        .iter()
-        .any(|g| g.contains(&p) && g.contains(&q) && mesh.has_face(g))
-    {
+    if protect.on_edge(p, q).iter().any(|g| mesh.has_face(g)) {
         return Ok(false);
     }
     if remove_edge(mesh, p, q, protect, effort.max_region)?.is_some() {
@@ -399,10 +465,7 @@ fn retire_edge(
             if cell[i] == p || cell[i] == q {
                 continue;
             }
-            if protect
-                .iter()
-                .any(|g| sorted(g) == sorted(&mesh.face(t as usize, i)))
-            {
+            if protect.holds(&mesh.face(t as usize, i)) {
                 continue;
             }
             if flip23(mesh, t as usize, i)?.is_some() {
@@ -420,7 +483,7 @@ fn retire_edge(
 fn recover_facet(
     mesh: &mut TetMesh,
     f: &[u32; 3],
-    envelope_facets: &[[u32; 3]],
+    envelope_facets: &Protected<'_>,
     effort: Effort,
 ) -> Result<()> {
     for _ in 0..effort.flips {
@@ -453,7 +516,7 @@ fn recover_facet(
 fn rebuild_around(
     mesh: &mut TetMesh,
     f: &[u32; 3],
-    protect: &[[u32; 3]],
+    protect: &Protected<'_>,
     effort: Effort,
 ) -> Result<()> {
     if effort.max_region == 0 {
@@ -749,10 +812,4 @@ fn plane_probe(a: &[f64; 3], b: &[f64; 3], c: &[f64; 3]) -> [f64; 3] {
         e1[0] * e2[1] - e1[1] * e2[0],
     ];
     [a[0] + n[0], a[1] + n[1], a[2] + n[2]]
-}
-
-fn sorted(f: &[u32; 3]) -> [u32; 3] {
-    let mut k = *f;
-    k.sort_unstable();
-    k
 }

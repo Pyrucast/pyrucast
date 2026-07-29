@@ -27,6 +27,7 @@ use crate::error::Result;
 
 use super::delaunay::{Boundary, EdgeFan, TetMesh};
 use super::fill::{fill, Constraints, DEFAULT_BUDGET};
+use super::recovery::Protected;
 
 use super::predicates::orient3d;
 
@@ -183,7 +184,7 @@ pub fn remove_edge(
     mesh: &mut TetMesh,
     p: u32,
     q: u32,
-    protect: &[[u32; 3]],
+    protect: &Protected<'_>,
     max_region: usize,
 ) -> Result<Option<Vec<u32>>> {
     let Some(fan) = mesh.edge_fan(p, q) else {
@@ -213,7 +214,7 @@ fn rebuild_without(
     q: u32,
     fan: &EdgeFan,
     region: &[u32],
-    protect: &[[u32; 3]],
+    protect: &Protected<'_>,
 ) -> Result<Option<Vec<u32>>> {
     let mut boundary = mesh.region_boundary(region);
 
@@ -238,10 +239,7 @@ fn rebuild_without(
         }
         // Re-cutting swaps those two triangles for two others. An envelope
         // facet is not ours to swap: it is the answer, not scratch space.
-        if protect
-            .iter()
-            .any(|g| sorted(g) == sorted(&[p, q, x0]) || sorted(g) == sorted(&[p, q, xn]))
-        {
+        if protect.holds(&[p, q, x0]) || protect.holds(&[p, q, xn]) {
             return Ok(None);
         }
         let Some(recut) = recut_end_faces(mesh, fan, p, q) else {
@@ -288,10 +286,7 @@ fn rebuild_without(
 /// Handing them to the search as walls is what stops recovery from undoing
 /// its own work — without it, freeing one edge quietly buries a facet won
 /// earlier, and the sweep chases its tail.
-pub fn relevant(mesh: &TetMesh, region: &[u32], protect: &[[u32; 3]]) -> Vec<[u32; 3]> {
-    if protect.is_empty() {
-        return Vec::new();
-    }
+pub fn relevant(mesh: &TetMesh, region: &[u32], protect: &Protected<'_>) -> Vec<[u32; 3]> {
     // The region's own vertices, not just those on its surface: while the
     // envelope is being recovered a facet of a concave body is an *interior*
     // face of the triangulation, and those are exactly the ones a rebuild
@@ -303,11 +298,17 @@ pub fn relevant(mesh: &TetMesh, region: &[u32], protect: &[[u32; 3]]) -> Vec<[u3
         .collect();
     here.sort_unstable();
     here.dedup();
-    protect
+    // Only facets touching the region can be at risk, so ask the index for
+    // those rather than walking the whole envelope.
+    let mut out: Vec<[u32; 3]> = here
         .iter()
+        .flat_map(|&x| protect.at(x))
         .filter(|f| f.iter().all(|x| here.binary_search(x).is_ok()) && mesh.has_face(f))
         .copied()
-        .collect()
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 /// The region plus every cell touching it through a face.

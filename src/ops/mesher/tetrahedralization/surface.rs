@@ -29,6 +29,7 @@ use crate::error::Result;
 use super::delaunay::{Boundary, TetMesh};
 use super::fill::{fill, Constraints, DEFAULT_BUDGET};
 use super::predicates::{orient2d, orient3d};
+use super::recovery::Protected;
 use crate::ops::mesher::triangulation::{ear_clip_2d, signed_area};
 
 /// Triangles a single strip may hold before the walk is called off.
@@ -44,7 +45,7 @@ pub fn recut_flat_strip(
     mesh: &mut TetMesh,
     u: u32,
     v: u32,
-    protect: &[[u32; 3]],
+    protect: &Protected<'_>,
     max_region: usize,
 ) -> Result<bool> {
     let Some(strip) = walk_strip(mesh, u, v) else {
@@ -56,10 +57,7 @@ pub fn recut_flat_strip(
         .collect();
     // The strip is about to be cut differently; an envelope facet caught in
     // it would be destroyed, so the whole re-cut is off.
-    if faces
-        .iter()
-        .any(|f| protect.iter().any(|g| sorted(g) == sorted(f)))
-    {
+    if faces.iter().any(|f| protect.holds(f)) {
         return Ok(false);
     }
     let Some(loop_) = boundary_loop(&faces) else {
