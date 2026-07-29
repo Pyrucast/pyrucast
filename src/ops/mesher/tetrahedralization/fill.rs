@@ -30,10 +30,11 @@ use super::predicates::orient3d;
 
 /// Cells examined before a search gives up.
 ///
-/// A pocket small enough to be worth rebuilding is filled in a few dozen
-/// steps; a search that runs long has wandered somewhere unhelpful, and
-/// stopping keeps recovery responsive.
-pub const DEFAULT_BUDGET: usize = 20_000;
+/// The search is exponential in the pocket's size, so the budget is what
+/// makes it a *bounded* tool rather than a gamble. A pocket small enough to
+/// be worth rebuilding is filled in a few dozen steps; recovery tries many
+/// pockets, so each one has to stay cheap.
+pub const DEFAULT_BUDGET: usize = 3_000;
 
 /// What the filling must and must not contain.
 ///

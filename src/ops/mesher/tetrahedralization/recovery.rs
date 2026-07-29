@@ -44,7 +44,7 @@ use super::surface::recut_flat_strip;
 const FLIP_BUDGET: usize = 512;
 
 /// Cells a facet's pocket may hold before rebuilding it is abandoned.
-const MAX_FACET_REGION: usize = 64;
+const MAX_FACET_REGION: usize = 16;
 
 /// Passes over the whole envelope before recovery is called off.
 ///
@@ -232,8 +232,11 @@ fn clear_one_obstruction(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]
                 if p == u || q == u || p == v || q == v {
                     continue;
                 }
-                if segments_cross(mesh, u, v, p, q) && retire_edge(mesh, p, q, protect)? {
-                    return Ok(true);
+                if segments_cross(mesh, u, v, p, q) {
+                    let ok = retire_edge(mesh, p, q, protect)?;
+                    if ok {
+                        return Ok(true);
+                    }
                 }
             }
         }

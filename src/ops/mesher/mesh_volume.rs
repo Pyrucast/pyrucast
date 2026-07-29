@@ -37,19 +37,25 @@
 //! missed, and the envelopes that genuinely cannot be filled are correctly
 //! refused.
 //!
-//! What it does not have is a way to widen its view when no pocket, however
-//! grown, does the job. On those the mesher reports the stuck edge rather
-//! than returning a mesh that does not match its surface — the contract
-//! holds, but the answer is an error where a mesh was possible. Whether a
-//! given envelope lands in that band is not something the current code can
-//! predict: a subdivided box goes through at 3×3 and not at 2×2 or 4×4, and
-//! reordering the same facets can change the outcome, because the order
-//! decides the Delaunay triangulation recovery starts from.
+//! What it does not have is a way to widen its view when no pocket does the
+//! job. Growing the pocket is the obvious answer and it is what the code
+//! tries, but the rebuild is an *exhaustive* search, so it stops being
+//! affordable past half a dozen cells — and the cases that need widening
+//! need far more than that. Recovery therefore gives up, quickly and
+//! explicitly: the contract holds, but the answer is an error where a mesh
+//! was possible.
 //!
-//! Curved surfaces — the normal input — fare better than the small
-//! hand-built shapes above, which are all planar faces and cospherical
-//! corners. `meshes_a_realistic_closed_surface` is the case that matters;
-//! `meshes_a_concave_solid` is `#[ignore]`d and pins one that does not work.
+//! The commonest shape in that band is a **flat quadrilateral of the
+//! surface** whose two triangles the Delaunay triangulation cut along the
+//! other diagonal. The whole side wall of an extrusion is made of them,
+//! which is why `meshes_the_envelope_of_an_extruded_plate` passes on a
+//! coarse plate and `meshes_a_finer_extruded_plate` is `#[ignore]`d.
+//! Curved surfaces fare better — `meshes_a_realistic_closed_surface` is the
+//! case that matters — and `meshes_a_concave_solid` pins another gap.
+//!
+//! Getting past this needs a different filler for a pocket: a *Delaunay*
+//! retriangulation of the cavity, which is polynomial, instead of the
+//! exhaustive search, which is not.
 //!
 //! Interior refinement — the sizing field and the removal of slivers — is not
 //! implemented yet either, which is why `target_size` is accepted and
@@ -573,6 +579,66 @@ mod tests {
                 .unwrap(),
             envelope.cell_count().unwrap()
         );
+    }
+
+    /// The envelope of a plate meshed by `triangulate_surface`, extruded and
+    /// peeled — the pipeline `formation/maillage_test.py` uses.
+    ///
+    /// `n` segments per side of a unit square, `size` the target edge length.
+    /// Note the `invert`: `extrude` does not check that its direction lies on
+    /// the same side as the source surface's normal, so `skin` of the result
+    /// comes back with its normals pointing into the material.
+    fn extruded_plate(coords: &Handle<Coords>, n: usize, size: f64) -> Mesh {
+        let mut pts: Vec<[f64; 3]> = Vec::new();
+        for i in 0..n {
+            pts.push([i as f64 / n as f64, 0.0, 0.0]);
+        }
+        for i in 0..n {
+            pts.push([1.0, 0.0, i as f64 / n as f64]);
+        }
+        for i in 0..n {
+            pts.push([1.0 - i as f64 / n as f64, 0.0, 1.0]);
+        }
+        for i in 0..n {
+            pts.push([0.0, 0.0, 1.0 - i as f64 / n as f64]);
+        }
+        let ids: Vec<NodeId> = pts
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        for i in 0..ids.len() {
+            sm.add_cell(&[ids[i], ids[(i + 1) % ids.len()]]).unwrap();
+        }
+        let contour = Mesh::from_submesh(sm);
+
+        let plate =
+            super::super::triangulate_surface(&contour, ElementType::TRI3, Some(size)).unwrap();
+        let solid = super::super::extrude(&plate, &[0.0, 0.4, 0.0], 1).unwrap();
+        let skin = super::super::skin(&solid, None).unwrap();
+        let skin = super::super::convert(&skin, ElementType::TRI3).unwrap();
+        super::super::invert(&skin).unwrap()
+    }
+
+    #[test]
+    fn meshes_the_envelope_of_an_extruded_plate() {
+        let coords = insert(Coords::new(3).unwrap());
+        let envelope = extruded_plate(&coords, 2, 0.5);
+        let mesh = mesh_volume(&envelope, None).unwrap();
+        assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
+        let v = mesh_volume_of(&mesh);
+        assert!((v - 0.4).abs() < 1e-12, "volume {v}");
+    }
+
+    #[test]
+    #[ignore = "the side-wall quadrilaterals of an extrusion need a wider \
+                re-cut than a pocket rebuild can reach — see the module docs"]
+    fn meshes_a_finer_extruded_plate() {
+        let coords = insert(Coords::new(3).unwrap());
+        let envelope = extruded_plate(&coords, 3, 0.35);
+        let mesh = mesh_volume(&envelope, None).unwrap();
+        let v = mesh_volume_of(&mesh);
+        assert!((v - 0.4).abs() < 1e-12, "volume {v}");
     }
 
     #[test]

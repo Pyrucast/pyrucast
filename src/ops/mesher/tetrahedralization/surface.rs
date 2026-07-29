@@ -34,6 +34,9 @@ use crate::ops::mesher::triangulation::{ear_clip_2d, signed_area};
 /// Triangles a single strip may hold before the walk is called off.
 const STRIP_LIMIT: usize = 256;
 
+/// Cells the pocket behind a strip may hold before the re-cut is abandoned.
+const MAX_REGION: usize = 16;
+
 /// Make `(u, v)` an edge of the mesh by re-cutting the flat surface strip it
 /// runs across.
 ///
@@ -63,35 +66,63 @@ pub fn recut_flat_strip(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]]
         return Ok(false);
     };
 
-    // The cells behind the strip are rebuilt against the new surface.
+    // The cells behind the strip are rebuilt against the new surface. The
+    // ones directly carrying it are rarely enough: two triangles of a flat
+    // quadrilateral usually belong to cells that meet only along the
+    // diagonal, never through a face, so the pocket has to be widened until
+    // it is something a rebuild can close.
     let mut region: Vec<u32> = strip.iter().map(|&(t, _)| t).collect();
     region.sort_unstable();
     region.dedup();
-    let mut boundary = mesh.region_boundary(&region);
     let old: Vec<[u32; 3]> = faces.iter().map(sorted).collect();
-    boundary.retain(|f| !old.contains(&sorted(f)));
-    boundary.extend_from_slice(&new_faces);
 
-    let keep = super::flips::relevant(mesh, &region, protect);
-    let Some(cells) = fill(
-        mesh.points(),
-        &boundary,
-        Constraints {
-            with_faces: &keep,
-            ..Default::default()
-        },
-        DEFAULT_BUDGET,
-    ) else {
-        return Ok(false);
-    };
-    let snapshot = mesh.clone();
-    match mesh.replace_region_with(&region, &cells, "a surface re-cut", Boundary::MayRecutHull) {
-        Ok(_) => Ok(true),
-        Err(_) => {
+    loop {
+        let mut boundary = mesh.region_boundary(&region);
+        boundary.retain(|f| !old.contains(&sorted(f)));
+        boundary.extend_from_slice(&new_faces);
+
+        let keep = super::flips::relevant(mesh, &region, protect);
+        if let Some(cells) = fill(
+            mesh.points(),
+            &boundary,
+            Constraints {
+                with_faces: &keep,
+                ..Default::default()
+            },
+            DEFAULT_BUDGET,
+        ) {
+            let snapshot = mesh.clone();
+            if mesh
+                .replace_region_with(&region, &cells, "a surface re-cut", Boundary::MayRecutHull)
+                .is_ok()
+            {
+                return Ok(true);
+            }
             *mesh = snapshot;
-            Ok(false)
+        }
+
+        let wider = widen(mesh, &region);
+        if wider.len() == region.len() || wider.len() > MAX_REGION {
+            return Ok(false);
+        }
+        region = wider;
+    }
+}
+
+/// The region plus every cell touching it through a face.
+fn widen(mesh: &TetMesh, region: &[u32]) -> Vec<u32> {
+    let mut out: Vec<u32> = region.to_vec();
+    for &t in region {
+        for i in 0..4 {
+            if let Some(n) = mesh.neighbour(t as usize, i) {
+                if !out.contains(&(n as u32)) {
+                    out.push(n as u32);
+                }
+            }
         }
     }
+    out.sort_unstable();
+    out
 }
 
 // ─── Walking the strip ──────────────────────────────────────────────────

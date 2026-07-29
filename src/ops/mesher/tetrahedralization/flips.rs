@@ -30,7 +30,7 @@ use super::fill::{fill, Constraints, DEFAULT_BUDGET};
 
 /// Cells a pocket may hold before widening it is abandoned. Past this the
 /// exhaustive rebuild costs more than it is worth.
-const MAX_REGION: usize = 48;
+const MAX_REGION: usize = 16;
 use super::predicates::orient3d;
 
 /// Try to replace the two tetrahedra sharing face `i` of `t` with the three
