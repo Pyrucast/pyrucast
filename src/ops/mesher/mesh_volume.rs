@@ -109,12 +109,19 @@
 //! The first of those two numbers is the whole point — 10⁻¹⁶ is a singular
 //! element matrix, 10⁻² is a perfectly ordinary cell.
 //!
-//! **What still survives** is a sliver whose four corners are all nodes of
-//! the envelope. No node can be inserted to break it up and none of its own
-//! can be moved, since the caller's nodes are fixed by contract; only a
-//! reconnection can help, and sometimes none does. On a coarse envelope a
-//! few of those remain. Splitting the offending facet would clear them, and
-//! is what `allow_surface_nodes` could be extended to do.
+//! **What can still defeat both** is a sliver whose four corners are all
+//! nodes of the envelope. No node can be inserted to break it up and none of
+//! its own can be moved, since the caller's nodes are fixed by contract;
+//! only a reconnection can help, and sometimes none does. Cutting the
+//! surface there is tried when `allow_surface_nodes` allows it, and does not
+//! always work either — the four corners can simply be in the wrong places.
+//!
+//! Rather than hand back a mesh with a singular cell in it, the mesher
+//! **refuses**, and says where: the one thing that always clears such a cell
+//! is a different surface discretisation, and only the caller can supply
+//! that. The line is drawn at a shape of 10⁻⁴, several orders below anything
+//! a sound mesh produces (see `DEGENERATE_SHAPE`), so a merely thin cell is
+//! never mistaken for a flat one.
 
 use crate::containers::mesh::{ElementType, Mesh, Node, NodeId, SubMesh};
 use crate::error::{PyrucastError, Result};
@@ -143,6 +150,16 @@ const VOLUME_TOLERANCE: f64 = 1e-9;
 /// own subdivisions is recovered by the Delaunay triangulation unaided — so
 /// the cap is a guard against pathological input, not the normal exit.
 const MAX_SUBDIVISIONS: usize = 12;
+
+/// Shape below which a cell is called unusable.
+///
+/// The measure is `η = 12 (3V)^(2/3) / Σℓ²`: 1 for a regular tetrahedron, 0
+/// for a flat one, and independent of how big the mesh is. Sound cells sit
+/// well above this even in the tail — the worst on the plate of
+/// `formation/maillage_test.py` is 4·10⁻² — while a genuinely flat one lands
+/// several orders below, so the line between "thin" and "degenerate" is not
+/// a matter of taste.
+const DEGENERATE_SHAPE: f64 = 1e-4;
 
 /// Mesh the inside of `envelope` with `TET4` cells.
 ///
@@ -180,6 +197,7 @@ pub fn mesh_volume_cancellable(
     }
 
     let mut env = Envelope::extract(envelope, cancel)?;
+    let mut unusable: Option<PyrucastError> = None;
     for _ in 0..MAX_SUBDIVISIONS {
         cancel.check()?;
         let mut mesh = TetMesh::delaunay(env.points(), cancel)?;
@@ -217,6 +235,26 @@ pub fn mesh_volume_cancellable(
             smooth::smooth(&mut mesh, &inside, &movable, &walls, cancel)?;
             let inside = classify::interior_within(&mesh, &env, &walls, cancel)?;
 
+            // A sliver whose four corners are all the caller's own nodes is
+            // beyond both passes: nothing can be inserted to break it up and
+            // none of its corners may move. The only cure is a finer surface
+            // there, which is the caller's to allow.
+            let stubborn = smooth::stubborn(&mesh, &inside, env.points().len(), DEGENERATE_SHAPE);
+            if !stubborn.is_empty() {
+                let complaint = degenerate(&mesh, &stubborn);
+                let Some(cuts) = facets_of(&stubborn, &walls, &env) else {
+                    return Err(complaint);
+                };
+                if !allow_surface_nodes {
+                    return Err(complaint);
+                }
+                // Cutting the surface there may or may not free the cell;
+                // remember the complaint in case it never does.
+                unusable = Some(complaint);
+                env.subdivide(&cuts)?;
+                continue;
+            }
+
             let cells = validate(&mesh, &env, &inside)?;
             warn_if_subdivided(&env, &cells);
             return materialize(envelope, &env, mesh.points(), &cells);
@@ -230,10 +268,74 @@ pub fn mesh_volume_cancellable(
         // which is what the recovery reasons about.
         env.subdivide(&stuck)?;
     }
-    Err(PyrucastError::Message(format!(
-        "mesh_volume: the envelope still would not fit after {MAX_SUBDIVISIONS} rounds of \
-         subdividing it — the surface is likely self-touching or extremely thin somewhere"
-    )))
+    // Whichever wall the loop ran into, say which one.
+    Err(unusable.unwrap_or_else(|| {
+        PyrucastError::Message(format!(
+            "mesh_volume: the envelope still would not fit after {MAX_SUBDIVISIONS} rounds of \
+             subdividing it — the surface is likely self-touching or extremely thin somewhere"
+        ))
+    }))
+}
+
+/// The envelope facets carried by cells that cannot be improved.
+///
+/// Cutting those facets is what gives the next attempt somewhere to put a
+/// node. `None` when a cell has no facet of its own to cut, which leaves
+/// nothing to try.
+fn facets_of(
+    stubborn: &[([u32; 4], f64)],
+    walls: &std::collections::HashSet<[u32; 3]>,
+    env: &Envelope,
+) -> Option<Vec<recovery::Stuck>> {
+    let mut cuts: Vec<recovery::Stuck> = Vec::new();
+    for (v, _) in stubborn {
+        for f in super::tetrahedralization::delaunay::FACE_OF {
+            let face = [v[f[0]], v[f[1]], v[f[2]]];
+            let mut k = face;
+            k.sort_unstable();
+            if !walls.contains(&k) {
+                continue;
+            }
+            // Report it the way the envelope stores it, so subdividing finds
+            // the facet it is meant to cut.
+            if let Some(&g) = env.facets().iter().find(|g| {
+                let mut s = **g;
+                s.sort_unstable();
+                s == k
+            }) {
+                cuts.push(recovery::Stuck::Facet(g));
+            }
+        }
+    }
+    cuts.sort_unstable_by_key(|s| match s {
+        recovery::Stuck::Facet(f) => *f,
+        recovery::Stuck::Edge(a, b) => [*a, *b, 0],
+    });
+    cuts.dedup();
+    (!cuts.is_empty()).then_some(cuts)
+}
+
+/// The report handed back when a cell cannot be made usable.
+fn degenerate(mesh: &TetMesh, stubborn: &[([u32; 4], f64)]) -> PyrucastError {
+    let (v, quality) = stubborn
+        .iter()
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .expect("the list is not empty");
+    let centre: Vec<String> = (0..3)
+        .map(|k| {
+            let mid: f64 = v.iter().map(|&i| mesh.points()[i as usize][k]).sum::<f64>() / 4.0;
+            format!("{mid:.6}")
+        })
+        .collect();
+    PyrucastError::Message(format!(
+        "mesh_volume: the mesh has {} flat cell(s) that cannot be improved — the worst, around \
+         ({}), has a shape of {quality:.2e} where 1 is a regular tetrahedron. Its four corners \
+         are all nodes of the envelope, so no node can be added to break it up and none of its \
+         own may be moved. Refine the surface mesh around that point, or pass \
+         allow_surface_nodes to let the mesher cut the envelope there itself.",
+        stubborn.len(),
+        centre.join(", ")
+    ))
 }
 
 /// Take back every subdivision point the mesh will part with.
@@ -754,31 +856,6 @@ mod tests {
         (Mesh::from_submesh(sm), v6 / 6.0)
     }
 
-    #[test]
-    fn meshes_a_realistic_closed_surface() {
-        // 98 nodes, 192 facets, nothing degenerate: the case the mesher is
-        // actually for, as opposed to the eight-corner puzzles above.
-        let coords = insert(Coords::new(3).unwrap());
-        let (envelope, expected) = subdivided_blob(&coords, 3);
-        let mesh = mesh_volume(&envelope, None, false).unwrap();
-        assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
-        assert!(
-            mesh.cell_count().unwrap() > 100,
-            "{}",
-            mesh.cell_count().unwrap()
-        );
-        let v = mesh_volume_of(&mesh);
-        assert!((v - expected).abs() < 1e-12 * expected, "{v} vs {expected}");
-        // The surface is handed back untouched.
-        assert_eq!(
-            super::super::skin(&mesh, None)
-                .unwrap()
-                .cell_count()
-                .unwrap(),
-            envelope.cell_count().unwrap()
-        );
-    }
-
     /// The envelope of a plate meshed by `triangulate_surface`, extruded and
     /// peeled — the pipeline `formation/maillage_test.py` uses.
     ///
@@ -816,6 +893,24 @@ mod tests {
         let skin = super::super::skin(&solid, None).unwrap();
         let skin = super::super::convert(&skin, ElementType::TRI3).unwrap();
         super::super::invert(&skin).unwrap()
+    }
+
+    #[test]
+    fn meshes_a_realistic_closed_surface() {
+        // A plate meshed, extruded and peeled, at a size that gives a few
+        // thousand cells: the shape of input the mesher is actually for, as
+        // opposed to the eight-corner puzzles above.
+        let coords = insert(Coords::new(3).unwrap());
+        let envelope = extruded_plate(&coords, 8, 0.15);
+        let mesh = mesh_volume(&envelope, None, true).unwrap();
+        assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
+        assert!(
+            mesh.cell_count().unwrap() > 2000,
+            "{}",
+            mesh.cell_count().unwrap()
+        );
+        let v = mesh_volume_of(&mesh);
+        assert!((v - 0.4).abs() < 1e-12, "volume {v}");
     }
 
     #[test]
@@ -959,8 +1054,8 @@ mod tests {
         // enough to sink a computation. This is what refinement and the
         // sliver pass are for, so this is what has to be measured.
         let coords = insert(Coords::new(3).unwrap());
-        let (envelope, _) = subdivided_blob(&coords, 3);
-        let mesh = mesh_volume(&envelope, Some(1.0 / 6.0), false).unwrap();
+        let envelope = extruded_plate(&coords, 6, 0.2);
+        let mesh = mesh_volume(&envelope, None, true).unwrap();
 
         let n = mesh.cell_count().unwrap();
         let mut angles = Vec::with_capacity(n);
@@ -996,6 +1091,24 @@ mod tests {
             flattest > 1e-12,
             "flattest cell is {flattest:.2e} of the mean"
         );
+    }
+
+    #[test]
+    fn refuses_a_surface_that_cannot_carry_a_usable_mesh() {
+        // Four nodes of this envelope happen to fall almost in one plane.
+        // The cell they make has no volume worth the name, and nothing can
+        // be done to it from the inside: no node may be added to break it
+        // up, and its own four are the caller's. Returning that mesh would
+        // hand back a singular element matrix, so it is refused — with the
+        // one thing the caller can act on.
+        let coords = insert(Coords::new(3).unwrap());
+        let (envelope, _) = subdivided_blob(&coords, 3);
+        let err = mesh_volume(&envelope, None, false).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("flat cell"), "{msg}");
+        assert!(msg.contains("Refine the surface mesh"), "{msg}");
+        // And it says where, so the advice can be followed.
+        assert!(msg.contains("around ("), "{msg}");
     }
 
     #[test]

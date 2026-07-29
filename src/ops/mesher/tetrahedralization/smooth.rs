@@ -210,6 +210,48 @@ fn relax(mesh: &mut TetMesh, inside: &[bool], movable: &[bool]) -> bool {
     changed
 }
 
+/// Cells that neither pass can reach, with how flat each one is.
+///
+/// A sliver whose four corners are all nodes of the envelope is beyond both
+/// moves this module has: no node can be inserted to break it up, and none
+/// of its own may be moved, since the caller's nodes are fixed. Naming them
+/// is the only thing left to do — either to cut the surface there, or to
+/// tell the caller their surface cannot carry a usable mesh as drawn.
+///
+/// Shape is measured by `η = 12 (3V)^(2/3) / Σℓ²`, which is 1 for a regular
+/// tetrahedron and 0 for a flat one, and — unlike a volume — does not depend
+/// on how big the rest of the mesh happens to be.
+pub fn stubborn(
+    mesh: &TetMesh,
+    inside: &[bool],
+    on_envelope: usize,
+    floor: f64,
+) -> Vec<([u32; 4], f64)> {
+    mesh.iter()
+        .filter(|(t, _)| inside.get(*t).copied().unwrap_or(false))
+        .filter(|(_, v)| v.iter().all(|&x| (x as usize) < on_envelope))
+        .map(|(_, v)| (v, shape(mesh, &v)))
+        .filter(|&(_, q)| q < floor)
+        .collect()
+}
+
+/// How near a regular tetrahedron a cell is: 1 for regular, 0 for flat.
+fn shape(mesh: &TetMesh, v: &[u32; 4]) -> f64 {
+    let p = mesh.points();
+    let mut squares = 0.0;
+    for a in 0..4 {
+        for b in a + 1..4 {
+            let (x, y) = (p[v[a] as usize], p[v[b] as usize]);
+            squares += (0..3).map(|k| (x[k] - y[k]).powi(2)).sum::<f64>();
+        }
+    }
+    if squares == 0.0 {
+        return 0.0;
+    }
+    let volume = mesh.orientation(v).abs() / 6.0;
+    12.0 * (3.0 * volume).powf(2.0 / 3.0) / squares
+}
+
 /// The smallest dihedral angle of the mesh's material, in degrees.
 pub fn worst_angle(mesh: &TetMesh, inside: &[bool]) -> f64 {
     mesh.iter()
