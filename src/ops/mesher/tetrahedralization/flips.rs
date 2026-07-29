@@ -28,9 +28,6 @@ use crate::error::Result;
 use super::delaunay::{Boundary, EdgeFan, TetMesh};
 use super::fill::{fill, Constraints, DEFAULT_BUDGET};
 
-/// Cells a pocket may hold before widening it is abandoned. Past this the
-/// exhaustive rebuild costs more than it is worth.
-const MAX_REGION: usize = 16;
 use super::predicates::orient3d;
 
 /// Try to replace the two tetrahedra sharing face `i` of `t` with the three
@@ -187,6 +184,7 @@ pub fn remove_edge(
     p: u32,
     q: u32,
     protect: &[[u32; 3]],
+    max_region: usize,
 ) -> Result<Option<Vec<u32>>> {
     let Some(fan) = mesh.edge_fan(p, q) else {
         return Ok(None);
@@ -201,7 +199,7 @@ pub fn remove_edge(
             return Ok(Some(created));
         }
         let wider = grow(mesh, &region);
-        if wider.len() == region.len() || wider.len() > MAX_REGION {
+        if wider.len() == region.len() || wider.len() > max_region {
             return Ok(None);
         }
         region = wider;

@@ -20,6 +20,29 @@
 //! 5 proves it before anything is written, by checking that the mesh's own
 //! boundary is precisely the set of facets that came in.
 //!
+//! # Letting the envelope be cut finer
+//!
+//! `allow_surface_nodes` trades the second half of that contract for
+//! robustness, and it is the difference between a mesher that works on real
+//! input and one that does not.
+//!
+//! What stays: the **shape**. Every node the mesher adds sits on the edge or
+//! the facet it divides, so the surface is the same surface — only its
+//! triangulation is finer. What goes: the **discretisation**. The skin of the
+//! result no longer matches the surface mesh that was passed in, which
+//! matters if two solids are meant to share a conforming interface, and not
+//! at all if the envelope was only ever a way to describe a form. A warning
+//! on stderr says how many nodes were added, because the difference is easy
+//! to overlook.
+//!
+//! It is also why it works. Recovery is hard precisely because a segment
+//! that cannot be fitted has, otherwise, no way out; subdivide it and the
+//! problem splits into two easier ones, and a segment closely enough
+//! surrounded by its own subdivisions is recovered by the Delaunay
+//! triangulation unaided. On the plate of `formation/maillage_test.py` —
+//! 3308 facets — this costs 15 added nodes and under a second, where the
+//! strict mode cannot finish at all.
+//!
 //! Every geometric decision runs on exact predicates, so degenerate input —
 //! a box, a regular grid, cospherical corners — is decided rather than
 //! guessed at. Where no answer exists, the mesher says so: some polyhedra
@@ -37,25 +60,21 @@
 //! missed, and the envelopes that genuinely cannot be filled are correctly
 //! refused.
 //!
-//! What it does not have is a way to widen its view when no pocket does the
-//! job. Growing the pocket is the obvious answer and it is what the code
-//! tries, but the rebuild is an *exhaustive* search, so it stops being
-//! affordable past half a dozen cells — and the cases that need widening
-//! need far more than that. Recovery therefore gives up, quickly and
-//! explicitly: the contract holds, but the answer is an error where a mesh
-//! was possible.
+//! In **strict** mode (the default) recovery still has a real gap. It has no
+//! way to widen its view when no pocket does the job: growing the pocket is
+//! what the code tries, but the rebuild is an *exhaustive* search, so it
+//! stops being affordable past half a dozen cells — and the cases that need
+//! widening need far more. The commonest of them is a **flat quadrilateral
+//! of the surface** whose two triangles the Delaunay triangulation cut along
+//! the other diagonal; the whole side wall of an extrusion is made of them.
+//! Recovery gives up explicitly there, and giving up is not instant either:
+//! a failure costs seconds, because the search has to be tried before it can
+//! be declared hopeless.
 //!
-//! The commonest shape in that band is a **flat quadrilateral of the
-//! surface** whose two triangles the Delaunay triangulation cut along the
-//! other diagonal. The whole side wall of an extrusion is made of them,
-//! which is why `meshes_the_envelope_of_an_extruded_plate` passes on a
-//! coarse plate and `meshes_a_finer_extruded_plate` is `#[ignore]`d.
-//! Curved surfaces fare better — `meshes_a_realistic_closed_surface` is the
-//! case that matters — and `meshes_a_concave_solid` pins another gap.
-//!
-//! Getting past this needs a different filler for a pocket: a *Delaunay*
+//! Closing that gap needs a different filler for a pocket — a *Delaunay*
 //! retriangulation of the cavity, which is polynomial, instead of the
-//! exhaustive search, which is not.
+//! exhaustive search, which is not. Until then, `allow_surface_nodes` is the
+//! answer for anything with large flat faces.
 //!
 //! Interior refinement — the sizing field and the removal of slivers — is not
 //! implemented yet either, which is why `target_size` is accepted and
@@ -78,6 +97,14 @@ use super::tetrahedralization::recovery;
 /// the mesh really does fill the surface.
 const VOLUME_TOLERANCE: f64 = 1e-9;
 
+/// Rounds of envelope subdivision before the mesher gives up.
+///
+/// Each round cuts the pieces that would not fit and starts again. The
+/// theory says this terminates — a segment closely enough surrounded by its
+/// own subdivisions is recovered by the Delaunay triangulation unaided — so
+/// the cap is a guard against pathological input, not the normal exit.
+const MAX_SUBDIVISIONS: usize = 12;
+
 /// Mesh the inside of `envelope` with `TET4` cells.
 ///
 /// `envelope` is a closed surface of `TRI3` facets whose normals point **out
@@ -90,14 +117,19 @@ const VOLUME_TOLERANCE: f64 = 1e-9;
 ///
 /// This is the uninterruptible convenience form; for a long mesh a caller
 /// may want to stop early, use [`mesh_volume_cancellable`].
-pub fn mesh_volume(envelope: &Mesh, target_size: Option<f64>) -> Result<Mesh> {
-    mesh_volume_cancellable(envelope, target_size, &NoCancel)
+pub fn mesh_volume(
+    envelope: &Mesh,
+    target_size: Option<f64>,
+    allow_surface_nodes: bool,
+) -> Result<Mesh> {
+    mesh_volume_cancellable(envelope, target_size, allow_surface_nodes, &NoCancel)
 }
 
 /// [`mesh_volume`], stoppable through `cancel`.
 pub fn mesh_volume_cancellable(
     envelope: &Mesh,
     target_size: Option<f64>,
+    allow_surface_nodes: bool,
     cancel: &dyn Cancel,
 ) -> Result<Mesh> {
     if let Some(h) = target_size {
@@ -108,15 +140,58 @@ pub fn mesh_volume_cancellable(
         }
     }
 
-    let env = Envelope::extract(envelope, cancel)?;
-    cancel.check()?;
-    let mut mesh = TetMesh::delaunay(env.points(), cancel)?;
-    recovery::recover(&mut mesh, &env, cancel)?;
-    cancel.check()?;
-    let inside = classify::interior(&mesh, &env, cancel)?;
+    let mut env = Envelope::extract(envelope, cancel)?;
+    for _ in 0..MAX_SUBDIVISIONS {
+        cancel.check()?;
+        let mut mesh = TetMesh::delaunay(env.points(), cancel)?;
+        // A caller that allows subdividing has a cheaper way out than the
+        // exhaustive pocket rebuilds, so recovery is told not to fight.
+        let effort = if allow_surface_nodes {
+            recovery::Effort::QUICK
+        } else {
+            recovery::Effort::THOROUGH
+        };
+        let stuck = recovery::recover(&mut mesh, &env, effort, cancel)?;
 
-    let cells = validate(&mesh, &env, &inside)?;
-    materialize(envelope, &env, &cells)
+        if stuck.is_empty() {
+            cancel.check()?;
+            let inside = classify::interior(&mesh, &env, cancel)?;
+            let cells = validate(&mesh, &env, &inside)?;
+            warn_if_subdivided(&env);
+            return materialize(envelope, &env, &cells);
+        }
+        if !allow_surface_nodes {
+            return Err(recovery::describe(&mesh, &stuck[0]));
+        }
+        // Cut the envelope finer where it would not go in, and start over.
+        // Rebuilding from scratch rather than patching keeps the
+        // triangulation a true Delaunay one at the start of every attempt,
+        // which is what the recovery reasons about.
+        env.subdivide(&stuck)?;
+    }
+    Err(PyrucastError::Message(format!(
+        "mesh_volume: the envelope still would not fit after {MAX_SUBDIVISIONS} rounds of \
+         subdividing it — the surface is likely self-touching or extremely thin somewhere"
+    )))
+}
+
+/// Tell the caller, on stderr, when the envelope had to be cut finer.
+///
+/// Allowing it is a deliberate choice, but the consequence is easy to
+/// overlook: the shape is untouched, yet the skin of the result no longer
+/// matches the surface mesh that was handed in, so two solids meshed this
+/// way no longer share a conforming interface. Saying so out loud costs
+/// nothing and saves a puzzling afternoon.
+fn warn_if_subdivided(env: &Envelope) {
+    let added = env.points().len() - env.given_node_count();
+    if added == 0 {
+        return;
+    }
+    eprintln!(
+        "mesh_volume: warning — the envelope would not fit as given, so {added} node(s) were \
+         added on it. Its shape is unchanged (each new node lies on the edge or facet it \
+         divides), but the skin of the result no longer matches the surface mesh passed in."
+    );
 }
 
 /// Check the meshed volume against the envelope it came from, and return the
@@ -171,11 +246,9 @@ fn validate(mesh: &TetMesh, env: &Envelope, inside: &[bool]) -> Result<Vec<[u32;
         key.sort_unstable();
         if !boundary.remove(&key) {
             return Err(PyrucastError::Message(format!(
-                "mesh_volume: envelope facet ({}, {}, {}) is not on the boundary of the mesh \
+                "mesh_volume: an envelope facet at {:?} is not on the boundary of the mesh \
                  (internal error)",
-                env.node_ids()[f[0] as usize].0,
-                env.node_ids()[f[1] as usize].0,
-                env.node_ids()[f[2] as usize].0
+                env.points()[f[0] as usize]
             )));
         }
     }
@@ -192,12 +265,20 @@ fn validate(mesh: &TetMesh, env: &Envelope, inside: &[bool]) -> Result<Vec<[u32;
 /// Build the output mesh, reusing the envelope's nodes.
 fn materialize(envelope: &Mesh, env: &Envelope, cells: &[[u32; 4]]) -> Result<Mesh> {
     let coords = envelope.coords()?;
-    let ids: &[NodeId] = env.node_ids();
 
-    // Interior nodes, if a later pass ever adds any, would be created here;
-    // for now every vertex is an envelope node, so nothing is allocated and
-    // the surface is untouched by construction.
-    let kept: Vec<Node> = Vec::new();
+    // The caller's own nodes come back untouched; anything past them was put
+    // on the envelope by a subdivision round and needs a node of its own.
+    // The `Node` handles are held until the cells hold them, so the store
+    // cannot collect a point between its creation and its first use.
+    let given = env.given_node_count();
+    let mut kept: Vec<Node> = Vec::with_capacity(env.points().len() - given);
+    let mut ids: Vec<NodeId> = env.node_ids().to_vec();
+    for p in &env.points()[given..] {
+        let node = Node::create_in(coords.clone(), p)?;
+        ids.push(node.id());
+        kept.push(node);
+    }
+
     let mut sub = SubMesh::new(coords, ElementType::TET4);
     for v in cells {
         sub.add_cell(&[
@@ -288,7 +369,7 @@ mod tests {
     fn meshes_a_box_and_keeps_its_volume() {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
-        let mesh = mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), None).unwrap();
+        let mesh = mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), None, false).unwrap();
 
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
         assert!(mesh.cell_count().unwrap() >= 5);
@@ -301,7 +382,7 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let before = read(&coords).unwrap().node_count();
-        let mesh = mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), None).unwrap();
+        let mesh = mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), None, false).unwrap();
 
         assert_eq!(
             read(&coords).unwrap().node_count(),
@@ -326,7 +407,7 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let env = surface(&coords, &nodes, &BOX_FACETS);
-        let mesh = mesh_volume(&env, None).unwrap();
+        let mesh = mesh_volume(&env, None, false).unwrap();
 
         // `skin` peels the boundary independently; it must find the same
         // twelve triangles.
@@ -356,7 +437,7 @@ mod tests {
         ];
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
-        let err = mesh_volume(&surface(&coords, &nodes, &UNFILLABLE), None).unwrap_err();
+        let err = mesh_volume(&surface(&coords, &nodes, &UNFILLABLE), None, false).unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("without adding a node on the surface"),
@@ -379,7 +460,7 @@ mod tests {
         .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
         .collect();
         let facets = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]];
-        let mesh = mesh_volume(&surface(&coords, &n, &facets), None).unwrap();
+        let mesh = mesh_volume(&surface(&coords, &n, &facets), None, false).unwrap();
         assert_eq!(mesh.cell_count().unwrap(), 1);
         assert!((mesh_volume_of(&mesh) - 1.0 / 6.0).abs() < 1e-15);
     }
@@ -396,7 +477,7 @@ mod tests {
                     .unwrap();
             }
         }
-        let mesh = mesh_volume(&Mesh::from_submesh(sm), None).unwrap();
+        let mesh = mesh_volume(&Mesh::from_submesh(sm), None, false).unwrap();
         assert!((mesh_volume_of(&mesh) - 3.0).abs() < 1e-12);
     }
 
@@ -417,14 +498,12 @@ mod tests {
             sm.add_cell(&[inner[f[0]], inner[f[2]], inner[f[1]]])
                 .unwrap();
         }
-        let mesh = mesh_volume(&Mesh::from_submesh(sm), None).unwrap();
+        let mesh = mesh_volume(&Mesh::from_submesh(sm), None, false).unwrap();
         let v = mesh_volume_of(&mesh);
         assert!((v - (27.0 - 1.0)).abs() < 1e-12, "volume {v}");
     }
 
     #[test]
-    #[ignore = "recovery cannot yet free an envelope edge that needs a wide \
-                re-cut of the outer triangulation — see the module docs"]
     fn meshes_a_concave_solid() {
         // An L-shaped prism: the reflex edge is what a convex-hull-based
         // mesher gets wrong, so the volume check is the real assertion here.
@@ -457,7 +536,7 @@ mod tests {
             facets.push([b(i), b(j), t(j)]);
             facets.push([b(i), t(j), t(i)]);
         }
-        let mesh = mesh_volume(&surface(&coords, &n, &facets), None).unwrap();
+        let mesh = mesh_volume(&surface(&coords, &n, &facets), None, true).unwrap();
         let v = mesh_volume_of(&mesh);
         assert!((v - 3.0).abs() < 1e-12, "volume {v}");
     }
@@ -562,7 +641,7 @@ mod tests {
         // actually for, as opposed to the eight-corner puzzles above.
         let coords = insert(Coords::new(3).unwrap());
         let (envelope, expected) = subdivided_blob(&coords, 3);
-        let mesh = mesh_volume(&envelope, None).unwrap();
+        let mesh = mesh_volume(&envelope, None, false).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
         assert!(
             mesh.cell_count().unwrap() > 100,
@@ -624,28 +703,40 @@ mod tests {
     fn meshes_the_envelope_of_an_extruded_plate() {
         let coords = insert(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 2, 0.5);
-        let mesh = mesh_volume(&envelope, None).unwrap();
+        let mesh = mesh_volume(&envelope, None, false).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
         let v = mesh_volume_of(&mesh);
         assert!((v - 0.4).abs() < 1e-12, "volume {v}");
     }
 
     #[test]
-    #[ignore = "the side-wall quadrilaterals of an extrusion need a wider \
-                re-cut than a pocket rebuild can reach — see the module docs"]
-    fn meshes_a_finer_extruded_plate() {
+    fn meshes_a_finer_extruded_plate_by_subdividing_it() {
+        // Strictly, the side-wall quadrilaterals defeat recovery; allowed to
+        // cut the envelope finer, the mesher gets through.
         let coords = insert(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 3, 0.35);
-        let mesh = mesh_volume(&envelope, None).unwrap();
+        assert!(mesh_volume(&envelope, None, false).is_err());
+
+        let before = read(&coords).unwrap().node_count();
+        let mesh = mesh_volume(&envelope, None, true).unwrap();
         let v = mesh_volume_of(&mesh);
         assert!((v - 0.4).abs() < 1e-12, "volume {v}");
+
+        // Nodes were added, and the shape is none the worse for it: the
+        // volume above is exact, and the skin still peels to a closed
+        // surface.
+        let added = read(&coords).unwrap().node_count() - before;
+        assert!(added > 0, "the strict run failed, so something had to give");
+        let peeled = super::super::skin(&mesh, None).unwrap();
+        assert!(peeled.cell_count().unwrap() > envelope.cell_count().unwrap());
     }
 
     #[test]
     fn rejects_a_bad_size() {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
-        let err = mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), Some(0.0)).unwrap_err();
+        let err =
+            mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), Some(0.0), false).unwrap_err();
         assert!(err.to_string().contains("size must be > 0"), "{err}");
     }
 
@@ -655,8 +746,9 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let flag = AtomicBool::new(true);
-        let err = mesh_volume_cancellable(&surface(&coords, &nodes, &BOX_FACETS), None, &flag)
-            .unwrap_err();
+        let err =
+            mesh_volume_cancellable(&surface(&coords, &nodes, &BOX_FACETS), None, false, &flag)
+                .unwrap_err();
         assert!(matches!(err, PyrucastError::Interrupted));
     }
 }

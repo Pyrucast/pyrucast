@@ -34,16 +34,19 @@ use crate::ops::mesher::triangulation::{ear_clip_2d, signed_area};
 /// Triangles a single strip may hold before the walk is called off.
 const STRIP_LIMIT: usize = 256;
 
-/// Cells the pocket behind a strip may hold before the re-cut is abandoned.
-const MAX_REGION: usize = 16;
-
 /// Make `(u, v)` an edge of the mesh by re-cutting the flat surface strip it
 /// runs across.
 ///
 /// Returns `false` when the segment does not run along a flat piece of the
 /// outer surface, or when the strip cannot be re-cut — in which case nothing
 /// has been touched.
-pub fn recut_flat_strip(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]]) -> Result<bool> {
+pub fn recut_flat_strip(
+    mesh: &mut TetMesh,
+    u: u32,
+    v: u32,
+    protect: &[[u32; 3]],
+    max_region: usize,
+) -> Result<bool> {
     let Some(strip) = walk_strip(mesh, u, v) else {
         return Ok(false);
     };
@@ -102,7 +105,7 @@ pub fn recut_flat_strip(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]]
         }
 
         let wider = widen(mesh, &region);
-        if wider.len() == region.len() || wider.len() > MAX_REGION {
+        if wider.len() == region.len() || wider.len() > max_region {
             return Ok(false);
         }
         region = wider;

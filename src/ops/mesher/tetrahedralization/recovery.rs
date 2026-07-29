@@ -37,25 +37,65 @@ use super::intersect::{segment_hits_triangle, triangles_intersect};
 use super::predicates::{orient2d, orient3d};
 use super::surface::recut_flat_strip;
 
-/// Flips allowed per edge or facet before the search is called off.
+/// How hard recovery should try before declaring a piece stuck.
 ///
-/// Recovery normally takes a handful; a run that reaches this many is not
-/// converging, and stopping turns a hang into a diagnosis.
-const FLIP_BUDGET: usize = 512;
+/// Fighting for an envelope edge is worth it only when there is no other way
+/// out. A caller that has allowed the envelope to be subdivided *does* have
+/// another way out, and a cheaper one: the exhaustive pocket rebuilds cost
+/// far more than cutting the offending edge in two and starting again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Effort {
+    /// Largest pocket a rebuild may grow to. Zero forbids widening, and with
+    /// it the wholesale rebuilds, leaving only the local moves.
+    pub max_region: usize,
+    /// Moves spent on one edge or facet before it is declared stuck.
+    pub flips: usize,
+    /// Sweeps over the whole envelope before what is left is reported.
+    pub passes: usize,
+}
 
-/// Cells a facet's pocket may hold before rebuilding it is abandoned.
-const MAX_FACET_REGION: usize = 16;
+impl Effort {
+    /// Everything, for a caller that must succeed here or not at all.
+    pub const THOROUGH: Effort = Effort {
+        max_region: 16,
+        flips: 512,
+        passes: 8,
+    };
+    /// Local moves only, and few of them, for a caller that will subdivide
+    /// instead. Insisting is pointless when giving up costs one round of
+    /// cutting the offending piece in two.
+    pub const QUICK: Effort = Effort {
+        max_region: 0,
+        flips: 24,
+        passes: 2,
+    };
+}
 
-/// Passes over the whole envelope before recovery is called off.
+/// A piece of the envelope recovery could not fit into the mesh.
 ///
-/// Recovering one facet can undo another — a rebuild is free to re-cut a
-/// pocket a previous one had settled — so the envelope is swept again until
-/// nothing is missing. Progress is monotone in practice; the cap is what
-/// turns a hypothetical cycle into a diagnosis.
-const RECOVERY_PASSES: usize = 8;
+/// A missing edge takes its facets down with it, so an edge is reported in
+/// preference to the facets that depend on it: subdividing the edge is what
+/// frees them all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stuck {
+    /// Both ends, as local envelope indices.
+    Edge(u32, u32),
+    /// A facet whose three sides are present but which is still buried.
+    Facet([u32; 3]),
+}
 
 /// Make every edge and every facet of `envelope` present in `mesh`.
-pub fn recover(mesh: &mut TetMesh, envelope: &Envelope, cancel: &dyn Cancel) -> Result<()> {
+///
+/// Returns what could **not** be fitted; an empty list means the envelope is
+/// wholly in the mesh. Reporting rather than failing lets the caller decide
+/// what to do about it — refuse, or subdivide the offending pieces and come
+/// back.
+pub fn recover(
+    mesh: &mut TetMesh,
+    envelope: &Envelope,
+    effort: Effort,
+    cancel: &dyn Cancel,
+) -> Result<Vec<Stuck>> {
     let mut edges: Vec<(u32, u32)> = Vec::with_capacity(3 * envelope.facets().len());
     for f in envelope.facets() {
         for k in 0..3 {
@@ -66,51 +106,63 @@ pub fn recover(mesh: &mut TetMesh, envelope: &Envelope, cancel: &dyn Cancel) -> 
     edges.sort_unstable();
     edges.dedup();
 
-    for _ in 0..RECOVERY_PASSES {
+    // Recovering one facet can undo another, so the envelope is swept again
+    // until nothing is missing — or until a sweep gains nothing, which is
+    // the signal that the rest is genuinely out of reach and that grinding
+    // through more sweeps only costs time.
+    let mut previously_missing = usize::MAX;
+    for _ in 0..effort.passes {
         // Edges first: a facet cannot be recovered while its own sides are
         // missing.
         for &(u, v) in &edges {
             cancel.check()?;
-            if mesh.has_edge(u, v) {
-                continue;
-            }
-            recover_edge(mesh, u, v, envelope.facets())?;
             if !mesh.has_edge(u, v) {
-                return Err(stuck(mesh, "edge", &[u, v]));
+                recover_edge(mesh, u, v, envelope.facets(), effort)?;
             }
         }
-
         for f in envelope.facets() {
             cancel.check()?;
-            if mesh.has_face(f) {
-                continue;
-            }
-            recover_facet(mesh, f, envelope.facets())?;
             if !mesh.has_face(f) {
-                return Err(stuck(mesh, "facet", f));
+                recover_facet(mesh, f, envelope.facets(), effort)?;
             }
         }
-
         let missing = envelope
             .facets()
             .iter()
             .filter(|f| !mesh.has_face(f))
             .count();
         if missing == 0 {
-            return Ok(());
+            return Ok(Vec::new());
         }
+        if missing >= previously_missing {
+            break;
+        }
+        previously_missing = missing;
     }
 
-    let lost = envelope
-        .facets()
+    let mut stuck: Vec<Stuck> = edges
         .iter()
-        .find(|f| !mesh.has_face(f))
-        .expect("a pass only ends unfinished when a facet is missing");
-    Err(stuck(mesh, "facet", lost))
+        .filter(|&&(u, v)| !mesh.has_edge(u, v))
+        .map(|&(u, v)| Stuck::Edge(u, v))
+        .collect();
+    // Only facets whose sides are all in place: the others go away with the
+    // edge they are waiting on.
+    stuck.extend(
+        envelope
+            .facets()
+            .iter()
+            .filter(|f| !mesh.has_face(f) && (0..3).all(|k| mesh.has_edge(f[k], f[(k + 1) % 3])))
+            .map(|f| Stuck::Facet(*f)),
+    );
+    Ok(stuck)
 }
 
-/// The diagnosis handed back when recovery gives up.
-fn stuck(mesh: &TetMesh, what: &str, vertices: &[u32]) -> PyrucastError {
+/// The diagnosis handed back when the caller will not subdivide.
+pub fn describe(mesh: &TetMesh, stuck: &Stuck) -> PyrucastError {
+    let (what, vertices) = match stuck {
+        Stuck::Edge(u, v) => ("edge", vec![*u, *v]),
+        Stuck::Facet(f) => ("facet", f.to_vec()),
+    };
     let where_ = vertices
         .iter()
         .map(|&i| {
@@ -121,9 +173,9 @@ fn stuck(mesh: &TetMesh, what: &str, vertices: &[u32]) -> PyrucastError {
         .join(" – ");
     PyrucastError::Message(format!(
         "mesh_volume: cannot fit the envelope's {what} {where_} into the mesh without adding a \
-         node on the surface, which the contract forbids. Refine the surface mesh around it — \
-         some shapes (a twisted prism, a very flat sliver of a solid) admit no tetrahedral \
-         mesh at all on their own nodes."
+         node on the surface. Pass allow_surface_nodes to let the mesher subdivide the envelope \
+         there — its shape is kept, only its facets are cut finer — or refine the surface mesh \
+         yourself around that spot."
     ))
 }
 
@@ -131,8 +183,14 @@ fn stuck(mesh: &TetMesh, what: &str, vertices: &[u32]) -> PyrucastError {
 
 /// Flip obstructions away until `(u, v)` is an edge of the mesh, or until
 /// nothing applies.
-fn recover_edge(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]]) -> Result<()> {
-    for _ in 0..FLIP_BUDGET {
+fn recover_edge(
+    mesh: &mut TetMesh,
+    u: u32,
+    v: u32,
+    protect: &[[u32; 3]],
+    effort: Effort,
+) -> Result<()> {
+    for _ in 0..effort.flips {
         if mesh.has_edge(u, v) {
             return Ok(());
         }
@@ -140,9 +198,9 @@ fn recover_edge(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]]) -> Res
         // but running along a flat piece of its surface, or that every
         // obstruction is held in place by a facet already won. Re-cut the
         // surface, then fall back to rebuilding the corridor whole.
-        if !clear_one_obstruction(mesh, u, v, protect)?
-            && !recut_flat_strip(mesh, u, v, protect)?
-            && !rebuild_along(mesh, u, v, protect)?
+        if !clear_one_obstruction(mesh, u, v, protect, effort)?
+            && !recut_flat_strip(mesh, u, v, protect, effort.max_region)?
+            && !rebuild_along(mesh, u, v, protect, effort)?
         {
             return Ok(()); // caller reports the failure
         }
@@ -158,7 +216,16 @@ fn recover_edge(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]]) -> Res
 /// at the cost of a facet already won — nothing local can move, and the way
 /// out is to stop unpicking the pocket and rebuild it whole, with the edge
 /// handed to the search as something the filling must contain.
-fn rebuild_along(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]]) -> Result<bool> {
+fn rebuild_along(
+    mesh: &mut TetMesh,
+    u: u32,
+    v: u32,
+    protect: &[[u32; 3]],
+    effort: Effort,
+) -> Result<bool> {
+    if effort.max_region == 0 {
+        return Ok(false);
+    }
     let mut region = corridor(mesh, u, v);
     if region.is_empty() {
         return Ok(false);
@@ -186,7 +253,7 @@ fn rebuild_along(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]]) -> Re
             *mesh = snapshot;
         }
         let wider = grow_region(mesh, &region);
-        if wider.len() == region.len() || wider.len() > MAX_FACET_REGION {
+        if wider.len() == region.len() || wider.len() > effort.max_region {
             return Ok(false);
         }
         region = wider;
@@ -198,7 +265,13 @@ fn rebuild_along(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]]) -> Re
 /// Everything the segment runs through is fair game, not just what touches
 /// `u`: an envelope edge spanning a wide flat face is typically blocked far
 /// from either end.
-fn clear_one_obstruction(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]]) -> Result<bool> {
+fn clear_one_obstruction(
+    mesh: &mut TetMesh,
+    u: u32,
+    v: u32,
+    protect: &[[u32; 3]],
+    effort: Effort,
+) -> Result<bool> {
     let corridor = corridor(mesh, u, v);
 
     // A face the segment goes through has to open up. The 2-3 flip that
@@ -233,7 +306,7 @@ fn clear_one_obstruction(mesh: &mut TetMesh, u: u32, v: u32, protect: &[[u32; 3]
                     continue;
                 }
                 if segments_cross(mesh, u, v, p, q) {
-                    let ok = retire_edge(mesh, p, q, protect)?;
+                    let ok = retire_edge(mesh, p, q, protect, effort)?;
                     if ok {
                         return Ok(true);
                     }
@@ -300,7 +373,13 @@ fn corridor(mesh: &TetMesh, u: u32, v: u32) -> Vec<u32> {
 /// the fan is thinned instead: a 2-3 flip on a face that holds the whole
 /// edge trades the two cells carrying it there for one, so each such flip
 /// shortens the fan by one and walks it toward a shape that can be undone.
-fn retire_edge(mesh: &mut TetMesh, p: u32, q: u32, protect: &[[u32; 3]]) -> Result<bool> {
+fn retire_edge(
+    mesh: &mut TetMesh,
+    p: u32,
+    q: u32,
+    protect: &[[u32; 3]],
+    effort: Effort,
+) -> Result<bool> {
     // An edge that is a side of an envelope facet already in place cannot be
     // taken out without taking the facet with it. Refusing here is what keeps
     // recovery from trading one facet for its neighbour, over and over.
@@ -310,7 +389,7 @@ fn retire_edge(mesh: &mut TetMesh, p: u32, q: u32, protect: &[[u32; 3]]) -> Resu
     {
         return Ok(false);
     }
-    if remove_edge(mesh, p, q, protect)?.is_some() {
+    if remove_edge(mesh, p, q, protect, effort.max_region)?.is_some() {
         return Ok(true);
     }
     for t in mesh.tets_with_edge(p, q) {
@@ -338,22 +417,27 @@ fn retire_edge(mesh: &mut TetMesh, p: u32, q: u32, protect: &[[u32; 3]]) -> Resu
 
 /// Make facet `f` appear, first by clearing what pierces it, then — if that
 /// is not enough — by rebuilding the pocket it runs through around it.
-fn recover_facet(mesh: &mut TetMesh, f: &[u32; 3], envelope_facets: &[[u32; 3]]) -> Result<()> {
-    for _ in 0..FLIP_BUDGET {
+fn recover_facet(
+    mesh: &mut TetMesh,
+    f: &[u32; 3],
+    envelope_facets: &[[u32; 3]],
+    effort: Effort,
+) -> Result<()> {
+    for _ in 0..effort.flips {
         if mesh.has_face(f) {
             return Ok(());
         }
         let Some((p, q)) = piercing_edge(mesh, f) else {
             break;
         };
-        if !retire_edge(mesh, p, q, envelope_facets)? {
+        if !retire_edge(mesh, p, q, envelope_facets, effort)? {
             break;
         }
     }
     if mesh.has_face(f) {
         return Ok(());
     }
-    rebuild_around(mesh, f, envelope_facets)
+    rebuild_around(mesh, f, envelope_facets, effort)
 }
 
 /// Rebuild the cells the facet runs through, this time with the facet
@@ -366,7 +450,15 @@ fn recover_facet(mesh: &mut TetMesh, f: &[u32; 3], envelope_facets: &[[u32; 3]])
 /// wholesale, with the facet handed to the search as a wall it may not
 /// cross. It then either finds a filling that has the facet, or proves there
 /// is none.
-fn rebuild_around(mesh: &mut TetMesh, f: &[u32; 3], protect: &[[u32; 3]]) -> Result<()> {
+fn rebuild_around(
+    mesh: &mut TetMesh,
+    f: &[u32; 3],
+    protect: &[[u32; 3]],
+    effort: Effort,
+) -> Result<()> {
+    if effort.max_region == 0 {
+        return Ok(());
+    }
     let mut region = cells_meeting(mesh, f);
     if region.is_empty() {
         return Ok(());
@@ -396,7 +488,7 @@ fn rebuild_around(mesh: &mut TetMesh, f: &[u32; 3], protect: &[[u32; 3]]) -> Res
             *mesh = snapshot;
         }
         let wider = grow_region(mesh, &region);
-        if wider.len() == region.len() || wider.len() > MAX_FACET_REGION {
+        if wider.len() == region.len() || wider.len() > effort.max_region {
             return Ok(()); // caller reports the failure
         }
         region = wider;

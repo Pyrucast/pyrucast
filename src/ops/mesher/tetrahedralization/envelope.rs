@@ -33,6 +33,7 @@ use crate::store::read;
 
 use super::intersect::first_self_intersection;
 use super::predicates::collinear3d;
+use super::recovery::Stuck;
 
 /// Two nodes closer than this fraction of the bounding-box diagonal are
 /// treated as the same point and rejected as a duplicate.
@@ -361,6 +362,131 @@ impl Envelope {
     /// mesh is checked against.
     pub fn volume(&self) -> f64 {
         self.volume
+    }
+
+    /// How many of the points came from the caller.
+    ///
+    /// Anything beyond that was put there by [`Self::subdivide`] and has no
+    /// `NodeId` yet; the operator creates those when it writes the mesh out.
+    pub fn given_node_count(&self) -> usize {
+        self.node_ids.len()
+    }
+
+    /// Cut the envelope finer at the places named, keeping its shape.
+    ///
+    /// An **edge** is split at its middle, and both facets along it become
+    /// two. A **facet** is split at its centre into three. In each case the
+    /// new point lies on the piece it divides, so the surface is the same
+    /// surface — only its triangulation is finer. That is the whole trade
+    /// the caller is making by allowing it: the solid keeps its form, the
+    /// skin of the result no longer matches the mesh that was handed in.
+    ///
+    /// Subdividing is what makes recovery possible at all when it is stuck:
+    /// a segment surrounded closely enough by its own subdivisions is
+    /// recovered by the Delaunay triangulation on its own.
+    pub fn subdivide(&mut self, at: &[Stuck]) -> Result<()> {
+        let mut edges: Vec<(u32, u32)> = Vec::new();
+        let mut facets: Vec<[u32; 3]> = Vec::new();
+        for s in at {
+            match *s {
+                Stuck::Edge(u, v) => edges.push(if u < v { (u, v) } else { (v, u) }),
+                Stuck::Facet(f) => facets.push(f),
+            }
+        }
+        edges.sort_unstable();
+        edges.dedup();
+        if edges.is_empty() && facets.is_empty() {
+            return Ok(());
+        }
+
+        // Every edge gets its midpoint first, so a facet carrying more than
+        // one split edge is cut for all of them in the same pass — cutting
+        // only some of them would tear the surface open along the others.
+        let mut middle: HashMap<(u32, u32), u32> = HashMap::with_capacity(edges.len());
+        for &(u, v) in &edges {
+            let (a, b) = (self.points[u as usize], self.points[v as usize]);
+            self.points.push([
+                (a[0] + b[0]) / 2.0,
+                (a[1] + b[1]) / 2.0,
+                (a[2] + b[2]) / 2.0,
+            ]);
+            middle.insert((u, v), (self.points.len() - 1) as u32);
+        }
+        let split_of = |u: u32, v: u32| -> Option<u32> {
+            middle.get(&if u < v { (u, v) } else { (v, u) }).copied()
+        };
+
+        let mut next: Vec<[u32; 3]> = Vec::with_capacity(self.facets.len() + 3 * edges.len());
+        for f in &self.facets {
+            // Name the sides so the templates below read the same way round
+            // as the facet: side `k` runs from `f[k]` to `f[k + 1]`.
+            let cut: [Option<u32>; 3] = [0, 1, 2].map(|k: usize| split_of(f[k], f[(k + 1) % 3]));
+            match (cut[0], cut[1], cut[2]) {
+                (None, None, None) => next.push(*f),
+                // One side cut: split the facet across to the opposite corner.
+                (Some(m), None, None) => {
+                    next.push([f[0], m, f[2]]);
+                    next.push([m, f[1], f[2]]);
+                }
+                (None, Some(m), None) => {
+                    next.push([f[1], m, f[0]]);
+                    next.push([m, f[2], f[0]]);
+                }
+                (None, None, Some(m)) => {
+                    next.push([f[2], m, f[1]]);
+                    next.push([m, f[0], f[1]]);
+                }
+                // Two sides cut: a corner triangle plus the quadrilateral
+                // left over, itself cut in two.
+                (Some(m), Some(n), None) => {
+                    next.push([m, f[1], n]);
+                    next.push([f[0], m, n]);
+                    next.push([f[0], n, f[2]]);
+                }
+                (None, Some(m), Some(n)) => {
+                    next.push([m, f[2], n]);
+                    next.push([f[1], m, n]);
+                    next.push([f[1], n, f[0]]);
+                }
+                (Some(n), None, Some(m)) => {
+                    next.push([m, f[0], n]);
+                    next.push([f[2], m, n]);
+                    next.push([f[2], n, f[1]]);
+                }
+                // All three: the plain four-way split.
+                (Some(m), Some(n), Some(p)) => {
+                    next.push([f[0], m, p]);
+                    next.push([m, f[1], n]);
+                    next.push([p, n, f[2]]);
+                    next.push([m, n, p]);
+                }
+            }
+        }
+        self.facets = next;
+
+        for f in &facets {
+            let Some(pos) = self.facets.iter().position(|g| g == f) else {
+                continue; // already cut by one of the edge splits
+            };
+            let (a, b, c) = (
+                self.points[f[0] as usize],
+                self.points[f[1] as usize],
+                self.points[f[2] as usize],
+            );
+            self.points.push([
+                (a[0] + b[0] + c[0]) / 3.0,
+                (a[1] + b[1] + c[1]) / 3.0,
+                (a[2] + b[2] + c[2]) / 3.0,
+            ]);
+            let m = (self.points.len() - 1) as u32;
+            self.facets.swap_remove(pos);
+            self.facets.push([f[0], f[1], m]);
+            self.facets.push([f[1], f[2], m]);
+            self.facets.push([f[2], f[0], m]);
+        }
+
+        self.volume = self.signed_volume();
+        Ok(())
     }
 }
 
