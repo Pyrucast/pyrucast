@@ -59,6 +59,7 @@ const SPLITTER: f64 = 134_217_729.0;
 // exactly the two expressions evaluated below. Multiplied by the
 // "permanent" (the same determinant with every term made positive), they
 // bound the absolute error of the estimate.
+const ORIENT2D_ERRBOUND: f64 = (3.0 + 16.0 * EPSILON) * EPSILON;
 const ORIENT3D_ERRBOUND: f64 = (7.0 + 56.0 * EPSILON) * EPSILON;
 const INSPHERE_ERRBOUND: f64 = (16.0 + 224.0 * EPSILON) * EPSILON;
 
@@ -282,6 +283,84 @@ fn expansion_estimate(e: &[f64]) -> f64 {
 /// `a·b - c·d` for expansions — the 2×2 minor both predicates are built on.
 fn minor2(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
     expansion_diff(&expansion_mul(a, b), &expansion_mul(c, d))
+}
+
+// ─── orient2d ───────────────────────────────────────────────────────────
+
+/// Planar orientation test: `> 0` when `pa`, `pb`, `pc` run
+/// counter-clockwise, `< 0` clockwise, and exactly `0.0` when they are
+/// collinear.
+///
+/// The value is twice the signed area of the triangle, up to rounding; only
+/// the **sign** is guaranteed exact. This is the usual convention, the one
+/// [`crate::ops::mesher::triangulation::signed_area`] already follows.
+///
+/// # Example
+///
+/// ```
+/// use pyrucast::ops::mesher::tetrahedralization::predicates::orient2d;
+///
+/// assert!(orient2d(&[0.0, 0.0], &[1.0, 0.0], &[0.0, 1.0]) > 0.0);
+/// assert!(orient2d(&[0.0, 0.0], &[0.0, 1.0], &[1.0, 0.0]) < 0.0);
+/// assert_eq!(orient2d(&[0.0, 0.0], &[1.0, 2.0], &[2.0, 4.0]), 0.0);
+/// ```
+pub fn orient2d(pa: &[f64; 2], pb: &[f64; 2], pc: &[f64; 2]) -> f64 {
+    let detleft = (pa[0] - pc[0]) * (pb[1] - pc[1]);
+    let detright = (pa[1] - pc[1]) * (pb[0] - pc[0]);
+    let det = detleft - detright;
+
+    // Only a difference of like-signed products can cancel; anything else
+    // already has its sign settled by the estimate.
+    let detsum = if detleft > 0.0 {
+        if detright <= 0.0 {
+            return det;
+        }
+        detleft + detright
+    } else if detleft < 0.0 {
+        if detright >= 0.0 {
+            return det;
+        }
+        -detleft - detright
+    } else {
+        return det;
+    };
+    let errbound = ORIENT2D_ERRBOUND * detsum;
+    if det >= errbound || -det >= errbound {
+        return det;
+    }
+    orient2d_exact(pa, pb, pc)
+}
+
+/// The exact fallback of [`orient2d`], in expansion arithmetic.
+fn orient2d_exact(pa: &[f64; 2], pb: &[f64; 2], pc: &[f64; 2]) -> f64 {
+    let acx = diff(pa[0], pc[0]);
+    let acy = diff(pa[1], pc[1]);
+    let bcx = diff(pb[0], pc[0]);
+    let bcy = diff(pb[1], pc[1]);
+    expansion_estimate(&minor2(&acx, &bcy, &acy, &bcx))
+}
+
+/// Whether `pa`, `pb`, `pc` are exactly collinear in 3-D.
+///
+/// Three points are collinear when the cross product of the two edge
+/// vectors vanishes, i.e. when all three of its components — each a planar
+/// orientation test on one coordinate projection — are exactly zero.
+///
+/// # Example
+///
+/// ```
+/// use pyrucast::ops::mesher::tetrahedralization::predicates::collinear3d;
+///
+/// assert!(collinear3d(&[0.0, 0.0, 0.0], &[1.0, 2.0, 3.0], &[2.0, 4.0, 6.0]));
+/// assert!(!collinear3d(&[0.0, 0.0, 0.0], &[1.0, 2.0, 3.0], &[2.0, 4.0, 7.0]));
+/// // A repeated point degenerates to a segment, hence collinear.
+/// assert!(collinear3d(&[1.0, 1.0, 1.0], &[1.0, 1.0, 1.0], &[9.0, 0.0, 0.0]));
+/// ```
+pub fn collinear3d(pa: &[f64; 3], pb: &[f64; 3], pc: &[f64; 3]) -> bool {
+    const PROJECTIONS: [(usize, usize); 3] = [(1, 2), (2, 0), (0, 1)];
+    PROJECTIONS
+        .iter()
+        .all(|&(i, j)| orient2d(&[pa[i], pa[j]], &[pb[i], pb[j]], &[pc[i], pc[j]]) == 0.0)
 }
 
 // ─── orient3d ───────────────────────────────────────────────────────────
@@ -551,6 +630,50 @@ mod tests {
             std::cmp::Ordering::Equal => 0,
             std::cmp::Ordering::Greater => 1,
         }
+    }
+
+    // ─── orient2d ───────────────────────────────────────────────────────
+
+    #[test]
+    fn orient2d_follows_permutation_parity() {
+        let (a, b, c) = ([0.3, 0.1], [1.2, 0.4], [0.5, 1.7]);
+        let base = sign(orient2d(&a, &b, &c));
+        assert_eq!(base, 1);
+        assert_eq!(sign(orient2d(&b, &a, &c)), -base);
+        assert_eq!(sign(orient2d(&b, &c, &a)), base);
+        assert_eq!(orient2d(&a, &b, &a), 0.0);
+    }
+
+    #[test]
+    fn orient2d_resolves_a_sign_the_estimate_cannot() {
+        // The classic near-collinear stress: c one ulp off the line (a, b),
+        // with coordinates that make the two products cancel almost fully.
+        let a = [0.5, 0.5];
+        let b = [12.0, 12.0];
+        let ulp = 2f64.powi(-48); // ulp(24.0)
+        assert_eq!(orient2d(&a, &b, &[24.0, 24.0]), 0.0);
+        assert!(orient2d(&a, &b, &[24.0, 24.0 + ulp]) > 0.0);
+        assert!(orient2d(&a, &b, &[24.0, 24.0 - ulp]) < 0.0);
+    }
+
+    #[test]
+    fn collinear3d_detects_exact_degeneracy_only() {
+        assert!(collinear3d(
+            &[0.0, 0.0, 0.0],
+            &[1.0, 2.0, 3.0],
+            &[2.0, 4.0, 6.0]
+        ));
+        assert!(collinear3d(
+            &[7.0, -1.0, 0.5],
+            &[7.0, -1.0, 0.5],
+            &[0.0, 0.0, 0.0]
+        ));
+        // One ulp off the line is not collinear, however thin the triangle.
+        assert!(!collinear3d(
+            &[0.0, 0.0, 0.0],
+            &[1.0, 2.0, 3.0],
+            &[2.0, 4.0, 6.0 + 2f64.powi(-50)]
+        ));
     }
 
     // ─── orient3d ───────────────────────────────────────────────────────

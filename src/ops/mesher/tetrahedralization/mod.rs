@@ -6,5 +6,7 @@
 //!
 //! - [`predicates`] — exact `orient3d` / `insphere`, the foundation every
 //!   other decision rests on.
+//! - [`envelope`] — reading and validating the closed input surface.
 
+pub mod envelope;
 pub mod predicates;
