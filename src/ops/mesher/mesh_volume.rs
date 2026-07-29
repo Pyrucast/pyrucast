@@ -90,25 +90,31 @@
 //!
 //! # Quality
 //!
-//! The mesh is **valid but not yet good**. Every cell has a strictly positive
-//! volume and the boundary is exactly the envelope, but no interior node is
-//! ever added, so what comes out is a tetrahedralization of the envelope's
-//! own nodes and nothing else. Such meshes always carry **slivers** — cells
-//! of four nearly coplanar nodes, with a decent radius-edge ratio and almost
-//! no volume — and no amount of care in the recovery removes them, because
-//! they are not a defect of the recovery.
+//! A valid mesh is not the same as a usable one. Everything above only
+//! guarantees that the cells fill the envelope with positive volumes; it
+//! says nothing about their *shape*, and a tetrahedralization of a surface's
+//! own nodes is always full of flat ones. Two further passes turn it into a
+//! mesh one can compute on:
 //!
-//! Measured on the plate of `formation/maillage_test.py` (4724 cells): the
-//! median smallest dihedral angle is 43°, which is fine, but 1.8 % of cells
-//! are under 10° and the flattest has a volume 10⁻¹⁵ of the average. On a
-//! small box of flat panels it is far worse: 14 % under 10°.
+//! - [`tetrahedralization::refine`](super::tetrahedralization::refine) puts nodes
+//!   **inside** the solid, at the circumcentres of the cells whose
+//!   radius-edge ratio or size says they are wrong;
+//! - [`tetrahedralization::smooth`](super::tetrahedralization::smooth) then chases
+//!   the **slivers** refinement cannot reach, by reconnecting cells and
+//!   relaxing interior nodes.
 //!
-//! A handful of flat cells is enough to make a finite-element matrix
-//! singular, so **the result is not yet usable for computation**. What is
-//! missing is the other half of a mesher: a sizing field, interior point
-//! insertion at the circumcentres of badly shaped cells, and a sliver pass
-//! (flips plus interior-node smoothing). `target_size` is accepted and
-//! checked against that future, and does nothing today.
+//! What that is worth, measured on the plate of `formation/maillage_test.py`
+//! at 28 000 cells: the flattest cell went from 8·10⁻¹⁶ of the average
+//! volume to 4·10⁻², and the share of cells under 10° from 1.8 % to 0.5 %.
+//! The first of those two numbers is the whole point — 10⁻¹⁶ is a singular
+//! element matrix, 10⁻² is a perfectly ordinary cell.
+//!
+//! **What still survives** is a sliver whose four corners are all nodes of
+//! the envelope. No node can be inserted to break it up and none of its own
+//! can be moved, since the caller's nodes are fixed by contract; only a
+//! reconnection can help, and sometimes none does. On a coarse envelope a
+//! few of those remain. Splitting the offending facet would clear them, and
+//! is what `allow_surface_nodes` could be extended to do.
 
 use crate::containers::mesh::{ElementType, Mesh, Node, NodeId, SubMesh};
 use crate::error::{PyrucastError, Result};
@@ -118,7 +124,9 @@ use super::tetrahedralization::classify;
 use super::tetrahedralization::delaunay::TetMesh;
 use super::tetrahedralization::envelope::Envelope;
 use super::tetrahedralization::recovery;
+use super::tetrahedralization::refine;
 use super::tetrahedralization::simplify;
+use super::tetrahedralization::smooth;
 
 /// How far the meshed volume may drift from the envelope's own, relative to
 /// it, before the result is refused.
@@ -189,22 +197,29 @@ pub fn mesh_volume_cancellable(
             // The subdivision points were the price of getting a mesh, not
             // something wanted for itself: now that there is one, try to
             // give them back.
-            let t = std::time::Instant::now();
             reclaim(&mut mesh, &mut env, cancel)?;
-            let t1 = std::time::Instant::now();
-            let inside = classify::interior(&mesh, &env, cancel)?;
-            let t2 = std::time::Instant::now();
+
+            // Only now is there a solid to fill: the envelope is in place,
+            // so the inside can be told from the outside and nodes can be
+            // put where the mesh needs them.
+            let walls = classify::walls_of(&env);
+            let mut inside = classify::interior_within(&mesh, &env, &walls, cancel)?;
+            let target = target_size.unwrap_or_else(|| env.mean_edge_length());
+            refine::refine(&mut mesh, &mut inside, &walls, target, cancel)?;
+            let inside = classify::interior_within(&mesh, &env, &walls, cancel)?;
+
+            // Refinement cannot remove a sliver — no node insertion can —
+            // so the mesh is improved rather than subdivided. Only the
+            // interior nodes may move; the caller's own stay where they are.
+            let movable: Vec<bool> = (0..mesh.points().len())
+                .map(|i| i >= env.points().len())
+                .collect();
+            smooth::smooth(&mut mesh, &inside, &movable, &walls, cancel)?;
+            let inside = classify::interior_within(&mesh, &env, &walls, cancel)?;
+
             let cells = validate(&mesh, &env, &inside)?;
-            if std::env::var("PYRU_DEBUG").is_ok() {
-                eprintln!(
-                    "   reclaim {:?}, classify {:?}, validate {:?}",
-                    t1 - t,
-                    t2 - t1,
-                    t2.elapsed()
-                );
-            }
             warn_if_subdivided(&env, &cells);
-            return materialize(envelope, &env, &cells);
+            return materialize(envelope, &env, mesh.points(), &cells);
         }
         if !allow_surface_nodes {
             return Err(recovery::describe(&mesh, &stuck[0]));
@@ -260,11 +275,14 @@ fn reclaim(mesh: &mut TetMesh, env: &mut Envelope, cancel: &dyn Cancel) -> Resul
 /// nothing and saves a puzzling afternoon.
 fn warn_if_subdivided(env: &Envelope, cells: &[[u32; 4]]) {
     let given = env.given_node_count() as u32;
+    // Only the points that sit *on* the envelope count here; anything past
+    // its own list is an interior node, which was never in question.
+    let on_surface = env.points().len() as u32;
     let mut kept: Vec<u32> = cells
         .iter()
         .flatten()
         .copied()
-        .filter(|&i| i >= given)
+        .filter(|&i| i >= given && i < on_surface)
         .collect();
     kept.sort_unstable();
     kept.dedup();
@@ -348,26 +366,30 @@ fn validate(mesh: &TetMesh, env: &Envelope, inside: &[bool]) -> Result<Vec<[u32;
 }
 
 /// Build the output mesh, reusing the envelope's nodes.
-fn materialize(envelope: &Mesh, env: &Envelope, cells: &[[u32; 4]]) -> Result<Mesh> {
+fn materialize(
+    envelope: &Mesh,
+    env: &Envelope,
+    points: &[[f64; 3]],
+    cells: &[[u32; 4]],
+) -> Result<Mesh> {
     let coords = envelope.coords()?;
 
-    // The caller's own nodes come back untouched; anything past them was put
-    // on the envelope by a subdivision round and needs a node of its own.
-    // The `Node` handles are held until the cells hold them, so the store
-    // cannot collect a point between its creation and its first use.
-    // Only the subdivision points the cells actually use get a node: those
-    // that were handed back keep their slot in the envelope but must not
-    // leave anything behind in the store.
+    // The caller's own nodes come back untouched. Past them come the points
+    // put on the envelope to make it fit, and past those the interior nodes
+    // refinement placed; both need a node of their own, and only where a
+    // cell actually uses them. The `Node` handles are held until the cells
+    // hold them, so the store cannot collect a point between its creation
+    // and its first use.
     let given = env.given_node_count();
     let mut ids: Vec<NodeId> = env.node_ids().to_vec();
-    ids.resize(env.points().len(), NodeId(u32::MAX));
+    ids.resize(points.len(), NodeId(u32::MAX));
     let mut kept: Vec<Node> = Vec::new();
     for v in cells {
         for &i in v {
             if (i as usize) < given || ids[i as usize] != NodeId(u32::MAX) {
                 continue;
             }
-            let node = Node::create_in(coords.clone(), &env.points()[i as usize])?;
+            let node = Node::create_in(coords.clone(), &points[i as usize])?;
             ids[i as usize] = node.id();
             kept.push(node);
         }
@@ -472,28 +494,31 @@ mod tests {
     }
 
     #[test]
-    fn the_envelope_nodes_are_reused_and_no_node_is_added() {
+    fn the_envelope_nodes_are_reused_and_none_is_added_on_it() {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
-        let before = read(&coords).unwrap().node_count();
-        let mesh = mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), None, false).unwrap();
+        let envelope = surface(&coords, &nodes, &BOX_FACETS);
+        let mesh = mesh_volume(&envelope, None, false).unwrap();
 
-        assert_eq!(
-            read(&coords).unwrap().node_count(),
-            before,
-            "nodes were added"
-        );
+        // Every corner the caller gave is still there, with its own identity.
         let mut used: Vec<NodeId> = Vec::new();
         for ci in 0..mesh.cell_count().unwrap() {
             for k in 0..4 {
                 let id = mesh.node(0, ci, k).unwrap().id();
-                assert!(nodes.contains(&id), "cell uses a foreign node");
                 if !used.contains(&id) {
                     used.push(id);
                 }
             }
         }
-        assert_eq!(used.len(), 8, "every corner must be used");
+        assert!(
+            nodes.iter().all(|n| used.contains(n)),
+            "an envelope node went missing"
+        );
+
+        // Refinement adds nodes, but strictly *inside*: peeling the result
+        // gives back the twelve facets that came in, no more.
+        let peeled = super::super::skin(&mesh, None).unwrap();
+        assert_eq!(peeled.cell_count().unwrap(), 12);
     }
 
     #[test]
@@ -826,11 +851,12 @@ mod tests {
     }
 
     #[test]
-    fn every_node_it_adds_lies_on_the_envelope() {
+    fn every_node_it_puts_on_the_skin_lies_on_the_envelope() {
         // The promise of the permissive mode is that the *shape* survives: a
         // subdivision point sits on the edge it divides, so the surface is
-        // the same surface, cut finer. That is checked here node by node,
-        // rather than taken on trust.
+        // the same surface, cut finer. Interior nodes are another matter and
+        // are not in question here, so the check is made on the skin of the
+        // result — the only place a node could have moved the boundary.
         let coords = insert(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 4, 0.3);
         let given: Vec<Vec<f64>> = {
@@ -850,25 +876,126 @@ mod tests {
                 .sum::<f64>()
                 .sqrt()
         };
+        let peeled = super::super::skin(&mesh, None).unwrap();
         let mut checked = 0;
-        for ci in 0..mesh.cell_count().unwrap() {
-            for k in 0..4 {
-                let p = mesh.node(0, ci, k).unwrap().coord().unwrap();
-                if given.iter().any(|q| q == &p) {
-                    continue; // one of the caller's own nodes
+        for (si, &n) in peeled.cell_counts().unwrap().iter().enumerate() {
+            for ci in 0..n {
+                for k in 0..3 {
+                    let p = peeled.node(si, ci, k).unwrap().coord().unwrap();
+                    if given.iter().any(|q| q == &p) {
+                        continue; // one of the caller's own nodes
+                    }
+                    // Anything else on the skin has to sit on a segment
+                    // between two of them.
+                    let on_a_segment = given.iter().enumerate().any(|(i, a)| {
+                        given[i + 1..].iter().any(|b| {
+                            let len = dist(a, b);
+                            len > 0.0 && (dist(a, &p) + dist(&p, b) - len).abs() < 1e-12 * len
+                        })
+                    });
+                    assert!(on_a_segment, "skin node {p:?} is off the envelope");
+                    checked += 1;
                 }
-                // An added node has to sit on a segment between two of them.
-                let on_a_segment = given.iter().enumerate().any(|(i, a)| {
-                    given[i + 1..].iter().any(|b| {
-                        let len = dist(a, b);
-                        len > 0.0 && (dist(a, &p) + dist(&p, b) - len).abs() < 1e-12 * len
-                    })
-                });
-                assert!(on_a_segment, "added node {p:?} is off the envelope");
-                checked += 1;
             }
         }
         assert!(checked > 0, "nothing was added, so nothing was checked");
+    }
+
+    /// The smallest dihedral angle of a cell, in degrees, and its volume.
+    ///
+    /// The angle across an edge is read by flattening the two opposite
+    /// corners into the plane perpendicular to it.
+    fn shape_of(p: &[Vec<f64>; 4]) -> (f64, f64) {
+        const EDGES: [(usize, usize, usize, usize); 6] = [
+            (0, 1, 2, 3),
+            (0, 2, 1, 3),
+            (0, 3, 1, 2),
+            (1, 2, 0, 3),
+            (1, 3, 0, 2),
+            (2, 3, 0, 1),
+        ];
+        let sub = |a: &[f64], b: &[f64]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+        let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        let cross = |a: [f64; 3], b: [f64; 3]| {
+            [
+                a[1] * b[2] - a[2] * b[1],
+                a[2] * b[0] - a[0] * b[2],
+                a[0] * b[1] - a[1] * b[0],
+            ]
+        };
+        let volume = dot(
+            sub(&p[1], &p[0]),
+            cross(sub(&p[2], &p[0]), sub(&p[3], &p[0])),
+        )
+        .abs()
+            / 6.0;
+
+        let mut worst = f64::INFINITY;
+        for (a, b, c, d) in EDGES {
+            let e = sub(&p[b], &p[a]);
+            let len = dot(e, e).sqrt();
+            let unit = [e[0] / len, e[1] / len, e[2] / len];
+            let flatten = |x: &[f64]| {
+                let w = sub(x, &p[a]);
+                let along = dot(w, unit);
+                [
+                    w[0] - along * unit[0],
+                    w[1] - along * unit[1],
+                    w[2] - along * unit[2],
+                ]
+            };
+            let (u, w) = (flatten(&p[c]), flatten(&p[d]));
+            let cos = (dot(u, w) / (dot(u, u).sqrt() * dot(w, w).sqrt())).clamp(-1.0, 1.0);
+            worst = worst.min(cos.acos().to_degrees());
+        }
+        (worst, volume)
+    }
+
+    #[test]
+    fn the_cells_are_shaped_well_enough_to_compute_with() {
+        // Valid is not the same as usable. Without interior nodes the mesh
+        // carries slivers — cells of four nearly coplanar corners, whose
+        // element matrix is close to singular — and a handful of them is
+        // enough to sink a computation. This is what refinement and the
+        // sliver pass are for, so this is what has to be measured.
+        let coords = insert(Coords::new(3).unwrap());
+        let (envelope, _) = subdivided_blob(&coords, 3);
+        let mesh = mesh_volume(&envelope, Some(1.0 / 6.0), false).unwrap();
+
+        let n = mesh.cell_count().unwrap();
+        let mut angles = Vec::with_capacity(n);
+        let mut volumes = Vec::with_capacity(n);
+        for ci in 0..n {
+            let p: [Vec<f64>; 4] =
+                std::array::from_fn(|k| mesh.node(0, ci, k).unwrap().coord().unwrap());
+            let (angle, volume) = shape_of(&p);
+            angles.push(angle);
+            volumes.push(volume);
+        }
+
+        // The bulk has to be well shaped: a regular tetrahedron measures
+        // 70.5°, so a median near 45° is a healthy mesh.
+        angles.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let median = angles[n / 2];
+        assert!(median > 30.0, "median dihedral angle is only {median:.1}°");
+
+        // And the tail has to stay a tail.
+        let pinched = angles.iter().filter(|&&a| a < 10.0).count();
+        assert!(
+            100 * pinched < 6 * n,
+            "{pinched} of {n} cells are under 10°"
+        );
+
+        // Nothing may be *exactly* flat. A few slivers pinned to the surface
+        // do survive — their four corners are the caller's own nodes, so
+        // neither an insertion nor a move can reach them — but a cell of no
+        // volume at all would mean something upstream went wrong.
+        let mean: f64 = volumes.iter().sum::<f64>() / n as f64;
+        let flattest = volumes.iter().cloned().fold(f64::INFINITY, f64::min) / mean;
+        assert!(
+            flattest > 1e-12,
+            "flattest cell is {flattest:.2e} of the mean"
+        );
     }
 
     #[test]

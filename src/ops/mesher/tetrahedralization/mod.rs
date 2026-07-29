@@ -8,6 +8,10 @@
 //!   other decision rests on.
 //! - [`fill`] — exhaustive rebuild of a small region from its own vertices,
 //!   the complete answer where a flip pattern is only a guess.
+//! - [`refine`] — putting nodes inside the solid, which is what turns a
+//!   valid tetrahedralization into a usable mesh.
+//! - [`smooth`] — the sliver pass: reconnect and relax until the worst
+//!   dihedral angle stops improving.
 //! - [`simplify`] — putting a subdivision point back out of the mesh, so the
 //!   envelope can be handed back as it came in.
 //! - [`surface`] — re-cutting a flat strip of the outer surface, for the
@@ -32,5 +36,7 @@ pub mod flips;
 pub mod intersect;
 pub mod predicates;
 pub mod recovery;
+pub mod refine;
 pub mod simplify;
+pub mod smooth;
 pub mod surface;

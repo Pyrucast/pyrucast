@@ -29,7 +29,13 @@ use super::envelope::Envelope;
 ///
 /// Indexed by slot; dead slots are `false`.
 pub fn interior(mesh: &TetMesh, envelope: &Envelope, cancel: &dyn Cancel) -> Result<Vec<bool>> {
-    let walls: HashSet<[u32; 3]> = envelope
+    let walls = walls_of(envelope);
+    interior_within(mesh, envelope, &walls, cancel)
+}
+
+/// The envelope's facets as the keys a face lookup uses.
+pub fn walls_of(envelope: &Envelope) -> HashSet<[u32; 3]> {
+    envelope
         .facets()
         .iter()
         .map(|f| {
@@ -37,8 +43,16 @@ pub fn interior(mesh: &TetMesh, envelope: &Envelope, cancel: &dyn Cancel) -> Res
             k.sort_unstable();
             k
         })
-        .collect();
+        .collect()
+}
 
+/// [`interior`], with the wall set already built.
+pub fn interior_within(
+    mesh: &TetMesh,
+    envelope: &Envelope,
+    walls: &HashSet<[u32; 3]>,
+    cancel: &dyn Cancel,
+) -> Result<Vec<bool>> {
     let mut inside = vec![false; mesh.slot_count()];
     let mut outside = vec![false; mesh.slot_count()];
     let mut seeds_in: Vec<u32> = Vec::new();
@@ -77,8 +91,8 @@ pub fn interior(mesh: &TetMesh, envelope: &Envelope, cancel: &dyn Cancel) -> Res
         ));
     }
 
-    flood(mesh, &walls, &seeds_in, &mut inside, cancel)?;
-    flood(mesh, &walls, &seeds_out, &mut outside, cancel)?;
+    flood(mesh, walls, &seeds_in, &mut inside, cancel)?;
+    flood(mesh, walls, &seeds_out, &mut outside, cancel)?;
 
     // Cells beyond the envelope but inside the convex hull are reached from
     // the hull's own outer faces too, which have no neighbour at all.

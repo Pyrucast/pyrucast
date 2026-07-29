@@ -353,6 +353,28 @@ impl Envelope {
         ]
     }
 
+    /// Mean length of the envelope's edges — the mesh's own natural scale,
+    /// and the default target when the caller names none.
+    pub fn mean_edge_length(&self) -> f64 {
+        let mut total = 0.0;
+        let mut count = 0usize;
+        for f in &self.facets {
+            for k in 0..3 {
+                let (a, b) = (
+                    self.points[f[k] as usize],
+                    self.points[f[(k + 1) % 3] as usize],
+                );
+                total += (0..3).map(|i| (a[i] - b[i]).powi(2)).sum::<f64>().sqrt();
+                count += 1;
+            }
+        }
+        if count == 0 {
+            0.0
+        } else {
+            total / count as f64
+        }
+    }
+
     /// Diagonal of the bounding box — the natural length scale of the body,
     /// used to turn relative tolerances into absolute ones.
     pub fn bbox_diagonal(&self) -> f64 {

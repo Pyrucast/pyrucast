@@ -503,6 +503,174 @@ impl TetMesh {
         self.hint = self.first_live().unwrap_or(0) as u32;
     }
 
+    /// Move a point. The caller is responsible for checking that the cells
+    /// around it stay well formed.
+    pub(super) fn set_point(&mut self, i: u32, p: [f64; 3]) {
+        self.points[i as usize] = p;
+    }
+
+    /// Add a point to the cloud, returning its index.
+    pub(super) fn add_point(&mut self, p: [f64; 3]) -> u32 {
+        self.points.push(p);
+        self.vertex_tet.push(Cell::new(NO_TET));
+        (self.points.len() - 1) as u32
+    }
+
+    /// Insert `p` inside the region bounded by `walls`, returning the cells
+    /// that replaced its cavity.
+    ///
+    /// This is Bowyer-Watson again, with two differences that matter once
+    /// the mesh is no longer a plain Delaunay triangulation. The cavity
+    /// **stops at a wall**, so a point can never eat through the surface it
+    /// is meant to stay inside; and star-shapedness, which the unconstrained
+    /// version gets for free, is now checked and enforced by shrinking the
+    /// cavity — stopping at walls can leave a face the point cannot see, and
+    /// joining to it would fold the mesh.
+    ///
+    /// `wall_ok` is consulted for every wall the cavity runs into; a `false`
+    /// calls the whole insertion off. That is how the caller keeps a point
+    /// from being placed too near the surface — the condition Delaunay
+    /// refinement needs in order to terminate at all.
+    ///
+    /// `None` when `p` does not land in a cell of `region`, or when a wall
+    /// refused it.
+    pub(super) fn insert_within(
+        &mut self,
+        p: [f64; 3],
+        region: &[bool],
+        walls: &HashSet<[u32; 3]>,
+        wall_ok: &dyn Fn(&[[f64; 3]; 3]) -> bool,
+    ) -> Result<Option<Vec<u32>>> {
+        let Some(seed) = self.locate_within(&p, region, walls) else {
+            return Ok(None);
+        };
+
+        self.stamp += 1;
+        let stamp = self.stamp;
+        self.mark.resize(self.tets.len(), 0);
+        let mut cavity = vec![seed as u32];
+        self.mark[seed] = stamp;
+        let mut stack = vec![seed as u32];
+        while let Some(t) = stack.pop() {
+            for i in 0..4 {
+                let n = self.tets[t as usize].nb[i];
+                if n == NO_TET || self.mark[n as usize] == stamp {
+                    continue;
+                }
+                let face = self.face(t as usize, i);
+                if walls.contains(&sorted3(face)) {
+                    let corners = [
+                        self.points[face[0] as usize],
+                        self.points[face[1] as usize],
+                        self.points[face[2] as usize],
+                    ];
+                    if !wall_ok(&corners) {
+                        return Ok(None); // too close to the surface
+                    }
+                    continue;
+                }
+                if !region.get(n as usize).copied().unwrap_or(false) {
+                    continue; // beyond the region
+                }
+                let v = self.tets[n as usize].v;
+                if insphere(
+                    &self.points[v[0] as usize],
+                    &self.points[v[1] as usize],
+                    &self.points[v[2] as usize],
+                    &self.points[v[3] as usize],
+                    &p,
+                ) > 0.0
+                {
+                    self.mark[n as usize] = stamp;
+                    cavity.push(n);
+                    stack.push(n);
+                }
+            }
+        }
+
+        // Shrink until every face of the cavity is visible from `p`.
+        let idx = self.add_point(p);
+        loop {
+            let faces = self.cavity_boundary(&cavity);
+            let blind = faces
+                .iter()
+                .find(|f| self.orientation(&[f[0], f[2], f[1], idx]) <= 0.0);
+            let Some(&f) = blind else { break };
+            // Drop the cell that owns the offending face; the seed never is,
+            // since `p` lies inside it.
+            let key = sorted3(f);
+            let owner = cavity.iter().position(|&t| {
+                t != seed as u32 && (0..4).any(|i| sorted3(self.face(t as usize, i)) == key)
+            });
+            match owner {
+                Some(k) => {
+                    self.mark[cavity[k] as usize] = 0;
+                    cavity.swap_remove(k);
+                }
+                None => {
+                    self.points.truncate(idx as usize);
+                    self.vertex_tet.truncate(idx as usize);
+                    return Ok(None);
+                }
+            }
+        }
+
+        let new: Vec<[u32; 4]> = self
+            .cavity_boundary(&cavity)
+            .into_iter()
+            .map(|f| [f[0], f[2], f[1], idx])
+            .collect();
+        let created = self.replace_region(&cavity, &new, "a refinement insertion")?;
+        self.hint = *created.last().unwrap_or(&self.hint);
+        Ok(Some(created))
+    }
+
+    /// Walk to the cell of `region` holding `p`, never crossing a wall.
+    fn locate_within(
+        &self,
+        p: &[f64; 3],
+        region: &[bool],
+        walls: &HashSet<[u32; 3]>,
+    ) -> Option<usize> {
+        let mut t = self.hint as usize;
+        if t >= self.tets.len() || self.tets[t].dead || !region.get(t).copied().unwrap_or(false) {
+            t = (0..self.tets.len())
+                .find(|&i| !self.tets[i].dead && region.get(i).copied().unwrap_or(false))?;
+        }
+        let budget = 8 * self.tets.len() + 64;
+        for step in 0..budget {
+            let mut moved = false;
+            for k in 0..4 {
+                let i = (k + step) % 4;
+                let f = self.face(t, i);
+                if orient3d(
+                    &self.points[f[0] as usize],
+                    &self.points[f[1] as usize],
+                    &self.points[f[2] as usize],
+                    p,
+                ) <= 0.0
+                {
+                    continue;
+                }
+                // `p` is beyond this face; a wall there means it is outside.
+                if walls.contains(&sorted3(f)) {
+                    return None;
+                }
+                let n = self.tets[t].nb[i];
+                if n == NO_TET || !region.get(n as usize).copied().unwrap_or(false) {
+                    return None;
+                }
+                t = n as usize;
+                moved = true;
+                break;
+            }
+            if !moved {
+                return Some(t);
+            }
+        }
+        None
+    }
+
     // ─── Storage ────────────────────────────────────────────────────────
 
     fn alloc(&mut self, v: [u32; 4]) -> u32 {
