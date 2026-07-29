@@ -28,21 +28,28 @@
 //!
 //! # Limitations
 //!
-//! Recovery (step 3) works one obstruction at a time: it sweeps the corridor
-//! an envelope edge runs through and rebuilds whatever pocket blocks it. The
-//! rebuild itself is exhaustive within that pocket, so no *local* possibility
-//! is missed, and surfaces that genuinely cannot be filled are correctly
+//! Recovery (step 3) is the part that is not finished. It works obstruction
+//! by obstruction: sweep the corridor an envelope edge runs through, rebuild
+//! whatever pocket blocks it, re-cut the outer surface where the edge lies
+//! flat in it, and — when every obstruction is held in place by a facet
+//! already won — rebuild the corridor whole with the edge imposed. Each
+//! rebuild is an exhaustive search within its pocket, so nothing *local* is
+//! missed, and the envelopes that genuinely cannot be filled are correctly
 //! refused.
 //!
-//! What is missed is the case where no single pocket does it: freeing the
-//! edge needs the mesh's own outer triangulation re-cut over a wider patch
-//! first, which is a decision no local rebuild can take. Notably, an
-//! envelope edge running inside a **flat** face of the solid is blocked by
-//! the other diagonal of that face, and swapping it may in turn need its
-//! neighbours swapped. Envelopes with large planar faces therefore still hit
-//! the "cannot fit" error, while a surface with genuine curvature goes
-//! through — `meshes_a_realistic_closed_surface` is the case that matters,
-//! and the two `#[ignore]`d tests pin the ones that do not.
+//! What it does not have is a way to widen its view when no pocket, however
+//! grown, does the job. On those the mesher reports the stuck edge rather
+//! than returning a mesh that does not match its surface — the contract
+//! holds, but the answer is an error where a mesh was possible. Whether a
+//! given envelope lands in that band is not something the current code can
+//! predict: a subdivided box goes through at 3×3 and not at 2×2 or 4×4, and
+//! reordering the same facets can change the outcome, because the order
+//! decides the Delaunay triangulation recovery starts from.
+//!
+//! Curved surfaces — the normal input — fare better than the small
+//! hand-built shapes above, which are all planar faces and cospherical
+//! corners. `meshes_a_realistic_closed_surface` is the case that matters;
+//! `meshes_a_concave_solid` is `#[ignore]`d and pins one that does not work.
 //!
 //! Interior refinement — the sizing field and the removal of slivers — is not
 //! implemented yet either, which is why `target_size` is accepted and
@@ -388,8 +395,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "boundary recovery is not yet strong enough for these diagonals \
-                — see the module docs' Limitations"]
     fn meshes_a_box_with_an_internal_cavity() {
         // Outer shell outward, inner shell inward: the cavity is declared by
         // its orientation alone, and the cells filling it must be dropped.
@@ -400,6 +405,9 @@ mod tests {
         for f in &BOX_FACETS {
             sm.add_cell(&[outer[f[0]], outer[f[1]], outer[f[2]]])
                 .unwrap();
+        }
+        for f in &BOX_FACETS {
+            // Reversed: the cavity's normals point into the hole.
             sm.add_cell(&[inner[f[0]], inner[f[2]], inner[f[1]]])
                 .unwrap();
         }
@@ -409,8 +417,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "boundary recovery is not yet strong enough for these diagonals \
-                — see the module docs' Limitations"]
+    #[ignore = "recovery cannot yet free an envelope edge that needs a wide \
+                re-cut of the outer triangulation — see the module docs"]
     fn meshes_a_concave_solid() {
         // An L-shaped prism: the reflex edge is what a convex-hull-based
         // mesher gets wrong, so the volume check is the real assertion here.

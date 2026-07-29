@@ -8,6 +8,8 @@
 //!   other decision rests on.
 //! - [`fill`] — exhaustive rebuild of a small region from its own vertices,
 //!   the complete answer where a flip pattern is only a guess.
+//! - [`surface`] — re-cutting a flat strip of the outer surface, for the
+//!   envelope edges that run inside a flat face of the solid.
 //! - [`recovery`] — putting the envelope's edges and facets back into the
 //!   triangulation.
 //! - [`classify`] — flooding from both sides of the recovered surface to
@@ -28,3 +30,4 @@ pub mod flips;
 pub mod intersect;
 pub mod predicates;
 pub mod recovery;
+pub mod surface;

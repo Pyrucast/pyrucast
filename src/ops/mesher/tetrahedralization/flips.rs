@@ -26,7 +26,11 @@
 use crate::error::Result;
 
 use super::delaunay::{Boundary, EdgeFan, TetMesh};
-use super::fill::{fill, DEFAULT_BUDGET};
+use super::fill::{fill, Constraints, DEFAULT_BUDGET};
+
+/// Cells a pocket may hold before widening it is abandoned. Past this the
+/// exhaustive rebuild costs more than it is worth.
+const MAX_REGION: usize = 48;
 use super::predicates::orient3d;
 
 /// Try to replace the two tetrahedra sharing face `i` of `t` with the three
@@ -178,11 +182,42 @@ pub fn flip22(mesh: &mut TetMesh, p: u32, q: u32) -> Result<Option<Vec<u32>>> {
 /// the flat quadrilateral its two end faces form along the other diagonal,
 /// so those faces must meet nothing and lie in one plane — otherwise the
 /// solid itself would change shape.
-pub fn remove_edge(mesh: &mut TetMesh, p: u32, q: u32) -> Result<Option<Vec<u32>>> {
+pub fn remove_edge(
+    mesh: &mut TetMesh,
+    p: u32,
+    q: u32,
+    protect: &[[u32; 3]],
+) -> Result<Option<Vec<u32>>> {
     let Some(fan) = mesh.edge_fan(p, q) else {
         return Ok(None);
     };
-    let mut boundary = mesh.region_boundary(&fan.cells);
+    // The fan alone is often too tight: which cells may exist around a
+    // vertex is forced by its link, and those forced choices can leave the
+    // rest of a small pocket with no way to close. Widening the pocket by a
+    // layer of neighbours gives the rebuild the room it needs.
+    let mut region = fan.cells.clone();
+    loop {
+        if let Some(created) = rebuild_without(mesh, p, q, &fan, &region, protect)? {
+            return Ok(Some(created));
+        }
+        let wider = grow(mesh, &region);
+        if wider.len() == region.len() || wider.len() > MAX_REGION {
+            return Ok(None);
+        }
+        region = wider;
+    }
+}
+
+/// Rebuild `region` without the edge `(p, q)`, or report that it cannot be.
+fn rebuild_without(
+    mesh: &mut TetMesh,
+    p: u32,
+    q: u32,
+    fan: &EdgeFan,
+    region: &[u32],
+    protect: &[[u32; 3]],
+) -> Result<Option<Vec<u32>>> {
+    let mut boundary = mesh.region_boundary(region);
 
     let mode = if fan.closed {
         Boundary::Preserved
@@ -203,7 +238,15 @@ pub fn remove_edge(mesh: &mut TetMesh, p: u32, q: u32) -> Result<Option<Vec<u32>
         {
             return Ok(None); // the two end faces are not one flat quadrilateral
         }
-        let Some(recut) = recut_end_faces(mesh, &fan, p, q) else {
+        // Re-cutting swaps those two triangles for two others. An envelope
+        // facet is not ours to swap: it is the answer, not scratch space.
+        if protect
+            .iter()
+            .any(|g| sorted(g) == sorted(&[p, q, x0]) || sorted(g) == sorted(&[p, q, xn]))
+        {
+            return Ok(None);
+        }
+        let Some(recut) = recut_end_faces(mesh, fan, p, q) else {
             return Ok(None);
         };
         boundary.retain(|f| {
@@ -214,18 +257,75 @@ pub fn remove_edge(mesh: &mut TetMesh, p: u32, q: u32) -> Result<Option<Vec<u32>
         Boundary::MayRecutHull
     };
 
-    let Some(new) = fill(mesh.points(), &boundary, &[(p, q)], DEFAULT_BUDGET) else {
+    // Whatever of the envelope this pocket already holds has to survive the
+    // rebuild, or recovery spends its passes trading one facet for another.
+    let keep = relevant(mesh, region, protect);
+    let Some(new) = fill(
+        mesh.points(),
+        &boundary,
+        Constraints {
+            without_edges: &[(p, q)],
+            with_faces: &keep,
+            ..Default::default()
+        },
+        DEFAULT_BUDGET,
+    ) else {
         return Ok(None);
     };
     // A filling the mesh will not take is declined, not committed by halves.
     let snapshot = mesh.clone();
-    match mesh.replace_region_with(&fan.cells, &new, "an edge removal", mode) {
+    match mesh.replace_region_with(region, &new, "an edge removal", mode) {
         Ok(created) => Ok(Some(created)),
+
         Err(_) => {
             *mesh = snapshot;
             Ok(None)
         }
     }
+}
+
+/// The envelope facets a rebuild of this region could disturb: those wholly
+/// inside it that the mesh already holds.
+///
+/// Handing them to the search as walls is what stops recovery from undoing
+/// its own work — without it, freeing one edge quietly buries a facet won
+/// earlier, and the sweep chases its tail.
+pub fn relevant(mesh: &TetMesh, region: &[u32], protect: &[[u32; 3]]) -> Vec<[u32; 3]> {
+    if protect.is_empty() {
+        return Vec::new();
+    }
+    // The region's own vertices, not just those on its surface: while the
+    // envelope is being recovered a facet of a concave body is an *interior*
+    // face of the triangulation, and those are exactly the ones a rebuild
+    // would quietly bury.
+    let mut here: Vec<u32> = region
+        .iter()
+        .filter_map(|&t| mesh.tet(t as usize))
+        .flatten()
+        .collect();
+    here.sort_unstable();
+    here.dedup();
+    protect
+        .iter()
+        .filter(|f| f.iter().all(|x| here.binary_search(x).is_ok()) && mesh.has_face(f))
+        .copied()
+        .collect()
+}
+
+/// The region plus every cell touching it through a face.
+fn grow(mesh: &TetMesh, region: &[u32]) -> Vec<u32> {
+    let mut out: Vec<u32> = region.to_vec();
+    for &t in region {
+        for i in 0..4 {
+            if let Some(n) = mesh.neighbour(t as usize, i) {
+                if !out.contains(&(n as u32)) {
+                    out.push(n as u32);
+                }
+            }
+        }
+    }
+    out.sort_unstable();
+    out
 }
 
 /// The two triangles replacing an open fan's end faces, cut along the other

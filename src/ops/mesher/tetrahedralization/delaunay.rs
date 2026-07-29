@@ -728,7 +728,7 @@ impl TetMesh {
     }
 
     /// Whether `(a, b, c)` is a face of some tetrahedron.
-    pub(super) fn has_face(&self, f: &[u32; 3]) -> bool {
+    pub fn has_face(&self, f: &[u32; 3]) -> bool {
         self.face_owners(f).is_some()
     }
 
