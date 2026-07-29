@@ -218,7 +218,7 @@ fn all_strictly_negative(d: &[f64; 3]) -> bool {
 }
 
 /// Whether the closed segment `pq` meets the closed triangle `t`.
-fn segment_hits_triangle(p: &[f64; 3], q: &[f64; 3], t: &[&[f64; 3]; 3]) -> bool {
+pub(super) fn segment_hits_triangle(p: &[f64; 3], q: &[f64; 3], t: &[&[f64; 3]; 3]) -> bool {
     let sp = orient3d(t[0], t[1], t[2], p);
     let sq = orient3d(t[0], t[1], t[2], q);
     if (sp > 0.0 && sq > 0.0) || (sp < 0.0 && sq < 0.0) {

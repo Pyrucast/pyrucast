@@ -702,6 +702,22 @@ impl TetMesh {
         fan
     }
 
+    /// The outward faces of a set of cells taken together — the surface of
+    /// the region they fill.
+    pub(super) fn region_boundary(&self, cells: &[u32]) -> Vec<[u32; 3]> {
+        let inside: HashSet<u32> = cells.iter().copied().collect();
+        let mut faces = Vec::with_capacity(2 * cells.len() + 2);
+        for &t in cells {
+            for i in 0..4 {
+                let n = self.tets[t as usize].nb[i];
+                if n == NO_TET || !inside.contains(&n) {
+                    faces.push(self.face(t as usize, i));
+                }
+            }
+        }
+        faces
+    }
+
     /// Whether face `f` of cell `t` meets nothing — it is on the outer
     /// surface of the whole mesh.
     pub(super) fn face_is_free(&self, t: u32, f: &[u32; 3]) -> bool {

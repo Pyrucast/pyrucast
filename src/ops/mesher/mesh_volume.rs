@@ -28,15 +28,21 @@
 //!
 //! # Limitations
 //!
-//! Recovery (step 3) currently reconnects locally — it removes whatever edge
-//! or face stands in the way, and gives up when no reconnection applies. That
-//! is enough for a surface whose facets already sit close to the Delaunay
-//! triangulation of its nodes, and it correctly refuses the surfaces that
-//! genuinely cannot be filled. In between there is a band of envelopes that
-//! *are* fillable but whose recovery needs more than local moves — carving a
-//! cavity around the missing facet and re-tetrahedralizing it wholesale. On
-//! those the mesher reports the stuck edge rather than returning a wrong
-//! mesh; two `#[ignore]`d tests below pin the cases to fix.
+//! Recovery (step 3) works one obstruction at a time: it sweeps the corridor
+//! an envelope edge runs through and rebuilds whatever pocket blocks it. The
+//! rebuild itself is exhaustive within that pocket, so no *local* possibility
+//! is missed, and surfaces that genuinely cannot be filled are correctly
+//! refused.
+//!
+//! What is missed is the case where no single pocket does it: freeing the
+//! edge needs the mesh's own outer triangulation re-cut over a wider patch
+//! first, which is a decision no local rebuild can take. Notably, an
+//! envelope edge running inside a **flat** face of the solid is blocked by
+//! the other diagonal of that face, and swapping it may in turn need its
+//! neighbours swapped. Envelopes with large planar faces therefore still hit
+//! the "cannot fit" error, while a surface with genuine curvature goes
+//! through — `meshes_a_realistic_closed_surface` is the case that matters,
+//! and the two `#[ignore]`d tests pin the ones that do not.
 //!
 //! Interior refinement — the sizing field and the removal of slivers — is not
 //! implemented yet either, which is why `target_size` is accepted and
@@ -440,6 +446,125 @@ mod tests {
         let mesh = mesh_volume(&surface(&coords, &n, &facets), None).unwrap();
         let v = mesh_volume_of(&mesh);
         assert!((v - 3.0).abs() < 1e-12, "volume {v}");
+    }
+
+    /// A box whose faces are cut into `n × n` squares, every vertex nudged
+    /// off the lattice so nothing is accidentally coplanar or cospherical —
+    /// the shape of a surface mesh that actually comes out of a mesher.
+    fn subdivided_blob(coords: &Handle<Coords>, n: usize) -> (Mesh, f64) {
+        let jitter = |i: usize, k: usize| {
+            let mut x = ((i * 3 + k) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            x ^= x >> 29;
+            ((x >> 11) as f64 / (1u64 << 53) as f64 - 0.5) * 0.02
+        };
+        let s = n as f64;
+        let mut pts: Vec<[f64; 3]> = Vec::new();
+        let mut at: std::collections::HashMap<(usize, usize, usize), usize> =
+            std::collections::HashMap::new();
+        for i in 0..=n {
+            for j in 0..=n {
+                for k in 0..=n {
+                    if i == 0 || i == n || j == 0 || j == n || k == 0 || k == n {
+                        at.insert((i, j, k), pts.len());
+                        pts.push([i as f64 / s, j as f64 / s, k as f64 / s]);
+                    }
+                }
+            }
+        }
+        for (m, p) in pts.iter_mut().enumerate() {
+            for k in 0..3 {
+                p[k] += jitter(m, k);
+            }
+        }
+
+        let mut facets: Vec<[usize; 3]> = Vec::new();
+        let mut quad = |a, b, c, d| {
+            facets.push([a, b, c]);
+            facets.push([a, c, d]);
+        };
+        for i in 0..n {
+            for j in 0..n {
+                quad(
+                    at[&(i, j, 0)],
+                    at[&(i, j + 1, 0)],
+                    at[&(i + 1, j + 1, 0)],
+                    at[&(i + 1, j, 0)],
+                );
+                quad(
+                    at[&(i, j, n)],
+                    at[&(i + 1, j, n)],
+                    at[&(i + 1, j + 1, n)],
+                    at[&(i, j + 1, n)],
+                );
+                quad(
+                    at[&(i, 0, j)],
+                    at[&(i + 1, 0, j)],
+                    at[&(i + 1, 0, j + 1)],
+                    at[&(i, 0, j + 1)],
+                );
+                quad(
+                    at[&(i, n, j)],
+                    at[&(i, n, j + 1)],
+                    at[&(i + 1, n, j + 1)],
+                    at[&(i + 1, n, j)],
+                );
+                quad(
+                    at[&(0, i, j)],
+                    at[&(0, i, j + 1)],
+                    at[&(0, i + 1, j + 1)],
+                    at[&(0, i + 1, j)],
+                );
+                quad(
+                    at[&(n, i, j)],
+                    at[&(n, i + 1, j)],
+                    at[&(n, i + 1, j + 1)],
+                    at[&(n, i, j + 1)],
+                );
+            }
+        }
+        let ids: Vec<NodeId> = pts
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        for f in &facets {
+            sm.add_cell(&[ids[f[0]], ids[f[1]], ids[f[2]]]).unwrap();
+        }
+        // The volume the surface encloses, by the divergence theorem.
+        let v6: f64 = facets
+            .iter()
+            .map(|f| {
+                let (a, b, c) = (pts[f[0]], pts[f[1]], pts[f[2]]);
+                a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
+                    + a[2] * (b[0] * c[1] - b[1] * c[0])
+            })
+            .sum();
+        (Mesh::from_submesh(sm), v6 / 6.0)
+    }
+
+    #[test]
+    fn meshes_a_realistic_closed_surface() {
+        // 98 nodes, 192 facets, nothing degenerate: the case the mesher is
+        // actually for, as opposed to the eight-corner puzzles above.
+        let coords = insert(Coords::new(3).unwrap());
+        let (envelope, expected) = subdivided_blob(&coords, 3);
+        let mesh = mesh_volume(&envelope, None).unwrap();
+        assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
+        assert!(
+            mesh.cell_count().unwrap() > 100,
+            "{}",
+            mesh.cell_count().unwrap()
+        );
+        let v = mesh_volume_of(&mesh);
+        assert!((v - expected).abs() < 1e-12 * expected, "{v} vs {expected}");
+        // The surface is handed back untouched.
+        assert_eq!(
+            super::super::skin(&mesh, None)
+                .unwrap()
+                .cell_count()
+                .unwrap(),
+            envelope.cell_count().unwrap()
+        );
     }
 
     #[test]

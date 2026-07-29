@@ -25,7 +25,8 @@
 
 use crate::error::Result;
 
-use super::delaunay::{Boundary, TetMesh};
+use super::delaunay::{Boundary, EdgeFan, TetMesh};
+use super::fill::{fill, DEFAULT_BUDGET};
 use super::predicates::orient3d;
 
 /// Try to replace the two tetrahedra sharing face `i` of `t` with the three
@@ -158,118 +159,103 @@ pub fn flip22(mesh: &mut TetMesh, p: u32, q: u32) -> Result<Option<Vec<u32>>> {
         .map(Some)
 }
 
-/// Take edge `(p, q)` out of the mesh, refilling its fan with cells that do
-/// not use it.
+/// Take edge `(p, q)` out of the mesh, rebuilding its fan without it.
 ///
 /// This is the general form of which [`flip32`] and [`flip22`] are the two
 /// smallest cases, and it is what boundary recovery actually needs: an edge
 /// standing in the way of an envelope edge has whatever fan it happens to
-/// have, and the small flips only reach fans of two or three.
+/// have, and the small flips only reach fans of two or three cells.
 ///
-/// Removing the edge means re-cutting the polygon its fan leaves behind —
-/// the *link* — and hanging `p` and `q` off each triangle of the result. Any
-/// triangulation of the link gives a filling; the one used is the first
-/// whose cells are all positively oriented, which is exactly the condition
-/// for the region to be filled without overlap. If none is, the edge cannot
-/// be removed and the caller is told so.
+/// The fan is handed to [`fill`] as a closed region with the edge forbidden,
+/// so the answer is complete: if any way of rebuilding that pocket without
+/// the edge exists, it is found; if none does, the edge genuinely cannot go
+/// and the caller is told so. Enumerating a *pattern* instead — re-cutting
+/// the ring of vertices and hanging `p` and `q` off each triangle — misses
+/// the fillings that use a cell of four ring vertices, which on a box is
+/// precisely the one that works.
 ///
 /// An **open** fan ends on the outer surface. Removing the edge there re-cuts
-/// the flat quadrilateral its two end faces form, so those must meet nothing
-/// and lie in one plane — otherwise the solid itself would change shape.
+/// the flat quadrilateral its two end faces form along the other diagonal,
+/// so those faces must meet nothing and lie in one plane — otherwise the
+/// solid itself would change shape.
 pub fn remove_edge(mesh: &mut TetMesh, p: u32, q: u32) -> Result<Option<Vec<u32>>> {
     let Some(fan) = mesh.edge_fan(p, q) else {
         return Ok(None);
     };
-    // Beyond this the number of triangulations grows fast, and a fan this
-    // long means the search has gone somewhere unhelpful anyway.
-    if fan.link.len() < 3 || fan.link.len() > 8 {
-        return Ok(None);
-    }
+    let mut boundary = mesh.region_boundary(&fan.cells);
 
-    let boundary = if fan.closed {
+    let mode = if fan.closed {
         Boundary::Preserved
     } else {
-        // The two end faces close the region; re-cutting them is only
-        // harmless where they meet nothing and are coplanar.
         let (x0, xn) = (fan.link[0], *fan.link.last().expect("non-empty link"));
         let first = *fan.cells.first().expect("non-empty fan");
         let last = *fan.cells.last().expect("non-empty fan");
         if !mesh.face_is_free(first, &[p, q, x0]) || !mesh.face_is_free(last, &[p, q, xn]) {
             return Ok(None);
         }
+        let pts = mesh.points();
         if orient3d(
-            &mesh.points()[p as usize],
-            &mesh.points()[q as usize],
-            &mesh.points()[x0 as usize],
-            &mesh.points()[xn as usize],
+            &pts[p as usize],
+            &pts[q as usize],
+            &pts[x0 as usize],
+            &pts[xn as usize],
         ) != 0.0
         {
-            return Ok(None);
+            return Ok(None); // the two end faces are not one flat quadrilateral
         }
+        let Some(recut) = recut_end_faces(mesh, &fan, p, q) else {
+            return Ok(None);
+        };
+        boundary.retain(|f| {
+            let k = sorted(f);
+            k != sorted(&[p, q, x0]) && k != sorted(&[p, q, xn])
+        });
+        boundary.extend_from_slice(&recut);
         Boundary::MayRecutHull
     };
 
-    for triangles in triangulations(fan.link.len()) {
-        let mut new: Vec<[u32; 4]> = Vec::with_capacity(2 * triangles.len());
-        let mut ok = true;
-        for t in &triangles {
-            let (a, b, c) = (fan.link[t[0]], fan.link[t[1]], fan.link[t[2]]);
-            // One cell each side of the triangle, so the pair fills the slab
-            // the edge used to occupy.
-            let sp = mesh.orientation(&[a, b, c, p]);
-            let sq = mesh.orientation(&[a, b, c, q]);
-            if sp > 0.0 && sq < 0.0 {
-                new.push([a, b, c, p]);
-                new.push([b, a, c, q]);
-            } else if sp < 0.0 && sq > 0.0 {
-                new.push([b, a, c, p]);
-                new.push([a, b, c, q]);
-            } else {
-                ok = false;
-                break;
-            }
-        }
-        if !ok {
-            continue;
-        }
-        // A filling that does not tile the fan is declined, not committed.
-        let snapshot = mesh.clone();
-        match mesh.replace_region_with(&fan.cells, &new, "an edge removal", boundary) {
-            Ok(created) => return Ok(Some(created)),
-            Err(_) => *mesh = snapshot,
+    let Some(new) = fill(mesh.points(), &boundary, &[(p, q)], DEFAULT_BUDGET) else {
+        return Ok(None);
+    };
+    // A filling the mesh will not take is declined, not committed by halves.
+    let snapshot = mesh.clone();
+    match mesh.replace_region_with(&fan.cells, &new, "an edge removal", mode) {
+        Ok(created) => Ok(Some(created)),
+        Err(_) => {
+            *mesh = snapshot;
+            Ok(None)
         }
     }
-    Ok(None)
 }
 
-/// Every triangulation of a polygon of `n` vertices, as index triples.
-///
-/// The usual recursion: the edge from the first to the last vertex belongs
-/// to one triangle, and that triangle splits the rest in two.
-fn triangulations(n: usize) -> Vec<Vec<[usize; 3]>> {
-    fn split(lo: usize, hi: usize, out: &mut Vec<Vec<[usize; 3]>>) {
-        if hi - lo < 2 {
-            out.push(Vec::new());
-            return;
+/// The two triangles replacing an open fan's end faces, cut along the other
+/// diagonal of their flat quadrilateral and facing the same way.
+fn recut_end_faces(mesh: &TetMesh, fan: &EdgeFan, p: u32, q: u32) -> Option<[[u32; 3]; 2]> {
+    let (x0, xn) = (fan.link[0], *fan.link.last()?);
+    // The apex of the first cell lies strictly inside the solid, below the
+    // end face; a replacement facing the same way keeps it below too.
+    let inside = mesh.apex_beyond(*fan.cells.first()? as usize, &[p, q, x0])?;
+    let facing_out = |f: [u32; 3]| -> [u32; 3] {
+        let pts = mesh.points();
+        if orient3d(
+            &pts[f[0] as usize],
+            &pts[f[1] as usize],
+            &pts[f[2] as usize],
+            &pts[inside as usize],
+        ) < 0.0
+        {
+            f
+        } else {
+            [f[0], f[2], f[1]]
         }
-        for k in lo + 1..hi {
-            let mut left = Vec::new();
-            split(lo, k, &mut left);
-            let mut right = Vec::new();
-            split(k, hi, &mut right);
-            for l in &left {
-                for r in &right {
-                    let mut t = vec![[lo, k, hi]];
-                    t.extend_from_slice(l);
-                    t.extend_from_slice(r);
-                    out.push(t);
-                }
-            }
-        }
-    }
-    let mut out = Vec::new();
-    split(0, n - 1, &mut out);
-    out
+    };
+    Some([facing_out([x0, xn, p]), facing_out([x0, xn, q])])
+}
+
+fn sorted(f: &[u32; 3]) -> [u32; 3] {
+    let mut k = *f;
+    k.sort_unstable();
+    k
 }
 
 #[cfg(test)]

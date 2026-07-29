@@ -32,6 +32,7 @@ use crate::interrupt::Cancel;
 use super::delaunay::TetMesh;
 use super::envelope::Envelope;
 use super::flips::{flip23, remove_edge};
+use super::intersect::segment_hits_triangle;
 use super::predicates::orient3d;
 
 /// Flips allowed per edge or facet before the search is called off.
@@ -113,28 +114,32 @@ fn recover_edge(mesh: &mut TetMesh, u: u32, v: u32) -> Result<()> {
 }
 
 /// Remove one thing standing between `u` and `v`, if any move applies.
+///
+/// Everything the segment runs through is fair game, not just what touches
+/// `u`: an envelope edge spanning a wide flat face is typically blocked far
+/// from either end.
 fn clear_one_obstruction(mesh: &mut TetMesh, u: u32, v: u32) -> Result<bool> {
-    let star = mesh.tets_around_vertex(u);
+    let corridor = corridor(mesh, u, v);
 
-    // The segment leaves `u` through the face opposite it. Opening that face
-    // with a 2-3 flip replaces it by an edge pointing further along.
-    for &t in &star {
-        let cell = mesh.tet(t as usize).expect("live star cell");
-        let at = cell
-            .iter()
-            .position(|&x| x == u)
-            .expect("star cell holds u");
-        let f = mesh.face(t as usize, at);
-        if pierces_triangle(mesh, u, v, &f) && flip23(mesh, t as usize, at)?.is_some() {
-            return Ok(true);
+    // A face the segment goes through has to open up. The 2-3 flip that
+    // opens it replaces it by an edge pointing further along.
+    for &t in &corridor {
+        for i in 0..4 {
+            let f = mesh.face(t as usize, i);
+            if f.contains(&u) || f.contains(&v) {
+                continue;
+            }
+            if pierces_triangle_between(mesh, u, v, &f) && flip23(mesh, t as usize, i)?.is_some() {
+                return Ok(true);
+            }
         }
     }
 
     // Otherwise the segment runs exactly through an existing edge — the two
-    // diagonals of a quadrilateral face crossing at its centre, say. That
+    // diagonals of a flat quadrilateral crossing at its centre, say. That
     // edge has to go.
-    for &t in &star {
-        let cell = mesh.tet(t as usize).expect("live star cell");
+    for &t in &corridor {
+        let cell = mesh.tet(t as usize).expect("live corridor cell");
         for a in 0..4 {
             for b in a + 1..4 {
                 let (p, q) = (cell[a], cell[b]);
@@ -148,6 +153,55 @@ fn clear_one_obstruction(mesh: &mut TetMesh, u: u32, v: u32) -> Result<bool> {
         }
     }
     Ok(false)
+}
+
+/// Every cell the segment from `u` to `v` passes through or touches.
+///
+/// Grown outwards from `u`'s star: a cell the segment meets is always a
+/// neighbour of another one it meets, so the walk finds all of them.
+fn corridor(mesh: &TetMesh, u: u32, v: u32) -> Vec<u32> {
+    let touched = |t: u32| -> bool {
+        let cell = mesh.tet(t as usize).expect("live cell");
+        if cell.contains(&u) || cell.contains(&v) {
+            return true;
+        }
+        let pts = mesh.points();
+        (0..4).any(|i| {
+            let f = mesh.face(t as usize, i);
+            segment_hits_triangle(
+                &pts[u as usize],
+                &pts[v as usize],
+                &[
+                    &pts[f[0] as usize],
+                    &pts[f[1] as usize],
+                    &pts[f[2] as usize],
+                ],
+            )
+        })
+    };
+
+    let mut seen: HashSet<u32> = HashSet::new();
+    let mut out: Vec<u32> = Vec::new();
+    let mut stack: Vec<u32> = mesh
+        .tets_around_vertex(u)
+        .into_iter()
+        .filter(|&t| seen.insert(t))
+        .collect();
+    while let Some(t) = stack.pop() {
+        if !touched(t) {
+            continue;
+        }
+        out.push(t);
+        for i in 0..4 {
+            if let Some(n) = mesh.neighbour(t as usize, i) {
+                if seen.insert(n as u32) {
+                    stack.push(n as u32);
+                }
+            }
+        }
+    }
+    out.sort_unstable();
+    out
 }
 
 /// Work toward removing edge `(p, q)`, returning whether anything moved.
@@ -236,23 +290,6 @@ fn piercing_edge(mesh: &TetMesh, f: &[u32; 3]) -> Option<(u32, u32)> {
 }
 
 // ─── Exact geometric questions ──────────────────────────────────────────
-
-/// Whether the segment from `u` to `v` leaves through the interior of the
-/// outward face `f`, `u` being the opposite vertex.
-fn pierces_triangle(mesh: &TetMesh, u: u32, v: u32, f: &[u32; 3]) -> bool {
-    let p = mesh.points();
-    // `v` has to be beyond the face for the segment to reach it.
-    if orient3d(
-        &p[f[0] as usize],
-        &p[f[1] as usize],
-        &p[f[2] as usize],
-        &p[v as usize],
-    ) <= 0.0
-    {
-        return false;
-    }
-    line_through_triangle(mesh, u, v, f)
-}
 
 /// Whether the open segment `(p, q)` crosses the interior of triangle `f`,
 /// with its two ends strictly on opposite sides.

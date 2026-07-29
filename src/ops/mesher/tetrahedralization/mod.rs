@@ -6,6 +6,8 @@
 //!
 //! - [`predicates`] — exact `orient3d` / `insphere`, the foundation every
 //!   other decision rests on.
+//! - [`fill`] — exhaustive rebuild of a small region from its own vertices,
+//!   the complete answer where a flip pattern is only a guess.
 //! - [`recovery`] — putting the envelope's edges and facets back into the
 //!   triangulation.
 //! - [`classify`] — flooding from both sides of the recovered surface to
@@ -21,6 +23,7 @@
 pub mod classify;
 pub mod delaunay;
 pub mod envelope;
+pub mod fill;
 pub mod flips;
 pub mod intersect;
 pub mod predicates;
