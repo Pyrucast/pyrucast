@@ -15,7 +15,7 @@
 //! With an `angle_deg` given, each closed loop is further split into open
 //! *arêtes* (edges) at its **corner** nodes — where the boundary changes
 //! direction by more than `angle_deg` degrees — the 1-D analogue of the
-//! dihedral-angle face splitting done by [`crate::ops::mesher::skin`].
+//! dihedral-angle face splitting done by [`crate::ops::mesher::skin()`].
 
 use crate::aggregate::Aggregate;
 use crate::containers::mesh::{Coords, ElementType, Mesh, NodeId, SubMesh};
