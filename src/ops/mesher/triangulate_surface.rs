@@ -29,15 +29,14 @@
 //! QUA4 recombination pass run over plain local data and parallelise through
 //! [`crate::parallel`], grain policy included.
 
+use super::contour::{self, Domain, Frame};
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{
-    Coords, ElementType, Mesh, Node, NodeId, Point2, Point3, SubMesh, Vector2, Vector3,
-};
+use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, Point2, SubMesh, Vector2};
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use crate::parallel::*;
-use crate::store::{insert, read, Handle};
-use std::collections::{HashMap, HashSet, VecDeque};
+use crate::store::{insert, Handle};
+use std::collections::{HashMap, VecDeque};
 
 // Ruppert refinement provably terminates for a minimum-angle threshold up
 // to ~20.7°; staying just under it keeps the point count finite.
@@ -80,278 +79,20 @@ pub fn triangulate_surface_cancellable(
             )));
         }
     }
-    let coords_handle = contour.coords()?;
-    let dim = read(&coords_handle)?.dim();
-    if dim != 2 && dim != 3 {
-        return Err(PyrucastError::Message(format!(
-            "triangulate_surface: contour must be 2-D or 3-D, got dim={}",
-            dim
-        )));
-    }
+    let parsed = contour::parse(contour, "triangulate_surface")?;
 
-    let loops = extract_loops(contour)?;
-    if loops.is_empty() {
-        return Err(PyrucastError::Message(
-            "triangulate_surface: contour has no boundary loop".into(),
-        ));
-    }
-    let frame = Frame::fit(dim, &loops)?;
-    let loops2d: Vec<Loop2D> = loops
-        .iter()
-        .map(|l| Loop2D {
-            node_ids: l.node_ids.clone(),
-            pts: l.world_pts.iter().map(|p| frame.to_local(p)).collect(),
-        })
-        .collect();
-    let domains = build_domains(loops2d)?;
-
-    let mut results = Vec::with_capacity(domains.len());
-    for d in &domains {
+    let mut results = Vec::with_capacity(parsed.domains.len());
+    for d in &parsed.domains {
         results.push(mesh_domain(d, element_type, target_size, cancel)?);
     }
 
-    materialize(coords_handle, &frame, dim, element_type, results)
-}
-
-// ─── Contour parsing ──────────────────────────────────────────────────────
-
-struct LoopData {
-    node_ids: Vec<NodeId>,
-    world_pts: Vec<Vec<f64>>,
-}
-
-fn extract_loops(mesh: &Mesh) -> Result<Vec<LoopData>> {
-    let coords = mesh.coords()?;
-    let c = read(&coords)?;
-    let mut loops = Vec::new();
-    for sm in mesh {
-        let s = read(sm)?;
-        if s.element_type() != ElementType::SEG2 {
-            return Err(PyrucastError::Message(format!(
-                "triangulate_surface: contour submeshes must be SEG2, got {}",
-                s.element_type()
-            )));
-        }
-        let conn = s.connectivity();
-        let n = conn.len() / 2;
-        if n < 3 {
-            return Err(PyrucastError::Message(
-                "triangulate_surface: a boundary loop needs at least 3 segments".into(),
-            ));
-        }
-        let mut next: HashMap<NodeId, NodeId> = HashMap::new();
-        for pair in conn.chunks(2) {
-            if next.insert(pair[0], pair[1]).is_some() {
-                return Err(PyrucastError::Message(
-                    "triangulate_surface: a boundary submesh is not a simple loop (branching)"
-                        .into(),
-                ));
-            }
-        }
-        let start = conn[0];
-        let mut chain = Vec::with_capacity(n);
-        let mut cur = start;
-        let mut seen = HashSet::new();
-        for _ in 0..n {
-            if !seen.insert(cur) {
-                return Err(PyrucastError::Message(
-                    "triangulate_surface: a boundary submesh is not a simple loop (repeated node)"
-                        .into(),
-                ));
-            }
-            chain.push(cur);
-            cur = *next.get(&cur).ok_or_else(|| {
-                PyrucastError::Message(
-                    "triangulate_surface: a boundary submesh is not closed".into(),
-                )
-            })?;
-        }
-        if cur != start {
-            return Err(PyrucastError::Message(
-                "triangulate_surface: a boundary submesh is not closed".into(),
-            ));
-        }
-        let world_pts: Result<Vec<Vec<f64>>> = chain
-            .iter()
-            .map(|&nid| Ok(c.coord(nid)?.to_vec()))
-            .collect();
-        loops.push(LoopData {
-            node_ids: chain,
-            world_pts: world_pts?,
-        });
-    }
-    Ok(loops)
-}
-
-// ─── Planar frame (2-D native, or best-fit plane for a 3-D contour) ───────
-
-enum Frame {
-    Planar2D,
-    Planar3D {
-        origin: Point3,
-        u: Vector3,
-        v: Vector3,
-    },
-}
-
-impl Frame {
-    fn fit(dim: u8, loops: &[LoopData]) -> Result<Frame> {
-        if dim == 2 {
-            return Ok(Frame::Planar2D);
-        }
-        let mut origin = Vector3::zeros();
-        let mut count = 0usize;
-        for l in loops {
-            for p in &l.world_pts {
-                origin += Vector3::new(p[0], p[1], p[2]);
-                count += 1;
-            }
-        }
-        if count == 0 {
-            return Err(PyrucastError::Message(
-                "triangulate_surface: empty contour".into(),
-            ));
-        }
-        origin /= count as f64;
-        let mut normal = Vector3::zeros();
-        for l in loops {
-            let pts = &l.world_pts;
-            let n = pts.len();
-            for i in 0..n {
-                let a = Vector3::new(pts[i][0], pts[i][1], pts[i][2]);
-                let b = Vector3::new(
-                    pts[(i + 1) % n][0],
-                    pts[(i + 1) % n][1],
-                    pts[(i + 1) % n][2],
-                );
-                normal.x += (a.y - b.y) * (a.z + b.z);
-                normal.y += (a.z - b.z) * (a.x + b.x);
-                normal.z += (a.x - b.x) * (a.y + b.y);
-            }
-        }
-        let nn = normal.norm();
-        if nn < 1e-30 {
-            return Err(PyrucastError::Message(
-                "triangulate_surface: contour points are collinear or degenerate".into(),
-            ));
-        }
-        normal /= nn;
-        let helper = if normal.x.abs() < 0.9 {
-            Vector3::x()
-        } else {
-            Vector3::y()
-        };
-        let u = (helper - normal * helper.dot(&normal)).normalize();
-        let v = normal.cross(&u);
-        Ok(Frame::Planar3D {
-            origin: Point3::from(origin),
-            u,
-            v,
-        })
-    }
-
-    fn to_local(&self, p: &[f64]) -> Point2 {
-        match self {
-            Frame::Planar2D => Point2::new(p[0], p[1]),
-            Frame::Planar3D { origin, u, v } => {
-                let d = Vector3::new(p[0], p[1], p[2]) - origin.coords;
-                Point2::new(d.dot(u), d.dot(v))
-            }
-        }
-    }
-
-    fn to_world(&self, p: Point2, dim: u8) -> Vec<f64> {
-        match self {
-            Frame::Planar2D => vec![p.x, p.y],
-            Frame::Planar3D { origin, u, v } => {
-                debug_assert_eq!(dim, 3);
-                let w = origin.coords + u * p.x + v * p.y;
-                vec![w.x, w.y, w.z]
-            }
-        }
-    }
-}
-
-// ─── Domains: outer CCW loop + its CW hole loops ──────────────────────────
-
-struct Loop2D {
-    node_ids: Vec<NodeId>,
-    pts: Vec<Point2>,
-}
-
-struct Domain {
-    outer: Loop2D,
-    holes: Vec<Loop2D>,
-}
-
-fn signed_area(pts: &[Point2]) -> f64 {
-    let n = pts.len();
-    let mut a = 0.0;
-    for i in 0..n {
-        let p = pts[i];
-        let q = pts[(i + 1) % n];
-        a += p.x * q.y - q.x * p.y;
-    }
-    a * 0.5
-}
-
-fn point_in_polygon(p: Point2, poly: &[Point2]) -> bool {
-    let n = poly.len();
-    let mut inside = false;
-    let mut j = n - 1;
-    for i in 0..n {
-        let (xi, yi) = (poly[i].x, poly[i].y);
-        let (xj, yj) = (poly[j].x, poly[j].y);
-        if (yi > p.y) != (yj > p.y) && p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi {
-            inside = !inside;
-        }
-        j = i;
-    }
-    inside
-}
-
-fn build_domains(loops: Vec<Loop2D>) -> Result<Vec<Domain>> {
-    let mut outers = Vec::new();
-    let mut holes = Vec::new();
-    for l in loops {
-        let a = signed_area(&l.pts);
-        if a.abs() < 1e-300 {
-            return Err(PyrucastError::Message(
-                "triangulate_surface: a boundary loop has zero area".into(),
-            ));
-        }
-        if a > 0.0 {
-            outers.push(l);
-        } else {
-            holes.push(l);
-        }
-    }
-    if outers.is_empty() {
-        return Err(PyrucastError::Message(
-            "triangulate_surface: no counter-clockwise (outer) loop found".into(),
-        ));
-    }
-    let mut domains: Vec<Domain> = outers
-        .into_iter()
-        .map(|o| Domain {
-            outer: o,
-            holes: Vec::new(),
-        })
-        .collect();
-    'hole: for h in holes {
-        let p = h.pts[0];
-        for d in domains.iter_mut() {
-            if point_in_polygon(p, &d.outer.pts) {
-                d.holes.push(h);
-                continue 'hole;
-            }
-        }
-        return Err(PyrucastError::Message(
-            "triangulate_surface: a hole (clockwise) loop is not contained in any outer loop"
-                .into(),
-        ));
-    }
-    Ok(domains)
+    materialize(
+        parsed.coords,
+        &parsed.frame,
+        parsed.dim,
+        element_type,
+        results,
+    )
 }
 
 // ─── Geometric primitives (2-D) ───────────────────────────────────────────
@@ -2034,7 +1775,8 @@ fn materialize(
 mod tests {
     use super::*;
     use crate::containers::mesh::Coords;
-    use crate::store::insert;
+    use crate::store::{insert, read};
+    use std::collections::HashSet;
 
     fn loop_mesh(coords: Handle<Coords>, pts: &[(f64, f64)]) -> Mesh {
         let ids: Vec<NodeId> = pts

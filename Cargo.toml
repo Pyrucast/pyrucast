@@ -95,6 +95,15 @@ viz-interactive = ["viz", "dep:winit", "dep:softbuffer"]
 # so without `viz` truly active here the `.pyi` would document `plot`
 # methods that a plain `python-api`/`extension-module` build (no `viz`)
 # doesn't actually compile in.
+#
+# Never combine with `abi3`: `pyo3-stub-gen` unconditionally implements
+# `PyStubType` for `PyEncodingWarning`, which `pyo3` only defines under
+# `#[cfg(Py_3_10)]` — a cfg `abi3-py39` doesn't set, since the stable ABI
+# targets CPython >= 3.9. That combination fails to build with an error
+# inside `pyo3-stub-gen` itself (upstream issue Jij-Inc/pyo3-stub-gen#290,
+# closed wontfix). Not a problem in practice: `abi3` is release-CI-only
+# and `stub-gen` is a separate dev tool, never both at once — but it does
+# mean `cargo {build,check,clippy} --all-features` cannot succeed.
 stub-gen = ["python-api", "dep:pyo3-stub-gen", "viz"]
 # Build against Python's stable/limited API (CPython >= 3.9) instead of a
 # specific CPython minor version. One published wheel then installs on any
@@ -103,4 +112,6 @@ stub-gen = ["python-api", "dep:pyo3-stub-gen", "viz"]
 # exact cp3XX tag. Off by default: only the release CI
 # (.github/workflows/release.yml) adds it — everyday `maturin develop` /
 # `check.sh` / `build.sh` stay on pyo3's full (non-limited) API.
+#
+# Never combine with `stub-gen` — see the comment above `stub-gen`.
 abi3 = ["pyo3/abi3-py39"]

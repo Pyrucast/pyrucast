@@ -1,9 +1,10 @@
-//! Exact geometric predicates in 3-D: [`orient3d`] and [`insphere`].
+//! Exact geometric predicates: [`orient2d`] in 2-D, [`orient3d`] and
+//! [`insphere`] in 3-D.
 //!
-//! A tetrahedral mesher is a program that asks the same two questions
-//! millions of times — *on which side of this plane does that point lie?*
-//! and *is that point inside this circumsphere?* — and builds a data
-//! structure out of the answers. The answers must be **mutually
+//! A mesher is a program that asks the same two questions millions of times
+//! — *on which side of this line/plane does that point lie?* and *is that
+//! point inside this circumcircle/sphere?* — and builds a data structure out
+//! of the answers. The answers must be **mutually
 //! consistent**: if `orient3d(a, b, c, d)` says "above" then
 //! `orient3d(b, a, c, d)` must say "below", and a point cannot be at once
 //! inside a tetrahedron and outside all four of its faces. Plain `f64`

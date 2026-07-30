@@ -5,7 +5,8 @@
 //! coordinate arrays with no knowledge of the container layer.
 //!
 //! - [`predicates`] — exact `orient3d` / `insphere`, the foundation every
-//!   other decision rests on.
+//!   other decision rests on. It is shared with the surface meshers and so
+//!   lives one level up, re-exported here under its historical path.
 //! - [`fill`] — exhaustive rebuild of a small region from its own vertices,
 //!   the complete answer where a flip pattern is only a guess.
 //! - [`refine`] — putting nodes inside the solid, which is what turns a
@@ -34,7 +35,8 @@ pub mod envelope;
 pub mod fill;
 pub mod flips;
 pub mod intersect;
-pub mod predicates;
+pub use super::predicates;
+
 pub mod recovery;
 pub mod refine;
 pub mod simplify;
