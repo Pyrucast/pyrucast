@@ -17,7 +17,6 @@ from ._pyrucast import (
     invert as invert,
     line as line,
     merge_nodes as merge_nodes,
-    mesh_volume as mesh_volume,
     orient as orient,
     poi1_from_nodes as poi1_from_nodes,
     read_gmsh as read_gmsh,
@@ -31,7 +30,7 @@ from ._pyrucast import (
     transfinite as transfinite,
     translate as translate,
     triangulate_surface as triangulate_surface,
-    volume as volume,
+    triangulate_volume as triangulate_volume,
 )
 
 __all__ = [
@@ -46,7 +45,6 @@ __all__ = [
     "invert",
     "line",
     "merge_nodes",
-    "mesh_volume",
     "orient",
     "poi1_from_nodes",
     "read_gmsh",
@@ -60,5 +58,5 @@ __all__ = [
     "transfinite",
     "translate",
     "triangulate_surface",
-    "volume",
+    "triangulate_volume",
 ]

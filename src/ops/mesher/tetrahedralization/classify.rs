@@ -62,7 +62,7 @@ pub fn interior_within(
         cancel.check()?;
         let owners = mesh.face_owners(f).ok_or_else(|| {
             PyrucastError::Message(format!(
-                "mesh_volume: envelope facet ({}, {}, {}) is missing from the mesh after \
+                "triangulate_volume: envelope facet ({}, {}, {}) is missing from the mesh after \
                  recovery (internal error)",
                 f[0], f[1], f[2]
             ))
@@ -87,7 +87,7 @@ pub fn interior_within(
     }
     if seeds_in.is_empty() {
         return Err(PyrucastError::Message(
-            "mesh_volume: no tetrahedron lies inside the envelope".into(),
+            "triangulate_volume: no tetrahedron lies inside the envelope".into(),
         ));
     }
 
@@ -99,7 +99,7 @@ pub fn interior_within(
     for (t, _) in mesh.iter() {
         if inside[t] == outside[t] {
             return Err(PyrucastError::Message(format!(
-                "mesh_volume: tetrahedron {t} is {} — the recovered envelope does not close \
+                "triangulate_volume: tetrahedron {t} is {} — the recovered envelope does not close \
                  the mesh (internal error)",
                 if inside[t] {
                     "reachable from both sides of the envelope"

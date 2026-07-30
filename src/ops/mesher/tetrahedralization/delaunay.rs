@@ -124,7 +124,7 @@ impl TetMesh {
     pub fn delaunay(points: &[[f64; 3]], cancel: &dyn Cancel) -> Result<TetMesh> {
         if points.len() < 4 {
             return Err(PyrucastError::Message(format!(
-                "mesh_volume: a tetrahedralization needs at least 4 points, got {}",
+                "triangulate_volume: a tetrahedralization needs at least 4 points, got {}",
                 points.len()
             )));
         }
@@ -245,7 +245,7 @@ impl TetMesh {
         for v in new {
             if self.orientation(v) <= 0.0 {
                 return Err(PyrucastError::Message(format!(
-                    "mesh_volume: replacing {what} would create an inverted or flat \
+                    "triangulate_volume: replacing {what} would create an inverted or flat \
                      tetrahedron (internal error)"
                 )));
             }
@@ -303,7 +303,7 @@ impl TetMesh {
             };
             if boundary != Boundary::MayRecutHull || !dropped_faced_nothing || !volume_kept {
                 return Err(PyrucastError::Message(format!(
-                    "mesh_volume: replacing {what} would leave {unmatched} unmatched face(s) — \
+                    "triangulate_volume: replacing {what} would leave {unmatched} unmatched face(s) — \
                      the new cells do not tile the same region (internal error)"
                 )));
             }
@@ -374,7 +374,7 @@ impl TetMesh {
         let mut t = self.hint as usize;
         if t >= self.tets.len() || self.tets[t].dead {
             t = self.first_live().ok_or_else(|| {
-                PyrucastError::Message("mesh_volume: the triangulation is empty".into())
+                PyrucastError::Message("triangulate_volume: the triangulation is empty".into())
             })?;
         }
         // Generous, but finite: a correct walk is far shorter, and a budget
@@ -399,7 +399,8 @@ impl TetMesh {
                     let n = tet.nb[i];
                     if n == NO_TET {
                         return Err(PyrucastError::Message(
-                            "mesh_volume: a point fell outside the bootstrap tetrahedron".into(),
+                            "triangulate_volume: a point fell outside the bootstrap tetrahedron"
+                                .into(),
                         ));
                     }
                     t = n as usize;
@@ -412,7 +413,7 @@ impl TetMesh {
             }
         }
         Err(PyrucastError::Message(
-            "mesh_volume: point location did not converge (internal error)".into(),
+            "triangulate_volume: point location did not converge (internal error)".into(),
         ))
     }
 

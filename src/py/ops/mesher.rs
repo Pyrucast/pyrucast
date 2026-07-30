@@ -392,25 +392,8 @@ pub fn triangulate_surface(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Fill the interior of a closed **TRI3** surface `envelope` with TET4 cells
-/// using a size-controlled **Delaunay** fill that **creates interior nodes** —
-/// the 3-D companion of `triangulate_surface`.
-///
-/// `size` sets the target element edge length; `None` uses the mean edge
-/// length of the envelope's faces. The envelope must be a closed,
-/// consistently oriented TRI3 surface on a 3-D Coords. The result is a Mesh
-/// with a single TET4 submesh; boundary nodes are reused. This first version
-/// targets convex or mildly concave envelopes.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-#[pyo3(signature = (envelope, size=None))]
-pub fn volume(py: Python<'_>, envelope: PyRef<PyMesh>, size: Option<f64>) -> PyResult<PyMesh> {
-    // Poll Python signals while paving so a long mesh stays Ctrl+C-able.
-    let mesh = crate::ops::mesher::volume_cancellable(&envelope.inner, size, &PySignals(py))?;
-    Ok(PyMesh { inner: mesh })
-}
-
-/// Fill the inside of a closed `TRI3` `envelope` with `TET4` cells.
+/// Fill the inside of a closed `TRI3` `envelope` with `TET4` cells — the 3-D
+/// companion of `triangulate_surface`.
 ///
 /// The envelope's normals must point **out of the material**; a concave
 /// shape is fine, and an internal cavity is simply another closed surface
@@ -427,14 +410,14 @@ pub fn volume(py: Python<'_>, envelope: PyRef<PyMesh>, size: Option<f64>) -> PyR
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (envelope, size=None, allow_surface_nodes=false))]
-pub fn mesh_volume(
+pub fn triangulate_volume(
     py: Python<'_>,
     envelope: PyRef<PyMesh>,
     size: Option<f64>,
     allow_surface_nodes: bool,
 ) -> PyResult<PyMesh> {
     // Poll Python signals while meshing so a long run stays Ctrl+C-able.
-    let mesh = crate::ops::mesher::mesh_volume_cancellable(
+    let mesh = crate::ops::mesher::triangulate_volume_cancellable(
         &envelope.inner,
         size,
         allow_surface_nodes,

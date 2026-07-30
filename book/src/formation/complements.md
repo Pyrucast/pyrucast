@@ -48,8 +48,8 @@ plaque trouée en volume :
   coordonnées (Cast3M `TRAN`/`VOLU 'TRAN'`) ;
 - `pyrucast.mesher.sweep_solid(mesh_a, mesh_b, n_couches)` — balayage entre
   deux profils `TRI3`/`QUA4` non parallèles (Cast3M `REGL` + `VOLU`) ;
-- `pyrucast.mesher.volume(enveloppe, taille)` — remplissage `TET4` d'une
-  enveloppe `TRI3` fermée par triangulation de Delaunay 3D (Cast3M
+- `pyrucast.mesher.triangulate_volume(enveloppe, taille)` — remplissage `TET4`
+  d'une enveloppe `TRI3` fermée par triangulation de Delaunay 3D (Cast3M
   `VOLU` par remplissage).
 
 Aucun de ces trois n'est mis en œuvre dans les scripts de cette formation.

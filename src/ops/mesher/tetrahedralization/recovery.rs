@@ -241,7 +241,7 @@ pub fn describe(mesh: &TetMesh, stuck: &Stuck) -> PyrucastError {
         .collect::<Vec<_>>()
         .join(" – ");
     PyrucastError::Message(format!(
-        "mesh_volume: cannot fit the envelope's {what} {where_} into the mesh without adding a \
+        "triangulate_volume: cannot fit the envelope's {what} {where_} into the mesh without adding a \
          node on the surface. Pass allow_surface_nodes to let the mesher subdivide the envelope \
          there — its shape is kept, only its facets are cut finer — or refine the surface mesh \
          yourself around that spot."

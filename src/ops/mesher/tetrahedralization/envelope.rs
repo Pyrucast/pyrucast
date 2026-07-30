@@ -81,14 +81,14 @@ impl Envelope {
     pub fn extract(mesh: &Mesh, cancel: &dyn Cancel) -> Result<Envelope> {
         if mesh.is_empty() {
             return Err(PyrucastError::Message(
-                "mesh_volume: the envelope is empty".into(),
+                "triangulate_volume: the envelope is empty".into(),
             ));
         }
         let coords_handle = mesh.coords()?;
         let dim = read(&coords_handle)?.dim();
         if dim != 3 {
             return Err(PyrucastError::Message(format!(
-                "mesh_volume: the envelope must be 3-D, got dim={dim}"
+                "triangulate_volume: the envelope must be 3-D, got dim={dim}"
             )));
         }
 
@@ -102,7 +102,7 @@ impl Envelope {
             let et = sm.element_type();
             if et != ElementType::TRI3 {
                 return Err(PyrucastError::Message(format!(
-                    "mesh_volume: the envelope must be made of TRI3 facets, got {et}. \
+                    "triangulate_volume: the envelope must be made of TRI3 facets, got {et}. \
                      A quadrangle has no single plane to respect, so it is refused rather \
                      than silently split; mesh the surface in TRI3 first."
                 )));
@@ -148,7 +148,7 @@ impl Envelope {
     fn validate(mut self, cancel: &dyn Cancel) -> Result<Envelope> {
         if self.points.len() < 4 || self.facets.len() < 4 {
             return Err(PyrucastError::Message(format!(
-                "mesh_volume: a closed surface needs at least 4 nodes and 4 facets, got {} and {}",
+                "triangulate_volume: a closed surface needs at least 4 nodes and 4 facets, got {} and {}",
                 self.points.len(),
                 self.facets.len()
             )));
@@ -165,7 +165,7 @@ impl Envelope {
         self.volume = self.signed_volume();
         if self.volume <= 0.0 {
             return Err(PyrucastError::Message(format!(
-                "mesh_volume: the envelope encloses a signed volume of {:.6e}, so its normals \
+                "triangulate_volume: the envelope encloses a signed volume of {:.6e}, so its normals \
                  point into the material instead of out of it — use invert() on the surface. \
                  An internal cavity, on the other hand, is meant to have inward normals: only \
                  the total must be positive.",
@@ -203,7 +203,7 @@ impl Envelope {
                             let d2: f64 = (0..3).map(|k| (p[k] - q[k]).powi(2)).sum();
                             if d2 <= tol2 {
                                 return Err(PyrucastError::Message(format!(
-                                    "mesh_volume: nodes {} and {} of the envelope are at the \
+                                    "triangulate_volume: nodes {} and {} of the envelope are at the \
                                      same place {:?} — weld them with merge_nodes() first",
                                     self.node_ids[j as usize].0, self.node_ids[i].0, p
                                 )));
@@ -224,7 +224,7 @@ impl Envelope {
         for (fi, f) in self.facets.iter().enumerate() {
             if let Some(repeated) = (0..3).find(|&k| f[k] == f[(k + 1) % 3]) {
                 return Err(PyrucastError::Message(format!(
-                    "mesh_volume: facet {fi} of the envelope uses node {} twice",
+                    "triangulate_volume: facet {fi} of the envelope uses node {} twice",
                     self.node_ids[f[repeated] as usize].0
                 )));
             }
@@ -235,7 +235,7 @@ impl Envelope {
             );
             if collinear3d(a, b, c) {
                 return Err(PyrucastError::Message(format!(
-                    "mesh_volume: facet {fi} of the envelope is flat — its nodes {}, {} and {} \
+                    "triangulate_volume: facet {fi} of the envelope is flat — its nodes {}, {} and {} \
                      are collinear, so it has no normal",
                     self.node_ids[f[0] as usize].0,
                     self.node_ids[f[1] as usize].0,
@@ -246,7 +246,7 @@ impl Envelope {
             key.sort_unstable();
             if let Some(prev) = seen.insert(key, fi) {
                 return Err(PyrucastError::Message(format!(
-                    "mesh_volume: facets {prev} and {fi} of the envelope share the same three \
+                    "triangulate_volume: facets {prev} and {fi} of the envelope share the same three \
                      nodes {}, {}, {}",
                     self.node_ids[key[0] as usize].0,
                     self.node_ids[key[1] as usize].0,
@@ -267,7 +267,7 @@ impl Envelope {
                 let edge = (f[k], f[(k + 1) % 3]);
                 if let Some(prev) = owner.insert(edge, fi) {
                     return Err(PyrucastError::Message(format!(
-                        "mesh_volume: facets {prev} and {fi} of the envelope both walk the edge \
+                        "triangulate_volume: facets {prev} and {fi} of the envelope both walk the edge \
                          ({}, {}) in the same direction, so they disagree on which side is out \
                          — orient the surface consistently (see orient()) or remove the overlap",
                         self.node_ids[edge.0 as usize].0, self.node_ids[edge.1 as usize].0
@@ -278,7 +278,7 @@ impl Envelope {
         for (&(u, v), &fi) in &owner {
             if !owner.contains_key(&(v, u)) {
                 return Err(PyrucastError::Message(format!(
-                    "mesh_volume: edge ({}, {}) of facet {fi} has no facet on its other side, \
+                    "triangulate_volume: edge ({}, {}) of facet {fi} has no facet on its other side, \
                      so the envelope is not closed",
                     self.node_ids[u as usize].0, self.node_ids[v as usize].0
                 )));
@@ -296,7 +296,7 @@ impl Envelope {
         match first_self_intersection(&self.points, &self.facets) {
             None => Ok(()),
             Some((i, j)) => Err(PyrucastError::Message(format!(
-                "mesh_volume: facets {i} (nodes {}, {}, {}) and {j} (nodes {}, {}, {}) of the \
+                "triangulate_volume: facets {i} (nodes {}, {}, {}) and {j} (nodes {}, {}, {}) of the \
                  envelope pass through each other, so the surface has no well-defined inside",
                 self.node_ids[self.facets[i][0] as usize].0,
                 self.node_ids[self.facets[i][1] as usize].0,

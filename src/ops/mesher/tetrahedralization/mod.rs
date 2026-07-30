@@ -1,4 +1,4 @@
-//! Internal machinery of the tetrahedral mesher `mesh_volume`.
+//! Internal machinery of the tetrahedral mesher `triangulate_volume`.
 //!
 //! The operator itself reads the envelope, validates it and materializes the
 //! result; everything between those two ends lives here, on plain index and

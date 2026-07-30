@@ -21,8 +21,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `translate(mesh, vector)` | **copie** du maillage translatée de `vector` (nœuds neufs, original intact) |
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
-| `volume(envelope, size=None)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` par **Delaunay** (voir plus bas) |
-| `mesh_volume(envelope, size=None, allow_surface_nodes=False)` | maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` : Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
+| `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (TET4/PENTA6/HEX8) en faces `TRI3`/`QUA4`, **une par face plane** du solide (voir plus bas) |
 | `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
@@ -388,103 +387,16 @@ store ; lissage et recombinaison QUA4 sont parallélisés (`rayon`). Le module
 géométriques réutilisables indépendamment du système `Mesh`
 (voir [Triangulation](../triangulation.md)).
 
-## Mailleur volumique : `volume`
-
-`volume(envelope, size=None)` est le **compagnon 3D** de `triangulate_surface` : il remplit
-l'intérieur d'une **enveloppe surfacique fermée** avec des tétraèdres `TET4`, à
-taille de maille imposée, en créant les nœuds internes nécessaires. Le
-remplissage d'un intérieur vide est précisément ce que fait un opérateur de
-volume ; il s'appuie ici sur un cœur **Delaunay** robuste.
-
-L'`envelope` doit être une **surface `TRI3` fermée et orientée de façon
-cohérente** (un ou plusieurs sous-maillages, tous `TRI3`) sur un `Coords` **3D**.
-`size` fixe la longueur d'arête cible ; `None` prend la longueur moyenne des
-arêtes de l'enveloppe. Le résultat est un `Mesh` à un sous-maillage `TET4`
-(orientation à volume signé positif — convention `TET4`) ; les nœuds de bord
-sont **réutilisés**, les nœuds internes créés dans le même `Coords`.
-
-### Méthode
-
-Le remplissage est le pendant 3D du pipeline 2D de `triangulate_surface` :
-Delaunay du bord, puis **récupération contrainte de la peau** et **excavation
-par flood-fill** (au lieu d'une découpe par centroïde, qui laissait des
-tétraèdres traverser les concavités et les trous).
-
-1. **Delaunay du bord.** Les seuls nœuds de bord sont tétraédrisés par
-   l'algorithme incrémental de **Bowyer–Watson**. Un *jitter* déterministe
-   minuscule est appliqué au calcul de **connectivité** pour lever sans
-   ambiguïté les dégénérescences cosphériques (les huit coins d'un cube, par
-   exemple) ; la sortie conserve les coordonnées exactes.
-2. **Récupération de la peau.** Chaque face de peau absente du Delaunay (une
-   diagonale de quad prise « à l'envers », une arête de concavité) est
-   récupérée en re-tétraédrisant le petit corridor qu'elle traverse, puis
-   **marquée contrainte**. Toute face de peau qui resterait irrécupérable →
-   **erreur claire** (polyèdre de type Schönhardt), jamais un maillage faux.
-3. **Points internes.** Une grille de nœuds candidats à la taille cible est
-   insérée *dans le maillage déjà contraint* (aucun nœud si la taille dépasse
-   la géométrie), la cavité de Bowyer–Watson étant **coupée aux faces
-   contraintes** : un nœud interne ne peut jamais raboter une face de peau.
-4. **Excavation.** Un *flood-fill* depuis un tétraèdre intérieur garde
-   exactement ce que la peau enferme, sans jamais traverser la surface : les
-   concavités, les trous et l'autre côté d'une pièce mince sont creusés
-   exactement.
-
-> **Portée.** Les enveloppes convexes ou peu concaves sont maillées
-> directement. Les surfaces fortement non convexes riches en **arêtes réflexes**
-> (le pourtour d'un trou facetté, par exemple) peuvent encore déclencher
-> l'erreur de récupération : une récupération de bord 3D complète (prédicats
-> exacts) reste à faire.
-
-### Exemple Python
+## Mailleur volumique : `triangulate_volume`
 
 ```python
-import pyrucast
-
-# Enveloppe : la surface d'un cube, en TRI3 fermés et orientés.
-# (par ex. obtenue en assemblant des faces TRI3, ou via les mailleurs de
-#  surface puis une mise en volume.)
-env = construire_enveloppe_cube()  # Mesh TRI3 fermé sur un Coords 3D
-
-# Remplissage en tétraèdres de taille ~0,5.
-tet = pyrucast.mesher.volume(env, 0.5)
-print(tet.element_types())  # ['TET4']
+solide = pyrucast.mesher.triangulate_volume(
+    enveloppe, size=None, allow_surface_nodes=False
+)
 ```
 
-### Interruption
-
-Comme `triangulate_surface`, un maillage trop long s'**interrompt** par `Ctrl+C` : `volume`
-sonde les signaux pendant la génération des points et l'insertion Delaunay, et
-lève une `KeyboardInterrupt`. Côté Rust,
-`volume_cancellable(envelope, size, &cancel)` accepte un jeton
-d'interruption (timeout, drapeau partagé…) — voir
-[Interrompre une fonction](../developper/interrompre-une-fonction.md).
-
-### Limitations actuelles
-
-- **Entrée `TRI3` seulement** : les enveloppes `QUA4` (découpe en triangles) ne
-  sont pas encore acceptées.
-- **Convexe ou peu concave** : la découpe se fait au centroïde, sans
-  *recouvrement de frontière* (boundary recovery). Pour une enveloppe convexe le
-  pavage est exact ; sur une **forte concavité**, le bord Delaunay s'écarte de
-  la surface d'entrée (le creux peut être comblé) — les cavités internes et les
-  surfaces de genre > 0 ne sont pas non plus garanties.
-- **Taille uniforme** : pas encore de champ de densité variable.
-- **Sortie `TET4`** : le remplissage hexaédrique (`HEX8`) n'est pas couvert.
-- Le maillage des nœuds **de bord** suit la triangulation de Delaunay : les
-  faces externes des `TET4` peuvent diviser les facettes d'entrée selon d'autres
-  diagonales (même surface, autre découpe).
-
-Côté Rust, `ops::mesher::volume(&envelope, Some(0.5))`. Le cœur géométrique
-(`pave_volume`) opère sur de simples `Vec<Point3>` sans toucher au store —
-frontière nette pour un futur parallélisme intra-opérateur.
-
-## Mailleur volumique exact : `mesh_volume`
-
-```python
-solide = pyrucast.mesher.mesh_volume(enveloppe, size=None, allow_surface_nodes=False)
-```
-
-Remplit l'intérieur d'une **enveloppe fermée en TRI3** avec des `TET4`. Les
+Le **compagnon 3D** de `triangulate_surface` : il remplit l'intérieur d'une
+**enveloppe fermée en TRI3** avec des `TET4`. Les
 normales de l'enveloppe doivent pointer **vers l'extérieur de la matière** ;
 une forme concave est admise, et une cavité interne n'est qu'une autre
 surface fermée dont les normales pointent vers le trou — elle se soustrait
@@ -493,7 +405,7 @@ d'elle-même, sans argument dédié.
 ```python
 peau = pyrucast.mesher.convert(pyrucast.mesher.skin(solide_penta6), "TRI3")
 peau = pyrucast.mesher.invert(peau)  # voir « pièges », plus bas
-volume = pyrucast.mesher.mesh_volume(peau, size=0.01)
+volume = pyrucast.mesher.triangulate_volume(peau, size=0.01)
 ```
 
 L'enveloppe est **respectée exactement** : ses nœuds sont réutilisés tels
@@ -542,7 +454,7 @@ corrompt le graphe d'adjacence. C'est de cette façon qu'un mailleur
 incrémental tourne en boucle ou produit des cellules qui se recouvrent.
 
 Ni une tolérance ni un jitter n'y remédient : ils rendent le prédicat
-*généralement* juste, pas cohérent avec lui-même. `mesh_volume` calcule donc
+*généralement* juste, pas cohérent avec lui-même. `triangulate_volume` calcule donc
 le **signe exact**, par la technique des expansions flottantes de Shewchuk :
 une estimation en `f64` comparée à une borne d'erreur rigoureuse, puis, dans
 le seul cas où le signe reste indécidable, une réévaluation en arithmétique
@@ -728,7 +640,7 @@ endroit — ou de laisser le mailleur le faire.
 ### `allow_surface_nodes` : ce qu'on échange
 
 ```python
-solide = pyrucast.mesher.mesh_volume(peau, allow_surface_nodes=True)
+solide = pyrucast.mesher.triangulate_volume(peau, allow_surface_nodes=True)
 ```
 
 Autorise le mailleur à **couper l'enveloppe plus fin** là où il ne peut ni la
@@ -750,7 +662,7 @@ posés sur l'enveloppe, le maillage rendu porte un **second sous-maillage de
 sans rien ajouter n'a qu'un sous-maillage `TET4` :
 
 ```python
-solide = pyrucast.mesher.mesh_volume(peau, allow_surface_nodes=True)
+solide = pyrucast.mesher.triangulate_volume(peau, allow_surface_nodes=True)
 if solide.element_types() == ["TET4", "POI1"]:
     ajoutes = solide.cell_counts()[1]
     print(f"{ajoutes} nœud(s) posé(s) sur la peau")
@@ -771,7 +683,7 @@ partout où le maillage veut bien s'en séparer : sur la plaque de la formation,
 
 **Orientation après `extrude`.** `extrude` ne vérifie pas que sa direction
 est du côté de la normale de la surface source. Un `skin` de son résultat
-revient donc souvent avec les normales **rentrantes**, et `mesh_volume` le
+revient donc souvent avec les normales **rentrantes**, et `triangulate_volume` le
 refuse en vous renvoyant vers `invert`. C'est le cas du pipeline
 `triangulate_surface` → `extrude` → `skin` ci-dessus.
 
@@ -797,8 +709,8 @@ Le coût est essentiellement **linéaire** en nombre de mailles produites.
 L'opération est interruptible : `Ctrl+C` pendant un long maillage lève
 `KeyboardInterrupt` sans rien laisser derrière.
 
-Côté Rust, `ops::mesher::mesh_volume(envelope, size, allow_surface_nodes)`,
-et `mesh_volume_cancellable(…, cancel)` pour la forme interruptible.
+Côté Rust, `ops::mesher::triangulate_volume(envelope, size, allow_surface_nodes)`,
+et `triangulate_volume_cancellable(…, cancel)` pour la forme interruptible.
 
 ## Bord d'une surface : `border`
 

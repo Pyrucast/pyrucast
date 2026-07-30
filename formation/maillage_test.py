@@ -96,7 +96,10 @@ def main() -> None:
     skin[0].face_color = (255, 0, 0)
     skin = pc.mesher.convert(skin, "TRI3")
     skin.plot(view=(-45, 25, 1.0), wireframe=True)
-    volume2 = pc.mesher.volume(skin, 0.5)
+    # La peau de la plaque ne rentre pas telle quelle dans une
+    # tétraédrisation : `allow_surface_nodes` laisse le mailleur découper
+    # l'enveloppe là où il en a besoin (la forme, elle, est conservée).
+    volume2 = pc.mesher.triangulate_volume(skin, 0.5, allow_surface_nodes=True)
     volume2.plot(view=(45, 25, 1.0), wireframe=False)
     # ANCHOR_END: non_structure
 

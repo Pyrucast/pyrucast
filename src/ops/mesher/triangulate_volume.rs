@@ -186,17 +186,17 @@ const DEGENERATE_SHAPE: f64 = 1e-4;
 /// pass: it must be positive when given, and is not used yet.
 ///
 /// This is the uninterruptible convenience form; for a long mesh a caller
-/// may want to stop early, use [`mesh_volume_cancellable`].
-pub fn mesh_volume(
+/// may want to stop early, use [`triangulate_volume_cancellable`].
+pub fn triangulate_volume(
     envelope: &Mesh,
     target_size: Option<f64>,
     allow_surface_nodes: bool,
 ) -> Result<Mesh> {
-    mesh_volume_cancellable(envelope, target_size, allow_surface_nodes, &NoCancel)
+    triangulate_volume_cancellable(envelope, target_size, allow_surface_nodes, &NoCancel)
 }
 
-/// [`mesh_volume`], stoppable through `cancel`.
-pub fn mesh_volume_cancellable(
+/// [`triangulate_volume`], stoppable through `cancel`.
+pub fn triangulate_volume_cancellable(
     envelope: &Mesh,
     target_size: Option<f64>,
     allow_surface_nodes: bool,
@@ -205,7 +205,7 @@ pub fn mesh_volume_cancellable(
     if let Some(h) = target_size {
         if h.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
             return Err(PyrucastError::Message(format!(
-                "mesh_volume: size must be > 0, got {h}"
+                "triangulate_volume: size must be > 0, got {h}"
             )));
         }
     }
@@ -287,7 +287,7 @@ pub fn mesh_volume_cancellable(
     // Whichever wall the loop ran into, say which one.
     Err(unusable.unwrap_or_else(|| {
         PyrucastError::Message(format!(
-            "mesh_volume: the envelope still would not fit after {MAX_SUBDIVISIONS} rounds of \
+            "triangulate_volume: the envelope still would not fit after {MAX_SUBDIVISIONS} rounds of \
              subdividing it — the surface is likely self-touching or extremely thin somewhere"
         ))
     }))
@@ -344,7 +344,7 @@ fn degenerate(mesh: &TetMesh, stubborn: &[([u32; 4], f64)]) -> PyrucastError {
         })
         .collect();
     PyrucastError::Message(format!(
-        "mesh_volume: the mesh has {} flat cell(s) that cannot be improved — the worst, around \
+        "triangulate_volume: the mesh has {} flat cell(s) that cannot be improved — the worst, around \
          ({}), has a shape of {quality:.2e} where 1 is a regular tetrahedron. Its four corners \
          are all nodes of the envelope, so no node can be added to break it up and none of its \
          own may be moved. Refine the surface mesh around that point, or pass \
@@ -417,7 +417,7 @@ fn warn_if_subdivided(env: &Envelope, cells: &[[u32; 4]]) -> Vec<u32> {
         return kept;
     }
     eprintln!(
-        "mesh_volume: warning — the envelope would not fit as given, so {added} node(s) were \
+        "triangulate_volume: warning — the envelope would not fit as given, so {added} node(s) were \
          added on it. Its shape is unchanged (each new node lies on the edge or facet it \
          divides), but the skin of the result no longer matches the surface mesh passed in. \
          The result therefore carries a SECOND SUBMESH, of POI1, naming those {added} node(s): \
@@ -437,7 +437,7 @@ fn warn_if_subdivided(env: &Envelope, cells: &[[u32; 4]]) -> Vec<u32> {
 fn validate(mesh: &TetMesh, env: &Envelope, inside: &[bool]) -> Result<Vec<[u32; 4]>> {
     if let Some(defect) = mesh.find_defect() {
         return Err(PyrucastError::Message(format!(
-            "mesh_volume: {defect} (internal error)"
+            "triangulate_volume: {defect} (internal error)"
         )));
     }
 
@@ -448,7 +448,7 @@ fn validate(mesh: &TetMesh, env: &Envelope, inside: &[bool]) -> Result<Vec<[u32;
         .collect();
     if cells.is_empty() {
         return Err(PyrucastError::Message(
-            "mesh_volume: produced no cell".into(),
+            "triangulate_volume: produced no cell".into(),
         ));
     }
 
@@ -456,7 +456,7 @@ fn validate(mesh: &TetMesh, env: &Envelope, inside: &[bool]) -> Result<Vec<[u32;
     let drift = (volume - env.volume()).abs();
     if drift > VOLUME_TOLERANCE * env.volume() {
         return Err(PyrucastError::Message(format!(
-            "mesh_volume: the mesh fills {volume:.12e} but the envelope encloses {:.12e} \
+            "triangulate_volume: the mesh fills {volume:.12e} but the envelope encloses {:.12e} \
              (internal error)",
             env.volume()
         )));
@@ -479,7 +479,7 @@ fn validate(mesh: &TetMesh, env: &Envelope, inside: &[bool]) -> Result<Vec<[u32;
         key.sort_unstable();
         if !boundary.remove(&key) {
             return Err(PyrucastError::Message(format!(
-                "mesh_volume: an envelope facet at {:?} is not on the boundary of the mesh \
+                "triangulate_volume: an envelope facet at {:?} is not on the boundary of the mesh \
                  (internal error)",
                 env.points()[f[0] as usize]
             )));
@@ -487,7 +487,7 @@ fn validate(mesh: &TetMesh, env: &Envelope, inside: &[bool]) -> Result<Vec<[u32;
     }
     if !boundary.is_empty() {
         return Err(PyrucastError::Message(format!(
-            "mesh_volume: the mesh has {} boundary face(s) that are not envelope facets \
+            "triangulate_volume: the mesh has {} boundary face(s) that are not envelope facets \
              (internal error)",
             boundary.len()
         )));
@@ -618,7 +618,7 @@ mod tests {
     }
 
     /// Total volume of a TET4 mesh, read back through the public API.
-    fn mesh_volume_of(mesh: &Mesh) -> f64 {
+    fn volume_of(mesh: &Mesh) -> f64 {
         let mut total = 0.0;
         for (si, &n) in mesh.cell_counts().unwrap().iter().enumerate() {
             if mesh.element_types().unwrap()[si] != ElementType::TET4 {
@@ -642,11 +642,11 @@ mod tests {
     fn meshes_a_box_and_keeps_its_volume() {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
-        let mesh = mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), None, false).unwrap();
+        let mesh = triangulate_volume(&surface(&coords, &nodes, &BOX_FACETS), None, false).unwrap();
 
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
         assert!(mesh.cell_count().unwrap() >= 5);
-        let v = mesh_volume_of(&mesh);
+        let v = volume_of(&mesh);
         assert!((v - 1.0).abs() < 1e-12, "volume {v}");
     }
 
@@ -655,7 +655,7 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let envelope = surface(&coords, &nodes, &BOX_FACETS);
-        let mesh = mesh_volume(&envelope, None, false).unwrap();
+        let mesh = triangulate_volume(&envelope, None, false).unwrap();
 
         // Every corner the caller gave is still there, with its own identity.
         let mut used: Vec<NodeId> = Vec::new();
@@ -683,7 +683,7 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let env = surface(&coords, &nodes, &BOX_FACETS);
-        let mesh = mesh_volume(&env, None, false).unwrap();
+        let mesh = triangulate_volume(&env, None, false).unwrap();
 
         // `skin` peels the boundary independently; it must find the same
         // twelve triangles.
@@ -713,7 +713,8 @@ mod tests {
         ];
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
-        let err = mesh_volume(&surface(&coords, &nodes, &UNFILLABLE), None, false).unwrap_err();
+        let err =
+            triangulate_volume(&surface(&coords, &nodes, &UNFILLABLE), None, false).unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("without adding a node on the surface"),
@@ -736,9 +737,9 @@ mod tests {
         .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
         .collect();
         let facets = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]];
-        let mesh = mesh_volume(&surface(&coords, &n, &facets), None, false).unwrap();
+        let mesh = triangulate_volume(&surface(&coords, &n, &facets), None, false).unwrap();
         assert_eq!(mesh.cell_count().unwrap(), 1);
-        assert!((mesh_volume_of(&mesh) - 1.0 / 6.0).abs() < 1e-15);
+        assert!((volume_of(&mesh) - 1.0 / 6.0).abs() < 1e-15);
     }
 
     #[test]
@@ -753,8 +754,8 @@ mod tests {
                     .unwrap();
             }
         }
-        let mesh = mesh_volume(&Mesh::from_submesh(sm), None, false).unwrap();
-        assert!((mesh_volume_of(&mesh) - 3.0).abs() < 1e-12);
+        let mesh = triangulate_volume(&Mesh::from_submesh(sm), None, false).unwrap();
+        assert!((volume_of(&mesh) - 3.0).abs() < 1e-12);
     }
 
     #[test]
@@ -774,8 +775,8 @@ mod tests {
             sm.add_cell(&[inner[f[0]], inner[f[2]], inner[f[1]]])
                 .unwrap();
         }
-        let mesh = mesh_volume(&Mesh::from_submesh(sm), None, false).unwrap();
-        let v = mesh_volume_of(&mesh);
+        let mesh = triangulate_volume(&Mesh::from_submesh(sm), None, false).unwrap();
+        let v = volume_of(&mesh);
         assert!((v - (27.0 - 1.0)).abs() < 1e-12, "volume {v}");
     }
 
@@ -812,8 +813,8 @@ mod tests {
             facets.push([b(i), b(j), t(j)]);
             facets.push([b(i), t(j), t(i)]);
         }
-        let mesh = mesh_volume(&surface(&coords, &n, &facets), None, true).unwrap();
-        let v = mesh_volume_of(&mesh);
+        let mesh = triangulate_volume(&surface(&coords, &n, &facets), None, true).unwrap();
+        let v = volume_of(&mesh);
         assert!((v - 3.0).abs() < 1e-12, "volume {v}");
     }
 
@@ -957,7 +958,7 @@ mod tests {
         // opposed to the eight-corner puzzles above.
         let coords = insert(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 8, 0.15);
-        let mesh = mesh_volume(&envelope, None, true).unwrap();
+        let mesh = triangulate_volume(&envelope, None, true).unwrap();
 
         // Nodes had to be added on the envelope here, so the result carries a
         // second submesh naming them.
@@ -966,7 +967,7 @@ mod tests {
             vec![ElementType::TET4, ElementType::POI1]
         );
         assert!(tet_count(&mesh) > 2000, "{}", tet_count(&mesh));
-        let v = mesh_volume_of(&mesh);
+        let v = volume_of(&mesh);
         assert!((v - 0.4).abs() < 1e-12, "volume {v}");
     }
 
@@ -985,7 +986,7 @@ mod tests {
                 .collect()
         };
 
-        let mesh = mesh_volume(&envelope, None, true).unwrap();
+        let mesh = triangulate_volume(&envelope, None, true).unwrap();
         let types = mesh.element_types().unwrap();
         assert_eq!(types, vec![ElementType::TET4, ElementType::POI1]);
 
@@ -1011,7 +1012,7 @@ mod tests {
     fn a_mesh_that_needed_no_extra_node_has_no_poi1_submesh() {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
-        let mesh = mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), None, true).unwrap();
+        let mesh = triangulate_volume(&surface(&coords, &nodes, &BOX_FACETS), None, true).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
     }
 
@@ -1019,9 +1020,9 @@ mod tests {
     fn meshes_the_envelope_of_an_extruded_plate() {
         let coords = insert(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 2, 0.5);
-        let mesh = mesh_volume(&envelope, None, false).unwrap();
+        let mesh = triangulate_volume(&envelope, None, false).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
-        let v = mesh_volume_of(&mesh);
+        let v = volume_of(&mesh);
         assert!((v - 0.4).abs() < 1e-12, "volume {v}");
     }
 
@@ -1035,8 +1036,8 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 3, 0.35);
 
-        let mesh = mesh_volume(&envelope, None, false).unwrap();
-        let v = mesh_volume_of(&mesh);
+        let mesh = triangulate_volume(&envelope, None, false).unwrap();
+        let v = volume_of(&mesh);
         assert!((v - 0.4).abs() < 1e-12, "volume {v}");
 
         // Nodes were added — refinement fills the inside — but none of them
@@ -1065,8 +1066,8 @@ mod tests {
                 .collect()
         };
 
-        let mesh = mesh_volume(&envelope, None, true).unwrap();
-        assert!((mesh_volume_of(&mesh) - 0.4).abs() < 1e-12);
+        let mesh = triangulate_volume(&envelope, None, true).unwrap();
+        assert!((volume_of(&mesh) - 0.4).abs() < 1e-12);
 
         let dist = |a: &[f64], b: &[f64]| -> f64 {
             a.iter()
@@ -1159,7 +1160,7 @@ mod tests {
         // sliver pass are for, so this is what has to be measured.
         let coords = insert(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 6, 0.2);
-        let mesh = mesh_volume(&envelope, None, true).unwrap();
+        let mesh = triangulate_volume(&envelope, None, true).unwrap();
 
         let n = tet_count(&mesh);
         let mut angles = Vec::with_capacity(n);
@@ -1235,8 +1236,8 @@ mod tests {
         // it, so the envelope goes through as given.
         let coords = insert(Coords::new(3).unwrap());
         let (envelope, volume) = subdivided_blob(&coords, 3);
-        let mesh = mesh_volume(&envelope, None, false).unwrap();
-        let v = mesh_volume_of(&mesh);
+        let mesh = triangulate_volume(&envelope, None, false).unwrap();
+        let v = volume_of(&mesh);
         assert!((v - volume).abs() < 1e-9 * volume, "volume {v} vs {volume}");
     }
 
@@ -1244,8 +1245,8 @@ mod tests {
     fn rejects_a_bad_size() {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
-        let err =
-            mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), Some(0.0), false).unwrap_err();
+        let err = triangulate_volume(&surface(&coords, &nodes, &BOX_FACETS), Some(0.0), false)
+            .unwrap_err();
         assert!(err.to_string().contains("size must be > 0"), "{err}");
     }
 
@@ -1255,9 +1256,13 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let flag = AtomicBool::new(true);
-        let err =
-            mesh_volume_cancellable(&surface(&coords, &nodes, &BOX_FACETS), None, false, &flag)
-                .unwrap_err();
+        let err = triangulate_volume_cancellable(
+            &surface(&coords, &nodes, &BOX_FACETS),
+            None,
+            false,
+            &flag,
+        )
+        .unwrap_err();
         assert!(matches!(err, PyrucastError::Interrupted));
     }
 }

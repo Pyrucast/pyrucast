@@ -14,7 +14,7 @@ Maillage - création;MANU;Maillage manuel (élément défini nœud par nœud);Me
 Maillage - création;LIRE;Lit un maillage depuis un fichier externe (gmsh .msh, ASCII/binaire);read_gmsh / read_gmsh_str
 Maillage - génération;TRAN;Translation/extrusion d'un maillage (engendre la dimension supérieure);extrude / translate
 Maillage - génération;ROTA;Rotation / révolution d'un maillage;rotate / sweep_solid
-Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep / sweep_solid / volume / mesh_volume
+Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep / sweep_solid / triangulate_volume
 Maillage - génération;GENE;Génère un maillage par balayage entre deux lignes;sweep
 Maillage - génération;SYME;Symétrie d'un maillage;—
 Maillage - génération;HOMO;Homothétie d'un maillage;—

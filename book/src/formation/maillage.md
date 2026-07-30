@@ -3,7 +3,7 @@
 Fil rouge de toute la formation : une **plaque rectangulaire percée d'un
 trou circulaire** — l'équivalent pyrucast, en 2D, de la pièce « structure
 avec un trou » du support Cast3M original (un tube troué, en 3D). pyrucast
-sait mailler des volumes 3D (`pyrucast.mesher.volume`, `sweep_solid`,
+sait mailler des volumes 3D (`pyrucast.mesher.triangulate_volume`, `sweep_solid`,
 `extrude`), mais la formation reste en 2D pour se concentrer sur les
 concepts — [Compléments](complements.md) pointe vers la 3D pour la suite.
 
