@@ -392,6 +392,52 @@ pub fn triangulate_surface(
     Ok(PyMesh { inner: mesh })
 }
 
+/// Pave the inside of a closed contour with quadrangles, in rows walking
+/// inward from the boundary.
+///
+/// The quadrangle-oriented companion of `triangulate_surface`, and the one to
+/// reach for when the mesh is going to be computed on: paving lays QUA4 cells
+/// down directly, in rows that follow the contour, instead of triangulating
+/// and pairing triangles up afterwards.
+///
+/// `contour` holds **one or more** closed SEG2 loops, oriented by the caller
+/// exactly as for `triangulate_surface`: a **counter-clockwise** loop is a
+/// domain's outer boundary, a **clockwise** loop is a hole. Several disjoint
+/// CCW loops pave several independent domains at once. `size` sets the target
+/// element edge length; `None` uses the mean boundary edge length per domain.
+/// `element_type` is "QUA4", "QUA8" or "QUA9". The contour may be 2-D or a
+/// planar loop in 3-D (paved in its best-fit plane, then lifted back), and its
+/// nodes are reused as they are and never moved.
+///
+/// With `all_quad=False` (the default) a handful of triangles may come back in
+/// a separate TRI3 submesh. `all_quad=True` guarantees none: a boundary loop
+/// with an odd number of segments then receives one extra node on its longest
+/// segment, which is unavoidable — a polygon with an odd number of sides
+/// cannot be filled with quadrangles alone, and paving cannot change that
+/// parity.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (contour, element_type, size=None, all_quad=false))]
+pub fn pave_surface(
+    py: Python<'_>,
+    contour: PyRef<PyMesh>,
+    element_type: &str,
+    size: Option<f64>,
+    all_quad: bool,
+) -> PyResult<PyMesh> {
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
+    // Poll Python signals while paving so a long run stays Ctrl+C-able.
+    let mesh = crate::ops::mesher::pave_surface_cancellable(
+        &contour.inner,
+        et,
+        size,
+        all_quad,
+        &PySignals(py),
+    )?;
+    Ok(PyMesh { inner: mesh })
+}
+
 /// Fill the inside of a closed `TRI3` `envelope` with `TET4` cells — the 3-D
 /// companion of `triangulate_surface`.
 ///

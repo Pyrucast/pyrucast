@@ -110,6 +110,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesher::convert, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::triangulate_volume, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::triangulate_surface, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::pave_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::to_poi1, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::barycenter, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::border, m)?)?;

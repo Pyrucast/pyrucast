@@ -29,6 +29,7 @@ from ._pyrucast import (
     to_quadratic as to_quadratic,
     transfinite as transfinite,
     translate as translate,
+    pave_surface as pave_surface,
     triangulate_surface as triangulate_surface,
     triangulate_volume as triangulate_volume,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "line",
     "merge_nodes",
     "orient",
+    "pave_surface",
     "poi1_from_nodes",
     "read_gmsh",
     "read_gmsh_str",

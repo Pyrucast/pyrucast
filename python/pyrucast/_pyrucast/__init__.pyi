@@ -65,6 +65,7 @@ __all__ = [
     "merge",
     "merge_nodes",
     "orient",
+    "pave_surface",
     "poi1_from_nodes",
     "psca",
     "read_gmsh",
@@ -2588,6 +2589,33 @@ def orient(mesh: Mesh) -> Mesh:
     lowest-indexed cell, which keeps its orientation; the absolute sense is not
     chosen (use `invert` to flip a whole mesh, e.g. a hole's boundary). Returns
     a fresh mesh sharing the input's nodes.
+    """
+
+def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False) -> Mesh:
+    r"""
+    Pave the inside of a closed contour with quadrangles, in rows walking
+    inward from the boundary.
+    
+    The quadrangle-oriented companion of `triangulate_surface`, and the one to
+    reach for when the mesh is going to be computed on: paving lays QUA4 cells
+    down directly, in rows that follow the contour, instead of triangulating
+    and pairing triangles up afterwards.
+    
+    `contour` holds **one or more** closed SEG2 loops, oriented by the caller
+    exactly as for `triangulate_surface`: a **counter-clockwise** loop is a
+    domain's outer boundary, a **clockwise** loop is a hole. Several disjoint
+    CCW loops pave several independent domains at once. `size` sets the target
+    element edge length; `None` uses the mean boundary edge length per domain.
+    `element_type` is "QUA4", "QUA8" or "QUA9". The contour may be 2-D or a
+    planar loop in 3-D (paved in its best-fit plane, then lifted back), and its
+    nodes are reused as they are and never moved.
+    
+    With `all_quad=False` (the default) a handful of triangles may come back in
+    a separate TRI3 submesh. `all_quad=True` guarantees none: a boundary loop
+    with an odd number of segments then receives one extra node on its longest
+    segment, which is unavoidable — a polygon with an odd number of sides
+    cannot be filled with quadrangles alone, and paving cannot change that
+    parity.
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:

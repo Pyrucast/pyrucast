@@ -233,7 +233,6 @@ pub fn plan(
     // whose identifications run together, merging more than two nodes at once
     // and losing a node the count was relying on. Demoting one end to a plain
     // side restores it; each demotion removes an end, so this settles.
-    let mut k = k;
     loop {
         let built = assemble(front, pts, rep, &v, &p, &theta, &k, size);
         let Ok(plan) = built else { return built };
