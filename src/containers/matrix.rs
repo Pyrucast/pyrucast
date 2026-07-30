@@ -82,10 +82,10 @@ use crate::containers::model::SubModel;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::models::{MatrixKind, Physics};
+use crate::parallel::*;
 use crate::store::{insert, read, Handle};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -1237,6 +1237,7 @@ impl Matrix {
             let factor = sub.factor();
             let block: Vec<(usize, usize, f64)> = (0..lv.len())
                 .into_par_iter()
+                .with_min_len(MIN_PARALLEL_LEN)
                 .map(|k| (trow[lr[k]], tcol[lc[k]], lv[k] * factor))
                 .collect();
             if out.is_empty() {

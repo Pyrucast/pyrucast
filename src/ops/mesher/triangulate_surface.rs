@@ -26,7 +26,8 @@
 //! its own point set with no shared mutable state, so the per-domain work is
 //! embarrassingly parallel (kept sequential here since the domain loop
 //! shares a `&dyn Cancel` token, which is not `Sync`). Smoothing and the
-//! QUA4 recombination pass run over plain local data and use `rayon`.
+//! QUA4 recombination pass run over plain local data and parallelise through
+//! [`crate::parallel`], grain policy included.
 
 use crate::aggregate::Aggregate;
 use crate::containers::mesh::{
@@ -34,8 +35,8 @@ use crate::containers::mesh::{
 };
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
+use crate::parallel::*;
 use crate::store::{insert, read, Handle};
-use rayon::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 // Ruppert refinement provably terminates for a minimum-angle threshold up
@@ -1834,31 +1835,34 @@ fn smooth(pts: &mut [Point2], is_boundary: &[bool], tris: &[[u32; 3]], iters: us
     }
     for _ in 0..iters {
         let old = pts.to_vec();
-        pts.par_iter_mut().enumerate().for_each(|(i, p)| {
-            if is_boundary[i] || ring[i].is_empty() {
-                return;
-            }
-            let mut c = Vector2::zeros();
-            for &nb in &ring[i] {
-                c += old[nb as usize].coords;
-            }
-            c /= ring[i].len() as f64;
-            let cand = Point2::from(old[i].coords * 0.5 + c * 0.5);
-            let safe = incident[i].iter().all(|&ti| {
-                let t = tris[ti as usize];
-                let q = |k: u32| {
-                    if k as usize == i {
-                        cand
-                    } else {
-                        old[k as usize]
-                    }
-                };
-                orient(q(t[0]), q(t[1]), q(t[2])) > 0.0
+        pts.par_iter_mut()
+            .with_min_len(MIN_PARALLEL_LEN)
+            .enumerate()
+            .for_each(|(i, p)| {
+                if is_boundary[i] || ring[i].is_empty() {
+                    return;
+                }
+                let mut c = Vector2::zeros();
+                for &nb in &ring[i] {
+                    c += old[nb as usize].coords;
+                }
+                c /= ring[i].len() as f64;
+                let cand = Point2::from(old[i].coords * 0.5 + c * 0.5);
+                let safe = incident[i].iter().all(|&ti| {
+                    let t = tris[ti as usize];
+                    let q = |k: u32| {
+                        if k as usize == i {
+                            cand
+                        } else {
+                            old[k as usize]
+                        }
+                    };
+                    orient(q(t[0]), q(t[1]), q(t[2])) > 0.0
+                });
+                if safe {
+                    *p = cand;
+                }
             });
-            if safe {
-                *p = cand;
-            }
-        });
     }
 }
 
@@ -1898,6 +1902,7 @@ fn recombine_to_quads(pts: &[Point2], tris: &[[u32; 3]]) -> (Vec<[u32; 4]>, Vec<
     }
     let candidates: Vec<(f64, usize, usize, u32, u32)> = tris
         .par_iter()
+        .with_min_len(MIN_PARALLEL_LEN)
         .enumerate()
         .flat_map_iter(|(i, t)| {
             let edge_owner = &edge_owner;

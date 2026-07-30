@@ -23,11 +23,11 @@ use crate::containers::matrix::{AssemblyPattern, BlockSlots, Matrix, NamedDof};
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
 use crate::ops::assemble::coloring;
+use crate::parallel::*;
 use crate::store::read;
 use nalgebra_sparse::CsrMatrix;
-use rayon::prelude::*;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 
 /// Build the global CSR sparsity [`AssemblyPattern`] for `k` from its blocks'
 /// topology alone — no kernel evaluation. Each block contributes its global
@@ -106,10 +106,13 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     }
 
     // Sort + dedup each row's columns independently → parallel across rows.
-    row_cols.par_iter_mut().for_each(|cols| {
-        cols.sort_unstable();
-        cols.dedup();
-    });
+    row_cols
+        .par_iter_mut()
+        .with_min_len(MIN_PARALLEL_LEN)
+        .for_each(|cols| {
+            cols.sort_unstable();
+            cols.dedup();
+        });
     // Concatenate into the CSR arrays (serial: O(nnz) appends + prefix sum).
     let mut row_offsets = vec![0usize; nrows + 1];
     let mut col_indices: Vec<usize> = Vec::new();
@@ -129,6 +132,9 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     // Second pass: map every block entry to its CSR value slot once, so the
     // numeric scatter reads slots directly instead of binary-searching per
     // entry on every assembly. Parallel across blocks (independent output).
+    // No `with_min_len` here: an item is a whole block (all its cells, all
+    // their entries), so blocks are few and each is heavy — the grain policy
+    // counts leaf items and would serialise this loop outright.
     pattern.block_slots = block_entries
         .into_par_iter()
         .map(|be| match be {
@@ -222,18 +228,6 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
     .map_err(|e| PyrucastError::Message(format!("scatter_serial: invalid CSR: {e}")))
 }
 
-/// Accumulate `v` into the atomic slot `a`. The caller guarantees that, within
-/// one colour, no two parallel cells touch the same slot (coloured cells share
-/// no DOF), so this load-then-store is never a data race; colours run in
-/// sequence, so accumulation across colours is ordered by the rayon barrier
-/// between them. `Relaxed` therefore suffices — on x86 it is a plain `mov`, so
-/// the colour-disjoint scatter costs the same as a non-atomic one.
-#[inline]
-fn add_atomic(a: &AtomicU64, v: f64) {
-    let cur = f64::from_bits(a.load(Ordering::Relaxed));
-    a.store((cur + v).to_bits(), Ordering::Relaxed);
-}
-
 /// Assemble `k` into a CSR by scattering each block's contribution into
 /// `pattern`'s value slots **in parallel**, colour by colour. A computed
 /// block's element matrices are evaluated in parallel
@@ -295,11 +289,14 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                 // precomputed (indexed cell-for-cell, entry-for-entry).
                 let factor = blk.factor();
                 for color in coloring {
-                    color.par_iter().for_each(|&cell| {
-                        for (&(_, _, v), &slot) in per_cell[cell].iter().zip(&slots[cell]) {
-                            add_atomic(&values[slot], v * factor);
-                        }
-                    });
+                    color
+                        .par_iter()
+                        .with_min_len(MIN_PARALLEL_LEN)
+                        .for_each(|&cell| {
+                            for (&(_, _, v), &slot) in per_cell[cell].iter().zip(&slots[cell]) {
+                                add_atomic(&values[slot], v * factor);
+                            }
+                        });
                 }
             }
             None => {
