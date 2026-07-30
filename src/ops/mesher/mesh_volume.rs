@@ -123,6 +123,7 @@
 //! a sound mesh produces (see `DEGENERATE_SHAPE`), so a merely thin cell is
 //! never mistaken for a flat one.
 
+use crate::aggregate::Aggregate;
 use crate::containers::mesh::{ElementType, Mesh, Node, NodeId, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
@@ -232,7 +233,9 @@ pub fn mesh_volume_cancellable(
             let movable: Vec<bool> = (0..mesh.points().len())
                 .map(|i| i >= env.points().len())
                 .collect();
-            smooth::smooth(&mut mesh, &inside, &movable, &walls, cancel)?;
+            let protect = recovery::Protected::new(env.facets());
+            smooth::smooth(&mut mesh, &inside, &movable, &walls, &protect, cancel)?;
+            drop(protect);
             let inside = classify::interior_within(&mesh, &env, &walls, cancel)?;
 
             // A sliver whose four corners are all the caller's own nodes is
@@ -256,8 +259,8 @@ pub fn mesh_volume_cancellable(
             }
 
             let cells = validate(&mesh, &env, &inside)?;
-            warn_if_subdivided(&env, &cells);
-            return materialize(envelope, &env, mesh.points(), &cells);
+            let added = warn_if_subdivided(&env, &cells);
+            return materialize(envelope, &env, mesh.points(), &cells, &added);
         }
         if !allow_surface_nodes {
             return Err(recovery::describe(&mesh, &stuck[0]));
@@ -368,14 +371,20 @@ fn reclaim(mesh: &mut TetMesh, env: &mut Envelope, cancel: &dyn Cancel) -> Resul
     Ok(())
 }
 
-/// Tell the caller, on stderr, when the envelope had to be cut finer.
+/// Tell the caller, on stderr, when the envelope had to be cut finer, and
+/// return which of its points are the new ones.
 ///
 /// Allowing it is a deliberate choice, but the consequence is easy to
 /// overlook: the shape is untouched, yet the skin of the result no longer
 /// matches the surface mesh that was handed in, so two solids meshed this
 /// way no longer share a conforming interface. Saying so out loud costs
 /// nothing and saves a puzzling afternoon.
-fn warn_if_subdivided(env: &Envelope, cells: &[[u32; 4]]) {
+///
+/// A message on stderr is however a poor thing to act on. The points come
+/// back so they can be handed over as part of the mesh, where a caller can
+/// look at them, plot them, or hand them to whatever needs to know the
+/// interface moved.
+fn warn_if_subdivided(env: &Envelope, cells: &[[u32; 4]]) -> Vec<u32> {
     let given = env.given_node_count() as u32;
     // Only the points that sit *on* the envelope count here; anything past
     // its own list is an interior node, which was never in question.
@@ -390,13 +399,15 @@ fn warn_if_subdivided(env: &Envelope, cells: &[[u32; 4]]) {
     kept.dedup();
     let added = kept.len();
     if added == 0 {
-        return;
+        return kept;
     }
     eprintln!(
         "mesh_volume: warning — the envelope would not fit as given, so {added} node(s) were \
          added on it. Its shape is unchanged (each new node lies on the edge or facet it \
-         divides), but the skin of the result no longer matches the surface mesh passed in."
+         divides), but the skin of the result no longer matches the surface mesh passed in. \
+         They come back as a POI1 submesh of the result."
     );
+    kept
 }
 
 /// Check the meshed volume against the envelope it came from, and return the
@@ -468,11 +479,17 @@ fn validate(mesh: &TetMesh, env: &Envelope, inside: &[bool]) -> Result<Vec<[u32;
 }
 
 /// Build the output mesh, reusing the envelope's nodes.
+///
+/// `added` are the points that had to be put on the envelope, which come back
+/// as a second submesh of `POI1` alongside the cells — the one part of the
+/// result the caller did not ask for, named rather than left to be
+/// rediscovered by comparing skins.
 fn materialize(
     envelope: &Mesh,
     env: &Envelope,
     points: &[[f64; 3]],
     cells: &[[u32; 4]],
+    added: &[u32],
 ) -> Result<Mesh> {
     let coords = envelope.coords()?;
 
@@ -497,7 +514,7 @@ fn materialize(
         }
     }
 
-    let mut sub = SubMesh::new(coords, ElementType::TET4);
+    let mut sub = SubMesh::new(coords.clone(), ElementType::TET4);
     for v in cells {
         sub.add_cell(&[
             ids[v[0] as usize],
@@ -506,8 +523,18 @@ fn materialize(
             ids[v[3] as usize],
         ])?;
     }
+    let mut out = Mesh::from_submesh(sub);
+
+    if !added.is_empty() {
+        // Every one of these is used by a cell — that is how it was
+        // collected — so it has a node by now.
+        let marks: Vec<NodeId> = added.iter().map(|&i| ids[i as usize]).collect();
+        out = out.union(&Mesh::from_submesh(SubMesh::poi1_from_node_ids(
+            coords, &marks,
+        )?))?;
+    }
     drop(kept);
-    Ok(Mesh::from_submesh(sub))
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -565,10 +592,21 @@ mod tests {
         Mesh::from_submesh(sm)
     }
 
+    /// How many cells the `TET4` submesh holds.
+    ///
+    /// The result may carry a second submesh of `POI1` naming the nodes that
+    /// had to be added on the envelope, which is not made of cells to measure.
+    fn tet_count(mesh: &Mesh) -> usize {
+        mesh.cell_counts().unwrap()[0]
+    }
+
     /// Total volume of a TET4 mesh, read back through the public API.
     fn mesh_volume_of(mesh: &Mesh) -> f64 {
         let mut total = 0.0;
         for (si, &n) in mesh.cell_counts().unwrap().iter().enumerate() {
+            if mesh.element_types().unwrap()[si] != ElementType::TET4 {
+                continue;
+            }
             for ci in 0..n {
                 let p: Vec<Vec<f64>> = (0..4)
                     .map(|k| mesh.node(si, ci, k).unwrap().coord().unwrap())
@@ -903,14 +941,61 @@ mod tests {
         let coords = insert(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 8, 0.15);
         let mesh = mesh_volume(&envelope, None, true).unwrap();
-        assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
-        assert!(
-            mesh.cell_count().unwrap() > 2000,
-            "{}",
-            mesh.cell_count().unwrap()
+
+        // Nodes had to be added on the envelope here, so the result carries a
+        // second submesh naming them.
+        assert_eq!(
+            mesh.element_types().unwrap(),
+            vec![ElementType::TET4, ElementType::POI1]
         );
+        assert!(tet_count(&mesh) > 2000, "{}", tet_count(&mesh));
         let v = mesh_volume_of(&mesh);
         assert!((v - 0.4).abs() < 1e-12, "volume {v}");
+    }
+
+    #[test]
+    fn the_nodes_it_adds_on_the_envelope_come_back_as_a_poi1_submesh() {
+        // A warning on stderr is not something a script can act on. When the
+        // envelope had to be cut, the points that did the cutting are handed
+        // back as part of the result, so the caller can see exactly where its
+        // surface stopped matching.
+        let coords = insert(Coords::new(3).unwrap());
+        let envelope = extruded_plate(&coords, 5, 0.25);
+        let given: Vec<Vec<f64>> = {
+            let c = read(&coords).unwrap();
+            c.iter_live()
+                .map(|id| c.coord(id).unwrap().to_vec())
+                .collect()
+        };
+
+        let mesh = mesh_volume(&envelope, None, true).unwrap();
+        let types = mesh.element_types().unwrap();
+        assert_eq!(types, vec![ElementType::TET4, ElementType::POI1]);
+
+        // One node per cell, none of them the caller's own, and every one of
+        // them used by the volume — a marker for a point that is not in the
+        // mesh would be worse than no marker at all.
+        let marks = mesh.cell_counts().unwrap()[1];
+        assert!(marks > 0, "the submesh is there, so it must name something");
+        for ci in 0..marks {
+            let p = mesh.node(1, ci, 0).unwrap().coord().unwrap();
+            assert!(
+                !given.iter().any(|q| q == &p),
+                "{p:?} was the caller's node all along"
+            );
+            let id = mesh.node(1, ci, 0).unwrap().id();
+            let used = (0..tet_count(&mesh))
+                .any(|t| (0..4).any(|k| mesh.node(0, t, k).unwrap().id() == id));
+            assert!(used, "{p:?} is named but no cell uses it");
+        }
+    }
+
+    #[test]
+    fn a_mesh_that_needed_no_extra_node_has_no_poi1_submesh() {
+        let coords = insert(Coords::new(3).unwrap());
+        let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let mesh = mesh_volume(&surface(&coords, &nodes, &BOX_FACETS), None, true).unwrap();
+        assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
     }
 
     #[test]
@@ -955,7 +1040,7 @@ mod tests {
         // are not in question here, so the check is made on the skin of the
         // result — the only place a node could have moved the boundary.
         let coords = insert(Coords::new(3).unwrap());
-        let envelope = extruded_plate(&coords, 4, 0.3);
+        let envelope = extruded_plate(&coords, 5, 0.25);
         let given: Vec<Vec<f64>> = {
             let c = read(&coords).unwrap();
             c.iter_live()
@@ -1059,7 +1144,7 @@ mod tests {
         let envelope = extruded_plate(&coords, 6, 0.2);
         let mesh = mesh_volume(&envelope, None, true).unwrap();
 
-        let n = mesh.cell_count().unwrap();
+        let n = tet_count(&mesh);
         let mut angles = Vec::with_capacity(n);
         let mut volumes = Vec::with_capacity(n);
         for ci in 0..n {
@@ -1096,21 +1181,46 @@ mod tests {
     }
 
     #[test]
-    fn refuses_a_surface_that_cannot_carry_a_usable_mesh() {
-        // Four nodes of this envelope happen to fall almost in one plane.
-        // The cell they make has no volume worth the name, and nothing can
-        // be done to it from the inside: no node may be added to break it
-        // up, and its own four are the caller's. Returning that mesh would
-        // hand back a singular element matrix, so it is refused — with the
-        // one thing the caller can act on.
+    fn a_flat_cell_nothing_can_reach_is_named_rather_than_returned() {
+        // No envelope in this suite produces one any more — taking a bad
+        // cell's own edges out reaches what used to be hopeless — so the
+        // refusal is exercised on its own. What matters about it is not that
+        // it happens but what it says: the caller can only act on *where* and
+        // *what to do*.
         let coords = insert(Coords::new(3).unwrap());
         let (envelope, _) = subdivided_blob(&coords, 3);
-        let err = mesh_volume(&envelope, None, false).unwrap_err();
-        let msg = err.to_string();
+        let env = Envelope::extract(&envelope, &NoCancel).unwrap();
+        let mesh = TetMesh::delaunay(env.points(), &NoCancel).unwrap();
+
+        // A healthy mesh has nothing to report, which is what makes the
+        // report worth reading.
+        let inside = vec![true; mesh.slot_count()];
+        let (_, v) = mesh.iter().next().expect("a non-empty triangulation");
+        let msg = degenerate(&mesh, &[(v, 1e-9)]).to_string();
         assert!(msg.contains("flat cell"), "{msg}");
         assert!(msg.contains("Refine the surface mesh"), "{msg}");
-        // And it says where, so the advice can be followed.
         assert!(msg.contains("around ("), "{msg}");
+
+        // And the floor is calibrated, not nominal: the cells of a sound
+        // triangulation are nowhere near it.
+        let flagged = smooth::stubborn(&mesh, &inside, env.points().len(), DEGENERATE_SHAPE);
+        assert!(
+            flagged.is_empty(),
+            "{} sound cell(s) were called degenerate",
+            flagged.len()
+        );
+    }
+
+    #[test]
+    fn the_blob_that_used_to_carry_a_hopeless_cell_now_meshes_strictly() {
+        // It used to be refused: one cell of it was flat and beyond every
+        // move the sliver pass had. Taking the cell's own edges out reaches
+        // it, so the envelope goes through as given.
+        let coords = insert(Coords::new(3).unwrap());
+        let (envelope, volume) = subdivided_blob(&coords, 3);
+        let mesh = mesh_volume(&envelope, None, false).unwrap();
+        let v = mesh_volume_of(&mesh);
+        assert!((v - volume).abs() < 1e-9 * volume, "volume {v} vs {volume}");
     }
 
     #[test]

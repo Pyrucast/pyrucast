@@ -312,14 +312,12 @@ fn rebuild_along(
             },
             DEFAULT_BUDGET,
         ) {
-            let snapshot = mesh.clone();
             if mesh
                 .replace_region(&region, &cells, "an edge recovery")
                 .is_ok()
             {
                 return Ok(true);
             }
-            *mesh = snapshot;
         }
         let wider = grow_region(mesh, &region);
         if wider.len() == region.len() || wider.len() > effort.max_region {
@@ -571,14 +569,12 @@ fn rebuild_around(
         });
         let missing = match outcome {
             Ok(cells) => {
-                let snapshot = mesh.clone();
                 if mesh
                     .replace_region(&region, &cells, "a facet recovery")
                     .is_ok()
                 {
                     return Ok(());
                 }
-                *mesh = snapshot;
                 Vec::new()
             }
             Err(missing) => missing,

@@ -46,9 +46,20 @@ def _surface(c, nodes, facets=_BOX_FACETS):
     return mesh
 
 
+def _tet_count(mesh):
+    """How many cells the TET4 submesh holds.
+
+    A result whose envelope had to be cut carries a second submesh of POI1
+    naming the nodes that were added, which is not made of cells to measure.
+    """
+    return mesh.cell_counts()[0]
+
+
 def _volume(mesh):
     total = 0.0
     for si, n in enumerate(mesh.cell_counts()):
+        if mesh.element_types()[si] != "TET4":
+            continue
         for ci in range(n):
             p = [mesh.node(si, ci, k).coord() for k in range(4)]
             e = [[p[i][k] - p[0][k] for k in range(3)] for i in (1, 2, 3)]
@@ -119,9 +130,33 @@ def test_mesh_volume_size_controls_the_fineness():
     envelope = _extruded_plate(c, 6, 0.2)
     coarse = pyrucast.mesher.mesh_volume(envelope, size=0.4, allow_surface_nodes=True)
     fine = pyrucast.mesher.mesh_volume(envelope, size=0.1, allow_surface_nodes=True)
-    assert fine.cell_count() > 3 * coarse.cell_count()
+    assert _tet_count(fine) > 3 * _tet_count(coarse)
     assert abs(_volume(fine) - 0.4) < 1e-12
     assert abs(_volume(coarse) - 0.4) < 1e-12
+
+
+def test_mesh_volume_names_the_nodes_it_adds_on_the_envelope():
+    # When the envelope has to be cut to fit, the points that did the cutting
+    # come back as a second submesh of POI1 — a warning on stderr is not
+    # something a script can act on.
+    c = pyrucast.Coords(3)
+    envelope = _extruded_plate(c, 6, 0.2)
+    mesh = pyrucast.mesher.mesh_volume(envelope, allow_surface_nodes=True)
+    assert mesh.element_types() == ["TET4", "POI1"]
+
+    added = mesh.cell_counts()[1]
+    assert added > 0
+    # Each marker is a node the volume actually uses.
+    used = {mesh.node(0, ci, k).id for ci in range(_tet_count(mesh)) for k in range(4)}
+    for ci in range(added):
+        assert mesh.node(1, ci, 0).id in used
+
+
+def test_mesh_volume_adds_no_submesh_when_it_adds_no_node():
+    c = pyrucast.Coords(3)
+    envelope = _surface(c, _box(c, [0, 0, 0], [1, 1, 1]))
+    mesh = pyrucast.mesher.mesh_volume(envelope, allow_surface_nodes=True)
+    assert mesh.element_types() == ["TET4"]
 
 
 def test_mesh_volume_hollow_box_subtracts_the_cavity():

@@ -156,13 +156,11 @@ fn rebuild_star(
         return Ok(false); // `m` is off the boundary, so this cannot happen
     }
 
-    let snapshot = mesh.clone();
+    // A refusal costs nothing: the swap decides whether the cells tile the
+    // star before it touches the mesh.
     match mesh.replace_region_with(star, &cells, "a vertex removal", mode) {
         Ok(_) => Ok(true),
-        Err(_) => {
-            *mesh = snapshot;
-            Ok(false)
-        }
+        Err(_) => Ok(false),
     }
 }
 

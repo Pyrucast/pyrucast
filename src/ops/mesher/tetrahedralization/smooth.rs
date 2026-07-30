@@ -21,6 +21,13 @@
 //!
 //! - **reconnection**: the same nodes, joined differently. A sliver is often
 //!   one flip away from two decent cells.
+//! - **edge removal**: the sliver's own edges taken out, one at a time. This
+//!   is the move that actually kills slivers, and the reason is geometric —
+//!   a sliver is flat *across* an edge, so a 2-3 flip on one of its faces
+//!   often has nowhere to go (the pair of cells is not convex there), while
+//!   emptying the ring of cells around the offending edge and filling it
+//!   again always has the room to. It subsumes the 3-2 flip and everything
+//!   past it.
 //! - **smoothing**: the same connections, with a node moved. Only interior
 //!   nodes move; the envelope's own nodes are the caller's and are never
 //!   touched, which is what keeps the surface exactly as it came in.
@@ -36,10 +43,25 @@ use crate::error::Result;
 use crate::interrupt::Cancel;
 
 use super::delaunay::TetMesh;
-use super::flips::flip23;
+use super::flips::{flip23, remove_edge_if};
+use super::recovery::Protected;
 
 /// Below this angle (degrees) a cell is worth working on.
 const POOR: f64 = 25.0;
+
+/// Below this angle (degrees) a cell is bad enough to spend a pocket rebuild
+/// on.
+///
+/// Edge removal costs far more than a flip, so it is kept for the cells that
+/// a flip and a nudge have already failed to mend.
+const DIRE: f64 = 12.0;
+
+/// Largest pocket an edge removal may grow to while chasing a sliver.
+///
+/// Small on purpose. Widening is how recovery gets its answer when it must
+/// have one; here there is no must — the next edge, or the next cell, is
+/// always an option.
+const SLIVER_REGION: usize = 8;
 
 /// Sweeps of reconnection and smoothing before the pass gives up.
 const ROUNDS: usize = 6;
@@ -62,17 +84,100 @@ pub fn smooth(
     inside: &[bool],
     movable: &[bool],
     walls: &HashSet<[u32; 3]>,
+    protect: &Protected<'_>,
     cancel: &dyn Cancel,
 ) -> Result<f64> {
+    // Cells that no edge removal could mend. Without this the last rounds are
+    // spent re-proving the same handful of cells hopeless, six edges at a
+    // time, which is most of what the pass costs on a large mesh.
+    let mut hopeless: HashSet<[u32; 4]> = HashSet::new();
     for _ in 0..ROUNDS {
         cancel.check()?;
         let reconnected = reconnect(mesh, inside, walls)?;
         let moved = relax(mesh, inside, movable);
-        if !reconnected && !moved {
+        // Every round, not only the rounds the cheap moves gave up on:
+        // relaxation reports a move whenever a node shifted at all, which on
+        // a large mesh is every round, so gating on it would keep the pocket
+        // rebuilds from ever running.
+        let carved = carve(mesh, inside, protect, &mut hopeless, cancel)?;
+        if !reconnected && !moved && !carved {
             break;
         }
     }
     Ok(worst_angle(mesh, inside))
+}
+
+/// Take out the edges of the cells that neither of the cheap moves fixed.
+///
+/// The six edges of a bad cell are tried in turn; which order hardly matters,
+/// but an envelope edge is never offered, since removing one would change the
+/// surface. The replacement is judged **before** it is committed, so the pass
+/// stays monotone like the other two without ever copying the mesh.
+fn carve(
+    mesh: &mut TetMesh,
+    inside: &[bool],
+    protect: &Protected<'_>,
+    hopeless: &mut HashSet<[u32; 4]>,
+    cancel: &dyn Cancel,
+) -> Result<bool> {
+    const PAIRS: [(usize, usize); 6] = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)];
+    let mut changed = false;
+    for t in 0..mesh.slot_count() {
+        cancel.check()?;
+        let Some(v) = mesh.tet(t) else { continue };
+        if !inside.get(t).copied().unwrap_or(false) {
+            continue;
+        }
+        let before = min_dihedral(mesh, &v);
+        if before >= DIRE || hopeless.contains(&key(&v)) {
+            continue;
+        }
+        let mut freed = false;
+        for (a, b) in PAIRS {
+            let (p, q) = (v[a], v[b]);
+            if !protect.on_edge(p, q).is_empty() {
+                continue; // an edge of the envelope: not ours to remove
+            }
+            // The neighbourhood is judged before and after, so a removal
+            // that merely moves the problem is undone.
+            let Some(ring) = mesh.edge_fan(p, q) else {
+                continue;
+            };
+            let around = ring
+                .cells
+                .iter()
+                .filter_map(|&c| mesh.tet(c as usize))
+                .map(|c| min_dihedral(mesh, &c))
+                .fold(f64::INFINITY, f64::min);
+
+            let better = |m: &TetMesh, cells: &[[u32; 4]]| {
+                cells
+                    .iter()
+                    .map(|c| min_dihedral(m, c))
+                    .fold(f64::INFINITY, f64::min)
+                    > around
+            };
+            if remove_edge_if(mesh, p, q, protect, SLIVER_REGION, Some(&better))?.is_some() {
+                changed = true;
+                freed = true;
+                break;
+            }
+        }
+        // The cell is still there and all six of its edges were tried: its
+        // neighbourhood would have to change on its own account before the
+        // answer could differ, and if it does the cell is a different cell.
+        if !freed {
+            hopeless.insert(key(&v));
+        }
+    }
+    Ok(changed)
+}
+
+/// A cell named by its vertices, whichever order they came in.
+fn key(v: &[u32; 4]) -> [u32; 4] {
+    let mut k = *v;
+    k.sort_unstable();
+    k
 }
 
 /// Flip the faces of poor cells, keeping what improves them.

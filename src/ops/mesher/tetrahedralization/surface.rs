@@ -97,7 +97,6 @@ pub fn recut_flat_strip(
         });
         let missing = match outcome {
             Ok(cells) => {
-                let snapshot = mesh.clone();
                 if mesh
                     .replace_region_with(
                         &region,
@@ -109,7 +108,6 @@ pub fn recut_flat_strip(
                 {
                     return Ok(true);
                 }
-                *mesh = snapshot;
                 Vec::new()
             }
             Err(missing) => missing,

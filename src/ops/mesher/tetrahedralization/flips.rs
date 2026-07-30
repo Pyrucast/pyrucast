@@ -26,10 +26,17 @@
 use crate::error::Result;
 
 use super::delaunay::{Boundary, EdgeFan, TetMesh};
-use super::fill::{fill, Constraints, DEFAULT_BUDGET};
+use super::fill::{delaunay_fill, fill, Constraints, DEFAULT_BUDGET};
+use super::predicates::orient3d;
 use super::recovery::Protected;
 
-use super::predicates::orient3d;
+/// Search steps an edge removal gets when it is improving the mesh rather
+/// than recovering the boundary.
+const OPPORTUNIST_BUDGET: usize = 400;
+
+/// A caller's say over the cells that would replace a pocket, before the swap
+/// is made.
+pub type Accept<'a> = &'a dyn Fn(&TetMesh, &[[u32; 4]]) -> bool;
 
 /// Try to replace the two tetrahedra sharing face `i` of `t` with the three
 /// that share the edge joining their apexes.
@@ -187,6 +194,34 @@ pub fn remove_edge(
     protect: &Protected<'_>,
     max_region: usize,
 ) -> Result<Option<Vec<u32>>> {
+    remove_edge_if(mesh, p, q, protect, max_region, None)
+}
+
+/// [`remove_edge`], with a say over the filling that replaces the pocket.
+///
+/// `accept` is handed the candidate cells **before** anything is committed. A
+/// caller that removes an edge to improve the mesh — rather than to make room
+/// for an envelope facet — needs to know whether the replacement is actually
+/// better, and finding out by doing it and undoing it would mean copying the
+/// whole mesh once per candidate edge. On a mesh of any size that costs more
+/// than the pass it belongs to.
+///
+/// Passing it also says *why* the edge is going, and that changes what is
+/// worth spending. Recovery needs completeness — it has to know whether a
+/// filling exists at all — and pays the full exhaustive search for it. A
+/// quality pass does not: it is choosing among edges it may as well leave
+/// alone. It still gets a search, because measured against not having one it
+/// is what removes the last flat cells, but a short one: most of what the
+/// search ever finds, it finds early, and the long tail of it is spent on
+/// edges that will be declined anyway.
+pub fn remove_edge_if(
+    mesh: &mut TetMesh,
+    p: u32,
+    q: u32,
+    protect: &Protected<'_>,
+    max_region: usize,
+    accept: Option<Accept<'_>>,
+) -> Result<Option<Vec<u32>>> {
     let Some(fan) = mesh.edge_fan(p, q) else {
         return Ok(None);
     };
@@ -196,7 +231,7 @@ pub fn remove_edge(
     // layer of neighbours gives the rebuild the room it needs.
     let mut region = fan.cells.clone();
     loop {
-        if let Some(created) = rebuild_without(mesh, p, q, &fan, &region, protect)? {
+        if let Some(created) = rebuild_without(mesh, p, q, &fan, &region, protect, accept)? {
             return Ok(Some(created));
         }
         let wider = grow(mesh, &region);
@@ -215,6 +250,7 @@ fn rebuild_without(
     fan: &EdgeFan,
     region: &[u32],
     protect: &Protected<'_>,
+    accept: Option<Accept<'_>>,
 ) -> Result<Option<Vec<u32>>> {
     let mut boundary = mesh.region_boundary(region);
 
@@ -256,27 +292,35 @@ fn rebuild_without(
     // Whatever of the envelope this pocket already holds has to survive the
     // rebuild, or recovery spends its passes trading one facet for another.
     let keep = relevant(mesh, region, protect);
-    let Some(new) = fill(
-        mesh.points(),
-        &boundary,
-        Constraints {
-            without_edges: &[(p, q)],
-            with_faces: &keep,
-            ..Default::default()
-        },
-        DEFAULT_BUDGET,
-    ) else {
+    let want = Constraints {
+        without_edges: &[(p, q)],
+        with_faces: &keep,
+        ..Default::default()
+    };
+    // The Delaunay filler first, and here it is more than a shortcut: what is
+    // asked of it is that the filling *not* hold `(p, q)`, and an edge worth
+    // removing is usually one the triangulation would not have drawn anyway.
+    // So the cheap answer is also the likely one, and the search is left for
+    // when it is not — a short one when the caller is only improving the mesh.
+    let budget = match accept {
+        Some(_) => OPPORTUNIST_BUDGET,
+        None => DEFAULT_BUDGET,
+    };
+    let Ok(new) = delaunay_fill(mesh.points(), &boundary, want)
+        .or_else(|_| fill(mesh.points(), &boundary, want, budget).ok_or(()))
+    else {
         return Ok(None);
     };
-    // A filling the mesh will not take is declined, not committed by halves.
-    let snapshot = mesh.clone();
+    if let Some(accept) = accept {
+        if !accept(mesh, &new) {
+            return Ok(None);
+        }
+    }
+    // A filling the mesh will not take is declined, and declined without
+    // having touched anything: the swap decides that before it mutates.
     match mesh.replace_region_with(region, &new, "an edge removal", mode) {
         Ok(created) => Ok(Some(created)),
-
-        Err(_) => {
-            *mesh = snapshot;
-            Ok(None)
-        }
+        Err(_) => Ok(None),
     }
 }
 

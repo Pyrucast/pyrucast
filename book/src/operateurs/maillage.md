@@ -663,16 +663,46 @@ casse. Le maillage est donc *amélioré* plutôt que subdivisé, par les deux
 seuls mouvements qui ne changent pas ce qu'il remplit :
 
 - **reconnexion** : les mêmes nœuds, joints autrement ;
+- **retrait d'arête** : les arêtes du sliver ôtées, une à une ;
 - **relaxation** : les mêmes liens, un nœud déplacé — les nœuds **intérieurs**
   seulement, jamais les vôtres.
 
-Les deux sont jugés sur le plus petit **angle dièdre** des cellules touchées
+Les trois sont jugés sur le plus petit **angle dièdre** des cellules touchées
 et appliqués seulement s'ils l'améliorent, ce qui rend la passe monotone.
 
-Sur la plaque percée de `formation/maillage_test.py`, 28 000 mailles : la
-cellule la plus plate passe de \\( 8\cdot10^{-16} \\) du volume moyen à
-\\( 4\cdot10^{-2} \\), et la part de cellules sous 10° de 1,8 % à 0,5 %. Le
-premier chiffre est l'enjeu : \\( 10^{-16} \\), c'est une matrice singulière.
+Le deuxième est celui qui tue réellement les slivers, et la raison est
+géométrique. Un sliver est plat **en travers** d'une arête : une bascule 2-3
+sur une de ses faces n'a donc souvent nulle part où aller — la paire de
+cellules n'y est pas convexe — tandis que vider l'anneau de cellules autour de
+l'arête fautive et le remplir autrement a toujours la place de le faire. Le
+retrait d'arête généralise la bascule 3-2 et tout ce qui vient après.
+
+Mesuré sur la plaque percée de `formation/maillage_test.py`, en ajoutant cette
+passe (l'angle dièdre médian reste à 47° dans tous les cas) :
+
+| mailles | part sous 10° | part sous 1° | cellule la plus plate / moyenne |
+|---|---|---|---|
+| 28 000 | 0,59 % → **0,00 %** | 0 → 0 | \\( 5{,}5\cdot10^{-2} \\) → \\( 1{,}5\cdot10^{-1} \\) |
+| 117 000 | 0,81 % → **0,02 %** | 0,009 % → **0,000 %** | \\( 2{,}9\cdot10^{-2} \\) → \\( 7{,}8\cdot10^{-2} \\) |
+| 402 000 | 0,94 % → **0,11 %** | 0,022 % → **0,000 %** | \\( 7{,}3\cdot10^{-5} \\) → \\( 3{,}6\cdot10^{-3} \\) |
+| 977 000 | 0,91 % → **0,18 %** | 0,028 % → **0,001 %** | \\( 4{,}0\cdot10^{-3} \\) → \\( 7{,}1\cdot10^{-4} \\) |
+
+Le second chiffre est l'enjeu : une cellule sous 1° d'angle dièdre donne une
+matrice élémentaire quasi singulière, et il n'en faut pas beaucoup pour
+couler un calcul. La passe coûte environ **1,35×** le temps de maillage, à
+toutes les tailles.
+
+> **Ce que cela a demandé.** Une passe qui améliore un maillage doit être
+> moins chère que sa construction, ce qui interdit deux réflexes. On ne
+> **teste pas en faisant puis défaisant** : copier le maillage à chaque
+> candidat coûte \\( O(n) \\) pour un échange qui coûte \\( O(1) \\), donc une
+> passe qui fait \\( O(n) \\) échanges devient quadratique — mesuré, cela
+> portait le maillage d'un million de mailles à 325 s au lieu de 77 s. Le
+> remplacement de région décide donc **avant de muter** si les nouvelles
+> cellules pavent bien la région, à partir de leurs seules faces. Et on ne
+> paie pas la **recherche exhaustive** de remplissage pour une arête qu'on
+> peut aussi bien laisser en place : la récupération du bord a besoin de
+> complétude, une passe de qualité n'a besoin que d'une réponse.
 
 ### Quand l'enveloppe ne convient pas
 
@@ -684,7 +714,9 @@ sur ses nœuds, soit la récupération n'y arrive pas.
 
 **« the mesh has N flat cell(s) that cannot be improved … »** — un sliver
 dont les quatre coins sont des nœuds de l'enveloppe. Rien à insérer pour le
-casser, rien à bouger puisque ses coins sont les vôtres. La mesure est
+casser, rien à bouger puisque ses coins sont les vôtres, et le retrait
+d'arête n'y arrive pas non plus. C'est devenu rare : aucune des enveloppes de
+la suite de tests ne l'obtient plus. La mesure est
 \\( \eta = 12\,(3V)^{2/3} / \sum \ell^2 \\), qui vaut 1 pour un tétraèdre
 régulier et 0 pour un plat ; le seuil de \\( 10^{-4} \\) est calibré et non
 choisi — les cellules saines restent au-dessus de \\( 4\cdot10^{-2} \\), une
@@ -709,6 +741,23 @@ résultat ne coïncide plus avec le maillage surfacique fourni. Cela compte si
 deux solides doivent partager une interface conforme ; cela ne compte pas si
 l'enveloppe ne servait qu'à décrire une forme. Un avertissement sur `stderr`
 indique combien de nœuds ont été ajoutés.
+
+**Et surtout, le résultat vous dit lesquels.** Un message sur `stderr` n'est
+pas quelque chose sur quoi un script peut agir ; quand des nœuds ont été
+posés sur l'enveloppe, le maillage rendu porte un **second sous-maillage de
+`POI1`** qui les nomme. Il n'apparaît que dans ce cas — un maillage obtenu
+sans rien ajouter n'a qu'un sous-maillage `TET4` :
+
+```python
+solide = pyrucast.mesher.mesh_volume(peau, allow_surface_nodes=True)
+if solide.element_types() == ["TET4", "POI1"]:
+    ajoutes = solide.cell_counts()[1]
+    print(f"{ajoutes} nœud(s) posé(s) sur la peau")
+```
+
+Ce sous-maillage se visualise, se soustrait, sert de support de champ comme
+n'importe quel autre. Attention en revanche si vous enchaînez : les opérateurs
+qui attendent un maillage volumique pur veulent le sous-maillage `TET4` seul.
 
 C'est aussi ce qui débloque. Une arête qu'on n'arrive pas à faire rentrer n'a
 autrement aucune issue ; la couper en deux scinde le problème en deux plus

@@ -265,6 +265,50 @@ impl TetMesh {
             }
         }
 
+        // Whether the new cells tile the same region as the old ones is
+        // decided by their faces alone, so it is decided *here* — before
+        // anything is torn down. A caller then never has to keep a copy of
+        // the mesh in case the swap is refused, and that matters: the copy is
+        // O(mesh) while the swap is O(region), so paying it once per swap
+        // turns any pass that makes many swaps quadratic.
+        let mut counts: HashMap<[u32; 3], usize> = HashMap::with_capacity(4 * new.len());
+        for v in new {
+            for f in FACE_OF {
+                *counts
+                    .entry(sorted3([v[f[0]], v[f[1]], v[f[2]]]))
+                    .or_insert(0) += 1;
+            }
+        }
+        // A face used twice by the new cells is interior to them; used once,
+        // it has to be one the region already presented.
+        let unmatched = counts
+            .iter()
+            .filter(|(key, &n)| n == 1 && !outside.contains_key(*key))
+            .count();
+        if unmatched > 0 {
+            // Faces the new cells do not present are a crack — unless the
+            // caller asked for the hull to be re-cut, in which case both the
+            // faces dropped and the faces gained must lie where the region
+            // met nothing at all, and the swept volume must be unchanged.
+            let dropped_faced_nothing = outside
+                .iter()
+                .all(|(key, &n)| counts.contains_key(key) || n == NO_TET);
+            let volume_kept = {
+                let before: f64 = old
+                    .iter()
+                    .map(|&t| self.orientation(&self.tets[t as usize].v))
+                    .sum();
+                let after: f64 = new.iter().map(|v| self.orientation(v)).sum();
+                (after - before).abs() <= 1e-9 * before.abs().max(after.abs())
+            };
+            if boundary != Boundary::MayRecutHull || !dropped_faced_nothing || !volume_kept {
+                return Err(PyrucastError::Message(format!(
+                    "mesh_volume: replacing {what} would leave {unmatched} unmatched face(s) — \
+                     the new cells do not tile the same region (internal error)"
+                )));
+            }
+        }
+
         // The vertices about to lose their cells: their hints have to be
         // pointed somewhere live again afterwards, or the next star walk
         // falls back to scanning the whole mesh — which is O(n) per query
@@ -313,32 +357,11 @@ impl TetMesh {
             }
         }
 
-        if !pending.is_empty() {
-            // Faces the new cells do not present are a crack — unless the
-            // caller asked for the hull to be re-cut, in which case both the
-            // faces dropped and the faces gained must lie where the region
-            // met nothing at all, and the swept volume must be unchanged.
-            let new_faces: HashSet<[u32; 3]> = created
-                .iter()
-                .flat_map(|&t| (0..4).map(move |i| (t, i)))
-                .map(|(t, i)| sorted3(self.face(t as usize, i)))
-                .collect();
-            let dropped_faced_nothing = outside
-                .iter()
-                .all(|(key, &n)| new_faces.contains(key) || n == NO_TET);
-            let volume_kept = {
-                let before: f64 = old.iter().map(|&t| self.dead_orientation(t)).sum();
-                let after: f64 = new.iter().map(|v| self.orientation(v)).sum();
-                (after - before).abs() <= 1e-9 * before.abs().max(after.abs())
-            };
-            if boundary != Boundary::MayRecutHull || !dropped_faced_nothing || !volume_kept {
-                return Err(PyrucastError::Message(format!(
-                    "mesh_volume: replacing {what} left {} unmatched face(s) — the new cells \
-                     do not tile the same region (internal error)",
-                    pending.len()
-                )));
-            }
-        }
+        debug_assert_eq!(
+            pending.len(),
+            unmatched,
+            "the pre-flight face count must agree with what the relinking found"
+        );
         Ok(created)
     }
 
@@ -1010,13 +1033,6 @@ impl TetMesh {
     /// Whether no tetrahedron is left.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    /// Six times the signed volume of a slot's cell, live or just killed —
-    /// the vertices survive the kill, which is what lets a region swap
-    /// compare volumes after the fact.
-    fn dead_orientation(&self, t: u32) -> f64 {
-        self.orientation(&self.tets[t as usize].v)
     }
 
     /// Six times the signed volume of a tetrahedron — positive for every
