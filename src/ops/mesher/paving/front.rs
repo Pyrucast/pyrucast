@@ -196,6 +196,36 @@ impl Front {
         (m1, m2)
     }
 
+    /// Cut the loop in two along the chord `(a, b)`, which both resulting
+    /// loops then carry as an edge — traversed in opposite directions, so it
+    /// ends up shared by exactly one quadrangle on each side.
+    ///
+    /// Unlike [`merge`](Self::merge) this identifies nothing: the two slots
+    /// keep their own, distinct vertices. It is the move for a loop that has
+    /// stopped making progress — two smaller loops usually pave where one
+    /// large one would not, and closing the large one outright would fill it
+    /// with a decomposition instead of proper rows.
+    ///
+    /// Returns a representative slot of each side.
+    pub fn split_by_chord(&mut self, a: u32, b: u32) -> (u32, u32) {
+        debug_assert_ne!(a, b);
+        debug_assert_ne!(self.next(a), b);
+        debug_assert_ne!(self.next(b), a);
+        let ap = self.prev(a);
+        let bn = self.next(b);
+        let (va, vb) = (self.vertex(a), self.vertex(b));
+
+        // Side A closes straight from `b` back to `a`.
+        self.link(b, a);
+        // Side B gets fresh slots for the same two vertices.
+        let a2 = self.alloc(va);
+        let b2 = self.alloc(vb);
+        self.link(ap, a2);
+        self.link(a2, b2);
+        self.link(b2, bn);
+        (a, b2)
+    }
+
     /// Are `a` and `b` on the same loop?
     pub fn same_loop(&self, a: u32, b: u32) -> bool {
         let mut s = a;
@@ -289,6 +319,21 @@ mod tests {
         let kept = f.collapse_edge(s, 99);
         assert_eq!(f.loop_len(kept), 4);
         assert_eq!(verts(&f, kept), vec![99, 3, 4, 0]);
+    }
+
+    #[test]
+    fn a_chord_cuts_one_loop_into_two_that_share_it() {
+        let mut f = Front::new();
+        let r = f.add_loop(&[0, 1, 2, 3, 4, 5, 6, 7]);
+        let s = f.loop_slots(r);
+        let (a, b) = (s[1], s[5]);
+        let (ra, rb) = f.split_by_chord(a, b);
+        assert!(!f.same_loop(ra, rb));
+        // Side A runs 1 2 3 4 5; side B runs 5 6 7 0 1.
+        assert_eq!(verts(&f, ra), vec![1, 2, 3, 4, 5]);
+        assert_eq!(verts(&f, rb), vec![5, 6, 7, 0, 1]);
+        // Together they walk every original slot plus the chord's two ends.
+        assert_eq!(f.loop_len(ra) + f.loop_len(rb), 8 + 2);
     }
 
     #[test]

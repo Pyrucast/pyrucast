@@ -28,13 +28,18 @@
 //! entrance, by making every input loop even.
 
 use super::geom::{orient, quad_is_valid, quad_quality, segments_cross, tri_quality};
-use crate::containers::mesh::Point2;
+use crate::containers::mesh::{Point2, Vector2};
 
 /// The elements a closure produced.
+///
+/// `added` holds points the closure had to create, addressed by the caller as
+/// `pts.len() + i`. Adding a point *inside* the polygon is always safe — it is
+/// splitting an *edge* that would leave a T-junction.
 #[derive(Default)]
 pub struct Closure {
     pub quads: Vec<[u32; 4]>,
     pub tris: Vec<[u32; 3]>,
+    pub added: Vec<Point2>,
 }
 
 /// Fill the simple polygon `verts` (counter-clockwise, material inside).
@@ -45,24 +50,45 @@ pub struct Closure {
 /// rather than giving up.
 pub fn close(pts: &[Point2], verts: &[u32]) -> Closure {
     let mut out = Closure::default();
-    fill(pts, verts, &mut out);
+    let base = pts.len() as u32;
+    fill(pts, verts, base, &mut out);
     out
 }
 
-fn fill(pts: &[Point2], v: &[u32], out: &mut Closure) {
+/// Where a point created by the closure will land once the caller has stored
+/// it. Keeps `fill` able to read back its own additions.
+fn at(pts: &[Point2], out: &Closure, i: u32) -> Point2 {
+    match (i as usize).checked_sub(pts.len()) {
+        Some(k) => out.added[k],
+        None => pts[i as usize],
+    }
+}
+
+fn fill(pts: &[Point2], v: &[u32], base: u32, out: &mut Closure) {
     let n = v.len();
     match n {
         0..=2 => {}
         3 => out.tris.push([v[0], v[1], v[2]]),
         4 => {
             let c = [
-                pts[v[0] as usize],
-                pts[v[1] as usize],
-                pts[v[2] as usize],
-                pts[v[3] as usize],
+                at(pts, out, v[0]),
+                at(pts, out, v[1]),
+                at(pts, out, v[2]),
+                at(pts, out, v[3]),
             ];
             if quad_is_valid(c) {
                 out.quads.push([v[0], v[1], v[2], v[3]]);
+            } else if let Some(g) = centre_split(&c) {
+                // A reflex corner is shared out between two quadrangles hinged
+                // on an interior point. This keeps a triangle-free result
+                // where the two-triangle fallback below would break it.
+                let gi = base + out.added.len() as u32;
+                out.added.push(g);
+                let r = (0..4)
+                    .find(|&i| orient(c[(i + 3) % 4], c[i], c[(i + 1) % 4]) <= 0.0)
+                    .unwrap_or(0);
+                out.quads.push([v[r], v[(r + 1) % 4], v[(r + 2) % 4], gi]);
+                out.quads.push([v[(r + 2) % 4], v[(r + 3) % 4], v[r], gi]);
             } else {
                 // A reflex quadrangle has a negative Jacobian at that corner,
                 // so it is not an element any solver can use. Two triangles
@@ -84,7 +110,7 @@ fn fill(pts: &[Point2], v: &[u32], out: &mut Closure) {
                     let (a, b, c) = (v[(i + n - 1) % n], v[i], v[(i + 1) % n]);
                     out.tris.push([a, b, c]);
                     let rest: Vec<u32> = (0..n).filter(|&j| j != i).map(|j| v[j]).collect();
-                    fill(pts, &rest, out);
+                    fill(pts, &rest, base, out);
                     return;
                 }
             }
@@ -92,13 +118,50 @@ fn fill(pts: &[Point2], v: &[u32], out: &mut Closure) {
                 Some((i, j)) => {
                     let left: Vec<u32> = (i..=j).map(|t| v[t]).collect();
                     let right: Vec<u32> = (j..n).chain(0..=i).map(|t| v[t]).collect();
-                    fill(pts, &left, out);
-                    fill(pts, &right, out);
+                    fill(pts, &left, base, out);
+                    fill(pts, &right, base, out);
                 }
                 None => fan(pts, v, out),
             }
         }
     }
+}
+
+/// An interior point that turns a reflex quadrangle into two valid ones.
+///
+/// The diagonal from the reflex corner to the opposite one already lies inside
+/// the quadrangle — that is what makes the two-triangle split work — but a
+/// point taken *on* it is collinear with both its ends, so each quadrangle
+/// would have a degenerate corner. The candidates are therefore taken beside
+/// the diagonal, offset perpendicular to it on both sides, nearest first.
+///
+/// Returns `None` when the shape is too pinched for any of them, leaving the
+/// caller to fall back to triangles.
+fn centre_split(c: &[Point2; 4]) -> Option<Point2> {
+    let r = (0..4).find(|&i| orient(c[(i + 3) % 4], c[i], c[(i + 1) % 4]) <= 0.0)?;
+    let (a, b) = (c[r], c[(r + 2) % 4]);
+    let d = b - a;
+    let len = d.norm();
+    if len == 0.0 {
+        return None;
+    }
+    let normal = Vector2::new(-d.y, d.x) / len;
+    for &t in &[0.5, 0.4, 0.6, 0.3, 0.7] {
+        let mid = Point2::from(a.coords * (1.0 - t) + b.coords * t);
+        // Nearest offsets first: on a sliver only a hair's breadth off the
+        // diagonal keeps both halves inside.
+        for &off in &[
+            0.02, -0.02, 0.05, -0.05, 0.10, -0.10, 0.20, -0.20, 0.35, -0.35,
+        ] {
+            let g = mid + normal * (off * len);
+            if quad_is_valid([c[r], c[(r + 1) % 4], c[(r + 2) % 4], g])
+                && quad_is_valid([c[(r + 2) % 4], c[(r + 3) % 4], c[r], g])
+            {
+                return Some(g);
+            }
+        }
+    }
+    None
 }
 
 /// Last resort: a triangle fan from the vertex that gives the best worst

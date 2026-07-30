@@ -311,4 +311,241 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, PyrucastError::Interrupted));
     }
+
+    #[test]
+    fn a_concave_l_shape_is_paved_without_leaving_the_material() {
+        let coords = insert(Coords::new(2).unwrap());
+        let mut pts = Vec::new();
+        let step = 0.1;
+        for i in 0..20 {
+            pts.push((i as f64 * step, 0.0));
+        }
+        for i in 0..10 {
+            pts.push((2.0, i as f64 * step));
+        }
+        for i in 0..15 {
+            pts.push((2.0 - i as f64 * step, 1.0));
+        }
+        for i in 0..10 {
+            pts.push((0.5, 1.0 + i as f64 * step));
+        }
+        for i in 0..5 {
+            pts.push((0.5 - i as f64 * step, 2.0));
+        }
+        for i in 0..20 {
+            pts.push((0.0, 2.0 - i as f64 * step));
+        }
+        let contour = loop_mesh(coords, &pts);
+        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.1), false).unwrap();
+        let r = inspect(&mesh);
+        assert_eq!(r.non_conforming, 0);
+        assert!(r.min_quality > 0.0, "min quality {}", r.min_quality);
+        // 2×1 foot plus 0.5×1 leg.
+        assert!((r.area - 2.5).abs() < 1e-9, "area {}", r.area);
+    }
+
+    #[test]
+    fn all_quad_leaves_no_triangle_on_an_odd_contour() {
+        // 4 + 4 + 4 + 5 = 17 segments: an odd loop, which no amount of paving
+        // can fill with quadrangles alone.
+        let coords = insert(Coords::new(2).unwrap());
+        let mut pts = rect_loop(1.0, 1.0, 4, 4);
+        pts.push((0.0, 0.125));
+        let contour = loop_mesh(coords, &pts);
+        assert_eq!(pts.len() % 2, 1);
+
+        // Left alone, odd parity costs at most one triangle — sometimes none,
+        // when a degenerate remnant absorbs it on the way.
+        // On a contour this coarse the fronts can end up grazing each other,
+        // leaving a clockwise remnant that bounds no material. It is dropped
+        // rather than filled with cells no solver could integrate, which costs
+        // a sliver of area — the paver degrading rather than failing. Hence
+        // the tolerance here, where the well-formed cases above assert the
+        // area exactly.
+        for &all_quad in &[false, true] {
+            let r =
+                inspect(&pave_surface(&contour, ElementType::QUA4, Some(0.25), all_quad).unwrap());
+            assert_eq!(r.non_conforming, 0, "all_quad={all_quad}");
+            assert!(
+                (r.area - 1.0).abs() < 5e-3,
+                "all_quad={all_quad}, area {}",
+                r.area
+            );
+            if all_quad {
+                assert_eq!(r.tris, 0, "all_quad must leave no triangle");
+            } else {
+                assert!(r.tris <= 1, "odd parity costs at most one: {}", r.tris);
+            }
+        }
+    }
+
+    #[test]
+    fn the_contour_nodes_come_back_untouched() {
+        let coords = insert(Coords::new(2).unwrap());
+        let pts = rect_loop(1.0, 1.0, 6, 6);
+        let contour = loop_mesh(coords.clone(), &pts);
+        let before: Vec<(NodeId, Vec<f64>)> = {
+            let c = read(&coords).unwrap();
+            let s = read(&contour[0]).unwrap();
+            s.connectivity()
+                .iter()
+                .map(|&n| (n, c.coord(n).unwrap().to_vec()))
+                .collect()
+        };
+        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.15), false).unwrap();
+        let c = read(&coords).unwrap();
+        for (id, coord) in &before {
+            assert_eq!(&c.coord(*id).unwrap().to_vec(), coord, "node {id:?} moved");
+        }
+        // And they are still the ones the mesh is built on.
+        let used: HashMap<NodeId, ()> = mesh
+            .into_iter()
+            .flat_map(|sm| read(sm).unwrap().connectivity().to_vec())
+            .map(|n| (n, ()))
+            .collect();
+        for (id, _) in &before {
+            assert!(used.contains_key(id), "contour node {id:?} was abandoned");
+        }
+    }
+
+    #[test]
+    fn a_planar_contour_in_3d_is_paved_in_its_own_plane() {
+        // The formation benchmark lives in the y = 0 plane of a 3-D Coords.
+        let coords = insert(Coords::new(3).unwrap());
+        let ids: Vec<NodeId> = rect_loop(1.0, 1.0, 6, 6)
+            .iter()
+            .map(|&(x, z)| Node::create_in(coords.clone(), &[x, 0.0, z]).unwrap().id())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        let n = ids.len();
+        for i in 0..n {
+            sm.add_cell(&[ids[i], ids[(i + 1) % n]]).unwrap();
+        }
+        let contour = Mesh::from_submesh(sm);
+        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.2), false).unwrap();
+        let c = read(&coords).unwrap();
+        for sm in &mesh {
+            for &node in read(sm).unwrap().connectivity() {
+                assert!(
+                    c.coord(node).unwrap()[1].abs() < 1e-12,
+                    "a node left the y = 0 plane"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn quadratic_forms_are_derived_from_the_quadrangles() {
+        let coords = insert(Coords::new(2).unwrap());
+        let contour = loop_mesh(coords, &rect_loop(1.0, 1.0, 4, 4));
+        for (et, npc) in [(ElementType::QUA8, 8), (ElementType::QUA9, 9)] {
+            let mesh = pave_surface(&contour, et, Some(0.25), true).unwrap();
+            assert_eq!(mesh.element_types().unwrap(), vec![et]);
+            assert_eq!(read(&mesh[0]).unwrap().element_type().nodes_per_cell(), npc);
+        }
+    }
+
+    #[test]
+    fn bad_input_is_rejected_with_a_named_error() {
+        let coords = insert(Coords::new(2).unwrap());
+        let contour = loop_mesh(coords.clone(), &rect_loop(1.0, 1.0, 4, 4));
+        for err in [
+            pave_surface(&contour, ElementType::TRI3, None, false).unwrap_err(),
+            pave_surface(&contour, ElementType::QUA4, Some(0.0), false).unwrap_err(),
+            pave_surface(&contour, ElementType::QUA4, Some(-1.0), false).unwrap_err(),
+        ] {
+            assert!(
+                format!("{err}").starts_with("pave_surface:"),
+                "unhelpful error: {err}"
+            );
+        }
+        // A contour of the wrong element type is caught by the shared parser,
+        // which still names this operator.
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let d = Node::create_in(coords, &[0.0, 1.0]).unwrap();
+        sm.add_cell(&[a.id(), b.id(), d.id()]).unwrap();
+        let err =
+            pave_surface(&Mesh::from_submesh(sm), ElementType::QUA4, None, false).unwrap_err();
+        assert!(format!("{err}").starts_with("pave_surface:"), "{err}");
+    }
+
+    #[test]
+    fn the_default_size_follows_the_contour_discretisation() {
+        let coords = insert(Coords::new(2).unwrap());
+        let contour = loop_mesh(coords, &rect_loop(1.0, 1.0, 10, 10));
+        let mesh = pave_surface(&contour, ElementType::QUA4, None, false).unwrap();
+        let r = inspect(&mesh);
+        assert_eq!(r.non_conforming, 0);
+        assert!((r.area - 1.0).abs() < 1e-9);
+        // Boundary spacing 0.1 over a unit square: of the order of 100 cells.
+        assert!(
+            (40..400).contains(&(r.quads + r.tris)),
+            "{} cells",
+            r.quads + r.tris
+        );
+    }
+
+    /// Throughput and shape, on the plate-with-a-hole benchmark. Not part of
+    /// the normal run: `cargo test --release -- --ignored`.
+    #[test]
+    #[ignore = "performance check, run explicitly with --ignored"]
+    fn perf_and_quality_plate_with_hole_under_30s() {
+        use crate::ops::mesher::paving::geom::{quad_quality, tri_quality};
+        let coords = insert(Coords::new(2).unwrap());
+        let outer = loop_mesh(coords.clone(), &rect_loop(0.30, 0.10, 60, 20));
+        let hole = loop_mesh(coords, &circle_loop(0.225, 0.05, 0.035, 64, true));
+        let contour = outer.union(&hole).unwrap();
+
+        let t0 = std::time::Instant::now();
+        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.00029), false).unwrap();
+        let dt = t0.elapsed();
+
+        let c = read(&mesh.coords().unwrap()).unwrap();
+        let at = |id: NodeId| {
+            let v = c.coord(id).unwrap();
+            Point2::new(v[0], v[1])
+        };
+        let (mut nq, mut nt) = (0usize, 0usize);
+        let mut worst = f64::INFINITY;
+        let mut under = 0usize;
+        for sm in &mesh {
+            let s = read(sm).unwrap();
+            let npc = s.element_type().nodes_per_cell();
+            for cell in s.connectivity().chunks(npc) {
+                let p: Vec<Point2> = cell.iter().map(|&n| at(n)).collect();
+                let q = if npc == 4 {
+                    nq += 1;
+                    quad_quality([p[0], p[1], p[2], p[3]])
+                } else {
+                    nt += 1;
+                    tri_quality(p[0], p[1], p[2])
+                };
+                worst = worst.min(q);
+                if q < 0.5 {
+                    under += 1;
+                }
+            }
+        }
+        let total = nq + nt;
+        let rate = total as f64 / dt.as_secs_f64();
+        println!(
+            "pave_surface: {total} cells ({nq} QUA4 + {nt} TRI3) in {:.2} s\n\
+             \x20 rate {:.0} cells/s | quads {:.1} % | worst scaled Jacobian {:.3} | below 0.5: {:.2} %",
+            dt.as_secs_f64(),
+            rate,
+            100.0 * nq as f64 / total as f64,
+            worst,
+            100.0 * under as f64 / total as f64,
+        );
+        assert!(dt.as_secs_f64() < 30.0, "took {:?}", dt);
+        assert!(rate > 10_000.0, "only {rate:.0} cells/s");
+        assert!(worst > 0.0, "an inverted cell got through: {worst}");
+        assert!(
+            nq as f64 / total as f64 > 0.95,
+            "only {:.1} % quadrangles",
+            100.0 * nq as f64 / total as f64
+        );
+    }
 }

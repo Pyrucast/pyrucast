@@ -174,12 +174,21 @@ pub fn pave(
             front.kill_loop(rep);
             continue;
         }
-        if n <= CLOSE_AT || stalls > MAX_STALL || steps > cap {
+        if n <= CLOSE_AT || steps > cap {
             close_loop(&mut fab, &mut front, rep);
             continue;
         }
+        if stalls > MAX_STALL {
+            // Cutting the loop in two usually gets it moving again; closing it
+            // outright would fill a large polygon with a decomposition, which
+            // is a far worse mesh than two more rows would have been.
+            if !unstick(&fab, &mut front, rep, all_quad, &mut stack) {
+                close_loop(&mut fab, &mut front, rep);
+            }
+            continue;
+        }
 
-        match try_row(&mut fab, &mut front, rep, target) {
+        match try_row(&mut fab, &mut front, rep, target, all_quad) {
             // The row consumed the loop outright.
             Some(None) => {}
             Some(Some(new_rep)) => {
@@ -241,7 +250,13 @@ fn split_longest_segment(fab: &mut Fabric, verts: &mut Vec<u32>) {
 ///
 /// `Some(Some(r))` advanced the loop to `r`, `Some(None)` finished it off, and
 /// `None` means the row could not be laid at all.
-fn try_row(fab: &mut Fabric, front: &mut Front, rep: u32, target: f64) -> Option<Option<u32>> {
+fn try_row(
+    fab: &mut Fabric,
+    front: &mut Front,
+    rep: u32,
+    target: f64,
+    all_quad: bool,
+) -> Option<Option<u32>> {
     let slots = front.loop_slots(rep);
     let n = slots.len();
     let p: Vec<Point2> = slots
@@ -263,7 +278,7 @@ fn try_row(fab: &mut Fabric, front: &mut Front, rep: u32, target: f64) -> Option
     for _ in 0..RETREAT_STEPS {
         let sz = |i: usize| base[i] * scale[i];
         let want = |i: usize| base[i];
-        match row::plan(front, &fab.pts, rep, &sz, &want) {
+        match row::plan(front, &fab.pts, rep, &sz, &want, all_quad) {
             Ok(plan) => {
                 if chain_is_free(front, fab, &grid, &plan) {
                     let out = commit(fab, front, rep, plan);
@@ -314,13 +329,20 @@ fn chain_is_free(front: &Front, fab: &Fabric, grid: &EdgeGrid, plan: &RowPlan) -
                 return false;
             }
         }
-        // And against itself, skipping the neighbours it legitimately touches.
-        for j in (i + 2)..m {
-            if i == 0 && j == m - 1 {
+    }
+    // And against itself. Asking every pair would be quadratic in the front
+    // length, which on a fine mesh is the dominant cost of the whole paver.
+    let ring: Vec<Point2> = plan.chain.iter().map(|&i| at(i)).collect();
+    let own = EdgeGrid::of_ring(&ring, 0.0);
+    for i in 0..m {
+        let (a, b) = (ring[i], ring[(i + 1) % m]);
+        for j in own.near_segment(a, b) {
+            let j = j as usize;
+            // Skip itself and the two edges it shares an endpoint with.
+            if j == i || (j + 1) % m == i || (i + 1) % m == j {
                 continue;
             }
-            let (c, d) = (at(plan.chain[j]), at(plan.chain[(j + 1) % m]));
-            if segments_cross(a, b, c, d) {
+            if segments_cross(a, b, ring[j], ring[(j + 1) % m]) {
                 return false;
             }
         }
@@ -404,12 +426,78 @@ fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32) {
         .iter()
         .map(|&s| front.vertex(s))
         .collect();
+    // A front loop bounds material on its left, so a closed one encloses
+    // positive area. A non-positive one is a degenerate remnant — two parts of
+    // the front that ended up grazing each other — and bounds no material at
+    // all. Filling it would add elements the domain does not contain, and,
+    // being clockwise, they could not be oriented correctly anyway.
+    let poly: Vec<Point2> = verts.iter().map(|&v| fab.pts[v as usize]).collect();
+    if crate::ops::mesher::triangulation::signed_area(&poly) <= 0.0 {
+        front.kill_loop(rep);
+        return;
+    }
     let filled = close::close(&fab.pts, &verts);
+    for p in &filled.added {
+        fab.add(*p, true);
+    }
     for q in filled.quads {
         fab.push_quad(q);
     }
     fab.tris.extend(filled.tris);
     front.kill_loop(rep);
+}
+
+/// Cut a stalled loop in two along the shortest admissible chord.
+///
+/// Returns `false` when no chord is usable, in which case the caller falls
+/// back to closing the loop outright.
+fn unstick(
+    fab: &Fabric,
+    front: &mut Front,
+    rep: u32,
+    all_quad: bool,
+    stack: &mut Vec<(u32, u32)>,
+) -> bool {
+    let slots = front.loop_slots(rep);
+    let n = slots.len();
+    if n < 8 {
+        return false;
+    }
+    let grid = EdgeGrid::build(front, &fab.pts, 0.0);
+    let mut best: Option<(f64, usize, usize)> = None;
+    for i in 0..n {
+        let pa = fab.pts[front.vertex(slots[i]) as usize];
+        for j in (i + 1)..n {
+            let gap = j - i;
+            // Both sides must be worth paving, and — under the all-quadrangle
+            // guarantee — both must stay even. A chord adds one slot to each
+            // side, so an odd gap is what keeps the parity.
+            if gap < 3 || n - gap < 3 {
+                continue;
+            }
+            if all_quad && gap % 2 == 0 {
+                continue;
+            }
+            let pb = fab.pts[front.vertex(slots[j]) as usize];
+            let d = (pb - pa).norm();
+            if best.is_some_and(|(bd, _, _)| d >= bd) {
+                continue;
+            }
+            if !seam_is_clear(front, fab, &grid, slots[i], slots[j]) {
+                continue;
+            }
+            best = Some((d, i, j));
+        }
+    }
+    match best {
+        Some((_, i, j)) => {
+            let (ra, rb) = front.split_by_chord(slots[i], slots[j]);
+            stack.push((ra, 0));
+            stack.push((rb, 0));
+            true
+        }
+        None => false,
+    }
 }
 
 /// The closest pair of front nodes that ought to be merged, if any.

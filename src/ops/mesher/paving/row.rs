@@ -171,6 +171,7 @@ pub fn plan(
     rep: u32,
     size: &dyn Fn(usize) -> f64,
     spacing: &dyn Fn(usize) -> f64,
+    all_quad: bool,
 ) -> Result<RowPlan, Vec<usize>> {
     let slots = front.loop_slots(rep);
     let n = slots.len();
@@ -227,6 +228,39 @@ pub fn plan(
         return Err((0..n).collect());
     }
 
+    // A row normally preserves the loop's parity, which is what the
+    // all-quadrangle guarantee rests on. The exception is a chain of ends
+    // whose identifications run together, merging more than two nodes at once
+    // and losing a node the count was relying on. Demoting one end to a plain
+    // side restores it; each demotion removes an end, so this settles.
+    let mut k = k;
+    loop {
+        let built = assemble(front, pts, rep, &v, &p, &theta, &k, size);
+        let Ok(plan) = built else { return built };
+        if !all_quad || plan.chain.len() % 2 == n % 2 || plan.chain.len() < 3 {
+            return Ok(plan);
+        }
+        match (0..n).find(|&i| k[i] == 1) {
+            Some(i) => k[i] = 2,
+            None => return Ok(plan),
+        }
+    }
+}
+
+/// Build the row for a settled classification.
+#[allow(clippy::too_many_arguments)]
+fn assemble(
+    front: &Front,
+    pts: &[Point2],
+    rep: u32,
+    v: &[u32],
+    p: &[Point2],
+    theta: &[f64],
+    k: &[usize],
+    size: &dyn Fn(usize) -> f64,
+) -> Result<RowPlan, Vec<usize>> {
+    let _ = (front, rep);
+    let n = v.len();
     // ── New nodes, slot by slot ───────────────────────────────────────────
     // `chain_of[i]` walks slot `i`'s new nodes from the predecessor side to
     // the successor side: x_{k-1}, w_{k-2}, …, w_1, x_1.
@@ -461,7 +495,7 @@ mod tests {
     fn a_square_row_makes_one_quad_per_edge_less_the_corners() {
         let (f, pts) = square_loop(5);
         let rep = f.live_slots().next().unwrap();
-        let plan = plan(&f, &pts, rep, &|_| 0.2, &|_| 0.2).unwrap();
+        let plan = plan(&f, &pts, rep, &|_| 0.2, &|_| 0.2, false).unwrap();
         // 20 slots, 4 corners classified as ends.
         assert_eq!(plan.quads.len(), 16);
         assert_eq!(plan.chain.len(), 12);
@@ -471,7 +505,7 @@ mod tests {
     fn the_row_tiles_the_strip_without_gap_or_overlap() {
         let (f, pts) = square_loop(5);
         let rep = f.live_slots().next().unwrap();
-        let plan = plan(&f, &pts, rep, &|_| 0.2, &|_| 0.2).unwrap();
+        let plan = plan(&f, &pts, rep, &|_| 0.2, &|_| 0.2, false).unwrap();
         let at = |c: Corner| match c {
             Corner::Old(i) => pts[i as usize],
             Corner::New(i) => plan.pts[i as usize],
@@ -499,7 +533,7 @@ mod tests {
     fn every_planned_quad_is_convex_and_counter_clockwise() {
         let (f, pts) = square_loop(6);
         let rep = f.live_slots().next().unwrap();
-        let plan = plan(&f, &pts, rep, &|_| 0.15, &|_| 0.15).unwrap();
+        let plan = plan(&f, &pts, rep, &|_| 0.15, &|_| 0.15, false).unwrap();
         let at = |c: Corner| match c {
             Corner::Old(i) => pts[i as usize],
             Corner::New(i) => plan.pts[i as usize],
@@ -525,8 +559,8 @@ mod tests {
         ];
         let mut f = Front::new();
         let rep = f.add_loop(&(0..6).collect::<Vec<_>>());
-        assert!(plan(&f, &pts, rep, &|_| 0.12, &|_| 0.12).is_ok());
-        let blame = plan(&f, &pts, rep, &|_| 1.4, &|_| 1.4).unwrap_err();
+        assert!(plan(&f, &pts, rep, &|_| 0.12, &|_| 0.12, false).is_ok());
+        let blame = plan(&f, &pts, rep, &|_| 1.4, &|_| 1.4, false).unwrap_err();
         assert!(!blame.is_empty(), "a refusal must say where");
         assert!(blame.iter().all(|&i| i < 6));
     }
@@ -541,7 +575,7 @@ mod tests {
         // each of them testable.
         let (f, pts) = square_loop(5);
         let rep = f.live_slots().next().unwrap();
-        assert!(plan(&f, &pts, rep, &|_| 5.0, &|_| 5.0).is_ok());
+        assert!(plan(&f, &pts, rep, &|_| 5.0, &|_| 5.0, false).is_ok());
     }
 
     #[test]
@@ -556,9 +590,8 @@ mod tests {
             let (f, pts) = square_loop(per_side);
             let rep = f.live_slots().next().unwrap();
             let n = f.loop_len(rep);
-            if let Ok(plan) = plan(&f, &pts, rep, &|_| 0.6 / per_side as f64, &|_| {
-                0.6 / per_side as f64
-            }) {
+            let h = 0.6 / per_side as f64;
+            if let Ok(plan) = plan(&f, &pts, rep, &|_| h, &|_| h, false) {
                 assert_eq!(
                     plan.chain.len() % 2,
                     n % 2,
@@ -582,7 +615,7 @@ mod tests {
         // angle classification is what is being exercised.
         let (f, pts) = square_loop(2);
         let rep = f.live_slots().next().unwrap();
-        let plan = plan(&f, &pts, rep, &|_| 0.5, &|_| 0.5).unwrap();
+        let plan = plan(&f, &pts, rep, &|_| 0.5, &|_| 0.5, false).unwrap();
         assert_eq!(plan.pts.len(), 1);
         assert_eq!(plan.chain.len(), 1);
         assert_eq!(plan.quads.len(), 4);

@@ -37,19 +37,45 @@ impl EdgeGrid {
     /// Index every live front edge. `hint` is the target element size, used
     /// as the lower bound on the cell size.
     pub fn build(front: &Front, pts: &[Point2], hint: f64) -> EdgeGrid {
-        let slots: Vec<u32> = front.live_slots().collect();
+        EdgeGrid::of_segments(
+            front.live_slots().map(|s| {
+                (
+                    s,
+                    pts[front.vertex(s) as usize],
+                    pts[front.vertex(front.next(s)) as usize],
+                )
+            }),
+            hint,
+        )
+    }
+
+    /// Index a closed polyline, each edge named by the index of its first
+    /// point. Used to ask whether an advanced front crosses *itself*, which
+    /// is otherwise a quadratic question.
+    pub fn of_ring(pts: &[Point2], hint: f64) -> EdgeGrid {
+        let m = pts.len();
+        EdgeGrid::of_segments(
+            (0..m as u32).map(|i| (i, pts[i as usize], pts[(i as usize + 1) % m])),
+            hint,
+        )
+    }
+
+    /// Index an arbitrary set of named segments.
+    pub fn of_segments(segs: impl Iterator<Item = (u32, Point2, Point2)>, hint: f64) -> EdgeGrid {
+        let items: Vec<(u32, Point2, Point2)> = segs.collect();
         let (mut lo, mut hi) = (
             Point2::new(f64::INFINITY, f64::INFINITY),
             Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
         );
-        for &s in &slots {
-            let p = pts[front.vertex(s) as usize];
-            lo.x = lo.x.min(p.x);
-            lo.y = lo.y.min(p.y);
-            hi.x = hi.x.max(p.x);
-            hi.y = hi.y.max(p.y);
+        for (_, a, b) in &items {
+            for p in [a, b] {
+                lo.x = lo.x.min(p.x);
+                lo.y = lo.y.min(p.y);
+                hi.x = hi.x.max(p.x);
+                hi.y = hi.y.max(p.y);
+            }
         }
-        let n = slots.len().max(1);
+        let n = items.len().max(1);
         if !lo.x.is_finite() {
             lo = Point2::origin();
             hi = Point2::origin();
@@ -70,11 +96,9 @@ impl EdgeGrid {
             ny,
             buckets: vec![Vec::new(); nx * ny],
         };
-        for &s in &slots {
-            let a = pts[front.vertex(s) as usize];
-            let b = pts[front.vertex(front.next(s)) as usize];
-            for k in grid.cells_of(a, b) {
-                grid.buckets[k].push(s);
+        for (id, a, b) in &items {
+            for k in grid.cells_of(*a, *b) {
+                grid.buckets[k].push(*id);
             }
         }
         grid
