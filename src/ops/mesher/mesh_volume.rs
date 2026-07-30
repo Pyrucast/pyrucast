@@ -33,7 +33,9 @@
 //! matters if two solids are meant to share a conforming interface, and not
 //! at all if the envelope was only ever a way to describe a form. A warning
 //! on stderr says how many nodes were added, because the difference is easy
-//! to overlook.
+//! to overlook — and the result **names them**, in a second submesh of `POI1`
+//! alongside the cells, so a caller can act on it rather than read stderr.
+//! That submesh appears only when there is something to name.
 //!
 //! It is also why it works. Recovery is hard precisely because a segment
 //! that cannot be fitted has, otherwise, no way out; subdivide it and the
@@ -72,21 +74,23 @@
 //! missed, and the envelopes that genuinely cannot be filled are correctly
 //! refused.
 //!
-//! In **strict** mode (the default) recovery still has a real gap. It has no
-//! way to widen its view when no pocket does the job: growing the pocket is
-//! what the code tries, but the rebuild is an *exhaustive* search, so it
-//! stops being affordable past half a dozen cells — and the cases that need
-//! widening need far more. The commonest of them is a **flat quadrilateral
-//! of the surface** whose two triangles the Delaunay triangulation cut along
-//! the other diagonal; the whole side wall of an extrusion is made of them.
-//! Recovery gives up explicitly there, and giving up is not instant either:
-//! a failure costs seconds, because the search has to be tried before it can
-//! be declared hopeless.
+//! A pocket has two fillers. The exhaustive search above is complete — it alone
+//! can prove a small pocket has *no* filling — but it is exponential and runs
+//! out of road at half a dozen cells. The other one does not search: it
+//! **computes** the Delaunay triangulation of the pocket's own vertices and
+//! asks whether that contains every face of the pocket's surface, for the
+//! price of one triangulation whatever the pocket's size. When it does not, it
+//! names the face it stumbled on, and swallowing the cell beyond that face
+//! makes the obstruction impossible to repeat. That is what settles the
+//! **flat quadrilaterals of the surface** an extrusion's side wall is made
+//! of — the facet goes in as a wall with both its faces, cutting the pocket
+//! in two, and each half is filled from its own side.
 //!
-//! Closing that gap needs a different filler for a pocket — a *Delaunay*
-//! retriangulation of the cavity, which is polynomial, instead of the
-//! exhaustive search, which is not. Until then, `allow_surface_nodes` is the
-//! answer for anything with large flat faces.
+//! What it does **not** do is edges. A Delaunay triangulation is what it is:
+//! one cannot *ask* it for an edge, and a missing envelope edge is missing
+//! precisely because it is not Delaunay. So a blocked edge remains the
+//! business of the flips, and where they do not suffice, of
+//! `allow_surface_nodes`.
 //!
 //! # Quality
 //!
@@ -100,21 +104,30 @@
 //!   **inside** the solid, at the circumcentres of the cells whose
 //!   radius-edge ratio or size says they are wrong;
 //! - [`tetrahedralization::smooth`](super::tetrahedralization::smooth) then chases
-//!   the **slivers** refinement cannot reach, by reconnecting cells and
-//!   relaxing interior nodes.
+//!   the **slivers** refinement cannot reach, by reconnecting cells, taking
+//!   out the edges a sliver is flat across, and relaxing interior nodes.
 //!
 //! What that is worth, measured on the plate of `formation/maillage_test.py`
-//! at 28 000 cells: the flattest cell went from 8·10⁻¹⁶ of the average
-//! volume to 4·10⁻², and the share of cells under 10° from 1.8 % to 0.5 %.
-//! The first of those two numbers is the whole point — 10⁻¹⁶ is a singular
-//! element matrix, 10⁻² is a perfectly ordinary cell.
+//! (the median dihedral angle sits at 47° throughout, so what moves is the
+//! tail):
 //!
-//! **What can still defeat both** is a sliver whose four corners are all
+//! | cells | under 10° | under 1° | flattest / average |
+//! |---|---|---|---|
+//! | 28 000 | 0.59 % → 0.00 % | 0 → 0 | 5.5·10⁻² → 1.5·10⁻¹ |
+//! | 402 000 | 0.94 % → 0.11 % | 0.022 % → 0.000 % | 7.3·10⁻⁵ → 3.6·10⁻³ |
+//! | 977 000 | 0.91 % → 0.18 % | 0.028 % → 0.001 % | 4.0·10⁻³ → 7.1·10⁻⁴ |
+//!
+//! The second column is the whole point: a cell under 1° has a nearly
+//! singular element matrix, and it does not take many to sink a computation.
+//! The passes cost about 1.35× the meshing time, at every size.
+//!
+//! **What can still defeat all three** is a sliver whose four corners are all
 //! nodes of the envelope. No node can be inserted to break it up and none of
-//! its own can be moved, since the caller's nodes are fixed by contract;
-//! only a reconnection can help, and sometimes none does. Cutting the
-//! surface there is tried when `allow_surface_nodes` allows it, and does not
-//! always work either — the four corners can simply be in the wrong places.
+//! its own can be moved, since the caller's nodes are fixed by contract. It
+//! has become rare — no envelope in the test suite produces one — but it
+//! remains possible, and cutting the surface there, when
+//! `allow_surface_nodes` allows it, does not always work either: the four
+//! corners can simply be in the wrong places.
 //!
 //! Rather than hand back a mesh with a singular cell in it, the mesher
 //! **refuses**, and says where: the one thing that always clears such a cell
@@ -383,7 +396,9 @@ fn reclaim(mesh: &mut TetMesh, env: &mut Envelope, cancel: &dyn Cancel) -> Resul
 /// A message on stderr is however a poor thing to act on. The points come
 /// back so they can be handed over as part of the mesh, where a caller can
 /// look at them, plot them, or hand them to whatever needs to know the
-/// interface moved.
+/// interface moved. That changes the shape of the result — a submesh appears
+/// that was not there otherwise — so the warning says so outright rather than
+/// leaving it to be discovered by a loop that reads a marker as a cell.
 fn warn_if_subdivided(env: &Envelope, cells: &[[u32; 4]]) -> Vec<u32> {
     let given = env.given_node_count() as u32;
     // Only the points that sit *on* the envelope count here; anything past
@@ -405,7 +420,9 @@ fn warn_if_subdivided(env: &Envelope, cells: &[[u32; 4]]) -> Vec<u32> {
         "mesh_volume: warning — the envelope would not fit as given, so {added} node(s) were \
          added on it. Its shape is unchanged (each new node lies on the edge or facet it \
          divides), but the skin of the result no longer matches the surface mesh passed in. \
-         They come back as a POI1 submesh of the result."
+         The result therefore carries a SECOND SUBMESH, of POI1, naming those {added} node(s): \
+         its element types are [TET4, POI1] rather than [TET4] alone, so anything that walks \
+         the submeshes or counts cells must take the TET4 one and leave the markers out."
     );
     kept
 }

@@ -740,7 +740,8 @@ triangulation s'affine. Ce qui est perdu : la **discrétisation** — la peau du
 résultat ne coïncide plus avec le maillage surfacique fourni. Cela compte si
 deux solides doivent partager une interface conforme ; cela ne compte pas si
 l'enveloppe ne servait qu'à décrire une forme. Un avertissement sur `stderr`
-indique combien de nœuds ont été ajoutés.
+indique combien de nœuds ont été ajoutés — et prévient que le maillage rendu
+porte de ce fait un sous-maillage de plus.
 
 **Et surtout, le résultat vous dit lesquels.** Un message sur `stderr` n'est
 pas quelque chose sur quoi un script peut agir ; quand des nœuds ont été
