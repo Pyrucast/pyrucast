@@ -711,6 +711,9 @@ impl Mesh {
     ///
     /// For a single submesh, use
     /// [`crate::viz::render_submesh_with_field`] with the submesh handle.
+    // Eight orthogonal rendering options, all optional at the Python layer:
+    // grouping them into a struct would only move the argument list.
+    #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "viz")]
     pub fn plot_with_field(
         &self,

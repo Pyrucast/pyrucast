@@ -299,6 +299,7 @@ impl FieldArg<'_> {
 /// File export draws the supplied `component`; the interactive window
 /// adds a clickable button (top-centre) and a `Tab` keyboard shortcut
 /// to cycle through every component (union of the zones').
+#[allow(clippy::too_many_arguments)] // see `Mesh::plot_with_field`
 pub(crate) fn render_mesh_with_field(
     mesh: &crate::containers::mesh::Mesh,
     field: FieldArg<'_>,
@@ -345,6 +346,7 @@ pub(crate) fn render_mesh_with_field(
 /// Render a [`crate::containers::mesh::SubMesh`] (by handle, so
 /// element-field zones can be matched by identity) coloured by a field
 /// component. Same semantics as `render_mesh_with_field`.
+#[allow(clippy::too_many_arguments)] // see `Mesh::plot_with_field`
 pub fn render_submesh_with_field(
     submesh: &crate::store::Handle<crate::containers::mesh::SubMesh>,
     field: FieldArg<'_>,
