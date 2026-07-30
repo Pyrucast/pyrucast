@@ -131,6 +131,21 @@ pub trait Aggregate: Default {
         Ok(out)
     }
 
+    /// Mirror of [`Aggregate::union_sub`] with the sub-object **first**: a
+    /// fresh aggregate holding `h`, then `self`'s subs, skipping the one whose
+    /// slot is `h`'s. Same sharing and finalization semantics; only the zone
+    /// order differs. Python: `sub | aggregate`.
+    fn union_sub_first(&self, h: &Handle<Self::Sub>) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let mut out = Self::default();
+        out.add_sub(h.clone())?;
+        out.try_extend_from(self)?;
+        out.finalize()?;
+        Ok(out)
+    }
+
     /// Fresh aggregate holding the sub-objects at `indices` (already
     /// resolved against `len`, in the given order). Each handle is shared
     /// (refcount bump), not deep-copied. Backs Python slicing (`agg[i:j:k]`).
@@ -336,10 +351,12 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 /// [`Aggregate`]. The name `inner` is hardcoded by this macro.
 ///
 /// `$Inner` is the **Rust** aggregate type stored in `$T`'s `inner` field
-/// (e.g. `Mesh` behind `PyMesh`); it owns the `union`/`union_sub`/`union_subs`
-/// constructors that back the `|` operator. The macro wires both the
-/// aggregate-level `|` (on `$T`) **and** the sub-level `|` (on `$Sub`), so a
-/// single invocation gives the whole uniform union surface.
+/// (e.g. `Mesh` behind `PyMesh`); it owns the
+/// `union`/`union_sub`/`union_sub_first`/`union_subs` constructors that back
+/// the `|` operator. The macro wires the aggregate-level `|` (on `$T`, both
+/// senses: `__or__` and the reflected `__ror__` for `sub | agg`) **and** the
+/// sub-level `|` (on `$Sub`), so a single invocation gives the whole uniform
+/// union surface.
 ///
 /// # Usage
 ///
@@ -502,6 +519,27 @@ macro_rules! impl_aggregate_pymethods {
                     }
                     if let Ok(s) = other.extract::<pyo3::PyRef<'_, $Sub>>() {
                         let inner = self.inner.union_sub(&s.handle)?;
+                        return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
+                    }
+                    Ok(py.NotImplemented())
+                }
+
+                /// Right-hand `sub | aggregate`: the **union with the
+                /// sub-object first**, then this aggregate's zones — the
+                /// mirror of `aggregate | sub`, with the same deduplication
+                /// and finalization. Reached when the left operand's `__or__`
+                /// returns `NotImplemented` (a sub-object only knows how to
+                /// union another sub-object), so both senses of `|` are
+                /// accepted and differ only in zone order. Returns
+                /// `NotImplemented` for any other left-hand type.
+                fn __ror__(
+                    &self,
+                    py: pyo3::Python<'_>,
+                    other: &pyo3::Bound<'_, pyo3::PyAny>,
+                ) -> pyo3::PyResult<pyo3::Py<pyo3::PyAny>> {
+                    use $crate::aggregate::Aggregate;
+                    if let Ok(s) = other.extract::<pyo3::PyRef<'_, $Sub>>() {
+                        let inner = self.inner.union_sub_first(&s.handle)?;
                         return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
                     }
                     Ok(py.NotImplemented())
@@ -713,8 +751,9 @@ macro_rules! impl_aggregate_std_traits {
             }
         }
 
-        // `union` / `union_sub` (aggregate | aggregate, aggregate | sub)
-        // are default methods on the `Aggregate` trait. Only `sub | sub`
+        // `union` / `union_sub` / `union_sub_first` (aggregate | aggregate,
+        // aggregate | sub, sub | aggregate) are default methods on the
+        // `Aggregate` trait. Only `sub | sub`
         // needs a generated builder here: a sub-handle alone cannot name
         // its parent aggregate type, so we hang the constructor on `$T`.
         impl $T {
@@ -849,6 +888,24 @@ mod tests {
         assert_eq!(read(&h).unwrap().0, 7);
         b.push(insert(Item(8)));
         assert!(b.unit().is_err()); // two → error
+    }
+
+    #[test]
+    fn union_sub_first_mirrors_union_sub() {
+        let mut b = Bag::default();
+        b.push(insert(Item(1)));
+        b.push(insert(Item(2)));
+        let h = insert(Item(3));
+
+        let appended = b.union_sub(&h).unwrap();
+        let prepended = b.union_sub_first(&h).unwrap();
+        let values = |bag: &Bag| -> Vec<u32> { bag.iter().map(|h| read(h).unwrap().0).collect() };
+        assert_eq!(values(&appended), vec![1, 2, 3]);
+        assert_eq!(values(&prepended), vec![3, 1, 2]);
+
+        // A sub already held is not duplicated — it just moves to the front.
+        let already = b.get(1).unwrap();
+        assert_eq!(values(&b.union_sub_first(&already).unwrap()), vec![2, 1]);
     }
 
     #[test]

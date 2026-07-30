@@ -281,8 +281,8 @@ mutation en place — et ne sont **pas** la composition (`|`, ci-dessous).
 
 La composition d'agrégats est l'**union** : côté **Python** elle s'écrit `|`
 (comme `set | set`), côté **Rust** ce sont les méthodes nommées `union` /
-`union_sub` / `union_subs` (renvoient `Result<…>`). Les sous-objets sont
-**partagés** (refcount), jamais copiés ; les contraintes de domaine (même
+`union_sub` / `union_sub_first` / `union_subs` (renvoient `Result<…>`). Les
+sous-objets sont **partagés** (refcount), jamais copiés ; les contraintes de domaine (même
 `Coords` pour `Mesh`, etc.) restent vérifiées.
 
 Sémantique d'union (uniforme pour **tous** les agrégats) :
@@ -296,7 +296,8 @@ Sémantique d'union (uniforme pour **tous** les agrégats) :
 | Python | Rust | Résultat | Sémantique |
 |---|---|---|---|
 | `agrégat \| agrégat` | `a.union(&b)` | agrégat | union dédupliquée, ordre de 1ʳᵉ apparition |
-| `agrégat \| sub` | `a.union_sub(&h)` | agrégat | ajoute un sous-objet (ignoré si déjà présent) |
+| `agrégat \| sub` | `a.union_sub(&h)` | agrégat | ajoute un sous-objet **en queue** (ignoré si déjà présent) |
+| `sub \| agrégat` | `a.union_sub_first(&h)` | agrégat | la même union, sous-objet **en tête** (via `__ror__`) |
 | `sub \| sub` | `T::union_subs(&a, &b)` | agrégat | union des deux sous-objets |
 | `node \| node` | `a.union(&b)` | `Mesh` | maillage POI1 unitaire sur les deux nœuds |
 | `mesh \| node` | `m.union_node(&n)` | `Mesh` | ajoute un point (erreur si `Mesh` non unitaire POI1) |

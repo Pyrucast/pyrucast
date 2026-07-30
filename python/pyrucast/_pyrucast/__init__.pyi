@@ -441,6 +441,17 @@ class ElementField:
         other type so Python can fall back to the right operand's
         `__ror__`.
         """
+    def __ror__(self, other: typing.Any) -> typing.Any:
+        r"""
+        Right-hand `sub | aggregate`: the **union with the
+        sub-object first**, then this aggregate's zones — the
+        mirror of `aggregate | sub`, with the same deduplication
+        and finalization. Reached when the left operand's `__or__`
+        returns `NotImplemented` (a sub-object only knows how to
+        union another sub-object), so both senses of `|` are
+        accepted and differ only in zone order. Returns
+        `NotImplemented` for any other left-hand type.
+        """
 
 @typing.final
 class Evolution:
@@ -543,6 +554,17 @@ class Evolution:
         other type so Python can fall back to the right operand's
         `__ror__`.
         """
+    def __ror__(self, other: typing.Any) -> typing.Any:
+        r"""
+        Right-hand `sub | aggregate`: the **union with the
+        sub-object first**, then this aggregate's zones — the
+        mirror of `aggregate | sub`, with the same deduplication
+        and finalization. Reached when the left operand's `__or__`
+        returns `NotImplemented` (a sub-object only knows how to
+        union another sub-object), so both senses of `|` are
+        accepted and differ only in zone order. Returns
+        `NotImplemented` for any other left-hand type.
+        """
 
 @typing.final
 class FiniteElementSpace:
@@ -632,6 +654,17 @@ class FiniteElementSpace:
         (`consolidate_element`). Returns `NotImplemented` for any
         other type so Python can fall back to the right operand's
         `__ror__`.
+        """
+    def __ror__(self, other: typing.Any) -> typing.Any:
+        r"""
+        Right-hand `sub | aggregate`: the **union with the
+        sub-object first**, then this aggregate's zones — the
+        mirror of `aggregate | sub`, with the same deduplication
+        and finalization. Reached when the left operand's `__or__`
+        returns `NotImplemented` (a sub-object only knows how to
+        union another sub-object), so both senses of `|` are
+        accepted and differ only in zone order. Returns
+        `NotImplemented` for any other left-hand type.
         """
 
 @typing.final
@@ -782,6 +815,17 @@ class Matrix:
         other type so Python can fall back to the right operand's
         `__ror__`.
         """
+    def __ror__(self, other: typing.Any) -> typing.Any:
+        r"""
+        Right-hand `sub | aggregate`: the **union with the
+        sub-object first**, then this aggregate's zones — the
+        mirror of `aggregate | sub`, with the same deduplication
+        and finalization. Reached when the left operand's `__or__`
+        returns `NotImplemented` (a sub-object only knows how to
+        union another sub-object), so both senses of `|` are
+        accepted and differ only in zone order. Returns
+        `NotImplemented` for any other left-hand type.
+        """
 
 @typing.final
 class Mesh:
@@ -891,6 +935,17 @@ class Mesh:
         (`consolidate_element`). Returns `NotImplemented` for any
         other type so Python can fall back to the right operand's
         `__ror__`.
+        """
+    def __ror__(self, other: typing.Any) -> typing.Any:
+        r"""
+        Right-hand `sub | aggregate`: the **union with the
+        sub-object first**, then this aggregate's zones — the
+        mirror of `aggregate | sub`, with the same deduplication
+        and finalization. Reached when the left operand's `__or__`
+        returns `NotImplemented` (a sub-object only knows how to
+        union another sub-object), so both senses of `|` are
+        accepted and differ only in zone order. Returns
+        `NotImplemented` for any other left-hand type.
         """
 
 @typing.final
@@ -1187,6 +1242,17 @@ class Model:
         other type so Python can fall back to the right operand's
         `__ror__`.
         """
+    def __ror__(self, other: typing.Any) -> typing.Any:
+        r"""
+        Right-hand `sub | aggregate`: the **union with the
+        sub-object first**, then this aggregate's zones — the
+        mirror of `aggregate | sub`, with the same deduplication
+        and finalization. Reached when the left operand's `__or__`
+        returns `NotImplemented` (a sub-object only knows how to
+        union another sub-object), so both senses of `|` are
+        accepted and differ only in zone order. Returns
+        `NotImplemented` for any other left-hand type.
+        """
 
 @typing.final
 class Node:
@@ -1386,6 +1452,17 @@ class NodeField:
         (`consolidate_element`). Returns `NotImplemented` for any
         other type so Python can fall back to the right operand's
         `__ror__`.
+        """
+    def __ror__(self, other: typing.Any) -> typing.Any:
+        r"""
+        Right-hand `sub | aggregate`: the **union with the
+        sub-object first**, then this aggregate's zones — the
+        mirror of `aggregate | sub`, with the same deduplication
+        and finalization. Reached when the left operand's `__or__`
+        returns `NotImplemented` (a sub-object only knows how to
+        union another sub-object), so both senses of `|` are
+        accepted and differ only in zone order. Returns
+        `NotImplemented` for any other left-hand type.
         """
 
 @typing.final

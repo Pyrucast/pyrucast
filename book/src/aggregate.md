@@ -50,6 +50,12 @@ Côté **Rust**, le trait `Aggregate` fournit les mêmes : `len`, `is_empty`,
 > slicing s'appuie sur `subset` côté Rust et préserve les invariants de
 > l'agrégat (`check_push`, `finalize`).
 
+> **Passer une seule zone à un opérateur.** Les opérateurs (`ops/`) prennent
+> des **agrégats**, pas des vues : `mesher.invert(mesh[1])` lève un `TypeError`
+> (« `SubMesh` object is not an instance of `Mesh` »). Pour n'en traiter qu'une,
+> utiliser le slicing, qui rend un agrégat unitaire :
+> `mesher.invert(mesh[1:2])`.
+
 > **`unit()` vs `[0]`.** `agg[0]` prend silencieusement la première de
 > plusieurs zones ; `agg.unit()` **exige** qu'il n'y en ait qu'une et lève
 > sinon. Aux frontières qui n'ont de sens que mono-zone (par exemple ajouter
@@ -80,13 +86,20 @@ côté Rust. La sémantique est **uniforme pour les sept agrégats** :
    les zones partageant un même support (voir [Champ](field.md),
    [Champ aux nœuds](node-field.md)).
 
-Les trois formes de l'union :
+Les quatre formes de l'union :
 
 | Python | Rust | Résultat |
 |---|---|---|
 | `agg \| agg` | `a.union(&b)` | union dédupliquée des deux listes |
-| `agg \| sub` | `a.union_sub(&h)` | ajoute une zone (ignorée si déjà présente) |
+| `agg \| sub` | `a.union_sub(&h)` | ajoute une zone **en queue** (ignorée si déjà présente) |
+| `sub \| agg` | `a.union_sub_first(&h)` | la même union, la zone **en tête** |
 | `sub \| sub` | `T::union_subs(&a, &b)` | un agrégat neuf portant les deux zones |
+
+L'union est donc acceptée **dans les deux sens** : `sub | agg` passe par le
+`__ror__` de l'agrégat (une zone seule ne sait unir qu'une autre zone), et ne
+diffère de `agg | sub` que par l'ordre des zones. La déduplication et la
+finalisation sont identiques — une zone déjà présente est simplement déplacée
+en tête.
 
 Plus, pour les nœuds (cf. [Nœud](node.md)) :
 

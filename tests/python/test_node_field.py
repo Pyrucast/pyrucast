@@ -478,6 +478,21 @@ def test_union_aggregate_plus_subfield():
     assert len(f) == 2
 
 
+def test_union_subfield_plus_aggregate_still_fuses_same_support():
+    # Reflected form `sub | agg` (NodeField.__ror__): the sub-zone comes first,
+    # and `finalize()` still fuses zones sharing a support — same result as
+    # `agg | sub`, only the zone order differs.
+    c, nodes, mesh = _two_zone_mesh()
+    a = pyrucast.NodeField(mesh[0], ["T"])
+    a[0].set_value(nodes[0], "T", 1.0)
+    b = pyrucast.NodeField(mesh, ["P"])
+    f = a[0] | b
+    assert len(f) == 2
+    assert f.components() == ["T", "P"]
+    assert f.value(nodes[0], "T") == 1.0
+    f.check()
+
+
 def test_union_field_to_itself_dedups_by_handle():
     # Same handle on both sides: the union deduplicates by handle, so a single
     # zone remains (and the store mutex is never re-locked).

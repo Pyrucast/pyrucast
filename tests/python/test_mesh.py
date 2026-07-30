@@ -93,6 +93,31 @@ def test_aggregate_union_sub_and_sub_union_sub():
     assert len(m2) == 3
 
 
+def test_sub_union_aggregate_mirrors_aggregate_union_sub():
+    """`sub | agg` (Mesh.__ror__) is accepted like `agg | sub`, sub first."""
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    d = c.add_node([2.0, 0.0])
+    two = pyrucast.mesher.line(a, b, 2)  # one submesh, 2 cells
+    five = pyrucast.mesher.line(b, d, 5)  # one submesh, 5 cells
+
+    assert (two | five[0]).cell_counts() == [2, 5]
+    assert (five[0] | two).cell_counts() == [5, 2]
+
+    # A zone already held is not duplicated, it only moves to the front.
+    m = two | five
+    assert (m[1] | m).cell_counts() == [5, 2]
+
+    # An unrelated left operand still raises, rather than silently unioning.
+    try:
+        _ = 3 | m
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("int | Mesh should raise TypeError")
+
+
 def test_node_union_node_and_mesh_union_node():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
