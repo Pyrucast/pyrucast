@@ -1280,4 +1280,38 @@ mod tests {
             assert!(s.contains("GAUSS"));
         }
     }
+
+    #[test]
+    fn pyra5_jacobian_volume() {
+        // A pyramid on a 2 × 3 rectangular base of height 4, apex deliberately
+        // off-centre: the volume is base × height / 3 whatever the apex does,
+        // which is a check the quadrature rule has to pass and a wrong Jacobi
+        // weight would fail.
+        let coords = insert(Coords::new(3).unwrap());
+        let ids: Vec<NodeId> = [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [2.0, 3.0, 0.0],
+            [0.0, 3.0, 0.0],
+            [1.7, 0.4, 4.0],
+        ]
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
+        .collect();
+        let sm = {
+            let mut sm = SubMesh::new(coords, ElementType::PYRA5);
+            sm.add_cell(&ids).unwrap();
+            insert(sm)
+        };
+        let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
+            .unwrap();
+        let mut vol = 0.0;
+        for g in 0..sub.gauss_count() {
+            vol += sub.gauss_weight(g).unwrap() * sub.det_jacobian(0, g).unwrap();
+        }
+        assert!(
+            (vol - 8.0).abs() < 1e-12,
+            "PYRA5 volume = {vol}, expected 8"
+        );
+    }
 }

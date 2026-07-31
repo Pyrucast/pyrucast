@@ -23,6 +23,7 @@
 //! | `QUA4` | `ξ, η ∈ [-1, +1]` | `(-1, -1)`, `(1, -1)`, `(1, 1)`, `(-1, 1)` — CCW |
 //! | `TET4` | `ξ, η, ζ ∈ [0, 1]` with `ξ + η + ζ ≤ 1` | `(0,0,0)`, `(1,0,0)`, `(0,1,0)`, `(0,0,1)` — face 0-1-2 CCW seen from node 3 |
 //! | `PENTA6` | `ξ, η ∈ [0, 1]` with `ξ + η ≤ 1`, `ζ ∈ [0, 1]` | bottom triangle CCW then top triangle CCW: `(0,0,0)`, `(1,0,0)`, `(0,1,0)`, `(0,0,1)`, `(1,0,1)`, `(0,1,1)` — the extrusion of a TRI3 along `ζ` |
+//! | `PYRA5` | `ζ ∈ [0, 1]`, `ξ, η ∈ [-(1-ζ), +(1-ζ)]` | square base CCW seen from the apex, then the apex: `(-1,-1,0)`, `(1,-1,0)`, `(1,1,0)`, `(-1,1,0)`, `(0,0,1)` |
 //! | `HEX8` | `ξ, η, ζ ∈ [-1, +1]` | bottom face CCW then top face CCW: `(-1,-1,-1)`, `(1,-1,-1)`, `(1,1,-1)`, `(-1,1,-1)`, `(-1,-1,1)`, `(1,-1,1)`, `(1,1,1)`, `(-1,1,1)` |
 //!
 //! ## Quadratic (Lagrange-2) variants
@@ -85,6 +86,17 @@ pub enum ElementType {
     /// (nodes 3..5 at `ζ = 1`), i.e. `(0,0,0)`, `(1,0,0)`, `(0,1,0)`,
     /// `(0,0,1)`, `(1,0,1)`, `(0,1,1)`.
     PENTA6,
+    /// 5-node pyramid: a square base and an apex. Reference: `ζ ∈ [0, 1]`
+    /// with `ξ, η ∈ [-(1-ζ), +(1-ζ)]`, so the square shrinks to a point at
+    /// the apex. Local order: base CCW seen from the apex (nodes 0..3 at
+    /// `ζ = 0`), then the apex, i.e. `(-1,-1,0)`, `(1,-1,0)`, `(1,1,0)`,
+    /// `(-1,1,0)`, `(0,0,1)`.
+    ///
+    /// This is the element that makes a hexahedron and a tetrahedron meet:
+    /// its square face matches a `HEX8` face and its four triangles match
+    /// `TET4` faces, so a hexahedral layer can be closed onto a tetrahedral
+    /// core without a hanging node.
+    PYRA5,
     /// 8-node hexahedron. Reference: `ξ, η, ζ ∈ [-1, +1]`. Local order:
     /// bottom face CCW (nodes 0..3), then top face CCW (nodes 4..7),
     /// i.e. `(-1,-1,-1)`, `(1,-1,-1)`, `(1,1,-1)`, `(-1,1,-1)`,
@@ -136,6 +148,7 @@ impl ElementType {
             Self::TRI3 => 3,
             Self::QUA4 | Self::TET4 => 4,
             Self::PENTA6 => 6,
+            Self::PYRA5 => 5,
             Self::HEX8 => 8,
             Self::SEG3 => 3,
             Self::TRI6 => 6,
@@ -154,7 +167,7 @@ impl ElementType {
             Self::POI1 => 0,
             Self::SEG2 => 1,
             Self::TRI3 | Self::QUA4 => 2,
-            Self::TET4 | Self::PENTA6 | Self::HEX8 => 3,
+            Self::TET4 | Self::PYRA5 | Self::PENTA6 | Self::HEX8 => 3,
             Self::SEG3 => 1,
             Self::TRI6 | Self::QUA8 => 2,
             Self::TET10 | Self::PENTA15 | Self::HEX20 => 3,
@@ -172,6 +185,7 @@ impl ElementType {
             Self::QUA4 => "QUA4",
             Self::TET4 => "TET4",
             Self::PENTA6 => "PENTA6",
+            Self::PYRA5 => "PYRA5",
             Self::HEX8 => "HEX8",
             Self::SEG3 => "SEG3",
             Self::TRI6 => "TRI6",
@@ -216,6 +230,7 @@ impl ElementType {
             Self::TET10 => &[0, 2, 1, 3, 6, 5, 4, 7, 9, 8],
             Self::PENTA6 => &[0, 2, 1, 3, 5, 4],
             Self::PENTA15 => &[0, 2, 1, 3, 5, 4, 8, 7, 6, 11, 10, 9, 12, 14, 13],
+            Self::PYRA5 => &[0, 3, 2, 1, 4],
             Self::HEX8 => &[0, 3, 2, 1, 4, 7, 6, 5],
             Self::HEX20 => &[
                 0, 3, 2, 1, 4, 7, 6, 5, 11, 10, 9, 8, 15, 14, 13, 12, 16, 19, 18, 17,
@@ -235,6 +250,7 @@ impl ElementType {
             "TRI3" => Some(Self::TRI3),
             "QUA4" => Some(Self::QUA4),
             "TET4" => Some(Self::TET4),
+            "PYRA5" => Some(Self::PYRA5),
             "PENTA6" => Some(Self::PENTA6),
             "HEX8" => Some(Self::HEX8),
             "SEG3" => Some(Self::SEG3),

@@ -39,7 +39,8 @@ use std::fmt;
 pub enum Interpolation {
     /// Linear Lagrange (P1 / Q1). One shape function per geometric node,
     /// equal to 1 at "its" node and 0 at the others. Defined for the linear
-    /// element types (`SEG2`, `TRI3`, `QUA4`, `TET4`, `PENTA6`, `HEX8`).
+    /// element types (`SEG2`, `TRI3`, `QUA4`, `TET4`, `PYRA5`, `PENTA6`,
+    /// `HEX8`).
     Lagrange1,
     /// Quadratic Lagrange (P2 / Q2 serendipity). One shape function per
     /// geometric node — corners **and** mid-edge nodes. Defined for the
@@ -57,7 +58,10 @@ impl Interpolation {
     pub fn is_compatible_with(self, element_type: ElementType) -> bool {
         use ElementType::*;
         match self {
-            Self::Lagrange1 => matches!(element_type, SEG2 | TRI3 | QUA4 | TET4 | PENTA6 | HEX8),
+            Self::Lagrange1 => matches!(
+                element_type,
+                SEG2 | TRI3 | QUA4 | TET4 | PYRA5 | PENTA6 | HEX8
+            ),
             Self::Lagrange2 => {
                 matches!(
                     element_type,
@@ -127,6 +131,7 @@ impl Interpolation {
                 }
                 Ok(n)
             }
+            (Self::Lagrange1, ElementType::PYRA5) => Ok(pyra5_shape(xi)),
             (Self::Lagrange1, ElementType::PENTA6) => {
                 // Prism = TRI3 (barycentric ξ, η) ⊗ SEG2 (linear ζ ∈ [0, 1]).
                 let (a, b, c) = (xi[0], xi[1], xi[2]);
@@ -206,6 +211,7 @@ impl Interpolation {
                 }
                 Ok(out)
             }
+            (Self::Lagrange1, ElementType::PYRA5) => Ok(pyra5_dshape(xi)),
             (Self::Lagrange1, ElementType::PENTA6) => {
                 // ∂N_i/∂(ξ, η, ζ) with L1 = 1-ξ-η, L2 = ξ, L3 = η and the
                 // ζ ∈ [0, 1] linear factor.
@@ -270,6 +276,72 @@ fn check_xi_len(element_type: ElementType, xi: &[f64]) -> Result<()> {
 
 /// Reference coordinates of the 8 HEX8 nodes, in local order
 /// (bottom face CCW then top face CCW).
+/// Signs `(ξ_i, η_i)` of the pyramid's four base nodes, counter-clockwise
+/// seen from the apex.
+const PYRA5_BASE: [(f64, f64); 4] = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)];
+
+/// Below this distance from the apex the rational shape functions are taken
+/// at their limit instead of evaluated, which would divide by zero.
+const PYRA5_APEX_EPS: f64 = 1e-12;
+
+/// Shape functions of the 5-node pyramid.
+///
+/// The pyramid is the one common element whose shape functions are **not**
+/// polynomial. Its square base has to collapse to a single point at the apex,
+/// and no polynomial does that while staying bilinear on the base. Writing
+/// `m = 1 - ζ` for the half-width of the cross-section, the base functions are
+/// the bilinear ones in the *scaled* coordinates `ξ/m`, `η/m`, weighted by `m`:
+///
+/// ```text
+/// N_i = (m / 4) (1 + ξ_i ξ/m) (1 + η_i η/m)   for i = 0..3,    N_4 = ζ
+/// ```
+///
+/// Expanded, the cross term is `ξ_i η_i ξη / (4m)` — the rational part, and
+/// the reason the pyramid needs a quadrature rule of its own. It is bounded
+/// (`|ξ|, |η| ≤ m` on the reference element, so the term is at most `m/4`) but
+/// it is genuinely singular *at* the apex, where the limit `N_4 = 1` is taken
+/// directly.
+fn pyra5_shape(xi: &[f64]) -> Vec<f64> {
+    let (a, b, c) = (xi[0], xi[1], xi[2]);
+    let m = 1.0 - c;
+    if m <= PYRA5_APEX_EPS {
+        return vec![0.0, 0.0, 0.0, 0.0, 1.0];
+    }
+    let (u, v) = (a / m, b / m);
+    let mut n: Vec<f64> = PYRA5_BASE
+        .iter()
+        .map(|&(si, ti)| 0.25 * m * (1.0 + si * u) * (1.0 + ti * v))
+        .collect();
+    n.push(c);
+    n
+}
+
+/// Reference derivatives of the 5-node pyramid, row-major `∂N_i/∂ξ_j`.
+///
+/// Differentiating `N_i = (1/4)[m + ξ_i ξ + η_i η + ξ_i η_i ξη/m]` gives
+/// `∂/∂ξ = (ξ_i/4)(1 + η_i v)`, `∂/∂η = (η_i/4)(1 + ξ_i u)` and
+/// `∂/∂ζ = (1/4)(-1 + ξ_i η_i u v)`, with `u = ξ/m`, `v = η/m`. The three sums
+/// over the five nodes vanish, as they must.
+fn pyra5_dshape(xi: &[f64]) -> Vec<f64> {
+    let (a, b, c) = (xi[0], xi[1], xi[2]);
+    let m = 1.0 - c;
+    if m <= PYRA5_APEX_EPS {
+        // At the apex only the ζ derivative survives in the limit.
+        return vec![
+            0.0, 0.0, -0.25, 0.0, 0.0, -0.25, 0.0, 0.0, -0.25, 0.0, 0.0, -0.25, 0.0, 0.0, 1.0,
+        ];
+    }
+    let (u, v) = (a / m, b / m);
+    let mut out = Vec::with_capacity(5 * 3);
+    for &(si, ti) in PYRA5_BASE.iter() {
+        out.push(0.25 * si * (1.0 + ti * v));
+        out.push(0.25 * ti * (1.0 + si * u));
+        out.push(0.25 * (-1.0 + si * ti * u * v));
+    }
+    out.extend_from_slice(&[0.0, 0.0, 1.0]);
+    out
+}
+
 const HEX8_REF_NODES: [(f64, f64, f64); 8] = [
     (-1.0, -1.0, -1.0),
     (1.0, -1.0, -1.0),
@@ -1052,5 +1124,108 @@ mod tests {
             Some(Interpolation::Lagrange1)
         );
         assert_eq!(Interpolation::from_name("unknown"), None);
+    }
+
+    /// Interior sample points of the reference pyramid, well clear of the
+    /// apex and one right up against it.
+    const PYRA5_SAMPLES: [[f64; 3]; 6] = [
+        [0.0, 0.0, 0.0],
+        [0.5, -0.25, 0.25],
+        [-0.9, 0.9, 0.05],
+        [0.0, 0.0, 0.5],
+        [0.02, -0.01, 0.98],
+        [0.0, 0.0, 1.0],
+    ];
+
+    #[test]
+    fn pyra5_is_a_partition_of_unity_up_to_the_apex() {
+        for xi in PYRA5_SAMPLES {
+            check_partition_of_unity(Interpolation::Lagrange1, ElementType::PYRA5, &xi);
+            check_derivatives_sum_to_zero(Interpolation::Lagrange1, ElementType::PYRA5, &xi);
+        }
+    }
+
+    #[test]
+    fn pyra5_shape_functions_are_one_at_their_own_node() {
+        let nodes = [
+            [-1.0, -1.0, 0.0],
+            [1.0, -1.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [-1.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ];
+        for (j, xi) in nodes.iter().enumerate() {
+            let n = Interpolation::Lagrange1
+                .shape(ElementType::PYRA5, xi)
+                .unwrap();
+            for (i, &v) in n.iter().enumerate() {
+                let want = if i == j { 1.0 } else { 0.0 };
+                assert!((v - want).abs() < 1e-12, "N_{i} at node {j} = {v}");
+            }
+        }
+    }
+
+    #[test]
+    fn pyra5_derivatives_match_finite_differences() {
+        // The rational term is where a hand-derived derivative goes wrong, so
+        // it is checked against the shape functions themselves.
+        let h = 1e-6;
+        for xi in [[0.1, -0.2, 0.3], [-0.4, 0.4, 0.1], [0.0, 0.0, 0.6]] {
+            let d = Interpolation::Lagrange1
+                .dshape_dxi(ElementType::PYRA5, &xi)
+                .unwrap();
+            for j in 0..3 {
+                let (mut lo, mut hi) = (xi, xi);
+                lo[j] -= h;
+                hi[j] += h;
+                let a = Interpolation::Lagrange1
+                    .shape(ElementType::PYRA5, &lo)
+                    .unwrap();
+                let b = Interpolation::Lagrange1
+                    .shape(ElementType::PYRA5, &hi)
+                    .unwrap();
+                for i in 0..5 {
+                    let fd = (b[i] - a[i]) / (2.0 * h);
+                    assert!(
+                        (d[i * 3 + j] - fd).abs() < 1e-7,
+                        "∂N_{i}/∂ξ_{j} at {xi:?}: {} vs {fd} by finite difference",
+                        d[i * 3 + j]
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn pyra5_shape_functions_are_bilinear_on_the_base_and_linear_on_an_edge() {
+        // On ζ = 0 the pyramid must reduce to a QUA4, so a hexahedron and a
+        // pyramid sharing a face agree along it.
+        for &(a, b) in &[(0.3, -0.7), (-0.5, 0.5), (1.0, 1.0)] {
+            let n = Interpolation::Lagrange1
+                .shape(ElementType::PYRA5, &[a, b, 0.0])
+                .unwrap();
+            let q = Interpolation::Lagrange1
+                .shape(ElementType::QUA4, &[a, b])
+                .unwrap();
+            for i in 0..4 {
+                assert!(
+                    (n[i] - q[i]).abs() < 1e-12,
+                    "base node {i}: {} vs {}",
+                    n[i],
+                    q[i]
+                );
+            }
+            assert!(n[4].abs() < 1e-12, "the apex must not reach the base");
+        }
+        // And along the edge from base node 0 to the apex it is linear, so a
+        // tetrahedron sharing that edge agrees too.
+        for t in [0.0, 0.25, 0.5, 0.75] {
+            let xi = [-(1.0 - t), -(1.0 - t), t];
+            let n = Interpolation::Lagrange1
+                .shape(ElementType::PYRA5, &xi)
+                .unwrap();
+            assert!((n[0] - (1.0 - t)).abs() < 1e-12, "N_0 at t={t} = {}", n[0]);
+            assert!((n[4] - t).abs() < 1e-12, "N_4 at t={t} = {}", n[4]);
+        }
     }
 }

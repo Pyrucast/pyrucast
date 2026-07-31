@@ -16,7 +16,7 @@
 use crate::containers::finite_element_space::Interpolation;
 use crate::containers::mesh::ElementType;
 use crate::error::Result;
-use crate::viz::mesh_draw::{HEX8_FACES, PENTA6_FACES, TET4_FACES};
+use crate::viz::mesh_draw::{HEX8_FACES, PENTA6_FACES, PYRA5_FACES, TET4_FACES};
 
 /// Subdivision of one face of the reference element.
 pub(crate) struct FaceSubdivision {
@@ -56,6 +56,13 @@ fn ref_nodes(et: ElementType) -> Vec<Vec<f64>> {
             vec![1.0, -1.0],
             vec![1.0, 1.0],
             vec![-1.0, 1.0],
+        ],
+        ElementType::PYRA5 => vec![
+            vec![-1.0, -1.0, 0.0],
+            vec![1.0, -1.0, 0.0],
+            vec![1.0, 1.0, 0.0],
+            vec![-1.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
         ],
         ElementType::TET4 => vec![
             vec![0.0, 0.0, 0.0],
@@ -256,6 +263,24 @@ pub(crate) fn subdivide(
                     interp,
                     n,
                     [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]], &nodes[f[3]]],
+                )?);
+            }
+            Ok(CellSubdivision::Faces(faces))
+        }
+        ElementType::PYRA5 => {
+            let mut faces = Vec::with_capacity(5);
+            faces.push(quad_face(
+                et,
+                interp,
+                n,
+                [&nodes[0], &nodes[3], &nodes[2], &nodes[1]],
+            )?);
+            for f in PYRA5_FACES.iter().filter(|f| f.len() == 3) {
+                faces.push(tri_face(
+                    et,
+                    interp,
+                    n,
+                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]]],
                 )?);
             }
             Ok(CellSubdivision::Faces(faces))

@@ -258,6 +258,14 @@ fn clamp_reference(element_type: ElementType, xi: &mut [f64]) {
                 *v = v.clamp(-1.0, 1.0);
             }
         }
+        // The cross-section shrinks with ζ, so ζ is clamped first and the
+        // in-plane bound follows from it.
+        PYRA5 => {
+            xi[2] = xi[2].clamp(0.0, 1.0);
+            let half = 1.0 - xi[2];
+            xi[0] = xi[0].clamp(-half, half);
+            xi[1] = xi[1].clamp(-half, half);
+        }
         TRI3 | TRI6 => {
             // Clamp to the unit simplex: non-negative, then pull back onto the
             // hypotenuse if a + b > 1 (the closest point on the line a + b = 1).

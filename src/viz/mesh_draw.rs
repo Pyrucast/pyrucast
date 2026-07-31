@@ -106,6 +106,16 @@ pub(crate) const PENTA6_FACES: [&[usize]; 5] = [
     &[2, 0, 3, 5], // side
 ];
 
+/// Faces of a PYRA5 (pyramid) — the square base, wound so its normal points
+/// away from the apex, then the four triangles round the sides.
+pub(crate) const PYRA5_FACES: [&[usize]; 5] = [
+    &[0, 3, 2, 1], // base
+    &[0, 1, 4],
+    &[1, 2, 4],
+    &[2, 3, 4],
+    &[3, 0, 4],
+];
+
 /// Edges of each element type, as local node-index pairs — used by the
 /// wireframe rendering style. POI1 has no edge (it draws as a dot).
 #[rustfmt::skip]
@@ -116,6 +126,10 @@ fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
         ElementType::TRI3 => &[[0, 1], [1, 2], [2, 0]],
         ElementType::QUA4 => &[[0, 1], [1, 2], [2, 3], [3, 0]],
         ElementType::TET4 => &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
+        ElementType::PYRA5 => &[
+            [0, 1], [1, 2], [2, 3], [3, 0],
+            [0, 4], [1, 4], [2, 4], [3, 4],
+        ],
         ElementType::PENTA6 => &[
             [0, 1], [1, 2], [2, 0],
             [3, 4], [4, 5], [5, 3],
@@ -174,6 +188,7 @@ pub(crate) fn boundary_faces(et: ElementType, conn: &[NodeId]) -> Option<HashSet
             HEX8_FACES.iter().map(|f| f.as_slice()).collect()
         }
         ElementType::PENTA6 | ElementType::PENTA15 => PENTA6_FACES.to_vec(),
+        ElementType::PYRA5 => PYRA5_FACES.to_vec(),
         _ => return None,
     };
     let npc = et.nodes_per_cell();
@@ -328,6 +343,22 @@ fn submesh_primitives_impl(
                             pts[base + face[2]],
                             pts[base + face[3]],
                         ],
+                        color: c,
+                        outline: true,
+                    });
+                }
+            }
+        }
+        ElementType::PYRA5 => {
+            for i in 0..n_cells {
+                let base = 5 * i;
+                let c = cell_color(i);
+                for (fi, face) in PYRA5_FACES.iter().enumerate() {
+                    if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
+                        continue;
+                    }
+                    out.push(Primitive::Face {
+                        verts: face.iter().map(|&li| pts[base + li]).collect(),
                         color: c,
                         outline: true,
                     });

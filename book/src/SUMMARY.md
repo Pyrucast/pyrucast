@@ -45,6 +45,7 @@
   - [TRI3 — triangle linéaire](elements/tri3.md)
   - [QUA4 — quadrangle bilinéaire](elements/qua4.md)
   - [TET4 — tétraèdre linéaire](elements/tet4.md)
+  - [PYRA5 — pyramide linéaire](elements/pyra5.md)
   - [PENTA6 — prisme linéaire](elements/penta6.md)
   - [HEX8 — hexaèdre trilinéaire](elements/hex8.md)
   - [SEG3 — segment quadratique](elements/seg3.md)

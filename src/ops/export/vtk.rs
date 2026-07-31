@@ -56,6 +56,7 @@ fn vtk_cell_type(et: ElementType) -> u8 {
         ElementType::TRI3 => 5,
         ElementType::QUA4 => 9,
         ElementType::TET4 => 10,
+        ElementType::PYRA5 => 14, // VTK_PYRAMID
         ElementType::PENTA6 => 13,
         ElementType::HEX8 => 12,
         // Quadratic types: pyrucast's node order already matches VTK's, so

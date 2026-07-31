@@ -199,6 +199,7 @@ fn corner_count(et: ElementType) -> usize {
         ElementType::TRI3 | ElementType::TRI6 => 3,
         ElementType::QUA4 | ElementType::QUA8 | ElementType::QUA9 => 4,
         ElementType::TET4 | ElementType::TET10 => 4,
+        ElementType::PYRA5 => 5,
         ElementType::PENTA6 | ElementType::PENTA15 => 6,
         ElementType::HEX8 | ElementType::HEX20 | ElementType::HEX27 => 8,
     }
@@ -214,6 +215,15 @@ fn boundary_facets(et: ElementType) -> &'static [&'static [usize]] {
             &[&[0, 1], &[1, 2], &[2, 3], &[3, 0]]
         }
         ElementType::TET4 | ElementType::TET10 => &[&[1, 2, 3], &[0, 3, 2], &[0, 1, 3], &[0, 2, 1]],
+        // Base first, wound the other way so its normal points away from the
+        // apex, then the four triangles round the sides.
+        ElementType::PYRA5 => &[
+            &[0, 3, 2, 1],
+            &[0, 1, 4],
+            &[1, 2, 4],
+            &[2, 3, 4],
+            &[3, 0, 4],
+        ],
         ElementType::PENTA6 | ElementType::PENTA15 => &[
             &[0, 2, 1],
             &[3, 4, 5],
@@ -298,6 +308,13 @@ mod tests {
                 &[0.0, 0.5],
             ]),
             QUA4 => v(&[&[-1.0, -1.0], &[1.0, -1.0], &[1.0, 1.0], &[-1.0, 1.0]]),
+            PYRA5 => v(&[
+                &[-1.0, -1.0, 0.0],
+                &[1.0, -1.0, 0.0],
+                &[1.0, 1.0, 0.0],
+                &[-1.0, 1.0, 0.0],
+                &[0.0, 0.0, 1.0],
+            ]),
             QUA8 => v(&[
                 &[-1.0, -1.0],
                 &[1.0, -1.0],

@@ -55,6 +55,7 @@ pas un élément fini.
 | [TRI3](tri3.md) | 3 | 2 | simplexe \\( \xi+\eta\le 1 \\) | Hammer 3 pts |
 | [QUA4](qua4.md) | 4 | 2 | \\( [-1,1]^2 \\) | 2×2 Gauss (4) |
 | [TET4](tet4.md) | 4 | 3 | simplexe \\( \xi+\eta+\zeta\le 1 \\) | Hammer 4 pts |
+| [PYRA5](pyra5.md) | 5 | 3 | pyramide (section carrée décroissante) | Gauss×Jacobi conique (8) |
 | [PENTA6](penta6.md) | 6 | 3 | prisme (TRI3 × \\( \zeta \\)) | TRI×Gauss (6) |
 | [HEX8](hex8.md) | 8 | 3 | \\( [-1,1]^3 \\) | 2×2×2 Gauss (8) |
 
@@ -91,6 +92,7 @@ points d'intégration \\( n_g \\) si le couple est supporté :
 | [TRI3](tri3.md) | ✓ (3) | ✓ (1) |
 | [QUA4](qua4.md) | ✓ (4) | ✓ (1) |
 | [TET4](tet4.md) | ✓ (4) | ✓ (1) |
+| [PYRA5](pyra5.md) | ✓ (8) | ✓ (1) |
 | [PENTA6](penta6.md) | ✓ (6) | ✓ (1) |
 | [HEX8](hex8.md) | ✓ (8) | ✓ (1) |
 | [SEG3](seg3.md) | ✓ (3) | ✓ (1) |

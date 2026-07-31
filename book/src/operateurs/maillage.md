@@ -1284,6 +1284,7 @@ copiée telle quelle.
 | `4`  | `TET4` |
 | `5`  | `HEX8` |
 | `6`  | `PENTA6` |
+| `7`  | `PYRA5` |
 | `15` | `POI1` |
 | `8`  | `SEG3` |
 | `9`  | `TRI6` |

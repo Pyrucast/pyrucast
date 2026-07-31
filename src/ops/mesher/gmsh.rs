@@ -24,7 +24,7 @@
 //! | `18` | `PENTA15` |
 //! | `12` | `HEX27` |
 //!
-//! Any other gmsh element type (pyramid, order 3+, …) is an error. For most
+//! Any other gmsh element type (order 3+, …) is an error. For most
 //! types the local node ordering already matches pyrucast's reference frame
 //! (see [`crate::containers::mesh::ElementType`]) and the connectivity is
 //! copied verbatim; the quadratic **volumes** (`TET10`, `HEX20`, `PENTA15`,
@@ -78,6 +78,7 @@ fn element_type_from_gmsh(code: u32) -> Result<ElementType> {
         4 => ElementType::TET4,
         5 => ElementType::HEX8,
         6 => ElementType::PENTA6,
+        7 => ElementType::PYRA5,
         15 => ElementType::POI1,
         8 => ElementType::SEG3,
         9 => ElementType::TRI6,
@@ -90,7 +91,8 @@ fn element_type_from_gmsh(code: u32) -> Result<ElementType> {
         other => {
             return Err(err(format!(
                 "gmsh: unsupported element type {other} (supported: 1=SEG2, \
-                 2=TRI3, 3=QUA4, 4=TET4, 5=HEX8, 6=PENTA6, 15=POI1; quadratic: \
+                 2=TRI3, 3=QUA4, 4=TET4, 5=HEX8, 6=PENTA6, 7=PYRA5, 15=POI1; \
+                 quadratic: \
                  8=SEG3, 9=TRI6, 16=QUA8, 10=QUA9, 11=TET10, 17=HEX20, \
                  18=PENTA15, 12=HEX27)"
             )))
@@ -1092,11 +1094,48 @@ $Nodes
 $EndNodes
 $Elements
 1
-1 7 2 0 1 1 2 3
+1 21 2 0 1 1 2 3
 $EndElements
 ";
-        // gmsh type 7 = 5-node pyramid (PYR5), not supported by pyrucast.
-        assert!(read_gmsh_str(coords(2), mesh).is_err());
+        // gmsh type 21 = 10-node third-order triangle, which pyrucast has no
+        // element for.
+        let err = read_gmsh_str(coords(2), mesh).unwrap_err();
+        assert!(
+            format!("{err}").contains("unsupported element type 21"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn reads_a_pyramid() {
+        // gmsh type 7 = 5-node pyramid: square base then apex, the same order
+        // pyrucast uses.
+        let mesh = "\
+$MeshFormat
+2.2 0 8
+$EndMeshFormat
+$Nodes
+5
+1 -1 -1 0
+2 1 -1 0
+3 1 1 0
+4 -1 1 0
+5 0 0 1
+$EndNodes
+$Elements
+1
+1 7 2 0 1 1 2 3 4 5
+$EndElements
+";
+        let groups = read_gmsh_str(coords(3), mesh).unwrap();
+        assert_eq!(groups.len(), 1);
+        let m = &groups[0].1;
+        assert_eq!(m.element_types().unwrap(), vec![ElementType::PYRA5]);
+        assert_eq!(m.cell_count().unwrap(), 1);
+        assert_eq!(
+            m.node(0, 0, 4).unwrap().coord().unwrap(),
+            vec![0.0, 0.0, 1.0]
+        );
     }
 
     #[test]

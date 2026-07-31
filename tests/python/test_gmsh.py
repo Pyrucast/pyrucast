@@ -132,7 +132,8 @@ def test_read_from_file(tmp_path):
 
 
 def test_unsupported_element_type_raises():
-    # gmsh type 7 = 5-node pyramid (PYR5), unsupported by pyrucast.
+    # gmsh type 21 = 10-node third-order triangle, which pyrucast has no
+    # element for.
     bad = textwrap.dedent(
         """\
         $MeshFormat
@@ -146,9 +147,35 @@ def test_unsupported_element_type_raises():
         $EndNodes
         $Elements
         1
-        1 7 2 0 1 1 2 3
+        1 21 2 0 1 1 2 3
         $EndElements
         """
     )
     with pytest.raises(Exception, match="unsupported element type"):
         pyrucast.mesher.read_gmsh_str(pyrucast.Coords(dim=2), bad)
+
+
+def test_reads_a_pyramid():
+    """gmsh type 7 is the 5-node pyramid: square base then apex."""
+    mesh = textwrap.dedent(
+        """\
+        $MeshFormat
+        2.2 0 8
+        $EndMeshFormat
+        $Nodes
+        5
+        1 -1 -1 0
+        2 1 -1 0
+        3 1 1 0
+        4 -1 1 0
+        5 0 0 1
+        $EndNodes
+        $Elements
+        1
+        1 7 2 0 1 1 2 3 4 5
+        $EndElements
+        """
+    )
+    groups = pyrucast.mesher.read_gmsh_str(pyrucast.Coords(dim=3), mesh)
+    assert list(groups) == ["<ungrouped>"]
+    assert groups["<ungrouped>"].element_types() == ["PYRA5"]

@@ -86,6 +86,7 @@ impl QuadratureRule {
             (Self::Gauss, ElementType::TRI3) => 3,
             (Self::Gauss, ElementType::QUA4) => 4,
             (Self::Gauss, ElementType::TET4) => 4,
+            (Self::Gauss, ElementType::PYRA5) => 8,
             (Self::Gauss, ElementType::PENTA6) => 6,
             (Self::Gauss, ElementType::HEX8) => 8,
             (Self::Gauss, ElementType::SEG3) => 3,
@@ -145,6 +146,43 @@ impl QuadratureRule {
                     ],
                     vec![1.0 / 24.0; 4],
                 )
+            }
+            (Self::Gauss, ElementType::PYRA5) => {
+                // A pyramid is not a product of simplices, so it gets a
+                // **conical** product rule: 2 × 2 Gauss–Legendre across the
+                // square cross-section, times a 2-point Gauss–Jacobi rule in
+                // `ζ`.
+                //
+                // The Jacobi weight is what makes it work. Writing a point as
+                // `ξ = a(1-ζ)`, `η = b(1-ζ)` with `a, b ∈ [-1, 1]`, the change
+                // of variables brings out `dξ dη = (1-ζ)² da db` — exactly the
+                // cross-section shrinking toward the apex. Integrating the
+                // `ζ` direction against that `(1-ζ)²` is a Gauss–Jacobi rule
+                // with `α = 2`, whose two nodes are the roots of
+                // `z² - (2/3) z + 1/15`, namely `1/3 ∓ √10/15`.
+                //
+                // The weights then sum to `2 × 2 × 1/3 = 4/3`, the volume of
+                // the reference pyramid — the check the test below makes.
+                let a = 1.0 / 3.0_f64.sqrt();
+                let spread = 10.0_f64.sqrt() / 15.0;
+                let (z0, z1) = (1.0 / 3.0 - spread, 1.0 / 3.0 + spread);
+                // From the first two moments of `(1-z)²` on `[0, 1]`:
+                // `w0 + w1 = 1/3` and `w0 z0 + w1 z1 = 1/12`.
+                let w1 = (1.0 / 12.0 - z0 / 3.0) / (z1 - z0);
+                let w0 = 1.0 / 3.0 - w1;
+                let mut xi = Vec::with_capacity(8 * 3);
+                let mut w = Vec::with_capacity(8);
+                for &sa in &[-a, a] {
+                    for &sb in &[-a, a] {
+                        for &(z, wz) in &[(z0, w0), (z1, w1)] {
+                            xi.push(sa * (1.0 - z));
+                            xi.push(sb * (1.0 - z));
+                            xi.push(z);
+                            w.push(wz);
+                        }
+                    }
+                }
+                (xi, w)
             }
             (Self::Gauss, ElementType::PENTA6) => {
                 // Tensor product of the 3-point TRI3 rule (weights 1/6) with
@@ -275,6 +313,9 @@ impl QuadratureRule {
                 ElementType::PENTA6 | ElementType::PENTA15 => {
                     (vec![1.0 / 3.0, 1.0 / 3.0, 0.5], vec![0.5])
                 }
+                // Centroid of the reference pyramid is a quarter of the way
+                // up; its volume is 4/3.
+                ElementType::PYRA5 => (vec![0.0, 0.0, 0.25], vec![4.0 / 3.0]),
                 ElementType::HEX8 | ElementType::HEX20 | ElementType::HEX27 => {
                     (vec![0.0, 0.0, 0.0], vec![8.0])
                 }
@@ -350,17 +391,20 @@ mod tests {
             ElementType::QUA4 | ElementType::QUA8 | ElementType::QUA9 => 4.0,
             ElementType::TET4 | ElementType::TET10 => 1.0 / 6.0,
             ElementType::PENTA6 | ElementType::PENTA15 => 0.5,
+            // Square base of side 2 tapering to a point: ∫₀¹ (2(1-ζ))² dζ.
+            ElementType::PYRA5 => 4.0 / 3.0,
             ElementType::HEX8 | ElementType::HEX20 | ElementType::HEX27 => 8.0,
             ElementType::POI1 => unreachable!(),
         }
     }
 
     /// Every non-POI1 element type, for parametric quadrature tests.
-    const ALL_FE_TYPES: [ElementType; 14] = [
+    const ALL_FE_TYPES: [ElementType; 15] = [
         ElementType::SEG2,
         ElementType::TRI3,
         ElementType::QUA4,
         ElementType::TET4,
+        ElementType::PYRA5,
         ElementType::PENTA6,
         ElementType::HEX8,
         ElementType::SEG3,
