@@ -100,6 +100,11 @@ def main() -> None:
     hexa = pc.mesher.extrude(pavee, [0, EPAISSEUR, 0], 2)
     print(f"extrudé       : {hexa.element_types()}, {hexa.cell_count()} mailles")
 
+    # `pave_volume` (couche limite hexaédrique + cœur tétraédrique) n'est pas
+    # employé ici : sur cette pièce l'extrusion donne déjà du HEX8 pur, qui est
+    # le meilleur maillage possible. Il est fait pour les solides que
+    # l'extrusion ne couvre pas — voir examples/volume_frontal.py.
+
     volume = pc.mesher.extrude(plaque, [0, EPAISSEUR, 0], 2)
     volume.plot(view=(-45, 25, 1.0))
     skin = pc.mesher.skin(volume)

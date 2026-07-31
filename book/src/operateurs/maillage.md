@@ -805,6 +805,21 @@ plus médiocres du lot, ce qui est attendu d'un élément de raccord aplati.
 Une seconde couche coûte cher : le cube 6³ tombe à 2 100 mailles/s, la
 tétraédrisation du cœur devenant nettement plus difficile.
 
+### Ce que l'enveloppe devient
+
+Elle est **respectée à la maille près**. Ses nœuds sont réutilisés tels quels
+(mêmes identifiants, mêmes positions), ils sont marqués immobiles donc le
+lissage ne les touche pas, et chaque facette devient **exactement une face de
+maille** — un `QUA4` la face d'un `HEX8`, un `TRI3` celle d'un `PENTA6`. Aucun
+nœud n'est ajouté sur le bord. La couture protège explicitement ce contrat :
+entre deux nœuds candidats, celui de l'enveloppe est toujours le survivant, et
+si les deux en sont, la couture est refusée.
+
+C'est aussi pour cela que le cœur tétraédrique tourne en mode **strict** : en
+mode permissif il ajouterait des nœuds sur la surface intérieure et ne
+rejoindrait plus les pyramides. Cette exigence est la contrepartie du contrat,
+et la principale source d'échec.
+
 ### Limitations actuelles
 
 - **Deux cas sur huit échouent**, tous deux au cœur : une plaque mince et un

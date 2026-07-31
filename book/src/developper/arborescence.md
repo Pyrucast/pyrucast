@@ -50,7 +50,10 @@ src/
 ├── ops/                # LES OPÉRATEURS (fonctions libres, par thème)
 │   ├── mod.rs
 │   ├── mesher/         # construction de maillages (line, triangulate_surface, …)
-│   │   └── triangulation/  # briques 2D (ear clipping, CDT, Ruppert)
+│   │   ├── triangulation/  # briques 2D Delaunay (ear clipping, CDT, Ruppert)
+│   │   ├── tetrahedralization/  # briques 3D Delaunay (prédicats exacts, …)
+│   │   ├── paving/         # front avançant 2D (pave_surface)
+│   │   └── plaster/        # front avançant 3D (pave_volume)
 │   ├── build/          # construction de champs (material_field)
 │   ├── geom/           # mesures géométriques (réservé)
 │   ├── field/          # gradient, divergence, deformation, restrict, …

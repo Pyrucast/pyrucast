@@ -140,6 +140,8 @@ et constituent une bonne checklist :
 | convention de référence | (doc) `element_type.rs` + [fe-space](../fe-space.md) | l'élément fini |
 | fonctions de forme + dérivées | `containers/finite_element_space/interpolation.rs` | l'élément fini |
 | points / poids de Gauss | `containers/finite_element_space/quadrature.rs` | l'élément fini |
+| facettes orientées + nombre de coins | `ops/mesher/orient.rs` | `orient`, `skin`, `border` |
+| domaine de référence (centre, appartenance, projection) | `ops/geom/locate.rs`, `ops/geom/project.rs` | `locate_points`, `project_points` |
 | primitive de rendu + faces/arêtes | `viz/mesh_draw.rs` | la visualisation |
 | rendu interpolé (subdivision) | `viz/subdivide.rs` | la visualisation colorée |
 | code VTK / gmsh | `ops/export/vtk.rs`, `ops/mesher/gmsh.rs` | les entrées/sorties |
@@ -147,3 +149,9 @@ et constituent une bonne checklist :
 
 Comme pour [ajouter une physique](../ajouter-une-physique.md), tout le code
 **générique** (assemblage, Jacobien, viz hors `match`) reste inchangé.
+
+> **Repère pratique.** Il n'est pas nécessaire de retrouver ces fichiers à la
+> main : ajoutez la variante à l'énumération et `cargo build` énumère lui-même
+> tous les `match` devenus non exhaustifs. Le tableau ci-dessus dit *quoi*
+> écrire dans chacun ; le compilateur dit *où*. Les deux dernières lignes ont
+> précisément été découvertes ainsi en ajoutant [PYRA5](../elements/pyra5.md).
