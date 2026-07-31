@@ -409,12 +409,14 @@ pub fn triangulate_surface(
 /// planar loop in 3-D (paved in its best-fit plane, then lifted back), and its
 /// nodes are reused as they are and never moved.
 ///
-/// With `all_quad=False` (the default) a handful of triangles may come back in
-/// a separate TRI3 submesh. `all_quad=True` guarantees none: a boundary loop
-/// with an odd number of segments then receives one extra node on its longest
-/// segment, which is unavoidable — a polygon with an odd number of sides
-/// cannot be filled with quadrangles alone, and paving cannot change that
-/// parity.
+/// With `all_quad=False` (the default) the leftover triangles come back in a
+/// separate TRI3 submesh. `all_quad=True` removes the parity obstruction: a
+/// boundary loop with an odd number of segments receives one extra node on its
+/// longest segment, which is unavoidable — a polygon with an odd number of
+/// sides cannot be filled with quadrangles alone, and paving cannot change
+/// that parity. It is not an absolute zero: where a leftover polygon is too
+/// distorted for any quadrangle decomposition, the closure still prefers two
+/// triangles to a cell with a negative Jacobian.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (contour, element_type, size=None, all_quad=false))]

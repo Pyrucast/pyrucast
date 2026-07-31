@@ -579,10 +579,27 @@ fn find_seam(
     best.map(|(_, a, b)| (a, b))
 }
 
-/// Does the segment joining two front nodes stay clear of the front?
+/// Does the segment joining two front nodes stay inside the material and
+/// clear of the front?
+///
+/// Both halves matter. Crossing no front edge is not enough: a chord can leave
+/// the material through a concave corner and come back, meeting nothing on the
+/// way. Such a seam looks admissible and quietly folds the front over itself.
 fn seam_is_clear(front: &Front, fab: &Fabric, grid: &EdgeGrid, a: u32, b: u32) -> bool {
     let pa = fab.pts[front.vertex(a) as usize];
     let pb = fab.pts[front.vertex(b) as usize];
+    // The chord has to set off into the material at both ends.
+    for (s, from, to) in [(a, pa, pb), (b, pb, pa)] {
+        let prev = fab.pts[front.vertex(front.prev(s)) as usize];
+        let next = fab.pts[front.vertex(front.next(s)) as usize];
+        let convex = geom::orient(prev, from, next) > 0.0;
+        let left = geom::orient(from, next, to) > 0.0;
+        let right = geom::orient(prev, from, to) > 0.0;
+        let inside = if convex { left && right } else { left || right };
+        if !inside {
+            return false;
+        }
+    }
     for s in grid.near_segment(pa, pb) {
         let (u, w) = (s, front.next(s));
         if u == a || u == b || w == a || w == b {

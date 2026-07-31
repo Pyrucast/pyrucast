@@ -484,6 +484,12 @@ D'où le paramètre :
   minimal, et il n'y a pas d'alternative : découper une arête plus tard
   laisserait un nœud en T.
 
+`all_quad` lève l'obstruction **de parité**, la seule qui puisse être levée
+d'avance. Ce n'est pas un zéro absolu : un polygone résiduel trop déformé
+n'admet aucune décomposition en quadrangles, et la fermeture préfère alors
+deux triangles à une maille de jacobien négatif — la validité n'est jamais
+échangée. En pratique, quelques mailles sur plusieurs milliers.
+
 ### Exemple Python
 
 ```python
@@ -492,7 +498,7 @@ import pyrucast as pc
 coords = pc.Coords(2)
 # … contour extérieur CCW et cercle-trou CW, consolidés en une boucle chacun.
 plaque = pc.mesher.pave_surface(contour, "QUA4", size=0.002, all_quad=True)
-print(plaque.element_types())  # ['QUA4'] — aucun triangle
+print(plaque.element_types())  # ['QUA4'] le plus souvent
 
 # Le solide prismatique vient alors gratuitement, et en hexaèdres purs.
 volume = pc.mesher.extrude(plaque, [0, 0.02, 0], 2)
@@ -510,9 +516,10 @@ un maillage long lève `KeyboardInterrupt`. Côté Rust, la forme
 Plaque trouée de 30 × 10 cm percée d'un trou de rayon 3,5 cm, taille de maille
 0,29 mm, en `--release` :
 
-| mailles | temps | débit | quadrangles | mailles inversées |
-|---|---|---|---|---|
-| 209 167 | 1,39 s | 150 000 /s | 100,0 % | 0 |
+| géométrie | mailles | temps | débit | quadrangles | mailles inversées |
+|---|---|---|---|---|---|
+| plaque rectangulaire trouée | 209 167 | 1,37 s | 153 000 /s | 100,0 % | 0 |
+| plaque de la formation (bout arrondi) | 57 275 | 0,39 s | 147 000 /s | 99,7 % | 0 |
 
 1,2 % des mailles ont un jacobien normalisé inférieur à 0,5. Le coût est
 essentiellement linéaire : le front croît comme la racine du nombre de mailles,
