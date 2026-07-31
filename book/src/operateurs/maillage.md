@@ -686,6 +686,16 @@ facette la plus proche à laquelle il n'appartient pas. Là où le solide est
 le maillage renonce. Demander une couche vingt fois plus épaisse que la pièce
 ne produit donc plus une erreur mais une couche adaptée.
 
+**Il place ses éléments localement.** Une facette qui ne peut pas avancer —
+parce que la maille sortirait retournée — reste où elle est pendant que ses
+voisines poursuivent. La marche ainsi créée est refermée par une **paroi
+latérale**, un quadrangle neuf tendu entre l'ancienne arête et la nouvelle. Son
+orientation n'est pas choisie mais forcée : si `A` avance et que sa voisine `B`
+reste, l'arête `(u,w)` qu'elles partageaient n'est plus empruntée que par `B`,
+dans le sens `(w,u)` ; il faut donc que quelque chose l'emprunte en `(u,w)`, et
+emprunte la nouvelle arête en `(w',u')`. Le quadrangle `[u, w, w', u']` fait
+exactement les deux, et le front reste une surface fermée et orientée.
+
 **Il se coud.** Deux parties du front qui se retrouvent à distance de contact
 sont soudées, ce qui referme une région mince au lieu d'y laisser un éclat
 qu'aucune maille ne peut remplir. Deux critères, tous deux nécessaires : les
@@ -804,9 +814,17 @@ tétraédrisation du cœur devenant nettement plus difficile.
   limite principale aujourd'hui.
 - La profondeur des pyramides est fixée au quart de l'arête de leur base. Plus
   profondes, elles seraient mieux formées mais finiraient par se traverser.
-- Le front avance sur toute sa surface à la fois : chaque nœud a son propre
-  pas, mais aucune facette ne peut rester en arrière pendant que ses voisines
-  avancent. C'est ce qui distingue encore ce mailleur d'un vrai plastering.
+- **Les parois latérales ne servent jamais sur les cas mesurés.** Le mécanisme
+  est là et testé — retenir une facette lève bien quatre parois et le front
+  reste fermé — mais sur les huit géométries du banc, le plafonnement par la
+  place suffit toujours à rendre les mailles valides, et aucune facette n'a
+  besoin d'être retenue. C'est une capacité en réserve, pas un moteur en
+  service.
+- Le plastering **complet** — remplir tout le volume d'hexaèdres par front
+  avançant, sans cœur tétraédrique — reste un problème ouvert. Sandia, qui l'a
+  inventé, l'a abandonné : la fermeture du vide central bute sur des
+  obstructions topologiques qu'une méthode locale ne voit pas. Le cœur
+  tétraédrique n'est donc pas un raccourci mais l'état de l'art.
 
 ## Mailleur volumique : `triangulate_volume`
 

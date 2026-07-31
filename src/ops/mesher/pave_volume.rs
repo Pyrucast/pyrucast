@@ -359,6 +359,41 @@ mod tests {
         box_skin_sized(nx, ny, nz, 1.0)
     }
 
+    /// The skin of an L-shaped solid: a re-entrant corner, which is where a
+    /// front has to hold some facets back while others carry on.
+    fn ell_skin(n: usize, height: f64, layers: usize) -> Mesh {
+        let coords = insert(Coords::new(3).unwrap());
+        let pt = |x: f64, z: f64| Node::create_in(coords.clone(), &[x, 0.0, z]).unwrap();
+        // Walk the L so the face's normal is +y.
+        let corners = [
+            (0.0, 0.0),
+            (0.0, 1.0),
+            (0.4, 1.0),
+            (0.4, 0.4),
+            (1.0, 0.4),
+            (1.0, 0.0),
+        ];
+        let nodes: Vec<Node> = corners.iter().map(|&(x, z)| pt(x, z)).collect();
+        let mut ring: Option<Mesh> = None;
+        for i in 0..nodes.len() {
+            let a = &nodes[i];
+            let b = &nodes[(i + 1) % nodes.len()];
+            let d = ((b.coord().unwrap()[0] - a.coord().unwrap()[0]).powi(2)
+                + (b.coord().unwrap()[2] - a.coord().unwrap()[2]).powi(2))
+            .sqrt();
+            let k = ((d * n as f64).round() as usize).max(1);
+            let seg = crate::ops::mesher::line(a, b, k, ElementType::SEG2).unwrap();
+            ring = Some(match ring {
+                None => seg,
+                Some(m) => m.union(&seg).unwrap(),
+            });
+        }
+        let contour = crate::ops::mesher::consolidate(&ring.unwrap()).unwrap();
+        let face = super::super::pave_surface(&contour, ElementType::QUA4, None, true).unwrap();
+        let solid = crate::ops::mesher::extrude(&face, &[0.0, height, 0.0], layers).unwrap();
+        crate::ops::mesher::skin(&solid, None).unwrap()
+    }
+
     /// Cells per element type.
     fn kinds(mesh: &Mesh) -> HashMap<ElementType, usize> {
         mesh.element_types()
@@ -618,7 +653,13 @@ mod tests {
         let barreau = box_skin_sized(10, 2, 2, 0.25);
         report("barreau 1×0,25×1", &barreau, 1, Some(0.1), Some(0.25));
 
-        // D. Montée en taille sur le cube.
+        // D. Solide rentrant : le coin concave est ce qui force le front à
+        //    retenir des facettes pendant que les autres avancent.
+        let ell = ell_skin(6, 0.6, 4);
+        report("L rentrant, 1 couche", &ell, 1, Some(0.08), Some(0.2));
+        report("L rentrant, 2 couches", &ell, 2, Some(0.06), Some(0.2));
+
+        // E. Montée en taille sur le cube.
         for n in [8, 12, 16] {
             let s = box_skin(n, n, n);
             report(

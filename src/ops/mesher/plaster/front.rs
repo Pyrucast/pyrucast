@@ -243,11 +243,24 @@ impl Front {
             .collect()
     }
 
-    /// Grow one layer of cells inward, each node stepping by at most `step`
-    /// and by at most the room it has.
+    /// Place one round of cells, each facet advancing only if it can.
     ///
-    /// Returns `false` when even the shortest retry produces a cell that is
-    /// inside out, which means the front has nowhere left to go.
+    /// This is what makes the method a plastering rather than an offset: a
+    /// facet that cannot advance — because the cell would come out inside out,
+    /// or because it has run out of room — simply stays where it is while its
+    /// neighbours go on without it. The step that leaves behind is closed by a
+    /// **side wall**, a fresh front quadrangle spanning the old edge and the
+    /// new one.
+    ///
+    /// The side wall's winding is forced, not chosen. If facet `A` advances
+    /// and its neighbour `B` does not, the edge `(u, w)` they shared is used
+    /// by `B` alone now, in the direction `(w, u)`; something must use it as
+    /// `(u, w)` for the front to stay a closed oriented surface, and something
+    /// must use the new edge as `(w', u')`. The quadrangle `[u, w, w', u']`
+    /// does exactly both.
+    ///
+    /// Returns `false` when not one facet could move, which is the front
+    /// saying it has nowhere left to go.
     pub fn advance(&mut self, step: f64) -> Result<bool> {
         let ring = self.ring();
         let at: HashMap<u32, usize> = ring.iter().enumerate().map(|(i, &v)| (v, i)).collect();
@@ -255,74 +268,129 @@ impl Front {
         let room = self.room(&ring);
         let want: Vec<f64> = room.iter().map(|&r| step.min(r)).collect();
 
+        // Retreat locally first: a facet whose cell is inside out pulls its own
+        // nodes back, and only what is still impossible afterwards is held.
         let mut scale = vec![1.0f64; ring.len()];
-        for _ in 0..RETREAT_STEPS {
+        let mut moving: Vec<bool> = vec![true; self.facets.len()];
+        for round in 0..=RETREAT_STEPS {
             let moved: Vec<Point3> = (0..ring.len())
                 .map(|i| self.fab.pts[ring[i] as usize] + dir[i] * (want[i] * scale[i]))
                 .collect();
-            let bad = self.invalid_cells(&ring, &at, &moved);
-            if bad.is_empty() {
-                self.commit(&ring, &at, &moved)?;
-                return Ok(true);
+            let mut stuck = Vec::new();
+            for (fi, f) in self.facets.iter().enumerate() {
+                if !moving[fi] {
+                    continue;
+                }
+                let c = f.corners();
+                let outer: Vec<Point3> = c.iter().map(|&v| self.fab.pts[v as usize]).collect();
+                let inner: Vec<Point3> = c.iter().map(|&v| moved[at[&v]]).collect();
+                if !layer_cell_is_valid(&outer, &inner) {
+                    stuck.push(fi);
+                }
             }
-            for i in bad {
-                scale[i] *= RETREAT;
+            if stuck.is_empty() {
+                return self.commit(&at, &moved, &moving).map(|()| true);
+            }
+            if round == RETREAT_STEPS {
+                // Out of patience: these facets stay put, the rest advance.
+                for fi in stuck {
+                    moving[fi] = false;
+                }
+                if !moving.iter().any(|&m| m) {
+                    return Ok(false);
+                }
+                return self.commit(&at, &moved, &moving).map(|()| true);
+            }
+            for fi in stuck {
+                for &v in self.facets[fi].corners() {
+                    scale[at[&v]] *= RETREAT;
+                }
             }
         }
         Ok(false)
     }
 
-    /// Ring positions whose cells would come out inside out.
-    fn invalid_cells(
-        &self,
-        ring: &[u32],
+    /// Write the advancing facets' cells into the fabric, move those facets
+    /// onto their offsets, and wall in the steps that leaves.
+    fn commit(
+        &mut self,
         at: &HashMap<u32, usize>,
         moved: &[Point3],
-    ) -> Vec<usize> {
-        let _ = ring;
-        let mut bad = Vec::new();
-        for f in &self.facets {
-            let c = f.corners();
-            let outer: Vec<Point3> = c.iter().map(|&v| self.fab.pts[v as usize]).collect();
-            let inner: Vec<Point3> = c.iter().map(|&v| moved[at[&v]]).collect();
-            if !layer_cell_is_valid(&outer, &inner) {
-                bad.extend(c.iter().map(|v| at[v]));
+        moving: &[bool],
+    ) -> Result<()> {
+        // Only the nodes an advancing facet stands on get a new copy; a node
+        // used solely by facets staying put does not move at all.
+        let mut fresh: HashMap<u32, u32> = HashMap::new();
+        for (fi, f) in self.facets.iter().enumerate() {
+            if moving[fi] {
+                for &v in f.corners() {
+                    fresh.entry(v).or_insert(u32::MAX);
+                }
             }
         }
-        bad.sort_unstable();
-        bad.dedup();
-        bad
-    }
-
-    /// Write the advanced layer into the fabric and move the front onto it.
-    fn commit(&mut self, _ring: &[u32], at: &HashMap<u32, usize>, moved: &[Point3]) -> Result<()> {
-        let mut next = Vec::with_capacity(moved.len());
-        for p in moved {
-            next.push(self.fab.add(*p, &self.coords)?);
+        let mut keys: Vec<u32> = fresh.keys().copied().collect();
+        keys.sort_unstable();
+        for v in keys {
+            let id = self.fab.add(moved[at[&v]], &self.coords)?;
+            fresh.insert(v, id);
         }
-        for f in &self.facets {
+
+        for (fi, f) in self.facets.iter().enumerate() {
+            if !moving[fi] {
+                continue;
+            }
             match f {
-                // The facet is the cell's outer face and the new copy its
-                // inner one; `HEX8` and `PENTA6` both read inner-then-outer
-                // here, since the facet's winding faces the void's outside.
                 Facet::Quad(q) => {
-                    let n: Vec<u32> = q.iter().map(|v| next[at[v]]).collect();
+                    let n: Vec<u32> = q.iter().map(|v| fresh[v]).collect();
                     self.fab
                         .hexes
                         .push([n[0], n[1], n[2], n[3], q[0], q[1], q[2], q[3]]);
                 }
                 Facet::Tri(t) => {
-                    let n: Vec<u32> = t.iter().map(|v| next[at[v]]).collect();
+                    let n: Vec<u32> = t.iter().map(|v| fresh[v]).collect();
                     self.fab.prisms.push([n[0], n[1], n[2], t[0], t[1], t[2]]);
                 }
             }
         }
-        for f in self.facets.iter_mut() {
-            match f {
-                Facet::Quad(q) => *q = q.map(|v| next[at[&v]]),
-                Facet::Tri(t) => *t = t.map(|v| next[at[&v]]),
+
+        // Which directed edges the facets left behind still carry, so a wall
+        // goes up exactly where an advancing facet abandoned one.
+        let mut held: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
+        for (fi, f) in self.facets.iter().enumerate() {
+            if moving[fi] {
+                continue;
+            }
+            let c = f.corners();
+            for i in 0..c.len() {
+                held.insert((c[i], c[(i + 1) % c.len()]));
             }
         }
+        let mut walls: Vec<Facet> = Vec::new();
+        for (fi, f) in self.facets.iter().enumerate() {
+            if !moving[fi] {
+                continue;
+            }
+            let c = f.corners();
+            for i in 0..c.len() {
+                let (u, w) = (c[i], c[(i + 1) % c.len()]);
+                // The neighbour across this edge walks it the other way. If it
+                // stayed behind, the edge is now unbalanced and needs a wall.
+                if held.contains(&(w, u)) {
+                    walls.push(Facet::Quad([u, w, fresh[&w], fresh[&u]]));
+                }
+            }
+        }
+
+        for (fi, f) in self.facets.iter_mut().enumerate() {
+            if !moving[fi] {
+                continue;
+            }
+            match f {
+                Facet::Quad(q) => *q = q.map(|v| fresh[&v]),
+                Facet::Tri(t) => *t = t.map(|v| fresh[&v]),
+            }
+        }
+        self.facets.extend(walls);
         Ok(())
     }
 
@@ -908,6 +976,69 @@ mod tests {
         for &v in &ring {
             let p = f.fab.pts[v as usize];
             assert!(p.y.is_finite());
+        }
+    }
+
+    #[test]
+    fn holding_a_facet_back_raises_a_wall_and_keeps_the_front_closed() {
+        // Drive `commit` directly with a mask that holds one facet: this is
+        // the mechanism the front relies on when a cell cannot be laid, and it
+        // is worth testing on its own because the room cap keeps it from
+        // firing on well-proportioned parts.
+        let mut f = box_front([1.0, 1.0, 1.0]);
+        let ring = f.ring();
+        let at: HashMap<u32, usize> = ring.iter().enumerate().map(|(i, &v)| (v, i)).collect();
+        let dir = f.unit_offsets(&ring);
+        let moved: Vec<Point3> = (0..ring.len())
+            .map(|i| f.fab.pts[ring[i] as usize] + dir[i] * 0.2)
+            .collect();
+
+        let mut moving = vec![true; f.facets.len()];
+        moving[0] = false; // one face stays behind
+        f.commit(&at, &moved, &moving).unwrap();
+
+        // Five cells, not six, and four walls closing the step round the face
+        // that stayed.
+        assert_eq!(f.fab.hexes.len(), 5);
+        assert_eq!(f.facets.len(), 6 + 4, "four walls should have gone up");
+        // And the front is still a closed oriented surface, which is the whole
+        // point of the walls.
+        let mut balance: HashMap<(u32, u32), i32> = HashMap::new();
+        for facet in &f.facets {
+            let c = facet.corners();
+            for i in 0..c.len() {
+                let (a, b) = (c[i], c[(i + 1) % c.len()]);
+                let (k, d) = if a < b { ((a, b), 1) } else { ((b, a), -1) };
+                *balance.entry(k).or_insert(0) += d;
+            }
+        }
+        assert!(
+            balance.values().all(|&v| v == 0),
+            "the walls failed to balance the front's edges"
+        );
+    }
+
+    #[test]
+    fn the_front_stays_a_closed_oriented_surface_while_it_advances() {
+        // The invariant the side walls exist to preserve: every edge is used
+        // exactly twice, once in each direction. Break it and the front no
+        // longer says which side is out.
+        let mut f = slab_front(4, 0.3);
+        for _ in 0..3 {
+            f.advance(0.5).unwrap();
+            let mut balance: HashMap<(u32, u32), i32> = HashMap::new();
+            for facet in &f.facets {
+                let c = facet.corners();
+                for i in 0..c.len() {
+                    let (a, b) = (c[i], c[(i + 1) % c.len()]);
+                    let (k, d) = if a < b { ((a, b), 1) } else { ((b, a), -1) };
+                    *balance.entry(k).or_insert(0) += d;
+                }
+            }
+            assert!(
+                balance.values().all(|&v| v == 0),
+                "the front stopped being a closed oriented surface"
+            );
         }
     }
 
