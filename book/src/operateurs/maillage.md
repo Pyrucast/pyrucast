@@ -672,6 +672,35 @@ par des triangles, et le mailleur tétraédrique existant prend le relais — en
 mode **strict**, donc en réutilisant ces triangles tels quels : les deux
 parties du maillage se rejoignent nœud à nœud.
 
+### Un front, pas un décalage global
+
+Décaler l'enveloppe entière d'une même distance est la version naïve, et elle
+lâche dès que le solide cesse d'être épais partout : un seul étranglement
+plafonne l'épaisseur de toutes les couches, sur toute la pièce. Le front fait
+trois choses à la place.
+
+**Il avance de ce que la place permet.** Le pas de chaque nœud est borné par la
+distance du front à lui-même en ce point — la moitié de la distance à la
+facette la plus proche à laquelle il n'appartient pas. Là où le solide est
+épais la couche est pleine, là où il se pince elle s'amincit au lieu que tout
+le maillage renonce. Demander une couche vingt fois plus épaisse que la pièce
+ne produit donc plus une erreur mais une couche adaptée.
+
+**Il se coud.** Deux parties du front qui se retrouvent à distance de contact
+sont soudées, ce qui referme une région mince au lieu d'y laisser un éclat
+qu'aucune maille ne peut remplir. Deux critères, tous deux nécessaires : les
+deux nœuds ne doivent pas partager de facette — les souder l'écraserait, ce
+n'est pas une couture mais une dégénérescence — et leurs normales doivent
+**se faire face**. Sans ce second critère, deux nœuds voisins d'une même nappe
+lisse se soudent et replient la surface ; c'est ce qui rendait le cube
+impossible à mailler pendant la mise au point.
+
+**Il est lissé.** Les nœuds qu'il a créés sont relâchés sous garde de validité,
+si bien qu'un pas raccourci par la place disponible ne reste pas en coude. La
+garde est le jacobien normalisé lui-même, pas un indicateur qui lui
+ressemblerait, et le balayage est de Gauss–Seidel : chaque déplacement est jugé
+sur le maillage tel qu'il est, donc la pire maille ne peut que s'améliorer.
+
 ### Décaler n'est pas « déplacer chaque nœud selon sa normale »
 
 Moyenner les normales des facettes incidentes donne une direction, et cette
@@ -737,16 +766,47 @@ print(dict(zip(maille.element_types(), maille.cell_counts())))
   l'erreur le dit et une couche plus mince, ou une enveloppe plus fine, est la
   réponse habituelle.
 
+### Qualité et coût
+
+Mesuré sur des cubes de 6³ à 16³ mailles de peau, en `--release`
+(`cargo test --release -- --ignored volume_report --nocapture`) :
+
+| cas | mailles | temps | débit | jacobien médian | inversées |
+|---|---|---|---|---|---|
+| cube 6³, 1 couche | 4 054 | 0,22 s | 18 700 /s | 0,374 | 0 |
+| cube 8³, 1 couche | 7 422 | 0,38 s | 19 500 /s | 0,345 | 0 |
+| cube 12³, 1 couche | 16 454 | 0,80 s | 20 600 /s | 0,418 | 0 |
+| cube 16³, 1 couche | 35 015 | 1,72 s | 20 300 /s | 0,431 | 0 |
+
+Le coût est **linéaire**, autour de 20 000 mailles/s et 50 µs par maille. Par
+type, sur le cube 16³ :
+
+| type | minimum | médiane |
+|---|---|---|
+| `HEX8` | 0,577 | **0,987** |
+| `PYRA5` | 0,181 | 0,319 |
+| `TET4` | 0,040 | 0,431 |
+
+La couche hexaédrique est donc quasi parfaite — c'est le but — et le minimum de
+0,577 n'est pas un défaut mais la valeur exacte d'un coin à 60°, celle des
+hexaèdres qui suivent une arête du cube. Les pyramides sont les mailles les
+plus médiocres du lot, ce qui est attendu d'un élément de raccord aplati.
+
+Une seconde couche coûte cher : le cube 6³ tombe à 2 100 mailles/s, la
+tétraédrisation du cœur devenant nettement plus difficile.
+
 ### Limitations actuelles
 
+- **Deux cas sur huit échouent**, tous deux au cœur : une plaque mince et un
+  barreau, c'est-à-dire les géométries où le front se referme réellement sur
+  lui-même. La couture soude bien, mais un repli *partiel* laisse un vide que
+  le mailleur tétraédrique, en mode strict, ne sait pas remplir. C'est la
+  limite principale aujourd'hui.
 - La profondeur des pyramides est fixée au quart de l'arête de leur base. Plus
-  profondes, elles seraient mieux formées mais finiraient par se traverser, et
-  le cœur reçoit alors une surface sans intérieur bien défini.
-- Pas encore de plastering au sens plein : les couches sont des décalages de
-  l'enveloppe entière, sans front avançant ni couture, donc une géométrie très
-  concave limite l'épaisseur admissible bien avant que le solide ne soit
-  rempli.
-- Pas de lissage du maillage produit.
+  profondes, elles seraient mieux formées mais finiraient par se traverser.
+- Le front avance sur toute sa surface à la fois : chaque nœud a son propre
+  pas, mais aucune facette ne peut rester en arrière pendant que ses voisines
+  avancent. C'est ce qui distingue encore ce mailleur d'un vrai plastering.
 
 ## Mailleur volumique : `triangulate_volume`
 

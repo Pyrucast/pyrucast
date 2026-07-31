@@ -38,7 +38,9 @@ use crate::aggregate::Aggregate;
 use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, Point3, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
+use crate::ops::mesher::plaster::front::Front;
 use crate::ops::mesher::plaster::shell::{Facet, Shell};
+use crate::ops::mesher::plaster::{self, smooth};
 use crate::store::{insert, read, Handle};
 use std::collections::HashMap;
 
@@ -56,6 +58,9 @@ const APEX_DEPTH: f64 = 0.25;
 /// Two apexes closer than this many mean edges are the same point, and get the
 /// same node.
 const APEX_WELD: f64 = 1e-7;
+
+/// Smoothing sweeps run over the layer once the front has stopped.
+const SMOOTH_SWEEPS: usize = 12;
 
 /// Mesh the inside of a closed `QUA4`/`TRI3` envelope with a hexahedral
 /// boundary layer over a tetrahedral core.
@@ -107,80 +112,70 @@ pub fn pave_volume_cancellable(
         }
     }
     let coords = envelope.coords()?;
-    let mut shell = Shell::extract(envelope, "pave_volume")?;
-    if shell.volume() <= 0.0 {
+    let shell = Shell::extract(envelope, "pave_volume")?;
+    let mut front = Front::new(shell, coords.clone());
+    if front.volume() <= 0.0 {
         return Err(PyrucastError::Message(format!(
             "pave_volume: the envelope encloses a signed volume of {:.3e}, so its normals \
              point into the material rather than out of it. Run `invert` on it.",
-            shell.volume()
+            front.volume()
         )));
     }
-    let step = thickness.unwrap_or_else(|| shell.mean_edge());
+    let step = thickness.unwrap_or_else(|| front.mean_edge());
 
-    let mut kept: Vec<Node> = Vec::new();
-    let mut hexes: Vec<[NodeId; 8]> = Vec::new();
-    let mut prisms: Vec<[NodeId; 6]> = Vec::new();
-
-    // ── The boundary layers ───────────────────────────────────────────────
+    // ── The advancing front ───────────────────────────────────────────────
     for layer in 0..layers {
         cancel.check()?;
-        let offsets = shell.inward_offsets(step);
-        let (inner, nodes) = shell.offset_by(&offsets, &coords)?;
-        kept.extend(nodes);
-        for f in &shell.facets {
-            match f {
-                // The facet is the cell's outer face and the offset copy its
-                // inner one. `HEX8` reads bottom-then-top with the bottom
-                // wound counter-clockwise seen from the top, which is what the
-                // inner copy is: it carries the facet's own winding, and the
-                // facet faces outward.
-                Facet::Quad(q) => hexes.push([
-                    inner.nodes[q[0] as usize],
-                    inner.nodes[q[1] as usize],
-                    inner.nodes[q[2] as usize],
-                    inner.nodes[q[3] as usize],
-                    shell.nodes[q[0] as usize],
-                    shell.nodes[q[1] as usize],
-                    shell.nodes[q[2] as usize],
-                    shell.nodes[q[3] as usize],
-                ]),
-                Facet::Tri(t) => prisms.push([
-                    inner.nodes[t[0] as usize],
-                    inner.nodes[t[1] as usize],
-                    inner.nodes[t[2] as usize],
-                    shell.nodes[t[0] as usize],
-                    shell.nodes[t[1] as usize],
-                    shell.nodes[t[2] as usize],
-                ]),
-            }
-        }
-        if inner.volume() <= 0.0 {
+        if !front.advance(step)? {
             return Err(PyrucastError::Message(format!(
-                "pave_volume: layer {} turns the envelope inside out — a thickness of {step} \
-                 is more than the solid can take there. Ask for a thinner layer, fewer of \
-                 them, or refine the envelope.",
+                "pave_volume: layer {} has nowhere to go — every step, down to a fraction of \
+                 the one asked for, would turn a cell inside out. Ask for fewer layers, a \
+                 thinner one, or refine the envelope.",
                 layer + 1
             )));
         }
-        shell = inner;
+        // Where the front has closed on itself, seam it shut before going on.
+        front.weld();
+        if front.facets.is_empty() {
+            break;
+        }
     }
+
+    // ── Smoothing ─────────────────────────────────────────────────────────
+    {
+        let patch = smooth::Patch {
+            hexes: &front.fab.hexes,
+            prisms: &front.fab.prisms,
+            movable: &front.fab.movable,
+        };
+        let inc = smooth::Incidence::build(&patch, front.fab.pts.len());
+        let mut pts = std::mem::take(&mut front.fab.pts);
+        smooth::smooth(&mut pts, &patch, &inc, SMOOTH_SWEEPS);
+        front.fab.pts = pts;
+    }
+    // Before anything reads the mesh back out of the store — the core mesher
+    // does, from the node coordinates — the smoothed positions have to be
+    // there. Cap the front from one set of positions and tetrahedralise
+    // against another and the two surfaces simply do not match.
+    write_positions(&coords, &front.fab)?;
 
     // ── The junction, and the void it leaves ──────────────────────────────
     //
     // Two apexes can land on the same point, and not by accident: where three
     // faces meet at a convex corner, the corner cell of each pushes its apex
-    // toward the same place, and at a depth of half the base's edge they
-    // coincide exactly. Two pyramids sharing an apex node is perfectly sound —
-    // it is two more cells round one vertex. Two *nodes* at the same position
-    // is not, so the apexes are looked up by position before being created.
-    let tol = shell.mean_edge() * APEX_WELD;
+    // toward the same place. Two pyramids sharing an apex node is perfectly
+    // sound — two more cells round one vertex. Two *nodes* at the same
+    // position is not, so apexes are looked up by position before being made.
+    let id = |v: u32| front.fab.ids[v as usize];
+    let tol = front.mean_edge().max(f64::MIN_POSITIVE) * APEX_WELD;
     let mut apexes: HashMap<[i64; 3], NodeId> = HashMap::new();
+    let mut kept: Vec<Node> = Vec::new();
     let mut pyramids: Vec<[NodeId; 5]> = Vec::new();
     let mut void: Vec<[NodeId; 3]> = Vec::new();
-    for f in &shell.facets {
+    for f in &front.facets {
         match f {
             Facet::Quad(q) => {
-                let base: Vec<Point3> = q.iter().map(|&i| shell.points[i as usize]).collect();
+                let base: Vec<Point3> = q.iter().map(|&i| front.fab.pts[i as usize]).collect();
                 let centre = Point3::from(
                     base.iter()
                         .fold(Point3::origin(), |a, p| a + p.coords)
@@ -191,50 +186,35 @@ pub fn pave_volume_cancellable(
                     .map(|i| (base[(i + 1) % 4] - base[i]).norm())
                     .sum::<f64>()
                     / 4.0;
-                let normal = quad_normal(&base);
-                // The shell's normals point away from the void, so the apex
-                // goes the other way.
-                let apex = centre - normal * (edge * APEX_DEPTH);
+                let apex = centre - quad_normal(&base) * (edge * APEX_DEPTH);
                 let key = [
                     (apex.x / tol).round() as i64,
                     (apex.y / tol).round() as i64,
                     (apex.z / tol).round() as i64,
                 ];
                 let apex_id = match apexes.get(&key) {
-                    Some(&id) => id,
+                    Some(&i) => i,
                     None => {
                         let a = Node::create_in(coords.clone(), &[apex.x, apex.y, apex.z])?;
-                        let id = a.id();
+                        let i = a.id();
                         kept.push(a);
-                        apexes.insert(key, id);
-                        id
+                        apexes.insert(key, i);
+                        i
                     }
                 };
-
-                // Seen from the apex the base runs the other way round, so it
-                // is reversed for `PYRA5`'s "base counter-clockwise from the
-                // apex" convention.
-                let b: [NodeId; 4] = [
-                    shell.nodes[q[0] as usize],
-                    shell.nodes[q[3] as usize],
-                    shell.nodes[q[2] as usize],
-                    shell.nodes[q[1] as usize],
-                ];
+                // Seen from the apex the base runs the other way round, which
+                // is the winding `PYRA5` asks for.
+                let b = [id(q[0]), id(q[3]), id(q[2]), id(q[1])];
                 pyramids.push([b[0], b[1], b[2], b[3], apex_id]);
                 // The void's boundary at a pyramid is the pyramid's own
-                // triangles, taken the other way round: the void's outward
-                // normal points *into* the pyramid.
+                // triangles, the other way round: the void's outward normal
+                // points *into* the pyramid.
                 for i in 0..4 {
                     void.push([b[(i + 1) % 4], b[i], apex_id]);
                 }
             }
-            // A triangular facet already faces the void with the right
-            // orientation: the shell's normal points out of the void.
-            Facet::Tri(t) => void.push([
-                shell.nodes[t[0] as usize],
-                shell.nodes[t[1] as usize],
-                shell.nodes[t[2] as usize],
-            ]),
+            // A triangular facet already faces the void the right way.
+            Facet::Tri(t) => void.push([id(t[0]), id(t[1]), id(t[2])]),
         }
     }
 
@@ -254,7 +234,9 @@ pub fn pave_volume_cancellable(
     });
 
     // ── The core ──────────────────────────────────────────────────────────
-    let core = {
+    let core = if void.is_empty() {
+        Mesh::empty()
+    } else {
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         for t in &void {
             sm.add_cell(t)?;
@@ -271,7 +253,22 @@ pub fn pave_volume_cancellable(
         })?
     };
 
-    materialize(&coords, hexes, prisms, pyramids, core)
+    let hexes: Vec<[NodeId; 8]> = front.fab.hexes.iter().map(|c| c.map(id)).collect();
+    let prisms: Vec<[NodeId; 6]> = front.fab.prisms.iter().map(|c| c.map(id)).collect();
+    let out = materialize(&coords, hexes, prisms, pyramids, core);
+    drop(kept);
+    out
+}
+
+/// Push the fabric's smoothed positions back into the `Coords`.
+fn write_positions(coords: &Handle<Coords>, fab: &plaster::front::Fabric) -> Result<()> {
+    let mut c = crate::store::write(coords)?;
+    for (i, p) in fab.pts.iter().enumerate() {
+        if fab.movable[i] {
+            c.set_coord(fab.ids[i], &[p.x, p.y, p.z])?;
+        }
+    }
+    Ok(())
 }
 
 /// Outward unit normal of a quadrangular facet, by Newell's method so a
@@ -338,7 +335,7 @@ mod tests {
 
     /// The skin of a `nx × ny × nz` box of hexahedra: a closed QUA4 shell with
     /// outward normals, built with the operators rather than by hand.
-    fn box_skin(nx: usize, ny: usize, nz: usize) -> Mesh {
+    fn box_skin_sized(nx: usize, ny: usize, nz: usize, height: f64) -> Mesh {
         let coords = insert(Coords::new(3).unwrap());
         let corner = |x: f64, z: f64| Node::create_in(coords.clone(), &[x, 0.0, z]).unwrap();
         let (a, b) = (corner(0.0, 0.0), corner(1.0, 0.0));
@@ -354,8 +351,12 @@ mod tests {
         }
         let contour = crate::ops::mesher::consolidate(&ring).unwrap();
         let face = super::super::pave_surface(&contour, ElementType::QUA4, None, true).unwrap();
-        let solid = crate::ops::mesher::extrude(&face, &[0.0, 1.0, 0.0], ny).unwrap();
+        let solid = crate::ops::mesher::extrude(&face, &[0.0, height, 0.0], ny).unwrap();
         crate::ops::mesher::skin(&solid, None).unwrap()
+    }
+
+    fn box_skin(nx: usize, ny: usize, nz: usize) -> Mesh {
+        box_skin_sized(nx, ny, nz, 1.0)
     }
 
     /// Cells per element type.
@@ -461,10 +462,173 @@ mod tests {
     }
 
     #[test]
-    fn too_thick_a_layer_is_refused_with_a_reason() {
-        let skin = box_skin(2, 2, 2);
-        let err = pave_volume(&skin, 1, Some(2.0), Some(0.4)).unwrap_err();
-        let msg = format!("{err}");
-        assert!(msg.starts_with("pave_volume:"), "{msg}");
+    fn an_over_thick_layer_is_clamped_by_the_room_rather_than_refused() {
+        // Twice the width of the solid. A front that offsets the whole
+        // envelope by one distance can only give up here; one that asks how
+        // much room it has at each node simply takes what there is.
+        let skin = box_skin(3, 3, 3);
+        let mesh = pave_volume(&skin, 1, Some(2.0), Some(0.4)).unwrap();
+        let k = kinds(&mesh);
+        assert_eq!(k.get(&ElementType::HEX8), Some(&54), "{k:?}");
+        // And the layer stayed inside the box, so no cell is inside out.
+        let coords = mesh.coords().unwrap();
+        let c = read(&coords).unwrap();
+        for sub in &mesh {
+            let s = read(sub).unwrap();
+            for &n in s.connectivity() {
+                for x in c.coord(n).unwrap() {
+                    assert!(
+                        (-1e-9..=1.0 + 1e-9).contains(x),
+                        "a node left the box at {x}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Corner edge triples whose determinant is positive on the reference
+    /// element, per type — the scaled Jacobian is read off these.
+    fn corner_table(et: ElementType) -> &'static [[usize; 4]] {
+        match et {
+            ElementType::HEX8 => &[
+                [0, 1, 3, 4],
+                [1, 2, 0, 5],
+                [2, 3, 1, 6],
+                [3, 0, 2, 7],
+                [4, 7, 5, 0],
+                [5, 4, 6, 1],
+                [6, 5, 7, 2],
+                [7, 6, 4, 3],
+            ],
+            ElementType::PENTA6 => &[
+                [0, 1, 2, 3],
+                [1, 2, 0, 4],
+                [2, 0, 1, 5],
+                [3, 5, 4, 0],
+                [4, 3, 5, 1],
+                [5, 4, 3, 2],
+            ],
+            // The pyramid is judged on its four base corners; the apex has
+            // four neighbours and no three of them frame it.
+            ElementType::PYRA5 => &[[0, 1, 3, 4], [1, 2, 0, 4], [2, 3, 1, 4], [3, 0, 2, 4]],
+            ElementType::TET4 => &[[0, 1, 2, 3], [1, 2, 0, 3], [2, 0, 1, 3], [3, 1, 0, 2]],
+            _ => &[],
+        }
+    }
+
+    /// Scaled Jacobian of every cell of a mesh, by element type.
+    fn qualities(mesh: &Mesh) -> HashMap<ElementType, Vec<f64>> {
+        let coords = mesh.coords().unwrap();
+        let c = read(&coords).unwrap();
+        let at = |n: NodeId| {
+            let v = c.coord(n).unwrap();
+            Point3::new(v[0], v[1], v[2])
+        };
+        let mut out: HashMap<ElementType, Vec<f64>> = HashMap::new();
+        for sm in mesh {
+            let s = read(sm).unwrap();
+            let et = s.element_type();
+            let table = corner_table(et);
+            let npc = et.nodes_per_cell();
+            for cell in s.connectivity().chunks(npc) {
+                let p: Vec<Point3> = cell.iter().map(|&n| at(n)).collect();
+                let mut worst = f64::INFINITY;
+                for k in table {
+                    let o = p[k[0]];
+                    let e = [p[k[1]] - o, p[k[2]] - o, p[k[3]] - o];
+                    let l: f64 = e.iter().map(|v| v.norm()).product();
+                    worst = worst.min(if l == 0.0 {
+                        0.0
+                    } else {
+                        e[0].cross(&e[1]).dot(&e[2]) / l
+                    });
+                }
+                out.entry(et).or_default().push(worst);
+            }
+        }
+        out
+    }
+
+    fn pct(v: &mut [f64], q: f64) -> f64 {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v[((v.len() - 1) as f64 * q) as usize]
+    }
+
+    fn report(name: &str, skin: &Mesh, layers: usize, thickness: Option<f64>, core: Option<f64>) {
+        let t0 = std::time::Instant::now();
+        let mesh = match pave_volume(skin, layers, thickness, core) {
+            Ok(m) => m,
+            Err(e) => {
+                println!(
+                    "│  {name:<34} ÉCHEC — {}",
+                    format!("{e}").chars().skip(90).take(96).collect::<String>()
+                );
+                return;
+            }
+        };
+        let dt = t0.elapsed();
+        let q = qualities(&mesh);
+        let total: usize = q.values().map(|v| v.len()).sum();
+        let all: Vec<f64> = q.values().flatten().copied().collect();
+        let worst = pct(&mut all.clone(), 0.0);
+        let p1 = pct(&mut all.clone(), 0.01);
+        let med = pct(&mut all.clone(), 0.5);
+        let inverted = all.iter().filter(|&&x| x <= 0.0).count();
+        let mut kinds: Vec<(ElementType, usize)> = q.iter().map(|(k, v)| (*k, v.len())).collect();
+        kinds.sort_by_key(|(k, _)| k.name());
+        let composition: Vec<String> = kinds.iter().map(|(k, n)| format!("{k} {n}")).collect();
+        println!(
+            "│  {name:<34} {total:>7} mailles  {:>6.2} s  {:>8.0}/s",
+            dt.as_secs_f64(),
+            total as f64 / dt.as_secs_f64()
+        );
+        println!("│      {}", composition.join(", "));
+        println!(
+            "│      jacobien normalisé  min {worst:.3}  p1 {p1:.3}  médiane {med:.3}  inversées {inverted}"
+        );
+        for (k, _) in kinds {
+            let mut vals = q[&k].clone();
+            println!(
+                "│        {k:<7} min {:.3}  médiane {:.3}",
+                pct(&mut vals.clone(), 0.0),
+                pct(&mut vals, 0.5)
+            );
+        }
+    }
+
+    /// Quality and throughput on named cases. Run explicitly:
+    /// `cargo test --release -- --ignored volume_report --nocapture`.
+    #[test]
+    #[ignore = "reporting run, not an assertion"]
+    fn volume_report() {
+        println!("\n┌─ pave_volume");
+        println!("│");
+
+        // A. Cube, une couche puis deux — le cas de référence.
+        let cube = box_skin(6, 6, 6);
+        report("cube 6³, 1 couche", &cube, 1, Some(0.08), Some(0.2));
+        report("cube 6³, 2 couches", &cube, 2, Some(0.06), Some(0.2));
+        report("cube 6³, épaisseur libre", &cube, 1, None, Some(0.2));
+
+        // B. Plaque mince : la place disponible borne le pas, la couture ferme.
+        let plaque = box_skin_sized(8, 1, 8, 0.08);
+        report("plaque mince 1×0,08×1", &plaque, 1, Some(1.0), Some(0.2));
+
+        // C. Barreau allongé : une direction bien plus fine que les autres.
+        let barreau = box_skin_sized(10, 2, 2, 0.25);
+        report("barreau 1×0,25×1", &barreau, 1, Some(0.1), Some(0.25));
+
+        // D. Montée en taille sur le cube.
+        for n in [8, 12, 16] {
+            let s = box_skin(n, n, n);
+            report(
+                &format!("cube {n}³, 1 couche"),
+                &s,
+                1,
+                Some(0.5 / n as f64),
+                Some(1.5 / n as f64),
+            );
+        }
+        println!("└─");
     }
 }
