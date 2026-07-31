@@ -93,6 +93,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `translate(mesh: &Mesh, vector: &[f64]) -> Mesh` | `translate(mesh, vector) -> Mesh` |
 | `rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> Mesh` | `rotate(mesh, angle, center, axis=None) -> Mesh` |
 | `triangulate_surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Mesh` | `triangulate_surface(contour, element_type, size=None) -> Mesh` |
+| `pave_surface(contour: &Mesh, element_type: ElementType, size: Option<f64>, all_quad: bool) -> Mesh` | `pave_surface(contour, element_type, size=None, all_quad=False) -> Mesh` |
 | `triangulate_volume(envelope: &Mesh, size: Option<f64>, allow_surface_nodes: bool) -> Mesh` | `triangulate_volume(envelope, size=None, allow_surface_nodes=False) -> Mesh` |
 | `border(mesh: &Mesh, angle_deg: Option<f64>) -> Mesh` | `border(mesh, angle_deg=None) -> Mesh` |
 | `skin(mesh: &Mesh, angle_deg: Option<f64>) -> Mesh` | `skin(mesh, angle_deg=None) -> Mesh` |

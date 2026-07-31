@@ -52,6 +52,12 @@ const RETREAT_STEPS: usize = 8;
 /// Two front nodes closer than this many target sizes are seamed together.
 const SEAM_FACTOR: f64 = 0.72;
 
+/// How many times `unstick` doubles its search radius before giving up.
+const CHORD_RADIUS_STEPS: usize = 4;
+
+/// How many of the shortest chords `unstick` checks for clearance per radius.
+const CHORD_CANDIDATES: usize = 8;
+
 /// Stalled turns tolerated on one loop before it is closed outright.
 const MAX_STALL: u32 = 2;
 
@@ -182,7 +188,7 @@ pub fn pave(
             // Cutting the loop in two usually gets it moving again; closing it
             // outright would fill a large polygon with a decomposition, which
             // is a far worse mesh than two more rows would have been.
-            if !unstick(&fab, &mut front, rep, all_quad, &mut stack) {
+            if !unstick(&fab, &mut front, rep, target, all_quad, &mut stack) {
                 close_loop(&mut fab, &mut front, rep);
             }
             continue;
@@ -455,6 +461,7 @@ fn unstick(
     fab: &Fabric,
     front: &mut Front,
     rep: u32,
+    target: f64,
     all_quad: bool,
     stack: &mut Vec<(u32, u32)>,
 ) -> bool {
@@ -463,41 +470,52 @@ fn unstick(
     if n < 8 {
         return false;
     }
-    let grid = EdgeGrid::build(front, &fab.pts, 0.0);
-    let mut best: Option<(f64, usize, usize)> = None;
-    for i in 0..n {
-        let pa = fab.pts[front.vertex(slots[i]) as usize];
-        for j in (i + 1)..n {
-            let gap = j - i;
-            // Both sides must be worth paving, and — under the all-quadrangle
-            // guarantee — both must stay even. A chord adds one slot to each
-            // side, so an odd gap is what keeps the parity.
-            if gap < 3 || n - gap < 3 {
-                continue;
+    let rank: HashMap<u32, usize> = slots.iter().enumerate().map(|(i, &s)| (s, i)).collect();
+    let grid = EdgeGrid::build(front, &fab.pts, target);
+
+    // The chord that helps is a short one, across whatever neck the loop got
+    // stuck on — not a diameter. Widening the search radius by steps finds it
+    // through the grid, which keeps this linear in the front length; testing
+    // every pair of slots is quadratic and, on a loop that stalls again and
+    // again, ends up dominating the whole mesh.
+    for step in 0..CHORD_RADIUS_STEPS {
+        let radius = target * (1 << step) as f64;
+        // Gather first, check clearance afterwards and only on the shortest
+        // few. Clearance sweeps the grid along the whole chord, so on a long
+        // one it touches most of the front; running it on every candidate is
+        // what turns a stubborn loop into minutes of work.
+        let mut cand: Vec<(f64, usize, usize)> = Vec::new();
+        for (i, &sa) in slots.iter().enumerate() {
+            let pa = fab.pts[front.vertex(sa) as usize];
+            for sb in grid.near_point(pa, radius) {
+                let Some(&j) = rank.get(&sb) else { continue };
+                let gap = (j + n - i) % n;
+                // Both sides must be worth paving, and — under the
+                // all-quadrangle guarantee — both must stay even. A chord adds
+                // one slot to each side, so an odd gap is what keeps parity.
+                if gap < 3 || n - gap < 3 || (all_quad && gap.is_multiple_of(2)) {
+                    continue;
+                }
+                let d = (fab.pts[front.vertex(sb) as usize] - pa).norm();
+                if d < radius {
+                    cand.push((d, i, j));
+                }
             }
-            if all_quad && gap % 2 == 0 {
-                continue;
-            }
-            let pb = fab.pts[front.vertex(slots[j]) as usize];
-            let d = (pb - pa).norm();
-            if best.is_some_and(|(bd, _, _)| d >= bd) {
-                continue;
-            }
-            if !seam_is_clear(front, fab, &grid, slots[i], slots[j]) {
-                continue;
-            }
-            best = Some((d, i, j));
         }
-    }
-    match best {
-        Some((_, i, j)) => {
+        cand.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        let best = cand
+            .iter()
+            .take(CHORD_CANDIDATES)
+            .find(|&&(_, i, j)| seam_is_clear(front, fab, &grid, slots[i], slots[j]))
+            .copied();
+        if let Some((_, i, j)) = best {
             let (ra, rb) = front.split_by_chord(slots[i], slots[j]);
             stack.push((ra, 0));
             stack.push((rb, 0));
-            true
+            return true;
         }
-        None => false,
     }
+    false
 }
 
 /// The closest pair of front nodes that ought to be merged, if any.
@@ -595,23 +613,46 @@ fn seam_is_clear(front: &Front, fab: &Fabric, grid: &EdgeGrid, a: u32, b: u32) -
 /// Returns `false` when the rewrite is not admissible, in which case the
 /// caller treats the loop as stalled rather than corrupting the mesh.
 fn seam(fab: &mut Fabric, front: &mut Front, a: u32, b: u32, stack: &mut Vec<(u32, u32)>) -> bool {
-    let (keep, drop) = (front.vertex(a), front.vertex(b));
+    // Either vertex may be the survivor. Trying both roughly doubles how often
+    // a seam is admissible, which matters because a seam is the only way a
+    // contracting front sheds nodes: refuse too many and the front keeps every
+    // node it started with while its edges shrink, until no row fits at all.
+    for (x, y) in [(a, b), (b, a)] {
+        if merge_into(fab, front, x, y) {
+            let (m1, m2) = front.merge(a, b, front.vertex(x));
+            stack.push((m1, 0));
+            stack.push((m2, 0));
+            return true;
+        }
+    }
+    false
+}
+
+/// Rewrite every reference to `loser`'s vertex into `winner`'s, if the result
+/// is a sound mesh. Positions are left exactly where they are: the vertex that
+/// survives keeps its own, so nothing already laid moves.
+fn merge_into(fab: &mut Fabric, front: &Front, winner: u32, loser: u32) -> bool {
+    let (keep, drop) = (front.vertex(winner), front.vertex(loser));
     if keep == drop {
         return false;
     }
-    let affected = fab.incident[drop as usize].clone();
-    let mut rewritten = Vec::with_capacity(affected.len());
-    for &qi in &affected {
-        let mut q = fab.quads[qi as usize];
-        // A quadrangle holding both vertices would collapse onto itself.
+    // The discarded position disappears from the mesh, so it must not be one
+    // of the caller's contour nodes — the survivor may well be. This is why
+    // both directions are worth trying: when one side is pinned, the other
+    // one goes.
+    if !fab.movable[drop as usize] {
+        return false;
+    }
+    let touching = fab.incident[drop as usize].clone();
+    let rewrite = |q: [u32; 4]| q.map(|c| if c == drop { keep } else { c });
+
+    for &qi in &touching {
+        let q = fab.quads[qi as usize];
+        // A quadrangle holding both would collapse onto itself.
         if q.contains(&keep) {
             return false;
         }
-        for c in q.iter_mut() {
-            if *c == drop {
-                *c = keep;
-            }
-        }
+        let q = rewrite(q);
         if !geom::quad_is_valid([
             fab.pts[q[0] as usize],
             fab.pts[q[1] as usize],
@@ -620,16 +661,29 @@ fn seam(fab: &mut Fabric, front: &mut Front, a: u32, b: u32, stack: &mut Vec<(u3
         ]) {
             return false;
         }
-        rewritten.push((qi, q));
     }
-    for (qi, q) in rewritten {
-        fab.quads[qi as usize] = q;
+
+    // Identifying two vertices can leave an edge with three cells on it, when
+    // both of them already had a neighbour in common. Only edges reaching the
+    // surviving vertex can be affected, so counting those is enough.
+    let mut around: HashMap<u32, usize> = HashMap::new();
+    for &qi in touching.iter().chain(&fab.incident[keep as usize]) {
+        let q = rewrite(fab.quads[qi as usize]);
+        for t in 0..4 {
+            if q[t] == keep {
+                *around.entry(q[(t + 1) % 4]).or_insert(0) += 1;
+                *around.entry(q[(t + 3) % 4]).or_insert(0) += 1;
+            }
+        }
+    }
+    if around.values().any(|&c| c > 2) {
+        return false;
+    }
+
+    for &qi in &touching {
+        fab.quads[qi as usize] = rewrite(fab.quads[qi as usize]);
         fab.incident[keep as usize].push(qi);
     }
     fab.incident[drop as usize].clear();
-
-    let (m1, m2) = front.merge(a, b, keep);
-    stack.push((m1, 0));
-    stack.push((m2, 0));
     true
 }

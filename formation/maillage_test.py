@@ -90,6 +90,16 @@ def main() -> None:
     plaque = pc.mesher.triangulate_surface(contour, "TRI3", size=0.01)
     plaque.plot(view=(-45, 25, 1.0))
     print(f"non structuré : {plaque.element_types()}, {plaque.cell_count()} mailles")
+
+    # Même contour, mailleur par pavage frontal : des quadrangles posés
+    # directement, en rangées parallèles au bord. `all_quad=True` interdit
+    # tout triangle résiduel, d'où une extrusion en HEX8 purs.
+    pavee = pc.mesher.pave_surface(contour, "QUA4", size=0.01, all_quad=True)
+    pavee.plot(view=(-45, 25, 1.0))
+    print(f"pavé          : {pavee.element_types()}, {pavee.cell_count()} mailles")
+    hexa = pc.mesher.extrude(pavee, [0, EPAISSEUR, 0], 2)
+    print(f"extrudé       : {hexa.element_types()}, {hexa.cell_count()} mailles")
+
     volume = pc.mesher.extrude(plaque, [0, EPAISSEUR, 0], 2)
     volume.plot(view=(-45, 25, 1.0))
     skin = pc.mesher.skin(volume)

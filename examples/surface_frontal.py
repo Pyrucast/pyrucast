@@ -1,10 +1,9 @@
-"""Frontal surface mesher demo (`pyrucast.mesher.pave_surface`).
+"""Frontal quadrangle mesher demo (`pyrucast.mesher.pave_surface`).
 
-Builds a circular SEG2 contour and fills its interior with a
-size-controlled advancing front that creates interior nodes — first as
-triangles (TRI3), then as a quad-dominant mesh (QUA4). Unlike
-`triangulate_surface` (which only triangulates the contour nodes), `pave_surface`
-honours a target element size.
+Builds a circular SEG2 contour and paves its interior with quadrangles laid
+in rows walking inward from the boundary. Contrast with
+`triangulate_surface`, which triangulates and can only recombine triangles
+into quadrangles two by two afterwards.
 
 Run:
 
@@ -23,13 +22,18 @@ def main() -> None:
     # Circular contour: radius 5, 48 segments, in the XY plane.
     contour = pc.mesher.circle(center, [0.0, 0.0, 1.0], 5.0, 48)
 
-    # Triangles of edge length ~0.8 (interior nodes are created).
-    tri = pc.mesher.pave_surface(contour, "TRI3", 0.8)
-    print("TRI3 :", tri.element_types(), tri.cell_count(), "cells")
-
-    # Quad-dominant variant (may carry a few triangles).
+    # Quadrangles of edge length ~0.8; a few triangles may remain.
     quad = pc.mesher.pave_surface(contour, "QUA4", 0.8)
-    print("QUA4 :", quad.element_types(), quad.cell_count(), "cells")
+    print("QUA4      :", quad.element_types(), quad.cell_count(), "cells")
+
+    # Asking for it outright: no triangle at all. The contour has an even
+    # number of segments, so this costs nothing here.
+    strict = pc.mesher.pave_surface(contour, "QUA4", 0.8, all_quad=True)
+    print("all_quad  :", strict.element_types(), strict.cell_count(), "cells")
+
+    # Compare with the Delaunay mesher's recombination on the same contour.
+    recombined = pc.mesher.triangulate_surface(contour, "QUA4", 0.8)
+    print("recombined:", recombined.element_types(), recombined.cell_count(), "cells")
 
 
 if __name__ == "__main__":

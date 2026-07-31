@@ -21,6 +21,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `translate(mesh, vector)` | **copie** du maillage translatée de `vector` (nœuds neufs, original intact) |
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
+| `pave_surface(contour, type, size=None, all_quad=False)` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (TET4/PENTA6/HEX8) en faces `TRI3`/`QUA4`, **une par face plane** du solide (voir plus bas) |
@@ -386,6 +387,168 @@ store ; lissage et recombinaison QUA4 sont parallélisés (`rayon`). Le module
 `pyrucast::ops::mesher::triangulation` regroupe par ailleurs les briques
 géométriques réutilisables indépendamment du système `Mesh`
 (voir [Triangulation](../triangulation.md)).
+
+## Pavage frontal d'un contour fermé : `pave_surface`
+
+`pave_surface(contour, element_type, size=None, all_quad=False)` remplit le
+même contour que `triangulate_surface`, mais en **posant directement des
+quadrangles**, par rangées qui avancent depuis le bord vers l'intérieur. C'est
+la version quadrangle de l'opérateur Cast3M `SURF`.
+
+### Pourquoi un second mailleur de surface
+
+`triangulate_surface` accepte `"QUA4"`, mais il triangule d'abord et
+**recombine** ensuite les triangles deux par deux : ce qu'on obtient dépend de
+la chance des appariements, les valences sont désordonnées et rien n'est
+aligné sur le bord. `pave_surface` ne recombine pas. Il pose des rangées
+**parallèles au contour**, ce qui est précisément la structure recherchée en
+éléments finis, où les gradients de contrainte et de flux sont les plus forts
+près des frontières.
+
+| | `triangulate_surface` | `pave_surface` |
+|---|---|---|
+| méthode | Delaunay contraint + Ruppert | front avançant |
+| élément naturel | `TRI3` | `QUA4` |
+| `QUA4` obtenu par | recombinaison de paires | construction |
+| rangées alignées sur le bord | non | oui |
+| tout-quadrangle garanti | impossible | `all_quad=True` |
+
+### Convention
+
+Identique à `triangulate_surface`, et volontairement : les deux opérateurs
+partagent leur lecture de contour. `contour` est un `Mesh` d'une ou plusieurs
+**boucles `SEG2` fermées**, chacune dans **un seul** sous-maillage
+(`pyrucast.consolidate`), orientées par l'appelant — **CCW** pour une frontière
+extérieure, **CW** pour un trou. Plusieurs boucles CCW disjointes pavent
+plusieurs domaines indépendants en une passe. La configuration peut être en
+dimension **2**, ou une boucle **plane en 3D** (ajustée à son plan de meilleur
+approximation par la méthode de Newell, pavée dans ce plan, puis relevée).
+
+**Le contour est figé** : les nœuds d'entrée sont réutilisés tels quels (mêmes
+identifiants, mêmes positions) et ne sont jamais déplacés — la seule exception
+est décrite sous *Le tout-quadrangle* ci-dessous.
+
+`element_type` vaut `"QUA4"`, `"QUA8"` ou `"QUA9"` (les formes quadratiques
+sont dérivées du maillage `QUA4`). `size` fixe la longueur d'arête visée ; par
+défaut, la longueur moyenne des segments de bord du domaine.
+
+### Méthode
+
+Le **front** part du bord du domaine et avance vers l'intérieur. Il est
+toujours un ensemble de boucles simples et disjointes, matière à gauche ; cet
+invariant n'est jamais supposé, il est **maintenu**.
+
+1. **Une rangée par tour.** À chaque nœud du front, le nombre de quadrangles
+   voulus est \\( k = \operatorname{round}(\theta / 90°) \\), borné à
+   \\( 1..4 \\), où \\( \theta \\) est l'angle intérieur. Ce n'est pas un seuil
+   réglé : si \\( k \\) quadrangles entourent le nœud, ses voisins forment un
+   chemin de \\( k+1 \\) sommets, dont \\( k-1 \\) sont neufs — vouloir des
+   angles droits fixe \\( k \\). Les nouveaux nœuds se placent sur les rayons
+   qui découpent le secteur en \\( k \\) parts égales.
+2. **Refus et retrait.** Un quadrangle non strictement convexe a un jacobien
+   négatif à son coin rentrant : aucun code éléments finis ne peut l'intégrer.
+   Une rangée qui en produirait un, ou dont les arêtes croiseraient le front,
+   est **refusée** ; le planificateur dit *quels* nœuds sont en cause, et la
+   rangée est reprise moins loin à cet endroit seulement.
+3. **Couture.** Deux nœuds de front qui se rapprochent à moins d'environ une
+   demi-maille sont **identifiés**. La même opération *scinde* une boucle
+   quand les deux nœuds lui appartiennent — c'est ainsi qu'une géométrie
+   concave se divise — et *joint* deux boucles sinon — c'est ainsi qu'un trou
+   est absorbé. Les trous n'ont donc aucun traitement particulier.
+4. **Déblocage.** Une boucle qui n'avance plus est **coupée en deux** par une
+   corde, et les deux moitiés reprennent le pavage.
+5. **Fermeture.** Une boucle réduite à six nœuds ou moins est remplie par
+   décomposition, sans jamais découper une arête (ce qui laisserait un nœud
+   en T, donc un maillage non conforme).
+6. **Lissage** sous garde de validité, qui ne déplace jamais un nœud du
+   contour.
+
+Toutes les décisions topologiques — convexité, croisement de segments —
+passent par le prédicat **exact** `orient2d` (technique de Shewchuk, partagé
+avec le mailleur volumique). Ce ne sont donc pas des estimations.
+
+### Le tout-quadrangle
+
+Un polygone à nombre **pair** de côtés se remplit toujours de quadrangles
+seuls ; un polygone impair laisse toujours **exactement un** triangle. Or le
+pavage ne peut pas changer cette parité — une rangée la conserve, une couture
+retire deux nœuds. **Elle est donc décidée par le contour, avant que le
+maillage ne commence.**
+
+D'où le paramètre :
+
+- `all_quad=False` (défaut) — les quelques triangles résiduels reviennent dans
+  un sous-maillage `TRI3` séparé ;
+- `all_quad=True` — toute boucle de bord à nombre impair de segments reçoit
+  **un** nœud supplémentaire, au milieu de son plus long segment. C'est le prix
+  minimal, et il n'y a pas d'alternative : découper une arête plus tard
+  laisserait un nœud en T.
+
+### Exemple Python
+
+```python
+import pyrucast as pc
+
+coords = pc.Coords(2)
+# … contour extérieur CCW et cercle-trou CW, consolidés en une boucle chacun.
+plaque = pc.mesher.pave_surface(contour, "QUA4", size=0.002, all_quad=True)
+print(plaque.element_types())  # ['QUA4'] — aucun triangle
+
+# Le solide prismatique vient alors gratuitement, et en hexaèdres purs.
+volume = pc.mesher.extrude(plaque, [0, 0.02, 0], 2)
+print(volume.element_types())  # ['HEX8']
+```
+
+### Interruption
+
+Le pavage interroge les signaux Python entre deux rangées : `Ctrl+C` pendant
+un maillage long lève `KeyboardInterrupt`. Côté Rust, la forme
+`pave_surface_cancellable(..., cancel)` prend un jeton `Cancel`.
+
+### Coût
+
+Plaque trouée de 30 × 10 cm percée d'un trou de rayon 3,5 cm, taille de maille
+0,29 mm, en `--release` :
+
+| mailles | temps | débit | quadrangles | mailles inversées |
+|---|---|---|---|---|
+| 209 167 | 1,39 s | 150 000 /s | 100,0 % | 0 |
+
+1,2 % des mailles ont un jacobien normalisé inférieur à 0,5. Le coût est
+essentiellement linéaire : le front croît comme la racine du nombre de mailles,
+et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
+
+### Pièges
+
+- **Une boucle par sous-maillage.** Comme pour `triangulate_surface`, une
+  boucle fermée doit tenir dans un seul sous-maillage : `pyrucast.consolidate`
+  après avoir uni les côtés.
+- **Orientation.** Un trou doit être **CW**. `pyrucast.mesher.invert` retourne
+  un cercle construit en CCW.
+- **La taille du contour compte.** Le front part de la discrétisation du bord
+  et converge vers `size` en quelques rangées. Un contour beaucoup plus
+  grossier que `size` donne donc des premières rangées plus grosses que
+  demandé.
+
+### Limitations actuelles
+
+- Pas encore de nettoyage topologique (résorption des doublets, valences
+  ramenées vers 4) : la qualité du pire élément reste inférieure à ce qu'un
+  paveur mûr obtient, même si aucune maille n'est inversée.
+- Sur un contour très grossier, deux parties du front peuvent finir par
+  s'effleurer et laisser une boucle d'aire négative. Elle est **abandonnée**
+  plutôt que remplie de mailles inintégrables, ce qui coûte un éclat d'aire.
+  Le paveur peut donc dégrader ; il ne peut pas rendre un maillage invalide.
+- **Front convexe sans coin.** Un front ne perd des nœuds que par couture, et
+  une couture n'est acceptée que si elle laisse toutes les mailles valides. Un
+  contour circulaire n'a aucun coin : son front garde donc son nombre de nœuds
+  pendant qu'il se contracte, ses arêtes raccourcissent, et les rangées
+  finissent par ne plus tenir. Le paveur s'en sort par des cordes de
+  découpage, mais le débit s'effondre — de l'ordre de 10³ mailles/s sur un
+  disque finement discrétisé, contre 10⁵ sur la plaque trouée. Une géométrie
+  comportant des coins, ou un contour discrétisé près de la taille visée, ne
+  rencontre pas ce cas.
+- Pas de champ de taille variable : `size` est uniforme par domaine.
 
 ## Mailleur volumique : `triangulate_volume`
 

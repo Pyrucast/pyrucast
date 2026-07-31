@@ -30,7 +30,7 @@ def main() -> None:
     # rotation about z sweeps a genuine wedge of material.
     center = coords.add_node([1.5, 0.0, 0.5])
     contour = pc.mesher.circle(center, [0.0, 1.0, 0.0], 0.5, 24)
-    face = pc.mesher.pave_surface(contour, "TRI3", 0.25)
+    face = pc.mesher.triangulate_surface(contour, "TRI3", 0.25)
     print("face  :", face.element_types(), face.cell_count(), "cells")
 
     # One 15° slice of a solid of revolution about the z axis.

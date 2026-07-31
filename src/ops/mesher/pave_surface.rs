@@ -291,6 +291,20 @@ mod tests {
         let contour = outer.union(&hole).unwrap();
         let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.1), false).unwrap();
         let r = inspect(&mesh);
+        // Seaming discards one of two vertices, so the contour has to be
+        // checked here too — this is the geometry where the outer front and
+        // the hole's front meet and get seamed together.
+        {
+            let all: std::collections::HashSet<NodeId> = mesh
+                .into_iter()
+                .flat_map(|sm| read(sm).unwrap().connectivity().to_vec())
+                .collect();
+            for sub in [&outer[0], &hole[0]] {
+                for n in read(sub).unwrap().connectivity() {
+                    assert!(all.contains(n), "contour node {n:?} was seamed away");
+                }
+            }
+        }
         let expect = 3.0 - std::f64::consts::PI * 0.35 * 0.35;
         println!(
             "plate: {} quads, {} tris, area {:.6} (hole polygon {:.6}), q_min {:.3}",
