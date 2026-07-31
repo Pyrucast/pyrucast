@@ -425,8 +425,8 @@ dimension **2**, ou une boucle **plane en 3D** (ajustée à son plan de meilleur
 approximation par la méthode de Newell, pavée dans ce plan, puis relevée).
 
 **Le contour est figé** : les nœuds d'entrée sont réutilisés tels quels (mêmes
-identifiants, mêmes positions) et ne sont jamais déplacés — la seule exception
-est décrite sous *Le tout-quadrangle* ci-dessous.
+identifiants, mêmes positions), ne sont jamais déplacés, et aucun nœud n'est
+ajouté sur une arête de bord. Voir *Le contour est intouchable* ci-dessous.
 
 `element_type` vaut `"QUA4"`, `"QUA8"` ou `"QUA9"` (les formes quadratiques
 sont dérivées du maillage `QUA4`). `size` fixe la longueur d'arête visée ; par
@@ -460,35 +460,71 @@ invariant n'est jamais supposé, il est **maintenu**.
 5. **Fermeture.** Une boucle réduite à six nœuds ou moins est remplie par
    décomposition, sans jamais découper une arête (ce qui laisserait un nœud
    en T, donc un maillage non conforme).
-6. **Lissage** sous garde de validité, qui ne déplace jamais un nœud du
-   contour.
+6. **Nettoyage topologique**, puis **lissage** sous garde de validité qui ne
+   déplace jamais un nœud du contour. Dans cet ordre : lisser un nœud qui n'a
+   pas le bon nombre de mailles autour de lui ne fait qu'étaler l'erreur sur
+   ses voisins.
+
+Le nettoyage corrige ce que le lissage ne peut pas atteindre, parce que c'est
+de la **connectivité** et non de la géométrie :
+
+- un **doublet** — un nœud intérieur n'ayant que deux mailles autour de lui,
+  qui partagent donc *deux* arêtes. Il reste coincé dans un coin quelles que
+  soient les positions ; fusionner les deux mailles supprime le nœud et le coin
+  d'un coup ;
+- une **valence fautive**. Un nœud intérieur veut quatre mailles : avec trois,
+  les angles valent 120° en moyenne, avec cinq, 72°, et aucun lissage n'y peut
+  rien puisque les angles autour d'un nœud somment à 2π quelles que soient les
+  positions. Deux mailles voisines forment un hexagone, qui se recoupe selon
+  l'une de ses trois diagonales ; changer de diagonale déplace une unité de
+  valence. C'est le seul geste, il ne change ni le nombre de nœuds ni le bord,
+  et il n'est appliqué que s'il fait strictement baisser l'erreur de valence.
+
+Le nombre de mailles voulu à un nœud est le même
+\\( \operatorname{round}(\theta / 90°) \\) que dans la classification des
+rangées, avec ici \\( \theta \\) la somme des angles incidents : \\( 2\pi \\) à
+l'intérieur — d'où le quatre familier — et moins au bord, ce qui donne trois le
+long d'une arête droite et deux dans un coin droit. Une seule formule, aucun
+cas particulier « nœud de bord ».
 
 Toutes les décisions topologiques — convexité, croisement de segments —
 passent par le prédicat **exact** `orient2d` (technique de Shewchuk, partagé
 avec le mailleur volumique). Ce ne sont donc pas des estimations.
 
+### Le contour est intouchable
+
+Tous les nœuds du contour reviennent dans le maillage, à leur position, et
+**aucun nœud n'est jamais ajouté sur une arête de bord**. La discrétisation du
+bord appartient à l'appelant : elle porte en général les conditions aux
+limites, et un nœud glissé au milieu d'un segment serait un nœud que personne
+n'a demandé. Rien dans le paveur ne découpe une arête de bord, et la couture —
+la seule opération qui abandonne un nœud — refuse d'abandonner un nœud de
+contour.
+
+Corollaire : un contour avec lequel le paveur ne peut pas travailler est
+**signalé**, pas contourné. Deux cas, tous deux renvoyés en erreur nommant le
+problème :
+
+- `all_quad` sur une boucle à nombre **impair** de segments. Un polygone à
+  nombre impair de côtés n'admet aucun remplissage en quadrangles seuls ; le
+  pavage ne peut pas changer cette parité — une rangée la conserve, une couture
+  retire deux nœuds — et rééquilibrer le compte reviendrait à ajouter un nœud
+  au bord ;
+- un contour si grossier, ou si irrégulier pour la taille demandée, que le
+  front **se replie sur lui-même** en laissant une région impossible à
+  remplir. L'erreur indique l'endroit.
+
 ### Le tout-quadrangle
 
-Un polygone à nombre **pair** de côtés se remplit toujours de quadrangles
-seuls ; un polygone impair laisse toujours **exactement un** triangle. Or le
-pavage ne peut pas changer cette parité — une rangée la conserve, une couture
-retire deux nœuds. **Elle est donc décidée par le contour, avant que le
-maillage ne commence.**
+Laissé à lui-même (`all_quad=False`), un contour impair coûte simplement **un**
+triangle, rendu dans un sous-maillage `TRI3` séparé — avec les quelques mailles
+qu'un polygone résiduel trop déformé n'a pas pu rendre carrées : la fermeture
+préfère deux triangles à une maille de jacobien négatif, et la validité n'est
+jamais échangée.
 
-D'où le paramètre :
-
-- `all_quad=False` (défaut) — les quelques triangles résiduels reviennent dans
-  un sous-maillage `TRI3` séparé ;
-- `all_quad=True` — toute boucle de bord à nombre impair de segments reçoit
-  **un** nœud supplémentaire, au milieu de son plus long segment. C'est le prix
-  minimal, et il n'y a pas d'alternative : découper une arête plus tard
-  laisserait un nœud en T.
-
-`all_quad` lève l'obstruction **de parité**, la seule qui puisse être levée
-d'avance. Ce n'est pas un zéro absolu : un polygone résiduel trop déformé
-n'admet aucune décomposition en quadrangles, et la fermeture préfère alors
-deux triangles à une maille de jacobien négatif — la validité n'est jamais
-échangée. En pratique, quelques mailles sur plusieurs milliers.
+Avec `all_quad=True`, la parité devient une exigence sur l'entrée : discrétisez
+chaque boucle de bord avec un nombre pair de segments, et le résultat est sans
+triangle.
 
 ### Exemple Python
 
@@ -497,8 +533,9 @@ import pyrucast as pc
 
 coords = pc.Coords(2)
 # … contour extérieur CCW et cercle-trou CW, consolidés en une boucle chacun.
+# Chaque boucle du contour a un nombre pair de segments, donc all_quad passe.
 plaque = pc.mesher.pave_surface(contour, "QUA4", size=0.002, all_quad=True)
-print(plaque.element_types())  # ['QUA4'] le plus souvent
+print(plaque.element_types())  # ['QUA4']
 
 # Le solide prismatique vient alors gratuitement, et en hexaèdres purs.
 volume = pc.mesher.extrude(plaque, [0, 0.02, 0], 2)
@@ -510,6 +547,30 @@ print(volume.element_types())  # ['HEX8']
 Le pavage interroge les signaux Python entre deux rangées : `Ctrl+C` pendant
 un maillage long lève `KeyboardInterrupt`. Côté Rust, la forme
 `pave_surface_cancellable(..., cancel)` prend un jeton `Cancel`.
+
+### Qualité
+
+Plaque 30 × 10 cm percée, taille visée 1,6 mm, 15 652 mailles (99,8 % de
+quadrangles) :
+
+| indicateur | valeur |
+|---|---|
+| jacobien normalisé — médiane | **1,000** |
+| jacobien normalisé — moyenne / p5 / p1 / min | 0,967 / 0,84 / 0,60 / 0,069 |
+| mailles inversées | **0** |
+| mailles sous 0,5 | 0,61 % |
+| angle médian | **90,0°** |
+| angles sous 30° | 0,17 % |
+| nœuds intérieurs de valence 4 | **97,4 %** |
+| élancement médian | 1,86 |
+
+Autrement dit : le cœur du maillage est fait de rectangles à angle droit et de
+valence régulière, ce qui est exactement ce qu'on demande à un maillage
+quadrangulaire. Les deux faiblesses résiduelles sont l'**élancement** — les
+mailles sont d'équerre mais environ deux fois plus longues que larges, parce
+que l'espacement le long du front et la distance d'avance évoluent
+indépendamment — et la dispersion de la **taille d'arête**, qui va de 0,4 à
+3,7 mm autour des 1,6 mm demandés.
 
 ### Coût
 
@@ -539,13 +600,15 @@ et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
 
 ### Limitations actuelles
 
-- Pas encore de nettoyage topologique (résorption des doublets, valences
-  ramenées vers 4) : la qualité du pire élément reste inférieure à ce qu'un
-  paveur mûr obtient, même si aucune maille n'est inversée.
-- Sur un contour très grossier, deux parties du front peuvent finir par
-  s'effleurer et laisser une boucle d'aire négative. Elle est **abandonnée**
-  plutôt que remplie de mailles inintégrables, ce qui coûte un éclat d'aire.
-  Le paveur peut donc dégrader ; il ne peut pas rendre un maillage invalide.
+- La taille des mailles n'est pas uniforme : l'espacement le long du front et
+  la distance d'avance ne sont pas asservis l'un à l'autre, d'où un élancement
+  médian proche de 2 et une taille d'arête étalée d'un facteur 10. Les angles,
+  eux, restent droits.
+- Deux fronts qui se rejoignent de face laissent normalement un éclat de
+  recouvrement, dégénéré et sans matière : il est écarté. Au-delà d'une
+  demi-maille d'aire, en revanche, c'est une région perdue, et le paveur
+  **sort en erreur** en indiquant l'endroit plutôt que de rendre un maillage
+  troué.
 - **Front convexe sans coin.** Un front ne perd des nœuds que par couture, et
   une couture n'est acceptée que si elle laisse toutes les mailles valides. Un
   contour circulaire n'a aucun coin : son front garde donc son nombre de nœuds

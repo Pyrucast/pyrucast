@@ -66,10 +66,54 @@ def test_pave_surface_handles_a_hole():
 
 def test_pave_surface_all_quad_leaves_no_triangle():
     coords = pc.Coords(2)
-    # An odd number of boundary segments, which is what forces a triangle.
-    contour = _closed_loop(coords, _rect(1.0, 1.0, 4, 4) + [(0.0, 0.125)])
-    mesh = pc.mesher.pave_surface(contour, "QUA4", size=0.25, all_quad=True)
+    contour = _closed_loop(coords, _rect(1.0, 1.0, 6, 6))  # 24 segments, even
+    mesh = pc.mesher.pave_surface(contour, "QUA4", size=0.2, all_quad=True)
     assert _cells(mesh).get("TRI3", 0) == 0
+
+
+def test_pave_surface_all_quad_refuses_an_odd_contour():
+    """The contour is the caller's, so parity cannot be fixed by adding to it."""
+    coords = pc.Coords(2)
+    contour = _closed_loop(coords, _rect(1.0, 1.0, 4, 4) + [(0.0, 0.125)])
+    with pytest.raises(Exception, match="odd"):
+        pc.mesher.pave_surface(contour, "QUA4", size=0.25, all_quad=True)
+    # Left alone it meshes, paying one triangle.
+    mesh = pc.mesher.pave_surface(contour, "QUA4", size=0.25)
+    assert _cells(mesh).get("TRI3", 0) <= 1
+
+
+def test_pave_surface_never_adds_a_node_on_the_boundary():
+    """Every contour node comes back, and the boundary keeps its own edges."""
+    coords = pc.Coords(2)
+    pts = _rect(3.0, 1.0, 30, 10)
+    contour = _closed_loop(coords, pts)
+    mesh = pc.mesher.pave_surface(contour, "QUA4", size=0.1)
+
+    # Edges used by a single cell are the mesh boundary; they must be exactly
+    # the contour's own segments, no more and no fewer.
+    seen = {}
+    for sub in mesh:
+        for c in range(sub.cell_count()):
+            ids = [n.id for n in sub[c].nodes()]
+            for i in range(len(ids)):
+                a, b = ids[i], ids[(i + 1) % len(ids)]
+                key = (a, b) if a < b else (b, a)
+                seen[key] = seen.get(key, 0) + 1
+    # Each contour segment must be an edge of exactly one cell: present, and
+    # not split in two by a node the mesher slipped in.
+    ids = [n.id for c in range(contour[0].cell_count()) for n in contour[0][c].nodes()]
+    for k in range(0, len(ids), 2):
+        a, b = ids[k], ids[k + 1]
+        key = (a, b) if a < b else (b, a)
+        assert seen.get(key) == 1, f"contour segment {key} is not a boundary edge"
+
+    # And nothing else is on the boundary: no extra node, and no hole left
+    # inside the mesh either.
+    boundary = [e for e, k in seen.items() if k == 1]
+    assert len(boundary) == len(pts), (
+        f"{len(boundary)} boundary edges for {len(pts)} contour segments — "
+        "the mesh has a hole in it or grew a boundary node"
+    )
 
 
 def test_pave_surface_default_size_follows_the_contour():

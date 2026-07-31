@@ -25,22 +25,32 @@
 //!
 //! A 3-D contour is fitted to its best plane, paved there, and lifted back.
 //!
-//! ## Triangles, and how to have none
+//! ## The contour is untouchable
 //!
-//! A polygon with an even number of sides can always be filled with
-//! quadrangles alone; an odd one always leaves exactly one triangle. Paving
-//! provably cannot change that parity — a row preserves it and a seam removes
-//! two nodes — so the count is decided by the contour before meshing starts.
-//! With `all_quad`, any boundary loop with an odd number of segments therefore
-//! receives **one** extra node, on its longest segment.
+//! Every node of the contour comes back in the mesh, at its own position, and
+//! **no node is ever added on a boundary edge**. The boundary discretisation
+//! is the caller's: it usually carries the boundary conditions, and a node
+//! silently inserted in the middle of a segment would be a node nobody asked
+//! for. Nothing in the paver may split a boundary edge, and the seam — the one
+//! operation that discards a node — refuses to discard a contour one.
 //!
-//! That removes the *parity* obstruction, and it is the only one that can be
-//! removed in advance. A leftover polygon can still be too distorted for any
-//! quadrangle decomposition, and there the closure prefers a pair of triangles
-//! to a cell with a negative Jacobian — validity is never traded away. So
-//! `all_quad` means "no triangle that parity made unavoidable", in practice a
-//! handful of cells in a few thousand rather than a hard zero. Without it, the
-//! leftover triangles simply come back in a separate `TRI3` submesh.
+//! The corollary is that a contour the paver cannot work with is reported, not
+//! worked around. There are two such cases and both come back as an error
+//! naming the problem:
+//!
+//! - `all_quad` on a loop with an **odd** number of segments. A polygon with
+//!   an odd number of sides has no filling by quadrangles alone, paving
+//!   provably cannot change that parity — a row preserves it, a seam removes
+//!   two nodes — and evening the count out would mean adding a boundary node.
+//! - a contour so coarse or so uneven for the requested size that the
+//!   advancing front **folds onto itself**, leaving a region that cannot be
+//!   filled. The error names where.
+//!
+//! Left to itself (`all_quad = false`) an odd loop simply costs one triangle,
+//! returned in a separate `TRI3` submesh, along with the few cells a distorted
+//! leftover polygon could not make square — the closure prefers a pair of
+//! triangles to a cell with a negative Jacobian, and validity is never traded
+//! away.
 
 use crate::aggregate::Aggregate;
 use crate::containers::mesh::{ElementType, Mesh, Node, NodeId, SubMesh};
@@ -367,38 +377,32 @@ mod tests {
     }
 
     #[test]
-    fn all_quad_leaves_no_triangle_on_an_odd_contour() {
-        // 4 + 4 + 4 + 5 = 17 segments: an odd loop, which no amount of paving
-        // can fill with quadrangles alone.
+    fn all_quad_on_an_odd_contour_is_an_error_rather_than_a_silent_triangle() {
+        // 4 + 4 + 4 + 5 = 17 segments. A polygon with an odd number of sides
+        // has no filling by quadrangles alone, and the contour is the
+        // caller's: nothing here may add a node to it to even the count out.
+        // So the honest answer is to say so.
         let coords = insert(Coords::new(2).unwrap());
         let mut pts = rect_loop(1.0, 1.0, 4, 4);
         pts.push((0.0, 0.125));
-        let contour = loop_mesh(coords, &pts);
         assert_eq!(pts.len() % 2, 1);
+        let contour = loop_mesh(coords, &pts);
 
-        // Left alone, odd parity costs at most one triangle — sometimes none,
-        // when a degenerate remnant absorbs it on the way.
-        // On a contour this coarse the fronts can end up grazing each other,
-        // leaving a clockwise remnant that bounds no material. It is dropped
-        // rather than filled with cells no solver could integrate, which costs
-        // a sliver of area — the paver degrading rather than failing. Hence
-        // the tolerance here, where the well-formed cases above assert the
-        // area exactly.
-        for &all_quad in &[false, true] {
-            let r =
-                inspect(&pave_surface(&contour, ElementType::QUA4, Some(0.25), all_quad).unwrap());
-            assert_eq!(r.non_conforming, 0, "all_quad={all_quad}");
-            assert!(
-                (r.area - 1.0).abs() < 2e-2,
-                "all_quad={all_quad}, area {}",
-                r.area
-            );
-            if all_quad {
-                assert_eq!(r.tris, 0, "all_quad must leave no triangle");
-            } else {
-                assert!(r.tris <= 1, "odd parity costs at most one: {}", r.tris);
-            }
-        }
+        let err = pave_surface(&contour, ElementType::QUA4, Some(0.25), true).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.starts_with("pave_surface:"), "{msg}");
+        assert!(
+            msg.contains("17 segments"),
+            "the count should be named: {msg}"
+        );
+        assert!(msg.contains("odd"), "{msg}");
+
+        // Left to itself the same contour meshes fine, paying the one
+        // triangle that parity makes unavoidable.
+        let r = inspect(&pave_surface(&contour, ElementType::QUA4, Some(0.25), false).unwrap());
+        assert!(r.tris <= 1, "odd parity costs at most one: {}", r.tris);
+        assert_eq!(r.non_conforming, 0);
+        assert!((r.area - 1.0).abs() < 2e-2, "area {}", r.area);
     }
 
     #[test]
@@ -428,6 +432,51 @@ mod tests {
         for (id, _) in &before {
             assert!(used.contains_key(id), "contour node {id:?} was abandoned");
         }
+    }
+
+    #[test]
+    fn the_mesh_boundary_is_exactly_the_contour() {
+        // The strongest statement of the contract: every contour segment is a
+        // boundary edge of the mesh, and there is no other boundary edge —
+        // so no node was added on the boundary, none was dropped, and no hole
+        // was left anywhere inside.
+        let coords = insert(Coords::new(2).unwrap());
+        let pts = rect_loop(3.0, 1.0, 30, 10);
+        let contour = loop_mesh(coords, &pts);
+        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.1), false).unwrap();
+
+        let mut used: HashMap<(NodeId, NodeId), usize> = HashMap::new();
+        for sm in &mesh {
+            let s = read(sm).unwrap();
+            let npc = s.element_type().nodes_per_cell();
+            for cell in s.connectivity().chunks(npc) {
+                for i in 0..npc {
+                    let (a, b) = (cell[i], cell[(i + 1) % npc]);
+                    let key = if a.0 < b.0 { (a, b) } else { (b, a) };
+                    *used.entry(key).or_insert(0) += 1;
+                }
+            }
+        }
+        let contour_conn = read(&contour[0]).unwrap();
+        for seg in contour_conn.connectivity().chunks(2) {
+            let key = if seg[0].0 < seg[1].0 {
+                (seg[0], seg[1])
+            } else {
+                (seg[1], seg[0])
+            };
+            assert_eq!(
+                used.get(&key),
+                Some(&1),
+                "contour segment {key:?} is not on the boundary"
+            );
+        }
+        let boundary = used.values().filter(|&&u| u == 1).count();
+        assert_eq!(
+            boundary,
+            pts.len(),
+            "the mesh boundary has {boundary} edges for {} contour segments",
+            pts.len()
+        );
     }
 
     #[test]
@@ -569,5 +618,187 @@ mod tests {
             "only {:.1} % quadrangles",
             100.0 * nq as f64 / total as f64
         );
+    }
+
+    /// A full quality read-out on the plate benchmark, for judging the mesh
+    /// rather than merely asserting it is valid. Run explicitly:
+    /// `cargo test --release -- --ignored quality_report --nocapture`.
+    #[test]
+    #[ignore = "reporting run, not an assertion"]
+    fn quality_report_plate_with_hole() {
+        use crate::ops::mesher::paving::geom::{quad_quality, tri_quality};
+        let coords = insert(Coords::new(2).unwrap());
+        let outer = loop_mesh(coords.clone(), &rect_loop(0.30, 0.10, 60, 20));
+        let hole = loop_mesh(coords, &circle_loop(0.225, 0.05, 0.035, 64, true));
+        let contour = outer.union(&hole).unwrap();
+        let target = 0.0016;
+
+        let t0 = std::time::Instant::now();
+        let mesh = pave_surface(&contour, ElementType::QUA4, Some(target), false).unwrap();
+        let dt = t0.elapsed();
+
+        let c = read(&mesh.coords().unwrap()).unwrap();
+        let at = |id: NodeId| {
+            let v = c.coord(id).unwrap();
+            Point2::new(v[0], v[1])
+        };
+
+        let mut jac: Vec<f64> = Vec::new();
+        let mut angles: Vec<f64> = Vec::new();
+        let mut aspect: Vec<f64> = Vec::new();
+        let mut edges: Vec<f64> = Vec::new();
+        let mut valence: HashMap<NodeId, usize> = HashMap::new();
+        let mut edge_use: HashMap<(NodeId, NodeId), usize> = HashMap::new();
+        let (mut nq, mut nt) = (0usize, 0usize);
+
+        for sm in &mesh {
+            let s = read(sm).unwrap();
+            let npc = s.element_type().nodes_per_cell();
+            for cell in s.connectivity().chunks(npc) {
+                let p: Vec<Point2> = cell.iter().map(|&n| at(n)).collect();
+                if npc == 4 {
+                    nq += 1;
+                    jac.push(quad_quality([p[0], p[1], p[2], p[3]]));
+                } else {
+                    nt += 1;
+                    jac.push(tri_quality(p[0], p[1], p[2]));
+                }
+                let mut lo = f64::INFINITY;
+                let mut hi: f64 = 0.0;
+                for i in 0..npc {
+                    let (prev, cur, next) = (p[(i + npc - 1) % npc], p[i], p[(i + 1) % npc]);
+                    let (u, w) = (prev - cur, next - cur);
+                    let ang = (u.dot(&w) / (u.norm() * w.norm())).clamp(-1.0, 1.0).acos();
+                    angles.push(ang.to_degrees());
+                    let l = w.norm();
+                    lo = lo.min(l);
+                    hi = hi.max(l);
+                    edges.push(l);
+                    *valence.entry(cell[i]).or_insert(0) += 1;
+                    let (a, b) = (cell[i], cell[(i + 1) % npc]);
+                    let key = if a.0 < b.0 { (a, b) } else { (b, a) };
+                    *edge_use.entry(key).or_insert(0) += 1;
+                }
+                aspect.push(hi / lo);
+            }
+        }
+
+        let pct = |v: &mut Vec<f64>, q: f64| {
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            v[((v.len() - 1) as f64 * q) as usize]
+        };
+        let total = nq + nt;
+        let boundary: usize = edge_use.values().filter(|&&u| u == 1).count();
+        let interior_nodes: Vec<NodeId> = {
+            let mut on_boundary: std::collections::HashSet<NodeId> =
+                std::collections::HashSet::new();
+            for ((a, b), &u) in &edge_use {
+                if u == 1 {
+                    on_boundary.insert(*a);
+                    on_boundary.insert(*b);
+                }
+            }
+            valence
+                .keys()
+                .filter(|n| !on_boundary.contains(n))
+                .copied()
+                .collect()
+        };
+        let mut hist: HashMap<usize, usize> = HashMap::new();
+        for n in &interior_nodes {
+            *hist.entry(valence[n]).or_insert(0) += 1;
+        }
+        let irregular = interior_nodes.iter().filter(|n| valence[n] != 4).count();
+
+        println!("\n┌─ pave_surface — plaque 30 × 10 cm, trou r = 3,5 cm, taille visée {target} m");
+        println!("│");
+        println!(
+            "│  mailles          {total}  ({nq} QUA4 + {nt} TRI3, {:.2} % quadrangles)",
+            100.0 * nq as f64 / total as f64
+        );
+        println!(
+            "│  temps            {:.2} s  ({:.0} mailles/s)",
+            dt.as_secs_f64(),
+            total as f64 / dt.as_secs_f64()
+        );
+        println!(
+            "│  nœuds            {}  (dont {} intérieurs)",
+            valence.len(),
+            interior_nodes.len()
+        );
+        println!("│  arêtes de bord   {boundary}");
+        println!(
+            "│  conformité       {}",
+            if edge_use.values().all(|&u| u <= 2) {
+                "OK — aucune arête à plus de 2 mailles"
+            } else {
+                "ROMPUE"
+            }
+        );
+        println!("│");
+        println!("│  Jacobien normalisé (1 = carré, ≤ 0 = inintégrable)");
+        println!(
+            "│    min {:.3}   p1 {:.3}   p5 {:.3}   médiane {:.3}   moyenne {:.3}",
+            pct(&mut jac.clone(), 0.0),
+            pct(&mut jac.clone(), 0.01),
+            pct(&mut jac.clone(), 0.05),
+            pct(&mut jac.clone(), 0.5),
+            jac.iter().sum::<f64>() / jac.len() as f64
+        );
+        for seuil in [0.0, 0.2, 0.5, 0.7] {
+            println!(
+                "│    sous {seuil:.1} : {:.3} %  ({} mailles)",
+                100.0 * jac.iter().filter(|&&j| j < seuil).count() as f64 / total as f64,
+                jac.iter().filter(|&&j| j < seuil).count()
+            );
+        }
+        println!("│");
+        println!("│  Angles (degrés)");
+        println!(
+            "│    min {:.1}   p1 {:.1}   médiane {:.1}   p99 {:.1}   max {:.1}",
+            pct(&mut angles.clone(), 0.0),
+            pct(&mut angles.clone(), 0.01),
+            pct(&mut angles.clone(), 0.5),
+            pct(&mut angles.clone(), 0.99),
+            pct(&mut angles.clone(), 1.0)
+        );
+        println!(
+            "│    sous 30° : {:.2} %      au-dessus de 150° : {:.2} %",
+            100.0 * angles.iter().filter(|&&a| a < 30.0).count() as f64 / angles.len() as f64,
+            100.0 * angles.iter().filter(|&&a| a > 150.0).count() as f64 / angles.len() as f64
+        );
+        println!("│");
+        println!("│  Élancement (arête la plus longue / la plus courte)");
+        println!(
+            "│    médiane {:.2}   p99 {:.2}   max {:.2}",
+            pct(&mut aspect.clone(), 0.5),
+            pct(&mut aspect.clone(), 0.99),
+            pct(&mut aspect.clone(), 1.0)
+        );
+        println!("│");
+        println!("│  Taille d'arête (visée {target})");
+        println!(
+            "│    p1 {:.5}   médiane {:.5}   p99 {:.5}",
+            pct(&mut edges.clone(), 0.01),
+            pct(&mut edges.clone(), 0.5),
+            pct(&mut edges.clone(), 0.99)
+        );
+        println!("│");
+        println!("│  Valence des nœuds intérieurs (4 = régulier)");
+        let mut ks: Vec<usize> = hist.keys().copied().collect();
+        ks.sort_unstable();
+        for k in ks {
+            println!(
+                "│    {k} : {:>6}  ({:.2} %)",
+                hist[&k],
+                100.0 * hist[&k] as f64 / interior_nodes.len() as f64
+            );
+        }
+        println!(
+            "│    irréguliers : {irregular} sur {} ({:.2} %)",
+            interior_nodes.len(),
+            100.0 * irregular as f64 / interior_nodes.len() as f64
+        );
+        println!("└─");
     }
 }

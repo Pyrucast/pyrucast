@@ -20,6 +20,7 @@
 //! [`close`], which fills any simple polygon. The paver can degrade, but it
 //! cannot fail to return a conforming mesh.
 
+pub mod cleanup;
 pub mod close;
 pub mod front;
 pub mod geom;
@@ -28,7 +29,7 @@ pub mod row;
 pub mod smooth;
 
 use crate::containers::mesh::{NodeId, Point2};
-use crate::error::Result;
+use crate::error::{PyrucastError, Result};
 use crate::interrupt::Cancel;
 use crate::ops::mesher::contour::Domain;
 use front::Front;
@@ -60,6 +61,10 @@ const CHORD_CANDIDATES: usize = 8;
 
 /// Stalled turns tolerated on one loop before it is closed outright.
 const MAX_STALL: u32 = 2;
+
+/// Largest fold, in units of the target cell's area, written off as two
+/// fronts grazing rather than reported as a region that could not be meshed.
+const FOLD_TOLERANCE: f64 = 0.5;
 
 /// Smoothing sweeps run over the finished mesh.
 const FINAL_SWEEPS: usize = 12;
@@ -147,10 +152,20 @@ pub fn pave(
     };
 
     // ── Parity, settled once and for all at the entrance ──────────────────
+    // The contour is the caller's and is never touched, so an odd loop cannot
+    // be fixed here: it simply has no triangle-free filling, and saying so is
+    // more useful than quietly producing one triangle anyway.
     if all_quad {
-        for verts in loops.iter_mut() {
-            if verts.len() % 2 == 1 {
-                split_longest_segment(&mut fab, verts);
+        for (k, verts) in loops.iter().enumerate() {
+            if !verts.len().is_multiple_of(2) {
+                let which = if k == 0 { "outer boundary" } else { "hole" };
+                return Err(PyrucastError::Message(format!(
+                    "pave_surface: all_quad was asked for, but the {which} loop has {} \
+                     segments — an odd number. A polygon with an odd number of sides has no \
+                     filling by quadrangles alone, and paving cannot change that parity. \
+                     Re-mesh that loop with an even number of segments.",
+                    verts.len()
+                )));
             }
         }
     }
@@ -181,7 +196,7 @@ pub fn pave(
             continue;
         }
         if n <= CLOSE_AT || steps > cap {
-            close_loop(&mut fab, &mut front, rep);
+            close_loop(&mut fab, &mut front, rep, target)?;
             continue;
         }
         if stalls > MAX_STALL {
@@ -189,7 +204,7 @@ pub fn pave(
             // outright would fill a large polygon with a decomposition, which
             // is a far worse mesh than two more rows would have been.
             if !unstick(&fab, &mut front, rep, target, all_quad, &mut stack) {
-                close_loop(&mut fab, &mut front, rep);
+                close_loop(&mut fab, &mut front, rep, target)?;
             }
             continue;
         }
@@ -219,6 +234,13 @@ pub fn pave(
     }
 
     // ── Finish ────────────────────────────────────────────────────────────
+    // Connectivity first, positions after: smoothing a node that has the
+    // wrong number of cells around it only spreads the error over its
+    // neighbours, so the cleanup has to come first for the sweep to have
+    // something worth polishing.
+    cleanup::run(&fab.pts, &fab.movable, &mut fab.quads, &fab.tris);
+    compact(&mut fab);
+
     let patch = smooth::Patch {
         quads: &fab.quads,
         tris: &fab.tris,
@@ -231,24 +253,44 @@ pub fn pave(
     Ok(fab)
 }
 
-/// Put one node in the middle of a loop's longest segment, making the loop's
-/// segment count even. The node is new but immovable: it lies on the user's
-/// boundary and has to stay there.
-fn split_longest_segment(fab: &mut Fabric, verts: &mut Vec<u32>) {
-    let n = verts.len();
-    let mut best = (f64::NEG_INFINITY, 0usize);
-    for i in 0..n {
-        let d = (fab.pts[verts[(i + 1) % n] as usize] - fab.pts[verts[i] as usize]).norm();
-        if d > best.0 {
-            best = (d, i);
+/// Drop the nodes no cell refers to any more — the ones a doublet removal
+/// took out — and renumber the rest. Contour nodes are kept whatever happens:
+/// they are the caller's, and they occupy the first entries by construction.
+fn compact(fab: &mut Fabric) {
+    let n_contour = fab.contour_ids.len();
+    let mut used = vec![false; fab.pts.len()];
+    used[..n_contour].fill(true);
+    for q in &fab.quads {
+        for &v in q {
+            used[v as usize] = true;
         }
     }
-    let i = best.1;
-    let mid = Point2::from(
-        (fab.pts[verts[i] as usize].coords + fab.pts[verts[(i + 1) % n] as usize].coords) * 0.5,
-    );
-    let v = fab.add(mid, false);
-    verts.insert(i + 1, v);
+    for t in &fab.tris {
+        for &v in t {
+            used[v as usize] = true;
+        }
+    }
+    if used.iter().all(|&u| u) {
+        return;
+    }
+    let mut remap = vec![u32::MAX; fab.pts.len()];
+    let (mut pts, mut movable) = (Vec::new(), Vec::new());
+    for i in 0..fab.pts.len() {
+        if used[i] {
+            remap[i] = pts.len() as u32;
+            pts.push(fab.pts[i]);
+            movable.push(fab.movable[i]);
+        }
+    }
+    for q in fab.quads.iter_mut() {
+        *q = q.map(|v| remap[v as usize]);
+    }
+    for t in fab.tris.iter_mut() {
+        *t = t.map(|v| remap[v as usize]);
+    }
+    fab.pts = pts;
+    fab.movable = movable;
+    fab.incident.clear();
 }
 
 /// Attempt one row on the loop at `rep`, retreating where the geometry refuses
@@ -426,21 +468,46 @@ fn relax_front(fab: &mut Fabric, front: &Front, rep: u32) {
 }
 
 /// Fill what is left of a loop with elements and retire it.
-fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32) {
+fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32, target: f64) -> Result<()> {
     let verts: Vec<u32> = front
         .loop_slots(rep)
         .iter()
         .map(|&s| front.vertex(s))
         .collect();
     // A front loop bounds material on its left, so a closed one encloses
-    // positive area. A non-positive one is a degenerate remnant — two parts of
-    // the front that ended up grazing each other — and bounds no material at
-    // all. Filling it would add elements the domain does not contain, and,
-    // being clockwise, they could not be oriented correctly anyway.
+    // positive area. A non-positive one means two parts of the front folded
+    // over each other, and whatever is between them cannot be meshed. Dropping
+    // it silently would return a mesh with a hole in it, so it is an error —
+    // and one worth locating, since it always comes from a contour that is too
+    // coarse or too uneven for the size asked of it.
     let poly: Vec<Point2> = verts.iter().map(|&v| fab.pts[v as usize]).collect();
-    if crate::ops::mesher::triangulation::signed_area(&poly) <= 0.0 {
-        front.kill_loop(rep);
-        return;
+    let area = crate::ops::mesher::triangulation::signed_area(&poly);
+    if area <= 0.0 {
+        // Two fronts meeting head-on normally leave a slither of overlap
+        // between them, which is degenerate and covers nothing; discarding
+        // that is right. What is not right is discarding a region that was
+        // supposed to hold cells, so the two are told apart by size.
+        if -area <= FOLD_TOLERANCE * target * target {
+            // Two lines of front lying on top of each other. Welding them
+            // shut costs nothing and leaves the mesh whole; simply dropping
+            // the ring would leave a crack behind, and a crack is a hole in
+            // the connectivity even when it has no area worth speaking of.
+            weld(fab, front, rep);
+            front.kill_loop(rep);
+            return Ok(());
+        }
+        let centre = poly
+            .iter()
+            .fold(Point2::origin(), |acc, p| acc + p.coords)
+            .coords
+            / poly.len() as f64;
+        return Err(PyrucastError::Message(format!(
+            "pave_surface: the advancing front folded onto itself near ({:.6}, {:.6}) in the \
+             meshing plane, leaving a region that cannot be filled. The contour there is too \
+             coarse or too uneven for the element size asked of it: discretise it closer to \
+             the target size, or ask for a larger one.",
+            centre.x, centre.y
+        )));
     }
     let filled = close::close(&fab.pts, &verts);
     for p in &filled.added {
@@ -451,6 +518,7 @@ fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32) {
     }
     fab.tris.extend(filled.tris);
     front.kill_loop(rep);
+    Ok(())
 }
 
 /// Cut a stalled loop in two along the shortest admissible chord.
@@ -516,6 +584,43 @@ fn unstick(
         }
     }
     false
+}
+
+/// Sew a flattened ring shut by identifying the vertices that face each other
+/// across it — the closest pair that are not already neighbours, taken again
+/// and again until nothing is left to sew.
+///
+/// Pairing the ends against each other instead, as the ring order suggests,
+/// is wrong: a flattened ring is a lens, and its two ends are the *thin* part.
+/// Whatever refuses to merge is left alone: the ring is retired either way,
+/// and a refused weld costs a crack, not correctness.
+fn weld(fab: &mut Fabric, front: &Front, rep: u32) {
+    let mut verts: Vec<u32> = front
+        .loop_slots(rep)
+        .iter()
+        .map(|&s| front.vertex(s))
+        .collect();
+    while verts.len() >= 4 {
+        let n = verts.len();
+        let mut best: Option<(f64, usize, usize)> = None;
+        for i in 0..n {
+            for j in (i + 2)..n {
+                if i == 0 && j == n - 1 {
+                    continue;
+                }
+                let d = (fab.pts[verts[j] as usize] - fab.pts[verts[i] as usize]).norm();
+                if best.is_none_or(|(bd, _, _)| d < bd) {
+                    best = Some((d, i, j));
+                }
+            }
+        }
+        let Some((_, i, j)) = best else { break };
+        let (a, b) = (verts[i], verts[j]);
+        if !merge_into(fab, a, b) && !merge_into(fab, b, a) {
+            break;
+        }
+        verts.remove(j);
+    }
 }
 
 /// The closest pair of front nodes that ought to be merged, if any.
@@ -635,7 +740,7 @@ fn seam(fab: &mut Fabric, front: &mut Front, a: u32, b: u32, stack: &mut Vec<(u3
     // contracting front sheds nodes: refuse too many and the front keeps every
     // node it started with while its edges shrink, until no row fits at all.
     for (x, y) in [(a, b), (b, a)] {
-        if merge_into(fab, front, x, y) {
+        if merge_into(fab, front.vertex(x), front.vertex(y)) {
             let (m1, m2) = front.merge(a, b, front.vertex(x));
             stack.push((m1, 0));
             stack.push((m2, 0));
@@ -648,8 +753,7 @@ fn seam(fab: &mut Fabric, front: &mut Front, a: u32, b: u32, stack: &mut Vec<(u3
 /// Rewrite every reference to `loser`'s vertex into `winner`'s, if the result
 /// is a sound mesh. Positions are left exactly where they are: the vertex that
 /// survives keeps its own, so nothing already laid moves.
-fn merge_into(fab: &mut Fabric, front: &Front, winner: u32, loser: u32) -> bool {
-    let (keep, drop) = (front.vertex(winner), front.vertex(loser));
+fn merge_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
     if keep == drop {
         return false;
     }

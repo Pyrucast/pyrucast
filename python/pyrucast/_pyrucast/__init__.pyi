@@ -2607,15 +2607,19 @@ def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optiona
     CCW loops pave several independent domains at once. `size` sets the target
     element edge length; `None` uses the mean boundary edge length per domain.
     `element_type` is "QUA4", "QUA8" or "QUA9". The contour may be 2-D or a
-    planar loop in 3-D (paved in its best-fit plane, then lifted back), and its
-    nodes are reused as they are and never moved.
+    planar loop in 3-D (paved in its best-fit plane, then lifted back).
     
-    With `all_quad=False` (the default) a handful of triangles may come back in
-    a separate TRI3 submesh. `all_quad=True` guarantees none: a boundary loop
-    with an odd number of segments then receives one extra node on its longest
-    segment, which is unavoidable — a polygon with an odd number of sides
-    cannot be filled with quadrangles alone, and paving cannot change that
-    parity.
+    The contour is untouchable: its nodes come back at their own positions and
+    no node is ever added on a boundary edge. A contour the paver cannot work
+    with is therefore reported rather than worked around — `all_quad=True` on a
+    loop with an odd number of segments raises, since a polygon with an odd
+    number of sides has no filling by quadrangles alone and evening the count
+    out would mean adding a boundary node; so does a contour so coarse for the
+    requested size that the front folds onto itself.
+    
+    With `all_quad=False` (the default) an odd loop simply costs one triangle,
+    returned in a separate TRI3 submesh, along with the few cells a distorted
+    leftover polygon could not make square.
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:

@@ -406,17 +406,19 @@ pub fn triangulate_surface(
 /// CCW loops pave several independent domains at once. `size` sets the target
 /// element edge length; `None` uses the mean boundary edge length per domain.
 /// `element_type` is "QUA4", "QUA8" or "QUA9". The contour may be 2-D or a
-/// planar loop in 3-D (paved in its best-fit plane, then lifted back), and its
-/// nodes are reused as they are and never moved.
+/// planar loop in 3-D (paved in its best-fit plane, then lifted back).
 ///
-/// With `all_quad=False` (the default) the leftover triangles come back in a
-/// separate TRI3 submesh. `all_quad=True` removes the parity obstruction: a
-/// boundary loop with an odd number of segments receives one extra node on its
-/// longest segment, which is unavoidable — a polygon with an odd number of
-/// sides cannot be filled with quadrangles alone, and paving cannot change
-/// that parity. It is not an absolute zero: where a leftover polygon is too
-/// distorted for any quadrangle decomposition, the closure still prefers two
-/// triangles to a cell with a negative Jacobian.
+/// The contour is untouchable: its nodes come back at their own positions and
+/// no node is ever added on a boundary edge. A contour the paver cannot work
+/// with is therefore reported rather than worked around — `all_quad=True` on a
+/// loop with an odd number of segments raises, since a polygon with an odd
+/// number of sides has no filling by quadrangles alone and evening the count
+/// out would mean adding a boundary node; so does a contour so coarse for the
+/// requested size that the front folds onto itself.
+///
+/// With `all_quad=False` (the default) an odd loop simply costs one triangle,
+/// returned in a separate TRI3 submesh, along with the few cells a distorted
+/// leftover polygon could not make square.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (contour, element_type, size=None, all_quad=false))]
