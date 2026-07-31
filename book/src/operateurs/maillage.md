@@ -577,10 +577,24 @@ indépendamment — et la dispersion de la **taille d'arête**, qui va de 0,4 à
 Plaque trouée de 30 × 10 cm percée d'un trou de rayon 3,5 cm, taille de maille
 0,29 mm, en `--release` :
 
-| géométrie | mailles | temps | débit | quadrangles | mailles inversées |
-|---|---|---|---|---|---|
-| plaque rectangulaire trouée | 209 167 | 1,37 s | 153 000 /s | 100,0 % | 0 |
-| plaque de la formation (bout arrondi) | 57 275 | 0,39 s | 147 000 /s | 99,7 % | 0 |
+Plaque 30 × 10 cm percée, contour à 224 segments, `--release` :
+
+| taille visée | mailles | temps | débit | µs/maille |
+|---|---|---|---|---|
+| 4 mm | 3 171 | 0,033 s | 96 000 /s | 10,4 |
+| 1,6 mm | 15 652 | 0,17 s | 91 000 /s | 11,0 |
+| 0,4 mm | 181 067 | 1,91 s | 95 000 /s | 10,6 |
+| 0,2 mm | 310 446 | 6,14 s | 51 000 /s | 19,8 |
+
+Le coût est **linéaire** — environ 10 µs par maille sur deux ordres de grandeur
+— tant que le front avance sans se coincer. Il double quand les blocages se
+multiplient, la boucle repassant alors par les cordes de déblocage et les
+fermetures.
+
+Le temps se répartit en gros en trois tiers : la pose des rangées, le
+nettoyage topologique et le lissage final. À titre de comparaison sur la même
+géométrie à 1,6 mm, `triangulate_surface` produit 93 000 mailles/s en `QUA4`
+(mais 23 % de triangles) et 178 000 /s en `TRI3`.
 
 1,2 % des mailles ont un jacobien normalisé inférieur à 0,5. Le coût est
 essentiellement linéaire : le front croît comme la racine du nombre de mailles,

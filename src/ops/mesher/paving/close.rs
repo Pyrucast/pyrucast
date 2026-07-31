@@ -30,6 +30,9 @@
 use super::geom::{orient, quad_is_valid, quad_quality, segments_cross, tri_quality};
 use crate::containers::mesh::{Point2, Vector2};
 
+/// How many diagonals are weighed on a large polygon before one is picked.
+const DIAGONAL_SAMPLES: usize = 256;
+
 /// The elements a closure produced.
 ///
 /// `added` holds points the closure had to create, addressed by the caller as
@@ -214,12 +217,24 @@ fn best_ear(pts: &[Point2], v: &[u32]) -> Option<usize> {
 
 /// The diagonal that splits the polygon into two even halves and leaves the
 /// best-shaped pieces.
+///
+/// Every diagonal is weighed while the polygon is small. Past that, only a
+/// bounded sample is: judging all of them costs `O(n³)` once the clearance
+/// test is counted, and a leftover polygon of a few hundred sides — which
+/// happens when a loop stalls — would then cost more than the entire mesh
+/// around it.
 fn best_diagonal(pts: &[Point2], v: &[u32]) -> Option<(usize, usize)> {
     let n = v.len();
+    let step = (n * n / DIAGONAL_SAMPLES).max(1);
+    let mut seen = 0usize;
     let mut best: Option<(f64, usize, usize)> = None;
     for i in 0..n {
         for j in (i + 2)..n {
             if i == 0 && j == n - 1 {
+                continue;
+            }
+            seen += 1;
+            if step > 1 && !seen.is_multiple_of(step) {
                 continue;
             }
             // Both halves must stay even, which happens exactly when the
