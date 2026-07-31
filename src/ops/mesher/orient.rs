@@ -208,6 +208,11 @@ fn corner_count(et: ElementType) -> usize {
 /// Local corner indices of each outward-oriented facet of an element type
 /// (d ≥ 2). `SEG*` (d = 1) and `POI1` (d = 0) are handled directly in
 /// [`oriented_facets`] and return `&[]` here.
+#[cfg(test)]
+pub(crate) fn facets_of(et: ElementType) -> &'static [&'static [usize]] {
+    boundary_facets(et)
+}
+
 fn boundary_facets(et: ElementType) -> &'static [&'static [usize]] {
     match et {
         ElementType::TRI3 | ElementType::TRI6 => &[&[0, 1], &[1, 2], &[2, 0]],

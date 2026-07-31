@@ -22,6 +22,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `pave_surface(contour, type, size=None, all_quad=False)` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
+| `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (TET4/PENTA6/HEX8) en faces `TRI3`/`QUA4`, **une par face plane** du solide (voir plus bas) |
@@ -633,6 +634,119 @@ et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
   comportant des coins, ou un contour discrétisé près de la taille visée, ne
   rencontre pas ce cas.
 - Pas de champ de taille variable : `size` est uniforme par domaine.
+
+## Couche limite hexaédrique : `pave_volume`
+
+`pave_volume(envelope, layers=1, thickness=None, size=None)` remplit la même
+enveloppe fermée que `triangulate_volume`, mais met des **hexaèdres là où ils
+comptent** — dans la couche contre le bord, où les gradients de contrainte et
+de flux sont les plus raides et où la forme d'une maille décide de la
+précision — et laisse l'intérieur, où le champ est lisse, aux tétraèdres.
+
+```text
+peau (QUA4 / TRI3)  ──►  décalage intérieur  ──►  HEX8 / PENTA6   (couche limite)
+                                                        │
+                     faces internes carrées ──► PYRA5   │           (le raccord)
+                                                        ▼
+                                 vide borné par des triangles seulement
+                                                        │
+                                          triangulate_volume  ──►  TET4
+```
+
+### Pourquoi les pyramides ne sont pas facultatives
+
+Les faces internes de la couche sont **carrées**, et un tétraèdre n'en a
+aucune. Découper chaque carré en deux triangles ne suffit pas : l'hexaèdre de
+l'autre côté continue de voir une face carrée, avec un nœud suspendu en son
+milieu. Le maillage n'est plus conforme et aucun solveur ne peut assembler à
+travers cette face.
+
+La pyramide est le seul élément qui présente un carré d'un côté et des
+triangles de l'autre — c'est exactement ce que réclame le raccord. Ses
+fonctions de forme se réduisent à celles d'un `QUA4` sur la base et restent
+linéaires le long des arêtes vers le sommet, ce qui assure la continuité des
+deux côtés : voir [PYRA5](../elements/pyra5.md).
+
+Une fois chaque face carrée coiffée, ce qui reste du vide n'est plus borné que
+par des triangles, et le mailleur tétraédrique existant prend le relais — en
+mode **strict**, donc en réutilisant ces triangles tels quels : les deux
+parties du maillage se rejoignent nœud à nœud.
+
+### Décaler n'est pas « déplacer chaque nœud selon sa normale »
+
+Moyenner les normales des facettes incidentes donne une direction, et cette
+direction ne suffit pas. Déplacez le coin d'un cube de \\( t \\) le long de la
+normale moyenne \\( (1,1,1)/\sqrt3 \\) et chacune des trois faces ne s'écarte
+que de \\( t/\sqrt3 \\) : la couche est la plus mince là où la géométrie
+tourne, c'est-à-dire là où elle peut le moins se le permettre. Pire, au coin
+d'un tétraèdre la normale moyenne est **tangente** à l'une des faces
+incidentes, qu'un déplacement le long d'elle ne décale donc pas du tout.
+Aucun facteur d'échelle ne rattrape cela : c'est la direction qui est fausse.
+
+Le nœud décalé doit être le point où les facettes incidentes, chacune poussée
+de \\( t \\) vers l'intérieur, se rencontrent :
+
+\\[
+\mathbf{d} \cdot \mathbf{n}_j = -t \quad \text{pour chaque facette incidente } j,
+\\]
+
+soit trois équations à trois inconnues à un coin, davantage sur une surface
+lisse, moins sur une arête. Résoudre au sens des **moindres carrés**, par les
+équations normales \\( (N^{\!\top}\!N)\,\mathbf{d} = -t\,N^{\!\top}\mathbf{1} \\),
+couvre les trois cas d'un coup et rend l'intersection exacte quand elle
+existe. Au coin du cube : \\( \mathbf{d} = -t(1,1,1) \\).
+
+### Convention
+
+`envelope` est une surface **fermée** de facettes `QUA4` et/ou `TRI3`, de
+normales **sortantes de la matière** — même convention que
+`triangulate_volume`, si bien que la peau d'un maillage (`skin`) s'y branche
+directement. Ses nœuds sont réutilisés tels quels. Une enveloppe ouverte, ou
+dont les facettes se contredisent sur l'orientation, est refusée en nommant
+l'arête fautive.
+
+`layers` couches sont poussées vers l'intérieur, chacune de `thickness` de
+profondeur ; `thickness=None` prend la longueur d'arête moyenne de
+l'enveloppe, ce qui donne des mailles à peu près cubiques. `size` est la
+taille visée pour le cœur tétraédrique.
+
+Le résultat porte un sous-maillage `HEX8` (issu des facettes carrées), un
+`PENTA6` (des triangulaires), un `PYRA5` (le raccord) et un `TET4` (le cœur),
+chacun présent seulement s'il n'est pas vide.
+
+### Exemple Python
+
+```python
+import pyrucast as pc
+
+peau = pc.mesher.skin(solide)  # QUA4, normales sortantes
+maille = pc.mesher.pave_volume(peau, layers=1, thickness=0.15, size=0.4)
+print(dict(zip(maille.element_types(), maille.cell_counts())))
+# {'HEX8': 54, 'PYRA5': 54, 'TET4': 408}
+```
+
+### Pièges
+
+- **Orientation.** Une enveloppe retournée est refusée en le disant ;
+  `pyrucast.mesher.invert` la remet à l'endroit.
+- **Épaisseur.** Une couche plus épaisse que le solide ne peut pas rentrer :
+  le décalage retourne l'enveloppe et l'opérateur sort en erreur en nommant la
+  couche fautive.
+- **Le cœur peut refuser.** Le mailleur tétraédrique travaille en mode strict,
+  donc sans ajouter de nœud sur la surface intérieure ; s'il n'y arrive pas,
+  l'erreur le dit et une couche plus mince, ou une enveloppe plus fine, est la
+  réponse habituelle.
+
+### Limitations actuelles
+
+- La profondeur des pyramides est fixée au quart de l'arête de leur base. Plus
+  profondes, elles seraient mieux formées mais finiraient par se traverser, et
+  le cœur reçoit alors une surface sans intérieur bien défini.
+- Pas encore de plastering au sens plein : les couches sont des décalages de
+  l'enveloppe entière, sans front avançant ni couture, donc une géométrie très
+  concave limite l'épaisseur admissible bien avant que le solide ne soit
+  rempli.
+- Pas de lissage du maillage produit.
 
 ## Mailleur volumique : `triangulate_volume`
 

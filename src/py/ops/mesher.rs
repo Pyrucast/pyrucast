@@ -442,6 +442,45 @@ pub fn pave_surface(
     Ok(PyMesh { inner: mesh })
 }
 
+/// Mesh the inside of a closed envelope with a hexahedral boundary layer over
+/// a tetrahedral core — the 3-D companion of `pave_surface`.
+///
+/// Puts hexahedra where they matter, in the layer against the boundary where
+/// gradients are steepest and an element's shape decides the accuracy, and
+/// leaves the smooth interior to tetrahedra.
+///
+/// `layers` boundary layers are grown inward, each `thickness` deep;
+/// `thickness=None` takes the envelope's mean edge length, which gives roughly
+/// cube-shaped cells. `size` is the target element size for the tetrahedral
+/// core. The envelope is a closed surface of QUA4 and/or TRI3 facets whose
+/// normals point **out of the material**, exactly as for `triangulate_volume`;
+/// its nodes are reused as they are.
+///
+/// The result carries a QUA4-born HEX8 submesh, a TRI3-born PENTA6 one, a
+/// PYRA5 one and a TET4 one, each present only if non-empty. The pyramids are
+/// the junction: the layer's inner faces are squares and a tetrahedron has
+/// none, so without them the mesh could not be conforming.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (envelope, layers=1, thickness=None, size=None))]
+pub fn pave_volume(
+    py: Python<'_>,
+    envelope: PyRef<PyMesh>,
+    layers: usize,
+    thickness: Option<f64>,
+    size: Option<f64>,
+) -> PyResult<PyMesh> {
+    // Poll Python signals while meshing so a long run stays Ctrl+C-able.
+    let mesh = crate::ops::mesher::pave_volume_cancellable(
+        &envelope.inner,
+        layers,
+        thickness,
+        size,
+        &PySignals(py),
+    )?;
+    Ok(PyMesh { inner: mesh })
+}
+
 /// Fill the inside of a closed `TRI3` `envelope` with `TET4` cells — the 3-D
 /// companion of `triangulate_surface`.
 ///

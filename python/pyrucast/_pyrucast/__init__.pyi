@@ -66,6 +66,7 @@ __all__ = [
     "merge_nodes",
     "orient",
     "pave_surface",
+    "pave_volume",
     "poi1_from_nodes",
     "psca",
     "read_gmsh",
@@ -2620,6 +2621,28 @@ def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optiona
     With `all_quad=False` (the default) an odd loop simply costs one triangle,
     returned in a separate TRI3 submesh, along with the few cells a distorted
     leftover polygon could not make square.
+    """
+
+def pave_volume(envelope: Mesh, layers: builtins.int = 1, thickness: typing.Optional[builtins.float] = None, size: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Mesh the inside of a closed envelope with a hexahedral boundary layer over
+    a tetrahedral core — the 3-D companion of `pave_surface`.
+    
+    Puts hexahedra where they matter, in the layer against the boundary where
+    gradients are steepest and an element's shape decides the accuracy, and
+    leaves the smooth interior to tetrahedra.
+    
+    `layers` boundary layers are grown inward, each `thickness` deep;
+    `thickness=None` takes the envelope's mean edge length, which gives roughly
+    cube-shaped cells. `size` is the target element size for the tetrahedral
+    core. The envelope is a closed surface of QUA4 and/or TRI3 facets whose
+    normals point **out of the material**, exactly as for `triangulate_volume`;
+    its nodes are reused as they are.
+    
+    The result carries a QUA4-born HEX8 submesh, a TRI3-born PENTA6 one, a
+    PYRA5 one and a TET4 one, each present only if non-empty. The pyramids are
+    the junction: the layer's inner faces are squares and a tetrahedron has
+    none, so without them the mesh could not be conforming.
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
