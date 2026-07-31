@@ -1,6 +1,6 @@
 # Python & conventions pyrucast
 
-Cast3M invente un langage de commande dédié, Gibiane, avec ses propres
+Cast3M fournit un langage de commande dédié, Gibiane, avec ses propres
 règles de syntaxe. pyrucast fait le choix inverse : **Python ordinaire**,
 sans surcouche — mais avec des conventions de nommage strictes qui jouent le
 même rôle que la grammaire de Gibiane. Les connaître à l'avance évite de

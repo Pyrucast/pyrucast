@@ -31,7 +31,7 @@ interpreter at ...`.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip maturin
-maturin develop --release
+maturin develop --release --features extension-module,viz-interactive
 ```
 
 ### Windows (PowerShell)
@@ -40,7 +40,7 @@ maturin develop --release
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install --upgrade pip maturin
-maturin develop --release
+maturin develop --release --features extension-module,viz-interactive
 ```
 
 `maturin develop` compile le module Rust et l'installe dans le venv (mode
@@ -48,7 +48,8 @@ maturin develop --release
 usage réel (un build debug est typiquement 10× plus lent à l'exécution).
 Après toute modification du Rust, relancer simplement `maturin develop
 --release` — pas besoin de réinstaller ni de réactiver le venv tant qu'il
-reste actif.
+reste actif. Les options  --features extension-module,viz-interactive 
+permettent d'activer la visualisation interactive.
 
 ## Vérification immédiate
 
@@ -74,12 +75,12 @@ c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
-mesh = pyrucast.Mesh(c, "POI1")  # un sous-maillage = liste de nœuds
-mesh.unit().add_cell([a])
-mesh.unit().add_cell([b])
-
+mesh = pyrucast.Mesh(c, "SEG2")  # un sous-maillage 
+mesh.unit().add_cell([a,b])
+mesh.plot()
 print(c)
 print(mesh)  # Mesh: 1 submesh(es), 2 cell(s) total
+mesh.dump()
 ```
 
 À partir d'ici, le chapitre [Introduction](introduction.md) présente le

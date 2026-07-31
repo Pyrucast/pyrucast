@@ -3,11 +3,10 @@
 Adaptation, à pyrucast, du plan d'une formation « Débuter avec Cast3M »
 (présentation du logiciel, langage de commande, maillage, calcul thermique,
 calcul mécanique, compléments) — le même déroulé pédagogique, mais avec
-l'API Python de pyrucast et un unique fil rouge : **une plaque rectangulaire
+l'API Python de pyrucast et un unique fil rouge : **une plaque 
 percée d'un trou**, encastrée d'un côté, chargée de l'autre.
 
-Contrairement au support original, ce chapitre ne rejoue pas chaque
-diapositive : chaque section ci-dessous condense la construction pas à pas
+Chaque section ci-dessous condense la construction pas à pas
 en un script complet, testé, rangé dans le dossier
 [`formation/`](https://github.com/Pyrucast/pyrucast/tree/master/formation)
 du dépôt. Le code affiché dans le livre est **inclus directement depuis ces
@@ -35,10 +34,17 @@ fichiers** (pas de copie manuelle) : ce que vous voyez est ce qui s'exécute.
 > support Cast3M qui n'ont pas d'équivalent testé dans pyrucast sont signalées
 > en encadré, comme celui-ci, plutôt que passées sous silence.
 
-Chaque script se lance directement depuis la racine du dépôt, après
-[compilation](../installation.md) :
+Après la [compilation](../installation.md) de pyrucast :
+```bash
+pip install maturin
+maturin develop --release --features extension-module,viz-interactive
+```
+ou son installé à partir de pypi
+```bash
+pip install pyrucast
+```
+Chaque script se lance directement depuis la racine du dépôt :
 
 ```bash
-maturin develop --release
 python formation/maillage.py
 ```
