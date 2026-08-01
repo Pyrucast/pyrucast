@@ -77,8 +77,32 @@ retour radial.
   configuration de référence, tout à zéro).
 - **sortie du `COMP`** (état de B, = `prev` du pas suivant) : contrainte
   (`sigma_*` dans l'ordre de Voigt du modèle) suivie de l'état mis à jour et de
-  l'écho de `ε(B)` full-3-D (plus `sigma_zz` en 2-D) pour que `prev` soit
-  complet. Le prédicteur élastique est `σ_trial = σ(A) + C:(ε(B) − ε(A))`.
+  l'écho de `ε(B)` full-3-D (plus `sigma_zz` pour les modèles **plans** en 2-D,
+  dont le dual de Voigt l'omet) pour que `prev` soit complet. Le prédicteur
+  élastique est `σ_trial = σ(A) + C:(ε(B) − ε(A))`.
+- **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `solid`
+  (3-D).
+
+## Axisymétrie
+
+Le modèle `"axisymmetric"` s'applique sur une géométrie de révolution
+([`Coords.axisymmetric()`](../coords.md#repère-de-révolution)) : Voigt à quatre
+composantes `[εrr, εzz, εθθ, γrz]`, nommées `eps_xx, eps_yy, eps_zz, eps_xy`
+avec **`zz` = orthoradial** (convention Cast3M). Le modèle et le repère doivent
+s'accorder dans les deux sens, comme en [élasticité](elasticite.md#axisymétrie).
+
+L'état interne étant **déjà stocké en 3-D complet** et le retour radial se
+faisant en 3-D, la spécialisation axisymétrique se réduit à une table d'indices
+`[rr, zz, θθ, rz] → [xx, yy, zz, xy]`. Deux conséquences :
+
+- la déformation orthoradiale `ε_θθ = u_r/r` est **mesurée** (produite par
+  `deformation`), pas supposée : `ε(B)` est donc entièrement connue, sans la
+  résolution hors-plan qu'exige la contrainte plane ;
+- `σ_zz` fait partie du dual de Voigt et n'est donc **pas** ré-émis en écho,
+  contrairement aux modèles plans.
+
+La tangente cohérente axisymétrique est la restriction `[rr, zz, θθ, rz]` de la
+tangente 3-D, validée par différences finies dans `tests/tangent.rs`.
 
 ## Mise en donnée (Rust) : poutre console, boucle de Newton complète
 

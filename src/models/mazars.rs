@@ -26,6 +26,11 @@
 //! effective stress is a function of the current total strain `ε(B)` — damage
 //! mechanics has no strain increment; only `κ` is history.
 //!
+//! The equivalent strain is built from the **principal strains of the full 3-D
+//! tensor**, so the 2-D models differ only in how that tensor is reconstructed:
+//! plane strain forces `ε_zz = 0`, plane stress derives it, and **axisymmetric**
+//! reads the measured hoop `ε_θθ = u_r/r`.
+//!
 //! As for plasticity, the Newton loop driving the load increments lives in
 //! Python (see `ROADMAP.md`); this module provides the point-wise update only.
 
@@ -47,6 +52,11 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// Material components required by the Mazars model.
 const MATERIAL_COMPONENTS: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"];
 
+/// Where each **axisymmetric** Voigt slot `[rr, zz, θθ, rz]` sits in the full
+/// 3-D order `[xx, yy, zz, yz, xz, xy]` — the damage law itself stays 3-D
+/// (principal strains of the full tensor), only the projection changes.
+const AXI_TO_3D: [usize; 4] = [0, 1, 2, 5];
+
 fn primal_name(a: usize) -> String {
     format!("u_{}", AXES[a])
 }
@@ -55,8 +65,16 @@ fn dual_name(a: usize) -> String {
 }
 
 /// Stress component names in Voigt order (matching [`crate::models::elasticity`]).
-fn stress_names(space_dim: usize) -> Vec<String> {
-    if space_dim == 2 {
+fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
+    if space_dim == 2 && model.is_axisymmetric() {
+        // [rr, zz, θθ, rz] — the hoop is `zz`, Cast3M naming.
+        vec![
+            "sigma_xx".into(),
+            "sigma_yy".into(),
+            "sigma_zz".into(),
+            "sigma_xy".into(),
+        ]
+    } else if space_dim == 2 {
         vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()]
     } else {
         vec![
@@ -87,32 +105,41 @@ impl Mazars {
     /// `model` is inconsistent with the space dimension (same rule as
     /// [`crate::models::elasticity::Elasticity::new`]).
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        let (submesh, space_dim, axisymmetric) = {
+        let (submesh, space_dim, ref_dim, axisymmetric) = {
             let s = read(&fespace)?;
-            (s.submesh(), s.space_dim(), s.is_axisymmetric())
+            (
+                s.submesh(),
+                s.space_dim(),
+                s.ref_dim()?,
+                s.is_axisymmetric(),
+            )
         };
-        // A body of revolution needs the hoop component, but the damage law and
-        // its equivalent strain are written on a 3-component 2-D Voigt vector.
-        // Refusing is better than silently combining a plane law with the 2πr
-        // measure the geometry already applies.
-        if axisymmetric {
-            return Err(PyrucastError::Message(
-                "Mazars: axisymmetric geometries are not supported yet — \
-                 use Elasticity for a body of revolution"
-                    .into(),
-            ));
-        }
+        crate::models::elasticity::check_continuum_dimensions("Mazars", space_dim, ref_dim)?;
         #[allow(clippy::match_like_matches_macro)]
         let ok = match (space_dim, model) {
             (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,
+            (2, ElasticityModel::Axisymmetric) => true,
             (3, ElasticityModel::Solid) => true,
             _ => false,
         };
         if !ok {
             return Err(PyrucastError::Message(format!(
                 "Mazars: model {model:?} is incompatible with a {space_dim}-D space \
-                 (2-D ⇒ plane_stress|plane_strain, 3-D ⇒ solid)"
+                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ solid)"
             )));
+        }
+        // Same two-way agreement as `Elasticity::new`.
+        if axisymmetric != model.is_axisymmetric() {
+            return Err(PyrucastError::Message(if axisymmetric {
+                format!(
+                    "Mazars: model {model:?} on an axisymmetric geometry — a body of \
+                     revolution requires the `axisymmetric` model"
+                )
+            } else {
+                "Mazars: the `axisymmetric` model requires an axisymmetric geometry \
+                 (build the Coords with Coords::axisymmetric)"
+                    .into()
+            }));
         }
         let support = read(&submesh)?.to_poi1()?;
         Ok(Self {
@@ -235,7 +262,7 @@ impl Domain for Mazars {
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        let mut comps = stress_names(self.space_dim);
+        let mut comps = stress_names(self.space_dim, self.model);
         comps.push("damage".into());
         comps.push("kappa".into());
         Ok(comps)
@@ -269,9 +296,9 @@ impl Domain for Mazars {
         let eps = read_strain(deformation, cell, g, d, p.nu, self.model)?;
         let kappa_old = prev_opt(prev, cell, g, "kappa");
         let (sigma, damage, kappa) = mazars_update(&eps, kappa_old, &p);
-        let v = stress_names(d).len();
+        let v = stress_names(d, self.model).len();
         for r in 0..v {
-            out[r] = voigt_stress(&sigma, d, r);
+            out[r] = voigt_stress(&sigma, d, self.model, r);
         }
         out[v] = damage;
         out[v + 1] = kappa;
@@ -419,6 +446,9 @@ fn read_strain(
         eps[5] = f.value(cell, g, "eps_xy")?;
         if model == ElasticityModel::PlaneStress {
             eps[2] = -nu / (1.0 - nu) * (eps[0] + eps[1]);
+        } else if model.is_axisymmetric() {
+            // The hoop ε_θθ = u_r/r is measured by `deformation`, not assumed.
+            eps[2] = f.value(cell, g, "eps_zz")?;
         }
     } else {
         for (k, suf) in ["xx", "yy", "zz", "yz", "xz", "xy"].iter().enumerate() {
@@ -429,8 +459,10 @@ fn read_strain(
 }
 
 /// Project the full 3-D stress to the model's Voigt slot `r`.
-fn voigt_stress(sigma: &[f64; 6], space_dim: usize, r: usize) -> f64 {
-    if space_dim == 2 {
+fn voigt_stress(sigma: &[f64; 6], space_dim: usize, model: ElasticityModel, r: usize) -> f64 {
+    if space_dim == 2 && model.is_axisymmetric() {
+        sigma[AXI_TO_3D[r]]
+    } else if space_dim == 2 {
         match r {
             0 => sigma[0],
             1 => sigma[1],

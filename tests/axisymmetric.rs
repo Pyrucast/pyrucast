@@ -16,6 +16,8 @@
 //! Reference solution: the Lamé thick-walled cylinder under internal pressure.
 
 use pyrucast::aggregate::Aggregate;
+use pyrucast::containers::element_field::ElementField;
+use pyrucast::containers::field::SubField;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
@@ -24,7 +26,7 @@ use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::assemble::{self, FluxDensity};
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::ops::{behavior, build, field, mesher};
-use pyrucast::store::insert;
+use pyrucast::store::{insert, read};
 use pyrucast::Result;
 
 use std::f64::consts::PI;
@@ -166,7 +168,7 @@ fn axial_translation_is_rigid_but_radial_translation_is_not() -> Result<()> {
 
     // Axial translation: every component vanishes, hoop included.
     let strain = field::deformation(&uniform(0.0, 0.5)?, &fes)?;
-    let s = pyrucast::store::read(&strain.get(0)?)?;
+    let s = read(&strain.get(0)?)?;
     for g in 0..s.gauss_count() {
         for c in ["eps_xx", "eps_yy", "eps_xy", "eps_zz"] {
             assert!(
@@ -180,7 +182,7 @@ fn axial_translation_is_rigid_but_radial_translation_is_not() -> Result<()> {
 
     // Radial translation: meridian strains vanish, the hoop does not.
     let strain = field::deformation(&uniform(0.5, 0.0)?, &fes)?;
-    let s = pyrucast::store::read(&strain.get(0)?)?;
+    let s = read(&strain.get(0)?)?;
     for g in 0..s.gauss_count() {
         for c in ["eps_xx", "eps_yy", "eps_xy"] {
             assert!(s.value(0, g, c)?.abs() < 1e-14);
@@ -219,7 +221,7 @@ fn uniform_dilation_is_an_exact_constant_strain_state() -> Result<()> {
     let u = NodeField::from_sub(u);
 
     let strain = field::deformation(&u, &fes)?;
-    let s = pyrucast::store::read(&strain.get(0)?)?;
+    let s = read(&strain.get(0)?)?;
     for cell in 0..s.cell_count() {
         for g in 0..s.gauss_count() {
             assert!((s.value(cell, g, "eps_xx")? - C).abs() < 1e-14);
@@ -268,7 +270,7 @@ fn lame_thick_cylinder_under_internal_pressure() -> Result<()> {
 
     // Internal pressure on r = a, pushing outward (+r).
     let mut inner = Mesh::from_submesh(SubMesh::new(
-        pyrucast::store::read(&mesh.get(0)?)?.coords(),
+        read(&mesh.get(0)?)?.coords(),
         ElementType::SEG2,
     ));
     for j in 0..NZ {
@@ -317,8 +319,8 @@ fn lame_thick_cylinder_under_internal_pressure() -> Result<()> {
     // The radius at each Gauss point, obtained the same way any field is: the
     // nodal coordinates interpolated onto the quadrature.
     let gauss_r = field::interp_to_gauss(&field::coordinates(&mesh, None)?, &fes)?;
-    let s = pyrucast::store::read(&stress.get(0)?)?;
-    let rg = pyrucast::store::read(&gauss_r.get(0)?)?;
+    let s = read(&stress.get(0)?)?;
+    let rg = read(&gauss_r.get(0)?)?;
     for cell in 0..s.cell_count() {
         for g in 0..s.gauss_count() {
             let r = rg.value(cell, g, "X")?;
@@ -494,8 +496,213 @@ fn model_and_geometry_must_agree() -> Result<()> {
     let err = Model::elasticity(&plane_fes, ElasticityModel::Axisymmetric).unwrap_err();
     assert!(format!("{err}").contains("requires an axisymmetric geometry"));
 
-    // The laws that are not ready for it refuse outright.
-    let err = Model::plasticity(&axi, ElasticityModel::PlaneStrain).unwrap_err();
-    assert!(format!("{err}").contains("not supported"));
+    // The same two-way rule holds for the non-linear laws.
+    for err in [
+        Model::plasticity(&axi, ElasticityModel::PlaneStrain).unwrap_err(),
+        Model::mazars(&axi, ElasticityModel::PlaneStrain).unwrap_err(),
+    ] {
+        assert!(format!("{err}").contains("axisymmetric geometry"));
+    }
+    assert!(Model::plasticity(&axi, ElasticityModel::Axisymmetric).is_ok());
+    assert!(Model::mazars(&axi, ElasticityModel::Axisymmetric).is_ok());
+    Ok(())
+}
+
+/// A continuum physics on a **manifold** (a boundary mesh: `SEG2` in 2-D) has no
+/// meaning — `B` would be built from the tangent gradient and `Bᵀ D B` would be
+/// rank-deficient in the normal direction. All three refuse it, on a plain
+/// Cartesian geometry as much as on a revolved one.
+#[test]
+fn a_boundary_mesh_is_not_a_solid() -> Result<()> {
+    for axisymmetric in [true, false] {
+        let coords = insert(if axisymmetric {
+            Coords::axisymmetric()?
+        } else {
+            Coords::new(2)?
+        });
+        let a = Node::create_in(coords.clone(), &[1.0, 0.0])?;
+        let b = Node::create_in(coords.clone(), &[2.0, 0.0])?;
+        let mut line = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+        line.add_cell(&[a.id(), b.id()])?;
+        let fes = FiniteElementSpace::lagrange1(&line)?;
+        let model = if axisymmetric {
+            ElasticityModel::Axisymmetric
+        } else {
+            ElasticityModel::PlaneStrain
+        };
+        for err in [
+            Model::elasticity(&fes, model).unwrap_err(),
+            Model::plasticity(&fes, model).unwrap_err(),
+            Model::mazars(&fes, model).unwrap_err(),
+        ] {
+            assert!(
+                format!("{err}").contains("manifold, not a"),
+                "expected a manifold rejection, got: {err}"
+            );
+        }
+    }
+    Ok(())
+}
+
+// ─── Lois non linéaires : équivalence avec la loi 3-D ────────────────────────
+
+/// A single-cell model of `kind` ("plasticity" / "mazars") on the given
+/// geometry, plus its material field. `axisymmetric` picks the meridian-plane
+/// QUA4 (2-D, hoop = `zz`) or the Cartesian HEX8 (full 3-D).
+fn nonlinear_cell(
+    kind: &str,
+    axisymmetric: bool,
+) -> Result<(Model, ElementField, FiniteElementSpace)> {
+    let (mesh, model_kind) = if axisymmetric {
+        let coords = insert(Coords::axisymmetric()?);
+        let n: Vec<Node> = [(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0)]
+            .iter()
+            .map(|&(r, z)| Node::create_in(coords.clone(), &[r, z]))
+            .collect::<Result<_>>()?;
+        let mut m = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
+        m.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())?;
+        (m, ElasticityModel::Axisymmetric)
+    } else {
+        let coords = insert(Coords::new(3)?);
+        let n: Vec<Node> = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (1.0, 0.0, 1.0),
+            (1.0, 1.0, 1.0),
+            (0.0, 1.0, 1.0),
+        ]
+        .iter()
+        .map(|&(x, y, z)| Node::create_in(coords.clone(), &[x, y, z]))
+        .collect::<Result<_>>()?;
+        let mut m = Mesh::from_submesh(SubMesh::new(coords, ElementType::HEX8));
+        m.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())?;
+        (m, ElasticityModel::Solid)
+    };
+    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let model = match kind {
+        "plasticity" => Model::plasticity(&fes, model_kind)?,
+        _ => Model::mazars(&fes, model_kind)?,
+    };
+    let props: Vec<(&str, f64)> = if kind == "plasticity" {
+        vec![("E", 70_000.0), ("nu", 0.3), ("sigma_y", 200.0)]
+    } else {
+        vec![
+            ("E", 30_000.0),
+            ("nu", 0.2),
+            ("eps_d0", 1e-4),
+            ("A_t", 0.8),
+            ("B_t", 20_000.0),
+            ("A_c", 1.4),
+            ("B_c", 1900.0),
+        ]
+    };
+    let materials = build::material_field(&model, &props)?;
+    Ok((model, materials, fes))
+}
+
+/// Impose a uniform strain state on a one-cell model and return its stress.
+/// `(rr, zz, hoop, rz)` are the four axisymmetric components; the 3-D twin gets
+/// the very same tensor with `ε_yz = ε_xz = 0`.
+fn stress_of(
+    model: &Model,
+    materials: &ElementField,
+    fes: &FiniteElementSpace,
+    axisymmetric: bool,
+    eps: (f64, f64, f64, f64),
+    prev: Option<&ElementField>,
+) -> Result<ElementField> {
+    let (rr, zz, hoop, rz) = eps;
+    let mut names = vec!["eps_xx", "eps_yy", "eps_zz", "eps_xy"];
+    if !axisymmetric {
+        names.extend(["eps_yz", "eps_xz"]);
+    }
+    let mut sub = pyrucast::containers::element_field::SubElementField::new(
+        fes.get(0)?,
+        names.iter().map(|s| s.to_string()).collect(),
+    )?;
+    sub.set_uniform("eps_xx", rr)?;
+    sub.set_uniform("eps_yy", zz)?;
+    sub.set_uniform("eps_zz", hoop)?;
+    sub.set_uniform("eps_xy", rz)?;
+    let mut strain = ElementField::empty();
+    strain.add_sub(insert(sub))?;
+    behavior::integrate(model, &strain, prev, materials, None)
+}
+
+/// The axisymmetric law must be the **same law** as the 3-D one restricted to
+/// `[rr, zz, θθ, rz]`: fed the same strain tensor, it must return the same
+/// stress. Run over several increments so the history path (`prev`) is
+/// exercised too — this is what pins the state plumbing (`eps_p_*`, the echoed
+/// `ε(A)`, and the `σ_zz` that axisymmetric carries in its dual rather than as
+/// an echo).
+#[test]
+fn nonlinear_laws_agree_with_their_3d_twin() -> Result<()> {
+    for kind in ["plasticity", "mazars"] {
+        let (axi_m, axi_mat, axi_fes) = nonlinear_cell(kind, true)?;
+        let (sol_m, sol_mat, sol_fes) = nonlinear_cell(kind, false)?;
+        let (mut axi_prev, mut sol_prev) = (None, None);
+
+        // A load path past yield / the damage threshold, with a non-proportional
+        // shear step so the return map really works. Scaled per law: plasticity
+        // yields around ε ≈ 3e-3, Mazars damages from eps_d0 = 1e-4 — and Mazars
+        // is kept at *moderate* damage, since a fully damaged point carries
+        // near-zero stress, which would make the comparison below vacuous again.
+        let scale = if kind == "plasticity" { 1.0 } else { 0.02 };
+        let path = [
+            (2.0e-3, -2.0e-3, 5.0e-4, 0.0),
+            (1.0e-2, -9.0e-3, 2.0e-3, 1.0e-3),
+            (2.5e-2, -2.0e-2, 5.0e-3, 6.0e-3),
+            (1.8e-2, -1.4e-2, 3.0e-3, 3.0e-3), // unloading
+        ]
+        .map(|(a, b, c, d): (f64, f64, f64, f64)| (a * scale, b * scale, c * scale, d * scale));
+        for (step, &eps) in path.iter().enumerate() {
+            let a = stress_of(&axi_m, &axi_mat, &axi_fes, true, eps, axi_prev.as_ref())?;
+            let s = stress_of(&sol_m, &sol_mat, &sol_fes, false, eps, sol_prev.as_ref())?;
+            let (ga, gs) = (read(&a.get(0)?)?, read(&s.get(0)?)?);
+            let mut peak = 0.0_f64;
+            for comp in ["sigma_xx", "sigma_yy", "sigma_zz", "sigma_xy"] {
+                let (va, vs) = (ga.value(0, 0, comp)?, gs.value(0, 0, comp)?);
+                peak = peak.max(vs.abs());
+                assert!(
+                    (va - vs).abs() < 1e-9 * (1.0 + vs.abs()),
+                    "{kind} step {step}: axisymmetric {comp} = {va}, 3-D twin = {vs}"
+                );
+            }
+            // …and the stresses compared must be of a real magnitude, else the
+            // relative tolerance above would be met by any two near-zero values.
+            assert!(
+                peak > 1.0,
+                "{kind} step {step}: stresses too small ({peak})"
+            );
+            // The 3-D twin must see no out-of-plane shear (axial symmetry).
+            if kind == "plasticity" {
+                for comp in ["sigma_yz", "sigma_xz"] {
+                    assert!(gs.value(0, 0, comp)?.abs() < 1e-12);
+                }
+            }
+            // Guard against a vacuous test: from the second step on, the law
+            // must actually be non-linear (yielding / damaging), otherwise this
+            // would only be comparing two elastic evaluations.
+            if step >= 1 {
+                let nonlinear = if kind == "plasticity" {
+                    ga.value(0, 0, "p")?
+                } else {
+                    ga.value(0, 0, "damage")?
+                };
+                assert!(
+                    nonlinear > 1e-6,
+                    "{kind} step {step}: the load path stayed linear ({nonlinear}) — \
+                     the comparison would prove nothing"
+                );
+            }
+            drop(ga);
+            drop(gs);
+            axi_prev = Some(a);
+            sol_prev = Some(s);
+        }
+    }
     Ok(())
 }

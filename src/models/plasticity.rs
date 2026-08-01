@@ -20,8 +20,15 @@
 //!
 //! State is always carried in **full 3-D** (six `eps_p_*` components) regardless
 //! of the 2-D/3-D model, which keeps the radial return identical across plane
-//! stress / plane strain / solid; only the input strain reconstruction and the
-//! output stress projection differ.
+//! stress / plane strain / axisymmetric / solid; only the input strain
+//! reconstruction and the output stress projection differ.
+//!
+//! **Axisymmetric** therefore costs almost nothing here: the hoop `ε_θθ = u_r/r`
+//! is *measured* by [`crate::ops::field::deformation`], not assumed, so `ε(B)` is
+//! fully known (no out-of-plane solve, unlike plane stress) and the whole
+//! specialisation is the index map `[rr, zz, θθ, rz] → [xx, yy, zz, xy]`. Note
+//! that `σ_zz` is then part of the Voigt dual and must **not** be echoed as extra
+//! state.
 //!
 //! Following the locked architecture decision (see `ROADMAP.md`), the Newton
 //! loop driving these increments lives in Python; this module provides the
@@ -51,6 +58,12 @@ const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
 /// Index pairs `(i, j)` matching [`TENSOR_SUFFIXES`].
 const TENSOR_PAIRS: [(usize, usize); 6] = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)];
 
+/// Where each **axisymmetric** Voigt slot `[rr, zz, θθ, rz]` sits in the full
+/// 3-D order [`TENSOR_SUFFIXES`] (`[xx, yy, zz, yz, xz, xy]`). The whole
+/// axisymmetric specialisation of this law is this one index map: the state and
+/// the radial return stay full 3-D, only the projection in and out changes.
+const AXI_TO_3D: [usize; 4] = [0, 1, 2, 5];
+
 fn primal_name(a: usize) -> String {
     format!("u_{}", AXES[a])
 }
@@ -60,8 +73,16 @@ fn dual_name(a: usize) -> String {
 
 /// Stress component names in Voigt order for the given space dimension —
 /// matching [`crate::models::elasticity`] so downstream code is uniform.
-fn stress_names(space_dim: usize) -> Vec<String> {
-    if space_dim == 2 {
+fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
+    if space_dim == 2 && model.is_axisymmetric() {
+        // [rr, zz, θθ, rz] — the hoop is `zz`, Cast3M naming.
+        vec![
+            "sigma_xx".into(),
+            "sigma_yy".into(),
+            "sigma_zz".into(),
+            "sigma_xy".into(),
+        ]
+    } else if space_dim == 2 {
         vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()]
     } else {
         vec![
@@ -91,12 +112,20 @@ fn state_names() -> Vec<String> {
 /// recoverable next step) and — in 2-D only — the out-of-plane stress `sigma_zz`
 /// that the Voigt dual omits (so `σ(A)` is fully recoverable). In 3-D the Voigt
 /// dual already carries all six stresses.
-fn echo_names(space_dim: usize) -> Vec<String> {
+fn echo_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
     let mut v: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
-    if space_dim == 2 {
+    if echoes_sigma_zz(space_dim, model) {
         v.push("sigma_zz".into());
     }
     v
+}
+
+/// Whether `σ_zz` must be echoed as extra state. Only the **plane** 2-D models
+/// need it: their Voigt dual stops at `[xx, yy, xy]`. Axisymmetric already
+/// carries `sigma_zz` (the hoop) in its dual, so echoing it would emit the same
+/// component name twice.
+fn echoes_sigma_zz(space_dim: usize, model: ElasticityModel) -> bool {
+    space_dim == 2 && !model.is_axisymmetric()
 }
 
 /// Perfect von Mises plasticity on an FE subspace.
@@ -117,32 +146,42 @@ impl Plasticity {
     /// Errors if `model` is inconsistent with the space dimension (same rule as
     /// [`crate::models::elasticity::Elasticity::new`]).
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        let (submesh, space_dim, axisymmetric) = {
+        let (submesh, space_dim, ref_dim, axisymmetric) = {
             let s = read(&fespace)?;
-            (s.submesh(), s.space_dim(), s.is_axisymmetric())
+            (
+                s.submesh(),
+                s.space_dim(),
+                s.ref_dim()?,
+                s.is_axisymmetric(),
+            )
         };
-        // A body of revolution needs the hoop component, but the J2 return
-        // mapping, the state names and the consistent tangent are all written on
-        // a 3-component 2-D Voigt vector. Refusing is better than silently
-        // combining a plane law with the 2πr measure the geometry already applies.
-        if axisymmetric {
-            return Err(PyrucastError::Message(
-                "Plasticity: axisymmetric geometries are not supported yet — \
-                 use Elasticity for a body of revolution"
-                    .into(),
-            ));
-        }
+        elasticity::check_continuum_dimensions("Plasticity", space_dim, ref_dim)?;
         #[allow(clippy::match_like_matches_macro)]
         let ok = match (space_dim, model) {
             (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,
+            (2, ElasticityModel::Axisymmetric) => true,
             (3, ElasticityModel::Solid) => true,
             _ => false,
         };
         if !ok {
             return Err(PyrucastError::Message(format!(
                 "Plasticity: model {model:?} is incompatible with a {space_dim}-D space \
-                 (2-D ⇒ plane_stress|plane_strain, 3-D ⇒ solid)"
+                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ solid)"
             )));
+        }
+        // Same two-way agreement as `Elasticity::new`: the 2πr measure comes
+        // from the geometry, the hoop component from the model.
+        if axisymmetric != model.is_axisymmetric() {
+            return Err(PyrucastError::Message(if axisymmetric {
+                format!(
+                    "Plasticity: model {model:?} on an axisymmetric geometry — a body of \
+                     revolution requires the `axisymmetric` model"
+                )
+            } else {
+                "Plasticity: the `axisymmetric` model requires an axisymmetric geometry \
+                 (build the Coords with Coords::axisymmetric)"
+                    .into()
+            }));
         }
         let support = read(&submesh)?.to_poi1()?;
         Ok(Self {
@@ -245,7 +284,7 @@ impl SubModelKind for Plasticity {
     ) -> Result<()> {
         let geom = &geoms[0];
         let st = state.expect("consistent tangent requires the behaviour state (D_alg)");
-        elasticity::element_tangent_from_state(geom, st, ke)
+        elasticity::element_tangent_from_state(geom, st, self.model, ke)
     }
 
     fn physics(&self) -> &'static [Physics] {
@@ -288,12 +327,15 @@ impl Domain for Plasticity {
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        let mut comps = stress_names(self.space_dim);
+        let mut comps = stress_names(self.space_dim, self.model);
         comps.extend(state_names());
-        comps.extend(echo_names(self.space_dim));
+        comps.extend(echo_names(self.space_dim, self.model));
         // Consistent algorithmic tangent D_alg (upper triangle) — consumed by
         // the tangent assembler (`assemble::tangent`).
-        comps.extend(elasticity::tangent_component_names(self.space_dim));
+        comps.extend(elasticity::tangent_component_names(
+            self.space_dim,
+            self.model,
+        ));
         Ok(comps)
     }
 
@@ -317,7 +359,7 @@ impl Domain for Plasticity {
         let sigma_y = mat.value(cell, 0, "sigma_y")?;
 
         // End-of-step strain ε(B).
-        let eps_b = read_strain(deformation, cell, g, d)?;
+        let eps_b = read_strain(deformation, cell, g, d, self.model)?;
         // Converged state at A from `prev` (all zero on the first step, where A
         // is the reference configuration: σ(A)=0, ε(A)=0, ε_p(A)=0, p(A)=0).
         let prev_state = PrevState {
@@ -330,17 +372,18 @@ impl Domain for Plasticity {
         let (sigma, eps_p_new, p_new, eps_b_full) =
             radial_return_incremental(&eps_b, &prev_state, lambda, mu, sigma_y, self.model);
 
-        let v = stress_names(d).len();
+        let v = stress_names(d, self.model).len();
         for r in 0..v {
-            out[r] = voigt_stress(&sigma, d, r);
+            out[r] = voigt_stress(&sigma, d, self.model, r);
         }
         out[v..v + 6].copy_from_slice(&eps_p_new); // ε_p(B)
         out[v + 6] = p_new; // p(B)
                             // Echo the full-3-D end-of-step strain ε(B), so `prev` carries ε(A) next
                             // step (in plane stress this includes the solved out-of-plane ε_zz).
         out[v + 7..v + 13].copy_from_slice(&eps_b_full);
-        // In 2-D the Voigt dual omits σ_zz; echo it so σ(A) is fully recoverable.
-        if d == 2 {
+        // The plane 2-D duals omit σ_zz; echo it so σ(A) is fully recoverable.
+        // Axisymmetric already carries it (the hoop), so it must not be echoed.
+        if echoes_sigma_zz(d, self.model) {
             out[v + 13] = sigma[2];
         }
 
@@ -350,7 +393,7 @@ impl Domain for Plasticity {
         let sig_trial = elastic_predictor(&eps_b_full, &prev_state, lambda, mu);
         let d3 = consistent_tangent_3d(&sig_trial, lambda, mu, sigma_y);
         let dv = tangent_matrix_model(&d3, self.model);
-        let base = v + 13 + if d == 2 { 1 } else { 0 };
+        let base = v + 13 + usize::from(echoes_sigma_zz(d, self.model));
         let mut idx = base;
         for i in 0..dv.len() {
             for j in i..dv.len() {
@@ -603,15 +646,17 @@ fn consistent_tangent_3d(
 
 /// Reduce the full-3-D consistent tangent to the model's `v×v` engineering-Voigt
 /// matrix: the `[xx, yy, xy]` block for plane strain, its **static condensation**
-/// on `ε_zz` (so `σ_zz = 0`) for plane stress, the full `6×6` for the solid.
+/// on `ε_zz` (so `σ_zz = 0`) for plane stress, the `[rr, zz, θθ, rz]` block for
+/// axisymmetric, the full `6×6` for the solid.
 fn tangent_matrix_model(d3: &[[f64; 6]; 6], model: ElasticityModel) -> Vec<Vec<f64>> {
     match model {
-        // Rejected by `Plasticity::new`: the whole law (strain reading, state
-        // names, tangent) is written on a 3-component 2-D Voigt vector, so a body
-        // of revolution never reaches here.
-        ElasticityModel::Axisymmetric => {
-            unreachable!("Plasticity rejects an axisymmetric geometry at construction")
-        }
+        // Axisymmetric: the plain [rr, zz, θθ, rz] sub-block. No condensation —
+        // all four strains are prescribed (the hoop is measured, not assumed), so
+        // the 3-D tangent restricts directly.
+        ElasticityModel::Axisymmetric => AXI_TO_3D
+            .iter()
+            .map(|&i| AXI_TO_3D.iter().map(|&j| d3[i][j]).collect())
+            .collect(),
         ElasticityModel::Solid => d3.iter().map(|r| r.to_vec()).collect(),
         ElasticityModel::PlaneStrain => {
             let idx = [0usize, 1, 5];
@@ -647,13 +692,27 @@ fn read_opt(f: &SubElementField, cell: usize, g: usize, name: &str) -> f64 {
 /// Reconstruct the full 3-D **tensor** strain from the deformation input.
 /// Plane strain forces the out-of-plane components to zero; plane stress leaves
 /// `eps_zz` as the trial elastic guess (it is overwritten by the return map).
-fn read_strain(f: &SubElementField, cell: usize, g: usize, space_dim: usize) -> Result<[f64; 6]> {
+fn read_strain(
+    f: &SubElementField,
+    cell: usize,
+    g: usize,
+    space_dim: usize,
+    model: ElasticityModel,
+) -> Result<[f64; 6]> {
     let mut eps = [0.0; 6];
     if space_dim == 2 {
         eps[0] = f.value(cell, g, "eps_xx")?;
         eps[1] = f.value(cell, g, "eps_yy")?;
         eps[5] = f.value(cell, g, "eps_xy")?;
-        // eps_zz/yz/xz stay 0 (plane strain); plane stress fixes eps_zz later.
+        if model.is_axisymmetric() {
+            // The hoop ε_θθ = u_r/r is **measured**, not assumed: `deformation`
+            // produces it on a body of revolution. So ε(B) is fully known here
+            // — no plane assumption, no out-of-plane solve.
+            eps[2] = f.value(cell, g, "eps_zz")?;
+        }
+        // eps_yz/xz stay 0 (axial symmetry ⇒ no orthoradial shear); for the
+        // plane models eps_zz also stays 0 (plane strain) or is solved later
+        // (plane stress).
     } else {
         for (k, suf) in TENSOR_SUFFIXES.iter().enumerate() {
             eps[k] = f.value(cell, g, &format!("eps_{suf}"))?;
@@ -688,8 +747,10 @@ fn read_prev_plastic_strain(prev: Option<&SubElementField>, cell: usize, g: usiz
 
 /// Project the full 3-D stress to the model's Voigt slot `r`.
 /// 2-D order is `[xx, yy, xy]`; 3-D is the full `[xx, yy, zz, yz, xz, xy]`.
-fn voigt_stress(sigma: &[f64; 6], space_dim: usize, r: usize) -> f64 {
-    if space_dim == 2 {
+fn voigt_stress(sigma: &[f64; 6], space_dim: usize, model: ElasticityModel, r: usize) -> f64 {
+    if space_dim == 2 && model.is_axisymmetric() {
+        sigma[AXI_TO_3D[r]]
+    } else if space_dim == 2 {
         match r {
             0 => sigma[0],
             1 => sigma[1],

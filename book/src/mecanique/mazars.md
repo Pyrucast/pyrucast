@@ -71,6 +71,21 @@ facteur `(1−D)` se simplifie dans `σ_zz = 0`).
   d'incrément, seul `kappa` est historique.
 - **sortie du `COMP`** (= `prev` du pas suivant) : contrainte (`sigma_*`),
   `damage` (le scalaire `D`), et `kappa` mis à jour.
+- **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `solid`
+  (3-D).
+
+## Axisymétrie
+
+Le modèle `"axisymmetric"` s'applique sur une géométrie de révolution
+([`Coords.axisymmetric()`](../coords.md#repère-de-révolution)) : Voigt à quatre
+composantes `[εrr, εzz, εθθ, γrz]`, nommées `eps_xx, eps_yy, eps_zz, eps_xy`
+avec **`zz` = orthoradial** (convention Cast3M). Le modèle et le repère doivent
+s'accorder dans les deux sens, comme en [élasticité](elasticite.md#axisymétrie).
+
+La déformation équivalente étant bâtie sur les **déformations principales du
+tenseur 3-D complet**, les modèles 2-D ne diffèrent que par la reconstruction de
+ce tenseur : la déformation plane force `ε_zz = 0`, la contrainte plane la
+déduit, et l'axisymétrie lit l'orthoradiale `ε_θθ = u_r/r` mesurée.
 
 ## Exemple Python
 

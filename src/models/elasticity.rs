@@ -85,12 +85,6 @@ fn voigt_size(space_dim: usize, model: ElasticityModel) -> usize {
         _ => 6,
     }
 }
-/// Voigt component count of the **planar / solid** models — 3 in 2-D, 6 in 3-D.
-/// The axisymmetric case never reaches the helpers that use it (the non-linear
-/// laws, which reject a body of revolution).
-fn planar_voigt_size(space_dim: usize) -> usize {
-    voigt_size(space_dim, ElasticityModel::PlaneStrain)
-}
 /// Stress component names in Voigt order. Axisymmetric names the hoop `θθ`
 /// component `sigma_zz`, after Cast3M (`x = r`, `y = z`).
 fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
@@ -113,6 +107,32 @@ fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
     }
 }
 
+/// Reject an FE subspace whose elements are a **manifold** in their space
+/// (`ref_dim < space_dim`) for a continuum-mechanics physics named `label`.
+///
+/// The continuum kernels build `B` from `∂N_i/∂x_a`, which on a manifold is the
+/// *tangent* gradient: the resulting `Bᵀ D B` would be rank-deficient in the
+/// normal direction and silently meaningless. A boundary sub-mesh (`SEG2` in
+/// 2-D, `TRI3` in 3-D) is a support for loads
+/// ([`flux`](fn@crate::ops::assemble::flux)) or convection, not a solid — and a
+/// structural element (bar, beam) is a different physics with its own kernel.
+/// Shared by [`Elasticity`], [`Plasticity`](crate::models::plasticity) and
+/// [`Mazars`](crate::models::mazars).
+pub(crate) fn check_continuum_dimensions(
+    label: &str,
+    space_dim: usize,
+    ref_dim: usize,
+) -> Result<()> {
+    if ref_dim != space_dim {
+        return Err(PyrucastError::Message(format!(
+            "{label}: a {ref_dim}-D element in a {space_dim}-D space is a manifold, not a \
+             solid — a boundary mesh carries loads (flux, convection), and a bar or beam \
+             is a structural physics of its own (truss, frame, timoshenko)"
+        )));
+    }
+    Ok(())
+}
+
 /// Linear-elasticity physics on an FE subspace.
 ///
 /// Material data (`E`, `nu`) is supplied at assembly time via
@@ -130,10 +150,16 @@ impl Elasticity {
     /// Linear elasticity on an FE subspace, with the given 2-D/3-D model.
     /// Errors if `model` is inconsistent with the space dimension.
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        let (submesh, space_dim, axisymmetric) = {
+        let (submesh, space_dim, ref_dim, axisymmetric) = {
             let s = read(&fespace)?;
-            (s.submesh(), s.space_dim(), s.is_axisymmetric())
+            (
+                s.submesh(),
+                s.space_dim(),
+                s.ref_dim()?,
+                s.is_axisymmetric(),
+            )
         };
+        check_continuum_dimensions("Elasticity", space_dim, ref_dim)?;
         #[allow(clippy::match_like_matches_macro)]
         let ok = match (space_dim, model) {
             (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,
@@ -425,7 +451,7 @@ fn b_matrix(
 ) -> Vec<Vec<f64>> {
     let v = match hoop {
         Some(_) => 4,
-        None => planar_voigt_size(space_dim),
+        None => voigt_size(space_dim, ElasticityModel::PlaneStrain),
     };
     let dofs = space_dim * n_nodes;
     let mut b = vec![vec![0.0; dofs]; v];
@@ -603,10 +629,11 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
 /// Names of the **consistent-tangent** state components a non-linear physics
 /// (plasticity, Mazars) emits: the upper triangle of the symmetric `v×v`
 /// algorithmic modulus `D_alg` in the model's engineering-Voigt order, named
-/// `ktan_{i}_{j}` for `i ≤ j`. `v = 3` in 2-D, `6` in 3-D — so 6 or 21 names.
+/// `ktan_{i}_{j}` for `i ≤ j`. `v = 3` in 2-D plane, `4` axisymmetric, `6` in
+/// 3-D — so 6, 10 or 21 names.
 /// The tangent assembler reads them back with [`read_tangent_matrix`].
-pub fn tangent_component_names(space_dim: usize) -> Vec<String> {
-    let v = planar_voigt_size(space_dim);
+pub fn tangent_component_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
+    let v = voigt_size(space_dim, model);
     let mut names = Vec::with_capacity(v * (v + 1) / 2);
     for i in 0..v {
         for j in i..v {
@@ -623,8 +650,9 @@ pub fn read_tangent_matrix(
     cell: usize,
     g: usize,
     space_dim: usize,
+    model: ElasticityModel,
 ) -> Result<Vec<Vec<f64>>> {
-    let v = planar_voigt_size(space_dim);
+    let v = voigt_size(space_dim, model);
     let mut d = vec![vec![0.0; v]; v];
     for i in 0..v {
         for j in i..v {
@@ -644,15 +672,22 @@ pub fn read_tangent_matrix(
 pub fn element_tangent_from_state(
     geom: &CellGeom,
     state: &SubElementField,
+    model: ElasticityModel,
     ke: &mut [f64],
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
     let dofs = space_dim * n_nodes;
-    let v = planar_voigt_size(space_dim);
+    let v = voigt_size(space_dim, model);
     for g in 0..geom.n_gauss {
-        let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim, None);
-        let d = read_tangent_matrix(state, geom.cell, g, space_dim)?;
+        // Same hoop row as `element_stiffness` on a body of revolution.
+        let hoop = if model.is_axisymmetric() {
+            Some((geom.n_at_g(g)?, geom.radius(g)?))
+        } else {
+            None
+        };
+        let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim, hoop);
+        let d = read_tangent_matrix(state, geom.cell, g, space_dim, model)?;
         // DB = D·B (voigt × dofs), then Kᵉ += Bᵀ (DB) · |J| w.
         let mut db = vec![vec![0.0; dofs]; v];
         for (r, dbr) in db.iter_mut().enumerate() {

@@ -180,7 +180,7 @@ impl PyModel {
 
     /// `Model.plasticity(fespace, model)` — perfect von Mises elastoplasticity
     /// spanning every subspace of `fespace`. `model` is `"plane_stress"` /
-    /// `"plane_strain"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity
+    /// `"plane_strain"` / `"axisymmetric"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity
     /// (`u_x, u_y(, u_z)`); material (`E`, `nu`, `sigma_y`) is supplied at
     /// assembly / integration time. The behaviour integration (`COMP`) carries
     /// the plastic-strain + cumulated-`p` internal state (`VAR0`→`VAR1`).
@@ -192,7 +192,8 @@ impl PyModel {
     ) -> PyResult<Self> {
         let m = ElasticityModel::from_tag(model).ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err(format!(
-                "plasticity: unknown model '{model}' (expected plane_stress|plane_strain|solid)"
+                "plasticity: unknown model '{model}' \
+                 (expected plane_stress|plane_strain|axisymmetric|solid)"
             ))
         })?;
         let inner = Model::plasticity(&fespace.inner, m)?;
@@ -200,8 +201,8 @@ impl PyModel {
     }
 
     /// `Model.mazars(fespace, model)` — Mazars isotropic damage spanning every
-    /// subspace of `fespace`. `model` is `"plane_stress"` / `"plane_strain"`
-    /// (2-D) or `"solid"` (3-D). Same DOFs as elasticity; material
+    /// subspace of `fespace`. `model` is `"plane_stress"` / `"plane_strain"` /
+    /// `"axisymmetric"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity; material
     /// (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
     /// assembly / integration time. The behaviour integration (`COMP`) carries
     /// the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
@@ -213,7 +214,8 @@ impl PyModel {
     ) -> PyResult<Self> {
         let m = ElasticityModel::from_tag(model).ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err(format!(
-                "mazars: unknown model '{model}' (expected plane_stress|plane_strain|solid)"
+                "mazars: unknown model '{model}' \
+                 (expected plane_stress|plane_strain|axisymmetric|solid)"
             ))
         })?;
         let inner = Model::mazars(&fespace.inner, m)?;

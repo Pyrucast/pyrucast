@@ -167,10 +167,16 @@ avec la mesure \\( 2\pi r \\).
 
 La **thermique** n'a rien de spécifique à faire : le flux \\( q = -k\nabla T \\)
 est déjà purement méridien, et le facteur \\( 2\pi r \\) suffit à produire le
-profil logarithmique d'un cylindre creux. En revanche
-[plasticité](plasticite.md), [Mazars](mazars.md), [barre](truss.md) et
-[portique](portique.md) **refusent** explicitement une géométrie axisymétrique :
-leur Voigt est câblé à trois composantes.
+profil logarithmique d'un cylindre creux. La [plasticité](plasticite.md) et
+[Mazars](mazars.md) supportent l'axisymétrie, leur état interne étant déjà
+stocké en 3-D complet. En revanche [barre](truss.md) et [portique](portique.md)
+la **refusent** : un segment du plan méridien engendre une coque de révolution,
+que leurs noyaux ne modélisent pas.
+
+Un maillage de **bord** (`SEG2` en 2-D) est par ailleurs refusé comme domaine
+par les trois physiques de milieu continu : `B` y serait bâti sur le gradient
+tangent et \\( B^\top D B \\) serait déficient en rang dans la direction
+normale. Un bord porte des charges (`flux`, convection), il n'est pas un massif.
 
 Validation : `tests/axisymmetric.rs` (Lamé, patch test de dilatation uniforme,
 \\( \int B^\top\sigma = K u \\), volume et masse de révolution, conduction

@@ -138,6 +138,34 @@ fn tangent_matches_fd_plane_stress() -> Result<()> {
     check_tangent_fd(&model, &fes, &n, 2, &plastic_disp_2d())
 }
 
+/// Axisymmetric: the finite-difference oracle covers the whole revolved chain in
+/// one shot — the hoop row `N_i/r` of `B`, its transpose in the internal forces,
+/// the `[rr, zz, θθ, rz]` restriction of the 3-D algorithmic tangent, and the
+/// `2πr` measure (which multiplies both sides, so it must be consistent).
+#[test]
+fn tangent_matches_fd_axisymmetric() -> Result<()> {
+    let coords = insert(Coords::axisymmetric()?);
+    // Away from the axis, so the element is well away from r = 0.
+    let corners = [(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0)];
+    let nodes: Vec<Node> = corners
+        .iter()
+        .map(|&(r, z)| Node::create_in(coords.clone(), &[r, z]))
+        .collect::<Result<_>>()?;
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
+    mesh.add_cell(&nodes.iter().map(|n| n.id()).collect::<Vec<_>>())?;
+    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let model = plasticity_model(&fes, ElasticityModel::Axisymmetric)?;
+
+    // Past-yield radial + axial displacement (the hoop strain u_r/r is large
+    // here, so the θθ component genuinely drives the return map).
+    let mut base = vec![0.0; nodes.len() * 2];
+    for (i, &(r, z)) in corners.iter().enumerate() {
+        base[2 * i] = 0.02 * r - 0.004 * z;
+        base[2 * i + 1] = 0.003 * r + 0.015 * z;
+    }
+    check_tangent_fd(&model, &fes, &nodes, 2, &base)
+}
+
 #[test]
 fn tangent_matches_fd_solid_hex() -> Result<()> {
     let coords = insert(Coords::new(3)?);
