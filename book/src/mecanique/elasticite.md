@@ -182,6 +182,28 @@ Validation : `tests/axisymmetric.rs` (Lamé, patch test de dilatation uniforme,
 \\( \int B^\top\sigma = K u \\), volume et masse de révolution, conduction
 logarithmique) et `tests/python/test_axisymmetric.py`.
 
+### Convergence sur Lamé
+
+La solution de Lamé \\( u_r = c_1 r + c_2/r \\) comporte un terme **rationnel** :
+aucune base de Lagrange, de quelque degré que ce soit, ne la reproduit
+exactement. Les éléments quadratiques gagnent un ordre, pas l'exactitude. La
+solution ne dépendant que de \\( r \\), le problème discret est une EDO 1-D et les
+valeurs **nodales** sont superconvergentes en \\( O(h^{2p}) \\) :
+
+| `nr` | Q1 (`QUA4`) | ordre | Q2 (`QUA8`) | ordre |
+|---:|---:|---:|---:|---:|
+| 5  | 6,5e-3 | — | 2,6e-5 | — |
+| 10 | 1,6e-3 | 1,97 | 1,7e-6 | 3,94 |
+| 20 | 4,1e-4 | 1,99 | 1,1e-7 | 3,99 |
+| 40 | 1,0e-4 | 2,00 | 6,8e-9 | 4,00 |
+
+(erreur relative maximale sur \\( u_r \\)). Les contraintes, une dérivée plus bas,
+passent de \\( O(h) \\) à \\( O(h^2) \\).
+
+Le cas **exact** existe néanmoins : lorsque \\( c_2 = 0 \\) — dilatation uniforme
+\\( u_r = c\,r \\) — l'état de déformation est constant et même Q1 le reproduit à
+la précision machine (c'est le patch test de la suite de validation).
+
 ### Matrice de masse
 
 Pour la dynamique, la **masse consistante** (composante matériau `rho`) est

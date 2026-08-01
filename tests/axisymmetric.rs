@@ -18,7 +18,7 @@
 use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::element_field::ElementField;
 use pyrucast::containers::field::SubField;
-use pyrucast::containers::finite_element_space::FiniteElementSpace;
+use pyrucast::containers::finite_element_space::{FiniteElementSpace, Interpolation};
 use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
@@ -243,105 +243,171 @@ fn uniform_dilation_is_an_exact_constant_strain_state() -> Result<()> {
 /// A = p a²/(b²−a²),  B = p a² b²/(b²−a²)
 /// ```
 ///
-/// The internal pressure is applied as a distributed load on the inner SEG2
-/// edge: because the geometry is axisymmetric, `flux` integrates `∫ 2πr N p` and
-/// yields the correct total ring force with no manual factor.
-#[test]
-fn lame_thick_cylinder_under_internal_pressure() -> Result<()> {
+/// Solves it on an `nr × 1` mesh, linear (`QUA4`) or quadratic (`QUA8`), and
+/// returns `(max relative error on u_r, max stress error / p)`.
+///
+/// The internal pressure is applied as a distributed load on the inner edge:
+/// because the geometry is axisymmetric, `flux` integrates `∫ 2πr N p` and
+/// yields the correct total ring force with no manual factor. The solid and the
+/// loaded edge live in **one** mesh so that `to_quadratic` gives them a *shared*
+/// mid-edge node rather than two coincident ones.
+fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     const E: f64 = 210_000.0;
     const NU: f64 = 0.3;
     const P: f64 = 100.0;
-    const A: f64 = 1.0; // inner radius
-    const B: f64 = 2.0; // outer radius
-    const H: f64 = 0.5; // height
-    const NR: usize = 40;
-    const NZ: usize = 1;
+    const A: f64 = 1.0;
+    const B: f64 = 2.0;
+    const H: f64 = 0.5;
 
-    let (grid, mesh, fes) = annulus(A, B, H, NR, NZ)?;
-    let idx = |i: usize, j: usize| j * (NR + 1) + i;
+    let coords = insert(Coords::axisymmetric()?);
+    let idx = |i: usize, j: usize| j * (nr + 1) + i;
+    let mut grid: Vec<Node> = Vec::new();
+    for j in 0..=1 {
+        for i in 0..=nr {
+            grid.push(Node::create_in(
+                coords.clone(),
+                &[A + (B - A) * i as f64 / nr as f64, H * j as f64],
+            )?);
+        }
+    }
+    let mut mesh = Mesh::empty();
+    let mut solid = SubMesh::new(coords.clone(), ElementType::QUA4);
+    for i in 0..nr {
+        solid.add_cell(&[
+            grid[idx(i, 0)].id(),
+            grid[idx(i + 1, 0)].id(),
+            grid[idx(i + 1, 1)].id(),
+            grid[idx(i, 1)].id(),
+        ])?;
+    }
+    let mut edge = SubMesh::new(coords.clone(), ElementType::SEG2);
+    edge.add_cell(&[grid[idx(0, 0)].id(), grid[idx(0, 1)].id()])?;
+    mesh.add_sub(insert(solid))?;
+    mesh.add_sub(insert(edge))?;
 
-    // Plane strain: u_z = 0 on both z faces.
-    let ends: Vec<Node> = (0..=NR)
-        .flat_map(|i| [grid[idx(i, 0)].clone(), grid[idx(i, NZ)].clone()])
+    let (mesh, interp) = if quadratic {
+        (mesher::to_quadratic(&mesh)?, Interpolation::Lagrange2)
+    } else {
+        (mesh, Interpolation::Lagrange1)
+    };
+    let mut solid_mesh = Mesh::empty();
+    solid_mesh.add_sub(mesh.get(0)?)?;
+    let mut edge_mesh = Mesh::empty();
+    edge_mesh.add_sub(mesh.get(1)?)?;
+    let fes = FiniteElementSpace::new(&solid_mesh, interp)?;
+    let edge_fes = FiniteElementSpace::new(&edge_mesh, interp)?;
+
+    // Plane strain: u_z = 0 on both z faces (every node on them, mid-edge
+    // nodes included — hence the coordinate filter rather than an index list).
+    let poi1 = mesher::to_poi1(&solid_mesh)?;
+    let nodes: Vec<Node> = (0..read(&poi1.get(0)?)?.cell_count())
+        .map(|c| poi1.node(0, c, 0))
+        .collect::<Result<_>>()?;
+    let ends: Vec<Node> = nodes
+        .iter()
+        .filter(|n| {
+            let z = n.coord().map(|c| c[1]).unwrap_or(f64::NAN);
+            z.abs() < 1e-12 || (z - H).abs() < 1e-12
+        })
+        .cloned()
         .collect();
     let mut model = Model::elasticity(&fes, ElasticityModel::Axisymmetric)?;
     model = model.union(&clamp(&ends, "u_y", "f_y")?)?;
     let materials = build::material_field(&model, &[("E", E), ("nu", NU)])?;
 
-    // Internal pressure on r = a, pushing outward (+r).
-    let mut inner = Mesh::from_submesh(SubMesh::new(
-        read(&mesh.get(0)?)?.coords(),
-        ElementType::SEG2,
-    ));
-    for j in 0..NZ {
-        inner.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
-    }
-    let inner_fes = FiniteElementSpace::lagrange1(&inner)?;
-    let load = assemble::flux(&inner_fes.get(0)?, FluxDensity::Uniform(P), "f_x")?;
-    let rhs = NodeField::from_sub(load);
-
+    let load = assemble::flux(&edge_fes.get(0)?, FluxDensity::Uniform(P), "f_x")?;
     let stiffness = assemble::stiffness(&model, &materials)?;
-    let solution = solve(&stiffness, &rhs)?;
+    let solution = solve(&stiffness, &NodeField::from_sub(load))?;
 
-    // ── Displacement against Lamé ──────────────────────────────────────────
-    let a2 = A * A;
-    let b2 = B * B;
+    let (a2, b2) = (A * A, B * B);
     let ca = P * a2 / (b2 - a2);
     let cb = P * a2 * b2 / (b2 - a2);
-    let u_exact = |r: f64| (1.0 + NU) / E * ((1.0 - 2.0 * NU) * ca * r + cb / r);
 
-    for i in 0..=NR {
-        let n = &grid[idx(i, 0)];
+    // ── Displacement against Lamé ──────────────────────────────────────────
+    let mut worst_u = 0.0_f64;
+    for n in &nodes {
         let r = n.coord()?[0];
-        let ur = solution.value(n.id(), "u_x")?;
-        let exact = u_exact(r);
-        assert!(
-            (ur - exact).abs() / exact < 5e-3,
-            "u_r({r}) = {ur}, Lamé = {exact}"
-        );
-        // u_z must stay zero (plane strain).
-        assert!(solution.value(n.id(), "u_y")?.abs() < 1e-12);
+        let exact = (1.0 + NU) / E * ((1.0 - 2.0 * NU) * ca * r + cb / r);
+        worst_u = worst_u.max((solution.value(n.id(), "u_x")? - exact).abs() / exact.abs());
+        assert!(solution.value(n.id(), "u_y")?.abs() < 1e-12, "plane strain");
     }
 
     // ── Stresses against Lamé, at the Gauss points ─────────────────────────
     // `solve` returns the Lagrange multipliers alongside the displacement, so
     // restrict onto a displacement-shaped field before differentiating.
-    let displacement = {
-        let sm = insert(SubMesh::poi1_from_nodes(&grid)?);
-        let zero = pyrucast::containers::node_field::SubNodeField::from_poi1(
-            &sm,
-            vec!["u_x".to_string(), "u_y".to_string()],
-        )?;
-        field::restrict_like(&solution, &NodeField::from_sub(zero))?
-    };
+    let sm = insert(SubMesh::poi1_from_nodes(&nodes)?);
+    let zero = pyrucast::containers::node_field::SubNodeField::from_poi1(
+        &sm,
+        vec!["u_x".to_string(), "u_y".to_string()],
+    )?;
+    let displacement = field::restrict_like(&solution, &NodeField::from_sub(zero))?;
     let strain = field::deformation(&displacement, &fes)?;
     let stress = behavior::integrate(&model, &strain, None, &materials, None)?;
     // The radius at each Gauss point, obtained the same way any field is: the
     // nodal coordinates interpolated onto the quadrature.
-    let gauss_r = field::interp_to_gauss(&field::coordinates(&mesh, None)?, &fes)?;
-    let s = read(&stress.get(0)?)?;
-    let rg = read(&gauss_r.get(0)?)?;
+    let gauss_r = field::interp_to_gauss(&field::coordinates(&solid_mesh, None)?, &fes)?;
+    let (s, rg) = (read(&stress.get(0)?)?, read(&gauss_r.get(0)?)?);
+    let mut worst_s = 0.0_f64;
     for cell in 0..s.cell_count() {
         for g in 0..s.gauss_count() {
             let r = rg.value(cell, g, "X")?;
-            let srr_exact = ca - cb / (r * r);
-            let stt_exact = ca + cb / (r * r);
-            let srr = s.value(cell, g, "sigma_xx")?;
-            let stt = s.value(cell, g, "sigma_zz")?; // hoop
-                                                     // Q1 stresses converge in O(h) — measured 6.4 → 3.3 → 1.7 % of P
-                                                     // for NR = 20 → 40 → 80 — and the error peaks at the loaded inner
-                                                     // face, where the gradient is steepest. The displacement above is
-                                                     // the sharp check (O(h²)); this one pins the shape of the field.
-            assert!(
-                (srr - srr_exact).abs() < 0.04 * P,
-                "σ_rr({r}) = {srr}, Lamé = {srr_exact}"
-            );
-            assert!(
-                (stt - stt_exact).abs() < 0.04 * P,
-                "σ_θθ({r}) = {stt}, Lamé = {stt_exact}"
-            );
+            worst_s = worst_s.max((s.value(cell, g, "sigma_xx")? - (ca - cb / (r * r))).abs());
+            worst_s = worst_s.max((s.value(cell, g, "sigma_zz")? - (ca + cb / (r * r))).abs());
         }
     }
+    Ok((worst_u, worst_s / P))
+}
+
+/// Linear `QUA4`: displacement converges in O(h²), stress in O(h).
+#[test]
+fn lame_thick_cylinder_under_internal_pressure() -> Result<()> {
+    let (u, s) = lame_case(40, false)?;
+    assert!(u < 5e-3, "relative displacement error {u}");
+    assert!(s < 0.04, "stress error {s} of p");
+    Ok(())
+}
+
+/// Quadratic `QUA8`. **Not exact** — and it cannot be: the Lamé displacement
+/// `c₁·r + c₂/r` has a *rational* term, which no Lagrange basis of any degree
+/// spans. What quadratic elements buy is an order, not exactness.
+///
+/// The solution depends on `r` alone, so the discrete problem is a 1-D ODE and
+/// the nodal values are superconvergent at `O(h^{2p})`: `O(h²)` for `p = 1`,
+/// `O(h⁴)` for `p = 2`. Measured relative displacement error:
+///
+/// | nr | Q1 | ordre | Q2 | ordre |
+/// |---:|---:|---:|---:|---:|
+/// | 5  | 6.5e-3 | — | 2.6e-5 | — |
+/// | 10 | 1.6e-3 | 1.97 | 1.7e-6 | 3.94 |
+/// | 20 | 4.1e-4 | 1.99 | 1.1e-7 | 3.99 |
+/// | 40 | 1.0e-4 | 2.00 | 6.8e-9 | 4.00 |
+///
+/// The stress (one derivative down) goes from `O(h)` to `O(h²)`.
+#[test]
+fn lame_quadratic_elements_gain_an_order_but_are_not_exact() -> Result<()> {
+    let (u5, s5) = lame_case(5, true)?;
+    let (u10, s10) = lame_case(10, true)?;
+
+    // Far more accurate than Q1 — 1.7e-6 at nr = 10, where Q1 needs nr = 40 to
+    // reach 1e-4.
+    assert!(u10 < 1e-5, "quadratic displacement error {u10}");
+    assert!(s10 < 0.01, "quadratic stress error {s10} of p");
+
+    // …but genuinely converging, not exact: halving h divides the nodal error by
+    // ~16 (order 4) and the stress error by ~4 (order 2).
+    let order_u = (u5 / u10).log2();
+    let order_s = (s5 / s10).log2();
+    assert!(
+        (3.5..4.5).contains(&order_u),
+        "nodal displacement order {order_u}, expected ≈ 4"
+    );
+    assert!(
+        (1.5..2.5).contains(&order_s),
+        "stress order {order_s}, expected ≈ 2"
+    );
+    // The point of the test: a non-zero error at every refinement. `1/r` is not
+    // a polynomial, so no Lagrange element reproduces Lamé exactly.
+    assert!(u10 > 0.0 && s10 > 0.0);
     Ok(())
 }
 
