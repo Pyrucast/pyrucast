@@ -1,7 +1,8 @@
 # Élasticité linéaire
 
 Continuum en petites déformations : 2-D (`TRI3` / `QUA4`) ou 3-D
-(`TET4` / `HEX8`).
+(`TET4` / `HEX8`), les cas 2-D couvrant aussi l'**axisymétrie** (solide de
+révolution maillé dans son plan méridien).
 
 ## Équations continues résolues
 
@@ -108,6 +109,73 @@ c\nu & c\nu & c(1-\nu) & & & \\\\
 \quad (\text{ordre } [xx, yy, zz, yz, xz, xy]).
 \\]
 
+- **`axisymmetric`** (solide de révolution), même \\( c \\) : les trois
+  directions normales \\( r, z, \theta \\) étant orthogonales, le bloc normal est
+  l'isotrope 3×3 et \\( rz \\) est le seul cisaillement,
+
+\\[
+D = c\begin{bmatrix}
+1-\nu & \nu & \nu & \\\\
+\nu & 1-\nu & \nu & \\\\
+\nu & \nu & 1-\nu & \\\\
+& & & \tfrac{1-2\nu}{2}
+\end{bmatrix}
+\quad (\text{ordre } [rr, zz, \theta\theta, rz]).
+\\]
+
+## Axisymétrie
+
+Un solide de **révolution** se maille dans son plan méridien \\( (r, z) \\) sur
+des `Coords` déclarées axisymétriques (\\( x = r \ge 0 \\), \\( y = z \\)) — voir
+[Coordonnées](../coords.md#repère-de-révolution). Deux choses changent, et elles
+ont deux origines distinctes :
+
+1. **la mesure d'intégration**, portée par la *géométrie* :
+   \\( d\Omega = 2\pi r\,|J|\,d\xi \\). Elle vaut pour **toutes** les intégrales
+   — rigidité, masse, conductivité, flux réparti, volumes, forces internes, y
+   compris sur les sous-maillages de bord `SEG2`, dont \\( \int 2\pi r\,N \\)
+   donne directement l'effort sur l'anneau. Rien à écrire : c'est
+   `CellGeom::det_j_w` qui l'applique, en un seul point ;
+2. **la déformation orthoradiale**, portée par le *modèle* :
+   \\( \varepsilon_{\theta\theta} = u_r / r \\), que le gradient méridien ne peut
+   pas exprimer. Elle ajoute une quatrième composante de Voigt et une ligne à
+   \\( B \\) :
+
+\\[
+B_i = \begin{bmatrix}
+\partial_r N_i & 0 \\\\
+0 & \partial_z N_i \\\\
+N_i / r & 0 \\\\
+\partial_z N_i & \partial_r N_i
+\end{bmatrix}
+\quad (\varepsilon = [\varepsilon_{rr}, \varepsilon_{zz}, \varepsilon_{\theta\theta}, \gamma_{rz}]^\top).
+\\]
+
+Les points de Gauss étant **intérieurs** à la maille, \\( r > 0 \\) même pour un
+élément qui touche l'axe : le terme \\( N_i/r \\) reste fini, sans traitement
+particulier de l'axe.
+
+**Nommage** (convention Cast3M) : les composantes s'appellent `sigma_xx`,
+`sigma_yy`, `sigma_zz`, `sigma_xy` et `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy`,
+où **`zz` désigne l'orthoradial \\( \theta\theta \\)** — le plan méridien
+n'occupant que `xx`, `yy` et `xy`, il n'y a pas de collision.
+
+Le modèle et le repère doivent **s'accorder dans les deux sens** : une géométrie
+de révolution refuse `plane_stress` / `plane_strain`, et `axisymmetric` refuse
+une géométrie cartésienne. Sans cela on mélangerait silencieusement une loi plane
+avec la mesure \\( 2\pi r \\).
+
+La **thermique** n'a rien de spécifique à faire : le flux \\( q = -k\nabla T \\)
+est déjà purement méridien, et le facteur \\( 2\pi r \\) suffit à produire le
+profil logarithmique d'un cylindre creux. En revanche
+[plasticité](plasticite.md), [Mazars](mazars.md), [barre](truss.md) et
+[portique](portique.md) **refusent** explicitement une géométrie axisymétrique :
+leur Voigt est câblé à trois composantes.
+
+Validation : `tests/axisymmetric.rs` (Lamé, patch test de dilatation uniforme,
+\\( \int B^\top\sigma = K u \\), volume et masse de révolution, conduction
+logarithmique) et `tests/python/test_axisymmetric.py`.
+
 ### Matrice de masse
 
 Pour la dynamique, la **masse consistante** (composante matériau `rho`) est
@@ -129,6 +197,8 @@ par [`lump`](../operateurs/assemblage.md).
   champ matériau mais jamais exigé pour un assemblage purement élastique.
 - **comportement** (`COMP`) : `σ = D ε` (convention tenseur → ingénieur
   `γ = 2ε`), à partir de la déformation `ε` (op [`deformation`](../operateurs/champs.md)).
+- **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `solid`
+  (3-D).
 
 ## Mise en donnée (Rust, testé)
 

@@ -75,8 +75,8 @@ c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
-mesh = pyrucast.Mesh(c, "SEG2")  # un sous-maillage 
-mesh.unit().add_cell([a,b])
+mesh = pyrucast.Mesh(c, "SEG2")  # un sous-maillage
+mesh.unit().add_cell([a, b])
 mesh.plot()
 print(c)
 print(mesh)  # Mesh: 1 submesh(es), 2 cell(s) total

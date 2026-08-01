@@ -6,6 +6,55 @@ modèle pyrucast — tous les autres (Mesh, NodeField, FE space…) viennent s'y
 greffer. L'**accesseur** utilisateur d'un nœud, le [`Node`](node.md), fait
 l'objet du chapitre suivant.
 
+## Repère de révolution
+
+Un `Coords` déclare aussi **comment lire ses coordonnées** : cartésien par
+défaut, ou **axisymétrique** — le plan méridien \\( (r, z) \\) d'un solide de
+révolution, avec \\( x = r \ge 0 \\) (rayon) et \\( y = z \\) (axe). C'est
+l'équivalent du `OPTI MODE AXIS` de Cast3M, et sa place est bien la géométrie :
+le repère change la **mesure d'intégration** elle-même,
+
+\\[
+d\Omega = 2\pi r \, |J| \, d\xi,
+\\]
+
+donc rigidité, masse, conductivité, flux réparti, volumes et forces internes
+d'un coup — sur le corps comme sur ses bords. Le facteur \\( 2\pi \\) est celui
+de l'**anneau complet** : les masses, volumes et résultantes nodales sont ceux de
+la pièce de révolution entière.
+
+```rust,ignore
+use pyrucast::containers::mesh::Coords;
+
+// Cartésien (par défaut) : dim libre.
+let plan = Coords::new(2).unwrap();
+assert!(!plan.is_axisymmetric());
+
+// Révolution : la dimension vaut nécessairement 2, donc pas d'argument.
+let axi = Coords::axisymmetric().unwrap();
+assert_eq!(axi.dim(), 2);
+assert!(axi.is_axisymmetric());
+```
+
+```python
+import pyrucast
+
+c = pyrucast.Coords.axisymmetric()
+assert c.dim == 2 and c.is_axisymmetric
+c.add_node([1.0, 0.0])  # r = 1, z = 0
+c.add_node([-1.0, 0.0])  # erreur : x est un rayon, il doit être ≥ 0
+```
+
+Un rayon négatif est refusé à l'ajout (et au `set_coord`) plutôt que de
+ressortir en `|J|` négatif au fond d'une intégrale. Tout espace éléments finis
+bâti sur ces `Coords` hérite du repère, si bien qu'un corps et son bord ne
+peuvent pas diverger.
+
+Côté **mécanique**, l'axisymétrie ajoute la déformation orthoradiale
+\\( \varepsilon_{\theta\theta} = u_r/r \\), qui relève du modèle et non de la
+géométrie : voir [Élasticité linéaire](mecanique/elasticite.md#axisymétrie). La
+**thermique** n'a rien à changer.
+
 ## Identité d'un nœud
 
 Chaque nœud créé reçoit un identifiant interne **stable** (`NodeId`), unique

@@ -37,11 +37,12 @@ Maillage - info;NOEU;Nœuds d'un maillage;Mesh / Node
 Maillage - info;FACE;Faces (frontières) des éléments;—
 Maillage - info;MESU;Mesure (longueur / aire / volume) d'un maillage;—
 Maillage - info;DIME;Dimension de l'espace de travail;Coords (dimension)
+Maillage - info;MODE AXIS;Hypothèse axisymétrique (plan méridien r-z d'un solide de révolution);Coords.axisymmetric() — x = r, y = z ; mesure 2πr sur toutes les intégrales
 Maillage - info;NBNO;Nombre de nœuds;len(mesh) / méthodes Mesh
 Maillage - info;QUEL;Information sur un élément (type, nœuds);Cell / Element
 Maillage - info;ELEM (APPUYE);Éléments d'un maillage s'appuyant sur un jeu de nœuds;elements_on
 Maillage - info;POIN PROC;Nœud d'un maillage le plus proche de coordonnées données;nearest_node / Mesh.nearest_node
-Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément fini);Model.* (heat_conduction, elasticity, plasticity, mazars…) ; nature physique par bloc via physics() ; filtrage par nature via Model.filter / Matrix.filter
+Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément fini);Model.* (heat_conduction, elasticity, plasticity, mazars…) ; formulation mécanique en argument (plane_stress, plane_strain, axisymmetric, solid) ; nature physique par bloc via physics() ; filtrage par nature via Model.filter / Matrix.filter
 Modèle et matériau;MATE;Définit le champ de propriétés matériau;material_field / sub_material_field
 Modèle et matériau;CARA;Caractéristiques géométriques (sections de poutres/coques);material_field (composantes section)
 Modèle et matériau;COMP;Intègre la loi de comportement (déf -> contraintes);integrate_behavior
@@ -146,7 +147,7 @@ Objets - gestion;DETR;Détruit un objet;Python natif (del)
 Objets - gestion;COPI;Copie (duplique) un objet;.copy() / clone
 Objets - gestion;VIDE;Teste si un objet est vide;Python natif (len == 0)
 Objets - gestion;TYPE;Type d'un objet;Python natif (type())
-Objets - gestion;OPTI;Fixe les options globales (dimension, mode, mémoire);paramètres / Coords (dimension)
+Objets - gestion;OPTI;Fixe les options globales (dimension, mode, mémoire);paramètres / Coords (dimension et repère : new / axisymmetric)
 Langage GIBIANE;DEBPROC;Définit le début d'une procédure;Python natif (def)
 Langage GIBIANE;FINPROC;Fin de procédure / valeurs de retour;Python natif (return)
 Langage GIBIANE;SI;Test conditionnel;Python natif (if)

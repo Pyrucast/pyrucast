@@ -239,6 +239,11 @@ Le résultat est le tenseur **symétrique** en convention **tenseur**
 composante `eps_<ai><aj>` par entrée indépendante `i ≤ j`. C'est l'entrée du
 comportement de l'[élasticité](../mecanique/elasticite.md).
 
+Sur un sous-espace [axisymétrique](../coords.md#repère-de-révolution), une
+quatrième composante `eps_zz` est ajoutée : la déformation **orthoradiale**
+`ε_θθ = u_r / r`, que le gradient méridien ne peut pas exprimer (cf.
+[Axisymétrie](../mecanique/elasticite.md#axisymétrie)).
+
 ### `thermal_strain(temperature, materials, fespace, t_ref)` → `ElementField`
 
 Déformation thermique de libre dilatation (Cast3M `EPTH`), pour la
@@ -253,7 +258,9 @@ thermomécanique **non couplée** :
 composante **facultative** de l'élasticité (à côté de `E`/`nu`, cf.
 [Élasticité](../mecanique/elasticite.md)). La sortie a **exactement la même
 disposition** que `deformation` (composantes normales à `α·ΔT`, cisaillements
-nuls), si bien que `deformation(u, fespace) - thermal_strain(...)` donne la
+nuls — y compris l'orthoradiale `eps_zz` en axisymétrique, un solide de
+révolution se dilatant aussi circonférentiellement), si bien que
+`deformation(u, fespace) - thermal_strain(...)` donne la
 déformation mécanique `ε(u) − ε_th`. Aucun couplage n'est fait ici :
 l'utilisateur compose la charge thermique et la contrainte réelle
 `σ = D:(ε − ε_th)` à partir des briques (`integrate_behavior`,
