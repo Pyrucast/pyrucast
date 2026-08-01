@@ -20,6 +20,17 @@
 //! per-cell snapshot copies), and the deterministic write-back / scatter. See
 //! the book chapter *« Parallélisme »* and *« Ajouter une physique »*.
 //!
+//! # Integration measure
+//!
+//! Every kernel takes its quadrature weight from [`CellGeom::det_j_w`], which is
+//! therefore the **single place** the geometric measure is decided. On an
+//! [axisymmetric](crate::containers::mesh::Coords::axisymmetric) geometry it
+//! returns `2πr |J| w` instead of `|J| w`, so stiffness, mass, conductivity,
+//! distributed flux, volumes and internal forces all integrate over the full
+//! ring with no per-physics change. What a physics *does* own is its operator:
+//! only mechanics gains a term (the hoop strain `ε_θθ = u_r / r`), which is why
+//! [`CellGeom::axisymmetric`] and [`CellGeom::radius`] are exposed.
+//!
 //! # Determinism
 //!
 //! [`element_pointwise`] writes each output slot exactly once
@@ -63,6 +74,9 @@ struct RefData {
     n_gauss: usize,
     space_dim: usize,
     ref_dim: usize,
+    /// Whether the geometry is a body of revolution — the `2πr` factor of
+    /// [`CellGeom::det_j_w`].
+    axisymmetric: bool,
     /// Shape values `N_i(ξ_g)` per Gauss point.
     n_ref: Vec<Vec<f64>>,
     /// Reference derivatives `∂N_i/∂ξ_k(ξ_g)` per Gauss point.
@@ -87,6 +101,7 @@ impl RefData {
             n_gauss,
             space_dim: fe.space_dim(),
             ref_dim: fe.ref_dim()?,
+            axisymmetric: fe.is_axisymmetric(),
             n_ref,
             dn_ref,
             weights,
@@ -116,6 +131,11 @@ pub struct CellGeom<'a> {
     pub n_gauss: usize,
     /// Spatial dimension.
     pub space_dim: usize,
+    /// Whether the geometry is the meridian plane of a body of revolution
+    /// (`x = r`, `y = z`). [`det_j_w`](Self::det_j_w) already carries the `2πr`,
+    /// so a kernel only reads this when its **operator** differs — mechanics,
+    /// for the hoop strain `ε_θθ = u_r / r`.
+    pub axisymmetric: bool,
 }
 
 impl<'a> CellGeom<'a> {
@@ -129,6 +149,7 @@ impl<'a> CellGeom<'a> {
             n_nodes: rd.n_nodes,
             n_gauss: rd.n_gauss,
             space_dim: rd.space_dim,
+            axisymmetric: rd.axisymmetric,
         })
     }
 
@@ -172,14 +193,64 @@ impl<'a> CellGeom<'a> {
         Ok(&self.rd.n_ref[g])
     }
 
-    /// `|J|_g · w_g` — the integration weight of Gauss point `g`.
-    pub fn det_j_w(&self, g: usize) -> Result<f64> {
+    /// Physical coordinates of Gauss point `g`, `x_a = Σ_i N_i(ξ_g) · x_{i,a}`
+    /// (length `space_dim`). Uses the same lazy coordinate gather as
+    /// [`dn_dx`](Self::dn_dx), so a kernel that never asks pays nothing.
+    pub fn x_at_g(&self, g: usize) -> Result<Vec<f64>> {
         self.ensure_cell_coords()?;
         let cc = self.cell_coords.borrow();
         let cc = cc.as_ref().unwrap();
-        let dn = &self.rd.dn_ref[g];
-        let jac = build_jacobian(cc, dn, self.space_dim, self.rd.ref_dim, self.n_nodes);
-        Ok(jacobian_measure(&jac, self.space_dim, self.rd.ref_dim) * self.rd.weights[g])
+        let n = &self.rd.n_ref[g];
+        let d = self.space_dim;
+        let mut x = vec![0.0_f64; d];
+        for i in 0..self.n_nodes {
+            for (a, xa) in x.iter_mut().enumerate() {
+                *xa += n[i] * cc[i * d + a];
+            }
+        }
+        Ok(x)
+    }
+
+    /// Radius `r` at Gauss point `g` — the first physical coordinate, on an
+    /// **axisymmetric** geometry only (errors otherwise, since `x` is then just
+    /// an abscissa and dividing by it would be meaningless).
+    ///
+    /// Gauss points are interior to the cell, so `r > 0` even for a cell touching
+    /// the axis: the `N_i / r` of the hoop strain stays finite — the standard
+    /// treatment of the axis in an axisymmetric formulation.
+    pub fn radius(&self, g: usize) -> Result<f64> {
+        if !self.axisymmetric {
+            return Err(PyrucastError::Message(
+                "CellGeom::radius: the geometry is not axisymmetric (build the Coords \
+                 with Coords::axisymmetric)"
+                    .into(),
+            ));
+        }
+        Ok(self.x_at_g(g)?[0])
+    }
+
+    /// `|J|_g · w_g` — the integration weight of Gauss point `g`.
+    ///
+    /// On an **axisymmetric** geometry this is `2πr_g · |J|_g · w_g`: the
+    /// circumferential measure is applied here, once, so *every* integral built
+    /// on `CellGeom` — stiffness, mass, conductivity, distributed flux, volumes,
+    /// internal forces, on the body and on its boundary alike — integrates over
+    /// the full ring without its kernel knowing.
+    pub fn det_j_w(&self, g: usize) -> Result<f64> {
+        self.ensure_cell_coords()?;
+        // Scoped so the `RefCell` borrow is released before `radius` (which
+        // re-borrows through `ensure_cell_coords`) is called below.
+        let w = {
+            let cc = self.cell_coords.borrow();
+            let cc = cc.as_ref().unwrap();
+            let dn = &self.rd.dn_ref[g];
+            let jac = build_jacobian(cc, dn, self.space_dim, self.rd.ref_dim, self.n_nodes);
+            jacobian_measure(&jac, self.space_dim, self.rd.ref_dim) * self.rd.weights[g]
+        };
+        if !self.axisymmetric {
+            return Ok(w);
+        }
+        Ok(w * std::f64::consts::TAU * self.radius(g)?)
     }
 }
 
@@ -786,4 +857,82 @@ pub fn reduce_cells(
             cell(&geom)
         })
         .try_reduce(|| 0.0, |a, b| Ok(a + b))
+}
+
+// ─── Unit tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aggregate::Aggregate;
+    use crate::containers::finite_element_space::FiniteElementSpace;
+    use crate::containers::mesh::{ElementType, Mesh, Node};
+    use crate::store::insert;
+
+    /// One QUA4 spanning `r ∈ [r0, r1]`, `z ∈ [0, 1]`, in the requested frame.
+    fn one_quad(r0: f64, r1: f64, axisymmetric: bool) -> Handle<SubFiniteElementSpace> {
+        let coords = insert(if axisymmetric {
+            Coords::axisymmetric().unwrap()
+        } else {
+            Coords::new(2).unwrap()
+        });
+        let a = Node::create_in(coords.clone(), &[r0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[r1, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[r1, 1.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[r0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
+        mesh.add_cell(&[a.id(), b.id(), c.id(), d.id()]).unwrap();
+        FiniteElementSpace::lagrange1(&mesh)
+            .unwrap()
+            .get(0)
+            .unwrap()
+    }
+
+    /// `Σ_g det_j_w` is the cell measure: the plane area in Cartesian, the
+    /// **revolved volume** `π(r1² − r0²)·h` in axisymmetric — the single check
+    /// that the 2πr factor lands in the quadrature weight.
+    #[test]
+    fn det_j_w_carries_the_revolution_measure() {
+        let plane = reduce_cells(&one_quad(1.0, 2.0, false), |geom| {
+            (0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum()
+        })
+        .unwrap();
+        assert!((plane - 1.0).abs() < 1e-12, "plane area {plane} ≠ 1");
+
+        let revolved = reduce_cells(&one_quad(1.0, 2.0, true), |geom| {
+            (0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum()
+        })
+        .unwrap();
+        let expected = std::f64::consts::PI * (2.0_f64.powi(2) - 1.0);
+        assert!(
+            (revolved - expected).abs() < 1e-10,
+            "revolved volume {revolved} ≠ {expected}"
+        );
+    }
+
+    /// Gauss points sit strictly inside the cell, so a cell **touching the axis**
+    /// still has `r > 0` — what keeps the hoop term `N_i / r` finite there.
+    #[test]
+    fn radius_is_positive_even_on_a_cell_touching_the_axis() {
+        reduce_cells(&one_quad(0.0, 1.0, true), |geom| {
+            for g in 0..geom.n_gauss {
+                let r = geom.radius(g)?;
+                assert!(r > 0.0 && r < 1.0, "radius {r} outside (0, 1)");
+                // radius is the first physical coordinate, and z stays in [0, 1].
+                let x = geom.x_at_g(g)?;
+                assert_eq!(x.len(), 2);
+                assert!((x[0] - r).abs() < 1e-15);
+                assert!(x[1] > 0.0 && x[1] < 1.0);
+            }
+            Ok(0.0)
+        })
+        .unwrap();
+    }
+
+    /// `radius` is meaningless without the revolution hypothesis, and says so.
+    #[test]
+    fn radius_rejects_a_cartesian_geometry() {
+        let err = reduce_cells(&one_quad(1.0, 2.0, false), |geom| geom.radius(0)).unwrap_err();
+        assert!(format!("{err}").contains("not axisymmetric"));
+    }
 }

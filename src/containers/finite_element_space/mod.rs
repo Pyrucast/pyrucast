@@ -88,6 +88,13 @@ pub struct SubFiniteElementSpace {
     /// `Coords` may not change dimension, so this is stable for
     /// the lifetime of the subspace.
     space_dim: usize,
+    /// Whether the owning `Coords` describes a body of revolution, read at
+    /// construction like `space_dim` (the frame is fixed for the lifetime of a
+    /// `Coords`). Carried here so the parallel drivers snapshot it once instead
+    /// of re-reading the store per cell. `#[serde(default)]` for subspaces
+    /// serialised before the frame existed.
+    #[serde(default)]
+    axisymmetric: bool,
 
     // Reference-space tables (invariant under mesh deformation):
     /// Flat `n_g × ref_dim` reference coordinates of the Gauss points.
@@ -141,7 +148,10 @@ impl SubFiniteElementSpace {
                 quadrature, et
             )));
         }
-        let space_dim = read(&coords)?.dim() as usize;
+        let (space_dim, axisymmetric) = {
+            let c = read(&coords)?;
+            (c.dim() as usize, c.is_axisymmetric())
+        };
         let ref_dim = et.topological_dim();
         if space_dim < ref_dim {
             return Err(PyrucastError::Message(format!(
@@ -172,6 +182,7 @@ impl SubFiniteElementSpace {
             interpolation,
             quadrature,
             space_dim,
+            axisymmetric,
             gauss_xi,
             gauss_w,
             n_at_g,
@@ -227,6 +238,15 @@ impl SubFiniteElementSpace {
     /// Geometric (physical) dimension of the underlying `Coords`.
     pub fn space_dim(&self) -> usize {
         self.space_dim
+    }
+
+    /// Whether the underlying `Coords` describes a body of revolution
+    /// ([`Coords::axisymmetric`](crate::containers::mesh::Coords::axisymmetric)):
+    /// `x = r`, `y = z`, and every integral over this subspace runs over the
+    /// full ring (`dΩ = 2πr |J| dξ`). Read from the geometry at construction —
+    /// never a per-space choice, so a body and its boundary can never disagree.
+    pub fn is_axisymmetric(&self) -> bool {
+        self.axisymmetric
     }
 
     /// Number of nodes per cell (= `element_type().nodes_per_cell()`).
@@ -304,6 +324,11 @@ impl SubFiniteElementSpace {
     /// (`space_dim > ref_dim`). The returned value is always
     /// non-negative; it is the **measure scaling factor** to use in
     /// numerical integration.
+    ///
+    /// Purely geometric: on an [axisymmetric](Self::is_axisymmetric) subspace it
+    /// stays the meridian-plane `|J|` — the circumferential `2πr` belongs to the
+    /// integration weight, and is applied by
+    /// [`CellGeom::det_j_w`](crate::models::kernel::CellGeom::det_j_w).
     pub fn det_jacobian(&self, cell_idx: usize, g: usize) -> Result<f64> {
         let jac = self.jacobian(cell_idx, g)?;
         Ok(jacobian_measure(&jac, self.space_dim, self.ref_dim()?))

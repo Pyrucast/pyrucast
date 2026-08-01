@@ -38,6 +38,14 @@
 //! configurations. An active configuration is designated by index;
 //! [`Coords::coord`] reads from the active one.
 //!
+//! # Coordinate frame
+//!
+//! A `Coords` also declares **how its coordinates are to be read**: plain
+//! Cartesian (the default, [`Coords::new`]) or **axisymmetric**
+//! ([`Coords::axisymmetric`]) — a 2-D meridian plane `(r, z)` describing a body
+//! of revolution. The frame is a property of the geometry, so every mesh, FE
+//! space and integral built on top of it inherits it; see [`CoordinateFrame`].
+//!
 //! # Example
 //!
 //! ```
@@ -80,12 +88,50 @@ impl crate::dump::Dump for NodeId {
     }
 }
 
+/// How the coordinates of a [`Coords`] are to be read — the geometric
+/// hypothesis every integral built on top of it obeys.
+///
+/// This is the Cast3M `OPTI MODE` axis: it belongs to the **geometry**, not to
+/// any one physics, because it changes the integration measure `dΩ` itself —
+/// stiffness, mass, distributed flux, volumes and internal forces alike.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CoordinateFrame {
+    /// Plain Cartesian coordinates in `dim` dimensions, `dΩ = |J| dξ`.
+    #[default]
+    Cartesian,
+    /// 2-D meridian plane of a body of revolution: `x = r` (radius, `≥ 0`),
+    /// `y = z` (axis of revolution). Integrals run over the **full ring**,
+    /// `dΩ = 2πr |J| dξ`, so masses, volumes and nodal resultants are those of
+    /// the whole revolved part.
+    Axisymmetric,
+}
+
+impl CoordinateFrame {
+    /// Whether this frame is [`Axisymmetric`](Self::Axisymmetric).
+    pub fn is_axisymmetric(self) -> bool {
+        self == Self::Axisymmetric
+    }
+}
+
+impl fmt::Display for CoordinateFrame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Cartesian => "cartesian",
+            Self::Axisymmetric => "axisymmetric",
+        })
+    }
+}
+
 /// Node coordinates with stable identity, multiple configurations,
 /// optional solver permutation, and a garbage collector for unreferenced
 /// nodes.
 #[derive(Serialize, Deserialize)]
 pub struct Coords {
     dim: u8,
+    /// Geometric hypothesis the coordinates obey. `#[serde(default)]` so a
+    /// `Coords` serialised before the frame existed reloads as Cartesian.
+    #[serde(default)]
+    frame: CoordinateFrame,
     /// `configs[c][id * dim + k]` — each configuration holds `capacity * dim` values.
     configs: Vec<Vec<f64>>,
     config_names: Vec<String>,
@@ -99,14 +145,16 @@ pub struct Coords {
 }
 
 impl Coords {
-    /// Create an empty `Coords` in dimension `dim` (≥ 1). A first
-    /// configuration named `"default"` is created automatically.
+    /// Create an empty **Cartesian** `Coords` in dimension `dim` (≥ 1). A first
+    /// configuration named `"default"` is created automatically. For a body of
+    /// revolution, see [`Coords::axisymmetric`].
     pub fn new(dim: u8) -> Result<Self> {
         if dim == 0 {
             return Err(PyrucastError::Message("dim must be ≥ 1".into()));
         }
         Ok(Self {
             dim,
+            frame: CoordinateFrame::Cartesian,
             configs: vec![Vec::new()],
             config_names: vec!["default".into()],
             active: 0,
@@ -116,9 +164,56 @@ impl Coords {
         })
     }
 
+    /// Create an empty **axisymmetric** `Coords` — the 2-D meridian plane of a
+    /// body of revolution, `x = r` (radius, `≥ 0`) and `y = z` (axis). The
+    /// dimension is necessarily 2, so it is not an argument.
+    ///
+    /// Every FE space built over this geometry integrates over the full ring
+    /// (`dΩ = 2πr |J| dξ`); mechanics additionally gains the hoop strain
+    /// `ε_θθ = u_r / r` through
+    /// [`ElasticityModel::Axisymmetric`](crate::models::elasticity::ElasticityModel::Axisymmetric).
+    ///
+    /// ```
+    /// use pyrucast::containers::mesh::Coords;
+    ///
+    /// let c = Coords::axisymmetric().unwrap();
+    /// assert_eq!(c.dim(), 2);
+    /// assert!(c.is_axisymmetric());
+    /// ```
+    pub fn axisymmetric() -> Result<Self> {
+        Ok(Self {
+            frame: CoordinateFrame::Axisymmetric,
+            ..Self::new(2)?
+        })
+    }
+
     /// Geometric dimension.
     pub fn dim(&self) -> u8 {
         self.dim
+    }
+
+    /// Geometric hypothesis these coordinates obey.
+    pub fn frame(&self) -> CoordinateFrame {
+        self.frame
+    }
+
+    /// Whether these coordinates describe a body of revolution — the shorthand
+    /// for `frame().is_axisymmetric()`.
+    pub fn is_axisymmetric(&self) -> bool {
+        self.frame.is_axisymmetric()
+    }
+
+    /// Reject a negative radius in an axisymmetric frame (`x = r ≥ 0`), where
+    /// `what` names the calling operation.
+    fn check_radius(&self, what: &str, coords: &[f64]) -> Result<()> {
+        if self.frame.is_axisymmetric() && coords[0] < 0.0 {
+            return Err(PyrucastError::Message(format!(
+                "{what}: negative radius x = {} in an axisymmetric Coords \
+                 (x = r ≥ 0, y = z along the axis of revolution)",
+                coords[0]
+            )));
+        }
+        Ok(())
     }
 
     /// Number of live (not collected) nodes.
@@ -147,6 +242,7 @@ impl Coords {
                 coords.len()
             )));
         }
+        self.check_radius("add_node", coords)?;
         let id = self.alive.len() as u32;
         for set in &mut self.configs {
             set.extend_from_slice(coords);
@@ -224,6 +320,7 @@ impl Coords {
                 coords.len()
             )));
         }
+        self.check_radius("set_coord", coords)?;
         let d = self.dim as usize;
         let s = id.0 as usize * d;
         self.configs[self.active][s..s + d].copy_from_slice(coords);
@@ -331,6 +428,7 @@ impl fmt::Debug for Coords {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Coords")
             .field("dim", &self.dim)
+            .field("frame", &self.frame)
             .field("configs", &self.config_names)
             .field("active", &self.active)
             .field("node_count", &self.node_count())
@@ -349,10 +447,17 @@ impl fmt::Display for Coords {
         } else {
             "identity"
         };
+        // The frame is shown only when it departs from the Cartesian default, so
+        // the overwhelmingly common rendering stays unchanged.
+        let frame_label = match self.frame {
+            CoordinateFrame::Cartesian => String::new(),
+            f => format!(" ({f})"),
+        };
         write!(
             f,
-            "Coords: dim={}, configs={} (active=\"{}\"), nodes={} ({} collected), permutation: {}",
+            "Coords: dim={}{}, configs={} (active=\"{}\"), nodes={} ({} collected), permutation: {}",
             self.dim,
+            frame_label,
             self.configs.len(),
             active_name,
             self.node_count(),
@@ -367,8 +472,16 @@ impl crate::dump::Dump for Coords {
         use crate::dump::{fmt_float, table};
         let dim = self.dim as usize;
         const AXES: [&str; 3] = ["x", "y", "z"];
+        // In a meridian plane the columns are the radius and the axis, so name
+        // them as such rather than x/y.
+        const AXES_AXI: [&str; 2] = ["r", "z"];
+        let axes: &[&str] = if self.frame.is_axisymmetric() {
+            &AXES_AXI
+        } else {
+            &AXES
+        };
         let mut headers = vec!["node".to_string()];
-        headers.extend((0..dim).map(|i| AXES.get(i).copied().unwrap_or("?").to_string()));
+        headers.extend((0..dim).map(|i| axes.get(i).copied().unwrap_or("?").to_string()));
         headers.push("refs".to_string());
         let rows: Vec<Vec<String>> = self
             .iter_live()
@@ -398,6 +511,33 @@ mod tests {
         assert_eq!(c.dim(), 3);
         assert_eq!(c.node_count(), 0);
         assert_eq!(c.capacity(), 0);
+    }
+
+    #[test]
+    fn cartesian_by_default_axisymmetric_on_demand() {
+        assert!(!Coords::new(2).unwrap().is_axisymmetric());
+        let c = Coords::axisymmetric().unwrap();
+        assert_eq!(c.dim(), 2);
+        assert_eq!(c.frame(), CoordinateFrame::Axisymmetric);
+        assert!(c.is_axisymmetric());
+        // The frame surfaces in Display only when it is not the default.
+        assert!(Coords::new(2).unwrap().to_string().contains("dim=2,"));
+        assert!(c.to_string().contains("dim=2 (axisymmetric)"));
+    }
+
+    /// `x = r` is a radius: negative values are a modelling error, caught at the
+    /// door rather than as a negative `|J|` deep in an integral.
+    #[test]
+    fn axisymmetric_rejects_a_negative_radius() {
+        let mut c = Coords::axisymmetric().unwrap();
+        let err = c.add_node(&[-1.0, 0.0]).unwrap_err();
+        assert!(format!("{err}").contains("negative radius"));
+        // On the axis (r = 0) is legitimate.
+        let id = c.add_node(&[0.0, 2.0]).unwrap();
+        assert!(c.set_coord(id, &[-0.5, 2.0]).is_err());
+        c.set_coord(id, &[0.5, 2.0]).unwrap();
+        // A Cartesian Coords keeps accepting negative x.
+        assert!(Coords::new(2).unwrap().add_node(&[-1.0, 0.0]).is_ok());
     }
 
     #[test]

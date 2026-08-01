@@ -49,7 +49,7 @@ pub mod point;
 // defined here, instead of through their defining sub-module.
 pub use cell::{Cell, CellIter};
 pub use color::RgbColor;
-pub use coords::{Coords, NodeId};
+pub use coords::{CoordinateFrame, Coords, NodeId};
 pub use element_type::ElementType;
 pub use node::Node;
 pub use point::{Point2, Point3, Vector2, Vector3};
