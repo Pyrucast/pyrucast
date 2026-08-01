@@ -66,6 +66,13 @@ impl PySubFiniteElementSpace {
         Ok(read(&self.handle)?.space_dim())
     }
 
+    /// Whether the underlying geometry is a body of revolution — inherited from
+    /// the `Coords`, so a body and its boundary can never disagree.
+    #[getter]
+    fn is_axisymmetric(&self) -> PyResult<bool> {
+        Ok(read(&self.handle)?.is_axisymmetric())
+    }
+
     /// Number of nodes per element.
     #[getter]
     fn nodes_per_cell(&self) -> PyResult<usize> {

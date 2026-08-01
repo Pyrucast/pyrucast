@@ -154,10 +154,14 @@ impl PyModel {
     }
 
     /// `Model.elasticity(fespace, model)` — linear-elasticity model spanning
-    /// every subspace of `fespace`. `model` is `"plane_stress"` or
-    /// `"plane_strain"` (2-D), or `"solid"` (3-D). DOFs are the vector
-    /// displacement `u_x, u_y(, u_z)`; material (`E`, `nu`) is supplied at
-    /// assembly time.
+    /// every subspace of `fespace`. `model` is `"plane_stress"`,
+    /// `"plane_strain"` or `"axisymmetric"` (2-D), or `"solid"` (3-D). DOFs are
+    /// the vector displacement `u_x, u_y(, u_z)`; material (`E`, `nu`) is
+    /// supplied at assembly time.
+    ///
+    /// `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
+    /// (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the model,
+    /// the `2πr` integration measure from the geometry, and the two must agree.
     #[classmethod]
     fn elasticity(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
@@ -166,7 +170,8 @@ impl PyModel {
     ) -> PyResult<Self> {
         let m = ElasticityModel::from_tag(model).ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err(format!(
-                "elasticity: unknown model '{model}' (expected plane_stress|plane_strain|solid)"
+                "elasticity: unknown model '{model}' \
+                 (expected plane_stress|plane_strain|axisymmetric|solid)"
             ))
         })?;
         let inner = Model::elasticity(&fespace.inner, m)?;

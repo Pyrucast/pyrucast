@@ -11,6 +11,10 @@ use pyo3::prelude::*;
 /// Create one with `Coords(dim)`, then add nodes with
 /// `add_node([x, y, ...])`. Every mesh, node and field is attached to a
 /// `Coords`.
+///
+/// `Coords.axisymmetric()` builds the 2-D meridian plane of a body of
+/// revolution instead (`x = r ≥ 0`, `y = z`): every integral over it then runs
+/// over the full ring, `dΩ = 2πr |J| dξ`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Coords")]
 pub struct PyCoords {
@@ -29,10 +33,29 @@ impl PyCoords {
         })
     }
 
+    /// `Coords.axisymmetric()` — the 2-D meridian plane of a body of
+    /// revolution: `x = r` (radius, `≥ 0`) and `y = z` (axis). The dimension is
+    /// necessarily 2, so it takes no argument.
+    ///
+    /// Every FE space built on it integrates over the full ring; mechanics adds
+    /// the hoop strain through `Model.elasticity(fes, "axisymmetric")`.
+    #[classmethod]
+    fn axisymmetric(_cls: &pyo3::Bound<'_, pyo3::types::PyType>) -> PyResult<Self> {
+        Ok(Self {
+            handle: insert(Coords::axisymmetric()?),
+        })
+    }
+
     /// Spatial dimension of the coordinates (1, 2 or 3).
     #[getter]
     fn dim(&self) -> PyResult<u8> {
         Ok(read(&self.handle)?.dim())
+    }
+
+    /// Whether these coordinates describe a body of revolution.
+    #[getter]
+    fn is_axisymmetric(&self) -> PyResult<bool> {
+        Ok(read(&self.handle)?.is_axisymmetric())
     }
 
     /// Number of live nodes.
