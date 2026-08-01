@@ -117,10 +117,21 @@ impl Plasticity {
     /// Errors if `model` is inconsistent with the space dimension (same rule as
     /// [`crate::models::elasticity::Elasticity::new`]).
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        let (submesh, space_dim) = {
+        let (submesh, space_dim, axisymmetric) = {
             let s = read(&fespace)?;
-            (s.submesh(), s.space_dim())
+            (s.submesh(), s.space_dim(), s.is_axisymmetric())
         };
+        // A body of revolution needs the hoop component, but the J2 return
+        // mapping, the state names and the consistent tangent are all written on
+        // a 3-component 2-D Voigt vector. Refusing is better than silently
+        // combining a plane law with the 2πr measure the geometry already applies.
+        if axisymmetric {
+            return Err(PyrucastError::Message(
+                "Plasticity: axisymmetric geometries are not supported yet — \
+                 use Elasticity for a body of revolution"
+                    .into(),
+            ));
+        }
         #[allow(clippy::match_like_matches_macro)]
         let ok = match (space_dim, model) {
             (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,
@@ -595,6 +606,12 @@ fn consistent_tangent_3d(
 /// on `ε_zz` (so `σ_zz = 0`) for plane stress, the full `6×6` for the solid.
 fn tangent_matrix_model(d3: &[[f64; 6]; 6], model: ElasticityModel) -> Vec<Vec<f64>> {
     match model {
+        // Rejected by `Plasticity::new`: the whole law (strain reading, state
+        // names, tangent) is written on a 3-component 2-D Voigt vector, so a body
+        // of revolution never reaches here.
+        ElasticityModel::Axisymmetric => {
+            unreachable!("Plasticity rejects an axisymmetric geometry at construction")
+        }
         ElasticityModel::Solid => d3.iter().map(|r| r.to_vec()).collect(),
         ElasticityModel::PlaneStrain => {
             let idx = [0usize, 1, 5];

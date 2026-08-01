@@ -1,9 +1,21 @@
 //! Linear (small-strain) elasticity — `K = ∫ Bᵀ D B dΩ`.
 //!
 //! Works in 2-D (TRI3 / QUA4) and 3-D (TET4 / HEX8). 2-D supports **plane
-//! stress** and **plane strain**; 3-D is the full solid. Voigt convention:
-//! strain `[εxx, εyy, γxy]` (2-D) / `[εxx, εyy, εzz, γyz, γxz, γxy]` (3-D), with
-//! **engineering** shear `γ = 2ε`; stress in the matching order.
+//! stress**, **plane strain** and **axisymmetric**; 3-D is the full solid.
+//! Voigt convention, with **engineering** shear `γ = 2ε` and stress in the
+//! matching order:
+//!
+//! | model | Voigt vector |
+//! |---|---|
+//! | plane stress / plane strain | `[εxx, εyy, γxy]` |
+//! | axisymmetric | `[εrr, εzz, εθθ, γrz]`, named `[εxx, εyy, εzz, γxy]` |
+//! | solid | `[εxx, εyy, εzz, γyz, γxz, γxy]` |
+//!
+//! The axisymmetric naming follows Cast3M: `x = r`, `y = z` (axis of
+//! revolution) and the **`zz` component is the hoop** `θθ`, whose strain is
+//! `ε_θθ = u_r / r`. It requires an axisymmetric geometry
+//! ([`Coords::axisymmetric`](crate::containers::mesh::Coords::axisymmetric)),
+//! which is also what puts the `2πr` in the integration measure.
 //!
 //! Primal `u_x, u_y(, u_z)` (displacement), dual `f_x, …` (nodal force).
 //! Material components `E` (Young) and `nu` (Poisson).
@@ -30,19 +42,31 @@ pub enum ElasticityModel {
     PlaneStress,
     /// 2-D plane strain (long prismatic body, `εzz = 0`).
     PlaneStrain,
+    /// 2-D meridian plane of a body of revolution: four Voigt components, the
+    /// hoop strain `ε_θθ = u_r / r` among them. Requires an axisymmetric
+    /// geometry.
+    Axisymmetric,
     /// Full 3-D solid.
     Solid,
 }
 
 impl ElasticityModel {
-    /// Parse from a lowercase tag (`"plane_stress"`, `"plane_strain"`, `"solid"`).
+    /// Parse from a lowercase tag (`"plane_stress"`, `"plane_strain"`,
+    /// `"axisymmetric"`, `"solid"`).
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
             "plane_stress" => Some(Self::PlaneStress),
             "plane_strain" => Some(Self::PlaneStrain),
+            "axisymmetric" => Some(Self::Axisymmetric),
             "solid" => Some(Self::Solid),
             _ => None,
         }
+    }
+
+    /// Whether this model carries the hoop (θθ) component — i.e. is
+    /// [`Axisymmetric`](Self::Axisymmetric).
+    pub fn is_axisymmetric(self) -> bool {
+        self == Self::Axisymmetric
     }
 }
 
@@ -52,27 +76,40 @@ fn primal_name(a: usize) -> String {
 fn dual_name(a: usize) -> String {
     format!("f_{}", AXES[a])
 }
-/// Voigt component count: 3 in 2-D, 6 in 3-D.
-fn voigt_size(space_dim: usize) -> usize {
-    if space_dim == 2 {
-        3
-    } else {
-        6
+/// Voigt component count: 3 in 2-D plane, **4** axisymmetric (the hoop joins
+/// them), 6 in 3-D.
+fn voigt_size(space_dim: usize, model: ElasticityModel) -> usize {
+    match (space_dim, model) {
+        (2, ElasticityModel::Axisymmetric) => 4,
+        (2, _) => 3,
+        _ => 6,
     }
 }
-/// Stress component names in Voigt order.
-fn stress_names(space_dim: usize) -> Vec<String> {
-    if space_dim == 2 {
-        vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()]
-    } else {
-        vec![
+/// Voigt component count of the **planar / solid** models — 3 in 2-D, 6 in 3-D.
+/// The axisymmetric case never reaches the helpers that use it (the non-linear
+/// laws, which reject a body of revolution).
+fn planar_voigt_size(space_dim: usize) -> usize {
+    voigt_size(space_dim, ElasticityModel::PlaneStrain)
+}
+/// Stress component names in Voigt order. Axisymmetric names the hoop `θθ`
+/// component `sigma_zz`, after Cast3M (`x = r`, `y = z`).
+fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
+    match (space_dim, model) {
+        (2, ElasticityModel::Axisymmetric) => vec![
+            "sigma_xx".into(),
+            "sigma_yy".into(),
+            "sigma_zz".into(),
+            "sigma_xy".into(),
+        ],
+        (2, _) => vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()],
+        _ => vec![
             "sigma_xx".into(),
             "sigma_yy".into(),
             "sigma_zz".into(),
             "sigma_yz".into(),
             "sigma_xz".into(),
             "sigma_xy".into(),
-        ]
+        ],
     }
 }
 
@@ -93,21 +130,39 @@ impl Elasticity {
     /// Linear elasticity on an FE subspace, with the given 2-D/3-D model.
     /// Errors if `model` is inconsistent with the space dimension.
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        let (submesh, space_dim) = {
+        let (submesh, space_dim, axisymmetric) = {
             let s = read(&fespace)?;
-            (s.submesh(), s.space_dim())
+            (s.submesh(), s.space_dim(), s.is_axisymmetric())
         };
         #[allow(clippy::match_like_matches_macro)]
         let ok = match (space_dim, model) {
             (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,
+            (2, ElasticityModel::Axisymmetric) => true,
             (3, ElasticityModel::Solid) => true,
             _ => false,
         };
         if !ok {
             return Err(PyrucastError::Message(format!(
                 "Elasticity: model {model:?} is incompatible with a {space_dim}-D space \
-                 (2-D ⇒ plane_stress|plane_strain, 3-D ⇒ solid)"
+                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ solid)"
             )));
+        }
+        // The model and the geometry must agree **both ways**: the 2πr measure
+        // comes from the Coords while the hoop row comes from the model, so a
+        // mismatch would silently mix a plane constitutive law with a revolved
+        // measure (or the reverse) and quietly produce wrong results.
+        if axisymmetric != model.is_axisymmetric() {
+            return Err(PyrucastError::Message(if axisymmetric {
+                format!(
+                    "Elasticity: model {model:?} on an axisymmetric geometry — a body of \
+                     revolution requires the `axisymmetric` model (its integrals already \
+                     carry the 2πr factor)"
+                )
+            } else {
+                "Elasticity: the `axisymmetric` model requires an axisymmetric geometry \
+                 (build the Coords with Coords::axisymmetric)"
+                    .into()
+            }));
         }
         let support = read(&submesh)?.to_poi1()?;
         Ok(Self {
@@ -247,7 +302,7 @@ impl Domain for Elasticity {
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(stress_names(self.space_dim))
+        Ok(stress_names(self.space_dim, self.model))
     }
 
     /// Linear stress σ = D·ε at one Gauss point (material `E`, `nu` per cell).
@@ -266,7 +321,7 @@ impl Domain for Elasticity {
         let e = mat.value(cell, 0, "E")?;
         let nu = mat.value(cell, 0, "nu")?;
         let dmat = constitutive(e, nu, self.model, d);
-        let strain = voigt_strain(&|name| input.value(cell, g, name), d)?;
+        let strain = voigt_strain(&|name| input.value(cell, g, name), d, self.model)?;
         for (r, drow) in dmat.iter().enumerate() {
             out[r] = drow.iter().zip(&strain).map(|(dv, s)| dv * s).sum();
         }
@@ -293,6 +348,19 @@ pub fn constitutive(e: f64, nu: f64, model: ElasticityModel, space_dim: usize) -
                 vec![0.0, 0.0, c * (1.0 - 2.0 * nu) / 2.0],
             ]
         }
+        (2, ElasticityModel::Axisymmetric) => {
+            // Voigt order [rr, zz, θθ, rz]: the three normal directions are
+            // mutually orthogonal, so the 3×3 normal block is the isotropic one
+            // (as in plane strain, with θθ restored) and `rz` is the lone shear.
+            let c = e / ((1.0 + nu) * (1.0 - 2.0 * nu));
+            let (d_n, d_off) = (c * (1.0 - nu), c * nu);
+            vec![
+                vec![d_n, d_off, d_off, 0.0],
+                vec![d_off, d_n, d_off, 0.0],
+                vec![d_off, d_off, d_n, 0.0],
+                vec![0.0, 0.0, 0.0, c * (1.0 - 2.0 * nu) / 2.0],
+            ]
+        }
         _ => {
             // 3-D solid (Voigt order [xx, yy, zz, yz, xz, xy]).
             let c = e / ((1.0 + nu) * (1.0 - 2.0 * nu));
@@ -314,8 +382,21 @@ pub fn constitutive(e: f64, nu: f64, model: ElasticityModel, space_dim: usize) -
 /// Voigt **engineering** strain from the tensor strain components produced by
 /// [`crate::ops::field::deformation`] (`eps_xx`, `eps_xy`, …), reading each
 /// component by name through `eps`. Off-diagonals become `γ = 2ε`.
-fn voigt_strain(eps: &dyn Fn(&str) -> Result<f64>, space_dim: usize) -> Result<Vec<f64>> {
-    if space_dim == 2 {
+fn voigt_strain(
+    eps: &dyn Fn(&str) -> Result<f64>,
+    space_dim: usize,
+    model: ElasticityModel,
+) -> Result<Vec<f64>> {
+    if space_dim == 2 && model.is_axisymmetric() {
+        // [εrr, εzz, εθθ, γrz] — the hoop `eps_zz` is produced by
+        // `ops::field::deformation` on an axisymmetric space.
+        Ok(vec![
+            eps("eps_xx")?,
+            eps("eps_yy")?,
+            eps("eps_zz")?,
+            2.0 * eps("eps_xy")?,
+        ])
+    } else if space_dim == 2 {
         Ok(vec![eps("eps_xx")?, eps("eps_yy")?, 2.0 * eps("eps_xy")?])
     } else {
         Ok(vec![
@@ -332,13 +413,32 @@ fn voigt_strain(eps: &dyn Fn(&str) -> Result<f64>, space_dim: usize) -> Result<V
 /// Strain-displacement matrix `B` (Voigt) from `∂N_i/∂x_a` (`dn_dx`, layout
 /// `[i*space_dim + a]`). Shape `voigt_size × (space_dim·nodes)`, node-major
 /// columns (matching [`DofOrdering::NodesThenVars`]).
-fn b_matrix(dn_dx: &[f64], n_nodes: usize, space_dim: usize) -> Vec<Vec<f64>> {
-    let v = voigt_size(space_dim);
+///
+/// `hoop` carries the axisymmetric extra: `Some((N, r))` — the shape values and
+/// the radius at the Gauss point — adds the fourth row `ε_θθ = Σ_i N_i u_{r,i} / r`
+/// and orders the rows `[rr, zz, θθ, rz]`. `None` gives the plane / solid `B`.
+fn b_matrix(
+    dn_dx: &[f64],
+    n_nodes: usize,
+    space_dim: usize,
+    hoop: Option<(&[f64], f64)>,
+) -> Vec<Vec<f64>> {
+    let v = match hoop {
+        Some(_) => 4,
+        None => planar_voigt_size(space_dim),
+    };
     let dofs = space_dim * n_nodes;
     let mut b = vec![vec![0.0; dofs]; v];
     let dn = |i: usize, a: usize| dn_dx[i * space_dim + a];
     for i in 0..n_nodes {
-        if space_dim == 2 {
+        if let Some((n, r)) = hoop {
+            let (cr, cz) = (2 * i, 2 * i + 1);
+            b[0][cr] = dn(i, 0); // εrr
+            b[1][cz] = dn(i, 1); // εzz
+            b[2][cr] = n[i] / r; // εθθ = u_r / r
+            b[3][cr] = dn(i, 1); // γrz
+            b[3][cz] = dn(i, 0);
+        } else if space_dim == 2 {
             let (cx, cy) = (2 * i, 2 * i + 1);
             b[0][cx] = dn(i, 0); // εxx
             b[1][cy] = dn(i, 1); // εyy
@@ -384,7 +484,13 @@ pub fn element_stiffness(
     );
     let v = d.len();
     for g in 0..geom.n_gauss {
-        let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim);
+        // On a body of revolution the hoop row needs `N` and `r` at this point.
+        let hoop = if model.is_axisymmetric() {
+            Some((geom.n_at_g(g)?, geom.radius(g)?))
+        } else {
+            None
+        };
+        let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim, hoop);
         // DB = D·B  (voigt × dofs).
         let mut db = vec![vec![0.0; dofs]; v];
         for r in 0..v {
@@ -459,6 +565,18 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
         let dn = geom.dn_dx(g)?; // [i * d + c]
         let w = geom.det_j_w(g)?;
         let sig = crate::models::voigt_stress_matrix(stress, geom.cell, g, d)?; // [c * d + e]
+                                                                                // On a body of revolution the hoop strain's own non-linear part,
+                                                                                // ½(u_r/r)², contributes `σ_θθ N_i N_j / r²` on the radial diagonal —
+                                                                                // the initial-stress counterpart of the `N_i / r` row of `B`.
+        let hoop = if geom.axisymmetric {
+            let r = geom.radius(g)?;
+            Some((
+                geom.n_at_g(g)?,
+                stress.value(geom.cell, g, "sigma_zz")? / (r * r),
+            ))
+        } else {
+            None
+        };
         for i in 0..n_nodes {
             for j in 0..n_nodes {
                 // Scalar gᵢⱼ = Σ_{c,e} (∂N_i/∂x_c) σ_ce (∂N_j/∂x_e).
@@ -473,6 +591,9 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
                 for a in 0..d {
                     ke[(i * d + a) * dofs + (j * d + a)] += gij;
                 }
+                if let Some((n, s_hoop)) = hoop {
+                    ke[(i * d) * dofs + (j * d)] += s_hoop * n[i] * n[j] * w;
+                }
             }
         }
     }
@@ -485,7 +606,7 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
 /// `ktan_{i}_{j}` for `i ≤ j`. `v = 3` in 2-D, `6` in 3-D — so 6 or 21 names.
 /// The tangent assembler reads them back with [`read_tangent_matrix`].
 pub fn tangent_component_names(space_dim: usize) -> Vec<String> {
-    let v = voigt_size(space_dim);
+    let v = planar_voigt_size(space_dim);
     let mut names = Vec::with_capacity(v * (v + 1) / 2);
     for i in 0..v {
         for j in i..v {
@@ -503,7 +624,7 @@ pub fn read_tangent_matrix(
     g: usize,
     space_dim: usize,
 ) -> Result<Vec<Vec<f64>>> {
-    let v = voigt_size(space_dim);
+    let v = planar_voigt_size(space_dim);
     let mut d = vec![vec![0.0; v]; v];
     for i in 0..v {
         for j in i..v {
@@ -528,9 +649,9 @@ pub fn element_tangent_from_state(
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
     let dofs = space_dim * n_nodes;
-    let v = voigt_size(space_dim);
+    let v = planar_voigt_size(space_dim);
     for g in 0..geom.n_gauss {
-        let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim);
+        let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim, None);
         let d = read_tangent_matrix(state, geom.cell, g, space_dim)?;
         // DB = D·B (voigt × dofs), then Kᵉ += Bᵀ (DB) · |J| w.
         let mut db = vec![vec![0.0; dofs]; v];

@@ -26,6 +26,10 @@ use crate::store::{insert, read};
 /// shear `γ`), with one component `eps_<ai><aj>` per independent entry
 /// `i ≤ j`, in order `eps_xx, eps_xy, …, eps_yy, …`.
 ///
+/// On an [axisymmetric](crate::containers::mesh::Coords::axisymmetric) subspace
+/// a fourth component `eps_zz` is appended: the **hoop** strain
+/// `ε_θθ = u_r / r`, which the meridian gradient cannot express.
+///
 /// Runs on the shared parallel driver `models::kernel::nodal_pointwise`,
 /// like [`crate::ops::field::gradient`](fn@crate::ops::field::gradient).
 pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
@@ -33,7 +37,10 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
     let view = u.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        let space_dim = read(sub)?.space_dim();
+        let (space_dim, axisymmetric) = {
+            let s = read(sub)?;
+            (s.space_dim(), s.is_axisymmetric())
+        };
         if components.len() != space_dim {
             return Err(PyrucastError::Message(format!(
                 "deformation: the displacement field carries {} component(s) but the FE \
@@ -52,6 +59,13 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
                 pairs.push((i, j));
             }
         }
+        // On a body of revolution the hoop strain ε_θθ = u_r / r is a fourth,
+        // independent component. It is appended last and named `eps_zz` (Cast3M's
+        // naming, x = r and y = z), which is free of clashes since the meridian
+        // plane only spans xx, xy and yy. Consumers read by name.
+        if axisymmetric {
+            names.push("eps_zz".to_string());
+        }
         // Point kernel: ε_ij = ½(∂u_i/∂x_j + ∂u_j/∂x_i) with ∂u_i/∂x_j = Σ_k u_i(k)·∂N_k/∂x_j.
         let sf = kernel::nodal_pointwise(sub, &view, names, |geom, field, g, out| {
             let dn_dx = geom.dn_dx(g)?;
@@ -67,6 +81,15 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
                     dji += u_j * dn_dx[k * sd + i];
                 }
                 out[c] = 0.5 * (dij + dji);
+            }
+            if axisymmetric {
+                // ε_θθ = u_r / r, with u_r interpolated at the Gauss point.
+                let n = geom.n_at_g(g)?;
+                let mut u_r = 0.0;
+                for k in 0..geom.n_nodes {
+                    u_r += field.value(ids[k], &components[0])? * n[k];
+                }
+                out[pairs.len()] = u_r / geom.radius(g)?;
             }
             Ok(())
         })?;

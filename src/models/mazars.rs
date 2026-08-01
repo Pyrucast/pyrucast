@@ -87,10 +87,21 @@ impl Mazars {
     /// `model` is inconsistent with the space dimension (same rule as
     /// [`crate::models::elasticity::Elasticity::new`]).
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        let (submesh, space_dim) = {
+        let (submesh, space_dim, axisymmetric) = {
             let s = read(&fespace)?;
-            (s.submesh(), s.space_dim())
+            (s.submesh(), s.space_dim(), s.is_axisymmetric())
         };
+        // A body of revolution needs the hoop component, but the damage law and
+        // its equivalent strain are written on a 3-component 2-D Voigt vector.
+        // Refusing is better than silently combining a plane law with the 2πr
+        // measure the geometry already applies.
+        if axisymmetric {
+            return Err(PyrucastError::Message(
+                "Mazars: axisymmetric geometries are not supported yet — \
+                 use Elasticity for a body of revolution"
+                    .into(),
+            ));
+        }
         #[allow(clippy::match_like_matches_macro)]
         let ok = match (space_dim, model) {
             (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,

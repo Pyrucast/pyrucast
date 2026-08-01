@@ -62,7 +62,10 @@ pub fn thermal_strain(
         // mechanical `E`/`nu`/`alpha`) resolves the expansion zone without an
         // explicit consolidate.
         let mat_sub = material.sub_for_fespace_with(sub, &[ALPHA])?;
-        let space_dim = read(sub)?.space_dim();
+        let (space_dim, axisymmetric) = {
+            let s = read(sub)?;
+            (s.space_dim(), s.is_axisymmetric())
+        };
 
         // Fail fast with an actionable message if the temperature lacks its
         // component (the material zone was already selected on `alpha`).
@@ -85,6 +88,14 @@ pub fn thermal_strain(
                 pairs.push((i, j));
             }
         }
+        // A body of revolution dilates circumferentially too: the hoop `eps_zz`
+        // is a fourth diagonal entry, matching the extra component
+        // [`crate::ops::field::deformation`](fn@crate::ops::field::deformation)
+        // produces there.
+        if axisymmetric {
+            names.push("eps_zz".to_string());
+        }
+        let n_diag = names.len();
 
         let sf = kernel::element_pointwise(
             sub,
@@ -98,6 +109,9 @@ pub fn thermal_strain(
                 let eps_th = material.value(cell, g, ALPHA)? * d_temp;
                 for (c, &(i, j)) in pairs.iter().enumerate() {
                     out[c] = if i == j { eps_th } else { 0.0 };
+                }
+                if axisymmetric {
+                    out[n_diag - 1] = eps_th; // hoop `eps_zz`
                 }
                 Ok(())
             },

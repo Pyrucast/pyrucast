@@ -18,7 +18,7 @@ use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
-use crate::error::Result;
+use crate::error::{PyrucastError, Result};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
@@ -66,10 +66,19 @@ impl Truss {
     /// Truss physics on a `SEG2` FE subspace. Builds the stable POI1
     /// [`SubMesh`] over the subspace's unique nodes.
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        let (submesh, space_dim) = {
+        let (submesh, space_dim, axisymmetric) = {
             let s = read(&fespace)?;
-            (s.submesh(), s.space_dim())
+            (s.submesh(), s.space_dim(), s.is_axisymmetric())
         };
+        // A segment in a meridian plane sweeps a cone of revolution, not a bar:
+        // the kernel's `E·A/L` has no meaning there.
+        if axisymmetric {
+            return Err(PyrucastError::Message(
+                "Truss: axisymmetric geometries are not supported — a segment in a \
+                 meridian plane is a shell of revolution, not a bar"
+                    .into(),
+            ));
+        }
         let support = read(&submesh)?.to_poi1()?;
         Ok(Self {
             fespace,

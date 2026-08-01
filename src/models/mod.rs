@@ -829,6 +829,11 @@ pub trait Domain: Sync {
 /// plasticity) and the model-free
 /// [`crate::ops::assemble::internal_forces_continuum`] operator. Fills
 /// `fe` node-major / axis-minor (`fe[i * space_dim + a]`).
+///
+/// On an **axisymmetric** geometry the radial row gains the hoop term
+/// `f_{i,r} += (N_i / r) σ_θθ` — the transpose of the `N_i / r` row the
+/// strain-displacement matrix `B` carries there, so `∫ Bᵀσ` keeps matching `K·u`
+/// for a linear law.
 pub(crate) fn continuum_internal_force_element(
     geoms: &[CellGeom],
     stress: &SubElementField,
@@ -841,6 +846,15 @@ pub(crate) fn continuum_internal_force_element(
         let dn = geom.dn_dx(g)?; // [i * d + b]
         let w = geom.det_j_w(g)?;
         let sig = voigt_stress_matrix(stress, geom.cell, g, d)?; // [a * d + b]
+                                                                 // `sigma_zz` is the hoop stress and only exists on a body of revolution.
+        let hoop = if geom.axisymmetric {
+            Some((
+                geom.n_at_g(g)?,
+                stress.value(geom.cell, g, "sigma_zz")? / geom.radius(g)?,
+            ))
+        } else {
+            None
+        };
         for i in 0..n_nodes {
             for a in 0..d {
                 let mut s = 0.0;
@@ -848,6 +862,9 @@ pub(crate) fn continuum_internal_force_element(
                     s += dn[i * d + b] * sig[a * d + b];
                 }
                 fe[i * d + a] += s * w;
+            }
+            if let Some((n, s_hoop)) = hoop {
+                fe[i * d] += n[i] * s_hoop * w;
             }
         }
     }

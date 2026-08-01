@@ -44,14 +44,28 @@ impl Frame {
     /// Frame physics on a 2-D `SEG2` FE subspace. Errors unless the subspace is
     /// `SEG2` in a 2-D configuration.
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        let (submesh, space_dim, et) = {
+        let (submesh, space_dim, et, axisymmetric) = {
             let s = read(&fespace)?;
-            (s.submesh(), s.space_dim(), s.element_type()?)
+            (
+                s.submesh(),
+                s.space_dim(),
+                s.element_type()?,
+                s.is_axisymmetric(),
+            )
         };
         if et != ElementType::SEG2 {
             return Err(PyrucastError::Message(format!(
                 "Frame: expected SEG2 elements, got {et}"
             )));
+        }
+        // A segment in a meridian plane sweeps a shell of revolution, which this
+        // Euler–Bernoulli kernel does not model.
+        if axisymmetric {
+            return Err(PyrucastError::Message(
+                "Frame: axisymmetric geometries are not supported — a segment in a \
+                 meridian plane is a shell of revolution, not a beam"
+                    .into(),
+            ));
         }
         if space_dim != 2 {
             return Err(PyrucastError::Message(format!(
