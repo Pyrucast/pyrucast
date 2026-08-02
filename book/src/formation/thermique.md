@@ -80,14 +80,16 @@ l'autre.
 Le premier problème n'a que deux conditions aux limites : l'alésage tenu à
 250 °C, et un flux sortant de −40 kW/m² sur la face gauche.
 
-### Les régions chargées, repérées par leur forme
+### Les régions chargées, repérées par leur géométrie
 
 Aucun numéro de nœud n'apparaît dans le script. Les régions sont découpées
-**géométriquement**, avec la famille
-[`pyrucast.mesher.points_*`](../operateurs/maillage.md) — qui sélectionne les
-nœuds d'un plan, d'un cylindre, d'une sphère — suivie de
-`pyrucast.mesher.elements_on(..., strict=True)`, qui remonte aux éléments dont
-**tous** les nœuds sont retenus.
+**géométriquement**, de deux façons complémentaires : par **forme**, avec la
+famille [`pyrucast.mesher.points_*`](../operateurs/maillage.md) — qui
+sélectionne les nœuds d'un plan, d'un cylindre, d'une sphère — et par
+**coordonnée**, avec `pyrucast.field.coordinates` + `pyrucast.field.select`
+(voir l'étape 2). Dans les deux cas,
+`pyrucast.mesher.elements_on(..., strict=True)` remonte ensuite aux éléments
+dont **tous** les nœuds sont retenus.
 
 ```python
 {{#include ../../../formation/thermique.py:regions_conduction}}
@@ -157,11 +159,11 @@ face gauche d'où la chaleur s'échappe.
 ## Étape 2 — convection et source volumique
 
 On ajoute maintenant les deux sollicitations restantes, sans rien retoucher
-aux précédentes : un film convectif sur le nez arrondi
-(\\( h = 240 \\) W/m²/K vers un fluide à −80 °C) et une cartouche chauffante
-de 4 MW/m³ noyée dans la matière.
+aux précédentes : un film convectif sous la pièce, sur la face
+\\( z = 0 \\) (\\( h = 240 \\) W/m²/K vers un fluide à −80 °C), et une tranche
+chauffée à 4 MW/m³ entre \\( 0{,}33\\,L \\) et \\( 0{,}51\\,L \\).
 
-### Deux nouvelles régions
+### Deux nouvelles régions, repérées par leurs coordonnées
 
 ```python
 {{#include ../../../formation/thermique.py:regions_convection}}
@@ -169,20 +171,23 @@ de 4 MW/m³ noyée dans la matière.
 
 ![Surface convectée](img/thermique-cl-convection.svg)
 
-![Cartouche chauffante](img/thermique-cl-source.svg)
+![Zone chauffée](img/thermique-cl-source.svg)
 
-**`on` et `in` ne sélectionnent pas la même chose.** `points_on_cylinder`
-retient les nœuds de la **surface latérale**, disques d'extrémité exclus :
-c'est exactement la paroi d'un alésage, ou le nez arrondi. `points_in_cylinder`
-retient les nœuds du **volume plein**, disques compris : c'est le cœur d'une
-cartouche chauffante. Même axe, même famille d'opérateurs, deux régions de
-nature différente.
+**Une coordonnée est un champ nodal comme un autre.**
+`pyrucast.field.coordinates(peau, ["Z"])` rend la coordonnée Z des nœuds de la
+peau sous forme de `NodeField`, et `pyrucast.field.select` garde ceux dont la
+valeur tombe dans une **bande** — `ge=-TOL, le=TOL` pour « z = 0 »,
+`ge=0.33*LENGTH, le=0.51*LENGTH` pour la tranche chauffée. Le résultat est un
+maillage `POI1`, exactement comme celui d'un `points_*` : la suite ne change
+pas, `elements_on` remonte aux éléments. C'est la voie à prendre dès que la
+région n'a pas de forme simple à nommer, et la tolérance y est **explicite** —
+une face plane vaut zéro à l'arrondi machine près, jamais exactement zéro.
 
-**`strict=True` approche la région par un escalier.** La cartouche est un
-cylindre de rayon 35 mm, mais le maillage est structuré : ce qui est retenu
-est le paquet de 40 hexaèdres entièrement contenus dedans, bien visible sur
-la figure. C'est le prix à payer pour que la région chargée soit un
-sous-maillage conforme.
+**`strict=True` approche la région par un escalier.** La bande en X coupe le
+maillage entre deux abscisses quelconques, mais ce qui est retenu est le
+paquet des 80 hexaèdres dont **tous** les nœuds sont dedans : la tranche
+s'arrête donc aux frontières des éléments, bien visible sur la figure. C'est
+le prix à payer pour que la région chargée soit un sous-maillage conforme.
 
 ### Le modèle complet
 
@@ -195,17 +200,24 @@ membres du système, parce que \\( \phi \cdot n = h\\,(T - T\_f) \\) dépend de
 l'inconnue :
 
 - sa part en \\( T \\) donne \\( \int h\\,[N]^T[N] \\, dS \\), qui s'ajoute
-  **dans** la matrice — d'où le `Model.convection(nez_fes)` réuni au modèle de
-  conduction par `|`, sur les mêmes degrés de liberté « T » et « q » ; ce
+  **dans** la matrice — d'où le `Model.convection(basse_fes)` réuni au modèle
+  de conduction par `|`, sur les mêmes degrés de liberté « T » et « q » ; ce
   n'est pas un système séparé ;
 - sa part en \\( T\_f \\) donne \\( \int h\\,T\_f\\,[N]^T \\, dS \\), un second
-  membre ordinaire — d'où le `pc.assemble.flux(nez_fes[0], H_CONV * T_EXT,
+  membre ordinaire — d'où le `pc.assemble.flux(basse_fes[0], H_CONV * T_EXT,
   "q")`, le même opérateur que pour le flux imposé.
 
 La source volumique, elle, est le terme \\( \int_V [N]^T q \\, dV \\) : encore
 `flux`, mais appliqué à des `HEX8`, donc intégré sur un volume. Un seul
 `material_field` couvre le tout — « k » est réclamé par la conduction, « h »
 par la convection.
+
+### Trois chargements qui se touchent : le second membre se **somme**
+
+Le bas de la face gauche est sur \\( z = 0 \\), et la tranche chauffée
+débouche elle aussi sous la pièce : les trois chargements répartis partagent
+des nœuds. Leurs contributions doivent donc **s'additionner** là — et c'est
+précisément ce que l'union `|` ne fait pas.
 
 > **Piège : deux régions chargées adjacentes.** Leurs contributions nodales
 > ne sont **pas** sommées automatiquement à l'assemblage : chaque
@@ -216,20 +228,25 @@ par la convection.
 > perdue. L'union ne lève une erreur que si les deux valeurs **diffèrent** ;
 > quand elles coïncident, elle passe sans rien dire.
 >
-> Sommer les champs (`+`) ne corrige pas le problème : l'arithmétique de
+> Sommer les champs (`+`) ne suffit pas non plus tel quel : l'arithmétique de
 > champs apparie elle aussi les zones **par support** (deux supports
 > distincts sont recopiés tels quels), et elle ne fait même pas la
-> vérification de cohérence de `|`. Pour additionner vraiment deux régions
-> qui se touchent, il faut d'abord les **ramener sur un support commun** —
-> `pyrucast.field.restrict` sur un même maillage retombe sur le support
-> `POI1` canonique de ce maillage, donc `restrict(a, m) + restrict(b, m)` est
-> bien une somme nœud à nœud (la page [Champs](../field.md) détaille cette
-> algèbre ; le [chapitre 3](mecanique.md) en donne un exemple avec
-> `restrict_like`).
->
-> Le plus simple reste de **dessiner des régions de charge deux à deux
-> disjointes**, et c'est le cas ici par construction : la face gauche, le nez
-> arrondi, l'alésage et la cartouche ne partagent aucun nœud.
+> vérification de cohérence de `|`. Il faut d'abord **ramener les champs sur
+> un support commun** — `pyrucast.field.restrict` sur un même maillage retombe
+> sur le support `POI1` canonique de ce maillage, donc
+> `restrict(a, m) + restrict(b, m)` est bien une somme nœud à nœud (la page
+> [Champs](../field.md) détaille cette algèbre ; le
+> [chapitre 3](mecanique.md) en donne un exemple avec `restrict_like`).
+
+D'où les quatre lignes du script : le maillage `POI1` de tous les nœuds
+chargés (`to_poi1` puis `consolidate`, pour n'avoir qu'un seul sous-maillage
+donc un seul support), les trois champs restreints dessus, et leur somme par
+`+`. La vérification est immédiate — la puissance totale du second membre vaut
+la somme des trois puissances prises séparément, ce que l'union perdrait.
+
+La température imposée, elle, vit sur le maillage des **multiplicateurs**,
+translaté donc disjoint de tous les autres : elle se réunit au reste par `|`
+sans rien avoir à sommer.
 
 `pyrucast.solver.solve` factorise la matrice creuse (LU parallèle) et met la
 factorisation en cache — deux résolutions sur la même matrice ne la
@@ -237,10 +254,12 @@ factorisent qu'une fois.
 
 ![Température, étape 2](img/thermique-complet.svg)
 
-La lecture du résultat suit les quatre chargements : le maximum (430 °C) est
-au cœur de la cartouche, l'alésage reste tenu à 250 °C par le blocage, le nez
-arrondi est le point froid (224 °C) sous l'effet de la convection, et la face
-gauche décroît sous le flux sortant.
+La lecture du résultat suit les quatre chargements : le maximum (330 °C) est
+au cœur de la tranche chauffée, l'alésage reste tenu à 250 °C par le blocage,
+la face gauche est le point froid (110 °C) sous le flux sortant, et le film
+convectif refroidit tout le dessous de la pièce. La comparaison avec la figure
+de l'étape 1 se lit directement : la même pièce, 78 °C plus chaude à gauche à
+cause de la source, et un maximum qui n'est plus à l'alésage.
 
 > **Non disponible dans pyrucast.**
 >
