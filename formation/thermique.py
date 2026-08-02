@@ -10,60 +10,55 @@ on the **structured HEX8** volume without restating a single dimension.
 
 FR — Conduction stationnaire avec les quatre sollicitations thermiques :
 
-- **température imposée** sur l'alésage (Cast3M `BLOQ`/`DEPI`) ;
-- **flux imposé** sur la face gauche (Cast3M `FLUX`) ;
-- **convection** (film, Robin) sur le nez arrondi (Cast3M
-  `MODE ... 'CONVECTION'` + `CONV`) ;
-- **source volumique** dans une cartouche chauffante (Cast3M `SOUR`).
+- **température imposée** sur l'alésage ;
+- **flux imposé** sur la face gauche ;
+- **convection** (film, Robin) sur le nez arrondi ;
+- **source volumique** dans une cartouche chauffante.
 
-EN — Steady conduction with the four thermal loads of the Cast3M tutorial:
+EN — Steady conduction with the four thermal loads:
 
-- **imposed temperature** on the bore (Cast3M `BLOQ`/`DEPI`);
-- **imposed flux** on the left face (Cast3M `FLUX`);
-- **convection** (film, Robin) on the rounded nose (Cast3M
-  `MODE ... 'CONVECTION'` + `CONV`);
-- **volume source** inside a heating cartridge (Cast3M `SOUR`).
+- **imposed temperature** on the bore;
+- **imposed flux** on the left face;
+- **convection** (film, Robin) on the rounded nose;
+- **volume source** inside a heating cartridge.
 
 FR — Les quatre régions sont repérées **par leur forme**, jamais par des
 numéros de nœuds : la famille `pyrucast.mesher.points_*` sélectionne les nœuds
 d'un plan, d'un cylindre, d'une sphère… et `pyrucast.mesher.elements_on`
-remonte aux éléments qu'ils portent entièrement — l'exact équivalent du
-`POIN ... PLAN`/`CYLI` puis `ELEM 'APPUYE' 'STRICTEMENT'` de Cast3M.
+remonte aux éléments qu'ils portent entièrement.
 
 EN — The four regions are located **by shape**, never by node numbers: the
 `pyrucast.mesher.points_*` family selects the nodes of a plane, a cylinder, a
 sphere… and `pyrucast.mesher.elements_on` walks back to the elements they
-fully carry — the exact counterpart of Cast3M's `POIN ... PLAN`/`CYLI` then
-`ELEM 'APPUYE' 'STRICTEMENT'`.
+fully carry.
 
-FR — Contrairement à Cast3M, les contributions nodales de deux régions
-chargées adjacentes ne se **somment pas** toutes seules : chaque chargement
-est assemblé sur son propre support, et `|` juxtapose ces supports au lieu de
-les additionner — à un nœud partagé, `solve` retient la valeur de la
-**première** zone qui définit le couple (nœud, composante), et `|` ne lève une
-erreur que si les deux valeurs diffèrent. `+` ne change rien : l'arithmétique
-de champs apparie elle aussi les zones **par support**. Pour additionner
-vraiment deux régions qui se touchent, il faut d'abord les ramener sur un
-support commun (`pyrucast.field.restrict` sur un même maillage), puis `+`. Les
-quatre régions ci-dessous sont deux à deux disjointes, ce qui évite la
-question.
+FR — Attention, les contributions nodales de deux régions chargées adjacentes
+ne se **somment pas** toutes seules : chaque chargement est assemblé sur son
+propre support, et `|` juxtapose ces supports au lieu de les additionner — à
+un nœud partagé, `solve` retient la valeur de la **première** zone qui définit
+le couple (nœud, composante), et `|` ne lève une erreur que si les deux
+valeurs diffèrent. `+` ne change rien : l'arithmétique de champs apparie elle
+aussi les zones **par support**. Pour additionner vraiment deux régions qui se
+touchent, il faut d'abord les ramener sur un support commun
+(`pyrucast.field.restrict` sur un même maillage), puis `+`. Les quatre régions
+ci-dessous sont deux à deux disjointes, ce qui évite la question.
 
-EN — Unlike Cast3M, the nodal contributions of two adjacent loaded regions do
-**not** add up on their own: each load is assembled on its own support, and
-`|` juxtaposes those supports rather than summing them — at a shared node
-`solve` keeps the value of the **first** zone defining the (node, component)
-pair, and `|` only raises an error when the two values differ. `+` changes
-nothing: field arithmetic likewise pairs zones **by support**. To genuinely
-add two touching regions, bring them onto a common support first
+EN — Beware, the nodal contributions of two adjacent loaded regions do **not**
+add up on their own: each load is assembled on its own support, and `|`
+juxtaposes those supports rather than summing them — at a shared node `solve`
+keeps the value of the **first** zone defining the (node, component) pair, and
+`|` only raises an error when the two values differ. `+` changes nothing:
+field arithmetic likewise pairs zones **by support**. To genuinely add two
+touching regions, bring them onto a common support first
 (`pyrucast.field.restrict` onto one and the same mesh), then `+`. The four
 regions below are pairwise disjoint, which sidesteps the question.
 
-FR — Limite connue par rapport à Cast3M : **pas de rayonnement** et **pas de
-terme transitoire** — seule la conduction **stationnaire** est résolue ici.
-Voir la page thermique du livre pour le détail de ces limites.
+FR — Limites connues : **pas de rayonnement** et **pas de terme transitoire**
+— seule la conduction **stationnaire** est résolue ici. Voir la page thermique
+du livre pour le détail de ces limites.
 
-EN — Known limits against Cast3M: **no radiation** and **no transient term** —
-only **steady** conduction is solved here. See the book's thermal page.
+EN — Known limits: **no radiation** and **no transient term** — only **steady**
+conduction is solved here. See the book's thermal page.
 
 Lancement / Running ::
 
