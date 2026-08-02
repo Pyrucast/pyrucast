@@ -115,7 +115,7 @@ VERT = (0, 170, 0)  # zone chauffée / heated zone
 K_COND = 50.0  # W/m/K
 FLUX_IMPOSE = -40_000.0  # W/m², face gauche / left face
 H_CONV, T_EXT = 240.0, -80.0  # W/m²/K, °C — convection, face z = 0
-SOURCE_VOLUMIQUE = 4_000_000.0  # W/m³, zone chauffée / heated zone (≈ 400 W)
+SOURCE_VOLUMIQUE = 2600e3  # W/m³, zone chauffée / heated zone (≈ 260 W)
 T_IMPOSEE = 250.0  # °C, alésage / bore
 
 # FR — La zone chauffée est une tranche de la pièce, entre deux abscisses.
@@ -143,7 +143,7 @@ def show_nodefield(mesh: pc.Mesh, field: pc.NodeField, title: str, file: str) ->
         title=title,
         field=field,
         component="T",
-        cmap="coolwarm",
+        cmap="viridis",
         smooth=1,
         save=os.path.join(OUT, file) if OUT else None,
     )

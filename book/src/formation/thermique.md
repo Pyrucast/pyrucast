@@ -161,7 +161,7 @@ face gauche d'où la chaleur s'échappe.
 On ajoute maintenant les deux sollicitations restantes, sans rien retoucher
 aux précédentes : un film convectif sous la pièce, sur la face
 \\( z = 0 \\) (\\( h = 240 \\) W/m²/K vers un fluide à −80 °C), et une tranche
-chauffée à 4 MW/m³ entre \\( 0{,}33\\,L \\) et \\( 0{,}51\\,L \\).
+chauffée à 2,6 MW/m³ entre \\( 0{,}33\\,L \\) et \\( 0{,}51\\,L \\).
 
 ### Deux nouvelles régions, repérées par leurs coordonnées
 
@@ -254,12 +254,14 @@ factorisent qu'une fois.
 
 ![Température, étape 2](img/thermique-complet.svg)
 
-La lecture du résultat suit les quatre chargements : le maximum (330 °C) est
-au cœur de la tranche chauffée, l'alésage reste tenu à 250 °C par le blocage,
-la face gauche est le point froid (110 °C) sous le flux sortant, et le film
-convectif refroidit tout le dessous de la pièce. La comparaison avec la figure
-de l'étape 1 se lit directement : la même pièce, 78 °C plus chaude à gauche à
-cause de la source, et un maximum qui n'est plus à l'alésage.
+La lecture du résultat suit les quatre chargements : l'alésage est toujours
+tenu à 250 °C par le blocage et la face gauche reste le point froid sous le
+flux sortant, mais les isothermes, rectilignes à l'étape 1, s'infléchissent
+maintenant autour de la tranche chauffée. Les deux nouvelles sollicitations
+jouent en sens contraire — la source réchauffe la moitié gauche (le minimum
+remonte de 32 à 40 °C), le film convectif pompe la chaleur sous la pièce — et
+avec les cotes du chapitre 1 c'est la convection qui l'emporte : rien ne passe
+au-dessus de la température de l'alésage.
 
 > **Non disponible dans pyrucast.**
 >
