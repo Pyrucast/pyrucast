@@ -112,6 +112,21 @@ besoin du même jeu de composantes ni de la même décomposition :
 Cela suppose l'invariant de champ (au plus une zone par `(support, composante)`,
 garanti par l'union `|`) ; la sortie l'hérite par construction.
 
+> **« Même support » = le même objet, pas la même géométrie.** L'appariement se
+> fait par **identité de slot** (`Handle::same_slot`, via
+> `SubField::same_support`), jamais en comparant les nœuds. Deux supports
+> distincts qui portent les mêmes nœuds — ou qui n'en partagent que quelques-uns,
+> comme deux régions de bord adjacentes assemblées chacune de son côté — comptent
+> donc chacun comme « porté d'un seul côté » : les deux zones passent
+> **inchangées** et se retrouvent côte à côte dans la sortie. Rien n'est sommé au
+> nœud commun, et à la lecture agrégat (`gather`, `value`) c'est la **première**
+> zone définissant `(nœud, composante)` qui l'emporte — l'autre contribution est
+> perdue sans erreur. Pour additionner deux régions qui se touchent, il faut donc
+> les ramener sur un support **partagé** au préalable :
+> `restrict(a, m) + restrict(b, m)` (même maillage `m` ⇒ même support `POI1`
+> canonique, mis en cache), ou `restrict_like(b, a)` pour retomber sur celui de
+> `a` (cf. [Opérateurs sur les champs](operateurs/champs.md)).
+
 Tous les opérateurs passent par `merge_components` (zone) / `merge_field`
 (agrégat) / `merge_subfield` (maj ciblée d'une zone). Là où un jeu de composantes
 divergent est une **erreur** plutôt qu'un passthrough (p. ex. l'interpolation
