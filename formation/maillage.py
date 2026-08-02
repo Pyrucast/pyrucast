@@ -275,7 +275,7 @@ def unstructured_mesh(
 
 # ── Maillage structuré / Structured mesh ──────────────────────────────────
 # ANCHOR: structure
-def structured_mesh() -> tuple[pc.Mesh, pc.Mesh]:
+def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # FR — En structuré on ne donne plus une taille de maille mais un **nombre
     # d'éléments** par direction. La pièce est traitée en deux morceaux : une
     # grille rectangulaire à gauche, une couronne autour du trou à droite.
@@ -369,15 +369,27 @@ def structured_mesh() -> tuple[pc.Mesh, pc.Mesh]:
     # EN — Grid and ring share the nodes of the right edge `l1213`: the mesh is
     # conforming, `|` is enough to bring them together.
     grid = sr1 | sh1
-    show(grid, "Plaque structurée (QUA4)", "maillage-structure.svg")
-    print(f"structured      : {grid.element_types()}, {grid.cell_count()} mailles")
 
     # FR — Même extrusion que pour le non structuré, mais un QUA4 balayé donne
     # un hexaèdre HEX8 — le meilleur élément pour le calcul.
     # EN — Same extrusion as for the unstructured mesh, but a swept QUA4 gives
     # an HEX8 hexahedron — the best element to compute on.
     volume_structure = pc.mesher.extrude(grid, [0, THICKNESS, 0], 2)
-    show(volume_structure, "Volume structuré (HEX8)", "maillage-volume-structure.svg")
+
+    # FR — `plot=False` : les chapitres suivants (thermique, mécanique…)
+    # importent cette fonction pour calculer sur ce volume-ci, sans refaire les
+    # figures ni les impressions du présent chapitre.
+    # EN — `plot=False`: the following chapters (thermal, mechanical…) import
+    # this function to compute on this very volume, without redoing the present
+    # chapter's figures and printouts.
+    if plot:
+        print(f"structured      : {grid.element_types()}, {grid.cell_count()} mailles")
+        show(grid, "Plaque structurée (QUA4)", "maillage-structure.svg")
+        show(
+            volume_structure,
+            "Volume structuré (HEX8)",
+            "maillage-volume-structure.svg",
+        )
     return grid, volume_structure
 
 

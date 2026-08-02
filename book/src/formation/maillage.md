@@ -205,6 +205,13 @@ La même extrusion que pour le non structuré donne enfin le volume — mais un
 
 ![Volume structuré (HEX8)](img/maillage-volume-structure.svg)
 
+C'est ce volume que reprennent les chapitres suivants : ils importent
+`structured_mesh` et l'appellent avec `plot=False`, qui rend le maillage sans
+retracer les figures de cette page. Importer la fonction plutôt que recopier
+sa géométrie n'est pas un raffinement de style — deux maillages construits à
+l'identique dans deux scripts porteraient des nœuds **distincts**, et toute
+condition posée sur l'un serait sans effet sur l'autre.
+
 ## Visualiser et exporter
 
 Une seule méthode, `plot(...)`, sur `Mesh`/`SubMesh` — l'équivalent de

@@ -102,7 +102,7 @@ def resoudre_thermique(plaque, trou):
 
 
 def main() -> None:
-    coords, plaque, gauche, arc_bas, trou = construire_plaque_trouee()
+    _coords, plaque, gauche, arc_bas, trou = construire_plaque_trouee()
     fes = pc.FiniteElementSpace(plaque)
     arc_fes = pc.FiniteElementSpace(arc_bas)
 

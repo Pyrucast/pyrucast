@@ -75,7 +75,7 @@ def construire_plaque_trouee():
 
 
 def main() -> None:
-    coords, plaque, bord_gauche, arc_bas = construire_plaque_trouee()
+    _coords, plaque, bord_gauche, arc_bas = construire_plaque_trouee()
     fes = pc.FiniteElementSpace(plaque)
     arc_fes = pc.FiniteElementSpace(arc_bas)
 
@@ -121,7 +121,7 @@ def main() -> None:
         p_max = r["state"].max("p") if r["state"] is not None else 0.0
         print(
             f"{r['time']:>6.2f} {r['mech_iters']:>11} {r['mech_anderson']:>9} "
-            f"{str(r['converged']):>9} {p_max:>12.3e}"
+            f"{r['converged']!s:>9} {p_max:>12.3e}"
         )
 
     dernier = data["results"][-1]

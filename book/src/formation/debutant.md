@@ -21,7 +21,7 @@ fichiers** (pas de copie manuelle) : ce que vous voyez est ce qui s'exécute.
 3. [Maillage](maillage.md) — mailleur non structuré (triangulation avec
    trou) et mailleur structuré (balayage).
 4. [Calcul thermique](thermique.md) — conduction, flux imposé, convection,
-   source volumique.
+   source volumique, et le repérage géométrique des régions chargées.
 5. [Calcul mécanique](mecanique.md) — élasticité linéaire, dilatation
    thermique, plasticité parfaite (pas à pas), contact unilatéral.
 6. [Compléments](complements.md) — éléments structuraux, export de
