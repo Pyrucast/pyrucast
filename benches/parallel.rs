@@ -11,6 +11,13 @@
 //! `RAYON_NUM_THREADS=1 cargo bench` then `RAYON_NUM_THREADS=8 cargo bench`,
 //! and compare. The solver's faer factorization is multithreaded too; the
 //! cached path additionally shows the algorithmic win of reuse.
+//!
+//! A fourth group contrasts the **plane and axisymmetric** formulations on the
+//! *same* geometry, over the four operations the revolved case touches. The gap
+//! is the cost of the formulation itself — four Voigt components instead of
+//! three, plus the `2πr` measure — not an overhead paid by plane models: the
+//! Cartesian path takes one predictable branch in
+//! `CellGeom::det_j_w` and nothing else.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
@@ -27,15 +34,34 @@ use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOpt
 use pyrucast::ops::{assemble, behavior, field};
 use pyrucast::store::insert;
 
-/// Plane-stress elasticity on an `n × n` QUA4 grid: returns the model, its
-/// material field, and a strain field ready to feed `behavior::integrate`.
-fn elasticity_grid(n: usize) -> (Model, ElementField, ElementField) {
-    let coords = insert(Coords::new(2).unwrap());
+/// Everything an elasticity benchmark needs on one grid.
+struct Grid {
+    model: Model,
+    materials: ElementField,
+    fespace: FiniteElementSpace,
+    /// Nodal displacement — the input of `field::deformation`.
+    displacement: NodeField,
+    /// `deformation(displacement)` — the input of `behavior::integrate`.
+    strain: ElementField,
+}
+
+/// Elasticity on an `n × n` QUA4 grid under the given 2-D `model`.
+///
+/// The grid starts at `x = 1` so it is a valid meridian plane (`x = r ≥ 0`) and
+/// the plane and axisymmetric variants share the **exact same geometry** — a
+/// translation leaves the Cartesian Jacobian untouched, so it costs the plane
+/// case nothing and makes the two directly comparable.
+fn elasticity_grid_with(n: usize, model_kind: ElasticityModel) -> Grid {
+    let coords = insert(if model_kind.is_axisymmetric() {
+        Coords::axisymmetric().unwrap()
+    } else {
+        Coords::new(2).unwrap()
+    });
     let mut ids: Vec<NodeId> = Vec::with_capacity((n + 1) * (n + 1));
     for j in 0..=n {
         for i in 0..=n {
             ids.push(
-                Node::create_in(coords.clone(), &[i as f64, j as f64])
+                Node::create_in(coords.clone(), &[1.0 + i as f64, j as f64])
                     .unwrap()
                     .id(),
             );
@@ -50,8 +76,8 @@ fn elasticity_grid(n: usize) -> (Model, ElementField, ElementField) {
                 .unwrap();
         }
     }
-    let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    let model = Model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
+    let fespace = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    let model = Model::elasticity(&fespace, model_kind).unwrap();
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
 
     // A smooth displacement field u = (0.01·x, −0.005·y) → constant strain.
@@ -60,12 +86,24 @@ fn elasticity_grid(n: usize) -> (Model, ElementField, ElementField) {
     for j in 0..=n {
         for i in 0..=n {
             let nid = at(i, j);
-            u.set_value(nid, "u_x", 0.01 * i as f64).unwrap();
+            u.set_value(nid, "u_x", 0.01 * (1.0 + i as f64)).unwrap();
             u.set_value(nid, "u_y", -0.005 * j as f64).unwrap();
         }
     }
-    let strain = field::deformation(&NodeField::from_sub(u), &fes).unwrap();
-    (model, materials, strain)
+    let displacement = NodeField::from_sub(u);
+    let strain = field::deformation(&displacement, &fespace).unwrap();
+    Grid {
+        model,
+        materials,
+        fespace,
+        displacement,
+        strain,
+    }
+}
+
+/// Plane-stress elasticity on an `n × n` QUA4 grid — the default case.
+fn elasticity_grid(n: usize) -> Grid {
+    elasticity_grid_with(n, ElasticityModel::PlaneStress)
 }
 
 /// A strictly diagonally-dominant (hence non-singular) 5-point-Laplacian-like
@@ -138,13 +176,55 @@ fn spd_system(n: usize) -> (Matrix, NodeField) {
 }
 
 fn bench_assembly(c: &mut Criterion) {
-    let (model, materials, strain) = elasticity_grid(40); // 1600 QUA4 cells
+    let g = elasticity_grid(40); // 1600 QUA4 cells
     c.bench_function("stiffness elasticity 40x40 QUA4", |b| {
-        b.iter(|| black_box(assemble::stiffness(&model, &materials).unwrap()))
+        b.iter(|| black_box(assemble::stiffness(&g.model, &g.materials).unwrap()))
     });
     c.bench_function("integrate elasticity 40x40 QUA4", |b| {
-        b.iter(|| black_box(behavior::integrate(&model, &strain, None, &materials, None).unwrap()))
+        b.iter(|| {
+            black_box(behavior::integrate(&g.model, &g.strain, None, &g.materials, None).unwrap())
+        })
     });
+}
+
+/// Plane vs axisymmetric on the same geometry, over the four operations the
+/// revolved formulation touches: the stiffness (hoop row of `B`), the
+/// deformation (the extra `ε_θθ = u_r/r` component), the constitutive law (four
+/// Voigt components instead of three) and the internal forces (the hoop `Bᵀ`).
+///
+/// Read the pairs as a ratio, not an absolute: the axisymmetric case does
+/// genuinely more arithmetic. A plane model must stay level with the pre-existing
+/// `bench_assembly` figures — that is the regression this group guards.
+///
+/// The ratio itself is size-dependent: at 1600 cells everything is cache-resident
+/// and the revolved case measures ~+10 to +35 %, whereas on a memory-bound grid
+/// (10⁵–10⁶ cells) it settles around +4 to +20 %. Compare a run against a previous
+/// run of the *same* size, not against those figures.
+fn bench_axisymmetric(c: &mut Criterion) {
+    for (tag, kind) in [
+        ("plane", ElasticityModel::PlaneStrain),
+        ("axisymmetric", ElasticityModel::Axisymmetric),
+    ] {
+        let g = elasticity_grid_with(40, kind);
+        let state = behavior::integrate(&g.model, &g.strain, None, &g.materials, None).unwrap();
+
+        c.bench_function(&format!("stiffness {tag} 40x40 QUA4"), |b| {
+            b.iter(|| black_box(assemble::stiffness(&g.model, &g.materials).unwrap()))
+        });
+        c.bench_function(&format!("deformation {tag} 40x40 QUA4"), |b| {
+            b.iter(|| black_box(field::deformation(&g.displacement, &g.fespace).unwrap()))
+        });
+        c.bench_function(&format!("integrate {tag} 40x40 QUA4"), |b| {
+            b.iter(|| {
+                black_box(
+                    behavior::integrate(&g.model, &g.strain, None, &g.materials, None).unwrap(),
+                )
+            })
+        });
+        c.bench_function(&format!("internal_forces {tag} 40x40 QUA4"), |b| {
+            b.iter(|| black_box(assemble::internal_forces(&g.model, &state).unwrap()))
+        });
+    }
 }
 
 fn bench_solver(c: &mut Criterion) {
@@ -168,5 +248,5 @@ fn bench_solver(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_assembly, bench_solver);
+criterion_group!(benches, bench_assembly, bench_axisymmetric, bench_solver);
 criterion_main!(benches);
