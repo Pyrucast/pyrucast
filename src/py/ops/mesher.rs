@@ -81,6 +81,243 @@ pub fn elements_on(mesh: PyRef<PyMesh>, points: PyRef<PyMesh>, strict: bool) -> 
     Ok(PyMesh { inner: result })
 }
 
+// --- Node selection by geometric region (Cast3m `POIN … SPHE / CYLI / …`) ---
+//
+// One operator per (shape, side). They all return a POI1 mesh mirroring
+// `mesh` submesh by submesh — one zone per input zone, possibly empty — and
+// all take the same `tol`, the geometric precision of the test as a distance
+// to the region's surface; `tol=None` means `1e-6 ×` the bounding-box
+// diagonal. The odd one out is the *nearest* node, which returns a single
+// node and lives on the class: `mesh.nearest_node(point)`.
+
+/// Nodes **inside** the sphere of centre `center` and radius `radius`.
+///
+/// Keeps the nodes at a distance `≤ radius + tol` from `center`. In 2-D the
+/// sphere is a disc — `center` just has to match the mesh dimension.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, center, radius, tol=None))]
+pub fn points_in_sphere(
+    mesh: PyRef<PyMesh>,
+    center: Vec<f64>,
+    radius: f64,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::points_in_sphere(&mesh.inner, &center, radius, tol)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Nodes **on** the sphere of centre `center` and radius `radius`
+/// (Cast3m `POIN … SPHE`).
+///
+/// Keeps the nodes whose distance to `center` is within `tol` of `radius`, on
+/// either side. In 2-D this selects a circle.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, center, radius, tol=None))]
+pub fn points_on_sphere(
+    mesh: PyRef<PyMesh>,
+    center: Vec<f64>,
+    radius: f64,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::points_on_sphere(&mesh.inner, &center, radius, tol)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Nodes **on** the plane through `origin` with normal `normal`
+/// (Cast3m `POIN … PLAN`).
+///
+/// Keeps the nodes within `tol` of the plane — the usual way to grab a
+/// boundary face of a box mesh. `normal` need not be normalized; in 2-D the
+/// plane is a line.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, origin, normal, tol=None))]
+pub fn points_on_plane(
+    mesh: PyRef<PyMesh>,
+    origin: Vec<f64>,
+    normal: Vec<f64>,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::points_on_plane(&mesh.inner, &origin, &normal, tol)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Nodes **below** the plane through `origin` with normal `normal` — the
+/// half-space the normal points away from, plane included.
+///
+/// There is no `points_above_plane`: flip the normal and this is the other
+/// half-space.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, origin, normal, tol=None))]
+pub fn points_below_plane(
+    mesh: PyRef<PyMesh>,
+    origin: Vec<f64>,
+    normal: Vec<f64>,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::points_below_plane(&mesh.inner, &origin, &normal, tol)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Nodes **on** the infinite line through `a` and `b`
+/// (Cast3m `POIN … DROIT`).
+///
+/// Keeps the nodes at a distance `≤ tol` from the line, with no bound along
+/// it — use `points_in_cylinder` with a small radius for a selection clipped
+/// to the `a → b` segment.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, a, b, tol=None))]
+pub fn points_on_line(
+    mesh: PyRef<PyMesh>,
+    a: Vec<f64>,
+    b: Vec<f64>,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::points_on_line(&mesh.inner, &a, &b, tol)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Nodes **inside** the finite cylinder of axis `base → top` and radius
+/// `radius`.
+///
+/// The cylinder is capped: a node is kept when it is within `radius + tol` of
+/// the axis **and** its axial coordinate falls between the two end sections.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, base, top, radius, tol=None))]
+pub fn points_in_cylinder(
+    mesh: PyRef<PyMesh>,
+    base: Vec<f64>,
+    top: Vec<f64>,
+    radius: f64,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::points_in_cylinder(&mesh.inner, &base, &top, radius, tol)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Nodes **on** the lateral surface of the finite cylinder of axis
+/// `base → top` and radius `radius` (Cast3m `POIN … CYLI`).
+///
+/// The end discs are **not** part of the selection — they are flat faces, and
+/// `points_on_plane` cuts those. This is how you grab the bore of a tube.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, base, top, radius, tol=None))]
+pub fn points_on_cylinder(
+    mesh: PyRef<PyMesh>,
+    base: Vec<f64>,
+    top: Vec<f64>,
+    radius: f64,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::points_on_cylinder(&mesh.inner, &base, &top, radius, tol)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Nodes **inside** the cone of axis `base → top`, radius `base_radius` at
+/// `base` and `top_radius` at `top`.
+///
+/// The shape is a truncated cone: `top_radius=0` (the default) gives a true
+/// cone whose apex is `top`, `top_radius=base_radius` a cylinder. Capped like
+/// `points_in_cylinder`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, base, top, base_radius, top_radius=0.0, tol=None))]
+pub fn points_in_cone(
+    mesh: PyRef<PyMesh>,
+    base: Vec<f64>,
+    top: Vec<f64>,
+    base_radius: f64,
+    top_radius: f64,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result =
+        crate::ops::mesher::points_in_cone(&mesh.inner, &base, &top, base_radius, top_radius, tol)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Nodes **on** the lateral surface of the cone of axis `base → top`, radius
+/// `base_radius` at `base` and `top_radius` at `top` (Cast3m `POIN … CONE`).
+///
+/// The distance to the slanted surface is the perpendicular one, so the band
+/// stays `tol` wide however steep the cone is. As for `points_on_cylinder`,
+/// the end discs are not part of the selection.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, base, top, base_radius, top_radius=0.0, tol=None))]
+pub fn points_on_cone(
+    mesh: PyRef<PyMesh>,
+    base: Vec<f64>,
+    top: Vec<f64>,
+    base_radius: f64,
+    top_radius: f64,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result =
+        crate::ops::mesher::points_on_cone(&mesh.inner, &base, &top, base_radius, top_radius, tol)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Nodes **inside** the torus of centre `center`, axis `axis`, major radius
+/// `major_radius` and minor radius `minor_radius`.
+///
+/// The section is circular: the torus is the set of points at a distance
+/// `≤ minor_radius` from the circle of radius `major_radius` drawn around
+/// `center` in the plane normal to `axis`. **3-D only.**
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, center, axis, major_radius, minor_radius, tol=None))]
+pub fn points_in_torus(
+    mesh: PyRef<PyMesh>,
+    center: Vec<f64>,
+    axis: Vec<f64>,
+    major_radius: f64,
+    minor_radius: f64,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::points_in_torus(
+        &mesh.inner,
+        &center,
+        &axis,
+        major_radius,
+        minor_radius,
+        tol,
+    )?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Nodes **on** the torus of centre `center`, axis `axis`, major radius
+/// `major_radius` and minor radius `minor_radius`.
+///
+/// Keeps the nodes within `tol` of the tube's surface. The torus being
+/// closed, there is no cap to worry about here. **3-D only.**
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, center, axis, major_radius, minor_radius, tol=None))]
+pub fn points_on_torus(
+    mesh: PyRef<PyMesh>,
+    center: Vec<f64>,
+    axis: Vec<f64>,
+    major_radius: f64,
+    minor_radius: f64,
+    tol: Option<f64>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesher::points_on_torus(
+        &mesh.inner,
+        &center,
+        &axis,
+        major_radius,
+        minor_radius,
+        tol,
+    )?;
+    Ok(PyMesh { inner: result })
+}
+
 // `consolidate(mesh)` is exposed by the type-dispatching top-level
 // wrapper in `crate::py::ops::consolidate` (shared with NodeField).
 

@@ -29,6 +29,17 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
 | `invert(mesh)` | **inverse** l'orientation de toutes les cellules, toute dimension, équivalent Cast3M `INVE` (voir plus bas) |
 | `elements_on(mesh, points, strict=True)` | les **éléments** de `mesh` qui s'**appuient** sur les nœuds de `points` (voir plus bas) |
+| `points_in_sphere(mesh, center, radius, tol=None)` | les nœuds **dans** la sphère (le disque en 2D) — famille `points_*`, voir plus bas |
+| `points_on_sphere(mesh, center, radius, tol=None)` | les nœuds **sur** la sphère (le cercle en 2D) |
+| `points_on_plane(mesh, origin, normal, tol=None)` | les nœuds **dans** le plan (la droite en 2D) — la façon usuelle d'attraper une face de bord |
+| `points_below_plane(mesh, origin, normal, tol=None)` | les nœuds du **demi-espace** opposé à la normale, plan compris (normale retournée ⇒ l'autre moitié) |
+| `points_on_line(mesh, a, b, tol=None)` | les nœuds **sur la droite** (infinie) passant par `a` et `b` |
+| `points_in_cylinder(mesh, base, top, radius, tol=None)` | les nœuds **dans** le cylindre fini d'axe `base → top` |
+| `points_on_cylinder(mesh, base, top, radius, tol=None)` | les nœuds **sur la surface latérale** du même cylindre (disques d'extrémité **exclus**) |
+| `points_in_cone(mesh, base, top, base_radius, top_radius=0.0, tol=None)` | les nœuds **dans** le cône tronqué (`top_radius=0` ⇒ cône vrai de sommet `top`) |
+| `points_on_cone(mesh, base, top, base_radius, top_radius=0.0, tol=None)` | les nœuds **sur la surface latérale** du même cône |
+| `points_in_torus(mesh, center, axis, major_radius, minor_radius, tol=None)` | les nœuds **dans** le tore à section circulaire (**3D seulement**) |
+| `points_on_torus(mesh, center, axis, major_radius, minor_radius, tol=None)` | les nœuds **sur** la surface du même tore |
 | `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 ; nuage **canonique mis en cache** par sous-maillage (scellé) ⇒ handle reproductible, partagé par `restrict`/blocs de matrice/`divergence`/`flux` (supports appariables) |
 | `to_quadratic(mesh)` | la **copie quadratique** (Lagrange-2) d'un maillage linéaire : TRI3→TRI6, HEX8→HEX20, … (voir plus bas) |
 | `convert(mesh, element_type)` | **change le type d'élément** sans déplacer ni ajouter de nœud : identité, `QUA4`→`TRI3` (2 triangles), `HEX8`→`TET4` (6 tétraèdres) (voir plus bas) |
@@ -1379,6 +1390,120 @@ print(loose.cell_count())  # 2  (les deux touchent un nœud de pts)
 ```
 
 Côté Rust, `ops::mesher::elements_on(&mesh, &points, strict)`.
+
+## Sélection de nœuds par région géométrique : la famille `points_*`
+
+Pour poser une condition aux limites il faut d'abord **désigner des nœuds**.
+La famille `points_*` répond à cette question par une **région géométrique** —
+l'équivalent de l'opérateur historique `POIN … PLAN / DROIT / CYLI / SPHE` :
+
+```text
+points_<in|on|below>_<forme>(mesh, …géométrie…, tol=None) -> Mesh POI1
+```
+
+Toutes ces fonctions renvoient un **maillage POI1 calqué sur l'entrée** : un
+sous-maillage par sous-maillage de `mesh`, dans le même ordre, **éventuellement
+vide**. La sélection conserve donc le zonage de sa source — on sait de *quelle*
+zone vient chaque nœud, et on peut travailler zone par zone en indexant le
+résultat. `consolidate(sel)` retombe sur un nuage unique quand ce découpage ne
+sert pas.
+
+Les nœuds sont **dédoublonnés dans l'ordre de première apparition** dans la
+connectivité, exactement comme [`to_poi1`](#inventaire) — une sélection totale
+reproduit `to_poi1` nœud pour nœud.
+
+### `in` et `on`
+
+Deux familles, deux lectures :
+
+- `points_in_*` — **dans** la région fermée, élargie de `tol` ;
+- `points_on_*` — à moins de `tol` de la **surface** de la région, des deux
+  côtés.
+
+Deux formes sont **fermées par des faces planes**, et la distinction compte :
+`points_on_cylinder` et `points_on_cone` ne retiennent que la **surface
+latérale**, pas les disques d'extrémité — ceux-ci sont plats, c'est
+`points_on_plane` qui les coupe. Le tore, lui, est une surface fermée : la
+question ne se pose pas.
+
+Le plan n'a pas de « dedans » : il a deux côtés, d'où `points_below_plane`, le
+demi-espace **opposé** à la normale (plan compris). Il n'existe pas de
+`points_above_plane` : retourner la normale donne l'autre moitié.
+
+Enfin, la droite est **infinie** là où le cylindre est **borné** : pour une
+sélection le long d'un axe mais limitée au segment, c'est `points_in_cylinder`
+avec un petit rayon.
+
+### La tolérance `tol`
+
+`tol` est la **précision géométrique** du test, mesurée comme une **distance à
+la surface** de la région. `tol=None` demande la valeur par défaut :
+`1e-6 ×` la diagonale de la boîte englobante du maillage. C'est ce qui rend les
+opérateurs **sans échelle** — le même appel marche sur une équerre en
+millimètres et sur un barrage en kilomètres — et ce qui rend `points_on_plane`
+utilisable sur des nœuds sortis d'un mailleur plutôt que d'une arithmétique
+exacte.
+
+Pour le cône, la distance est prise **perpendiculairement** à la surface
+inclinée, et non radialement : la bande reste large de `tol` quelle que soit la
+pente.
+
+### Le cas « un seul nœud »
+
+La requête du **nœud le plus proche** d'un point ne peut en renvoyer qu'un ;
+elle n'est donc pas dans cette famille et ne renvoie pas de POI1, mais un
+`Node` : c'est la méthode `mesh.nearest_node([x, y])` (`ops::geom::nearest_node`
+côté Rust, voir [Opérateurs géométriques](geometrie.md)).
+
+### Repère de travail
+
+Les nœuds sont testés dans les coordonnées où ils sont **stockés**. En
+[axisymétrie](../coords.md), c'est le demi-plan méridien `(r, z)` et non le
+solide de révolution : une « sphère » y est un cercle du méridien. Le tore,
+qui a besoin d'un axe hors du plan pour être un tore, est **3D seulement**.
+
+```python
+import pyrucast
+
+# Une plaque carrée maillée en TRI3.
+plaque = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.1)
+
+# Le bord gauche (x = 0) : le plan de normale +x passant par l'origine.
+gauche = pyrucast.mesher.points_on_plane(plaque, [0.0, 0.0], [1.0, 0.0])
+
+# Les nœuds du congé : dans le disque de rayon 0.2 autour du coin rentrant.
+conge = pyrucast.mesher.points_in_sphere(plaque, [1.0, 1.0], 0.2)
+
+# La sélection sert directement de support imposé à un Dirichlet — le nuage
+# POI1 est ce que `Model.dirichlet` attend (cf. Contraintes / Dirichlet).
+blocage = pyrucast.Model.dirichlet(
+    "UX", "RX", gauche, pyrucast.mesher.barycenter(gauche)
+)
+
+# La sortie POI1 est un maillage ordinaire : elle se rebranche sur les autres
+# opérateurs, ici pour remonter aux éléments portés par la sélection.
+bande = pyrucast.mesher.elements_on(plaque, conge, strict=True)
+```
+
+En 3D, les formes de révolution sélectionnent alésages, arbres et gorges :
+
+```python
+# L'alésage d'un tube : la surface latérale du cylindre de rayon intérieur.
+alesage = pyrucast.mesher.points_on_cylinder(
+    tube, [0.0, 0.0, 0.0], [0.0, 0.0, 10.0], 5.0
+)
+
+# Un chanfrein conique (rayon 8 en z = 0, sommet fictif en z = 8).
+chanfrein = pyrucast.mesher.points_on_cone(piece, [0.0, 0.0, 0.0], [0.0, 0.0, 8.0], 8.0)
+
+# La matière autour d'une gorge torique de rayon 1 sur un cercle de rayon 5.
+gorge = pyrucast.mesher.points_in_torus(
+    piece, [0.0, 0.0, 3.0], [0.0, 0.0, 1.0], 5.0, 1.0
+)
+```
+
+Côté Rust, `ops::mesher::points_on_plane(&mesh, &origin, &normal, tol)` et
+consorts, avec `tol: Option<f64>`.
 
 ## Soudure des nœuds proches : `merge_nodes`
 

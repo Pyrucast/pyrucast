@@ -103,6 +103,17 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `barycenter(mesh: &Mesh) -> Mesh` | `barycenter(mesh) -> Mesh` |
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
 | `elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Mesh` | `elements_on(mesh, points, strict=True) -> Mesh` |
+| `points_in_sphere(mesh: &Mesh, center: &[f64], radius: f64, tol: Option<f64>) -> Mesh` | `points_in_sphere(mesh, center, radius, tol=None) -> Mesh` |
+| `points_on_sphere(mesh: &Mesh, center: &[f64], radius: f64, tol: Option<f64>) -> Mesh` | `points_on_sphere(mesh, center, radius, tol=None) -> Mesh` |
+| `points_on_plane(mesh: &Mesh, origin: &[f64], normal: &[f64], tol: Option<f64>) -> Mesh` | `points_on_plane(mesh, origin, normal, tol=None) -> Mesh` |
+| `points_below_plane(mesh: &Mesh, origin: &[f64], normal: &[f64], tol: Option<f64>) -> Mesh` | `points_below_plane(mesh, origin, normal, tol=None) -> Mesh` |
+| `points_on_line(mesh: &Mesh, a: &[f64], b: &[f64], tol: Option<f64>) -> Mesh` | `points_on_line(mesh, a, b, tol=None) -> Mesh` |
+| `points_in_cylinder(mesh: &Mesh, base: &[f64], top: &[f64], radius: f64, tol: Option<f64>) -> Mesh` | `points_in_cylinder(mesh, base, top, radius, tol=None) -> Mesh` |
+| `points_on_cylinder(mesh: &Mesh, base: &[f64], top: &[f64], radius: f64, tol: Option<f64>) -> Mesh` | `points_on_cylinder(mesh, base, top, radius, tol=None) -> Mesh` |
+| `points_in_cone(mesh: &Mesh, base: &[f64], top: &[f64], base_radius: f64, top_radius: f64, tol: Option<f64>) -> Mesh` | `points_in_cone(mesh, base, top, base_radius, top_radius=0.0, tol=None) -> Mesh` |
+| `points_on_cone(mesh: &Mesh, base: &[f64], top: &[f64], base_radius: f64, top_radius: f64, tol: Option<f64>) -> Mesh` | `points_on_cone(mesh, base, top, base_radius, top_radius=0.0, tol=None) -> Mesh` |
+| `points_in_torus(mesh: &Mesh, center: &[f64], axis: &[f64], major_radius: f64, minor_radius: f64, tol: Option<f64>) -> Mesh` | `points_in_torus(mesh, center, axis, major_radius, minor_radius, tol=None) -> Mesh` |
+| `points_on_torus(mesh: &Mesh, center: &[f64], axis: &[f64], major_radius: f64, minor_radius: f64, tol: Option<f64>) -> Mesh` | `points_on_torus(mesh, center, axis, major_radius, minor_radius, tol=None) -> Mesh` |
 | `merge_nodes(mesh: &Mesh, tol: f64) -> Mesh` | `merge_nodes(mesh, tol) -> Mesh` |
 | `read_gmsh(coords: Handle<Coords>, path: &Path) -> Vec<(String, Mesh)>` | `read_gmsh(coords, path) -> dict[str, Mesh]` |
 | `read_gmsh_str(coords: Handle<Coords>, text: &str) -> Vec<(String, Mesh)>` | `read_gmsh_str(coords, text) -> dict[str, Mesh]` |
@@ -203,7 +214,9 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 > point le plus proche sur une surface, sous le [contact](contraintes/contact.md)) ;
 > ces deux primitives sont internes (API Rust), pas encore exposées en Python.
 > `nearest_node(mesh, point)` (nœud le plus proche d'un point) est en revanche
-> exposée comme méthode : `mesh.nearest_node([x, y])`.
+> exposée comme méthode : `mesh.nearest_node([x, y])`. C'est la requête « un
+> seul nœud » de la famille `points_*` d'`ops::mesher` (sélection par région
+> géométrique), qui, elle, renvoie toujours un maillage POI1.
 
 ## Opérateurs (dunders ↔ traits Rust)
 

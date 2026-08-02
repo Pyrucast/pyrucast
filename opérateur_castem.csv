@@ -42,6 +42,12 @@ Maillage - info;NBNO;Nombre de nœuds;len(mesh) / méthodes Mesh
 Maillage - info;QUEL;Information sur un élément (type, nœuds);Cell / Element
 Maillage - info;ELEM (APPUYE);Éléments d'un maillage s'appuyant sur un jeu de nœuds;elements_on
 Maillage - info;POIN PROC;Nœud d'un maillage le plus proche de coordonnées données;nearest_node / Mesh.nearest_node
+Maillage - info;POIN PLAN;Nœuds d'un maillage situés dans un plan (une droite en 2D);points_on_plane ; demi-espace opposé à la normale par points_below_plane
+Maillage - info;POIN DROIT;Nœuds d'un maillage situés sur une droite (infinie);points_on_line
+Maillage - info;POIN SPHE;Nœuds d'un maillage situés sur une sphère (un cercle en 2D);points_on_sphere ; intérieur par points_in_sphere
+Maillage - info;POIN CYLI;Nœuds d'un maillage situés sur un cylindre (surface latérale, disques exclus);points_on_cylinder ; intérieur par points_in_cylinder
+Maillage - info;POIN CONE;Nœuds d'un maillage situés sur un cône (tronqué, surface latérale);points_on_cone ; intérieur par points_in_cone
+Maillage - info;POIN TORE;Nœuds d'un maillage situés sur un tore à section circulaire (3D);points_on_torus ; intérieur par points_in_torus
 Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément fini);Model.* (heat_conduction, elasticity, plasticity, mazars…) ; formulation mécanique en argument (plane_stress, plane_strain, axisymmetric, solid) — élasticité, plasticité et Mazars ; nature physique par bloc via physics() ; filtrage par nature via Model.filter / Matrix.filter
 Modèle et matériau;MATE;Définit le champ de propriétés matériau;material_field / sub_material_field
 Modèle et matériau;CARA;Caractéristiques géométriques (sections de poutres/coques);material_field (composantes section)

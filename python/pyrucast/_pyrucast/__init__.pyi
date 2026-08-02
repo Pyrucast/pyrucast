@@ -68,6 +68,17 @@ __all__ = [
     "pave_surface",
     "pave_volume",
     "poi1_from_nodes",
+    "points_below_plane",
+    "points_in_cone",
+    "points_in_cylinder",
+    "points_in_sphere",
+    "points_in_torus",
+    "points_on_cone",
+    "points_on_cylinder",
+    "points_on_line",
+    "points_on_plane",
+    "points_on_sphere",
+    "points_on_torus",
     "psca",
     "read_gmsh",
     "read_gmsh_str",
@@ -151,11 +162,20 @@ class Coords:
     Create one with `Coords(dim)`, then add nodes with
     `add_node([x, y, ...])`. Every mesh, node and field is attached to a
     `Coords`.
+    
+    `Coords.axisymmetric()` builds the 2-D meridian plane of a body of
+    revolution instead (`x = r ≥ 0`, `y = z`): every integral over it then runs
+    over the full ring, `dΩ = 2πr |J| dξ`.
     """
     @property
     def dim(self) -> builtins.int:
         r"""
         Spatial dimension of the coordinates (1, 2 or 3).
+        """
+    @property
+    def is_axisymmetric(self) -> builtins.bool:
+        r"""
+        Whether these coordinates describe a body of revolution.
         """
     @property
     def active(self) -> builtins.int:
@@ -165,6 +185,16 @@ class Coords:
     def __new__(cls, dim: builtins.int) -> Coords:
         r"""
         `Coords(dim)` — an empty `Coords` in `dim` dimensions.
+        """
+    @classmethod
+    def axisymmetric(cls) -> Coords:
+        r"""
+        `Coords.axisymmetric()` — the 2-D meridian plane of a body of
+        revolution: `x = r` (radius, `≥ 0`) and `y = z` (axis). The dimension is
+        necessarily 2, so it takes no argument.
+        
+        Every FE space built on it integrates over the full ring; mechanics adds
+        the hoop strain through `Model.elasticity(fes, "axisymmetric")`.
         """
     def node_count(self) -> builtins.int:
         r"""
@@ -994,17 +1024,21 @@ class Model:
     def elasticity(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
         r"""
         `Model.elasticity(fespace, model)` — linear-elasticity model spanning
-        every subspace of `fespace`. `model` is `"plane_stress"` or
-        `"plane_strain"` (2-D), or `"solid"` (3-D). DOFs are the vector
-        displacement `u_x, u_y(, u_z)`; material (`E`, `nu`) is supplied at
-        assembly time.
+        every subspace of `fespace`. `model` is `"plane_stress"`,
+        `"plane_strain"` or `"axisymmetric"` (2-D), or `"solid"` (3-D). DOFs are
+        the vector displacement `u_x, u_y(, u_z)`; material (`E`, `nu`) is
+        supplied at assembly time.
+        
+        `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
+        (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the model,
+        the `2πr` integration measure from the geometry, and the two must agree.
         """
     @classmethod
     def plasticity(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
         r"""
         `Model.plasticity(fespace, model)` — perfect von Mises elastoplasticity
         spanning every subspace of `fespace`. `model` is `"plane_stress"` /
-        `"plane_strain"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity
+        `"plane_strain"` / `"axisymmetric"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity
         (`u_x, u_y(, u_z)`); material (`E`, `nu`, `sigma_y`) is supplied at
         assembly / integration time. The behaviour integration (`COMP`) carries
         the plastic-strain + cumulated-`p` internal state (`VAR0`→`VAR1`).
@@ -1013,8 +1047,8 @@ class Model:
     def mazars(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
         r"""
         `Model.mazars(fespace, model)` — Mazars isotropic damage spanning every
-        subspace of `fespace`. `model` is `"plane_stress"` / `"plane_strain"`
-        (2-D) or `"solid"` (3-D). Same DOFs as elasticity; material
+        subspace of `fespace`. `model` is `"plane_stress"` / `"plane_strain"` /
+        `"axisymmetric"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity; material
         (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
         assembly / integration time. The behaviour integration (`COMP`) carries
         the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
@@ -1703,6 +1737,12 @@ class SubFiniteElementSpace:
     def space_dim(self) -> builtins.int:
         r"""
         Spatial dimension the elements live in.
+        """
+    @property
+    def is_axisymmetric(self) -> builtins.bool:
+        r"""
+        Whether the underlying geometry is a body of revolution — inherited from
+        the `Coords`, so a body and its boundary can never disagree.
         """
     @property
     def nodes_per_cell(self) -> builtins.int:
@@ -2652,6 +2692,109 @@ def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
     The Coords is taken from the nodes themselves (every `Node`
     carries its own), so no Coords argument is needed. Returns a
     Mesh with a single POI1 submesh; raises if `nodes` is empty.
+    """
+
+def points_below_plane(mesh: Mesh, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **below** the plane through `origin` with normal `normal` — the
+    half-space the normal points away from, plane included.
+    
+    There is no `points_above_plane`: flip the normal and this is the other
+    half-space.
+    """
+
+def points_in_cone(mesh: Mesh, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **inside** the cone of axis `base → top`, radius `base_radius` at
+    `base` and `top_radius` at `top`.
+    
+    The shape is a truncated cone: `top_radius=0` (the default) gives a true
+    cone whose apex is `top`, `top_radius=base_radius` a cylinder. Capped like
+    `points_in_cylinder`.
+    """
+
+def points_in_cylinder(mesh: Mesh, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **inside** the finite cylinder of axis `base → top` and radius
+    `radius`.
+    
+    The cylinder is capped: a node is kept when it is within `radius + tol` of
+    the axis **and** its axial coordinate falls between the two end sections.
+    """
+
+def points_in_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **inside** the sphere of centre `center` and radius `radius`.
+    
+    Keeps the nodes at a distance `≤ radius + tol` from `center`. In 2-D the
+    sphere is a disc — `center` just has to match the mesh dimension.
+    """
+
+def points_in_torus(mesh: Mesh, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **inside** the torus of centre `center`, axis `axis`, major radius
+    `major_radius` and minor radius `minor_radius`.
+    
+    The section is circular: the torus is the set of points at a distance
+    `≤ minor_radius` from the circle of radius `major_radius` drawn around
+    `center` in the plane normal to `axis`. **3-D only.**
+    """
+
+def points_on_cone(mesh: Mesh, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **on** the lateral surface of the cone of axis `base → top`, radius
+    `base_radius` at `base` and `top_radius` at `top` (Cast3m `POIN … CONE`).
+    
+    The distance to the slanted surface is the perpendicular one, so the band
+    stays `tol` wide however steep the cone is. As for `points_on_cylinder`,
+    the end discs are not part of the selection.
+    """
+
+def points_on_cylinder(mesh: Mesh, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **on** the lateral surface of the finite cylinder of axis
+    `base → top` and radius `radius` (Cast3m `POIN … CYLI`).
+    
+    The end discs are **not** part of the selection — they are flat faces, and
+    `points_on_plane` cuts those. This is how you grab the bore of a tube.
+    """
+
+def points_on_line(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **on** the infinite line through `a` and `b`
+    (Cast3m `POIN … DROIT`).
+    
+    Keeps the nodes at a distance `≤ tol` from the line, with no bound along
+    it — use `points_in_cylinder` with a small radius for a selection clipped
+    to the `a → b` segment.
+    """
+
+def points_on_plane(mesh: Mesh, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **on** the plane through `origin` with normal `normal`
+    (Cast3m `POIN … PLAN`).
+    
+    Keeps the nodes within `tol` of the plane — the usual way to grab a
+    boundary face of a box mesh. `normal` need not be normalized; in 2-D the
+    plane is a line.
+    """
+
+def points_on_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **on** the sphere of centre `center` and radius `radius`
+    (Cast3m `POIN … SPHE`).
+    
+    Keeps the nodes whose distance to `center` is within `tol` of `radius`, on
+    either side. In 2-D this selects a circle.
+    """
+
+def points_on_torus(mesh: Mesh, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    r"""
+    Nodes **on** the torus of centre `center`, axis `axis`, major radius
+    `major_radius` and minor radius `minor_radius`.
+    
+    Keeps the nodes within `tol` of the tube's surface. The torus being
+    closed, there is no cap to worry about here. **3-D only.**
     """
 
 def psca(x: typing.Any, y: typing.Any) -> typing.Any:

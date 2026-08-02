@@ -120,6 +120,17 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesher::invert, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::merge_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::elements_on, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_in_sphere, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_on_sphere, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_on_plane, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_below_plane, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_on_line, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_in_cylinder, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_on_cylinder, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_in_cone, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_on_cone, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_in_torus, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::points_on_torus, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::read_gmsh, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::read_gmsh_str, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::export::export_vtk, m)?)?;

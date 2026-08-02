@@ -32,6 +32,13 @@ sous les contraintes qui les consomment) :
   on connaît sa position approximative mais pas son id. Exposée côté Python
   (`mesh.nearest_node([x, y])`).
 
+C'est la requête « un seul nœud » de la famille de **sélection par région
+géométrique** — `points_in_sphere`, `points_on_plane`, `points_in_cylinder`,
+`points_on_cone`, `points_on_torus`… — documentée avec les [opérateurs de
+maillage](maillage.md). Elle est rangée ici, et non là-bas, parce qu'elle est
+la seule à ne pas renvoyer un maillage POI1 : le point le plus proche est
+unique, c'est un `Node`.
+
 Sont encore prévus, au fil des besoins : boîtes englobantes (AABB), centroïdes,
 aires/volumes, métriques de **qualité** d'élément. Les briques de Jacobien
 existantes vivent aujourd'hui sur le
