@@ -226,7 +226,26 @@ impl<'a> CellGeom<'a> {
                     .into(),
             ));
         }
-        Ok(self.x_at_g(g)?[0])
+        self.ensure_cell_coords()?;
+        let cc = self.cell_coords.borrow();
+        Ok(Self::radius_from(
+            cc.as_ref().unwrap(),
+            &self.rd.n_ref[g],
+            self.n_nodes,
+            self.space_dim,
+        ))
+    }
+
+    /// `r = Σ_i N_i x_i` from already-borrowed cell coordinates — the scalar
+    /// core of [`radius`](Self::radius), split out so the hot
+    /// [`det_j_w`](Self::det_j_w) computes it under its **existing** borrow
+    /// instead of allocating an `x_at_g` vector per Gauss point.
+    fn radius_from(cell_coords: &[f64], n: &[f64], n_nodes: usize, space_dim: usize) -> f64 {
+        let mut r = 0.0;
+        for i in 0..n_nodes {
+            r += n[i] * cell_coords[i * space_dim];
+        }
+        r
     }
 
     /// `|J|_g · w_g` — the integration weight of Gauss point `g`.
@@ -238,19 +257,19 @@ impl<'a> CellGeom<'a> {
     /// the full ring without its kernel knowing.
     pub fn det_j_w(&self, g: usize) -> Result<f64> {
         self.ensure_cell_coords()?;
-        // Scoped so the `RefCell` borrow is released before `radius` (which
-        // re-borrows through `ensure_cell_coords`) is called below.
-        let w = {
-            let cc = self.cell_coords.borrow();
-            let cc = cc.as_ref().unwrap();
-            let dn = &self.rd.dn_ref[g];
-            let jac = build_jacobian(cc, dn, self.space_dim, self.rd.ref_dim, self.n_nodes);
-            jacobian_measure(&jac, self.space_dim, self.rd.ref_dim) * self.rd.weights[g]
-        };
+        let cc = self.cell_coords.borrow();
+        let cc = cc.as_ref().unwrap();
+        let dn = &self.rd.dn_ref[g];
+        let jac = build_jacobian(cc, dn, self.space_dim, self.rd.ref_dim, self.n_nodes);
+        let w = jacobian_measure(&jac, self.space_dim, self.rd.ref_dim) * self.rd.weights[g];
+        // One predictable branch on a per-subspace constant; the Cartesian path
+        // returns here having paid nothing else. The revolved path reuses the
+        // borrow above, so it allocates nothing either.
         if !self.axisymmetric {
             return Ok(w);
         }
-        Ok(w * std::f64::consts::TAU * self.radius(g)?)
+        let r = Self::radius_from(cc, &self.rd.n_ref[g], self.n_nodes, self.space_dim);
+        Ok(w * std::f64::consts::TAU * r)
     }
 }
 
