@@ -1,21 +1,20 @@
 # Calcul thermique
 
 Reprend la chape percée de la page [Maillage](maillage.md) pour un calcul de
-**conduction thermique stationnaire**, avec les mêmes quatre types de
-sollicitation que le TD Cast3M :
+**conduction thermique stationnaire**, avec quatre types de sollicitation :
 
-| Chargement | Cast3M | pyrucast |
-|---|---|---|
-| température imposée (alésage) | `BLOQ 'T'` + `DEPI` | `Model.dirichlet("T", "q", ...)` |
-| flux imposé (face gauche) | `FLUX` | `pc.assemble.flux(fes, densité, "q")` |
-| convection (nez arrondi) | `MODE ... 'CONVECTION'` + `CONV` | `Model.convection(fes)` + `pc.assemble.flux(fes, h·T_ext, "q")` |
-| source volumique (cartouche chauffante) | `SOUR` | `pc.assemble.flux(fes, densité, "q")` sur des éléments sélectionnés |
+| Chargement | pyrucast |
+|---|---|
+| température imposée (alésage) | `Model.dirichlet("T", "q", ...)` |
+| flux imposé (face gauche) | `pc.assemble.flux(fes, densité, "q")` |
+| convection (nez arrondi) | `Model.convection(fes)` + `pc.assemble.flux(fes, h·T_ext, "q")` |
+| source volumique (cartouche chauffante) | `pc.assemble.flux(fes, densité, "q")` sur des éléments sélectionnés |
 
 Le point notable : en pyrucast, **`flux` est l'unique opérateur de charge
 répartie**, quelle que soit la dimension du sous-espace éléments finis sur
 lequel on l'applique — une face `QUA4` intègre une densité surfacique, un
-`HEX8` une densité volumique. Il joue à la fois le rôle de `FLUX`, `PRES` et
-`SOUR` en Cast3M.
+`HEX8` une densité volumique. Flux surfacique, pression et source volumique
+passent donc tous par le même opérateur.
 
 ## On ne remaille pas : on importe
 
@@ -37,10 +36,10 @@ l'autre.
 
 Aucun numéro de nœud n'apparaît dans le script. Les quatre régions sont
 découpées **géométriquement**, avec la famille
-[`pyrucast.mesher.points_*`](../operateurs/maillage.md) — l'équivalent du
-`POIN ... PLAN` / `CYLI` de Cast3M — suivie de
-`pyrucast.mesher.elements_on(..., strict=True)`, l'équivalent de
-`ELEM 'APPUYE' 'STRICTEMENT'`.
+[`pyrucast.mesher.points_*`](../operateurs/maillage.md) — qui sélectionne les
+nœuds d'un plan, d'un cylindre, d'une sphère — suivie de
+`pyrucast.mesher.elements_on(..., strict=True)`, qui remonte aux éléments dont
+**tous** les nœuds sont retenus.
 
 ```python
 {{#include ../../../formation/thermique.py:construction}}
@@ -74,12 +73,10 @@ couronne), et la grille ne touche pas le trou.
 **`strict=True` approche la région par un escalier.** La cartouche est un
 cylindre de rayon 35 mm, mais le maillage est structuré : ce qui est retenu
 est le paquet de 40 hexaèdres entièrement contenus dedans. C'est le prix à
-payer pour que la région chargée soit un sous-maillage conforme — et c'est
-le même compromis qu'en Cast3M.
+payer pour que la région chargée soit un sous-maillage conforme.
 
-> **Piège pyrucast, sans équivalent Cast3M.** En Cast3M, deux régions
-> chargées adjacentes voient leurs contributions nodales **sommées
-> automatiquement** lors de l'assemblage. Pas en pyrucast : chaque
+> **Piège : deux régions chargées adjacentes.** Leurs contributions nodales
+> ne sont **pas** sommées automatiquement à l'assemblage : chaque
 > chargement est assemblé sur **son propre support**, et l'union (`|`)
 > juxtapose ces supports sans les additionner. À un nœud partagé, le solveur
 > lit le second membre zone par zone et retient la valeur de la **première**
@@ -126,8 +123,8 @@ par la conduction, « h » par la convection.
 {{#include ../../../formation/thermique.py:resolution}}
 ```
 
-Comme Cast3M `RESO`, `pyrucast.solver.solve` factorise la matrice creuse
-(LU parallèle) et met la factorisation en cache.
+`pyrucast.solver.solve` factorise la matrice creuse (LU parallèle) et met la
+factorisation en cache.
 
 ![Champ de température (°C)](img/thermique.svg)
 
@@ -139,17 +136,16 @@ gauche décroît sous le flux sortant.
 > **Non disponible dans pyrucast.**
 >
 > - **Rayonnement.** Pas de condition de bord de type
->   `ϕ·n = εσ(T⁴∞ − T⁴)` (Cast3M `MODE 'RAYONNEMENT'`) — seules conduction et
->   convection (film/Robin) existent.
+>   `ϕ·n = εσ(T⁴∞ − T⁴)` — seules conduction et convection (film/Robin)
+>   existent.
 > - **Régime transitoire.** La matrice de capacité `C = ∫ρcₚNᵢNⱼ` est
 >   assemblable (`pyrucast.assemble.mass`), mais **rien ne la relie encore à
 >   une boucle en temps** : chaque pas résout `[K]{T} = {P}` **stationnaire**
->   (pas de `[C]{Ṫ} + [K]{T} = {P}` intégré en temps, pas d'équivalent
->   Cast3M `PASAPAS` pour la thermique). Un `Evolution` peut faire varier
->   un chargement stationnaire d'un pas à l'autre (voir
+>   (pas de `[C]{Ṫ} + [K]{T} = {P}` intégré en temps). Un `Evolution` peut
+>   faire varier un chargement stationnaire d'un pas à l'autre (voir
 >   [Calcul mécanique](mecanique.md) pour ce mécanisme appliqué à la
 >   mécanique), mais c'est une suite de problèmes stationnaires
->   indépendants, pas une intégration temporelle au sens de Cast3M.
+>   indépendants, pas une intégration temporelle.
 
 ## Script complet
 
