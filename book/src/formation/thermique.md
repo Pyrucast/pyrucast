@@ -79,15 +79,28 @@ le même compromis qu'en Cast3M.
 
 > **Piège pyrucast, sans équivalent Cast3M.** En Cast3M, deux régions
 > chargées adjacentes voient leurs contributions nodales **sommées
-> automatiquement** lors de l'assemblage. pyrucast combine les seconds
-> membres par **union de champs** (`|`), qui exige des supports
-> **disjoints** — deux valeurs différentes pour le même `(nœud, composante)`
-> lèvent une erreur explicite plutôt que de se sommer silencieusement. C'est
-> un choix de conception délibéré (mieux vaut une erreur qu'une somme
-> implicite qui masquerait un bug), mais il impose de **dessiner des régions
-> de charge deux à deux disjointes**. C'est le cas ici par construction : la
-> face gauche, le nez arrondi, l'alésage et la cartouche ne partagent aucun
-> nœud.
+> automatiquement** lors de l'assemblage. Pas en pyrucast : chaque
+> chargement est assemblé sur **son propre support**, et l'union (`|`)
+> juxtapose ces supports sans les additionner. À un nœud partagé, le solveur
+> lit le second membre zone par zone et retient la valeur de la **première**
+> qui définit le couple `(nœud, composante)` — l'autre contribution est
+> perdue. L'union ne lève une erreur que si les deux valeurs **diffèrent** ;
+> quand elles coïncident, elle passe sans rien dire.
+>
+> Sommer les champs (`+`) ne corrige pas le problème : l'arithmétique de
+> champs apparie elle aussi les zones **par support** (deux supports
+> distincts sont recopiés tels quels), et elle ne fait même pas la
+> vérification de cohérence de `|`. Pour additionner vraiment deux régions
+> qui se touchent, il faut d'abord les **ramener sur un support commun** —
+> `pyrucast.field.restrict` sur un même maillage retombe sur le support
+> `POI1` canonique de ce maillage, donc `restrict(a, m) + restrict(b, m)` est
+> bien une somme nœud à nœud (la page [Champs](../field.md) détaille cette
+> algèbre ; le [chapitre 3](mecanique.md) en donne un exemple avec
+> `restrict_like`).
+>
+> Le plus simple reste de **dessiner des régions de charge deux à deux
+> disjointes**, et c'est le cas ici par construction : la face gauche, le nez
+> arrondi, l'alésage et la cartouche ne partagent aucun nœud.
 
 ## Modèle : conduction + convection + température imposée
 

@@ -79,10 +79,12 @@ modele = modele | pc.Model.dirichlet("T", "q", impose, multiplicateur)
 `NodeField | NodeField`…) — l'équivalent de `ET` en Gibiane
 (`cex = l12 ET c23 ET c34 ...`). `len(agg)`, `agg[i]` (une vue, jamais une
 copie), `agg.unit()` (l'unique sous-objet, erreur sinon) complètent le
-protocole. **`|` exige des supports disjoints** — deux contributions à la
-même valeur d'un même nœud lèvent une erreur explicite plutôt que de se
-sommer silencieusement (voir la note correspondante dans
-[Calcul thermique](thermique.md)).
+protocole. **`|` ne somme pas les contributions d'un nœud partagé** : les
+zones sont juxtaposées support par support, et à un nœud commun c'est la
+première zone définissant le couple `(nœud, composante)` qui l'emporte ; deux
+valeurs **différentes** lèvent une erreur explicite plutôt que de se sommer
+silencieusement. Une véritable superposition demande un support commun et `+`
+(voir la note correspondante dans [Calcul thermique](thermique.md)).
 
 L'arithmétique de champs (`+ - * / **`) est réservée aux **valeurs**
 (construire un résidu, une charge scalée) — jamais à la composition

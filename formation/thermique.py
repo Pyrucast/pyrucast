@@ -8,8 +8,7 @@ EN — Picks the **pierced lug** meshed in chapter 1 back up: the script imports
 `structured_mesh` straight from `formation/maillage.py`, so the analysis runs
 on the **structured HEX8** volume without restating a single dimension.
 
-FR — Conduction stationnaire avec les quatre sollicitations thermiques du TD
-Cast3M :
+FR — Conduction stationnaire avec les quatre sollicitations thermiques :
 
 - **température imposée** sur l'alésage (Cast3M `BLOQ`/`DEPI`) ;
 - **flux imposé** sur la face gauche (Cast3M `FLUX`) ;
@@ -37,16 +36,27 @@ sphere… and `pyrucast.mesher.elements_on` walks back to the elements they
 fully carry — the exact counterpart of Cast3M's `POIN ... PLAN`/`CYLI` then
 `ELEM 'APPUYE' 'STRICTEMENT'`.
 
-FR — Contrairement à Cast3M, les régions chargées ne doivent **pas partager de
-nœuds** : `pyrucast` combine les seconds membres par union de champs (`|`),
-qui exige des supports disjoints (là où Cast3M somme silencieusement les
-contributions nodales de bords adjacents). Les quatre régions ci-dessous sont
-donc choisies deux à deux disjointes.
+FR — Contrairement à Cast3M, les contributions nodales de deux régions
+chargées adjacentes ne se **somment pas** toutes seules : chaque chargement
+est assemblé sur son propre support, et `|` juxtapose ces supports au lieu de
+les additionner — à un nœud partagé, `solve` retient la valeur de la
+**première** zone qui définit le couple (nœud, composante), et `|` ne lève une
+erreur que si les deux valeurs diffèrent. `+` ne change rien : l'arithmétique
+de champs apparie elle aussi les zones **par support**. Pour additionner
+vraiment deux régions qui se touchent, il faut d'abord les ramener sur un
+support commun (`pyrucast.field.restrict` sur un même maillage), puis `+`. Les
+quatre régions ci-dessous sont deux à deux disjointes, ce qui évite la
+question.
 
-EN — Unlike Cast3M, the loaded regions must **not share nodes**: `pyrucast`
-combines right-hand sides by field union (`|`), which requires disjoint
-supports (where Cast3M silently sums the nodal contributions of adjacent
-edges). The four regions below are therefore chosen pairwise disjoint.
+EN — Unlike Cast3M, the nodal contributions of two adjacent loaded regions do
+**not** add up on their own: each load is assembled on its own support, and
+`|` juxtaposes those supports rather than summing them — at a shared node
+`solve` keeps the value of the **first** zone defining the (node, component)
+pair, and `|` only raises an error when the two values differ. `+` changes
+nothing: field arithmetic likewise pairs zones **by support**. To genuinely
+add two touching regions, bring them onto a common support first
+(`pyrucast.field.restrict` onto one and the same mesh), then `+`. The four
+regions below are pairwise disjoint, which sidesteps the question.
 
 FR — Limite connue par rapport à Cast3M : **pas de rayonnement** et **pas de
 terme transitoire** — seule la conduction **stationnaire** est résolue ici.
@@ -251,10 +261,16 @@ def main() -> None:
     temperature_imposee = pc.NodeField(multiplicateur_T, ["imposed_T"])
     temperature_imposee[0].add_to_component("imposed_T", T_IMPOSEE)
 
-    # FR — Union : les quatre régions chargées sont disjointes par
-    # construction, `|` refuserait deux valeurs pour un même (nœud, composante).
-    # EN — Union: the four loaded regions are disjoint by construction, `|`
-    # would refuse two values for the same (node, component) pair.
+    # FR — Union : les quatre régions chargées étant disjointes, chaque couple
+    # (nœud, composante) n'est défini que par une zone — `|` les juxtapose sans
+    # rien avoir à arbitrer. Sur des régions qui se touchent, il faudrait
+    # d'abord les ramener sur un support commun (`field.restrict`) et les
+    # sommer par `+` : `|` ne somme pas les contributions d'un nœud partagé.
+    # EN — Union: the four loaded regions being disjoint, every (node,
+    # component) pair is defined by a single zone — `|` juxtaposes them with
+    # nothing to arbitrate. For touching regions one would first bring them
+    # onto a common support (`field.restrict`) and sum with `+`: `|` does not
+    # add up the contributions at a shared node.
     second_membre = (
         flux_gauche | charge_convection | charge_source | temperature_imposee
     )
