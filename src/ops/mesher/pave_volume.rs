@@ -1,7 +1,7 @@
 //! Hexahedron-dominant volume meshing: a boundary layer grown inward from a
 //! closed surface, closed onto a tetrahedral core.
 //!
-//! Where [`triangulate_volume`](super::triangulate_volume) fills a solid with
+//! Where [`triangulate_volume`](fn@super::triangulate_volume) fills a solid with
 //! tetrahedra throughout, `pave_volume` puts **hexahedra where they matter** —
 //! in the layer against the boundary, where stress and flux gradients are
 //! steepest and where an element's shape decides the accuracy — and leaves the
@@ -68,11 +68,11 @@ const SMOOTH_SWEEPS: usize = 12;
 /// `layers` boundary layers are grown inward, each `thickness` deep;
 /// `thickness` defaults to the envelope's mean edge length, which gives
 /// roughly cube-shaped cells. `core_size` is the target element size for the
-/// tetrahedral core, and follows [`triangulate_volume`](super::triangulate_volume)'s
+/// tetrahedral core, and follows [`triangulate_volume`](fn@super::triangulate_volume)'s
 /// convention.
 ///
 /// The envelope's normals must point **out of the material**, exactly as for
-/// [`triangulate_volume`](super::triangulate_volume); its nodes are reused as
+/// [`triangulate_volume`](fn@super::triangulate_volume); its nodes are reused as
 /// they are. The result carries a `HEX8` submesh (from the quadrangular
 /// facets), a `PENTA6` one (from the triangular facets), a `PYRA5` one (the
 /// junction) and a `TET4` one (the core), each present only if non-empty.

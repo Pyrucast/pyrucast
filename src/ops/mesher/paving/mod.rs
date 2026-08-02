@@ -1,4 +1,4 @@
-//! Frontal paving: the machinery behind [`pave_surface`](super::pave_surface).
+//! Frontal paving: the machinery behind [`pave_surface`](fn@super::pave_surface).
 //!
 //! The front starts as the domain's boundary and walks inward, laying a whole
 //! row of quadrangles at a time ([`row`]) until each loop is small enough to

@@ -1,6 +1,6 @@
 //! Frontal paving of a closed contour into quadrangles.
 //!
-//! Where [`triangulate_surface`](super::triangulate_surface) triangulates by
+//! Where [`triangulate_surface`](fn@super::triangulate_surface) triangulates by
 //! constrained Delaunay and can only *recombine* triangles into quadrangles
 //! afterwards, `pave_surface` lays quadrangles down directly, in rows walking
 //! inward from the boundary. That is the whole point: the rows follow the
@@ -11,16 +11,16 @@
 //! holes, parsed by [`super::contour`]):
 //!
 //! 1. Seed the advancing front with the domain's boundary loops.
-//! 2. Lay a whole row of quadrangles along a loop
-//!    ([`paving::row`](super::paving::row)): each front node is given as many
-//!    quadrangles as its interior angle asks for, at the local element size.
+//! 2. Lay a whole row of quadrangles along a loop ([`paving::row`]): each
+//!    front node is given as many quadrangles as its interior angle asks for,
+//!    at the local element size.
 //! 3. Refuse and retreat if the row would produce a quadrangle that is not
 //!    strictly convex, or edges that cross the front. Every such test runs on
 //!    the exact predicates of [`super::predicates`].
 //! 4. Seam front nodes that have come within touching distance — which splits
 //!    a loop where the domain is concave and joins two loops where a hole is
 //!    being swallowed.
-//! 5. Close small loops with quadrangles ([`paving::close`](super::paving::close)).
+//! 5. Close small loops with quadrangles ([`paving::close`]).
 //! 6. Smooth, under a validity guard that never moves a contour node.
 //!
 //! A 3-D contour is fitted to its best plane, paved there, and lifted back.

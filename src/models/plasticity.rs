@@ -24,7 +24,9 @@
 //! reconstruction and the output stress projection differ.
 //!
 //! **Axisymmetric** therefore costs almost nothing here: the hoop `ε_θθ = u_r/r`
-//! is *measured* by [`crate::ops::field::deformation`], not assumed, so `ε(B)` is
+//! is *measured* by
+//! [`crate::ops::field::deformation`](fn@crate::ops::field::deformation), not
+//! assumed, so `ε(B)` is
 //! fully known (no out-of-plane solve, unlike plane stress) and the whole
 //! specialisation is the index map `[rr, zz, θθ, rz] → [xx, yy, zz, xy]`. Note
 //! that `σ_zz` is then part of the Voigt dual and must **not** be echoed as extra

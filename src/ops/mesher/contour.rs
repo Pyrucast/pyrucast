@@ -1,8 +1,8 @@
 //! Shared front-end of the surface meshers: read a closed `SEG2` contour,
 //! fit it to a plane, and sort its loops into domains.
 //!
-//! Both surface meshers — [`triangulate_surface`](super::triangulate_surface)
-//! (constrained Delaunay) and [`pave_surface`](super::pave_surface) (frontal
+//! Both surface meshers — [`triangulate_surface`](fn@super::triangulate_surface)
+//! (constrained Delaunay) and [`pave_surface`](fn@super::pave_surface) (frontal
 //! paving) — take the *same* input and disagree only on how they fill it.
 //! Everything up to "a list of domains, each an outer loop plus its holes,
 //! expressed in a local 2-D frame" is therefore factored out here so the two

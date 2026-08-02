@@ -1,5 +1,5 @@
 //! Plane geometry for the paver, with every topological decision resting on
-//! the exact predicate [`orient2d`](crate::ops::mesher::predicates::orient2d).
+//! the exact predicate [`orient2d`].
 //!
 //! The paver never asks "is this number small?"; it asks "is this point left
 //! of that line?" and gets an answer that is exactly right, including on

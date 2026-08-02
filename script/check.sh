@@ -23,7 +23,9 @@ step "cargo test --features viz"                 cargo test --features viz
 step "cargo build --features viz-interactive"    cargo build --features viz-interactive
 step "maturin develop --features extension-module,viz" maturin develop --features extension-module,viz
 step "pytest"                                    python -m pytest
-step "cargo doc --no-deps --lib"                 cargo doc --no-deps --lib
+# Documentation : mêmes exigences que `set_new_version.sh`, pour qu'une passe
+# de version ne découvre pas un lien cassé ou un warning rustdoc resté ici.
+step "cargo doc --no-deps --lib (sans warning)"  env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib
 step "mdbook build"                              mdbook build book
 step "mdbook test"                               mdbook test book
 

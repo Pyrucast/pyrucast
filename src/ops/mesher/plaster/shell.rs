@@ -2,7 +2,7 @@
 //!
 //! A shell is a watertight set of `QUA4` and `TRI3` facets whose normals point
 //! **out of the material** — the same convention as
-//! [`triangulate_volume`](crate::ops::mesher::triangulate_volume), so a skin
+//! [`triangulate_volume`](fn@crate::ops::mesher::triangulate_volume), so a skin
 //! taken from one mesher feeds straight into the other.
 //!
 //! Everything that happens *to* the front once it starts moving — the local
