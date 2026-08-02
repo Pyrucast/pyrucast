@@ -179,6 +179,68 @@ where
     Ok(())
 }
 
+// ─── Revolution toggle (interactive window only) ────────────────────────────
+//
+// Offered only on an axisymmetric plot, where sweeping the meridian section
+// into its body of revolution is meaningful. Pinned to the top-left corner:
+// the field button is centred and the view readout sits on the right.
+
+#[cfg(any(test, feature = "viz-interactive"))]
+const REVOLVE_WIDTH: i32 = 150;
+#[cfg(any(test, feature = "viz-interactive"))]
+const REVOLVE_HEIGHT: i32 = 26;
+/// Fill of the button when the sweep is on (the state reads at a glance).
+#[cfg(any(test, feature = "viz-interactive"))]
+const REVOLVE_ON_FILL: RGBColor = RGBColor(198, 224, 250);
+
+/// Pixel-space rectangle `(x, y, width, height)` of the revolution toggle.
+#[cfg(any(test, feature = "viz-interactive"))]
+pub(crate) fn revolve_button_rect() -> (i32, i32, i32, i32) {
+    (BUTTON_MARGIN, BUTTON_MARGIN, REVOLVE_WIDTH, REVOLVE_HEIGHT)
+}
+
+/// Is the pixel `(px, py)` inside the revolution toggle?
+#[cfg(any(test, feature = "viz-interactive"))]
+pub(crate) fn click_hits_revolve_button(px: f64, py: f64) -> bool {
+    let (bx, by, bw, bh) = revolve_button_rect();
+    px >= bx as f64 && px <= (bx + bw) as f64 && py >= by as f64 && py <= (by + bh) as f64
+}
+
+/// Draw the revolution toggle, labelled with the state it is in.
+#[cfg(any(test, feature = "viz-interactive"))]
+pub(crate) fn draw_revolve_button<DB: DrawingBackend>(
+    area: &DrawingArea<DB, Shift>,
+    revolve: Option<crate::viz::Revolve>,
+) -> Result<()>
+where
+    DB::ErrorType: 'static,
+{
+    let (bx, by, bw, bh) = revolve_button_rect();
+    let fill = match revolve {
+        Some(_) => REVOLVE_ON_FILL,
+        None => BUTTON_FILL,
+    };
+    area.draw(&Rectangle::new(
+        [(bx, by), (bx + bw - 1, by + bh - 1)],
+        ShapeStyle::from(&fill).filled(),
+    ))
+    .map_err(pl_err)?;
+    area.draw(&Rectangle::new(
+        [(bx, by), (bx + bw - 1, by + bh - 1)],
+        ShapeStyle::from(&BUTTON_BORDER),
+    ))
+    .map_err(pl_err)?;
+
+    let label = match revolve {
+        Some(rev) => format!("3D {:.0}deg  [R]", rev.angle()),
+        None => "2D section  [R]".to_string(),
+    };
+    let text_style = TextStyle::from(("sans-serif", 13).into_font()).color(&BUTTON_TEXT);
+    area.draw_text(&label, &text_style, (bx + 10, by + 5))
+        .map_err(pl_err)?;
+    Ok(())
+}
+
 // ─── View readout (interactive window only) ─────────────────────────────────
 
 #[cfg(any(test, feature = "viz-interactive"))]
@@ -465,11 +527,38 @@ mod tests {
                 scale: 1.0,
                 target: None,
                 show_axes: true,
+                revolve: None,
             };
             draw_view_readout(&area, &view).unwrap();
             area.present().unwrap();
         }
         assert!(buf.contains("view=(45.0, 35.3, 1.00)"));
+    }
+
+    #[test]
+    fn revolve_button_hit_test_and_labels() {
+        let (bx, by, bw, bh) = revolve_button_rect();
+        assert!(click_hits_revolve_button(
+            (bx + bw / 2) as f64,
+            (by + bh / 2) as f64
+        ));
+        assert!(!click_hits_revolve_button(400.0, 300.0));
+
+        // The label states which of the two modes is active.
+        for (revolve, expected) in [
+            (None, "2D section"),
+            (Some(crate::viz::Revolve::full()), "3D 360deg"),
+        ] {
+            let mut buf = String::new();
+            {
+                let backend = SVGBackend::with_string(&mut buf, (400, 100));
+                let area = backend.into_drawing_area();
+                area.fill(&WHITE).unwrap();
+                draw_revolve_button(&area, revolve).unwrap();
+                area.present().unwrap();
+            }
+            assert!(buf.contains(expected), "{buf}");
+        }
     }
 
     #[test]

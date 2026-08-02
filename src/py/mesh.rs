@@ -169,11 +169,19 @@ impl PySubMesh {
     ///   (interior edges of volume cells included) instead of the opaque
     ///   outer skin. Geometry only — combining it with `field` raises
     ///   `ValueError`, since a field always colours the faces.
+    /// - `revolve`: on an **axisymmetric** geometry (`Coords.axisymmetric()`),
+    ///   sweep the `(r, z)` meridian section into the body of revolution it
+    ///   describes, instead of drawing the flat section (default `False`).
+    ///   `ValueError` on a non-axisymmetric geometry. In the interactive
+    ///   window, the top-left button or the `R` key toggles it at runtime.
+    /// - `revolve_angle`: swept angle in degrees, in `]0, 360]` (default
+    ///   `360`). A partial sweep cuts the body open and shows the meridian
+    ///   section — and the field on it — at both ends.
     /// - `title`: optional figure name. It titles the interactive window
     ///   and is drawn centred as a caption at the bottom of a saved
     ///   PNG/SVG (default `None` ⇒ no caption, default window title).
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, wireframe=false, title=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, wireframe=false, revolve=false, revolve_angle=360.0, title=None))]
     #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
@@ -187,19 +195,12 @@ impl PySubMesh {
         cmap: Option<String>,
         smooth: usize,
         wireframe: bool,
+        revolve: bool,
+        revolve_angle: f64,
         title: Option<String>,
     ) -> PyResult<()> {
         let style = mesh_style(wireframe, field.is_some())?;
-        let mut view = view
-            .map(|(yaw, pitch, scale)| crate::viz::View {
-                yaw,
-                pitch,
-                scale,
-                target: None,
-                show_axes,
-            })
-            .unwrap_or_default();
-        view.show_axes = show_axes;
+        let view = crate::py::build_view(view, show_axes, revolve, revolve_angle)?;
         let scale = crate::viz::ColorScale {
             cmap: parse_cmap(cmap)?,
             vmin,
@@ -354,9 +355,10 @@ impl PyMesh {
     /// coloured by a `NodeField` / `ElementField` if `field` is
     /// supplied). See
     /// `SubMesh.plot` for the meaning of `view`, `save`, `show_axes`,
-    /// `field`, `component`, `wireframe` and `title`.
+    /// `field`, `component`, `wireframe`, `revolve`, `revolve_angle` and
+    /// `title`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, wireframe=false, title=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, field=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, wireframe=false, revolve=false, revolve_angle=360.0, title=None))]
     #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
@@ -370,19 +372,12 @@ impl PyMesh {
         cmap: Option<String>,
         smooth: usize,
         wireframe: bool,
+        revolve: bool,
+        revolve_angle: f64,
         title: Option<String>,
     ) -> PyResult<()> {
         let style = mesh_style(wireframe, field.is_some())?;
-        let mut view = view
-            .map(|(yaw, pitch, scale)| crate::viz::View {
-                yaw,
-                pitch,
-                scale,
-                target: None,
-                show_axes,
-            })
-            .unwrap_or_default();
-        view.show_axes = show_axes;
+        let view = crate::py::build_view(view, show_axes, revolve, revolve_angle)?;
         let scale = crate::viz::ColorScale {
             cmap: parse_cmap(cmap)?,
             vmin,

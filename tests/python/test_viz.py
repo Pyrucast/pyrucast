@@ -271,3 +271,77 @@ def test_wireframe_with_field_is_rejected(tmp_path):
     nf = _build_field_on_nodes(c, [a, b, cc], ["T"], [[0.0, 1.0, 2.0]])
     with pytest.raises(ValueError):
         tri.plot(save=str(tmp_path / "x.svg"), field=nf, wireframe=True)
+
+
+# ─── axisymmetric revolution ────────────────────────────────────────────────
+
+
+def _axisymmetric_section():
+    """A 2×2 QUA4 grid in the meridian plane: the section of a hollow tube."""
+    c = pyrucast.Coords.axisymmetric()
+    n = {}
+    for i in range(3):
+        for j in range(3):
+            n[(i, j)] = c.add_node([1.0 + 0.5 * i, 0.5 * j])
+    mesh = pyrucast.Mesh(c, "QUA4")
+    for i in range(2):
+        for j in range(2):
+            mesh[0].add_cell(
+                [n[(i, j)], n[(i + 1, j)], n[(i + 1, j + 1)], n[(i, j + 1)]]
+            )
+    return c, mesh, n
+
+
+def test_revolve_sweeps_the_section_off_its_plane(tmp_path):
+    """Worked example — the same section drawn flat, then revolved.
+
+    Plotted as it stands, an axisymmetric mesh is a flat `(r, z)` section:
+    seen from the top (`pitch=90`) it collapses onto a single line. Revolved,
+    it becomes the tube it describes and fills the picture from every angle.
+    """
+    _, mesh, _ = _axisymmetric_section()
+
+    flat = tmp_path / "section.svg"
+    body = tmp_path / "tube.svg"
+    mesh.plot(view=(0.0, 90.0, 1.0), save=str(flat))
+    mesh.plot(view=(0.0, 90.0, 1.0), save=str(body), revolve=True)
+
+    # The swept body carries far more faces than the flat section (4 cells).
+    assert flat.read_text().count("<polygon") == 4
+    assert body.read_text().count("<polygon") > 50
+
+
+def test_revolve_angle_cuts_the_body_open(tmp_path):
+    """A partial sweep adds the meridian section at both ends of the angle."""
+    _, mesh, _ = _axisymmetric_section()
+    full = tmp_path / "full.svg"
+    part = tmp_path / "part.svg"
+    mesh.plot(save=str(full), revolve=True)
+    mesh.plot(save=str(part), revolve=True, revolve_angle=90.0)
+    # A quarter turn draws far fewer bands, plus the two end sections.
+    assert part.read_text().count("<polygon") < full.read_text().count("<polygon")
+
+
+def test_revolve_carries_the_field_colours(tmp_path):
+    """The field keeps colouring the cells the swept surface comes from."""
+    c, mesh, n = _axisymmetric_section()
+    nodes = list(n.values())
+    nf = _build_field_on_nodes(c, nodes, ["T"], [[float(k) for k in range(len(nodes))]])
+    path = tmp_path / "field3d.svg"
+    mesh.plot(save=str(path), field=nf, revolve=True)
+    text = path.read_text()
+    assert "[T]" in text
+    assert "<polygon" in text
+
+
+def test_revolve_needs_axisymmetric_coordinates(tmp_path):
+    """On a plain Cartesian mesh the abscissa is no radius — it must raise."""
+    _, sm = _make_two_triangles()
+    with pytest.raises(RuntimeError, match="axisymmetric"):
+        sm.plot(save=str(tmp_path / "nope.svg"), revolve=True)
+
+
+def test_revolve_angle_must_be_a_turn_at_most(tmp_path):
+    _, mesh, _ = _axisymmetric_section()
+    with pytest.raises(RuntimeError, match="360"):
+        mesh.plot(save=str(tmp_path / "nope.svg"), revolve=True, revolve_angle=400.0)

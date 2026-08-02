@@ -455,7 +455,7 @@ fn submesh_primitives_impl(
 }
 
 /// Bbox covering every vertex used by `prims`.
-fn primitives_bbox(prims: &[Primitive]) -> Bbox3 {
+pub(crate) fn primitives_bbox(prims: &[Primitive]) -> Bbox3 {
     let mut bb = Bbox3::empty();
     for prim in prims {
         match prim {
@@ -687,6 +687,18 @@ where
         return Ok(());
     }
 
+    // Axisymmetric plots may be swept into the body of revolution they
+    // describe first: every backend and every colouring path funnels through
+    // here, so the sweep is written once (see `crate::viz::revolve`).
+    let swept;
+    let prims = match view.revolve {
+        Some(rev) => {
+            swept = crate::viz::revolve::revolve_primitives(prims, rev);
+            &swept[..]
+        }
+        None => prims,
+    };
+
     let bbox = primitives_bbox(prims);
     let proj = Projector::new(view, bbox.center());
 
@@ -896,6 +908,12 @@ impl Drawable for SubMesh {
         let prims = submesh_primitives(self)?;
         render_primitives(area, view, &prims)
     }
+
+    fn is_axisymmetric(&self) -> bool {
+        read(&self.coords())
+            .map(|c| c.is_axisymmetric())
+            .unwrap_or(false)
+    }
 }
 
 // ─── Drawable for Mesh ──────────────────────────────────────────────────────
@@ -925,6 +943,12 @@ impl Drawable for Mesh {
             all.append(&mut prims);
         }
         render_primitives(area, view, &all)
+    }
+
+    fn is_axisymmetric(&self) -> bool {
+        self.coords()
+            .and_then(|c| Ok(read(&c)?.is_axisymmetric()))
+            .unwrap_or(false)
     }
 }
 
@@ -989,6 +1013,10 @@ impl Drawable for SubMeshWire<'_> {
         let prims = submesh_wireframe_primitives(self.0)?;
         render_primitives(area, view, &prims)
     }
+
+    fn is_axisymmetric(&self) -> bool {
+        self.0.is_axisymmetric()
+    }
 }
 
 /// Wireframe `Drawable` wrapper over a [`Mesh`] — every submesh drawn as
@@ -1010,6 +1038,10 @@ impl Drawable for MeshWire<'_> {
             all.extend(submesh_wireframe_primitives(&*read(&sm)?)?);
         }
         render_primitives(area, view, &all)
+    }
+
+    fn is_axisymmetric(&self) -> bool {
+        self.0.is_axisymmetric()
     }
 }
 

@@ -414,8 +414,10 @@ impl PyNodeField {
     ///
     /// Same `view` / `save` / `show_axes` / `component` / `vmin` /
     /// `vmax` / `cmap` / `title` semantics as `Mesh.plot`.
+    /// `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
+    /// of revolution — see `SubMesh.plot`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, component=None, vmin=None, vmax=None, cmap=None, title=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, component=None, vmin=None, vmax=None, cmap=None, revolve=false, revolve_angle=360.0, title=None))]
     #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
@@ -426,18 +428,11 @@ impl PyNodeField {
         vmin: Option<f64>,
         vmax: Option<f64>,
         cmap: Option<String>,
+        revolve: bool,
+        revolve_angle: f64,
         title: Option<String>,
     ) -> PyResult<()> {
-        let mut view = view
-            .map(|(yaw, pitch, scale)| crate::viz::View {
-                yaw,
-                pitch,
-                scale,
-                target: None,
-                show_axes,
-            })
-            .unwrap_or_default();
-        view.show_axes = show_axes;
+        let view = crate::py::build_view(view, show_axes, revolve, revolve_angle)?;
         let scale = crate::viz::ColorScale {
             cmap: crate::py::mesh::parse_cmap(cmap)?,
             vmin,

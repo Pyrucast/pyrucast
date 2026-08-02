@@ -55,6 +55,11 @@ Côté **mécanique**, l'axisymétrie ajoute la déformation orthoradiale
 géométrie : voir [Élasticité linéaire](mecanique/elasticite.md#axisymétrie). La
 **thermique** n'a rien à changer.
 
+Côté **visualisation**, un tracé axisymétrique montre par défaut la section
+méridienne ; l'option `revolve` la balaie pour dessiner le corps de révolution
+lui-même — voir
+[Visualisation](visualization.md#axisymétrie--section-méridienne-ou-corps-de-révolution).
+
 ## Identité d'un nœud
 
 Chaque nœud créé reçoit un identifiant interne **stable** (`NodeId`), unique

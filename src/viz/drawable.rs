@@ -32,4 +32,12 @@ pub trait Drawable {
     fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, view: &View) -> Result<()>
     where
         DB::ErrorType: 'static;
+
+    /// Whether the object's geometry lives in an
+    /// [axisymmetric](crate::containers::mesh::Coords::axisymmetric) frame —
+    /// the only case where [`View::revolve`](crate::viz::View::revolve) means
+    /// something. Objects carrying no geometry (a curve) keep the default.
+    fn is_axisymmetric(&self) -> bool {
+        false
+    }
 }

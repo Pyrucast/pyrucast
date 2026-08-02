@@ -178,8 +178,10 @@ impl PySubEvolution {
 
     /// Plot this single curve — see `Evolution.plot`. A scalar curve draws an
     /// X-Y line; a field curve renders with a frame slider.
+    /// `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
+    /// of revolution — see `SubMesh.plot`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, mesh=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, frame=None, x_label=None, y_label=None, title=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, mesh=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, frame=None, revolve=false, revolve_angle=360.0, x_label=None, y_label=None, title=None))]
     #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
@@ -193,11 +195,13 @@ impl PySubEvolution {
         cmap: Option<String>,
         smooth: usize,
         frame: Option<usize>,
+        revolve: bool,
+        revolve_angle: f64,
         x_label: Option<String>,
         y_label: Option<String>,
         title: Option<String>,
     ) -> PyResult<()> {
-        let view = build_view(view, show_axes);
+        let view = crate::py::build_view(view, show_axes, revolve, revolve_angle)?;
         let scale = crate::viz::ColorScale {
             cmap: crate::py::mesh::parse_cmap(cmap)?,
             vmin,
@@ -374,8 +378,10 @@ impl PyEvolution {
     /// omit it for the interactive window. `mesh` supplies the surface for
     /// field evolutions (node frames default to a point cloud). `x_label` /
     /// `y_label` / `title` label the curve.
+    /// `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
+    /// of revolution — see `SubMesh.plot`.
     #[cfg(feature = "viz")]
-    #[pyo3(signature = (view=None, save=None, show_axes=true, mesh=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, frame=None, x_label=None, y_label=None, title=None))]
+    #[pyo3(signature = (view=None, save=None, show_axes=true, mesh=None, component=None, vmin=None, vmax=None, cmap=None, smooth=4, frame=None, revolve=false, revolve_angle=360.0, x_label=None, y_label=None, title=None))]
     #[allow(clippy::too_many_arguments)]
     fn plot(
         &self,
@@ -389,11 +395,13 @@ impl PyEvolution {
         cmap: Option<String>,
         smooth: usize,
         frame: Option<usize>,
+        revolve: bool,
+        revolve_angle: f64,
         x_label: Option<String>,
         y_label: Option<String>,
         title: Option<String>,
     ) -> PyResult<()> {
-        let view = build_view(view, show_axes);
+        let view = crate::py::build_view(view, show_axes, revolve, revolve_angle)?;
         let scale = crate::viz::ColorScale {
             cmap: crate::py::mesh::parse_cmap(cmap)?,
             vmin,
@@ -413,22 +421,6 @@ impl PyEvolution {
         )?;
         Ok(())
     }
-}
-
-/// Build a [`crate::viz::View`] from an optional `(yaw, pitch, scale)` triple.
-#[cfg(feature = "viz")]
-fn build_view(view: Option<(f64, f64, f64)>, show_axes: bool) -> crate::viz::View {
-    let mut v = view
-        .map(|(yaw, pitch, scale)| crate::viz::View {
-            yaw,
-            pitch,
-            scale,
-            target: None,
-            show_axes,
-        })
-        .unwrap_or_default();
-    v.show_axes = show_axes;
-    v
 }
 
 crate::impl_aggregate_pymethods!(

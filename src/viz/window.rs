@@ -12,6 +12,11 @@
 //!   plane),
 //! - mouse wheel → multiplies `scale` (zoom).
 //!
+//! Keyboard: `A` toggles the orientation gizmo, `Tab` cycles the field
+//! component, ← / → step the evolution frames, and `R` — on an axisymmetric
+//! plot only — sweeps the meridian section into its body of revolution (same
+//! as clicking the top-left button).
+//!
 //! `winit::EventLoop::new()` may be called at most once per process on
 //! most platforms. To stay usable from long-lived Python interpreters,
 //! the event loop is cached in a thread-local and re-driven via
@@ -79,6 +84,16 @@ struct App<'a, D: Drawable> {
     pitch: f64,
     scale: f64,
     show_axes: bool,
+    /// Current revolution of an axisymmetric plot; `None` = flat section.
+    revolve: Option<crate::viz::Revolve>,
+    /// Sweep asked for by the caller, restored when the toggle comes back on.
+    revolve_pref: crate::viz::Revolve,
+    /// Whether the object may be swept at all (axisymmetric geometry). The
+    /// toggle — button and `R` key — is inert otherwise.
+    can_revolve: bool,
+    /// Bounding box of the flat section, kept to switch `bbox` back and forth
+    /// as the sweep is toggled.
+    section_bbox: Bbox3,
     /// Custom OS window title (`None` → the default "pyrucast").
     title: Option<String>,
 
@@ -112,6 +127,13 @@ impl<'a, D: Drawable> App<'a, D> {
         field_button: Option<&'a dyn FieldButton>,
         title: Option<&str>,
     ) -> Self {
+        let can_revolve = object.is_axisymmetric();
+        let revolve = view.revolve.filter(|_| can_revolve);
+        let section_bbox = bbox;
+        let bbox = match revolve {
+            Some(_) => crate::viz::revolve::revolved_bbox(&section_bbox),
+            None => section_bbox,
+        };
         let target = view.target.unwrap_or_else(|| bbox.center());
         let w = INIT_WIDTH;
         let h = INIT_HEIGHT;
@@ -126,6 +148,10 @@ impl<'a, D: Drawable> App<'a, D> {
             pitch: view.pitch,
             scale: view.scale,
             show_axes: view.show_axes,
+            revolve,
+            revolve_pref: revolve.unwrap_or_default(),
+            can_revolve,
+            section_bbox,
             title: title.map(str::to_string),
             width: w,
             height: h,
@@ -146,7 +172,29 @@ impl<'a, D: Drawable> App<'a, D> {
             scale: self.scale,
             target: Some(self.target),
             show_axes: self.show_axes,
+            revolve: self.revolve,
         }
+    }
+
+    /// Switch between the flat meridian section and its body of revolution.
+    /// The swept body is centred on the axis, not on the section, so the
+    /// camera re-targets — otherwise the object would jump out of frame.
+    fn toggle_revolve(&mut self) {
+        if !self.can_revolve {
+            return;
+        }
+        self.revolve = match self.revolve {
+            Some(rev) => {
+                self.revolve_pref = rev;
+                None
+            }
+            None => Some(self.revolve_pref),
+        };
+        self.bbox = match self.revolve {
+            Some(_) => crate::viz::revolve::revolved_bbox(&self.section_bbox),
+            None => self.section_bbox,
+        };
+        self.target = self.bbox.center();
     }
 
     /// Translate the camera target in the screen plane by a pixel drag
@@ -185,24 +233,23 @@ impl<'a, D: Drawable> App<'a, D> {
         if w == 0 || h == 0 {
             return;
         }
+        // Read the camera out before the buffer is borrowed mutably.
+        let view = self.current_view();
+        let (show_axes, can_revolve, revolve) = (self.show_axes, self.can_revolve, self.revolve);
         // Re-create a fresh frame in the RGB buffer.
         self.pixel_buf.fill(255);
         {
             let backend = BitMapBackend::with_buffer(&mut self.pixel_buf, (w, h));
             let area = backend.into_drawing_area();
             if area.fill(&WHITE).is_ok() {
-                let view = View {
-                    yaw: self.yaw,
-                    pitch: self.pitch,
-                    scale: self.scale,
-                    target: Some(self.target),
-                    show_axes: self.show_axes,
-                };
                 let _ = self.object.draw_on(&area, &view);
-                if self.show_axes {
+                if show_axes {
                     let _ = crate::viz::axes::draw_gizmo(&area, &view);
                 }
                 let _ = overlay::draw_view_readout(&area, &view);
+                if can_revolve {
+                    let _ = overlay::draw_revolve_button(&area, revolve);
+                }
                 let _ = area.present();
             }
         }
@@ -276,6 +323,17 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                 ..
             } => {
                 if state == ElementState::Pressed {
+                    // If the press landed on the revolution toggle, switch
+                    // between section and body instead of starting a drag.
+                    if let (true, Some((cx, cy))) = (self.can_revolve, self.cursor) {
+                        if overlay::click_hits_revolve_button(cx, cy) {
+                            self.toggle_revolve();
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                            return;
+                        }
+                    }
                     // If the press landed on the field-component button,
                     // cycle the field instead of starting a drag.
                     if let (Some(btn), Some((cx, cy))) = (self.field_button, self.cursor) {
@@ -396,6 +454,12 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
             } => match &logical_key {
                 Key::Character(s) if s.eq_ignore_ascii_case("a") => {
                     self.show_axes = !self.show_axes;
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                }
+                Key::Character(s) if s.eq_ignore_ascii_case("r") => {
+                    self.toggle_revolve();
                     if let Some(w) = &self.window {
                         w.request_redraw();
                     }
@@ -527,6 +591,15 @@ impl<'a> Drawable for FieldDrawable<'a> {
             .draw_on(area, view),
         }
     }
+
+    fn is_axisymmetric(&self) -> bool {
+        match &self.source {
+            GeomSource::Mesh(m) => m.is_axisymmetric(),
+            GeomSource::SubMesh(sm) => crate::store::read(sm)
+                .map(|sm| sm.is_axisymmetric())
+                .unwrap_or(false),
+        }
+    }
 }
 
 impl<'a> FieldButton for FieldDrawable<'a> {
@@ -558,6 +631,7 @@ pub(crate) fn run_interactive_mesh_field(
         scale,
         smooth,
     );
+    crate::viz::check_revolve(&drawable, &view)?;
     let bbox = drawable.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();
@@ -599,6 +673,7 @@ pub(crate) fn run_interactive_submesh_field(
         scale,
         smooth,
     );
+    crate::viz::check_revolve(&drawable, &view)?;
     let bbox = drawable.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();
@@ -771,6 +846,7 @@ impl<'a> Drawable for EvolutionFrames<'a> {
                     points,
                     component: comp,
                     scale: self.scale,
+                    axisymmetric: crate::viz::node_field_is_axisymmetric(f),
                 }
                 .draw_on(area, view)?;
             }
@@ -788,6 +864,16 @@ impl<'a> Drawable for EvolutionFrames<'a> {
             self.abscissas[k],
         )?;
         Ok(())
+    }
+
+    fn is_axisymmetric(&self) -> bool {
+        match self.mesh {
+            Some(m) => m.is_axisymmetric(),
+            None => match &self.frames[0] {
+                crate::viz::FrameField::Node(f) => crate::viz::node_field_is_axisymmetric(f),
+                crate::viz::FrameField::Element(_) => false,
+            },
+        }
     }
 }
 
@@ -850,6 +936,7 @@ pub(crate) fn run_interactive_evolution(
         scale,
         smooth,
     )?;
+    crate::viz::check_revolve(&drawable, &view)?;
     let bbox = drawable.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();

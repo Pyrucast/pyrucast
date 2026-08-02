@@ -589,6 +589,10 @@ impl<'a> Drawable for MeshFieldView<'a> {
         super::overlay::draw_colorbar(area, cmap, vmin, vmax)?;
         Ok(())
     }
+
+    fn is_axisymmetric(&self) -> bool {
+        self.mesh.is_axisymmetric()
+    }
 }
 
 /// `Drawable` over a single [`SubMesh`] (by handle, so element-field
@@ -636,6 +640,12 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
         super::overlay::draw_colorbar(area, cmap, vmin, vmax)?;
         Ok(())
     }
+
+    fn is_axisymmetric(&self) -> bool {
+        read(self.submesh)
+            .map(|sm| sm.is_axisymmetric())
+            .unwrap_or(false)
+    }
 }
 
 /// `Drawable` over the support nodes of a [`NodeField`], as a coloured
@@ -647,6 +657,9 @@ pub(crate) struct NodeFieldPointsView<'a> {
     pub(crate) points: Vec<(crate::containers::mesh::Point3, f64)>,
     pub component: &'a str,
     pub scale: crate::viz::ColorScale,
+    /// Whether the support coordinates are the meridian plane of a body of
+    /// revolution — the cloud can then be swept like any other plot.
+    pub axisymmetric: bool,
 }
 
 impl<'a> Drawable for NodeFieldPointsView<'a> {
@@ -678,6 +691,10 @@ impl<'a> Drawable for NodeFieldPointsView<'a> {
         super::overlay::draw_field_overlay(area, self.component, vmin, vmax)?;
         super::overlay::draw_colorbar(area, cmap, vmin, vmax)?;
         Ok(())
+    }
+
+    fn is_axisymmetric(&self) -> bool {
+        self.axisymmetric
     }
 }
 

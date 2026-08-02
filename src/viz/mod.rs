@@ -45,6 +45,7 @@ pub mod drawable;
 pub mod field_color;
 pub mod mesh_draw;
 pub mod overlay;
+pub mod revolve;
 pub mod subdivide;
 #[cfg(feature = "viz-interactive")]
 pub mod window;
@@ -55,6 +56,7 @@ use crate::viz::drawable::Drawable;
 use std::path::Path;
 
 pub use field_color::Colormap;
+pub use revolve::Revolve;
 
 // ─── Point of view ──────────────────────────────────────────────────────────
 
@@ -81,6 +83,12 @@ pub struct View {
     /// Show the orientation gizmo (small red/green/blue axes triad in the
     /// bottom-left corner) on top of the rendered object.
     pub show_axes: bool,
+    /// Sweep an [axisymmetric](crate::containers::mesh::Coords::axisymmetric)
+    /// meridian plot into the body of revolution it describes (see
+    /// [`Revolve`]). `None` — the default — keeps the flat `(r, z)` section.
+    /// Only accepted on axisymmetric geometry; the interactive window toggles
+    /// it with the top-left button or the `R` key.
+    pub revolve: Option<Revolve>,
 }
 
 impl View {
@@ -92,6 +100,7 @@ impl View {
             scale: 1.0,
             target: None,
             show_axes: true,
+            revolve: None,
         }
     }
 
@@ -103,6 +112,7 @@ impl View {
             scale: 1.0,
             target: None,
             show_axes: true,
+            revolve: None,
         }
     }
 
@@ -114,6 +124,7 @@ impl View {
             scale: 1.0,
             target: None,
             show_axes: true,
+            revolve: None,
         }
     }
 
@@ -125,6 +136,7 @@ impl View {
             scale: 1.0,
             target: None,
             show_axes: true,
+            revolve: None,
         }
     }
 }
@@ -216,6 +228,21 @@ pub(crate) const DEFAULT_HEIGHT: u32 = 600;
 
 // ─── Render dispatch ────────────────────────────────────────────────────────
 
+/// Reject a [`Revolve`] asked of a geometry that is not axisymmetric — the
+/// sweep reads the abscissa as a radius, which is only a radius in the
+/// meridian frame.
+pub(crate) fn check_revolve<D: Drawable>(object: &D, view: &View) -> Result<()> {
+    if view.revolve.is_some() && !object.is_axisymmetric() {
+        return Err(PyrucastError::Message(
+            "revolve: the plotted geometry is not axisymmetric — build it on \
+             Coords::axisymmetric() (Python: Coords.axisymmetric()), whose \
+             abscissa is the radius the sweep turns around"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Render a [`Drawable`] either to a file (PNG / SVG) or, if `save` is
 /// `None`, to an interactive window. Headless export works without
 /// `viz-interactive`; the interactive path requires it.
@@ -226,6 +253,7 @@ pub(crate) fn render<D: Drawable>(
     title: Option<&str>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
+    check_revolve(object, &view)?;
     match save {
         Some(path) => render_to_file(object, view, path, title),
         None => {
@@ -311,6 +339,7 @@ pub(crate) fn render_mesh_with_field(
     title: Option<&str>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
+    check_revolve(mesh, &view)?;
     let data = field.data()?;
     let resolved = field_color::resolve_component(&data, component)?;
     match save {
@@ -358,6 +387,7 @@ pub fn render_submesh_with_field(
     title: Option<&str>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
+    check_revolve(&*crate::store::read(submesh)?, &view)?;
     let data = field.data()?;
     let resolved = field_color::resolve_component(&data, component)?;
     match save {
@@ -410,6 +440,15 @@ pub(crate) fn node_field_points(
     Ok(points)
 }
 
+/// Whether a [`NodeField`] lives on axisymmetric coordinates — the point cloud
+/// it draws alone can then be swept like any other axisymmetric plot.
+pub(crate) fn node_field_is_axisymmetric(field: &crate::containers::node_field::NodeField) -> bool {
+    field
+        .coords()
+        .and_then(|c| Ok(crate::store::read(&c)?.is_axisymmetric()))
+        .unwrap_or(false)
+}
+
 /// Bounding box of a [`NodeField`]'s support nodes (component-independent),
 /// for centring a point-cloud view (interactive only).
 #[cfg(feature = "viz-interactive")]
@@ -445,6 +484,7 @@ pub(crate) fn render_node_field_points(
         points,
         component: &resolved,
         scale,
+        axisymmetric: node_field_is_axisymmetric(field),
     };
     render(&drawable, view, save, title)
 }
@@ -594,6 +634,8 @@ pub(crate) fn render_curve(
     };
     let mut view = view.unwrap_or_default();
     view.show_axes = false;
+    // A curve is a flat chart: no camera, hence no body to sweep either.
+    view.revolve = None;
     // The curve's own caption already sits at the top of the chart, so we do
     // not repeat it as a bottom figure title.
     render(&plot, Some(view), save, None)

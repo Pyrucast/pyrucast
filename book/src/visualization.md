@@ -33,7 +33,8 @@ La caméra est décrite par une structure `View`, située sur une sphère orient
 - `yaw` : azimut en degrés (rotation autour de l'axe Z monde) ;
 - `pitch` : élévation en degrés (au-dessus du plan XY monde) ;
 - `scale` : `1.0` = la bounding-box remplit l'image ; `>1` zoom, `<1` dézoom ;
-- `target` : point regardé. `None` ⇒ le centre de la bounding-box de l'objet visualisé.
+- `target` : point regardé. `None` ⇒ le centre de la bounding-box de l'objet visualisé ;
+- `revolve` : sur une géométrie **axisymétrique** uniquement, balaie la section méridienne pour tracer le corps de révolution (voir [plus bas](#axisymétrie--section-méridienne-ou-corps-de-révolution)). `None` (défaut) ⇒ la section plane.
 
 Préréglages disponibles :
 
@@ -336,6 +337,65 @@ mesh.plot(save="fil.svg", wireframe=True)  # fil de fer
 # mesh.plot(save="x.svg", field=t_field, wireframe=True)
 ```
 
+## Axisymétrie : section méridienne ou corps de révolution
+
+Un maillage bâti sur des [coordonnées axisymétriques](coords.md) est le **demi-plan méridien** `(r, z)` d'un corps de révolution : tracé tel quel, il se lit comme une section plane 2-D — ce qui est fidèle à l'objet calculé, mais peu parlant pour montrer la pièce.
+
+L'option `revolve` balaie cette section autour de l'axe `r = 0` et dessine le solide qu'elle décrit. **Rien n'est recalculé** : le balayage a lieu sur les primitives de rendu, juste avant la projection, donc il s'applique de la même façon au maillage seul, au fil de fer, à la coloration par un champ (plate **et** interpolée) et aux évolutions.
+
+| Argument | Défaut | Effet |
+|---|---|---|
+| `revolve` | `False` | `True` ⇒ trace le corps de révolution au lieu de la section |
+| `revolve_angle` | `360.0` | angle balayé en degrés, dans `]0, 360]` |
+
+Un angle **partiel** ouvre la pièce et dessine la section méridienne — et le champ qui la colore — aux deux extrémités du balayage, comme une coupe.
+
+```python
+import pyrucast
+
+coords = pyrucast.Coords.axisymmetric()  # (r, z), r ≥ 0
+# … maillage de la section, calcul, champ t_field …
+
+mesh.plot(save="section.svg")  # la section plane (défaut)
+mesh.plot(save="piece.svg", revolve=True)  # le corps de révolution complet
+mesh.plot(save="coupe.svg", revolve=True, revolve_angle=270.0)  # ouvert à 270°
+mesh.plot(save="t3d.svg", field=t_field, revolve=True)  # champ sur le corps
+```
+
+Côté Rust, c'est le champ `revolve` de la `View`, portant un [`Revolve`] :
+
+```rust,ignore
+use pyrucast::viz::{Revolve, View};
+use std::path::Path;
+
+let vue = View { revolve: Some(Revolve::full()), ..View::iso() };
+mesh.plot(Some(vue), Some(Path::new("piece.svg"))).unwrap();
+
+// Balayage partiel, ou finesse angulaire choisie à la main.
+let _ = Revolve::new(270.0).unwrap();              // un secteur par 10°
+let _ = Revolve::with_sectors(360.0, 72).unwrap(); // silhouette plus lisse
+```
+
+Demander `revolve` sur une géométrie **non** axisymétrique est une erreur : l'abscisse n'y est pas un rayon, le balayage n'aurait aucun sens.
+
+### Ce qui est dessiné
+
+Seul ce qui est **visible** est émis, l'algorithme du peintre faisant le reste :
+
+- une **face** balaie un anneau de matière. Seules les arêtes de **bord** de la section engendrent une surface latérale : une arête partagée par deux cellules reste enfouie dans la matière. C'est le pendant exact de la suppression des facettes intérieures des maillages volumiques ;
+- le **contour d'élément** du rendu interpolé suit la même règle, si bien que le quadrillage du maillage reste tracé sur la surface balayée ;
+- **segments et points** sont répétés à chaque station angulaire, et les cercles décrits par leurs extrémités sont ajoutés : c'est le fil de fer (resp. le nuage de nœuds) du maillage balayé ;
+- une arête posée **sur l'axe** (`r = 0`) ne balaie rien ; une arête qui le touche par une extrémité balaie un cône (triangles au lieu de quadrangles).
+
+### Bascule dans la fenêtre interactive
+
+En mode interactif, sur une géométrie axisymétrique uniquement :
+
+- un **bouton en haut à gauche** indique l'état courant (`2D section` / `3D 360deg`) et bascule au clic ;
+- **touche `R`** — même effet, sans toucher à la souris.
+
+La caméra se recentre à chaque bascule : le corps balayé est centré sur l'axe, la section ne l'est pas, sans quoi la pièce sortirait du cadre.
+
 ## Export vers ParaView (`export_vtk`)
 
 Pour les maillages industriels — ou simplement pour exploiter les filtres de
@@ -406,5 +466,6 @@ et les directions pour les lever :
 
 - Le rendu utilise l'algorithme du **peintre** : projection 3D → 2D, tri des triangles par profondeur moyenne (du plus lointain au plus proche), puis dessin des facettes pleines **opaques** suivies des arêtes noires en superposition. L'opacité assure l'élimination des faces cachées (les facettes proches recouvrent les lointaines) ; c'est ce qui fait qu'un solide 3D se lit comme un solide et non comme une coque transparente. Coût : `O(n log n)` à chaque rafraîchissement, raisonnable jusqu'à quelques milliers de cellules. Pour des maillages plus lourds ou un post-traitement avancé, exporter vers ParaView avec `export_vtk` (voir ci-dessus).
 - Limite connue de l'algorithme du peintre : pour un solide **fortement non convexe**, le tri par profondeur moyenne peut mal ordonner deux facettes qui se chevauchent en profondeur. C'est inhérent à la méthode ; un *z-buffer* par pixel le corrigerait, au prix d'un rendu non vectoriel.
+- Le balayage axisymétrique (`revolve`) multiplie le nombre de primitives par le nombre de secteurs, mais **seulement sur le bord** de la section (les arêtes intérieures ne balaient rien) : le coût reste proportionnel au périmètre, pas à la surface. Une section partielle ajoute en plus une copie de la section à chaque extrémité.
 - L'export reste **portable Linux ↔ Windows** : tout le rendu se fait en CPU, sans pilote GPU. Le binaire `viz-interactive` nécessite en revanche un serveur d'affichage (X11, Wayland ou Windows) à l'exécution — ce qui est attendu pour une fenêtre interactive.
 - Le mode interactif est confiné à `src/viz/window.rs` ; il est entièrement encapsulé derrière la feature `viz-interactive` et ne s'invite pas dans la couche de calcul.
