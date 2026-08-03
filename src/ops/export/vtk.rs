@@ -37,9 +37,10 @@
 //!   (its cells line up one-to-one, submesh by submesh).
 
 use crate::aggregate::Aggregate;
+use crate::atoms::{ElementType, NodeId};
 use crate::containers::element_field::ElementField;
 use crate::containers::field::{Field, SubField};
-use crate::containers::mesh::{ElementType, Mesh, NodeId, SubMesh};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::parallel::*;
@@ -335,8 +336,10 @@ pub fn write_vtk_element_field(mesh: &Mesh, field: &ElementField, path: &Path) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::Node;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, Node, SubMesh};
+    use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Unit square as two TRI3 on a 2-D Coords, plus the four nodes.

@@ -24,7 +24,7 @@ de l'**anneau complet** : les masses, volumes et résultantes nodales sont ceux 
 la pièce de révolution entière.
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
+use pyrucast::coords::Coords;
 
 // Cartésien (par défaut) : dim libre.
 let plan = Coords::new(2).unwrap();
@@ -74,7 +74,7 @@ Seul le ramasse-miettes `Coords::gc()` retire les nœuds dont le refcount
 **interne** est tombé à 0.
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
+use pyrucast::coords::Coords;
 use pyrucast::store::{insert, write};
 
 let coords = insert(Coords::new(2).unwrap());
@@ -181,7 +181,7 @@ réduire la bande/profil. L'identité (`NodeId`) n'est jamais modifiée.
 Rust :
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
+use pyrucast::coords::Coords;
 use pyrucast::store::{insert, read, write};
 
 let coords = insert(Coords::new(2).unwrap());

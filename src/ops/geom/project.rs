@@ -24,7 +24,8 @@
 //! separated point and negative for a penetrated one, which is the sign
 //! convention the contact constraint consumes.
 
-use crate::containers::mesh::{ElementType, Mesh, NodeId};
+use crate::atoms::{ElementType, NodeId};
+use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::parallel::*;
 use crate::store::read;
@@ -333,7 +334,9 @@ fn facet_normal(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, Node, SubMesh};
+    use crate::atoms::Node;
+    use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     fn mesh_2d_segment() -> Mesh {

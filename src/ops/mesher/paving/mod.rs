@@ -28,7 +28,7 @@ pub mod proximity;
 pub mod row;
 pub mod smooth;
 
-use crate::containers::mesh::{NodeId, Point2};
+use crate::atoms::{NodeId, Point2};
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::Cancel;
 use crate::ops::mesher::contour::Domain;

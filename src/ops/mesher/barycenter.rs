@@ -8,7 +8,8 @@
 //! nodes (e.g. Lagrange multipliers) for a set of nodes.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{ElementType, Mesh, NodeId, SubMesh};
+use crate::atoms::{ElementType, NodeId};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
 use crate::store::{insert, read, write};
 
@@ -18,7 +19,7 @@ use crate::store::{insert, read, write};
 /// submesh is a POI1 submesh with one cell per element of the matching input
 /// submesh, holding a **new** node placed at the element's centroid (the
 /// arithmetic mean of its nodes' coordinates). The nodes are minted in the
-/// input mesh's [`Coords`](crate::containers::mesh::Coords);
+/// input mesh's [`Coords`](crate::coords::Coords);
 /// each output POI1 submesh owns the sole initial refcount of the nodes it
 /// mints (handed over via
 /// [`SubMesh::add_cell_taking`](crate::containers::mesh::SubMesh::add_cell_taking)),
@@ -79,9 +80,9 @@ pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::Node;
+    use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::store::{insert, read};
 
     /// A POI1 input yields one colocated (same coordinates) fresh node per

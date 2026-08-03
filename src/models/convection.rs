@@ -241,9 +241,11 @@ pub fn element_film_matrix(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node};
+    use crate::containers::mesh::Mesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Convection on a single SEG2 boundary "edge" of length `L` in a 2-D

@@ -2,9 +2,10 @@
 //! [`crate::containers::finite_element_space::FiniteElementSpace`].
 
 use crate::aggregate::Aggregate;
+use crate::atoms::Element;
 use crate::containers::finite_element_space::Interpolation;
 use crate::containers::finite_element_space::QuadratureRule;
-use crate::containers::finite_element_space::{Element, FiniteElementSpace, SubFiniteElementSpace};
+use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::error::{PyrucastError, Result};
 use crate::py::element::PyElement;
 use crate::py::mesh::PyMesh;

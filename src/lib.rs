@@ -36,7 +36,9 @@
 #![allow(clippy::needless_range_loop)]
 
 pub mod aggregate;
+pub mod atoms;
 pub mod containers;
+pub mod coords;
 pub mod dump;
 pub mod error;
 pub mod interrupt;

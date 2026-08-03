@@ -24,13 +24,13 @@
 //! ```
 //! use pyrucast::containers::field::SubField;
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::containers::mesh::Coords;
+//! use pyrucast::coords::Coords;
 //! use pyrucast::containers::element_field::{ElementField, SubElementField};
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::model::{Model, SubModel};
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::containers::node_field::{NodeField, SubNodeField};
 //! use pyrucast::ops::assemble;
 //! use pyrucast::ops::mesher;
@@ -84,8 +84,8 @@
 //! assert!((solution.value(b.id(), "T").unwrap() - 1.0).abs() < 1e-12);
 //! ```
 
+use crate::atoms::NodeId;
 use crate::containers::matrix::Matrix;
-use crate::containers::mesh::NodeId;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
@@ -317,16 +317,16 @@ fn solve_inner(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::element_field::SubElementField;
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Mesh;
-    use crate::containers::mesh::Node;
     use crate::containers::mesh::SubMesh;
     use crate::containers::model::{Model, SubModel};
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// 1-D Poisson `-u'' = 0` on `[0, 1]` with `u(0) = 0` and `u(1) = 1`,

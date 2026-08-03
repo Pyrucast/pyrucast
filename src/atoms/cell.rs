@@ -9,10 +9,10 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::Coords;
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::coords::Coords;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::store::insert;
 //!
 //! let coords = insert(Coords::new(2).unwrap());
@@ -32,9 +32,9 @@
 
 use std::fmt;
 
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::Node;
-use crate::containers::mesh::NodeId;
+use crate::atoms::ElementType;
+use crate::atoms::Node;
+use crate::atoms::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
@@ -189,9 +189,9 @@ impl ExactSizeIterator for CellIter {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::Node;
+    use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     #[test]

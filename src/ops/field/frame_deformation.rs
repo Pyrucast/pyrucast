@@ -33,8 +33,8 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::Field;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::containers::mesh::Coords;
 use crate::containers::node_field::{NodeField, NodeFieldView};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 
@@ -243,9 +243,11 @@ fn rotate(r: &[[f64; 3]; 3], v: &[f64]) -> [f64; 3] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Build a one-cell frame FE space between two nodes plus a `(w,θ)`/DOF

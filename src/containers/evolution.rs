@@ -1093,7 +1093,9 @@ fn element_sub_on(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, ElementType, Node, SubMesh};
+    use crate::atoms::{ElementType, Node};
+    use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::store::{insert, Handle};
 
     fn scalar_curve(samples: &[(f64, f64)], oor: OutOfRange) -> SubEvolution {

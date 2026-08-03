@@ -40,10 +40,10 @@
 //! # Example — single block
 //!
 //! ```
-//! use pyrucast::containers::mesh::Coords;
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::coords::Coords;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::containers::matrix::{SubMatrix, DofOrdering};
 //! use pyrucast::store::insert;
 //!
@@ -72,14 +72,14 @@
 //! ```
 
 use crate::aggregate::Aggregate;
+use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::mesh::Coords;
 use crate::containers::mesh::Mesh;
-use crate::containers::mesh::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::SubModel;
 use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::models::{MatrixKind, Physics};
 use crate::parallel::*;
@@ -1179,7 +1179,7 @@ impl Matrix {
     /// DOF list. O(total block DOFs) via a hash set (no quadratic `contains`).
     ///
     /// Order: **solver order** when the backing `Coords` carries a
-    /// [`permutation`](crate::containers::mesh::Coords::permutation) (stable
+    /// [`permutation`](crate::coords::Coords::permutation) (stable
     /// sort by the node's permutation index, so the per-node variable order is
     /// preserved); otherwise **first-seen** (identical to the historical
     /// behaviour, hence bit-for-bit stable when no permutation is set).
@@ -1735,9 +1735,9 @@ impl crate::dump::Dump for Matrix {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Build a POI1 SubMesh with `n` fresh nodes in a new 1-D Coords.

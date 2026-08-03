@@ -25,7 +25,7 @@
 //! mesh is no longer conforming, and no solver can assemble across that face.
 //! A pyramid is the one element that presents a square on one side and
 //! triangles on the other, so it is exactly what the junction needs — see
-//! [`PYRA5`](crate::containers::mesh::ElementType::PYRA5), whose shape
+//! [`PYRA5`](crate::atoms::ElementType::PYRA5), whose shape
 //! functions reduce to `QUA4`'s on the base and stay linear along the edges to
 //! the apex, which is what makes the continuity hold.
 //!
@@ -35,7 +35,9 @@
 //! of the mesh meet node for node.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, Point3, SubMesh};
+use crate::atoms::{ElementType, Node, NodeId, Point3};
+use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use crate::ops::mesher::plaster::front::Front;
@@ -273,8 +275,8 @@ fn write_positions(coords: &Handle<Coords>, fab: &plaster::front::Fabric) -> Res
 
 /// Outward unit normal of a quadrangular facet, by Newell's method so a
 /// slightly non-planar quadrangle still gets a sensible answer.
-fn quad_normal(p: &[Point3]) -> crate::containers::mesh::Vector3 {
-    let mut n = crate::containers::mesh::Vector3::zeros();
+fn quad_normal(p: &[Point3]) -> crate::atoms::Vector3 {
+    let mut n = crate::atoms::Vector3::zeros();
     for i in 0..p.len() {
         let (a, b) = (p[i], p[(i + 1) % p.len()]);
         n.x += (a.y - b.y) * (a.z + b.z);
@@ -330,7 +332,7 @@ fn materialize(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
+    use crate::coords::Coords;
     use std::collections::HashMap;
 
     /// The skin of a `nx × ny × nz` box of hexahedra: a closed QUA4 shell with

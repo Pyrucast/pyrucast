@@ -21,10 +21,11 @@
 //! `ρI_p`/`ρI_y`/`ρI_z`, optional `rho`) and the **geometric stiffness** under
 //! the axial force `N` — linear-element forms, rotated `Tᵀ·T`.
 
+use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
-use crate::containers::mesh::{ElementType, SubMesh};
+use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
@@ -495,9 +496,11 @@ fn write_12x12(ke: &mut [f64], m: &[[f64; 12]; 12]) {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{Node, NodeId};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, Mesh, Node, NodeId};
+    use crate::containers::mesh::Mesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     fn one_beam(bx: f64, by: f64, bz: f64) -> (Frame3d, NodeId, NodeId) {

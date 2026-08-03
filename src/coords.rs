@@ -23,7 +23,7 @@
 //!   usual [`crate::store::Handle`] refcount.
 //! - **Each node** inside the Coords has its own refcount,
 //!   manipulated via [`Coords::incref`] / [`Coords::decref`]
-//!   (used by [`crate::containers::mesh::Node`] and, later, by meshes and fields).
+//!   (used by [`crate::atoms::Node`] and, later, by meshes and fields).
 //!
 //! # Identity vs solver ordering
 //!
@@ -49,7 +49,8 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::{Coords, NodeId};
+//! use pyrucast::atoms::NodeId;
+//! use pyrucast::coords::Coords;
 //! use pyrucast::store::{insert, write};
 //!
 //! let h = insert(Coords::new(2).unwrap());
@@ -62,31 +63,10 @@
 //! assert_eq!(c.gc(), 1);
 //! ```
 
+use crate::atoms::NodeId;
 use crate::error::{PyrucastError, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-
-/// Stable internal identifier of a node inside a `Coords`.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct NodeId(pub u32);
-
-impl fmt::Debug for NodeId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NodeId({})", self.0)
-    }
-}
-
-impl fmt::Display for NodeId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl crate::dump::Dump for NodeId {
-    fn render(&self, _opts: &crate::dump::DumpOptions) -> String {
-        self.to_string()
-    }
-}
 
 /// How the coordinates of a [`Coords`] are to be read — the geometric
 /// hypothesis every integral built on top of it obeys.
@@ -174,7 +154,7 @@ impl Coords {
     /// [`ElasticityModel::Axisymmetric`](crate::models::elasticity::ElasticityModel::Axisymmetric).
     ///
     /// ```
-    /// use pyrucast::containers::mesh::Coords;
+    /// use pyrucast::coords::Coords;
     ///
     /// let c = Coords::axisymmetric().unwrap();
     /// assert_eq!(c.dim(), 2);
@@ -233,7 +213,7 @@ impl Coords {
 
     /// Add a node with these coordinates in **all** configurations. Initializes its
     /// refcount to 1 — the caller is responsible for at least one decrement
-    /// (typically through the end-of-life of a [`crate::containers::mesh::Node`]).
+    /// (typically through the end-of-life of a [`crate::atoms::Node`]).
     pub fn add_node(&mut self, coords: &[f64]) -> Result<NodeId> {
         if coords.len() != self.dim as usize {
             return Err(PyrucastError::Message(format!(

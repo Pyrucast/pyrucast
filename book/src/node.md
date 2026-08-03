@@ -21,7 +21,8 @@ propre `incref`) référence un `NodeId`, ce nœud est protégé du ramasse-miet
 dans [Coordonnées](coords.md).
 
 ```rust,ignore
-use pyrucast::containers::mesh::{Coords, Node};
+use pyrucast::atoms::Node;
+use pyrucast::coords::Coords;
 use pyrucast::store::{insert, write};
 
 let coords = insert(Coords::new(2).unwrap());

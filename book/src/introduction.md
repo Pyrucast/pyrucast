@@ -59,7 +59,7 @@ Résumé des rôles :
 Exemple minimal en Rust :
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
+use pyrucast::coords::Coords;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
 use pyrucast::mesh::node::Node;

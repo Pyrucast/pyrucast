@@ -54,16 +54,17 @@
 //! finale, effort tranchant au bout).
 
 use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::ElementType;
+use pyrucast::atoms::Node;
 use pyrucast::containers::element_field::ElementField;
 use pyrucast::containers::evolution::{
     Evolution, Interpolated, OutOfRange, SubEvolution, SubValue,
 };
 use pyrucast::containers::field::{Field, SubField};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::ElementType;
-use pyrucast::containers::mesh::{Coords, Node};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
+use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::assemble::internal_forces;
 use pyrucast::ops::assemble::{flux, stiffness, FluxDensity};

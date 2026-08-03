@@ -1,5 +1,5 @@
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::Node;
+use crate::atoms::ElementType;
+use crate::atoms::Node;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 
@@ -60,7 +60,7 @@ pub fn arc(
         ));
     }
 
-    use crate::containers::mesh::Vector3;
+    use crate::atoms::Vector3;
     let to_v3 = |p: &[f64]| {
         Vector3::new(
             p.first().copied().unwrap_or(0.0),
@@ -122,9 +122,9 @@ pub fn arc(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::store::insert;
     use std::f64::consts::PI;
 

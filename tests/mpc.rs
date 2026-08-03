@@ -6,13 +6,15 @@
 //! `u(x) = x` and the equivalence with Dirichlet holds for the single-term case.
 
 use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::element_field::{ElementField, SubElementField};
 use pyrucast::containers::field::SubField;
 use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
-use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
+use pyrucast::coords::Coords;
 use pyrucast::models::mpc::MpcTerm;
 use pyrucast::ops::assemble::stiffness;
 use pyrucast::ops::mesher::barycenter;

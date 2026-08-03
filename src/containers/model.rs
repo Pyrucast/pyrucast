@@ -63,14 +63,15 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::containers::mesh::{Coords, NodeId};
+//! use pyrucast::atoms::NodeId;
+//! use pyrucast::coords::Coords;
 //! use pyrucast::containers::element_field::SubElementField;
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::containers::field::SubField;
 //! use pyrucast::containers::model::{Model, SubModel};
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::ops::assemble;
 //! use pyrucast::ops::mesher;
 //! use pyrucast::store::insert;
@@ -113,11 +114,11 @@
 //! ```
 
 use crate::aggregate::Aggregate;
+use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::matrix::AssemblyPattern;
 use crate::containers::mesh::Mesh;
-use crate::containers::mesh::NodeId;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
@@ -1198,14 +1199,14 @@ fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::element_field::ElementField;
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
     use crate::containers::mesh::Mesh;
-    use crate::containers::mesh::Node;
     use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::ops::assemble;
     use crate::store::{insert, write};
 

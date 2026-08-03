@@ -479,9 +479,11 @@ fn voigt_stress(sigma: &[f64; 6], space_dim: usize, model: ElasticityModel, r: u
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node};
+    use crate::containers::mesh::Mesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     fn unit_quad(model: ElasticityModel) -> Mazars {

@@ -1,7 +1,7 @@
 //! Python wrappers for [`crate::containers::model::SubModel`] and [`crate::containers::model::Model`].
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::NodeId;
+use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::{mpc, Physics, RelationSense};

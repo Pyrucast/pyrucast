@@ -39,8 +39,8 @@
 //! periodicity and is validated with a clear error. Chained relations (a master
 //! that is itself a slave elsewhere) are out of scope for v1.
 
+use crate::atoms::NodeId;
 use crate::containers::matrix::Matrix;
-use crate::containers::mesh::NodeId;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
@@ -459,9 +459,11 @@ fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::matrix::{DofOrdering, SubMatrix};
-    use crate::containers::mesh::{Coords, ElementType, Node, SubMesh};
+    use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// A constraint-free model must route through the plain LU solver: a

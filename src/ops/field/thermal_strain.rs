@@ -126,8 +126,10 @@ pub fn thermal_strain(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::store::{insert, read, write};
 
     fn tri3_fes_2d() -> FiniteElementSpace {

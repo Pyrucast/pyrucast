@@ -7,14 +7,14 @@
 //! functions are sampled when integrating.
 //!
 //! The reference frames are those documented on each `ElementType`
-//! variant (see [`crate::containers::mesh::element_type`]). The weights are calibrated so
+//! variant (see [`crate::atoms::element_type`]). The weights are calibrated so
 //! that the sum equals the measure of the reference domain (i.e., 2 for
 //! SEG2, 1/2 for TRI3, 4 for QUA4, 1/6 for TET4, 8 for HEX8).
 //!
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::finite_element_space::QuadratureRule;
 //!
 //! let (xi, w) = QuadratureRule::Gauss.points(ElementType::QUA4).unwrap();
@@ -24,7 +24,7 @@
 //! assert_eq!(xi.len(), 4 * 2);       // n_g × ref_dim, flat
 //! ```
 
-use crate::containers::mesh::ElementType;
+use crate::atoms::ElementType;
 use crate::error::{PyrucastError, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;

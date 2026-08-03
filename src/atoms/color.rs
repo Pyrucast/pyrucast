@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::RgbColor;
+//! use pyrucast::atoms::RgbColor;
 //!
 //! let red = RgbColor::new(220, 60, 60);
 //! assert_eq!((red.r, red.g, red.b), (220, 60, 60));

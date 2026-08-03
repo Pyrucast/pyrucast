@@ -28,7 +28,7 @@
 //! entrance, by making every input loop even.
 
 use super::geom::{orient, quad_is_valid, quad_quality, segments_cross, tri_quality};
-use crate::containers::mesh::{Point2, Vector2};
+use crate::atoms::{Point2, Vector2};
 
 /// How many diagonals are weighed on a large polygon before one is picked.
 const DIAGONAL_SAMPLES: usize = 256;

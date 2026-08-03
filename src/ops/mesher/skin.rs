@@ -13,7 +13,9 @@
 //! cube thus yields six submeshes, a prism five (two caps and three sides).
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{Coords, ElementType, Mesh, NodeId, SubMesh};
+use crate::atoms::{ElementType, NodeId};
+use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 use std::collections::HashMap;
@@ -283,7 +285,7 @@ fn emit_submesh(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Node;
+    use crate::atoms::Node;
     use crate::store::insert;
 
     /// Eight corner nodes of the unit cube, indexed as HEX8 expects:

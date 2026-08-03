@@ -1,6 +1,7 @@
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::NodeId;
-use crate::containers::mesh::{Coords, Mesh, SubMesh};
+use crate::atoms::NodeId;
+use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read};
 use std::collections::HashMap;
@@ -15,7 +16,7 @@ use std::collections::HashMap;
 /// coordinates** (no averaging — a deliberate choice, like the rest of the
 /// pipeline, to avoid silently moving geometry). Welded-away nodes are left in
 /// the shared [`Coords`]; once nothing references them they become collectable
-/// by [`Coords::gc`](crate::containers::mesh::Coords::gc).
+/// by [`Coords::gc`](crate::coords::Coords::gc).
 ///
 /// Cells that collapse — i.e. reference the same representative more than once
 /// after welding (a SEG2 whose two ends merge, a TRI3 with two coincident
@@ -169,8 +170,8 @@ fn neighbour_offsets(dim: usize) -> Vec<Vec<i64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
 
     fn coords2() -> crate::store::Handle<Coords> {
         insert(Coords::new(2).unwrap())

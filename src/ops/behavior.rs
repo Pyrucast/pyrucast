@@ -96,11 +96,13 @@ pub fn integrate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::model::SubModel;
     use crate::containers::node_field::{NodeField, SubNodeField};
+    use crate::coords::Coords;
     use crate::ops::build::{material_field, material_field_per_sub_model};
     use crate::ops::field::{frame_deformation, gradient};
 

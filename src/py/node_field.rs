@@ -2,8 +2,8 @@
 //! [`crate::containers::node_field::NodeField`].
 
 use crate::aggregate::Aggregate;
+use crate::atoms::NodeId;
 use crate::containers::field::SubField;
-use crate::containers::mesh::NodeId;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::ops::field::Band;
 use crate::py::mesh::{PyMesh, PySubMesh};

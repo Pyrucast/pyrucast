@@ -181,9 +181,9 @@ Cette uniformité simplifie tout : le solveur reçoit une seule `Matrix` + un se
 ## API Rust
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
-use pyrucast::containers::mesh::element_type::ElementType;
-use pyrucast::containers::mesh::node::Node;
+use pyrucast::coords::Coords;
+use pyrucast::atoms::element_type::ElementType;
+use pyrucast::atoms::node::Node;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::model::Model;

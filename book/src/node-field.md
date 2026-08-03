@@ -88,7 +88,9 @@ zone (`SubNodeField`) sur `+`/`*`/… Le nommé `merge(a, b)` ≡ `a | b`.
 
 ```rust,ignore
 use pyrucast::aggregate::Aggregate;
-use pyrucast::containers::mesh::{Coords, ElementType, Node, SubMesh, Mesh};
+use pyrucast::atoms::{ElementType, Node};
+use pyrucast::coords::Coords;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::store::{insert, write};
 

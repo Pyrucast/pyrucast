@@ -14,7 +14,7 @@
 //! The axisymmetric naming follows Cast3M: `x = r`, `y = z` (axis of
 //! revolution) and the **`zz` component is the hoop** `θθ`, whose strain is
 //! `ε_θθ = u_r / r`. It requires an axisymmetric geometry
-//! ([`Coords::axisymmetric`](crate::containers::mesh::Coords::axisymmetric)),
+//! ([`Coords::axisymmetric`](crate::coords::Coords::axisymmetric)),
 //! which is also what puts the `2πr` in the integration measure.
 //!
 //! Primal `u_x, u_y(, u_z)` (displacement), dual `f_x, …` (nodal force).
@@ -719,9 +719,11 @@ pub fn element_tangent_from_state(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node, NodeId};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId};
+    use crate::containers::mesh::Mesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     fn unit_quad(model: ElasticityModel) -> Elasticity {

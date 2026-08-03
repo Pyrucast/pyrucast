@@ -1,7 +1,7 @@
 //! `Element` — lightweight view on a single element of a
 //! [`SubFiniteElementSpace`].
 //!
-//! It is to [`SubFiniteElementSpace`] what [`crate::containers::mesh::Cell`]
+//! It is to [`SubFiniteElementSpace`] what [`crate::atoms::Cell`]
 //! is to [`crate::containers::mesh::SubMesh`] : a `(handle, cell_idx)`
 //! pair that exposes the FE quantities (shape functions, Jacobian,
 //! physical derivatives, …) for a single cell. Cloning an `Element` is
@@ -11,11 +11,11 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::Coords;
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::coords::Coords;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::store::insert;
 //!
 //! let coords = insert(Coords::new(1).unwrap());
@@ -35,9 +35,9 @@
 
 use std::fmt;
 
+use crate::atoms::Cell;
+use crate::atoms::NodeId;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::mesh::Cell;
-use crate::containers::mesh::NodeId;
 use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
 
@@ -225,11 +225,11 @@ impl ExactSizeIterator for ElementIter {}
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     fn seg2_fes() -> (Handle<Coords>, Vec<Node>, FiniteElementSpace) {

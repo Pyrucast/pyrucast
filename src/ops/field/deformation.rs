@@ -26,7 +26,7 @@ use crate::store::{insert, read};
 /// shear `γ`), with one component `eps_<ai><aj>` per independent entry
 /// `i ≤ j`, in order `eps_xx, eps_xy, …, eps_yy, …`.
 ///
-/// On an [axisymmetric](crate::containers::mesh::Coords::axisymmetric) subspace
+/// On an [axisymmetric](crate::coords::Coords::axisymmetric) subspace
 /// a fourth component `eps_zz` is appended: the **hoop** strain
 /// `ε_θθ = u_r / r`, which the meridian gradient cannot express.
 ///
@@ -103,9 +103,11 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::store::{insert, read};
 
     /// Linear displacement `u_x = 2x + 0.5y`, `u_y = 0.1x + 3y` on a TRI3.

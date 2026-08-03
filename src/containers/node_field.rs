@@ -28,10 +28,10 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::Coords;
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::coords::Coords;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::containers::node_field::SubNodeField;
 //! use pyrucast::store::insert;
 //!
@@ -59,10 +59,11 @@
 //! ```
 
 use crate::aggregate::Aggregate;
+use crate::atoms::ElementType;
+use crate::atoms::NodeId;
 use crate::containers::field::SubField;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::{Coords, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 #[cfg(test)]
 use crate::store::write;
@@ -233,10 +234,10 @@ impl SubNodeField {
     ///
     /// ```
     /// use pyrucast::aggregate::Aggregate;
-    /// use pyrucast::containers::mesh::Coords;
-    /// use pyrucast::containers::mesh::ElementType;
+    /// use pyrucast::coords::Coords;
+    /// use pyrucast::atoms::ElementType;
     /// use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// use pyrucast::containers::mesh::Node;
+    /// use pyrucast::atoms::Node;
     /// use pyrucast::containers::node_field::SubNodeField;
     /// use pyrucast::store::insert;
     ///
@@ -861,7 +862,7 @@ impl NodeFieldView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Node;
+    use crate::atoms::Node;
     use crate::store::insert;
 
     fn make_poi1_with(n_nodes: usize) -> (Handle<Coords>, Vec<Node>, Handle<SubMesh>) {

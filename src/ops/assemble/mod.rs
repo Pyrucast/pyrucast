@@ -288,8 +288,10 @@ pub fn lump(m: &Matrix) -> Result<Matrix> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::ops::build::material_field_per_sub_model;
 
     /// Assemble the stiffness the **literal** way: every sub-model fills its

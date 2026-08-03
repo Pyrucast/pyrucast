@@ -1,7 +1,7 @@
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::Node;
-use crate::containers::mesh::NodeId;
+use crate::atoms::ElementType;
+use crate::atoms::Node;
+use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read};
@@ -107,10 +107,10 @@ pub(super) fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::ops::mesher::line::line;
     use crate::store::insert;
 

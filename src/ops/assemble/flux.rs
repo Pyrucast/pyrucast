@@ -105,8 +105,10 @@ pub fn flux(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node, NodeId};
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Lagrange-1 FE subspace over a fresh SEG2 line of `n` equal elements from

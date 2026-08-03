@@ -18,7 +18,8 @@
 //! this operator's.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{ElementType, Mesh, NodeId, SubMesh};
+use crate::atoms::{ElementType, NodeId};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read};
 
@@ -102,7 +103,8 @@ pub fn convert(mesh: &Mesh, target: ElementType) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, Node};
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     #[test]
@@ -207,7 +209,7 @@ mod tests {
             .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
             .collect();
         let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
-        let color = crate::containers::mesh::RgbColor::new(10, 20, 30);
+        let color = crate::atoms::RgbColor::new(10, 20, 30);
         sm.set_face_color(color);
         let mut m = Mesh::from_submesh(sm);
         m.add_cell(&n).unwrap();

@@ -18,7 +18,9 @@
 //! dihedral-angle face splitting done by [`crate::ops::mesher::skin()`].
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{Coords, ElementType, Mesh, NodeId, SubMesh};
+use crate::atoms::{ElementType, NodeId};
+use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 use std::collections::HashMap;
@@ -281,7 +283,8 @@ fn split_at_corners(chain: &[NodeId], corners: &[usize]) -> Vec<Vec<NodeId>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, Node};
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// signed area of a node-id loop, read from `coords` (2-D).

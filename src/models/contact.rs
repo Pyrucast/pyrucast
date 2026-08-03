@@ -45,9 +45,10 @@
 //! space dimension, since the normal couples them all in one scalar relation.
 
 use crate::aggregate::Aggregate;
+use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::{Mesh, NodeId, SubMesh};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
@@ -408,7 +409,8 @@ fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, ElementType, Node};
+    use crate::atoms::{ElementType, Node};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// A slave node above a single SEG2 master (2-D): pairing, relation

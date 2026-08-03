@@ -1,6 +1,6 @@
 //! Revolution of an axisymmetric plot into the 3-D body it describes.
 //!
-//! An [axisymmetric](crate::containers::mesh::Coords::axisymmetric) mesh is the
+//! An [axisymmetric](crate::coords::Coords::axisymmetric) mesh is the
 //! meridian half-plane `(r, z)` of a body of revolution: drawn as it stands, it
 //! shows a flat 2-D section. A [`Revolve`] set on the
 //! [`View`](crate::viz::View) sweeps that section around the axis `r = 0` and
@@ -31,7 +31,7 @@
 
 use std::collections::HashMap;
 
-use crate::containers::mesh::{Point3, RgbColor};
+use crate::atoms::{Point3, RgbColor};
 use crate::error::{PyrucastError, Result};
 #[cfg(any(test, feature = "viz-interactive"))]
 use crate::viz::camera::Bbox3;

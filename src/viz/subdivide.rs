@@ -13,8 +13,8 @@
 //! shared edge are evaluated separately by each side, so inter-element
 //! discontinuities of a Gauss-point field stay visible.
 
+use crate::atoms::ElementType;
 use crate::containers::finite_element_space::Interpolation;
-use crate::containers::mesh::ElementType;
 use crate::error::Result;
 use crate::viz::mesh_draw::{HEX8_FACES, PENTA6_FACES, PYRA5_FACES, TET4_FACES};
 

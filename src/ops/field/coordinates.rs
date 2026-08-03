@@ -1,7 +1,7 @@
 use crate::aggregate::Aggregate;
+use crate::atoms::NodeId;
 use crate::containers::field::Field;
 use crate::containers::mesh::Mesh;
-use crate::containers::mesh::NodeId;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, write};
@@ -178,10 +178,10 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     #[test]

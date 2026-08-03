@@ -7,7 +7,8 @@
 //! pick a node to pin a boundary condition or read a result at, when you know
 //! roughly *where* it is but not its id.
 
-use crate::containers::mesh::{Mesh, Node, NodeId};
+use crate::atoms::{Node, NodeId};
+use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::store::read;
 use std::collections::HashSet;
@@ -63,7 +64,9 @@ pub fn nearest_node(mesh: &Mesh, point: &[f64]) -> Result<Node> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, ElementType, SubMesh};
+    use crate::atoms::ElementType;
+    use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     #[test]

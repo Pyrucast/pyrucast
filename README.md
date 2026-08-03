@@ -24,7 +24,7 @@ pyrucast = { git = "…", default-features = false }   # pas de pyo3, pas de lib
 ```
 
 ```rust
-use pyrucast::containers::mesh::ElementType;
+use pyrucast::atoms::ElementType;
 let mesh = pyrucast::ops::mesher::triangulate_surface(&contour, ElementType::TRI3, Some(1.0))?;
 ```
 

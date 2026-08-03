@@ -19,7 +19,7 @@
 //! bigger than the front it indexes.
 
 use super::front::Front;
-use crate::containers::mesh::Point2;
+use crate::atoms::Point2;
 
 /// Uniform grid bucketing front edges by their bounding box.
 ///

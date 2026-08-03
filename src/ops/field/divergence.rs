@@ -96,8 +96,10 @@ fn divergence_element(geoms: &[CellGeom], field: &SubElementField, fe: &mut [f64
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
 
     /// 1-D, two SEG2 on `[0, 2]`, uniform field `F = (a)`: the weak divergence
     /// telescopes to `[−a, 0, +a]` — zero at the interior node (div of a

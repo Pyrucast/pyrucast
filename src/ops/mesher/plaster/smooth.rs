@@ -12,7 +12,7 @@
 //! square. Requiring that the worst corner around a node does not get worse is
 //! therefore not a proxy for quality — it is the thing itself.
 
-use crate::containers::mesh::Point3;
+use crate::atoms::Point3;
 
 /// The three edges leaving each corner of a `HEX8`, in an order whose
 /// determinant is positive on the reference element.
@@ -200,7 +200,7 @@ mod tests {
                     let interior = i == 1 && j == 1 && k == 1;
                     let mut p = Point3::new(i as f64, j as f64, k as f64);
                     if interior {
-                        p += crate::containers::mesh::Vector3::new(0.45, -0.4, 0.35);
+                        p += crate::atoms::Vector3::new(0.45, -0.4, 0.35);
                     }
                     pts.push(p);
                     movable.push(interior);

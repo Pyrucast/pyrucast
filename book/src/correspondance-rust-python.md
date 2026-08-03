@@ -27,14 +27,14 @@ Le nom de la classe Python est identique au nom de la structure Rust.
 
 | Module Rust | Structure Rust | Classe Python | Chapitre |
 |---|---|---|---|
-| `containers::mesh::coords` | `Coords` | `pyrucast.Coords` | [Coords](coords.md) |
-| `containers::mesh::node` | `Node` | `pyrucast.Node` | [Nœud](node.md) |
+| `coords` | `Coords` | `pyrucast.Coords` | [Coords](coords.md) |
+| `atoms::node` | `Node` | `pyrucast.Node` | [Nœud](node.md) |
 | `containers::mesh` | `SubMesh` | `pyrucast.SubMesh` *(vue, via `mesh[i]`)* | [Maillage](mesh.md) |
 | `containers::mesh` | `Mesh` | `pyrucast.Mesh` | [Maillage](mesh.md) |
-| `containers::mesh::cell` | `Cell` | `pyrucast.Cell` | [Maillage](mesh.md) |
+| `atoms::cell` | `Cell` | `pyrucast.Cell` | [Maillage](mesh.md) |
 | `containers::finite_element_space` | `SubFiniteElementSpace` | `pyrucast.SubFiniteElementSpace` | [Espace EF](fe-space.md) |
 | `containers::finite_element_space` | `FiniteElementSpace` | `pyrucast.FiniteElementSpace` | [Espace EF](fe-space.md) |
-| `containers::finite_element_space::element` | `Element` | `pyrucast.Element` | [Espace EF](fe-space.md) |
+| `atoms::element` | `Element` | `pyrucast.Element` | [Espace EF](fe-space.md) |
 | `containers::node_field` | `SubNodeField` | `pyrucast.SubNodeField` *(vue, via `node_field[i]`)* | [Champ aux nœuds](node-field.md) |
 | `containers::node_field` | `NodeField` | `pyrucast.NodeField` | [Champ aux nœuds](node-field.md) |
 | `containers::element_field` | `SubElementField` | `pyrucast.SubElementField` *(vue, via `element_field[i]`)* | [Champ aux points de Gauss](element-field.md) |

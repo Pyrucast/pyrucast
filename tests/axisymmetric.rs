@@ -2,7 +2,7 @@
 //! the public API.
 //!
 //! The geometry is the meridian plane `(r, z)` of
-//! [`Coords::axisymmetric`](pyrucast::containers::mesh::Coords::axisymmetric):
+//! [`Coords::axisymmetric`](pyrucast::coords::Coords::axisymmetric):
 //! `x = r`, `y = z`. Two things then differ from a plane computation, and each
 //! gets its own checks here:
 //!
@@ -16,12 +16,14 @@
 //! Reference solution: the Lamé thick-walled cylinder under internal pressure.
 
 use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::element_field::ElementField;
 use pyrucast::containers::field::SubField;
 use pyrucast::containers::finite_element_space::{FiniteElementSpace, Interpolation};
-use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
+use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::assemble::{self, FluxDensity};
 use pyrucast::ops::solver::lu::solve;

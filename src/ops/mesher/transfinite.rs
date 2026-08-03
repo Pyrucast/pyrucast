@@ -1,8 +1,9 @@
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::Node;
-use crate::containers::mesh::NodeId;
-use crate::containers::mesh::{Coords, Mesh, SubMesh};
+use crate::atoms::ElementType;
+use crate::atoms::Node;
+use crate::atoms::NodeId;
+use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
 
@@ -195,9 +196,9 @@ fn side_columns(mesh: &Mesh, label: &str) -> Result<SideColumns> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::ops::mesher::line::line;
     use crate::store::insert;
 

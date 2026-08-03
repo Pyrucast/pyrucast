@@ -13,7 +13,9 @@
 //!
 //! ```
 //! use pyrucast::containers::field::SubField;
-//! use pyrucast::containers::mesh::{Coords, ElementType, Node, SubMesh};
+//! use pyrucast::atoms::{ElementType, Node};
+//! use pyrucast::containers::mesh::SubMesh;
+//! use pyrucast::coords::Coords;
 //! use pyrucast::containers::node_field::SubNodeField;
 //! use pyrucast::store::insert;
 //!
@@ -1237,10 +1239,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::element_field::ElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::store::{insert, write, Handle};
 
     fn make_node_field(values: &[f64]) -> SubNodeField {

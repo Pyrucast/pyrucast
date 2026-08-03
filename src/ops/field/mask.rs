@@ -109,8 +109,10 @@ pub fn mask_sub_cells(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::store::{insert, read, write};
 
     /// Single-zone POI1 NodeField over `n` 1-D nodes; returns (nodes, field).

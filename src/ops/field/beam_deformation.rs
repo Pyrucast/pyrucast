@@ -97,9 +97,11 @@ fn subspace_beam_deformation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Pure bending kinematics `w = 0`, `θ = x` on a SEG2 ⇒ `κ = 1`, `γ = −θ`.

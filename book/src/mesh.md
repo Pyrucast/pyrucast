@@ -114,7 +114,7 @@ copie.unit().add_cell([b, n3, n4])  # OK
 ## API Rust
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
+use pyrucast::coords::Coords;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::{Mesh, SubMesh};
 use pyrucast::mesh::node::Node;

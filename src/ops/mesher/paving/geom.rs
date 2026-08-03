@@ -6,7 +6,7 @@
 //! degenerate input. That is what lets the front invariant — a set of simple,
 //! pairwise disjoint loops — be *maintained* rather than *hoped for*.
 
-use crate::containers::mesh::{Point2, Vector2};
+use crate::atoms::{Point2, Vector2};
 use crate::ops::mesher::predicates::orient2d;
 
 /// Exact orientation of the triangle `(a, b, c)`: `> 0` counter-clockwise,

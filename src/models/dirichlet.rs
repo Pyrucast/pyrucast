@@ -4,7 +4,7 @@
 //! is a *constraint*, not a volumetric physics: it carries no material and no
 //! constitutive law. It is built from **two meshes supplied by the user** — it
 //! creates no node and never mutates the
-//! [`Coords`](crate::containers::mesh::Coords):
+//! [`Coords`](crate::coords::Coords):
 //!
 //! - `imposed_mesh`  — POI1 (for now): the constrained nodes (shared with the
 //!   target physics), one node per cell;
@@ -37,8 +37,9 @@
 //! be overridden by hand.
 
 use crate::aggregate::Aggregate;
+use crate::atoms::{ElementType, NodeId};
 use crate::containers::element_field::SubElementField;
-use crate::containers::mesh::{ElementType, Mesh, NodeId};
+use crate::containers::mesh::Mesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
@@ -93,7 +94,7 @@ impl Dirichlet {
     /// `target_dual` is the dual variable of the target physics (e.g. `"q"`).
     /// `multiplier` / `imposed_value` default to `lambda_<imposed_variable>` /
     /// `imposed_<imposed_variable>` when `None`. Both meshes must be POI1 (for
-    /// now), share one [`Coords`](crate::containers::mesh::Coords),
+    /// now), share one [`Coords`](crate::coords::Coords),
     /// and pair element-for-element (same number of submeshes, same cell count
     /// per submesh).
     ///

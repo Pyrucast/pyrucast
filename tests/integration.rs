@@ -2,10 +2,11 @@
 //! an external crate (Phase 0 + Phase 1 + Phase 2).
 
 use pyrucast::aggregate::Aggregate;
-use pyrucast::containers::mesh::coords::{Coords, NodeId};
-use pyrucast::containers::mesh::element_type::ElementType;
-use pyrucast::containers::mesh::node::Node;
+use pyrucast::atoms::element_type::ElementType;
+use pyrucast::atoms::node::Node;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
+use pyrucast::atoms::NodeId;
+use pyrucast::coords::Coords;
 use pyrucast::persist::Persist;
 use pyrucast::store::{compact, insert, live_count, read, swap_out, write};
 use pyrucast::{PyrucastError, Result};

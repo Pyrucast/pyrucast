@@ -4,8 +4,9 @@
 //! mirroring `src/ops/mesher/` — rather than on the `Mesh` class, per the
 //! `py/ops/` convention (operations live with operations).
 
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::{Mesh, Node, SubMesh};
+use crate::atoms::ElementType;
+use crate::atoms::Node;
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::py::coords::PyCoords;
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;

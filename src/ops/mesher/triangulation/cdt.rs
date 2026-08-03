@@ -28,7 +28,7 @@
 //! and hole removal will be layered on top in subsequent commits.
 
 use super::{cross2, point_in_triangle};
-use crate::containers::mesh::{Point2, Vector2};
+use crate::atoms::{Point2, Vector2};
 use crate::error::{PyrucastError, Result};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -1453,7 +1453,7 @@ fn in_circle_tolerant(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
 ///
 /// # Example
 /// ```
-/// use pyrucast::containers::mesh::Point2;
+/// use pyrucast::atoms::Point2;
 /// use pyrucast::ops::mesher::triangulation::delaunay_2d;
 ///
 /// let pts = vec![

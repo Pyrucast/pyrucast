@@ -51,9 +51,11 @@ pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::store::{insert, read};
 
     /// Constant nodal field ⇒ same value at every Gauss point, same component

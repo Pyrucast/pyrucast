@@ -20,8 +20,8 @@
 //! no copy) in the result.
 
 use crate::aggregate::Aggregate;
+use crate::atoms::NodeId;
 use crate::containers::field::SubField;
-use crate::containers::mesh::NodeId;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
 use crate::store::{insert, read, Handle};
@@ -136,8 +136,10 @@ pub fn consolidate_node(field: &NodeField) -> Result<NodeField> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::Field;
-    use crate::containers::mesh::{Coords, ElementType, Node, SubMesh};
+    use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::store::{insert, write, Handle};
 
     /// Single-zone POI1 field over `nodes`, sharing the support handle `sm`.

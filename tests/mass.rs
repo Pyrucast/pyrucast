@@ -9,9 +9,11 @@
 //! Matrix rows are labelled by the **dual** variable (`f_x`/`f_y` for mechanics,
 //! `q` for thermal), columns by the **primal** one (`u_x`/`u_y`, `T`).
 
+use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
+use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::{assemble, build};
 use pyrucast::store::insert;

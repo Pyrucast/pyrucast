@@ -286,7 +286,7 @@ Le déterminant du Jacobien n'est **pas** vérifié à la construction : un él�
 Constructeur principal — Lagrange-1 partout, quadrature de Gauss par défaut :
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
+use pyrucast::coords::Coords;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::finite_element_space::FiniteElementSpace;
 use pyrucast::mesh::{Mesh, SubMesh};

@@ -20,12 +20,12 @@ pub fn merge(a: &NodeField, b: &NodeField) -> Result<NodeField> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::field::Field;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
     use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Single-zone POI1 field over the given nodes (attached to `coords`).

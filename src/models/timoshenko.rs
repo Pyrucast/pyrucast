@@ -21,12 +21,13 @@
 //! `V = G·A_s·γ` from the section strains `(κ, γ)` produced by
 //! [`crate::ops::field::beam_deformation`](fn@crate::ops::field::beam_deformation).
 
+use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::{
     Interpolation, QuadratureRule, SubFiniteElementSpace,
 };
 use crate::containers::matrix::DofOrdering;
-use crate::containers::mesh::{ElementType, SubMesh};
+use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
@@ -320,9 +321,11 @@ fn accumulate(ke: &mut [f64], b: &[f64; 4], coef: f64) {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{Node, NodeId};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, Mesh, Node, NodeId};
+    use crate::containers::mesh::Mesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// One SEG2 beam of length `L`, returns `(timoshenko, n0, n1, L)`.

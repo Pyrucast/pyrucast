@@ -16,8 +16,9 @@
 //! For a point on a shared face the first containing cell (in submesh, then
 //! cell order) wins.
 
+use crate::atoms::{ElementType, NodeId};
 use crate::containers::finite_element_space::Interpolation;
-use crate::containers::mesh::{ElementType, Mesh, NodeId};
+use crate::containers::mesh::Mesh;
 use crate::error::Result;
 use crate::parallel::*;
 use crate::store::read;
@@ -484,7 +485,9 @@ fn contains_reference(element_type: ElementType, xi: &[f64], tol: f64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, Node, SubMesh};
+    use crate::atoms::Node;
+    use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// A unit HEX8 at the origin; locate its centre and a corner.

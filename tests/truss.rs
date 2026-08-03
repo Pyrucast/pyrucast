@@ -11,10 +11,12 @@
 
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
+use pyrucast::coords::Coords;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::ops::{assemble, build, mesher};
 use pyrucast::store::insert;

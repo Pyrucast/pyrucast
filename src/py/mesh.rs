@@ -1,8 +1,8 @@
 //! Python wrappers for [`crate::containers::mesh::SubMesh`] and [`crate::containers::mesh::Mesh`].
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::NodeId;
+use crate::atoms::ElementType;
+use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::py::coords::PyCoords;
 use crate::py::node::PyNode;
@@ -133,8 +133,7 @@ impl PySubMesh {
     /// Set the face colour from an `(r, g, b)` tuple of bytes.
     #[setter]
     fn set_face_color(&self, rgb: (u8, u8, u8)) -> PyResult<()> {
-        write(&self.handle)?
-            .set_face_color(crate::containers::mesh::RgbColor::new(rgb.0, rgb.1, rgb.2));
+        write(&self.handle)?.set_face_color(crate::atoms::RgbColor::new(rgb.0, rgb.1, rgb.2));
         Ok(())
     }
 
@@ -248,7 +247,7 @@ impl PySubMesh {
                 "submesh index {idx} out of range (len={n})"
             )));
         }
-        let cell = crate::containers::mesh::Cell::new(self.handle.clone(), normalized as usize)?;
+        let cell = crate::atoms::Cell::new(self.handle.clone(), normalized as usize)?;
         Ok(crate::py::cell::PyCell::from_cell(cell))
     }
 

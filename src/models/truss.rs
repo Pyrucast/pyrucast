@@ -365,9 +365,11 @@ pub fn element_geometric(geom: &CellGeom, state: &SubElementField, ke: &mut [f64
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node, NodeId};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId};
+    use crate::containers::mesh::Mesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Truss on a single inclined SEG2 in 2-D, returns `(model, a_id, b_id)`.

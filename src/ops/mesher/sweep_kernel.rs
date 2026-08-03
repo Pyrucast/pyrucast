@@ -9,9 +9,9 @@
 //!   between two matching surface meshes (TRI3 → PENTA6, QUA4 → HEX8).
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::Node;
-use crate::containers::mesh::NodeId;
+use crate::atoms::ElementType;
+use crate::atoms::Node;
+use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read};

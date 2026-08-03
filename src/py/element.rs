@@ -1,6 +1,6 @@
-//! Python wrapper for [`crate::containers::finite_element_space::Element`].
+//! Python wrapper for [`crate::atoms::Element`].
 
-use crate::containers::finite_element_space::Element;
+use crate::atoms::Element;
 use crate::py::cell::PyCell;
 use crate::py::node::PyNode;
 use pyo3::prelude::*;

@@ -1,5 +1,5 @@
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::Node;
+use crate::atoms::ElementType;
+use crate::atoms::Node;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 
@@ -54,7 +54,7 @@ pub fn circle(
         ));
     }
 
-    use crate::containers::mesh::Vector3;
+    use crate::atoms::Vector3;
     use crate::ops::mesher::triangulation::in_plane_basis;
     let n_vec = Vector3::new(normal[0], normal[1], normal[2]);
     if n_vec.norm() < 1e-15 {
@@ -91,9 +91,9 @@ pub fn circle(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     #[test]

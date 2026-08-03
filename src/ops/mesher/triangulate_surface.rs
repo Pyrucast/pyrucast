@@ -31,7 +31,9 @@
 
 use super::contour::{self, Domain, Frame};
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, Point2, SubMesh, Vector2};
+use crate::atoms::{ElementType, Node, NodeId, Point2, Vector2};
+use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use crate::parallel::*;
@@ -1774,7 +1776,7 @@ fn materialize(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
+    use crate::coords::Coords;
     use crate::store::{insert, read};
     use std::collections::HashSet;
 

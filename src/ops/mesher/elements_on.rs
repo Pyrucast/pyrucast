@@ -1,5 +1,6 @@
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{Mesh, NodeId};
+use crate::atoms::NodeId;
+use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read};
 use std::collections::HashSet;
@@ -69,7 +70,9 @@ pub fn elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, ElementType, Node, SubMesh};
+    use crate::atoms::{ElementType, Node};
+    use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Five nodes on a line and a TRI3 mesh of two triangles sharing edge
@@ -153,7 +156,7 @@ mod tests {
         let (coords, n, _m) = two_triangles();
         // Two zones: a TRI3 and a SEG2, on the same coords.
         let mut mesh = Mesh::empty();
-        let tri_color = crate::containers::mesh::RgbColor::new(10, 20, 30);
+        let tri_color = crate::atoms::RgbColor::new(10, 20, 30);
         {
             let mut tri = SubMesh::new(coords.clone(), ElementType::TRI3);
             tri.set_face_color(tri_color);

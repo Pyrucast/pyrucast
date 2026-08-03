@@ -70,9 +70,11 @@ pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<Eleme
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::store::{insert, read};
 
     /// 1-D linear field `T(x) = x` on a single SEG2 ⇒ `∇T = 1`.

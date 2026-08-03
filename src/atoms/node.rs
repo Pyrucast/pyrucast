@@ -6,17 +6,17 @@
 //! long as at least one `Node` exists, the node is protected from the
 //! `Coords`'s garbage collector.
 //!
-//! Internal code can still manipulate [`crate::containers::mesh::NodeId`]
+//! Internal code can still manipulate [`crate::atoms::NodeId`]
 //! values directly, but then loses the automatic GC protection: it must
-//! call [`Coords::incref`](crate::containers::mesh::Coords::incref) /
-//! [`Coords::decref`](crate::containers::mesh::Coords::decref)
+//! call [`Coords::incref`](crate::coords::Coords::incref) /
+//! [`Coords::decref`](crate::coords::Coords::decref)
 //! by hand.
 //!
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::Coords;
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::coords::Coords;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::store::{insert, read, write};
 //!
 //! let coords = insert(Coords::new(2).unwrap());
@@ -33,10 +33,33 @@
 //! assert!(!read(&coords).unwrap().is_alive(id));
 //! ```
 
-use crate::containers::mesh::{Coords, NodeId};
+use crate::coords::Coords;
 use crate::error::Result;
 use crate::store::{read, write, Handle};
+use serde::{Deserialize, Serialize};
 use std::fmt;
+
+/// Stable internal identifier of a node inside a `Coords`.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct NodeId(pub u32);
+
+impl fmt::Debug for NodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NodeId({})", self.0)
+    }
+}
+
+impl fmt::Display for NodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl crate::dump::Dump for NodeId {
+    fn render(&self, _opts: &crate::dump::DumpOptions) -> String {
+        self.to_string()
+    }
+}
 
 /// RAII accessor to a node of a `Coords`.
 pub struct Node {

@@ -67,7 +67,7 @@ Dans la fenêtre interactive uniquement, le point de vue courant `view=(yaw, pit
 Exemple Rust :
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
+use pyrucast::coords::Coords;
 use pyrucast::mesh::element_type::ElementType;
 use pyrucast::mesh::SubMesh;
 use pyrucast::mesh::node::Node;

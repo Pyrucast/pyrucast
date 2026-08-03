@@ -19,7 +19,7 @@
 //! construction picks exactly one node: it is
 //! [`nearest_node`](fn@crate::ops::geom::nearest_node) in
 //! [`crate::ops::geom`], and returns a
-//! [`Node`](crate::containers::mesh::Node).
+//! [`Node`](crate::atoms::Node).
 //!
 //! # Tolerance
 //!
@@ -37,12 +37,13 @@
 //! # Coordinates
 //!
 //! Nodes are tested in the coordinates they are **stored** in. Under an
-//! axisymmetric [`CoordinateFrame`](crate::containers::mesh::CoordinateFrame)
+//! axisymmetric [`CoordinateFrame`](crate::coords::CoordinateFrame)
 //! that is the meridian half-plane `(r, z)`, not the 3-D body of revolution:
 //! a "sphere" there is a circle in the `(r, z)` plane, not a sphere in space.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{Mesh, NodeId, SubMesh};
+use crate::atoms::NodeId;
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read};
 use std::collections::HashSet;
@@ -692,7 +693,8 @@ fn default_tol(mesh: &Mesh) -> Result<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, ElementType, Node};
+    use crate::atoms::{ElementType, Node};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// A 3×3 grid of POI1 nodes over [0, 2]², one node per integer pair, as a

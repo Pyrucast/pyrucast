@@ -41,8 +41,8 @@
 //! are always enforced); a model with **no** inequality falls back to a plain
 //! [`lu::solve`].
 
+use crate::atoms::NodeId;
 use crate::containers::matrix::Matrix;
-use crate::containers::mesh::NodeId;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
@@ -743,13 +743,15 @@ fn factorize_status(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::element_field::{ElementField, SubElementField};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::matrix::Matrix;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::model::{Model, SubModel};
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::ops::assemble::stiffness;
     use crate::ops::mesher::barycenter;
     use crate::store::insert;

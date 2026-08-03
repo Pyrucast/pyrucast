@@ -46,7 +46,7 @@ Toute l'API publique renvoie `pyrucast::Result<T>`, alias de `Result<T, Pyrucast
 Rust :
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
+use pyrucast::coords::Coords;
 
 // Dimension nulle — erreur attendue.
 let err = Coords::new(0).unwrap_err();
@@ -83,7 +83,7 @@ Le binding PyO3 branche ces deux vues sur les dunder methods Python correspondan
 Rust :
 
 ```rust,ignore
-use pyrucast::containers::mesh::Coords;
+use pyrucast::coords::Coords;
 use pyrucast::store::{insert, read};
 
 let coords = insert(Coords::new(2).unwrap());

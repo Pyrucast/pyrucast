@@ -26,7 +26,7 @@
 //!
 //! Any other gmsh element type (order 3+, …) is an error. For most
 //! types the local node ordering already matches pyrucast's reference frame
-//! (see [`crate::containers::mesh::ElementType`]) and the connectivity is
+//! (see [`crate::atoms::ElementType`]) and the connectivity is
 //! copied verbatim; the quadratic **volumes** (`TET10`, `HEX20`, `PENTA15`,
 //! `HEX27`) have their mid-edge / face nodes **reordered** to pyrucast's
 //! (VTK) order — see `gmsh_node_permutation`.
@@ -56,7 +56,9 @@
 //! the import is merged into it.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, SubMesh};
+use crate::atoms::{ElementType, Node, NodeId};
+use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 use std::collections::HashMap;

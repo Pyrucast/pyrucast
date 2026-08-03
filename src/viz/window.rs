@@ -76,7 +76,7 @@ struct App<'a, D: Drawable> {
     /// Whether a slider drag is in progress (suppresses camera rotation).
     sliding: bool,
     /// Cached so we don't recompute the bbox each frame.
-    target: crate::containers::mesh::Point3,
+    target: crate::atoms::Point3,
     /// Scene bounding box — kept so a pan drag can convert pixel deltas into a
     /// world-space shift of `target` at the current zoom.
     bbox: Bbox3,

@@ -26,7 +26,8 @@
 use std::collections::HashMap;
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{ElementType, Mesh, NodeId};
+use crate::atoms::{ElementType, NodeId};
+use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::Cancel;
 use crate::store::read;
@@ -605,7 +606,9 @@ fn sorted(f: &[u32; 3]) -> [u32; 3] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, Node, SubMesh};
+    use crate::atoms::Node;
+    use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::interrupt::NoCancel;
     use crate::store::insert;
     use crate::store::Handle;

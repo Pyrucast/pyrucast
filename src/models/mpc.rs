@@ -9,7 +9,7 @@
 //!
 //! It is a *constraint*, not a volumetric physics: it carries no material and no
 //! constitutive law, and it creates no node (it never mutates the
-//! [`Coords`](crate::containers::mesh::Coords)). It is the **generalisation of
+//! [`Coords`](crate::coords::Coords)). It is the **generalisation of
 //! [`Dirichlet`](crate::models::dirichlet::Dirichlet)**, which is the single-term
 //! relation `1·u = u_d`.
 //!
@@ -39,8 +39,9 @@
 //! [`Model::dual_of`](crate::containers::model::Model::dual_of).
 
 use crate::aggregate::Aggregate;
+use crate::atoms::{ElementType, NodeId};
 use crate::containers::element_field::SubElementField;
-use crate::containers::mesh::{ElementType, Mesh, NodeId};
+use crate::containers::mesh::Mesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
@@ -124,7 +125,7 @@ impl Mpc {
     ///
     /// `multiplier` / `imposed_value` default to `lambda_mpc` / `mpc_rhs` when
     /// `None`. Every term mesh and `multiplier_mesh` must be POI1, share one
-    /// [`Coords`](crate::containers::mesh::Coords), and pair element-for-element
+    /// [`Coords`](crate::coords::Coords), and pair element-for-element
     /// (same number of submeshes, same cell count per submesh).
     ///
     /// A non-equality `sense` turns the relations unilateral (enforced only
@@ -356,7 +357,9 @@ fn share(mesh: &Mesh) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, Node, SubMesh};
+    use crate::atoms::Node;
+    use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::ops::mesher::barycenter;
     use crate::store::insert;
 

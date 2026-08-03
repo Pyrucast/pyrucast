@@ -298,9 +298,11 @@ pub fn element_capacity(geom: &CellGeom, material: &SubElementField, ke: &mut [f
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node};
+    use crate::containers::mesh::Mesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// HeatConduction on a single SEG2 of length `L`.

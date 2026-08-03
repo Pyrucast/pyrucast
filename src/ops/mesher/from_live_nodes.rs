@@ -1,5 +1,5 @@
-use crate::containers::mesh::Coords;
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::Result;
 use crate::store::{read, Handle};
 
@@ -14,9 +14,9 @@ pub fn from_live_nodes(coords: Handle<Coords>) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     #[test]

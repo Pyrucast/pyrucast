@@ -67,7 +67,7 @@
 
 use super::front::Front;
 use super::geom::{interior_angle, quad_is_valid, rot};
-use crate::containers::mesh::Point2;
+use crate::atoms::Point2;
 
 /// Interior-angle span of one quadrangle corner: the row aims for right
 /// angles, and `k = round(θ / QUARTER_TURN)` follows from that.

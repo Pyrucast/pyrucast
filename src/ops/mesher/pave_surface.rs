@@ -53,7 +53,8 @@
 //! away.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{ElementType, Mesh, Node, NodeId, SubMesh};
+use crate::atoms::{ElementType, Node, NodeId};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use crate::ops::mesher::{contour, paving};
@@ -187,7 +188,8 @@ fn materialize(parsed: &contour::Contour, fabrics: Vec<paving::Fabric>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, Point2};
+    use crate::atoms::Point2;
+    use crate::coords::Coords;
     use crate::store::{insert, read};
     use std::collections::HashMap;
     use std::sync::atomic::AtomicBool;

@@ -106,7 +106,9 @@ use pyrucast::aggregate::Aggregate;
 use pyrucast::containers::element_field::ElementField;
 use pyrucast::containers::field::{Field, SubField};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+use pyrucast::atoms::{ElementType, Node};
+use pyrucast::coords::Coords;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::store::{insert, write};
 
 let coords = insert(Coords::new(2).unwrap());

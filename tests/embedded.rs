@@ -8,12 +8,14 @@
 //! interpolation there — i.e. the linear field evaluated at its coordinates.
 
 use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::element_field::{ElementField, SubElementField};
 use pyrucast::containers::field::SubField;
 use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
+use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::assemble::{self, stiffness, FluxDensity};
 use pyrucast::ops::build;

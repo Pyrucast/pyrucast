@@ -1,6 +1,6 @@
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::NodeId;
+use crate::atoms::ElementType;
+use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
 use crate::store::{insert, read};
@@ -64,8 +64,8 @@ pub fn consolidate_mesh(mesh: &Mesh) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::Node;
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     #[test]

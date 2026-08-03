@@ -160,9 +160,11 @@ pub fn check_unique_component_per_support(field: &ElementField) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::field::Field;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Single-subspace Lagrange-1 FE space over one TRI3 cell.

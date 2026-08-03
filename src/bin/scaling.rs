@@ -19,11 +19,13 @@
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
+use pyrucast::atoms::{ElementType, Node, NodeId};
 use pyrucast::containers::element_field::ElementField;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, SubMesh};
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
+use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::build::material_field;
 use pyrucast::ops::{assemble, behavior, field};

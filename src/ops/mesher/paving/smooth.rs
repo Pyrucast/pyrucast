@@ -25,7 +25,7 @@
 //! cannot hand back a mesh worse formed than the one it was given.
 
 use super::geom::{quad_quality, tri_quality};
-use crate::containers::mesh::{Point2, Vector2};
+use crate::atoms::{Point2, Vector2};
 use crate::parallel::*;
 
 /// Relaxation applied to the Laplacian step. Under-relaxing keeps the pass

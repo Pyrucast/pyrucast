@@ -17,10 +17,10 @@ pub fn sweep_solid(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mesh
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Build a single-TRI3 mesh on `coords` from three coordinates, returning

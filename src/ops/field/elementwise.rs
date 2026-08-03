@@ -81,8 +81,10 @@ field_unary!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, ElementType, Node, NodeId, SubMesh};
+    use crate::atoms::{ElementType, Node, NodeId};
+    use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::{NodeField, SubNodeField};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Build a single-zone `SubNodeField` named "T" carrying `values`,

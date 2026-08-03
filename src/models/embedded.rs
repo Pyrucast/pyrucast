@@ -23,7 +23,7 @@
 //! ([`crate::ops::geom::locate_points`]). An immersed node that lands in no
 //! host cell is an error: the immersed mesh must lie within the host. The
 //! immersed and host meshes must share one
-//! [`Coords`](crate::containers::mesh::Coords) (their node ids are
+//! [`Coords`](crate::coords::Coords) (their node ids are
 //! Coords-relative). Fresh colocated multiplier nodes are minted with the
 //! [`barycenter`](crate::ops::mesher::barycenter()) mesher, one per immersed node.
 //!
@@ -44,9 +44,10 @@
 //!   constraint row and the slot for the right-hand side `g_c`.
 
 use crate::aggregate::Aggregate;
+use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::{Mesh, NodeId, SubMesh};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{
@@ -448,7 +449,8 @@ fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, ElementType, Node};
+    use crate::atoms::{ElementType, Node};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Build a unit HEX8 host and a two-node bar through its interior; check the

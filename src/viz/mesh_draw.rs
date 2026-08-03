@@ -14,10 +14,11 @@
 //! face boundaries.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::RgbColor;
-use crate::containers::mesh::{Coords, NodeId};
+use crate::atoms::ElementType;
+use crate::atoms::NodeId;
+use crate::atoms::RgbColor;
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::Result;
 use crate::store::{read, Handle};
 use crate::viz::camera::{Bbox3, Projector};
@@ -26,7 +27,7 @@ use crate::viz::View;
 use plotters::coord::Shift;
 use plotters::prelude::*;
 
-use crate::containers::mesh::Point3;
+use crate::atoms::Point3;
 use std::collections::{HashMap, HashSet};
 
 /// Pad world coordinates to a 3-D point, filling missing components with 0.0.
@@ -1050,8 +1051,8 @@ impl Drawable for MeshWire<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::Node;
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     fn unit_viewport() -> Viewport {

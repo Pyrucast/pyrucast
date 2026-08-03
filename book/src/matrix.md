@@ -127,7 +127,7 @@ côtés, et les blocs de `M` ne contribuent rien aux DOFs qu'ils ne portent pas.
 ## Cas d'usage typique : matrice de raideur du laplacien
 
 ```rust,ignore
-use pyrucast::containers::mesh::NodeId;
+use pyrucast::atoms::NodeId;
 use pyrucast::containers::matrix::Matrix;
 
 let mut k = Matrix::new(true);  // matrice de raideur, symétrique

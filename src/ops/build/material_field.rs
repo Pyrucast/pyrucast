@@ -107,13 +107,14 @@ pub fn material_field_per_sub_model(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
+    use crate::atoms::NodeId;
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::matrix::Matrix;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
-    use crate::containers::mesh::{Coords, NodeId};
     use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::ops::assemble;
     use crate::store::Handle;
 

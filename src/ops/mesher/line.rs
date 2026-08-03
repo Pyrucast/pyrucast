@@ -1,5 +1,5 @@
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::Node;
+use crate::atoms::ElementType;
+use crate::atoms::Node;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 
@@ -65,9 +65,9 @@ pub fn line(a: &Node, b: &Node, n_elems: usize, element_type: ElementType) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     #[test]

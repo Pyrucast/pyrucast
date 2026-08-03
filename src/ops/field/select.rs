@@ -49,9 +49,10 @@
 //! band, e.g. `Band::new(Some(0.0), None, Some(1.0), None)` for `0 <= v <= 1`.
 
 use crate::aggregate::Aggregate;
+use crate::atoms::NodeId;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
-use crate::containers::mesh::{Mesh, NodeId, SubMesh};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
 use crate::store::{insert, read};
@@ -214,10 +215,12 @@ pub fn select_sub_cells(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::element_field::ElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::{NodeField, SubNodeField};
+    use crate::coords::Coords;
     use crate::store::{insert, read, write};
 
     /// Single-zone POI1 NodeField over `n` 1-D nodes; returns (nodes, field).

@@ -137,7 +137,8 @@
 //! never mistaken for a flat one.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::{ElementType, Mesh, Node, NodeId, SubMesh};
+use crate::atoms::{ElementType, Node, NodeId};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 
@@ -557,7 +558,7 @@ fn materialize(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
+    use crate::coords::Coords;
     use crate::store::{insert, read, Handle};
 
     /// The eight corners of an axis-aligned box, ordered

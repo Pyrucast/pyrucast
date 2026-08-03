@@ -14,10 +14,11 @@
 //! (translational `ρA` + rotary `ρI`, optional `rho`) and the **geometric
 //! stiffness** under the axial force `N` (linear-element forms, rotated `Tᵀ·T`).
 
+use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
-use crate::containers::mesh::{ElementType, SubMesh};
+use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
@@ -399,9 +400,11 @@ fn write_6x6(ke: &mut [f64], m: &[[f64; 6]; 6]) {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{Node, NodeId};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, Mesh, Node, NodeId};
+    use crate::containers::mesh::Mesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     fn one_frame(ax: f64, ay: f64, bx: f64, by: f64) -> (Frame, NodeId, NodeId) {

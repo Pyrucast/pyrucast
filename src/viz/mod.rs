@@ -18,10 +18,10 @@
 //! # Example
 //!
 //! ```no_run
-//! use pyrucast::containers::mesh::Coords;
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::coords::Coords;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::store::insert;
 //! use pyrucast::viz::View;
 //!
@@ -79,11 +79,11 @@ pub struct View {
     pub yaw: f64,
     pub pitch: f64,
     pub scale: f64,
-    pub target: Option<crate::containers::mesh::Point3>,
+    pub target: Option<crate::atoms::Point3>,
     /// Show the orientation gizmo (small red/green/blue axes triad in the
     /// bottom-left corner) on top of the rendered object.
     pub show_axes: bool,
-    /// Sweep an [axisymmetric](crate::containers::mesh::Coords::axisymmetric)
+    /// Sweep an [axisymmetric](crate::coords::Coords::axisymmetric)
     /// meridian plot into the body of revolution it describes (see
     /// [`Revolve`]). `None` — the default — keeps the flat `(r, z)` section.
     /// Only accepted on axisymmetric geometry; the interactive window toggles
@@ -426,7 +426,7 @@ pub fn render_submesh_with_field(
 pub(crate) fn node_field_points(
     field: &crate::containers::node_field::NodeField,
     component: &str,
-) -> Result<Vec<(crate::containers::mesh::Point3, f64)>> {
+) -> Result<Vec<(crate::atoms::Point3, f64)>> {
     use crate::viz::mesh_draw::pad3;
     let view = field.view()?;
     let coords = field.coords()?;

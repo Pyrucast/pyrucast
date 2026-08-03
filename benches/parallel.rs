@@ -22,12 +22,14 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::{ElementType, Node, NodeId};
 use pyrucast::containers::element_field::ElementField;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
-use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, SubMesh};
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
+use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::build::material_field;
 use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOptions};

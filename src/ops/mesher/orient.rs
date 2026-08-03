@@ -38,8 +38,8 @@
 //! `Coords` and node ids); the input is left untouched.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::NodeId;
+use crate::atoms::ElementType;
+use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
 use crate::store::{insert, read};
@@ -291,7 +291,8 @@ fn facet_sign(seq: &[NodeId]) -> i8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, Node};
+    use crate::atoms::Node;
+    use crate::coords::Coords;
     use crate::store::Handle;
 
     /// Reference-node coordinates of a type, in local order — the ground truth

@@ -115,10 +115,10 @@ pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::store::{insert, write};
 
     /// Build a single-zone POI1 field on `n` fresh 1-D nodes;

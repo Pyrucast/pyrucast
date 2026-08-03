@@ -7,8 +7,9 @@
 //! Nodes shared between cells of the source stay shared in the copy.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::NodeId;
-use crate::containers::mesh::{Mesh, Node, SubMesh};
+use crate::atoms::Node;
+use crate::atoms::NodeId;
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read};
 use std::collections::HashMap;
@@ -143,8 +144,8 @@ pub fn rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
+    use crate::atoms::ElementType;
+    use crate::coords::Coords;
     use crate::store::insert;
     use std::f64::consts::PI;
 

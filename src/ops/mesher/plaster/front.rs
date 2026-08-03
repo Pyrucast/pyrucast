@@ -18,7 +18,8 @@
 //!   guard, so a step forced short by a neighbour is not left as a kink.
 
 use super::shell::{Facet, Shell};
-use crate::containers::mesh::{Coords, Node, NodeId, Point3, Vector3};
+use crate::atoms::{Node, NodeId, Point3, Vector3};
+use crate::coords::Coords;
 use crate::error::Result;
 use crate::store::Handle;
 use std::collections::HashMap;
@@ -783,7 +784,9 @@ impl PointGrid {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, SubMesh};
+    use crate::atoms::ElementType;
+    use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// A closed box of six QUA4 facets, normals outward.

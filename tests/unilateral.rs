@@ -12,12 +12,14 @@
 //! - inactive: `T(x) = q·x` and `λ = 0` exactly.
 
 use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::{ElementType, Node, NodeId};
 use pyrucast::containers::element_field::{ElementField, SubElementField};
 use pyrucast::containers::field::SubField;
 use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use pyrucast::containers::mesh::{Coords, ElementType, Mesh, Node, NodeId, SubMesh};
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
+use pyrucast::coords::Coords;
 use pyrucast::models::mpc::MpcTerm;
 use pyrucast::models::RelationSense;
 use pyrucast::ops::assemble::stiffness;

@@ -9,7 +9,8 @@
 //! step, the seams, the smoothing — lives in [`super::front`]; this module
 //! only reads the surface in and vouches for it.
 //!
-use crate::containers::mesh::{ElementType, Mesh, NodeId, Point3};
+use crate::atoms::{ElementType, NodeId, Point3};
+use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::store::read;
 use std::collections::HashMap;
@@ -152,7 +153,9 @@ impl Shell {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::{Coords, Node, SubMesh};
+    use crate::atoms::Node;
+    use crate::containers::mesh::SubMesh;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// The six faces of an axis-aligned box, as QUA4 with outward normals.

@@ -375,7 +375,7 @@ pub fn collinear3d(pa: &[f64; 3], pb: &[f64; 3], pc: &[f64; 3]) -> bool {
 /// rounding; only the **sign** is guaranteed exact.
 ///
 /// This is the sign convention of
-/// [`ElementType::TET4`](crate::containers::mesh::ElementType::TET4), whose
+/// [`ElementType::TET4`](crate::atoms::ElementType::TET4), whose
 /// face `0-1-2` is counter-clockwise seen from node 3: a well-formed `TET4`
 /// has `orient3d(n0, n1, n2, n3) > 0`. Note that it is the *opposite* of
 /// Shewchuk's published convention, whose formula is evaluated internally

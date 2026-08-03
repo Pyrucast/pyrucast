@@ -10,7 +10,7 @@
 //!   derivatives at those Gauss points) and computes the physical
 //!   quantities — Jacobian, `|J|`, `dN/dx` — **on the fly** from the
 //!   current node coordinates in the
-//!   [`crate::containers::mesh::Coords`].
+//!   [`crate::coords::Coords`].
 //! - [`FiniteElementSpace`] — collection of `SubFiniteElementSpace` matching the
 //!   submeshes of a [`crate::containers::mesh::Mesh`] one-for-one. The mesh handle
 //!   is captured at construction.
@@ -27,11 +27,11 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::containers::mesh::Coords;
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::coords::Coords;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::store::{insert, read};
 //!
 //! let coords = insert(Coords::new(2).unwrap());
@@ -54,18 +54,19 @@
 //! }
 //! ```
 
-pub mod element;
+use crate::atoms::{Element, ElementIter};
+
 pub mod interpolation;
 pub mod quadrature;
 
-pub use element::{Element, ElementIter};
 pub use interpolation::Interpolation;
 pub use quadrature::QuadratureRule;
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::{Coords, NodeId};
+use crate::atoms::ElementType;
+use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -241,7 +242,7 @@ impl SubFiniteElementSpace {
     }
 
     /// Whether the underlying `Coords` describes a body of revolution
-    /// ([`Coords::axisymmetric`](crate::containers::mesh::Coords::axisymmetric)):
+    /// ([`Coords::axisymmetric`](crate::coords::Coords::axisymmetric)):
     /// `x = r`, `y = z`, and every integral over this subspace runs over the
     /// full ring (`dΩ = 2πr |J| dξ`). Read from the geometry at construction —
     /// never a per-space choice, so a body and its boundary can never disagree.
@@ -675,7 +676,7 @@ pub(crate) fn build_dn_dx(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
-    use crate::containers::mesh::Node;
+    use crate::atoms::Node;
     use crate::store::{insert, read, write};
 
     fn cfg2d() -> Handle<Coords> {

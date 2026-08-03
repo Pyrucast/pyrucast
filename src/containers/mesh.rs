@@ -16,10 +16,10 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::Coords;
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::coords::Coords;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::store::{insert, read};
 //!
 //! let coords = insert(Coords::new(2).unwrap());
@@ -37,24 +37,9 @@
 //! assert_eq!(read(&coords).unwrap().refcount(a.id()), 1);
 //! ```
 
-pub mod cell;
-pub mod color;
-pub mod coords;
-pub mod element_type;
-pub mod node;
-pub mod point;
-
-// Flat re-exports: the public types of this module are reachable as
-// `mesh::Cell`, `mesh::Coords`, … alongside the `SubMesh` / `Mesh`
-// defined here, instead of through their defining sub-module.
-pub use cell::{Cell, CellIter};
-pub use color::RgbColor;
-pub use coords::{CoordinateFrame, Coords, NodeId};
-pub use element_type::ElementType;
-pub use node::Node;
-pub use point::{Point2, Point3, Vector2, Vector3};
-
 use crate::aggregate::Aggregate;
+use crate::atoms::{Cell, CellIter, ElementType, Node, NodeId, RgbColor};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read, write, Handle};
 use serde::{Deserialize, Serialize};

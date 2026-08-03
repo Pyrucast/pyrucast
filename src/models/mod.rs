@@ -23,10 +23,11 @@
 //! Everything else is generic. See the book chapter *« Ajouter une
 //! physique »* for the full walkthrough.
 
+use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::{Mesh, NodeId, SubMesh};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::SubNodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};

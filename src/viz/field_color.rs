@@ -20,9 +20,9 @@
 //! those per-cell nodal values.
 
 use crate::aggregate::Aggregate;
+use crate::atoms::RgbColor;
 use crate::containers::element_field::{ElementFieldView, SubElementField};
 use crate::containers::field::SubField;
-use crate::containers::mesh::RgbColor;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeFieldView;
 use crate::error::{PyrucastError, Result};
@@ -359,8 +359,8 @@ pub(crate) fn submesh_primitives_smooth(
     vmax: f64,
     n: usize,
 ) -> Result<Vec<Primitive>> {
+    use crate::atoms::Point3;
     use crate::containers::finite_element_space::Interpolation;
-    use crate::containers::mesh::Point3;
     use crate::viz::mesh_draw::pad3;
     use crate::viz::subdivide::{subdivide, CellSubdivision};
 
@@ -372,7 +372,7 @@ pub(crate) fn submesh_primitives_smooth(
         return Ok(Vec::new());
     }
     let sub = match et {
-        crate::containers::mesh::ElementType::POI1 => CellSubdivision::Points,
+        crate::atoms::ElementType::POI1 => CellSubdivision::Points,
         _ => subdivide(et, Interpolation::Lagrange1, n)?,
     };
 
@@ -654,7 +654,7 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
 /// `field=`).
 pub(crate) struct NodeFieldPointsView<'a> {
     /// Distinct support nodes with their (padded 3-D) position and value.
-    pub(crate) points: Vec<(crate::containers::mesh::Point3, f64)>,
+    pub(crate) points: Vec<(crate::atoms::Point3, f64)>,
     pub component: &'a str,
     pub scale: crate::viz::ColorScale,
     /// Whether the support coordinates are the meridian plane of a body of
@@ -701,12 +701,12 @@ impl<'a> Drawable for NodeFieldPointsView<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::field::Field;
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
     use crate::containers::mesh::SubMesh as RawSubMesh;
     use crate::containers::node_field::{NodeField, SubNodeField};
+    use crate::coords::Coords;
     use crate::store::insert;
 
     #[test]

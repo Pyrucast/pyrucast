@@ -53,12 +53,12 @@
 //! ```
 //! use pyrucast::aggregate::Aggregate;
 //! use pyrucast::containers::field::SubField;
-//! use pyrucast::containers::mesh::Coords;
+//! use pyrucast::coords::Coords;
 //! use pyrucast::containers::element_field::ElementField;
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
-//! use pyrucast::containers::mesh::Node;
+//! use pyrucast::atoms::Node;
 //! use pyrucast::store::{insert, read, write};
 //!
 //! let coords = insert(Coords::new(2).unwrap());
@@ -642,13 +642,13 @@ impl ElementFieldView {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::finite_element_space::Interpolation;
     use crate::containers::finite_element_space::QuadratureRule;
     use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-    use crate::containers::mesh::Coords;
-    use crate::containers::mesh::ElementType;
-    use crate::containers::mesh::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
     use crate::store::{insert, read, write};
 
     fn make_tri3_subfespace() -> Handle<SubFiniteElementSpace> {

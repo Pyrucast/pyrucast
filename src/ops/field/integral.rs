@@ -17,10 +17,10 @@
 //! already-integrated nodal forces, `Σ_nodes f`) is a plain value reduction
 //! instead — see [`crate::containers::field::Field::sum`].
 
+use crate::atoms::NodeId;
 use crate::containers::element_field::ElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::FiniteElementSpace;
-use crate::containers::mesh::NodeId;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
@@ -106,10 +106,12 @@ pub fn integral_element(field: &ElementField, component: &str) -> Result<f64> {
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::element_field::SubElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{Coords, ElementType, Mesh, Node, SubMesh};
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     /// Nodal integral on SEG2 `[0, 1]` of the linear field `f(x) = x`

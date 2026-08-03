@@ -24,7 +24,7 @@
 //!
 //! Every kernel takes its quadrature weight from [`CellGeom::det_j_w`], which is
 //! therefore the **single place** the geometric measure is decided. On an
-//! [axisymmetric](crate::containers::mesh::Coords::axisymmetric) geometry it
+//! [axisymmetric](crate::coords::Coords::axisymmetric) geometry it
 //! returns `2πr |J| w` instead of `|J| w`, so stiffness, mass, conductivity,
 //! distributed flux, volumes and internal forces all integrate over the full
 //! ring with no per-physics change. What a physics *does* own is its operator:
@@ -49,14 +49,16 @@
 //! `RAYON_NUM_THREADS` — though, summed in colour order rather than cell order, not
 //! bit-for-bit with a sequential run (via [`crate::parallel::colored_scatter`]).
 
+use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::{
     build_dn_dx, build_jacobian, jacobian_measure, SubFiniteElementSpace,
 };
 use crate::containers::matrix::{DofOrdering, SubMatrix};
-use crate::containers::mesh::{Coords, NodeId, SubMesh};
+use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeFieldView, SubNodeField};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::ops::assemble::coloring;
 use crate::parallel::*;
@@ -884,8 +886,9 @@ pub fn reduce_cells(
 mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node};
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::{ElementType, Mesh, Node};
+    use crate::containers::mesh::Mesh;
     use crate::store::insert;
 
     /// One QUA4 spanning `r ∈ [r0, r1]`, `z ∈ [0, 1]`, in the requested frame.

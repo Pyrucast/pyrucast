@@ -1,6 +1,7 @@
-//! Python wrapper for [`crate::containers::mesh::Coords`].
+//! Python wrapper for [`crate::coords::Coords`].
 
-use crate::containers::mesh::{Coords, NodeId};
+use crate::atoms::NodeId;
+use crate::coords::Coords;
 use crate::py::node::PyNode;
 use crate::store::{insert, read, write, Handle};
 use pyo3::prelude::*;

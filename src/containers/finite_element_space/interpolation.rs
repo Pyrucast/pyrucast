@@ -4,7 +4,7 @@
 //! shape functions `N_i(ξ)` and their reference derivatives
 //! `∂N_i/∂ξ_j` for a given [`ElementType`]. It is independent of any
 //! particular cell or coordinate set: every evaluation lives in the
-//! reference frame of the element type (see [`crate::containers::mesh::element_type`]).
+//! reference frame of the element type (see [`crate::atoms::element_type`]).
 //!
 //! Adding a new interpolation means:
 //! - adding a variant to [`Interpolation`];
@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::mesh::ElementType;
+//! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::finite_element_space::Interpolation;
 //!
 //! // Lagrange-1 shape functions of a TRI3 at the centroid (1/3, 1/3).
@@ -26,7 +26,7 @@
 //! assert!((s - 1.0).abs() < 1e-12);  // partition of unity
 //! ```
 
-use crate::containers::mesh::ElementType;
+use crate::atoms::ElementType;
 use crate::error::{PyrucastError, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -357,7 +357,7 @@ const HEX8_REF_NODES: [(f64, f64, f64); 8] = [
 //
 // Each `*_shape` returns the `n_nodes` values `N_i(ξ)`; each `*_dshape`
 // returns the row-major buffer `dN[i * d_r + k] = ∂N_i/∂ξ_k`. Node order
-// follows [`crate::containers::mesh::element_type`]: corners first (same as
+// follows [`crate::atoms::element_type`]: corners first (same as
 // the linear parent), then mid-edge nodes in the documented edge order.
 
 /// SEG3 on `ξ ∈ [-1, 1]`: corners at `∓1`, mid node at `0`.

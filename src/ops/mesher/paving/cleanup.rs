@@ -34,7 +34,7 @@
 //! convex.
 
 use super::geom::{quad_is_valid, quad_quality};
-use crate::containers::mesh::Point2;
+use crate::atoms::Point2;
 use std::collections::HashMap;
 
 /// Passes over the mesh. Each one is a sweep of doublet removal followed by a

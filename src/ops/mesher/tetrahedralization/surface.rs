@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 
-use crate::containers::mesh::Point2;
+use crate::atoms::Point2;
 use crate::error::Result;
 
 use super::delaunay::{Boundary, TetMesh};

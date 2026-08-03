@@ -9,9 +9,9 @@
 //! conforming.
 
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::ElementType;
-use crate::containers::mesh::Node;
-use crate::containers::mesh::NodeId;
+use crate::atoms::ElementType;
+use crate::atoms::Node;
+use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::store::{insert, read};
@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 /// The quadratic element type of a linear one, together with its edges as
 /// local corner-index pairs — **in the mid-edge node order** expected by the
-/// quadratic type (see [`crate::containers::mesh::element_type`]).
+/// quadratic type (see [`crate::atoms::element_type`]).
 fn quadratic_of(et: ElementType) -> Result<(ElementType, &'static [(usize, usize)])> {
     Ok(match et {
         ElementType::SEG2 => (ElementType::SEG3, &[(0, 1)]),
@@ -134,7 +134,7 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::containers::mesh::Coords;
+    use crate::coords::Coords;
     use crate::store::insert;
 
     #[test]
