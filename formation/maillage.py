@@ -241,6 +241,11 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     l15 = pc.mesher.line(p1, p5, n15)
     x13 = LENGTH - (HEIGHT / 2.0)
     sr1 = pc.mesher.extrude(l15, [x13, 0, 0], n12)
+
+    # FR — `plot=False` : les chapitres suivants importent le volume, sans figures.
+    # EN — `plot=False`: later chapters import the volume, without any figure.
+    if plot:
+        show(sr1, "Grille structurée (QUA4)", "maillage-grille.svg")
     # ANCHOR_END: grille
 
     # ANCHOR: bord_droit
@@ -291,28 +296,34 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
         | pc.mesher.arc(p17, p6, p14, n15)
     )
     cin = pc.consolidate(cin)
+
+    # FR — Les deux boucles, l'une bleue et l'autre rouge : découpages alignés.
+    # EN — Both loops, one blue and one red: their cuttings line up.
+    if plot:
+        cext.unit().face_color, cin.unit().face_color = PALETTE[2], PALETTE[3]
+        show(cext | cin, "Les deux boucles de la couronne", "maillage-boucles.svg")
     # ANCHOR_END: boucle_interieure
 
     # ANCHOR: sweep
     # FR — `sweep` relie les deux boucles par 3 couches de QUA4.
     # EN — `sweep` links both loops with 3 layers of QUA4.
     sh1 = pc.mesher.sweep(cext, cin, 3)
+    if plot:
+        show(sh1, "Couronne balayée (QUA4)", "maillage-couronne.svg")
 
     # FR — Grille et couronne partagent les nœuds du bord droit : `|` suffit.
     # EN — Grid and ring share the right edge's nodes: `|` is enough.
     grid = sr1 | sh1
+    if plot:
+        print(f"structured      : {grid.element_types()}, {grid.cell_count()} mailles")
+        show(grid, "Plaque structurée (QUA4)", "maillage-structure.svg")
     # ANCHOR_END: sweep
 
     # ANCHOR: volume_hex8
     # FR — Même extrusion qu'en non structuré, mais un QUA4 donne un HEX8.
     # EN — Same extrusion as in the unstructured case, but a QUA4 gives an HEX8.
     volume_structure = pc.mesher.extrude(grid, [0, THICKNESS, 0], 2)
-
-    # FR — `plot=False` : les chapitres suivants importent ce volume, sans figures.
-    # EN — `plot=False`: later chapters import this very volume, without figures.
     if plot:
-        print(f"structured      : {grid.element_types()}, {grid.cell_count()} mailles")
-        show(grid, "Plaque structurée (QUA4)", "maillage-structure.svg")
         show(
             volume_structure,
             "Volume structuré (HEX8)",

@@ -244,6 +244,13 @@ rectangulaire à gauche, une couronne autour du trou à droite.
 par translation ; un `SEG2` balayé donne un `QUA4`, d'où une grille régulière
 `n12 × n15`. La grille s'arrête à `x13`, l'abscisse où commence le demi-disque.
 
+![Grille structurée, 200 QUA4](img/maillage-grille.svg)
+
+C'est ici qu'apparaît le premier `if plot:` : les chapitres suivants importent
+`structured_mesh` pour calculer sur son volume et l'appellent avec
+`plot=False`, ce qui rend le maillage sans retracer aucune des figures de
+cette page.
+
 ### Un bord se récupère, il ne se refabrique pas
 
 ```python
@@ -290,6 +297,12 @@ avoir le **même nombre de segments**. D'où le trou découpé en quatre quarts 
 10 segments, soit 40 également — et les quatre points de départ `p14`…`p17`
 posés explicitement pour que les deux découpages s'alignent.
 
+![Les deux boucles de la couronne](img/maillage-boucles.svg)
+
+La figure montre les deux boucles seules, l'extérieure en bleu et l'intérieure
+en rouge : 40 segments de chaque côté, et les découpages en vis-à-vis. C'est
+exactement ce que `sweep` demande.
+
 ### `sweep`, puis l'union
 
 ```python
@@ -298,8 +311,12 @@ posés explicitement pour que les deux découpages s'alignent.
 
 `sweep(a, b, n)` balaie une ligne **sur une autre**, en `n` couches : entre
 deux boucles fermées, c'est le moyen d'obtenir un maillage structuré propre
-autour d'un trou. Grille et couronne partageant les nœuds du bord droit
-`l1213`, l'union `|` suffit ensuite à en faire un maillage conforme.
+autour d'un trou. Les 40 paires de nœuds donnent ici 40 × 3 = 120 `QUA4`.
+
+![Couronne balayée, 120 QUA4](img/maillage-couronne.svg)
+
+Grille et couronne partageant les nœuds du bord droit `l1213`, l'union `|`
+suffit ensuite à en faire un maillage conforme — 200 + 120 = 320 `QUA4` :
 
 ![Plaque structurée (QUA4)](img/maillage-structure.svg)
 
@@ -314,12 +331,10 @@ balayé donne un `HEX8`, le meilleur élément pour le calcul :
 
 ![Volume structuré (HEX8)](img/maillage-volume-structure.svg)
 
-C'est ce volume que reprennent les chapitres suivants : ils importent
-`structured_mesh` et l'appellent avec `plot=False`, qui rend le maillage sans
-retracer les figures ni réimprimer les comptes de cette page. Importer la
-fonction plutôt que recopier sa géométrie n'est pas un raffinement de style —
-deux maillages construits à l'identique dans deux scripts porteraient des
-nœuds **distincts**, et toute condition posée sur l'un serait sans effet sur
+C'est ce volume que reprennent les chapitres suivants. Importer la fonction
+plutôt que recopier sa géométrie n'est pas un raffinement de style — deux
+maillages construits à l'identique dans deux scripts porteraient des nœuds
+**distincts**, et toute condition posée sur l'un serait sans effet sur
 l'autre.
 
 ## Visualiser et exporter
