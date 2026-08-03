@@ -14,7 +14,7 @@ use std::collections::HashSet;
 /// increfed afresh by the new submeshes; `mesh` itself is left untouched.
 ///
 /// Errors if `mesh` has no submeshes (no Coords to attach to).
-pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
+pub fn consolidate_mesh(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let mut result = Mesh::empty();
 
@@ -92,7 +92,7 @@ mod tests {
         mesh.add_sub(sm2).unwrap();
         assert_eq!(mesh.len(), 2);
 
-        let c2 = consolidate(&mesh).unwrap();
+        let c2 = consolidate_mesh(&mesh).unwrap();
         assert_eq!(c2.len(), 1, "must merge the two TRI3 submeshes");
         assert_eq!(
             c2.cell_count().unwrap(),
@@ -124,7 +124,7 @@ mod tests {
         mesh.add_sub(sm1).unwrap();
         mesh.add_sub(sm2).unwrap();
 
-        let c2 = consolidate(&mesh).unwrap();
+        let c2 = consolidate_mesh(&mesh).unwrap();
         assert_eq!(c2.len(), 1);
         assert_eq!(c2.cell_count().unwrap(), 1, "the duplicate must be removed");
     }
@@ -158,7 +158,7 @@ mod tests {
         mesh.add_sub(sm_poi).unwrap();
         mesh.add_sub(sm_tri2).unwrap();
 
-        let c2 = consolidate(&mesh).unwrap();
+        let c2 = consolidate_mesh(&mesh).unwrap();
         assert_eq!(c2.len(), 2, "TRI3 + POI1");
         assert_eq!(
             c2.element_types().unwrap(),

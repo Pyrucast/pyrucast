@@ -349,7 +349,7 @@ mod tests {
         for m in [line(&d, &c, nx), line(&c, &b, nz), line(&b, &a, nx)] {
             ring = ring.union(&m).unwrap();
         }
-        let contour = crate::ops::mesher::consolidate(&ring).unwrap();
+        let contour = crate::ops::mesher::consolidate_mesh(&ring).unwrap();
         let face = super::super::pave_surface(&contour, ElementType::QUA4, None, true).unwrap();
         let solid = crate::ops::mesher::extrude(&face, &[0.0, height, 0.0], ny).unwrap();
         crate::ops::mesher::skin(&solid, None).unwrap()
@@ -388,7 +388,7 @@ mod tests {
                 Some(m) => m.union(&seg).unwrap(),
             });
         }
-        let contour = crate::ops::mesher::consolidate(&ring.unwrap()).unwrap();
+        let contour = crate::ops::mesher::consolidate_mesh(&ring.unwrap()).unwrap();
         let face = super::super::pave_surface(&contour, ElementType::QUA4, None, true).unwrap();
         let solid = crate::ops::mesher::extrude(&face, &[0.0, height, 0.0], layers).unwrap();
         crate::ops::mesher::skin(&solid, None).unwrap()

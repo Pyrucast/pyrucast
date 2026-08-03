@@ -115,8 +115,8 @@ fonction libre `ops::<thème>::f` est exposée comme `pyrucast.<thème>.f`
 (`pyrucast.mesher.to_poi1`, `pyrucast.field.coordinates`,
 `pyrucast.assemble.stiffness`, `pyrucast.solver.solve`, …). Les conteneurs
 (`containers::…`) restent des classes au top-level (`pyrucast.Coords`,
-`pyrucast.Mesh`, …), et `pyrucast.consolidate` (dispatch mesh/champ) reste
-au top-level à l'image du niveau racine de `ops`.
+`pyrucast.Mesh`, …). Le miroir est **sans exception** : aucune fonction libre
+ne vit au top-level Python.
 
 C'est le passage au *layout mixte* maturin (dossier `python/pyrucast/`,
 extension privée `_pyrucast` + couche Python pure) qui débloque ce rangement :
@@ -253,13 +253,13 @@ pour le câblage Python des wrappers non-agrégats.
 
 Côté Python, les fonctions des thèmes ci-dessous vivent dans le
 **sous-module du thème** (`pyrucast.<thème>.f(...)`) — voir la note sur les
-sous-modules plus haut. Seul `pyrucast.consolidate` reste au top-level.
+sous-modules plus haut, sans exception.
 
 | Opération | Rust | Python |
 |---|---|---|
 | accesseur / mutation mono-conteneur | méthode | méthode |
 | vue dérivée d'un seul conteneur | méthode | méthode |
-| transformation mesh→mesh | `ops::mesher::*` | `pyrucast.mesher.to_poi1`, `pyrucast.consolidate` *(top-level)*, … |
+| transformation mesh→mesh | `ops::mesher::*` | `pyrucast.mesher.to_poi1`, `pyrucast.mesher.consolidate_mesh`, … |
 | construction de conteneur | `ops::build::*` | `pyrucast.build.material_field`, … |
 | opérateur sur field croisant un mesh/field | `ops::field::*` | `pyrucast.field.coordinates`, `pyrucast.field.restrict`, `pyrucast.field.merge` |
 | assemblage `Model` → `Matrix` | `ops::assemble::*` | `pyrucast.assemble.stiffness`, `pyrucast.assemble.mass` |
@@ -283,7 +283,7 @@ sous-modules plus haut. Seul `pyrucast.consolidate` reste au top-level.
   `SubField::check_same_components` garde `merge_components` en amont.
 - `stiffness(model, mat)`, `mass(model)` → **`ops::assemble`** (famille
   assembleur ; `mass` suit `stiffness`, elles ne se séparent pas).
-- `consolidate(mesh)`, `to_poi1(mesh)` → **`ops::mesher`** (famille des
+- `consolidate_mesh(mesh)`, `to_poi1(mesh)` → **`ops::mesher`** (famille des
   transformations mesh→mesh ; mono-conteneur mais rattachées à leur
   famille).
 - `material_field(model, …)` → **`ops::build`** (produit un `ElementField`

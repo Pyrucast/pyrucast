@@ -738,3 +738,19 @@ def test_convert_unknown_element_type():
         pass
     else:
         raise AssertionError("expected error for unknown element type")
+
+
+def test_consolidate_mesh_fuses_same_type_and_drops_duplicates():
+    # Two submeshes of one element type carrying the same cell: consolidate_mesh
+    # fuses them into a single submesh and drops the duplicate.
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    d = c.add_node([0.0, 1.0])
+    za = pyrucast.Mesh(c, "TRI3")
+    za.unit().add_cell([a, b, d])
+    zb = pyrucast.Mesh(c, "TRI3")
+    zb.unit().add_cell([a, b, d])  # duplicate cell in a second submesh
+    m = pyrucast.mesher.consolidate_mesh(za | zb)
+    assert len(m) == 1  # one submesh per element type, duplicates dropped
+    assert m.cell_counts() == [1]

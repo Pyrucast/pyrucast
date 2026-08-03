@@ -86,7 +86,7 @@ Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_beha
 Champs - dérivation;REAC;Réactions nodales;—
 Champs - extraction;EXCO;Extrait/renomme une composante d'un champ;filter_components (extraction, str ou liste) / rename_component (renommage)
 Champs - extraction;DEPL;Extrait le champ de déplacement;NodeField
-Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / consolidate
+Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / consolidate_node
 Champs - extraction;ELNO;Passe un champ des points de Gauss aux nœuds;divergence (partiel)
 Champs - extraction;REDU;Restreint un champ à un sous-maillage;restrict
 Champs - extraction;;Reprojette un champ sur le support et les composantes d'un champ cible (combinable par + - * /);restrict_like

@@ -97,7 +97,7 @@ def main() -> None:
 
     # FR — Les charges réparties s'intègrent sur des faces : il faut la peau.
     # EN — Distributed loads integrate over faces: the skin is needed.
-    peau = pc.consolidate(pc.mesher.skin(volume))
+    peau = pc.mesher.consolidate_mesh(pc.mesher.skin(volume))
     # ANCHOR_END: maillage
 
     # ── Étape 1 : régions / Step 1: regions ─────────────────────────────────
@@ -109,7 +109,7 @@ def main() -> None:
 
     # FR — L'alésage : les nœuds sur le cylindre, lus à même le volume.
     # EN — The bore: the nodes on the cylinder, read straight off the volume.
-    alesage = pc.consolidate(
+    alesage = pc.mesher.consolidate_mesh(
         pc.mesher.points_on_cylinder(volume, bas_axe, haut_axe, HOLE_RADIUS)
     )
     # ANCHOR_END: alesage
@@ -194,7 +194,7 @@ def main() -> None:
     # EN — The heated zone: same approach on X, as a band, over the volume.
     x_volume = pc.field.coordinates(volume, ["X"])
     noeuds_source = pc.field.select(x_volume, ge=SOURCE_X_MIN, le=SOURCE_X_MAX)
-    zone_source = pc.consolidate(
+    zone_source = pc.mesher.consolidate_mesh(
         pc.mesher.elements_on(volume, noeuds_source, strict=True)
     )
     zone_source.unit().face_color = VERT
@@ -233,7 +233,7 @@ def main() -> None:
     # ANCHOR: second_membre
     # FR — Les trois charges se touchent : support commun, puis `+` somme.
     # EN — The three loads touch: a common support first, then `+` really sums.
-    noeuds_charges = pc.consolidate(
+    noeuds_charges = pc.mesher.consolidate_mesh(
         pc.mesher.to_poi1(face_gauche | face_basse | zone_source)
     )
     second_membre = (

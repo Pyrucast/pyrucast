@@ -10,9 +10,8 @@ Python). Elle matérialise la règle de [Conventions](conventions.md) :
   thème** : `pyrucast.<thème>.f` (le rangement par thème du code Rust est
   reflété par une hiérarchie de modules Python : `mesher`, `field`,
   `assemble` (dont les forces internes `BSIG`), `behavior`, `solver`,
-  `export`, `build`, plus `store`). Seul `pyrucast.consolidate` (dispatch
-  mesh/champ) reste au
-  top-level, à l'image du niveau racine de `ops` ;
+  `export`, `build`, plus `store`). Le miroir est sans exception : aucune
+  fonction libre ne vit au top-level ;
 - une surcharge d'opérateur Rust devient un dunder Python (`Add` →
   `__add__`, `Index` → `__getitem__`, …) ;
 - un constructeur nommé Rust devient un `classmethod` / constructeur
@@ -117,7 +116,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `merge_nodes(mesh: &Mesh, tol: f64) -> Mesh` | `merge_nodes(mesh, tol) -> Mesh` |
 | `read_gmsh(coords: Handle<Coords>, path: &Path) -> Vec<(String, Mesh)>` | `read_gmsh(coords, path) -> dict[str, Mesh]` |
 | `read_gmsh_str(coords: Handle<Coords>, text: &str) -> Vec<(String, Mesh)>` | `read_gmsh_str(coords, text) -> dict[str, Mesh]` |
-| `consolidate(mesh: &Mesh) -> Mesh` | `pyrucast.consolidate(mesh) -> Mesh` (**top-level** ; dispatch par type, partagé avec `NodeField`) |
+| `consolidate_mesh(mesh: &Mesh) -> Mesh` | `consolidate_mesh(mesh) -> Mesh` |
 
 ### `ops::field` — opérateurs sur les champs
 
@@ -140,8 +139,8 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `Field::filter_components(&self, wanted: &[String]) -> Self` / `SubField::select_components(&self, wanted) -> Self` | `filter_components(field, components) -> field` (dispatch par type ; `components` est un `str` ou une liste — p. ex. `model.primal_vars()` ; `EXCO`) |
 | `Field::rename_component(&self, from, to) -> Self` / `SubField::rename_component(&self, from, to) -> Self` | `rename_component(field, old, new) -> field` (dispatch par type ; renommage sans déplacement de valeur) |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
-| `consolidate_node(field: &NodeField) -> NodeField` | `pyrucast.consolidate(field) -> NodeField` (**top-level** ; dispatch par type, partagé avec `Mesh`) |
-| `consolidate_element(field: &ElementField) -> ElementField` | `pyrucast.consolidate(field) -> ElementField` (**top-level** ; dispatch par type ; fusionne les zones d'une même fespace) |
+| `consolidate_node(field: &NodeField) -> NodeField` | `consolidate_node(field) -> NodeField` |
+| `consolidate_element(field: &ElementField) -> ElementField` | `consolidate_element(field) -> ElementField` (fusionne les zones d'une même fespace) |
 | `SubField::dot(&self, other) -> f64` / `Field::dot_field(&self, other) -> f64` | `xty(x, y) -> float` (dispatch par type ; produit scalaire **global** de deux champs) |
 | `SubField::xtx(&self) -> f64` / `Field::xtx(&self) -> f64` | `xtx(x) -> float` (dispatch par type ; `Σ v²`, norme au carré `XTX`) |
 | `SubField::xtx_components(&self, &[&str]) -> Result<f64>` / `Field::xtx_components(&self, &[&str]) -> Result<f64>` | `xtx(x, components=[…]) -> float` (norme au carré restreinte à ces composantes) |

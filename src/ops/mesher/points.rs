@@ -12,7 +12,7 @@
 //! The result mirrors `mesh` **submesh by submesh** — same order, one POI1
 //! submesh per input submesh, **possibly empty** — so a selection keeps the
 //! zoning of its source and the caller can tell *which* zone a node came
-//! from. Use [`consolidate`](fn@super::consolidate) to fuse the zones into a
+//! from. Use [`consolidate_mesh`](fn@super::consolidate_mesh) to fuse the zones into a
 //! single point cloud, or index the result to work zone by zone.
 //!
 //! The one query that does *not* return a mesh is the nearest node, which by

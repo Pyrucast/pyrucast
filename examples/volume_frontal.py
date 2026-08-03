@@ -32,7 +32,9 @@ def box_skin(n: int) -> pc.Mesh:
     for p, q in ((a, d), (d, c), (c, b), (b, a)):
         seg = pc.mesher.line(p, q, n)
         ring = seg if ring is None else ring | seg
-    face = pc.mesher.pave_surface(pc.consolidate(ring), "QUA4", all_quad=True)
+    face = pc.mesher.pave_surface(
+        pc.mesher.consolidate_mesh(ring), "QUA4", all_quad=True
+    )
     return pc.mesher.skin(pc.mesher.extrude(face, [0.0, 1.0, 0.0], n))
 
 

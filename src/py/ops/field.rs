@@ -118,6 +118,35 @@ pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeFie
     })
 }
 
+/// Fuse the zones of a node `field` sharing the same component set into one,
+/// deduping the nodes on their interface after a coherence check.
+///
+/// Errors if two zones disagree on a value at a shared `(node, component)`
+/// pair. `field` itself is left untouched.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn consolidate_node(field: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
+    Ok(PyNodeField {
+        inner: crate::ops::field::consolidate_node(&field.inner)?,
+    })
+}
+
+/// Fuse the zones of an element `field` sharing the same `FiniteElementSpace`
+/// support into a single zone carrying the union of their components.
+///
+/// The counterpart of `|`, which leaves component-disjoint zones side by side:
+/// this is how per-physics material zones built on one shared fespace become a
+/// single material field readable by every physics. Components carried by two
+/// zones must agree value by value, else it errors. `field` itself is left
+/// untouched.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn consolidate_element(field: PyRef<PyElementField>) -> PyResult<PyElementField> {
+    Ok(PyElementField {
+        inner: crate::ops::field::consolidate_element(&field.inner)?,
+    })
+}
+
 /// Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
 ///
 /// Geometric and physics-agnostic: each component of `field` is

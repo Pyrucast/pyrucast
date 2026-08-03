@@ -44,7 +44,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `to_quadratic(mesh)` | la **copie quadratique** (Lagrange-2) d'un maillage linéaire : TRI3→TRI6, HEX8→HEX20, … (voir plus bas) |
 | `convert(mesh, element_type)` | **change le type d'élément** sans déplacer ni ajouter de nœud : identité, `QUA4`→`TRI3` (2 triangles), `HEX8`→`TET4` (6 tétraèdres) (voir plus bas) |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
-| `consolidate(mesh)` | fusionne les sous-maillages de même type (dispatch partagé avec `NodeField`) |
+| `consolidate_mesh(mesh)` | fusionne les sous-maillages de même type, en écartant les mailles dupliquées |
 | `merge_nodes(mesh, tol)` | **soude** les nœuds distants de moins de `tol` ; remappe la connectivité, abandonne les cellules dégénérées (voir plus bas) |
 | `read_gmsh(coords, path)` | **lit un maillage gmsh** `.msh` (ASCII 2.2 ou 4.1) dans `coords`, renvoie un `dict` `{groupe physique: Mesh}` (voir plus bas) |
 | `read_gmsh_str(coords, text)` | comme `read_gmsh` mais depuis le **texte** du fichier déjà en mémoire |
@@ -430,7 +430,7 @@ près des frontières.
 Identique à `triangulate_surface`, et volontairement : les deux opérateurs
 partagent leur lecture de contour. `contour` est un `Mesh` d'une ou plusieurs
 **boucles `SEG2` fermées**, chacune dans **un seul** sous-maillage
-(`pyrucast.consolidate`), orientées par l'appelant — **CCW** pour une frontière
+(`pyrucast.mesher.consolidate_mesh`), orientées par l'appelant — **CCW** pour une frontière
 extérieure, **CW** pour un trou. Plusieurs boucles CCW disjointes pavent
 plusieurs domaines indépendants en une passe. La configuration peut être en
 dimension **2**, ou une boucle **plane en 3D** (ajustée à son plan de meilleur
@@ -615,7 +615,7 @@ et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
 ### Pièges
 
 - **Une boucle par sous-maillage.** Comme pour `triangulate_surface`, une
-  boucle fermée doit tenir dans un seul sous-maillage : `pyrucast.consolidate`
+  boucle fermée doit tenir dans un seul sous-maillage : `pyrucast.mesher.consolidate_mesh`
   après avoir uni les côtés.
 - **Orientation.** Un trou doit être **CW**. `pyrucast.mesher.invert` retourne
   un cercle construit en CCW.
@@ -1361,7 +1361,7 @@ Le résultat **épouse la structure** de `mesh` sous-maillage par sous-maillage
 (même ordre, mêmes types d'éléments, mêmes couleurs) : chaque sous-maillage de
 sortie porte les cellules retenues du sous-maillage d'entrée correspondant,
 **éventuellement vide**. Les zones restent séparées (jamais de fusion). Au
-besoin, `consolidate(mesh)` élimine ou fond ensuite les zones vides ou
+besoin, `consolidate_mesh(mesh)` élimine ou fond ensuite les zones vides ou
 redondantes. Les cellules retenues réutilisent les nœuds d'origine (refcount
 incrémenté) ; `mesh` est laissé intact.
 
@@ -1405,7 +1405,7 @@ Toutes ces fonctions renvoient un **maillage POI1 calqué sur l'entrée** : un
 sous-maillage par sous-maillage de `mesh`, dans le même ordre, **éventuellement
 vide**. La sélection conserve donc le zonage de sa source — on sait de *quelle*
 zone vient chaque nœud, et on peut travailler zone par zone en indexant le
-résultat. `consolidate(sel)` retombe sur un nuage unique quand ce découpage ne
+résultat. `consolidate_mesh(sel)` retombe sur un nuage unique quand ce découpage ne
 sert pas.
 
 Les nœuds sont **dédoublonnés dans l'ordre de première apparition** dans la
@@ -1524,7 +1524,7 @@ représentant après soudure (un `SEG2` dont les deux bouts fusionnent, un `TRI3
 à deux coins confondus, …) — est **abandonnée** : elle est dégénérée. Les
 cellules `POI1` (un seul nœud) ne s'effondrent jamais et sont toujours
 conservées ; dédupliquer des points colocalisés reste le rôle de
-`consolidate`, pas celui-ci.
+`consolidate_mesh`, pas celui-ci.
 
 `tol` doit être ≥ 0 ; `tol = 0` ne soude que les nœuds **exactement**
 colocalisés. Seuls les nœuds **référencés** par le maillage sont concernés. Le

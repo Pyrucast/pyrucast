@@ -244,7 +244,7 @@ pub fn vtk_element_field_string(mesh: &Mesh, field: &ElementField) -> Result<Str
                 if found.is_some() {
                     return Err(PyrucastError::Message(format!(
                         "vtk: component {component} is carried by two zones on the \
-                     same support — consolidate the field first"
+                     same support — consolidate_element the field first"
                     )));
                 }
                 let ng = sub.gauss_count();

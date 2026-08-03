@@ -12,7 +12,7 @@ une **fonction libre** d'un module `ops/` est figée dans le fichier
 - **fonction libre `ops::<thème>`** — tout opérateur qui croise des
   conteneurs ou appartient à une famille d'opérateurs
   (`ops::field::restrict(field, mesh)`, `ops::assemble::stiffness(model,
-  mat)`, `ops::mesher::consolidate(mesh)`).
+  mat)`, `ops::mesher::consolidate_mesh(mesh)`).
 
 Le binding Python est un **miroir 1:1** : une fonction Rust devient une
 fonction Python, une méthode reste une méthode. On vise le style
@@ -32,8 +32,10 @@ K = pyrucast.assemble.stiffness(model, materials)
 sol = pyrucast.solver.solve(K, rhs)
 ```
 
-Seul `pyrucast.consolidate` (dispatch mesh/champ) reste au top-level, à
-l'image du niveau racine de `ops`.
+Le miroir est **sans exception** : aucune fonction libre ne vit au top-level
+Python. Les trois consolidations suivent leur thème —
+`pyrucast.mesher.consolidate_mesh`, `pyrucast.field.consolidate_node`,
+`pyrucast.field.consolidate_element` — comme leurs homologues Rust.
 
 ## Erreurs
 

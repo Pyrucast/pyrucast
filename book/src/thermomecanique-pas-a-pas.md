@@ -90,7 +90,7 @@ nul besoin de les fusionner : les opérateurs (`stiffness`, `integrate_behavior`
 `thermal_strain`) résolvent leur zone matière **par les composantes qu'ils
 requièrent** (`k` pour la conduction, `E`/`nu` pour l'élasticité, `alpha` pour la
 dilatation). Pour fusionner explicitement des zones qui partagent légitimement un
-support, [`consolidate`](operateurs/champs.md) reste disponible.
+support, [`consolidate_element`](operateurs/champs.md) reste disponible.
 
 En sortie, `data["results"]` est une liste (un élément par instant) :
 

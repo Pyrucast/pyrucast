@@ -165,8 +165,8 @@ def test_result_mirrors_the_submeshes_including_empty_zones():
     # La seconde zone ne sélectionne rien mais reste présente et vide.
     assert sel.cell_counts() == [2, 0]
 
-    # `consolidate` est la voie pour retomber sur un nuage unique.
-    assert pyrucast.consolidate(sel).cell_counts() == [2]
+    # `consolidate_mesh` est la voie pour retomber sur un nuage unique.
+    assert pyrucast.mesher.consolidate_mesh(sel).cell_counts() == [2]
 
 
 def test_tolerance_defaults_to_the_model_scale():

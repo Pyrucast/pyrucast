@@ -555,7 +555,7 @@ macro_rules! impl_aggregate_pymethods {
                 /// `NodeField` *fuses* them (union of components), whereas
                 /// `ElementField` keeps component-disjoint zones side by side
                 /// and only rejects a component carried by two zones on one
-                /// support — fuse those explicitly with `consolidate`
+                /// support — fuse those explicitly with `consolidate_element`
                 /// (`consolidate_element`). Returns `NotImplemented` for any
                 /// other type so Python can fall back to the right operand's
                 /// `__ror__`.

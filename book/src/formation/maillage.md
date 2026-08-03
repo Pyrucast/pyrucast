@@ -76,7 +76,7 @@ Le contour se maille **bord par bord**, chacun avec son mailleur dédié :
 jamais un segment du bord. La finesse du contour est donc un choix de
 l'utilisateur, indépendant de la taille de maille demandée pour l'intérieur.
 
-### `consolidate` est obligatoire
+### `consolidate_mesh` est obligatoire
 
 ```python
 {{#include ../../../formation/maillage.py:contour_consolidate}}
@@ -84,7 +84,7 @@ l'utilisateur, indépendant de la taille de maille demandée pour l'intérieur.
 
 L'union `|` réunit les cinq bords dans un même maillage, mais chacun y garde
 son propre sous-maillage `SEG2`. Or `triangulate_surface` exige qu'une boucle
-fermée tienne dans **un seul** sous-maillage. `pyrucast.consolidate` les
+fermée tienne dans **un seul** sous-maillage. `pyrucast.mesher.consolidate_mesh` les
 fusionne sans toucher à la connectivité.
 
 ### Le trou, et le contour complet

@@ -134,7 +134,9 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesher::read_gmsh, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesher::read_gmsh_str, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::export::export_vtk, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::consolidate, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesher::consolidate_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::consolidate_node, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::field::consolidate_element, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::coordinates, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::set_coordinates, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::displace, m)?)?;

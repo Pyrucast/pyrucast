@@ -117,9 +117,9 @@ def border_plate_with_hole() -> pc.Mesh:
     # ANCHOR_END: contour_bords
 
     # ANCHOR: contour_consolidate
-    # FR — `|` garde un sous-maillage par bord ; `consolidate` les fusionne.
-    # EN — `|` keeps one submesh per edge; `consolidate` fuses them.
-    cex = pc.consolidate(cex)
+    # FR — `|` garde un sous-maillage par bord ; `consolidate_mesh` les fusionne.
+    # EN — `|` keeps one submesh per edge; `consolidate_mesh` fuses them.
+    cex = pc.mesher.consolidate_mesh(cex)
     # ANCHOR_END: contour_consolidate
 
     # ANCHOR: contour_trou
@@ -279,7 +279,7 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
         | l1213
         | pc.mesher.line(p13, p2, int(n15 / 2))
     )
-    cext = pc.consolidate(cext)
+    cext = pc.mesher.consolidate_mesh(cext)
     # ANCHOR_END: boucle_exterieure
 
     # ANCHOR: boucle_interieure
@@ -295,7 +295,7 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
         | pc.mesher.arc(p16, p6, p17, n15)
         | pc.mesher.arc(p17, p6, p14, n15)
     )
-    cin = pc.consolidate(cin)
+    cin = pc.mesher.consolidate_mesh(cin)
 
     # FR — Les deux boucles, l'une bleue et l'autre rouge : découpages alignés.
     # EN — Both loops, one blue and one red: their cuttings line up.

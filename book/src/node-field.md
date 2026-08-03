@@ -69,7 +69,7 @@ fois par zone**. Trois règles régissent cette duplication :
   `ElementField` ;
 - **cohérence à la demande** : `field.check()` vérifie que toutes les
   zones stockant un même couple `(nœud, composante)` portent la **même**
-  valeur (comparaison exacte) ; `consolidate(field)` fait cette
+  valeur (comparaison exacte) ; `consolidate_node(field)` fait cette
   vérification puis **fusionne par support** — les zones définies sur le
   **même** `SubMesh` (identité de handle) deviennent une seule zone portant
   l'union de leurs composantes (valeurs des composantes communes vérifiées),
@@ -80,7 +80,7 @@ fois par zone**. Trois règles régissent cette duplication :
 Comme pour tous les agrégats, `a | b` **unit les zones** (handles partagés,
 pas de copie ; déduplication par handle) — ce n'est pas une addition de
 valeurs. L'union **finalise** en fusionnant les zones de même support (voir
-`consolidate` ci-dessus) et lève si deux zones divergent sur une valeur
+`consolidate_node` ci-dessus) et lève si deux zones divergent sur une valeur
 partagée. L'arithmétique scalaire (`f + 2.0`, `f * 0.5`, …) vit au niveau
 zone (`SubNodeField`) sur `+`/`*`/… Le nommé `merge(a, b)` ≡ `a | b`.
 
@@ -150,7 +150,7 @@ print(u.sum("UX"))  # 1.5  — Σ sur les nœuds (résultante d'un champ de forc
 f = pyrucast.NodeField.with_components_per_submesh(two_zone_mesh, [["T"], ["UX", "UY"]])
 print(f.components())  # ['T', 'UX', 'UY']
 f.check()  # cohérence des interfaces (lève sinon)
-g = pyrucast.consolidate(f)  # fusion au plus juste
+g = pyrucast.field.consolidate_node(f)  # fusion au plus juste
 ```
 
 ## Refcount et sûreté du swap
@@ -185,4 +185,4 @@ nœuds **à travers les zones** (règle premier-trouvé) :
 | `restrict(f, mesh)` | une zone par submesh cible, sur le **nuage POI1 canonique caché** du sous-maillage (`to_poi1`) ⇒ deux restrictions sur le même `mesh` partagent le support et sont soustractibles (et s'alignent avec `K·x`/`solve`) ; `0.0` pour les nœuds non couverts |
 | `restrict_like(f, target)` | reprojette sur le support **et** les composantes de `target` (mêmes slots) ⇒ combinable par `+ - * /` avec `target` ; nœuds/composantes hors de `target` abandonnés, `0.0` si non couverts |
 | `merge(a, b)` | union structurelle consolidée (conflit de valeur ⇒ erreur) |
-| `consolidate(f)` | fusion par jeu de composantes après vérification de cohérence |
+| `consolidate_node(f)` | fusion par jeu de composantes après vérification de cohérence |

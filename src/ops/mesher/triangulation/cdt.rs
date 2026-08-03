@@ -2234,7 +2234,7 @@ mod tests {
         let r_arc = 0.05_f64;
         let r_hole = 0.035_f64;
 
-        // Each vertex appears exactly once (as `consolidate` merges the
+        // Each vertex appears exactly once (as `consolidate_mesh` merges the
         // shared endpoints of adjacent edges): every side contributes its
         // start point and its interior points but not its end point, which
         // is the next side's start.

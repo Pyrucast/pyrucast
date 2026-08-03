@@ -318,8 +318,20 @@ pub fn points_on_torus(
     Ok(PyMesh { inner: result })
 }
 
-// `consolidate(mesh)` is exposed by the type-dispatching top-level
-// wrapper in `crate::py::ops::consolidate` (shared with NodeField).
+/// Fuse submeshes of the same element type into one, dropping duplicate cells
+/// (identical node sequences).
+///
+/// Types appear in their first-seen order; the face colour of the first
+/// submesh of each type is kept. `mesh` itself is left untouched.
+///
+/// Errors if `mesh` has no submesh (no `Coords` to attach to).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn consolidate_mesh(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    Ok(PyMesh {
+        inner: crate::ops::mesher::consolidate_mesh(&mesh.inner)?,
+    })
+}
 
 /// Weld together nodes closer than `tol`, redirecting the connectivity to one
 /// representative per cluster.

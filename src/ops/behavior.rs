@@ -75,7 +75,7 @@ pub fn integrate(
         };
         // Resolve the material zone by the components this physics needs, so a
         // shared fespace carrying several component-disjoint material zones
-        // resolves each physics' own zone without an explicit consolidate.
+        // resolves each physics' own zone without an explicit consolidate_element.
         let material = match mat_fespace {
             Some(fe) => Some(match mat_components {
                 Some(required) => materials.sub_for_fespace_with(&fe, required)?,

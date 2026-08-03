@@ -9,6 +9,8 @@ scalaires point-à-point (abs, sqrt, exp, trigonométrie…).
 from ._pyrucast import (
     abs as abs,
     beam_deformation as beam_deformation,
+    consolidate_element as consolidate_element,
+    consolidate_node as consolidate_node,
     coordinates as coordinates,
     cos as cos,
     cosh as cosh,
@@ -43,6 +45,8 @@ from ._pyrucast import (
 __all__ = [
     "abs",
     "beam_deformation",
+    "consolidate_element",
+    "consolidate_node",
     "coordinates",
     "cos",
     "cosh",

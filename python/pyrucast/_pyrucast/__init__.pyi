@@ -31,7 +31,9 @@ __all__ = [
     "beam_deformation",
     "border",
     "circle",
-    "consolidate",
+    "consolidate_element",
+    "consolidate_mesh",
+    "consolidate_node",
     "convert",
     "coordinates",
     "cos",
@@ -468,7 +470,7 @@ class ElementField:
         `field | other` → a fresh `ElementField` holding the zones of both.
         Component-disjoint zones on one support stay **side by side** (unlike
         `NodeField`, which fuses them); a component carried by two zones on the
-        same support is rejected — fuse those explicitly with `consolidate`.
+        same support is rejected — fuse those explicitly with `consolidate_element`.
         """
     def __ror__(self, other: SubElementField) -> ElementField:
         r"""
@@ -2307,22 +2309,36 @@ def circle(center: Node, normal: typing.Sequence[builtins.float], radius: builti
     `element_type` is `"SEG2"` (default) or `"SEG3"`.
     """
 
-def consolidate(obj: typing.Any) -> typing.Any:
+def consolidate_element(field: ElementField) -> ElementField:
     r"""
-    Consolidate a container — fuse redundant sub-objects « au plus juste ».
+    Fuse the zones of an element `field` sharing the same `FiniteElementSpace`
+    support into a single zone carrying the union of their components.
     
-    Dispatches on the argument type (Python has a single top-level name
-    for the two themed Rust ops):
+    The counterpart of `|`, which leaves component-disjoint zones side by side:
+    this is how per-physics material zones built on one shared fespace become a
+    single material field readable by every physics. Components carried by two
+    zones must agree value by value, else it errors. `field` itself is left
+    untouched.
+    """
+
+def consolidate_mesh(mesh: Mesh) -> Mesh:
+    r"""
+    Fuse submeshes of the same element type into one, dropping duplicate cells
+    (identical node sequences).
     
-    - `Mesh` → `ops::mesher::consolidate`: fuse submeshes of the same
-      element type, drop duplicate cells;
-    - `NodeField` → `ops::field::consolidate_node`: fuse zones with the same
-      component set, dedupe interface nodes after a coherence check.
-    - `ElementField` → `ops::field::consolidate_element`: fuse zones sharing the
-      same `FiniteElementSpace` support into a single zone carrying the union of
-      their components (shared components must agree value-by-value). Useful to
-      merge per-physics material zones built on one shared fespace into a single
-      material field readable by every physics.
+    Types appear in their first-seen order; the face colour of the first
+    submesh of each type is kept. `mesh` itself is left untouched.
+    
+    Errors if `mesh` has no submesh (no `Coords` to attach to).
+    """
+
+def consolidate_node(field: NodeField) -> NodeField:
+    r"""
+    Fuse the zones of a node `field` sharing the same component set into one,
+    deduping the nodes on their interface after a coherence check.
+    
+    Errors if two zones disagree on a value at a shared `(node, component)`
+    pair. `field` itself is left untouched.
     """
 
 def convert(mesh: Mesh, element_type: builtins.str) -> Mesh:

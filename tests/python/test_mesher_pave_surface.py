@@ -18,7 +18,7 @@ def _closed_loop(coords, points):
     for a, b in zip(nodes, nodes[1:] + nodes[:1]):
         seg = pc.mesher.line(a, b, 1)
         mesh = seg if mesh is None else mesh | seg
-    return pc.consolidate(mesh)
+    return pc.mesher.consolidate_mesh(mesh)
 
 
 def _rect(width, height, nx, ny):

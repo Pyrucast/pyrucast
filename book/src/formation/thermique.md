@@ -100,7 +100,7 @@ chapitre 1.
 La deuxième ligne prépare la suite. Les chargements **répartis** s'intègrent
 sur des faces et non sur des nœuds — c'est le \\( [N]^T \\) des intégrales
 ci-dessus : il leur faut de vraies mailles de bord, que
-`pyrucast.mesher.skin` extrait du volume d'hexaèdres. `pyrucast.consolidate`
+`pyrucast.mesher.skin` extrait du volume d'hexaèdres. `pyrucast.mesher.consolidate_mesh`
 ramène cette peau à un **seul** sous-maillage, pour que les sélections qui
 suivent en renvoient un seul elles aussi.
 
@@ -132,7 +132,7 @@ mêmes 120 nœuds que sur la peau.
 
 **Un `points_*` renvoie déjà un maillage `POI1`.** Le résultat est utilisable
 tel quel comme support d'un `Model.dirichlet`, sans passer par
-`pyrucast.mesher.to_poi1`. Seul `consolidate` reste nécessaire, pour écarter le
+`pyrucast.mesher.to_poi1`. Seul `consolidate_mesh` reste nécessaire, pour écarter le
 sous-maillage **vide** que laisse la partie du volume qui ne touche pas le trou
 (le volume en compte deux : la grille et la couronne).
 
@@ -258,7 +258,7 @@ portent entièrement.
 
 Même démarche, mais sur X et sur le **volume** : une bande de valeurs au lieu
 d'une égalité, et des `HEX8` au lieu de `QUA4`. Comme pour l'alésage,
-`consolidate` écarte le sous-maillage vide laissé par la partie du volume qui
+`consolidate_mesh` écarte le sous-maillage vide laissé par la partie du volume qui
 ne rencontre pas la bande.
 
 **`strict=True` approche la région par un escalier.** La bande en X coupe le
@@ -329,7 +329,7 @@ précisément ce que l'union `|` ne fait pas.
 ```
 
 D'où ces quelques lignes : le maillage `POI1` de tous les nœuds chargés
-(`to_poi1` puis `consolidate`, pour n'avoir qu'un seul sous-maillage donc un
+(`to_poi1` puis `consolidate_mesh`, pour n'avoir qu'un seul sous-maillage donc un
 seul support), les trois champs restreints dessus, et leur somme par `+`. La
 vérification est immédiate — la puissance totale du second membre vaut la
 somme des trois puissances prises séparément, ce que l'union perdrait.

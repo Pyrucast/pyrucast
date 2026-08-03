@@ -57,7 +57,7 @@ def construire_plaque_trouee():
     droit = pc.mesher.line(p2, p3, 4)
     haut = pc.mesher.line(p3, p4, 10)
     bord_gauche = pc.mesher.line(p4, p1, 4)
-    boucle_ext = pc.consolidate(bas | droit | haut | bord_gauche)
+    boucle_ext = pc.mesher.consolidate_mesh(bas | droit | haut | bord_gauche)
 
     centre = coords.add_node(list(CENTRE_TROU))
     trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)

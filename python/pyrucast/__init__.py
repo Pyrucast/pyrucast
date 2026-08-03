@@ -9,8 +9,6 @@ Package *mixed Rust/Python*. L'extension compilée est le sous-module privé
 - les **verbes** (`ops::<thème>::f`) vivent dans le sous-module du thème :
   `pyrucast.mesher.triangulate_surface`, `pyrucast.field.gradient`,
   `pyrucast.assemble.stiffness`, `pyrucast.solver.solve`, … ;
-- `pyrucast.consolidate` (dispatch mesh/champ) reste au top-level, comme au
-  niveau racine de `ops` ;
 - la couche Python pure de plus haut niveau vit dans ses propres sous-modules
   (`pyrucast.thermomechanics`).
 """
@@ -37,9 +35,7 @@ from ._pyrucast import (
     SubNodeField as SubNodeField,
 )
 
-# ── Dispatcher à la racine de `ops` : reste au top-level ────────────────────
 from ._pyrucast import __doc__, __version__  # noqa: F401
-from ._pyrucast import consolidate as consolidate
 
 # ── Verbes rangés par thème (miroir de `src/ops/*`) ─────────────────────────
 from . import (
@@ -76,8 +72,6 @@ __all__ = [
     "SubMesh",
     "SubModel",
     "SubNodeField",
-    # dispatcher racine
-    "consolidate",
     # sous-modules de verbes
     "assemble",
     "behavior",
