@@ -52,8 +52,8 @@
 //!
 //! These conventions are compatible with the orientations already enforced
 //! elsewhere in the codebase (CCW filling in
-//! [`crate::ops::mesher::triangulate_surface()`], HEX8 node ordering in
-//! [`crate::ops::mesher::extrude()`]).
+//! [`crate::ops::mesh::triangulate_surface()`], HEX8 node ordering in
+//! [`crate::ops::mesh::extrude()`]).
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -213,8 +213,8 @@ impl ElementType {
     /// `SEG*`, the single-axis flip `ξ ↦ -ξ`). `POI1` has no orientation, so its
     /// permutation is the identity (reversal is a no-op).
     ///
-    /// Shared building block of [`crate::ops::mesher::invert()`] (applied to
-    /// every cell) and [`crate::ops::mesher::orient()`] (applied to the cells a
+    /// Shared building block of [`crate::ops::mesh::invert()`] (applied to
+    /// every cell) and [`crate::ops::mesh::orient()`] (applied to the cells a
     /// consistency pass decides to flip).
     pub fn reversal_permutation(self) -> &'static [usize] {
         match self {

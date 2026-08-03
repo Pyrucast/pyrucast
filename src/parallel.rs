@@ -74,7 +74,7 @@ pub fn map_component_inplace(
 
 /// Accumulate `v` into the f64 atomic slot `a` (the value held as its bit
 /// pattern). The colour-driven scatters — the global assembly
-/// ([`crate::ops::assemble`]) and the nodal scatters ([`colored_scatter`], behind
+/// ([`crate::ops::matrix`]) and the nodal scatters ([`colored_scatter`], behind
 /// the `Bᵀ` divergence and the distributed flux load) — guarantee that within one
 /// colour no two parallel cells touch the same slot, so this load-then-store
 /// never races; colours run in sequence behind a rayon barrier, so cross-colour
@@ -116,7 +116,7 @@ impl Scatter<'_> {
 /// *Determinism* note). It is the shared mechanism behind the `Bᵀ` divergence
 /// ([`crate::models::kernel::scatter_to_nodes`], behind the `Bᵀ` divergence,
 /// the internal forces and the distributed flux load
-/// [`crate::ops::assemble::flux`](fn@crate::ops::assemble::flux)). Returns the
+/// [`crate::ops::node_field::flux`](fn@crate::ops::node_field::flux)). Returns the
 /// accumulator as plain `f64`.
 pub fn colored_scatter<S>(
     n_slots: usize,

@@ -24,10 +24,10 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::assemble::internal_forces;
-use pyrucast::ops::field::{deformation, interp_to_gauss, thermal_strain};
+use pyrucast::ops::element_field::{deformation, interp_to_gauss, thermal_strain};
+use pyrucast::ops::mesh;
+use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{assemble, behavior, build, mesher};
 use pyrucast::store::{insert, read};
 use pyrucast::Result;
 
@@ -72,7 +72,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     // ── Modèle : élasticité + deux bords en x encastrés + appui u_y en bas ──
     let clamp = |nodes: &[Node], var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-        let multiplier = mesher::barycenter(&imposed)?;
+        let multiplier = mesh::barycenter(&imposed)?;
         Model::dirichlet(
             var.into(),
             dual.into(),
@@ -92,7 +92,10 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     model = model.union(&clamp(&bottom, "u_y", "f_y")?)?;
 
     // `alpha` supplied through the material field — an optional elastic component.
-    let materials = build::material_field(&model, &[("E", E), ("nu", NU), ("alpha", ALPHA)])?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("nu", NU), ("alpha", ALPHA)],
+    )?;
 
     // ── Température imposée T = T_ref + ΔT partout, portée aux points de Gauss
     let support = insert(SubMesh::poi1_from_nodes(&grid)?);
@@ -104,11 +107,15 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
 
     // ── Charge thermique f_th = ∫ Bᵀ D ε_th (BSIG de σ_th = D:ε_th) ─────────
     let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF)?;
-    let sig_th = behavior::integrate(&model, &eps_th, None, &materials, None)?;
+    let sig_th =
+        pyrucast::ops::element_field::behavior::integrate(&model, &eps_th, None, &materials, None)?;
     let f_th = internal_forces(&model, &sig_th)?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
-    let solution = solve(&assemble::stiffness(&model, &materials)?, &f_th)?;
+    let solution = solve(
+        &pyrucast::ops::matrix::stiffness(&model, &materials)?,
+        &f_th,
+    )?;
 
     // ── Déplacement propre (u_x, u_y) puis σ = D:(ε(u) − ε_th) ─────────────
     let disp_support = insert(SubMesh::poi1_from_nodes(&grid)?);
@@ -119,7 +126,9 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     }
     let eps = deformation(&NodeField::from_sub(disp), &fes)?;
     let eps_mech = eps.merge_field(&eps_th, |a, b| a - b)?;
-    let sigma = behavior::integrate(&model, &eps_mech, None, &materials, None)?;
+    let sigma = pyrucast::ops::element_field::behavior::integrate(
+        &model, &eps_mech, None, &materials, None,
+    )?;
 
     // ── Vérification : σ_xx = −E·α·ΔT, σ_yy = 0 ────────────────────────────
     let expected = -E * ALPHA * DT;

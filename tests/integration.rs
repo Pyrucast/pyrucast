@@ -4,8 +4,8 @@
 use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::element_type::ElementType;
 use pyrucast::atoms::node::Node;
-use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::atoms::NodeId;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
 use pyrucast::persist::Persist;
 use pyrucast::store::{compact, insert, live_count, read, swap_out, write};
@@ -174,9 +174,8 @@ fn triangulate_surface_from_circle_contour() -> Result<()> {
     // triangles, while conserving the inscribed octagon's area.
     let coords = insert(Coords::new(2)?);
     let center = Node::create_in(coords.clone(), &[0.0, 0.0])?;
-    let circle =
-        pyrucast::ops::mesher::circle(&center, &[0.0, 0.0, 1.0], 1.0, 8, ElementType::SEG2)?;
-    let tri = pyrucast::ops::mesher::triangulate_surface(&circle, ElementType::TRI3, Some(0.25))?;
+    let circle = pyrucast::ops::mesh::circle(&center, &[0.0, 0.0, 1.0], 1.0, 8, ElementType::SEG2)?;
+    let tri = pyrucast::ops::mesh::triangulate_surface(&circle, ElementType::TRI3, Some(0.25))?;
     assert_eq!(tri.element_types()?, vec![ElementType::TRI3]);
     assert!(tri.cell_count()? > 6, "expected interior nodes to be added");
 

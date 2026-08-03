@@ -167,7 +167,7 @@ struct ActiveSetState {
 
 /// Solve `model`'s system with unilateral constraints by the active-set method,
 /// using the default options. `matrix` is the assembled saddle-point stiffness
-/// of `model` (as produced by [`crate::ops::assemble::stiffness`]); `rhs` is
+/// of `model` (as produced by [`crate::ops::matrix::stiffness`]); `rhs` is
 /// the load field (the right-hand sides `g` live at the multiplier nodes'
 /// imposed-value slots).
 ///
@@ -752,8 +752,8 @@ mod tests {
     use crate::containers::model::{Model, SubModel};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::ops::assemble::stiffness;
-    use crate::ops::mesher::barycenter;
+    use crate::ops::matrix::stiffness;
+    use crate::ops::mesh::barycenter;
     use crate::store::insert;
     use std::sync::atomic::Ordering;
 

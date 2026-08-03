@@ -1,4 +1,4 @@
-//! Value-range predicate shared by [`select`](super::select) and
+//! Value-range predicate shared by [`select`](crate::ops::mesh::select_nodes) and
 //! [`mask`](super::mask): a `[lower, upper]` band whose two sides are each
 //! open, inclusive (`>=` / `<=`), or strict (`>` / `<`).
 //!

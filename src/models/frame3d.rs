@@ -183,7 +183,7 @@ impl Domain for Frame3d {
     /// Section forces `N, M_y, M_z, T, V_y, V_z` — the linear law on the
     /// generalised strains `(eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z)`
     /// produced by
-    /// [`crate::ops::field::frame_deformation`](fn@crate::ops::field::frame_deformation).
+    /// [`crate::ops::element_field::frame_deformation`](fn@crate::ops::element_field::frame_deformation).
     fn behavior_output_components(&self) -> Result<Vec<String>> {
         Ok(vec![
             "N".into(),

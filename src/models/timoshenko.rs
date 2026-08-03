@@ -19,7 +19,7 @@
 //!
 //! The behaviour (`COMP`) returns the **section forces** `M = E·I·κ`,
 //! `V = G·A_s·γ` from the section strains `(κ, γ)` produced by
-//! [`crate::ops::field::beam_deformation`](fn@crate::ops::field::beam_deformation).
+//! [`crate::ops::element_field::beam_deformation`](fn@crate::ops::element_field::beam_deformation).
 
 use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;

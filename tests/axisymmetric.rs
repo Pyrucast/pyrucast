@@ -25,9 +25,10 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::assemble::{self, FluxDensity};
+
+use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{behavior, build, field, mesher};
+use pyrucast::ops::{element_field, measure, mesh, node_field};
 use pyrucast::store::{insert, read};
 use pyrucast::Result;
 
@@ -71,7 +72,7 @@ fn annulus(
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    let multiplier = mesher::barycenter(&imposed)?;
+    let multiplier = mesh::barycenter(&imposed)?;
     Model::dirichlet(
         var.into(),
         dual.into(),
@@ -101,7 +102,7 @@ fn integral_measures_the_revolved_volume() -> Result<()> {
     }
     let ones = NodeField::from_sub(ones);
 
-    let volume = field::integral(&ones, &fes, "one")?;
+    let volume = measure::integral(&ones, &fes, "one")?;
     let expected = PI * (3.0_f64.powi(2) - 1.0) * 2.0;
     assert!(
         (volume - expected).abs() < 1e-9,
@@ -117,9 +118,12 @@ fn mass_matrix_weighs_the_whole_ring() -> Result<()> {
     const RHO: f64 = 7800.0;
     let (_grid, _mesh, fes) = annulus(1.0, 3.0, 2.0, 4, 2)?;
     let model = Model::elasticity(&fes, ElasticityModel::Axisymmetric)?;
-    let materials = build::material_field(&model, &[("E", 1.0), ("nu", 0.3), ("rho", RHO)])?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", 1.0), ("nu", 0.3), ("rho", RHO)],
+    )?;
 
-    let mass = assemble::mass(&model, &materials)?;
+    let mass = pyrucast::ops::matrix::mass(&model, &materials)?;
     // 1ᵀ M 1 on the radial component: ∫ ρ (Σ_i N_i)(Σ_j N_j) dΩ = ρ·volume, the
     // shape functions being a partition of unity. So a unit radial "displacement"
     // gives nodal forces summing to the ring's mass.
@@ -169,7 +173,7 @@ fn axial_translation_is_rigid_but_radial_translation_is_not() -> Result<()> {
     };
 
     // Axial translation: every component vanishes, hoop included.
-    let strain = field::deformation(&uniform(0.0, 0.5)?, &fes)?;
+    let strain = element_field::deformation(&uniform(0.0, 0.5)?, &fes)?;
     let s = read(&strain.get(0)?)?;
     for g in 0..s.gauss_count() {
         for c in ["eps_xx", "eps_yy", "eps_xy", "eps_zz"] {
@@ -183,7 +187,7 @@ fn axial_translation_is_rigid_but_radial_translation_is_not() -> Result<()> {
     drop(s);
 
     // Radial translation: meridian strains vanish, the hoop does not.
-    let strain = field::deformation(&uniform(0.5, 0.0)?, &fes)?;
+    let strain = element_field::deformation(&uniform(0.5, 0.0)?, &fes)?;
     let s = read(&strain.get(0)?)?;
     for g in 0..s.gauss_count() {
         for c in ["eps_xx", "eps_yy", "eps_xy"] {
@@ -222,7 +226,7 @@ fn uniform_dilation_is_an_exact_constant_strain_state() -> Result<()> {
     }
     let u = NodeField::from_sub(u);
 
-    let strain = field::deformation(&u, &fes)?;
+    let strain = element_field::deformation(&u, &fes)?;
     let s = read(&strain.get(0)?)?;
     for cell in 0..s.cell_count() {
         for g in 0..s.gauss_count() {
@@ -288,7 +292,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     mesh.add_sub(insert(edge))?;
 
     let (mesh, interp) = if quadratic {
-        (mesher::to_quadratic(&mesh)?, Interpolation::Lagrange2)
+        (mesh::to_quadratic(&mesh)?, Interpolation::Lagrange2)
     } else {
         (mesh, Interpolation::Lagrange1)
     };
@@ -301,7 +305,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
 
     // Plane strain: u_z = 0 on both z faces (every node on them, mid-edge
     // nodes included — hence the coordinate filter rather than an index list).
-    let poi1 = mesher::to_poi1(&solid_mesh)?;
+    let poi1 = mesh::to_poi1(&solid_mesh)?;
     let nodes: Vec<Node> = (0..read(&poi1.get(0)?)?.cell_count())
         .map(|c| poi1.node(0, c, 0))
         .collect::<Result<_>>()?;
@@ -315,10 +319,10 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
         .collect();
     let mut model = Model::elasticity(&fes, ElasticityModel::Axisymmetric)?;
     model = model.union(&clamp(&ends, "u_y", "f_y")?)?;
-    let materials = build::material_field(&model, &[("E", E), ("nu", NU)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
 
-    let load = assemble::flux(&edge_fes.get(0)?, FluxDensity::Uniform(P), "f_x")?;
-    let stiffness = assemble::stiffness(&model, &materials)?;
+    let load = pyrucast::ops::node_field::flux(&edge_fes.get(0)?, FluxDensity::Uniform(P), "f_x")?;
+    let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &NodeField::from_sub(load))?;
 
     let (a2, b2) = (A * A, B * B);
@@ -342,12 +346,14 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
         &sm,
         vec!["u_x".to_string(), "u_y".to_string()],
     )?;
-    let displacement = field::restrict_like(&solution, &NodeField::from_sub(zero))?;
-    let strain = field::deformation(&displacement, &fes)?;
-    let stress = behavior::integrate(&model, &strain, None, &materials, None)?;
+    let displacement = node_field::restrict_like(&solution, &NodeField::from_sub(zero))?;
+    let strain = element_field::deformation(&displacement, &fes)?;
+    let stress =
+        pyrucast::ops::element_field::behavior::integrate(&model, &strain, None, &materials, None)?;
     // The radius at each Gauss point, obtained the same way any field is: the
     // nodal coordinates interpolated onto the quadrature.
-    let gauss_r = field::interp_to_gauss(&field::coordinates(&solid_mesh, None)?, &fes)?;
+    let gauss_r =
+        element_field::interp_to_gauss(&node_field::coordinates(&solid_mesh, None)?, &fes)?;
     let (s, rg) = (read(&stress.get(0)?)?, read(&gauss_r.get(0)?)?);
     let mut worst_s = 0.0_f64;
     for cell in 0..s.cell_count() {
@@ -425,7 +431,7 @@ fn internal_forces_match_stiffness_times_displacement() -> Result<()> {
     let support = insert(SubMesh::poi1_from_nodes(&grid)?);
 
     let model = Model::elasticity(&fes, ElasticityModel::Axisymmetric)?;
-    let materials = build::material_field(&model, &[("E", E), ("nu", NU)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
 
     // An arbitrary, non-rigid displacement field.
     let mut u = pyrucast::containers::node_field::SubNodeField::from_poi1(
@@ -440,11 +446,12 @@ fn internal_forces_match_stiffness_times_displacement() -> Result<()> {
     }
     let u = NodeField::from_sub(u);
 
-    let strain = field::deformation(&u, &fes)?;
-    let stress = behavior::integrate(&model, &strain, None, &materials, None)?;
-    let bsig = assemble::internal_forces(&model, &stress)?;
+    let strain = element_field::deformation(&u, &fes)?;
+    let stress =
+        pyrucast::ops::element_field::behavior::integrate(&model, &strain, None, &materials, None)?;
+    let bsig = pyrucast::ops::node_field::internal_forces(&model, &stress)?;
 
-    let stiffness = assemble::stiffness(&model, &materials)?;
+    let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let ku = stiffness.mul_field(&u)?;
 
     for n in &grid {
@@ -495,7 +502,7 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
         ),
     ] {
         let m = Mesh::from_submesh(SubMesh::poi1_from_nodes(&nodes)?);
-        let multiplier = mesher::barycenter(&m)?;
+        let multiplier = mesh::barycenter(&m)?;
         for k in 0..nodes.len() {
             mult_nodes.push((multiplier.node(0, k, 0)?, value));
         }
@@ -509,7 +516,7 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
             Default::default(),
         )?)?;
     }
-    let materials = build::material_field(&model, &[("k", 1.0)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("k", 1.0)])?;
 
     let mult_sm = insert(SubMesh::poi1_from_nodes(
         &mult_nodes
@@ -526,7 +533,7 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
     }
     let rhs = NodeField::from_sub(rhs);
 
-    let conductivity = assemble::stiffness(&model, &materials)?;
+    let conductivity = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&conductivity, &rhs)?;
 
     let exact = |r: f64| TA + (TB - TA) * (r / A).ln() / (B / A).ln();
@@ -667,7 +674,7 @@ fn nonlinear_cell(
             ("B_c", 1900.0),
         ]
     };
-    let materials = build::material_field(&model, &props)?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &props)?;
     Ok((model, materials, fes))
 }
 
@@ -697,7 +704,7 @@ fn stress_of(
     sub.set_uniform("eps_xy", rz)?;
     let mut strain = ElementField::empty();
     strain.add_sub(insert(sub))?;
-    behavior::integrate(model, &strain, prev, materials, None)
+    pyrucast::ops::element_field::behavior::integrate(model, &strain, prev, materials, None)
 }
 
 /// The axisymmetric law must be the **same law** as the 3-D one restricted to

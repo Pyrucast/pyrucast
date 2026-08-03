@@ -12,10 +12,11 @@ use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::assemble::{internal_forces, tangent};
-use pyrucast::ops::behavior::integrate;
-use pyrucast::ops::build::material_field;
-use pyrucast::ops::field::deformation;
+use pyrucast::ops::element_field::behavior::integrate;
+use pyrucast::ops::element_field::deformation;
+use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::matrix::tangent;
+use pyrucast::ops::node_field::internal_forces;
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -211,7 +212,7 @@ fn plasticity_model(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<
 /// the elastic stiffness bit-for-bit-close.
 #[test]
 fn elastic_regime_tangent_equals_stiffness() -> Result<()> {
-    use pyrucast::ops::assemble::stiffness;
+    use pyrucast::ops::matrix::stiffness;
     let (fes, n) = unit_quad()?;
     let model = plasticity_model(&fes, ElasticityModel::PlaneStrain)?;
     let materials = material_field(&model, &[("E", 70_000.0), ("nu", 0.3), ("sigma_y", 200.0)])?;

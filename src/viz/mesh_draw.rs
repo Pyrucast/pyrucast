@@ -84,7 +84,7 @@ pub(crate) enum Primitive {
 pub(crate) const TET4_FACES: [[usize; 3]; 4] = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]];
 
 /// Faces of a HEX8 — bot / top / 4 lateral, in the convention used by
-/// [`crate::ops::mesher::extrude`]: HEX8 = [bot[0..4], top[0..4]], both CCW seen from
+/// [`crate::ops::mesh::extrude`]: HEX8 = [bot[0..4], top[0..4]], both CCW seen from
 /// outside the lateral surface.
 pub(crate) const HEX8_FACES: [[usize; 4]; 6] = [
     [0, 3, 2, 1], // bottom (normal opposed to extrusion direction)
@@ -97,7 +97,7 @@ pub(crate) const HEX8_FACES: [[usize; 4]; 6] = [
 
 /// Faces of a PENTA6 (prism) — two triangular caps then three
 /// quadrilateral sides, each oriented outwards, in the convention used by
-/// [`crate::ops::mesher::extrude`]: PENTA6 = [bot[0..3], top[0..3]]. The
+/// [`crate::ops::mesh::extrude`]: PENTA6 = [bot[0..3], top[0..3]]. The
 /// caps carry 3 indices, the sides 4, so the faces are stored as slices.
 pub(crate) const PENTA6_FACES: [&[usize]; 5] = [
     &[0, 2, 1],    // bottom triangle (normal opposed to extrusion direction)

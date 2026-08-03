@@ -36,7 +36,7 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// Deformation component names (`grad_T_x`, …), one per spatial direction —
 /// the leading components of the behaviour-input field consumed by
 /// [`SubModelKind::integrate_behavior`]. They match what
-/// [`crate::ops::field::gradient`] names the gradient of a temperature field
+/// [`crate::ops::element_field::gradient`] names the gradient of a temperature field
 /// whose component is [`PRIMAL_VAR`].
 fn deformation_components(space_dim: usize) -> Vec<String> {
     (0..space_dim)
@@ -59,7 +59,7 @@ fn flux_components(space_dim: usize) -> Vec<String> {
 /// - primal variable: `"T"` (temperature, columns).
 /// - dual variable:   `"q"` (heat flux row labels).
 /// - Material data (conductivity `"k"`, …) is **not** stored here; it is
-///   supplied at assembly time via [`crate::ops::assemble::stiffness`].
+///   supplied at assembly time via [`crate::ops::matrix::stiffness`].
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HeatConduction {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -141,7 +141,7 @@ impl SubModelKind for HeatConduction {
     /// Internal nodal fluxes `q_i = ∫ ∇N_i · flux dx` of one cell — `Bᵀ` applied
     /// to the weak-form flux, the scalar-transport counterpart of the
     /// continuum-mechanics default (and identical to
-    /// [`crate::ops::field::divergence`](fn@crate::ops::field::divergence) of the
+    /// [`crate::ops::node_field::divergence`](fn@crate::ops::node_field::divergence) of the
     /// flux vector). Single dual variable `q`, so `fe[i]` per node.
     fn internal_force_element(
         &self,
@@ -326,7 +326,7 @@ mod tests {
 
     /// COMP on a linear law returns the weak-form flux `k·∇T` — the exact
     /// quantity the assembled stiffness integrates (`∫ Bᵀ·flux = K·T`). The
-    /// deformation input (`grad_T_x`) is what [`crate::ops::field::gradient`]
+    /// deformation input (`grad_T_x`) is what [`crate::ops::element_field::gradient`]
     /// produces from a nodal temperature; here it is set directly.
     #[test]
     fn integrate_behavior_returns_weak_form_flux() {

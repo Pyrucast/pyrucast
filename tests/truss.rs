@@ -17,8 +17,8 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{assemble, build, mesher};
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -43,7 +43,7 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
     // `u_y` is clamped at both nodes to make the system well-posed.
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        let multiplier = mesher::barycenter(&imposed)?;
+        let multiplier = mesh::barycenter(&imposed)?;
         Model::dirichlet(
             var.into(),
             dual.into(),
@@ -60,7 +60,7 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
     model = model.union(&clamp(&n1, "u_y", "f_y")?)?;
 
     // ── Matériau E, A (Dirichlet ignoré automatiquement) ───────────────────
-    let materials = build::material_field(&model, &[("E", E), ("A", A)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("A", A)])?;
 
     // ── Chargement : force axiale F au nœud droit ──────────────────────────
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
@@ -71,7 +71,7 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
     let rhs = NodeField::from_sub(rhs);
 
     // ── Assemblage + résolution ────────────────────────────────────────────
-    let stiffness = assemble::stiffness(&model, &materials)?;
+    let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
 
     // ── Comparaison à l'analytique : u_x = F·L / (E·A) ─────────────────────

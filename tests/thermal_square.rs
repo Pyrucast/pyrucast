@@ -26,8 +26,8 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{assemble, build, mesher};
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -68,7 +68,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     // ── Dirichlet T = 20 sur le bord droit (x = 1) ─────────────────────────
     let right_nodes: Vec<Node> = (0..=N).map(|j| grid[idx(N, j)].clone()).collect();
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&right_nodes)?);
-    let multiplier = mesher::barycenter(&imposed)?;
+    let multiplier = mesh::barycenter(&imposed)?;
     let mults: Vec<Node> = (0..=N)
         .map(|j| multiplier.node(0, j, 0))
         .collect::<Result<_>>()?;
@@ -84,7 +84,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         Default::default(),
     )?;
     let model = conduction.union(&dirichlet)?;
-    let materials = build::material_field(&model, &[("k", K)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K)])?;
 
     // ── Chargement ─────────────────────────────────────────────────────────
     // Source : flux uniforme (densité Q) sur le bord gauche, transformé en
@@ -96,7 +96,11 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         left_edge.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
     }
     let left_fes = FiniteElementSpace::lagrange1(&left_edge)?;
-    let source = assemble::flux(&left_fes.get(0)?, assemble::FluxDensity::Uniform(Q), "q")?;
+    let source = pyrucast::ops::node_field::flux(
+        &left_fes.get(0)?,
+        pyrucast::ops::node_field::FluxDensity::Uniform(Q),
+        "q",
+    )?;
 
     // Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
     let mut imposed_sm = SubMesh::new(coords.clone(), ElementType::POI1);
@@ -115,7 +119,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     let rhs = source.union(&imposed_load)?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
-    let stiffness = assemble::stiffness(&model, &materials)?;
+    let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
 
     // ── Comparaison à l'analytique u(x) = 20 + (Q/k)(1 − x), ∀ y ───────────

@@ -27,12 +27,12 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::build::material_field;
-use pyrucast::ops::{assemble, behavior, field};
+use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::{element_field, matrix};
 use pyrucast::store::insert;
 
 /// Plane-stress elasticity on an `n × n` QUA4 grid: model, material field, and a
-/// strain field ready for `behavior::integrate`.
+/// strain field ready for `element_field::behavior::integrate`.
 fn build(n: usize) -> (Model, ElementField, ElementField) {
     let coords = insert(Coords::new(2).unwrap());
     let mut ids: Vec<NodeId> = Vec::with_capacity((n + 1) * (n + 1));
@@ -67,7 +67,7 @@ fn build(n: usize) -> (Model, ElementField, ElementField) {
             u.set_value(nid, "u_y", -0.005 * j as f64).unwrap();
         }
     }
-    let strain = field::deformation(&NodeField::from_sub(u), &fes).unwrap();
+    let strain = element_field::deformation(&NodeField::from_sub(u), &fes).unwrap();
     (model, materials, strain)
 }
 
@@ -141,24 +141,31 @@ fn main() {
         let model = &model;
         let materials = &materials;
         move || {
-            black_box(assemble::stiffness(model, materials).unwrap());
+            black_box(matrix::stiffness(model, materials).unwrap());
         }
     };
-    run_op("assemble::stiffness", &threads, reps, &stiffness);
+    run_op("matrix::stiffness", &threads, reps, &stiffness);
 
     let integrate = {
         let model = &model;
         let materials = &materials;
         let strain = &strain;
         move || {
-            black_box(behavior::integrate(model, strain, None, materials, None).unwrap());
+            black_box(
+                element_field::behavior::integrate(model, strain, None, materials, None).unwrap(),
+            );
         }
     };
-    run_op("behavior::integrate", &threads, reps, &integrate);
+    run_op(
+        "element_field::behavior::integrate",
+        &threads,
+        reps,
+        &integrate,
+    );
 
     println!(
         "Note: speedup is vs the 1-thread run. Both ops are colour-parallel. \
-         assemble::stiffness memoises its CSR sparsity on the model (built once, \
+         matrix::stiffness memoises its CSR sparsity on the model (built once, \
          reused here across reps), so the timed path is the parallel scatter; a \
          first-ever assembly also pays the one-off symbolic build."
     );

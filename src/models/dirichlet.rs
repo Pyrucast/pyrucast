@@ -11,7 +11,7 @@
 //! - `multiplier_mesh` — POI1: the support of the Lagrange multipliers, paired
 //!   element-for-element with `imposed_mesh` (same submesh structure, same
 //!   per-submesh cell count). Typically built from `imposed_mesh` with the
-//!   generic [`barycenter`](crate::ops::mesher::barycenter()) mesher (colocated fresh nodes),
+//!   generic [`barycenter`](crate::ops::mesh::barycenter()) mesher (colocated fresh nodes),
 //!   but the user is free to colocate, offset, or even reuse the constrained
 //!   nodes themselves.
 //!

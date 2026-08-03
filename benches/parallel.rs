@@ -1,8 +1,8 @@
 //! Parallelism benchmarks for the hot FE paths.
 //!
 //! Measures the three heaviest operations on a sizeable mesh:
-//!   - `assemble::stiffness` (per-element assembly),
-//!   - `behavior::integrate` (per-Gauss-point constitutive law),
+//!   - `pyrucast::ops::matrix::stiffness` (per-element assembly),
+//!   - `pyrucast::ops::element_field::behavior::integrate` (per-Gauss-point constitutive law),
 //!   - the linear solver, contrasting a **fresh factorization every solve**
 //!     against the **transparently cached** factorization (factor once, solve
 //!     many).
@@ -31,9 +31,9 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::build::material_field;
+use pyrucast::ops::element_field;
+use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOptions};
-use pyrucast::ops::{assemble, behavior, field};
 use pyrucast::store::insert;
 
 /// Everything an elasticity benchmark needs on one grid.
@@ -41,9 +41,9 @@ struct Grid {
     model: Model,
     materials: ElementField,
     fespace: FiniteElementSpace,
-    /// Nodal displacement — the input of `field::deformation`.
+    /// Nodal displacement — the input of `element_field::deformation`.
     displacement: NodeField,
-    /// `deformation(displacement)` — the input of `behavior::integrate`.
+    /// `deformation(displacement)` — the input of `pyrucast::ops::element_field::behavior::integrate`.
     strain: ElementField,
 }
 
@@ -93,7 +93,7 @@ fn elasticity_grid_with(n: usize, model_kind: ElasticityModel) -> Grid {
         }
     }
     let displacement = NodeField::from_sub(u);
-    let strain = field::deformation(&displacement, &fespace).unwrap();
+    let strain = element_field::deformation(&displacement, &fespace).unwrap();
     Grid {
         model,
         materials,
@@ -180,11 +180,20 @@ fn spd_system(n: usize) -> (Matrix, NodeField) {
 fn bench_assembly(c: &mut Criterion) {
     let g = elasticity_grid(40); // 1600 QUA4 cells
     c.bench_function("stiffness elasticity 40x40 QUA4", |b| {
-        b.iter(|| black_box(assemble::stiffness(&g.model, &g.materials).unwrap()))
+        b.iter(|| black_box(pyrucast::ops::matrix::stiffness(&g.model, &g.materials).unwrap()))
     });
     c.bench_function("integrate elasticity 40x40 QUA4", |b| {
         b.iter(|| {
-            black_box(behavior::integrate(&g.model, &g.strain, None, &g.materials, None).unwrap())
+            black_box(
+                pyrucast::ops::element_field::behavior::integrate(
+                    &g.model,
+                    &g.strain,
+                    None,
+                    &g.materials,
+                    None,
+                )
+                .unwrap(),
+            )
         })
     });
 }
@@ -208,23 +217,39 @@ fn bench_axisymmetric(c: &mut Criterion) {
         ("axisymmetric", ElasticityModel::Axisymmetric),
     ] {
         let g = elasticity_grid_with(40, kind);
-        let state = behavior::integrate(&g.model, &g.strain, None, &g.materials, None).unwrap();
+        let state = pyrucast::ops::element_field::behavior::integrate(
+            &g.model,
+            &g.strain,
+            None,
+            &g.materials,
+            None,
+        )
+        .unwrap();
 
         c.bench_function(&format!("stiffness {tag} 40x40 QUA4"), |b| {
-            b.iter(|| black_box(assemble::stiffness(&g.model, &g.materials).unwrap()))
+            b.iter(|| black_box(pyrucast::ops::matrix::stiffness(&g.model, &g.materials).unwrap()))
         });
         c.bench_function(&format!("deformation {tag} 40x40 QUA4"), |b| {
-            b.iter(|| black_box(field::deformation(&g.displacement, &g.fespace).unwrap()))
+            b.iter(|| black_box(element_field::deformation(&g.displacement, &g.fespace).unwrap()))
         });
         c.bench_function(&format!("integrate {tag} 40x40 QUA4"), |b| {
             b.iter(|| {
                 black_box(
-                    behavior::integrate(&g.model, &g.strain, None, &g.materials, None).unwrap(),
+                    pyrucast::ops::element_field::behavior::integrate(
+                        &g.model,
+                        &g.strain,
+                        None,
+                        &g.materials,
+                        None,
+                    )
+                    .unwrap(),
                 )
             })
         });
         c.bench_function(&format!("internal_forces {tag} 40x40 QUA4"), |b| {
-            b.iter(|| black_box(assemble::internal_forces(&g.model, &state).unwrap()))
+            b.iter(|| {
+                black_box(pyrucast::ops::node_field::internal_forces(&g.model, &state).unwrap())
+            })
         });
     }
 }

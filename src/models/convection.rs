@@ -13,7 +13,7 @@
 //! ```text
 //! K_ij = h ∫_Γ N_i N_j dΓ   (this sub-model, into the stiffness),
 //! f_i  = h·T_ext ∫_Γ N_i dΓ (a right-hand side, built with
-//!                            crate::ops::assemble::flux — not stored here).
+//!                            crate::ops::node_field::flux — not stored here).
 //! ```
 //!
 //! Primal `"T"`, dual `"q"` — the **same** DOFs as
@@ -53,7 +53,7 @@ pub const MATERIAL_COMPONENT: &str = "h";
 const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
 
 /// Behaviour-**input** component: the temperature interpolated at the Gauss
-/// points (e.g. via [`crate::ops::field::interp_to_gauss`]).
+/// points (e.g. via [`crate::ops::element_field::interp_to_gauss`]).
 const INPUT_COMPONENT: &str = PRIMAL_VAR;
 /// Behaviour-**output** component: the weak-form convective flux density
 /// `h·T` (see [`Convection::integrate_point`]).
@@ -64,7 +64,7 @@ const OUTPUT_COMPONENT: &str = "flux";
 /// - primal variable: `"T"` (temperature, columns).
 /// - dual variable:   `"q"` (heat flux row labels).
 /// - Material data (film coefficient `"h"`) is **not** stored here; it is
-///   supplied at assembly time via [`crate::ops::assemble::stiffness`], read
+///   supplied at assembly time via [`crate::ops::matrix::stiffness`], read
 ///   from the boundary cells of the material field.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Convection {

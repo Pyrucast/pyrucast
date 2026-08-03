@@ -19,7 +19,7 @@
 //! ├── primal_vars(): Vec<String>      # union over sub-models — columns
 //! └── dual_vars():   Vec<String>      # union over sub-models — rows
 //!
-//! ops::assemble (operators, not Model methods)
+//! ops::matrix (operators, not Model methods)
 //! ├── stiffness(model, materials) -> Matrix   # rows: dual × cols: primal
 //! └── mass(model)                 -> Matrix   # same DOF layout, may be empty
 //!
@@ -72,8 +72,8 @@
 //! use pyrucast::containers::field::SubField;
 //! use pyrucast::containers::model::{Model, SubModel};
 //! use pyrucast::atoms::Node;
-//! use pyrucast::ops::assemble;
-//! use pyrucast::ops::mesher;
+//! use pyrucast::ops::matrix;
+//! use pyrucast::ops::mesh;
 //! use pyrucast::store::insert;
 //!
 //! // 1-D Coords with two nodes spanning [0, 1].
@@ -99,7 +99,7 @@
 //! // Dirichlet on node `a`: the imposed POI1 mesh + a colocated multiplier
 //! // support minted by the `barycenter` mesher.
 //! let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-//! let multiplier = mesher::barycenter(&imposed).unwrap();
+//! let multiplier = mesh::barycenter(&imposed).unwrap();
 //! model
 //!     .add_sub(insert(
 //!         SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None, Default::default())
@@ -107,7 +107,7 @@
 //!     ))
 //!     .unwrap();
 //!
-//! let k = assemble::stiffness(&model, &materials).unwrap();
+//! let k = pyrucast::ops::matrix::stiffness(&model, &materials).unwrap();
 //! // 2 real DOFs ("T") + 1 multiplier DOF + 2 real rows ("q") + 1 multiplier row.
 //! assert_eq!(k.n_rows().unwrap(), 3);
 //! assert_eq!(k.n_cols().unwrap(), 3);
@@ -227,7 +227,7 @@ impl SubModel {
     /// Heat-conduction sub-model on an FE subspace.
     ///
     /// Material data (conductivity `"k"`, …) is supplied separately at
-    /// assembly time via [`crate::ops::assemble::stiffness`], keeping
+    /// assembly time via [`crate::ops::matrix::stiffness`], keeping
     /// the model immutable and material-independent. See
     /// [`heat_conduction::HeatConduction::new`] for the support it builds.
     pub fn heat_conduction(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
@@ -240,9 +240,9 @@ impl SubModel {
     ///
     /// Same DOFs (`"T"`/`"q"`) as [`Self::heat_conduction`], so it couples into
     /// the conduction stiffness. The film coefficient `"h"` is supplied at
-    /// assembly time via [`crate::ops::assemble::stiffness`]; the external
+    /// assembly time via [`crate::ops::matrix::stiffness`]; the external
     /// temperature enters as a load (`h·T_ext ∫N_i dΓ`) built with
-    /// [`flux`](fn@crate::ops::assemble::flux). See
+    /// [`flux`](fn@crate::ops::node_field::flux). See
     /// [`convection::Convection::new`].
     pub fn convection(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         Ok(SubModel::Convection(convection::Convection::new(fespace)?))
@@ -683,16 +683,16 @@ impl SubModel {
 
     /// FE subspace this sub-model integrates its behaviour on, or `None`
     /// for a constraint sub-model. The operators in
-    /// [`crate::ops::behavior`] use it to pair the per-zone deformation
+    /// [`crate::ops::element_field::behavior`] use it to pair the per-zone deformation
     /// field with its sub-model.
     pub fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
         self.as_kind().as_domain().map(|d| d.behavior_fespace())
     }
 
     /// Integrate this sub-model's constitutive law (Cast3m `COMP`), stepping
-    /// A → B. The caller ([`crate::ops::behavior::integrate`]) supplies the
+    /// A → B. The caller ([`crate::ops::element_field::behavior::integrate`]) supplies the
     /// matching per-zone end-of-step `deformation` ε(B) (from
-    /// [`crate::ops::field::gradient`] / [`crate::ops::field::deformation`]),
+    /// [`crate::ops::element_field::gradient`] / [`crate::ops::element_field::deformation`]),
     /// the previous converged state `prev` (state at A, `None` on the first
     /// step), the `material`, and the time increment `dt` (`None` if
     /// rate-independent).
@@ -715,7 +715,7 @@ impl SubModel {
     }
 
     /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this sub-model (Cast3m `BSIG`).
-    /// The caller ([`crate::ops::assemble::internal_forces`]) supplies the
+    /// The caller ([`crate::ops::node_field::internal_forces`]) supplies the
     /// matching per-zone `stress` (this sub-model's
     /// [`integrate_behavior`](Self::integrate_behavior) output).
     pub(crate) fn build_internal_forces(
@@ -1207,7 +1207,6 @@ mod tests {
     use crate::containers::mesh::Mesh;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::ops::assemble;
     use crate::store::{insert, write};
 
     /// Returns `(coords, a_id, b_id, model, materials)`.
@@ -1236,7 +1235,7 @@ mod tests {
         if dirichlet_at_left {
             let imposed =
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-            let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+            let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
                 .add_sub(insert(
                     SubModel::dirichlet(
@@ -1320,7 +1319,7 @@ mod tests {
         use crate::store::read as store_read;
         // Heat conduction (one computed block) + Dirichlet (a literal C/Cᵀ pair).
         let (_cfg, _, _, model, materials) = build_seg2_heat_model(1.0, 1.0, true);
-        let k = assemble::stiffness(&model, &materials).unwrap();
+        let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
 
         // Every assembled block is tagged (non-empty), computed and literal alike.
         for h in &k {
@@ -1353,7 +1352,7 @@ mod tests {
         let length = 2.0;
         let k_val = 1.5;
         let (_cfg, a_id, b_id, model, materials) = build_seg2_heat_model(length, k_val, false);
-        let k = assemble::stiffness(&model, &materials).unwrap();
+        let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
 
         assert_eq!(k.n_rows().unwrap(), 2);
         assert_eq!(k.n_cols().unwrap(), 2);
@@ -1387,7 +1386,7 @@ mod tests {
         model
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
-        let k = assemble::stiffness(&model, &materials).unwrap();
+        let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         assert_eq!(k.n_rows().unwrap(), 3);
         assert_eq!(k.n_cols().unwrap(), 3);
 
@@ -1415,7 +1414,7 @@ mod tests {
         let n_nodes = read(&coords).unwrap().node_count();
         assert_eq!(n_nodes, 3);
 
-        let k = assemble::stiffness(&model, &materials).unwrap();
+        let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         // 2 real "q" rows + 1 multiplier "T" row = 3 rows.
         // 2 real "T" cols + 1 multiplier "lambda_T" col = 3 cols.
         assert_eq!(k.n_rows().unwrap(), 3);
@@ -1453,7 +1452,7 @@ mod tests {
 
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         // The multiplier node is owned by the multiplier submesh (refcount 1;
         // the transient Node below is dropped at the end of the statement).
         let mult_id = multiplier.node(0, 0, 0).unwrap().id();
@@ -1517,7 +1516,7 @@ mod tests {
         model
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
-        assert!(assemble::stiffness(&model, &materials).is_err());
+        assert!(crate::ops::matrix::stiffness(&model, &materials).is_err());
     }
 
     #[test]
@@ -1525,7 +1524,7 @@ mod tests {
         let model = Model::empty();
         assert_eq!(model.primal_vars().unwrap(), Vec::<String>::new());
         assert_eq!(model.dual_vars().unwrap(), Vec::<String>::new());
-        let m = assemble::mass(&model, &ElementField::empty()).unwrap();
+        let m = crate::ops::matrix::mass(&model, &ElementField::empty()).unwrap();
         assert_eq!(m.n_rows().unwrap(), 0);
         assert_eq!(m.n_cols().unwrap(), 0);
     }
@@ -1564,7 +1563,7 @@ mod tests {
 
         // Compose with a Dirichlet model via `union` (Python `|`).
         let imp = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
-        let mlt = crate::ops::mesher::barycenter(&imp).unwrap();
+        let mlt = crate::ops::mesh::barycenter(&imp).unwrap();
         let dir = Model::dirichlet(
             "T".into(),
             "q".into(),
@@ -1657,7 +1656,7 @@ mod tests {
             .add_sub(insert(SubModel::heat_conduction(sub_b).unwrap()))
             .unwrap();
 
-        let k = assemble::stiffness(&model, &materials).unwrap();
+        let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
 
         // For a SEG2 of length h = 1 and conductivity k:
         // K_local = (k / h) [[1, -1], [-1, 1]] = k [[1, -1], [-1, 1]].
@@ -1688,7 +1687,7 @@ mod tests {
 
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         let dir = SubModel::dirichlet(
             "T".into(),
             "q".into(),
@@ -1702,7 +1701,7 @@ mod tests {
         assert!(dir.material_components().is_none());
     }
 
-    /// `assemble::stiffness` must fail with a clear error when no
+    /// `crate::ops::matrix::stiffness` must fail with a clear error when no
     /// SubElementField matches a HeatConduction's FE subspace.
     #[test]
     fn assemble_errors_when_no_material_matches_fespace() {
@@ -1720,7 +1719,7 @@ mod tests {
         model
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
-        let err = assemble::stiffness(&model, &materials).unwrap_err();
+        let err = crate::ops::matrix::stiffness(&model, &materials).unwrap_err();
         assert!(format!("{}", err).contains("no SubElementField"));
     }
 
@@ -1735,7 +1734,7 @@ mod tests {
         let a = Node::create_in(coords, &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         let dirichlet = Model::dirichlet(
             "T".into(),
             "q".into(),
@@ -1765,7 +1764,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let mesh_b =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
-        let mult = crate::ops::mesher::barycenter(&mesh_b).unwrap();
+        let mult = crate::ops::mesh::barycenter(&mesh_b).unwrap();
         let terms = vec![
             crate::models::mpc::MpcTerm::new(&mesh_b, "T".into(), "q".into(), 1.0).unwrap(),
             crate::models::mpc::MpcTerm::new(&mesh_a, "T".into(), "q".into(), -1.0).unwrap(),
@@ -1839,7 +1838,7 @@ mod tests {
         let a = Node::create_in(coords, &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-        let multiplier = crate::ops::mesher::barycenter(&imposed).unwrap();
+        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         let dirichlet = Model::dirichlet(
             "T".into(),
             "q".into(),

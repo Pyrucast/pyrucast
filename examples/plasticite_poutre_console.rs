@@ -66,15 +66,17 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::assemble::internal_forces;
-use pyrucast::ops::assemble::{flux, stiffness, FluxDensity};
-use pyrucast::ops::behavior::integrate;
-use pyrucast::ops::build::material_field;
-use pyrucast::ops::field::{
-    coordinates, deformation, mask_cells, restrict, restrict_like, select_nodes, Band,
-};
+use pyrucast::ops::element_field::behavior::integrate;
+use pyrucast::ops::element_field::deformation;
+use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::field::{mask_cells, Band};
 use pyrucast::ops::geom::nearest_node;
-use pyrucast::ops::mesher::{line, sweep, to_poi1, translate};
+use pyrucast::ops::matrix::stiffness;
+use pyrucast::ops::mesh::select_nodes;
+use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
+use pyrucast::ops::node_field::internal_forces;
+use pyrucast::ops::node_field::{coordinates, restrict, restrict_like};
+use pyrucast::ops::node_field::{flux, FluxDensity};
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
 use pyrucast::Result;

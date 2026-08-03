@@ -19,8 +19,8 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{assemble, build, mesher};
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -57,7 +57,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     // ── Modèle : portique + encastrement complet à la base ─────────────────
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        let multiplier = mesher::barycenter(&imposed)?;
+        let multiplier = mesh::barycenter(&imposed)?;
         Model::dirichlet(
             var.into(),
             dual.into(),
@@ -73,7 +73,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     model = model.union(&clamp(&nodes[0], "u_y", "f_y")?)?;
     model = model.union(&clamp(&nodes[0], "rz", "m_z")?)?;
 
-    let materials = build::material_field(
+    let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)],
     )?;
@@ -88,7 +88,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     let rhs = NodeField::from_sub(rhs);
 
     // ── Assemblage + résolution ────────────────────────────────────────────
-    let solution = solve(&assemble::stiffness(&model, &materials)?, &rhs)?;
+    let solution = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 
     // ── Comparaison : déplacement du bout = δ·(perpendiculaire) ────────────
     let delta = P * L.powi(3) / (3.0 * E * I) + P * L / (G * A_S);

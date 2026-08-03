@@ -19,8 +19,8 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{assemble, build, mesher};
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -50,7 +50,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(
         nodes.last().unwrap(),
     ))?);
-    let multiplier = mesher::barycenter(&imposed)?;
+    let multiplier = mesh::barycenter(&imposed)?;
     let mult = multiplier.node(0, 0, 0)?.id();
 
     let conduction = Model::heat_conduction(&fes)?;
@@ -66,7 +66,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let model = conduction.union(&dirichlet)?;
 
     // ── Matériau : k uniforme (Dirichlet est ignoré automatiquement) ───────
-    let materials = build::material_field(&model, &[("k", K)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K)])?;
 
     // ── Chargement : source Q en x = 0 (composante duale "q"), valeur imposée
     //    T = 20 au nœud-multiplicateur (slot "imposed_T") ───────────────────
@@ -81,7 +81,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let rhs = NodeField::from_sub(rhs);
 
     // ── Assemblage + résolution ────────────────────────────────────────────
-    let stiffness = assemble::stiffness(&model, &materials)?;
+    let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
 
     // ── Comparaison à la solution analytique u(x) = 20 + (Q/k)(1 − x) ──────

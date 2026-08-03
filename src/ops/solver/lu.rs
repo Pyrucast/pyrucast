@@ -32,8 +32,8 @@
 //! use pyrucast::containers::model::{Model, SubModel};
 //! use pyrucast::atoms::Node;
 //! use pyrucast::containers::node_field::{NodeField, SubNodeField};
-//! use pyrucast::ops::assemble;
-//! use pyrucast::ops::mesher;
+//! use pyrucast::ops::matrix;
+//! use pyrucast::ops::mesh;
 //! use pyrucast::ops::solver::lu::solve;
 //! use pyrucast::store::insert;
 //!
@@ -58,8 +58,8 @@
 //! // supports minted by `barycenter`.
 //! let imposed_a = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
 //! let imposed_b = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
-//! let mult_mesh_a = mesher::barycenter(&imposed_a).unwrap();
-//! let mult_mesh_b = mesher::barycenter(&imposed_b).unwrap();
+//! let mult_mesh_a = mesh::barycenter(&imposed_a).unwrap();
+//! let mult_mesh_b = mesh::barycenter(&imposed_b).unwrap();
 //! let dir_a = SubModel::dirichlet("T".into(), "q".into(), &imposed_a, &mult_mesh_a, None, None, Default::default()).unwrap();
 //! let dir_b = SubModel::dirichlet("T".into(), "q".into(), &imposed_b, &mult_mesh_b, None, None, Default::default()).unwrap();
 //! let mult_a = dir_a.multiplier_nodes().unwrap()[0];
@@ -77,7 +77,7 @@
 //! rhs.set_value(mult_b, "imposed_T", 1.0).unwrap();
 //! let rhs = NodeField::from_sub(rhs);
 //!
-//! let k = assemble::stiffness(&model, &materials).unwrap();
+//! let k = pyrucast::ops::matrix::stiffness(&model, &materials).unwrap();
 //! let solution = solve(&k, &rhs).unwrap();
 //! // Solution: T(a) = 0, T(b) = 1, λ_a = +1, λ_b = -1 (boundary fluxes).
 //! assert!((solution.value(a.id(), "T").unwrap() - 0.0).abs() < 1e-12);
@@ -367,8 +367,8 @@ mod tests {
         let imposed_right = Mesh::from_submesh(
             SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[n_elems])).unwrap(),
         );
-        let mult_mesh_left = crate::ops::mesher::barycenter(&imposed_left).unwrap();
-        let mult_mesh_right = crate::ops::mesher::barycenter(&imposed_right).unwrap();
+        let mult_mesh_left = crate::ops::mesh::barycenter(&imposed_left).unwrap();
+        let mult_mesh_right = crate::ops::mesh::barycenter(&imposed_right).unwrap();
         let left_dir = SubModel::dirichlet(
             "T".into(),
             "q".into(),
@@ -406,7 +406,7 @@ mod tests {
         let rhs = NodeField::from_sub(rhs);
 
         // Assemble + solve.
-        let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
+        let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         let solution = solve(&k, &rhs).unwrap();
 
         // Verify T at every node equals its physical coordinate.
@@ -452,7 +452,7 @@ mod tests {
         model
             .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
-        let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
+        let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
 
         // Build a tiny non-empty rhs on a real node so we can find the
         // Coords of the result SubNodeField.
@@ -495,7 +495,7 @@ mod tests {
             let imposed = Mesh::from_submesh(
                 SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[end])).unwrap(),
             );
-            let mult = crate::ops::mesher::barycenter(&imposed).unwrap();
+            let mult = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
                 .add_sub(insert(
                     SubModel::dirichlet(
@@ -511,7 +511,7 @@ mod tests {
                 ))
                 .unwrap();
         }
-        let k = crate::ops::assemble::stiffness(&model, &materials).unwrap();
+        let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         let rhs_sm = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[nodes[0].id()]).unwrap();

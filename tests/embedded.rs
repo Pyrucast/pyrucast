@@ -17,9 +17,9 @@ use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::assemble::{self, stiffness, FluxDensity};
-use pyrucast::ops::build;
-use pyrucast::ops::mesher::barycenter;
+use pyrucast::ops::matrix::stiffness;
+use pyrucast::ops::mesh::barycenter;
+use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::{insert, Handle};
 use pyrucast::Result;
@@ -200,13 +200,14 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
         None,
     )?)?;
 
-    let materials = build::material_field(&model, &[("E", E), ("nu", NU)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
 
     // Traction S on the x = 1 face (QUA4 [1, 2, 6, 5]).
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let traction = assemble::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
+    let traction =
+        pyrucast::ops::node_field::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
     let rhs = NodeField::from_sub(traction);
 
     let solution = solve(&stiffness(&model, &materials)?, &rhs)?;
@@ -294,12 +295,13 @@ fn embedded_per_component_offset() -> Result<()> {
     emb_model.add_sub(insert(embedded))?;
     model = model.union(&emb_model)?;
 
-    let materials = build::material_field(&model, &[("E", E), ("nu", NU)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
 
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let traction = assemble::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
+    let traction =
+        pyrucast::ops::node_field::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
     let mut rhs = NodeField::from_sub(traction);
     for sm in &emb_rhs {
         rhs.add_sub(sm.clone())?;

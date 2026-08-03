@@ -180,7 +180,7 @@ impl Domain for Frame {
 
     /// Section forces `N` (axial), `M` (bending), `V` (shear) — the linear law
     /// on the generalised strains `(eps, kappa, gamma)` produced by
-    /// [`crate::ops::field::frame_deformation`](fn@crate::ops::field::frame_deformation).
+    /// [`crate::ops::element_field::frame_deformation`](fn@crate::ops::element_field::frame_deformation).
     fn behavior_output_components(&self) -> Result<Vec<String>> {
         Ok(vec!["N".into(), "M".into(), "V".into()])
     }

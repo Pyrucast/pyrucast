@@ -513,9 +513,9 @@ crate::impl_aggregate!(NodeField, SubNodeField, subfield, "subfield(s)", {
 
     /// Fuse zones sharing the same support `SubMesh` (union of components,
     /// shared values verified). Runs at the end of every union (`a | b`).
-    /// See [`crate::ops::field::consolidate_node`](fn@crate::ops::field::consolidate_node).
+    /// See [`crate::ops::node_field::consolidate`](fn@crate::ops::node_field::consolidate).
     fn finalize(&mut self) -> Result<()> {
-        *self = crate::ops::field::consolidate_node(self)?;
+        *self = crate::ops::node_field::consolidate(self)?;
         Ok(())
     }
 });
@@ -682,7 +682,7 @@ impl NodeField {
     ///
     /// Reads tolerate divergence (first sub wins); this is the on-demand
     /// verification — call it before trusting a field assembled from
-    /// independently mutated zones. `ops::field::consolidate_node` runs the
+    /// independently mutated zones. `ops::node_field::consolidate` runs the
     /// same verification while deduplicating.
     pub fn check(&self) -> Result<()> {
         use crate::containers::field::SubField;

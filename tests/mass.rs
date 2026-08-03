@@ -15,7 +15,6 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::{assemble, build};
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -37,9 +36,12 @@ fn consistent_mass_of_unit_quad_matches_closed_form() -> Result<()> {
     const RHO: f64 = 2.0;
     let (fes, n) = unit_quad()?;
     let model = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
-    let materials = build::material_field(&model, &[("E", 1.0), ("nu", 0.3), ("rho", RHO)])?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", 1.0), ("nu", 0.3), ("rho", RHO)],
+    )?;
 
-    let m = assemble::mass(&model, &materials)?;
+    let m = pyrucast::ops::matrix::mass(&model, &materials)?;
     let tol = 1e-12;
 
     // Per-component block = ρ·(1/36)·[[4,2,1,2],[2,4,2,1],[1,2,4,2],[2,1,2,4]].
@@ -74,9 +76,12 @@ fn heat_capacity_of_unit_quad_matches_closed_form() -> Result<()> {
     let model = Model::heat_conduction(&fes)?;
     // `k` is required by the physics; `rho`/`cp` are optional and kept because
     // supplied — the capacity matrix needs them, the conductivity does not.
-    let materials = build::material_field(&model, &[("k", 1.0), ("rho", RHO), ("cp", CP)])?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("k", 1.0), ("rho", RHO), ("cp", CP)],
+    )?;
 
-    let c = assemble::mass(&model, &materials)?;
+    let c = pyrucast::ops::matrix::mass(&model, &materials)?;
     let tol = 1e-12;
     let rc = RHO * CP;
     assert!((c.get(n[0].id(), "q", n[0].id(), "T")? - rc * 4.0 / 36.0).abs() < tol);
@@ -93,10 +98,13 @@ fn lumped_mass_is_diagonal_and_conserves_total() -> Result<()> {
     const RHO: f64 = 2.0;
     let (fes, n) = unit_quad()?;
     let model = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
-    let materials = build::material_field(&model, &[("E", 1.0), ("nu", 0.3), ("rho", RHO)])?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", 1.0), ("nu", 0.3), ("rho", RHO)],
+    )?;
 
-    let m = assemble::mass(&model, &materials)?;
-    let lumped = assemble::lump(&m)?;
+    let m = pyrucast::ops::matrix::mass(&model, &materials)?;
+    let lumped = pyrucast::ops::matrix::lump(&m)?;
     let tol = 1e-12;
 
     // Each diagonal = its consistent-mass row sum = ρ·(4+2+1+2)/36 = ρ/4.
@@ -116,7 +124,8 @@ fn mass_requires_density() -> Result<()> {
     let (fes, _) = unit_quad()?;
     let model = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
     // No `rho` supplied ⇒ the mass kernel must error clearly.
-    let materials = build::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;
-    assert!(assemble::mass(&model, &materials).is_err());
+    let materials =
+        pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;
+    assert!(pyrucast::ops::matrix::mass(&model, &materials).is_err());
     Ok(())
 }

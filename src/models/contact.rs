@@ -56,7 +56,7 @@ use crate::models::{
     SubModelKind,
 };
 use crate::ops::geom::project_points;
-use crate::ops::mesher::barycenter;
+use crate::ops::mesh::barycenter;
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;

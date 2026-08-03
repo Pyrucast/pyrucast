@@ -28,7 +28,7 @@ use pyo3::prelude::*;
 #[pyo3(signature = (mesh, components=None))]
 pub fn coordinates(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
-        inner: crate::ops::field::coordinates(&mesh.inner, components)?,
+        inner: crate::ops::node_field::coordinates(&mesh.inner, components)?,
     })
 }
 
@@ -41,7 +41,7 @@ pub fn coordinates(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyRe
 #[pyfunction]
 #[pyo3(signature = (field, components=None))]
 pub fn set_coordinates(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> PyResult<()> {
-    crate::ops::field::set_coordinates(&field.inner, components)?;
+    crate::ops::coords::set(&field.inner, components)?;
     Ok(())
 }
 
@@ -53,7 +53,7 @@ pub fn set_coordinates(field: PyRef<PyNodeField>, components: Option<Vec<String>
 #[pyfunction]
 #[pyo3(signature = (field, components=None))]
 pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> PyResult<()> {
-    crate::ops::field::displace(&field.inner, components)?;
+    crate::ops::coords::displace(&field.inner, components)?;
     Ok(())
 }
 
@@ -78,7 +78,7 @@ pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> P
 #[pyfunction]
 pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
-        inner: crate::ops::field::restrict(&field.inner, &mesh.inner)?,
+        inner: crate::ops::node_field::restrict(&field.inner, &mesh.inner)?,
     })
 }
 
@@ -100,7 +100,7 @@ pub fn restrict_like(
     target: PyRef<PyNodeField>,
 ) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
-        inner: crate::ops::field::restrict_like(&field.inner, &target.inner)?,
+        inner: crate::ops::node_field::restrict_like(&field.inner, &target.inner)?,
     })
 }
 
@@ -114,7 +114,7 @@ pub fn restrict_like(
 #[pyfunction]
 pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
-        inner: crate::ops::field::merge(&a.inner, &b.inner)?,
+        inner: crate::ops::node_field::merge(&a.inner, &b.inner)?,
     })
 }
 
@@ -127,7 +127,7 @@ pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeFie
 #[pyfunction]
 pub fn consolidate_node(field: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
-        inner: crate::ops::field::consolidate_node(&field.inner)?,
+        inner: crate::ops::node_field::consolidate(&field.inner)?,
     })
 }
 
@@ -143,7 +143,7 @@ pub fn consolidate_node(field: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
 #[pyfunction]
 pub fn consolidate_element(field: PyRef<PyElementField>) -> PyResult<PyElementField> {
     Ok(PyElementField {
-        inner: crate::ops::field::consolidate_element(&field.inner)?,
+        inner: crate::ops::element_field::consolidate(&field.inner)?,
     })
 }
 
@@ -159,7 +159,7 @@ pub fn gradient(
     field: PyRef<PyNodeField>,
     fespace: PyRef<PyFiniteElementSpace>,
 ) -> PyResult<PyElementField> {
-    let ef = crate::ops::field::gradient(&field.inner, &fespace.inner)?;
+    let ef = crate::ops::element_field::gradient(&field.inner, &fespace.inner)?;
     Ok(PyElementField { inner: ef })
 }
 
@@ -176,7 +176,7 @@ pub fn deformation(
     u: PyRef<PyNodeField>,
     fespace: PyRef<PyFiniteElementSpace>,
 ) -> PyResult<PyElementField> {
-    let ef = crate::ops::field::deformation(&u.inner, &fespace.inner)?;
+    let ef = crate::ops::element_field::deformation(&u.inner, &fespace.inner)?;
     Ok(PyElementField { inner: ef })
 }
 
@@ -190,7 +190,7 @@ pub fn interp_to_gauss(
     field: PyRef<PyNodeField>,
     fespace: PyRef<PyFiniteElementSpace>,
 ) -> PyResult<PyElementField> {
-    let ef = crate::ops::field::interp_to_gauss(&field.inner, &fespace.inner)?;
+    let ef = crate::ops::element_field::interp_to_gauss(&field.inner, &fespace.inner)?;
     Ok(PyElementField { inner: ef })
 }
 
@@ -210,7 +210,7 @@ pub fn thermal_strain(
     fespace: PyRef<PyFiniteElementSpace>,
     t_ref: f64,
 ) -> PyResult<PyElementField> {
-    let ef = crate::ops::field::thermal_strain(
+    let ef = crate::ops::element_field::thermal_strain(
         &temperature.inner,
         &materials.inner,
         &fespace.inner,
@@ -229,7 +229,7 @@ pub fn beam_deformation(
     field: PyRef<PyNodeField>,
     fespace: PyRef<PyFiniteElementSpace>,
 ) -> PyResult<PyElementField> {
-    let ef = crate::ops::field::beam_deformation(&field.inner, &fespace.inner)?;
+    let ef = crate::ops::element_field::beam_deformation(&field.inner, &fespace.inner)?;
     Ok(PyElementField { inner: ef })
 }
 
@@ -240,7 +240,7 @@ pub fn beam_deformation(
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
-    let nf = crate::ops::field::divergence(&field.inner)?;
+    let nf = crate::ops::node_field::divergence(&field.inner)?;
     Ok(PyNodeField { inner: nf })
 }
 
@@ -267,12 +267,12 @@ pub fn integral(
         let fes = fespace.ok_or_else(|| {
             PyTypeError::new_err("integral: a NodeField needs a FiniteElementSpace (fespace=...)")
         })?;
-        return Ok(crate::ops::field::integral(
+        return Ok(crate::ops::measure::integral(
             &f.inner, &fes.inner, component,
         )?);
     }
     if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
-        return Ok(crate::ops::field::integral_element(&f.inner, component)?);
+        return Ok(crate::ops::measure::integral_element(&f.inner, component)?);
     }
     Err(PyTypeError::new_err(
         "integral: expected a NodeField (with fespace=...) or an ElementField",
@@ -360,13 +360,13 @@ pub fn select(
     use crate::ops::field as ops;
     let band = ops::Band::new(ge, gt, le, lt)?;
     let inner = if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
-        ops::select_nodes(&f.inner, &band, components)?
+        crate::ops::mesh::select_nodes(&f.inner, &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
-        ops::select_cells(&f.inner, &band, components)?
+        crate::ops::mesh::select_cells(&f.inner, &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        ops::select_sub_nodes(&*read(&f.handle)?, &band, components)?
+        crate::ops::mesh::select_sub_nodes(&*read(&f.handle)?, &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        ops::select_sub_cells(&*read(&f.handle)?, &band, components)?
+        crate::ops::mesh::select_sub_cells(&*read(&f.handle)?, &band, components)?
     } else {
         return Err(PyTypeError::new_err(
             "expected a NodeField, SubNodeField, ElementField or SubElementField",

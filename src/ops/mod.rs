@@ -1,41 +1,62 @@
-//! Themed operators — functions that take containers in and return
-//! containers (or derived data) out.
+//! Operators — the functions that consume containers and produce
+//! containers (or derived data).
 //!
-//! The directory is the home for everything that does not naturally
-//! belong to a single container's inherent methods. The split is by
-//! theme rather than by container, so a `gradient(mesh, field)` lives
-//! next to `interp_to_gauss`, not in `mesh.rs` *or* `node_field.rs`.
+//! # How this directory is split
 //!
-//! Themes:
-//! - [`build`]: construct containers (fills, refinements, transforms).
-//! - [`geom`]: geometric measures (bbox, centroid, area, jacobian
-//!   helpers, normals).
-//! - [`field`]: field-on-mesh operations (gradient, divergence,
-//!   interpolation, projection, restriction).
-//! - [`assemble`]: build a [`crate::containers::matrix::Matrix`] /
-//!   [`crate::containers::node_field::SubNodeField`] from a `Model` —
-//!   stiffness, mass, flux RHS, and the internal nodal forces
-//!   [`assemble::internal_forces`](fn@assemble::internal_forces) (Cast3m
-//!   `BSIG`, `∫ Bᵀ σ`). The
-//!   per-physics integrands live under [`crate::models`]; this layer
-//!   wires them together.
-//! - [`behavior`]: integrate the constitutive law of a `Model` (Cast3m
-//!   `COMP`) — the exact, possibly non-linear counterpart of the
-//!   `assemble::stiffness` linearization.
-//! - [`solver`]: solve `A · x = b` (currently a single dense LU
-//!   back-end in [`solver::lu`]; sparse direct and iterative
-//!   back-ends will live alongside it).
-//! - [`export`]: write meshes and fields to external formats (legacy
-//!   VTK for ParaView) — the side-effecting counterpart of the readers.
+//! **A module gathers the operators that produce the same container, and
+//! is named after it.** An operation is filed by its *output*, never by
+//! its input: `gradient(field, fespace)` produces an `ElementField`, so it
+//! lives in [`element_field`] — next to `deformation` and
+//! `interp_to_gauss`, not in [`mesh`] nor in [`node_field`].
 //!
-//! Each sub-module starts empty — new operators should land here from
-//! day one; legacy code migrates opportunistically.
+//! - [`mesh`] — meshers, transforms, selections: everything yielding a `Mesh`.
+//! - [`node_field`] — nodal derivations and nodal assembly.
+//! - [`element_field`] — kinematics, material data, constitutive law.
+//! - [`matrix`] — the assemblers proper (`stiffness`, `mass`, `tangent`, …).
+//! - [`coords`] — the two operators that write back into the coordinate store.
+//!
+//! Operators that produce **no** container are grouped by activity, the
+//! product rule having nothing to say about them:
+//!
+//! - [`measure`] — integrals and other reductions to a number;
+//! - [`geom`] — geometric queries (locate, project, nearest);
+//! - [`export`] — writing to external formats.
+//!
+//! # The one exception
+//!
+//! [`solver`] produces a `NodeField` and would belong to [`node_field`].
+//! It keeps its own name because **several distinct families produce a
+//! nodal field** — derivation, assembly, resolution — and only resolution
+//! is looked up by its own name. It is the single module named after an
+//! activity while producing a container, and it is meant to stay the only
+//! one.
+//!
+//! # Two corollaries worth remembering
+//!
+//! A module never holds two operators differing only by the container they
+//! act on: the qualifier belongs to the module name, not to the function
+//! name. Hence three fusions named [`mesh::consolidate`](fn@mesh::consolidate),
+//! [`node_field::consolidate`](fn@node_field::consolidate) and [`element_field::consolidate`](fn@element_field::consolidate), rather
+//! than three suffixed functions in one place.
+//!
+//! Nothing here produces a `Model`, a `FiniteElementSpace` or an
+//! `Evolution`, and that is not an oversight: those are **declared**
+//! through named constructors on the type itself, never built by
+//! transformation.
 
-pub mod assemble;
-pub mod behavior;
-pub mod build;
+pub mod coords;
+pub mod element_field;
 pub mod export;
 pub mod field;
 pub mod geom;
-pub mod mesher;
+pub mod matrix;
+pub mod measure;
+pub mod mesh;
+pub mod node_field;
 pub mod solver;
+
+// Shared assembly machinery, used by the matrix assemblers and the nodal
+// ones alike (`node_field::flux`, `node_field::internal_forces`). Not a
+// theme — no operator lives here.
+pub mod coloring;
+pub mod scatter;

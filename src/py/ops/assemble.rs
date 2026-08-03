@@ -1,11 +1,11 @@
-//! Python wrappers for the assembly operations in [`crate::ops::assemble`].
+//! Python wrappers for the assembly operations in [`crate::ops::matrix`].
 //!
 //! Free functions that assemble a global [`PyMatrix`] from a model, plus the
 //! internal nodal forces (`BSIG`, `∫ Bᵀ σ`). Kept here — mirroring
 //! `src/ops/assemble/` — per the `py/ops/` convention.
 
 use crate::containers::node_field::NodeField;
-use crate::ops::assemble::FluxDensity;
+use crate::ops::node_field::FluxDensity;
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
 use crate::py::matrix::PyMatrix;
@@ -21,7 +21,7 @@ use pyo3::prelude::*;
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn stiffness(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
-    let k = crate::ops::assemble::stiffness(&model.inner, &materials.inner)?;
+    let k = crate::ops::matrix::stiffness(&model.inner, &materials.inner)?;
     Ok(PyMatrix { inner: k })
 }
 
@@ -34,7 +34,7 @@ pub fn stiffness(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyR
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn mass(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
-    let m = crate::ops::assemble::mass(&model.inner, &materials.inner)?;
+    let m = crate::ops::matrix::mass(&model.inner, &materials.inner)?;
     Ok(PyMatrix { inner: m })
 }
 
@@ -48,7 +48,7 @@ pub fn mass(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn assemble(mut matrix: PyRefMut<'_, PyMatrix>) -> PyResult<()> {
-    crate::ops::assemble::assemble(&mut matrix.inner)?;
+    crate::ops::matrix::assemble(&mut matrix.inner)?;
     Ok(())
 }
 
@@ -58,7 +58,7 @@ pub fn assemble(mut matrix: PyRefMut<'_, PyMatrix>) -> PyResult<()> {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn lump(matrix: PyRef<PyMatrix>) -> PyResult<PyMatrix> {
-    let m = crate::ops::assemble::lump(&matrix.inner)?;
+    let m = crate::ops::matrix::lump(&matrix.inner)?;
     Ok(PyMatrix { inner: m })
 }
 
@@ -72,7 +72,7 @@ pub fn geometric(
     materials: PyRef<PyElementField>,
     stress: PyRef<PyElementField>,
 ) -> PyResult<PyMatrix> {
-    let m = crate::ops::assemble::geometric(&model.inner, &materials.inner, &stress.inner)?;
+    let m = crate::ops::matrix::geometric(&model.inner, &materials.inner, &stress.inner)?;
     Ok(PyMatrix { inner: m })
 }
 
@@ -86,7 +86,7 @@ pub fn tangent(
     materials: PyRef<PyElementField>,
     state: PyRef<PyElementField>,
 ) -> PyResult<PyMatrix> {
-    let m = crate::ops::assemble::tangent(&model.inner, &materials.inner, &state.inner)?;
+    let m = crate::ops::matrix::tangent(&model.inner, &materials.inner, &state.inner)?;
     Ok(PyMatrix { inner: m })
 }
 
@@ -107,9 +107,9 @@ pub fn flux(
     component: &str,
 ) -> PyResult<PyNodeField> {
     let sub = if let Ok(value) = density.extract::<f64>() {
-        crate::ops::assemble::flux(&fespace.handle, FluxDensity::Uniform(value), component)?
+        crate::ops::node_field::flux(&fespace.handle, FluxDensity::Uniform(value), component)?
     } else if let Ok(field) = density.extract::<PyRef<PySubElementField>>() {
-        crate::ops::assemble::flux(
+        crate::ops::node_field::flux(
             &fespace.handle,
             FluxDensity::Field(&field.handle),
             component,
@@ -141,7 +141,7 @@ pub fn internal_forces(
     model: PyRef<PyModel>,
     stresses: PyRef<PyElementField>,
 ) -> PyResult<PyNodeField> {
-    let nf = crate::ops::assemble::internal_forces(&model.inner, &stresses.inner)?;
+    let nf = crate::ops::node_field::internal_forces(&model.inner, &stresses.inner)?;
     Ok(PyNodeField { inner: nf })
 }
 
@@ -159,6 +159,6 @@ pub fn internal_forces_continuum(
     stresses: PyRef<PyElementField>,
     fespace: PyRef<PyFiniteElementSpace>,
 ) -> PyResult<PyNodeField> {
-    let nf = crate::ops::assemble::internal_forces_continuum(&stresses.inner, &fespace.inner)?;
+    let nf = crate::ops::node_field::internal_forces_continuum(&stresses.inner, &fespace.inner)?;
     Ok(PyNodeField { inner: nf })
 }

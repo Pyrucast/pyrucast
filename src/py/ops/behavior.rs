@@ -1,4 +1,4 @@
-//! Python wrappers for the behaviour operator in [`crate::ops::behavior`].
+//! Python wrappers for the behaviour operator in [`crate::ops::element_field::behavior`].
 //!
 //! Free function that integrates the constitutive law of a model (Cast3m
 //! `COMP`). Kept here — mirroring `src/ops/behavior.rs` — per the `py/ops/`
@@ -34,7 +34,7 @@ pub fn integrate_behavior(
     dt: Option<f64>,
 ) -> PyResult<PyElementField> {
     let prev_inner = prev.as_ref().map(|p| &p.inner);
-    let ef = crate::ops::behavior::integrate(
+    let ef = crate::ops::element_field::behavior::integrate(
         &model.inner,
         &deformation.inner,
         prev_inner,

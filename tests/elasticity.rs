@@ -4,7 +4,7 @@
 //! Uniaxial tension of the unit square `[0,1]²` (QUA4 grid), **plane stress**:
 //! rollers `u_x = 0` on the left edge and `u_y = 0` on the bottom edge, and a
 //! uniform traction `S` applied on the right edge — turned into consistent
-//! nodal forces by the [`flux`](pyrucast::ops::assemble::flux) operator. The
+//! nodal forces by the [`flux`](pyrucast::ops::node_field::flux) operator. The
 //! exact field is uniform stress `σ_xx = S` with the linear displacement
 //! `u_x = (S/E)·x`, `u_y = −(ν S/E)·y`, reproduced nodally by Q1.
 //!
@@ -20,9 +20,9 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::assemble::{self, FluxDensity};
+use pyrucast::ops::mesh;
+use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{build, mesher};
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -62,7 +62,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     // ── Modèle : élasticité plane stress + appuis (rollers) ────────────────
     let roller = |nodes: &[Node], var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-        let multiplier = mesher::barycenter(&imposed)?;
+        let multiplier = mesh::barycenter(&imposed)?;
         Model::dirichlet(
             var.into(),
             dual.into(),
@@ -79,7 +79,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     model = model.union(&roller(&left, "u_x", "f_x")?)?;
     model = model.union(&roller(&bottom, "u_y", "f_y")?)?;
 
-    let materials = build::material_field(&model, &[("E", E), ("nu", NU)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
 
     // ── Chargement : traction S sur le bord droit (charges nodales cohérentes
     //    via l'opérateur flux, sur la composante f_x) ────────────────────────
@@ -88,11 +88,12 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
         right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
     }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    let traction = assemble::flux(&right_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
+    let traction =
+        pyrucast::ops::node_field::flux(&right_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
     let rhs = NodeField::from_sub(traction);
 
     // ── Assemblage + résolution ────────────────────────────────────────────
-    let stiffness = assemble::stiffness(&model, &materials)?;
+    let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
 
     // ── Comparaison à l'analytique u_x = (S/E)·x, u_y = −(ν S/E)·y ─────────
@@ -113,7 +114,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    let multiplier = mesher::barycenter(&imposed)?;
+    let multiplier = mesh::barycenter(&imposed)?;
     Model::dirichlet(
         var.into(),
         dual.into(),
@@ -159,16 +160,17 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     model = model.union(&clamp(&pick(&[0, 1, 4, 5]), "u_y", "f_y")?)?; // y = 0 face
     model = model.union(&clamp(&pick(&[0, 1, 2, 3]), "u_z", "f_z")?)?; // z = 0 face
 
-    let materials = build::material_field(&model, &[("E", E), ("nu", NU)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
 
     // Traction S on the x = 1 face (QUA4 [1, 2, 6, 5]).
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let traction = assemble::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
+    let traction =
+        pyrucast::ops::node_field::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
     let rhs = NodeField::from_sub(traction);
 
-    let solution = solve(&assemble::stiffness(&model, &materials)?, &rhs)?;
+    let solution = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 
     let tol = 1e-10;
     for (i, c) in points.iter().enumerate() {

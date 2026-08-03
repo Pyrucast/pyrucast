@@ -114,7 +114,7 @@ fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
 /// *tangent* gradient: the resulting `Bᵀ D B` would be rank-deficient in the
 /// normal direction and silently meaningless. A boundary sub-mesh (`SEG2` in
 /// 2-D, `TRI3` in 3-D) is a support for loads
-/// ([`flux`](fn@crate::ops::assemble::flux)) or convection, not a solid — and a
+/// ([`flux`](fn@crate::ops::node_field::flux)) or convection, not a solid — and a
 /// structural element (bar, beam) is a different physics with its own kernel.
 /// Shared by [`Elasticity`], [`Plasticity`](crate::models::plasticity) and
 /// [`Mazars`](crate::models::mazars).
@@ -136,7 +136,7 @@ pub(crate) fn check_continuum_dimensions(
 /// Linear-elasticity physics on an FE subspace.
 ///
 /// Material data (`E`, `nu`) is supplied at assembly time via
-/// [`crate::ops::assemble::stiffness`], not stored here.
+/// [`crate::ops::matrix::stiffness`], not stored here.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Elasticity {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -318,7 +318,7 @@ impl Domain for Elasticity {
     /// `alpha` (thermal-expansion coefficient) — accepted through the material
     /// field when doing thermomechanics, never required for a plain elastic
     /// assembly. Consumed by
-    /// [`crate::ops::field::thermal_strain`](fn@crate::ops::field::thermal_strain).
+    /// [`crate::ops::element_field::thermal_strain`](fn@crate::ops::element_field::thermal_strain).
     fn optional_material_components(&self) -> &'static [&'static str] {
         &["alpha", "rho"]
     }
@@ -406,7 +406,7 @@ pub fn constitutive(e: f64, nu: f64, model: ElasticityModel, space_dim: usize) -
 }
 
 /// Voigt **engineering** strain from the tensor strain components produced by
-/// [`crate::ops::field::deformation`] (`eps_xx`, `eps_xy`, …), reading each
+/// [`crate::ops::element_field::deformation`] (`eps_xx`, `eps_xy`, …), reading each
 /// component by name through `eps`. Off-diagonals become `γ = 2ε`.
 fn voigt_strain(
     eps: &dyn Fn(&str) -> Result<f64>,
@@ -415,7 +415,7 @@ fn voigt_strain(
 ) -> Result<Vec<f64>> {
     if space_dim == 2 && model.is_axisymmetric() {
         // [εrr, εzz, εθθ, γrz] — the hoop `eps_zz` is produced by
-        // `ops::field::deformation` on an axisymmetric space.
+        // `ops::element_field::deformation` on an axisymmetric space.
         Ok(vec![
             eps("eps_xx")?,
             eps("eps_yy")?,

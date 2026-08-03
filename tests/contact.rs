@@ -17,9 +17,9 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::assemble::{self, FluxDensity};
+use pyrucast::ops::mesh;
+use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::unilateral;
-use pyrucast::ops::{build, mesher};
 use pyrucast::store::{insert, Handle};
 use pyrucast::Result;
 
@@ -59,7 +59,7 @@ fn block(coords: &Handle<Coords>, y0: f64) -> Result<(Vec<Node>, SubMesh)> {
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    let multiplier = mesher::barycenter(&imposed)?;
+    let multiplier = mesh::barycenter(&imposed)?;
     Model::dirichlet(
         var.into(),
         dual.into(),
@@ -120,7 +120,7 @@ fn two_blocks() -> Result<TwoBlocks> {
     model = model.union(&clamp(&bottom_edge, "u_y", "f_y")?)?;
     model = model.union(&contact)?;
 
-    let materials = build::material_field(&model, &[("E", E), ("nu", 0.0)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", 0.0)])?;
     let slave_nodes = slave_nodes_v.iter().map(|n| n.id()).collect();
 
     Ok(TwoBlocks {
@@ -148,10 +148,11 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
         top_edge.add_cell(&[tb.top[idx(i, N)].id(), tb.top[idx(i + 1, N)].id()])?;
     }
     let top_fes = FiniteElementSpace::lagrange1(&top_edge)?;
-    let traction = assemble::flux(&top_fes.get(0)?, FluxDensity::Uniform(-S), "f_y")?;
+    let traction =
+        pyrucast::ops::node_field::flux(&top_fes.get(0)?, FluxDensity::Uniform(-S), "f_y")?;
     let rhs = NodeField::from_sub(traction).union(&tb.model.contact_gaps()?)?;
 
-    let k = assemble::stiffness(&tb.model, &tb.materials)?;
+    let k = pyrucast::ops::matrix::stiffness(&tb.model, &tb.materials)?;
     let solution = unilateral::solve(&tb.model, &k, &rhs)?;
 
     // Bottom block: u_y = −(S/E)·y; top block: −(S/E)·y shifted by the closed
@@ -213,7 +214,7 @@ fn separation_releases_every_pair() -> Result<()> {
     let top_edge_nodes: Vec<Node> = (0..=N).map(|i| tb.top[idx(i, N)].clone()).collect();
     let lift_model = clamp(&top_edge_nodes, "u_y", "f_y")?;
     let model = tb.model.union(&lift_model)?;
-    let materials = build::material_field(&model, &[("E", E), ("nu", 0.0)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", 0.0)])?;
 
     let rhs = lift_model
         .constraint_rhs(
@@ -224,7 +225,7 @@ fn separation_releases_every_pair() -> Result<()> {
         )?
         .union(&model.contact_gaps()?)?;
 
-    let k = assemble::stiffness(&model, &materials)?;
+    let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = unilateral::solve(&model, &k, &rhs)?;
 
     // Top block translates rigidly; bottom block stays put.
@@ -318,16 +319,17 @@ fn contact_3d_two_cubes() -> Result<()> {
     model = model.union(&clamp(&all_nodes, "u_y", "f_y")?)?;
     model = model.union(&clamp(&bottom[0..4], "u_z", "f_z")?)?;
     model = model.union(&contact)?;
-    let materials = build::material_field(&model, &[("E", E), ("nu", 0.0)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", 0.0)])?;
 
     // Pressure S downward on the top face of the top cube.
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[top[4].id(), top[5].id(), top[6].id(), top[7].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let traction = assemble::flux(&face_fes.get(0)?, FluxDensity::Uniform(-S), "f_z")?;
+    let traction =
+        pyrucast::ops::node_field::flux(&face_fes.get(0)?, FluxDensity::Uniform(-S), "f_z")?;
     let rhs = NodeField::from_sub(traction).union(&model.contact_gaps()?)?;
 
-    let k = assemble::stiffness(&model, &materials)?;
+    let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = unilateral::solve(&model, &k, &rhs)?;
 
     // u_z = −(S/E)·z on both cubes (touching: no gap offset).

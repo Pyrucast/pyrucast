@@ -400,10 +400,10 @@ crate::impl_aggregate!(ElementField, SubElementField, subfield, "subfield(s)", {
     /// support with disjoint components are kept side by side (no fusion, no new
     /// `SubElementField`); a duplicated component is an error. To fuse zones that
     /// legitimately share a support, call
-    /// [`crate::ops::field::consolidate_element`](fn@crate::ops::field::consolidate_element)
+    /// [`crate::ops::element_field::consolidate`](fn@crate::ops::element_field::consolidate)
     /// explicitly.
     fn finalize(&mut self) -> Result<()> {
-        crate::ops::field::check_unique_component_per_support(self)
+        crate::ops::element_field::check_unique_component_per_support(self)
     }
 });
 crate::impl_aggregate_dump!(ElementField);
@@ -442,7 +442,7 @@ impl ElementField {
     ///
     /// The honest multi-zone accessor: a union (`a | b`) may leave several
     /// **component-disjoint** zones on one support (see
-    /// [`crate::ops::field::check_unique_component_per_support`]); this returns
+    /// [`crate::ops::element_field::check_unique_component_per_support`]); this returns
     /// all of them. Empty when none match. Prefer this whenever a support may
     /// legitimately carry more than one zone.
     pub(crate) fn subs_for_fespace(
@@ -472,7 +472,7 @@ impl ElementField {
     /// silently returns the first of many (that footgun once let `strain | state`
     /// drop the state). When a support may carry several zones, use
     /// [`subs_for_fespace`](Self::subs_for_fespace) or fuse them with
-    /// [`crate::ops::field::consolidate_element`].
+    /// [`crate::ops::element_field::consolidate`].
     pub(crate) fn sub_for_fespace(
         &self,
         fespace: &Handle<SubFiniteElementSpace>,
@@ -505,7 +505,7 @@ impl ElementField {
     /// zones a union leaves side by side (`k` for conduction, `E`/`nu` for
     /// elasticity on one shared mesh) — and each caller resolves *its own* zone by
     /// naming the components it needs, without an explicit
-    /// [`consolidate_element`](crate::ops::field::consolidate_element). It stays
+    /// [`consolidate_element`](crate::ops::element_field::consolidate). It stays
     /// safe: it never silently returns the first of several — it errors if **no**
     /// zone carries the full set, or if **more than one** does (a genuine
     /// ambiguity the caller must resolve). `required` must be non-empty (an empty

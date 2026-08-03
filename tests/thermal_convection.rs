@@ -34,7 +34,6 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{assemble, build};
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -88,7 +87,7 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
 
     // Matériau : k pour la conduction, h pour la convection (chaque sous-modèle
     // prélève la composante qu'il requiert dans la liste fournie).
-    let materials = build::material_field(&model, &[("k", K), ("h", H)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K), ("h", H)])?;
 
     // ── Chargement ─────────────────────────────────────────────────────────
     // Source : flux uniforme (densité Q) sur le bord gauche, en charges nodales
@@ -98,20 +97,24 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
         left_edge.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
     }
     let left_fes = FiniteElementSpace::lagrange1(&left_edge)?;
-    let source = assemble::flux(&left_fes.get(0)?, assemble::FluxDensity::Uniform(Q), "q")?;
+    let source = pyrucast::ops::node_field::flux(
+        &left_fes.get(0)?,
+        pyrucast::ops::node_field::FluxDensity::Uniform(Q),
+        "q",
+    )?;
 
     // Convection : la part externe h·T_ext du flux de Robin est un second membre,
     // bâti avec le MÊME opérateur `flux` (densité h·T_ext) — aucune normale.
-    let conv_load = assemble::flux(
+    let conv_load = pyrucast::ops::node_field::flux(
         &right_fes.get(0)?,
-        assemble::FluxDensity::Uniform(H * T_EXT),
+        pyrucast::ops::node_field::FluxDensity::Uniform(H * T_EXT),
         "q",
     )?;
 
     let rhs = NodeField::from_sub(source).union(&NodeField::from_sub(conv_load))?;
 
     // ── Assemblage + résolution (K rendue définie par le terme de film) ────
-    let stiffness = assemble::stiffness(&model, &materials)?;
+    let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
 
     // ── Comparaison à l'analytique T(x) = T_ext + Q/h + (Q/k)(1 − x), ∀ y ──

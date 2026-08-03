@@ -18,8 +18,8 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{assemble, build, mesher};
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -48,7 +48,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     // ── Modèle : poutre + encastrement à gauche (w = θ = 0) ────────────────
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        let multiplier = mesher::barycenter(&imposed)?;
+        let multiplier = mesh::barycenter(&imposed)?;
         Model::dirichlet(
             var.into(),
             dual.into(),
@@ -64,7 +64,10 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     model = model.union(&clamp(&nodes[0], "theta", "m_theta")?)?;
 
     // ── Matériau E, I, G, A_s ──────────────────────────────────────────────
-    let materials = build::material_field(&model, &[("E", E), ("I", I), ("G", G), ("A_s", A_S)])?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("I", I), ("G", G), ("A_s", A_S)],
+    )?;
 
     // ── Chargement : force transverse P au bout libre (composante f_w) ─────
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
@@ -75,7 +78,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     let rhs = NodeField::from_sub(rhs);
 
     // ── Assemblage + résolution ────────────────────────────────────────────
-    let solution = solve(&assemble::stiffness(&model, &materials)?, &rhs)?;
+    let solution = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 
     // ── Comparaison : w_tip = P·L³/(3·E·I) + P·L/(G·A_s) ───────────────────
     let w_tip = solution.value(nodes[N].id(), "w")?;
@@ -118,7 +121,7 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
 
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        let multiplier = mesher::barycenter(&imposed)?;
+        let multiplier = mesh::barycenter(&imposed)?;
         Model::dirichlet(
             var.into(),
             dual.into(),
@@ -132,7 +135,10 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
     let mut model = Model::timoshenko(&fes)?;
     model = model.union(&clamp(&nodes[0], "w", "f_w")?)?;
     model = model.union(&clamp(&nodes[0], "theta", "m_theta")?)?;
-    let materials = build::material_field(&model, &[("E", E), ("I", I), ("G", G), ("A_s", A_S)])?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("I", I), ("G", G), ("A_s", A_S)],
+    )?;
 
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
@@ -140,11 +146,17 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_w".into()])?;
     rhs.set_value(nodes[N].id(), "f_w", P)?;
     let rhs = NodeField::from_sub(rhs);
-    let solution = solve(&assemble::stiffness(&model, &materials)?, &rhs)?;
+    let solution = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 
     // (κ, γ) puis efforts de section M = EI·κ, V = GA_s·γ.
-    let deformation = pyrucast::ops::field::beam_deformation(&solution, &fes)?;
-    let forces = pyrucast::ops::behavior::integrate(&model, &deformation, None, &materials, None)?;
+    let deformation = pyrucast::ops::element_field::beam_deformation(&solution, &fes)?;
+    let forces = pyrucast::ops::element_field::behavior::integrate(
+        &model,
+        &deformation,
+        None,
+        &materials,
+        None,
+    )?;
     let f = read(&forces.get(0)?)?;
 
     for cell in 0..f.cell_count() {

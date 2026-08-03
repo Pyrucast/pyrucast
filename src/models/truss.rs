@@ -37,7 +37,7 @@ fn dual_name(a: usize) -> String {
     format!("f_{}", AXES[a])
 }
 /// Strain-tensor component names (`eps_xx`, `eps_xy`, …) for `i ≤ j`, matching
-/// what [`crate::ops::field::deformation`] produces — the behaviour input.
+/// what [`crate::ops::element_field::deformation`] produces — the behaviour input.
 fn strain_names(space_dim: usize) -> Vec<String> {
     let mut names = Vec::new();
     for i in 0..space_dim {
@@ -51,7 +51,7 @@ fn strain_names(space_dim: usize) -> Vec<String> {
 /// Truss / bar physics on a `SEG2` FE subspace.
 ///
 /// Material data (`E`, `A`) is supplied at assembly time via
-/// [`crate::ops::assemble::stiffness`], not stored here.
+/// [`crate::ops::matrix::stiffness`], not stored here.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Truss {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,

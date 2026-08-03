@@ -2,7 +2,7 @@
 //! shape**, testing each value against a `[lower, upper]` band, component by
 //! component (Cast3M's `MASQUE`).
 //!
-//! Unlike [`select`](super::select), which extracts the passing part of the
+//! Unlike [`select`](crate::ops::mesh::select_nodes), which extracts the passing part of the
 //! support into a `Mesh`, `mask` keeps the field's exact structure (same
 //! zones, same support, same components) and only rewrites the values:
 //! `1.0` where the band holds, `0.0` where it does not. The result is
@@ -10,7 +10,7 @@
 //! mask(field, ge=0)` zeroes the out-of-band values, component by
 //! component.
 //!
-//! There is **no** AND across components here (that is [`select`](super::select)'s job):
+//! There is **no** AND across components here (that is [`select`](crate::ops::mesh::select_nodes)'s job):
 //! each value stands on its own, so the mask is per component.
 //!
 //! # Component filter
@@ -33,7 +33,7 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
 
 use super::band::Band;
-use super::select::components_to_test;
+use crate::ops::mesh::select::components_to_test;
 
 /// Rewrite `sub` into its 0/1 mask: each **tested** component becomes `1.0`
 /// inside the band and `0.0` outside; untested components stay `1.0`.

@@ -15,7 +15,6 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::ops::{assemble, build};
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -36,7 +35,8 @@ fn geometric_stiffness_uniaxial_stress_unit_quad() -> Result<()> {
     const SIG: f64 = 3.0;
     let (fes, n) = unit_quad()?;
     let model = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
-    let materials = build::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;
+    let materials =
+        pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;
 
     // Uniform uniaxial stress σ_xx = SIG on the Gauss points.
     let stress_sub = SubElementField::from_uniform_per_component(
@@ -47,7 +47,7 @@ fn geometric_stiffness_uniaxial_stress_unit_quad() -> Result<()> {
     let mut stress = ElementField::empty();
     stress.add_sub(insert(stress_sub))?;
 
-    let kg = assemble::geometric(&model, &materials, &stress)?;
+    let kg = pyrucast::ops::matrix::geometric(&model, &materials, &stress)?;
     let tol = 1e-12;
 
     // σ · ∫(∂N_0/∂x)² = σ/3, on both the u_x and (δ_ab) the u_y diagonal block.
@@ -71,7 +71,8 @@ fn geometric_stiffness_is_symmetric() -> Result<()> {
     const SIG: f64 = 2.0;
     let (fes, n) = unit_quad()?;
     let model = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
-    let materials = build::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;
+    let materials =
+        pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;
     let stress_sub = SubElementField::from_uniform_per_component(
         fes.get(0)?,
         vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()],
@@ -80,7 +81,7 @@ fn geometric_stiffness_is_symmetric() -> Result<()> {
     let mut stress = ElementField::empty();
     stress.add_sub(insert(stress_sub))?;
 
-    let kg = assemble::geometric(&model, &materials, &stress)?;
+    let kg = pyrucast::ops::matrix::geometric(&model, &materials, &stress)?;
     let tol = 1e-12;
     for i in 0..4 {
         for j in 0..4 {

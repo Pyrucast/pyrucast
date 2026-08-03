@@ -95,7 +95,7 @@ pub struct Condensation {
 /// Solve `model`'s system by master/slave elimination, using the default options
 /// (reduced sparse LU, condensation cached). `matrix` is the assembled
 /// saddle-point stiffness of `model` (as produced by
-/// [`crate::ops::assemble::stiffness`]); `rhs` is the load field (its `g` values
+/// [`crate::ops::matrix::stiffness`]); `rhs` is the load field (its `g` values
 /// live at the multiplier nodes' imposed-value slots).
 ///
 /// A model with no constraint falls back to a plain [`lu::solve`].

@@ -317,7 +317,7 @@ impl SubMesh {
     /// node fields that project this submesh to its nodes pair under
     /// [`same_support`](crate::containers::field::SubField::same_support): a
     /// stiffness block's support (built this way in every physics' `new`), a
-    /// [`restrict`](fn@crate::ops::field::restrict) onto this mesh, and a
+    /// [`restrict`](fn@crate::ops::node_field::restrict) onto this mesh, and a
     /// `divergence`/`flux`/`internal_forces` output over it all share one handle
     /// and combine directly by the field operators. This is what lets
     /// `solve(K, f) - restrict(g, mesh)` and `&K * &restrict(f, mesh)` line up.
@@ -325,7 +325,7 @@ impl SubMesh {
     /// On an **unsealed** submesh nothing is cached — a fresh cloud is returned
     /// each call (the old behaviour), since the connectivity could still change
     /// and stale the companion. Shared building block:
-    /// [`crate::ops::mesher::to_poi1()`] applies it submesh-by-submesh.
+    /// [`crate::ops::mesh::to_poi1()`] applies it submesh-by-submesh.
     pub fn to_poi1(&self) -> Result<Handle<SubMesh>> {
         if let Some(h) = self.poi1_companion.get() {
             return Ok(h.clone());

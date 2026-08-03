@@ -58,7 +58,7 @@ const VOIGT_AXES: [&str; 3] = ["x", "y", "z"];
 /// The kind of element matrix a physics contributes — the discriminant that
 /// makes the whole assembly pipeline (recipe → scatter → per-kind pattern cache)
 /// matrix-agnostic. One `assemble_*` entry point per variant
-/// ([`crate::ops::assemble`]) drives the **same** machinery with a different
+/// ([`crate::ops::matrix`]) drives the **same** machinery with a different
 /// per-element kernel; a physics that has no term for a given kind contributes
 /// nothing (its [`matrix_layout`](SubModelKind::matrix_layout) returns `None`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -85,7 +85,7 @@ impl MatrixKind {
 }
 
 /// Structural declaration a volumetric physics gives so the **global**
-/// assembler ([`crate::ops::assemble::stiffness`]) can build its stiffness
+/// assembler ([`crate::ops::matrix::stiffness`]) can build its stiffness
 /// contribution as a *computed* [`SubMatrix`] — a recipe, no eagerly
 /// materialised values — and scatter it straight into the global CSR.
 ///
@@ -116,7 +116,7 @@ pub struct MatrixLayout {
 }
 
 /// One stiffness contribution of a sub-model, as handed to the global
-/// assembler ([`crate::ops::assemble::stiffness`]).
+/// assembler ([`crate::ops::matrix::stiffness`]).
 ///
 /// A sub-model declares *how* each of its blocks is produced without the
 /// assembler needing to know its concrete type: it just iterates
@@ -229,7 +229,7 @@ pub trait SubModelKind: Sync {
     /// Borrow this sub-model as a [`Domain`] capability, or `None` (default) if
     /// it is not a domain physics (a constraint such as `Dirichlet`). A domain
     /// overrides this to return `Some(self)`. This is the seam the assembler,
-    /// the material builders and [`crate::ops::behavior`] use — they never
+    /// the material builders and [`crate::ops::element_field::behavior`] use — they never
     /// assume every sub-model reads material or integrates a behaviour.
     fn as_domain(&self) -> Option<&dyn Domain> {
         None
@@ -422,7 +422,7 @@ pub trait SubModelKind: Sync {
     /// for a physics assembled the literal way (constraints such as `Dirichlet`,
     /// or any multi-block physics). When `Some`, it drives **both** paths from a
     /// single description: the global assembler
-    /// ([`crate::ops::assemble::stiffness`]) builds a *computed*
+    /// ([`crate::ops::matrix::stiffness`]) builds a *computed*
     /// [`SubMatrix`] and scatters [`element_matrix`](Self::element_matrix)
     /// straight into the CSR (never materialising values), and the default
     /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) produces the
@@ -468,8 +468,8 @@ pub trait SubModelKind: Sync {
     /// Local internal-force vector of one cell — the pure, sequential kernel
     /// that applies `Bᵀ` to the stress (Cast3m `BSIG`). It is the **transpose**
     /// of this physics' deformation operator `B` (the same `B` behind its
-    /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation) /
-    /// [`crate::ops::field::beam_deformation`](fn@crate::ops::field::beam_deformation)),
+    /// [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation) /
+    /// [`crate::ops::element_field::beam_deformation`](fn@crate::ops::element_field::beam_deformation)),
     /// so it mirrors [`Domain::integrate_point`]'s producer.
     ///
     /// Fills `fe` — the cell's local force vector, node-major / variable-minor
@@ -479,7 +479,7 @@ pub trait SubModelKind: Sync {
     /// of [`stiffness_layout`](Self::stiffness_layout), in that order.
     ///
     /// **Default**: the continuum-mechanics `f_{i,a} = Σ_g Σ_b (∂N_i/∂x_b) σ_ab`
-    /// — one [`crate::ops::field::divergence`](fn@crate::ops::field::divergence)
+    /// — one [`crate::ops::node_field::divergence`](fn@crate::ops::node_field::divergence)
     /// per row of the symmetric stress tensor `σ`, read in Voigt naming
     /// (`sigma_xx`, `sigma_xy`, …). A displacement physics (elasticity, Mazars,
     /// plasticity) gets it for free; a physics whose dual is not a displacement
@@ -726,11 +726,11 @@ pub trait Domain: Sync {
 
     /// Material component names this domain **accepts but does not require**:
     /// passed through the material channel if supplied (kept by
-    /// [`material_field`](fn@crate::ops::build::material_field)), never demanded
+    /// [`material_field`](fn@crate::ops::element_field::material_field)), never demanded
     /// at assembly (only the *required* components discriminate the material
     /// zone). Read by an ancillary operator — e.g. `alpha` (thermal expansion)
     /// consumed by
-    /// [`crate::ops::field::thermal_strain`](fn@crate::ops::field::thermal_strain).
+    /// [`crate::ops::element_field::thermal_strain`](fn@crate::ops::element_field::thermal_strain).
     /// Default: `&[]`.
     fn optional_material_components(&self) -> &'static [&'static str] {
         &[]
@@ -738,9 +738,9 @@ pub trait Domain: Sync {
 
     /// FE subspace this domain integrates its constitutive behaviour on. Its
     /// deformation input is produced geometrically by
-    /// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient) /
-    /// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation),
-    /// and [`crate::ops::behavior`] uses this handle to pair the per-zone
+    /// [`crate::ops::element_field::gradient`](fn@crate::ops::element_field::gradient) /
+    /// [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation),
+    /// and [`crate::ops::element_field::behavior`] uses this handle to pair the per-zone
     /// deformation field with its sub-model. Usually the same FE subspace as
     /// [`material_fespace`](Self::material_fespace).
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace>;
@@ -824,11 +824,11 @@ pub trait Domain: Sync {
 }
 
 /// Continuum-mechanics internal-force element kernel `f_{i,a} = Σ_g Σ_b
-/// (∂N_i/∂x_b) σ_ab |J| w` — one [`crate::ops::field::divergence`](fn@crate::ops::field::divergence)
+/// (∂N_i/∂x_b) σ_ab |J| w` — one [`crate::ops::node_field::divergence`](fn@crate::ops::node_field::divergence)
 /// per row of the symmetric stress tensor `σ` (read in Voigt naming). Backs both
 /// the [`SubModelKind::internal_force_element`] default (elasticity, Mazars,
 /// plasticity) and the model-free
-/// [`crate::ops::assemble::internal_forces_continuum`] operator. Fills
+/// [`crate::ops::node_field::internal_forces_continuum`] operator. Fills
 /// `fe` node-major / axis-minor (`fe[i * space_dim + a]`).
 ///
 /// On an **axisymmetric** geometry the radial row gains the hoop term

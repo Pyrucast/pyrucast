@@ -23,8 +23,8 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{assemble, build, mesher};
 use pyrucast::store::insert;
 use pyrucast::Result;
 
@@ -59,7 +59,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     // ── Modèle : cadre 3-D + encastrement complet (6 DOFs) à la base ───────
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        let multiplier = mesher::barycenter(&imposed)?;
+        let multiplier = mesh::barycenter(&imposed)?;
         Model::dirichlet(
             var.into(),
             dual.into(),
@@ -82,7 +82,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
         model = model.union(&clamp(&nodes[0], var, dual)?)?;
     }
 
-    let materials = build::material_field(
+    let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[
             ("E", E),
@@ -108,7 +108,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     let rhs = NodeField::from_sub(rhs);
 
     // ── Assemblage + résolution ────────────────────────────────────────────
-    let solution = solve(&assemble::stiffness(&model, &materials)?, &rhs)?;
+    let solution = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 
     // ── Comparaison à l'analytique (élément exact ⇒ nodalement exact) ──────
     let tip = nodes[N].id();

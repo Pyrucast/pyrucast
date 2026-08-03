@@ -41,8 +41,8 @@
 //!
 //! [`scatter_to_nodes`] (the shared nodal integrate-and-scatter driver behind the
 //! internal forces, the weak divergence
-//! [`crate::ops::field::divergence`](fn@crate::ops::field::divergence) and the
-//! distributed flux load [`crate::ops::assemble::flux`](fn@crate::ops::assemble::flux))
+//! [`crate::ops::node_field::divergence`](fn@crate::ops::node_field::divergence) and the
+//! distributed flux load [`crate::ops::node_field::flux`](fn@crate::ops::node_field::flux))
 //! instead builds each cell's local vector and scatters it in the **same parallel
 //! pass**, by **cell colouring** (colours = node-disjoint cells): every node
 //! accumulates in a fixed colour order, so the result is reproducible for any
@@ -60,7 +60,7 @@ use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeFieldView, SubNodeField};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::ops::assemble::coloring;
+use crate::ops::coloring;
 use crate::parallel::*;
 use crate::store::{read, Handle};
 use nalgebra_sparse::CooMatrix;
@@ -285,8 +285,8 @@ impl<'a> CellGeom<'a> {
 ///
 /// The **element-field-input** driver, mirrored by `nodal_pointwise` (which
 /// reads a nodal field instead). Backs the constitutive integration
-/// [`crate::ops::behavior::integrate`] and the thermal strain
-/// [`crate::ops::field::thermal_strain`](fn@crate::ops::field::thermal_strain).
+/// [`crate::ops::element_field::behavior::integrate`] and the thermal strain
+/// [`crate::ops::element_field::thermal_strain`](fn@crate::ops::element_field::thermal_strain).
 ///
 /// Returns the material-state field (flux/stress + `VAR1`) on `fespace`.
 pub fn element_pointwise(
@@ -347,9 +347,9 @@ pub fn element_pointwise(
 /// guards held for the whole region (slices borrowed, not copied), each output
 /// slot written exactly once (`par_chunks_mut` over cells) ⇒ **bit-for-bit
 /// deterministic**. Backs the geometric field producers
-/// [`crate::ops::field::gradient`](fn@crate::ops::field::gradient),
-/// [`crate::ops::field::deformation`](fn@crate::ops::field::deformation) and
-/// [`crate::ops::field::interp_to_gauss`](fn@crate::ops::field::interp_to_gauss).
+/// [`crate::ops::element_field::gradient`](fn@crate::ops::element_field::gradient),
+/// [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation) and
+/// [`crate::ops::element_field::interp_to_gauss`](fn@crate::ops::element_field::interp_to_gauss).
 pub(crate) fn nodal_pointwise(
     fespace: &Handle<SubFiniteElementSpace>,
     field: &NodeFieldView,
@@ -727,9 +727,9 @@ pub fn element_block_pattern(
 /// nodes** of `support`, in parallel — the shared nodal integrate-and-scatter
 /// driver. It backs the `Bᵀ` operators (internal forces `∫ Bᵀ σ`, Cast3m `BSIG`;
 /// the weak divergence
-/// [`crate::ops::field::divergence`](fn@crate::ops::field::divergence)) and the
+/// [`crate::ops::node_field::divergence`](fn@crate::ops::node_field::divergence)) and the
 /// distributed flux load `∫ φ N`
-/// ([`crate::ops::assemble::flux`](fn@crate::ops::assemble::flux)) alike.
+/// ([`crate::ops::node_field::flux`](fn@crate::ops::node_field::flux)) alike.
 ///
 /// `element(geoms, fe)` is a pure sequential kernel: for one cell it fills `fe` —
 /// the cell's local vector, **node-major / variable-minor**

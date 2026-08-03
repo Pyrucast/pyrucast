@@ -25,7 +25,7 @@
 //! immersed and host meshes must share one
 //! [`Coords`](crate::coords::Coords) (their node ids are
 //! Coords-relative). Fresh colocated multiplier nodes are minted with the
-//! [`barycenter`](crate::ops::mesher::barycenter()) mesher, one per immersed node.
+//! [`barycenter`](crate::ops::mesh::barycenter()) mesher, one per immersed node.
 //!
 //! # Variables
 //!
@@ -55,7 +55,7 @@ use crate::models::{
     SubModelKind,
 };
 use crate::ops::geom::locate_points;
-use crate::ops::mesher::barycenter;
+use crate::ops::mesh::barycenter;
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;

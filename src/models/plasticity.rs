@@ -25,7 +25,7 @@
 //!
 //! **Axisymmetric** therefore costs almost nothing here: the hoop `ε_θθ = u_r/r`
 //! is *measured* by
-//! [`crate::ops::field::deformation`](fn@crate::ops::field::deformation), not
+//! [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation), not
 //! assumed, so `ε(B)` is
 //! fully known (no out-of-plane solve, unlike plane stress) and the whole
 //! specialisation is the index map `[rr, zz, θθ, rz] → [xx, yy, zz, xy]`. Note
@@ -36,7 +36,7 @@
 //! loop driving these increments lives in Python; this module provides the
 //! point-wise constitutive update **and** the consistent algorithmic tangent
 //! `D_alg` (emitted alongside the stress, consumed by
-//! [`crate::ops::assemble::tangent`]) for quadratic convergence.
+//! [`crate::ops::matrix::tangent`]) for quadratic convergence.
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
@@ -241,7 +241,7 @@ impl SubModelKind for Plasticity {
         // The plain "stiffness" kernel is the *elastic* stiffness (the simple
         // iteration operator). The consistent algorithmic tangent `K_t` is a
         // separate operator — see [`element_tangent`](Self::element_tangent) and
-        // [`crate::ops::assemble::tangent`]. Reuse the elasticity element kernel
+        // [`crate::ops::matrix::tangent`]. Reuse the elasticity element kernel
         // verbatim; it reads only `E` and `nu` from the material.
         let mat = material.expect("Plasticity requires a material field");
         elasticity::element_stiffness(geom, mat, self.model, ke)
@@ -333,7 +333,7 @@ impl Domain for Plasticity {
         comps.extend(state_names());
         comps.extend(echo_names(self.space_dim, self.model));
         // Consistent algorithmic tangent D_alg (upper triangle) — consumed by
-        // the tangent assembler (`assemble::tangent`).
+        // the tangent assembler (`crate::ops::matrix::tangent`).
         comps.extend(elasticity::tangent_component_names(
             self.space_dim,
             self.model,

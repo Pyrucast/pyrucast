@@ -210,7 +210,7 @@ pub struct SubMatrix {
     #[serde(default)]
     recipe: Option<ComputedRecipe>,
     /// The set of [`Physics`] natures of the sub-model that produced this block,
-    /// set by the assembler ([`crate::ops::assemble`]) for **both** the computed
+    /// set by the assembler ([`crate::ops::matrix`]) for **both** the computed
     /// and the literal path (so a Dirichlet C/Cᵀ pair is tagged too). **Empty**
     /// for a block built directly, outside assembly (the « rien » case), or
     /// carrying several natures for a coupled physics. Consumed by
@@ -219,7 +219,7 @@ pub struct SubMatrix {
     physics: Vec<Physics>,
     /// Lazy scalar scale applied to every value this block emits — at direct
     /// accessors (`get`, `dense`, …) and at global assembly (`build_global_triplets`,
-    /// [`crate::ops::assemble::scatter`]) alike. Defaults to `1.0`; set via
+    /// [`crate::ops::scatter`]) alike. Defaults to `1.0`; set via
     /// `Mul<f64>`/`Div<f64>` ([`std::ops::Mul`], [`std::ops::Div`]) rather than
     /// eagerly rewriting `coo`, so it works for a **computed** block too (its
     /// values don't exist until assembly evaluates the recipe). Never touches
@@ -378,7 +378,7 @@ impl SubMatrix {
     /// The set of [`Physics`] natures of the sub-model that produced this block —
     /// **empty** for a block built outside assembly (the « rien » case), one entry
     /// for a plain physics, several for a coupled one. Set by the assembler on
-    /// every block it emits (see [`crate::ops::assemble`]).
+    /// every block it emits (see [`crate::ops::matrix`]).
     pub fn physics(&self) -> &[Physics] {
         &self.physics
     }
@@ -561,7 +561,7 @@ impl SubMatrix {
     /// COO entries in **local** index form `(row, col, value)` — the block's own
     /// numbering. Used by the aggregate to scatter into the global matrix via a
     /// per-block translation table. **Not** scaled by [`SubMatrix::factor`]: the
-    /// caller applies it (every consumer inside `containers`/`ops::assemble` does).
+    /// caller applies it (every consumer inside `containers`/`ops::matrix` does).
     pub fn local_triplets(&self) -> impl Iterator<Item = (usize, usize, f64)> + '_ {
         self.coo.triplet_iter().map(|(r, c, &v)| (r, c, v))
     }
@@ -941,7 +941,7 @@ pub type NamedDof = (NodeId, String);
 /// A pure function of a model's **block structure** — not of the material
 /// values — so it can be built once and reused across assemblies of the same
 /// model (materials change, sparsity does not). The assembler
-/// ([`crate::ops::assemble`]) builds it from a [`Matrix`]'s blocks and caches it
+/// ([`crate::ops::matrix`]) builds it from a [`Matrix`]'s blocks and caches it
 /// on the model (see `Model::matrix_pattern`); the numeric scatter then only
 /// fills the values at each entry's fixed slot.
 #[derive(Clone)]
@@ -959,7 +959,7 @@ pub struct AssemblyPattern {
     /// material-independent and cached, the `binary_search` that maps a
     /// block-local `(r, c)` to its CSR slot is paid **once here**, not on every
     /// assembly's numeric scatter. The scatter reads these back directly (see
-    /// [`crate::ops::assemble::scatter`]).
+    /// [`crate::ops::scatter`]).
     pub block_slots: Vec<BlockSlots>,
 }
 
@@ -1093,14 +1093,14 @@ impl Matrix {
         // A *computed* block carries no values: producing them means driving a
         // model kernel that lives in `crate::models` (outside `containers`).
         // Assembling it here would force a matrix↔kernel cycle, so we don't —
-        // the global assembler in `ops::assemble::stiffness` handles computed
+        // the global assembler in `ops::matrix::stiffness` handles computed
         // blocks and injects the finished CSR via `set_assembled`.
         for h in &*self {
             if read(h)?.is_computed() {
                 return Err(PyrucastError::Message(
                     "Matrix::finalize: this matrix carries a computed block; \
-                     assemble it with ops::assemble::assemble(&mut m) (or \
-                     ops::assemble::stiffness), which scatters the kernel into \
+                     assemble it with ops::matrix::assemble(&mut m) (or \
+                     ops::matrix::stiffness), which scatters the kernel into \
                      the global CSR — finalize() cannot (it must not reach into \
                      the model/kernel)"
                         .into(),
@@ -1120,7 +1120,7 @@ impl Matrix {
     }
 
     /// Inject a globally-assembled CSR built by an external assembler
-    /// ([`crate::ops::assemble`]), bypassing [`finalize`](Self::finalize).
+    /// ([`crate::ops::matrix`]), bypassing [`finalize`](Self::finalize).
     /// `row_dofs` / `col_dofs` must be this matrix' global DOF union (as
     /// returned by [`row_dofs`](Self::row_dofs) / [`col_dofs`](Self::col_dofs))
     /// and index `csr`. This is the path for matrices carrying *computed*
@@ -1448,7 +1448,7 @@ impl Matrix {
     /// assembly — the « rien » case) are never selected by a concrete nature; tag
     /// them [`Physics::Other`] to reach them with `filter(Physics::Other)`. The
     /// result is **not assembled** — like any matrix with freshly added blocks,
-    /// call [`crate::ops::assemble::assemble`] before handing it to a solver.
+    /// call [`crate::ops::matrix::assemble`] before handing it to a solver.
     pub fn filter(&self, physics: Physics) -> Result<Matrix> {
         let mut indices: Vec<usize> = Vec::new();
         for (i, h) in self.iter().enumerate() {
@@ -1653,8 +1653,8 @@ impl std::ops::Mul<&NodeField> for Matrix {
 // clones of `self`'s (see `map_blocks`). Fallible (store reads), like the
 // crate's other `Matrix` operators. No `Matrix + Matrix`: the assembler already
 // sums contributions landing on the same global `(row, col)`
-// ([`crate::ops::assemble::assemble`]), so `M/dt + K` is `(&(&m / dt)? | &k)?`
-// followed by `ops::assemble::assemble(&mut sys)` — see `book/src/matrix.md`.
+// ([`crate::ops::matrix::assemble`]), so `M/dt + K` is `(&(&m / dt)? | &k)?`
+// followed by `ops::matrix::assemble(&mut sys)` — see `book/src/matrix.md`.
 
 impl std::ops::Mul<f64> for &Matrix {
     type Output = Result<Matrix>;
@@ -2348,7 +2348,7 @@ mod tests {
         );
     }
 
-    /// `M/dt + K` ≡ `(M/dt) | K` followed by `ops::assemble::assemble` — no
+    /// `M/dt + K` ≡ `(M/dt) | K` followed by `ops::matrix::assemble` — no
     /// dedicated `Matrix + Matrix` operator is needed, because the assembler
     /// already sums contributions landing on the same global `(row, col)`.
     /// `K` carries a DOF (`c`) that `M` doesn't (mirroring a Dirichlet
@@ -2404,7 +2404,7 @@ mod tests {
         let m_dt = (&m / dt).unwrap(); // factor = 1/0.5 = 2 ⇒ diag(8, 8)
 
         let mut sys = m_dt.union(&k).unwrap();
-        crate::ops::assemble::assemble(&mut sys).unwrap();
+        crate::ops::matrix::assemble(&mut sys).unwrap();
 
         assert_eq!(sys.n_rows().unwrap(), 3);
         assert_eq!(sys.n_cols().unwrap(), 3);
@@ -2935,7 +2935,7 @@ mod tests {
             s.set_value(n1.id(), "q", 5.0).unwrap();
             NodeField::from_sub(s)
         };
-        let f_ext_r = crate::ops::field::restrict(&f_ext, &rm).unwrap();
+        let f_ext_r = crate::ops::node_field::restrict(&f_ext, &rm).unwrap();
         for (za, zb) in f_ext_r.iter().zip(f_int.iter()) {
             let sa = read(za).unwrap().support();
             let sb = read(zb).unwrap().support();
@@ -2957,7 +2957,7 @@ mod tests {
 
         // Strict residual (every component subtracted, missing read as 0):
         // reproject onto f_int's exact supports AND components.
-        let f_ext_like = crate::ops::field::restrict_like(&f_ext, &f_int).unwrap();
+        let f_ext_like = crate::ops::node_field::restrict_like(&f_ext, &f_int).unwrap();
         let r2 = (&f_ext_like - &f_int).unwrap();
         assert_eq!(r2.value(n0.id(), "q").unwrap(), 3.0);
         assert_eq!(r2.value(nm.id(), "imposed_T").unwrap(), -1.0); // 0 − 1

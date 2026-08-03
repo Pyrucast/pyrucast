@@ -1,4 +1,4 @@
-//! Python wrappers for the material-field builders in [`crate::ops::build`].
+//! Python wrappers for the material-field builders in [`crate::ops::element_field`].
 //!
 //! Free functions that build a material [`PyElementField`] (or a single
 //! [`PySubElementField`]) from a model. Kept here — mirroring
@@ -25,7 +25,7 @@ pub fn sub_material_field(
         .iter()
         .map(|(c, v)| (c.as_str(), *v))
         .collect();
-    let sub = crate::ops::build::sub_material_field(&*read(&sub_model.handle)?, &pairs)?;
+    let sub = crate::ops::element_field::sub_material_field(&*read(&sub_model.handle)?, &pairs)?;
     Ok(PySubElementField {
         handle: insert(sub),
     })
@@ -44,7 +44,7 @@ pub fn material_field(
         .iter()
         .map(|(c, v)| (c.as_str(), *v))
         .collect();
-    let ef = crate::ops::build::material_field(&model.inner, &pairs)?;
+    let ef = crate::ops::element_field::material_field(&model.inner, &pairs)?;
     Ok(PyElementField { inner: ef })
 }
 
@@ -65,6 +65,6 @@ pub fn material_field_per_sub_model(
         .map(|v| v.iter().map(|(c, x)| (c.as_str(), *x)).collect())
         .collect();
     let slices: Vec<&[(&str, f64)]> = owned.iter().map(|v| v.as_slice()).collect();
-    let ef = crate::ops::build::material_field_per_sub_model(&model.inner, &slices)?;
+    let ef = crate::ops::element_field::material_field_per_sub_model(&model.inner, &slices)?;
     Ok(PyElementField { inner: ef })
 }

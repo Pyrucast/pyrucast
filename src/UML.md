@@ -686,7 +686,7 @@ classDiagram
         +circle_seg2(center:&Node, normal:&[f64], radius:f64, n_elems:usize) Result~mesh_Mesh~
         +sweep_qua4(mesh_a:&Mesh, mesh_b:&Mesh, n_layers:usize) Result~mesh_Mesh~
         +extrude(mesh:&Mesh, direction:&[f64], n_layers:usize) Result~mesh_Mesh~
-        +fill_surface(contour:&Mesh, element_type:mesh_ElementType, refinement:Option~crate::ops::mesher::triangulation::RefinementOptions~) Result~mesh_Mesh~
+        +fill_surface(contour:&Mesh, element_type:mesh_ElementType, refinement:Option~crate::ops::mesh::triangulation::RefinementOptions~) Result~mesh_Mesh~
         +plot(view:Option~crate::viz::View~, save:Option~&std::path::Path~) Result~()~
         +plot_with_field(view:Option~crate::viz::View~, save:Option~&std::path::Path~, field:&crate::containers::node_field::NodeField, component:Option~&str~) Result~()~
         +consolidate() Result~mesh_Mesh~

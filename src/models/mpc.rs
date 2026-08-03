@@ -360,7 +360,7 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::ops::mesher::barycenter;
+    use crate::ops::mesh::barycenter;
     use crate::store::insert;
 
     fn poi1(node: &Node) -> Mesh {
