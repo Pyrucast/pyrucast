@@ -22,6 +22,7 @@ pub mod divergence;
 pub mod flux;
 pub mod internal_forces;
 pub mod merge;
+pub mod methods;
 pub mod restrict;
 
 pub use consolidate::consolidate;

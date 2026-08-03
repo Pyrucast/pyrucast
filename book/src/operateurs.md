@@ -32,6 +32,14 @@ et non avec `divergence` (qui rend un champ nodal). Une opération se range par
 sa sortie, jamais par son entrée. Le binding Python reste un miroir 1:1 — voir
 [Correspondance Rust ↔ Python](correspondance-rust-python.md).
 
+La **fonction libre est la forme canonique** : c'est elle qui est documentée
+dans les chapitres qui suivent. La plupart de ces opérations sont **aussi**
+des méthodes de leur sujet, pour permettre le chaînage —
+`maillage.border().consolidate()` plutôt que
+`mesh.consolidate(mesh.border(maillage))`. La règle qui décide lesquelles, et
+ses exclusions, tient dans les trois conditions de
+[Conventions](conventions.md#le-verbe-exposé-aussi-en-méthode).
+
 La **chaîne typique** d'un calcul enchaîne ces opérateurs :
 
 ```text

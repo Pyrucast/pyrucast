@@ -19,6 +19,7 @@
 pub mod band;
 pub mod elementwise;
 pub mod mask;
+pub mod methods;
 
 pub use band::Band;
 pub use elementwise::{abs, cos, cosh, exp, log, log10, sin, sinh, sqrt, tan, tanh};

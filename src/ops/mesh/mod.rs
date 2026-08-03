@@ -24,6 +24,7 @@ pub mod from_live_nodes;
 pub mod gmsh;
 pub mod line;
 pub mod merge_nodes;
+pub mod methods;
 pub mod orient;
 pub mod pave_surface;
 pub mod pave_volume;

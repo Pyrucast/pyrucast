@@ -864,3 +864,300 @@ pub fn select(
     };
     Ok(PyMesh { inner })
 }
+
+// ─── Méthodes de délégation ────────────────────────────────────────────────
+//
+// La face « sujet » des opérateurs ci-dessus (`CONVENTIONS.md` § « Le verbe
+// exposé aussi en méthode »). Aucune logique : chaque méthode rappelle la
+// fonction libre, receveur compris.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyMesh {
+    /// Voir `pyrucast.mesh.to_poi1`.
+    fn to_poi1(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
+        super::mesh::to_poi1(slf)
+    }
+
+    /// Voir `pyrucast.mesh.barycenter`.
+    fn barycenter(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
+        super::mesh::barycenter(slf)
+    }
+
+    /// Voir `pyrucast.mesh.elements_on`.
+    #[pyo3(signature = (points, strict=true))]
+    fn elements_on(slf: PyRef<'_, Self>, points: PyRef<PyMesh>, strict: bool) -> PyResult<PyMesh> {
+        super::mesh::elements_on(slf, points, strict)
+    }
+
+    /// Voir `pyrucast.mesh.points_in_sphere`.
+    #[pyo3(signature = (center, radius, tol=None))]
+    fn points_in_sphere(
+        slf: PyRef<'_, Self>,
+        center: Vec<f64>,
+        radius: f64,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_in_sphere(slf, center, radius, tol)
+    }
+
+    /// Voir `pyrucast.mesh.points_on_sphere`.
+    #[pyo3(signature = (center, radius, tol=None))]
+    fn points_on_sphere(
+        slf: PyRef<'_, Self>,
+        center: Vec<f64>,
+        radius: f64,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_on_sphere(slf, center, radius, tol)
+    }
+
+    /// Voir `pyrucast.mesh.points_on_plane`.
+    #[pyo3(signature = (origin, normal, tol=None))]
+    fn points_on_plane(
+        slf: PyRef<'_, Self>,
+        origin: Vec<f64>,
+        normal: Vec<f64>,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_on_plane(slf, origin, normal, tol)
+    }
+
+    /// Voir `pyrucast.mesh.points_below_plane`.
+    #[pyo3(signature = (origin, normal, tol=None))]
+    fn points_below_plane(
+        slf: PyRef<'_, Self>,
+        origin: Vec<f64>,
+        normal: Vec<f64>,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_below_plane(slf, origin, normal, tol)
+    }
+
+    /// Voir `pyrucast.mesh.points_on_line`.
+    #[pyo3(signature = (a, b, tol=None))]
+    fn points_on_line(
+        slf: PyRef<'_, Self>,
+        a: Vec<f64>,
+        b: Vec<f64>,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_on_line(slf, a, b, tol)
+    }
+
+    /// Voir `pyrucast.mesh.points_in_cylinder`.
+    #[pyo3(signature = (base, top, radius, tol=None))]
+    fn points_in_cylinder(
+        slf: PyRef<'_, Self>,
+        base: Vec<f64>,
+        top: Vec<f64>,
+        radius: f64,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_in_cylinder(slf, base, top, radius, tol)
+    }
+
+    /// Voir `pyrucast.mesh.points_on_cylinder`.
+    #[pyo3(signature = (base, top, radius, tol=None))]
+    fn points_on_cylinder(
+        slf: PyRef<'_, Self>,
+        base: Vec<f64>,
+        top: Vec<f64>,
+        radius: f64,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_on_cylinder(slf, base, top, radius, tol)
+    }
+
+    /// Voir `pyrucast.mesh.points_in_cone`.
+    #[pyo3(signature = (base, top, base_radius, top_radius=0.0, tol=None))]
+    fn points_in_cone(
+        slf: PyRef<'_, Self>,
+        base: Vec<f64>,
+        top: Vec<f64>,
+        base_radius: f64,
+        top_radius: f64,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_in_cone(slf, base, top, base_radius, top_radius, tol)
+    }
+
+    /// Voir `pyrucast.mesh.points_on_cone`.
+    #[pyo3(signature = (base, top, base_radius, top_radius=0.0, tol=None))]
+    fn points_on_cone(
+        slf: PyRef<'_, Self>,
+        base: Vec<f64>,
+        top: Vec<f64>,
+        base_radius: f64,
+        top_radius: f64,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_on_cone(slf, base, top, base_radius, top_radius, tol)
+    }
+
+    /// Voir `pyrucast.mesh.points_in_torus`.
+    #[pyo3(signature = (center, axis, major_radius, minor_radius, tol=None))]
+    fn points_in_torus(
+        slf: PyRef<'_, Self>,
+        center: Vec<f64>,
+        axis: Vec<f64>,
+        major_radius: f64,
+        minor_radius: f64,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_in_torus(slf, center, axis, major_radius, minor_radius, tol)
+    }
+
+    /// Voir `pyrucast.mesh.points_on_torus`.
+    #[pyo3(signature = (center, axis, major_radius, minor_radius, tol=None))]
+    fn points_on_torus(
+        slf: PyRef<'_, Self>,
+        center: Vec<f64>,
+        axis: Vec<f64>,
+        major_radius: f64,
+        minor_radius: f64,
+        tol: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::points_on_torus(slf, center, axis, major_radius, minor_radius, tol)
+    }
+
+    /// Voir `pyrucast.mesh.consolidate`.
+    fn consolidate(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
+        super::mesh::consolidate(slf)
+    }
+
+    /// Voir `pyrucast.mesh.merge_nodes`.
+    fn merge_nodes(slf: PyRef<'_, Self>, tol: f64) -> PyResult<PyMesh> {
+        super::mesh::merge_nodes(slf, tol)
+    }
+
+    /// Voir `pyrucast.mesh.border`.
+    #[pyo3(signature = (angle_deg=None))]
+    fn border(slf: PyRef<'_, Self>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
+        super::mesh::border(slf, angle_deg)
+    }
+
+    /// Voir `pyrucast.mesh.skin`.
+    #[pyo3(signature = (angle_deg=None))]
+    fn skin(slf: PyRef<'_, Self>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
+        super::mesh::skin(slf, angle_deg)
+    }
+
+    /// Voir `pyrucast.mesh.orient`.
+    fn orient(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
+        super::mesh::orient(slf)
+    }
+
+    /// Voir `pyrucast.mesh.invert`.
+    fn invert(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
+        super::mesh::invert(slf)
+    }
+
+    /// Voir `pyrucast.mesh.sweep`.
+    #[pyo3(signature = (mesh_b, n_layers, element_type="QUA4"))]
+    fn sweep(
+        slf: PyRef<'_, Self>,
+        mesh_b: PyRef<PyMesh>,
+        n_layers: usize,
+        element_type: &str,
+    ) -> PyResult<PyMesh> {
+        super::mesh::sweep(slf, mesh_b, n_layers, element_type)
+    }
+
+    /// Voir `pyrucast.mesh.transfinite`.
+    #[pyo3(signature = (side2, side3, side4, element_type="QUA4"))]
+    fn transfinite(
+        slf: PyRef<'_, Self>,
+        side2: PyRef<PyMesh>,
+        side3: PyRef<PyMesh>,
+        side4: PyRef<PyMesh>,
+        element_type: &str,
+    ) -> PyResult<PyMesh> {
+        super::mesh::transfinite(slf, side2, side3, side4, element_type)
+    }
+
+    /// Voir `pyrucast.mesh.extrude`.
+    fn extrude(slf: PyRef<'_, Self>, direction: Vec<f64>, n_layers: usize) -> PyResult<PyMesh> {
+        super::mesh::extrude(slf, direction, n_layers)
+    }
+
+    /// Voir `pyrucast.mesh.sweep_solid`.
+    fn sweep_solid(
+        slf: PyRef<'_, Self>,
+        mesh_b: PyRef<PyMesh>,
+        n_layers: usize,
+    ) -> PyResult<PyMesh> {
+        super::mesh::sweep_solid(slf, mesh_b, n_layers)
+    }
+
+    /// Voir `pyrucast.mesh.to_quadratic`.
+    fn to_quadratic(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
+        super::mesh::to_quadratic(slf)
+    }
+
+    /// Voir `pyrucast.mesh.convert`.
+    fn convert(slf: PyRef<'_, Self>, element_type: &str) -> PyResult<PyMesh> {
+        super::mesh::convert(slf, element_type)
+    }
+
+    /// Voir `pyrucast.mesh.translate`.
+    fn translate(slf: PyRef<'_, Self>, vector: Vec<f64>) -> PyResult<PyMesh> {
+        super::mesh::translate(slf, vector)
+    }
+
+    /// Voir `pyrucast.mesh.rotate`.
+    #[pyo3(signature = (angle, center, axis=None))]
+    fn rotate(
+        slf: PyRef<'_, Self>,
+        angle: f64,
+        center: Vec<f64>,
+        axis: Option<Vec<f64>>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::rotate(slf, angle, center, axis)
+    }
+
+    /// Voir `pyrucast.mesh.triangulate_surface`.
+    #[pyo3(signature = (element_type, size=None))]
+    fn triangulate_surface(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        element_type: &str,
+        size: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::triangulate_surface(py, slf, element_type, size)
+    }
+
+    /// Voir `pyrucast.mesh.pave_surface`.
+    #[pyo3(signature = (element_type, size=None, all_quad=false))]
+    fn pave_surface(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        element_type: &str,
+        size: Option<f64>,
+        all_quad: bool,
+    ) -> PyResult<PyMesh> {
+        super::mesh::pave_surface(py, slf, element_type, size, all_quad)
+    }
+
+    /// Voir `pyrucast.mesh.pave_volume`.
+    #[pyo3(signature = (layers=1, thickness=None, size=None))]
+    fn pave_volume(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        layers: usize,
+        thickness: Option<f64>,
+        size: Option<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::pave_volume(py, slf, layers, thickness, size)
+    }
+
+    /// Voir `pyrucast.mesh.triangulate_volume`.
+    #[pyo3(signature = (size=None, allow_surface_nodes=false))]
+    fn triangulate_volume(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        size: Option<f64>,
+        allow_surface_nodes: bool,
+    ) -> PyResult<PyMesh> {
+        super::mesh::triangulate_volume(py, slf, size, allow_surface_nodes)
+    }
+}

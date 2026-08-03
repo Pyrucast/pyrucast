@@ -204,3 +204,81 @@ pub fn integrate_behavior(
     )?;
     Ok(PyElementField { inner: ef })
 }
+
+// ─── Méthodes de délégation ────────────────────────────────────────────────
+//
+// La face « sujet » des opérateurs ci-dessus (`CONVENTIONS.md` § « Le verbe
+// exposé aussi en méthode »). Aucune logique : chaque méthode rappelle la
+// fonction libre, receveur compris.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyElementField {
+    /// Voir `pyrucast.element_field.consolidate`.
+    fn consolidate(slf: PyRef<'_, Self>) -> PyResult<PyElementField> {
+        super::element_field::consolidate(slf)
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyNodeField {
+    /// Voir `pyrucast.element_field.gradient`.
+    fn gradient(
+        slf: PyRef<'_, Self>,
+        fespace: PyRef<PyFiniteElementSpace>,
+    ) -> PyResult<PyElementField> {
+        super::element_field::gradient(slf, fespace)
+    }
+
+    /// Voir `pyrucast.element_field.interp_to_gauss`.
+    fn interp_to_gauss(
+        slf: PyRef<'_, Self>,
+        fespace: PyRef<PyFiniteElementSpace>,
+    ) -> PyResult<PyElementField> {
+        super::element_field::interp_to_gauss(slf, fespace)
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyModel {
+    /// Voir `pyrucast.element_field.material_field`.
+    fn material_field(
+        slf: PyRef<'_, Self>,
+        components_and_values: Vec<(String, f64)>,
+    ) -> PyResult<PyElementField> {
+        super::element_field::material_field(slf, components_and_values)
+    }
+
+    /// Voir `pyrucast.element_field.material_field_per_sub_model`.
+    fn material_field_per_sub_model(
+        slf: PyRef<'_, Self>,
+        components_and_values_per_sub_model: Vec<Vec<(String, f64)>>,
+    ) -> PyResult<PyElementField> {
+        super::element_field::material_field_per_sub_model(slf, components_and_values_per_sub_model)
+    }
+
+    /// Voir `pyrucast.element_field.integrate_behavior`.
+    #[pyo3(signature = (deformation, materials, prev=None, dt=None))]
+    fn integrate_behavior(
+        slf: PyRef<'_, Self>,
+        deformation: PyRef<PyElementField>,
+        materials: PyRef<PyElementField>,
+        prev: Option<PyRef<PyElementField>>,
+        dt: Option<f64>,
+    ) -> PyResult<PyElementField> {
+        super::element_field::integrate_behavior(slf, deformation, materials, prev, dt)
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PySubModel {
+    /// Voir `pyrucast.element_field.sub_material_field`.
+    fn material_field(
+        slf: PyRef<'_, Self>,
+        components_and_values: Vec<(String, f64)>,
+    ) -> PyResult<PySubElementField> {
+        super::element_field::sub_material_field(slf, components_and_values)
+    }
+}

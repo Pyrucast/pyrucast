@@ -67,3 +67,52 @@ pub fn tangent(
     let m = crate::ops::matrix::tangent(&model.inner, &materials.inner, &state.inner)?;
     Ok(PyMatrix { inner: m })
 }
+
+// ─── Méthodes de délégation ────────────────────────────────────────────────
+//
+// La face « sujet » des opérateurs ci-dessus (`CONVENTIONS.md` § « Le verbe
+// exposé aussi en méthode »). Aucune logique : chaque méthode rappelle la
+// fonction libre, receveur compris.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyModel {
+    /// Voir `pyrucast.matrix.stiffness`.
+    fn stiffness_matrix(
+        slf: PyRef<'_, Self>,
+        materials: PyRef<PyElementField>,
+    ) -> PyResult<PyMatrix> {
+        super::matrix::stiffness(slf, materials)
+    }
+
+    /// Voir `pyrucast.matrix.mass`.
+    fn mass_matrix(slf: PyRef<'_, Self>, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
+        super::matrix::mass(slf, materials)
+    }
+
+    /// Voir `pyrucast.matrix.geometric`.
+    fn geometric_matrix(
+        slf: PyRef<'_, Self>,
+        materials: PyRef<PyElementField>,
+        stress: PyRef<PyElementField>,
+    ) -> PyResult<PyMatrix> {
+        super::matrix::geometric(slf, materials, stress)
+    }
+
+    /// Voir `pyrucast.matrix.tangent`.
+    fn tangent_matrix(
+        slf: PyRef<'_, Self>,
+        materials: PyRef<PyElementField>,
+        state: PyRef<PyElementField>,
+    ) -> PyResult<PyMatrix> {
+        super::matrix::tangent(slf, materials, state)
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyMatrix {
+    /// Voir `pyrucast.matrix.lump`.
+    fn lump(slf: PyRef<'_, Self>) -> PyResult<PyMatrix> {
+        super::matrix::lump(slf)
+    }
+}

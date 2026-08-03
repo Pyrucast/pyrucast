@@ -17,6 +17,28 @@ Python). Elle matérialise la règle de [Conventions](conventions.md) :
 - un constructeur nommé Rust devient un `classmethod` / constructeur
   Python.
 
+**Les tableaux ci-dessous donnent la forme canonique** — la fonction libre.
+Beaucoup de ces opérations sont **aussi** exposées comme méthode de leur
+sujet, selon la règle des trois conditions
+([Conventions](conventions.md#le-verbe-exposé-aussi-en-méthode)) : premier
+argument sujet, retour conteneur, sens pour toute instance du type. La règle
+étant mécanique, la liste n'est pas recopiée ici — elle est **vérifiée par un
+test** (`tests/python/test_method_exposure.py`), qui lit le stub et échoue si
+une opération éligible perd sa méthode. Ce test porte aussi la liste des
+exclusions, chacune avec sa raison.
+
+Deux points à connaître, illustrés plus bas : le nom peut changer entre les
+deux formes (`matrix.stiffness(model, mats)` / `model.stiffness_matrix(mats)`,
+`element_field.sub_material_field(sub, …)` / `sub_model.material_field(…)`),
+et les cinématiques (`deformation`, `beam_deformation`, `thermal_strain`)
+n'ont **pas** de méthode : elles exigent des composantes nommées, elles
+n'auraient pas de sens sur un champ quelconque. Même raison pour
+`internal_forces`, qui lit la contrainte de Voigt par nom.
+
+> `ops::element_field::frame_deformation` existe côté Rust mais **n'est pas
+> exposée à Python** — une entorse au miroir 1:1, antérieure au redécoupage et
+> à traiter à part.
+
 > Source de vérité : le `#[pymodule]` de `src/lib.rs` (enregistrement des
 > classes et fonctions) et le stub `pyrucast.pyi` (signatures typées).
 > Cette page en est un instantané, à régénérer à la main si l'API bouge.

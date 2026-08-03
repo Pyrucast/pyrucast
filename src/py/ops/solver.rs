@@ -173,3 +173,56 @@ pub fn solve_unilateral(
     )?;
     Ok(PyNodeField { inner: solution })
 }
+
+// ─── Méthodes de délégation ────────────────────────────────────────────────
+//
+// La face « sujet » des opérateurs ci-dessus (`CONVENTIONS.md` § « Le verbe
+// exposé aussi en méthode »). Aucune logique : chaque méthode rappelle la
+// fonction libre, receveur compris.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyMatrix {
+    /// Voir `pyrucast.solver.solve`.
+    #[pyo3(signature = (rhs, method=None, cache=true))]
+    fn solve(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        rhs: PyRef<PyNodeField>,
+        method: Option<String>,
+        cache: bool,
+    ) -> PyResult<PyNodeField> {
+        super::solver::solve(py, slf, rhs, method, cache)
+    }
+
+    /// Voir `pyrucast.solver.solve_eliminate`.
+    #[pyo3(signature = (model, rhs, method=None, cache=true))]
+    fn solve_eliminate(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        model: PyRef<PyModel>,
+        rhs: PyRef<PyNodeField>,
+        method: Option<String>,
+        cache: bool,
+    ) -> PyResult<PyNodeField> {
+        super::solver::solve_eliminate(py, slf, model, rhs, method, cache)
+    }
+
+    /// Voir `pyrucast.solver.solve_unilateral`.
+    #[pyo3(signature = (model, rhs, method=None, active_set=None, cache=true, max_iter=100, tol=1e-10))]
+    #[allow(clippy::too_many_arguments)]
+    fn solve_unilateral(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        model: PyRef<PyModel>,
+        rhs: PyRef<PyNodeField>,
+        method: Option<String>,
+        active_set: Option<String>,
+        cache: bool,
+        max_iter: usize,
+        tol: f64,
+    ) -> PyResult<PyNodeField> {
+        super::solver::solve_unilateral(
+            py, slf, model, rhs, method, active_set, cache, max_iter, tol,
+        )
+    }
+}

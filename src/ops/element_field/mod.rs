@@ -24,6 +24,7 @@ pub mod frame_deformation;
 pub mod gradient;
 pub mod interp_to_gauss;
 pub mod material_field;
+pub mod methods;
 pub mod thermal_strain;
 
 pub use beam_deformation::beam_deformation;

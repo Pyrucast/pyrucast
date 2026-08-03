@@ -8,4 +8,5 @@
 
 pub mod eliminate;
 pub mod lu;
+pub mod methods;
 pub mod unilateral;

@@ -2,6 +2,7 @@
 //! over the field flavour, which give back a field of the caller's own kind.
 
 use crate::py::element_field::{PyElementField, PySubElementField};
+use crate::py::mesh::PyMesh;
 use crate::py::node_field::{PyNodeField, PySubNodeField};
 use crate::store::{insert, read};
 use pyo3::exceptions::PyTypeError;
@@ -328,3 +329,557 @@ py_field_unary!(tan, "Element-wise tangent of a field (radians).");
 py_field_unary!(sinh, "Element-wise hyperbolic sine of a field.");
 py_field_unary!(cosh, "Element-wise hyperbolic cosine of a field.");
 py_field_unary!(tanh, "Element-wise hyperbolic tangent of a field.");
+
+// ─── Méthodes de délégation ────────────────────────────────────────────────
+//
+// La face « sujet » des opérateurs polymorphes (`CONVENTIONS.md` § « Le verbe
+// exposé aussi en méthode »). Le type du receveur étant connu, la méthode
+// court-circuite le dispatch à quatre branches de la fonction libre et rend un
+// type **précis** au lieu de `Any`. `psca` n'y figure pas : symétrique.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyNodeField {
+    /// Voir `pyrucast.field.abs`.
+    fn abs(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::abs(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.sqrt`.
+    fn sqrt(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::sqrt(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.exp`.
+    fn exp(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::exp(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.log`.
+    fn log(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::log(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.log10`.
+    fn log10(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::log10(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.cos`.
+    fn cos(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::cos(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.sin`.
+    fn sin(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::sin(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.tan`.
+    fn tan(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::tan(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.sinh`.
+    fn sinh(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::sinh(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.cosh`.
+    fn cosh(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::cosh(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.tanh`.
+    fn tanh(&self) -> PyResult<PyNodeField> {
+        Ok(PyNodeField {
+            inner: crate::ops::field::tanh(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.mask`.
+    #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
+    fn mask(
+        &self,
+        ge: Option<f64>,
+        gt: Option<f64>,
+        le: Option<f64>,
+        lt: Option<f64>,
+        components: Option<Vec<String>>,
+    ) -> PyResult<PyNodeField> {
+        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        Ok(PyNodeField {
+            inner: crate::ops::field::mask_nodes(&self.inner, &band, components)?,
+        })
+    }
+
+    /// Voir `pyrucast.mesh.select`.
+    #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
+    fn select(
+        &self,
+        ge: Option<f64>,
+        gt: Option<f64>,
+        le: Option<f64>,
+        lt: Option<f64>,
+        components: Option<Vec<String>>,
+    ) -> PyResult<PyMesh> {
+        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        Ok(PyMesh {
+            inner: crate::ops::mesh::select_nodes(&self.inner, &band, components)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.filter_components`.
+    fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
+        use crate::containers::field::{Field, SubField};
+        let wanted = extract_names(components)?;
+        Ok(PyNodeField {
+            inner: self.inner.filter_components(wanted.as_slice())?,
+        })
+    }
+
+    /// Voir `pyrucast.field.rename_component`.
+    fn rename_component(&self, old: &str, new: &str) -> PyResult<PyNodeField> {
+        use crate::containers::field::{Field, SubField};
+        Ok(PyNodeField {
+            inner: self.inner.rename_component(old, new)?,
+        })
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyElementField {
+    /// Voir `pyrucast.field.abs`.
+    fn abs(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::abs(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.sqrt`.
+    fn sqrt(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::sqrt(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.exp`.
+    fn exp(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::exp(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.log`.
+    fn log(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::log(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.log10`.
+    fn log10(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::log10(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.cos`.
+    fn cos(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::cos(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.sin`.
+    fn sin(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::sin(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.tan`.
+    fn tan(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::tan(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.sinh`.
+    fn sinh(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::sinh(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.cosh`.
+    fn cosh(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::cosh(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.tanh`.
+    fn tanh(&self) -> PyResult<PyElementField> {
+        Ok(PyElementField {
+            inner: crate::ops::field::tanh(&self.inner)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.mask`.
+    #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
+    fn mask(
+        &self,
+        ge: Option<f64>,
+        gt: Option<f64>,
+        le: Option<f64>,
+        lt: Option<f64>,
+        components: Option<Vec<String>>,
+    ) -> PyResult<PyElementField> {
+        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        Ok(PyElementField {
+            inner: crate::ops::field::mask_cells(&self.inner, &band, components)?,
+        })
+    }
+
+    /// Voir `pyrucast.mesh.select`.
+    #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
+    fn select(
+        &self,
+        ge: Option<f64>,
+        gt: Option<f64>,
+        le: Option<f64>,
+        lt: Option<f64>,
+        components: Option<Vec<String>>,
+    ) -> PyResult<PyMesh> {
+        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        Ok(PyMesh {
+            inner: crate::ops::mesh::select_cells(&self.inner, &band, components)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.filter_components`.
+    fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PyElementField> {
+        use crate::containers::field::{Field, SubField};
+        let wanted = extract_names(components)?;
+        Ok(PyElementField {
+            inner: self.inner.filter_components(wanted.as_slice())?,
+        })
+    }
+
+    /// Voir `pyrucast.field.rename_component`.
+    fn rename_component(&self, old: &str, new: &str) -> PyResult<PyElementField> {
+        use crate::containers::field::{Field, SubField};
+        Ok(PyElementField {
+            inner: self.inner.rename_component(old, new)?,
+        })
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PySubNodeField {
+    /// Voir `pyrucast.field.abs`.
+    fn abs(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::abs(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.sqrt`.
+    fn sqrt(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::sqrt(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.exp`.
+    fn exp(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::exp(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.log`.
+    fn log(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::log(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.log10`.
+    fn log10(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::log10(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.cos`.
+    fn cos(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::cos(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.sin`.
+    fn sin(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::sin(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.tan`.
+    fn tan(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::tan(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.sinh`.
+    fn sinh(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::sinh(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.cosh`.
+    fn cosh(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::cosh(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.tanh`.
+    fn tanh(&self) -> PyResult<PySubNodeField> {
+        let out = crate::ops::field::tanh(&*read(&self.handle)?)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.mask`.
+    #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
+    fn mask(
+        &self,
+        ge: Option<f64>,
+        gt: Option<f64>,
+        le: Option<f64>,
+        lt: Option<f64>,
+        components: Option<Vec<String>>,
+    ) -> PyResult<PySubNodeField> {
+        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        let out = crate::ops::field::mask_sub_nodes(&*read(&self.handle)?, &band, components);
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.mesh.select`.
+    #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
+    fn select(
+        &self,
+        ge: Option<f64>,
+        gt: Option<f64>,
+        le: Option<f64>,
+        lt: Option<f64>,
+        components: Option<Vec<String>>,
+    ) -> PyResult<PyMesh> {
+        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        Ok(PyMesh {
+            inner: crate::ops::mesh::select_sub_nodes(&*read(&self.handle)?, &band, components)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.filter_components`.
+    fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
+        use crate::containers::field::{Field, SubField};
+        let wanted = extract_names(components)?;
+        let out = read(&self.handle)?.select_components(wanted.as_slice())?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.rename_component`.
+    fn rename_component(&self, old: &str, new: &str) -> PyResult<PySubNodeField> {
+        use crate::containers::field::{Field, SubField};
+        let out = read(&self.handle)?.rename_component(old, new)?;
+        Ok(PySubNodeField {
+            handle: insert(out),
+        })
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PySubElementField {
+    /// Voir `pyrucast.field.abs`.
+    fn abs(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::abs(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.sqrt`.
+    fn sqrt(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::sqrt(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.exp`.
+    fn exp(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::exp(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.log`.
+    fn log(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::log(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.log10`.
+    fn log10(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::log10(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.cos`.
+    fn cos(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::cos(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.sin`.
+    fn sin(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::sin(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.tan`.
+    fn tan(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::tan(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.sinh`.
+    fn sinh(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::sinh(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.cosh`.
+    fn cosh(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::cosh(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.tanh`.
+    fn tanh(&self) -> PyResult<PySubElementField> {
+        let out = crate::ops::field::tanh(&*read(&self.handle)?)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.mask`.
+    #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
+    fn mask(
+        &self,
+        ge: Option<f64>,
+        gt: Option<f64>,
+        le: Option<f64>,
+        lt: Option<f64>,
+        components: Option<Vec<String>>,
+    ) -> PyResult<PySubElementField> {
+        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        let out = crate::ops::field::mask_sub_cells(&*read(&self.handle)?, &band, components);
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.mesh.select`.
+    #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
+    fn select(
+        &self,
+        ge: Option<f64>,
+        gt: Option<f64>,
+        le: Option<f64>,
+        lt: Option<f64>,
+        components: Option<Vec<String>>,
+    ) -> PyResult<PyMesh> {
+        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        Ok(PyMesh {
+            inner: crate::ops::mesh::select_sub_cells(&*read(&self.handle)?, &band, components)?,
+        })
+    }
+
+    /// Voir `pyrucast.field.filter_components`.
+    fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PySubElementField> {
+        use crate::containers::field::{Field, SubField};
+        let wanted = extract_names(components)?;
+        let out = read(&self.handle)?.select_components(wanted.as_slice())?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+
+    /// Voir `pyrucast.field.rename_component`.
+    fn rename_component(&self, old: &str, new: &str) -> PyResult<PySubElementField> {
+        use crate::containers::field::{Field, SubField};
+        let out = read(&self.handle)?.rename_component(old, new)?;
+        Ok(PySubElementField {
+            handle: insert(out),
+        })
+    }
+}

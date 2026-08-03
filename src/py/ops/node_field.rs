@@ -185,3 +185,59 @@ pub fn internal_forces_continuum(
     let nf = crate::ops::node_field::internal_forces_continuum(&stresses.inner, &fespace.inner)?;
     Ok(PyNodeField { inner: nf })
 }
+
+// ─── Méthodes de délégation ────────────────────────────────────────────────
+//
+// La face « sujet » des opérateurs ci-dessus (`CONVENTIONS.md` § « Le verbe
+// exposé aussi en méthode »). Aucune logique : chaque méthode rappelle la
+// fonction libre, receveur compris.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyNodeField {
+    /// Voir `pyrucast.node_field.consolidate`.
+    fn consolidate(slf: PyRef<'_, Self>) -> PyResult<PyNodeField> {
+        super::node_field::consolidate(slf)
+    }
+
+    /// Voir `pyrucast.node_field.restrict`.
+    fn restrict(slf: PyRef<'_, Self>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
+        super::node_field::restrict(slf, mesh)
+    }
+
+    /// Voir `pyrucast.node_field.restrict_like`.
+    fn restrict_like(slf: PyRef<'_, Self>, target: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
+        super::node_field::restrict_like(slf, target)
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyMesh {
+    /// Voir `pyrucast.node_field.coordinates`.
+    #[pyo3(signature = (components=None))]
+    fn coordinates(slf: PyRef<'_, Self>, components: Option<Vec<String>>) -> PyResult<PyNodeField> {
+        super::node_field::coordinates(slf, components)
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyElementField {
+    /// Voir `pyrucast.node_field.divergence`.
+    fn divergence(slf: PyRef<'_, Self>) -> PyResult<PyNodeField> {
+        super::node_field::divergence(slf)
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PySubFiniteElementSpace {
+    /// Voir `pyrucast.node_field.flux`.
+    fn flux(
+        slf: PyRef<'_, Self>,
+        density: &Bound<'_, PyAny>,
+        component: &str,
+    ) -> PyResult<PyNodeField> {
+        super::node_field::flux(slf, density, component)
+    }
+}

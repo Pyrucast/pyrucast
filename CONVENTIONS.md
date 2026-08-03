@@ -133,6 +133,14 @@ composantes que d'axes — vérifié par comptage, jamais par nom), une exigence
 **sens porté par les noms de composantes** ne l'est pas (`sigma_xx`, `u_x`,
 « une température »).
 
+**Comment tester la condition 3 sans se tromper** : lire la méthode avec un
+receveur *quelconque*, pas avec l'exemple bien nommé.
+`stresses.internal_forces(model)` sonne juste — mais c'est le nom de la
+variable qui fait le travail. `field.internal_forces()` révèle que le *type*
+ne promet rien : n'importe quel champ par éléments porterait la méthode, alors
+qu'elle exige la contrainte de Voigt. Comparer avec `field.sqrt()` ou
+`field.mask(ge=0.0)`, qui gardent leur sens sur n'importe quel champ.
+
 Deux conséquences pratiques :
 
 - **Un ordre d'arguments qui ne met pas le sujet en tête est un défaut à

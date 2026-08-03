@@ -499,6 +499,74 @@ class ElementField:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def consolidate(self) -> ElementField:
+        r"""
+        Voir `pyrucast.element_field.consolidate`.
+        """
+    def abs(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.abs`.
+        """
+    def sqrt(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.sqrt`.
+        """
+    def exp(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.exp`.
+        """
+    def log(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.log`.
+        """
+    def log10(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.log10`.
+        """
+    def cos(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.cos`.
+        """
+    def sin(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.sin`.
+        """
+    def tan(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.tan`.
+        """
+    def sinh(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.sinh`.
+        """
+    def cosh(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.cosh`.
+        """
+    def tanh(self) -> ElementField:
+        r"""
+        Voir `pyrucast.field.tanh`.
+        """
+    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
+        r"""
+        Voir `pyrucast.field.mask`.
+        """
+    def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.select`.
+        """
+    def filter_components(self, components: typing.Any) -> ElementField:
+        r"""
+        Voir `pyrucast.field.filter_components`.
+        """
+    def rename_component(self, old: builtins.str, new: builtins.str) -> ElementField:
+        r"""
+        Voir `pyrucast.field.rename_component`.
+        """
+    def divergence(self) -> NodeField:
+        r"""
+        Voir `pyrucast.node_field.divergence`.
+        """
 
 @typing.final
 class Evolution:
@@ -860,6 +928,22 @@ class Matrix:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def lump(self) -> Matrix:
+        r"""
+        Voir `pyrucast.matrix.lump`.
+        """
+    def solve(self, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
+        r"""
+        Voir `pyrucast.solver.solve`.
+        """
+    def solve_eliminate(self, model: Model, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
+        r"""
+        Voir `pyrucast.solver.solve_eliminate`.
+        """
+    def solve_unilateral(self, model: Model, rhs: NodeField, method: typing.Optional[builtins.str] = None, active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10) -> NodeField:
+        r"""
+        Voir `pyrucast.solver.solve_unilateral`.
+        """
 
 @typing.final
 class Mesh:
@@ -973,6 +1057,138 @@ class Mesh:
         Print the full content (third display level) to stdout:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
+        """
+    def to_poi1(self) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.to_poi1`.
+        """
+    def barycenter(self) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.barycenter`.
+        """
+    def elements_on(self, points: Mesh, strict: builtins.bool = True) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.elements_on`.
+        """
+    def points_in_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_in_sphere`.
+        """
+    def points_on_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_on_sphere`.
+        """
+    def points_on_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_on_plane`.
+        """
+    def points_below_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_below_plane`.
+        """
+    def points_on_line(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_on_line`.
+        """
+    def points_in_cylinder(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_in_cylinder`.
+        """
+    def points_on_cylinder(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_on_cylinder`.
+        """
+    def points_in_cone(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_in_cone`.
+        """
+    def points_on_cone(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_on_cone`.
+        """
+    def points_in_torus(self, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_in_torus`.
+        """
+    def points_on_torus(self, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.points_on_torus`.
+        """
+    def consolidate(self) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.consolidate`.
+        """
+    def merge_nodes(self, tol: builtins.float) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.merge_nodes`.
+        """
+    def border(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.border`.
+        """
+    def skin(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.skin`.
+        """
+    def orient(self) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.orient`.
+        """
+    def invert(self) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.invert`.
+        """
+    def sweep(self, mesh_b: Mesh, n_layers: builtins.int, element_type: builtins.str = 'QUA4') -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.sweep`.
+        """
+    def transfinite(self, side2: Mesh, side3: Mesh, side4: Mesh, element_type: builtins.str = 'QUA4') -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.transfinite`.
+        """
+    def extrude(self, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.extrude`.
+        """
+    def sweep_solid(self, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.sweep_solid`.
+        """
+    def to_quadratic(self) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.to_quadratic`.
+        """
+    def convert(self, element_type: builtins.str) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.convert`.
+        """
+    def translate(self, vector: typing.Sequence[builtins.float]) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.translate`.
+        """
+    def rotate(self, angle: builtins.float, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.rotate`.
+        """
+    def triangulate_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.triangulate_surface`.
+        """
+    def pave_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.pave_surface`.
+        """
+    def pave_volume(self, layers: builtins.int = 1, thickness: typing.Optional[builtins.float] = None, size: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.pave_volume`.
+        """
+    def triangulate_volume(self, size: typing.Optional[builtins.float] = None, allow_surface_nodes: builtins.bool = False) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.triangulate_volume`.
+        """
+    def coordinates(self, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
+        r"""
+        Voir `pyrucast.node_field.coordinates`.
         """
 
 @typing.final
@@ -1274,6 +1490,34 @@ class Model:
         `sub_model | model` — the mirror of `model | sub_model`, differing
         only in that the lone term comes first.
         """
+    def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
+        r"""
+        Voir `pyrucast.element_field.material_field`.
+        """
+    def material_field_per_sub_model(self, components_and_values_per_sub_model: typing.Sequence[typing.Sequence[tuple[builtins.str, builtins.float]]]) -> ElementField:
+        r"""
+        Voir `pyrucast.element_field.material_field_per_sub_model`.
+        """
+    def integrate_behavior(self, deformation: ElementField, materials: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> ElementField:
+        r"""
+        Voir `pyrucast.element_field.integrate_behavior`.
+        """
+    def stiffness_matrix(self, materials: ElementField) -> Matrix:
+        r"""
+        Voir `pyrucast.matrix.stiffness`.
+        """
+    def mass_matrix(self, materials: ElementField) -> Matrix:
+        r"""
+        Voir `pyrucast.matrix.mass`.
+        """
+    def geometric_matrix(self, materials: ElementField, stress: ElementField) -> Matrix:
+        r"""
+        Voir `pyrucast.matrix.geometric`.
+        """
+    def tangent_matrix(self, materials: ElementField, state: ElementField) -> Matrix:
+        r"""
+        Voir `pyrucast.matrix.tangent`.
+        """
 
 @typing.final
 class Node:
@@ -1499,6 +1743,86 @@ class NodeField:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def gradient(self, fespace: FiniteElementSpace) -> ElementField:
+        r"""
+        Voir `pyrucast.element_field.gradient`.
+        """
+    def interp_to_gauss(self, fespace: FiniteElementSpace) -> ElementField:
+        r"""
+        Voir `pyrucast.element_field.interp_to_gauss`.
+        """
+    def abs(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.abs`.
+        """
+    def sqrt(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.sqrt`.
+        """
+    def exp(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.exp`.
+        """
+    def log(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.log`.
+        """
+    def log10(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.log10`.
+        """
+    def cos(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.cos`.
+        """
+    def sin(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.sin`.
+        """
+    def tan(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.tan`.
+        """
+    def sinh(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.sinh`.
+        """
+    def cosh(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.cosh`.
+        """
+    def tanh(self) -> NodeField:
+        r"""
+        Voir `pyrucast.field.tanh`.
+        """
+    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
+        r"""
+        Voir `pyrucast.field.mask`.
+        """
+    def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.select`.
+        """
+    def filter_components(self, components: typing.Any) -> NodeField:
+        r"""
+        Voir `pyrucast.field.filter_components`.
+        """
+    def rename_component(self, old: builtins.str, new: builtins.str) -> NodeField:
+        r"""
+        Voir `pyrucast.field.rename_component`.
+        """
+    def consolidate(self) -> NodeField:
+        r"""
+        Voir `pyrucast.node_field.consolidate`.
+        """
+    def restrict(self, mesh: Mesh) -> NodeField:
+        r"""
+        Voir `pyrucast.node_field.restrict`.
+        """
+    def restrict_like(self, target: NodeField) -> NodeField:
+        r"""
+        Voir `pyrucast.node_field.restrict_like`.
+        """
 
 @typing.final
 class SubElementField:
@@ -1647,6 +1971,66 @@ class SubElementField:
         r"""
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
+        """
+    def abs(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.abs`.
+        """
+    def sqrt(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.sqrt`.
+        """
+    def exp(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.exp`.
+        """
+    def log(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.log`.
+        """
+    def log10(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.log10`.
+        """
+    def cos(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.cos`.
+        """
+    def sin(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.sin`.
+        """
+    def tan(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.tan`.
+        """
+    def sinh(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.sinh`.
+        """
+    def cosh(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.cosh`.
+        """
+    def tanh(self) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.tanh`.
+        """
+    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.mask`.
+        """
+    def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.select`.
+        """
+    def filter_components(self, components: typing.Any) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.filter_components`.
+        """
+    def rename_component(self, old: builtins.str, new: builtins.str) -> SubElementField:
+        r"""
+        Voir `pyrucast.field.rename_component`.
         """
 
 @typing.final
@@ -1840,6 +2224,10 @@ class SubFiniteElementSpace:
         r"""
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
+        """
+    def flux(self, density: typing.Any, component: builtins.str) -> NodeField:
+        r"""
+        Voir `pyrucast.node_field.flux`.
         """
 
 @typing.final
@@ -2093,6 +2481,10 @@ class SubModel:
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
         """
+    def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
+        r"""
+        Voir `pyrucast.element_field.sub_material_field`.
+        """
 
 @typing.final
 class SubNodeField:
@@ -2245,6 +2637,66 @@ class SubNodeField:
         r"""
         `subfield | subfield` → a fresh `NodeField` holding both zones, fused
         if they share the same support.
+        """
+    def abs(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.abs`.
+        """
+    def sqrt(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.sqrt`.
+        """
+    def exp(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.exp`.
+        """
+    def log(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.log`.
+        """
+    def log10(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.log10`.
+        """
+    def cos(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.cos`.
+        """
+    def sin(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.sin`.
+        """
+    def tan(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.tan`.
+        """
+    def sinh(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.sinh`.
+        """
+    def cosh(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.cosh`.
+        """
+    def tanh(self) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.tanh`.
+        """
+    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.mask`.
+        """
+    def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.select`.
+        """
+    def filter_components(self, components: typing.Any) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.filter_components`.
+        """
+    def rename_component(self, old: builtins.str, new: builtins.str) -> SubNodeField:
+        r"""
+        Voir `pyrucast.field.rename_component`.
         """
 
 def abs(field: typing.Any) -> typing.Any:

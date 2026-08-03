@@ -290,6 +290,46 @@ pub fn lump(m: &Matrix) -> Result<Matrix> {
     Ok(out)
 }
 
+// ─── Méthodes de délégation ────────────────────────────────────────────────
+//
+// Voir `CONVENTIONS.md` § « Le verbe exposé aussi en méthode ». Le nom change
+// entre les deux formes : la fonction libre reçoit le qualificatif de son
+// module (`matrix::stiffness`), la méthode n'en a pas et doit le porter
+// (`model.stiffness_matrix`).
+
+impl Model {
+    /// Voir [`matrix::stiffness`](fn@crate::ops::matrix::stiffness).
+    pub fn stiffness_matrix(&self, materials: &ElementField) -> Result<Matrix> {
+        stiffness(self, materials)
+    }
+
+    /// Voir [`matrix::mass`](fn@crate::ops::matrix::mass).
+    pub fn mass_matrix(&self, materials: &ElementField) -> Result<Matrix> {
+        mass(self, materials)
+    }
+
+    /// Voir [`matrix::geometric`](fn@crate::ops::matrix::geometric).
+    pub fn geometric_matrix(
+        &self,
+        materials: &ElementField,
+        stress: &ElementField,
+    ) -> Result<Matrix> {
+        geometric(self, materials, stress)
+    }
+
+    /// Voir [`matrix::tangent`](fn@crate::ops::matrix::tangent).
+    pub fn tangent_matrix(&self, materials: &ElementField, state: &ElementField) -> Result<Matrix> {
+        tangent(self, materials, state)
+    }
+}
+
+impl Matrix {
+    /// Voir [`matrix::lump`](fn@crate::ops::matrix::lump).
+    pub fn lump(&self) -> Result<Matrix> {
+        lump(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
