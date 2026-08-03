@@ -8,9 +8,13 @@ use crate::atoms::ElementType;
 use crate::atoms::Node;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::py::coords::PyCoords;
+use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
+use crate::py::node_field::{PyNodeField, PySubNodeField};
 use crate::py::signals::PySignals;
+use crate::store::read;
+use pyo3::exceptions::PyTypeError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -328,7 +332,8 @@ pub fn points_on_torus(
 /// Errors if `mesh` has no submesh (no `Coords` to attach to).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn consolidate_mesh(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+#[pyo3(name = "consolidate_mesh")]
+pub fn consolidate(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh {
         inner: crate::ops::mesh::consolidate(&mesh.inner)?,
     })
@@ -809,4 +814,53 @@ pub fn read_gmsh_str<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let groups = crate::ops::mesh::read_gmsh_str(coords.handle.clone(), text)?;
     groups_to_dict(py, groups)
+}
+
+/// Select the part of a field's support passing a value band, zone by zone —
+/// a value-range filter returning a `Mesh`.
+///
+/// `field` may be a `NodeField` / `SubNodeField` (→ POI1 submeshes of the
+/// passing **nodes**) or an `ElementField` / `SubElementField` (→ submeshes
+/// of the passing **cells**, each of its zone's element type; a cell passes
+/// only when *all* its Gauss points do). The result has one submesh per
+/// processed zone.
+///
+/// The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+/// `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+/// (`le`/`lt`), at least one overall. With several components in play they
+/// are combined with **AND**: a point/cell is kept only when *every* tested
+/// component is in band.
+///
+/// `components=None` tests every component of each zone. A `components`
+/// list tests **only** those components, and only on the zones carrying
+/// **all** of them — a zone missing any listed component is skipped (no
+/// submesh). Errors if no bound is given, or the lower one exceeds the upper.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
+#[allow(clippy::too_many_arguments)]
+pub fn select(
+    field: &Bound<'_, PyAny>,
+    ge: Option<f64>,
+    gt: Option<f64>,
+    le: Option<f64>,
+    lt: Option<f64>,
+    components: Option<Vec<String>>,
+) -> PyResult<PyMesh> {
+    use crate::ops::field as ops;
+    let band = ops::Band::new(ge, gt, le, lt)?;
+    let inner = if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
+        crate::ops::mesh::select_nodes(&f.inner, &band, components)?
+    } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
+        crate::ops::mesh::select_cells(&f.inner, &band, components)?
+    } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
+        crate::ops::mesh::select_sub_nodes(&*read(&f.handle)?, &band, components)?
+    } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
+        crate::ops::mesh::select_sub_cells(&*read(&f.handle)?, &band, components)?
+    } else {
+        return Err(PyTypeError::new_err(
+            "expected a NodeField, SubNodeField, ElementField or SubElementField",
+        ));
+    };
+    Ok(PyMesh { inner })
 }

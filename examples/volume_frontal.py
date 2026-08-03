@@ -1,4 +1,4 @@
-"""Hexahedral boundary layer over a tetrahedral core (`pyrucast.mesher.pave_volume`).
+"""Hexahedral boundary layer over a tetrahedral core (`pyrucast.mesh.pave_volume`).
 
 Builds a box, takes its skin, and meshes the inside with hexahedra against the
 boundary and tetrahedra in the middle — the two joined by pyramids, the one
@@ -30,12 +30,10 @@ def box_skin(n: int) -> pc.Mesh:
     # inside out.
     ring = None
     for p, q in ((a, d), (d, c), (c, b), (b, a)):
-        seg = pc.mesher.line(p, q, n)
+        seg = pc.mesh.line(p, q, n)
         ring = seg if ring is None else ring | seg
-    face = pc.mesher.pave_surface(
-        pc.mesher.consolidate_mesh(ring), "QUA4", all_quad=True
-    )
-    return pc.mesher.skin(pc.mesher.extrude(face, [0.0, 1.0, 0.0], n))
+    face = pc.mesh.pave_surface(pc.mesh.consolidate(ring), "QUA4", all_quad=True)
+    return pc.mesh.skin(pc.mesh.extrude(face, [0.0, 1.0, 0.0], n))
 
 
 def main() -> None:
@@ -43,18 +41,18 @@ def main() -> None:
     print("peau       :", dict(zip(skin.element_types(), skin.cell_counts())))
 
     # One layer of hexahedra, then tetrahedra for the rest.
-    mesh = pc.mesher.pave_volume(skin, layers=1, thickness=0.08, size=0.2)
+    mesh = pc.mesh.pave_volume(skin, layers=1, thickness=0.08, size=0.2)
     print("pave_volume:", dict(zip(mesh.element_types(), mesh.cell_counts())))
 
     # Two layers: the front advances again on what it left behind.
-    thick = pc.mesher.pave_volume(skin, layers=2, thickness=0.06, size=0.2)
+    thick = pc.mesh.pave_volume(skin, layers=2, thickness=0.06, size=0.2)
     print("2 couches  :", dict(zip(thick.element_types(), thick.cell_counts())))
 
     # For comparison, the all-tetrahedron mesher on the same skin. It needs a
     # TRI3 envelope, hence the conversion, and `allow_surface_nodes` so it may
     # cut the envelope's facets finer where it cannot fit them as they are.
-    tets = pc.mesher.triangulate_volume(
-        pc.mesher.convert(skin, "TRI3"), 0.2, allow_surface_nodes=True
+    tets = pc.mesh.triangulate_volume(
+        pc.mesh.convert(skin, "TRI3"), 0.2, allow_surface_nodes=True
     )
     print("tout tétra :", dict(zip(tets.element_types(), tets.cell_counts())))
 

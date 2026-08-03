@@ -1,6 +1,8 @@
 # Opérateurs sur les champs
 
-Le module `ops::field` **dérive et transforme** les [champs](../field.md) :
+Les modules `ops::node_field`, `ops::element_field`, `ops::coords`,
+`ops::measure` et `ops::field` **dérivent et transforment** les
+[champs](../field.md) — chacun nommé d'après ce qu'il produit :
 coordonnées, restriction, fusion, et dérivations géométriques vers les points
 de Gauss. Ces opérateurs croisent des conteneurs (maillage + champ, espace EF
 + champ) — ce sont donc des **fonctions libres**. L'arithmétique scalaire et
@@ -15,7 +17,7 @@ chargement réparti `flux`), [Comportement](comportement.md), [Solveur](solveur.
 | Python | Effet |
 |---|---|
 | `coordinates(mesh, components=None)` | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. `None` ⇒ tous les axes présents dans la dimension du `Coords`. |
-| `set_coordinates(field, components=None)` | **écrit** les coordonnées du `Coords` actif depuis un champ `"X"/"Y"/"Z"`. |
+| `coords.set(field, components=None)` | **écrit** les coordonnées du `Coords` actif depuis un champ `"X"/"Y"/"Z"`. |
 | `displace(field, components=None)` | **ajoute** un champ de déplacement aux coordonnées (chaque nœud distinct traité **une seule fois**). |
 
 `coordinates` est le pont géométrie → champ : on en tire un `NodeField` qu'on
@@ -29,8 +31,8 @@ configuration déformée).
 | `restrict(field, mesh)` | restreint un `NodeField` aux nœuds de `mesh` (une zone par sous-maillage cible). Le support est le **nuage POI1 canonique** du sous-maillage (`to_poi1`, matérialisé une fois et **mis en cache**) : deux restrictions sur le **même** `mesh` partagent le support ⇒ `restrict(a,mesh) - restrict(b,mesh)` se soustrait directement, et s'aligne avec `K·restrict(f,mesh)` / `solve(K,f)`. Pour les ops élément (`gradient`, `integral`, …), repasser `mesh` à côté. `0.0` pour les nœuds non couverts ; nœuds hors de `mesh` abandonnés. Erreur si `mesh` n'est pas sur le même `Coords`. |
 | `restrict_like(field, target)` | reprojette `field` sur le support **et** les composantes de `target`, zone par zone (mêmes slots que `target`) ⇒ le résultat se combine directement avec `target` par les opérateurs `+ - * /`. Nœuds/composantes de `field` absents de `target` abandonnés ; `0.0` si non couverts. Typiquement pour replier un incrément de `solve` (qui porte aussi les multiplicateurs) dans une solution courante. Erreur si `Coords` différents. |
 | `merge(a, b)` | union structurelle de deux `NodeField`, consolidée — c'est l'**alias nommé** de `a \| b`. |
-| `consolidate_node(field)` | fusionne les zones de **même support** (handle identique) en vérifiant la cohérence des valeurs partagées. |
-| `consolidate_element(field)` | fusionne les zones d'une même `FiniteElementSpace` (union des composantes) — le pendant de `|`, qui les laisse côte à côte. |
+| `node_field.consolidate(field)` | fusionne les zones de **même support** (handle identique) en vérifiant la cohérence des valeurs partagées. |
+| `element_field.consolidate(field)` | fusionne les zones d'une même `FiniteElementSpace` (union des composantes) — le pendant de `|`, qui les laisse côte à côte. |
 
 La consolidation d'un `NodeField` est exactement la **finalisation** de l'union
 `|` : après déduplication par handle, les zones définies sur le même `SubMesh`
@@ -38,7 +40,7 @@ deviennent une seule zone portant l'union de leurs composantes — une composant
 définie par plusieurs zones doit y avoir la **même valeur** partout (sinon
 erreur). Une vérification inter-supports finale impose qu'un nœud partagé par
 des zones de supports différents s'accorde sur toute composante commune.
-Le même `consolidate` accepte un `ElementField` (opération `consolidate_element`) :
+Le même `consolidate` accepte un `ElementField` (opération `element_field.consolidate`) :
 les sous-champs d'une même `FiniteElementSpace` fusionnent en une zone portant
 l'union de leurs composantes — utile pour réunir des zones matériau bâties par
 physique sur une fespace partagée (`k` thermique + `E`/`nu`/`alpha` mécanique) en
@@ -88,10 +90,10 @@ n'est moyenné ni fusionné).
 
 ```python
 # Nœuds dont la température est entre 20 et 80 °C (bornes inclusives).
-chauds = pyrucast.field.select(temperature, ge=20.0, le=80.0)
+chauds = pyrucast.mesh.select(temperature, ge=20.0, le=80.0)
 
 # Cellules dont la contrainte de von Mises dépasse un seuil (borne basse seule).
-critiques = pyrucast.field.select(sigma, ge=250e6, components=["vm"])
+critiques = pyrucast.mesh.select(sigma, ge=250e6, components=["vm"])
 ```
 
 ## Masque par valeur
@@ -364,7 +366,7 @@ import pyrucast
 
 # Énergie de déformation externe : travail des efforts nodaux dans le champ
 # de déplacement (mêmes composantes, même maillage).
-energie = pyrucast.field.xty(forces, deplacements)
+energie = pyrucast.measure.xty(forces, deplacements)
 ```
 
 ### `psca(x, y)` → champ (même saveur que les entrées)
@@ -410,9 +412,9 @@ En interne, la réduction parallèle sur les cellules passe par le driver
 import pyrucast
 
 # Résultante d'une densité de force surfacique f_y sur une plaque (via N_i).
-r_y = pyrucast.field.integral(densite, "f_y", fespace=fes)
+r_y = pyrucast.measure.integral(densite, "f_y", fespace=fes)
 # Mesure du domaine : ∫ 1 dΩ.
-aire = pyrucast.field.integral(champ_unite, "u", fespace=fes)
+aire = pyrucast.measure.integral(champ_unite, "u", fespace=fes)
 ```
 
 ### Somme et `xtx`
@@ -445,12 +447,12 @@ import pyrucast
 rx = forces.sum("f_x")
 ry = forces.sum("f_y")
 # Norme du résidu au carré, pour un test de convergence.
-r2 = pyrucast.field.xtx(residu)
+r2 = pyrucast.measure.xtx(residu)
 # Même norme, restreinte aux seules composantes de translation.
-r2_uy = pyrucast.field.xtx(residu, components=["f_y"])
+r2_uy = pyrucast.measure.xtx(residu, components=["f_y"])
 ```
 
-## À venir dans `ops::field`
+## À venir
 
 Le module est conçu pour accueillir d'autres dérivations sur le même patron
 `(champ, espace EF) → champ` : projection L² vers les nœuds (`project_to_nodes`),

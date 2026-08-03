@@ -4,42 +4,47 @@ Les **opérateurs** sont les fonctions libres de pyrucast : elles **croisent
 des conteneurs** (maillage + champ, espace EF + champ…) ou appartiennent à une
 famille d'opérateurs, par opposition aux **méthodes** qui restent sur un seul
 conteneur (cf. [Conventions](conventions.md)). Côté Rust elles vivent sous
-`src/ops/<thème>` ; côté Python elles sont exposées **à plat** au top-level
-(`pyrucast.field.coordinates`, `pyrucast.assemble.stiffness`, …).
+`src/ops/<module>`, où le module porte le nom du **conteneur produit** ; côté
+Python elles sont exposées dans le sous-module de même nom
+(`pyrucast.node_field.coordinates`, `pyrucast.matrix.stiffness`, …).
 
-Cette partie suit **exactement les thèmes des modules `ops/`** : un chapitre
-par module, plus la visualisation (qui vit sous `src/viz/`).
+Les chapitres qui suivent sont organisés **par sujet**, ce qui ne recoupe pas
+toujours le module d'implémentation — la colonne de gauche donne la
+correspondance.
 
 | Module Rust | Chapitre | Contenu |
 |---|---|---|
-| `ops::mesher` | [Maillage](operateurs/maillage.md) | `line`, `circle`, `arc`, `extrude`, `sweep`, `transfinite` (DALL), `sweep_solid`, `translate`, `rotate`, `triangulate_surface`, `pave_surface`, `triangulate_volume`, `pave_volume`, `border`, `skin`, `orient`, `invert`, `elements_on`, sélection de nœuds par région (`points_in_sphere`, `points_on_plane`, `points_in_cylinder`, `points_on_cone`, `points_on_torus`…), `merge_nodes`, `read_gmsh`, `to_poi1`, `to_quadratic`, `convert`, `barycenter`, `consolidate_mesh`… |
-| `ops::build` | [Construction](operateurs/construction.md) | champs matériau (`material_field`…) |
+| `ops::mesh` | [Maillage](operateurs/maillage.md) | `line`, `circle`, `arc`, `extrude`, `sweep`, `transfinite` (DALL), `sweep_solid`, `translate`, `rotate`, `triangulate_surface`, `pave_surface`, `triangulate_volume`, `pave_volume`, `border`, `skin`, `orient`, `invert`, `elements_on`, sélection de nœuds par région (`points_in_sphere`, `points_on_plane`, `points_in_cylinder`, `points_on_cone`, `points_on_torus`…), `merge_nodes`, `read_gmsh`, `to_poi1`, `to_quadratic`, `convert`, `barycenter`, `mesh.consolidate`… |
+| `ops::element_field` | [Construction](operateurs/construction.md) | champs matériau (`material_field`…) |
+| `ops::coords` | [Champs](operateurs/champs.md) | `set`, `displace` — les deux seuls opérateurs qui écrivent la géométrie |
+| `ops::measure` | [Champs](operateurs/champs.md) | `integral` / `integral_element` (`∫ f dΩ`), `xtx` / `xty` (produits scalaires globaux) |
 | `ops::geom` | [Géométrie](operateurs/geometrie.md) | `locate_points` (mapping inverse, baignage), `project_points` (projection sur surface, contact), `nearest_node` (nœud le plus proche d'un point) |
-| `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `interp_to_gauss` (nœuds → Gauss), `thermal_strain` (déformation thermique `EPTH`), `restrict`, `restrict_like` (reprojection sur le support d'un champ cible), `select`, `mask`, `filter_components` / `rename_component` (extraction et renommage de composantes, `EXCO`), `merge`, `consolidate_node` / `consolidate_element`, `integral` / `integral_element` (intégrale `∫ f dΩ`), `xty` / `xtx` (produits scalaires globaux) / `psca` (produit scalaire nœud par nœud), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
-| `ops::assemble` | [Assemblage](operateurs/assemblage.md) | `stiffness`, `mass`, rigidité géométrique `geometric`, tangente cohérente `tangent`, concentration `lump`, composition `assemble` (réassemble depuis les blocs seuls, sans `Model`), chargement réparti `flux`, forces internes `internal_forces` / `internal_forces_continuum` (le `BSIG`, `∫ Bᵀ σ`) |
-| `ops::behavior` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`) |
+| `ops::node_field`, `ops::element_field`, `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `interp_to_gauss` (nœuds → Gauss), `thermal_strain` (déformation thermique `EPTH`), `restrict`, `restrict_like` (reprojection sur le support d'un champ cible), `select`, `mask`, `filter_components` / `rename_component` (extraction et renommage de composantes, `EXCO`), `merge`, `node_field.consolidate` / `element_field.consolidate`, `integral` / `integral_element` (intégrale `∫ f dΩ`), `xty` / `xtx` (produits scalaires globaux) / `psca` (produit scalaire nœud par nœud), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
+| `ops::matrix` | [Assemblage](operateurs/assemblage.md) | `stiffness`, `mass`, rigidité géométrique `geometric`, tangente cohérente `tangent`, concentration `lump`, composition `assemble` (réassemble depuis les blocs seuls, sans `Model`), chargement réparti `flux`, forces internes `internal_forces` / `internal_forces_continuum` (le `BSIG`, `∫ Bᵀ σ`) |
+| `ops::element_field::behavior` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`) |
 | `ops::solver` | [Solveur](operateurs/solveur.md) | `solve` (LU creux, Lagrange), `solve_eliminate` (condensation MPC), `solve_unilateral` (actif/inactif, relations unilatérales) |
 | `ops::export` | [Visualisation](visualization.md) | `export_vtk` (maillage / champ → VTK pour ParaView) |
 | `src/viz` | [Visualisation](visualization.md) | tracé des maillages, coloration par champ |
 
-Le découpage est **par thème, pas par conteneur** : `gradient(field, fespace)`
-vit à côté de `divergence`, pas dans `mesh.rs` *ou* `node_field.rs`. Le binding
-Python reste un miroir 1:1 — voir
+Le découpage est **par conteneur produit** : `gradient(field, fespace)` rend un
+`ElementField`, il vit donc dans `ops::element_field` à côté de `deformation`,
+et non avec `divergence` (qui rend un champ nodal). Une opération se range par
+sa sortie, jamais par son entrée. Le binding Python reste un miroir 1:1 — voir
 [Correspondance Rust ↔ Python](correspondance-rust-python.md).
 
 La **chaîne typique** d'un calcul enchaîne ces opérateurs :
 
 ```text
-mesher ──► (Mesh) ──► FiniteElementSpace
-                          │
-build ── material_field ──┤
-                          ▼
-assemble ── stiffness ──► (Matrix) ──┐
-field ── flux/coordinates ──► (RHS) ─┤
-                                     ▼
+mesh ──► (Mesh) ──► FiniteElementSpace
+                                 │
+element_field ── material_field ─┤
+                                 ▼
+matrix ── stiffness ──────────► (Matrix) ──┐
+node_field ── flux/coordinates ──► (RHS) ──┤
+                                           ▼
                           solver ── solve ──► (NodeField solution)
-                                     │
-                          field ── deformation ──► behavior ── integrate ──► (efforts)
+                                           │
+   element_field ── deformation ──► element_field.behavior ── integrate ──► (efforts)
                                      │
                                      ▼
                                    viz ── plot

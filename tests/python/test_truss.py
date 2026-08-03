@@ -5,8 +5,8 @@ import pyrucast
 
 def _clamp(c, node, var, dual):
     """Homogeneous Dirichlet (u = 0) on `var` at `node` (imposed value 0)."""
-    imposed = pyrucast.mesher.poi1_from_nodes([node])
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes([node])
+    multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -25,14 +25,14 @@ def test_truss_bar_axial_elongation():
     model = model | _clamp(c, n0, "u_y", "f_y")
     model = model | _clamp(c, n1, "u_y", "f_y")  # bar has no transverse stiffness
 
-    materials = pyrucast.build.material_field(model, [("E", E), ("A", A)])
+    materials = pyrucast.element_field.material_field(model, [("E", E), ("A", A)])
 
     load_mesh = pyrucast.Mesh(c, "POI1")
     load_mesh.unit().add_cell([n1])
     rhs = pyrucast.NodeField(load_mesh, ["f_x"])
     rhs[0].set_value(n1, "f_x", F)
 
-    K = pyrucast.assemble.stiffness(model, materials)
+    K = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K, rhs)
 
     expected = F * L / (E * A)

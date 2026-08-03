@@ -1,8 +1,10 @@
 # Opérateurs d'assemblage
 
-Le module `ops::assemble` transforme un [`Model`](../model.md) en une
-[`Matrice`](../matrix.md) (raideur, masse) et fabrique les **seconds membres**
-répartis. Les intégrandes par physique vivent sous `src/models/` ; cette couche
+Le module `ops::matrix` transforme un [`Model`](../model.md) en une
+[`Matrice`](../matrix.md) (raideur, masse). Les **seconds membres** répartis
+— `flux`, `internal_forces` — sont eux aussi des assemblages, mais leur
+résultat est un vecteur nodal : on se range par la sortie, ils vivent donc
+sous `ops::node_field`. Les intégrandes par physique vivent sous `src/models/` ; cette couche
 **oriente** : boucle sur les sous-modèles, mise en place des DOFs, accumulation
 dans la matrice globale.
 
@@ -21,8 +23,8 @@ sous-modèle qui en a besoin, l'assembleur sélectionne la zone dont le
 sous-modèles sans matériau (Dirichlet…) ignorent ce champ.
 
 ```python
-materials = pyrucast.build.material_field(model, [("k", 1.0)])
-K = pyrucast.assemble.stiffness(model, materials)
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+K = pyrucast.matrix.stiffness(model, materials)
 print(K)  # Matrix: n row(s) × n col(s), …
 ```
 
@@ -40,10 +42,10 @@ densité `rho` est une composante **facultative** des physiques mécaniques (com
 n'en a pas besoin, mais la masse / capacité les exige (erreur claire sinon).
 
 ```python
-materials = pyrucast.build.material_field(
+materials = pyrucast.element_field.material_field(
     model, [("E", 210.0), ("nu", 0.3), ("rho", 7800.0)]
 )
-M = pyrucast.assemble.mass(model, materials)
+M = pyrucast.matrix.mass(model, materials)
 ```
 
 ## `lump(matrix)` → `Matrix`
@@ -56,8 +58,8 @@ masse totale (`Σ_i M_lump[i,i] = Σ_ij M[i,j]`) — la forme découplée bon ma
 schémas explicites. La matrice d'entrée doit être assemblée et carrée.
 
 ```python
-M = pyrucast.assemble.mass(model, materials)
-M_lumped = pyrucast.assemble.lump(M)  # diagonale
+M = pyrucast.matrix.mass(model, materials)
+M_lumped = pyrucast.matrix.lump(M)  # diagonale
 ```
 
 ## `geometric(model, materials, stress)` → `Matrix`
@@ -72,7 +74,7 @@ pour le flambement et les analyses précontraintes. Le noyau
 `materials`. `materials` sert encore à résoudre chaque zone mécanique (`E`, `nu`).
 
 ```python
-Kg = pyrucast.assemble.geometric(model, materials, stress)
+Kg = pyrucast.matrix.geometric(model, materials, stress)
 ```
 
 ## `tangent(model, materials, state)` → `Matrix`
@@ -89,9 +91,9 @@ physique **linéaire** (élasticité) la tangente vaut la rigidité élastique e
 consomme. `materials` résout chaque zone comme `stiffness`.
 
 ```python
-strain = pyrucast.field.deformation(u, fes)
-state = pyrucast.behavior.integrate_behavior(model, strain, materials)
-Kt = pyrucast.assemble.tangent(model, materials, state)
+strain = pyrucast.element_field.deformation(u, fes)
+state = pyrucast.element_field.integrate_behavior(model, strain, materials)
+Kt = pyrucast.matrix.tangent(model, materials, state)
 ```
 
 ## Composition : `assemble(&mut Matrix)`
@@ -100,7 +102,7 @@ Kt = pyrucast.assemble.tangent(model, materials, state)
 produites au scatter) que `Matrix::finalize` ne sait pas assembler seul. Pour
 **recomposer** — ajouter une `SubMatrix` de provenance quelconque à une matrice
 existante (ou combiner plusieurs `Matrix` déjà assemblées via l'union `|`) puis
-réassembler — `ops::assemble::assemble(&mut m)` (Rust) / `pyrucast.assemble.assemble(m)`
+réassembler — `ops::matrix::assemble(&mut m)` (Rust) / `pyrucast.matrix.assemble(m)`
 (Python, mutation en place) reconstruit le motif creux depuis les **blocs seuls**
 (sans `Model`) et redisperse les valeurs :
 
@@ -111,9 +113,9 @@ assemble::assemble(&mut k)?;                // réassemble, nouveau bloc inclus
 ```
 
 ```python
-k = pyrucast.assemble.stiffness(model, materials)
+k = pyrucast.matrix.stiffness(model, materials)
 k.add_sub(bloc_supplementaire)
-pyrucast.assemble.assemble(k)
+pyrucast.matrix.assemble(k)
 ```
 
 Contrairement à `stiffness`, ce chemin ne consulte pas le motif mémoïsé sur le
@@ -129,7 +131,7 @@ s'obtient sans opérateur dédié :
 
 ```python
 sys = (m / dt) | k
-pyrucast.assemble.assemble(sys)
+pyrucast.matrix.assemble(sys)
 u = pyrucast.solver.solve(sys, rhs)
 ```
 
@@ -154,7 +156,7 @@ avec le reste du chargement par l'union `|`.
 
 ```python
 # Flux uniforme Q sur le bord gauche (maillage SEG2), composante duale "q".
-load = pyrucast.assemble.flux(edge_fes.unit(), Q, "q")
+load = pyrucast.node_field.flux(edge_fes.unit(), Q, "q")
 rhs = load | other_loads
 ```
 

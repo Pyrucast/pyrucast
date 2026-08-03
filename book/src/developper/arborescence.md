@@ -5,6 +5,11 @@ La carte des sources : où vit chaque morceau. La règle d'or est la
 (`containers/`) ne connaissent pas les opérateurs (`ops/`), et le binding
 Python (`py/`) est un miroir 1:1 qui n'ajoute aucune logique.
 
+Deux découpages secondaires en découlent, et l'arborescence les rend
+visibles : les types indivisibles vivent dans `atoms/` (seul un conteneur
+peut être le sujet d'un opérateur), et chaque module d'`ops/` porte le nom
+du **conteneur qu'il produit**.
+
 ```text
 src/
 ├── lib.rs              # racine de la crate + #[pymodule] (enregistrement Python)
@@ -15,19 +20,22 @@ src/
 ├── dump.rs             # trait Dump (3ᵉ niveau d'affichage : contenu intégral)
 ├── aggregate.rs        # trait Aggregate + macros (len/[i]/union, pyméthodes)
 │
-├── containers/         # LES OBJETS (structures de données, aucune dépendance à ops/)
+├── coords.rs           # LE MAGASIN : Coords (jeux de coordonnées, refcount par nœud)
+│
+├── atoms/              # LES INSÉCABLES (jamais sujet d'un opérateur)
 │   ├── mod.rs
-│   ├── mesh/
-│   │   ├── mod.rs          # Mesh, SubMesh
-│   │   ├── coords.rs       # Coords (jeux de coordonnées, refcount par nœud)
-│   │   ├── node.rs         # Node (accesseur RAII)
-│   │   ├── cell.rs         # Cell (vue d'une cellule)
-│   │   ├── element_type.rs # enum ElementType + métadonnées
-│   │   ├── point.rs        # Point2 / Point3 (géométrie nalgebra)
-│   │   └── color.rs        # RgbColor (couleur de face, viz)
+│   ├── node.rs         # Node (accesseur RAII) + NodeId
+│   ├── cell.rs         # Cell (désigne une maille d'un SubMesh)
+│   ├── element.rs      # Element (désigne un élément d'un SubFiniteElementSpace)
+│   ├── element_type.rs # enum ElementType + métadonnées
+│   ├── point.rs        # Point2 / Point3 / Vector2 / Vector3 (nalgebra)
+│   └── color.rs        # RgbColor (couleur de face, viz)
+│
+├── containers/         # LES DIVISIBLES (structures de données, aucune dépendance à ops/)
+│   ├── mod.rs
+│   ├── mesh.rs         # Mesh, SubMesh
 │   ├── finite_element_space/
 │   │   ├── mod.rs          # FiniteElementSpace, SubFiniteElementSpace
-│   │   ├── element.rs      # Element (vue d'un élément)
 │   │   ├── interpolation.rs# enum Interpolation (Lagrange1, fonctions de forme)
 │   │   └── quadrature.rs   # enum QuadratureRule (Gauss, Reduced)
 │   ├── field.rs        # traits Field / SubField (contrat commun des champs)
@@ -47,25 +55,30 @@ src/
 │   ├── frame3d.rs         # cadre 3D
 │   └── dirichlet.rs       # contrainte (multiplicateurs de Lagrange)
 │
-├── ops/                # LES OPÉRATEURS (fonctions libres, par thème)
+├── ops/                # LES OPÉRATEURS — un module par conteneur produit
 │   ├── mod.rs
-│   ├── mesher/         # construction de maillages (line, triangulate_surface, …)
+│   ├── mesh/           # → Mesh : mailleurs, transformations, select
 │   │   ├── triangulation/  # briques 2D Delaunay (ear clipping, CDT, Ruppert)
 │   │   ├── tetrahedralization/  # briques 3D Delaunay (prédicats exacts, …)
 │   │   ├── paving/         # front avançant 2D (pave_surface)
 │   │   └── plaster/        # front avançant 3D (pave_volume)
-│   ├── build/          # construction de champs (material_field)
-│   ├── geom/           # mesures géométriques (réservé)
-│   ├── field/          # gradient, divergence, deformation, restrict, …
-│   ├── assemble/       # stiffness, mass, flux
-│   ├── behavior.rs     # integrate (COMP)
-│   ├── solver/         # solve (LU dense, lu.rs)
-│   └── export/         # export VTK (read_gmsh côté mesher ; export_vtk ici)
+│   ├── node_field/     # → NodeField : coordinates, divergence, restrict, flux, …
+│   ├── element_field/  # → ElementField : gradient, deformation, material_field
+│   │   └── behavior.rs     # intégration de la loi de comportement (COMP)
+│   ├── matrix.rs       # → Matrix : stiffness, mass, geometric, tangent, lump
+│   ├── coords.rs       # écrit dans le magasin : set, displace
+│   ├── measure/        # → un nombre : integral, xtx, xty
+│   ├── geom/           # → une position : locate_points, project_points, nearest_node
+│   ├── field/          # polymorphe champ → même champ : mask, maths élémentaires
+│   ├── solver/         # → NodeField (l'exception nommée) : solve, eliminate, unilateral
+│   ├── export/         # effets de bord : export VTK (read_gmsh côté mesh)
+│   ├── coloring.rs     # machinerie d'assemblage partagée (pas un opérateur)
+│   └── scatter.rs      # idem
 │
 ├── py/                 # BINDING PyO3 (miroir 1:1 de containers/ + ops/)
 │   ├── mod.rs
 │   ├── coords.rs, node.rs, cell.rs, mesh.rs, …   # un wrapper Py<Foo> par objet
-│   └── ops/            # un wrapper par famille d'opérateurs
+│   └── ops/            # un wrapper par module d'opérateurs
 │
 ├── viz/                # VISUALISATION (feature `viz` / `viz-interactive`)
 │   ├── mod.rs, drawable.rs, mesh_draw.rs, camera.rs, field_color.rs, …
@@ -164,7 +177,7 @@ trait `SubModelKind` — voir [Ajouter une physique](../ajouter-une-physique.md)
 
 | Pour ajouter… | Toucher principalement |
 |---|---|
-| un type d'élément | `containers/mesh/element_type.rs`, `containers/finite_element_space/{interpolation,quadrature}.rs` ([guide](ajouter-un-element-fini.md)) |
+| un type d'élément | `atoms/element_type.rs`, `containers/finite_element_space/{interpolation,quadrature}.rs` ([guide](ajouter-un-element-fini.md)) |
 | une physique | `models/<nom>.rs` + 2 lignes dans `containers/model.rs` + 1 dans `py/model.rs` ([guide](../ajouter-une-physique.md)) |
-| un opérateur | `ops/<thème>/<nom>.rs` + son wrapper `py/ops/<thème>.rs` |
+| un opérateur | `ops/<conteneur produit>/<nom>.rs` + son wrapper `py/ops/<même module>.rs` |
 | un objet conteneur | `containers/<nom>.rs` + `py/<nom>.rs` + un chapitre de doc |

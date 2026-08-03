@@ -1,4 +1,4 @@
-"""Python tests for `pyrucast.mesher.circle`."""
+"""Python tests for `pyrucast.mesh.circle`."""
 
 import pyrucast
 
@@ -6,7 +6,7 @@ import pyrucast
 def test_circle_full_default_seg2():
     c = pyrucast.Coords(2)
     center = c.add_node([0.0, 0.0])
-    mesh = pyrucast.mesher.circle(center, [0.0, 0.0, 1.0], 1.0, 8)
+    mesh = pyrucast.mesh.circle(center, [0.0, 0.0, 1.0], 1.0, 8)
     assert mesh.element_types() == ["SEG2"]
     assert mesh.cell_count() == 8
 
@@ -14,7 +14,7 @@ def test_circle_full_default_seg2():
 def test_circle_full_seg3():
     c = pyrucast.Coords(2)
     center = c.add_node([0.0, 0.0])
-    mesh = pyrucast.mesher.circle(center, [0.0, 0.0, 1.0], 1.0, 6, element_type="SEG3")
+    mesh = pyrucast.mesh.circle(center, [0.0, 0.0, 1.0], 1.0, 6, element_type="SEG3")
     assert mesh.element_types() == ["SEG3"]
     assert mesh.cell_count() == 6
 
@@ -23,7 +23,7 @@ def test_circle_unknown_element_type_raises():
     c = pyrucast.Coords(2)
     center = c.add_node([0.0, 0.0])
     try:
-        pyrucast.mesher.circle(center, [0.0, 0.0, 1.0], 1.0, 8, element_type="BOGUS")
+        pyrucast.mesh.circle(center, [0.0, 0.0, 1.0], 1.0, 8, element_type="BOGUS")
     except ValueError:
         pass
     else:

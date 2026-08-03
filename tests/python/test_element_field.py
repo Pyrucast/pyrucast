@@ -459,7 +459,7 @@ def test_consolidate_element_fuses_component_disjoint_zones():
     union = a | b
     assert len(union) == 2  # two zones side by side (ElementField union does not fuse)
 
-    fused = pyrucast.field.consolidate_element(union)
+    fused = pyrucast.element_field.consolidate(union)
     assert len(fused) == 1
     sub = fused[0]
     assert set(sub.components()) == {"k", "E"}

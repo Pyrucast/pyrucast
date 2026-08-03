@@ -93,7 +93,7 @@ déduit, et l'axisymétrie lit l'orthoradiale `ε_θθ = u_r/r` mesurée.
 import pyrucast
 
 model = pyrucast.Model.mazars(fes, "plane_stress")
-materials = pyrucast.build.material_field(
+materials = pyrucast.element_field.material_field(
     model,
     [
         ("E", 30_000.0),
@@ -106,8 +106,10 @@ materials = pyrucast.build.material_field(
     ],
 )
 
-strain = pyrucast.field.deformation(u, fes)
-state = pyrucast.behavior.integrate_behavior(model, strain, materials, prev=prev_state)
+strain = pyrucast.element_field.deformation(u, fes)
+state = pyrucast.element_field.integrate_behavior(
+    model, strain, materials, prev=prev_state
+)
 d = state[0].value(0, 0, "damage")  # endommagement scalaire D
 kappa = state[0].value(0, 0, "kappa")  # variable d'historique
 ```

@@ -250,7 +250,7 @@ def test_coordinates_poi1_mesh_xyz():
     mesh.unit().add_cell([a])
     mesh.unit().add_cell([b])
 
-    f = pyrucast.field.coordinates(mesh)
+    f = pyrucast.node_field.coordinates(mesh)
     assert f.components() == ["X", "Y", "Z"]
     assert f.node_count() == 2
     assert f.value(a, "X") == 1.0
@@ -270,7 +270,7 @@ def test_coordinates_converts_non_poi1_and_deduplicates():
     tri.unit().add_cell([a, b, cc])
     tri.unit().add_cell([b, d, cc])
 
-    f = pyrucast.field.coordinates(tri)
+    f = pyrucast.node_field.coordinates(tri)
     assert f.components() == ["X", "Y"]  # 2-D ⇒ X, Y only
     assert f.node_count() == 4  # shared nodes appear once
     assert f.value(cc, "X") == 0.5
@@ -283,7 +283,7 @@ def test_coordinates_component_subset():
     mesh = pyrucast.Mesh(c, "POI1")
     mesh.unit().add_cell([a])
 
-    f = pyrucast.field.coordinates(mesh, ["X", "Z"])
+    f = pyrucast.node_field.coordinates(mesh, ["X", "Z"])
     assert f.components() == ["X", "Z"]
     assert f.value(a, "X") == 1.0
     assert f.value(a, "Z") == 3.0
@@ -295,7 +295,7 @@ def test_coordinates_rejects_axis_beyond_dimension():
     mesh = pyrucast.Mesh(c, "POI1")
     mesh.unit().add_cell([a])
     try:
-        pyrucast.field.coordinates(mesh, ["Z"])  # no Z in 2-D
+        pyrucast.node_field.coordinates(mesh, ["Z"])  # no Z in 2-D
     except RuntimeError:
         pass
     else:
@@ -311,10 +311,10 @@ def test_set_coordinates_writes_positions():
     mesh.unit().add_cell([b])
 
     # Read current positions into a field, move node a, write it all back.
-    f = pyrucast.field.coordinates(mesh)  # components X, Y
+    f = pyrucast.node_field.coordinates(mesh)  # components X, Y
     f[0][a, "X"] = 10.0
     f[0][a, "Y"] = 20.0
-    pyrucast.field.set_coordinates(f)  # default components ["X", "Y"]
+    pyrucast.coords.set(f)  # default components ["X", "Y"]
     assert a.coord() == [10.0, 20.0]
     assert b.coord() == [1.0, 1.0]
 
@@ -331,7 +331,7 @@ def test_displace_adds_displacement():
     d[0][a, "ux"] = 5.0
     d[0][a, "uy"] = -1.0
     d[0][b, "ux"] = 2.0
-    pyrucast.field.displace(d)  # default components ["ux", "uy"]
+    pyrucast.coords.displace(d)  # default components ["ux", "uy"]
     assert a.coord() == [5.0, -1.0]
     assert b.coord() == [3.0, 1.0]
 
@@ -536,7 +536,7 @@ def test_merge_compatible_and_conflict():
     b[0].set_value(n1, "T", 3.0)  # same value at the shared node → compatible
     b[0].set_value(n2, "T", 9.0)
 
-    m = pyrucast.field.merge(a, b)
+    m = pyrucast.node_field.merge(a, b)
     assert m.node_count() == 3
     assert m.value(n0, "T") == 5.0
     assert m.value(n1, "T") == 3.0
@@ -545,7 +545,7 @@ def test_merge_compatible_and_conflict():
     # Conflicting value at the shared node → error.
     b[0].set_value(n1, "T", 7.0)
     try:
-        pyrucast.field.merge(a, b)
+        pyrucast.node_field.merge(a, b)
     except RuntimeError:
         pass
     else:
@@ -563,7 +563,7 @@ def test_restrict_to_mesh_subset():
     mesh.unit().add_cell([nodes[0]])
     mesh.unit().add_cell([nodes[2]])
 
-    r = pyrucast.field.restrict(f, mesh)
+    r = pyrucast.node_field.restrict(f, mesh)
     assert r.node_count() == 2
     assert r.value(nodes[0], "T") == 1.0
     assert r.value(nodes[2], "T") == 3.0
@@ -590,8 +590,8 @@ def test_restrict_twice_to_element_mesh_is_subtractable():
         f[0].set_value(d, "v", vd)
         return f
 
-    a2 = pyrucast.field.restrict(field(1.0, 2.0, 3.0), tri)
-    b2 = pyrucast.field.restrict(field(0.5, 0.5, 0.5), tri)
+    a2 = pyrucast.node_field.restrict(field(1.0, 2.0, 3.0), tri)
+    b2 = pyrucast.node_field.restrict(field(0.5, 0.5, 0.5), tri)
 
     # Shared support ⇒ genuine difference (else a2's values would pass through).
     diff = a2 - b2
@@ -616,7 +616,7 @@ def test_restrict_like_lands_on_target_support():
     source[0].set_value(nodes[2], "u_x", 9.0)  # node dropped
     source[0].set_value(nodes[0], "lambda", 7.0)  # component dropped
 
-    r = pyrucast.field.restrict_like(source, target)
+    r = pyrucast.node_field.restrict_like(source, target)
     assert r.node_count() == 2
     assert r.value(nodes[0], "u_x") == 1.0
     assert r.value(nodes[1], "u_y") == 2.0
@@ -674,7 +674,7 @@ def test_consolidate_node_keeps_distinct_supports_separate():
     f[1].set_value(nodes[1], "T", 2.0)  # interface: same value
     f[1].set_value(nodes[3], "T", 4.0)
 
-    g = pyrucast.field.consolidate_node(f)
+    g = pyrucast.node_field.consolidate(f)
     assert len(g) == 2
     assert g.node_count() == 4
     assert g.value(nodes[1], "T") == 2.0
@@ -687,7 +687,7 @@ def test_consolidate_node_rejects_incoherent_field():
     f[0].set_value(nodes[1], "T", 1.0)
     f[1].set_value(nodes[1], "T", 2.0)
     try:
-        pyrucast.field.consolidate_node(f)
+        pyrucast.node_field.consolidate(f)
     except RuntimeError:
         pass
     else:
@@ -697,7 +697,7 @@ def test_consolidate_node_rejects_incoherent_field():
 def test_consolidate_node_keeps_distinct_component_sets_separate():
     c, nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField.with_components_per_submesh(mesh, [["T"], ["UX", "UY"]])
-    g = pyrucast.field.consolidate_node(f)
+    g = pyrucast.node_field.consolidate(f)
     assert len(g) == 2
     assert g.components() == ["T", "UX", "UY"]
 

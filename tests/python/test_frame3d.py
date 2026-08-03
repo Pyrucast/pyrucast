@@ -4,8 +4,8 @@ import pyrucast
 
 
 def _clamp(node, var, dual):
-    imposed = pyrucast.mesher.poi1_from_nodes([node])
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes([node])
+    multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -32,7 +32,7 @@ def test_cantilever_bending_and_torsion():
         ("r_z", "m_z"),
     ):
         model = model | _clamp(nodes[0], var, dual)
-    materials = pyrucast.build.material_field(
+    materials = pyrucast.element_field.material_field(
         model,
         [
             ("E", E),
@@ -52,7 +52,7 @@ def test_cantilever_bending_and_torsion():
     rhs[0].set_value(nodes[-1], "f_y", PY)
     rhs[0].set_value(nodes[-1], "f_z", PZ)
     rhs[0].set_value(nodes[-1], "m_x", MX)
-    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 
     tip = nodes[-1]
     tol = 1e-9

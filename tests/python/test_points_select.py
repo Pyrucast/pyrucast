@@ -36,11 +36,11 @@ def test_sphere_in_and_on_2d():
     # Croix de 5 points autour de l'origine, à distance 0 et 1.
     _, m = _cloud(2, [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [2.0, 0.0]])
 
-    inside = pyrucast.mesher.points_in_sphere(m, [0.0, 0.0], 1.0)
+    inside = pyrucast.mesh.points_in_sphere(m, [0.0, 0.0], 1.0)
     assert _coords_of(inside) == [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 
     # Le disque plein perd son centre quand on ne garde que le cercle.
-    on = pyrucast.mesher.points_on_sphere(m, [0.0, 0.0], 1.0)
+    on = pyrucast.mesh.points_on_sphere(m, [0.0, 0.0], 1.0)
     assert _coords_of(on) == [[1.0, 0.0], [0.0, 1.0]]
 
 
@@ -51,15 +51,15 @@ def test_plane_on_and_below():
     _, m = _cloud(3, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
 
     # La face z = 0 : la normale n'a pas besoin d'être unitaire.
-    face = pyrucast.mesher.points_on_plane(m, [0.0, 0.0, 0.0], [0.0, 0.0, 3.0])
+    face = pyrucast.mesh.points_on_plane(m, [0.0, 0.0, 0.0], [0.0, 0.0, 3.0])
     assert _coords_of(face) == [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
 
     # Sous le plan z = 1 : tout le monde (le plan est inclus).
-    below = pyrucast.mesher.points_below_plane(m, [0.0, 0.0, 1.0], [0.0, 0.0, 1.0])
+    below = pyrucast.mesh.points_below_plane(m, [0.0, 0.0, 1.0], [0.0, 0.0, 1.0])
     assert len(_coords_of(below)) == 3
 
     # Normale retournée : l'autre demi-espace, plan compris.
-    above = pyrucast.mesher.points_below_plane(m, [0.0, 0.0, 1.0], [0.0, 0.0, -1.0])
+    above = pyrucast.mesh.points_below_plane(m, [0.0, 0.0, 1.0], [0.0, 0.0, -1.0])
     assert _coords_of(above) == [[0.0, 0.0, 1.0]]
 
 
@@ -70,11 +70,11 @@ def test_line_is_infinite_where_the_cylinder_is_capped():
     _, m = _cloud(2, [[0.0, 0.0], [1.0, 1.0], [3.0, 3.0], [1.0, 0.0]])
 
     # La droite passe par les trois points de la diagonale, même au-delà de b.
-    on_line = pyrucast.mesher.points_on_line(m, [0.0, 0.0], [1.0, 1.0])
+    on_line = pyrucast.mesh.points_on_line(m, [0.0, 0.0], [1.0, 1.0])
     assert _coords_of(on_line) == [[0.0, 0.0], [1.0, 1.0], [3.0, 3.0]]
 
     # Le cylindre, lui, s'arrête à sa section d'extrémité.
-    capped = pyrucast.mesher.points_in_cylinder(m, [0.0, 0.0], [1.0, 1.0], 1e-9)
+    capped = pyrucast.mesh.points_in_cylinder(m, [0.0, 0.0], [1.0, 1.0], 1e-9)
     assert _coords_of(capped) == [[0.0, 0.0], [1.0, 1.0]]
 
 
@@ -90,10 +90,10 @@ def test_cylinder_surface_excludes_the_end_discs():
     )
     base, top = [0.0, 0.0, 0.0], [0.0, 0.0, 2.0]
 
-    lateral = pyrucast.mesher.points_on_cylinder(m, base, top, 1.0)
+    lateral = pyrucast.mesh.points_on_cylinder(m, base, top, 1.0)
     assert _coords_of(lateral) == [[1.0, 0.0, 1.0]]
 
-    solid = pyrucast.mesher.points_in_cylinder(m, base, top, 1.0)
+    solid = pyrucast.mesh.points_in_cylinder(m, base, top, 1.0)
     assert len(_coords_of(solid)) == 3
 
 
@@ -106,14 +106,14 @@ def test_cone_defaults_to_an_apex_and_degenerates_to_a_cylinder():
     base, top = [0.0, 0.0, 0.0], [0.0, 0.0, 2.0]
 
     # top_radius vaut 0 par défaut : le cône vrai, `top` est son sommet.
-    on = pyrucast.mesher.points_on_cone(m, base, top, 2.0)
+    on = pyrucast.mesh.points_on_cone(m, base, top, 2.0)
     assert _coords_of(on) == [[1.0, 0.0, 1.0]]
 
-    inside = pyrucast.mesher.points_in_cone(m, base, top, 2.0)
+    inside = pyrucast.mesh.points_in_cone(m, base, top, 2.0)
     assert _coords_of(inside) == [[1.0, 0.0, 1.0], [0.4, 0.0, 1.0]]
 
     # Rayons égaux : un cylindre, les trois points sont dedans.
-    cyl = pyrucast.mesher.points_in_cone(m, base, top, 2.0, 2.0)
+    cyl = pyrucast.mesh.points_in_cone(m, base, top, 2.0, 2.0)
     assert len(_coords_of(cyl)) == 3
 
 
@@ -132,17 +132,17 @@ def test_torus_tube_around_its_directrix():
     )
     center, axis = [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]
 
-    on = pyrucast.mesher.points_on_torus(m, center, axis, 2.0, 0.5)
+    on = pyrucast.mesh.points_on_torus(m, center, axis, 2.0, 0.5)
     assert _coords_of(on) == [[2.5, 0.0, 0.0], [0.0, 2.0, 0.5]]
 
-    inside = pyrucast.mesher.points_in_torus(m, center, axis, 2.0, 0.5)
+    inside = pyrucast.mesh.points_in_torus(m, center, axis, 2.0, 0.5)
     assert len(_coords_of(inside)) == 3
 
 
 def test_torus_needs_a_3d_mesh():
     _, m = _cloud(2, [[0.0, 0.0]])
     with pytest.raises(RuntimeError):
-        pyrucast.mesher.points_in_torus(m, [0.0, 0.0], [0.0, 1.0], 2.0, 0.5)
+        pyrucast.mesh.points_in_torus(m, [0.0, 0.0], [0.0, 1.0], 2.0, 0.5)
 
 
 # --- structure du résultat -------------------------------------------------
@@ -160,13 +160,13 @@ def test_result_mirrors_the_submeshes_including_empty_zones():
     high.unit().add_cell([far])
     m = m | high
 
-    sel = pyrucast.mesher.points_on_plane(m, [0.0, 0.0], [0.0, 1.0])
+    sel = pyrucast.mesh.points_on_plane(m, [0.0, 0.0], [0.0, 1.0])
     assert sel.element_types() == ["POI1", "POI1"]
     # La seconde zone ne sélectionne rien mais reste présente et vide.
     assert sel.cell_counts() == [2, 0]
 
     # `consolidate_mesh` est la voie pour retomber sur un nuage unique.
-    assert pyrucast.mesher.consolidate_mesh(sel).cell_counts() == [2]
+    assert pyrucast.mesh.consolidate(sel).cell_counts() == [2]
 
 
 def test_tolerance_defaults_to_the_model_scale():
@@ -174,11 +174,11 @@ def test_tolerance_defaults_to_the_model_scale():
 
     # Précision par défaut (1e-6 × diagonale) : le second nœud est hors bande.
     assert (
-        len(_coords_of(pyrucast.mesher.points_on_plane(m, [0.0, 0.0], [0.0, 1.0]))) == 1
+        len(_coords_of(pyrucast.mesh.points_on_plane(m, [0.0, 0.0], [0.0, 1.0]))) == 1
     )
 
     # Tolérance explicite plus large que son décalage : il rentre.
-    loose = pyrucast.mesher.points_on_plane(m, [0.0, 0.0], [0.0, 1.0], tol=0.02)
+    loose = pyrucast.mesh.points_on_plane(m, [0.0, 0.0], [0.0, 1.0], tol=0.02)
     assert len(_coords_of(loose)) == 2
 
 
@@ -190,10 +190,10 @@ def test_selection_feeds_elements_on():
     m = pyrucast.Mesh(c, "QUA4")
     m.unit().add_cell(ids)
 
-    bottom = pyrucast.mesher.points_on_plane(m, [0.0, 0.0], [0.0, 1.0])
+    bottom = pyrucast.mesh.points_on_plane(m, [0.0, 0.0], [0.0, 1.0])
     assert bottom.cell_counts() == [2]
-    assert pyrucast.mesher.elements_on(m, bottom, strict=True).cell_counts() == [0]
-    assert pyrucast.mesher.elements_on(m, bottom, strict=False).cell_counts() == [1]
+    assert pyrucast.mesh.elements_on(m, bottom, strict=True).cell_counts() == [0]
+    assert pyrucast.mesh.elements_on(m, bottom, strict=False).cell_counts() == [1]
 
 
 def test_nearest_node_is_the_single_node_query():
@@ -209,15 +209,15 @@ def test_invalid_arguments_raise():
     _, m = _cloud(2, [[0.0, 0.0]])
 
     with pytest.raises(RuntimeError):  # mauvaise dimension
-        pyrucast.mesher.points_in_sphere(m, [0.0, 0.0, 0.0], 1.0)
+        pyrucast.mesh.points_in_sphere(m, [0.0, 0.0, 0.0], 1.0)
     with pytest.raises(RuntimeError):  # rayon négatif
-        pyrucast.mesher.points_in_sphere(m, [0.0, 0.0], -1.0)
+        pyrucast.mesh.points_in_sphere(m, [0.0, 0.0], -1.0)
     with pytest.raises(RuntimeError):  # tolérance négative
-        pyrucast.mesher.points_in_sphere(m, [0.0, 0.0], 1.0, tol=-1e-9)
+        pyrucast.mesh.points_in_sphere(m, [0.0, 0.0], 1.0, tol=-1e-9)
     with pytest.raises(RuntimeError):  # normale nulle
-        pyrucast.mesher.points_on_plane(m, [0.0, 0.0], [0.0, 0.0])
+        pyrucast.mesh.points_on_plane(m, [0.0, 0.0], [0.0, 0.0])
     with pytest.raises(RuntimeError):  # axe de longueur nulle
-        pyrucast.mesher.points_on_line(m, [1.0, 1.0], [1.0, 1.0])
+        pyrucast.mesh.points_on_line(m, [1.0, 1.0], [1.0, 1.0])
 
 
 def test_axisymmetric_selection_reads_the_meridian_plane():
@@ -229,6 +229,6 @@ def test_axisymmetric_selection_reads_the_meridian_plane():
     for p in ([1.0, 0.0], [0.0, 1.0], [2.0, 0.0]):
         m.unit().add_cell([c.add_node(list(p))])
 
-    on = pyrucast.mesher.points_on_sphere(m, [0.0, 0.0], 1.0)
+    on = pyrucast.mesh.points_on_sphere(m, [0.0, 0.0], 1.0)
     assert _coords_of(on) == [[1.0, 0.0], [0.0, 1.0]]
     assert math.isclose(_coords_of(on)[0][0], 1.0)

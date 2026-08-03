@@ -16,7 +16,7 @@ def test_divergence_uniform_1d_telescopes():
     field = pyrucast.ElementField(fes, ["Fx"])
     field[0].set_uniform("Fx", a)
 
-    div = pyrucast.field.divergence(field)
+    div = pyrucast.node_field.divergence(field)
     assert abs(div.value(n[0], "div") + a) < 1e-12  # −a
     assert abs(div.value(n[1], "div")) < 1e-12  # 0 (interior)
     assert abs(div.value(n[2], "div") - a) < 1e-12  # +a
@@ -32,7 +32,7 @@ def test_divergence_rejects_wrong_component_count():
     fes = pyrucast.FiniteElementSpace(mesh)
     field = pyrucast.ElementField(fes, ["Fx"])  # 1 comp on a 2-D space
     try:
-        pyrucast.field.divergence(field)
+        pyrucast.node_field.divergence(field)
     except (ValueError, RuntimeError):
         pass
     else:

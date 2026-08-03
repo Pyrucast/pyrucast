@@ -43,7 +43,7 @@ def main() -> None:
     c = pyrucast.Coords(1)
     x0 = c.add_node([0.0])
     x1 = c.add_node([1.0])
-    mesh = pyrucast.mesher.line(x0, x1, N_ELEMS)
+    mesh = pyrucast.mesh.line(x0, x1, N_ELEMS)
     # Nœuds ordonnés le long de la ligne : x0, intérieurs…, x1.
     nodes = [mesh.node(0, i, 0) for i in range(N_ELEMS)] + [x1]
     fes = pyrucast.FiniteElementSpace(mesh)
@@ -51,25 +51,25 @@ def main() -> None:
     # ── Modèle : conduction + Dirichlet T = 20 en x = 1 ──────────────────────
     # Le support des multiplicateurs est fabriqué depuis le nœud imposé par le
     # mesher `barycenter` (un nœud neuf colocalisé). Le modèle ne crée rien.
-    imposed = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+    multiplier = pyrucast.mesh.barycenter(imposed)
     mult = multiplier.node(0, 0, 0)
     model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
         "T", "q", imposed, multiplier
     )
 
     # ── Matériau : k uniforme (Dirichlet ignoré automatiquement) ─────────────
-    materials = pyrucast.build.material_field(model, [("k", K)])
+    materials = pyrucast.element_field.material_field(model, [("k", K)])
 
     # ── Chargement : source Q en x = 0 (composante duale "q"), valeur imposée
     #    T = 20 au nœud-multiplicateur (slot "imposed_T") ─────────────────────
-    load_mesh = pyrucast.mesher.poi1_from_nodes([nodes[0], mult])
+    load_mesh = pyrucast.mesh.poi1_from_nodes([nodes[0], mult])
     rhs = pyrucast.NodeField(load_mesh, ["imposed_T", "q"])
     rhs[0].set_value(nodes[0], "q", Q)
     rhs[0].set_value(mult, "imposed_T", T_IMPOSED)
 
     # ── Assemblage + résolution ──────────────────────────────────────────────
-    K_mat = pyrucast.assemble.stiffness(model, materials)
+    K_mat = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K_mat, rhs)
 
     # ── Comparaison à l'analytique u(x) = 20 + (Q/k)(1 - x) ──────────────────

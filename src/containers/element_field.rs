@@ -489,7 +489,7 @@ impl ElementField {
             n => Err(PyrucastError::Message(format!(
                 "{n} SubElementFields live on the SubFiniteElementSpace at slot {} \
                  (generation {}); sub_for_fespace needs a unique zone. Use \
-                 subs_for_fespace, or consolidate_element to fuse the zones.",
+                 subs_for_fespace, or element_field::consolidate to fuse the zones.",
                 fespace.index(),
                 fespace.generation()
             ))),
@@ -505,7 +505,7 @@ impl ElementField {
     /// zones a union leaves side by side (`k` for conduction, `E`/`nu` for
     /// elasticity on one shared mesh) — and each caller resolves *its own* zone by
     /// naming the components it needs, without an explicit
-    /// [`consolidate_element`](crate::ops::element_field::consolidate). It stays
+    /// [`consolidate`](crate::ops::element_field::consolidate). It stays
     /// safe: it never silently returns the first of several — it errors if **no**
     /// zone carries the full set, or if **more than one** does (a genuine
     /// ambiguity the caller must resolve). `required` must be non-empty (an empty
@@ -539,7 +539,7 @@ impl ElementField {
             n => Err(PyrucastError::Message(format!(
                 "{n} SubElementFields on the SubFiniteElementSpace at slot {} \
                  (generation {}) each carry all of {:?}; the zone is ambiguous — \
-                 fuse them with consolidate_element or narrow the components",
+                 fuse them with element_field::consolidate or narrow the components",
                 fespace.index(),
                 fespace.generation(),
                 required

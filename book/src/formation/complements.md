@@ -35,7 +35,7 @@ Barre en traction — comparée à la solution analytique
 
 Pour la matrice de masse cohérente et la rigidité géométrique (flambage
 linéarisé), voir [Assemblage par `MatrixKind`](../operateurs/assemblage.md)
-— `pyrucast.assemble.mass`/`lump`/`geometric`/`tangent`, l'équivalent
+— `pyrucast.matrix.mass`/`lump`/`geometric`/`tangent`, l'équivalent
 Cast3M `MASS`/`LUMP`/`KSIG`/`KTAN`.
 
 ## Aller plus loin en 3D
@@ -43,12 +43,12 @@ Cast3M `MASS`/`LUMP`/`KSIG`/`KTAN`.
 Cette formation reste en 2D, mais rien n'empêche de reprendre la même
 plaque trouée en volume :
 
-- `pyrucast.mesher.extrude(mesh, direction, n_couches)` — balayage d'un
+- `pyrucast.mesh.extrude(mesh, direction, n_couches)` — balayage d'un
   maillage `SEG2`/`TRI3`/`QUA4` selon une direction, dans le même espace de
   coordonnées (Cast3M `TRAN`/`VOLU 'TRAN'`) ;
-- `pyrucast.mesher.sweep_solid(mesh_a, mesh_b, n_couches)` — balayage entre
+- `pyrucast.mesh.sweep_solid(mesh_a, mesh_b, n_couches)` — balayage entre
   deux profils `TRI3`/`QUA4` non parallèles (Cast3M `REGL` + `VOLU`) ;
-- `pyrucast.mesher.triangulate_volume(enveloppe, taille)` — remplissage `TET4`
+- `pyrucast.mesh.triangulate_volume(enveloppe, taille)` — remplissage `TET4`
   d'une enveloppe `TRI3` fermée par triangulation de Delaunay 3D (Cast3M
   `VOLU` par remplissage).
 
@@ -58,13 +58,13 @@ Aucun de ces trois n'est mis en œuvre dans les scripts de cette formation.
 
 Catalogue complet : [Éléments finis supportés](../elements/index.md) — 14
 types, de `POI1` à `HEX27`, y compris les versions quadratiques
-(`pyrucast.mesher.to_quadratic`, l'équivalent Cast3M `CHAN 'TRI6' ...`).
+(`pyrucast.mesh.to_quadratic`, l'équivalent Cast3M `CHAN 'TRI6' ...`).
 
 ## Échanges avec les outils extérieurs
 
 pyrucast ne parle, à ce jour, que deux formats externes :
 
-- **import** de maillage **Gmsh** (`pyrucast.mesher.read_gmsh`,
+- **import** de maillage **Gmsh** (`pyrucast.mesh.read_gmsh`,
   `read_gmsh_str`) — un dictionnaire `nom de région → Mesh` ;
 - **export VTK legacy** (`pyrucast.export.export_vtk`), lisible par
   ParaView — voir la fin du script de barre plus haut.

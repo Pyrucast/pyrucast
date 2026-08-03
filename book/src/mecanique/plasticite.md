@@ -141,14 +141,16 @@ s'écrit en Python ; voici l'usage **d'un pas** de la brique d'intégration :
 import pyrucast
 
 model = pyrucast.Model.plasticity(fes, "plane_stress")
-materials = pyrucast.build.material_field(
+materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("nu", 0.3), ("sigma_y", 250.0)]
 )
 
 # Déformation ε(B) issue du champ de déplacement courant (op géométrique).
-strain = pyrucast.field.deformation(u, fes)
+strain = pyrucast.element_field.deformation(u, fes)
 # Intégration A→B : `prev` = sortie du pas précédent (None au premier pas).
-state = pyrucast.behavior.integrate_behavior(model, strain, materials, prev=prev_state)
+state = pyrucast.element_field.integrate_behavior(
+    model, strain, materials, prev=prev_state
+)
 sigma_xx = state[0].value(0, 0, "sigma_xx")
 p = state[0].value(0, 0, "p")  # déformation plastique cumulée
 ```

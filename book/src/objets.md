@@ -18,7 +18,14 @@ Coords ── Node
 Evolution (agrège des SubEvolution : valeur tabulée vs variable, interpolée)
 ```
 
-Deux abstractions transverses traversent toute cette liste et méritent d'être
+Une distinction structure toute cette liste et se lit dans l'arborescence :
+`Coords` est le **magasin** (`src/coords.rs`), `Node` et `Cell` sont des
+**atomes** insécables (`src/atoms/`), et tout le reste — les sept agrégats et
+leurs vues `Sub*` — sont des **conteneurs** divisibles (`src/containers/`),
+les seuls qui puissent être le sujet d'un opérateur. Voir
+[Conventions](conventions.md).
+
+Deux abstractions transverses traversent la liste et méritent d'être
 lues tôt :
 
 - l'[**Agrégat**](aggregate.md) — la grammaire commune (`len`, `[i]`, union

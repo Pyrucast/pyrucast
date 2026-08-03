@@ -88,10 +88,10 @@ for i in range(4):
 fes = pyrucast.FiniteElementSpace(mesh)
 
 # 2) Supports de multiplicateurs : barycenter colocalise des nœuds neufs.
-imposed_left = pyrucast.mesher.poi1_from_nodes([nodes[0]])
-imposed_right = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
-mult_mesh_left = pyrucast.mesher.barycenter(imposed_left)
-mult_mesh_right = pyrucast.mesher.barycenter(imposed_right)
+imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
+imposed_right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
+mult_mesh_right = pyrucast.mesh.barycenter(imposed_right)
 left = pyrucast.Model.dirichlet("T", "q", imposed_left, mult_mesh_left)
 right = pyrucast.Model.dirichlet("T", "q", imposed_right, mult_mesh_right)
 mult_left = mult_mesh_left.node(0, 0, 0)
@@ -99,7 +99,7 @@ mult_right = mult_mesh_right.node(0, 0, 0)
 
 # 3) Modèle complet : conduction + les deux Dirichlet.
 model = pyrucast.Model.heat_conduction(fes) | left | right
-materials = pyrucast.build.material_field(model, [("k", 1.0)])
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
 # 4) Chargement : le helper `constraint_rhs` désigne chaque contrainte par son
 #    nœud contraint et écrit u_d au slot imposed_T du nœud-multiplicateur. On
@@ -107,7 +107,7 @@ materials = pyrucast.build.material_field(model, [("k", 1.0)])
 rhs = left.constraint_rhs([(nodes[0], 0.0)]) | right.constraint_rhs([(nodes[-1], 1.0)])
 
 # 5) Assemblage + résolution.
-K = pyrucast.assemble.stiffness(model, materials)
+K = pyrucast.matrix.stiffness(model, materials)
 solution = pyrucast.solver.solve(K, rhs)
 assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10  # T au milieu
 assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux à gauche

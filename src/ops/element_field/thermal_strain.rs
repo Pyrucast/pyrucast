@@ -60,7 +60,7 @@ pub fn thermal_strain(
         // Resolve the material zone by `alpha`, so a shared fespace carrying
         // several component-disjoint material zones (e.g. thermal `k` +
         // mechanical `E`/`nu`/`alpha`) resolves the expansion zone without an
-        // explicit consolidate_element.
+        // explicit consolidate.
         let mat_sub = material.sub_for_fespace_with(sub, &[ALPHA])?;
         let (space_dim, axisymmetric) = {
             let s = read(sub)?;

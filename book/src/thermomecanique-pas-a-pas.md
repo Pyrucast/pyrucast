@@ -25,7 +25,7 @@ fonctions Python de plus haut niveau, sans distinction à l'usage :
 ```python
 import pyrucast as pc
 
-pc.assemble.stiffness(...)  # opérateur Rust (extension)
+pc.matrix.stiffness(...)  # opérateur Rust (extension)
 pc.thermomechanics.step_by_step(...)  # fonction Python pure (thermomechanics.py)
 ```
 
@@ -90,7 +90,7 @@ nul besoin de les fusionner : les opérateurs (`stiffness`, `integrate_behavior`
 `thermal_strain`) résolvent leur zone matière **par les composantes qu'ils
 requièrent** (`k` pour la conduction, `E`/`nu` pour l'élasticité, `alpha` pour la
 dilatation). Pour fusionner explicitement des zones qui partagent légitimement un
-support, [`consolidate_element`](operateurs/champs.md) reste disponible.
+support, [`element_field.consolidate`](operateurs/champs.md) reste disponible.
 
 En sortie, `data["results"]` est une liste (un élément par instant) :
 

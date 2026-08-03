@@ -1,8 +1,9 @@
-"""Opérateurs de maillage — miroir de ``ops::mesher`` (Rust).
+"""Opérateurs produisant un maillage — miroir de ``ops::mesh`` (Rust).
 
-Fabriques et transformations qui produisent ou remanient un maillage :
-primitives 1D, balayages, extrusions, transformations rigides, remplissages
-surfaciques/volumiques, lecture gmsh, mesures géométriques dérivées.
+Mailleurs (ligne, cercle, arc, transfini, pavage, triangulation), balayages
+et transformations, extraction de peau et de bord, sélections géométriques,
+lecture gmsh. Tout ce qui rend un ``Mesh`` est ici, quelle que soit l'entrée
+— y compris ``select``, qui extrait le support d'un champ.
 """
 
 from ._pyrucast import (
@@ -10,7 +11,7 @@ from ._pyrucast import (
     barycenter as barycenter,
     border as border,
     circle as circle,
-    consolidate_mesh as consolidate_mesh,
+    consolidate_mesh as consolidate,
     convert as convert,
     elements_on as elements_on,
     extrude as extrude,
@@ -19,6 +20,8 @@ from ._pyrucast import (
     line as line,
     merge_nodes as merge_nodes,
     orient as orient,
+    pave_surface as pave_surface,
+    pave_volume as pave_volume,
     poi1_from_nodes as poi1_from_nodes,
     points_below_plane as points_below_plane,
     points_in_cone as points_in_cone,
@@ -34,6 +37,7 @@ from ._pyrucast import (
     read_gmsh as read_gmsh,
     read_gmsh_str as read_gmsh_str,
     rotate as rotate,
+    select as select,
     skin as skin,
     sweep as sweep,
     sweep_solid as sweep_solid,
@@ -41,8 +45,6 @@ from ._pyrucast import (
     to_quadratic as to_quadratic,
     transfinite as transfinite,
     translate as translate,
-    pave_surface as pave_surface,
-    pave_volume as pave_volume,
     triangulate_surface as triangulate_surface,
     triangulate_volume as triangulate_volume,
 )
@@ -52,7 +54,7 @@ __all__ = [
     "barycenter",
     "border",
     "circle",
-    "consolidate_mesh",
+    "consolidate",
     "convert",
     "elements_on",
     "extrude",
@@ -78,6 +80,7 @@ __all__ = [
     "read_gmsh",
     "read_gmsh_str",
     "rotate",
+    "select",
     "skin",
     "sweep",
     "sweep_solid",

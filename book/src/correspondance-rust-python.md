@@ -6,12 +6,12 @@ Python). Elle matérialise la règle de [Conventions](conventions.md) :
 
 - une structure `containers::…::Foo` est exposée sous le **même nom**
   `pyrucast.Foo` (le wrapper PyO3 interne `PyFoo` est masqué) ;
-- une fonction libre `ops::<thème>::f` est exposée dans le **sous-module du
-  thème** : `pyrucast.<thème>.f` (le rangement par thème du code Rust est
-  reflété par une hiérarchie de modules Python : `mesher`, `field`,
-  `assemble` (dont les forces internes `BSIG`), `behavior`, `solver`,
-  `export`, `build`, plus `store`). Le miroir est sans exception : aucune
-  fonction libre ne vit au top-level ;
+- une fonction libre `ops::<module>::f` est exposée dans le **sous-module de
+  même nom** : `pyrucast.<module>.f`. Le module Rust porte le nom du
+  **conteneur produit** (`mesh`, `node_field`, `element_field`, `matrix`,
+  `coords`), ou de l'activité quand il ne produit aucun conteneur
+  (`measure`, `geom`, `export`) ; `solver` est l'exception nommée. Le miroir
+  est sans exception : aucune fonction libre ne vit au top-level ;
 - une surcharge d'opérateur Rust devient un dunder Python (`Add` →
   `__add__`, `Index` → `__getitem__`, …) ;
 - un constructeur nommé Rust devient un `classmethod` / constructeur
@@ -74,9 +74,9 @@ Toutes les fonctions `ops` prennent leurs conteneurs **par référence** et
 renvoient `Result<T>` (converti en exception Python `RuntimeError`). Les
 signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
-### `ops::mesher` — construction et transformation de maillages
+### `ops::mesh` — construction et transformation de maillages
 
-| Rust (`ops::mesher::…`) | Python (`pyrucast.mesher.…`) |
+| Rust (`ops::mesh::…`) | Python (`pyrucast.mesh.…`) |
 |---|---|
 | `from_live_nodes(coords: Handle<Coords>) -> Mesh` | `from_live_nodes(coords) -> Mesh` |
 | `SubMesh::poi1_from_nodes(nodes: &[Node]) -> SubMesh` | `poi1_from_nodes(nodes) -> Mesh` |
@@ -116,34 +116,68 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `merge_nodes(mesh: &Mesh, tol: f64) -> Mesh` | `merge_nodes(mesh, tol) -> Mesh` |
 | `read_gmsh(coords: Handle<Coords>, path: &Path) -> Vec<(String, Mesh)>` | `read_gmsh(coords, path) -> dict[str, Mesh]` |
 | `read_gmsh_str(coords: Handle<Coords>, text: &str) -> Vec<(String, Mesh)>` | `read_gmsh_str(coords, text) -> dict[str, Mesh]` |
-| `consolidate_mesh(mesh: &Mesh) -> Mesh` | `consolidate_mesh(mesh) -> Mesh` |
+| `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` |
+| `select_nodes(field: &NodeField, band: &Band, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type ; part d'un champ mais rend un maillage, d'où son rangement ici) |
 
-### `ops::field` — opérateurs sur les champs
+### `ops::node_field` — opérateurs produisant un champ aux nœuds
 
-| Rust (`ops::field::…`) | Python (`pyrucast.field.…`) |
+| Rust (`ops::node_field::…`) | Python (`pyrucast.node_field.…`) |
 |---|---|
 | `coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `coordinates(mesh, components=None) -> NodeField` |
-| `set_coordinates(field: &NodeField, components: Option<Vec<String>>) -> ()` | `set_coordinates(field, components=None) -> None` |
+| `divergence(field: &ElementField) -> NodeField` | `divergence(field) -> NodeField` |
+| `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
+| `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
+| `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
+| `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |
+| `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
+| `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(model, stresses) -> NodeField` |
+| `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
+
+`flux` et `internal_forces` (`BSIG`, `∫ Bᵀ σ`) sont des **assemblages**,
+mais leur résultat est un vecteur nodal et non un opérateur : on se range
+par la sortie.
+
+### `ops::coords` — écriture dans le magasin de coordonnées
+
+| Rust (`ops::coords::…`) | Python (`pyrucast.coords.…`) |
+|---|---|
+| `set(field: &NodeField, components: Option<Vec<String>>) -> ()` | `set(field, components=None) -> None` |
 | `displace(field: &NodeField, components: Option<Vec<String>>) -> ()` | `displace(field, components=None) -> None` |
+
+### `ops::element_field` — opérateurs produisant un champ aux points de Gauss
+
+| Rust (`ops::element_field::…`) | Python (`pyrucast.element_field.…`) |
+|---|---|
 | `gradient(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `gradient(field, fespace) -> ElementField` |
 | `deformation(u: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `deformation(u, fespace) -> ElementField` |
 | `interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `interp_to_gauss(field, fespace) -> ElementField` |
 | `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref) -> ElementField` |
 | `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `beam_deformation(field, fespace) -> ElementField` |
-| `divergence(field: &ElementField) -> NodeField` | `divergence(field) -> NodeField` |
+| `consolidate(field: &ElementField) -> ElementField` | `consolidate(field) -> ElementField` (fusionne les zones d'une même fespace) |
+| `sub_material_field(sub: &SubModel, pairs: &[(&str, f64)]) -> SubElementField` | `sub_material_field(sub_model, components_and_values) -> SubElementField` |
+| `material_field(model: &Model, pairs: &[(&str, f64)]) -> ElementField` | `material_field(model, components_and_values) -> ElementField` |
+| `material_field_per_sub_model(model: &Model, per: &[&[(&str, f64)]]) -> ElementField` | `material_field_per_sub_model(model, components_and_values_per_sub_model) -> ElementField` |
+| `behavior::integrate(model, deformation, prev, materials, dt) -> ElementField` | `integrate_behavior(model, deformation, materials, prev=None, dt=None) -> ElementField` (`COMP`) |
+
+### `ops::measure` — réductions à un nombre
+
+| Rust (`ops::measure::…`) | Python (`pyrucast.measure.…`) |
+|---|---|
 | `integral(field: &NodeField, fespace, component) -> f64` / `integral_element(field: &ElementField, component) -> f64` | `integral(field, component, fespace=None) -> float` (dispatch par type ; `∫ f dΩ`, `fespace` requis pour un `NodeField`) |
-| `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
-| `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
-| `select_nodes(field: &NodeField, band: &Band, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type) |
+| `SubField::dot(&self, other) -> f64` / `Field::dot_field(&self, other) -> f64` | `xty(x, y) -> float` (dispatch par type ; produit scalaire **global** de deux champs) |
+| `SubField::xtx(&self) -> f64` / `Field::xtx(&self) -> f64` | `xtx(x) -> float` (dispatch par type ; `Σ v²`, norme au carré `XTX`) |
+| `SubField::xtx_components(&self, &[&str]) -> Result<f64>` | `xtx(x, components=[…]) -> float` (norme au carré restreinte à ces composantes) |
+
+### `ops::field` — opérateurs polymorphes entre sortes de champ
+
+Ils rendent un champ de la **sorte reçue** : la règle « un module par
+conteneur produit » ne peut pas les placer, ils se rangent donc par domaine.
+
+| Rust (`ops::field::…`) | Python (`pyrucast.field.…`) |
+|---|---|
 | `mask_nodes(field: &NodeField, band: &Band, …) -> NodeField` / `mask_cells(field: &ElementField, …) -> ElementField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> field` (dispatch par type ; champ `0/1` de même structure). Sucre : `field >= x` / `> x` / `<= x` / `< x` → masque |
 | `Field::filter_components(&self, wanted: &[String]) -> Self` / `SubField::select_components(&self, wanted) -> Self` | `filter_components(field, components) -> field` (dispatch par type ; `components` est un `str` ou une liste — p. ex. `model.primal_vars()` ; `EXCO`) |
 | `Field::rename_component(&self, from, to) -> Self` / `SubField::rename_component(&self, from, to) -> Self` | `rename_component(field, old, new) -> field` (dispatch par type ; renommage sans déplacement de valeur) |
-| `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
-| `consolidate_node(field: &NodeField) -> NodeField` | `consolidate_node(field) -> NodeField` |
-| `consolidate_element(field: &ElementField) -> ElementField` | `consolidate_element(field) -> ElementField` (fusionne les zones d'une même fespace) |
-| `SubField::dot(&self, other) -> f64` / `Field::dot_field(&self, other) -> f64` | `xty(x, y) -> float` (dispatch par type ; produit scalaire **global** de deux champs) |
-| `SubField::xtx(&self) -> f64` / `Field::xtx(&self) -> f64` | `xtx(x) -> float` (dispatch par type ; `Σ v²`, norme au carré `XTX`) |
-| `SubField::xtx_components(&self, &[&str]) -> Result<f64>` / `Field::xtx_components(&self, &[&str]) -> Result<f64>` | `xtx(x, components=[…]) -> float` (norme au carré restreinte à ces composantes) |
 | `SubField::pscal(&self, other) -> Self` / `Field::pscal_field(&self, other) -> Self` | `psca(x, y) -> field` (dispatch par type ; produit scalaire **nœud par nœud**, champ à une composante `"psca"`) |
 | `abs` / `sqrt` / `exp` / `log` / `log10` / `cos` / `sin` / `tan` / `sinh` / `cosh` / `tanh` `(field) -> Field` | mêmes noms `pyrucast.field.…(field)` — maths **élément par élément** (style numpy), un champ neuf du même type ; acceptent les quatre saveurs de champ (`NodeField` / `SubNodeField` / `ElementField` / `SubElementField`). Résultats non bornés : `log` de ≤ 0 → `-inf`/`nan` |
 
@@ -153,21 +187,9 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 > Ni l'une ni l'autre n'est une fonction `ops` — `merge(a, b)` est juste un
 > alias nommé de `a | b`.
 
-### `ops::build` — construction de champs matériau
+### `ops::matrix` — assemblage des matrices
 
-| Rust (`ops::build::…`) | Python (`pyrucast.build.…`) |
-|---|---|
-| `sub_material_field(sub: &SubModel, pairs: &[(&str, f64)]) -> SubElementField` | `sub_material_field(sub_model, components_and_values) -> SubElementField` |
-| `material_field(model: &Model, pairs: &[(&str, f64)]) -> ElementField` | `material_field(model, components_and_values) -> ElementField` |
-| `material_field_per_sub_model(model: &Model, per: &[&[(&str, f64)]]) -> ElementField` | `material_field_per_sub_model(model, components_and_values_per_sub_model) -> ElementField` |
-
-### `ops::assemble` — assemblage des matrices et forces internes
-
-`internal_forces` (`BSIG`, `∫ Bᵀ σ`) fait partie de la famille assemblage
-(`Model` → vecteur nodal, comme `flux`) et vit sous `ops::assemble` /
-`pyrucast.assemble`.
-
-| Rust (`ops::assemble::…`) | Python (`pyrucast.assemble.…`) |
+| Rust (`ops::matrix::…`) | Python (`pyrucast.matrix.…`) |
 |---|---|
 | `stiffness(model: &Model, materials: &ElementField) -> Matrix` | `stiffness(model, materials) -> Matrix` |
 | `mass(model: &Model, materials: &ElementField) -> Matrix` | `mass(model, materials) -> Matrix` |
@@ -175,15 +197,6 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Matrix` | `geometric(model, materials, stress) -> Matrix` |
 | `tangent(model: &Model, materials: &ElementField, state: &ElementField) -> Matrix` | `tangent(model, materials, state) -> Matrix` |
 | `assemble(k: &mut Matrix) -> Result<()>` | `assemble(matrix) -> None` (mutation en place — (ré)assemble une matrice depuis ses blocs seuls, sans `Model` : chemin de composition, ex. `M/dt + K`) |
-| `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
-| `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(model, stresses) -> NodeField` |
-| `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
-
-### `ops::behavior` — intégration du comportement (`COMP`)
-
-| Rust (`ops::behavior::…`) | Python (`pyrucast.behavior.…`) |
-|---|---|
-| `integrate(model: &Model, deformation: &ElementField, prev: Option<&ElementField>, materials: &ElementField, dt: Option<f64>) -> ElementField` | `integrate_behavior(model, deformation, materials, prev=None, dt=None) -> ElementField` |
 
 ### `ops::solver` — résolution
 
@@ -214,7 +227,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 > ces deux primitives sont internes (API Rust), pas encore exposées en Python.
 > `nearest_node(mesh, point)` (nœud le plus proche d'un point) est en revanche
 > exposée comme méthode : `mesh.nearest_node([x, y])`. C'est la requête « un
-> seul nœud » de la famille `points_*` d'`ops::mesher` (sélection par région
+> seul nœud » de la famille `points_*` d'`ops::mesh` (sélection par région
 > géométrique), qui, elle, renvoie toujours un maillage POI1.
 
 ## Opérateurs (dunders ↔ traits Rust)
@@ -331,8 +344,8 @@ sous-champs définis sur le **même support** (même `Handle<SubMesh>` pour
   partagé par des zones de supports différents s'accorde sur toute composante
   commune.
 
-Ces opérations sont aussi exposées en Rust : `ops::field::consolidate_node`
-(`NodeField`) et `ops::field::consolidate_element` (`ElementField`).
+Ces opérations sont aussi exposées en Rust : `ops::node_field::consolidate`
+(`NodeField`) et `ops::element_field::consolidate` (`ElementField`).
 
 #### `+` est réservé à l'arithmétique de champ
 

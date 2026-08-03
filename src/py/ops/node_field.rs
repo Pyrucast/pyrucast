@@ -1,0 +1,187 @@
+//! Python wrappers for [`crate::ops::node_field`] — the operators that
+//! produce a `NodeField`.
+
+use crate::containers::node_field::NodeField;
+use crate::ops::node_field::FluxDensity;
+use crate::py::element_field::{PyElementField, PySubElementField};
+use crate::py::finite_element_space::PyFiniteElementSpace;
+use crate::py::finite_element_space::PySubFiniteElementSpace;
+use crate::py::mesh::PyMesh;
+use crate::py::model::PyModel;
+use crate::py::node_field::PyNodeField;
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+
+/// Build a `NodeField` carrying the coordinates of every node of `mesh`
+/// — one `SubNodeField` per submesh, on the distinct nodes of its zone.
+///
+/// One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
+/// requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
+/// `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, components=None))]
+pub fn coordinates(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResult<PyNodeField> {
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::coordinates(&mesh.inner, components)?,
+    })
+}
+
+/// Restrict `field` to the nodes used by `mesh`.
+///
+/// Returns a new `NodeField` with one zone per submesh of `mesh`, each
+/// supported on the submesh's canonical POI1 node cloud (its distinct nodes,
+/// materialised once and cached). Two restrictions onto the **same** `mesh`
+/// share that support, so they combine directly: `restrict(a, mesh) -
+/// restrict(b, mesh)` is the node-by-node difference. That support is also the
+/// one a stiffness block over `mesh` uses, so `K * restrict(f, mesh)` and
+/// `solve(K, f) - restrict(g, mesh)` line up too.
+///
+/// Each zone carries the union of `field`'s components; nodes of `mesh` absent
+/// from `field` are assigned `0.0`. Element operations on the region
+/// (`gradient`, `integral`, `deformation`, `interp_to_gauss`) take `mesh` as a
+/// separate argument and read the field by node id. Use `restrict_like` to
+/// land on the exact support of an existing field instead of a mesh.
+///
+/// Errors if `mesh` and `field` are attached to different `Coords`s.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::restrict(&field.inner, &mesh.inner)?,
+    })
+}
+
+/// Reproject `field` onto the exact support and components of `target`,
+/// zone by zone.
+///
+/// Unlike `restrict` (which lands on a fresh support materialised from a
+/// mesh, carrying the union of `field`'s components), this reuses each zone
+/// of `target` as-is — same support, same component list — so the result is
+/// on the very same support as `target` and combines with it directly by the
+/// arithmetic operators (`target + restrict_like(field, target)`). A
+/// `(node, component)` pair is filled from `field` when it covers it, `0.0`
+/// otherwise; nodes and components of `field` absent from `target` are dropped.
+/// Errors if `target` and `field` are attached to different `Coords`s.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn restrict_like(
+    field: PyRef<PyNodeField>,
+    target: PyRef<PyNodeField>,
+) -> PyResult<PyNodeField> {
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::restrict_like(&field.inner, &target.inner)?,
+    })
+}
+
+/// Merge two node fields « au plus juste »: structural union of their
+/// zones, consolidated — zones sharing a component set are fused, the
+/// others stay separate (nothing is densified).
+///
+/// Errors if the two fields hold different values at the same
+/// `(node, component)` pair, or are attached to different `Coords`s.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::merge(&a.inner, &b.inner)?,
+    })
+}
+
+/// Fuse the zones of a node `field` sharing the same component set into one,
+/// deduping the nodes on their interface after a coherence check.
+///
+/// Errors if two zones disagree on a value at a shared `(node, component)`
+/// pair. `field` itself is left untouched.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(name = "consolidate_node")]
+pub fn consolidate(field: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::consolidate(&field.inner)?,
+    })
+}
+
+/// Weak divergence `div F` of a per-element **vector** field — the adjoint of
+/// `gradient`: `d_i = ∫ ∇N_i · F dΩ`, accumulated per node. The field must
+/// carry exactly `space_dim` components (the vector components in order).
+/// Returns a `NodeField` with a single `"div"` component (one zone per subspace).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
+    let nf = crate::ops::node_field::divergence(&field.inner)?;
+    Ok(PyNodeField { inner: nf })
+}
+
+/// Consistent nodal loads of a distributed flux over `fespace` — the analogue
+/// of Cast3m `FLUX` / `PRES`: `∫ density · N_i dΓ`, returned as a `NodeField`
+/// carrying the single component `component` (the model's dual variable, e.g.
+/// `"q"` for heat conduction).
+///
+/// `density` is either a **float** (uniform density) or a single-component
+/// `SubElementField` (per-Gauss density). The element measure comes from the
+/// FE subspace, so a `SEG2` edge in a 2-D mesh integrates as a line, a surface
+/// mesh as an area.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn flux(
+    fespace: PyRef<PySubFiniteElementSpace>,
+    density: &Bound<'_, PyAny>,
+    component: &str,
+) -> PyResult<PyNodeField> {
+    let sub = if let Ok(value) = density.extract::<f64>() {
+        crate::ops::node_field::flux(&fespace.handle, FluxDensity::Uniform(value), component)?
+    } else if let Ok(field) = density.extract::<PyRef<PySubElementField>>() {
+        crate::ops::node_field::flux(
+            &fespace.handle,
+            FluxDensity::Field(&field.handle),
+            component,
+        )?
+    } else {
+        return Err(PyValueError::new_err(
+            "flux: `density` doit être un float ou un SubElementField",
+        ));
+    };
+    Ok(PyNodeField {
+        inner: NodeField::from_sub(sub),
+    })
+}
+
+/// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of `model` (Cast3m `BSIG`).
+///
+/// `stresses` is the material-state field produced by `integrate_behavior`
+/// (`COMP`). Each behaviour-bearing sub-model applies its own `Bᵀ` (continuum
+/// solid, bar or beam) and the forces are scattered to the nodes. Returns a
+/// `NodeField` whose components are each sub-model's dual variables (`f_x`, …
+/// for a solid/bar; `f_w`, `m_theta` for a beam).
+///
+/// For a linear law the result equals the assembled stiffness applied to the
+/// solution (`K·u`); a non-linear law gives the exact internal forces, so
+/// `r = f_ext − f_int` is the residual.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn internal_forces(
+    model: PyRef<PyModel>,
+    stresses: PyRef<PyElementField>,
+) -> PyResult<PyNodeField> {
+    let nf = crate::ops::node_field::internal_forces(&model.inner, &stresses.inner)?;
+    Ok(PyNodeField { inner: nf })
+}
+
+/// Internal nodal forces of a **continuum-mechanics** stress field, without a
+/// model (Cast3m `BSIG` for a plain solid).
+///
+/// Convenience for the volumetric case (elasticity, Mazars, plasticity), where
+/// `B` is the universal symmetric gradient: it needs only the geometry
+/// (`fespace`) and the Voigt stress (`sigma_xx`, `sigma_xy`, …). Returns a
+/// `NodeField` with `space_dim` components `f_x, f_y, f_z` per node. **Bars and
+/// beams are not covered** — use `internal_forces(model, stresses)` for those.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn internal_forces_continuum(
+    stresses: PyRef<PyElementField>,
+    fespace: PyRef<PyFiniteElementSpace>,
+) -> PyResult<PyNodeField> {
+    let nf = crate::ops::node_field::internal_forces_continuum(&stresses.inner, &fespace.inner)?;
+    Ok(PyNodeField { inner: nf })
+}

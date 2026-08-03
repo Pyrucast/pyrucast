@@ -29,8 +29,8 @@ E, A, I, G, A_S, L, P, N = 1.0, 1.0, 1.0, 30.0, 1.0, 1.0, 1.0, 40
 
 
 def _clamp(node, var, dual):
-    imposed = pyrucast.mesher.poi1_from_nodes([node])
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes([node])
+    multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -41,21 +41,21 @@ def main() -> None:
     coords = pyrucast.Coords(2)
     base = coords.add_node([0.0, 0.0])
     tip = coords.add_node([L * c, L * s])
-    mesh = pyrucast.mesher.line(base, tip, N)  # ligne de N SEG2 à 45° (`line`)
+    mesh = pyrucast.mesh.line(base, tip, N)  # ligne de N SEG2 à 45° (`line`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.frame(fes)
     for var, dual in (("u_x", "f_x"), ("u_y", "f_y"), ("rz", "m_z")):
         model = model | _clamp(base, var, dual)
-    materials = pyrucast.build.material_field(
+    materials = pyrucast.element_field.material_field(
         model, [("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)]
     )
 
-    load = pyrucast.mesher.poi1_from_nodes([tip])
+    load = pyrucast.mesh.poi1_from_nodes([tip])
     rhs = pyrucast.NodeField(load, ["f_x", "f_y"])
     rhs[0].set_value(tip, "f_x", P * px)
     rhs[0].set_value(tip, "f_y", P * py)
-    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 
     delta = P * L**3 / (3.0 * E * I) + P * L / (G * A_S)
     ux = solution.value(tip, "u_x")

@@ -24,14 +24,14 @@ def test_geometric_stiffness_uniaxial():
     sig = 3.0
     fes, n = _unit_quad()
     model = pyrucast.Model.elasticity(fes, "plane_stress")
-    materials = pyrucast.build.material_field(model, [("E", 1.0), ("nu", 0.3)])
+    materials = pyrucast.element_field.material_field(model, [("E", 1.0), ("nu", 0.3)])
 
     stress = pyrucast.ElementField(fes, ["sigma_xx", "sigma_yy", "sigma_xy"])
     stress[0].set_uniform("sigma_xx", sig)
     stress[0].set_uniform("sigma_yy", 0.0)
     stress[0].set_uniform("sigma_xy", 0.0)
 
-    kg = pyrucast.assemble.geometric(model, materials, stress)
+    kg = pyrucast.matrix.geometric(model, materials, stress)
     tol = 1e-12
     assert abs(kg.get(n[0], "f_x", n[0], "u_x") - sig / 3.0) < tol
     # Same scalar on the u_y diagonal block (δ_ab).

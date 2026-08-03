@@ -1,6 +1,6 @@
 # Triangulation : briques mathématiques
 
-Ce chapitre rassemble les fondements mathématiques utilisés par `triangulate_surface` et le module `pyrucast::ops::mesher::triangulation`. Toutes les formules sont écrites avec la convention de pyrucast : points 2D notés \\( P = (x, y) \\), points 3D notés \\( P = (x, y, z) \\), vecteurs en gras, produit scalaire \\( \cdot \\), produit vectoriel \\( \times \\).
+Ce chapitre rassemble les fondements mathématiques utilisés par `triangulate_surface` et le module `pyrucast::ops::mesh::triangulation`. Toutes les formules sont écrites avec la convention de pyrucast : points 2D notés \\( P = (x, y) \\), points 3D notés \\( P = (x, y, z) \\), vecteurs en gras, produit scalaire \\( \cdot \\), produit vectoriel \\( \times \\).
 
 ## Aire signée d'un polygone 2D (formule du lacet)
 
@@ -16,11 +16,11 @@ avec la convention d'indices modulo \\(n\\). Le signe de \\(A\\) encode l'orient
 - \\( A < 0 \\) : sens **horaire** (CW) ;
 - \\( A \approx 0 \\) : polygone dégénéré (sommets colinéaires).
 
-Implémentation : `signed_area` dans `src/ops/mesher/triangulation.rs`.
+Implémentation : `signed_area` dans `src/ops/mesh/triangulation.rs`.
 
 ```rust,ignore
 use pyrucast::mesh::point::Point2;
-use pyrucast::ops::mesher::triangulation::signed_area;
+use pyrucast::ops::mesh::triangulation::signed_area;
 
 // Carré unitaire CCW — aire = +1.
 let pts = vec![
@@ -44,7 +44,7 @@ La fonction `ear_clip_2d` est utilisable indépendamment de `triangulate_surface
 
 ```rust,ignore
 use pyrucast::mesh::point::Point2;
-use pyrucast::ops::mesher::triangulation::ear_clip_2d;
+use pyrucast::ops::mesh::triangulation::ear_clip_2d;
 
 // Pentagone CCW quelconque.
 let pts = vec![
@@ -59,7 +59,7 @@ let triangles = ear_clip_2d(&pts).unwrap();
 assert_eq!(triangles.len(), 3);
 
 // Vérifier qu'un triangle est CCW (aire signée > 0).
-use pyrucast::ops::mesher::triangulation::signed_area;
+use pyrucast::ops::mesh::triangulation::signed_area;
 for [i, j, k] in &triangles {
     let area = signed_area(&[pts[*i], pts[*j], pts[*k]]);
     assert!(area > 0.0, "triangle non-CCW détecté");
@@ -88,7 +88,7 @@ L'orientation est détectée d'abord via \\(A\\) ; si \\(A < 0\\), on parcourt l
 
 ```rust,ignore
 use pyrucast::mesh::point::Point3;
-use pyrucast::ops::mesher::triangulation::{newell_normal, in_plane_basis};
+use pyrucast::ops::mesh::triangulation::{newell_normal, in_plane_basis};
 
 // Triangle dans le plan y = 0 (plan xz).
 let pts = vec![
@@ -184,13 +184,13 @@ où `diag` est la longueur de la diagonale de la AABB de l'ensemble des sommets.
 
 ## Pipeline Delaunay et CDT : usage direct en Rust
 
-Les fonctions du module `pyrucast::ops::mesher::triangulation` sont utilisables indépendamment du système `Mesh`.
+Les fonctions du module `pyrucast::ops::mesh::triangulation` sont utilisables indépendamment du système `Mesh`.
 
 ### Delaunay pur
 
 ```rust,ignore
 use pyrucast::mesh::point::Point2;
-use pyrucast::ops::mesher::triangulation::delaunay_2d;
+use pyrucast::ops::mesh::triangulation::delaunay_2d;
 
 let pts = vec![
     Point2::new(0.0, 0.0),
@@ -208,7 +208,7 @@ println!("{} triangles", triangles.len());
 
 ```rust,ignore
 use pyrucast::mesh::point::Point2;
-use pyrucast::ops::mesher::triangulation::triangulate_polygon_with_holes;
+use pyrucast::ops::mesh::triangulation::triangulate_polygon_with_holes;
 
 // Contour extérieur : carré 4×4.
 let outer = vec![
@@ -233,7 +233,7 @@ println!("{} triangles", triangles.len());
 
 ```rust,ignore
 use pyrucast::mesh::point::Point2;
-use pyrucast::ops::mesher::triangulation::{
+use pyrucast::ops::mesh::triangulation::{
     triangulate_polygon_with_holes_refined, RefinementOptions,
 };
 

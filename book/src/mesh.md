@@ -51,7 +51,7 @@ avec nœuds de face et central). Ils se posent avec l'interpolation `LAGRANGE2`
 (cf. [Espace éléments finis](fe-space.md)).
 
 Ajouter un nouveau type d'élément est purement additif (nouvelle variante +
-métadonnées dans `src/containers/mesh/element_type.rs`) — voir
+métadonnées dans `src/atoms/element_type.rs`) — voir
 [Ajouter un élément fini](developper/ajouter-un-element-fini.md).
 
 ## Cellule (`Cell`)

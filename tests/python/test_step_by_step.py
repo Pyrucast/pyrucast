@@ -22,8 +22,8 @@ NX, NY, L, H = 4, 2, 4.0, 1.0
 
 
 def _clamp(nodes, var, dual):
-    imposed = pc.mesher.poi1_from_nodes(nodes)
-    multiplier = pc.mesher.barycenter(imposed)
+    imposed = pc.mesh.poi1_from_nodes(nodes)
+    multiplier = pc.mesh.barycenter(imposed)
     return pc.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -59,8 +59,8 @@ def test_step_by_step_free_thermal_expansion():
     # Thermique : chaque nœud gauche+droit épinglé à T_HOT (un multiplicateur par
     # nœud via `translate` ⇒ température uniforme, pas seulement en moyenne).
     th_nodes = left + right
-    th_imposed = pc.mesher.poi1_from_nodes(th_nodes)
-    th_mult = pc.mesher.translate(th_imposed, [0.0, 0.0])
+    th_imposed = pc.mesh.poi1_from_nodes(th_nodes)
+    th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
     thermal_dir = pc.Model.dirichlet("T", "q", th_imposed, th_mult)
 
     # Modèle complet : conduction + élasticité (contraintes planes) + Dirichlet.
@@ -74,7 +74,7 @@ def test_step_by_step_free_thermal_expansion():
         | _clamp(bottom, "u_y", "f_y")
     )
 
-    materials = pc.build.material_field(
+    materials = pc.element_field.material_field(
         model, [("k", K_COND), ("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
 
@@ -121,11 +121,13 @@ def test_step_by_step_free_thermal_expansion():
     # Contrainte quasi nulle (dilatation libre). Les matériaux gardent leurs deux
     # zones (thermique + mécanique) : chaque opérateur résout la sienne par
     # composante, sans consolidation.
-    sigma = pc.behavior.integrate_behavior(
+    sigma = pc.element_field.integrate_behavior(
         model.filter("mechanical"),
-        pc.field.deformation(displacement, fes)
-        - pc.field.thermal_strain(
-            pc.field.interp_to_gauss(pc.field.restrict(temperature, mesh), fes),
+        pc.element_field.deformation(displacement, fes)
+        - pc.element_field.thermal_strain(
+            pc.element_field.interp_to_gauss(
+                pc.node_field.restrict(temperature, mesh), fes
+            ),
             materials,
             fes,
             T_REF,
@@ -146,10 +148,10 @@ def test_step_by_step_returns_history_per_time():
     left = [grid[idx(0, j)] for j in range(NY + 1)]
     bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
 
-    th_imposed = pc.mesher.poi1_from_nodes(
+    th_imposed = pc.mesh.poi1_from_nodes(
         left + [grid[idx(NX, j)] for j in range(NY + 1)]
     )
-    th_mult = pc.mesher.translate(th_imposed, [0.0, 0.0])
+    th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
     model = (
         pc.Model.heat_conduction(fes)
         | pc.Model.elasticity(fes, "plane_stress")
@@ -157,7 +159,7 @@ def test_step_by_step_returns_history_per_time():
         | _clamp(left, "u_x", "f_x")
         | _clamp(bottom, "u_y", "f_y")
     )
-    materials = pc.build.material_field(
+    materials = pc.element_field.material_field(
         model, [("k", K_COND), ("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
 

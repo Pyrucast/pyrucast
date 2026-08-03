@@ -11,8 +11,8 @@ conduction **stationnaire** `div(-k·grad T) = q`, en deux temps :
    tranche chauffée, sans rien retoucher au reste.
 
 Chaque étape est tracée avant d'être résolue, et les régions chargées sont
-repérées **par leur géométrie** : par forme (`pyrucast.mesher.points_*`) ou par
-coordonnée (`pyrucast.field.coordinates` + `pyrucast.field.select`). Ni
+repérées **par leur géométrie** : par forme (`pyrucast.mesh.points_*`) ou par
+coordonnée (`pyrucast.node_field.coordinates` + `pyrucast.mesh.select`). Ni
 rayonnement ni terme transitoire. Le détail pas à pas est dans le livre, page
 « Calcul thermique ».
 
@@ -26,8 +26,8 @@ solves **steady** conduction `div(-k·grad T) = q` on it, in two steps:
    heated slice, nothing else changes.
 
 Each step is plotted before being solved, and the loaded regions are located
-**by geometry**: by shape (`pyrucast.mesher.points_*`) or by coordinate
-(`pyrucast.field.coordinates` + `pyrucast.field.select`). No radiation, no
+**by geometry**: by shape (`pyrucast.mesh.points_*`) or by coordinate
+(`pyrucast.node_field.coordinates` + `pyrucast.mesh.select`). No radiation, no
 transient term. The step-by-step walkthrough lives in the book's thermal page.
 
 Lancement / Running ::
@@ -97,7 +97,7 @@ def main() -> None:
 
     # FR — Les charges réparties s'intègrent sur des faces : il faut la peau.
     # EN — Distributed loads integrate over faces: the skin is needed.
-    peau = pc.mesher.consolidate_mesh(pc.mesher.skin(volume))
+    peau = pc.mesh.consolidate(pc.mesh.skin(volume))
     # ANCHOR_END: maillage
 
     # ── Étape 1 : régions / Step 1: regions ─────────────────────────────────
@@ -109,16 +109,16 @@ def main() -> None:
 
     # FR — L'alésage : les nœuds sur le cylindre, lus à même le volume.
     # EN — The bore: the nodes on the cylinder, read straight off the volume.
-    alesage = pc.mesher.consolidate_mesh(
-        pc.mesher.points_on_cylinder(volume, bas_axe, haut_axe, HOLE_RADIUS)
+    alesage = pc.mesh.consolidate(
+        pc.mesh.points_on_cylinder(volume, bas_axe, haut_axe, HOLE_RADIUS)
     )
     # ANCHOR_END: alesage
 
     # ANCHOR: face_gauche
     # FR — La face gauche : les nœuds du plan x = 0, puis les QUA4 portés.
     # EN — The left face: the nodes of the plane x = 0, then the QUA4 they carry.
-    noeuds_gauche = pc.mesher.points_on_plane(peau, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
-    face_gauche = pc.mesher.elements_on(peau, noeuds_gauche, strict=True)
+    noeuds_gauche = pc.mesh.points_on_plane(peau, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    face_gauche = pc.mesh.elements_on(peau, noeuds_gauche, strict=True)
     # ANCHOR_END: face_gauche
 
     # ANCHOR: figure_conduction
@@ -143,19 +143,19 @@ def main() -> None:
 
     # FR — Dirichlet : le support bloqué, et un jumeau pour les multiplicateurs.
     # EN — Dirichlet: the constrained support, and a twin for the multipliers.
-    multiplicateur_T = pc.mesher.translate(alesage, [0.0, 0.0, 0.0])
+    multiplicateur_T = pc.mesh.translate(alesage, [0.0, 0.0, 0.0])
     modele = modele | pc.Model.dirichlet("T", "q", alesage, multiplicateur_T)
 
     # FR — La conduction ne réclame qu'un coefficient, « k ».
     # EN — Conduction asks for a single coefficient, "k".
-    materiaux = pc.build.material_field(modele, [("k", K_COND)])
+    materiaux = pc.element_field.material_field(modele, [("k", K_COND)])
     # ANCHOR_END: modele_conduction
 
     # ANCHOR: charges_conduction
     # FR — Flux imposé sur la face gauche.
     # EN — Imposed flux on the left face.
     gauche_fes = pc.FiniteElementSpace(face_gauche)
-    flux_gauche = pc.assemble.flux(gauche_fes[0], FLUX_IMPOSE, "q")
+    flux_gauche = pc.node_field.flux(gauche_fes[0], FLUX_IMPOSE, "q")
 
     # FR — Température imposée, posée sur le maillage des multiplicateurs.
     # EN — Imposed temperature, set on the multipliers' mesh.
@@ -166,7 +166,7 @@ def main() -> None:
     # ANCHOR: resolution_conduction
     # FR — `[K]{T} = {P}` : matrice assemblée, second membre réuni par `|`.
     # EN — `[K]{T} = {P}`: assembled matrix, right-hand side gathered by `|`.
-    K = pc.assemble.stiffness(modele, materiaux)
+    K = pc.matrix.stiffness(modele, materiaux)
     t_conduction = pc.solver.solve(K, flux_gauche | temperature_imposee)
     show_nodefield(
         volume, t_conduction, "Étape 1 — température (°C)", "thermique-conduction.svg"
@@ -177,9 +177,9 @@ def main() -> None:
     # ANCHOR: face_basse
     # FR — La face convectée, z = 0 : repérée par coordonnée, pas par forme.
     # EN — The convected face, z = 0: located by coordinate, not by shape.
-    z_peau = pc.field.coordinates(peau, ["Z"])
-    noeuds_bas = pc.field.select(z_peau, ge=-TOL, le=TOL)
-    face_basse = pc.mesher.elements_on(peau, noeuds_bas, strict=True)
+    z_peau = pc.node_field.coordinates(peau, ["Z"])
+    noeuds_bas = pc.mesh.select(z_peau, ge=-TOL, le=TOL)
+    face_basse = pc.mesh.elements_on(peau, noeuds_bas, strict=True)
     face_basse.unit().face_color = TURQUOISE
     show(
         peau | face_basse,
@@ -192,10 +192,10 @@ def main() -> None:
     # ANCHOR: zone_source
     # FR — La zone chauffée : même démarche sur X, en bande, et sur le volume.
     # EN — The heated zone: same approach on X, as a band, over the volume.
-    x_volume = pc.field.coordinates(volume, ["X"])
-    noeuds_source = pc.field.select(x_volume, ge=SOURCE_X_MIN, le=SOURCE_X_MAX)
-    zone_source = pc.mesher.consolidate_mesh(
-        pc.mesher.elements_on(volume, noeuds_source, strict=True)
+    x_volume = pc.node_field.coordinates(volume, ["X"])
+    noeuds_source = pc.mesh.select(x_volume, ge=SOURCE_X_MIN, le=SOURCE_X_MAX)
+    zone_source = pc.mesh.consolidate(
+        pc.mesh.elements_on(volume, noeuds_source, strict=True)
     )
     zone_source.unit().face_color = VERT
     show(
@@ -216,37 +216,37 @@ def main() -> None:
 
     # FR — Un seul champ matériau : « k » pour la conduction, « h » pour le film.
     # EN — A single material field: "k" for conduction, "h" for the film.
-    materiaux = pc.build.material_field(modele, [("k", K_COND), ("h", H_CONV)])
+    materiaux = pc.element_field.material_field(modele, [("k", K_COND), ("h", H_CONV)])
     # ANCHOR_END: modele_complet
 
     # ANCHOR: charges_complet
     # FR — Terme externe de la convection, h·T_ext : le même opérateur `flux`.
     # EN — The convection's external term, h·T_ext: the same `flux` operator.
-    charge_convection = pc.assemble.flux(basse_fes[0], H_CONV * T_EXT, "q")
+    charge_convection = pc.node_field.flux(basse_fes[0], H_CONV * T_EXT, "q")
 
     # FR — Source volumique : `flux` sur des HEX8, donc une densité volumique.
     # EN — Volume source: `flux` over HEX8 cells, hence a volume density.
     source_fes = pc.FiniteElementSpace(zone_source)
-    charge_source = pc.assemble.flux(source_fes[0], SOURCE_VOLUMIQUE, "q")
+    charge_source = pc.node_field.flux(source_fes[0], SOURCE_VOLUMIQUE, "q")
     # ANCHOR_END: charges_complet
 
     # ANCHOR: second_membre
     # FR — Les trois charges se touchent : support commun, puis `+` somme.
     # EN — The three loads touch: a common support first, then `+` really sums.
-    noeuds_charges = pc.mesher.consolidate_mesh(
-        pc.mesher.to_poi1(face_gauche | face_basse | zone_source)
+    noeuds_charges = pc.mesh.consolidate(
+        pc.mesh.to_poi1(face_gauche | face_basse | zone_source)
     )
     second_membre = (
-        pc.field.restrict(flux_gauche, noeuds_charges)
-        + pc.field.restrict(charge_convection, noeuds_charges)
-        + pc.field.restrict(charge_source, noeuds_charges)
+        pc.node_field.restrict(flux_gauche, noeuds_charges)
+        + pc.node_field.restrict(charge_convection, noeuds_charges)
+        + pc.node_field.restrict(charge_source, noeuds_charges)
     ) | temperature_imposee
     # ANCHOR_END: second_membre
 
     # ANCHOR: resolution_complet
     # FR — Même schéma qu'à l'étape 1, sur la matrice enrichie du terme convectif.
     # EN — Same pattern as step 1, on the matrix enriched with the film term.
-    K = pc.assemble.stiffness(modele, materiaux)
+    K = pc.matrix.stiffness(modele, materiaux)
     t_complet = pc.solver.solve(K, second_membre)
     show_nodefield(
         volume, t_complet, "Étape 2 — température (°C)", "thermique-complet.svg"

@@ -16,7 +16,7 @@ pyrucast est une librairie **Rust** exposée à **Python**.
   compilée par [`maturin`](https://www.maturin.rs) en un module
   d'extension `.so` / `.pyd`. Chaque classe Python (`pyrucast.Coords`,
   `pyrucast.Mesh`, …) enveloppe un type Rust ; chaque fonction de module
-  (`pyrucast.assemble.stiffness`, `pyrucast.solver.solve`, …) appelle une fonction Rust.
+  (`pyrucast.matrix.stiffness`, `pyrucast.solver.solve`, …) appelle une fonction Rust.
 
 Le binding est un **miroir 1:1** du Rust, sans logique propre : une méthode
 Rust reste une méthode, une fonction libre reste une fonction. La table de
@@ -28,7 +28,7 @@ fonction libre* est dans [Conventions](conventions.md).
    Script Python  ──►  module pyrucast (.so, pyo3)  ──►  crate Rust pyrucast
         |                      |                                |
    pyrucast.Coords        wrapper PyCoords                 struct Coords
-   pyrucast.assemble.stiffness     fonction de module              ops::assemble::stiffness
+   pyrucast.matrix.stiffness     fonction de module              ops::matrix::stiffness
 ```
 
 ## Tout vit dans un store, adressé par des handles

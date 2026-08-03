@@ -37,8 +37,8 @@ def _annulus(r0, r1, h, nr, nz):
 
 
 def _clamp(nodes, var, dual):
-    imposed = pyrucast.mesher.poi1_from_nodes(nodes)
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes(nodes)
+    multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -62,7 +62,7 @@ def test_integral_measures_the_revolved_volume():
     ones = pyrucast.NodeField(mesh, ["one"])
     ones.add_to_component("one", 1.0)
 
-    volume = pyrucast.field.integral(ones, "one", fes)
+    volume = pyrucast.measure.integral(ones, "one", fes)
     assert abs(volume - math.pi * (3.0**2 - 1.0) * 2.0) < 1e-9
 
 
@@ -77,16 +77,16 @@ def test_lame_thick_cylinder_under_internal_pressure():
     ends = [grid[idx(i, j)] for i in range(NR + 1) for j in (0, NZ)]
     model = pyrucast.Model.elasticity(fes, "axisymmetric")
     model = model | _clamp(ends, "u_y", "f_y")
-    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU)])
+    materials = pyrucast.element_field.material_field(model, [("E", E), ("nu", NU)])
 
     # Internal pressure on r = a. The geometry being axisymmetric, `flux`
     # integrates ∫ 2πr N p — the true ring force, with no manual factor.
     inner = pyrucast.Mesh(c, "SEG2")
     for j in range(NZ):
         inner.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
-    rhs = pyrucast.assemble.flux(pyrucast.FiniteElementSpace(inner)[0], P, "f_x")
+    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inner)[0], P, "f_x")
 
-    K = pyrucast.assemble.stiffness(model, materials)
+    K = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K, rhs)
 
     a2, b2 = A * A, B * B

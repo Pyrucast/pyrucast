@@ -39,7 +39,7 @@ Il alimente `Matrix::filter(Physics)` — le miroir de
 [`Model::filter`](model.md#nature-physique-et-filtrage) — qui renvoie une `Matrix`
 ne gardant que les blocs dont l'ensemble **contient** la nature donnée (handles
 partagés, pas de copie). Le résultat n'est **pas** assemblé : relancer
-`ops::assemble::assemble` avant de résoudre. Un bloc à l'ensemble vide n'est
+`ops::matrix::assemble` avant de résoudre. Un bloc à l'ensemble vide n'est
 sélectionné par aucune nature concrète ; l'étiqueter `Physics::Other` le rend
 atteignable. `Matrix::physics()` renvoie l'ensemble des natures présentes dans la
 matrice (dédupliqué — « plusieurs tags » au niveau de l'agrégat).
@@ -58,11 +58,11 @@ Passer d'un agrégat de blocs à une matrice utilisable se fait en deux temps :
 
 L'ordre des DOFs dans `row_dofs()` / `col_dofs()` est l'**ordre de première rencontre** des blocs — sauf si le `Coords` porte une [`permutation`](coords.md) (ordre solveur), auquel cas la liste globale suit cet ordre (tri stable). Reproductible dans les deux cas.
 
-### `finalize` vs `ops::assemble`
+### `finalize` vs `ops::matrix`
 
-- `Matrix::finalize()` n'assemble que des blocs **littéraux** (somme des COO → CSR). Il **refuse** un bloc calculé : le noyau vit dans `models`, hors de `containers`, et l'y appeler créerait un cycle `matrix ↔ kernel`. Il renvoie alors vers `ops::assemble`.
-- `ops::assemble::stiffness(model, materials)` construit les blocs (calculés pour les physiques volumiques, littéraux pour Dirichlet) et assemble, motif mémoïsé sur le `Model`.
-- `ops::assemble::assemble(&mut m)` réassemble une matrice **depuis ses blocs seuls**, sans `Model` : c'est le chemin de **composition** — combiner une sous-matrice neuve (de provenance quelconque) à une matrice existante puis réassembler. La `Matrix` ne dépendant que de ses blocs, cette composabilité de base est ainsi préservée y compris en présence de blocs calculés.
+- `Matrix::finalize()` n'assemble que des blocs **littéraux** (somme des COO → CSR). Il **refuse** un bloc calculé : le noyau vit dans `models`, hors de `containers`, et l'y appeler créerait un cycle `matrix ↔ kernel`. Il renvoie alors vers `ops::matrix`.
+- `ops::matrix::stiffness(model, materials)` construit les blocs (calculés pour les physiques volumiques, littéraux pour Dirichlet) et assemble, motif mémoïsé sur le `Model`.
+- `ops::matrix::assemble(&mut m)` réassemble une matrice **depuis ses blocs seuls**, sans `Model` : c'est le chemin de **composition** — combiner une sous-matrice neuve (de provenance quelconque) à une matrice existante puis réassembler. La `Matrix` ne dépendant que de ses blocs, cette composabilité de base est ainsi préservée y compris en présence de blocs calculés.
 
 Les opérations qui profitent du creux (matrice-vecteur, factorisation directe) utilisent `nalgebra-sparse` via des conversions à la demande :
 
@@ -80,7 +80,7 @@ un bloc **calculé** (dont les valeurs n'existent qu'à l'assemblage, produites 
 noyau élémentaire). Il est pris en compte partout où une valeur du bloc est lue ou
 émise : les accesseurs directs (`get`, `dense`, `to_dmatrix`, `to_coo`, `to_csr`,
 `to_csc`, `mul_dense`) et les deux passes d'assemblage global (`Matrix::finalize` et
-`ops::assemble::scatter`, calculé comme littéral). Seules les formes **locales** brutes
+`ops::matrix::scatter`, calculé comme littéral). Seules les formes **locales** brutes
 (`local_triplets`, `local_coo_arrays`) restent non mises à l'échelle — ce sont des vues
 internes destinées au remappage global, chaque consommateur y applique le facteur
 lui-même.
@@ -91,7 +91,7 @@ C'est nécessaire car `add_sub`/`union`/`filter`/`subset` **partagent** les
 `Handle<SubMatrix>` (refcount, même slot) plutôt que de les copier ; muter le facteur
 en place risquerait de rescaler silencieusement toute autre `Matrix` référençant le
 même bloc. Comme pour `filter`, le résultat n'est **pas assemblé** — `finalize()` ou
-`ops::assemble::assemble()` avant de résoudre.
+`ops::matrix::assemble()` avant de résoudre.
 
 ```rust,ignore
 let m_dt = (&m / dt)?;      // facteur = 1/dt sur chaque bloc de M, aucune valeur réécrite
@@ -105,7 +105,7 @@ existantes — l'union `|` (partage de blocs, pas de copie) suivie d'un réassem
 
 ```rust,ignore
 let mut sys = (&(&m / dt)? | &k)?;
-ops::assemble::assemble(&mut sys)?;   // requis dès qu'un bloc calculé est présent
+ops::matrix::assemble(&mut sys)?;   // requis dès qu'un bloc calculé est présent
 let rhs = (&f_ext + &(&m_dt * &u0)?)?;
 let u = solver::lu::solve(&sys, &rhs)?;
 ```
@@ -261,7 +261,7 @@ assert m_dt[0].factor == 1.0 / dt
 # `matrix * NodeField` (produit matrice-vecteur) coexiste avec `matrix * scalaire` :
 # le type de l'opérande de droite détermine laquelle des deux opérations s'exécute.
 sys = m_dt | k
-sys.finalize()  # (ou `pyrucast.assemble.assemble(sys)` si des blocs sont calculés)
+sys.finalize()  # (ou `pyrucast.matrix.assemble(sys)` si des blocs sont calculés)
 ```
 
 ## Sérialisation
@@ -270,6 +270,6 @@ sys.finalize()  # (ou `pyrucast.assemble.assemble(sys)` si des blocs sont calcul
 
 ## Limitations actuelles
 
-- **Cache de motif non invalidé par les mutations profondes** : le motif creux mémoïsé sur le `Model` est invalidé à l'ajout d'un sous-modèle (`add_sub`), mais pas si le maillage / l'espace EF sous-jacent change *en place* (remaillage) — reconstruire le modèle dans ce cas. Le chemin de composition `ops::assemble::assemble(&mut m)`, lui, reconstruit toujours le motif depuis les blocs.
+- **Cache de motif non invalidé par les mutations profondes** : le motif creux mémoïsé sur le `Model` est invalidé à l'ajout d'un sous-modèle (`add_sub`), mais pas si le maillage / l'espace EF sous-jacent change *en place* (remaillage) — reconstruire le modèle dans ce cas. Le chemin de composition `ops::matrix::assemble(&mut m)`, lui, reconstruit toujours le motif depuis les blocs.
 - **Pas de produit matrice-matrice** ni d'opérations algébriques entre matrices (somme, etc.) : à venir avec les premiers besoins concrets (préconditionneurs, formulations couplées).
 - Le drapeau `symmetric` n'est pas vérifié numériquement à l'assemblage. C'est de la responsabilité de l'assembleur (du `Model`) d'apparier correctement la déclaration et la réalité.

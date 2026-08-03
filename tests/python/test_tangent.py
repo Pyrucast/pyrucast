@@ -34,21 +34,21 @@ def _uniform_strain(c, nodes, exx):
 
 
 def _tangent_for(model, fes, materials, u):
-    strain = pyrucast.field.deformation(u, fes)
-    state = pyrucast.behavior.integrate_behavior(model, strain, materials)
-    return pyrucast.assemble.tangent(model, materials, state)
+    strain = pyrucast.element_field.deformation(u, fes)
+    state = pyrucast.element_field.integrate_behavior(model, strain, materials)
+    return pyrucast.matrix.tangent(model, materials, state)
 
 
 def test_elastic_tangent_equals_stiffness():
     E, NU, SY = 70_000.0, 0.3, 200.0
     c, n, fes = _unit_quad()
     model = pyrucast.Model.plasticity(fes, "plane_strain")
-    materials = pyrucast.build.material_field(
+    materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("sigma_y", SY)]
     )
 
     kt = _tangent_for(model, fes, materials, _uniform_strain(c, n, 1e-5))
-    k = pyrucast.assemble.stiffness(model, materials)
+    k = pyrucast.matrix.stiffness(model, materials)
     tol = 1e-6
     for i in range(4):
         for j in range(4):
@@ -62,12 +62,12 @@ def test_plastic_tangent_symmetric_and_softened():
     E, NU, SY = 70_000.0, 0.3, 200.0
     c, n, fes = _unit_quad()
     model = pyrucast.Model.plasticity(fes, "plane_strain")
-    materials = pyrucast.build.material_field(
+    materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("sigma_y", SY)]
     )
 
     kt = _tangent_for(model, fes, materials, _uniform_strain(c, n, 2e-2))
-    k = pyrucast.assemble.stiffness(model, materials)
+    k = pyrucast.matrix.stiffness(model, materials)
 
     # Symmetric.
     for i in range(4):

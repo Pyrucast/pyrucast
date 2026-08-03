@@ -470,7 +470,7 @@ class ElementField:
         `field | other` → a fresh `ElementField` holding the zones of both.
         Component-disjoint zones on one support stay **side by side** (unlike
         `NodeField`, which fuses them); a component carried by two zones on the
-        same support is rejected — fuse those explicitly with `consolidate_element`.
+        same support is rejected — fuse those explicitly with `pyrucast.element_field.consolidate`.
         """
     def __ror__(self, other: SubElementField) -> ElementField:
         r"""
@@ -2594,7 +2594,7 @@ def mask(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typi
     Per-component 0/1 **mask** of a field against a value band — same flavour
     and same structure as the input (Cast3M's `MASQUE`).
     
-    Unlike [`select`](fn@select), which extracts the passing support into a
+    Unlike `pyrucast.mesh.select`, which extracts the passing support into a
     `Mesh`, `mask` keeps the field's exact shape (zones, support, components)
     and only rewrites the values: `1.0` where the band holds, `0.0` where it
     does not — so the result is multipliable term by term with the input
@@ -2602,7 +2602,7 @@ def mask(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typi
     A `NodeField` masks per node, an `ElementField` per Gauss point.
     
     The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
-    `le` (`≤`), `lt` (`<`) — same rules as [`select`](fn@select). There is
+    `le` (`≤`), `lt` (`<`) — same rules as `pyrucast.mesh.select`. There is
     **no** AND across components here: each value stands on its own.
     
     `components=None` tests every component. A `components` list tests only
@@ -2849,7 +2849,7 @@ def psca(x: typing.Any, y: typing.Any) -> typing.Any:
     and carry the same components (aligned by name).
     
     For the **global** scalar product (a single float over the whole field),
-    see [`xty`](fn@xty).
+    see `pyrucast.measure.xty`.
     """
 
 def read_gmsh(coords: Coords, path: builtins.str) -> dict:
@@ -3228,6 +3228,6 @@ def xty(x: typing.Any, y: typing.Any) -> builtins.float:
     the field inner product used for energies (`F·u`), residual norms, etc.
     
     For the **node-by-node** scalar product (a field, one value per node),
-    see [`psca`](fn@psca).
+    see `pyrucast.field.psca`.
     """
 

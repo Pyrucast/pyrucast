@@ -25,7 +25,7 @@ Maillage - assemblage;ENLE;Enlève des éléments d'un maillage;—
 Maillage - assemblage;DIFF;Différence de maillages;—
 Maillage - assemblage;INTE;Intersection de maillages;—
 Maillage - transformation;CHAN;Change le type d'élément (POI1, passage quadratique…);to_poi1 (cas POI1) / to_quadratic (linéaire→quadratique) / convert (QUA4→TRI3, HEX8→TET4)
-Maillage - transformation;PLUS;Translate les coordonnées des nœuds;displace / set_coordinates
+Maillage - transformation;PLUS;Translate les coordonnées des nœuds;coords.displace / coords.set
 Maillage - transformation;TOUR;Tourne (rotation) les coordonnées des nœuds;rotate
 Maillage - transformation;INVE;Inverse l'orientation des éléments;invert
 Maillage - transformation;ORIE;Oriente les éléments d'une surface/ligne;orient
@@ -86,7 +86,7 @@ Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_beha
 Champs - dérivation;REAC;Réactions nodales;—
 Champs - extraction;EXCO;Extrait/renomme une composante d'un champ;filter_components (extraction, str ou liste) / rename_component (renommage)
 Champs - extraction;DEPL;Extrait le champ de déplacement;NodeField
-Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / consolidate_node
+Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / node_field.consolidate
 Champs - extraction;ELNO;Passe un champ des points de Gauss aux nœuds;divergence (partiel)
 Champs - extraction;REDU;Restreint un champ à un sous-maillage;restrict
 Champs - extraction;;Reprojette un champ sur le support et les composantes d'un champ cible (combinable par + - * /);restrict_like

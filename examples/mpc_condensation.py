@@ -48,14 +48,14 @@ def main():
     dual = base.dual_of("T")  # "q"
 
     # Dirichlet T(node0) = 0 (esclave node0).
-    imposed0 = pyrucast.mesher.poi1_from_nodes([nodes[0]])
-    mult0 = pyrucast.mesher.barycenter(imposed0)
+    imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
+    mult0 = pyrucast.mesh.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", dual, imposed0, mult0)
 
     # MPC 2·T(node4) − 1·T(node2) = 1.5 (esclave node4, maître node2 — disjoints).
-    mesh4 = pyrucast.mesher.poi1_from_nodes([nodes[4]])
-    mesh2 = pyrucast.mesher.poi1_from_nodes([nodes[2]])
-    mult_mpc = pyrucast.mesher.barycenter(mesh4)
+    mesh4 = pyrucast.mesh.poi1_from_nodes([nodes[4]])
+    mesh2 = pyrucast.mesh.poi1_from_nodes([nodes[2]])
+    mult_mpc = pyrucast.mesh.barycenter(mesh4)
     mpc = pyrucast.Model.mpc(
         [(mesh4, "T", dual, 2.0), (mesh2, "T", dual, -1.0)],
         mult_mpc,
@@ -68,7 +68,7 @@ def main():
         [(nodes[4], 1.5)]
     )
 
-    k = pyrucast.assemble.stiffness(model, materials)
+    k = pyrucast.matrix.stiffness(model, materials)
     lagrange = pyrucast.solver.solve(k, rhs)
     elimination = pyrucast.solver.solve_eliminate(model, k, rhs)
 

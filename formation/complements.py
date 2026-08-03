@@ -21,8 +21,8 @@ E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
 
 
 def encastrement(node, var, dual):
-    imposed = pc.mesher.poi1_from_nodes([node])
-    multiplier = pc.mesher.barycenter(imposed)
+    imposed = pc.mesh.poi1_from_nodes([node])
+    multiplier = pc.mesh.barycenter(imposed)
     return pc.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -31,7 +31,7 @@ def main() -> None:
     coords = pc.Coords(2)
     n0 = coords.add_node([0.0, 0.0])
     n1 = coords.add_node([L, 0.0])
-    mesh = pc.mesher.line(n0, n1, 1)
+    mesh = pc.mesh.line(n0, n1, 1)
     fes = pc.FiniteElementSpace(mesh)
 
     modele = pc.Model.truss(fes)
@@ -39,13 +39,13 @@ def main() -> None:
     modele = modele | encastrement(n0, "u_y", "f_y")
     modele = modele | encastrement(n1, "u_y", "f_y")  # pas de raideur transversale
 
-    materiaux = pc.build.material_field(modele, [("E", E), ("A", A)])
+    materiaux = pc.element_field.material_field(modele, [("E", E), ("A", A)])
 
-    charge = pc.mesher.poi1_from_nodes([n1])
+    charge = pc.mesh.poi1_from_nodes([n1])
     second_membre = pc.NodeField(charge, ["f_x"])
     second_membre[0].set_value(n1, "f_x", F)
 
-    K = pc.assemble.stiffness(modele, materiaux)
+    K = pc.matrix.stiffness(modele, materiaux)
     solution = pc.solver.solve(K, second_membre)
     # ANCHOR_END: barre
 
@@ -55,7 +55,7 @@ def main() -> None:
     assert abs(ux - attendu) < 1e-10 * attendu
 
     # ANCHOR: export
-    u_propre = pc.field.restrict_like(solution, pc.NodeField(mesh, ["u_x", "u_y"]))
+    u_propre = pc.node_field.restrict_like(solution, pc.NodeField(mesh, ["u_x", "u_y"]))
     chemin = os.path.join(tempfile.gettempdir(), "barre.vtk")
     pc.export.export_vtk(mesh, chemin, u_propre)
     print(f"Champ de déplacement exporté (VTK, lisible par ParaView) : {chemin}")

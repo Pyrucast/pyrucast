@@ -191,5 +191,5 @@ constructeurs propres :
 > fois sur le même support (deux zones de même support à composantes disjointes
 > restent côte à côte). Pour un `NodeField`, l'union finalise encore en fusionnant
 > les zones de même support (et lève si elles divergent sur une valeur partagée).
-> La fusion explicite reste offerte par `consolidate_node` / `consolidate_element`
+> La fusion explicite reste offerte par `node_field.consolidate` / `element_field.consolidate`
 > (cf. [Opérateurs sur les champs](operateurs/champs.md)).

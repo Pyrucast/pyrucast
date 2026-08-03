@@ -1,8 +1,8 @@
 # Opérateurs de comportement
 
-Le module `ops::behavior` **intègre la loi de comportement** d'un
+Le module `ops::element_field::behavior` **intègre la loi de comportement** d'un
 [`Model`](../model.md) — le `COMP` de cast3m (« intégrer le comportement ») ;
-l'opérateur `ops::assemble::internal_forces` en calcule les **forces internes** —
+l'opérateur `ops::node_field::internal_forces` en calcule les **forces internes** —
 le `BSIG` de cast3m (`∫ Bᵀ σ`).
 
 ## `integrate_behavior(model, deformation, materials, prev=None, dt=None)` → `ElementField`
@@ -53,8 +53,8 @@ tout l'intérêt d'intégrer le comportement exactement.
 state = None  # VAR0 = prev ; None au premier pas
 for step in range(1, nsteps + 1):
     ...  # charge du pas → boucle de Newton sur u
-    eps = pyrucast.field.deformation(u, fes)  # ε(B)
-    out = pyrucast.behavior.integrate_behavior(model, eps, materials, prev=state)
+    eps = pyrucast.element_field.deformation(u, fes)  # ε(B)
+    out = pyrucast.element_field.integrate_behavior(model, eps, materials, prev=state)
     ...  # F_int (BSIG), résidu, correction de u
     state = out  # commit : prev ← VAR1 pour le pas suivant
 ```
@@ -63,8 +63,8 @@ for step in range(1, nsteps + 1):
 
 ```python
 # Solution (w, theta) déjà obtenue par le solveur.
-eps = pyrucast.field.beam_deformation(solution, fes)  # (κ, γ) par élément
-forces = pyrucast.behavior.integrate_behavior(model, eps, materials)
+eps = pyrucast.element_field.beam_deformation(solution, fes)  # (κ, γ) par élément
+forces = pyrucast.element_field.integrate_behavior(model, eps, materials)
 # forces porte le moment M = E·I·κ et l'effort tranchant V = G·A_s·γ.
 ```
 
@@ -98,9 +98,9 @@ sorte que `r = f_ext − f_int` est le **résidu** d'équilibre.
 
 ```python
 # Solution déjà obtenue par le solveur.
-eps = pyrucast.field.deformation(solution, fes)  # ε = B·u
-sig = pyrucast.behavior.integrate_behavior(model, eps, materials)  # COMP : σ
-f_int = pyrucast.assemble.internal_forces(model, sig)  # BSIG : ∫ Bᵀ σ
+eps = pyrucast.element_field.deformation(solution, fes)  # ε = B·u
+sig = pyrucast.element_field.integrate_behavior(model, eps, materials)  # COMP : σ
+f_int = pyrucast.node_field.internal_forces(model, sig)  # BSIG : ∫ Bᵀ σ
 residu = f_ext - f_int  # équilibre
 ```
 

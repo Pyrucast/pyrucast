@@ -88,10 +88,10 @@ pub trait Aggregate: Default {
     /// [`Aggregate::try_extend_from`]. After the union, [`Aggregate::finalize`]
     /// runs — a no-op for most aggregates. The two field types override it
     /// **asymmetrically**: `NodeField` *fuses* zones sharing the same support
-    /// (`consolidate_node`), whereas `ElementField` only *checks* that no
+    /// (`node_field::consolidate`), whereas `ElementField` only *checks* that no
     /// component is carried by two zones on one support
     /// (`check_unique_component_per_support`) and leaves component-disjoint zones
-    /// side by side — fuse them explicitly with `consolidate_element`.
+    /// side by side — fuse them explicitly with `element_field::consolidate`.
     fn merge(&self, other: &Self) -> Result<Self>
     where
         Self: Sized,
@@ -555,8 +555,8 @@ macro_rules! impl_aggregate_pymethods {
                 /// `NodeField` *fuses* them (union of components), whereas
                 /// `ElementField` keeps component-disjoint zones side by side
                 /// and only rejects a component carried by two zones on one
-                /// support — fuse those explicitly with `consolidate_element`
-                /// (`consolidate_element`). Returns `NotImplemented` for any
+                /// support — fuse those explicitly with `element_field::consolidate`
+                /// (`element_field::consolidate`). Returns `NotImplemented` for any
                 /// other type so Python can fall back to the right operand's
                 /// `__ror__`.
                 fn __or__(

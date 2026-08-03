@@ -41,7 +41,7 @@ Sinon, c'est une **fonction libre dans `ops/<thème>`**.
 ### Départage des cas limites
 
 > **Deux conteneurs lourds entrent-ils comme pairs ?**
-> — Oui → fonction libre (`ops::field::restrict(field, mesh)`).
+> — Oui → fonction libre (`ops::node_field::restrict(field, mesh)`).
 > — Non, ça ne lit que `self` (+ petits args) → méthode.
 
 Et un repère de cohérence : si une opération mono-conteneur appartient à
@@ -102,8 +102,8 @@ masquer un constructeur `Sub*` est le **seul** écart permis, et il doit rester
 limité à ce cas.
 
 Le style visé côté Python est celui de **numpy / scipy** (et l'héritage
-**cast3m**) : des opérateurs **nommés** (`pyrucast.mesher.to_poi1(mesh)`,
-`pyrucast.assemble.stiffness(model, mat)`) plutôt que des chaînes de
+**cast3m**) : des opérateurs **nommés** (`pyrucast.mesh.to_poi1(mesh)`,
+`pyrucast.matrix.stiffness(model, mat)`) plutôt que des chaînes de
 méthodes, et des méthodes réservées aux accesseurs, mutations et vues
 dérivées.
 
@@ -112,8 +112,8 @@ dérivées.
 Le rangement par thème (`mesher`, `field`, `assemble`, `build`, `solver`,
 …) organise le code Rust (`src/ops/<thème>/`) **et** l'API Python : une
 fonction libre `ops::<thème>::f` est exposée comme `pyrucast.<thème>.f`
-(`pyrucast.mesher.to_poi1`, `pyrucast.field.coordinates`,
-`pyrucast.assemble.stiffness`, `pyrucast.solver.solve`, …). Les conteneurs
+(`pyrucast.mesh.to_poi1`, `pyrucast.node_field.coordinates`,
+`pyrucast.matrix.stiffness`, `pyrucast.solver.solve`, …). Les conteneurs
 (`containers::…`) restent des classes au top-level (`pyrucast.Coords`,
 `pyrucast.Mesh`, …). Le miroir est **sans exception** : aucune fonction libre
 ne vit au top-level Python.
@@ -139,7 +139,7 @@ couche FFI suivent le même découpage que Rust — `containers/` (data) vs
 
 C'est un **repère de navigation**, pas un changement de surface : depuis un
 wrapper on retrouve l'impl Rust par parité de chemin —
-`py/ops/mesher.rs` ↔ `ops/mesher/`, et `line` ↔ `ops/mesher/line.rs`.
+`py/ops/mesh.rs` ↔ `ops/mesh/`, et `line` ↔ `ops/mesh/line.rs`.
 Corollaire : une fonction libre se range par sa **famille `ops`** (cf. table
 de projection et cas tranchés ci-dessous), jamais par son type d'entrée ni
 de sortie.
@@ -251,26 +251,28 @@ pour le câblage Python des wrappers non-agrégats.
 
 ## Table de projection (état cible)
 
-Côté Python, les fonctions des thèmes ci-dessous vivent dans le
-**sous-module du thème** (`pyrucast.<thème>.f(...)`) — voir la note sur les
-sous-modules plus haut, sans exception.
+Côté Python, les fonctions vivent dans le **sous-module du conteneur
+produit** (`pyrucast.<module>.f(...)`) — voir la note sur les sous-modules
+plus haut, sans exception.
 
 | Opération | Rust | Python |
 |---|---|---|
 | accesseur / mutation mono-conteneur | méthode | méthode |
 | vue dérivée d'un seul conteneur | méthode | méthode |
-| transformation mesh→mesh | `ops::mesher::*` | `pyrucast.mesher.to_poi1`, `pyrucast.mesher.consolidate_mesh`, … |
-| construction de conteneur | `ops::build::*` | `pyrucast.build.material_field`, … |
-| opérateur sur field croisant un mesh/field | `ops::field::*` | `pyrucast.field.coordinates`, `pyrucast.field.restrict`, `pyrucast.field.merge` |
-| assemblage `Model` → `Matrix` | `ops::assemble::*` | `pyrucast.assemble.stiffness`, `pyrucast.assemble.mass` |
+| transformation mesh→mesh | `ops::mesh::*` | `pyrucast.mesh.to_poi1`, `pyrucast.mesh.consolidate`, … |
+| production d'un champ nodal | `ops::node_field::*` | `pyrucast.node_field.coordinates`, `pyrucast.node_field.restrict`, `pyrucast.node_field.merge` |
+| production d'un champ par éléments | `ops::element_field::*` | `pyrucast.element_field.gradient`, `pyrucast.element_field.material_field` |
+| réduction à un nombre | `ops::measure::*` | `pyrucast.measure.integral`, `pyrucast.measure.xty` |
+| assemblage `Model` → `Matrix` | `ops::matrix::*` | `pyrucast.matrix.stiffness`, `pyrucast.matrix.mass` |
 | résolution `A·x = b` | `ops::solver::*` | `pyrucast.solver.solve` |
 | arithmétique (`+ - * /`, indexation) | `impl` d'opérateur | dunder |
 | constructeur nommé | fn associée | `classmethod` |
 
 ## Cas tranchés explicitement
 
-- `restrict(field, mesh)` → **`ops::field`** (field + mesh en pairs).
-- `merge(a, b)` → **`ops::field`** (deux fields en pairs) ; alias nommé de
+- `restrict(field, mesh)` → **`ops::node_field`** (field + mesh en pairs ;
+  produit un champ nodal).
+- `merge(a, b)` → **`ops::node_field`** (deux fields en pairs) ; alias nommé de
   l'union `a | b` (`Aggregate::union`), fusion non arithmétique.
 - addition field+field → **opérateur `+`** (arithmétique de valeurs, pas la
   composition de zones), pas une `ops::field::add`. Les opérateurs `+ - * /`
@@ -281,18 +283,25 @@ sous-modules plus haut, sans exception.
   `Field::merge_field` (agrégat), `Field::merge_subfield` (maj ciblée d'une zone).
   Là où un écart de composantes doit être une erreur (interpolation `Evolution`),
   `SubField::check_same_components` garde `merge_components` en amont.
-- `stiffness(model, mat)`, `mass(model)` → **`ops::assemble`** (famille
+- `stiffness(model, mat)`, `mass(model)` → **`ops::matrix`** (famille
   assembleur ; `mass` suit `stiffness`, elles ne se séparent pas).
-- `consolidate_mesh(mesh)`, `to_poi1(mesh)` → **`ops::mesher`** (famille des
-  transformations mesh→mesh ; mono-conteneur mais rattachées à leur
-  famille).
-- `material_field(model, …)` → **`ops::build`** (produit un `ElementField`
-  dans la chaîne d'assemblage). *C'est le cas le plus limite — il ne lit que
-  le `Model` + une spec scalaire ; on le rattache à sa famille `build` pour
-  garder la chaîne `build → assemble → solve` uniforme.*
+- `consolidate(mesh)`, `to_poi1(mesh)` → **`ops::mesh`** (mono-conteneur,
+  mais elles produisent un `Mesh` et appartiennent à la famille des
+  mailleurs).
+- `select(field, ge=…)` → **`ops::mesh`** : elle part d'un champ mais rend un
+  `Mesh`, et on se range par la sortie. Sa jumelle `mask`, qui réécrit les
+  valeurs sans changer la structure, rend un champ de la sorte reçue et
+  reste donc dans `ops::field`.
+- `material_field(model, …)` → **`ops::element_field`** (produit un
+  `ElementField`). L'ancien module `build`, qui ne désignait aucune famille,
+  disparaît.
+- `flux`, `internal_forces` → **`ops::node_field`** : ce sont des
+  assemblages, mais leur résultat est un vecteur, pas un opérateur. La
+  machinerie qu'ils partagent avec `ops::matrix` (`ops::coloring`,
+  `ops::scatter`) vit à la racine d'`ops` — ce ne sont pas des opérateurs.
 - `mul_dense(self, x: &[f64])` → **méthode** (`x` est un slice, pas un
   conteneur lourd : produit matrice-vecteur mono-conteneur).
 - `support_submesh` / `support_mesh` sur `NodeField` → **méthodes** (vue du
   support d'un seul field). Renommées depuis `to_poi1_submesh` /
   `to_poi1_mesh` pour ne pas se confondre avec l'opérateur
-  `ops::mesher::to_poi1(mesh)`.
+  `ops::mesh::to_poi1(mesh)`.

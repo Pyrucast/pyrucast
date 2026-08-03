@@ -37,11 +37,11 @@ def bloc(coords: pc.Coords, y0: float):
     (`line` pour les bords bas/haut, `sweep` entre les deux, comme
     dans `formation/maillage.py`). Renvoie `(mesh, grille)`, `grille[idx(i,j)]`
     étant le nœud `(i,j)` (`i` : abscisse, `j` : ordonnée)."""
-    bas = pc.mesher.line(coords.add_node([0.0, y0]), coords.add_node([1.0, y0]), N)
-    haut = pc.mesher.line(
+    bas = pc.mesh.line(coords.add_node([0.0, y0]), coords.add_node([1.0, y0]), N)
+    haut = pc.mesh.line(
         coords.add_node([0.0, y0 + 1.0]), coords.add_node([1.0, y0 + 1.0]), N
     )
-    mesh = pc.mesher.sweep(bas, haut, N)
+    mesh = pc.mesh.sweep(bas, haut, N)
 
     grille = [None] * ((N + 1) * (N + 1))
     for cy in range(N):
@@ -55,20 +55,20 @@ def bloc(coords: pc.Coords, y0: float):
 
 
 def clamp(nodes, var, dual):
-    imposed = pc.mesher.poi1_from_nodes(nodes)
-    multiplier = pc.mesher.barycenter(imposed)
+    imposed = pc.mesh.poi1_from_nodes(nodes)
+    multiplier = pc.mesh.barycenter(imposed)
     return pc.Model.dirichlet(var, dual, imposed, multiplier)
 
 
 def bord_horizontal(mesh: pc.Mesh, y: float) -> pc.Mesh:
-    """Extrait, parmi les segments de bord de `mesh` (`pyrucast.mesher.border`,
+    """Extrait, parmi les segments de bord de `mesh` (`pyrucast.mesh.border`,
     l'équivalent Cast3M `CONTOUR`), ceux d'ordonnée `y` — un bord existant du
     maillage, pas une ligne recréée à côté (`line` fabriquerait de
     nouveaux nœuds, disjoints de `mesh`)."""
-    frontiere = pc.mesher.border(mesh)
-    ordonnee = pc.field.coordinates(frontiere, ["Y"])
-    noeuds = pc.field.select(ordonnee, ge=y - 1e-9, le=y + 1e-9)
-    return pc.mesher.elements_on(frontiere, noeuds, strict=True)
+    frontiere = pc.mesh.border(mesh)
+    ordonnee = pc.node_field.coordinates(frontiere, ["Y"])
+    noeuds = pc.mesh.select(ordonnee, ge=y - 1e-9, le=y + 1e-9)
+    return pc.mesh.elements_on(frontiere, noeuds, strict=True)
 
 
 def main() -> None:
@@ -84,7 +84,7 @@ def main() -> None:
     # gauche — la normale associée pointe vers +y). Esclave : nœuds du bord
     # bas du bloc haut.
     maitre = bord_horizontal(mesh_bas, 1.0)
-    esclave = pc.mesher.poi1_from_nodes([haut[idx(i, 0)] for i in range(N + 1)])
+    esclave = pc.mesh.poi1_from_nodes([haut[idx(i, 0)] for i in range(N + 1)])
 
     contact = pc.Model.contact(esclave, maitre, [("u_x", "f_x"), ("u_y", "f_y")])
     # ANCHOR_END: geometrie_contact
@@ -95,13 +95,13 @@ def main() -> None:
     modele = modele | clamp([bas[idx(i, 0)] for i in range(N + 1)], "u_y", "f_y")
     modele = modele | contact
 
-    materiaux = pc.build.material_field(modele, [("E", E), ("nu", 0.0)])
+    materiaux = pc.element_field.material_field(modele, [("E", E), ("nu", 0.0)])
     # ANCHOR_END: modele_contact
 
     # ANCHOR: chargement_contact
     bord_haut = bord_horizontal(mesh_haut, 2.0 + G0)
     bord_haut_fes = pc.FiniteElementSpace(bord_haut)
-    traction = pc.assemble.flux(bord_haut_fes[0], -S, "f_y")
+    traction = pc.node_field.flux(bord_haut_fes[0], -S, "f_y")
 
     # `contact_gaps()` fournit le second membre du contact — l'équivalent
     # Cast3M de la préparation du problème unilatéral avant RESO.
@@ -109,7 +109,7 @@ def main() -> None:
     # ANCHOR_END: chargement_contact
 
     # ANCHOR: resolution_contact
-    K = pc.assemble.stiffness(modele, materiaux)
+    K = pc.matrix.stiffness(modele, materiaux)
     solution = pc.solver.solve_unilateral(modele, K, second_membre)
     # ANCHOR_END: resolution_contact
 

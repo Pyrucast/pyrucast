@@ -333,7 +333,7 @@ def test_matrix_mul_and_truediv_scale_by_factor():
 
 
 def test_assemble_reassembles_scaled_mass_union_stiffness():
-    """`M/dt + K` via `(mass / dt) | stiffness` then `pyrucast.assemble.assemble`
+    """`M/dt + K` via `(mass / dt) | stiffness` then `pyrucast.matrix.assemble`
     — the dynamics idiom documented in book/src/matrix.md. `K` carries the
     Dirichlet multiplier DOF that `M` doesn't (a constraint only ever enters
     the stiffness matrix); the union/reassembly must still work and leave
@@ -345,22 +345,22 @@ def test_assemble_reassembles_scaled_mass_union_stiffness():
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
 
-    imposed = pyrucast.mesher.poi1_from_nodes([a])
-    mult_mesh = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes([a])
+    mult_mesh = pyrucast.mesh.barycenter(imposed)
     mult = mult_mesh.node(0, 0, 0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed, mult_mesh)
     model = pyrucast.Model.heat_conduction(fes) | dirichlet
-    materials = pyrucast.build.material_field(
+    materials = pyrucast.element_field.material_field(
         model, [("k", 1.0), ("rho", 2.0), ("cp", 3.0)]
     )
 
-    k = pyrucast.assemble.stiffness(model, materials)
-    m = pyrucast.assemble.mass(model, materials)
+    k = pyrucast.matrix.stiffness(model, materials)
+    m = pyrucast.matrix.mass(model, materials)
 
     dt = 0.5
     m_dt = m / dt
     sys = m_dt | k
-    pyrucast.assemble.assemble(sys)
+    pyrucast.matrix.assemble(sys)
 
     tol = 1e-12
     # K_e = k/h·[[1,-1],[-1,1]] = [[1,-1],[-1,1]] (h=1); C_e = ρcp·h/6·[[2,1],[1,2]]

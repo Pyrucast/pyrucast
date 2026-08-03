@@ -136,28 +136,34 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::read_gmsh, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::read_gmsh_str, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::export::export_vtk, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::mesh::consolidate_mesh, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::consolidate_node, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::consolidate_element, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::coordinates, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::set_coordinates, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::displace, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::restrict, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::restrict_like, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::select, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::consolidate, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::consolidate, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::consolidate, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::coordinates, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::coords::set, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::coords::displace, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::restrict, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::restrict_like, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::select, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::mask, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::filter_components, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::rename_component, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::merge, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::gradient, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::deformation, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::interp_to_gauss, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::thermal_strain, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::beam_deformation, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::divergence, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::integral, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::xty, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::xtx, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::merge, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::gradient, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::deformation, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        py::ops::element_field::interp_to_gauss,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::thermal_strain, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        py::ops::element_field::beam_deformation,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::divergence, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::measure::integral, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::measure::xty, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::measure::xtx, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::psca, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::abs, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::sqrt, m)?)?;
@@ -170,23 +176,29 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::field::sinh, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::cosh, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::field::tanh, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::assemble::stiffness, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::assemble::mass, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::assemble::assemble, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::assemble::lump, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::assemble::geometric, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::assemble::tangent, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::assemble::flux, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::assemble::internal_forces, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::matrix::stiffness, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::matrix::mass, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::matrix::assemble, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::matrix::lump, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::matrix::geometric, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::matrix::tangent, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::flux, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::internal_forces, m)?)?;
     m.add_function(wrap_pyfunction!(
-        py::ops::assemble::internal_forces_continuum,
+        py::ops::node_field::internal_forces_continuum,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(py::ops::behavior::integrate_behavior, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::build::sub_material_field, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::build::material_field, m)?)?;
     m.add_function(wrap_pyfunction!(
-        py::ops::build::material_field_per_sub_model,
+        py::ops::element_field::integrate_behavior,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        py::ops::element_field::sub_material_field,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::material_field, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        py::ops::element_field::material_field_per_sub_model,
         m
     )?)?;
     m.add_class::<py::coords::PyCoords>()?;

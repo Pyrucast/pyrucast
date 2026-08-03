@@ -1,4 +1,4 @@
-"""Python tests for `pyrucast.mesher.triangulate_volume`."""
+"""Python tests for `pyrucast.mesh.triangulate_volume`."""
 
 import pyrucast
 
@@ -73,9 +73,7 @@ def _volume(mesh):
 
 def test_triangulate_volume_box():
     c = pyrucast.Coords(3)
-    mesh = pyrucast.mesher.triangulate_volume(
-        _surface(c, _box(c, [0, 0, 0], [1, 1, 1]))
-    )
+    mesh = pyrucast.mesh.triangulate_volume(_surface(c, _box(c, [0, 0, 0], [1, 1, 1])))
     assert mesh.element_types() == ["TET4"]
     assert abs(_volume(mesh) - 1.0) < 1e-12
 
@@ -83,7 +81,7 @@ def test_triangulate_volume_box():
 def test_triangulate_volume_reuses_the_envelope_nodes():
     c = pyrucast.Coords(3)
     nodes = _box(c, [0, 0, 0], [1, 1, 1])
-    mesh = pyrucast.mesher.triangulate_volume(_surface(c, nodes))
+    mesh = pyrucast.mesh.triangulate_volume(_surface(c, nodes))
     used = {mesh.node(0, ci, k).id for ci in range(mesh.cell_count()) for k in range(4)}
     assert {n.id for n in nodes} <= used
 
@@ -93,8 +91,8 @@ def test_triangulate_volume_leaves_the_surface_alone():
     # back exactly the twelve facets that went in.
     c = pyrucast.Coords(3)
     envelope = _surface(c, _box(c, [0, 0, 0], [1, 1, 1]))
-    mesh = pyrucast.mesher.triangulate_volume(envelope)
-    assert pyrucast.mesher.skin(mesh).cell_count() == 12
+    mesh = pyrucast.mesh.triangulate_volume(envelope)
+    assert pyrucast.mesh.skin(mesh).cell_count() == 12
 
 
 def _extruded_plate(c, per_side, size):
@@ -117,10 +115,10 @@ def _extruded_plate(c, per_side, size):
     contour = pyrucast.Mesh(c, "SEG2")
     for i in range(len(nodes)):
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % len(nodes)]])
-    plate = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=size)
-    solid = pyrucast.mesher.extrude(plate, [0.0, 0.4, 0.0], 1)
-    skin = pyrucast.mesher.convert(pyrucast.mesher.skin(solid), "TRI3")
-    return pyrucast.mesher.invert(skin)
+    plate = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=size)
+    solid = pyrucast.mesh.extrude(plate, [0.0, 0.4, 0.0], 1)
+    skin = pyrucast.mesh.convert(pyrucast.mesh.skin(solid), "TRI3")
+    return pyrucast.mesh.invert(skin)
 
 
 def test_triangulate_volume_size_controls_the_fineness():
@@ -130,10 +128,10 @@ def test_triangulate_volume_size_controls_the_fineness():
     # inside can get.
     c = pyrucast.Coords(3)
     envelope = _extruded_plate(c, 6, 0.2)
-    coarse = pyrucast.mesher.triangulate_volume(
+    coarse = pyrucast.mesh.triangulate_volume(
         envelope, size=0.4, allow_surface_nodes=True
     )
-    fine = pyrucast.mesher.triangulate_volume(
+    fine = pyrucast.mesh.triangulate_volume(
         envelope, size=0.1, allow_surface_nodes=True
     )
     assert _tet_count(fine) > 3 * _tet_count(coarse)
@@ -147,7 +145,7 @@ def test_triangulate_volume_names_the_nodes_it_adds_on_the_envelope():
     # something a script can act on.
     c = pyrucast.Coords(3)
     envelope = _extruded_plate(c, 6, 0.2)
-    mesh = pyrucast.mesher.triangulate_volume(envelope, allow_surface_nodes=True)
+    mesh = pyrucast.mesh.triangulate_volume(envelope, allow_surface_nodes=True)
     assert mesh.element_types() == ["TET4", "POI1"]
 
     added = mesh.cell_counts()[1]
@@ -161,7 +159,7 @@ def test_triangulate_volume_names_the_nodes_it_adds_on_the_envelope():
 def test_triangulate_volume_adds_no_submesh_when_it_adds_no_node():
     c = pyrucast.Coords(3)
     envelope = _surface(c, _box(c, [0, 0, 0], [1, 1, 1]))
-    mesh = pyrucast.mesher.triangulate_volume(envelope, allow_surface_nodes=True)
+    mesh = pyrucast.mesh.triangulate_volume(envelope, allow_surface_nodes=True)
     assert mesh.element_types() == ["TET4"]
 
 
@@ -176,7 +174,7 @@ def test_triangulate_volume_hollow_box_subtracts_the_cavity():
         mesh.unit().add_cell([outer[f[0]], outer[f[1]], outer[f[2]]])
     for f in _BOX_FACETS:
         mesh.unit().add_cell([inner[f[0]], inner[f[2]], inner[f[1]]])
-    result = pyrucast.mesher.triangulate_volume(mesh)
+    result = pyrucast.mesh.triangulate_volume(mesh)
     assert abs(_volume(result) - (27.0 - 1.0)) < 1e-12
 
 
@@ -184,7 +182,7 @@ def test_triangulate_volume_rejects_an_open_surface():
     c = pyrucast.Coords(3)
     nodes = _box(c, [0, 0, 0], [1, 1, 1])
     try:
-        pyrucast.mesher.triangulate_volume(_surface(c, nodes, _BOX_FACETS[1:]))
+        pyrucast.mesh.triangulate_volume(_surface(c, nodes, _BOX_FACETS[1:]))
     except RuntimeError as e:
         assert "not closed" in str(e)
     else:
@@ -196,7 +194,7 @@ def test_triangulate_volume_rejects_inward_normals():
     nodes = _box(c, [0, 0, 0], [1, 1, 1])
     flipped = [(f[0], f[2], f[1]) for f in _BOX_FACETS]
     try:
-        pyrucast.mesher.triangulate_volume(_surface(c, nodes, flipped))
+        pyrucast.mesh.triangulate_volume(_surface(c, nodes, flipped))
     except RuntimeError as e:
         assert "invert()" in str(e)
     else:
@@ -209,7 +207,7 @@ def test_triangulate_volume_rejects_a_quadrangle_envelope():
     quad = pyrucast.Mesh(c, "QUA4")
     quad.unit().add_cell([nodes[0], nodes[1], nodes[2], nodes[3]])
     try:
-        pyrucast.mesher.triangulate_volume(quad)
+        pyrucast.mesh.triangulate_volume(quad)
     except RuntimeError as e:
         assert "TRI3" in str(e)
     else:
@@ -220,7 +218,7 @@ def test_triangulate_volume_rejects_a_bad_size():
     c = pyrucast.Coords(3)
     envelope = _surface(c, _box(c, [0, 0, 0], [1, 1, 1]))
     try:
-        pyrucast.mesher.triangulate_volume(envelope, size=0.0)
+        pyrucast.mesh.triangulate_volume(envelope, size=0.0)
     except RuntimeError as e:
         assert "size must be > 0" in str(e)
     else:
@@ -248,7 +246,7 @@ def test_triangulate_volume_refuses_a_box_whose_faces_cannot_be_filled():
         (3, 4, 7),
     ]
     try:
-        pyrucast.mesher.triangulate_volume(_surface(c, nodes, unfillable))
+        pyrucast.mesh.triangulate_volume(_surface(c, nodes, unfillable))
     except RuntimeError as e:
         assert "without adding a node on the surface" in str(e)
     else:

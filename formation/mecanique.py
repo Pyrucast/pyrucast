@@ -40,7 +40,7 @@ K_COND = 50.0  # W/m/K
 def construire_plaque_trouee():
     """Plaque rectangulaire trouée, construite bord par bord avec les
     mailleurs dédiés (`line`, `circle`), fusionnés en un seul
-    sous-maillage par `pyrucast.mesher.consolidate_mesh` avant `triangulate_surface` — comme
+    sous-maillage par `pyrucast.mesh.consolidate` avant `triangulate_surface` — comme
     dans `formation/maillage.py`. Renvoie aussi les sous-maillages utiles à
     la mécanique et à la thermique : bord gauche (encastrement), moitié
     basse du trou (chargement) et le trou complet (température imposée,
@@ -51,25 +51,25 @@ def construire_plaque_trouee():
     p3 = coords.add_node([LONGUEUR, HAUTEUR])
     p4 = coords.add_node([0.0, HAUTEUR])
 
-    bas = pc.mesher.line(p1, p2, 10)
-    droit = pc.mesher.line(p2, p3, 4)
-    haut = pc.mesher.line(p3, p4, 10)
-    gauche = pc.mesher.line(p4, p1, 4)
-    boucle_ext = pc.mesher.consolidate_mesh(bas | droit | haut | gauche)
+    bas = pc.mesh.line(p1, p2, 10)
+    droit = pc.mesh.line(p2, p3, 4)
+    haut = pc.mesh.line(p3, p4, 10)
+    gauche = pc.mesh.line(p4, p1, 4)
+    boucle_ext = pc.mesh.consolidate(bas | droit | haut | gauche)
 
     centre = coords.add_node(list(CENTRE_TROU))
-    trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
+    trou = pc.mesh.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
 
     # Boucle extérieure CCW, trou horaire (CW) : orientation attendue par
     # `triangulate_surface` (le trou est inversé, `trou` reste utilisable ci-dessous).
-    contour = boucle_ext | pc.mesher.invert(trou)
-    plaque = pc.mesher.triangulate_surface(contour, "TRI3", size=0.02)
+    contour = boucle_ext | pc.mesh.invert(trou)
+    plaque = pc.mesh.triangulate_surface(contour, "TRI3", size=0.02)
 
     # Moitié basse du trou (y < centre) : support de l'effort de la masse
     # suspendue, comme le `PRES 'MASS'` de Cast3M sur une moitié du cercle.
-    y = pc.field.coordinates(trou, ["Y"])
-    noeuds_bas_trou = pc.field.select(y, lt=CENTRE_TROU[1])
-    arc_bas = pc.mesher.elements_on(trou, noeuds_bas_trou, strict=True)
+    y = pc.node_field.coordinates(trou, ["Y"])
+    noeuds_bas_trou = pc.mesh.select(y, lt=CENTRE_TROU[1])
+    arc_bas = pc.mesh.elements_on(trou, noeuds_bas_trou, strict=True)
 
     return coords, plaque, gauche, arc_bas, trou
 
@@ -89,15 +89,15 @@ def resoudre_thermique(plaque, trou):
     fes = pc.FiniteElementSpace(plaque)
     modele_th = pc.Model.heat_conduction(fes)
 
-    trou_poi1 = pc.mesher.to_poi1(trou)
-    multiplicateur = pc.mesher.translate(trou_poi1, [0.0, 0.0])
+    trou_poi1 = pc.mesh.to_poi1(trou)
+    multiplicateur = pc.mesh.translate(trou_poi1, [0.0, 0.0])
     modele_th = modele_th | pc.Model.dirichlet("T", "q", trou_poi1, multiplicateur)
 
-    materiaux_th = pc.build.material_field(modele_th, [("k", K_COND)])
+    materiaux_th = pc.element_field.material_field(modele_th, [("k", K_COND)])
     temperature_imposee = pc.NodeField(multiplicateur, ["imposed_T"])
     temperature_imposee[0].add_to_component("imposed_T", T_IMPOSEE)
 
-    K_th = pc.assemble.stiffness(modele_th, materiaux_th)
+    K_th = pc.matrix.stiffness(modele_th, materiaux_th)
     return pc.solver.solve(K_th, temperature_imposee)
 
 
@@ -107,22 +107,22 @@ def main() -> None:
     arc_fes = pc.FiniteElementSpace(arc_bas)
 
     # ANCHOR: modele_elastique
-    encastrement = pc.mesher.to_poi1(gauche)
-    multiplicateur = pc.mesher.translate(encastrement, [0.0, 0.0])
+    encastrement = pc.mesh.to_poi1(gauche)
+    multiplicateur = pc.mesh.translate(encastrement, [0.0, 0.0])
 
     modele = pc.Model.elasticity(fes, "plane_stress")
     modele = modele | pc.Model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
     modele = modele | pc.Model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
-    materiaux = pc.build.material_field(
+    materiaux = pc.element_field.material_field(
         modele, [("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
 
     # Effort de la masse suspendue, réparti sur la moitié basse du trou —
     # analogue de FSUR 'MASS' / PRES 'MASS' (Cast3M section 6).
     pression = -MASSE * G / (2.0 * 3.14159265 * RAYON_TROU)
-    effort = pc.assemble.flux(arc_fes[0], pression, "f_y")
+    effort = pc.node_field.flux(arc_fes[0], pression, "f_y")
 
-    K = pc.assemble.stiffness(modele, materiaux)
+    K = pc.matrix.stiffness(modele, materiaux)
     # ANCHOR_END: modele_elastique
 
     # ANCHOR: cas1_elastique
@@ -132,21 +132,23 @@ def main() -> None:
 
     # ANCHOR: cas2_thermique
     temperature = resoudre_thermique(plaque, trou)
-    t_gauss = pc.field.interp_to_gauss(pc.field.restrict(temperature, plaque), fes)
-    eps_th = pc.field.thermal_strain(t_gauss, materiaux, fes, T_REF)
-    sig_th = pc.behavior.integrate_behavior(modele, eps_th, materiaux)
-    f_th = pc.assemble.internal_forces(modele, sig_th)
+    t_gauss = pc.element_field.interp_to_gauss(
+        pc.node_field.restrict(temperature, plaque), fes
+    )
+    eps_th = pc.element_field.thermal_strain(t_gauss, materiaux, fes, T_REF)
+    sig_th = pc.element_field.integrate_behavior(modele, eps_th, materiaux)
+    f_th = pc.node_field.internal_forces(modele, sig_th)
 
-    second_membre = f_th + pc.field.restrict_like(effort, f_th)
+    second_membre = f_th + pc.node_field.restrict_like(effort, f_th)
     u2 = pc.solver.solve(K, second_membre)
     print(f"2) + dilatation thermique : u_y(trou) ≈ {u2.min('u_y'):.6e} m")
     # ANCHOR_END: cas2_thermique
 
     # u2 porte aussi les multiplicateurs de Lagrange du Dirichlet : on ne
     # garde que (u_x, u_y) avant de calculer une déformation.
-    u2_propre = pc.field.restrict_like(u2, pc.NodeField(plaque, ["u_x", "u_y"]))
-    contraintes = pc.behavior.integrate_behavior(
-        modele, pc.field.deformation(u2_propre, fes) - eps_th, materiaux
+    u2_propre = pc.node_field.restrict_like(u2, pc.NodeField(plaque, ["u_x", "u_y"]))
+    contraintes = pc.element_field.integrate_behavior(
+        modele, pc.element_field.deformation(u2_propre, fes) - eps_th, materiaux
     )
     print(f"   σ_xx max ≈ {contraintes.max('sigma_xx'):.3e} Pa")
 

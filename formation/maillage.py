@@ -12,9 +12,9 @@ portée par **Y** : la géométrie est donc 3D (`Coords(3)`) dès le départ, ce
 évite d'avoir à la relever au moment de passer au volume.
 
 FR — Deux familles de mailleurs sont comparées : le **non structuré**
-(`pyrucast.mesher.triangulate_surface`), où l'on donne un contour fermé et une
-**taille de maille** cible, et le **structuré** (`pyrucast.mesher.extrude`,
-`pyrucast.mesher.sweep`), où l'on impose un **nombre d'éléments** et où le
+(`pyrucast.mesh.triangulate_surface`), où l'on donne un contour fermé et une
+**taille de maille** cible, et le **structuré** (`pyrucast.mesh.extrude`,
+`pyrucast.mesh.sweep`), où l'on impose un **nombre d'éléments** et où le
 maillage a la topologie d'une grille. Le détail pas à pas est dans le livre,
 page « Maillage ».
 
@@ -28,9 +28,9 @@ runs along **Y**: the geometry is 3-D (`Coords(3)`) from the start, so nothing
 has to be lifted when moving on to the volume.
 
 EN — Two families of meshers are compared: **unstructured**
-(`pyrucast.mesher.triangulate_surface`), where you hand in a closed contour and
-a target **element size**, and **structured** (`pyrucast.mesher.extrude`,
-`pyrucast.mesher.sweep`), where you impose an **element count** and the mesh
+(`pyrucast.mesh.triangulate_surface`), where you hand in a closed contour and
+a target **element size**, and **structured** (`pyrucast.mesh.extrude`,
+`pyrucast.mesh.sweep`), where you impose an **element count** and the mesh
 has grid topology. The step-by-step walkthrough lives in the book's meshing
 page.
 
@@ -108,24 +108,24 @@ p6 = coords.add_node([LENGTH, 0.0, HEIGHT / 2.0])
 def border_plate_with_hole() -> pc.Mesh:
     # FR — Le contour se maille bord par bord : `line` droit, `arc` courbe.
     # EN — The contour is meshed edge by edge: `line` straight, `arc` curved.
-    l12 = pc.mesher.line(p1, p2, 30)
-    c23 = pc.mesher.arc(p2, p6, p3, 8)
-    c34 = pc.mesher.arc(p3, p6, p4, 8)
-    l45 = pc.mesher.line(p4, p5, 30)
-    l51 = pc.mesher.line(p5, p1, 10)
+    l12 = pc.mesh.line(p1, p2, 30)
+    c23 = pc.mesh.arc(p2, p6, p3, 8)
+    c34 = pc.mesh.arc(p3, p6, p4, 8)
+    l45 = pc.mesh.line(p4, p5, 30)
+    l51 = pc.mesh.line(p5, p1, 10)
     cex = l12 | c23 | c34 | l45 | l51
     # ANCHOR_END: contour_bords
 
     # ANCHOR: contour_consolidate
     # FR — `|` garde un sous-maillage par bord ; `consolidate_mesh` les fusionne.
     # EN — `|` keeps one submesh per edge; `consolidate_mesh` fuses them.
-    cex = pc.mesher.consolidate_mesh(cex)
+    cex = pc.mesh.consolidate(cex)
     # ANCHOR_END: contour_consolidate
 
     # ANCHOR: contour_trou
     # FR — Le trou : cercle centré sur p6, de normale −Y, en 32 segments.
     # EN — The hole: a circle centred on p6, with normal −Y, in 32 segments.
-    cin = pc.mesher.circle(p6, [0, -1, 0], HOLE_RADIUS, 32)
+    cin = pc.mesh.circle(p6, [0, -1, 0], HOLE_RADIUS, 32)
 
     # FR — Deux sous-maillages : le contour extérieur, puis le trou.
     # EN — Two submeshes: the outer contour, then the hole.
@@ -142,7 +142,7 @@ def unstructured_mesh(
 ) -> tuple[pc.Mesh, pc.Mesh, pc.Mesh, pc.Mesh]:
     # FR — Les deux boucles tournent dans le même sens : deux domaines pleins.
     # EN — Both loops wind the same way: two filled-in domains.
-    plate_two_domains = pc.mesher.triangulate_surface(border, "TRI3", size=0.01)
+    plate_two_domains = pc.mesh.triangulate_surface(border, "TRI3", size=0.01)
     show(
         plate_two_domains,
         "Deux boucles CCW : le disque est rempli",
@@ -153,8 +153,8 @@ def unstructured_mesh(
     # ANCHOR: invert_trou
     # FR — `invert` retourne la boucle du trou : le mailleur y voit un trou.
     # EN — `invert` flips the hole loop: the mesher then sees a genuine hole.
-    border = border[:1] | pc.mesher.invert(border[1:])
-    plate = pc.mesher.triangulate_surface(border, "TRI3", size=0.01)
+    border = border[:1] | pc.mesh.invert(border[1:])
+    plate = pc.mesh.triangulate_surface(border, "TRI3", size=0.01)
     show(plate, "Plaque non structurée (TRI3)", "maillage-non-structure.svg")
     print(f"unstructured   : {plate.element_types()}, {plate.cell_count()} mailles")
     # ANCHOR_END: invert_trou
@@ -162,7 +162,7 @@ def unstructured_mesh(
     # ANCHOR: extrude
     # FR — L'extrusion balaie la surface sur l'épaisseur : un TRI3 donne un PENTA6.
     # EN — Extrusion sweeps the surface through the thickness: TRI3 gives PENTA6.
-    volume_extruded = pc.mesher.extrude(plate, [0, THICKNESS, 0], 2)
+    volume_extruded = pc.mesh.extrude(plate, [0, THICKNESS, 0], 2)
     show(
         volume_extruded,
         "Volume extrudé (toutes arêtes)",
@@ -179,7 +179,7 @@ def unstructured_mesh(
     # ANCHOR: skin
     # FR — `skin` extrait la peau et la découpe en faces planes, à 85° près.
     # EN — `skin` extracts the boundary and splits it into flat faces, at 85°.
-    skin = pc.mesher.skin(volume_extruded, angle_deg=85)
+    skin = pc.mesh.skin(volume_extruded, angle_deg=85)
     for i, face in enumerate(skin):
         face.face_color = PALETTE[i % len(PALETTE)]
     show(
@@ -193,7 +193,7 @@ def unstructured_mesh(
     # ANCHOR: convert_invert
     # FR — `convert` coupe chaque QUA4 en deux TRI3, `invert` sort les normales.
     # EN — `convert` splits each QUA4 into two TRI3, `invert` turns normals out.
-    skin = pc.mesher.invert(pc.mesher.convert(skin, "TRI3"))
+    skin = pc.mesh.invert(pc.mesh.convert(skin, "TRI3"))
     show(
         skin[1:-1],
         "Enveloppe TRI3",
@@ -205,9 +205,7 @@ def unstructured_mesh(
     # ANCHOR: triangulate_volume
     # FR — Remplissage TET4 ; le mailleur peut redécouper l'enveloppe donnée.
     # EN — TET4 filling; the mesher may re-cut the envelope it was handed.
-    volume_tetra = pc.mesher.triangulate_volume(
-        skin, size=0.01, allow_surface_nodes=True
-    )
+    volume_tetra = pc.mesh.triangulate_volume(skin, size=0.01, allow_surface_nodes=True)
     # ANCHOR_END: triangulate_volume
 
     # ANCHOR: noeuds_ajoutes
@@ -238,9 +236,9 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # ANCHOR: grille
     # FR — La grille : le bord gauche balayé par translation, un SEG2 → un QUA4.
     # EN — The grid: the left edge swept by translation, a SEG2 → a QUA4.
-    l15 = pc.mesher.line(p1, p5, n15)
+    l15 = pc.mesh.line(p1, p5, n15)
     x13 = LENGTH - (HEIGHT / 2.0)
-    sr1 = pc.mesher.extrude(l15, [x13, 0, 0], n12)
+    sr1 = pc.mesh.extrude(l15, [x13, 0, 0], n12)
 
     # FR — `plot=False` : les chapitres suivants importent le volume, sans figures.
     # EN — `plot=False`: later chapters import the volume, without any figure.
@@ -251,21 +249,21 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # ANCHOR: bord_droit
     # FR — Le bord droit de la grille ne se refabrique pas : il s'extrait.
     # EN — The grid's right edge is not rebuilt: it is extracted.
-    border_sr1 = pc.mesher.border(sr1)
-    right_nodes = pc.field.select(
-        pc.field.coordinates(border_sr1, ["X"]), ge=x13 * (n12 - 0.5) / n12
+    border_sr1 = pc.mesh.border(sr1)
+    right_nodes = pc.mesh.select(
+        pc.node_field.coordinates(border_sr1, ["X"]), ge=x13 * (n12 - 0.5) / n12
     )
-    l1213 = pc.mesher.elements_on(border_sr1, right_nodes, strict=True)
+    l1213 = pc.mesh.elements_on(border_sr1, right_nodes, strict=True)
     # ANCHOR_END: bord_droit
 
     # ANCHOR: extremites
     # FR — Ses deux extrémités, la plus basse et la plus haute en Z.
     # EN — Its two ends, the lowest and the highest in Z.
-    p13 = pc.field.select(
-        pc.field.coordinates(l1213, ["Z"]), le=0.5 / n15 * HEIGHT
+    p13 = pc.mesh.select(
+        pc.node_field.coordinates(l1213, ["Z"]), le=0.5 / n15 * HEIGHT
     ).node(0, 0, 0)
-    p12 = pc.field.select(
-        pc.field.coordinates(l1213, ["Z"]), ge=(n15 - 0.5) / n15 * HEIGHT
+    p12 = pc.mesh.select(
+        pc.node_field.coordinates(l1213, ["Z"]), ge=(n15 - 0.5) / n15 * HEIGHT
     ).node(0, 0, 0)
     # ANCHOR_END: extremites
 
@@ -273,13 +271,13 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # FR — Boucle extérieure de la couronne : 10+10+5+10+5 = 40 segments.
     # EN — The ring's outer loop: 10+10+5+10+5 = 40 segments.
     cext = (
-        pc.mesher.arc(p2, p6, p3, n15)
-        | pc.mesher.arc(p3, p6, p4, n15)
-        | pc.mesher.line(p4, p12, int(n15 / 2))
+        pc.mesh.arc(p2, p6, p3, n15)
+        | pc.mesh.arc(p3, p6, p4, n15)
+        | pc.mesh.line(p4, p12, int(n15 / 2))
         | l1213
-        | pc.mesher.line(p13, p2, int(n15 / 2))
+        | pc.mesh.line(p13, p2, int(n15 / 2))
     )
-    cext = pc.mesher.consolidate_mesh(cext)
+    cext = pc.mesh.consolidate(cext)
     # ANCHOR_END: boucle_exterieure
 
     # ANCHOR: boucle_interieure
@@ -290,12 +288,12 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     p16 = coords.add_node([LENGTH, 0.0, HEIGHT / 2.0 + HOLE_RADIUS])
     p17 = coords.add_node([LENGTH - HOLE_RADIUS, 0.0, HEIGHT / 2.0])
     cin = (
-        pc.mesher.arc(p14, p6, p15, n15)
-        | pc.mesher.arc(p15, p6, p16, n15)
-        | pc.mesher.arc(p16, p6, p17, n15)
-        | pc.mesher.arc(p17, p6, p14, n15)
+        pc.mesh.arc(p14, p6, p15, n15)
+        | pc.mesh.arc(p15, p6, p16, n15)
+        | pc.mesh.arc(p16, p6, p17, n15)
+        | pc.mesh.arc(p17, p6, p14, n15)
     )
-    cin = pc.mesher.consolidate_mesh(cin)
+    cin = pc.mesh.consolidate(cin)
 
     # FR — Les deux boucles, l'une bleue et l'autre rouge : découpages alignés.
     # EN — Both loops, one blue and one red: their cuttings line up.
@@ -307,7 +305,7 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # ANCHOR: sweep
     # FR — `sweep` relie les deux boucles par 3 couches de QUA4.
     # EN — `sweep` links both loops with 3 layers of QUA4.
-    sh1 = pc.mesher.sweep(cext, cin, 3)
+    sh1 = pc.mesh.sweep(cext, cin, 3)
     if plot:
         show(sh1, "Couronne balayée (QUA4)", "maillage-couronne.svg")
 
@@ -322,7 +320,7 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # ANCHOR: volume_hex8
     # FR — Même extrusion qu'en non structuré, mais un QUA4 donne un HEX8.
     # EN — Same extrusion as in the unstructured case, but a QUA4 gives an HEX8.
-    volume_structure = pc.mesher.extrude(grid, [0, THICKNESS, 0], 2)
+    volume_structure = pc.mesh.extrude(grid, [0, THICKNESS, 0], 2)
     if plot:
         show(
             volume_structure,

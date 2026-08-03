@@ -29,7 +29,7 @@ Coords ── Node                          (NodeId u32 stable ; Node = accesseu
                  │                  (+ Interpolation, QuadratureRule)
                  ├── ElementField  (agrège des SubElementField)   valeurs aux Gauss
                  └── Model  (agrège des SubModel : physiques + contraintes)
-                        └── ops::assemble ──► Matrix   (matrice creuse, DOFs nommés)
+                        └── ops::matrix ──► Matrix   (matrice creuse, DOFs nommés)
 
 Model + ElementField (matériau) ──► stiffness ──► Matrix
 Matrix + NodeField (second membre) ──► solve ──► NodeField (solution)

@@ -53,9 +53,9 @@ def main() -> None:
 
     # ── Maillage : grille N×N de QUA4 sur [0,1]², par balayage de deux lignes ─
     c = pyrucast.Coords(2)
-    bottom = pyrucast.mesher.line(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
-    top = pyrucast.mesher.line(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
-    mesh = pyrucast.mesher.sweep(bottom, top, N)
+    bottom = pyrucast.mesh.line(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
+    top = pyrucast.mesh.line(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
+    mesh = pyrucast.mesh.sweep(bottom, top, N)
 
     grid = [None] * ((N + 1) * (N + 1))
     for cy in range(N):
@@ -77,7 +77,7 @@ def main() -> None:
 
     # Matériau : k pour la conduction, h pour la convection (chaque sous-modèle
     # prélève la composante qu'il requiert).
-    materials = pyrucast.build.material_field(model, [("k", K), ("h", H)])
+    materials = pyrucast.element_field.material_field(model, [("k", K), ("h", H)])
 
     # ── Chargement ───────────────────────────────────────────────────────────
     # Source : flux uniforme (densité Q) sur le bord gauche.
@@ -85,16 +85,16 @@ def main() -> None:
     for j in range(N):
         left_edge.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
     left_fes = pyrucast.FiniteElementSpace(left_edge)
-    source = pyrucast.assemble.flux(left_fes[0], Q, "q")
+    source = pyrucast.node_field.flux(left_fes[0], Q, "q")
 
     # Convection : la part externe h·T_ext du flux de Robin, via le même `flux`.
-    conv_load = pyrucast.assemble.flux(right_fes[0], H * T_EXT, "q")
+    conv_load = pyrucast.node_field.flux(right_fes[0], H * T_EXT, "q")
 
     # Chargement = source du bord gauche + charge de convection du bord droit.
     rhs = source | conv_load
 
     # ── Assemblage + résolution (K rendue définie par le terme de film) ──────
-    K_mat = pyrucast.assemble.stiffness(model, materials)
+    K_mat = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K_mat, rhs)
 
     # ── Comparaison à l'analytique T(x) = T_ext + Q/h + (Q/k)(1 - x), ∀ y ────

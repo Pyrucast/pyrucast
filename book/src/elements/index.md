@@ -12,7 +12,7 @@ matrice élémentaire) est décrite une fois pour toutes au chapitre
 fiches ci-dessous ne répètent que ce qui est **propre** à chaque élément. Le
 code source est `containers/finite_element_space/interpolation.rs` (fonctions de
 forme) et `quadrature.rs` (points de Gauss) ; les conventions de repère et de
-numérotation locale vivent dans `containers/mesh/element_type.rs`.
+numérotation locale vivent dans `atoms/element_type.rs`.
 
 Toutes les fiches suivent le **même plan standard** : *introduction* (nombre de
 nœuds, famille, dimensions), **Repère de référence** (domaine + numérotation

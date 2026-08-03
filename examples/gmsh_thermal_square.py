@@ -120,7 +120,7 @@ def main() -> None:
         write_square_msh(msh, N)
 
         coords = pyrucast.Coords(dim=2)
-        regions = pyrucast.mesher.read_gmsh(coords, str(msh))
+        regions = pyrucast.mesh.read_gmsh(coords, str(msh))
 
     print("groupes lus :", sorted(regions))  # ['left', 'plate', 'right']
     plate = regions["plate"]
@@ -131,18 +131,18 @@ def main() -> None:
     fes = pyrucast.FiniteElementSpace(plate)
 
     right_nodes = unique_nodes(right)
-    imposed = pyrucast.mesher.poi1_from_nodes(right_nodes)
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes(right_nodes)
+    multiplier = pyrucast.mesh.barycenter(imposed)
     mults = [multiplier.node(0, j, 0) for j in range(len(right_nodes))]
 
     model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
         "T", "q", imposed, multiplier
     )
-    materials = pyrucast.build.material_field(model, [("k", K)])
+    materials = pyrucast.element_field.material_field(model, [("k", K)])
 
     # ── 3. Chargement : flux réparti sur le bord gauche + T imposée ──────────
     left_fes = pyrucast.FiniteElementSpace(left)
-    source = pyrucast.assemble.flux(left_fes[0], Q, "q")
+    source = pyrucast.node_field.flux(left_fes[0], Q, "q")
 
     imposed_mesh = pyrucast.Mesh(coords, "POI1")
     for m in mults:
@@ -154,7 +154,7 @@ def main() -> None:
     rhs = source | imposed_load
 
     # ── 4. Assemblage + résolution ───────────────────────────────────────────
-    K_mat = pyrucast.assemble.stiffness(model, materials)
+    K_mat = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K_mat, rhs)
 
     # ── 5. Comparaison à l'analytique u(x) = 20 + (Q/k)(1 - x) ───────────────

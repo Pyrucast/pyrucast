@@ -575,7 +575,7 @@ class PyElementField:
         """`field | other` → a fresh `ElementField` holding the zones of both.
         Component-disjoint zones on one support stay **side by side** (unlike
         `NodeField`, which fuses them); a component carried by two zones on the
-        same support is rejected — fuse those explicitly with `consolidate_element`."""
+        same support is rejected — fuse those explicitly with `pyrucast.element_field.consolidate`."""
     def __ror__(self, other: pyo3_stub_gen.RustType["PySubElementField"]) -> pyo3_stub_gen.RustType["PyElementField"]:
         """`subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first."""

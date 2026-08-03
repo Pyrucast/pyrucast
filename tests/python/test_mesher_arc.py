@@ -1,4 +1,4 @@
-"""Python tests for `pyrucast.mesher.arc`."""
+"""Python tests for `pyrucast.mesh.arc`."""
 
 import math
 
@@ -10,7 +10,7 @@ def test_arc_default_seg2():
     center = c.add_node([0.0, 0.0])
     a = c.add_node([1.0, 0.0])
     b = c.add_node([0.0, 1.0])
-    mesh = pyrucast.mesher.arc(a, center, b, 3)
+    mesh = pyrucast.mesh.arc(a, center, b, 3)
     assert mesh.element_types() == ["SEG2"]
     assert mesh.cell_count() == 3
     assert mesh.node(0, 0, 0).id == a.id
@@ -22,7 +22,7 @@ def test_arc_seg3():
     center = c.add_node([0.0, 0.0])
     a = c.add_node([1.0, 0.0])
     b = c.add_node([0.0, 1.0])
-    mesh = pyrucast.mesher.arc(a, center, b, 2, element_type="SEG3")
+    mesh = pyrucast.mesh.arc(a, center, b, 2, element_type="SEG3")
     assert mesh.element_types() == ["SEG3"]
     assert mesh.cell_count() == 2
 
@@ -32,7 +32,7 @@ def test_arc_nodes_lie_on_circle():
     center = c.add_node([1.0, 1.0])
     a = c.add_node([3.0, 1.0])
     b = c.add_node([1.0, 3.0])
-    mesh = pyrucast.mesher.arc(a, center, b, 4)
+    mesh = pyrucast.mesh.arc(a, center, b, 4)
     for ei in range(mesh.cell_count()):
         for corner in range(2):
             x, y = mesh.node(0, ei, corner).coord()
@@ -46,7 +46,7 @@ def test_arc_rejects_unequal_radii():
     a = c.add_node([1.0, 0.0])
     b = c.add_node([0.0, 2.0])
     try:
-        pyrucast.mesher.arc(a, center, b, 3)
+        pyrucast.mesh.arc(a, center, b, 3)
     except RuntimeError:
         pass
     else:

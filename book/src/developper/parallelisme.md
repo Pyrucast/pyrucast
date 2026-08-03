@@ -62,9 +62,9 @@ Timoshenko flexion/cisaillement, coque à venir). La sparsité ne dépendant que
 la connectivité, ces éléments empruntent le **même** chemin de scatter parallèle
 sans machinerie supplémentaire : seul le noyau numérique lit plusieurs géométries.
 
-Les **scatters nodaux** — les opérateurs `Bᵀ` (`ops::field::divergence` et les
-forces internes `ops::assemble::internal_forces`, Cast3m `BSIG`) et la charge répartie
-`ops::assemble::flux` (`∫ φ N`) — dispersent tous de la même façon : chaque
+Les **scatters nodaux** — les opérateurs `Bᵀ` (`ops::node_field::divergence` et les
+forces internes `ops::node_field::internal_forces`, Cast3m `BSIG`) et la charge répartie
+`ops::node_field::flux` (`∫ φ N`) — dispersent tous de la même façon : chaque
 cellule calcule sa contribution locale, puis l'accumule dans ses nœuds. Ils
 passent tous par le **même driver** `kernel::scatter_to_nodes` (« intègre un
 noyau élémentaire et disperse aux nœuds »), qui s'appuie sur le helper
@@ -75,7 +75,7 @@ ensemble élémentaire n'est matérialisé, et calcul et scatter se font dans la
 matrices élémentaires). Le driver est **agnostique à l'intégrande** : l'appelant
 capture le sien (champ de contrainte, densité de flux…) dans la closure
 élémentaire. `internal_forces` *est* une divergence (de la contrainte), et
-`ops::field::divergence` en est le cas scalaire (`n_dual = 1`) ; `flux` en est
+`ops::node_field::divergence` en est le cas scalaire (`n_dual = 1`) ; `flux` en est
 l'instance « masse » pondérée par `N` plutôt que par `∇N`. Déterministe par
 couleur, non bit-à-bit face à une somme en ordre de cellule.
 
@@ -91,7 +91,7 @@ l'ancien LU dense). Tous dans les tolérances numériques.
 
 ## Ce qui reste séquentiel (et pourquoi)
 
-- **Fusion de champs** — `consolidate_node` / `consolidate_element` (dédup et
+- **Fusion de champs** — `node_field.consolidate` / `element_field.consolidate` (dédup et
   vérification de cohérence entre zones).
 - **Mailleurs** — les noyaux séquentiels par nature (Bowyer–Watson, front
   avançant) restent séquentiels.

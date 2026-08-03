@@ -51,10 +51,10 @@ Côté **Rust**, le trait `Aggregate` fournit les mêmes : `len`, `is_empty`,
 > l'agrégat (`check_push`, `finalize`).
 
 > **Passer une seule zone à un opérateur.** Les opérateurs (`ops/`) prennent
-> des **agrégats**, pas des vues : `mesher.invert(mesh[1])` lève un `TypeError`
+> des **agrégats**, pas des vues : `mesh.invert(me[1])` lève un `TypeError`
 > (« `SubMesh` object is not an instance of `Mesh` »). Pour n'en traiter qu'une,
 > utiliser le slicing, qui rend un agrégat unitaire :
-> `mesher.invert(mesh[1:2])`.
+> `mesh.invert(me[1:2])`.
 
 > **`unit()` vs `[0]`.** `agg[0]` prend silencieusement la première de
 > plusieurs zones ; `agg.unit()` **exige** qu'il n'y en ait qu'une et lève

@@ -16,7 +16,7 @@ def _unit_square_quad():
 
 def test_border_default_is_one_closed_loop():
     mesh = _unit_square_quad()
-    b = pyrucast.mesher.border(mesh)
+    b = pyrucast.mesh.border(mesh)
     assert len(b) == 1
     assert b.element_types() == ["SEG2"]
     assert b.cell_counts() == [4]  # boucle fermée : 4 segments
@@ -25,6 +25,6 @@ def test_border_default_is_one_closed_loop():
 def test_border_angle_splits_into_open_aretes():
     mesh = _unit_square_quad()
     # Quatre coins à 90° → quatre arêtes ouvertes d'un segment chacune.
-    b = pyrucast.mesher.border(mesh, angle_deg=45.0)
+    b = pyrucast.mesh.border(mesh, angle_deg=45.0)
     assert len(b) == 4
     assert b.cell_counts() == [1, 1, 1, 1]

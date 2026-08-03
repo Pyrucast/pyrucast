@@ -14,7 +14,7 @@ dans le même ordre que le support original — élasticité linéaire (sections
 
 Le modèle : élasticité (contraintes planes), encastrement `u_x = u_y = 0`
 sur le bord gauche, effort réparti sur l'arc bas du trou (Cast3M
-`FSUR 'MASS'`/`PRES 'MASS'`, ici `pyrucast.assemble.flux` en composante
+`FSUR 'MASS'`/`PRES 'MASS'`, ici `pyrucast.node_field.flux` en composante
 `f_y`) :
 
 ```python
@@ -39,19 +39,19 @@ l'équivalent Cast3M `EPTH` :
 Trois briques, à la main, sans opérateur « tout-en-un » — comme en Cast3M
 (`EPTH` + `ELAS` + `BSIG`) :
 
-1. `pyrucast.field.thermal_strain` : \\( \varepsilon\_{\text{th}} =
+1. `pyrucast.element_field.thermal_strain` : \\( \varepsilon\_{\text{th}} =
    \alpha \cdot (T - T\_{\text{ref}}) \\), la même formule que Cast3M
    `EPTH`, à partir d'un champ de température **aux points de Gauss**
-   (`pyrucast.field.interp_to_gauss`) ;
-2. `pyrucast.behavior.integrate_behavior` : la pseudo-contrainte thermique
+   (`pyrucast.element_field.interp_to_gauss`) ;
+2. `pyrucast.element_field.integrate_behavior` : la pseudo-contrainte thermique
    \\( \sigma\_{\text{th}} = D : \varepsilon\_{\text{th}} \\) ;
-3. `pyrucast.assemble.internal_forces` : la charge nodale équivalente
+3. `pyrucast.node_field.internal_forces` : la charge nodale équivalente
    \\( F\_{\text{th}} = \int B^T \sigma\_{\text{th}} \, dV \\) (Cast3M
    `BSIG`).
 
 Le second membre se combine par **addition de champs** (`+`), pas par union
 (`|`) : `internal_forces` couvre tous les nœuds mécaniques, l'effort
-extérieur n'en couvre qu'une partie — `pyrucast.field.restrict_like`
+extérieur n'en couvre qu'une partie — `pyrucast.node_field.restrict_like`
 étend l'un sur le support de l'autre avant de les additionner. C'est la même
 distinction que la note de la page [Calcul thermique](thermique.md) : `|`
 pour des supports disjoints, `+`/`-` pour une véritable superposition sur un

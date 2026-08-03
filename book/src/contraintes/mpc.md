@@ -100,21 +100,21 @@ base = pyrucast.Model.heat_conduction(fes)
 dual = base.dual_of("T")  # "q"
 
 # Dirichlet T(0) = 0.
-imposed0 = pyrucast.mesher.poi1_from_nodes([nodes[0]])
-mult0 = pyrucast.mesher.barycenter(imposed0)
+imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
+mult0 = pyrucast.mesh.barycenter(imposed0)
 dirichlet = pyrucast.Model.dirichlet("T", dual, imposed0, mult0)
 
 # MPC 1·T(dernier) − 1·T(0) = 1.
-mesh_last = pyrucast.mesher.poi1_from_nodes([nodes[-1]])
-mesh_first = pyrucast.mesher.poi1_from_nodes([nodes[0]])
-mult_mpc = pyrucast.mesher.barycenter(mesh_last)
+mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
+mult_mpc = pyrucast.mesh.barycenter(mesh_last)
 mpc = pyrucast.Model.mpc(
     [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
     mult_mpc,
 )
 
 model = base | dirichlet | mpc
-materials = pyrucast.build.material_field(model, [("k", 1.0)])
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
 # Chargement : valeur imposée de Dirichlet + second membre g de la MPC. Le
 # helper `constraint_rhs` désigne chaque relation par un nœud (nœud contraint
@@ -124,7 +124,7 @@ rhs = dirichlet.constraint_rhs([(nodes[0], 0.0)]) | mpc.constraint_rhs(
     [(nodes[-1], 1.0)]
 )
 
-solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
+solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10
 ```
 

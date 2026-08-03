@@ -21,7 +21,7 @@ use std::collections::HashSet;
 /// element types and face colours, [[feedback-viz-per-element]] — zones
 /// stay separate): each output submesh holds the kept cells of the matching
 /// input submesh, possibly empty. Use
-/// [`consolidate_mesh`](crate::ops::mesh::consolidate()) to
+/// [`consolidate`](crate::ops::mesh::consolidate()) to
 /// drop or fuse the empty/redundant zones afterwards. Kept cells reference
 /// the original nodes (refcount bumped); `mesh` itself is left untouched.
 ///

@@ -26,8 +26,8 @@ E, NU, S, N = 210.0, 0.3, 2.0, 2
 
 
 def _clamp(nodes, var, dual):
-    imposed = pyrucast.mesher.poi1_from_nodes(nodes)
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes(nodes)
+    multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -39,9 +39,9 @@ def main() -> None:
         return j * (N + 1) + i
 
     # Grille N×N de QUA4 par balayage de deux lignes SEG2 (`sweep`).
-    bottom = pyrucast.mesher.line(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
-    top = pyrucast.mesher.line(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
-    mesh = pyrucast.mesher.sweep(bottom, top, N)
+    bottom = pyrucast.mesh.line(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
+    top = pyrucast.mesh.line(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
+    mesh = pyrucast.mesh.sweep(bottom, top, N)
 
     # Nœuds rangés par idx(i, j) (i selon x, j selon y) en relisant la
     # connectivité QUA4 : maille (cy, cx) = cy*N + cx, nœuds locaux 0..3.
@@ -61,16 +61,16 @@ def main() -> None:
     model = model | _clamp(left, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 
-    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU)])
+    materials = pyrucast.element_field.material_field(model, [("E", E), ("nu", NU)])
 
     # Traction S sur le bord droit → charges nodales cohérentes (op flux).
     right = pyrucast.Mesh(c, "SEG2")
     for j in range(N):
         right.unit().add_cell([grid[idx(N, j)], grid[idx(N, j + 1)]])
     right_fes = pyrucast.FiniteElementSpace(right)
-    rhs = pyrucast.assemble.flux(right_fes[0], S, "f_x")
+    rhs = pyrucast.node_field.flux(right_fes[0], S, "f_x")
 
-    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 
     print(f"{'x':>5} {'y':>5} {'u_x':>12} {'u_y':>12}")
     tol = 1e-10

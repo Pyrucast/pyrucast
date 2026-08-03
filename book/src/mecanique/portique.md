@@ -70,4 +70,4 @@ Le portique assemble aussi la **masse consistante** — translation `ρA` et
 rotation (inertie rotatoire) `ρI`, `rho` optionnel — et la **rigidité
 géométrique** transverse `(N/L)` sous l'effort axial `N` (sortie `N` du
 comportement), toutes deux en forme d'élément linéaire tournées `Tᵀ·T`
-(`pyrucast.assemble.mass` / `pyrucast.assemble.geometric`).
+(`pyrucast.matrix.mass` / `pyrucast.matrix.geometric`).

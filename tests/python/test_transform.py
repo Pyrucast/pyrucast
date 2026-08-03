@@ -20,7 +20,7 @@ def test_translate_fresh_nodes_original_untouched():
     ids = [c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0], [0.0, 1.0])]
     m.unit().add_cell(ids)
 
-    out = pyrucast.mesher.translate(m, [10.0, 5.0])
+    out = pyrucast.mesh.translate(m, [10.0, 5.0])
     assert out.element_types() == ["TRI3"]
     n0 = out.node(0, 0, 0)
     assert n0.coord() == [10.0, 5.0]
@@ -35,7 +35,7 @@ def test_rotate_2d_quarter_turn():
     ids = [c.add_node(p) for p in ([1.0, 0.0], [2.0, 0.0], [1.0, 1.0])]
     m.unit().add_cell(ids)
 
-    out = pyrucast.mesher.rotate(m, math.pi / 2.0, [0.0, 0.0])
+    out = pyrucast.mesh.rotate(m, math.pi / 2.0, [0.0, 0.0])
     x, y = out.node(0, 0, 0).coord()
     assert abs(x - 0.0) < 1e-12 and abs(y - 1.0) < 1e-12
 
@@ -43,7 +43,7 @@ def test_rotate_2d_quarter_turn():
 def test_rotate_3d_about_z():
     c = pyrucast.Coords(3)
     m, _ = _tri3(c, [[1.0, 0.0, 5.0], [0.0, 1.0, 5.0], [0.0, 0.0, 5.0]])
-    out = pyrucast.mesher.rotate(m, math.pi / 2.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    out = pyrucast.mesh.rotate(m, math.pi / 2.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
     x, y, z = out.node(0, 0, 0).coord()
     assert abs(x) < 1e-12 and abs(y - 1.0) < 1e-12 and abs(z - 5.0) < 1e-12
 
@@ -51,7 +51,7 @@ def test_rotate_3d_about_z():
 def test_extrude_tri3_to_penta6():
     c = pyrucast.Coords(3)
     m, _ = _tri3(c, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-    penta = pyrucast.mesher.extrude(m, [0.0, 0.0, 2.0], 2)
+    penta = pyrucast.mesh.extrude(m, [0.0, 0.0, 2.0], 2)
     assert penta.element_types() == ["PENTA6"]
     assert penta.cell_counts() == [2]
 
@@ -61,7 +61,7 @@ def test_sweep_solid_tri3_to_penta6():
     a, _ = _tri3(c, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     b, bids = _tri3(c, [[0.0, 0.0, 2.0], [1.0, 0.0, 2.0], [0.0, 1.0, 2.0]])
 
-    solid = pyrucast.mesher.sweep_solid(a, b, 2)
+    solid = pyrucast.mesh.sweep_solid(a, b, 2)
     assert solid.element_types() == ["PENTA6"]
     assert solid.cell_counts() == [2]
     # The top face of the last layer reuses mesh_b's nodes.
@@ -72,9 +72,9 @@ def test_rotate_via_sweep_builds_a_solid_of_revolution_slice():
     """rotate + sweep_solid together: sweep a face onto its rotated copy."""
     c = pyrucast.Coords(3)
     face, _ = _tri3(c, [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [1.0, 0.0, 1.0]])
-    rotated = pyrucast.mesher.rotate(
+    rotated = pyrucast.mesh.rotate(
         face, math.pi / 6.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]
     )
-    solid = pyrucast.mesher.sweep_solid(face, rotated, 1)
+    solid = pyrucast.mesh.sweep_solid(face, rotated, 1)
     assert solid.element_types() == ["PENTA6"]
     assert solid.cell_counts() == [1]

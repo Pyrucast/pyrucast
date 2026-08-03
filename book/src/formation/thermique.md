@@ -50,12 +50,12 @@ Chaque terme correspond à un objet du script :
 
 | Terme | pyrucast |
 |---|---|
-| \\( \int_V [B]^T \lambda [B] \\, dV \\) | `Model.heat_conduction(fes)`, assemblé par `pc.assemble.stiffness` |
+| \\( \int_V [B]^T \lambda [B] \\, dV \\) | `Model.heat_conduction(fes)`, assemblé par `pc.matrix.stiffness` |
 | \\( \int_{\partial V\_\phi} h [N]^T [N] \\, dS \\) | `Model.convection(fes)`, **dans la même matrice** |
 | \\( T = T\_{\text{imp}} \\) | `Model.dirichlet("T", "q", ...)` (multiplicateurs de Lagrange) |
-| \\( \int_{\partial V\_\phi} [N]^T \phi\_{\text{imp}} \\, dS \\) | `pc.assemble.flux(fes, φ, "q")` sur des `QUA4` |
-| \\( \int_{\partial V\_\phi} [N]^T h\\,T\_f \\, dS \\) | `pc.assemble.flux(fes, h·T_ext, "q")` sur des `QUA4` |
-| \\( \int_V [N]^T q \\, dV \\) | `pc.assemble.flux(fes, q, "q")` sur des `HEX8` |
+| \\( \int_{\partial V\_\phi} [N]^T \phi\_{\text{imp}} \\, dS \\) | `pc.node_field.flux(fes, φ, "q")` sur des `QUA4` |
+| \\( \int_{\partial V\_\phi} [N]^T h\\,T\_f \\, dS \\) | `pc.node_field.flux(fes, h·T_ext, "q")` sur des `QUA4` |
+| \\( \int_V [N]^T q \\, dV \\) | `pc.node_field.flux(fes, q, "q")` sur des `HEX8` |
 
 Les trois dernières lignes disent le point notable : en pyrucast, **`flux` est
 l'unique opérateur de charge répartie**, quelle que soit la dimension du
@@ -100,7 +100,7 @@ chapitre 1.
 La deuxième ligne prépare la suite. Les chargements **répartis** s'intègrent
 sur des faces et non sur des nœuds — c'est le \\( [N]^T \\) des intégrales
 ci-dessus : il leur faut de vraies mailles de bord, que
-`pyrucast.mesher.skin` extrait du volume d'hexaèdres. `pyrucast.mesher.consolidate_mesh`
+`pyrucast.mesh.skin` extrait du volume d'hexaèdres. `pyrucast.mesh.consolidate`
 ramène cette peau à un **seul** sous-maillage, pour que les sélections qui
 suivent en renvoient un seul elles aussi.
 
@@ -110,7 +110,7 @@ Le premier problème n'a que deux conditions aux limites : l'alésage tenu à
 250 °C, et un flux sortant de −40 kW/m² sur la face gauche. Aucun numéro de
 nœud n'apparaît dans le script : les régions sont découpées
 **géométriquement**, ici par **forme**, avec la famille
-[`pyrucast.mesher.points_*`](../operateurs/maillage.md).
+[`pyrucast.mesh.points_*`](../operateurs/maillage.md).
 
 ### L'alésage, sur un cylindre
 
@@ -132,7 +132,7 @@ mêmes 120 nœuds que sur la peau.
 
 **Un `points_*` renvoie déjà un maillage `POI1`.** Le résultat est utilisable
 tel quel comme support d'un `Model.dirichlet`, sans passer par
-`pyrucast.mesher.to_poi1`. Seul `consolidate_mesh` reste nécessaire, pour écarter le
+`pyrucast.mesh.to_poi1`. Seul `mesh.consolidate` reste nécessaire, pour écarter le
 sous-maillage **vide** que laisse la partie du volume qui ne touche pas le trou
 (le volume en compte deux : la grille et la couronne).
 
@@ -143,7 +143,7 @@ sous-maillage **vide** que laisse la partie du volume qui ne touche pas le trou
 ```
 
 Même principe, mais un flux s'intègre sur une **surface** : les nœuds ne
-suffisent pas. `pyrucast.mesher.elements_on(..., strict=True)` remonte des
+suffisent pas. `pyrucast.mesh.elements_on(..., strict=True)` remonte des
 nœuds sélectionnés aux mailles dont **tous** les sommets sont retenus — ici les
 20 `QUA4` de la face gauche. Le plan donné à `points_on_plane` est infini, mais
 il ne coupe la peau qu'à cet endroit.
@@ -169,7 +169,7 @@ se lit comme le croquis des conditions aux limites, sans annotation manuelle.
 
 `Model.heat_conduction` déclare le couple de degrés de liberté « T » (primal)
 et « q » (dual) sur tout le volume et porte le terme
-\\( \int_V [B]^T \lambda [B] \\, dV \\) ; `pc.assemble.stiffness` l'intègre
+\\( \int_V [B]^T \lambda [B] \\, dV \\) ; `pc.matrix.stiffness` l'intègre
 réellement, avec le \\( \lambda \\) lu dans le champ matériau sous le nom
 « k ».
 
@@ -198,7 +198,7 @@ sait quels coefficients celui-ci réclame, et la conduction n'en demande qu'un,
 {{#include ../../../formation/thermique.py:charges_conduction}}
 ```
 
-Le flux imposé est un pur second membre : `pc.assemble.flux` intègre
+Le flux imposé est un pur second membre : `pc.node_field.flux` intègre
 \\( \int [N]^T \phi\_{\text{imp}} \\, dS \\) sur les 20 `QUA4` de la face
 gauche et rend un champ nodal. L'espace éléments finis se construit sur le
 sous-maillage de la face, et `gauche_fes[0]` en désigne l'unique zone.
@@ -213,7 +213,7 @@ du système ci-dessus, en face des inconnues \\( \lambda \\).
 {{#include ../../../formation/thermique.py:resolution_conduction}}
 ```
 
-`pc.assemble.stiffness` intègre la matrice, `|` réunit les deux chargements —
+`pc.matrix.stiffness` intègre la matrice, `|` réunit les deux chargements —
 ils vivent sur des maillages disjoints, il n'y a donc rien à sommer — et
 `pyrucast.solver.solve` factorise la matrice creuse (LU parallèle) en mettant
 la factorisation en cache : deux résolutions sur la même matrice ne la
@@ -241,8 +241,8 @@ sont repérées par **coordonnée**, la seconde façon de découper une région.
 ![Surface convectée](img/thermique-cl-convection.svg)
 
 **Une coordonnée est un champ nodal comme un autre.**
-`pyrucast.field.coordinates(peau, ["Z"])` rend la coordonnée Z des nœuds de la
-peau sous forme de `NodeField`, et `pyrucast.field.select` garde ceux dont la
+`pyrucast.node_field.coordinates(peau, ["Z"])` rend la coordonnée Z des nœuds de la
+peau sous forme de `NodeField`, et `pyrucast.mesh.select` garde ceux dont la
 valeur tombe dans une **bande** — `ge=-TOL, le=TOL` pour « z = 0 ». Le résultat
 est un maillage `POI1`, exactement comme celui d'un `points_*` : la suite ne
 change pas, `elements_on(..., strict=True)` remonte aux `QUA4` que ces nœuds
@@ -258,7 +258,7 @@ portent entièrement.
 
 Même démarche, mais sur X et sur le **volume** : une bande de valeurs au lieu
 d'une égalité, et des `HEX8` au lieu de `QUA4`. Comme pour l'alésage,
-`consolidate_mesh` écarte le sous-maillage vide laissé par la partie du volume qui
+`mesh.consolidate` écarte le sous-maillage vide laissé par la partie du volume qui
 ne rencontre pas la bande.
 
 **`strict=True` approche la région par un escalier.** La bande en X coupe le
@@ -318,7 +318,7 @@ précisément ce que l'union `|` ne fait pas.
 > champs apparie elle aussi les zones **par support** (deux supports
 > distincts sont recopiés tels quels), et elle ne fait même pas la
 > vérification de cohérence de `|`. Il faut d'abord **ramener les champs sur
-> un support commun** — `pyrucast.field.restrict` sur un même maillage retombe
+> un support commun** — `pyrucast.node_field.restrict` sur un même maillage retombe
 > sur le support `POI1` canonique de ce maillage, donc
 > `restrict(a, m) + restrict(b, m)` est bien une somme nœud à nœud (la page
 > [Champs](../field.md) détaille cette algèbre ; le
@@ -329,7 +329,7 @@ précisément ce que l'union `|` ne fait pas.
 ```
 
 D'où ces quelques lignes : le maillage `POI1` de tous les nœuds chargés
-(`to_poi1` puis `consolidate_mesh`, pour n'avoir qu'un seul sous-maillage donc un
+(`to_poi1` puis `mesh.consolidate`, pour n'avoir qu'un seul sous-maillage donc un
 seul support), les trois champs restreints dessus, et leur somme par `+`. La
 vérification est immédiate — la puissance totale du second membre vaut la
 somme des trois puissances prises séparément, ce que l'union perdrait.
@@ -365,7 +365,7 @@ au-dessus de la température de l'alésage.
 >   existent.
 > - **Régime transitoire.** La matrice de capacité
 >   \\( [C] = \int_V \rho c\_p [N]^T [N] \\, dV \\) est assemblable
->   (`pyrucast.assemble.mass`), mais **rien ne la relie encore à une boucle en
+>   (`pyrucast.matrix.mass`), mais **rien ne la relie encore à une boucle en
 >   temps** : chaque pas résout \\( [K]\\{T\\} = \\{P\\} \\) **stationnaire**
 >   (pas de \\( [C]\\{\dot{T}\\} + [K]\\{T\\} = \\{P\\} \\) intégré en temps).
 >   Un `Evolution` peut faire varier un chargement stationnaire d'un pas à

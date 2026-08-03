@@ -88,7 +88,7 @@ pub fn assemble_kind(
                     // needs, so a shared fespace carrying several
                     // component-disjoint material zones (e.g. thermal `k` +
                     // mechanical `E`/`nu` on one mesh) resolves each physics'
-                    // own zone without an explicit consolidate_element.
+                    // own zone without an explicit consolidate.
                     let m = match sub.material_components() {
                         Some(required) => materials.sub_for_fespace_with(&fespace, required)?,
                         None => materials.sub_for_fespace(&fespace)?,

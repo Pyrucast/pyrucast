@@ -19,7 +19,7 @@ Model
 └── fespace() -> FiniteElementSpace # 1 sous-espace par sous-modèle de domaine
                                      # (contraintes exclues, sans dédup)
 
-ops::assemble (opérateurs, pas des méthodes de Model)
+ops::matrix (opérateurs, pas des méthodes de Model)
 ├── stiffness(model, materials) -> Matrix   # K  (assemblé sur demande)
 └── mass(model)                 -> Matrix   # M  (assemblé sur demande)
 
@@ -232,16 +232,16 @@ fes = pyrucast.FiniteElementSpace(mesh)
 # Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
 # Constructeurs au niveau parent, composés par `|` — pas de SubModel à la main.
 # Le maillage des multiplicateurs est fabriqué depuis les nœuds imposés.
-imposed = pyrucast.mesher.poi1_from_nodes([a])
-multiplier = pyrucast.mesher.barycenter(imposed)
+imposed = pyrucast.mesh.poi1_from_nodes([a])
+multiplier = pyrucast.mesh.barycenter(imposed)
 model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
     "T", "q", imposed, multiplier
 )
 
 # Matériau k = 1 (les sous-modèles Dirichlet sont ignorés automatiquement).
-materials = pyrucast.build.material_field(model, [("k", 1.0)])
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
-K = pyrucast.assemble.stiffness(model, materials)
+K = pyrucast.matrix.stiffness(model, materials)
 print("primal_vars =", model.primal_vars())  # ['T', 'lambda_T']
 print("dual_vars =", model.dual_vars())  # ['q', 'imposed_T']
 print(K)  # Matrix: 3 row(s) × 3 col(s), …

@@ -128,8 +128,8 @@ def _anderson_step(u, g, history, free_mesh):
     dg_diffs = [g - g_hist for (_, g_hist) in history]
 
     # ΔG restreints aux DDL libres (support des produits scalaires du résidu).
-    dg_free = [pyrucast.field.restrict(d, free_mesh) for d in dg_diffs]
-    g_free = pyrucast.field.restrict(g, free_mesh)
+    dg_free = [pyrucast.node_field.restrict(d, free_mesh) for d in dg_diffs]
+    g_free = pyrucast.node_field.restrict(g, free_mesh)
 
     # Équations normales (ΔGᵀΔG) γ = ΔGᵀg (petit système m×m symétrique).
     a = [[0.0] * m for _ in range(m)]
@@ -137,11 +137,11 @@ def _anderson_step(u, g, history, free_mesh):
     trace = 0.0
     for i in range(m):
         for j in range(i, m):
-            v = pyrucast.field.xty(dg_free[i], dg_free[j])
+            v = pyrucast.measure.xty(dg_free[i], dg_free[j])
             a[i][j] = v
             a[j][i] = v
         trace += a[i][i]
-        b[i] = pyrucast.field.xty(dg_free[i], g_free)
+        b[i] = pyrucast.measure.xty(dg_free[i], g_free)
     if trace <= 0.0:
         return None  # directions dégénérées
     # Régularisation de Tikhonov : + λ·(trace/m) sur la diagonale.
@@ -185,34 +185,34 @@ def main():
     pt_b = c.add_node([0.0, height])
     pt_c = c.add_node([length, 0.0])
     pt_d = c.add_node([length, height])
-    left_edge = pyrucast.mesher.line(pt_a, pt_b, ny)
-    right_edge = pyrucast.mesher.line(pt_c, pt_d, ny)
-    mesh = pyrucast.mesher.sweep(left_edge, right_edge, nx)
+    left_edge = pyrucast.mesh.line(pt_a, pt_b, ny)
+    right_edge = pyrucast.mesh.line(pt_c, pt_d, ny)
+    mesh = pyrucast.mesh.sweep(left_edge, right_edge, nx)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     # Nœud du bout (mi-hauteur) et maillage POI1 des nœuds LIBRES (X > 0).
     tip = mesh.nearest_node([length, height / 2.0])
-    coords_field = pyrucast.field.coordinates(mesh, ["X"])
-    free_mesh = pyrucast.field.select(coords_field, ge=length / nx / 2.0)
+    coords_field = pyrucast.node_field.coordinates(mesh, ["X"])
+    free_mesh = pyrucast.mesh.select(coords_field, ge=length / nx / 2.0)
 
     # ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
     model = pyrucast.Model.plasticity(fes, "plane_stress")
-    imposed_mesh = pyrucast.mesher.to_poi1(left_edge)
-    multiplier = pyrucast.mesher.translate(imposed_mesh, [0.0, 0.0])
+    imposed_mesh = pyrucast.mesh.to_poi1(left_edge)
+    multiplier = pyrucast.mesh.translate(imposed_mesh, [0.0, 0.0])
     model = model | pyrucast.Model.dirichlet("u_x", "f_x", imposed_mesh, multiplier)
     model = model | pyrucast.Model.dirichlet("u_y", "f_y", imposed_mesh, multiplier)
-    materials = pyrucast.build.material_field(
+    materials = pyrucast.element_field.material_field(
         model, [("E", young), ("nu", nu), ("sigma_y", sigma_y)]
     )
 
     # Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée une
     # fois ; `solve` met la factorisation en cache et la réutilise.
-    k = pyrucast.assemble.stiffness(model, materials)
+    k = pyrucast.matrix.stiffness(model, materials)
 
     # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     #    droite, réparti en efforts nodaux cohérents (op `flux`). ──────────────
     right_fes = pyrucast.FiniteElementSpace(right_edge)
-    load_unit = pyrucast.assemble.flux(right_fes[0], -1.0, "f_y")
+    load_unit = pyrucast.node_field.flux(right_fes[0], -1.0, "f_y")
 
     # ── Histoire de chargement : Evolution à valeur CHAMP (t ∈ [0, 1]) ───────
     zero_frame = load_unit * 0.0
@@ -242,19 +242,22 @@ def main():
         load_p = p_max_load * t  # cisaillement nominal au bout (pour l'affichage)
         load_scaled = load_evo.interpolate(t)
         # Norme de la charge du pas (échelle relative du résidu) : xᵀx du champ.
-        ext_norm = pyrucast.field.xtx(load_scaled) ** 0.5
+        ext_norm = pyrucast.measure.xtx(load_scaled) ** 0.5
         tol = 1e-6 * ext_norm + 1e-12
 
         # Résidu (et sortie de comportement) à un déplacement d'essai `u` :
         # ε(u) → COMP → BSIG → r = F_ext − F_int, plus la norme sur les DDL libres.
         def residual_at(u):
-            strain = pyrucast.field.deformation(u, fes)
-            out = pyrucast.behavior.integrate_behavior(model, strain | state, materials)
-            f_int = pyrucast.assemble.internal_forces(model, out)
-            f_ext = pyrucast.field.restrict_like(load_scaled, f_int)
+            strain = pyrucast.element_field.deformation(u, fes)
+            out = pyrucast.element_field.integrate_behavior(
+                model, strain | state, materials
+            )
+            f_int = pyrucast.node_field.internal_forces(model, out)
+            f_ext = pyrucast.node_field.restrict_like(load_scaled, f_int)
             residual = f_ext - f_int
             free_res = (
-                pyrucast.field.xtx(pyrucast.field.restrict(residual, free_mesh)) ** 0.5
+                pyrucast.measure.xtx(pyrucast.node_field.restrict(residual, free_mesh))
+                ** 0.5
             )
             return residual, free_res, out
 
@@ -280,7 +283,7 @@ def main():
             # de `to_poi1`) ; `restrict_like` ne filtre que les composantes duales
             # (multiplicateurs) — sinon elles se recopieraient dans u par union.
             du = pyrucast.solver.solve(k, residual)
-            g = pyrucast.field.restrict_like(du, u)
+            g = pyrucast.node_field.restrict_like(du, u)
 
             # Snapshot du couple (u, g) courant AVANT de bouger (`u + 0.0` = copie
             # indépendante) — source des différences d'Anderson au tour suivant.

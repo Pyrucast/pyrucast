@@ -114,13 +114,13 @@ impl Cancel for PySignals<'_> {
 
 #[pyfunction]
 pub fn triangulate_surface(py: Python<'_>, contour: PyRef<PyMesh>, /* … */) -> PyResult<PyMesh> {
-    let mesh = ops::mesher::triangulate_surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
+    let mesh = ops::mesh::triangulate_surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
     Ok(PyMesh { inner: mesh })
 }
 ```
 
 Le paramètre `py: Python<'_>` est injecté par PyO3 et **n'apparaît pas** dans la
-signature Python : `pyrucast.mesher.triangulate_surface(contour, element_type, size=None)` reste
+signature Python : `pyrucast.mesh.triangulate_surface(contour, element_type, size=None)` reste
 inchangée, mais un `Ctrl+C` l'interrompt désormais.
 
 ## Lien avec le parallélisme

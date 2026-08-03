@@ -27,8 +27,8 @@ E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
 
 def _clamp(node, var, dual):
     """Dirichlet homogène (u = 0) sur `var` au nœud `node`."""
-    imposed = pyrucast.mesher.poi1_from_nodes([node])
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes([node])
+    multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -36,7 +36,7 @@ def main() -> None:
     c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
     n1 = c.add_node([L, 0.0])
-    mesh = pyrucast.mesher.line(n0, n1, 1)  # un seul SEG2 (mailleur `line`)
+    mesh = pyrucast.mesh.line(n0, n1, 1)  # un seul SEG2 (mailleur `line`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.Model.truss(fes)
@@ -44,13 +44,13 @@ def main() -> None:
     model = model | _clamp(n0, "u_y", "f_y")
     model = model | _clamp(n1, "u_y", "f_y")  # pas de raideur transversale
 
-    materials = pyrucast.build.material_field(model, [("E", E), ("A", A)])
+    materials = pyrucast.element_field.material_field(model, [("E", E), ("A", A)])
 
-    load = pyrucast.mesher.poi1_from_nodes([n1])
+    load = pyrucast.mesh.poi1_from_nodes([n1])
     rhs = pyrucast.NodeField(load, ["f_x"])
     rhs[0].set_value(n1, "f_x", F)
 
-    solution = pyrucast.solver.solve(pyrucast.assemble.stiffness(model, materials), rhs)
+    solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 
     ux = solution.value(n1, "u_x")
     expected = F * L / (E * A)

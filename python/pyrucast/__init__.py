@@ -6,9 +6,13 @@ Package *mixed Rust/Python*. L'extension compilée est le sous-module privé
 
 - les **conteneurs** (`containers::…`) restent des classes au top-level :
   `pyrucast.Coords`, `pyrucast.Mesh`, `pyrucast.Model`, … ;
-- les **verbes** (`ops::<thème>::f`) vivent dans le sous-module du thème :
-  `pyrucast.mesher.triangulate_surface`, `pyrucast.field.gradient`,
-  `pyrucast.assemble.stiffness`, `pyrucast.solver.solve`, … ;
+- les **verbes** (`ops::<module>::f`) vivent dans le sous-module portant le
+  nom du conteneur qu'ils **produisent** : `pyrucast.mesh.triangulate_surface`,
+  `pyrucast.element_field.gradient`, `pyrucast.matrix.stiffness`,
+  `pyrucast.node_field.divergence`. Ceux qui ne produisent aucun conteneur
+  sont rangés par activité : `pyrucast.measure.integral`,
+  `pyrucast.export.export_vtk`. `pyrucast.solver.solve` est l'exception
+  unique et assumée — il produit un champ nodal mais se cherche par son nom ;
 - la couche Python pure de plus haut niveau vit dans ses propres sous-modules
   (`pyrucast.thermomechanics`).
 """
@@ -39,12 +43,14 @@ from ._pyrucast import __doc__, __version__  # noqa: F401
 
 # ── Verbes rangés par thème (miroir de `src/ops/*`) ─────────────────────────
 from . import (
-    assemble as assemble,
-    behavior as behavior,
-    build as build,
+    coords as coords,
+    element_field as element_field,
     export as export,
     field as field,
-    mesher as mesher,
+    matrix as matrix,
+    measure as measure,
+    mesh as mesh,
+    node_field as node_field,
     solver as solver,
     store as store,
 )
@@ -73,12 +79,14 @@ __all__ = [
     "SubModel",
     "SubNodeField",
     # sous-modules de verbes
-    "assemble",
-    "behavior",
-    "build",
+    "coords",
+    "element_field",
     "export",
     "field",
-    "mesher",
+    "matrix",
+    "measure",
+    "mesh",
+    "node_field",
     "solver",
     "store",
     # couche haut niveau

@@ -1,79 +1,42 @@
-"""Opérateurs de champ sur maillage — miroir de ``ops::field`` (Rust).
+"""Opérateurs polymorphes entre sortes de champ — miroir de ``ops::field``.
 
-Champ-sur-maillage : lecture/écriture de coordonnées, restrictions et
-sélections, gradient/divergence/déformation, interpolation aux points de
-Gauss, dilatation thermique, intégrales et produits, plus les fonctions
-scalaires point-à-point (abs, sqrt, exp, trigonométrie…).
+Ce qui rend un champ de la même sorte que celui reçu : masque de bande,
+filtrage et renommage de composantes, produit scalaire point-à-point, et les
+fonctions scalaires élément par élément (abs, sqrt, exp, trigonométrie…).
 """
 
 from ._pyrucast import (
     abs as abs,
-    beam_deformation as beam_deformation,
-    consolidate_element as consolidate_element,
-    consolidate_node as consolidate_node,
-    coordinates as coordinates,
     cos as cos,
     cosh as cosh,
-    deformation as deformation,
-    displace as displace,
-    divergence as divergence,
     exp as exp,
     filter_components as filter_components,
-    gradient as gradient,
-    integral as integral,
-    interp_to_gauss as interp_to_gauss,
     log as log,
     log10 as log10,
     mask as mask,
-    merge as merge,
     psca as psca,
     rename_component as rename_component,
-    restrict as restrict,
-    restrict_like as restrict_like,
-    select as select,
-    set_coordinates as set_coordinates,
     sin as sin,
     sinh as sinh,
     sqrt as sqrt,
     tan as tan,
     tanh as tanh,
-    thermal_strain as thermal_strain,
-    xtx as xtx,
-    xty as xty,
 )
 
 __all__ = [
     "abs",
-    "beam_deformation",
-    "consolidate_element",
-    "consolidate_node",
-    "coordinates",
     "cos",
     "cosh",
-    "deformation",
-    "displace",
-    "divergence",
     "exp",
     "filter_components",
-    "gradient",
-    "integral",
-    "interp_to_gauss",
     "log",
     "log10",
     "mask",
-    "merge",
     "psca",
     "rename_component",
-    "restrict",
-    "restrict_like",
-    "select",
-    "set_coordinates",
     "sin",
     "sinh",
     "sqrt",
     "tan",
     "tanh",
-    "thermal_strain",
-    "xtx",
-    "xty",
 ]

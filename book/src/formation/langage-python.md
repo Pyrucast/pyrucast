@@ -21,7 +21,7 @@ de plus haut niveau (`pyrucast.thermomechanics`). À l'usage, aucune
 distinction n'est visible :
 
 ```python
-pc.assemble.stiffness(...)  # opérateur Rust (extension compilée)
+pc.matrix.stiffness(...)  # opérateur Rust (extension compilée)
 pc.thermomechanics.step_by_step(...)  # fonction Python pure
 ```
 
@@ -53,12 +53,12 @@ l'arborescence Rust (`src/ops/<thème>/`) :
 
 | pyrucast (Python) | thème | Cast3M (le plus proche) |
 |---|---|---|
-| `pc.mesher.line`, `pc.mesher.triangulate_surface`, `pc.mesher.sweep`… | maillage | `DROITE`, `SURF`, `VOLU`, `TRAN` |
-| `pc.field.gradient`, `pc.field.select`, `pc.field.mask`… | champs | `GRAD`, `MASQUE` |
-| `pc.assemble.stiffness`, `pc.assemble.mass`, `pc.assemble.flux`… | assemblage | `RIGI`, `MASS`, `FLUX`/`PRES` |
-| `pc.behavior.integrate_behavior` | comportement | `COMP` |
+| `pc.mesh.line`, `pc.mesh.triangulate_surface`, `pc.mesh.sweep`… | maillage | `DROITE`, `SURF`, `VOLU`, `TRAN` |
+| `pc.element_field.gradient`, `pc.mesh.select`, `pc.field.mask`… | champs | `GRAD`, `MASQUE` |
+| `pc.matrix.stiffness`, `pc.matrix.mass`, `pc.node_field.flux`… | assemblage | `RIGI`, `MASS`, `FLUX`/`PRES` |
+| `pc.element_field.integrate_behavior` | comportement | `COMP` |
 | `pc.solver.solve`, `pc.solver.solve_unilateral` | solveur | `RESO` |
-| `pc.build.material_field` | construction | `MATE` |
+| `pc.element_field.material_field` | construction | `MATE` |
 | `pc.export.export_vtk` | export | `SORT 'VTK'` |
 
 Aucun nom raccourci ni forme abrégée : contrairement à Gibiane (`DROI` ⇔

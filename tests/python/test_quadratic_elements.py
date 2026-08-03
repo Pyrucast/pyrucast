@@ -135,7 +135,7 @@ def test_to_quadratic_promotes_linear_mesh():
     lin.unit().add_cell([a, b, d])
     lin.unit().add_cell([b, e, d])
 
-    quad = pyrucast.mesher.to_quadratic(lin)
+    quad = pyrucast.mesh.to_quadratic(lin)
     assert quad.element_types() == ["TRI6"]
     assert quad.cell_counts() == [2]
     # Corners are re-used; the original mesh is untouched.
@@ -156,9 +156,9 @@ def test_to_quadratic_promotes_linear_mesh():
 def test_to_quadratic_rejects_points():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
-    pts = pyrucast.mesher.poi1_from_nodes([a])
+    pts = pyrucast.mesh.poi1_from_nodes([a])
     with pytest.raises(Exception):
-        pyrucast.mesher.to_quadratic(pts)
+        pyrucast.mesh.to_quadratic(pts)
 
 
 def test_read_gmsh_quadratic_tet10():
@@ -184,7 +184,7 @@ $Elements
 1 11 2 0 1 1 2 3 4 5 6 7 8 9 10
 $EndElements
 """
-    groups = pyrucast.mesher.read_gmsh_str(pyrucast.Coords(3), mesh)
+    groups = pyrucast.mesh.read_gmsh_str(pyrucast.Coords(3), mesh)
     (_, m) = groups[0] if isinstance(groups, list) else list(groups.items())[0]
     assert m.element_types() == ["TET10"]
     # After the gmsh->pyrucast permutation, local node 8 is the (1,3) midpoint.

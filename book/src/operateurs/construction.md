@@ -1,10 +1,10 @@
 # Opérateurs de construction
 
-Le module `ops::build` **construit des conteneurs** à partir de données ou
-d'autres conteneurs. Aujourd'hui il héberge la construction des **champs
-matériau** prêts pour l'assemblage ; à terme, c'est le foyer prévu pour la
-migration des générateurs de maillage (actuellement sous
-[`ops::mesher`](maillage.md)) et des futurs helpers de remaillage / raffinement.
+Les **champs matériau** prêts pour l'assemblage vivent dans
+`ops::element_field`, avec les autres producteurs de champs aux points de
+Gauss : le module porte le nom du conteneur qu'il produit. L'ancien module
+`ops::build`, dont le nom ne désignait aucune famille, a disparu avec le
+redécoupage.
 
 ## Champs matériau
 
@@ -25,10 +25,10 @@ comme Dirichlet).
 import pyrucast
 
 # Thermique : conductivité uniforme.
-materials = pyrucast.build.material_field(model, [("k", 1.0)])
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
 # Élasticité : deux propriétés.
-materials = pyrucast.build.material_field(model, [("E", 210e9), ("nu", 0.3)])
+materials = pyrucast.element_field.material_field(model, [("E", 210e9), ("nu", 0.3)])
 ```
 
 Le champ produit est ensuite passé tel quel à

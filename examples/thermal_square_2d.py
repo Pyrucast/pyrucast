@@ -51,9 +51,9 @@ def main() -> None:
     # ── Maillage : grille N×N de QUA4 sur [0,1]², par balayage de deux lignes ─
     # SEG2 (bas → haut) avec le mailleur `sweep` (Cast3m « regle »).
     c = pyrucast.Coords(2)
-    bottom = pyrucast.mesher.line(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
-    top = pyrucast.mesher.line(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
-    mesh = pyrucast.mesher.sweep(bottom, top, N)
+    bottom = pyrucast.mesh.line(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
+    top = pyrucast.mesh.line(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
+    mesh = pyrucast.mesh.sweep(bottom, top, N)
 
     # Nœuds rangés par idx(i, j) (i selon x, j selon y) en relisant la
     # connectivité QUA4 : maille (cy, cx) = cy*N + cx, nœuds locaux 0..3.
@@ -69,15 +69,15 @@ def main() -> None:
 
     # ── Dirichlet T = 20 sur le bord droit (x = 1) ───────────────────────────
     right_nodes = [grid[idx(N, j)] for j in range(N + 1)]
-    imposed = pyrucast.mesher.poi1_from_nodes(right_nodes)
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes(right_nodes)
+    multiplier = pyrucast.mesh.barycenter(imposed)
     mults = [multiplier.node(0, j, 0) for j in range(N + 1)]
     model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
         "T", "q", imposed, multiplier
     )
 
     # ── Matériau : k uniforme (Dirichlet ignoré automatiquement) ─────────────
-    materials = pyrucast.build.material_field(model, [("k", K)])
+    materials = pyrucast.element_field.material_field(model, [("k", K)])
 
     # ── Chargement ───────────────────────────────────────────────────────────
     # Source : flux uniforme (densité Q) sur le bord gauche, transformé en
@@ -88,10 +88,10 @@ def main() -> None:
     for j in range(N):
         left_edge.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
     left_fes = pyrucast.FiniteElementSpace(left_edge)
-    source = pyrucast.assemble.flux(left_fes[0], Q, "q")
+    source = pyrucast.node_field.flux(left_fes[0], Q, "q")
 
     # Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
-    imposed_mesh = pyrucast.mesher.poi1_from_nodes(mults)
+    imposed_mesh = pyrucast.mesh.poi1_from_nodes(mults)
     imposed_load = pyrucast.NodeField(imposed_mesh, ["imposed_T"])
     for m in mults:
         imposed_load[0].set_value(m, "imposed_T", T_IMPOSED)
@@ -100,7 +100,7 @@ def main() -> None:
     rhs = source | imposed_load
 
     # ── Assemblage + résolution ──────────────────────────────────────────────
-    K_mat = pyrucast.assemble.stiffness(model, materials)
+    K_mat = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K_mat, rhs)
 
     # ── Comparaison à l'analytique u(x) = 20 + (Q/k)(1 - x), ∀ y ─────────────

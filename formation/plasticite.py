@@ -53,23 +53,23 @@ def construire_plaque_trouee():
     p3 = coords.add_node([LONGUEUR, HAUTEUR])
     p4 = coords.add_node([0.0, HAUTEUR])
 
-    bas = pc.mesher.line(p1, p2, 10)
-    droit = pc.mesher.line(p2, p3, 4)
-    haut = pc.mesher.line(p3, p4, 10)
-    bord_gauche = pc.mesher.line(p4, p1, 4)
-    boucle_ext = pc.mesher.consolidate_mesh(bas | droit | haut | bord_gauche)
+    bas = pc.mesh.line(p1, p2, 10)
+    droit = pc.mesh.line(p2, p3, 4)
+    haut = pc.mesh.line(p3, p4, 10)
+    bord_gauche = pc.mesh.line(p4, p1, 4)
+    boucle_ext = pc.mesh.consolidate(bas | droit | haut | bord_gauche)
 
     centre = coords.add_node(list(CENTRE_TROU))
-    trou = pc.mesher.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
+    trou = pc.mesh.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
 
     # Boucle extérieure CCW, trou horaire (CW) : orientation attendue par
     # `triangulate_surface` (le trou est inversé, `trou` reste utilisable ci-dessous).
-    contour = boucle_ext | pc.mesher.invert(trou)
-    plaque = pc.mesher.triangulate_surface(contour, "TRI3", size=0.02)
+    contour = boucle_ext | pc.mesh.invert(trou)
+    plaque = pc.mesh.triangulate_surface(contour, "TRI3", size=0.02)
 
-    y = pc.field.coordinates(trou, ["Y"])
-    noeuds_bas_trou = pc.field.select(y, lt=CENTRE_TROU[1])
-    arc_bas = pc.mesher.elements_on(trou, noeuds_bas_trou, strict=True)
+    y = pc.node_field.coordinates(trou, ["Y"])
+    noeuds_bas_trou = pc.mesh.select(y, lt=CENTRE_TROU[1])
+    arc_bas = pc.mesh.elements_on(trou, noeuds_bas_trou, strict=True)
 
     return coords, plaque, bord_gauche, arc_bas
 
@@ -80,20 +80,20 @@ def main() -> None:
     arc_fes = pc.FiniteElementSpace(arc_bas)
 
     # ANCHOR: modele_plastique
-    encastrement = pc.mesher.to_poi1(bord_gauche)
-    multiplicateur = pc.mesher.translate(encastrement, [0.0, 0.0])
+    encastrement = pc.mesh.to_poi1(bord_gauche)
+    multiplicateur = pc.mesh.translate(encastrement, [0.0, 0.0])
 
     modele = pc.Model.plasticity(fes, "plane_stress")
     modele = modele | pc.Model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
     modele = modele | pc.Model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
-    materiaux = pc.build.material_field(
+    materiaux = pc.element_field.material_field(
         modele, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
     )
     # ANCHOR_END: modele_plastique
 
     # ANCHOR: chargement_evolution
     pression = -FACTEUR_CHARGE * MASSE * G / (2.0 * 3.14159265 * RAYON_TROU)
-    effort_final = pc.assemble.flux(arc_fes[0], pression, "f_y")
+    effort_final = pc.node_field.flux(arc_fes[0], pression, "f_y")
     charge = pc.Evolution(
         [(0.0, effort_final * 0.0), (1.0, effort_final)], out_of_range="clamp"
     )
@@ -102,8 +102,8 @@ def main() -> None:
     # ANCHOR: pas_a_pas
     # DDL libres (hors encastrement) pour normer le résidu de Newton — sans
     # quoi les grandes réactions d'appui masquent la convergence réelle.
-    x = pc.field.coordinates(plaque, ["X"])
-    ddl_libres = pc.field.select(x, gt=1e-6)
+    x = pc.node_field.coordinates(plaque, ["X"])
+    ddl_libres = pc.mesh.select(x, gt=1e-6)
 
     data = {
         "times": [0.0, 0.2, 0.4, 0.55, 0.7],  # pseudo-temps ∈ [0, 1]

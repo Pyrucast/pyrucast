@@ -36,7 +36,7 @@ def _heat_setup(n_elems=4, length=1.0, k=2.0):
 
 def test_gradient_of_linear_temperature():
     _model, fes, _materials, t = _heat_setup(length=1.0)
-    grad = pyrucast.field.gradient(t, fes)
+    grad = pyrucast.element_field.gradient(t, fes)
     assert len(grad) == 1
     sub = grad[0]
     assert sub.components() == ["grad_T_x"]
@@ -48,8 +48,8 @@ def test_gradient_of_linear_temperature():
 def test_integrate_behavior_returns_weak_form_flux():
     k = 2.0
     model, fes, materials, t = _heat_setup(k=k)
-    grad = pyrucast.field.gradient(t, fes)
-    state = pyrucast.behavior.integrate_behavior(model, grad, materials)
+    grad = pyrucast.element_field.gradient(t, fes)
+    state = pyrucast.element_field.integrate_behavior(model, grad, materials)
     assert len(state) == 1
     sub = state[0]
     assert sub.components() == ["flux_x"]
@@ -65,8 +65,8 @@ def test_has_behavior_true_for_hc_false_for_dirichlet():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    imposed = pyrucast.mesher.poi1_from_nodes([a])
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes([a])
+    multiplier = pyrucast.mesh.barycenter(imposed)
     model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
         "T", "q", imposed, multiplier
     )
@@ -76,11 +76,11 @@ def test_has_behavior_true_for_hc_false_for_dirichlet():
 
 def test_integrate_behavior_missing_material_errors():
     model, fes, _materials, t = _heat_setup()
-    grad = pyrucast.field.gradient(t, fes)
+    grad = pyrucast.element_field.gradient(t, fes)
     # Material field on the right subspace but lacking the "k" component.
     bad = pyrucast.ElementField(fes, ["unused"])
     try:
-        pyrucast.behavior.integrate_behavior(model, grad, bad)
+        pyrucast.element_field.integrate_behavior(model, grad, bad)
     except RuntimeError:
         pass
     else:
@@ -105,7 +105,7 @@ def test_deformation_linearized_strain_2d():
         u[0].set_value(n, "u_x", 2.0 * x + 0.5 * y)
         u[0].set_value(n, "u_y", 0.1 * x + 3.0 * y)
 
-    strain = pyrucast.field.deformation(u, fes)
+    strain = pyrucast.element_field.deformation(u, fes)
     sub = strain[0]
     assert sub.components() == ["eps_xx", "eps_xy", "eps_yy"]
     for g in range(sub.gauss_count()):

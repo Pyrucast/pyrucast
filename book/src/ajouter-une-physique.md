@@ -125,7 +125,7 @@ sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
 
 - **Domaine** (physique sur une région) : `impl Domain` + `as_domain()`. Déclarer
   `material_fespace()` (+ `material_components()`) — l'assembleur
-  (`src/ops/assemble/mod.rs`) sélectionne et valide le `SubElementField`
+  (`src/ops/matrix.rs`) sélectionne et valide le `SubElementField`
   automatiquement ; `behavior_fespace()` + `behavior_output_components()` +
   `integrate_point(...)`, la loi de constitution **en un point de Gauss**.
   `integrate_behavior` est **fourni** : il pilote ce noyau en parallèle sur toutes
@@ -198,11 +198,11 @@ l'assembleur appellent tous `self.as_kind().<méthode>()` — ils sont
 
 ## Ce qui est générique (rien à toucher)
 
-- `src/ops/assemble/mod.rs` : `stiffness()` boucle sur `contributions()` et
+- `src/ops/matrix.rs` : `stiffness()` boucle sur `contributions()` et
   pilote le matériau via le seam `as_domain()` (`Domain`) ; `mass()` via
   `build_mass_blocks()`. Aucun `match` par variante.
-- `src/ops/build/material_field.rs` et son wrapper `src/py/ops/build.rs`.
-- `src/py/ops/assemble.rs` : `stiffness` / `mass` délèguent à `model.inner`.
+- `src/ops/element_field/material_field.rs` et son wrapper `src/py/ops/element_field.rs`.
+- `src/py/ops/matrix.rs` : `stiffness` / `mass` délèguent à `model.inner`.
 
 ## Pour finir
 

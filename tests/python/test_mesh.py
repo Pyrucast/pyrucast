@@ -21,14 +21,14 @@ def test_poi1_from_nodes_builds_points_mesh():
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     # Node-based: the Coords is taken from the nodes themselves.
-    m = pyrucast.mesher.poi1_from_nodes([a, b])
+    m = pyrucast.mesh.poi1_from_nodes([a, b])
     assert m.element_types() == ["POI1"]
     assert m.cell_count() == 2
 
 
 def test_poi1_from_nodes_empty_raises():
     try:
-        pyrucast.mesher.poi1_from_nodes([])
+        pyrucast.mesh.poi1_from_nodes([])
     except RuntimeError:
         pass
     else:
@@ -80,15 +80,15 @@ def test_aggregate_union_sub_and_sub_union_sub():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
-    s1 = pyrucast.mesher.poi1_from_nodes([a])[0]  # a PySubMesh
-    s2 = pyrucast.mesher.poi1_from_nodes([b])[0]
+    s1 = pyrucast.mesh.poi1_from_nodes([a])[0]  # a PySubMesh
+    s2 = pyrucast.mesh.poi1_from_nodes([b])[0]
 
     # sub + sub → Mesh
     m = s1 | s2
     assert len(m) == 2
 
     # mesh + sub → Mesh
-    s3 = pyrucast.mesher.poi1_from_nodes([a])[0]
+    s3 = pyrucast.mesh.poi1_from_nodes([a])[0]
     m2 = m | s3
     assert len(m2) == 3
 
@@ -99,8 +99,8 @@ def test_sub_union_aggregate_mirrors_aggregate_union_sub():
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     d = c.add_node([2.0, 0.0])
-    two = pyrucast.mesher.line(a, b, 2)  # one submesh, 2 cells
-    five = pyrucast.mesher.line(b, d, 5)  # one submesh, 5 cells
+    two = pyrucast.mesh.line(a, b, 2)  # one submesh, 2 cells
+    five = pyrucast.mesh.line(b, d, 5)  # one submesh, 5 cells
 
     assert (two | five[0]).cell_counts() == [2, 5]
     assert (five[0] | two).cell_counts() == [5, 2]
@@ -331,7 +331,7 @@ def test_triangulate_surface_square_tri3():
     c = pyrucast.Coords(2)
     contour = _discretized_square(c)
 
-    tri = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.25)
+    tri = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=0.25)
     assert tri.element_types() == ["TRI3"]
     assert tri.cell_count() > 2  # interior nodes created
     assert abs(_triangle_area_sum(tri) - 1.0) < 1e-9
@@ -341,7 +341,7 @@ def test_triangulate_surface_square_qua4_is_quad_dominant():
     c = pyrucast.Coords(2)
     contour = _discretized_square(c, per_side=6)
 
-    quad = pyrucast.mesher.triangulate_surface(contour, "QUA4", size=0.25)
+    quad = pyrucast.mesh.triangulate_surface(contour, "QUA4", size=0.25)
     # Quad-dominant: at least a QUA4 submesh (a few boundary TRI3 may remain).
     assert "QUA4" in quad.element_types()
 
@@ -361,7 +361,7 @@ def test_triangulate_surface_freezes_contour():
         return s
 
     before = node_map(contour)
-    mesh = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.05)
+    mesh = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=0.05)
     after = node_map(mesh)
 
     for nid, pos in before.items():
@@ -387,7 +387,7 @@ def test_triangulate_surface_unknown_element_type():
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 3]])
 
     try:
-        pyrucast.mesher.triangulate_surface(contour, "BOGUS")
+        pyrucast.mesh.triangulate_surface(contour, "BOGUS")
     except ValueError:
         pass
     else:
@@ -406,7 +406,7 @@ def test_triangulate_surface_rejects_unsupported_target_element():
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 3]])
 
     try:
-        pyrucast.mesher.triangulate_surface(contour, "TET4")
+        pyrucast.mesh.triangulate_surface(contour, "TET4")
     except RuntimeError:
         pass
     else:
@@ -431,7 +431,7 @@ def test_triangulate_surface_with_one_hole_2d():
     combined = outer | hole
     assert len(combined) == 2
 
-    tri = pyrucast.mesher.triangulate_surface(combined, "TRI3", size=1.0)
+    tri = pyrucast.mesh.triangulate_surface(combined, "TRI3", size=1.0)
     # Meshed area = outer 16 minus hole 4 = 12.
     assert abs(_triangle_area_sum(tri) - 12.0) < 1e-9
 
@@ -442,7 +442,7 @@ def test_triangulate_surface_two_disjoint_domains():
     a, _ = _build_seg2_loop(c, [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
     b, _ = _build_seg2_loop(c, [(3.0, 0.0), (4.0, 0.0), (4.0, 1.0), (3.0, 1.0)])
     combined = a | b
-    tri = pyrucast.mesher.triangulate_surface(combined, "TRI3", size=0.5)
+    tri = pyrucast.mesh.triangulate_surface(combined, "TRI3", size=0.5)
     # Total meshed area = 1 + 1 = 2.
     assert abs(_triangle_area_sum(tri) - 2.0) < 1e-9
 
@@ -452,7 +452,7 @@ def test_triangulate_surface_rejects_all_holes_no_outer():
     c = pyrucast.Coords(2)
     hole, _ = _build_seg2_loop(c, [(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)])
     try:
-        pyrucast.mesher.triangulate_surface(hole, "TRI3")
+        pyrucast.mesh.triangulate_surface(hole, "TRI3")
     except RuntimeError:
         pass
     else:
@@ -476,7 +476,7 @@ def test_triangulate_surface_3d_tilted_square():
     for i in range(4):
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
-    tri = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.5)
+    tri = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=0.5)
     assert tri.element_types() == ["TRI3"]
     assert tri.cell_count() >= 2
 
@@ -491,7 +491,7 @@ def test_triangulate_surface_3d_rejects_degenerate_contour():
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % 4]])
 
     try:
-        pyrucast.mesher.triangulate_surface(contour, "TRI3")
+        pyrucast.mesh.triangulate_surface(contour, "TRI3")
     except RuntimeError:
         pass
     else:
@@ -507,7 +507,7 @@ def test_triangulate_surface_rejects_non_seg2_contour():
     bogus.unit().add_cell([a, b, cc])
 
     try:
-        pyrucast.mesher.triangulate_surface(bogus, "TRI3")
+        pyrucast.mesh.triangulate_surface(bogus, "TRI3")
     except RuntimeError:
         pass
     else:
@@ -526,7 +526,7 @@ def test_to_poi1_converts_each_submesh_to_node_list():
     tri.unit().add_cell([a, b, cc])
     tri.unit().add_cell([b, d, cc])
 
-    poi = pyrucast.mesher.to_poi1(tri)
+    poi = pyrucast.mesh.to_poi1(tri)
     assert len(poi) == 1
     assert poi.element_types() == ["POI1"]
     assert poi.cell_count() == 4  # 6 connectivity entries, deduplicated
@@ -546,7 +546,7 @@ def test_to_poi1_preserves_submesh_count():
     tri.unit().add_cell([a, b, cc])
     mesh = pts | tri
 
-    poi = pyrucast.mesher.to_poi1(mesh)
+    poi = pyrucast.mesh.to_poi1(mesh)
     assert len(poi) == 2
     assert poi.element_types() == ["POI1", "POI1"]
     assert poi.cell_counts() == [1, 3]
@@ -566,7 +566,7 @@ def _mesh_with_n_zones(n):
     """A Mesh of `n` single-node POI1 zones sharing the same Coords."""
     c = pyrucast.Coords(2)
     subs = [
-        pyrucast.mesher.poi1_from_nodes([c.add_node([float(i), 0.0])])[0]
+        pyrucast.mesh.poi1_from_nodes([c.add_node([float(i), 0.0])])[0]
         for i in range(n)
     ]
     mesh = subs[0]
@@ -648,7 +648,7 @@ def _hex_cube():
 
 
 def test_skin_hex_cube_gives_six_quad_faces():
-    sk = pyrucast.mesher.skin(_hex_cube())
+    sk = pyrucast.mesh.skin(_hex_cube())
     assert sk.element_types() == ["QUA4"] * 6
     assert sk.cell_count() == 6
 
@@ -662,10 +662,10 @@ def test_skin_extruded_solid_merges_flat_faces():
     contour = pyrucast.Mesh(c, "SEG2")
     for i in range(4):
         contour[0].add_cell([sq[i], sq[(i + 1) % 4]])
-    surf = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.34)
-    solid = pyrucast.mesher.extrude(surf, [0, 0, 1], 3)
+    surf = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=0.34)
+    solid = pyrucast.mesh.extrude(surf, [0, 0, 1], 3)
 
-    faces = list(pyrucast.mesher.skin(solid))
+    faces = list(pyrucast.mesh.skin(solid))
     assert len(faces) == 6
     n_tri = sum(1 for s in faces if s.element_type == "TRI3")
     n_quad = sum(1 for s in faces if s.element_type == "QUA4")
@@ -673,7 +673,7 @@ def test_skin_extruded_solid_merges_flat_faces():
 
 
 def test_skin_large_angle_merges_all_faces():
-    sk = pyrucast.mesher.skin(_hex_cube(), angle_deg=180.0)
+    sk = pyrucast.mesh.skin(_hex_cube(), angle_deg=180.0)
     assert sk.element_types() == ["QUA4"]
     assert sk.cell_count() == 6
 
@@ -686,7 +686,7 @@ def test_skin_rejects_surface_mesh():
     m = pyrucast.Mesh(c, "TRI3")
     m[0].add_cell([a, b, d])
     try:
-        pyrucast.mesher.skin(m)
+        pyrucast.mesh.skin(m)
     except RuntimeError:
         pass
     else:
@@ -703,28 +703,28 @@ def _unit_quad():
 
 
 def test_convert_qua4_to_tri3_splits_each_quad():
-    tri = pyrucast.mesher.convert(_unit_quad(), "TRI3")
+    tri = pyrucast.mesh.convert(_unit_quad(), "TRI3")
     assert tri.element_types() == ["TRI3"]
     assert tri.cell_count() == 2
 
 
 def test_convert_hex8_to_tet4_gives_six_tets():
-    tets = pyrucast.mesher.convert(_hex_cube(), "TET4")
+    tets = pyrucast.mesh.convert(_hex_cube(), "TET4")
     assert tets.element_types() == ["TET4"]
     assert tets.cell_count() == 6
 
 
 def test_convert_identity_is_noop_copy():
-    tri = pyrucast.mesher.convert(_unit_quad(), "TRI3")
-    same = pyrucast.mesher.convert(tri, "TRI3")
+    tri = pyrucast.mesh.convert(_unit_quad(), "TRI3")
+    same = pyrucast.mesh.convert(tri, "TRI3")
     assert same.element_types() == ["TRI3"]
     assert same.cell_count() == 2
 
 
 def test_convert_rejects_unsupported_pair():
-    tri = pyrucast.mesher.convert(_unit_quad(), "TRI3")
+    tri = pyrucast.mesh.convert(_unit_quad(), "TRI3")
     try:
-        pyrucast.mesher.convert(tri, "QUA4")
+        pyrucast.mesh.convert(tri, "QUA4")
     except RuntimeError:
         pass
     else:
@@ -733,7 +733,7 @@ def test_convert_rejects_unsupported_pair():
 
 def test_convert_unknown_element_type():
     try:
-        pyrucast.mesher.convert(_unit_quad(), "NOPE")
+        pyrucast.mesh.convert(_unit_quad(), "NOPE")
     except (RuntimeError, ValueError):
         pass
     else:
@@ -751,6 +751,6 @@ def test_consolidate_mesh_fuses_same_type_and_drops_duplicates():
     za.unit().add_cell([a, b, d])
     zb = pyrucast.Mesh(c, "TRI3")
     zb.unit().add_cell([a, b, d])  # duplicate cell in a second submesh
-    m = pyrucast.mesher.consolidate_mesh(za | zb)
+    m = pyrucast.mesh.consolidate(za | zb)
     assert len(m) == 1  # one submesh per element type, duplicates dropped
     assert m.cell_counts() == [1]

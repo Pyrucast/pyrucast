@@ -1,9 +1,9 @@
 # Opérateurs de maillage
 
-Les **mesher** (`ops::mesher`) construisent et transforment des
+Les **mailleurs** (`ops::mesh`) construisent et transforment des
 [maillages](../mesh.md). Chacun prend ses conteneurs par référence et renvoie
 un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
-(`pyrucast.mesher.line`, …).
+(`pyrucast.mesh.line`, …).
 
 ## Inventaire
 
@@ -44,7 +44,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `to_quadratic(mesh)` | la **copie quadratique** (Lagrange-2) d'un maillage linéaire : TRI3→TRI6, HEX8→HEX20, … (voir plus bas) |
 | `convert(mesh, element_type)` | **change le type d'élément** sans déplacer ni ajouter de nœud : identité, `QUA4`→`TRI3` (2 triangles), `HEX8`→`TET4` (6 tétraèdres) (voir plus bas) |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
-| `consolidate_mesh(mesh)` | fusionne les sous-maillages de même type, en écartant les mailles dupliquées |
+| `mesh.consolidate(mesh)` | fusionne les sous-maillages de même type, en écartant les mailles dupliquées |
 | `merge_nodes(mesh, tol)` | **soude** les nœuds distants de moins de `tol` ; remappe la connectivité, abandonne les cellules dégénérées (voir plus bas) |
 | `read_gmsh(coords, path)` | **lit un maillage gmsh** `.msh` (ASCII 2.2 ou 4.1) dans `coords`, renvoie un `dict` `{groupe physique: Mesh}` (voir plus bas) |
 | `read_gmsh_str(coords, text)` | comme `read_gmsh` mais depuis le **texte** du fichier déjà en mémoire |
@@ -61,15 +61,15 @@ a = c.add_node([0.0, 0.0])
 b = c.add_node([4.0, 0.0])
 
 # Ligne de 4 SEG2 entre a et b (3 nœuds intermédiaires créés).
-line = pyrucast.mesher.line(a, b, 4)
+line = pyrucast.mesh.line(a, b, 4)
 print(line)  # Mesh: 1 submesh(es), 4 cell(s) total
 
 # Extrusion en QUA4 sur 2 couches selon +y.
-surf = pyrucast.mesher.extrude(line, [0.0, 1.0], 2)
+surf = pyrucast.mesh.extrude(line, [0.0, 1.0], 2)
 print(surf.element_types())  # ['QUA4']
 
 # Ligne quadratique : SEG3 (nœud de milieu d'arête par élément).
-line3 = pyrucast.mesher.line(a, b, 4, "SEG3")
+line3 = pyrucast.mesh.line(a, b, 4, "SEG3")
 print(line3.element_types())  # ['SEG3']
 ```
 
@@ -91,10 +91,10 @@ autre chose, il est ensuite **converti** :
   composées).
 
 ```python
-tri = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "TRI3")  # 2× plus de cellules que QUA4
-qua8 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "QUA8")
-qua9 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "QUA9")
-tri6 = pyrucast.mesher.sweep(mesh_a, mesh_b, 2, "TRI6")
+tri = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "TRI3")  # 2× plus de cellules que QUA4
+qua8 = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "QUA8")
+qua9 = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "QUA9")
+tri6 = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "TRI6")
 ```
 
 ## Surface entre 4 côtés : `transfinite`
@@ -129,12 +129,12 @@ p1 = c.add_node([2.0, 0.0])
 p2 = c.add_node([2.0, 1.0])
 p3 = c.add_node([0.0, 1.0])
 
-side1 = pyrucast.mesher.line(p0, p1, 4)  # bas,   4 éléments
-side2 = pyrucast.mesher.line(p1, p2, 2)  # droite, 2 éléments
-side3 = pyrucast.mesher.line(p2, p3, 4)  # haut,  4 éléments (= side1)
-side4 = pyrucast.mesher.line(p3, p0, 2)  # gauche, 2 éléments (= side2)
+side1 = pyrucast.mesh.line(p0, p1, 4)  # bas,   4 éléments
+side2 = pyrucast.mesh.line(p1, p2, 2)  # droite, 2 éléments
+side3 = pyrucast.mesh.line(p2, p3, 4)  # haut,  4 éléments (= side1)
+side4 = pyrucast.mesh.line(p3, p0, 2)  # gauche, 2 éléments (= side2)
 
-surf = pyrucast.mesher.transfinite(side1, side2, side3, side4)
+surf = pyrucast.mesh.transfinite(side1, side2, side3, side4)
 print(surf.element_types(), surf.cell_count())  # ['QUA4'] 8
 ```
 
@@ -176,10 +176,10 @@ face.unit().add_cell(
 )
 
 # Copie translatée de 5 selon +z (nœuds neufs ; `face` reste intacte).
-haut = pyrucast.mesher.translate(face, [0.0, 0.0, 5.0])
+haut = pyrucast.mesh.translate(face, [0.0, 0.0, 5.0])
 
 # Copie tournée de 30° autour de l'axe z passant par l'origine.
-tournee = pyrucast.mesher.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+tournee = pyrucast.mesh.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
 ```
 
 ## Tissage d'un solide entre deux surfaces : `sweep_solid`
@@ -201,7 +201,7 @@ surface et sa copie déplacée :
 
 ```python
 # `face` et `tournee` : la face TRI3 ci-dessus et sa copie tournée de 30°.
-solide = pyrucast.mesher.sweep_solid(face, tournee, 1)
+solide = pyrucast.mesh.sweep_solid(face, tournee, 1)
 print(solide.element_types())  # ['PENTA6']
 ```
 
@@ -222,8 +222,8 @@ Le maillage obtenu se calcule avec l'interpolation `LAGRANGE2` (cf.
 [Espace éléments finis](../fe-space.md)) :
 
 ```python
-lin = pyrucast.mesher.triangulate_surface(contour, "TRI3", 1.0)  # maillage TRI3
-quad = pyrucast.mesher.to_quadratic(lin)  # copie TRI6
+lin = pyrucast.mesh.triangulate_surface(contour, "TRI3", 1.0)  # maillage TRI3
+quad = pyrucast.mesh.to_quadratic(lin)  # copie TRI6
 print(quad.element_types())  # ['TRI6']
 
 fes = pyrucast.FiniteElementSpace(quad, interpolation="LAGRANGE2")
@@ -252,8 +252,8 @@ modifié. Tout autre couple `(source, cible)` lève une erreur : passer à un ty
 relève de [`to_quadratic`](#passage-à-lordre-quadratique--to_quadratic).
 
 ```python
-faces = pyrucast.mesher.skin(volume)  # peau en QUA4
-faces = pyrucast.mesher.convert(faces, "TRI3")  # QUA4 → TRI3
+faces = pyrucast.mesh.skin(volume)  # peau en QUA4
+faces = pyrucast.mesh.convert(faces, "TRI3")  # QUA4 → TRI3
 print(faces.element_types())  # ['TRI3']
 ```
 
@@ -269,8 +269,8 @@ mailleur est rapide (≈ 3·10⁵ mailles/s) et gère nativement les **trous** e
 Le **contour est figé** : le maillage produit réutilise exactement les nœuds
 d'entrée (mêmes identifiants, mêmes positions) et **n'ajoute aucun nœud sur une
 arête du contour**. Le raffinement n'insère donc que des nœuds *intérieurs* ;
-pour un bord plus fin, discrétisez le contour en amont (`mesher.line(a, b,
-15)`, `mesher.arc(...)`, `mesher.circle(...)`).
+pour un bord plus fin, discrétisez le contour en amont (`mesh.line(a, b,
+15)`, `mesh.arc(...)`, `mesh.circle(...)`).
 
 `contour` est un `Mesh` contenant **une ou plusieurs boucles SEG2** fermées ;
 la configuration peut être en dimension **2** (cas direct) ou une boucle
@@ -368,11 +368,11 @@ for i in range(4):
 combined = outer | hole
 
 # Maillage TRI3 de taille ~0.5 (aire = 16 - 4 = 12).
-tri = pyrucast.mesher.triangulate_surface(combined, "TRI3", size=0.5)
+tri = pyrucast.mesh.triangulate_surface(combined, "TRI3", size=0.5)
 print(tri.element_types(), tri.cell_count())
 
 # Variante quad-dominante.
-quad = pyrucast.mesher.triangulate_surface(combined, "QUA4", size=0.5)
+quad = pyrucast.mesh.triangulate_surface(combined, "QUA4", size=0.5)
 print(quad.element_types())  # ['QUA4', 'TRI3'] en général
 ```
 
@@ -393,10 +393,10 @@ jeton d'interruption (timeout, drapeau partagé…) — voir
 - Les boucles doivent être deux à deux disjointes (pas de trous emboîtés, pas
   de croisements).
 
-Côté Rust, `ops::mesher::triangulate_surface(&contour, ElementType::TRI3, Some(0.5))`.
+Côté Rust, `ops::mesh::triangulate_surface(&contour, ElementType::TRI3, Some(0.5))`.
 Le cœur (CDT + raffinement) opère sur de simples `Vec<Point2>` sans toucher au
 store ; lissage et recombinaison QUA4 sont parallélisés (`rayon`). Le module
-`pyrucast::ops::mesher::triangulation` regroupe par ailleurs les briques
+`pyrucast::ops::mesh::triangulation` regroupe par ailleurs les briques
 géométriques réutilisables indépendamment du système `Mesh`
 (voir [Triangulation](../triangulation.md)).
 
@@ -430,7 +430,7 @@ près des frontières.
 Identique à `triangulate_surface`, et volontairement : les deux opérateurs
 partagent leur lecture de contour. `contour` est un `Mesh` d'une ou plusieurs
 **boucles `SEG2` fermées**, chacune dans **un seul** sous-maillage
-(`pyrucast.mesher.consolidate_mesh`), orientées par l'appelant — **CCW** pour une frontière
+(`pyrucast.mesh.consolidate`), orientées par l'appelant — **CCW** pour une frontière
 extérieure, **CW** pour un trou. Plusieurs boucles CCW disjointes pavent
 plusieurs domaines indépendants en une passe. La configuration peut être en
 dimension **2**, ou une boucle **plane en 3D** (ajustée à son plan de meilleur
@@ -546,11 +546,11 @@ import pyrucast as pc
 coords = pc.Coords(2)
 # … contour extérieur CCW et cercle-trou CW, consolidés en une boucle chacun.
 # Chaque boucle du contour a un nombre pair de segments, donc all_quad passe.
-plaque = pc.mesher.pave_surface(contour, "QUA4", size=0.002, all_quad=True)
+plaque = pc.mesh.pave_surface(contour, "QUA4", size=0.002, all_quad=True)
 print(plaque.element_types())  # ['QUA4']
 
 # Le solide prismatique vient alors gratuitement, et en hexaèdres purs.
-volume = pc.mesher.extrude(plaque, [0, 0.02, 0], 2)
+volume = pc.mesh.extrude(plaque, [0, 0.02, 0], 2)
 print(volume.element_types())  # ['HEX8']
 ```
 
@@ -615,9 +615,9 @@ et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
 ### Pièges
 
 - **Une boucle par sous-maillage.** Comme pour `triangulate_surface`, une
-  boucle fermée doit tenir dans un seul sous-maillage : `pyrucast.mesher.consolidate_mesh`
+  boucle fermée doit tenir dans un seul sous-maillage : `pyrucast.mesh.consolidate`
   après avoir uni les côtés.
-- **Orientation.** Un trou doit être **CW**. `pyrucast.mesher.invert` retourne
+- **Orientation.** Un trou doit être **CW**. `pyrucast.mesh.invert` retourne
   un cercle construit en CCW.
 - **La taille du contour compte.** Le front part de la discrétisation du bord
   et converge vers `size` en quelques rangées. Un contour beaucoup plus
@@ -769,8 +769,8 @@ chacun présent seulement s'il n'est pas vide.
 ```python
 import pyrucast as pc
 
-peau = pc.mesher.skin(solide)  # QUA4, normales sortantes
-maille = pc.mesher.pave_volume(peau, layers=1, thickness=0.15, size=0.4)
+peau = pc.mesh.skin(solide)  # QUA4, normales sortantes
+maille = pc.mesh.pave_volume(peau, layers=1, thickness=0.15, size=0.4)
 print(dict(zip(maille.element_types(), maille.cell_counts())))
 # {'HEX8': 54, 'PYRA5': 54, 'TET4': 408}
 ```
@@ -778,7 +778,7 @@ print(dict(zip(maille.element_types(), maille.cell_counts())))
 ### Pièges
 
 - **Orientation.** Une enveloppe retournée est refusée en le disant ;
-  `pyrucast.mesher.invert` la remet à l'endroit.
+  `pyrucast.mesh.invert` la remet à l'endroit.
 - **Épaisseur.** Une couche plus épaisse que le solide ne peut pas rentrer :
   le décalage retourne l'enveloppe et l'opérateur sort en erreur en nommant la
   couche fautive.
@@ -855,7 +855,7 @@ et la principale source d'échec.
 ## Mailleur volumique : `triangulate_volume`
 
 ```python
-solide = pyrucast.mesher.triangulate_volume(
+solide = pyrucast.mesh.triangulate_volume(
     enveloppe, size=None, allow_surface_nodes=False
 )
 ```
@@ -868,9 +868,9 @@ surface fermée dont les normales pointent vers le trou — elle se soustrait
 d'elle-même, sans argument dédié.
 
 ```python
-peau = pyrucast.mesher.convert(pyrucast.mesher.skin(solide_penta6), "TRI3")
-peau = pyrucast.mesher.invert(peau)  # voir « pièges », plus bas
-volume = pyrucast.mesher.triangulate_volume(peau, size=0.01)
+peau = pyrucast.mesh.convert(pyrucast.mesh.skin(solide_penta6), "TRI3")
+peau = pyrucast.mesh.invert(peau)  # voir « pièges », plus bas
+volume = pyrucast.mesh.triangulate_volume(peau, size=0.01)
 ```
 
 L'enveloppe est **respectée exactement** : ses nœuds sont réutilisés tels
@@ -1105,7 +1105,7 @@ endroit — ou de laisser le mailleur le faire.
 ### `allow_surface_nodes` : ce qu'on échange
 
 ```python
-solide = pyrucast.mesher.triangulate_volume(peau, allow_surface_nodes=True)
+solide = pyrucast.mesh.triangulate_volume(peau, allow_surface_nodes=True)
 ```
 
 Autorise le mailleur à **couper l'enveloppe plus fin** là où il ne peut ni la
@@ -1127,7 +1127,7 @@ posés sur l'enveloppe, le maillage rendu porte un **second sous-maillage de
 sans rien ajouter n'a qu'un sous-maillage `TET4` :
 
 ```python
-solide = pyrucast.mesher.triangulate_volume(peau, allow_surface_nodes=True)
+solide = pyrucast.mesh.triangulate_volume(peau, allow_surface_nodes=True)
 if solide.element_types() == ["TET4", "POI1"]:
     ajoutes = solide.cell_counts()[1]
     print(f"{ajoutes} nœud(s) posé(s) sur la peau")
@@ -1174,7 +1174,7 @@ Le coût est essentiellement **linéaire** en nombre de mailles produites.
 L'opération est interruptible : `Ctrl+C` pendant un long maillage lève
 `KeyboardInterrupt` sans rien laisser derrière.
 
-Côté Rust, `ops::mesher::triangulate_volume(envelope, size, allow_surface_nodes)`,
+Côté Rust, `ops::mesh::triangulate_volume(envelope, size, allow_surface_nodes)`,
 et `triangulate_volume_cancellable(…, cancel)` pour la forme interruptible.
 
 ## Bord d'une surface : `border`
@@ -1201,11 +1201,11 @@ import pyrucast
 
 c = pyrucast.Coords(dim=2)
 center = c.add_node([0.0, 0.0])
-disc = pyrucast.mesher.triangulate_surface(
-    pyrucast.mesher.circle(center, [0.0, 0.0, 1.0], 2.0, 16), "TRI3"
+disc = pyrucast.mesh.triangulate_surface(
+    pyrucast.mesh.circle(center, [0.0, 0.0, 1.0], 2.0, 16), "TRI3"
 )
 
-bord = pyrucast.mesher.border(disc)
+bord = pyrucast.mesh.border(disc)
 print(len(bord))  # 1  (domaine simplement connexe)
 print(bord.element_types())  # ['SEG2']
 print(bord.cell_counts())  # [16]
@@ -1224,8 +1224,8 @@ dont tous les virages restent sous le seuil) est conservée comme une boucle
 fermée. `angle_deg=None` (défaut) garde chaque bord en une boucle fermée.
 
 ```python
-carre = pyrucast.mesher.triangulate_surface(contour_carre, "TRI3", 0.5)
-aretes = pyrucast.mesher.border(carre, angle_deg=45.0)
+carre = pyrucast.mesh.triangulate_surface(contour_carre, "TRI3", 0.5)
+aretes = pyrucast.mesh.border(carre, angle_deg=45.0)
 print(len(aretes))  # 4  (les quatre côtés, arêtes ouvertes)
 ```
 
@@ -1235,7 +1235,7 @@ cellules autres que POI1/TRI3/QUA4 (les bords 1D et 3D ne sont pas gérés ici �
 voir [`skin`](#peau-dun-volume--skin) pour le bord d'un volume), ou si le bord
 n'est pas un ensemble propre de boucles fermées (arête ouverte ou non-manifold).
 
-Côté Rust, `ops::mesher::border(&mesh, angle_deg)`.
+Côté Rust, `ops::mesh::border(&mesh, angle_deg)`.
 
 ## Peau d'un volume : `skin`
 
@@ -1267,10 +1267,10 @@ coins = [c.add_node(p) for p in [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]]
 contour = pyrucast.Mesh(c, "SEG2")
 for i in range(4):
     contour[0].add_cell([coins[i], coins[(i + 1) % 4]])
-surf = pyrucast.mesher.triangulate_surface(contour, "TRI3", 0.34)
-solide = pyrucast.mesher.extrude(surf, [0.0, 0.0, 1.0], 3)  # TRI3 -> PENTA6
+surf = pyrucast.mesh.triangulate_surface(contour, "TRI3", 0.34)
+solide = pyrucast.mesh.extrude(surf, [0.0, 0.0, 1.0], 3)  # TRI3 -> PENTA6
 
-peau = pyrucast.mesher.skin(solide)
+peau = pyrucast.mesh.skin(solide)
 print(len(peau))  # 6  (deux chapeaux + quatre flancs)
 print(peau.element_types())  # ['TRI3', 'TRI3', 'QUA4', 'QUA4', 'QUA4', 'QUA4']
 ```
@@ -1281,7 +1281,7 @@ sous-maillages POI1 sont ignorés. La fonction lève une erreur si le maillage n
 aucune cellule volumique, s'il porte des cellules autres que
 POI1/TET4/PENTA6/HEX8, ou si l'espace n'est pas 3D.
 
-Côté Rust, `ops::mesher::skin(&mesh, angle_deg)`.
+Côté Rust, `ops::mesh::skin(&mesh, angle_deg)`.
 
 ## Orientation des cellules : `orient` et `invert`
 
@@ -1334,13 +1334,13 @@ départ.
 import pyrucast
 
 # Une plaque trouée : contour extérieur + bord du trou, orientations quelconques.
-surf = pyrucast.mesher.triangulate_surface(contour, "TRI3")
+surf = pyrucast.mesh.triangulate_surface(contour, "TRI3")
 
-propre = pyrucast.mesher.orient(surf)  # toutes les mailles cohérentes
-trou_dedans = pyrucast.mesher.invert(propre)  # sens inversé (intérieur/extérieur)
+propre = pyrucast.mesh.orient(surf)  # toutes les mailles cohérentes
+trou_dedans = pyrucast.mesh.invert(propre)  # sens inversé (intérieur/extérieur)
 ```
 
-Côté Rust, `ops::mesher::orient(&mesh)` et `ops::mesher::invert(&mesh)`.
+Côté Rust, `ops::mesh::orient(&mesh)` et `ops::mesh::invert(&mesh)`.
 
 ## Éléments s'appuyant sur des nœuds : `elements_on`
 
@@ -1361,7 +1361,7 @@ Le résultat **épouse la structure** de `mesh` sous-maillage par sous-maillage
 (même ordre, mêmes types d'éléments, mêmes couleurs) : chaque sous-maillage de
 sortie porte les cellules retenues du sous-maillage d'entrée correspondant,
 **éventuellement vide**. Les zones restent séparées (jamais de fusion). Au
-besoin, `consolidate_mesh(mesh)` élimine ou fond ensuite les zones vides ou
+besoin, `mesh.consolidate(mesh)` élimine ou fond ensuite les zones vides ou
 redondantes. Les cellules retenues réutilisent les nœuds d'origine (refcount
 incrémenté) ; `mesh` est laissé intact.
 
@@ -1380,16 +1380,16 @@ mesh.unit().add_cell([nodes[0], nodes[1], nodes[2]])  # cellule 0
 mesh.unit().add_cell([nodes[1], nodes[3], nodes[2]])  # cellule 1
 
 # Points = {0, 1, 2} : seule la cellule 0 a tous ses nœuds dedans.
-pts = pyrucast.mesher.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
+pts = pyrucast.mesh.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
 
-strict = pyrucast.mesher.elements_on(mesh, pts, strict=True)
+strict = pyrucast.mesh.elements_on(mesh, pts, strict=True)
 print(strict.cell_count())  # 1  (cellule 0)
 
-loose = pyrucast.mesher.elements_on(mesh, pts, strict=False)
+loose = pyrucast.mesh.elements_on(mesh, pts, strict=False)
 print(loose.cell_count())  # 2  (les deux touchent un nœud de pts)
 ```
 
-Côté Rust, `ops::mesher::elements_on(&mesh, &points, strict)`.
+Côté Rust, `ops::mesh::elements_on(&mesh, &points, strict)`.
 
 ## Sélection de nœuds par région géométrique : la famille `points_*`
 
@@ -1405,7 +1405,7 @@ Toutes ces fonctions renvoient un **maillage POI1 calqué sur l'entrée** : un
 sous-maillage par sous-maillage de `mesh`, dans le même ordre, **éventuellement
 vide**. La sélection conserve donc le zonage de sa source — on sait de *quelle*
 zone vient chaque nœud, et on peut travailler zone par zone en indexant le
-résultat. `consolidate_mesh(sel)` retombe sur un nuage unique quand ce découpage ne
+résultat. `mesh.consolidate(sel)` retombe sur un nuage unique quand ce découpage ne
 sert pas.
 
 Les nœuds sont **dédoublonnés dans l'ordre de première apparition** dans la
@@ -1466,43 +1466,37 @@ qui a besoin d'un axe hors du plan pour être un tore, est **3D seulement**.
 import pyrucast
 
 # Une plaque carrée maillée en TRI3.
-plaque = pyrucast.mesher.triangulate_surface(contour, "TRI3", size=0.1)
+plaque = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=0.1)
 
 # Le bord gauche (x = 0) : le plan de normale +x passant par l'origine.
-gauche = pyrucast.mesher.points_on_plane(plaque, [0.0, 0.0], [1.0, 0.0])
+gauche = pyrucast.mesh.points_on_plane(plaque, [0.0, 0.0], [1.0, 0.0])
 
 # Les nœuds du congé : dans le disque de rayon 0.2 autour du coin rentrant.
-conge = pyrucast.mesher.points_in_sphere(plaque, [1.0, 1.0], 0.2)
+conge = pyrucast.mesh.points_in_sphere(plaque, [1.0, 1.0], 0.2)
 
 # La sélection sert directement de support imposé à un Dirichlet — le nuage
 # POI1 est ce que `Model.dirichlet` attend (cf. Contraintes / Dirichlet).
-blocage = pyrucast.Model.dirichlet(
-    "UX", "RX", gauche, pyrucast.mesher.barycenter(gauche)
-)
+blocage = pyrucast.Model.dirichlet("UX", "RX", gauche, pyrucast.mesh.barycenter(gauche))
 
 # La sortie POI1 est un maillage ordinaire : elle se rebranche sur les autres
 # opérateurs, ici pour remonter aux éléments portés par la sélection.
-bande = pyrucast.mesher.elements_on(plaque, conge, strict=True)
+bande = pyrucast.mesh.elements_on(plaque, conge, strict=True)
 ```
 
 En 3D, les formes de révolution sélectionnent alésages, arbres et gorges :
 
 ```python
 # L'alésage d'un tube : la surface latérale du cylindre de rayon intérieur.
-alesage = pyrucast.mesher.points_on_cylinder(
-    tube, [0.0, 0.0, 0.0], [0.0, 0.0, 10.0], 5.0
-)
+alesage = pyrucast.mesh.points_on_cylinder(tube, [0.0, 0.0, 0.0], [0.0, 0.0, 10.0], 5.0)
 
 # Un chanfrein conique (rayon 8 en z = 0, sommet fictif en z = 8).
-chanfrein = pyrucast.mesher.points_on_cone(piece, [0.0, 0.0, 0.0], [0.0, 0.0, 8.0], 8.0)
+chanfrein = pyrucast.mesh.points_on_cone(piece, [0.0, 0.0, 0.0], [0.0, 0.0, 8.0], 8.0)
 
 # La matière autour d'une gorge torique de rayon 1 sur un cercle de rayon 5.
-gorge = pyrucast.mesher.points_in_torus(
-    piece, [0.0, 0.0, 3.0], [0.0, 0.0, 1.0], 5.0, 1.0
-)
+gorge = pyrucast.mesh.points_in_torus(piece, [0.0, 0.0, 3.0], [0.0, 0.0, 1.0], 5.0, 1.0)
 ```
 
-Côté Rust, `ops::mesher::points_on_plane(&mesh, &origin, &normal, tol)` et
+Côté Rust, `ops::mesh::points_on_plane(&mesh, &origin, &normal, tol)` et
 consorts, avec `tol: Option<f64>`.
 
 ## Soudure des nœuds proches : `merge_nodes`
@@ -1524,7 +1518,7 @@ représentant après soudure (un `SEG2` dont les deux bouts fusionnent, un `TRI3
 à deux coins confondus, …) — est **abandonnée** : elle est dégénérée. Les
 cellules `POI1` (un seul nœud) ne s'effondrent jamais et sont toujours
 conservées ; dédupliquer des points colocalisés reste le rôle de
-`consolidate_mesh`, pas celui-ci.
+`mesh.consolidate`, pas celui-ci.
 
 `tol` doit être ≥ 0 ; `tol = 0` ne soude que les nœuds **exactement**
 colocalisés. Seuls les nœuds **référencés** par le maillage sont concernés. Le
@@ -1547,7 +1541,7 @@ mesh = pyrucast.Mesh(c, "SEG2")
 mesh.unit().add_cell([a, b])
 mesh.unit().add_cell([b2, d])
 
-joined = pyrucast.mesher.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
+joined = pyrucast.mesh.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
 ```
 
 > `merge_nodes` opère **au sein d'une même `Coords`** (l'invariant du `Mesh`
@@ -1555,7 +1549,7 @@ joined = pyrucast.mesher.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
 > maillées dans des `Coords` séparées ne se soudent donc pas : il faut d'abord
 > les amener dans la même `Coords`.
 
-Côté Rust, `ops::mesher::merge_nodes(&mesh, tol)`.
+Côté Rust, `ops::mesh::merge_nodes(&mesh, tol)`.
 
 ## Lecture d'un maillage gmsh : `read_gmsh`
 
@@ -1569,7 +1563,7 @@ laquelle lire (il garde ainsi la main sur les nœuds) ; le résultat est un
 import pyrucast
 
 coords = pyrucast.Coords(dim=2)
-regions = pyrucast.mesher.read_gmsh(coords, "piece.msh")
+regions = pyrucast.mesh.read_gmsh(coords, "piece.msh")
 # {'plate': Mesh<…>, 'bottom': Mesh<…>, …}  — ordre du fichier préservé
 
 plate = regions["plate"]
@@ -1590,7 +1584,7 @@ print(plate.cell_count())
 
   ```python
   coords = pyrucast.Coords(dim=2)
-  regions = pyrucast.mesher.read_gmsh(coords, "piece.msh")
+  regions = pyrucast.mesh.read_gmsh(coords, "piece.msh")
   plate = regions["plate"]
   bottom = regions["bottom"]  # même Coords que plate
 
@@ -1646,6 +1640,6 @@ gmsh stocke toujours trois coordonnées par nœud ; c'est la **dimension de la
 
 `read_gmsh_str(coords, text)` fait la même chose à partir du **texte** du
 fichier déjà chargé en mémoire (utile pour les tests ou un `.msh` reçu sur
-le réseau). Côté Rust, `ops::mesher::read_gmsh(coords, path)` et
-`ops::mesher::read_gmsh_str(coords, text)` renvoient un
+le réseau). Côté Rust, `ops::mesh::read_gmsh(coords, path)` et
+`ops::mesh::read_gmsh_str(coords, text)` renvoient un
 `Vec<(String, Mesh)>` ordonné.

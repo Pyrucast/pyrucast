@@ -74,4 +74,4 @@ Le cadre 3-D assemble aussi la **masse consistante** — translation `ρA`,
 inertie de torsion `ρ(I_y+I_z)`, inerties rotatoires de flexion `ρI_y`, `ρI_z`,
 `rho` optionnel — et la **rigidité géométrique** transverse `(N/L)` (sur les deux
 directions perpendiculaires à l'axe) sous l'effort axial `N`, en forme d'élément
-linéaire tournées `Tᵀ·T` (`pyrucast.assemble.mass` / `pyrucast.assemble.geometric`).
+linéaire tournées `Tᵀ·T` (`pyrucast.matrix.mass` / `pyrucast.matrix.geometric`).

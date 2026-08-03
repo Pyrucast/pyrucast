@@ -41,7 +41,7 @@ Une matrice singulière (p. ex. conditions aux limites oubliées) produit un piv
 nul ⇒ solution non finie ⇒ erreur explicite.
 
 ```python
-K = pyrucast.assemble.stiffness(model, materials)
+K = pyrucast.matrix.stiffness(model, materials)
 solution = pyrucast.solver.solve(K, rhs)  # factorise puis résout
 T = solution.value(some_node, "T")
 
@@ -94,7 +94,7 @@ esclave distinct, jamais réutilisé comme maître ni esclave ailleurs (couvre l
 périodicité ; erreur explicite sinon).
 
 ```python
-K = pyrucast.assemble.stiffness(model, materials)
+K = pyrucast.matrix.stiffness(model, materials)
 lagrange = pyrucast.solver.solve(K, rhs)  # système augmenté
 condense = pyrucast.solver.solve_eliminate(model, K, rhs)  # système réduit — même champ
 ```
@@ -199,7 +199,7 @@ erreur, la non-singularité du socle est confirmée par un **aller-retour**
 possible : le résultat est le même, seul le coût change.
 
 ```python
-K = pyrucast.assemble.stiffness(model, materials)  # modèle avec sense=">="
+K = pyrucast.matrix.stiffness(model, materials)  # modèle avec sense=">="
 solution = pyrucast.solver.solve_unilateral(model, K, rhs)  # "schur" par défaut
 reaction = solution.value(mult_node, "lambda_u_y")  # 0 si la butée est relâchée
 

@@ -51,12 +51,12 @@ def main():
     # ── Modèle : élasticité axisymétrique + déformations planes ────────────
     # u_z = 0 sur les deux faces z : c'est ce qui réalise l'hypothèse plane.
     ends = [grid[idx(i, j)] for i in range(NR + 1) for j in (0, NZ)]
-    imposed = pyrucast.mesher.poi1_from_nodes(ends)
+    imposed = pyrucast.mesh.poi1_from_nodes(ends)
     model = pyrucast.Model.elasticity(fes, "axisymmetric")
     model = model | pyrucast.Model.dirichlet(
-        "u_y", "f_y", imposed, pyrucast.mesher.barycenter(imposed)
+        "u_y", "f_y", imposed, pyrucast.mesh.barycenter(imposed)
     )
-    materials = pyrucast.build.material_field(model, [("E", E), ("nu", NU)])
+    materials = pyrucast.element_field.material_field(model, [("E", E), ("nu", NU)])
 
     # ── Chargement : pression interne sur r = a ────────────────────────────
     # La géométrie étant axisymétrique, `flux` intègre ∫ 2πr N p et donne
@@ -64,10 +64,10 @@ def main():
     inner = pyrucast.Mesh(c, "SEG2")
     for j in range(NZ):
         inner.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
-    rhs = pyrucast.assemble.flux(pyrucast.FiniteElementSpace(inner)[0], P, "f_x")
+    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inner)[0], P, "f_x")
 
     # ── Assemblage + résolution ────────────────────────────────────────────
-    k = pyrucast.assemble.stiffness(model, materials)
+    k = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(k, rhs)
 
     # ── Comparaison à Lamé ─────────────────────────────────────────────────
@@ -91,7 +91,7 @@ def main():
     # Le volume de la pièce sort de la même géométrie, sans facteur ajouté.
     ones = pyrucast.NodeField(mesh, ["one"])
     ones.add_to_component("one", 1.0)
-    volume = pyrucast.field.integral(ones, "one", fes)
+    volume = pyrucast.measure.integral(ones, "one", fes)
     print(
         f"Volume de révolution : {volume:.6f} (exact : {3.141592653589793 * (b2 - a2) * H:.6f})"
     )

@@ -35,8 +35,8 @@ NX, NY, L, H = 4, 2, 4.0, 1.0
 
 
 def _clamp(nodes, var, dual):
-    imposed = pyrucast.mesher.poi1_from_nodes(nodes)
-    multiplier = pyrucast.mesher.barycenter(imposed)
+    imposed = pyrucast.mesh.poi1_from_nodes(nodes)
+    multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
 
@@ -71,7 +71,7 @@ def _uniform_temperature(c, grid, fes, value):
     t_nodal = pyrucast.NodeField(t_mesh, ["T"])
     for node in grid:
         t_nodal[0].set_value(node, "T", value)
-    return pyrucast.field.interp_to_gauss(t_nodal, fes)
+    return pyrucast.element_field.interp_to_gauss(t_nodal, fes)
 
 
 def _displacement(solution, c, grid):
@@ -88,17 +88,15 @@ def _displacement(solution, c, grid):
 
 def _solve_thermal(model, materials, fes, c, grid):
     """ε_th → charge thermique → u → σ = D:(ε(u) − ε_th)."""
-    eps_th = pyrucast.field.thermal_strain(
+    eps_th = pyrucast.element_field.thermal_strain(
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
-    sig_th = pyrucast.behavior.integrate_behavior(model, eps_th, materials)
-    f_th = pyrucast.assemble.internal_forces(model, sig_th)
-    solution = pyrucast.solver.solve(
-        pyrucast.assemble.stiffness(model, materials), f_th
-    )
+    sig_th = pyrucast.element_field.integrate_behavior(model, eps_th, materials)
+    f_th = pyrucast.node_field.internal_forces(model, sig_th)
+    solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), f_th)
     u = _displacement(solution, c, grid)
-    sigma = pyrucast.behavior.integrate_behavior(
-        model, pyrucast.field.deformation(u, fes) - eps_th, materials
+    sigma = pyrucast.element_field.integrate_behavior(
+        model, pyrucast.element_field.deformation(u, fes) - eps_th, materials
     )
     return u, sigma
 
@@ -117,7 +115,7 @@ def main() -> None:
         | _clamp(right, "u_x", "f_x")
         | _clamp(bottom, "u_y", "f_y")
     )
-    materials = pyrucast.build.material_field(
+    materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
 
@@ -135,7 +133,7 @@ def main() -> None:
 
     model = pyrucast.Model.elasticity(fes, "plane_stress")
     model = model | _clamp(left, "u_x", "f_x") | _clamp(bottom, "u_y", "f_y")
-    materials = pyrucast.build.material_field(
+    materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
 
