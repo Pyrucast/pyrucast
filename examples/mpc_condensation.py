@@ -12,7 +12,7 @@ degré multiplicateur) et défini, `K̂ û = f̂` avec `K̂ = Tᵀ K T`, puis pr
 Deux voies pour un même résultat
 --------------------------------
 `solve(K, rhs)` résout le système augmenté par multiplicateurs de Lagrange ;
-`solve_eliminate(model, K, rhs)` condense les contraintes. Les deux produisent le
+`solve_eliminate(K, model, rhs)` condense les contraintes. Les deux produisent le
 **même** champ. L'élimination récupère en prime la *réaction* (équivalent du
 multiplicateur) dans la ligne duale de chaque esclave.
 
@@ -70,7 +70,7 @@ def main():
 
     k = pyrucast.matrix.stiffness(model, materials)
     lagrange = pyrucast.solver.solve(k, rhs)
-    elimination = pyrucast.solver.solve_eliminate(model, k, rhs)
+    elimination = pyrucast.solver.solve_eliminate(k, model, rhs)
 
     print("x      T (Lagrange)  T (élimination)")
     for i, node in enumerate(nodes):

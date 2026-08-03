@@ -223,7 +223,7 @@ def mechanical_step(
         out = pc.integrate_behavior(
             mechanical_model, mech_eps, materials, prev=state_prev, dt=dt
         )
-        f_int = pc.internal_forces(mechanical_model, out)
+        f_int = pc.internal_forces(out, mechanical_model)
         f_ext = pc.restrict_like(loads, f_int)
         residual = f_ext - f_int
         free_res = pc.xtx(pc.restrict(residual, support)) ** 0.5

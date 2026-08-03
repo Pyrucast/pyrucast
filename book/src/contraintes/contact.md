@@ -98,7 +98,7 @@ model = elasticite | appuis | contact
 
 rhs = pyrucast.node_field.flux(edge_fes[0], -S, "f_y") | model.contact_gaps()
 solution = pyrucast.solver.solve_unilateral(
-    model, pyrucast.matrix.stiffness(model, materials), rhs
+    pyrucast.matrix.stiffness(model, materials), model, rhs
 )
 
 reaction = solution.value(mult_node, "lambda_contact")  # ≤ 0 collé, 0 décollé

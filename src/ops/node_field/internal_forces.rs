@@ -42,7 +42,7 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// subspace), its `Bᵀ` kernel is integrated cell-by-cell and scattered to the
 /// nodes. Returns a [`NodeField`] with one zone per behaviour-bearing sub-model
 /// in model order, its components the sub-model's dual variables.
-pub fn internal_forces(model: &Model, stresses: &ElementField) -> Result<NodeField> {
+pub fn internal_forces(stresses: &ElementField, model: &Model) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for h in model {
         let beh_fespace = read(h)?.behavior_fespace();
@@ -143,7 +143,7 @@ mod tests {
         // f_int = ∫ Bᵀ σ  vs  K·u.
         let strain = deformation(&u, &fes).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
-        let f_int = internal_forces(&model, &stress).unwrap();
+        let f_int = internal_forces(&stress, &model).unwrap();
 
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         let ku = (&k * &u).unwrap();
@@ -191,7 +191,7 @@ mod tests {
         let strain = deformation(&u, &fes).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
 
-        let via_model = internal_forces(&model, &stress).unwrap();
+        let via_model = internal_forces(&stress, &model).unwrap();
         let via_fespace = internal_forces_continuum(&stress, &fes).unwrap();
 
         let m = via_model.view().unwrap();
@@ -236,7 +236,7 @@ mod tests {
 
         let strain = deformation(&u, &fes).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
-        let f_int = internal_forces(&model, &stress).unwrap();
+        let f_int = internal_forces(&stress, &model).unwrap();
 
         let n = e * area * eps; // axial force
         let fv = f_int.view().unwrap();
@@ -274,7 +274,7 @@ mod tests {
 
         let sect = beam_deformation(&u, &fes).unwrap();
         let stress = integrate(&model, &sect, None, &materials, None).unwrap();
-        let f_int = internal_forces(&model, &stress).unwrap();
+        let f_int = internal_forces(&stress, &model).unwrap();
 
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         let ku = (&k * &u).unwrap();

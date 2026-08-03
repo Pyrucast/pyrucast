@@ -268,7 +268,7 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
 
     let k = stiffness(&model, &materials)?;
     let lagrange = solve(&k, &rhs)?;
-    let elim = eliminate::solve(&model, &k, &rhs)?;
+    let elim = eliminate::solve(&k, &model, &rhs)?;
 
     // The two methods produce the same field, node-for-node.
     for (i, node) in nodes.iter().enumerate() {
@@ -367,7 +367,7 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
         rhs.set_value(nl, "imposed_T", 0.0)?;
         rhs.set_value(nm, "mpc_rhs", 1.0)?;
         let k = stiffness(&model, &materials)?;
-        eliminate::solve(&model, &k, &NodeField::from_sub(rhs))
+        eliminate::solve(&k, &model, &NodeField::from_sub(rhs))
     };
 
     let (nodes, ..) = heat_bar()?;
@@ -429,7 +429,7 @@ fn elimination_recovers_reaction_equals_multiplier() -> Result<()> {
 
     let k = stiffness(&model, &materials)?;
     let lagrange = solve(&k, &rhs)?;
-    let elim = eliminate::solve(&model, &k, &rhs)?;
+    let elim = eliminate::solve(&k, &model, &rhs)?;
 
     // Lagrange multipliers (reference boundary fluxes).
     let lambda_l = lagrange.value(nl, "lambda_T")?;
@@ -498,7 +498,7 @@ fn elimination_periodicity_constant_field() -> Result<()> {
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;
-    let elim = eliminate::solve(&model, &k, &rhs)?;
+    let elim = eliminate::solve(&k, &model, &rhs)?;
 
     for node in &nodes {
         let got = elim.value(node.id(), "T")?;
@@ -549,7 +549,7 @@ fn elimination_rejects_chaining() -> Result<()> {
     )?);
 
     let k = stiffness(&model, &materials)?;
-    assert!(eliminate::solve(&model, &k, &rhs).is_err());
+    assert!(eliminate::solve(&k, &model, &rhs).is_err());
     Ok(())
 }
 
@@ -572,7 +572,7 @@ fn elimination_rejects_zero_coefficient() -> Result<()> {
     let rhs = NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["mpc_rhs".into()])?);
 
     let k = stiffness(&model, &materials)?;
-    assert!(eliminate::solve(&model, &k, &rhs).is_err());
+    assert!(eliminate::solve(&k, &model, &rhs).is_err());
     Ok(())
 }
 
@@ -616,9 +616,9 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
     let mut k = stiffness(&model, &materials)?;
     assert!(k.cached_factorization::<Condensation>().is_none());
 
-    let s1 = eliminate::solve(&model, &k, &rhs)?;
+    let s1 = eliminate::solve(&k, &model, &rhs)?;
     assert!(k.cached_factorization::<Condensation>().is_some());
-    let s2 = eliminate::solve(&model, &k, &rhs)?;
+    let s2 = eliminate::solve(&k, &model, &rhs)?;
     for node in &nodes {
         assert_eq!(s1.value(node.id(), "T")?, s2.value(node.id(), "T")?);
     }

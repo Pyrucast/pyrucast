@@ -96,11 +96,11 @@ pub fn solve(
 /// boundaries.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (model, matrix, rhs, method=None, cache=true))]
+#[pyo3(signature = (matrix, model, rhs, method=None, cache=true))]
 pub fn solve_eliminate(
     py: Python<'_>,
-    model: PyRef<PyModel>,
     matrix: PyRef<PyMatrix>,
+    model: PyRef<PyModel>,
     rhs: PyRef<PyNodeField>,
     method: Option<String>,
     cache: bool,
@@ -110,8 +110,8 @@ pub fn solve_eliminate(
         cache,
     };
     let solution = crate::ops::solver::eliminate::solve_cancellable_with_options(
-        &model.inner,
         &matrix.inner,
+        &model.inner,
         &rhs.inner,
         &options,
         &PySignals(py),
@@ -144,12 +144,12 @@ pub fn solve_eliminate(
 /// and the gap. `Ctrl+C` is honoured at each iteration boundary.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (model, matrix, rhs, method=None, active_set=None, cache=true, max_iter=100, tol=1e-10))]
+#[pyo3(signature = (matrix, model, rhs, method=None, active_set=None, cache=true, max_iter=100, tol=1e-10))]
 #[allow(clippy::too_many_arguments)]
 pub fn solve_unilateral(
     py: Python<'_>,
-    model: PyRef<PyModel>,
     matrix: PyRef<PyMatrix>,
+    model: PyRef<PyModel>,
     rhs: PyRef<PyNodeField>,
     method: Option<String>,
     active_set: Option<String>,
@@ -165,8 +165,8 @@ pub fn solve_unilateral(
         tol,
     };
     let solution = crate::ops::solver::unilateral::solve_cancellable_with_options(
-        &model.inner,
         &matrix.inner,
+        &model.inner,
         &rhs.inner,
         &options,
         &PySignals(py),

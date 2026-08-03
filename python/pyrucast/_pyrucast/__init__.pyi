@@ -2519,7 +2519,7 @@ def integrate_behavior(model: Model, deformation: ElementField, materials: Eleme
     (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
     """
 
-def internal_forces(model: Model, stresses: ElementField) -> NodeField:
+def internal_forces(stresses: ElementField, model: Model) -> NodeField:
     r"""
     Internal nodal forces `f = ∫ Bᵀ σ dΩ` of `model` (Cast3m `BSIG`).
     
@@ -2543,7 +2543,7 @@ def internal_forces_continuum(stresses: ElementField, fespace: FiniteElementSpac
     `B` is the universal symmetric gradient: it needs only the geometry
     (`fespace`) and the Voigt stress (`sigma_xx`, `sigma_xy`, …). Returns a
     `NodeField` with `space_dim` components `f_x, f_y, f_z` per node. **Bars and
-    beams are not covered** — use `internal_forces(model, stresses)` for those.
+    beams are not covered** — use `internal_forces(stresses, model)` for those.
     """
 
 def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
@@ -3014,7 +3014,7 @@ def solve(matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] 
     already cached, only the (cheap) substitution runs.
     """
 
-def solve_eliminate(model: Model, matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
+def solve_eliminate(matrix: Matrix, model: Model, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
     r"""
     Solve `model`'s constrained system by **master/slave elimination**
     (condensation) — the alternative to the Lagrange-multiplier path of
@@ -3036,7 +3036,7 @@ def solve_eliminate(model: Model, matrix: Matrix, rhs: NodeField, method: typing
     boundaries.
     """
 
-def solve_unilateral(model: Model, matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] = None, active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10) -> NodeField:
+def solve_unilateral(matrix: Matrix, model: Model, rhs: NodeField, method: typing.Optional[builtins.str] = None, active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10) -> NodeField:
     r"""
     Solve `model`'s system with **unilateral** (inequality) constraints by the
     active-set (status) method — the operator for constraints built with
@@ -3133,7 +3133,7 @@ def thermal_strain(temperature: ElementField, materials: ElementField, fespace: 
     via `material_field`). Returns the strain tensor in the same layout as
     `deformation`, so `deformation(u, fespace) - thermal_strain(...)` is the
     mechanical strain. Backbone of uncoupled thermomechanics: assemble the
-    thermal load with `internal_forces(model, integrate_behavior(model, ε_th,
+    thermal load with `internal_forces(integrate_behavior(model, ε_th,
     materials))` and recover `σ = D:(ε − ε_th)`.
     """
 

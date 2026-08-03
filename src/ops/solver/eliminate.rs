@@ -99,19 +99,19 @@ pub struct Condensation {
 /// live at the multiplier nodes' imposed-value slots).
 ///
 /// A model with no constraint falls back to a plain [`lu::solve`].
-pub fn solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
-    solve_inner(model, matrix, rhs, &SolveOptions::default(), &NoCancel)
+pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeField> {
+    solve_inner(matrix, model, rhs, &SolveOptions::default(), &NoCancel)
 }
 
 /// Like [`solve`] but with explicit [`SolveOptions`] (`method` selects the direct
 /// back-end for the *reduced* system; `cache` toggles the condensation cache).
 pub fn solve_with_options(
-    model: &Model,
     matrix: &Matrix,
+    model: &Model,
     rhs: &NodeField,
     options: &SolveOptions,
 ) -> Result<NodeField> {
-    solve_inner(model, matrix, rhs, options, &NoCancel)
+    solve_inner(matrix, model, rhs, options, &NoCancel)
 }
 
 /// Like [`solve`], but polls `cancel` at each phase boundary so the call can be
@@ -119,29 +119,29 @@ pub fn solve_with_options(
 /// [`lu::solve_cancellable`]: the heavy library calls are not interrupted
 /// mid-way, only around them.
 pub fn solve_cancellable(
-    model: &Model,
     matrix: &Matrix,
+    model: &Model,
     rhs: &NodeField,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
-    solve_inner(model, matrix, rhs, &SolveOptions::default(), cancel)
+    solve_inner(matrix, model, rhs, &SolveOptions::default(), cancel)
 }
 
 /// [`solve_cancellable`] with explicit [`SolveOptions`] — the full form the
 /// Python binding routes to.
 pub fn solve_cancellable_with_options(
-    model: &Model,
     matrix: &Matrix,
+    model: &Model,
     rhs: &NodeField,
     options: &SolveOptions,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
-    solve_inner(model, matrix, rhs, options, cancel)
+    solve_inner(matrix, model, rhs, options, cancel)
 }
 
 fn solve_inner(
-    model: &Model,
     matrix: &Matrix,
+    model: &Model,
     rhs: &NodeField,
     options: &SolveOptions,
     cancel: &dyn Cancel,
@@ -496,7 +496,7 @@ mod tests {
         let rhs = NodeField::from_sub(rhs);
 
         let model = Model::empty();
-        let sol = solve(&model, &m, &rhs).unwrap();
+        let sol = solve(&m, &model, &rhs).unwrap();
         assert!((sol.value(a.id(), "T").unwrap() - 3.0).abs() < 1e-12);
     }
 }

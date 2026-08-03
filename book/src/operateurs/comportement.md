@@ -75,7 +75,7 @@ variables internes (`VAR0` → `VAR1`), voir
 [Plasticité parfaite](../mecanique/plasticite.md) (retour radial von Mises) et
 [Endommagement de Mazars](../mecanique/mazars.md).
 
-## `internal_forces(model, stresses)` → `NodeField`
+## `internal_forces(stresses, model)` → `NodeField`
 
 Les **forces internes** `f = ∫ Bᵀ σ dΩ` (le `BSIG` de cast3m) sont la
 **transposée** de l'opérateur de déformation `B` : là où
@@ -100,7 +100,7 @@ sorte que `r = f_ext − f_int` est le **résidu** d'équilibre.
 # Solution déjà obtenue par le solveur.
 eps = pyrucast.element_field.deformation(solution, fes)  # ε = B·u
 sig = pyrucast.element_field.integrate_behavior(model, eps, materials)  # COMP : σ
-f_int = pyrucast.node_field.internal_forces(model, sig)  # BSIG : ∫ Bᵀ σ
+f_int = pyrucast.node_field.internal_forces(sig, model)  # BSIG : ∫ Bᵀ σ
 residu = f_ext - f_int  # équilibre
 ```
 
@@ -111,5 +111,5 @@ plasticité), où `B` est le gradient symétrique universel et les DDL sont touj
 un déplacement : elle ne demande que la géométrie (`fespace`) et la contrainte en
 notation de Voigt (`sigma_xx`, `sigma_xy`…), et renvoie `space_dim` composantes
 `f_x, f_y, f_z` par nœud. **Barres et poutres ne sont pas couvertes** — leur `B`
-n'est pas le gradient symétrique — : utiliser `internal_forces(model, stresses)`
+n'est pas le gradient symétrique — : utiliser `internal_forces(stresses, model)`
 pour celles-ci.

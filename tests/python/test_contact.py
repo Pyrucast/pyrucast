@@ -82,7 +82,7 @@ def test_patch_test_uniform_pressure_through_contact():
     rhs = traction | model.contact_gaps()
 
     k = pyrucast.matrix.stiffness(model, materials)
-    solution = pyrucast.solver.solve_unilateral(model, k, rhs)
+    solution = pyrucast.solver.solve_unilateral(k, model, rhs)
 
     for j in range(N + 1):
         for i in range(N + 1):
@@ -116,7 +116,7 @@ def test_separation_releases_every_pair():
     rhs = rhs | model.contact_gaps()
 
     k = pyrucast.matrix.stiffness(model, materials)
-    solution = pyrucast.solver.solve_unilateral(model, k, rhs)
+    solution = pyrucast.solver.solve_unilateral(k, model, rhs)
 
     for j in range(N + 1):
         for i in range(N + 1):

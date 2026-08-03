@@ -70,7 +70,7 @@ Options de `solve` :
 - `cache` — réutiliser/peupler le cache (`True` par défaut ; `False` factorise à
   neuf sans toucher le cache).
 
-## `solve_eliminate(model, matrix, rhs)` → `NodeField`
+## `solve_eliminate(matrix, model, rhs)` → `NodeField`
 
 Voie **alternative** pour un modèle contraint : au lieu de border le système par
 des multiplicateurs de Lagrange (ce que fait `solve` sur la matrice augmentée),
@@ -96,13 +96,13 @@ périodicité ; erreur explicite sinon).
 ```python
 K = pyrucast.matrix.stiffness(model, materials)
 lagrange = pyrucast.solver.solve(K, rhs)  # système augmenté
-condense = pyrucast.solver.solve_eliminate(model, K, rhs)  # système réduit — même champ
+condense = pyrucast.solver.solve_eliminate(K, model, rhs)  # système réduit — même champ
 ```
 
 Voir l'exemple `examples/mpc_condensation.py` et la page
 [Contraintes](../contraintes.md).
 
-## `solve_unilateral(model, matrix, rhs)` → `NodeField`
+## `solve_unilateral(matrix, model, rhs)` → `NodeField`
 
 Solveur **actif/inactif** (méthode du statut) pour un modèle portant des
 relations **unilatérales** (contraintes construites avec `sense=">="` /
@@ -200,11 +200,11 @@ possible : le résultat est le même, seul le coût change.
 
 ```python
 K = pyrucast.matrix.stiffness(model, materials)  # modèle avec sense=">="
-solution = pyrucast.solver.solve_unilateral(model, K, rhs)  # "schur" par défaut
+solution = pyrucast.solver.solve_unilateral(K, model, rhs)  # "schur" par défaut
 reaction = solution.value(mult_node, "lambda_u_y")  # 0 si la butée est relâchée
 
 # Forcer l'ancienne méthode (refactorisation à chaque pas) :
-sol2 = pyrucast.solver.solve_unilateral(model, K, rhs, active_set="refactorize")
+sol2 = pyrucast.solver.solve_unilateral(K, model, rhs, active_set="refactorize")
 ```
 
 Voir la section « Relations unilatérales » de la page

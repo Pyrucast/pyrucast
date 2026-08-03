@@ -79,7 +79,7 @@ def test_unilateral_bound_statuses(q, bound, sense, slope, lam):
     """The four sense × status cases of a bound `T(1) ⋈ a` under a flux `q`."""
     nodes, model, materials, rhs, uni_mult = _bounded_bar(q, bound, sense)
     k = pyrucast.matrix.stiffness(model, materials)
-    solution = pyrucast.solver.solve_unilateral(model, k, rhs)
+    solution = pyrucast.solver.solve_unilateral(k, model, rhs)
     _check(nodes, solution, uni_mult, slope, lam)
 
 
@@ -87,15 +87,15 @@ def test_warm_start_survives_a_status_flip():
     """Re-solving on the same matrix warm-starts; a load flip re-iterates."""
     nodes, model, materials, rhs, uni_mult = _bounded_bar(1.0, 2.0, ">=")
     k = pyrucast.matrix.stiffness(model, materials)
-    first = pyrucast.solver.solve_unilateral(model, k, rhs)
+    first = pyrucast.solver.solve_unilateral(k, model, rhs)
     _check(nodes, first, uni_mult, 2.0, -1.0)
     # Identical re-solve: pure warm start (cached status + factorization).
-    again = pyrucast.solver.solve_unilateral(model, k, rhs)
+    again = pyrucast.solver.solve_unilateral(k, model, rhs)
     _check(nodes, again, uni_mult, 2.0, -1.0)
     # Stronger push on the same matrix: the relation must release from the
     # warm-started (active) status.
     rhs[0].set_value(nodes[-1], "q", 5.0)
-    released = pyrucast.solver.solve_unilateral(model, k, rhs)
+    released = pyrucast.solver.solve_unilateral(k, model, rhs)
     _check(nodes, released, uni_mult, 5.0, 0.0)
 
 
@@ -130,7 +130,7 @@ def test_unilateral_mpc_difference_relation():
         rhs[0].set_value(mpc_mult, "mpc_rhs", g)
 
         solution = pyrucast.solver.solve_unilateral(
-            model, pyrucast.matrix.stiffness(model, materials), rhs
+            pyrucast.matrix.stiffness(model, materials), model, rhs
         )
         for i, node in enumerate(nodes):
             assert abs(solution.value(node, "T") - slope * i * H) < TOL
@@ -145,7 +145,7 @@ def test_all_equality_model_falls_back_to_plain_solve():
     """No inequality: `solve_unilateral` agrees with the plain `solve`."""
     nodes, model, materials, rhs, _ = _bounded_bar(3.0, 0.5, "=")
     k = pyrucast.matrix.stiffness(model, materials)
-    a = pyrucast.solver.solve_unilateral(model, k, rhs)
+    a = pyrucast.solver.solve_unilateral(k, model, rhs)
     b = pyrucast.solver.solve(k, rhs)
     for node in nodes:
         assert abs(a.value(node, "T") - b.value(node, "T")) < TOL
@@ -156,7 +156,7 @@ def test_eliminate_rejects_unilateral_relations():
     _, model, materials, rhs, _ = _bounded_bar(1.0, 2.0, ">=")
     k = pyrucast.matrix.stiffness(model, materials)
     with pytest.raises(Exception, match="solve_unilateral"):
-        pyrucast.solver.solve_eliminate(model, k, rhs)
+        pyrucast.solver.solve_eliminate(k, model, rhs)
 
 
 def test_unknown_sense_rejected():

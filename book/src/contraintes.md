@@ -98,7 +98,7 @@ la **méthode du statut** (*active-set*), portée par l'opérateur
 
 ```python
 solution = pyrucast.solver.solve_unilateral(
-    model, k, rhs
+    k, model, rhs
 )  # method, cache, max_iter, tol
 ```
 

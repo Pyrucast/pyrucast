@@ -228,7 +228,7 @@ def test_mpc_elimination_matches_lagrange():
 
     k = pyrucast.matrix.stiffness(model, materials)
     lagrange = pyrucast.solver.solve(k, rhs)
-    elim = pyrucast.solver.solve_eliminate(model, k, rhs)
+    elim = pyrucast.solver.solve_eliminate(k, model, rhs)
 
     for node in nodes:
         assert abs(lagrange.value(node, "T") - elim.value(node, "T")) < TOL

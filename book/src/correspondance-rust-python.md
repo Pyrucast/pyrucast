@@ -130,7 +130,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |
 | `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
-| `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(model, stresses) -> NodeField` |
+| `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(stresses, model) -> NodeField` |
 | `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
 
 `flux` et `internal_forces` (`BSIG`, `∫ Bᵀ σ`) sont des **assemblages**,
@@ -202,8 +202,8 @@ conteneur produit » ne peut pas les placer, ils se rangent donc par domaine.
 | Rust (`ops::solver::…`) | Python (`pyrucast.solver.…`) |
 |---|---|
 | `lu::solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs) -> NodeField` |
-| `eliminate::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_eliminate(model, matrix, rhs) -> NodeField` |
-| `unilateral::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_unilateral(model, matrix, rhs, max_iter=100, tol=1e-10) -> NodeField` |
+| `eliminate::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_eliminate(matrix, model, rhs) -> NodeField` |
+| `unilateral::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_unilateral(matrix, model, rhs, max_iter=100, tol=1e-10) -> NodeField` |
 
 ### `ops::export` — export vers des formats externes
 

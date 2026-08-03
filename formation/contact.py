@@ -110,7 +110,7 @@ def main() -> None:
 
     # ANCHOR: resolution_contact
     K = pc.matrix.stiffness(modele, materiaux)
-    solution = pc.solver.solve_unilateral(modele, K, second_membre)
+    solution = pc.solver.solve_unilateral(K, modele, second_membre)
     # ANCHOR_END: resolution_contact
 
     print(f"Pression appliquée : {S}")

@@ -146,7 +146,7 @@ fn check(setup: &Setup, solution: &NodeField, slope: f64, lambda: f64) -> Result
 fn greater_equal_releases_when_feasible() -> Result<()> {
     let setup = bounded_bar(5.0, 2.0, RelationSense::GreaterEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let solution = unilateral::solve(&setup.model, &k, &setup.rhs)?;
+    let solution = unilateral::solve(&k, &setup.model, &setup.rhs)?;
     check(&setup, &solution, 5.0, 0.0)
 }
 
@@ -156,7 +156,7 @@ fn greater_equal_releases_when_feasible() -> Result<()> {
 fn greater_equal_holds_when_violated() -> Result<()> {
     let setup = bounded_bar(1.0, 2.0, RelationSense::GreaterEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let solution = unilateral::solve(&setup.model, &k, &setup.rhs)?;
+    let solution = unilateral::solve(&k, &setup.model, &setup.rhs)?;
     check(&setup, &solution, 2.0, -1.0)
 }
 
@@ -166,7 +166,7 @@ fn greater_equal_holds_when_violated() -> Result<()> {
 fn less_equal_holds_when_violated() -> Result<()> {
     let setup = bounded_bar(5.0, 2.0, RelationSense::LessEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let solution = unilateral::solve(&setup.model, &k, &setup.rhs)?;
+    let solution = unilateral::solve(&k, &setup.model, &setup.rhs)?;
     check(&setup, &solution, 2.0, 3.0)
 }
 
@@ -175,7 +175,7 @@ fn less_equal_holds_when_violated() -> Result<()> {
 fn less_equal_releases_when_feasible() -> Result<()> {
     let setup = bounded_bar(1.0, 2.0, RelationSense::LessEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let solution = unilateral::solve(&setup.model, &k, &setup.rhs)?;
+    let solution = unilateral::solve(&k, &setup.model, &setup.rhs)?;
     check(&setup, &solution, 1.0, 0.0)
 }
 
@@ -187,16 +187,16 @@ fn warm_start_survives_a_status_flip() -> Result<()> {
     // Start active (q = 1 against T(1) ≥ 2)…
     let setup = bounded_bar(1.0, 2.0, RelationSense::GreaterEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let first = unilateral::solve(&setup.model, &k, &setup.rhs)?;
+    let first = unilateral::solve(&k, &setup.model, &setup.rhs)?;
     check(&setup, &first, 2.0, -1.0)?;
 
     // …re-solve identically (pure warm start, no refactorization)…
-    let again = unilateral::solve(&setup.model, &k, &setup.rhs)?;
+    let again = unilateral::solve(&k, &setup.model, &setup.rhs)?;
     check(&setup, &again, 2.0, -1.0)?;
 
     // …then push hard (q = 5): the relation must release from the warm start.
     let strong = bounded_bar(5.0, 2.0, RelationSense::GreaterEqual)?;
-    let flipped = unilateral::solve(&setup.model, &k, &strong.rhs)?;
+    let flipped = unilateral::solve(&k, &setup.model, &strong.rhs)?;
     check(&strong, &flipped, 5.0, 0.0)
 }
 
@@ -250,7 +250,7 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
         let rhs = NodeField::from_sub(rhs);
 
         let k = stiffness(&model, &materials)?;
-        let solution = unilateral::solve(&model, &k, &rhs)?;
+        let solution = unilateral::solve(&k, &model, &rhs)?;
         for (i, node) in nodes.iter().enumerate() {
             let got = solution.value(node.id(), "T")?;
             let expected = slope * i as f64 * H;
@@ -289,8 +289,8 @@ fn schur_and_refactorize_agree() -> Result<()> {
         let setup = bounded_bar(q, bound, sense)?;
         let k = stiffness(&setup.model, &setup.materials)?;
         let schur = unilateral::solve_with_options(
-            &setup.model,
             &k,
+            &setup.model,
             &setup.rhs,
             &UnilateralOptions {
                 active_set: ActiveSetMethod::SchurComplement,
@@ -298,8 +298,8 @@ fn schur_and_refactorize_agree() -> Result<()> {
             },
         )?;
         let refac = unilateral::solve_with_options(
-            &setup.model,
             &k,
+            &setup.model,
             &setup.rhs,
             &UnilateralOptions {
                 active_set: ActiveSetMethod::Refactorize,
@@ -355,8 +355,8 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
 
     let k = stiffness(&model, &materials)?;
     let schur = unilateral::solve_with_options(
-        &model,
         &k,
+        &model,
         &rhs,
         &UnilateralOptions {
             active_set: ActiveSetMethod::SchurComplement,
@@ -364,8 +364,8 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
         },
     )?;
     let refac = unilateral::solve_with_options(
-        &model,
         &k,
+        &model,
         &rhs,
         &UnilateralOptions {
             active_set: ActiveSetMethod::Refactorize,
@@ -387,7 +387,7 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
 fn all_equality_model_falls_back_to_plain_solve() -> Result<()> {
     let setup = bounded_bar(3.0, 0.5, RelationSense::Equality)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let via_unilateral = unilateral::solve(&setup.model, &k, &setup.rhs)?;
+    let via_unilateral = unilateral::solve(&k, &setup.model, &setup.rhs)?;
     let via_lu = lu::solve(&k, &setup.rhs)?;
     for node in &setup.nodes {
         let a = via_unilateral.value(node.id(), "T")?;
@@ -403,7 +403,7 @@ fn all_equality_model_falls_back_to_plain_solve() -> Result<()> {
 fn eliminate_rejects_unilateral_relations() -> Result<()> {
     let setup = bounded_bar(1.0, 2.0, RelationSense::GreaterEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let err = eliminate::solve(&setup.model, &k, &setup.rhs).unwrap_err();
+    let err = eliminate::solve(&k, &setup.model, &setup.rhs).unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("solve_unilateral"),

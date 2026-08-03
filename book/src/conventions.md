@@ -62,6 +62,52 @@ diffèrent que par leur conteneur. Le qualificatif appartient au nom du
 module, pas à celui de la fonction — d'où trois `consolidate` homonymes et
 sans ambiguïté, au lieu de trois fonctions suffixées au même endroit.
 
+## Le verbe exposé aussi en méthode
+
+Une fonction libre garde sa **forme canonique** — c'est elle qui est
+documentée et qui définit l'opération. Elle est **en plus** exposée comme
+méthode de son premier argument si, et seulement si, les trois conditions
+tiennent :
+
+1. **le premier argument est le sujet** — l'objet qu'on transforme ;
+2. **le retour est un conteneur** — sinon il n'y a rien à composer ;
+3. **l'opération a un sens pour toute instance du type.**
+
+La troisième est celle qu'on oublie, et c'est la plus coûteuse : une méthode
+*promet*, elle apparaît dans l'auto-complétion de chaque objet du type.
+`u.deformation(fes)` s'afficherait sur tous les champs nodaux alors qu'elle
+exige des composantes `u_x`/`u_y`/`u_z` ; `t.thermal_strain(...)` sur tous les
+champs par éléments alors qu'elle exige une température. Ces opérations restent
+des fonctions libres seules.
+
+La ligne de partage : une **précondition structurelle** est admise
+(`triangulate_surface` veut un contour fermé, `divergence` veut autant de
+composantes que d'axes — vérifié par comptage, jamais par nom), une exigence de
+**sens porté par les noms de composantes** ne l'est pas.
+
+```python
+# chaînage, quand les trois conditions tiennent :
+peau = maillage.skin().consolidate()
+libre = champ.select(ge=0.0)
+eps = u.gradient(fes)
+
+# forme canonique seule, sinon :
+eps = pyrucast.element_field.deformation(u, fes)  # exige un déplacement
+f = pyrucast.node_field.merge(a, b)  # symétrique : `a | b` suffit
+```
+
+Deux conséquences à retenir. **Un ordre d'arguments qui ne met pas le sujet en
+tête est un défaut à corriger**, pas une raison de renoncer à la méthode.
+Et **une opération symétrique n'a pas de méthode** : `a.merge(b)` suggérerait
+que l'ordre compte, alors que `merge` est l'alias nommé de `a | b`.
+
+Enfin, le nom peut changer entre les deux formes. Le nom complet est toujours
+« qualificatif + verbe » ; la fonction libre reçoit le qualificatif de son
+module, la méthode n'en a pas et doit le porter : `matrix.stiffness(model,
+mats)` d'un côté, `model.stiffness_matrix(mats)` de l'autre. Quand la sortie
+est du type du sujet il n'y a rien à qualifier, et le nom ne bouge pas
+(`mesh.consolidate(m)` / `m.consolidate()`).
+
 ## Le miroir Python
 
 Le binding Python est un **miroir 1:1** : une fonction Rust devient une

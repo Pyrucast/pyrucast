@@ -161,10 +161,10 @@ pub fn flux(
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn internal_forces(
-    model: PyRef<PyModel>,
     stresses: PyRef<PyElementField>,
+    model: PyRef<PyModel>,
 ) -> PyResult<PyNodeField> {
-    let nf = crate::ops::node_field::internal_forces(&model.inner, &stresses.inner)?;
+    let nf = crate::ops::node_field::internal_forces(&stresses.inner, &model.inner)?;
     Ok(PyNodeField { inner: nf })
 }
 
@@ -175,7 +175,7 @@ pub fn internal_forces(
 /// `B` is the universal symmetric gradient: it needs only the geometry
 /// (`fespace`) and the Voigt stress (`sigma_xx`, `sigma_xy`, …). Returns a
 /// `NodeField` with `space_dim` components `f_x, f_y, f_z` per node. **Bars and
-/// beams are not covered** — use `internal_forces(model, stresses)` for those.
+/// beams are not covered** — use `internal_forces(stresses, model)` for those.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn internal_forces_continuum(

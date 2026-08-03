@@ -109,7 +109,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF)?;
     let sig_th =
         pyrucast::ops::element_field::behavior::integrate(&model, &eps_th, None, &materials, None)?;
-    let f_th = internal_forces(&model, &sig_th)?;
+    let f_th = internal_forces(&sig_th, &model)?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
     let solution = solve(

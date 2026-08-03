@@ -153,7 +153,7 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
     let rhs = NodeField::from_sub(traction).union(&tb.model.contact_gaps()?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&tb.model, &tb.materials)?;
-    let solution = unilateral::solve(&tb.model, &k, &rhs)?;
+    let solution = unilateral::solve(&k, &tb.model, &rhs)?;
 
     // Bottom block: u_y = −(S/E)·y; top block: −(S/E)·y shifted by the closed
     // gap (its own coordinates start at 1 + g₀ but its base lands at the
@@ -226,7 +226,7 @@ fn separation_releases_every_pair() -> Result<()> {
         .union(&model.contact_gaps()?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = unilateral::solve(&model, &k, &rhs)?;
+    let solution = unilateral::solve(&k, &model, &rhs)?;
 
     // Top block translates rigidly; bottom block stays put.
     for j in 0..=N {
@@ -330,7 +330,7 @@ fn contact_3d_two_cubes() -> Result<()> {
     let rhs = NodeField::from_sub(traction).union(&model.contact_gaps()?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = unilateral::solve(&model, &k, &rhs)?;
+    let solution = unilateral::solve(&k, &model, &rhs)?;
 
     // u_z = −(S/E)·z on both cubes (touching: no gap offset).
     for (nodes, z0) in [(&bottom, 0.0), (&top, 1.0)] {

@@ -45,10 +45,10 @@ Sinon, c'est une **fonction libre dans `ops/<thème>`**.
 > — Non, ça ne lit que `self` (+ petits args) → méthode.
 
 Et un repère de cohérence : si une opération mono-conteneur appartient à
-une **famille** déjà installée dans `ops/` (p. ex. les transformations
-mesh→mesh de `mesher`, ou les assembleurs de `assemble`), elle rejoint sa
-famille même si elle pourrait techniquement être une méthode. Une famille
-d'opérateurs ne se scinde pas entre `ops/` et les `impl` de conteneur.
+une **famille** déjà installée dans `ops/` (les mailleurs, les assembleurs),
+elle rejoint sa famille même si elle pourrait techniquement être une méthode.
+Une famille d'opérateurs ne se scinde pas entre `ops/` et les `impl` de
+conteneur.
 
 ### Exceptions assumées
 
@@ -62,6 +62,102 @@ d'opérateurs ne se scinde pas entre `ops/` et les `impl` de conteneur.
   **agrégat** (`Mesh`, `FiniteElementSpace`, `Model`, `ElementField`), le
   constructeur vit au niveau du **parent** et renvoie un parent — voir
   « Agrégats : un ou plusieurs, de manière transparente » ci-dessous.
+
+## Où vit une fonction libre : le conteneur produit
+
+**Un module d'`ops/` rassemble les opérateurs qui produisent le même
+conteneur, et porte son nom.** Une opération se range par sa **sortie**,
+jamais par son entrée : `gradient(field, fespace)` produit un
+`ElementField`, donc il vit dans `ops::element_field`, à côté de
+`deformation` et `interp_to_gauss` — pas dans `mesh` ni dans `node_field`.
+
+| module | produit |
+|---|---|
+| `ops::mesh` | un `Mesh` |
+| `ops::node_field` | un `NodeField` |
+| `ops::element_field` | un `ElementField` |
+| `ops::matrix` | une `Matrix` |
+| `ops::coords` | écrit dans le magasin |
+
+Les opérateurs qui ne produisent **aucun** conteneur échappent à la règle par
+construction ; on les range par activité : `ops::measure` (réductions à un
+nombre), `ops::geom` (requêtes géométriques), `ops::export` (effets de bord).
+
+### L'exception unique et nommée : `solver`
+
+`ops::solver` produit un `NodeField` et devrait rejoindre `ops::node_field`.
+Il garde son nom parce que **plusieurs familles distinctes produisent un
+champ nodal** — dérivation, assemblage, résolution — et que seule la
+résolution se cherche par son propre nom. C'est le seul module nommé d'après
+une activité tout en produisant un conteneur, et il doit le rester.
+
+### Corollaire : pas de qualificatif dans le nom d'une fonction
+
+Un module ne contient **jamais** deux opérateurs qui ne diffèrent que par le
+conteneur sur lequel ils portent. Si le cas se présente, le qualificatif
+appartient au **nom du module**, pas au nom de la fonction, et le module doit
+être scindé. C'est ce qui donne trois fusions homonymes et sans ambiguïté —
+`mesh::consolidate`, `node_field::consolidate`, `element_field::consolidate` —
+au lieu de trois fonctions suffixées au même endroit. De même `coords::set`
+face à `node_field::coordinates` qui lit.
+
+### Ce qui ne se construit pas
+
+Rien dans `ops/` ne produit un `Model`, un `FiniteElementSpace` ou une
+`Evolution`, et ce n'est pas un oubli : ces conteneurs se **déclarent** par
+constructeur nommé sur le type lui-même, ils ne se fabriquent pas par
+transformation.
+
+## Le verbe exposé aussi en méthode
+
+Une fonction libre garde sa **forme canonique** — c'est elle qui est
+documentée et qui définit l'opération. Elle est **en plus** exposée comme
+méthode de son premier argument si, et seulement si, les **trois** conditions
+tiennent :
+
+1. **le premier argument est le sujet** — l'objet qu'on transforme, pas un
+   paramètre ni un support ;
+2. **le retour est un conteneur** — sinon il n'y a rien à composer, et
+   `f.integral(comp, fes) -> float` n'apporte rien sur `integral(f, comp, fes)` ;
+3. **l'opération a un sens pour toute instance du type.** C'est la condition
+   qui coûte le plus et qu'on oublie le plus vite : une méthode *promet*, elle
+   apparaît dans l'auto-complétion de chaque objet du type. `u.deformation(fes)`
+   apparaîtrait sur tous les champs nodaux alors qu'elle exige des composantes
+   `u_x`/`u_y`/`u_z` ; `t.thermal_strain(...)` sur tous les champs par éléments
+   alors qu'elle exige une température. Ces opérations restent fonctions libres
+   seules.
+
+La ligne de partage de la condition 3 : une **précondition structurelle** est
+admise (`triangulate_surface` veut un contour fermé, `divergence` veut autant de
+composantes que d'axes — vérifié par comptage, jamais par nom), une exigence de
+**sens porté par les noms de composantes** ne l'est pas (`sigma_xx`, `u_x`,
+« une température »).
+
+Deux conséquences pratiques :
+
+- **Un ordre d'arguments qui ne met pas le sujet en tête est un défaut à
+  corriger, pas une raison de renoncer à la méthode.** C'est ce qui a fait
+  passer `internal_forces(model, stresses)` à `(stresses, model)` et
+  `solve_eliminate(model, matrix, rhs)` à `(matrix, model, rhs)`.
+- **Une opération symétrique n'a pas de méthode** : `a.merge(b)` suggérerait
+  que l'ordre compte. `merge` est l'alias nommé de `a | b` — l'opérateur donne
+  déjà la forme symétrique, il suffit.
+
+### Le nom peut changer entre les deux formes
+
+Le nom complet est toujours « qualificatif + verbe » ; ce qui change, c'est où
+se loge le qualificatif. La fonction libre le reçoit de son **module**, la
+méthode n'en a pas et doit donc le **porter** :
+
+| fonction libre | méthode |
+|---|---|
+| `matrix::stiffness(model, materials)` | `model.stiffness_matrix(materials)` |
+| `matrix::mass(model, materials)` | `model.mass_matrix(materials)` |
+| `matrix::tangent(...)` | `model.tangent_matrix(...)` |
+| `matrix::geometric(...)` | `model.geometric_matrix(...)` |
+
+Quand la sortie est du type du sujet, il n'y a rien à qualifier et le nom ne
+bouge pas : `mesh::consolidate(m)` et `m.consolidate()`.
 
 ## Règle Rust → Python : miroir 1:1
 
@@ -107,20 +203,26 @@ Le style visé côté Python est celui de **numpy / scipy** (et l'héritage
 méthodes, et des méthodes réservées aux accesseurs, mutations et vues
 dérivées.
 
-### Le thème est reflété par un sous-module Python
+### Le module de production est reflété par un sous-module Python
 
-Le rangement par thème (`mesher`, `field`, `assemble`, `build`, `solver`,
-…) organise le code Rust (`src/ops/<thème>/`) **et** l'API Python : une
-fonction libre `ops::<thème>::f` est exposée comme `pyrucast.<thème>.f`
+Le rangement par conteneur produit organise le code Rust
+(`src/ops/<module>/`) **et** l'API Python : une fonction libre
+`ops::<module>::f` est exposée comme `pyrucast.<module>.f`
 (`pyrucast.mesh.to_poi1`, `pyrucast.node_field.coordinates`,
 `pyrucast.matrix.stiffness`, `pyrucast.solver.solve`, …). Les conteneurs
-(`containers::…`) restent des classes au top-level (`pyrucast.Coords`,
-`pyrucast.Mesh`, …). Le miroir est **sans exception** : aucune fonction libre
-ne vit au top-level Python.
+(`containers::…`) et les atomes (`atoms::…`) restent des classes au top-level
+(`pyrucast.Coords`, `pyrucast.Mesh`, `pyrucast.Node`, …). Le miroir est
+**sans exception** : aucune fonction libre ne vit au top-level Python.
+
+L'extension compilée `_pyrucast` est en revanche **plate** : deux opérateurs
+homonymes dans deux modules (les trois `consolidate`, `coords::set`) y portent
+un `#[pyo3(name = "…")]` distinct, et la couche Python pure les ré-exporte
+sous leur vrai nom dans le bon sous-module. C'est un détail d'implémentation
+du namespace privé, pas une entorse au miroir.
 
 C'est le passage au *layout mixte* maturin (dossier `python/pyrucast/`,
 extension privée `_pyrucast` + couche Python pure) qui débloque ce rangement :
-chaque thème est un vrai module `.py` ré-exportant, de façon typée, les
+chaque module est un vrai fichier `.py` ré-exportant, de façon typée, les
 symboles de l'extension plate. Un seul stub `_pyrucast/__init__.pyi` reste
 généré pour l'extension ; les sous-modules n'étant que de la ré-exportation,
 les types les suivent sans stub dédié.

@@ -172,19 +172,19 @@ struct ActiveSetState {
 /// imposed-value slots).
 ///
 /// A model with no inequality relation falls back to a plain [`lu::solve`].
-pub fn solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
-    solve_inner(model, matrix, rhs, &UnilateralOptions::default(), &NoCancel)
+pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeField> {
+    solve_inner(matrix, model, rhs, &UnilateralOptions::default(), &NoCancel)
 }
 
 /// Like [`solve`] but with explicit [`UnilateralOptions`] (back-end, cache,
 /// iteration bound, sign tolerance).
 pub fn solve_with_options(
-    model: &Model,
     matrix: &Matrix,
+    model: &Model,
     rhs: &NodeField,
     options: &UnilateralOptions,
 ) -> Result<NodeField> {
-    solve_inner(model, matrix, rhs, options, &NoCancel)
+    solve_inner(matrix, model, rhs, options, &NoCancel)
 }
 
 /// Like [`solve`], but polls `cancel` at each status iteration so the call can
@@ -192,29 +192,29 @@ pub fn solve_with_options(
 /// as [`lu::solve_cancellable`]: each factorization is a single library call and
 /// is not interrupted mid-way.
 pub fn solve_cancellable(
-    model: &Model,
     matrix: &Matrix,
+    model: &Model,
     rhs: &NodeField,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
-    solve_inner(model, matrix, rhs, &UnilateralOptions::default(), cancel)
+    solve_inner(matrix, model, rhs, &UnilateralOptions::default(), cancel)
 }
 
 /// [`solve_cancellable`] with explicit [`UnilateralOptions`] — the full form the
 /// Python binding routes to.
 pub fn solve_cancellable_with_options(
-    model: &Model,
     matrix: &Matrix,
+    model: &Model,
     rhs: &NodeField,
     options: &UnilateralOptions,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
-    solve_inner(model, matrix, rhs, options, cancel)
+    solve_inner(matrix, model, rhs, options, cancel)
 }
 
 fn solve_inner(
-    model: &Model,
     matrix: &Matrix,
+    model: &Model,
     rhs: &NodeField,
     options: &UnilateralOptions,
     cancel: &dyn Cancel,
@@ -863,7 +863,7 @@ mod tests {
         let (model, _mat, k_ref, rhs, nodes) = two_loose_bounds(5.0);
         FACTORIZE_CALLS.store(0, Ordering::Relaxed);
         let sol_ref =
-            solve_with_options(&model, &k_ref, &rhs, &opts(ActiveSetMethod::Refactorize)).unwrap();
+            solve_with_options(&k_ref, &model, &rhs, &opts(ActiveSetMethod::Refactorize)).unwrap();
         let n_ref = FACTORIZE_CALLS.load(Ordering::Relaxed);
         assert!(
             n_ref >= 2,
@@ -874,8 +874,8 @@ mod tests {
         let (model_s, _m2, k_schur, rhs_s, _n2) = two_loose_bounds(5.0);
         FACTORIZE_CALLS.store(0, Ordering::Relaxed);
         let sol_schur = solve_with_options(
-            &model_s,
             &k_schur,
+            &model_s,
             &rhs_s,
             &opts(ActiveSetMethod::SchurComplement),
         )
@@ -901,12 +901,12 @@ mod tests {
         let (model, _mat, k, rhs, _nodes) = two_loose_bounds(5.0);
         FACTORIZE_CALLS.store(0, Ordering::Relaxed);
         let first =
-            solve_with_options(&model, &k, &rhs, &opts(ActiveSetMethod::SchurComplement)).unwrap();
+            solve_with_options(&k, &model, &rhs, &opts(ActiveSetMethod::SchurComplement)).unwrap();
         assert_eq!(FACTORIZE_CALLS.load(Ordering::Relaxed), 1);
 
         // Second solve: base cached on the matrix, nothing refactorized.
         let again =
-            solve_with_options(&model, &k, &rhs, &opts(ActiveSetMethod::SchurComplement)).unwrap();
+            solve_with_options(&k, &model, &rhs, &opts(ActiveSetMethod::SchurComplement)).unwrap();
         assert_eq!(
             FACTORIZE_CALLS.load(Ordering::Relaxed),
             1,

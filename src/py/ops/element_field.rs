@@ -78,7 +78,7 @@ pub fn interp_to_gauss(
 /// via `material_field`). Returns the strain tensor in the same layout as
 /// `deformation`, so `deformation(u, fespace) - thermal_strain(...)` is the
 /// mechanical strain. Backbone of uncoupled thermomechanics: assemble the
-/// thermal load with `internal_forces(model, integrate_behavior(model, ε_th,
+/// thermal load with `internal_forces(integrate_behavior(model, ε_th,
 /// materials))` and recover `σ = D:(ε − ε_th)`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

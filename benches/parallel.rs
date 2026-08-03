@@ -248,7 +248,7 @@ fn bench_axisymmetric(c: &mut Criterion) {
         });
         c.bench_function(&format!("internal_forces {tag} 40x40 QUA4"), |b| {
             b.iter(|| {
-                black_box(pyrucast::ops::node_field::internal_forces(&g.model, &state).unwrap())
+                black_box(pyrucast::ops::node_field::internal_forces(&state, &g.model).unwrap())
             })
         });
     }

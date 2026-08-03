@@ -280,7 +280,7 @@ fn main() -> Result<()> {
                 let out = tic(&T_BEHAVIOR, || {
                     integrate(&model, &strain, state.as_ref(), &materials, None)
                 })?;
-                let f_int = tic(&T_FINT, || internal_forces(&model, &out))?;
+                let f_int = tic(&T_FINT, || internal_forces(&out, &model))?;
                 // Résidu r = F_ext − F_int et sa norme sur les DDL libres.
                 let (residual, free_res) = tic(&T_RESIDUAL, || -> Result<_> {
                     let f_ext = restrict_like(&load_scaled, &f_int)?;
