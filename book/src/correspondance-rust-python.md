@@ -30,14 +30,15 @@ exclusions, chacune avec sa raison.
 Deux points à connaître, illustrés plus bas : le nom peut changer entre les
 deux formes (`matrix.stiffness(model, mats)` / `model.stiffness_matrix(mats)`,
 `element_field.sub_material_field(sub, …)` / `sub_model.material_field(…)`),
-et les cinématiques (`deformation`, `beam_deformation`, `thermal_strain`)
-n'ont **pas** de méthode : elles exigent des composantes nommées, elles
-n'auraient pas de sens sur un champ quelconque. Même raison pour
+et les cinématiques (`deformation`, `beam_deformation`, `frame_deformation`,
+`thermal_strain`) n'ont **pas** de méthode : elles exigent des composantes
+nommées, elles n'auraient pas de sens sur un champ quelconque. Même raison pour
 `internal_forces`, qui lit la contrainte de Voigt par nom.
 
-> `ops::element_field::frame_deformation` existe côté Rust mais **n'est pas
-> exposée à Python** — une entorse au miroir 1:1, antérieure au redécoupage et
-> à traiter à part.
+La **complétude du miroir** est elle aussi vérifiée par un test
+(`tests/python/test_mirror_completeness.py`) : il lit les `pub use` des
+`src/ops/*/mod.rs` et échoue si un opérateur Rust n'a pas de binding Python.
+Les dérogations y vivent avec leur raison.
 
 > Source de vérité : le `#[pymodule]` de `src/lib.rs` (enregistrement des
 > classes et fonctions) et le stub `pyrucast.pyi` (signatures typées).
@@ -175,6 +176,7 @@ par la sortie.
 | `interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `interp_to_gauss(field, fespace) -> ElementField` |
 | `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref) -> ElementField` |
 | `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `beam_deformation(field, fespace) -> ElementField` |
+| `frame_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `frame_deformation(field, fespace) -> ElementField` (portique orienté : `eps, kappa, gamma` en 2-D, `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` en 3-D) |
 | `consolidate(field: &ElementField) -> ElementField` | `consolidate(field) -> ElementField` (fusionne les zones d'une même fespace) |
 | `sub_material_field(sub: &SubModel, pairs: &[(&str, f64)]) -> SubElementField` | `sub_material_field(sub_model, components_and_values) -> SubElementField` |
 | `material_field(model: &Model, pairs: &[(&str, f64)]) -> ElementField` | `material_field(model, components_and_values) -> ElementField` |

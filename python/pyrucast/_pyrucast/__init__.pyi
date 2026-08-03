@@ -46,6 +46,7 @@ __all__ = [
     "extrude",
     "filter_components",
     "flux",
+    "frame_deformation",
     "from_live_nodes",
     "geometric",
     "gradient",
@@ -2915,6 +2916,23 @@ def flux(fespace: SubFiniteElementSpace, density: typing.Any, component: builtin
     `SubElementField` (per-Gauss density). The element measure comes from the
     FE subspace, so a `SEG2` edge in a 2-D mesh integrates as a line, a surface
     mesh as an area.
+    """
+
+def frame_deformation(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
+    r"""
+    Generalised section strains of an **oriented** `SEG2` frame element at the
+    Gauss points — the co-rotational counterpart of `beam_deformation` for the
+    `frame` (2-D) and `frame3d` (3-D) physics.
+    
+    Where `beam_deformation` expects a 1-D `(w, theta)` beam already aligned
+    with its axis, a frame element sits arbitrarily in space and carries the
+    full displacement + rotation at each node: this operator builds the
+    element's local axes, rotates the nodal triples into them, then evaluates
+    the section strains from the local DOFs. Components are `eps, kappa, gamma`
+    in 2-D and `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` in 3-D.
+    
+    Feed the result to `integrate_behavior` to obtain the section forces
+    (`N = E·A·eps`, `M = E·I·kappa`, `V = G·A_s·gamma`).
     """
 
 def from_live_nodes(coords: Coords) -> Mesh:

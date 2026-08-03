@@ -167,7 +167,7 @@ def main():
             # ε(u) → entrée de comportement (ε | VAR0) → σ, VAR1 (COMP).
             strain = pyrucast.element_field.deformation(u, fes)
             out = pyrucast.element_field.integrate_behavior(
-                model, strain | state, materials
+                model, strain, materials, prev=state
             )
             # Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
             f_int = pyrucast.node_field.internal_forces(out, model)

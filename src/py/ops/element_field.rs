@@ -97,6 +97,29 @@ pub fn thermal_strain(
     Ok(PyElementField { inner: ef })
 }
 
+/// Generalised section strains of an **oriented** `SEG2` frame element at the
+/// Gauss points — the co-rotational counterpart of `beam_deformation` for the
+/// `frame` (2-D) and `frame3d` (3-D) physics.
+///
+/// Where `beam_deformation` expects a 1-D `(w, theta)` beam already aligned
+/// with its axis, a frame element sits arbitrarily in space and carries the
+/// full displacement + rotation at each node: this operator builds the
+/// element's local axes, rotates the nodal triples into them, then evaluates
+/// the section strains from the local DOFs. Components are `eps, kappa, gamma`
+/// in 2-D and `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` in 3-D.
+///
+/// Feed the result to `integrate_behavior` to obtain the section forces
+/// (`N = E·A·eps`, `M = E·I·kappa`, `V = G·A_s·gamma`).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn frame_deformation(
+    field: PyRef<PyNodeField>,
+    fespace: PyRef<PyFiniteElementSpace>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::frame_deformation(&field.inner, &fespace.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
 /// Timoshenko-beam section strains `(kappa, gamma)` of a `(w, theta)` node
 /// field at the Gauss points of `fespace`. Feed the result to
 /// `integrate_behavior` of a Timoshenko model to obtain the section forces

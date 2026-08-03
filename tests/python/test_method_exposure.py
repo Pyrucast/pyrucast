@@ -53,13 +53,11 @@ RENAMED = {
 NO_METHOD = {
     "deformation": "exige des composantes de déplacement u_x/u_y/u_z",
     "beam_deformation": "exige déplacements + rotations",
+    "frame_deformation": "exige déplacements + rotations, dans un repère orienté",
     "thermal_strain": "exige une température, et alpha dans le matériau",
     "internal_forces": "exige la contrainte de Voigt (sigma_xx, sigma_zz…)",
     "internal_forces_continuum": "exige la contrainte de Voigt",
     "merge": "symétrique — `a | b` est déjà sa forme",
-    # `frame_deformation` relèverait aussi de la condition (3), mais elle
-    # n'apparaît pas ici : elle existe en Rust (`ops::element_field`) sans être
-    # exposée à Python — une entorse au miroir 1:1, à traiter séparément.
     "psca": "symétrique — l'ordre ne compte pas",
 }
 

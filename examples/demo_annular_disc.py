@@ -14,6 +14,9 @@ Interactive controls: left-drag rotates, mouse wheel zooms, key `A`
 toggles the X/Y/Z gizmo.
 """
 
+import os
+import tempfile
+
 import pyrucast as pc
 
 
@@ -37,16 +40,12 @@ def main() -> None:
     print(surface_mesh)
 
     # `mesh[i]` returns the i-th submesh handle and shares storage with
-    # the parent mesh, so colour changes survive every later
-    # add_submesh / __add__.
+    # the parent mesh, so colour changes survive every later `add_sub` / `|`.
     inner_mesh[0].face_color = (220, 60, 60)  # red
     outer_mesh[0].face_color = (60, 60, 220)  # blue
     surface_mesh[0].face_color = (60, 180, 60)  # green
 
-    final = pc.Mesh(coords)
-    final.add_submesh(inner_mesh[0])
-    final.add_submesh(outer_mesh[0])
-    final.add_submesh(surface_mesh[0])
+    final = inner_mesh | outer_mesh | surface_mesh
 
     print(final)
     print("submeshes:", final.element_types())
@@ -55,7 +54,11 @@ def main() -> None:
     # `mesh[i]` → SubMesh, `submesh[j]` → Cell, `cell[k]` → Node.
     print("first cell of the inner ring:", [n.id for n in final[0][0]])
 
-    final.plot()
+    out = os.path.join(
+        os.environ.get("PYRUCAST_IMG_DIR", tempfile.gettempdir()), "annular_disc.svg"
+    )
+    final.plot(save=out)
+    print(f"figure écrite dans {out}")
 
 
 if __name__ == "__main__":

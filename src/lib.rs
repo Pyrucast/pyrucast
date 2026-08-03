@@ -160,6 +160,10 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
         py::ops::element_field::beam_deformation,
         m
     )?)?;
+    m.add_function(wrap_pyfunction!(
+        py::ops::element_field::frame_deformation,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::divergence, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::measure::integral, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::measure::xty, m)?)?;

@@ -250,7 +250,7 @@ def main():
         def residual_at(u):
             strain = pyrucast.element_field.deformation(u, fes)
             out = pyrucast.element_field.integrate_behavior(
-                model, strain | state, materials
+                model, strain, materials, prev=state
             )
             f_int = pyrucast.node_field.internal_forces(out, model)
             f_ext = pyrucast.node_field.restrict_like(load_scaled, f_int)

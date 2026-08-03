@@ -23,6 +23,10 @@ step "cargo test --features viz"                 cargo test --features viz
 step "cargo build --features viz-interactive"    cargo build --features viz-interactive
 step "maturin develop --features extension-module,viz" maturin develop --features extension-module,viz
 step "pytest"                                    python -m pytest
+# Les exemples et les scripts de formation sont des chaînes de calcul
+# complètes : ils attrapent ce que les tests unitaires laissent passer,
+# typiquement une méthode renommée dont plus personne ne se sert.
+step "exemples + formation (bout en bout)"       ./script/run_examples.sh
 # Documentation : mêmes exigences que `set_new_version.sh`, pour qu'une passe
 # de version ne découvre pas un lien cassé ou un warning rustdoc resté ici.
 step "cargo doc --no-deps --lib (sans warning)"  env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib

@@ -12,8 +12,6 @@ for idx in range(len(xc[0].support_submesh())):
     print(idx, xc[0].get(idx, 0))
 fes = pc.FiniteElementSpace(lab, "LAGRANGE1", "GAUSS")
 print(fes)
-lab.plot(field=xc)
-fes
 mod1 = pc.Model.heat_conduction(fes)
 mat1 = pc.element_field.material_field(mod1, [("k", 1)])
 mesh_T_imp = pc.mesh.poi1_from_nodes([a])

@@ -450,7 +450,7 @@ impl PyNodeField {
 
     /// Voir `pyrucast.field.filter_components`.
     fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
-        use crate::containers::field::{Field, SubField};
+        use crate::containers::field::Field;
         let wanted = extract_names(components)?;
         Ok(PyNodeField {
             inner: self.inner.filter_components(wanted.as_slice())?,
@@ -459,7 +459,7 @@ impl PyNodeField {
 
     /// Voir `pyrucast.field.rename_component`.
     fn rename_component(&self, old: &str, new: &str) -> PyResult<PyNodeField> {
-        use crate::containers::field::{Field, SubField};
+        use crate::containers::field::Field;
         Ok(PyNodeField {
             inner: self.inner.rename_component(old, new)?,
         })
@@ -580,7 +580,7 @@ impl PyElementField {
 
     /// Voir `pyrucast.field.filter_components`.
     fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PyElementField> {
-        use crate::containers::field::{Field, SubField};
+        use crate::containers::field::Field;
         let wanted = extract_names(components)?;
         Ok(PyElementField {
             inner: self.inner.filter_components(wanted.as_slice())?,
@@ -589,7 +589,7 @@ impl PyElementField {
 
     /// Voir `pyrucast.field.rename_component`.
     fn rename_component(&self, old: &str, new: &str) -> PyResult<PyElementField> {
-        use crate::containers::field::{Field, SubField};
+        use crate::containers::field::Field;
         Ok(PyElementField {
             inner: self.inner.rename_component(old, new)?,
         })
@@ -722,7 +722,7 @@ impl PySubNodeField {
 
     /// Voir `pyrucast.field.filter_components`.
     fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
-        use crate::containers::field::{Field, SubField};
+        use crate::containers::field::SubField;
         let wanted = extract_names(components)?;
         let out = read(&self.handle)?.select_components(wanted.as_slice())?;
         Ok(PySubNodeField {
@@ -732,7 +732,7 @@ impl PySubNodeField {
 
     /// Voir `pyrucast.field.rename_component`.
     fn rename_component(&self, old: &str, new: &str) -> PyResult<PySubNodeField> {
-        use crate::containers::field::{Field, SubField};
+        use crate::containers::field::SubField;
         let out = read(&self.handle)?.rename_component(old, new)?;
         Ok(PySubNodeField {
             handle: insert(out),
@@ -866,7 +866,7 @@ impl PySubElementField {
 
     /// Voir `pyrucast.field.filter_components`.
     fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PySubElementField> {
-        use crate::containers::field::{Field, SubField};
+        use crate::containers::field::SubField;
         let wanted = extract_names(components)?;
         let out = read(&self.handle)?.select_components(wanted.as_slice())?;
         Ok(PySubElementField {
@@ -876,7 +876,7 @@ impl PySubElementField {
 
     /// Voir `pyrucast.field.rename_component`.
     fn rename_component(&self, old: &str, new: &str) -> PyResult<PySubElementField> {
-        use crate::containers::field::{Field, SubField};
+        use crate::containers::field::SubField;
         let out = read(&self.handle)?.rename_component(old, new)?;
         Ok(PySubElementField {
             handle: insert(out),
