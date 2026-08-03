@@ -247,11 +247,11 @@ conteneur produit » ne peut pas les placer, ils se rangent donc par domaine.
 > `ops::geom` héberge `locate_points` (mapping iso-paramétrique inverse, sous
 > le [baignage](contraintes/embedded.md)) et `project_points` (projection au
 > point le plus proche sur une surface, sous le [contact](contraintes/contact.md)) ;
-> ces deux primitives sont internes (API Rust), pas encore exposées en Python.
-> `nearest_node(mesh, point)` (nœud le plus proche d'un point) est en revanche
-> exposée comme méthode : `mesh.nearest_node([x, y])`. C'est la requête « un
-> seul nœud » de la famille `points_*` d'`ops::mesh` (sélection par région
-> géométrique), qui, elle, renvoie toujours un maillage POI1.
+> ces deux primitives sont internes (API Rust), pas encore exposées en Python —
+> la seule dérogation de module entier du garde-fou de complétude
+> (`tests/python/test_mirror_completeness.py`).
+> Le nœud le plus proche, lui, n'est **pas** un opérateur : c'est la méthode
+> `mesh.nearest_node([x, y])`, des deux côtés.
 
 ## Opérateurs (dunders ↔ traits Rust)
 

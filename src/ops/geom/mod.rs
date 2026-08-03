@@ -6,9 +6,7 @@
 //! a scalar or a derived geometric quantity.
 
 mod locate;
-mod nearest;
 mod project;
 
 pub use locate::{locate_points, Location};
-pub use nearest::nearest_node;
 pub use project::{project_points, Projection};

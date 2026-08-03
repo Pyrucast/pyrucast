@@ -323,7 +323,7 @@ impl PyMesh {
     /// `point` must have the mesh coordinate dimension. Only nodes referenced
     /// by a cell are considered; ties break to the smaller node id.
     fn nearest_node(&self, point: Vec<f64>) -> PyResult<PyNode> {
-        let node = crate::ops::geom::nearest_node(&self.inner, &point)?;
+        let node = self.inner.nearest_node(&point)?;
         Ok(PyNode::from_node(node))
     }
 

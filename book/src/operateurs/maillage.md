@@ -1452,8 +1452,8 @@ pente.
 
 La requête du **nœud le plus proche** d'un point ne peut en renvoyer qu'un ;
 elle n'est donc pas dans cette famille et ne renvoie pas de POI1, mais un
-`Node` : c'est la méthode `mesh.nearest_node([x, y])` (`ops::geom::nearest_node`
-côté Rust, voir [Opérateurs géométriques](geometrie.md)).
+`Node` : c'est la méthode `mesh.nearest_node([x, y])`, des deux côtés — voir
+[Opérateurs géométriques](geometrie.md).
 
 ### Repère de travail
 

@@ -68,7 +68,7 @@ src/
 │   ├── matrix.rs       # → Matrix : stiffness, mass, geometric, tangent, lump
 │   ├── coords.rs       # écrit dans le magasin : set, displace
 │   ├── measure/        # → un nombre : integral, xtx, xty
-│   ├── geom/           # → une position : locate_points, project_points, nearest_node
+│   ├── geom/           # → une position : locate_points, project_points (internes)
 │   ├── field/          # polymorphe champ → même champ : mask, maths élémentaires
 │   ├── solver/         # → NodeField (l'exception nommée) : solve, eliminate, unilateral
 │   ├── export/         # effets de bord : export VTK (read_gmsh côté mesh)

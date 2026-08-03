@@ -28,7 +28,12 @@ OPS = ROOT / "src" / "ops"
 
 # Modules Rust dont les fonctions n'ont pas (encore) de sous-module Python.
 NO_PYTHON_MODULE = {
-    "geom": "requêtes géométriques encore internes (locate/project/nearest)",
+    # Exception assumée : `locate_points` et `project_points` sont les
+    # primitives géométriques sous `Model.embedded` et `Model.contact`.
+    # L'utilisateur Python obtient leur résultat sous forme de contrainte
+    # assemblable, ce qui est le niveau utile ; les exposer suppose de décider
+    # comment traduire `Location` et `Projection`, ce qui reste à trancher.
+    "geom": "primitives internes des contraintes embedded / contact",
 }
 
 # Fonctions Rust délibérément non exposées, avec la raison.
@@ -58,6 +63,8 @@ RUST_ONLY = {
     "FluxDensity": "type de valeur, transporté par l'argument `density`",
     "Location": "type de retour de `geom`, non exposé",
     "Projection": "type de retour de `geom`, non exposé",
+    # `nearest_node` a quitté `ops::geom` : ce n'est pas un opérateur mais une
+    # méthode de `Mesh`, des deux côtés (mono-conteneur, vue dérivée).
 }
 
 

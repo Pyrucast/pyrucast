@@ -16,10 +16,10 @@
 //! single point cloud, or index the result to work zone by zone.
 //!
 //! The one query that does *not* return a mesh is the nearest node, which by
-//! construction picks exactly one node: it is
-//! [`nearest_node`](fn@crate::ops::geom::nearest_node) in
-//! [`crate::ops::geom`], and returns a
-//! [`Node`](crate::atoms::Node).
+//! construction picks exactly one node. It is therefore not an operator at all
+//! but a **method** of the mesh —
+//! [`Mesh::nearest_node`](crate::containers::mesh::Mesh::nearest_node) — and it
+//! returns a [`Node`](crate::atoms::Node).
 //!
 //! # Tolerance
 //!

@@ -75,7 +75,6 @@ use pyrucast::ops::element_field::behavior::integrate;
 use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::field::{mask_cells, Band};
-use pyrucast::ops::geom::nearest_node;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
 use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
@@ -164,7 +163,7 @@ fn main() -> Result<()> {
     // nœuds LIBRES (hors encastrement) — support cible pour mesurer la norme du
     // résidu sur les seuls DDL libres (`restrict` + `xtx`). Les nœuds libres sont
     // ceux de coordonnée X strictement positive (bande sur le champ `coordinates`).
-    let tip = nearest_node(&mesh, &[length, height / 2.])?;
+    let tip = &mesh.nearest_node(&[length, height / 2.])?;
     let coords_field = coordinates(&mesh, Some(vec!["X".into()]))?;
     let free_mesh = select_nodes(
         &coords_field,
