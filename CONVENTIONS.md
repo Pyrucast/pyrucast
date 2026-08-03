@@ -83,6 +83,16 @@ Les opérateurs qui ne produisent **aucun** conteneur échappent à la règle pa
 construction ; on les range par activité : `ops::measure` (réductions à un
 nombre), `ops::geom` (requêtes géométriques), `ops::export` (effets de bord).
 
+Un troisième cas existe : l'opérateur **générique**, dont le produit est un
+conteneur — toujours — mais **pas un conteneur déterminé**. `abs` rend un
+`NodeField` ou un `ElementField` selon ce qu'on lui donne : la règle ne
+désigne donc pas *un* module. Attention à ne pas confondre avec deux fonctions
+monomorphes de même famille (`mask_nodes` / `mask_cells`), qui ont chacune un
+produit déterminé et se rangent normalement. Ces opérateurs polymorphes se rangent par **domaine** :
+`ops::field` (masque de bande, filtrage et renommage de composantes, maths
+élément par élément). Ils restent des fonctions libres à part entière, avec
+leur méthode sur chacune des quatre saveurs de champ.
+
 ### L'exception unique et nommée : `solver`
 
 `ops::solver` produit un `NodeField` et devrait rejoindre `ops::node_field`.
@@ -373,10 +383,19 @@ plus haut, sans exception.
 | production d'un champ nodal | `ops::node_field::*` | `pyrucast.node_field.coordinates`, `pyrucast.node_field.restrict`, `pyrucast.node_field.merge` |
 | production d'un champ par éléments | `ops::element_field::*` | `pyrucast.element_field.gradient`, `pyrucast.element_field.material_field` |
 | réduction à un nombre | `ops::measure::*` | `pyrucast.measure.integral`, `pyrucast.measure.xty` |
+| écriture dans le magasin | `ops::coords::*` | `pyrucast.coords.set`, `pyrucast.coords.displace` |
+| champ → **même** champ (polymorphe) | `ops::field::*` | `pyrucast.field.mask`, `pyrucast.field.sqrt`, `pyrucast.field.filter_components` |
+| écriture d'un format externe | `ops::export::*` | `pyrucast.export.export_vtk` |
 | assemblage `Model` → `Matrix` | `ops::matrix::*` | `pyrucast.matrix.stiffness`, `pyrucast.matrix.mass` |
 | résolution `A·x = b` | `ops::solver::*` | `pyrucast.solver.solve` |
 | arithmétique (`+ - * /`, indexation) | `impl` d'opérateur | dunder |
 | constructeur nommé | fn associée | `classmethod` |
+| verbe éligible aux trois conditions | fonction libre **et** méthode | idem — voir « Le verbe exposé aussi en méthode » |
+
+`ops::geom` n'apparaît pas : ses deux fonctions (`locate_points`,
+`project_points`) sont les primitives internes de `Model.embedded` et
+`Model.contact`, et ne sont pas exposées à Python. C'est la seule dérogation
+de module entier, enregistrée dans `tests/python/test_mirror_completeness.py`.
 
 ## Cas tranchés explicitement
 

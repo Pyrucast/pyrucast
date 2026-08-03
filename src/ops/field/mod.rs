@@ -4,9 +4,13 @@
 //! Their product is their argument's own type, so the "one module per
 //! produced container" rule cannot place them: `mask` on a `NodeField`
 //! yields a `NodeField`, on an `ElementField` an `ElementField`. They are
-//! field *vocabulary* rather than constructive verbs, and are on their way
-//! to the field types themselves — see
-//! [`crate::containers::field`].
+//! therefore grouped by **domain** rather than by product — the third case of
+//! the rule, alongside "one module per produced container" and "grouped by
+//! activity when nothing is produced".
+//!
+//! They are full-fledged free functions, and each also carries a method on the
+//! four field flavours (`f.sqrt()`, `f.mask(ge=…)`), like any other operator
+//! meeting the three conditions.
 //!
 //! - [`Band`] — the shared `ge`/`gt`/`le`/`lt` comparison band;
 //! - [`mask_nodes`](fn@mask_nodes) & co. — 0/1 indicator of the same shape

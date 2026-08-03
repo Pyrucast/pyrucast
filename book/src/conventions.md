@@ -52,6 +52,12 @@ Ceux qui ne produisent **aucun** conteneur échappent à la règle par
 construction et se rangent par activité : `measure` (réductions à un
 nombre), `geom` (requêtes géométriques), `export` (effets de bord).
 
+Troisième cas : l'opérateur **générique**, dont le produit est bien un
+conteneur mais **pas un conteneur déterminé** — `abs` rend un `NodeField` ou
+un `ElementField` selon son argument, la règle ne désigne donc pas *un*
+module. Ceux-là se rangent par **domaine** (`field`) et restent des fonctions
+libres à part entière.
+
 **Une seule exception, nommée et assumée** : `solver` produit un `NodeField`
 et devrait rejoindre `node_field`. Il garde son nom parce que plusieurs
 familles distinctes produisent un champ nodal — dérivation, assemblage,

@@ -15,6 +15,15 @@
 //! - [`matrix`] — the assemblers proper (`stiffness`, `mass`, `tangent`, …).
 //! - [`coords`] — the two operators that write back into the coordinate store.
 //!
+//! A third case: the **generic** operator, whose product is a container —
+//! always — but not a *determined* one. `abs` yields a `NodeField` or an
+//! `ElementField` depending on what it is given, so the rule does not select
+//! one module. Those are grouped by domain instead:
+//!
+//! - [`field`] — anything that takes a field and gives back one of the same
+//!   flavour: the value-band mask, component filtering and renaming, and the
+//!   element-wise scalar maths.
+//!
 //! Operators that produce **no** container are grouped by activity, the
 //! product rule having nothing to say about them:
 //!
