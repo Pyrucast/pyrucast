@@ -314,23 +314,6 @@ impl PyMatrix {
         Ok(self.inner.mul_dense(&x)?)
     }
 
-    /// `matrix * x` — either a matrix-vector product against a `NodeField` (`x`
-    /// read at the matrix's column DOFs, result a fresh `NodeField` over its row
-    /// DOFs) or, for a `float`, a scalar scale: a fresh `Matrix` whose blocks
-    /// carry the scaled `factor` (lazy — no value is rewritten). The scaled
-    /// result is **not** finalized; call `finalize()` (or `assemble` for computed
-    /// blocks) before solving or querying it.
-    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let py = rhs.py();
-        if let Ok(field) = rhs.extract::<PyRef<'_, PyNodeField>>() {
-            let inner = self.inner.mul_field(&field.inner)?;
-            return Ok(Py::new(py, PyNodeField { inner })?.into_any());
-        }
-        let s: f64 = rhs.extract()?;
-        let inner = (&self.inner * s)?;
-        Ok(Py::new(py, PyMatrix { inner })?.into_any())
-    }
-
     /// `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
     /// `factor` (lazy). Not finalized; see `__mul__`.
     fn __truediv__(&self, rhs: f64) -> PyResult<PyMatrix> {
@@ -349,6 +332,45 @@ impl PyMatrix {
             .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
             .collect())
     }
+}
+
+// Polymorphic product — **closed block**, undecorated on purpose (see
+// `impl_aggregate_pymethods!`): its `.pyi` entries are the hand-written
+// overloads submitted just below.
+#[pymethods]
+impl PyMatrix {
+    /// `matrix * x` — either a matrix-vector product against a `NodeField` (`x`
+    /// read at the matrix's column DOFs, result a fresh `NodeField` over its row
+    /// DOFs) or, for a `float`, a scalar scale: a fresh `Matrix` whose blocks
+    /// carry the scaled `factor` (lazy — no value is rewritten). The scaled
+    /// result is **not** finalized; call `finalize()` (or `assemble` for computed
+    /// blocks) before solving or querying it.
+    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let py = rhs.py();
+        if let Ok(field) = rhs.extract::<PyRef<'_, PyNodeField>>() {
+            let inner = self.inner.mul_field(&field.inner)?;
+            return Ok(Py::new(py, PyNodeField { inner })?.into_any());
+        }
+        let s: f64 = rhs.extract()?;
+        let inner = (&self.inner * s)?;
+        Ok(Py::new(py, PyMatrix { inner })?.into_any())
+    }
+}
+
+#[cfg(feature = "stub-gen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+class PyMatrix:
+    @overload
+    def __mul__(self, rhs: pyo3_stub_gen.RustType["PyNodeField"]) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`matrix * x` → the matrix-vector product: `x` is read at the column
+        DOFs, the result is a fresh `NodeField` over the row DOFs."""
+    @overload
+    def __mul__(self, rhs: float) -> pyo3_stub_gen.RustType["PyMatrix"]:
+        """`matrix * scalar` → a fresh `Matrix` whose blocks carry the scaled
+        `factor` (lazy — no value is rewritten). **Not** finalized: call
+        `finalize()` (or `assemble` for computed blocks) before solving."""
+    "# }
 }
 
 crate::impl_aggregate_pymethods!(

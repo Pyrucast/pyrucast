@@ -429,7 +429,28 @@ class ElementField:
         against `x`; `==` / `!=` and non-scalar right-hands fall back to
         `NotImplemented`.
         """
-    def __len__(self) -> builtins.int: ...
+    def unit(self) -> SubElementField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubElementField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
     @typing.overload
     def __getitem__(self, key: int) -> SubElementField:
         r"""
@@ -466,28 +487,7 @@ class ElementField:
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
         """
-    def unit(self) -> SubElementField:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubElementField) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
+    def __len__(self) -> builtins.int: ...
 
 @typing.final
 class Evolution:
@@ -769,15 +769,6 @@ class Matrix:
         r"""
         `y = A · x` against a dense vector `x`.
         """
-    def __mul__(self, rhs: typing.Any) -> typing.Any:
-        r"""
-        `matrix * x` — either a matrix-vector product against a `NodeField` (`x`
-        read at the matrix's column DOFs, result a fresh `NodeField` over its row
-        DOFs) or, for a `float`, a scalar scale: a fresh `Matrix` whose blocks
-        carry the scaled `factor` (lazy — no value is rewritten). The scaled
-        result is **not** finalized; call `finalize()` (or `assemble` for computed
-        blocks) before solving or querying it.
-        """
     def __truediv__(self, rhs: builtins.float) -> Matrix:
         r"""
         `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
@@ -787,6 +778,42 @@ class Matrix:
         r"""
         List of `(row_node, row_field, col_node, col_field, value)`
         tuples — every entry across every block, in block-insertion order.
+        """
+    @typing.overload
+    def __mul__(self, rhs: NodeField) -> NodeField:
+        r"""
+        `matrix * x` → the matrix-vector product: `x` is read at the column
+        DOFs, the result is a fresh `NodeField` over the row DOFs.
+        """
+    @typing.overload
+    def __mul__(self, rhs: float) -> Matrix:
+        r"""
+        `matrix * scalar` → a fresh `Matrix` whose blocks carry the scaled
+        `factor` (lazy — no value is rewritten). **Not** finalized: call
+        `finalize()` (or `assemble` for computed blocks) before solving.
+        """
+    @typing.overload
+    def __getitem__(self, key: int) -> SubMatrix:
+        r"""
+        `matrix[i]` → the `SubMatrix` view of block i (one rectangular COO
+        block, with its row and column supports).
+        """
+    @typing.overload
+    def __getitem__(self, key: slice) -> Matrix:
+        r"""
+        `matrix[i:j:k]` → a fresh `Matrix` holding the sliced blocks, shared
+        with this one (no deep copy).
+        """
+    def __or__(self, other: Matrix  |  SubMatrix) -> Matrix:
+        r"""
+        `matrix | other` → a fresh `Matrix` holding the blocks of both, in
+        first-seen order and deduplicated by store slot. Assemble the global
+        operator this way, then call `finalize()` before solving.
+        """
+    def __ror__(self, other: SubMatrix) -> Matrix:
+        r"""
+        `sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
+        differing only in that the lone block comes first.
         """
     def unit(self) -> SubMatrix:
         r"""
@@ -811,29 +838,6 @@ class Matrix:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
-    @typing.overload
-    def __getitem__(self, key: int) -> SubMatrix:
-        r"""
-        `matrix[i]` → the `SubMatrix` view of block i (one rectangular COO
-        block, with its row and column supports).
-        """
-    @typing.overload
-    def __getitem__(self, key: slice) -> Matrix:
-        r"""
-        `matrix[i:j:k]` → a fresh `Matrix` holding the sliced blocks, shared
-        with this one (no deep copy).
-        """
-    def __or__(self, other: Matrix  |  SubMatrix) -> Matrix:
-        r"""
-        `matrix | other` → a fresh `Matrix` holding the blocks of both, in
-        first-seen order and deduplicated by store slot. Assemble the global
-        operator this way, then call `finalize()` before solving.
-        """
-    def __ror__(self, other: SubMatrix) -> Matrix:
-        r"""
-        `sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
-        differing only in that the lone block comes first.
-        """
 
 @typing.final
 class Mesh:
@@ -1271,20 +1275,18 @@ class Node:
         r"""
         Overwrite this node's coordinates.
         """
-    def __or__(self, other: typing.Any) -> typing.Any:
-        r"""
-        `node | node` → a unitary POI1 `Mesh` over both nodes (the same
-        union `|` as the aggregates). Returns `NotImplemented` for any other
-        right-hand type.
-        """
-    def __ror__(self, other: typing.Any) -> typing.Any:
-        r"""
-        Right-hand `mesh | node`: append this node to a **unitary POI1**
-        `Mesh`, yielding a new one. Reached when the left operand's `__or__`
-        returns `NotImplemented` (a `Mesh` doesn't know how to union a `Node`).
-        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    def __or__(self, other: Node) -> Mesh:
+        r"""
+        `node | node` → a unitary POI1 `Mesh` over both nodes — the usual way
+        to build the support of a point load or a boundary condition.
+        """
+    def __ror__(self, other: Mesh) -> Mesh:
+        r"""
+        `mesh | node` → a fresh POI1 `Mesh` with this node appended. The
+        left-hand `Mesh` must be unitary POI1.
+        """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
         Print the full content (third display level) to stdout: values /
@@ -1427,7 +1429,6 @@ class NodeField:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubNodeField:
         r"""
@@ -1463,6 +1464,7 @@ class NodeField:
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
         """
+    def __len__(self) -> builtins.int: ...
 
 @typing.final
 class SubElementField:
@@ -1560,14 +1562,6 @@ class SubElementField:
         element-by-element). The ternary `pow(x, y, z)` modulo form is
         rejected (meaningless on floats).
         """
-    def __getitem__(self, key: typing.Any) -> typing.Any:
-        r"""
-        Indexing dispatches on the key:
-        - `field[cell, gauss, "name"]` → the **value** (ValueError if unknown);
-        - `field["name"]` or `field[["a", "b"]]` → a **new sub-field** with only
-          those components (`filter_components`), so `u1[u2.components()]`
-          reprojects `u1` onto `u2`'s component set.
-        """
     def __setitem__(self, key: tuple[builtins.int, builtins.int, builtins.str], value: builtins.float) -> None:
         r"""
         `field[cell, gauss, "name"] = value`.
@@ -1581,6 +1575,25 @@ class SubElementField:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
+    @typing.overload
+    def __getitem__(self, key: tuple[int, int, str]) -> float:
+        r"""
+        `field[cell, gauss, "name"]` → the value at that Gauss point of that
+        cell, for that component. `ValueError` if any of the three is unknown.
+        """
+    @typing.overload
+    def __getitem__(self, key: str) -> SubElementField:
+        r"""
+        `field["sig_xx"]` → a fresh `SubElementField` on the same support,
+        keeping only that component.
+        """
+    @typing.overload
+    def __getitem__(self, key: list[str]) -> SubElementField:
+        r"""
+        `field[["sig_xx", "sig_yy"]]` → a fresh `SubElementField` keeping only
+        those components, so `u1[u2.components()]` reprojects `u1` onto `u2`'s
+        component set.
+        """
     def __or__(self, other: SubElementField) -> ElementField:
         r"""
         `subfield | subfield` → a fresh `ElementField` holding both zones,
@@ -2137,14 +2150,6 @@ class SubNodeField:
         element-by-element). The ternary `pow(x, y, z)` modulo form is
         rejected (meaningless on floats).
         """
-    def __getitem__(self, key: typing.Any) -> typing.Any:
-        r"""
-        Indexing dispatches on the key:
-        - `subfield[node, "UX"]` → the **value** (raises if node/component absent);
-        - `subfield["UX"]` or `subfield[["UX", "UY"]]` → a **new sub-field** with
-          only those components (`filter_components`), so `u1[u2.components()]`
-          reprojects `u1` onto `u2`'s component set.
-        """
     def __setitem__(self, key: tuple[Node, builtins.str], value: builtins.float) -> None:
         r"""
         `subfield[node, "UX"] = v` — raises if the node or component is absent.
@@ -2161,6 +2166,25 @@ class SubNodeField:
         r"""
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
+        """
+    @typing.overload
+    def __getitem__(self, key: tuple[Node, str]) -> float:
+        r"""
+        `subfield[node, "UX"]` → the value carried by that node for that
+        component. Raises if either is absent from this zone.
+        """
+    @typing.overload
+    def __getitem__(self, key: str) -> SubNodeField:
+        r"""
+        `subfield["UX"]` → a fresh `SubNodeField` on the same support,
+        keeping only that component.
+        """
+    @typing.overload
+    def __getitem__(self, key: list[str]) -> SubNodeField:
+        r"""
+        `subfield[["UX", "UY"]]` → a fresh `SubNodeField` keeping only those
+        components, so `u1[u2.components()]` reprojects `u1` onto `u2`'s
+        component set.
         """
     def __or__(self, other: SubNodeField) -> NodeField:
         r"""

@@ -207,31 +207,6 @@ impl PySubNodeField {
         self.scalar_or_combine(exponent, |a, b| a.powf(b))
     }
 
-    /// Indexing dispatches on the key:
-    /// - `subfield[node, "UX"]` → the **value** (raises if node/component absent);
-    /// - `subfield["UX"]` or `subfield[["UX", "UY"]]` → a **new sub-field** with
-    ///   only those components (`filter_components`), so `u1[u2.components()]`
-    ///   reprojects `u1` onto `u2`'s component set.
-    fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        // (node, component) → scalar value.
-        if let Ok((node, comp)) = key.extract::<(PyRef<'_, PyNode>, String)>() {
-            let nid = node.as_node().id();
-            let v = read(&self.handle)?.value(nid, &comp)?;
-            return Ok(v.into_pyobject(py)?.into_any().unbind());
-        }
-        // "comp" or ["comp", …] → component selection (a new sub-field).
-        let names = crate::py::ops::field::extract_names(key)?;
-        let out =
-            crate::containers::field::SubField::select_components(&*read(&self.handle)?, names)?;
-        Ok(Py::new(
-            py,
-            PySubNodeField {
-                handle: insert(out),
-            },
-        )?
-        .into_any())
-    }
-
     /// `subfield[node, "UX"] = v` — raises if the node or component is absent.
     fn __setitem__(&self, key: (PyRef<'_, PyNode>, String), value: f64) -> PyResult<()> {
         let (node, comp) = key;
@@ -576,6 +551,57 @@ impl PyNodeField {
             ))
         }
     }
+}
+
+// Polymorphic subscript — **closed block**, undecorated on purpose (see
+// `impl_aggregate_pymethods!`): its `.pyi` entries are the hand-written
+// overloads submitted just below.
+#[pymethods]
+impl PySubNodeField {
+    /// Indexing dispatches on the key:
+    /// - `subfield[node, "UX"]` → the **value** (raises if node/component absent);
+    /// - `subfield["UX"]` or `subfield[["UX", "UY"]]` → a **new sub-field** with
+    ///   only those components (`filter_components`), so `u1[u2.components()]`
+    ///   reprojects `u1` onto `u2`'s component set.
+    fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        // (node, component) → scalar value.
+        if let Ok((node, comp)) = key.extract::<(PyRef<'_, PyNode>, String)>() {
+            let nid = node.as_node().id();
+            let v = read(&self.handle)?.value(nid, &comp)?;
+            return Ok(v.into_pyobject(py)?.into_any().unbind());
+        }
+        // "comp" or ["comp", …] → component selection (a new sub-field).
+        let names = crate::py::ops::field::extract_names(key)?;
+        let out =
+            crate::containers::field::SubField::select_components(&*read(&self.handle)?, names)?;
+        Ok(Py::new(
+            py,
+            PySubNodeField {
+                handle: insert(out),
+            },
+        )?
+        .into_any())
+    }
+}
+
+#[cfg(feature = "stub-gen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+class PySubNodeField:
+    @overload
+    def __getitem__(self, key: tuple[pyo3_stub_gen.RustType["PyNode"], str]) -> float:
+        """`subfield[node, "UX"]` → the value carried by that node for that
+        component. Raises if either is absent from this zone."""
+    @overload
+    def __getitem__(self, key: str) -> pyo3_stub_gen.RustType["PySubNodeField"]:
+        """`subfield["UX"]` → a fresh `SubNodeField` on the same support,
+        keeping only that component."""
+    @overload
+    def __getitem__(self, key: list[str]) -> pyo3_stub_gen.RustType["PySubNodeField"]:
+        """`subfield[["UX", "UY"]]` → a fresh `SubNodeField` keeping only those
+        components, so `u1[u2.components()]` reprojects `u1` onto `u2`'s
+        component set."""
+    "# }
 }
 
 crate::impl_aggregate_pymethods!(

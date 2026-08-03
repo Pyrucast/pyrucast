@@ -169,32 +169,6 @@ impl PySubElementField {
         self.scalar_or_combine(exponent, |a, b| a.powf(b))
     }
 
-    /// Indexing dispatches on the key:
-    /// - `field[cell, gauss, "name"]` → the **value** (ValueError if unknown);
-    /// - `field["name"]` or `field[["a", "b"]]` → a **new sub-field** with only
-    ///   those components (`filter_components`), so `u1[u2.components()]`
-    ///   reprojects `u1` onto `u2`'s component set.
-    fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        // (cell, gauss, component) → scalar value.
-        if let Ok((cell, gauss, comp)) = key.extract::<(usize, usize, String)>() {
-            let v = read(&self.handle)?
-                .value(cell, gauss, &comp)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(v.into_pyobject(py)?.into_any().unbind());
-        }
-        // "name" or ["a", …] → component selection (a new sub-field).
-        let names = crate::py::ops::field::extract_names(key)?;
-        let out =
-            crate::containers::field::SubField::select_components(&*read(&self.handle)?, names)?;
-        Ok(Py::new(
-            py,
-            PySubElementField {
-                handle: insert(out),
-            },
-        )?
-        .into_any())
-    }
-
     /// `field[cell, gauss, "name"] = value`.
     fn __setitem__(&self, key: (usize, usize, String), value: f64) -> PyResult<()> {
         let (cell, gauss, comp) = key;
@@ -489,6 +463,58 @@ impl PyElementField {
             ))
         }
     }
+}
+
+// Polymorphic subscript — **closed block**, undecorated on purpose (see
+// `impl_aggregate_pymethods!`): its `.pyi` entries are the hand-written
+// overloads submitted just below.
+#[pymethods]
+impl PySubElementField {
+    /// Indexing dispatches on the key:
+    /// - `field[cell, gauss, "name"]` → the **value** (ValueError if unknown);
+    /// - `field["name"]` or `field[["a", "b"]]` → a **new sub-field** with only
+    ///   those components (`filter_components`), so `u1[u2.components()]`
+    ///   reprojects `u1` onto `u2`'s component set.
+    fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        // (cell, gauss, component) → scalar value.
+        if let Ok((cell, gauss, comp)) = key.extract::<(usize, usize, String)>() {
+            let v = read(&self.handle)?
+                .value(cell, gauss, &comp)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            return Ok(v.into_pyobject(py)?.into_any().unbind());
+        }
+        // "name" or ["a", …] → component selection (a new sub-field).
+        let names = crate::py::ops::field::extract_names(key)?;
+        let out =
+            crate::containers::field::SubField::select_components(&*read(&self.handle)?, names)?;
+        Ok(Py::new(
+            py,
+            PySubElementField {
+                handle: insert(out),
+            },
+        )?
+        .into_any())
+    }
+}
+
+#[cfg(feature = "stub-gen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+class PySubElementField:
+    @overload
+    def __getitem__(self, key: tuple[int, int, str]) -> float:
+        """`field[cell, gauss, "name"]` → the value at that Gauss point of that
+        cell, for that component. `ValueError` if any of the three is unknown."""
+    @overload
+    def __getitem__(self, key: str) -> pyo3_stub_gen.RustType["PySubElementField"]:
+        """`field["sig_xx"]` → a fresh `SubElementField` on the same support,
+        keeping only that component."""
+    @overload
+    def __getitem__(self, key: list[str]) -> pyo3_stub_gen.RustType["PySubElementField"]:
+        """`field[["sig_xx", "sig_yy"]]` → a fresh `SubElementField` keeping only
+        those components, so `u1[u2.components()]` reprojects `u1` onto `u2`'s
+        component set."""
+    "# }
 }
 
 crate::impl_aggregate_pymethods!(

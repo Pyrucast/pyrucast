@@ -56,6 +56,20 @@ impl PyNode {
         Ok(())
     }
 
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self.node))
+    }
+
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{}", self.node))
+    }
+}
+
+// Polymorphic union — **closed block**, undecorated on purpose (see
+// `impl_aggregate_pymethods!`): its `.pyi` entries are the hand-written
+// signatures submitted just below.
+#[pymethods]
+impl PyNode {
     /// `node | node` → a unitary POI1 `Mesh` over both nodes (the same
     /// union `|` as the aggregates). Returns `NotImplemented` for any other
     /// right-hand type.
@@ -77,14 +91,19 @@ impl PyNode {
         }
         Ok(py.NotImplemented())
     }
+}
 
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.node))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.node))
-    }
+#[cfg(feature = "stub-gen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+class PyNode:
+    def __or__(self, other: pyo3_stub_gen.RustType["PyNode"]) -> pyo3_stub_gen.RustType["PyMesh"]:
+        """`node | node` → a unitary POI1 `Mesh` over both nodes — the usual way
+        to build the support of a point load or a boundary condition."""
+    def __ror__(self, other: pyo3_stub_gen.RustType["PyMesh"]) -> pyo3_stub_gen.RustType["PyMesh"]:
+        """`mesh | node` → a fresh POI1 `Mesh` with this node appended. The
+        left-hand `Mesh` must be unitary POI1."""
+    "# }
 }
 
 crate::impl_dump_pymethod!(value PyNode, node);
