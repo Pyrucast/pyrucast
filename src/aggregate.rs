@@ -358,11 +358,39 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 /// sub-level `|` (on `$Sub`), so a single invocation gives the whole uniform
 /// union surface.
 ///
+/// # Type stubs
+///
+/// `__getitem__` / `__or__` / `__ror__` are **polymorphic**: their Rust
+/// signature is `&Bound<PyAny> -> Py<PyAny>`, from which `pyo3-stub-gen` can
+/// only infer `typing.Any` — which costs every aggregate its IDE completion
+/// (`mesh[0].` suggesting nothing). They therefore live in `#[pymethods]`
+/// blocks **deliberately left undecorated**, invisible to the stub generator,
+/// and their `.pyi` entries are written by hand in Python syntax: `$stub` for
+/// the aggregate, `$sub_stub` for the sub-object. Both are parsed by
+/// `gen_methods_from_python!`, which binds them to the Rust type named by the
+/// `class` line (hence `class PyMesh:`, not `class Mesh:`), so each aggregate
+/// states its own return types *and* its own docstrings.
+///
+/// The undecorated blocks are **closed**: a method added there would silently
+/// vanish from the stub. Anything new goes in the decorated blocks.
+///
 /// # Usage
 ///
 /// ```ignore
-/// pyrucast::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh, Mesh);
-/// pyrucast::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model, Model);
+/// pyrucast::impl_aggregate_pymethods!(
+///     PyMesh, PySubMesh, "Mesh", submesh, Mesh,
+///     r#"
+/// class PyMesh:
+///     @overload
+///     def __getitem__(self, key: int) -> pyo3_stub_gen.RustType["PySubMesh"]:
+///         """`mesh[i]` → the `SubMesh` of zone i."""
+///     "#,
+///     r#"
+/// class PySubMesh:
+///     def __or__(self, other: pyo3_stub_gen.RustType["PySubMesh"]) -> pyo3_stub_gen.RustType["PyMesh"]:
+///         """`sub | sub` → a fresh `Mesh` holding both zones."""
+///     "#
+/// );
 /// ```
 ///
 /// `$sub` is given once; `paste!` derives `{$sub}_count`, `$sub(i)`, and
@@ -370,7 +398,11 @@ pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
 #[cfg(feature = "python-api")]
 #[macro_export]
 macro_rules! impl_aggregate_pymethods {
-    ($T:ident, $Sub:ident, $name:literal, $sub:ident, $Inner:ty $(, $components:ident)?) => {
+    (
+        $T:ident, $Sub:ident, $name:literal, $sub:ident, $Inner:ty,
+        $stub:literal, $sub_stub:literal
+        $(, $components:ident)?
+    ) => {
         paste::paste! {
             #[cfg_attr(
                 feature = "stub-gen",
@@ -381,15 +413,20 @@ macro_rules! impl_aggregate_pymethods {
                 fn __len__(&self) -> pyo3::PyResult<usize> {
                     Ok($crate::aggregate::Aggregate::len(&self.inner))
                 }
+            }
 
-                /// `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
-                /// negative indices supported); `agg[i:j:k]` → a **fresh
-                /// aggregate** of the same type holding the sliced zones
-                /// (Python slicing: step, negative bounds). For field
-                /// aggregates, a **string** key `agg["u_x"]` or a **list** key
-                /// `agg[["u_x", "u_y"]]` returns a fresh field keeping only
-                /// those components (`filter_components`). Other key types raise
-                /// `TypeError`.
+            // Polymorphic subscript — **closed block**, undecorated on purpose:
+            // its `.pyi` entry comes from `$stub`, not from the generator.
+            #[pyo3::pymethods]
+            impl $T {
+                /// `agg[i]` → the typed **view** of zone `i` (negative indices
+                /// supported); `agg[i:j:k]` → a **fresh aggregate** of the same
+                /// type holding the sliced zones (Python slicing: step, negative
+                /// bounds). For field aggregates, a **string** key `agg["u_x"]`
+                /// or a **list** key `agg[["u_x", "u_y"]]` returns a fresh field
+                /// keeping only those components (`filter_components`). Other key
+                /// types raise `TypeError`. The Python-facing wording, which
+                /// differs per aggregate, lives in `$stub`.
                 fn __getitem__(
                     &self,
                     py: pyo3::Python<'_>,
@@ -452,7 +489,14 @@ macro_rules! impl_aggregate_pymethods {
                     let h = $crate::aggregate::Aggregate::get(&self.inner, i)?;
                     Ok(pyo3::Py::new(py, $Sub { handle: h })?.into_any())
                 }
+            }
 
+            #[cfg_attr(
+                feature = "stub-gen",
+                pyo3_stub_gen::derive::gen_stub_pymethods
+            )]
+            #[pyo3::pymethods]
+            impl $T {
                 /// The sole sub-object **view** of a unitary aggregate
                 /// (exactly one sub), else a clear error. Use it where the
                 /// single-zone case needs a sub method: `parent.unit().m(...)`.
@@ -463,6 +507,9 @@ macro_rules! impl_aggregate_pymethods {
                     Ok($Sub { handle: h })
                 }
 
+                /// Append a sub-object **in place** (the handle is shared, not
+                /// deep-copied). The functional counterpart is `|`, which leaves
+                /// the operands untouched and returns a fresh aggregate.
                 fn add_sub(&mut self, sub: pyo3::PyRef<'_, $Sub>) -> pyo3::PyResult<()> {
                     $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
                     Ok(())
@@ -493,7 +540,12 @@ macro_rules! impl_aggregate_pymethods {
                     );
                     $crate::dump::py_print(py, &text)
                 }
+            }
 
+            // Polymorphic union — **closed block**, undecorated on purpose:
+            // its `.pyi` entries come from `$stub`, not from the generator.
+            #[pyo3::pymethods]
+            impl $T {
                 /// `a | b` — **union** of this aggregate with `other`. `other`
                 /// may be another aggregate of the same type or a single
                 /// sub-object. Sub-objects already present (same store slot)
@@ -548,10 +600,8 @@ macro_rules! impl_aggregate_pymethods {
 
             // Sub-level `|` (uniform with the aggregate-level one above):
             // `sub | sub` → a fresh aggregate holding both sub-objects.
-            #[cfg_attr(
-                feature = "stub-gen",
-                pyo3_stub_gen::derive::gen_stub_pymethods
-            )]
+            // **Closed block**, undecorated on purpose: its `.pyi` entry comes
+            // from `$sub_stub`, not from the generator.
             #[pyo3::pymethods]
             impl $Sub {
                 /// `sub | sub` → a fresh aggregate holding both sub-objects
@@ -569,6 +619,17 @@ macro_rules! impl_aggregate_pymethods {
                     }
                     Ok(py.NotImplemented())
                 }
+            }
+
+            // Hand-written `.pyi` entries for the two closed blocks above.
+            #[cfg(feature = "stub-gen")]
+            pyo3_stub_gen::inventory::submit! {
+                pyo3_stub_gen::derive::gen_methods_from_python! { $stub }
+            }
+
+            #[cfg(feature = "stub-gen")]
+            pyo3_stub_gen::inventory::submit! {
+                pyo3_stub_gen::derive::gen_methods_from_python! { $sub_stub }
             }
         }
     };

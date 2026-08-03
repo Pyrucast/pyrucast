@@ -430,16 +430,41 @@ class ElementField:
         `NotImplemented`.
         """
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, key: typing.Any) -> typing.Any:
+    @typing.overload
+    def __getitem__(self, key: int) -> SubElementField:
         r"""
-        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
-        negative indices supported); `agg[i:j:k]` → a **fresh
-        aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). For field
-        aggregates, a **string** key `agg["u_x"]` or a **list** key
-        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
-        those components (`filter_components`). Other key types raise
-        `TypeError`.
+        `field[i]` → the `SubElementField` of zone i: the values carried by
+        the Gauss points of one support.
+        """
+    @typing.overload
+    def __getitem__(self, key: slice) -> ElementField:
+        r"""
+        `field[i:j:k]` → a fresh `ElementField` over the sliced zones, shared
+        with this one (no deep copy).
+        """
+    @typing.overload
+    def __getitem__(self, key: str) -> ElementField:
+        r"""
+        `field["sig_xx"]` → a fresh `ElementField` keeping only that
+        component, on every zone that carries it.
+        """
+    @typing.overload
+    def __getitem__(self, key: list[str]) -> ElementField:
+        r"""
+        `field[["sig_xx", "sig_yy"]]` → a fresh `ElementField` keeping only
+        those components, on every zone that carries them.
+        """
+    def __or__(self, other: ElementField  |  SubElementField) -> ElementField:
+        r"""
+        `field | other` → a fresh `ElementField` holding the zones of both.
+        Component-disjoint zones on one support stay **side by side** (unlike
+        `NodeField`, which fuses them); a component carried by two zones on the
+        same support is rejected — fuse those explicitly with `consolidate`.
+        """
+    def __ror__(self, other: SubElementField) -> ElementField:
+        r"""
+        `subfield | field` — the mirror of `field | subfield`, differing only
+        in that the lone zone comes first.
         """
     def unit(self) -> SubElementField:
         r"""
@@ -449,7 +474,12 @@ class ElementField:
         More honest than `parent[0]` (which silently takes the
         first of several) — see `CONVENTIONS.md`.
         """
-    def add_sub(self, sub: SubElementField) -> None: ...
+    def add_sub(self, sub: SubElementField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -457,33 +487,6 @@ class ElementField:
         Print the full content (third display level) to stdout:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
-        """
-    def __or__(self, other: typing.Any) -> typing.Any:
-        r"""
-        `a | b` — **union** of this aggregate with `other`. `other`
-        may be another aggregate of the same type or a single
-        sub-object. Sub-objects already present (same store slot)
-        are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Same-support zones are
-        handled **asymmetrically** by the two field types:
-        `NodeField` *fuses* them (union of components), whereas
-        `ElementField` keeps component-disjoint zones side by side
-        and only rejects a component carried by two zones on one
-        support — fuse those explicitly with `consolidate`
-        (`consolidate_element`). Returns `NotImplemented` for any
-        other type so Python can fall back to the right operand's
-        `__ror__`.
-        """
-    def __ror__(self, other: typing.Any) -> typing.Any:
-        r"""
-        Right-hand `sub | aggregate`: the **union with the
-        sub-object first**, then this aggregate's zones — the
-        mirror of `aggregate | sub`, with the same deduplication
-        and finalization. Reached when the left operand's `__or__`
-        returns `NotImplemented` (a sub-object only knows how to
-        union another sub-object), so both senses of `|` are
-        accepted and differ only in zone order. Returns
-        `NotImplemented` for any other left-hand type.
         """
 
 @typing.final
@@ -544,17 +547,28 @@ class Evolution:
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
-    def __len__(self) -> builtins.int: ...
-    def __getitem__(self, key: typing.Any) -> typing.Any:
+    @typing.overload
+    def __getitem__(self, key: int) -> SubEvolution:
         r"""
-        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
-        negative indices supported); `agg[i:j:k]` → a **fresh
-        aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). For field
-        aggregates, a **string** key `agg["u_x"]` or a **list** key
-        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
-        those components (`filter_components`). Other key types raise
-        `TypeError`.
+        `evolution[i]` → the `SubEvolution` of zone i: one tabulated curve,
+        interpolated linearly against the variable.
+        """
+    @typing.overload
+    def __getitem__(self, key: slice) -> Evolution:
+        r"""
+        `evolution[i:j:k]` → a fresh `Evolution` holding the sliced curves,
+        shared with this one (no deep copy).
+        """
+    def __or__(self, other: Evolution  |  SubEvolution) -> Evolution:
+        r"""
+        `evolution | other` → a fresh `Evolution` holding the curves of both,
+        in first-seen order and deduplicated by store slot.
+        """
+    def __ror__(self, other: SubEvolution) -> Evolution:
+        r"""
+        `sub_evolution | evolution` — the mirror of
+        `evolution | sub_evolution`, differing only in that the lone curve
+        comes first.
         """
     def unit(self) -> SubEvolution:
         r"""
@@ -564,7 +578,12 @@ class Evolution:
         More honest than `parent[0]` (which silently takes the
         first of several) — see `CONVENTIONS.md`.
         """
-    def add_sub(self, sub: SubEvolution) -> None: ...
+    def add_sub(self, sub: SubEvolution) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -573,33 +592,7 @@ class Evolution:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __or__(self, other: typing.Any) -> typing.Any:
-        r"""
-        `a | b` — **union** of this aggregate with `other`. `other`
-        may be another aggregate of the same type or a single
-        sub-object. Sub-objects already present (same store slot)
-        are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Same-support zones are
-        handled **asymmetrically** by the two field types:
-        `NodeField` *fuses* them (union of components), whereas
-        `ElementField` keeps component-disjoint zones side by side
-        and only rejects a component carried by two zones on one
-        support — fuse those explicitly with `consolidate`
-        (`consolidate_element`). Returns `NotImplemented` for any
-        other type so Python can fall back to the right operand's
-        `__ror__`.
-        """
-    def __ror__(self, other: typing.Any) -> typing.Any:
-        r"""
-        Right-hand `sub | aggregate`: the **union with the
-        sub-object first**, then this aggregate's zones — the
-        mirror of `aggregate | sub`, with the same deduplication
-        and finalization. Reached when the left operand's `__or__`
-        returns `NotImplemented` (a sub-object only knows how to
-        union another sub-object), so both senses of `|` are
-        accepted and differ only in zone order. Returns
-        `NotImplemented` for any other left-hand type.
-        """
+    def __len__(self) -> builtins.int: ...
 
 @typing.final
 class FiniteElementSpace:
@@ -646,17 +639,6 @@ class FiniteElementSpace:
         `FiniteElementSpace(mesh)`.
         """
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, key: typing.Any) -> typing.Any:
-        r"""
-        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
-        negative indices supported); `agg[i:j:k]` → a **fresh
-        aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). For field
-        aggregates, a **string** key `agg["u_x"]` or a **list** key
-        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
-        those components (`filter_components`). Other key types raise
-        `TypeError`.
-        """
     def unit(self) -> SubFiniteElementSpace:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -665,7 +647,12 @@ class FiniteElementSpace:
         More honest than `parent[0]` (which silently takes the
         first of several) — see `CONVENTIONS.md`.
         """
-    def add_sub(self, sub: SubFiniteElementSpace) -> None: ...
+    def add_sub(self, sub: SubFiniteElementSpace) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -674,32 +661,28 @@ class FiniteElementSpace:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __or__(self, other: typing.Any) -> typing.Any:
+    @typing.overload
+    def __getitem__(self, key: int) -> SubFiniteElementSpace:
         r"""
-        `a | b` — **union** of this aggregate with `other`. `other`
-        may be another aggregate of the same type or a single
-        sub-object. Sub-objects already present (same store slot)
-        are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Same-support zones are
-        handled **asymmetrically** by the two field types:
-        `NodeField` *fuses* them (union of components), whereas
-        `ElementField` keeps component-disjoint zones side by side
-        and only rejects a component carried by two zones on one
-        support — fuse those explicitly with `consolidate`
-        (`consolidate_element`). Returns `NotImplemented` for any
-        other type so Python can fall back to the right operand's
-        `__ror__`.
+        `fes[i]` → the `SubFiniteElementSpace` of zone i: the elements over
+        one submesh, with their interpolation and quadrature. Index it further
+        (`fes[i][j]`) to reach an `Element`.
         """
-    def __ror__(self, other: typing.Any) -> typing.Any:
+    @typing.overload
+    def __getitem__(self, key: slice) -> FiniteElementSpace:
         r"""
-        Right-hand `sub | aggregate`: the **union with the
-        sub-object first**, then this aggregate's zones — the
-        mirror of `aggregate | sub`, with the same deduplication
-        and finalization. Reached when the left operand's `__or__`
-        returns `NotImplemented` (a sub-object only knows how to
-        union another sub-object), so both senses of `|` are
-        accepted and differ only in zone order. Returns
-        `NotImplemented` for any other left-hand type.
+        `fes[i:j:k]` → a fresh `FiniteElementSpace` over the sliced
+        subspaces, shared with this one (no deep copy).
+        """
+    def __or__(self, other: FiniteElementSpace  |  SubFiniteElementSpace) -> FiniteElementSpace:
+        r"""
+        `fes | other` → a fresh `FiniteElementSpace` spanning the subspaces
+        of both, in first-seen order and deduplicated by store slot.
+        """
+    def __ror__(self, other: SubFiniteElementSpace) -> FiniteElementSpace:
+        r"""
+        `subspace | fes` — the mirror of `fes | subspace`, differing only in
+        that the lone subspace comes first.
         """
 
 @typing.final
@@ -805,18 +788,6 @@ class Matrix:
         List of `(row_node, row_field, col_node, col_field, value)`
         tuples — every entry across every block, in block-insertion order.
         """
-    def __len__(self) -> builtins.int: ...
-    def __getitem__(self, key: typing.Any) -> typing.Any:
-        r"""
-        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
-        negative indices supported); `agg[i:j:k]` → a **fresh
-        aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). For field
-        aggregates, a **string** key `agg["u_x"]` or a **list** key
-        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
-        those components (`filter_components`). Other key types raise
-        `TypeError`.
-        """
     def unit(self) -> SubMatrix:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -825,7 +796,12 @@ class Matrix:
         More honest than `parent[0]` (which silently takes the
         first of several) — see `CONVENTIONS.md`.
         """
-    def add_sub(self, sub: SubMatrix) -> None: ...
+    def add_sub(self, sub: SubMatrix) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -834,32 +810,29 @@ class Matrix:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __or__(self, other: typing.Any) -> typing.Any:
+    def __len__(self) -> builtins.int: ...
+    @typing.overload
+    def __getitem__(self, key: int) -> SubMatrix:
         r"""
-        `a | b` — **union** of this aggregate with `other`. `other`
-        may be another aggregate of the same type or a single
-        sub-object. Sub-objects already present (same store slot)
-        are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Same-support zones are
-        handled **asymmetrically** by the two field types:
-        `NodeField` *fuses* them (union of components), whereas
-        `ElementField` keeps component-disjoint zones side by side
-        and only rejects a component carried by two zones on one
-        support — fuse those explicitly with `consolidate`
-        (`consolidate_element`). Returns `NotImplemented` for any
-        other type so Python can fall back to the right operand's
-        `__ror__`.
+        `matrix[i]` → the `SubMatrix` view of block i (one rectangular COO
+        block, with its row and column supports).
         """
-    def __ror__(self, other: typing.Any) -> typing.Any:
+    @typing.overload
+    def __getitem__(self, key: slice) -> Matrix:
         r"""
-        Right-hand `sub | aggregate`: the **union with the
-        sub-object first**, then this aggregate's zones — the
-        mirror of `aggregate | sub`, with the same deduplication
-        and finalization. Reached when the left operand's `__or__`
-        returns `NotImplemented` (a sub-object only knows how to
-        union another sub-object), so both senses of `|` are
-        accepted and differ only in zone order. Returns
-        `NotImplemented` for any other left-hand type.
+        `matrix[i:j:k]` → a fresh `Matrix` holding the sliced blocks, shared
+        with this one (no deep copy).
+        """
+    def __or__(self, other: Matrix  |  SubMatrix) -> Matrix:
+        r"""
+        `matrix | other` → a fresh `Matrix` holding the blocks of both, in
+        first-seen order and deduplicated by store slot. Assemble the global
+        operator this way, then call `finalize()` before solving.
+        """
+    def __ror__(self, other: SubMatrix) -> Matrix:
+        r"""
+        `sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
+        differing only in that the lone block comes first.
         """
 
 @typing.final
@@ -928,16 +901,30 @@ class Mesh:
         `title`.
         """
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, key: typing.Any) -> typing.Any:
+    @typing.overload
+    def __getitem__(self, key: int) -> SubMesh:
         r"""
-        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
-        negative indices supported); `agg[i:j:k]` → a **fresh
-        aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). For field
-        aggregates, a **string** key `agg["u_x"]` or a **list** key
-        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
-        those components (`filter_components`). Other key types raise
-        `TypeError`.
+        `mesh[i]` → the `SubMesh` view of zone i, i.e. the cells of one
+        element type (negative indices supported). Iterating a `Mesh` yields
+        the same views, one per zone.
+        """
+    @typing.overload
+    def __getitem__(self, key: slice) -> Mesh:
+        r"""
+        `mesh[i:j:k]` → a fresh `Mesh` over the sliced zones, sharing their
+        cells with this one (no deep copy).
+        """
+    def __or__(self, other: Mesh  |  SubMesh) -> Mesh:
+        r"""
+        `mesh | other` → a fresh `Mesh` holding the zones of both, in
+        first-seen order. A zone already present (same store slot) is not added
+        twice; the others are shared, not copied. All zones must hang off the
+        same `Coords`.
+        """
+    def __ror__(self, other: SubMesh) -> Mesh:
+        r"""
+        `submesh | mesh` — the mirror of `mesh | submesh`, differing only in
+        that the lone zone comes first.
         """
     def unit(self) -> SubMesh:
         r"""
@@ -947,7 +934,12 @@ class Mesh:
         More honest than `parent[0]` (which silently takes the
         first of several) — see `CONVENTIONS.md`.
         """
-    def add_sub(self, sub: SubMesh) -> None: ...
+    def add_sub(self, sub: SubMesh) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -955,33 +947,6 @@ class Mesh:
         Print the full content (third display level) to stdout:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
-        """
-    def __or__(self, other: typing.Any) -> typing.Any:
-        r"""
-        `a | b` — **union** of this aggregate with `other`. `other`
-        may be another aggregate of the same type or a single
-        sub-object. Sub-objects already present (same store slot)
-        are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Same-support zones are
-        handled **asymmetrically** by the two field types:
-        `NodeField` *fuses* them (union of components), whereas
-        `ElementField` keeps component-disjoint zones side by side
-        and only rejects a component carried by two zones on one
-        support — fuse those explicitly with `consolidate`
-        (`consolidate_element`). Returns `NotImplemented` for any
-        other type so Python can fall back to the right operand's
-        `__ror__`.
-        """
-    def __ror__(self, other: typing.Any) -> typing.Any:
-        r"""
-        Right-hand `sub | aggregate`: the **union with the
-        sub-object first**, then this aggregate's zones — the
-        mirror of `aggregate | sub`, with the same deduplication
-        and finalization. Reached when the left operand's `__or__`
-        returns `NotImplemented` (a sub-object only knows how to
-        union another sub-object), so both senses of `|` are
-        accepted and differ only in zone order. Returns
-        `NotImplemented` for any other left-hand type.
         """
 
 @typing.final
@@ -1238,17 +1203,6 @@ class Model:
         with `|`. Raises if an index is out of range.
         """
     def __len__(self) -> builtins.int: ...
-    def __getitem__(self, key: typing.Any) -> typing.Any:
-        r"""
-        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
-        negative indices supported); `agg[i:j:k]` → a **fresh
-        aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). For field
-        aggregates, a **string** key `agg["u_x"]` or a **list** key
-        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
-        those components (`filter_components`). Other key types raise
-        `TypeError`.
-        """
     def unit(self) -> SubModel:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -1257,7 +1211,12 @@ class Model:
         More honest than `parent[0]` (which silently takes the
         first of several) — see `CONVENTIONS.md`.
         """
-    def add_sub(self, sub: SubModel) -> None: ...
+    def add_sub(self, sub: SubModel) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1266,32 +1225,28 @@ class Model:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __or__(self, other: typing.Any) -> typing.Any:
+    @typing.overload
+    def __getitem__(self, key: int) -> SubModel:
         r"""
-        `a | b` — **union** of this aggregate with `other`. `other`
-        may be another aggregate of the same type or a single
-        sub-object. Sub-objects already present (same store slot)
-        are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Same-support zones are
-        handled **asymmetrically** by the two field types:
-        `NodeField` *fuses* them (union of components), whereas
-        `ElementField` keeps component-disjoint zones side by side
-        and only rejects a component carried by two zones on one
-        support — fuse those explicitly with `consolidate`
-        (`consolidate_element`). Returns `NotImplemented` for any
-        other type so Python can fall back to the right operand's
-        `__ror__`.
+        `model[i]` → the `SubModel` view of term i (a physics term, a
+        Dirichlet condition, an MPC, ...).
         """
-    def __ror__(self, other: typing.Any) -> typing.Any:
+    @typing.overload
+    def __getitem__(self, key: slice) -> Model:
         r"""
-        Right-hand `sub | aggregate`: the **union with the
-        sub-object first**, then this aggregate's zones — the
-        mirror of `aggregate | sub`, with the same deduplication
-        and finalization. Reached when the left operand's `__or__`
-        returns `NotImplemented` (a sub-object only knows how to
-        union another sub-object), so both senses of `|` are
-        accepted and differ only in zone order. Returns
-        `NotImplemented` for any other left-hand type.
+        `model[i:j:k]` → a fresh `Model` holding the sliced terms, shared
+        with this one (no deep copy).
+        """
+    def __or__(self, other: Model  |  SubModel) -> Model:
+        r"""
+        `model | other` → a fresh `Model` holding the terms of both, in
+        first-seen order and deduplicated by store slot. This is how a problem
+        is composed: physics | boundary conditions | constraints.
+        """
+    def __ror__(self, other: SubModel) -> Model:
+        r"""
+        `sub_model | model` — the mirror of `model | sub_model`, differing
+        only in that the lone term comes first.
         """
 
 @typing.final
@@ -1450,18 +1405,6 @@ class NodeField:
         / `> x` / `<= x` / `< x` test every component against the scalar `x`;
         `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
         """
-    def __len__(self) -> builtins.int: ...
-    def __getitem__(self, key: typing.Any) -> typing.Any:
-        r"""
-        `agg[i]` → the typed **view** of zone `i` (a `$Sub`,
-        negative indices supported); `agg[i:j:k]` → a **fresh
-        aggregate** of the same type holding the sliced zones
-        (Python slicing: step, negative bounds). For field
-        aggregates, a **string** key `agg["u_x"]` or a **list** key
-        `agg[["u_x", "u_y"]]` returns a fresh field keeping only
-        those components (`filter_components`). Other key types raise
-        `TypeError`.
-        """
     def unit(self) -> SubNodeField:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -1470,7 +1413,12 @@ class NodeField:
         More honest than `parent[0]` (which silently takes the
         first of several) — see `CONVENTIONS.md`.
         """
-    def add_sub(self, sub: SubNodeField) -> None: ...
+    def add_sub(self, sub: SubNodeField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1479,32 +1427,41 @@ class NodeField:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __or__(self, other: typing.Any) -> typing.Any:
+    def __len__(self) -> builtins.int: ...
+    @typing.overload
+    def __getitem__(self, key: int) -> SubNodeField:
         r"""
-        `a | b` — **union** of this aggregate with `other`. `other`
-        may be another aggregate of the same type or a single
-        sub-object. Sub-objects already present (same store slot)
-        are not added twice; remaining handles are **shared**
-        (refcount bump), not deep-copied. Same-support zones are
-        handled **asymmetrically** by the two field types:
-        `NodeField` *fuses* them (union of components), whereas
-        `ElementField` keeps component-disjoint zones side by side
-        and only rejects a component carried by two zones on one
-        support — fuse those explicitly with `consolidate`
-        (`consolidate_element`). Returns `NotImplemented` for any
-        other type so Python can fall back to the right operand's
-        `__ror__`.
+        `field[i]` → the `SubNodeField` of zone i: the values carried by the
+        nodes of one support.
         """
-    def __ror__(self, other: typing.Any) -> typing.Any:
+    @typing.overload
+    def __getitem__(self, key: slice) -> NodeField:
         r"""
-        Right-hand `sub | aggregate`: the **union with the
-        sub-object first**, then this aggregate's zones — the
-        mirror of `aggregate | sub`, with the same deduplication
-        and finalization. Reached when the left operand's `__or__`
-        returns `NotImplemented` (a sub-object only knows how to
-        union another sub-object), so both senses of `|` are
-        accepted and differ only in zone order. Returns
-        `NotImplemented` for any other left-hand type.
+        `field[i:j:k]` → a fresh `NodeField` over the sliced zones, shared
+        with this one (no deep copy).
+        """
+    @typing.overload
+    def __getitem__(self, key: str) -> NodeField:
+        r"""
+        `field["u_x"]` → a fresh `NodeField` keeping only that component, on
+        every zone that carries it.
+        """
+    @typing.overload
+    def __getitem__(self, key: list[str]) -> NodeField:
+        r"""
+        `field[["u_x", "u_y"]]` → a fresh `NodeField` keeping only those
+        components, on every zone that carries them.
+        """
+    def __or__(self, other: NodeField  |  SubNodeField) -> NodeField:
+        r"""
+        `field | other` → a fresh `NodeField` holding the zones of both.
+        Zones sharing the same support are **fused** (union of their
+        components) — unlike `ElementField`, which juxtaposes them.
+        """
+    def __ror__(self, other: SubNodeField) -> NodeField:
+        r"""
+        `subfield | field` — the mirror of `field | subfield`, differing only
+        in that the lone zone comes first.
         """
 
 @typing.final
@@ -1624,12 +1581,10 @@ class SubElementField:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def __or__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: SubElementField) -> ElementField:
         r"""
-        `sub | sub` → a fresh aggregate holding both sub-objects
-        (first-seen order, deduplicated by handle, then finalized).
-        Sub-handles are shared (refcount bump). Returns
-        `NotImplemented` for any other right-hand type.
+        `subfield | subfield` → a fresh `ElementField` holding both zones,
+        left side by side (never fused).
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -1705,12 +1660,10 @@ class SubEvolution:
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
         """
-    def __or__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: SubEvolution) -> Evolution:
         r"""
-        `sub | sub` → a fresh aggregate holding both sub-objects
-        (first-seen order, deduplicated by handle, then finalized).
-        Sub-handles are shared (refcount bump). Returns
-        `NotImplemented` for any other right-hand type.
+        `sub_evolution | sub_evolution` → a fresh `Evolution` holding both
+        curves — the low-level way to build a multi-zone evolution.
         """
 
 @typing.final
@@ -1822,12 +1775,9 @@ class SubFiniteElementSpace:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def __or__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: SubFiniteElementSpace) -> FiniteElementSpace:
         r"""
-        `sub | sub` → a fresh aggregate holding both sub-objects
-        (first-seen order, deduplicated by handle, then finalized).
-        Sub-handles are shared (refcount bump). Returns
-        `NotImplemented` for any other right-hand type.
+        `subspace | subspace` → a fresh `FiniteElementSpace` spanning both.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -1909,12 +1859,9 @@ class SubMatrix:
     def __len__(self) -> builtins.int: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def __or__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: SubMatrix) -> Matrix:
         r"""
-        `sub | sub` → a fresh aggregate holding both sub-objects
-        (first-seen order, deduplicated by handle, then finalized).
-        Sub-handles are shared (refcount bump). Returns
-        `NotImplemented` for any other right-hand type.
+        `sub_matrix | sub_matrix` → a fresh `Matrix` holding both blocks.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -2021,12 +1968,10 @@ class SubMesh:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def __or__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: SubMesh) -> Mesh:
         r"""
-        `sub | sub` → a fresh aggregate holding both sub-objects
-        (first-seen order, deduplicated by handle, then finalized).
-        Sub-handles are shared (refcount bump). Returns
-        `NotImplemented` for any other right-hand type.
+        `submesh | submesh` → a fresh `Mesh` holding both zones. The usual
+        way to build a multi-element-type mesh from single-type ones.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -2082,12 +2027,9 @@ class SubModel:
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
-    def __or__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: SubModel) -> Model:
         r"""
-        `sub | sub` → a fresh aggregate holding both sub-objects
-        (first-seen order, deduplicated by handle, then finalized).
-        Sub-handles are shared (refcount bump). Returns
-        `NotImplemented` for any other right-hand type.
+        `sub_model | sub_model` → a fresh `Model` holding both terms.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -2220,12 +2162,10 @@ class SubNodeField:
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
         """
-    def __or__(self, other: typing.Any) -> typing.Any:
+    def __or__(self, other: SubNodeField) -> NodeField:
         r"""
-        `sub | sub` → a fresh aggregate holding both sub-objects
-        (first-seen order, deduplicated by handle, then finalized).
-        Sub-handles are shared (refcount bump). Returns
-        `NotImplemented` for any other right-hand type.
+        `subfield | subfield` → a fresh `NodeField` holding both zones, fused
+        if they share the same support.
         """
 
 def abs(field: typing.Any) -> typing.Any:

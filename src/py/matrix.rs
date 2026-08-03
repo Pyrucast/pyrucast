@@ -351,5 +351,34 @@ impl PyMatrix {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyMatrix, PySubMatrix, "Matrix", sub_matrix, Matrix);
+crate::impl_aggregate_pymethods!(
+    PyMatrix,
+    PySubMatrix,
+    "Matrix",
+    sub_matrix,
+    Matrix,
+    r#"
+class PyMatrix:
+    @overload
+    def __getitem__(self, key: int) -> pyo3_stub_gen.RustType["PySubMatrix"]:
+        """`matrix[i]` → the `SubMatrix` view of block i (one rectangular COO
+        block, with its row and column supports)."""
+    @overload
+    def __getitem__(self, key: slice) -> pyo3_stub_gen.RustType["PyMatrix"]:
+        """`matrix[i:j:k]` → a fresh `Matrix` holding the sliced blocks, shared
+        with this one (no deep copy)."""
+    def __or__(self, other: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
+        """`matrix | other` → a fresh `Matrix` holding the blocks of both, in
+        first-seen order and deduplicated by store slot. Assemble the global
+        operator this way, then call `finalize()` before solving."""
+    def __ror__(self, other: pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
+        """`sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
+        differing only in that the lone block comes first."""
+    "#,
+    r#"
+class PySubMatrix:
+    def __or__(self, other: pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
+        """`sub_matrix | sub_matrix` → a fresh `Matrix` holding both blocks."""
+    "#
+);
 crate::impl_dump_pymethod!(handle PySubMatrix, handle);

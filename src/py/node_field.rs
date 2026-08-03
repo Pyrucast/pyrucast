@@ -584,5 +584,37 @@ crate::impl_aggregate_pymethods!(
     "NodeField",
     subfield,
     NodeField,
+    r#"
+class PyNodeField:
+    @overload
+    def __getitem__(self, key: int) -> pyo3_stub_gen.RustType["PySubNodeField"]:
+        """`field[i]` → the `SubNodeField` of zone i: the values carried by the
+        nodes of one support."""
+    @overload
+    def __getitem__(self, key: slice) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`field[i:j:k]` → a fresh `NodeField` over the sliced zones, shared
+        with this one (no deep copy)."""
+    @overload
+    def __getitem__(self, key: str) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`field["u_x"]` → a fresh `NodeField` keeping only that component, on
+        every zone that carries it."""
+    @overload
+    def __getitem__(self, key: list[str]) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`field[["u_x", "u_y"]]` → a fresh `NodeField` keeping only those
+        components, on every zone that carries them."""
+    def __or__(self, other: pyo3_stub_gen.RustType["PyNodeField"] | pyo3_stub_gen.RustType["PySubNodeField"]) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`field | other` → a fresh `NodeField` holding the zones of both.
+        Zones sharing the same support are **fused** (union of their
+        components) — unlike `ElementField`, which juxtaposes them."""
+    def __ror__(self, other: pyo3_stub_gen.RustType["PySubNodeField"]) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`subfield | field` — the mirror of `field | subfield`, differing only
+        in that the lone zone comes first."""
+    "#,
+    r#"
+class PySubNodeField:
+    def __or__(self, other: pyo3_stub_gen.RustType["PySubNodeField"]) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`subfield | subfield` → a fresh `NodeField` holding both zones, fused
+        if they share the same support."""
+    "#,
     field_components
 );

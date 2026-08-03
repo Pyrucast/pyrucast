@@ -531,5 +531,34 @@ impl PyModel {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyModel, PySubModel, "Model", sub_model, Model);
+crate::impl_aggregate_pymethods!(
+    PyModel,
+    PySubModel,
+    "Model",
+    sub_model,
+    Model,
+    r#"
+class PyModel:
+    @overload
+    def __getitem__(self, key: int) -> pyo3_stub_gen.RustType["PySubModel"]:
+        """`model[i]` → the `SubModel` view of term i (a physics term, a
+        Dirichlet condition, an MPC, ...)."""
+    @overload
+    def __getitem__(self, key: slice) -> pyo3_stub_gen.RustType["PyModel"]:
+        """`model[i:j:k]` → a fresh `Model` holding the sliced terms, shared
+        with this one (no deep copy)."""
+    def __or__(self, other: pyo3_stub_gen.RustType["PyModel"] | pyo3_stub_gen.RustType["PySubModel"]) -> pyo3_stub_gen.RustType["PyModel"]:
+        """`model | other` → a fresh `Model` holding the terms of both, in
+        first-seen order and deduplicated by store slot. This is how a problem
+        is composed: physics | boundary conditions | constraints."""
+    def __ror__(self, other: pyo3_stub_gen.RustType["PySubModel"]) -> pyo3_stub_gen.RustType["PyModel"]:
+        """`sub_model | model` — the mirror of `model | sub_model`, differing
+        only in that the lone term comes first."""
+    "#,
+    r#"
+class PySubModel:
+    def __or__(self, other: pyo3_stub_gen.RustType["PySubModel"]) -> pyo3_stub_gen.RustType["PyModel"]:
+        """`sub_model | sub_model` → a fresh `Model` holding both terms."""
+    "#
+);
 crate::impl_dump_pymethod!(handle PySubModel, handle);

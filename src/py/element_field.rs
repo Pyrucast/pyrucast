@@ -497,6 +497,39 @@ crate::impl_aggregate_pymethods!(
     "ElementField",
     subfield,
     ElementField,
+    r#"
+class PyElementField:
+    @overload
+    def __getitem__(self, key: int) -> pyo3_stub_gen.RustType["PySubElementField"]:
+        """`field[i]` → the `SubElementField` of zone i: the values carried by
+        the Gauss points of one support."""
+    @overload
+    def __getitem__(self, key: slice) -> pyo3_stub_gen.RustType["PyElementField"]:
+        """`field[i:j:k]` → a fresh `ElementField` over the sliced zones, shared
+        with this one (no deep copy)."""
+    @overload
+    def __getitem__(self, key: str) -> pyo3_stub_gen.RustType["PyElementField"]:
+        """`field["sig_xx"]` → a fresh `ElementField` keeping only that
+        component, on every zone that carries it."""
+    @overload
+    def __getitem__(self, key: list[str]) -> pyo3_stub_gen.RustType["PyElementField"]:
+        """`field[["sig_xx", "sig_yy"]]` → a fresh `ElementField` keeping only
+        those components, on every zone that carries them."""
+    def __or__(self, other: pyo3_stub_gen.RustType["PyElementField"] | pyo3_stub_gen.RustType["PySubElementField"]) -> pyo3_stub_gen.RustType["PyElementField"]:
+        """`field | other` → a fresh `ElementField` holding the zones of both.
+        Component-disjoint zones on one support stay **side by side** (unlike
+        `NodeField`, which fuses them); a component carried by two zones on the
+        same support is rejected — fuse those explicitly with `consolidate`."""
+    def __ror__(self, other: pyo3_stub_gen.RustType["PySubElementField"]) -> pyo3_stub_gen.RustType["PyElementField"]:
+        """`subfield | field` — the mirror of `field | subfield`, differing only
+        in that the lone zone comes first."""
+    "#,
+    r#"
+class PySubElementField:
+    def __or__(self, other: pyo3_stub_gen.RustType["PySubElementField"]) -> pyo3_stub_gen.RustType["PyElementField"]:
+        """`subfield | subfield` → a fresh `ElementField` holding both zones,
+        left side by side (never fused)."""
+    "#,
     field_components
 );
 crate::impl_dump_pymethod!(handle PySubElementField, handle);

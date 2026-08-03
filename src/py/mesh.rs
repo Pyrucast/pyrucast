@@ -410,5 +410,37 @@ impl PyMesh {
     }
 }
 
-crate::impl_aggregate_pymethods!(PyMesh, PySubMesh, "Mesh", submesh, Mesh);
+crate::impl_aggregate_pymethods!(
+    PyMesh,
+    PySubMesh,
+    "Mesh",
+    submesh,
+    Mesh,
+    r#"
+class PyMesh:
+    @overload
+    def __getitem__(self, key: int) -> pyo3_stub_gen.RustType["PySubMesh"]:
+        """`mesh[i]` → the `SubMesh` view of zone i, i.e. the cells of one
+        element type (negative indices supported). Iterating a `Mesh` yields
+        the same views, one per zone."""
+    @overload
+    def __getitem__(self, key: slice) -> pyo3_stub_gen.RustType["PyMesh"]:
+        """`mesh[i:j:k]` → a fresh `Mesh` over the sliced zones, sharing their
+        cells with this one (no deep copy)."""
+    def __or__(self, other: pyo3_stub_gen.RustType["PyMesh"] | pyo3_stub_gen.RustType["PySubMesh"]) -> pyo3_stub_gen.RustType["PyMesh"]:
+        """`mesh | other` → a fresh `Mesh` holding the zones of both, in
+        first-seen order. A zone already present (same store slot) is not added
+        twice; the others are shared, not copied. All zones must hang off the
+        same `Coords`."""
+    def __ror__(self, other: pyo3_stub_gen.RustType["PySubMesh"]) -> pyo3_stub_gen.RustType["PyMesh"]:
+        """`submesh | mesh` — the mirror of `mesh | submesh`, differing only in
+        that the lone zone comes first."""
+    "#,
+    r#"
+class PySubMesh:
+    def __or__(self, other: pyo3_stub_gen.RustType["PySubMesh"]) -> pyo3_stub_gen.RustType["PyMesh"]:
+        """`submesh | submesh` → a fresh `Mesh` holding both zones. The usual
+        way to build a multi-element-type mesh from single-type ones."""
+    "#
+);
 crate::impl_dump_pymethod!(handle PySubMesh, handle);

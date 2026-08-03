@@ -273,6 +273,29 @@ crate::impl_aggregate_pymethods!(
     PySubFiniteElementSpace,
     "FiniteElementSpace",
     subspace,
-    FiniteElementSpace
+    FiniteElementSpace,
+    r#"
+class PyFiniteElementSpace:
+    @overload
+    def __getitem__(self, key: int) -> pyo3_stub_gen.RustType["PySubFiniteElementSpace"]:
+        """`fes[i]` → the `SubFiniteElementSpace` of zone i: the elements over
+        one submesh, with their interpolation and quadrature. Index it further
+        (`fes[i][j]`) to reach an `Element`."""
+    @overload
+    def __getitem__(self, key: slice) -> pyo3_stub_gen.RustType["PyFiniteElementSpace"]:
+        """`fes[i:j:k]` → a fresh `FiniteElementSpace` over the sliced
+        subspaces, shared with this one (no deep copy)."""
+    def __or__(self, other: pyo3_stub_gen.RustType["PyFiniteElementSpace"] | pyo3_stub_gen.RustType["PySubFiniteElementSpace"]) -> pyo3_stub_gen.RustType["PyFiniteElementSpace"]:
+        """`fes | other` → a fresh `FiniteElementSpace` spanning the subspaces
+        of both, in first-seen order and deduplicated by store slot."""
+    def __ror__(self, other: pyo3_stub_gen.RustType["PySubFiniteElementSpace"]) -> pyo3_stub_gen.RustType["PyFiniteElementSpace"]:
+        """`subspace | fes` — the mirror of `fes | subspace`, differing only in
+        that the lone subspace comes first."""
+    "#,
+    r#"
+class PySubFiniteElementSpace:
+    def __or__(self, other: pyo3_stub_gen.RustType["PySubFiniteElementSpace"]) -> pyo3_stub_gen.RustType["PyFiniteElementSpace"]:
+        """`subspace | subspace` → a fresh `FiniteElementSpace` spanning both."""
+    "#
 );
 crate::impl_dump_pymethod!(handle PySubFiniteElementSpace, handle);

@@ -156,6 +156,25 @@ Régénérer `pyrucast.pyi` à chaque changement de signature Python (nouvelle
 classe, paramètre, docstring `///`). Le fichier est **versionné** dans le repo,
 utilisable tel quel par les IDE.
 
+#### Les dunders polymorphes des agrégats
+
+Une exception : `__getitem__`, `__or__` et `__ror__` des agrégats (`Mesh`,
+`Model`, `NodeField`, …) prennent et rendent un `PyAny`, dont le générateur ne
+peut déduire que `typing.Any` — et `mesh[0].` ne proposerait alors plus rien
+dans l'IDE. Ces méthodes vivent donc dans des blocs `#[pymethods]`
+**volontairement non décorés** par `gen_stub_pymethods`, invisibles au
+générateur, et leurs entrées du `.pyi` sont écrites à la main en syntaxe Python
+dans les deux littéraux passés à `impl_aggregate_pymethods!` (voir
+`src/py/mesh.rs`) : surcharges `@overload` typées et docstrings propres à chaque
+agrégat, ce qui permet aussi de dire au bon endroit ce que `|` fait vraiment sur
+ce type-là. Le nom de classe y désigne le **type Rust** (`class PyMesh:`), et
+les types renvoyés passent par le marqueur `pyo3_stub_gen.RustType[...]`.
+
+Ces blocs non décorés sont **fermés** : une méthode qu'on y ajouterait
+disparaîtrait silencieusement du stub. Toute nouvelle méthode d'agrégat va dans
+les blocs décorés ; une méthode polymorphe de plus demande d'étendre le littéral
+correspondant, sur les sept sites d'appel de la macro.
+
 ## Scripts « tout-en-un »
 
 Le dossier `script/` contient deux niveaux d'automatisation. Tous activent (ou

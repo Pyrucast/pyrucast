@@ -428,5 +428,29 @@ crate::impl_aggregate_pymethods!(
     PySubEvolution,
     "Evolution",
     sub_evolution,
-    Evolution
+    Evolution,
+    r#"
+class PyEvolution:
+    @overload
+    def __getitem__(self, key: int) -> pyo3_stub_gen.RustType["PySubEvolution"]:
+        """`evolution[i]` → the `SubEvolution` of zone i: one tabulated curve,
+        interpolated linearly against the variable."""
+    @overload
+    def __getitem__(self, key: slice) -> pyo3_stub_gen.RustType["PyEvolution"]:
+        """`evolution[i:j:k]` → a fresh `Evolution` holding the sliced curves,
+        shared with this one (no deep copy)."""
+    def __or__(self, other: pyo3_stub_gen.RustType["PyEvolution"] | pyo3_stub_gen.RustType["PySubEvolution"]) -> pyo3_stub_gen.RustType["PyEvolution"]:
+        """`evolution | other` → a fresh `Evolution` holding the curves of both,
+        in first-seen order and deduplicated by store slot."""
+    def __ror__(self, other: pyo3_stub_gen.RustType["PySubEvolution"]) -> pyo3_stub_gen.RustType["PyEvolution"]:
+        """`sub_evolution | evolution` — the mirror of
+        `evolution | sub_evolution`, differing only in that the lone curve
+        comes first."""
+    "#,
+    r#"
+class PySubEvolution:
+    def __or__(self, other: pyo3_stub_gen.RustType["PySubEvolution"]) -> pyo3_stub_gen.RustType["PyEvolution"]:
+        """`sub_evolution | sub_evolution` → a fresh `Evolution` holding both
+        curves — the low-level way to build a multi-zone evolution."""
+    "#
 );
