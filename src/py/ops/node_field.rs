@@ -9,6 +9,9 @@ use crate::py::finite_element_space::PySubFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
 use crate::py::node_field::PyNodeField;
+use crate::py::node_field::PySubNodeField;
+use crate::store::{insert, read};
+use pyo3::exceptions::PyTypeError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -184,6 +187,53 @@ pub fn internal_forces_continuum(
 ) -> PyResult<PyNodeField> {
     let nf = crate::ops::node_field::internal_forces_continuum(&stresses.inner, &fespace.inner)?;
     Ok(PyNodeField { inner: nf })
+}
+
+/// Per-component 0/1 **mask** of a field against a value band — same structure
+/// as the input (Cast3M `MASQUE`): same zones, same support, same components,
+/// only the values are rewritten (`1.0` inside the band, `0.0` outside). The
+/// result is therefore multipliable term by term with the input.
+///
+/// Its sibling `pyrucast.mesh.select` extracts the passing *support* instead,
+/// and produces a `Mesh`.
+///
+/// The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
+/// `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
+/// stands on its own. `components=None` tests every component; a `components`
+/// list tests only those, leaving the others at `1.0` (identity for the
+/// product), and a zone missing a listed component is left all-`1.0`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(name = "mask_node")]
+#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
+#[allow(clippy::too_many_arguments)]
+pub fn mask(
+    py: Python<'_>,
+    field: &Bound<'_, PyAny>,
+    ge: Option<f64>,
+    gt: Option<f64>,
+    le: Option<f64>,
+    lt: Option<f64>,
+    components: Option<Vec<String>>,
+) -> PyResult<Py<PyAny>> {
+    let band = crate::atoms::Band::new(ge, gt, le, lt)?;
+    if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
+        let out = crate::ops::node_field::mask(&f.inner, &band, components)?;
+        Ok(Py::new(py, PyNodeField { inner: out })?.into_any())
+    } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
+        let out = crate::ops::node_field::mask_sub(&*read(&f.handle)?, &band, components);
+        Ok(Py::new(
+            py,
+            PySubNodeField {
+                handle: insert(out),
+            },
+        )?
+        .into_any())
+    } else {
+        Err(PyTypeError::new_err(
+            "expected a PyNodeField or PySubNodeField",
+        ))
+    }
 }
 
 // ─── Méthodes de délégation ────────────────────────────────────────────────

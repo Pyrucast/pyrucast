@@ -91,7 +91,7 @@ master = pyrucast.Mesh(c, "SEG2")
 for i in reversed(range(N)):
     master.unit().add_cell([bottom[idx(i + 1, N)], bottom[idx(i, N)]])
 # Esclave : nœuds du bord inférieur du bloc haut.
-slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
+slave = pyrucast.Mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
 
 contact = pyrucast.Model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
 model = elasticite | appuis | contact

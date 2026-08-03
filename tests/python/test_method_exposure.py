@@ -47,6 +47,10 @@ RENAMED = {
     "consolidate_mesh": "consolidate",
     "consolidate_node": "consolidate",
     "consolidate_element": "consolidate",
+    # Noms plats de l'extension : `_pyrucast` étant plat, `node_field.mask` et
+    # `element_field.mask` s'y enregistrent sous des noms distincts.
+    "mask_node": "mask",
+    "mask_element": "mask",
 }
 
 # Sans méthode, avec la raison. Condition (3) sauf mention contraire.

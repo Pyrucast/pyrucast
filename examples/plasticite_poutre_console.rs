@@ -54,6 +54,7 @@
 //! finale, effort tranchant au bout).
 
 use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::Band;
 use pyrucast::atoms::ElementType;
 use pyrucast::atoms::Node;
 use pyrucast::containers::element_field::ElementField;
@@ -68,8 +69,8 @@ use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::element_field::behavior::integrate;
 use pyrucast::ops::element_field::deformation;
+use pyrucast::ops::element_field::mask;
 use pyrucast::ops::element_field::material_field;
-use pyrucast::ops::field::{mask_cells, Band};
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
 use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
@@ -323,7 +324,7 @@ fn main() -> Result<()> {
 fn plastic_diagnostics(state: &ElementField) -> Result<(f64, usize)> {
     let p_max = Field::max(state, "p")?;
     let band = Band::new(None, Some(1e-12), None, None)?;
-    let masked = mask_cells(state, &band, Some(vec!["p".to_string()]))?;
+    let masked = mask(state, &band, Some(vec!["p".to_string()]))?;
     let n_plastic = Field::sum(&masked, "p")?.round() as usize;
     Ok((p_max, n_plastic))
 }

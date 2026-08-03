@@ -55,7 +55,7 @@ def bloc(coords: pc.Coords, y0: float):
 
 
 def clamp(nodes, var, dual):
-    imposed = pc.mesh.poi1_from_nodes(nodes)
+    imposed = pc.Mesh.poi1_from_nodes(nodes)
     multiplier = pc.mesh.barycenter(imposed)
     return pc.Model.dirichlet(var, dual, imposed, multiplier)
 
@@ -84,7 +84,7 @@ def main() -> None:
     # gauche — la normale associée pointe vers +y). Esclave : nœuds du bord
     # bas du bloc haut.
     maitre = bord_horizontal(mesh_bas, 1.0)
-    esclave = pc.mesh.poi1_from_nodes([haut[idx(i, 0)] for i in range(N + 1)])
+    esclave = pc.Mesh.poi1_from_nodes([haut[idx(i, 0)] for i in range(N + 1)])
 
     contact = pc.Model.contact(esclave, maitre, [("u_x", "f_x"), ("u_y", "f_y")])
     # ANCHOR_END: geometrie_contact

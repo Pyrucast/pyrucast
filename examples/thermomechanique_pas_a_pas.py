@@ -67,14 +67,14 @@ def main():
     bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
 
     def clamp(nodes, var, dual):
-        imposed = pc.mesh.poi1_from_nodes(nodes)
+        imposed = pc.Mesh.poi1_from_nodes(nodes)
         return pc.Model.dirichlet(var, dual, imposed, pc.mesh.barycenter(imposed))
 
     # ── Modèle : conduction + élasticité (contraintes planes) + Dirichlet ────
     # Thermique : température imposée sur les bords gauche/droit (un
     # multiplicateur par nœud ⇒ champ uniforme). Mécanique : appuis simples
     # (u_x=0 à gauche, u_y=0 en bas) ⇒ dilatation libre, sans contrainte.
-    th_imposed = pc.mesh.poi1_from_nodes(left + right)
+    th_imposed = pc.Mesh.poi1_from_nodes(left + right)
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
     model = (
         pc.Model.heat_conduction(fes)

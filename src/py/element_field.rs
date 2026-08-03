@@ -1,9 +1,9 @@
 //! Python wrappers for [`crate::containers::element_field::SubElementField`] and
 //! [`crate::containers::element_field::ElementField`].
 
+use crate::atoms::Band;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
-use crate::ops::field::Band;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::store::{insert, read, write, Handle};
 use pyo3::exceptions::{PyTypeError, PyValueError};
@@ -462,7 +462,7 @@ impl PySubElementField {
             CompareOp::Lt => Band::new(None, None, None, Some(x)),
             CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
         }?;
-        let out = crate::ops::field::mask_sub_cells(&*read(&self.handle)?, &band, None);
+        let out = crate::ops::element_field::mask_sub(&*read(&self.handle)?, &band, None);
         Ok(Py::new(
             py,
             PySubElementField {
@@ -497,7 +497,7 @@ impl PyElementField {
             CompareOp::Lt => Band::new(None, None, None, Some(x)),
             CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
         }?;
-        let out = crate::ops::field::mask_cells(&self.inner, &band, None)?;
+        let out = crate::ops::element_field::mask(&self.inner, &band, None)?;
         Ok(Py::new(py, PyElementField { inner: out })?.into_any())
     }
 }

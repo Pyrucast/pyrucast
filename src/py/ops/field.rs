@@ -22,174 +22,6 @@ pub(crate) fn extract_names(arg: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     ))
 }
 
-/// Per-component 0/1 **mask** of a field against a value band — same flavour
-/// and same structure as the input (Cast3M's `MASQUE`).
-///
-/// Unlike `pyrucast.mesh.select`, which extracts the passing support into a
-/// `Mesh`, `mask` keeps the field's exact shape (zones, support, components)
-/// and only rewrites the values: `1.0` where the band holds, `0.0` where it
-/// does not — so the result is multipliable term by term with the input
-/// (`field * mask(field, ge=0)` zeroes the negatives, component by component).
-/// A `NodeField` masks per node, an `ElementField` per Gauss point.
-///
-/// The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
-/// `le` (`≤`), `lt` (`<`) — same rules as `pyrucast.mesh.select`. There is
-/// **no** AND across components here: each value stands on its own.
-///
-/// `components=None` tests every component. A `components` list tests only
-/// those; the others stay at `1.0` (identity for the product), and a zone
-/// missing a listed component is left all-`1.0`. Errors if no bound is given,
-/// or the lower one exceeds the upper.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
-#[allow(clippy::too_many_arguments)]
-pub fn mask(
-    py: Python<'_>,
-    field: &Bound<'_, PyAny>,
-    ge: Option<f64>,
-    gt: Option<f64>,
-    le: Option<f64>,
-    lt: Option<f64>,
-    components: Option<Vec<String>>,
-) -> PyResult<Py<PyAny>> {
-    use crate::ops::field as ops;
-    let band = ops::Band::new(ge, gt, le, lt)?;
-    if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
-        let out = ops::mask_nodes(&f.inner, &band, components)?;
-        Ok(Py::new(py, PyNodeField { inner: out })?.into_any())
-    } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
-        let out = ops::mask_cells(&f.inner, &band, components)?;
-        Ok(Py::new(py, PyElementField { inner: out })?.into_any())
-    } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        let out = ops::mask_sub_nodes(&*read(&f.handle)?, &band, components);
-        Ok(Py::new(
-            py,
-            PySubNodeField {
-                handle: insert(out),
-            },
-        )?
-        .into_any())
-    } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        let out = ops::mask_sub_cells(&*read(&f.handle)?, &band, components);
-        Ok(Py::new(
-            py,
-            PySubElementField {
-                handle: insert(out),
-            },
-        )?
-        .into_any())
-    } else {
-        Err(PyTypeError::new_err(
-            "expected a NodeField, SubNodeField, ElementField or SubElementField",
-        ))
-    }
-}
-
-/// Keep only the named `components` of a field, zone by zone — Cast3M's `EXCO`
-/// (component extraction).
-///
-/// `components` is a single name or a list of names; a list `model.primal_vars()`
-/// is the intended input (strip a `solve` result of its dual/Lagrange unknowns).
-/// In each zone the requested components are kept in the zone's **own** order;
-/// a zone carrying **none** of them is dropped, and a zone carrying **only**
-/// requested components has its sub-field **shared** (handle copied, not
-/// duplicated). Names the field does not carry are ignored; errors if no zone
-/// carries any of `components`.
-///
-/// Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`
-/// and returns the same flavour.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn filter_components(
-    py: Python<'_>,
-    field: &Bound<'_, PyAny>,
-    components: &Bound<'_, PyAny>,
-) -> PyResult<Py<PyAny>> {
-    use crate::containers::field::{Field, SubField};
-    let wanted = extract_names(components)?;
-    if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
-        let inner = f.inner.filter_components(wanted.as_slice())?;
-        return Ok(Py::new(py, PyNodeField { inner })?.into_any());
-    }
-    if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
-        let inner = f.inner.filter_components(wanted.as_slice())?;
-        return Ok(Py::new(py, PyElementField { inner })?.into_any());
-    }
-    if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        let out = read(&f.handle)?.select_components(wanted.as_slice())?;
-        return Ok(Py::new(
-            py,
-            PySubNodeField {
-                handle: insert(out),
-            },
-        )?
-        .into_any());
-    }
-    if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        let out = read(&f.handle)?.select_components(wanted.as_slice())?;
-        return Ok(Py::new(
-            py,
-            PySubElementField {
-                handle: insert(out),
-            },
-        )?
-        .into_any());
-    }
-    Err(PyTypeError::new_err(
-        "expected a NodeField, SubNodeField, ElementField or SubElementField",
-    ))
-}
-
-/// Rename component `old` to `new` in a field, zone by zone — the renaming half
-/// of Cast3M's `EXCO`. Values are preserved (metadata-only change). A zone
-/// without `old` is carried unchanged; errors if no zone carries `old`, or if a
-/// zone already has a component named `new`.
-///
-/// Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`
-/// and returns the same flavour.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn rename_component(
-    py: Python<'_>,
-    field: &Bound<'_, PyAny>,
-    old: &str,
-    new: &str,
-) -> PyResult<Py<PyAny>> {
-    use crate::containers::field::{Field, SubField};
-    if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
-        let inner = f.inner.rename_component(old, new)?;
-        return Ok(Py::new(py, PyNodeField { inner })?.into_any());
-    }
-    if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
-        let inner = f.inner.rename_component(old, new)?;
-        return Ok(Py::new(py, PyElementField { inner })?.into_any());
-    }
-    if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        let out = read(&f.handle)?.rename_component(old, new)?;
-        return Ok(Py::new(
-            py,
-            PySubNodeField {
-                handle: insert(out),
-            },
-        )?
-        .into_any());
-    }
-    if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        let out = read(&f.handle)?.rename_component(old, new)?;
-        return Ok(Py::new(
-            py,
-            PySubElementField {
-                handle: insert(out),
-            },
-        )?
-        .into_any());
-    }
-    Err(PyTypeError::new_err(
-        "expected a NodeField, SubNodeField, ElementField or SubElementField",
-    ))
-}
-
 /// Node-by-node (or point-by-point) scalar product of two fields — Cast3M's
 /// `PSCA`. Returns a **new field** of the same flavour as the inputs, carrying
 /// a single `"psca"` component whose value at each node/point is `∑_c xᵣ,c·yᵣ,c`
@@ -426,9 +258,9 @@ impl PyNodeField {
         lt: Option<f64>,
         components: Option<Vec<String>>,
     ) -> PyResult<PyNodeField> {
-        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyNodeField {
-            inner: crate::ops::field::mask_nodes(&self.inner, &band, components)?,
+            inner: crate::ops::node_field::mask(&self.inner, &band, components)?,
         })
     }
 
@@ -442,7 +274,7 @@ impl PyNodeField {
         lt: Option<f64>,
         components: Option<Vec<String>>,
     ) -> PyResult<PyMesh> {
-        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyMesh {
             inner: crate::ops::mesh::select_nodes(&self.inner, &band, components)?,
         })
@@ -556,9 +388,9 @@ impl PyElementField {
         lt: Option<f64>,
         components: Option<Vec<String>>,
     ) -> PyResult<PyElementField> {
-        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyElementField {
-            inner: crate::ops::field::mask_cells(&self.inner, &band, components)?,
+            inner: crate::ops::element_field::mask(&self.inner, &band, components)?,
         })
     }
 
@@ -572,7 +404,7 @@ impl PyElementField {
         lt: Option<f64>,
         components: Option<Vec<String>>,
     ) -> PyResult<PyMesh> {
-        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyMesh {
             inner: crate::ops::mesh::select_cells(&self.inner, &band, components)?,
         })
@@ -697,8 +529,8 @@ impl PySubNodeField {
         lt: Option<f64>,
         components: Option<Vec<String>>,
     ) -> PyResult<PySubNodeField> {
-        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
-        let out = crate::ops::field::mask_sub_nodes(&*read(&self.handle)?, &band, components);
+        let band = crate::atoms::Band::new(ge, gt, le, lt)?;
+        let out = crate::ops::node_field::mask_sub(&*read(&self.handle)?, &band, components);
         Ok(PySubNodeField {
             handle: insert(out),
         })
@@ -714,7 +546,7 @@ impl PySubNodeField {
         lt: Option<f64>,
         components: Option<Vec<String>>,
     ) -> PyResult<PyMesh> {
-        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyMesh {
             inner: crate::ops::mesh::select_sub_nodes(&*read(&self.handle)?, &band, components)?,
         })
@@ -841,8 +673,8 @@ impl PySubElementField {
         lt: Option<f64>,
         components: Option<Vec<String>>,
     ) -> PyResult<PySubElementField> {
-        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
-        let out = crate::ops::field::mask_sub_cells(&*read(&self.handle)?, &band, components);
+        let band = crate::atoms::Band::new(ge, gt, le, lt)?;
+        let out = crate::ops::element_field::mask_sub(&*read(&self.handle)?, &band, components);
         Ok(PySubElementField {
             handle: insert(out),
         })
@@ -858,7 +690,7 @@ impl PySubElementField {
         lt: Option<f64>,
         components: Option<Vec<String>>,
     ) -> PyResult<PyMesh> {
-        let band = crate::ops::field::Band::new(ge, gt, le, lt)?;
+        let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyMesh {
             inner: crate::ops::mesh::select_sub_cells(&*read(&self.handle)?, &band, components)?,
         })

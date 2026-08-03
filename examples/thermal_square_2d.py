@@ -69,7 +69,7 @@ def main() -> None:
 
     # ── Dirichlet T = 20 sur le bord droit (x = 1) ───────────────────────────
     right_nodes = [grid[idx(N, j)] for j in range(N + 1)]
-    imposed = pyrucast.mesh.poi1_from_nodes(right_nodes)
+    imposed = pyrucast.Mesh.poi1_from_nodes(right_nodes)
     multiplier = pyrucast.mesh.barycenter(imposed)
     mults = [multiplier.node(0, j, 0) for j in range(N + 1)]
     model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
@@ -91,7 +91,7 @@ def main() -> None:
     source = pyrucast.node_field.flux(left_fes[0], Q, "q")
 
     # Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
-    imposed_mesh = pyrucast.mesh.poi1_from_nodes(mults)
+    imposed_mesh = pyrucast.Mesh.poi1_from_nodes(mults)
     imposed_load = pyrucast.NodeField(imposed_mesh, ["imposed_T"])
     for m in mults:
         imposed_load[0].set_value(m, "imposed_T", T_IMPOSED)

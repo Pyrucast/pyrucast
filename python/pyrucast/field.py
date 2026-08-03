@@ -1,8 +1,14 @@
 """Opérateurs polymorphes entre sortes de champ — miroir de ``ops::field``.
 
-Ce qui rend un champ de la même sorte que celui reçu : masque de bande,
-filtrage et renommage de composantes, produit scalaire point-à-point, et les
-fonctions scalaires élément par élément (abs, sqrt, exp, trigonométrie…).
+Les opérateurs **génériques** : ceux dont le produit est un conteneur, mais pas
+un conteneur déterminé — il dépend de l'argument. Les fonctions scalaires
+élément par élément (abs, sqrt, exp, trigonométrie…) et le produit scalaire
+point-à-point ``psca``.
+
+Le masque de bande n'est plus ici : ``mask`` a un produit déterminé, c'est deux
+fonctions, et elles vivent dans ``node_field`` et ``element_field``. Le
+filtrage et le renommage de composantes non plus : ce sont des méthodes du
+champ (``f.filter_components([...])``, ``f.rename_component(a, b)``).
 """
 
 from ._pyrucast import (
@@ -10,12 +16,9 @@ from ._pyrucast import (
     cos as cos,
     cosh as cosh,
     exp as exp,
-    filter_components as filter_components,
     log as log,
     log10 as log10,
-    mask as mask,
     psca as psca,
-    rename_component as rename_component,
     sin as sin,
     sinh as sinh,
     sqrt as sqrt,
@@ -28,12 +31,9 @@ __all__ = [
     "cos",
     "cosh",
     "exp",
-    "filter_components",
     "log",
     "log10",
-    "mask",
     "psca",
-    "rename_component",
     "sin",
     "sinh",
     "sqrt",

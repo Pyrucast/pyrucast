@@ -11,12 +11,12 @@
 //! pas dépendre d'un opérateur, et Rust autorise un `impl` inhérent dans
 //! n'importe quel module de la crate de définition.
 
+use crate::atoms::Band;
 use crate::atoms::ElementType;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
-use crate::ops::field::Band;
 
 impl Mesh {
     /// Voir [`mesh::barycenter`](fn@crate::ops::mesh::barycenter).

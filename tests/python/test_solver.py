@@ -20,8 +20,8 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", 1.0)
 
-    imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    imposed_right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+    imposed_left = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+    imposed_right = pyrucast.Mesh.poi1_from_nodes([nodes[-1]])
     mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
     mult_mesh_right = pyrucast.mesh.barycenter(imposed_right)
     left = pyrucast.Model.dirichlet("T", "q", imposed_left, mult_mesh_left)
@@ -94,7 +94,7 @@ def test_solver_with_nonzero_neumann():
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", 2.0)
 
-    imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
+    imposed_left = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
     mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
     left = pyrucast.Model.dirichlet("T", "q", imposed_left, mult_mesh_left)
     mult_left = mult_mesh_left.node(0, 0, 0)

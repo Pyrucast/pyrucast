@@ -57,7 +57,7 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
 use crate::store::{insert, read};
 
-use crate::ops::field::band::Band;
+use crate::atoms::Band;
 
 /// Indices, into a zone's component list, of the components to test.
 ///

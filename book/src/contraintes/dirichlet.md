@@ -88,8 +88,8 @@ for i in range(4):
 fes = pyrucast.FiniteElementSpace(mesh)
 
 # 2) Supports de multiplicateurs : barycenter colocalise des nœuds neufs.
-imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-imposed_right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+imposed_left = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+imposed_right = pyrucast.Mesh.poi1_from_nodes([nodes[-1]])
 mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
 mult_mesh_right = pyrucast.mesh.barycenter(imposed_right)
 left = pyrucast.Model.dirichlet("T", "q", imposed_left, mult_mesh_left)

@@ -70,7 +70,7 @@ ANDERSON_DEPTH = 3
 def _plastic_diagnostics(state):
     """(p_max, nombre de points de Gauss plastifiés) — `p > 0` marque un point."""
     p_max = state.max("p")
-    masked = pyrucast.field.mask(state, gt=1e-12, components=["p"])
+    masked = state.mask(gt=1e-12, components=["p"])
     n_plastic = round(masked.sum("p"))
     return p_max, n_plastic
 

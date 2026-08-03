@@ -35,10 +35,16 @@ et les cinématiques (`deformation`, `beam_deformation`, `frame_deformation`,
 nommées, elles n'auraient pas de sens sur un champ quelconque. Même raison pour
 `internal_forces`, qui lit la contrainte de Voigt par nom.
 
+`filter_components` et `rename_component` n'ont **que** la forme méthode
+(`f.filter_components(["u_x"])`, `f.rename_component("U", "DX")`) : un seul
+conteneur, de petits arguments, une vue dérivée — R1 en fait du vocabulaire du
+champ, pas un opérateur. Même chose pour `Mesh.poi1_from_nodes`, constructeur
+nommé donc `classmethod`.
+
 La **complétude du miroir** est elle aussi vérifiée par un test
-(`tests/python/test_mirror_completeness.py`) : il lit les `pub use` des
-`src/ops/*/mod.rs` et échoue si un opérateur Rust n'a pas de binding Python.
-Les dérogations y vivent avec leur raison.
+(`tests/python/test_mirror_completeness.py`), **dans les deux sens** : aucun
+opérateur Rust sans binding Python, et aucune fonction Python sans opérateur
+Rust. Les dérogations y vivent avec leur raison.
 
 > Source de vérité : le `#[pymodule]` de `src/lib.rs` (enregistrement des
 > classes et fonctions) et le stub `pyrucast.pyi` (signatures typées).
@@ -152,6 +158,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |
+| `mask(field: &NodeField, band: &Band, …) -> NodeField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> NodeField` (champ `0/1` de même structure ; sucre `field >= x`). Accepte aussi un `SubNodeField` |
 | `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
 | `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(stresses, model) -> NodeField` |
 | `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
@@ -178,6 +185,7 @@ par la sortie.
 | `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `beam_deformation(field, fespace) -> ElementField` |
 | `frame_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `frame_deformation(field, fespace) -> ElementField` (portique orienté : `eps, kappa, gamma` en 2-D, `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` en 3-D) |
 | `consolidate(field: &ElementField) -> ElementField` | `consolidate(field) -> ElementField` (fusionne les zones d'une même fespace) |
+| `mask(field: &ElementField, band: &Band, …) -> ElementField` | `mask(field, ge=None, …) -> ElementField` ; accepte aussi un `SubElementField` |
 | `sub_material_field(sub: &SubModel, pairs: &[(&str, f64)]) -> SubElementField` | `sub_material_field(sub_model, components_and_values) -> SubElementField` |
 | `material_field(model: &Model, pairs: &[(&str, f64)]) -> ElementField` | `material_field(model, components_and_values) -> ElementField` |
 | `material_field_per_sub_model(model: &Model, per: &[&[(&str, f64)]]) -> ElementField` | `material_field_per_sub_model(model, components_and_values_per_sub_model) -> ElementField` |
@@ -192,18 +200,16 @@ par la sortie.
 | `SubField::xtx(&self) -> f64` / `Field::xtx(&self) -> f64` | `xtx(x) -> float` (dispatch par type ; `Σ v²`, norme au carré `XTX`) |
 | `SubField::xtx_components(&self, &[&str]) -> Result<f64>` | `xtx(x, components=[…]) -> float` (norme au carré restreinte à ces composantes) |
 
-### `ops::field` — opérateurs polymorphes entre sortes de champ
+### `ops::field` — opérateurs génériques
 
-Ils rendent un champ de la **sorte reçue** : la règle « un module par
-conteneur produit » ne peut pas les placer, ils se rangent donc par domaine.
+Leur produit est un conteneur — toujours — mais **pas un conteneur
+déterminé** : il dépend de l'argument. La règle « un module par conteneur
+produit » ne désigne donc pas *un* module, et ils se rangent par domaine.
 
 | Rust (`ops::field::…`) | Python (`pyrucast.field.…`) |
 |---|---|
-| `mask_nodes(field: &NodeField, band: &Band, …) -> NodeField` / `mask_cells(field: &ElementField, …) -> ElementField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> field` (dispatch par type ; champ `0/1` de même structure). Sucre : `field >= x` / `> x` / `<= x` / `< x` → masque |
-| `Field::filter_components(&self, wanted: &[String]) -> Self` / `SubField::select_components(&self, wanted) -> Self` | `filter_components(field, components) -> field` (dispatch par type ; `components` est un `str` ou une liste — p. ex. `model.primal_vars()` ; `EXCO`) |
-| `Field::rename_component(&self, from, to) -> Self` / `SubField::rename_component(&self, from, to) -> Self` | `rename_component(field, old, new) -> field` (dispatch par type ; renommage sans déplacement de valeur) |
-| `SubField::pscal(&self, other) -> Self` / `Field::pscal_field(&self, other) -> Self` | `psca(x, y) -> field` (dispatch par type ; produit scalaire **nœud par nœud**, champ à une composante `"psca"`) |
-| `abs` / `sqrt` / `exp` / `log` / `log10` / `cos` / `sin` / `tan` / `sinh` / `cosh` / `tanh` `(field) -> Field` | mêmes noms `pyrucast.field.…(field)` — maths **élément par élément** (style numpy), un champ neuf du même type ; acceptent les quatre saveurs de champ (`NodeField` / `SubNodeField` / `ElementField` / `SubElementField`). Résultats non bornés : `log` de ≤ 0 → `-inf`/`nan` |
+| `psca<T: Pscal>(x: &T, y: &T) -> T` | `psca(x, y) -> field` (produit scalaire **nœud par nœud**, champ à une composante `"psca"`). Deux conteneurs en pairs et opération symétrique : fonction libre **seule**, pas de méthode |
+| `abs` / `sqrt` / `exp` / `log` / `log10` / `cos` / `sin` / `tan` / `sinh` / `cosh` / `tanh` `<T: MapValues>(field: &T) -> T` | mêmes noms `pyrucast.field.…(field)` — maths **élément par élément** (style numpy), un champ neuf du même type ; acceptent les quatre saveurs de champ (`NodeField` / `SubNodeField` / `ElementField` / `SubElementField`). Résultats non bornés : `log` de ≤ 0 → `-inf`/`nan` |
 
 > La composition de zones passe par l'**union** (`|` Python / `union` Rust) ;
 > l'arithmétique champ + scalaire **et** champ + champ par les **opérateurs**

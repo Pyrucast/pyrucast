@@ -26,7 +26,7 @@ def _poi1_field(values, components):
 
 def test_filter_single_name_keeps_only_it():
     f, _ = _poi1_field([[1.0, 2.0, 3.0]], components=("U", "V", "W"))
-    g = pyrucast.field.filter_components(f, "V")
+    g = f.filter_components("V")
     assert isinstance(g, pyrucast.NodeField)
     assert g.components() == ["V"]
     assert g[0].get(0, 0) == 2.0
@@ -35,7 +35,7 @@ def test_filter_single_name_keeps_only_it():
 def test_filter_list_keeps_subset_in_field_order():
     f, _ = _poi1_field([[1.0, 2.0, 3.0]], components=("U", "V", "W"))
     # Request order does not matter — the field's own order is kept.
-    g = pyrucast.field.filter_components(f, ["W", "U"])
+    g = f.filter_components(["W", "U"])
     assert g.components() == ["U", "W"]
     assert g[0].get(0, 0) == 1.0
     assert g[0].get(0, 1) == 3.0
@@ -46,7 +46,7 @@ def test_filter_accepts_superset_like_primal_vars():
     f, _ = _poi1_field([[1.0, 2.0, 9.0]], components=("u_x", "u_y", "lambda"))
     # Passing a list that names components the field lacks (as primal_vars may)
     # is fine — the extras are ignored, the dual is stripped.
-    g = pyrucast.field.filter_components(f, ["u_x", "u_y", "T"])
+    g = f.filter_components(["u_x", "u_y", "T"])
     assert g.components() == ["u_x", "u_y"]
 
 
@@ -55,7 +55,7 @@ def test_filter_no_op_returns_equivalent_field():
     # ignored): the filter is a no-op and returns the same components/values.
     # The handle-sharing optimization is checked at the Rust level.
     f, _ = _poi1_field([[1.0, 2.0]], components=("u_x", "u_y"))
-    g = pyrucast.field.filter_components(f, ["u_x", "u_y", "lambda"])
+    g = f.filter_components(["u_x", "u_y", "lambda"])
     assert g.components() == ["u_x", "u_y"]
     assert g[0].get(0, 0) == 1.0
     assert g[0].get(0, 1) == 2.0
@@ -64,7 +64,7 @@ def test_filter_no_op_returns_equivalent_field():
 def test_filter_none_present_errors():
     f, _ = _poi1_field([[1.0]], components=("T",))
     with pytest.raises(RuntimeError):
-        pyrucast.field.filter_components(f, ["nope"])
+        f.filter_components(["nope"])
 
 
 # ─── rename_component() ──────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ def test_filter_none_present_errors():
 
 def test_rename_preserves_values():
     f, _ = _poi1_field([[5.0, 6.0]], components=("U", "V"))
-    g = pyrucast.field.rename_component(f, "U", "DX")
+    g = f.rename_component("U", "DX")
     assert g.components() == ["DX", "V"]
     assert g[0].get(0, 0) == 5.0
     assert g[0].get(0, 1) == 6.0
@@ -81,13 +81,13 @@ def test_rename_preserves_values():
 def test_rename_absent_source_errors():
     f, _ = _poi1_field([[1.0]], components=("T",))
     with pytest.raises(RuntimeError):
-        pyrucast.field.rename_component(f, "nope", "X")
+        f.rename_component("nope", "X")
 
 
 def test_rename_collision_errors():
     f, _ = _poi1_field([[1.0, 2.0]], components=("U", "V"))
     with pytest.raises(RuntimeError):
-        pyrucast.field.rename_component(f, "U", "V")
+        f.rename_component("U", "V")
 
 
 # ─── __getitem__ sugar (numpy/pandas-style) ─────────────────────────────────
@@ -129,10 +129,10 @@ def test_getitem_unknown_component_raises():
 def test_filter_and_rename_on_subnodefield():
     f, _ = _poi1_field([[1.0, 2.0, 3.0]], components=("U", "V", "W"))
     sub = f[0]
-    g = pyrucast.field.filter_components(sub, ["U", "W"])
+    g = sub.filter_components(["U", "W"])
     assert isinstance(g, pyrucast.SubNodeField)
     assert g.components() == ["U", "W"]
-    r = pyrucast.field.rename_component(sub, "V", "VV")
+    r = sub.rename_component("V", "VV")
     assert r.components() == ["U", "VV", "W"]
 
 

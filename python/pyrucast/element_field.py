@@ -7,6 +7,7 @@ et intégration de la loi de comportement.
 """
 
 from ._pyrucast import (
+    mask_element as mask,
     beam_deformation as beam_deformation,
     consolidate_element as consolidate,
     deformation as deformation,
@@ -21,6 +22,7 @@ from ._pyrucast import (
 )
 
 __all__ = [
+    "mask",
     "beam_deformation",
     "consolidate",
     "deformation",

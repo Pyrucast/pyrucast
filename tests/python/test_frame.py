@@ -6,7 +6,7 @@ import pyrucast
 
 
 def _clamp(node, var, dual):
-    imposed = pyrucast.mesh.poi1_from_nodes([node])
+    imposed = pyrucast.Mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 

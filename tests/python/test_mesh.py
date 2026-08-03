@@ -21,14 +21,14 @@ def test_poi1_from_nodes_builds_points_mesh():
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     # Node-based: the Coords is taken from the nodes themselves.
-    m = pyrucast.mesh.poi1_from_nodes([a, b])
+    m = pyrucast.Mesh.poi1_from_nodes([a, b])
     assert m.element_types() == ["POI1"]
     assert m.cell_count() == 2
 
 
 def test_poi1_from_nodes_empty_raises():
     try:
-        pyrucast.mesh.poi1_from_nodes([])
+        pyrucast.Mesh.poi1_from_nodes([])
     except RuntimeError:
         pass
     else:
@@ -80,15 +80,15 @@ def test_aggregate_union_sub_and_sub_union_sub():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
-    s1 = pyrucast.mesh.poi1_from_nodes([a])[0]  # a PySubMesh
-    s2 = pyrucast.mesh.poi1_from_nodes([b])[0]
+    s1 = pyrucast.Mesh.poi1_from_nodes([a])[0]  # a PySubMesh
+    s2 = pyrucast.Mesh.poi1_from_nodes([b])[0]
 
     # sub + sub → Mesh
     m = s1 | s2
     assert len(m) == 2
 
     # mesh + sub → Mesh
-    s3 = pyrucast.mesh.poi1_from_nodes([a])[0]
+    s3 = pyrucast.Mesh.poi1_from_nodes([a])[0]
     m2 = m | s3
     assert len(m2) == 3
 
@@ -566,7 +566,7 @@ def _mesh_with_n_zones(n):
     """A Mesh of `n` single-node POI1 zones sharing the same Coords."""
     c = pyrucast.Coords(2)
     subs = [
-        pyrucast.mesh.poi1_from_nodes([c.add_node([float(i), 0.0])])[0]
+        pyrucast.Mesh.poi1_from_nodes([c.add_node([float(i), 0.0])])[0]
         for i in range(n)
     ]
     mesh = subs[0]

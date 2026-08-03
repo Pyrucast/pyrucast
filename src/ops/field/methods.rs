@@ -12,13 +12,12 @@
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
-use crate::ops::field::Band;
 
-/// Génère, pour une saveur de champ, les onze maths élémentaires et le masque
-/// de bande. `mask` a deux formes côté opérateur — faillible sur un agrégat,
-/// infaillible sur une zone — d'où le marqueur en dernier paramètre.
+/// Génère, pour une saveur de champ, les onze maths élémentaires. Le masque
+/// n'est plus ici : `mask` produit un conteneur déterminé, il a donc rejoint
+/// `ops::node_field` et `ops::element_field`.
 macro_rules! field_methods {
-    ($T:ty, $mask:ident, $wrap:ident) => {
+    ($T:ty) => {
         impl $T {
             /// Valeur absolue, voir [`field::abs`](fn@crate::ops::field::abs).
             pub fn abs(&self) -> Result<Self> {
@@ -64,24 +63,11 @@ macro_rules! field_methods {
             pub fn tanh(&self) -> Result<Self> {
                 crate::ops::field::tanh(self)
             }
-
-            /// Masque 0/1 sur une bande de valeurs — voir
-            /// [`field::mask_nodes`](fn@crate::ops::field::mask_nodes) et ses
-            /// variantes.
-            pub fn mask(&self, band: &Band, components: Option<Vec<String>>) -> Result<Self> {
-                field_methods!(@$wrap $mask, self, band, components)
-            }
         }
-    };
-    (@fallible $mask:ident, $s:expr, $band:expr, $components:expr) => {
-        crate::ops::field::$mask($s, $band, $components)
-    };
-    (@infallible $mask:ident, $s:expr, $band:expr, $components:expr) => {
-        Ok(crate::ops::field::$mask($s, $band, $components))
     };
 }
 
-field_methods!(NodeField, mask_nodes, fallible);
-field_methods!(ElementField, mask_cells, fallible);
-field_methods!(SubNodeField, mask_sub_nodes, infallible);
-field_methods!(SubElementField, mask_sub_cells, infallible);
+field_methods!(NodeField);
+field_methods!(ElementField);
+field_methods!(SubNodeField);
+field_methods!(SubElementField);

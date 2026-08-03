@@ -1204,6 +1204,41 @@ impl MapValues for ElementField {
     }
 }
 
+/// Node-by-node scalar product, uniform over the four field flavours.
+///
+/// The same shape as [`MapValues`]: a small primitive that lets the operator
+/// [`psca`](fn@crate::ops::field::psca) be written once, generically, instead
+/// of dispatching over four types. `pscal` (zone) and `pscal_field`
+/// (aggregate) do the work; this trait only unifies their names.
+pub trait Pscal: Sized {
+    /// A new field of the same flavour, carrying the single `"psca"` component.
+    fn pscal_with(&self, other: &Self) -> Result<Self>;
+}
+
+impl Pscal for SubNodeField {
+    fn pscal_with(&self, other: &Self) -> Result<Self> {
+        self.pscal(other)
+    }
+}
+
+impl Pscal for SubElementField {
+    fn pscal_with(&self, other: &Self) -> Result<Self> {
+        self.pscal(other)
+    }
+}
+
+impl Pscal for NodeField {
+    fn pscal_with(&self, other: &Self) -> Result<Self> {
+        self.pscal_field(other)
+    }
+}
+
+impl Pscal for ElementField {
+    fn pscal_with(&self, other: &Self) -> Result<Self> {
+        self.pscal_field(other)
+    }
+}
+
 /// Fold `op` over one component across every sub that defines it.
 fn fold_subs<A>(agg: &A, component: &str, op_name: &str, op: fn(f64, f64) -> f64) -> Result<f64>
 where

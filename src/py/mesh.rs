@@ -318,6 +318,22 @@ impl PyMesh {
         Ok(PyNode::from_node(node))
     }
 
+    /// A points (POI1) mesh with one point per node in `nodes`.
+    ///
+    /// The `Coords` comes from the nodes themselves — every `Node` carries its
+    /// own — so no `Coords` argument is needed. A **named constructor**, hence
+    /// a classmethod: it builds its own type, from atoms.
+    #[classmethod]
+    fn poi1_from_nodes(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        nodes: Vec<PyRef<PyNode>>,
+    ) -> PyResult<PyMesh> {
+        let ns: Vec<crate::atoms::Node> = nodes.iter().map(|n| n.as_node().clone()).collect();
+        Ok(PyMesh {
+            inner: crate::containers::mesh::Mesh::poi1_from_nodes(&ns)?,
+        })
+    }
+
     /// The mesh node closest (Euclidean distance) to `point`.
     ///
     /// `point` must have the mesh coordinate dimension. Only nodes referenced

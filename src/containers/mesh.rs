@@ -614,6 +614,17 @@ impl Mesh {
         self.iter().map(|sm| Ok(read(sm)?.cell_count())).collect()
     }
 
+    /// A POI1 mesh holding exactly `nodes` — the named constructor of a point
+    /// cloud from atoms.
+    ///
+    /// The parent-level form of
+    /// [`SubMesh::poi1_from_nodes`](SubMesh::poi1_from_nodes), which the
+    /// aggregate rule asks for: a named constructor lives on the parent and
+    /// returns a parent.
+    pub fn poi1_from_nodes(nodes: &[Node]) -> Result<Mesh> {
+        Ok(Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?))
+    }
+
     /// The mesh node closest (Euclidean distance) to `point`.
     ///
     /// `point` must have the mesh `Coords` spatial dimension. Only nodes

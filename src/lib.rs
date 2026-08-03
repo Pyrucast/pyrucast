@@ -98,7 +98,6 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_eliminate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_unilateral, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::from_live_nodes, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::mesh::poi1_from_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::line, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::circle, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::arc, m)?)?;
@@ -145,9 +144,8 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::node_field::restrict, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::restrict_like, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::select, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::mask, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::filter_components, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::field::rename_component, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::mask, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::mask, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::merge, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::gradient, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::deformation, m)?)?;

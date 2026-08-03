@@ -1,6 +1,11 @@
-//! Value-range predicate shared by [`select`](crate::ops::mesh::select_nodes) and
-//! [`mask`](super::mask): a `[lower, upper]` band whose two sides are each
+//! Value-range predicate: a `[lower, upper]` band whose two sides are each
 //! open, inclusive (`>=` / `<=`), or strict (`>` / `<`).
+//!
+//! An atom by the usual test — no part of a band is a band — and it lives here
+//! rather than with one of its users because it has several, in different
+//! modules: [`node_field::mask`](fn@crate::ops::node_field::mask),
+//! [`element_field::mask`](fn@crate::ops::element_field::mask) and
+//! [`mesh::select_nodes`](crate::ops::mesh::select_nodes).
 //!
 //! Built from the four comparison bounds `ge` / `gt` / `le` / `lt` — one
 //! lower bound (`ge` **or** `gt`) and one upper (`le` **or** `lt`), mirroring

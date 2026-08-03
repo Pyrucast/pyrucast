@@ -22,7 +22,7 @@ NX, NY, L, H = 4, 2, 4.0, 1.0
 
 
 def _clamp(nodes, var, dual):
-    imposed = pc.mesh.poi1_from_nodes(nodes)
+    imposed = pc.Mesh.poi1_from_nodes(nodes)
     multiplier = pc.mesh.barycenter(imposed)
     return pc.Model.dirichlet(var, dual, imposed, multiplier)
 
@@ -59,7 +59,7 @@ def test_step_by_step_free_thermal_expansion():
     # Thermique : chaque nœud gauche+droit épinglé à T_HOT (un multiplicateur par
     # nœud via `translate` ⇒ température uniforme, pas seulement en moyenne).
     th_nodes = left + right
-    th_imposed = pc.mesh.poi1_from_nodes(th_nodes)
+    th_imposed = pc.Mesh.poi1_from_nodes(th_nodes)
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
     thermal_dir = pc.Model.dirichlet("T", "q", th_imposed, th_mult)
 
@@ -148,7 +148,7 @@ def test_step_by_step_returns_history_per_time():
     left = [grid[idx(0, j)] for j in range(NY + 1)]
     bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
 
-    th_imposed = pc.mesh.poi1_from_nodes(
+    th_imposed = pc.Mesh.poi1_from_nodes(
         left + [grid[idx(NX, j)] for j in range(NY + 1)]
     )
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])

@@ -1,30 +1,29 @@
-//! Operators that are **polymorphic over the field flavour** — they take
-//! any field and give back one of the *same* kind.
+//! **Generic** operators over the field flavour — they take any field and give
+//! back one of the *same* kind.
 //!
-//! Their product is their argument's own type, so the "one module per
-//! produced container" rule cannot place them: `mask` on a `NodeField`
-//! yields a `NodeField`, on an `ElementField` an `ElementField`. They are
-//! therefore grouped by **domain** rather than by product — the third case of
-//! the rule, alongside "one module per produced container" and "grouped by
-//! activity when nothing is produced".
+//! Their product is a container — always — but not a *determined* one: `abs`
+//! yields a `NodeField` or an `ElementField` depending on what it is given, so
+//! the "one module per produced container" rule does not select a module. They
+//! are therefore grouped by **domain**, the third case of the rule, alongside
+//! "one module per produced container" and "grouped by activity when nothing
+//! is produced".
 //!
-//! They are full-fledged free functions, and each also carries a method on the
-//! four field flavours (`f.sqrt()`, `f.mask(ge=…)`), like any other operator
-//! meeting the three conditions.
+//! Beware the false friend: two **monomorphic** functions of one family each
+//! have a determined product and file normally. `mask` used to live here for
+//! that mistaken reason; it is really two functions, and they now sit in
+//! [`node_field::mask`](fn@crate::ops::node_field::mask) and
+//! [`element_field::mask`](fn@crate::ops::element_field::mask). Only genuinely
+//! generic code (`pub fn f<T: MapValues>(x: &T) -> Result<T>`) belongs here.
 //!
-//! - [`Band`] — the shared `ge`/`gt`/`le`/`lt` comparison band;
-//! - [`mask_nodes`](fn@mask_nodes) & co. — 0/1 indicator of the same shape
-//!   (Cast3M `MASQUE`). Its sibling
-//!   [`select`](crate::ops::mesh::select_nodes), which extracts the passing
-//!   *support* instead of rewriting the values, produces a `Mesh` and lives
-//!   with the mesh operators;
-//! - the element-wise scalar maths ([`abs`](fn@abs), [`sqrt`](fn@sqrt), …).
+//! What is left is the element-wise scalar maths ([`abs`](fn@abs),
+//! [`sqrt`](fn@sqrt), …) and [`psca`](fn@psca), one generic function each.
+//! The maths carry a method on the four flavours (`f.sqrt()`); `psca` does
+//! not — it takes two containers as peers and is symmetric, so it is a free
+//! function only, like `merge`.
 
-pub mod band;
 pub mod elementwise;
-pub mod mask;
 pub mod methods;
+pub mod psca;
 
-pub use band::Band;
 pub use elementwise::{abs, cos, cosh, exp, log, log10, sin, sinh, sqrt, tan, tanh};
-pub use mask::{mask_cells, mask_nodes, mask_sub_cells, mask_sub_nodes};
+pub use psca::psca;

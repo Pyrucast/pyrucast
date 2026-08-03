@@ -49,10 +49,16 @@ RUST_ONLY = {
     "assemble_kind": "moteur commun des assembleurs, pas une opération d'usage",
     "select_sub_cells": "les vues `Sub*` passent par le dispatch de `select`",
     "select_sub_nodes": "les vues `Sub*` passent par le dispatch de `select`",
-    "mask_sub_cells": "les vues `Sub*` passent par le dispatch de `mask`",
-    "mask_sub_nodes": "les vues `Sub*` passent par le dispatch de `mask`",
-    "mask_cells": "dispatch par type dans `field.mask`",
-    "mask_nodes": "dispatch par type dans `field.mask`",
+    "mask_sub": "les vues `Sub*` passent par le dispatch de `mask`",
+    # Les six écritures VTK typées sont derrière l'unique `export.export_vtk`,
+    # qui choisit selon ce qu'on lui passe (maillage, champ nodal, champ par
+    # éléments) et selon la présence d'un chemin.
+    "write_vtk_mesh": "dispatch dans `export.export_vtk`",
+    "write_vtk_node_field": "dispatch dans `export.export_vtk`",
+    "write_vtk_element_field": "dispatch dans `export.export_vtk`",
+    "vtk_mesh_string": "variante « vers une chaîne », non exposée",
+    "vtk_node_field_string": "variante « vers une chaîne », non exposée",
+    "vtk_element_field_string": "variante « vers une chaîne », non exposée",
     "select_cells": "dispatch par type dans `mesh.select`",
     "select_nodes": "dispatch par type dans `mesh.select`",
     "integral_element": "dispatch par type dans `measure.integral`",
@@ -96,17 +102,17 @@ def rust_exports():
     """
     for module, root in module_roots():
         text = root.read_text()
-        for line in text.splitlines():
-            m = re.match(r"pub use \w+::(?:\{(.+)\}|(\w+));", line.strip())
-            if m:
-                names = m.group(1) or m.group(2)
-                for name in (n.strip() for n in names.split(",")):
-                    if name and name[0].islower():
-                        yield module, name
-                continue
-            m = re.match(r"pub fn (\w+)", line)
-            if m:
-                yield module, m.group(1)
+        # `pub use sous_module::{a, b};` — éventuellement sur plusieurs lignes,
+        # ce que rustfmt fait dès que la liste dépasse la largeur. Un balayage
+        # ligne à ligne les rate en silence : c'est ainsi que toute la famille
+        # `points_*` est restée invisible à ce test.
+        for m in re.finditer(r"pub use \w+::(?:\{(.*?)\}|(\w+));", text, re.S):
+            names = m.group(1) or m.group(2)
+            for name in (n.strip() for n in names.split(",")):
+                if name and name[0].islower():
+                    yield module, name
+        for m in re.finditer(r"^pub fn (\w+)", text, re.M):
+            yield module, m.group(1)
         if module == "solver":
             for name in SOLVER_ENTRY_POINTS:
                 yield module, name
@@ -134,6 +140,65 @@ def test_rust_only_entries_are_documented_and_real():
         assert reason.strip(), f"{fn} : dérogation sans raison écrite"
     stale = [fn for fn in RUST_ONLY if fn not in names and fn[0].islower()]
     assert not stale, f"dérogations périmées, ces fonctions n'existent plus : {stale}"
+
+
+# Fonctions Python sans fonction libre Rust homonyme, avec la raison. Le sens
+# Rust → Python ne suffit pas : `filter_components` et `rename_component` sont
+# restées longtemps en fonction libre Python alors que Rust n'avait que la
+# méthode — l'asymétrie que la convention interdit, invisible au balayage
+# ci-dessus. Les deux ont depuis été retirées.
+PYTHON_ONLY = {
+    "set_swap_dir": "configuration du store, pas un opérateur",
+    "swap_dir": "configuration du store, pas un opérateur",
+    "mask_node": "nom plat de `node_field.mask` (namespace `_pyrucast` plat)",
+    "mask_element": "nom plat de `element_field.mask`",
+    "consolidate_mesh": "nom plat de `mesh.consolidate`",
+    "consolidate_node": "nom plat de `node_field.consolidate`",
+    "consolidate_element": "nom plat de `element_field.consolidate`",
+    "set_coordinates": "nom plat de `coords.set`",
+    "select": "dispatch par type sur `mesh::select_nodes` / `select_cells`",
+    "integral": "dispatch par type sur `measure::integral` / `integral_element`",
+    "integrate_behavior": "nom qualifié de `element_field::behavior::integrate`",
+    "solve_eliminate": "nom qualifié de `solver::eliminate::solve`",
+    "solve_unilateral": "nom qualifié de `solver::unilateral::solve`",
+    "export_vtk": "nom qualifié de `export::vtk::write`",
+    "xtx": "primitive du trait `Field`, exposée en opérateur de réduction",
+    "xty": "primitive du trait `Field`, exposée en opérateur de réduction",
+}
+
+
+def python_free_functions():
+    """(module, nom) des fonctions libres exposées par les sous-modules Python."""
+    for module, _ in module_roots():
+        py_module = getattr(pyrucast, module, None)
+        if py_module is None:
+            continue
+        for name in getattr(py_module, "__all__", []):
+            yield module, name
+
+
+def test_every_python_function_has_a_rust_operator():
+    """Le miroir dans l'autre sens : pas de fonction Python sans opérateur Rust.
+
+    C'est le sens que le premier balayage ne couvre pas, et par lequel
+    `filter_components` / `rename_component` ont survécu en double forme.
+    """
+    rust = {name for _, name in rust_exports()}
+    orphans = [
+        f"pyrucast.{module}.{name}"
+        for module, name in python_free_functions()
+        if name not in rust and name not in PYTHON_ONLY
+    ]
+    assert not orphans, (
+        "fonctions Python sans fonction libre Rust — soit l'opérateur manque "
+        "côté Rust, soit c'est une méthode déguisée en fonction :\n  "
+        + "\n  ".join(orphans)
+    )
+
+
+def test_python_only_entries_are_documented():
+    for fn, reason in PYTHON_ONLY.items():
+        assert reason.strip(), f"{fn} : dérogation sans raison écrite"
 
 
 def test_frame_deformation_is_reachable():

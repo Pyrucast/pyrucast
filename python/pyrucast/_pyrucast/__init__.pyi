@@ -44,7 +44,6 @@ __all__ = [
     "exp",
     "export_vtk",
     "extrude",
-    "filter_components",
     "flux",
     "frame_deformation",
     "from_live_nodes",
@@ -60,7 +59,8 @@ __all__ = [
     "log",
     "log10",
     "lump",
-    "mask",
+    "mask_element",
+    "mask_node",
     "mass",
     "material_field",
     "material_field_per_sub_model",
@@ -69,7 +69,6 @@ __all__ = [
     "orient",
     "pave_surface",
     "pave_volume",
-    "poi1_from_nodes",
     "points_below_plane",
     "points_in_cone",
     "points_in_cylinder",
@@ -84,7 +83,6 @@ __all__ = [
     "psca",
     "read_gmsh",
     "read_gmsh_str",
-    "rename_component",
     "restrict",
     "restrict_like",
     "rotate",
@@ -977,6 +975,15 @@ class Mesh:
     def node(self, submesh_idx: builtins.int, cell_idx: builtins.int, node_idx: builtins.int) -> Node:
         r"""
         The `node_idx`-th node of cell `cell_idx` in submesh `submesh_idx`.
+        """
+    @classmethod
+    def poi1_from_nodes(cls, nodes: typing.Sequence[Node]) -> Mesh:
+        r"""
+        A points (POI1) mesh with one point per node in `nodes`.
+        
+        The `Coords` comes from the nodes themselves — every `Node` carries its
+        own — so no `Coords` argument is needed. A **named constructor**, hence
+        a classmethod: it builds its own type, from atoms.
         """
     def nearest_node(self, point: typing.Sequence[builtins.float]) -> Node:
         r"""
@@ -2888,23 +2895,6 @@ def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: bu
     displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
     """
 
-def filter_components(field: typing.Any, components: typing.Any) -> typing.Any:
-    r"""
-    Keep only the named `components` of a field, zone by zone — Cast3M's `EXCO`
-    (component extraction).
-    
-    `components` is a single name or a list of names; a list `model.primal_vars()`
-    is the intended input (strip a `solve` result of its dual/Lagrange unknowns).
-    In each zone the requested components are kept in the zone's **own** order;
-    a zone carrying **none** of them is dropped, and a zone carrying **only**
-    requested components has its sub-field **shared** (handle copied, not
-    duplicated). Names the field does not carry are ignored; errors if no zone
-    carries any of `components`.
-    
-    Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`
-    and returns the same flavour.
-    """
-
 def flux(fespace: SubFiniteElementSpace, density: typing.Any, component: builtins.str) -> NodeField:
     r"""
     Consistent nodal loads of a distributed flux over `fespace` — the analogue
@@ -3058,26 +3048,38 @@ def lump(matrix: Matrix) -> Matrix:
     diagonal (lumped) mass, conserving the total mass.
     """
 
-def mask(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
+def mask_element(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
     r"""
-    Per-component 0/1 **mask** of a field against a value band — same flavour
-    and same structure as the input (Cast3M's `MASQUE`).
+    Per-component 0/1 **mask** of a field against a value band — same structure
+    as the input (Cast3M `MASQUE`): same zones, same support, same components,
+    only the values are rewritten (`1.0` inside the band, `0.0` outside). The
+    result is therefore multipliable term by term with the input.
     
-    Unlike `pyrucast.mesh.select`, which extracts the passing support into a
-    `Mesh`, `mask` keeps the field's exact shape (zones, support, components)
-    and only rewrites the values: `1.0` where the band holds, `0.0` where it
-    does not — so the result is multipliable term by term with the input
-    (`field * mask(field, ge=0)` zeroes the negatives, component by component).
-    A `NodeField` masks per node, an `ElementField` per Gauss point.
+    Its sibling `pyrucast.mesh.select` extracts the passing *support* instead,
+    and produces a `Mesh`.
     
     The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
-    `le` (`≤`), `lt` (`<`) — same rules as `pyrucast.mesh.select`. There is
-    **no** AND across components here: each value stands on its own.
+    `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
+    stands on its own. `components=None` tests every component; a `components`
+    list tests only those, leaving the others at `1.0` (identity for the
+    product), and a zone missing a listed component is left all-`1.0`.
+    """
+
+def mask_node(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
+    r"""
+    Per-component 0/1 **mask** of a field against a value band — same structure
+    as the input (Cast3M `MASQUE`): same zones, same support, same components,
+    only the values are rewritten (`1.0` inside the band, `0.0` outside). The
+    result is therefore multipliable term by term with the input.
     
-    `components=None` tests every component. A `components` list tests only
-    those; the others stay at `1.0` (identity for the product), and a zone
-    missing a listed component is left all-`1.0`. Errors if no bound is given,
-    or the lower one exceeds the upper.
+    Its sibling `pyrucast.mesh.select` extracts the passing *support* instead,
+    and produces a `Mesh`.
+    
+    The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
+    `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
+    stands on its own. `components=None` tests every component; a `components`
+    list tests only those, leaving the others at `1.0` (identity for the
+    product), and a zone missing a listed component is left all-`1.0`.
     """
 
 def mass(model: Model, materials: ElementField) -> Matrix:
@@ -3192,15 +3194,6 @@ def pave_volume(envelope: Mesh, layers: builtins.int = 1, thickness: typing.Opti
     PYRA5 one and a TET4 one, each present only if non-empty. The pyramids are
     the junction: the layer's inner faces are squares and a tetrahedron has
     none, so without them the mesh could not be conforming.
-    """
-
-def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
-    r"""
-    Build a points (POI1) mesh with one point per node in `nodes`.
-    
-    The Coords is taken from the nodes themselves (every `Node`
-    carries its own), so no Coords argument is needed. Returns a
-    Mesh with a single POI1 submesh; raises if `nodes` is empty.
     """
 
 def points_below_plane(mesh: Mesh, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
@@ -3343,17 +3336,6 @@ def read_gmsh_str(coords: Coords, text: builtins.str) -> dict:
     r"""
     Like `read_gmsh`, but parsing the `.msh` text already held in a string
     instead of reading from a path. Same `dict[str, Mesh]` result.
-    """
-
-def rename_component(field: typing.Any, old: builtins.str, new: builtins.str) -> typing.Any:
-    r"""
-    Rename component `old` to `new` in a field, zone by zone — the renaming half
-    of Cast3M's `EXCO`. Values are preserved (metadata-only change). A zone
-    without `old` is carried unchanged; errors if no zone carries `old`, or if a
-    zone already has a component named `new`.
-    
-    Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`
-    and returns the same flavour.
     """
 
 def restrict(field: NodeField, mesh: Mesh) -> NodeField:

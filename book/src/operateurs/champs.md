@@ -118,7 +118,7 @@ Gauss.
 
 ```python
 # Remet à zéro les valeurs négatives d'un champ, composante par composante.
-positif = champ * pyrucast.field.mask(champ, ge=0.0)
+positif = champ * champ.mask(ge=0.0)
 
 # Sucre : les comparaisons construisent directement un masque.
 positif = champ * (champ >= 0.0)  # même chose
@@ -163,10 +163,10 @@ une composante nommée `new`.
 
 ```python
 # Retire les multiplicateurs de Lagrange d'un résultat de solve.
-u = pyrucast.field.filter_components(solution, model.primal_vars())
+u = solution.filter_components(model.primal_vars())
 
 # Renomme une composante avant export.
-export = pyrucast.field.rename_component(u, "u_x", "DX")
+export = u.rename_component("u_x", "DX")
 ```
 
 **Sucre d'indexation** (façon pandas/numpy) : sur **les quatre saveurs**

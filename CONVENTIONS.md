@@ -111,6 +111,20 @@ appartient au **nom du module**, pas au nom de la fonction, et le module doit
 au lieu de trois fonctions suffixées au même endroit. De même `coords::set`
 face à `node_field::coordinates` qui lit.
 
+### Une limite de R3, à connaître
+
+R3 dit que le qualificatif d'une fonction doit passer dans le nom du module.
+Le remède ne s'applique que si le qualificatif distingue la **sortie** : c'est
+le cas des trois `consolidate`, qui produisent trois conteneurs différents.
+
+`select_nodes` et `select_cells` sont hors de portée : elles produisent toutes
+deux un `Mesh` et vivent donc toutes deux dans `ops::mesh`, leur qualificatif
+distinguant l'**entrée**. On ne peut pas le déplacer dans le nom du module,
+puisque le module est fixé par la sortie. Le suffixe reste donc légitime, et
+c'est côté Python que l'ambiguïté disparaît — une seule fonction `select` qui
+répartit selon le type reçu. Même situation pour `integral` /
+`integral_element`.
+
 ### Ce qui ne se construit pas
 
 Rien dans `ops/` ne produit un `Model`, un `FiniteElementSpace` ou une

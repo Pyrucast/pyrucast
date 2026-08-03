@@ -18,12 +18,13 @@
 //!   identity (a store handle, or an index into a container) and name one
 //!   piece of something bigger;
 //! - **values** — [`ElementType`], [`Point2`]/[`Point3`],
-//!   [`Vector2`]/[`Vector3`], [`RgbColor`]: `Copy`, identity-free, they
-//!   *are* their content.
+//!   [`Vector2`]/[`Vector3`], [`RgbColor`], [`Band`]: `Copy`, identity-free,
+//!   they *are* their content.
 //!
 //! [`crate::coords::Coords`] belongs to neither: it is the coordinate
 //! **store**, and it lives at the crate root next to [`crate::store`].
 
+pub mod band;
 pub mod cell;
 pub mod color;
 pub mod element;
@@ -33,6 +34,7 @@ pub mod point;
 
 // Flat re-exports: an atom is reachable as `atoms::Node`, `atoms::Cell`, …
 // rather than through its defining sub-module.
+pub use band::Band;
 pub use cell::{Cell, CellIter};
 pub use color::RgbColor;
 pub use element::{Element, ElementIter};

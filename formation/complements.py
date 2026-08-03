@@ -21,7 +21,7 @@ E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
 
 
 def encastrement(node, var, dual):
-    imposed = pc.mesh.poi1_from_nodes([node])
+    imposed = pc.Mesh.poi1_from_nodes([node])
     multiplier = pc.mesh.barycenter(imposed)
     return pc.Model.dirichlet(var, dual, imposed, multiplier)
 
@@ -41,7 +41,7 @@ def main() -> None:
 
     materiaux = pc.element_field.material_field(modele, [("E", E), ("A", A)])
 
-    charge = pc.mesh.poi1_from_nodes([n1])
+    charge = pc.Mesh.poi1_from_nodes([n1])
     second_membre = pc.NodeField(charge, ["f_x"])
     second_membre[0].set_value(n1, "f_x", F)
 

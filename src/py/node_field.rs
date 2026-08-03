@@ -2,10 +2,10 @@
 //! [`crate::containers::node_field::NodeField`].
 
 use crate::aggregate::Aggregate;
+use crate::atoms::Band;
 use crate::atoms::NodeId;
 use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
-use crate::ops::field::Band;
 use crate::py::mesh::{PyMesh, PySubMesh};
 use crate::py::node::PyNode;
 use crate::store::{insert, read, write, Handle};
@@ -550,7 +550,7 @@ impl PySubNodeField {
             CompareOp::Lt => Band::new(None, None, None, Some(x)),
             CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
         }?;
-        let out = crate::ops::field::mask_sub_nodes(&*read(&self.handle)?, &band, None);
+        let out = crate::ops::node_field::mask_sub(&*read(&self.handle)?, &band, None);
         Ok(Py::new(
             py,
             PySubNodeField {
@@ -584,7 +584,7 @@ impl PyNodeField {
             CompareOp::Lt => Band::new(None, None, None, Some(x)),
             CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
         }?;
-        let out = crate::ops::field::mask_nodes(&self.inner, &band, None)?;
+        let out = crate::ops::node_field::mask(&self.inner, &band, None)?;
         Ok(Py::new(py, PyNodeField { inner: out })?.into_any())
     }
 }

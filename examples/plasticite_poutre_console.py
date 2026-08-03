@@ -66,7 +66,7 @@ def _plastic_diagnostics(state):
     Sans boucle : `p_max` par `max`, le comptage en masquant la composante `p`
     en 0/1 (bande « > 1e-12 ») puis en la sommant."""
     p_max = state.max("p")
-    masked = pyrucast.field.mask(state, gt=1e-12, components=["p"])
+    masked = state.mask(gt=1e-12, components=["p"])
     n_plastic = round(masked.sum("p"))
     return p_max, n_plastic
 

@@ -232,7 +232,7 @@ fes = pyrucast.FiniteElementSpace(mesh)
 # Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
 # Constructeurs au niveau parent, composés par `|` — pas de SubModel à la main.
 # Le maillage des multiplicateurs est fabriqué depuis les nœuds imposés.
-imposed = pyrucast.mesh.poi1_from_nodes([a])
+imposed = pyrucast.Mesh.poi1_from_nodes([a])
 multiplier = pyrucast.mesh.barycenter(imposed)
 model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
     "T", "q", imposed, multiplier

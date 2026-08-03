@@ -5,8 +5,7 @@
 //! `py/ops/` convention (operations live with operations).
 
 use crate::atoms::ElementType;
-use crate::atoms::Node;
-use crate::containers::mesh::{Mesh, SubMesh};
+use crate::containers::mesh::Mesh;
 use crate::py::coords::PyCoords;
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::mesh::PyMesh;
@@ -25,21 +24,6 @@ use pyo3::types::PyDict;
 pub fn from_live_nodes(coords: PyRef<PyCoords>) -> PyResult<PyMesh> {
     let mesh = crate::ops::mesh::from_live_nodes(coords.handle.clone())?;
     Ok(PyMesh { inner: mesh })
-}
-
-/// Build a points (POI1) mesh with one point per node in `nodes`.
-///
-/// The Coords is taken from the nodes themselves (every `Node`
-/// carries its own), so no Coords argument is needed. Returns a
-/// Mesh with a single POI1 submesh; raises if `nodes` is empty.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn poi1_from_nodes(nodes: Vec<PyRef<PyNode>>) -> PyResult<PyMesh> {
-    let ns: Vec<Node> = nodes.iter().map(|n| n.as_node().clone()).collect();
-    let sm = SubMesh::poi1_from_nodes(&ns)?;
-    Ok(PyMesh {
-        inner: Mesh::from_submesh(sm),
-    })
 }
 
 /// Convert a mesh to POI1, submesh by submesh.
@@ -847,8 +831,7 @@ pub fn select(
     lt: Option<f64>,
     components: Option<Vec<String>>,
 ) -> PyResult<PyMesh> {
-    use crate::ops::field as ops;
-    let band = ops::Band::new(ge, gt, le, lt)?;
+    let band = crate::atoms::Band::new(ge, gt, le, lt)?;
     let inner = if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
         crate::ops::mesh::select_nodes(&f.inner, &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
