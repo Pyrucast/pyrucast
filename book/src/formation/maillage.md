@@ -17,58 +17,97 @@ Deux familles de mailleurs coexistent :
 | **structuré** | un **nombre d'éléments** | balaie une ligne sur une autre | grille |
 
 Le script complet est [`formation/maillage.py`](https://github.com/Pyrucast/pyrucast/blob/master/formation/maillage.py)
-; tous les extraits ci-dessous en sont issus directement.
+; tous les extraits ci-dessous en sont issus directement, dans l'ordre du
+fichier.
 
-## Points guides
+## Géométrie
 
-On pose d'abord les quelques points qui définissent la pièce — les points 
-`p1`/`p2`/`p4`/`p5` sont les coins du rectangle, `p6` le centre du
-demi-disque **et** du trou, `p3` la pointe. Ce sont les seuls nœuds saisis à
-la main de tout le script : tous les autres sortent d'un mailleur.
+### L'espace de coordonnées
 
 ```python
-{{#include ../../../formation/maillage.py:geometrie}}
+{{#include ../../../formation/maillage.py:coords}}
 ```
 
-`pyrucast.Coords` est le seul objet mutable du script. Tous les mailleurs y
+`pyrucast.Coords` est le **seul objet mutable** du script. Tous les mailleurs y
 déposent leurs nœuds, ce qui garantit que deux maillages construits côte à
-côte partagent bien leurs nœuds communs.
+côte partagent bien leurs nœuds communs — c'est ce qui rend possible, plus
+bas, de raccorder une couronne à une grille sans maillage non conforme.
+
+L'argument `3` est la dimension de l'espace : la pièce est plane, mais on la
+décrit d'emblée en 3D pour n'avoir rien à relever au moment de l'extruder.
+
+### Les cotes
+
+```python
+{{#include ../../../formation/maillage.py:parametres}}
+```
+
+Toutes les dimensions sont en mètres et nommées une seule fois : elles servent
+aux points guides, aux rayons du trou, à l'épaisseur d'extrusion, et les
+chapitres suivants les réimportent telles quelles pour placer leurs conditions
+aux limites.
+
+### Points guides
+
+On pose les quelques points qui définissent la pièce — `p1`/`p2`/`p4`/`p5`
+sont les coins du rectangle, `p6` le centre du demi-disque **et** du trou,
+`p3` la pointe.
+
+```python
+{{#include ../../../formation/maillage.py:points}}
+```
+
+Ce sont les seuls nœuds saisis à la main de tout le script : tous les autres
+sortent d'un mailleur.
 
 ## Contour fermé
 
+### Bord par bord
+
 Le contour se maille **bord par bord**, chacun avec son mailleur dédié :
-`line` pour les côtés droits, `arc` pour le demi-disque, `circle` pour le
-trou.
+`line` pour les côtés droits, `arc` pour le demi-disque.
 
 ```python
-{{#include ../../../formation/maillage.py:contour}}
+{{#include ../../../formation/maillage.py:contour_bords}}
 ```
-
-![Contour fermé de la plaque](img/maillage-contour.svg)
-
-Deux points méritent l'attention.
 
 **Le nombre d'éléments par bord est décidé ici, et seulement ici.**
 `triangulate_surface` respecte le contour qu'on lui donne : il ne redécoupe
 jamais un segment du bord. La finesse du contour est donc un choix de
 l'utilisateur, indépendant de la taille de maille demandée pour l'intérieur.
 
-**`consolidate` est obligatoire.** L'union `|` réunit les cinq bords dans un
-même maillage, mais chacun y garde son propre sous-maillage `SEG2`. Or
-`triangulate_surface` exige qu'une boucle fermée tienne dans **un seul**
-sous-maillage. `pyrucast.consolidate` les fusionne sans toucher à la
-connectivité.
+### `consolidate` est obligatoire
 
-Le contour renvoyé compte donc deux sous-maillages : le contour extérieur,
-puis le trou.
+```python
+{{#include ../../../formation/maillage.py:contour_consolidate}}
+```
+
+L'union `|` réunit les cinq bords dans un même maillage, mais chacun y garde
+son propre sous-maillage `SEG2`. Or `triangulate_surface` exige qu'une boucle
+fermée tienne dans **un seul** sous-maillage. `pyrucast.consolidate` les
+fusionne sans toucher à la connectivité.
+
+### Le trou, et le contour complet
+
+```python
+{{#include ../../../formation/maillage.py:contour_trou}}
+```
+
+Le trou tient en une commande : un cercle centré sur `p6`, de normale −Y
+(donc dans le plan de la pièce), en 32 segments. Le contour renvoyé compte
+ainsi deux sous-maillages : le contour extérieur, puis le trou.
+
+![Contour fermé de la plaque](img/maillage-contour.svg)
 
 ## Maillage non structuré : triangulation
 
 `triangulate_surface` remplit l'intérieur par triangulation de Delaunay
 contrainte, raffinée à la taille cible (raffinement de Ruppert).
 
+### L'orientation des boucles décide de la matière
+
 ```python
-{{#include ../../../formation/maillage.py:non_structure}}
+{{#include ../../../formation/maillage.py:deux_domaines}}
 ```
 
 Le point à retenir est **l'orientation des boucles**. Le mailleur la lit pour
@@ -84,8 +123,14 @@ second domaine, et le disque est rempli :
 
 ![Deux boucles CCW : le disque est rempli](img/maillage-deux-domaines.svg)
 
-`invert` retourne la boucle du trou, et le mailleur y voit alors un vrai
-trou :
+### `invert` fait du disque un vrai trou
+
+```python
+{{#include ../../../formation/maillage.py:invert_trou}}
+```
+
+`invert` retourne la boucle du trou — le sous-maillage 1 du contour, d'où le
+`border[:1] | invert(border[1:])` — et le mailleur y voit alors un vrai trou :
 
 ![Plaque non structurée (TRI3)](img/maillage-non-structure.svg)
 
@@ -94,14 +139,13 @@ nœuds à l'intérieur jusqu'à l'approcher, sans jamais toucher au bord.
 
 ## Du surfacique au volumique
 
-La suite enchaîne quatre opérateurs pour passer de la surface au volume
-tétraédrique.
-
-```python
-{{#include ../../../formation/maillage.py:volume}}
-```
+Quatre opérateurs enchaînés font passer de la surface au volume tétraédrique.
 
 ### `extrude` — balayage sur l'épaisseur
+
+```python
+{{#include ../../../formation/maillage.py:extrude}}
+```
 
 L'extrusion balaie la surface le long d'un vecteur, en un nombre de couches
 donné. Le type d'élément suit : `SEG2` → `QUA4`, `TRI3` → `PENTA6`,
@@ -117,12 +161,16 @@ cachées, ne montre que la peau :
 
 ### `skin` — la peau, découpée en faces planes
 
+```python
+{{#include ../../../formation/maillage.py:skin}}
+```
+
 `skin` extrait les facettes du bord du volume et les **regroupe par face
 plane** : deux facettes voisines restent dans la même face tant que leurs
-normales diffèrent de moins de l'angle donné. On obtient un sous-maillage par
-face — dessus, dessous, chant du trou, chant extérieur — donc colorable et
-sélectionnable indépendamment, ce qui sert directement à poser les conditions
-aux limites.
+normales diffèrent de moins de l'angle donné (85° ici). On obtient un
+sous-maillage par face — dessus, dessous, chant du trou, chant extérieur —
+donc colorable et sélectionnable indépendamment, ce qui sert directement à
+poser les conditions aux limites.
 
 ![Enveloppe QUA4, une couleur par face plane](img/maillage-enveloppe-qua4.svg)
 
@@ -130,6 +178,10 @@ aux limites.
 travers la pièce.)*
 
 ### `convert` + `invert` — préparer l'enveloppe
+
+```python
+{{#include ../../../formation/maillage.py:convert_invert}}
+```
 
 `triangulate_volume` n'accepte qu'une enveloppe **TRI3** fermée dont les
 normales **sortent de la matière**. `convert` coupe chaque `QUA4` en deux
@@ -140,10 +192,12 @@ bon sens.
 
 ### `triangulate_volume` — remplissage TET4
 
+```python
+{{#include ../../../formation/maillage.py:triangulate_volume}}
+```
+
 C'est le compagnon 3D de `triangulate_surface` : il remplit l'intérieur de
 l'enveloppe de tétraèdres.
-
-![Volume non structuré triangulé, TET4](img/maillage-volume-tetra.svg)
 
 `allow_surface_nodes=True` autorise le mailleur à redécouper l'enveloppe là
 où il ne sait pas la respecter telle quelle. La **forme** est conservée —
@@ -152,65 +206,121 @@ peau du résultat ne coïncide plus maille pour maille avec celle qu'on a
 fournie. Sans cette autorisation, une telle enveloppe serait refusée plutôt
 que mal maillée.
 
-> **Le résultat porte alors un sous-maillage de plus.** Quand des nœuds ont
-> dû être ajoutés, `triangulate_volume` prévient sur `stderr` **et** les
-> nomme : le maillage renvoyé contient un second sous-maillage, de `POI1`, à
-> côté des `TET4`. `element_types()` vaut donc `['TET4', 'POI1']` et non
-> `['TET4']`. Tout ce qui parcourt les sous-maillages ou compte des mailles
-> doit prendre le `TET4` seul. Sur la figure ci-dessus, les tétraèdres sont
-> en noir et ce sont ces nœuds ajoutés que l'on voit en rouge.
+### Les nœuds ajoutés, un sous-maillage de plus
+
+```python
+{{#include ../../../formation/maillage.py:noeuds_ajoutes}}
+```
+
+![Volume non structuré triangulé, TET4](img/maillage-volume-tetra.svg)
+
+> **Le résultat porte un sous-maillage de plus.** Quand des nœuds ont dû être
+> ajoutés, `triangulate_volume` prévient sur `stderr` **et** les nomme : le
+> maillage renvoyé contient un second sous-maillage, de `POI1`, à côté des
+> `TET4`. `element_types()` vaut donc `['TET4', 'POI1']` et non `['TET4']`.
+> Tout ce qui parcourt les sous-maillages ou compte des mailles doit prendre
+> le `TET4` seul. Sur la figure ci-dessus, les tétraèdres sont en noir et ce
+> sont ces nœuds ajoutés (3 sur cette pièce) que l'on voit en rouge.
 
 ## Maillage structuré : grille et couronne
 
-En structuré on ne donne plus une taille de maille mais un **nombre
-d'éléments** par direction. La pièce est traitée en deux morceaux : une
-grille rectangulaire à gauche, une couronne autour du trou à droite.
+### Un nombre d'éléments, plus une taille
 
 ```python
-{{#include ../../../formation/maillage.py:structure}}
+{{#include ../../../formation/maillage.py:comptes}}
 ```
 
-![Plaque structurée (QUA4)](img/maillage-structure.svg)
+En structuré on ne donne plus une taille de maille mais un **nombre
+d'éléments** par direction. La pièce est traitée en deux morceaux : une grille
+rectangulaire à gauche, une couronne autour du trou à droite.
 
-Trois idées à retenir.
+### La grille, par balayage du bord gauche
+
+```python
+{{#include ../../../formation/maillage.py:grille}}
+```
 
 **Balayer plutôt que remplir.** `extrude(ligne, vecteur, n)` balaie une ligne
-par translation ; `sweep(a, b, n)` balaie une ligne **sur une autre**, en `n`
-couches. Un `SEG2` balayé donne un `QUA4`, d'où une grille régulière dans les
-deux cas.
+par translation ; un `SEG2` balayé donne un `QUA4`, d'où une grille régulière
+`n12 × n15`. La grille s'arrête à `x13`, l'abscisse où commence le demi-disque.
 
-**Un bord se récupère, il ne se refabrique pas.** Pour raccorder la couronne à
-la grille, il faut le bord droit de la grille. Le reconstruire avec `line`
-donnerait une ligne jumelle ne partageant aucun nœud avec la grille, donc un
-maillage non conforme et une pièce en deux morceaux. On l'**extrait** :
-`border` donne le contour de la grille, une sélection sur la coordonnée X
-(`field.coordinates` + `field.select`) garde les nœuds de la dernière
-colonne, et `elements_on(..., strict=True)` remonte aux segments dont **tous**
-les nœuds y sont. Même méthode pour les deux extrémités de ce bord, repérées
-par leur coordonnée Z. Aucun indice n'est écrit à la main.
+### Un bord se récupère, il ne se refabrique pas
+
+```python
+{{#include ../../../formation/maillage.py:bord_droit}}
+```
+
+Pour raccorder la couronne à la grille, il faut le bord **droit** de la
+grille. Le reconstruire avec `line` donnerait une ligne jumelle ne partageant
+aucun nœud avec la grille, donc un maillage non conforme et une pièce en deux
+morceaux. On l'**extrait** : `border` donne le contour de la grille, une
+sélection sur la coordonnée X (`field.coordinates` + `field.select`) garde les
+nœuds de la dernière colonne, et `elements_on(..., strict=True)` remonte aux
+segments dont **tous** les nœuds y sont. Aucun indice n'est écrit à la main.
+
+### Ses deux extrémités, par coordonnée
+
+```python
+{{#include ../../../formation/maillage.py:extremites}}
+```
+
+Même méthode pour les deux points de raccord de la couronne, repérés par leur
+coordonnée Z (le plus bas et le plus haut) : la sélection rend un maillage
+`POI1` d'un seul nœud, dont `node(0, 0, 0)` extrait le point.
+
+### La boucle extérieure de la couronne
+
+```python
+{{#include ../../../formation/maillage.py:boucle_exterieure}}
+```
+
+Elle réunit le demi-disque, les deux tronçons de bord restants et le bord
+droit de la grille — 10 + 10 + 5 + 10 + 5 = **40 segments** — consolidés en une
+seule boucle fermée, comme pour le contour non structuré.
+
+### La boucle intérieure, alignée sur elle
+
+```python
+{{#include ../../../formation/maillage.py:boucle_interieure}}
+```
 
 **Les deux boucles doivent se correspondre.** `sweep` relie les nœuds de la
 première boucle à ceux de la seconde, une paire à la fois : elles doivent donc
-avoir le **même nombre de segments**. D'où le découpage du contour extérieur
-en 10 + 10 + 5 + 10 + 5 = 40 segments, et celui du trou en quatre quarts de
-10 segments, soit 40 également — les quatre points de départ `p14`…`p17` sont
+avoir le **même nombre de segments**. D'où le trou découpé en quatre quarts de
+10 segments, soit 40 également — et les quatre points de départ `p14`…`p17`
 posés explicitement pour que les deux découpages s'alignent.
 
-`sweep` entre deux boucles fermées est le moyen d'obtenir un maillage structuré
-propre autour d'un trou. Grille et couronne partageant les nœuds du bord
-droit, l'union `|` suffit à en faire un maillage conforme.
+### `sweep`, puis l'union
 
-La même extrusion que pour le non structuré donne enfin le volume — mais un
-`QUA4` balayé donne un `HEX8`, le meilleur élément pour le calcul :
+```python
+{{#include ../../../formation/maillage.py:sweep}}
+```
+
+`sweep(a, b, n)` balaie une ligne **sur une autre**, en `n` couches : entre
+deux boucles fermées, c'est le moyen d'obtenir un maillage structuré propre
+autour d'un trou. Grille et couronne partageant les nœuds du bord droit
+`l1213`, l'union `|` suffit ensuite à en faire un maillage conforme.
+
+![Plaque structurée (QUA4)](img/maillage-structure.svg)
+
+### Le volume HEX8
+
+```python
+{{#include ../../../formation/maillage.py:volume_hex8}}
+```
+
+La même extrusion que pour le non structuré donne le volume — mais un `QUA4`
+balayé donne un `HEX8`, le meilleur élément pour le calcul :
 
 ![Volume structuré (HEX8)](img/maillage-volume-structure.svg)
 
 C'est ce volume que reprennent les chapitres suivants : ils importent
 `structured_mesh` et l'appellent avec `plot=False`, qui rend le maillage sans
-retracer les figures de cette page. Importer la fonction plutôt que recopier
-sa géométrie n'est pas un raffinement de style — deux maillages construits à
-l'identique dans deux scripts porteraient des nœuds **distincts**, et toute
-condition posée sur l'un serait sans effet sur l'autre.
+retracer les figures ni réimprimer les comptes de cette page. Importer la
+fonction plutôt que recopier sa géométrie n'est pas un raffinement de style —
+deux maillages construits à l'identique dans deux scripts porteraient des
+nœuds **distincts**, et toute condition posée sur l'un serait sans effet sur
+l'autre.
 
 ## Visualiser et exporter
 
@@ -231,16 +341,7 @@ Le script réunit les deux dans un petit helper, pour que chaque tracé soit
 interactif à l'exécution et devienne une figure de cette page en mode batch :
 
 ```python
-OUT = os.environ.get("PYRUCAST_FORMATION_IMG_DIR")
-
-
-def show(mesh, title, file, wireframe=False):
-    mesh.plot(
-        view=VUE,
-        title=title,
-        wireframe=wireframe,
-        save=os.path.join(OUT, file) if OUT else None,
-    )
+{{#include ../../../formation/maillage.py:figures}}
 ```
 
 L'attribut `face_color` d'un sous-maillage fixe sa couleur de tracé, ce qui
@@ -258,10 +359,12 @@ script/generate-formation-figures.sh
 
 ## Script complet
 
+Une fois les explications retirées, tout le chapitre tient en une page — du
+premier point guide au volume structuré :
+
 ```python
-{{#include ../../../formation/maillage.py}}
+{{#include ../../../formation/maillage.py:script}}
 ```
 
-Suite : [Calcul thermique](thermique.md), sur une version 2D simplifiée de
-cette plaque — la géométrie y passe au second plan, l'attention va aux
-conditions aux limites.
+Suite : [Calcul thermique](thermique.md), qui reprend le volume `HEX8`
+structuré de cette page et y pose des conditions aux limites.
