@@ -175,6 +175,14 @@ disparaîtrait silencieusement du stub. Toute nouvelle méthode d'agrégat va da
 les blocs décorés ; une méthode polymorphe de plus demande d'étendre le littéral
 correspondant, sur les sept sites d'appel de la macro.
 
+Le même patron — bloc fermé + `submit!` adjacent — sert partout où une méthode
+écrite à la main est polymorphe : `SubNodeField.__getitem__`,
+`SubElementField.__getitem__`, `Node.__or__`/`__ror__`, `Matrix.__mul__`. Il
+sert aussi à corriger une **différence de vocabulaire** : `pyo3` regroupe les
+comparaisons sous `__richcmp__`, qui n'existe pas côté Python — le stub des
+champs déclare donc à la main `__ge__`/`__gt__`/`__le__`/`__lt__`, qui rendent
+un masque 0/1 et non un booléen.
+
 ## Scripts « tout-en-un »
 
 Le dossier `script/` contient deux niveaux d'automatisation. Tous activent (ou

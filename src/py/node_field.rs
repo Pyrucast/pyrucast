@@ -215,35 +215,6 @@ impl PySubNodeField {
         Ok(())
     }
 
-    /// Comparison sugar → a per-component 0/1 mask (see `mask`). `subfield >= x`
-    /// / `> x` / `<= x` / `< x` test every component against the scalar `x`;
-    /// `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
-    fn __richcmp__(
-        &self,
-        py: Python<'_>,
-        other: &Bound<'_, PyAny>,
-        op: CompareOp,
-    ) -> PyResult<Py<PyAny>> {
-        let Ok(x) = other.extract::<f64>() else {
-            return Ok(py.NotImplemented());
-        };
-        let band = match op {
-            CompareOp::Ge => Band::new(Some(x), None, None, None),
-            CompareOp::Gt => Band::new(None, Some(x), None, None),
-            CompareOp::Le => Band::new(None, None, Some(x), None),
-            CompareOp::Lt => Band::new(None, None, None, Some(x)),
-            CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
-        }?;
-        let out = crate::ops::field::mask_sub_nodes(&*read(&self.handle)?, &band, None);
-        Ok(Py::new(
-            py,
-            PySubNodeField {
-                handle: insert(out),
-            },
-        )?
-        .into_any())
-    }
-
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!("{:?}", &*read(&self.handle)?))
     }
@@ -501,29 +472,6 @@ impl PyNodeField {
         }
         self.binary(exponent, |a, b| a.powf(b))
     }
-
-    /// Comparison sugar → a per-component 0/1 mask (see `mask`). `field >= x`
-    /// / `> x` / `<= x` / `< x` test every component against the scalar `x`;
-    /// `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
-    fn __richcmp__(
-        &self,
-        py: Python<'_>,
-        other: &Bound<'_, PyAny>,
-        op: CompareOp,
-    ) -> PyResult<Py<PyAny>> {
-        let Ok(x) = other.extract::<f64>() else {
-            return Ok(py.NotImplemented());
-        };
-        let band = match op {
-            CompareOp::Ge => Band::new(Some(x), None, None, None),
-            CompareOp::Gt => Band::new(None, Some(x), None, None),
-            CompareOp::Le => Band::new(None, None, Some(x), None),
-            CompareOp::Lt => Band::new(None, None, None, Some(x)),
-            CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
-        }?;
-        let out = crate::ops::field::mask_nodes(&self.inner, &band, None)?;
-        Ok(Py::new(py, PyNodeField { inner: out })?.into_any())
-    }
 }
 
 impl PyNodeField {
@@ -582,6 +530,80 @@ impl PySubNodeField {
         )?
         .into_any())
     }
+
+    /// Comparison sugar → a per-component 0/1 mask (see `mask`). `subfield >= x`
+    /// / `> x` / `<= x` / `< x` test every component against the scalar `x`;
+    /// `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
+    fn __richcmp__(
+        &self,
+        py: Python<'_>,
+        other: &Bound<'_, PyAny>,
+        op: CompareOp,
+    ) -> PyResult<Py<PyAny>> {
+        let Ok(x) = other.extract::<f64>() else {
+            return Ok(py.NotImplemented());
+        };
+        let band = match op {
+            CompareOp::Ge => Band::new(Some(x), None, None, None),
+            CompareOp::Gt => Band::new(None, Some(x), None, None),
+            CompareOp::Le => Band::new(None, None, Some(x), None),
+            CompareOp::Lt => Band::new(None, None, None, Some(x)),
+            CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
+        }?;
+        let out = crate::ops::field::mask_sub_nodes(&*read(&self.handle)?, &band, None);
+        Ok(Py::new(
+            py,
+            PySubNodeField {
+                handle: insert(out),
+            },
+        )?
+        .into_any())
+    }
+}
+
+// `__richcmp__` is a pyo3-only spelling: CPython exposes the comparison slots
+// as `__ge__`/`__gt__`/`__le__`/`__lt__`, which is what the stub must declare.
+#[pymethods]
+impl PyNodeField {
+    /// Comparison sugar → a per-component 0/1 mask (see `mask`). `field >= x`
+    /// / `> x` / `<= x` / `< x` test every component against the scalar `x`;
+    /// `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
+    fn __richcmp__(
+        &self,
+        py: Python<'_>,
+        other: &Bound<'_, PyAny>,
+        op: CompareOp,
+    ) -> PyResult<Py<PyAny>> {
+        let Ok(x) = other.extract::<f64>() else {
+            return Ok(py.NotImplemented());
+        };
+        let band = match op {
+            CompareOp::Ge => Band::new(Some(x), None, None, None),
+            CompareOp::Gt => Band::new(None, Some(x), None, None),
+            CompareOp::Le => Band::new(None, None, Some(x), None),
+            CompareOp::Lt => Band::new(None, None, None, Some(x)),
+            CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
+        }?;
+        let out = crate::ops::field::mask_nodes(&self.inner, &band, None)?;
+        Ok(Py::new(py, PyNodeField { inner: out })?.into_any())
+    }
+}
+
+#[cfg(feature = "stub-gen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+class PyNodeField:
+    def __ge__(self, other: float) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`field >= x` → a fresh `NodeField` of per-component 0/1 flags (see
+        `mask`), not a boolean. Combine masks with `*` and use them to weight or
+        select values."""
+    def __gt__(self, other: float) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`field > x` → a 0/1 mask field (see `__ge__`)."""
+    def __le__(self, other: float) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`field <= x` → a 0/1 mask field (see `__ge__`)."""
+    def __lt__(self, other: float) -> pyo3_stub_gen.RustType["PyNodeField"]:
+        """`field < x` → a 0/1 mask field (see `__ge__`)."""
+    "# }
 }
 
 #[cfg(feature = "stub-gen")]
@@ -601,6 +623,15 @@ class PySubNodeField:
         """`subfield[["UX", "UY"]]` → a fresh `SubNodeField` keeping only those
         components, so `u1[u2.components()]` reprojects `u1` onto `u2`'s
         component set."""
+    def __ge__(self, other: float) -> pyo3_stub_gen.RustType["PySubNodeField"]:
+        """`subfield >= x` → a fresh `SubNodeField` of per-component 0/1 flags
+        (see `mask`), not a boolean."""
+    def __gt__(self, other: float) -> pyo3_stub_gen.RustType["PySubNodeField"]:
+        """`subfield > x` → a 0/1 mask field (see `__ge__`)."""
+    def __le__(self, other: float) -> pyo3_stub_gen.RustType["PySubNodeField"]:
+        """`subfield <= x` → a 0/1 mask field (see `__ge__`)."""
+    def __lt__(self, other: float) -> pyo3_stub_gen.RustType["PySubNodeField"]:
+        """`subfield < x` → a 0/1 mask field (see `__ge__`)."""
     "# }
 }
 

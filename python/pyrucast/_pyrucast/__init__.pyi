@@ -422,34 +422,22 @@ class ElementField:
         `SubElementField` → targeted zone). The ternary `pow(x, y, z)` modulo
         form is rejected.
         """
-    def __richcmp__(self, other: typing.Any, op: int) -> typing.Any:
+    def __ge__(self, other: float) -> ElementField:
         r"""
-        Comparison sugar → a per-component 0/1 mask (see `mask`), one value per
-        Gauss point. `field >= x` / `> x` / `<= x` / `< x` test every component
-        against `x`; `==` / `!=` and non-scalar right-hands fall back to
-        `NotImplemented`.
+        `field >= x` → a fresh `ElementField` of per-component 0/1 flags, one
+        value per Gauss point (see `mask`), not a boolean.
         """
-    def unit(self) -> SubElementField:
+    def __gt__(self, other: float) -> ElementField:
         r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
+        `field > x` → a 0/1 mask field (see `__ge__`).
         """
-    def add_sub(self, sub: SubElementField) -> None:
+    def __le__(self, other: float) -> ElementField:
         r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
+        `field <= x` → a 0/1 mask field (see `__ge__`).
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+    def __lt__(self, other: float) -> ElementField:
         r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
+        `field < x` → a 0/1 mask field (see `__ge__`).
         """
     @typing.overload
     def __getitem__(self, key: int) -> SubElementField:
@@ -486,6 +474,28 @@ class ElementField:
         r"""
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
+        """
+    def unit(self) -> SubElementField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubElementField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
 
@@ -1401,33 +1411,23 @@ class NodeField:
         `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo
         form is rejected.
         """
-    def __richcmp__(self, other: typing.Any, op: int) -> typing.Any:
+    def __ge__(self, other: float) -> NodeField:
         r"""
-        Comparison sugar → a per-component 0/1 mask (see `mask`). `field >= x`
-        / `> x` / `<= x` / `< x` test every component against the scalar `x`;
-        `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
+        `field >= x` → a fresh `NodeField` of per-component 0/1 flags (see
+        `mask`), not a boolean. Combine masks with `*` and use them to weight or
+        select values.
         """
-    def unit(self) -> SubNodeField:
+    def __gt__(self, other: float) -> NodeField:
         r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
+        `field > x` → a 0/1 mask field (see `__ge__`).
         """
-    def add_sub(self, sub: SubNodeField) -> None:
+    def __le__(self, other: float) -> NodeField:
         r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
+        `field <= x` → a 0/1 mask field (see `__ge__`).
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+    def __lt__(self, other: float) -> NodeField:
         r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
+        `field < x` → a 0/1 mask field (see `__ge__`).
         """
     @typing.overload
     def __getitem__(self, key: int) -> SubNodeField:
@@ -1463,6 +1463,28 @@ class NodeField:
         r"""
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
+        """
+    def unit(self) -> SubNodeField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubNodeField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
 
@@ -1566,13 +1588,6 @@ class SubElementField:
         r"""
         `field[cell, gauss, "name"] = value`.
         """
-    def __richcmp__(self, other: typing.Any, op: int) -> typing.Any:
-        r"""
-        Comparison sugar → a per-component 0/1 mask (see `mask`), one value per
-        Gauss point. `subfield >= x` / `> x` / `<= x` / `< x` test every
-        component against `x`; `==` / `!=` and non-scalar right-hands fall
-        back to `NotImplemented`.
-        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     @typing.overload
@@ -1593,6 +1608,23 @@ class SubElementField:
         `field[["sig_xx", "sig_yy"]]` → a fresh `SubElementField` keeping only
         those components, so `u1[u2.components()]` reprojects `u1` onto `u2`'s
         component set.
+        """
+    def __ge__(self, other: float) -> SubElementField:
+        r"""
+        `subfield >= x` → a fresh `SubElementField` of per-component 0/1
+        flags, one value per Gauss point (see `mask`), not a boolean.
+        """
+    def __gt__(self, other: float) -> SubElementField:
+        r"""
+        `subfield > x` → a 0/1 mask field (see `__ge__`).
+        """
+    def __le__(self, other: float) -> SubElementField:
+        r"""
+        `subfield <= x` → a 0/1 mask field (see `__ge__`).
+        """
+    def __lt__(self, other: float) -> SubElementField:
+        r"""
+        `subfield < x` → a 0/1 mask field (see `__ge__`).
         """
     def __or__(self, other: SubElementField) -> ElementField:
         r"""
@@ -2154,12 +2186,6 @@ class SubNodeField:
         r"""
         `subfield[node, "UX"] = v` — raises if the node or component is absent.
         """
-    def __richcmp__(self, other: typing.Any, op: int) -> typing.Any:
-        r"""
-        Comparison sugar → a per-component 0/1 mask (see `mask`). `subfield >= x`
-        / `> x` / `<= x` / `< x` test every component against the scalar `x`;
-        `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
-        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -2185,6 +2211,23 @@ class SubNodeField:
         `subfield[["UX", "UY"]]` → a fresh `SubNodeField` keeping only those
         components, so `u1[u2.components()]` reprojects `u1` onto `u2`'s
         component set.
+        """
+    def __ge__(self, other: float) -> SubNodeField:
+        r"""
+        `subfield >= x` → a fresh `SubNodeField` of per-component 0/1 flags
+        (see `mask`), not a boolean.
+        """
+    def __gt__(self, other: float) -> SubNodeField:
+        r"""
+        `subfield > x` → a 0/1 mask field (see `__ge__`).
+        """
+    def __le__(self, other: float) -> SubNodeField:
+        r"""
+        `subfield <= x` → a 0/1 mask field (see `__ge__`).
+        """
+    def __lt__(self, other: float) -> SubNodeField:
+        r"""
+        `subfield < x` → a 0/1 mask field (see `__ge__`).
         """
     def __or__(self, other: SubNodeField) -> NodeField:
         r"""
