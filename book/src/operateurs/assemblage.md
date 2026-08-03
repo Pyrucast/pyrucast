@@ -102,20 +102,21 @@ Kt = pyrucast.matrix.tangent(model, materials, state)
 produites au scatter) que `Matrix::finalize` ne sait pas assembler seul. Pour
 **recomposer** — ajouter une `SubMatrix` de provenance quelconque à une matrice
 existante (ou combiner plusieurs `Matrix` déjà assemblées via l'union `|`) puis
-réassembler — `ops::matrix::assemble(&mut m)` (Rust) / `pyrucast.matrix.assemble(m)`
-(Python, mutation en place) reconstruit le motif creux depuis les **blocs seuls**
+réassembler — `m.assemble()`. C'est une **méthode** et non une fonction libre :
+elle mute un seul conteneur en préservant son invariant, exactement comme sa
+voisine `finalize`. Elle reconstruit le motif creux depuis les **blocs seuls**
 (sans `Model`) et redisperse les valeurs :
 
 ```rust,ignore
-let mut k = assemble::stiffness(&model, &materials)?;
+let mut k = matrix::stiffness(&model, &materials)?;
 k.add_sub(insert(bloc_supplementaire))?;   // invalide l'état assemblé
-assemble::assemble(&mut k)?;                // réassemble, nouveau bloc inclus
+k.assemble()?;                             // réassemble, nouveau bloc inclus
 ```
 
 ```python
 k = pyrucast.matrix.stiffness(model, materials)
 k.add_sub(bloc_supplementaire)
-pyrucast.matrix.assemble(k)
+k.assemble()
 ```
 
 Contrairement à `stiffness`, ce chemin ne consulte pas le motif mémoïsé sur le
@@ -131,7 +132,7 @@ s'obtient sans opérateur dédié :
 
 ```python
 sys = (m / dt) | k
-pyrucast.matrix.assemble(sys)
+sys.assemble()
 u = pyrucast.solver.solve(sys, rhs)
 ```
 

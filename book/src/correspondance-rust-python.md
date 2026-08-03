@@ -196,7 +196,6 @@ conteneur produit » ne peut pas les placer, ils se rangent donc par domaine.
 | `lump(m: &Matrix) -> Matrix` | `lump(matrix) -> Matrix` |
 | `geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Matrix` | `geometric(model, materials, stress) -> Matrix` |
 | `tangent(model: &Model, materials: &ElementField, state: &ElementField) -> Matrix` | `tangent(model, materials, state) -> Matrix` |
-| `assemble(k: &mut Matrix) -> Result<()>` | `assemble(matrix) -> None` (mutation en place — (ré)assemble une matrice depuis ses blocs seuls, sans `Model` : chemin de composition, ex. `M/dt + K`) |
 
 ### `ops::solver` — résolution
 

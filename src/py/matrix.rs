@@ -211,6 +211,19 @@ impl PyMatrix {
         Ok(Self { inner: m })
     }
 
+    /// Re-assemble this matrix **from its blocks alone** — no `Model` —
+    /// mutating it in place. The composition path: after combining blocks of
+    /// any provenance (via `matrix * scalar` / `matrix / scalar`, `|` union,
+    /// `add_sub`, `filter`, …), including *computed* ones (which `finalize()`
+    /// refuses — the element kernel lives outside `containers`), call this to
+    /// fold everything into one CSR. Needed, for instance, to solve
+    /// `(M/dt + K) u = …` : `sys = (m / dt) | k; sys.assemble();
+    /// pyrucast.solver.solve(sys, rhs)`.
+    fn assemble(&mut self) -> PyResult<()> {
+        self.inner.assemble()?;
+        Ok(())
+    }
+
     /// Build the global DOF table and CSR. Must be called before any
     /// solver-facing method (`dense`, `mul_dense`, …).
     fn finalize(&mut self) -> PyResult<()> {

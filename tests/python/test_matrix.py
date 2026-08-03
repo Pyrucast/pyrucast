@@ -333,7 +333,7 @@ def test_matrix_mul_and_truediv_scale_by_factor():
 
 
 def test_assemble_reassembles_scaled_mass_union_stiffness():
-    """`M/dt + K` via `(mass / dt) | stiffness` then `pyrucast.matrix.assemble`
+    """`M/dt + K` via `(mass / dt) | stiffness` then `sys.assemble()`
     — the dynamics idiom documented in book/src/matrix.md. `K` carries the
     Dirichlet multiplier DOF that `M` doesn't (a constraint only ever enters
     the stiffness matrix); the union/reassembly must still work and leave
@@ -360,7 +360,7 @@ def test_assemble_reassembles_scaled_mass_union_stiffness():
     dt = 0.5
     m_dt = m / dt
     sys = m_dt | k
-    pyrucast.matrix.assemble(sys)
+    sys.assemble()
 
     tol = 1e-12
     # K_e = k/h·[[1,-1],[-1,1]] = [[1,-1],[-1,1]] (h=1); C_e = ρcp·h/6·[[2,1],[1,2]]

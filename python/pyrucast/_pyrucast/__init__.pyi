@@ -26,7 +26,6 @@ __all__ = [
     "SubNodeField",
     "abs",
     "arc",
-    "assemble",
     "barycenter",
     "beam_deformation",
     "border",
@@ -725,6 +724,17 @@ class Matrix:
         `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
         Fill entries via the block view (`block[0].add_entry(...)`) and
         compose several blocks with `|`, then `finalize()`.
+        """
+    def assemble(self) -> None:
+        r"""
+        Re-assemble this matrix **from its blocks alone** — no `Model` —
+        mutating it in place. The composition path: after combining blocks of
+        any provenance (via `matrix * scalar` / `matrix / scalar`, `|` union,
+        `add_sub`, `filter`, …), including *computed* ones (which `finalize()`
+        refuses — the element kernel lives outside `containers`), call this to
+        fold everything into one CSR. Needed, for instance, to solve
+        `(M/dt + K) u = …` : `sys = (m / dt) | k; sys.assemble();
+        pyrucast.solver.solve(sys, rhs)`.
         """
     def finalize(self) -> None:
         r"""
@@ -2249,17 +2259,6 @@ def arc(a: Node, center: Node, b: Node, n_elems: builtins.int, element_type: bui
     built).
     
     `element_type` is `"SEG2"` (default) or `"SEG3"`.
-    """
-
-def assemble(matrix: Matrix) -> None:
-    r"""
-    Re-assemble `matrix` **from its blocks alone** — no `Model` — mutating it in
-    place. The composition path: after combining blocks of any provenance (via
-    `matrix * scalar` / `matrix / scalar`, `|` union, `add_sub`, `filter`, …),
-    including *computed* ones (which `Matrix.finalize()` refuses — the element
-    kernel lives outside `containers`), call this to fold everything into one
-    CSR. Needed, for instance, to solve `(M/dt + K) u = …`:
-    `sys = (m / dt) | k; assemble(sys); solver.solve(sys, rhs)`.
     """
 
 def barycenter(mesh: Mesh) -> Mesh:

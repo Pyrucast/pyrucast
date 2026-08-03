@@ -133,31 +133,40 @@ pub fn assemble_kind(
     Ok(k)
 }
 
-/// Assemble (or re-assemble) `k` **from its blocks alone** — no `Model`.
-///
-/// The sparsity is rebuilt from the current blocks ([`crate::ops::scatter::build_pattern`],
-/// self-contained: a computed block resolves its fill through its recipe, a
-/// literal block through its COO) and the values are scattered into it. This is
-/// the composition path: after adding a block of any provenance to an already
-/// assembled matrix — which `finalize` cannot handle once computed blocks are
-/// present, and which `stiffness` cannot reach (it only knows a `Model`) — call
-/// this to fold the new block in.
-///
-/// ```ignore
-/// let mut k = crate::ops::matrix::stiffness(&model, &materials)?;
-/// k.add_sub(insert(some_block))?;   // invalidates the assembled state
-/// crate::ops::matrix::assemble(&mut k)?;      // re-assembles, new block included
-/// ```
-///
-/// Unlike [`stiffness`], this does not consult the model's cached pattern (there
-/// is no model here), so it rebuilds the sparsity each call — fine for the
-/// occasional composition; hot repeated assembly of a fixed model should keep
-/// going through [`stiffness`].
-pub fn assemble(k: &mut Matrix) -> Result<()> {
-    let pattern = crate::ops::scatter::build_pattern(k)?;
-    let csr = crate::ops::scatter::scatter_parallel(k, &pattern)?;
-    k.set_assembled(pattern.row_dofs, pattern.col_dofs, csr);
-    Ok(())
+// The composition path lives here rather than in `containers/matrix.rs`: it
+// needs the scatter machinery of `ops/`, and a container must not depend on an
+// operator. Rust lets an inherent `impl` sit in any module of the defining
+// crate, so `Matrix` gains the method without the container gaining the
+// dependency.
+impl Matrix {
+    /// Assemble (or re-assemble) this matrix **from its blocks alone** — no
+    /// `Model`.
+    ///
+    /// The sparsity is rebuilt from the current blocks
+    /// ([`crate::ops::scatter::build_pattern`], self-contained: a computed
+    /// block resolves its fill through its recipe, a literal block through its
+    /// COO) and the values are scattered into it. This is the composition path:
+    /// after adding a block of any provenance to an already assembled matrix —
+    /// which [`Matrix::finalize`] cannot handle once computed blocks are
+    /// present, and which [`stiffness`] cannot reach (it only knows a `Model`)
+    /// — call this to fold the new block in.
+    ///
+    /// ```ignore
+    /// let mut k = crate::ops::matrix::stiffness(&model, &materials)?;
+    /// k.add_sub(insert(some_block))?;   // invalidates the assembled state
+    /// k.assemble()?;                    // re-assembles, new block included
+    /// ```
+    ///
+    /// Unlike [`stiffness`], this does not consult the model's cached pattern
+    /// (there is no model here), so it rebuilds the sparsity each call — fine
+    /// for the occasional composition; hot repeated assembly of a fixed model
+    /// should keep going through [`stiffness`].
+    pub fn assemble(&mut self) -> Result<()> {
+        let pattern = crate::ops::scatter::build_pattern(self)?;
+        let csr = crate::ops::scatter::scatter_parallel(self, &pattern)?;
+        self.set_assembled(pattern.row_dofs, pattern.col_dofs, csr);
+        Ok(())
+    }
 }
 
 /// Turn one [`Contribution`] into a [`SubMatrix`] block ready to add to the
@@ -556,7 +565,7 @@ mod tests {
 
     /// Scaling the real production `stiffness()` output (computed volumetric
     /// blocks + literal Dirichlet block) with `Matrix * f64`, then re-assembling
-    /// with `ops::matrix::assemble` (required: `finalize` refuses a computed
+    /// with [`Matrix::assemble`] (required: `finalize` refuses a computed
     /// block), matches the literal reference scaled by hand.
     #[test]
     fn scaled_stiffness_matches_scaled_literal_reference() {
@@ -567,7 +576,7 @@ mod tests {
             scaled.finalize().is_err(),
             "finalize must still refuse a computed block after scaling"
         );
-        assemble(&mut scaled).unwrap();
+        scaled.assemble().unwrap();
 
         let k_ref = assemble_literal_reference(&model, &materials).unwrap();
         let csr_new = scaled.to_csr().unwrap();
@@ -702,7 +711,7 @@ mod tests {
 
         // `finalize` can't (computed block present); the self-contained path can.
         assert!(k.finalize().is_err());
-        assemble(&mut k).unwrap();
+        k.assemble().unwrap();
 
         let after = k.get(a.id(), "q", a.id(), "T").unwrap();
         assert!(

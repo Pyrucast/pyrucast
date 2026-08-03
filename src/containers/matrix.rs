@@ -1099,7 +1099,7 @@ impl Matrix {
             if read(h)?.is_computed() {
                 return Err(PyrucastError::Message(
                     "Matrix::finalize: this matrix carries a computed block; \
-                     assemble it with ops::matrix::assemble(&mut m) (or \
+                     assemble it with m.assemble() (or \
                      ops::matrix::stiffness), which scatters the kernel into \
                      the global CSR — finalize() cannot (it must not reach into \
                      the model/kernel)"
@@ -1448,7 +1448,7 @@ impl Matrix {
     /// assembly — the « rien » case) are never selected by a concrete nature; tag
     /// them [`Physics::Other`] to reach them with `filter(Physics::Other)`. The
     /// result is **not assembled** — like any matrix with freshly added blocks,
-    /// call [`crate::ops::matrix::assemble`] before handing it to a solver.
+    /// call [`Matrix::assemble`] before handing it to a solver.
     pub fn filter(&self, physics: Physics) -> Result<Matrix> {
         let mut indices: Vec<usize> = Vec::new();
         for (i, h) in self.iter().enumerate() {
@@ -1653,8 +1653,8 @@ impl std::ops::Mul<&NodeField> for Matrix {
 // clones of `self`'s (see `map_blocks`). Fallible (store reads), like the
 // crate's other `Matrix` operators. No `Matrix + Matrix`: the assembler already
 // sums contributions landing on the same global `(row, col)`
-// ([`crate::ops::matrix::assemble`]), so `M/dt + K` is `(&(&m / dt)? | &k)?`
-// followed by `ops::matrix::assemble(&mut sys)` — see `book/src/matrix.md`.
+// ([`Matrix::assemble`]), so `M/dt + K` is `(&(&m / dt)? | &k)?`
+// followed by `sys.assemble()` — see `book/src/matrix.md`.
 
 impl std::ops::Mul<f64> for &Matrix {
     type Output = Result<Matrix>;
@@ -2348,7 +2348,7 @@ mod tests {
         );
     }
 
-    /// `M/dt + K` ≡ `(M/dt) | K` followed by `ops::matrix::assemble` — no
+    /// `M/dt + K` ≡ `(M/dt) | K` followed by `Matrix::assemble` — no
     /// dedicated `Matrix + Matrix` operator is needed, because the assembler
     /// already sums contributions landing on the same global `(row, col)`.
     /// `K` carries a DOF (`c`) that `M` doesn't (mirroring a Dirichlet
@@ -2404,7 +2404,7 @@ mod tests {
         let m_dt = (&m / dt).unwrap(); // factor = 1/0.5 = 2 ⇒ diag(8, 8)
 
         let mut sys = m_dt.union(&k).unwrap();
-        crate::ops::matrix::assemble(&mut sys).unwrap();
+        sys.assemble().unwrap();
 
         assert_eq!(sys.n_rows().unwrap(), 3);
         assert_eq!(sys.n_cols().unwrap(), 3);
