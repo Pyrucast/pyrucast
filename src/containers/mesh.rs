@@ -256,6 +256,80 @@ impl SubMesh {
         Ok(copy)
     }
 
+    /// Rename this submesh's nodes **in place**, through `map`.
+    ///
+    /// Every node id that `map` mentions is replaced by its image wherever it
+    /// appears in the connectivity; ids absent from the map (and images equal
+    /// to their key) are left alone. Returns the number of rewritten slots.
+    ///
+    /// This is a **renaming**, not an edit of the mesh structure: the element
+    /// type, the number of cells and the cell order are untouched, so every
+    /// index a caller holds on this submesh (cell numbers, and therefore the
+    /// element fields keyed on them) stays valid. That is what makes an
+    /// in-place rewrite defensible on a container that otherwise only ever
+    /// grows — it is the seam [`merge_nodes_in_place`](fn@crate::ops::mesh::merge_nodes_in_place)
+    /// welds shared meshes through.
+    ///
+    /// Refcounts follow the rename: each rewritten slot increfs its new node
+    /// and decrefs the old one (the connectivity owns one unit per
+    /// *occurrence*). Nothing is written unless every incref succeeds, so a
+    /// dead or invalid image leaves the submesh exactly as it was. The lazily
+    /// built caches ([`node_index`](SubMesh::node_index),
+    /// [`to_poi1`](SubMesh::to_poi1)'s companion) are derived from the
+    /// connectivity and are therefore dropped.
+    ///
+    /// Refuses with [`PyrucastError::MeshSealed`] on a **sealed** submesh: a
+    /// consumer (finite-element space, field, matrix) has captured it, and its
+    /// node numbering must not move under it. Use
+    /// [`duplicate`](SubMesh::duplicate) to get an editable copy.
+    ///
+    /// Node **positions** are never touched — this only rewrites which node a
+    /// cell refers to.
+    pub fn remap_nodes(&mut self, map: &HashMap<NodeId, NodeId>) -> Result<usize> {
+        if self.sealed {
+            return Err(PyrucastError::MeshSealed);
+        }
+
+        // Slots to rewrite, with the refcount move each one implies.
+        let changes: Vec<(usize, NodeId, NodeId)> = self
+            .connectivity
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &old)| match map.get(&old) {
+                Some(&new) if new != old => Some((i, old, new)),
+                _ => None,
+            })
+            .collect();
+        if changes.is_empty() {
+            return Ok(0);
+        }
+
+        {
+            let mut c = write(&self.coords)?;
+            // Incref the images first: until they have all succeeded, nothing
+            // has been given up, so a rollback restores the initial state.
+            for (done, &(_, _, new)) in changes.iter().enumerate() {
+                if let Err(e) = c.incref(new) {
+                    for &(_, _, rollback) in &changes[..done] {
+                        let _ = c.decref(rollback);
+                    }
+                    return Err(e);
+                }
+            }
+            for &(_, old, _) in &changes {
+                c.decref(old)?;
+            }
+        }
+
+        for &(i, _, new) in &changes {
+            self.connectivity[i] = new;
+        }
+        // Both caches are derived from the connectivity that just moved.
+        self.node_index = OnceLock::new();
+        self.poi1_companion = OnceLock::new();
+        Ok(changes.len())
+    }
+
     /// Element type of the submesh.
     pub fn element_type(&self) -> ElementType {
         self.element_type
@@ -945,6 +1019,76 @@ mod tests {
         copy.add_cell(&[a.id(), b.id(), d.id()]).unwrap();
         assert_eq!(copy.cell_count(), 2);
         assert_eq!(sm.cell_count(), 1);
+    }
+
+    #[test]
+    fn remap_nodes_rewrites_connectivity_and_moves_refcounts() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
+        let b2 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        sm.add_cell(&[a.id(), b2.id(), c.id()]).unwrap();
+        sm.add_cell(&[b2.id(), c.id(), a.id()]).unwrap();
+
+        // b2 appears twice in the connectivity: two units, plus its Node.
+        assert_eq!(read(&coords).unwrap().refcount(b2.id()), 3);
+        assert_eq!(read(&coords).unwrap().refcount(b.id()), 1);
+
+        let map = HashMap::from([(b2.id(), b.id()), (a.id(), a.id())]);
+        assert_eq!(sm.remap_nodes(&map).unwrap(), 2, "two slots rewritten");
+
+        assert_eq!(sm.cell_count(), 2, "renaming never changes the cells");
+        assert_eq!(sm.connectivity()[1], b.id());
+        assert_eq!(sm.connectivity()[3], b.id());
+        // The two units moved from b2 to b; the identity entry moved nothing.
+        assert_eq!(read(&coords).unwrap().refcount(b2.id()), 1);
+        assert_eq!(read(&coords).unwrap().refcount(b.id()), 3);
+
+        // Re-applying the same map is a no-op (idempotent by construction).
+        assert_eq!(sm.remap_nodes(&map).unwrap(), 0);
+    }
+
+    #[test]
+    fn remap_nodes_drops_the_derived_caches() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let b2 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        sm.add_cell(&[a.id(), b2.id()]).unwrap();
+        // Populate the node_index cache before the rename.
+        assert!(sm.node_index().contains_key(&b2.id()));
+
+        sm.remap_nodes(&HashMap::from([(b2.id(), b.id())])).unwrap();
+        let index = sm.node_index();
+        assert!(
+            index.contains_key(&b.id()),
+            "cache rebuilt on the new nodes"
+        );
+        assert!(!index.contains_key(&b2.id()));
+    }
+
+    #[test]
+    fn remap_nodes_refuses_a_sealed_submesh() {
+        let coords = insert(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let b2 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        sm.add_cell(&[a.id(), b2.id()]).unwrap();
+        sm.seal();
+
+        assert!(matches!(
+            sm.remap_nodes(&HashMap::from([(b2.id(), b.id())]))
+                .unwrap_err(),
+            PyrucastError::MeshSealed
+        ));
+        assert_eq!(sm.connectivity()[1], b2.id(), "left untouched");
     }
 
     #[test]

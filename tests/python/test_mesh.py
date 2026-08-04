@@ -754,3 +754,84 @@ def test_consolidate_mesh_fuses_same_type_and_drops_duplicates():
     m = pyrucast.mesh.consolidate(za | zb)
     assert len(m) == 1  # one submesh per element type, duplicates dropped
     assert m.cell_counts() == [1]
+
+
+def _two_touching_segments():
+    """Two SEG2 meshes meeting at a duplicated node: (a,b) and (b2,d)."""
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    b2 = c.add_node([1.0, 0.0])  # colocated with b, but a distinct node
+    d = c.add_node([2.0, 0.0])
+    left = pyrucast.Mesh(c, "SEG2")
+    left.unit().add_cell([a, b])
+    right = pyrucast.Mesh(c, "SEG2")
+    right.unit().add_cell([b2, d])
+    return left, right, b, b2
+
+
+def test_merge_nodes_copies_by_default_leaving_the_sources_apart():
+    left, right, b, b2 = _two_touching_segments()
+
+    joined = pyrucast.mesh.merge_nodes(left | right, 1e-6)
+    assert joined.cell_count() == 2
+    # The welded mesh is a new one; the sources still hold their own nodes.
+    assert right.node(0, 0, 0).id == b2.id
+    assert left.node(0, 0, 1).id == b.id
+
+
+def test_merge_nodes_in_place_welds_the_sources_through_their_union():
+    left, right, b, b2 = _two_touching_segments()
+
+    both = left | right
+    welded = pyrucast.mesh.merge_nodes(both, 1e-6, in_place=True)
+    # In place: the very same mesh object comes back.
+    assert welded is both
+    # And the weld reached the two source meshes, which share the submeshes.
+    assert right.node(0, 0, 0).id == b.id
+    assert left.node(0, 0, 1).id == b.id
+    assert [left.cell_count(), right.cell_count()] == [1, 1]
+    assert b2.id != b.id
+
+
+def test_merge_nodes_in_place_is_also_a_mesh_method():
+    left, right, b, _ = _two_touching_segments()
+    both = left | right
+    assert both.merge_nodes(1e-6, in_place=True) is both
+    assert right.node(0, 0, 0).id == b.id
+
+
+def test_merge_nodes_in_place_refuses_to_drop_a_collapsing_cell():
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    d = c.add_node([1.0, 0.0])  # on top of b: the (b, d) segment collapses
+    mesh = pyrucast.Mesh(c, "SEG2")
+    mesh.unit().add_cell([a, b])
+    mesh.unit().add_cell([b, d])
+
+    try:
+        pyrucast.mesh.merge_nodes(mesh, 1e-6, in_place=True)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected an error on a collapsing cell")
+    # Nothing was written: both cells still there, still on d.
+    assert mesh.cell_count() == 2
+    assert mesh.node(0, 1, 1).id == d.id
+    # The copying variant drops it, as documented.
+    assert pyrucast.mesh.merge_nodes(mesh, 1e-6).cell_count() == 1
+
+
+def test_merge_nodes_in_place_refuses_a_sealed_submesh():
+    left, right, _, b2 = _two_touching_segments()
+    # A finite-element space captures `right` and seals its submesh.
+    pyrucast.FiniteElementSpace(right, "Lagrange1", "Gauss")
+
+    try:
+        pyrucast.mesh.merge_nodes(left | right, 1e-6, in_place=True)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected an error on a sealed submesh")
+    assert right.node(0, 0, 0).id == b2.id

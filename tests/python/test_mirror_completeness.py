@@ -63,6 +63,7 @@ RUST_ONLY = {
     "select_nodes": "dispatch par type dans `mesh.select`",
     "integral_element": "dispatch par type dans `measure.integral`",
     "consolidate": "exposé sous le nom court dans son sous-module Python",
+    "merge_nodes_in_place": "exposé par le drapeau `in_place=` de `mesh.merge_nodes`",
     "set": "exposé sous le nom court dans `pyrucast.coords`",
     "solve": "exposé par variante (`solve`, `solve_eliminate`, `solve_unilateral`)",
     "Band": "type de valeur, transporté par les arguments `ge`/`gt`/`le`/`lt`",

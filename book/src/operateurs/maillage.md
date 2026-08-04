@@ -49,7 +49,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `convert(mesh, element_type)` | **change le type d'élément** sans déplacer ni ajouter de nœud : identité, `QUA4`→`TRI3` (2 triangles), `HEX8`→`TET4` (6 tétraèdres) (voir plus bas) |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
 | `mesh.consolidate(mesh)` | fusionne les sous-maillages de même type, en écartant les mailles dupliquées |
-| `merge_nodes(mesh, tol)` | **soude** les nœuds distants de moins de `tol` ; remappe la connectivité, abandonne les cellules dégénérées (voir plus bas) |
+| `merge_nodes(mesh, tol, in_place=False)` | **soude** les nœuds distants de moins de `tol` ; remappe la connectivité, abandonne les cellules dégénérées — ou réécrit les sous-maillages **sur place** avec `in_place=True` (voir plus bas) |
 | `read_gmsh(coords, path)` | **lit un maillage gmsh** `.msh` (ASCII 2.2 ou 4.1) dans `coords`, renvoie un `dict` `{groupe physique: Mesh}` (voir plus bas) |
 | `read_gmsh_str(coords, text)` | comme `read_gmsh` mais depuis le **texte** du fichier déjà en mémoire |
 
@@ -1662,7 +1662,60 @@ joined = pyrucast.mesh.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
 > maillées dans des `Coords` séparées ne se soudent donc pas : il faut d'abord
 > les amener dans la même `Coords`.
 
-Côté Rust, `ops::mesh::merge_nodes(&mesh, tol)`.
+### Souder sur place : `in_place=True`
+
+Par défaut `merge_nodes` **copie** : il rend un maillage neuf et laisse ses
+entrées intactes. Les maillages d'origine, eux, gardent donc leurs nœuds
+dupliqués — ce qui oblige à ne plus manipuler qu'un troisième maillage, et à
+recâbler tout ce qui pointait vers les deux premiers.
+
+`merge_nodes(mesh, tol, in_place=True)` réécrit à la place la connectivité des
+sous-maillages **existants** — effet de bord assumé et voulu — et renvoie le
+maillage lui-même. Comme l'union `mesh_a | mesh_b` **partage** les
+sous-maillages (elle ne les copie pas), souder l'union soude du même coup
+`mesh_a` et `mesh_b` :
+
+```python
+gauche = pyrucast.mesh.line(a, b, 4)
+droite = pyrucast.mesh.line(b2, d, 4)  # b2 colocalisé avec b, mais distinct
+
+pyrucast.mesh.merge_nodes(gauche | droite, 1e-6, in_place=True)
+
+# Les deux morceaux partagent maintenant réellement le nœud d'interface.
+assert droite.node(0, 0, 0).id == b.id
+```
+
+Ce que la mutation ne touche pas : **la structure du maillage**. Mêmes
+sous-maillages, mêmes types, même nombre de cellules dans le même ordre — seul
+*quel nœud* une cellule référence change. C'est ce qui rend l'effet de bord
+tenable : tout indice déjà détenu sur ces sous-maillages (numéros de cellules,
+et donc les champs par élément qui s'appuient dessus) reste valide. Les
+coordonnées des nœuds ne bougent pas non plus.
+
+D'où deux refus, vérifiés **sur tout le maillage avant la moindre écriture**
+(un appel rejeté ne modifie donc rien) :
+
+- une cellule qui **s'effondrerait** est une **erreur**, là où la variante
+  copiante l'abandonne : l'abandonner changerait le nombre de mailles, c'est-à-
+  dire précisément l'invariant sur lequel repose l'appel sur place. Baissez
+  `tol`, ou passez par la variante copiante ;
+- un sous-maillage **scellé** est une erreur : un espace d'éléments finis, un
+  champ ou une matrice l'a capturé et lit sa numérotation de nœuds. Soudez
+  avant de les construire (ou repartez d'un `duplicate()`).
+
+Les caches dérivés de la connectivité (index des nœuds, compagnon POI1 de
+`to_poi1`) sont invalidés par la réécriture, et les refcounts suivent : chaque
+emplacement réécrit incrémente son nouveau nœud et décrémente l'ancien.
+
+Le retour est **exactement le maillage passé** — les mêmes sous-maillages,
+dont l'intérieur a changé —, pas une copie : en Python, `out is mesh`. On peut
+donc l'ignorer, ou chaîner dessus, au choix.
+
+Côté Rust, ce sont deux fonctions distinctes, faute de pouvoir surcharger le
+type de retour : `ops::mesh::merge_nodes(&mesh, tol)` (copiante) et
+`ops::mesh::merge_nodes_in_place(&mesh, tol)`, qui rend le même maillage
+soudé. La brique de conteneur sous-jacente est `SubMesh::remap_nodes(&map)`,
+un **renommage** de nœuds à structure constante.
 
 ## Lecture d'un maillage gmsh : `read_gmsh`
 

@@ -1130,7 +1130,7 @@ class Mesh:
         r"""
         Voir `pyrucast.mesh.consolidate`.
         """
-    def merge_nodes(self, tol: builtins.float) -> Mesh:
+    def merge_nodes(self, tol: builtins.float, in_place: builtins.bool = False) -> Mesh:
         r"""
         Voir `pyrucast.mesh.merge_nodes`.
         """
@@ -3133,7 +3133,7 @@ def merge(a: NodeField, b: NodeField) -> NodeField:
     `(node, component)` pair, or are attached to different `Coords`s.
     """
 
-def merge_nodes(mesh: Mesh, tol: builtins.float) -> Mesh:
+def merge_nodes(mesh: Mesh, tol: builtins.float, in_place: builtins.bool = False) -> Mesh:
     r"""
     Weld together nodes closer than `tol`, redirecting the connectivity to one
     representative per cluster.
@@ -3144,6 +3144,16 @@ def merge_nodes(mesh: Mesh, tol: builtins.float) -> Mesh:
     averaging). Cells that collapse onto a repeated node (a degenerate segment,
     triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
     coincident nodes. `mesh` itself is left untouched.
+    
+    With `in_place=True` the connectivity of `mesh`'s **own** submeshes is
+    rewritten instead — the assumed side effect — and the very same mesh object
+    is returned. Since the union `mesh_a | mesh_b` shares its submeshes rather
+    than copying them, welding that union in place welds `mesh_a` and `mesh_b`
+    themselves: afterwards they really do share their interface nodes. The mesh
+    structure is preserved (same submeshes, same cells in the same order), so a
+    cell that *would* collapse is an error here instead of being dropped, as is
+    a submesh already sealed by a finite-element space, field or matrix. Both
+    are checked before anything is written: a rejected call changes nothing.
     """
 
 def orient(mesh: Mesh) -> Mesh:

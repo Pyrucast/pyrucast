@@ -332,11 +332,31 @@ pub fn consolidate(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// averaging). Cells that collapse onto a repeated node (a degenerate segment,
 /// triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
 /// coincident nodes. `mesh` itself is left untouched.
+///
+/// With `in_place=True` the connectivity of `mesh`'s **own** submeshes is
+/// rewritten instead — the assumed side effect — and the very same mesh object
+/// is returned. Since the union `mesh_a | mesh_b` shares its submeshes rather
+/// than copying them, welding that union in place welds `mesh_a` and `mesh_b`
+/// themselves: afterwards they really do share their interface nodes. The mesh
+/// structure is preserved (same submeshes, same cells in the same order), so a
+/// cell that *would* collapse is an error here instead of being dropped, as is
+/// a submesh already sealed by a finite-element space, field or matrix. Both
+/// are checked before anything is written: a rejected call changes nothing.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn merge_nodes(mesh: PyRef<PyMesh>, tol: f64) -> PyResult<PyMesh> {
-    let result = crate::ops::mesh::merge_nodes(&mesh.inner, tol)?;
-    Ok(PyMesh { inner: result })
+#[pyo3(signature = (mesh, tol, in_place=false))]
+pub fn merge_nodes(
+    py: Python<'_>,
+    mesh: Py<PyMesh>,
+    tol: f64,
+    in_place: bool,
+) -> PyResult<Py<PyMesh>> {
+    if in_place {
+        crate::ops::mesh::merge_nodes_in_place(&mesh.borrow(py).inner, tol)?;
+        return Ok(mesh);
+    }
+    let result = crate::ops::mesh::merge_nodes(&mesh.borrow(py).inner, tol)?;
+    Py::new(py, PyMesh { inner: result })
 }
 
 /// Extract the boundary of a surface mesh (TRI3/QUA4) as SEG2 loops.
@@ -1082,8 +1102,14 @@ impl PyMesh {
     }
 
     /// Voir `pyrucast.mesh.merge_nodes`.
-    fn merge_nodes(slf: PyRef<'_, Self>, tol: f64) -> PyResult<PyMesh> {
-        super::mesh::merge_nodes(slf, tol)
+    #[pyo3(signature = (tol, in_place=false))]
+    fn merge_nodes(
+        slf: Py<Self>,
+        py: Python<'_>,
+        tol: f64,
+        in_place: bool,
+    ) -> PyResult<Py<PyMesh>> {
+        super::mesh::merge_nodes(py, slf, tol, in_place)
     }
 
     /// Voir `pyrucast.mesh.border`.

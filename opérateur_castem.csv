@@ -20,7 +20,7 @@ Maillage - génération;SYME;Symétrie d'un maillage;symmetry_point / symmetry_l
 Maillage - génération;HOMO;Homothétie d'un maillage;—
 Maillage - génération;AFFI;Affinité (mise à l'échelle anisotrope);—
 Maillage - assemblage;ET;Union (assemblage) de plusieurs maillages;union (opérateur |)
-Maillage - assemblage;ELIM;Élimine les nœuds doubles (fusion par tolérance);merge_nodes
+Maillage - assemblage;ELIM;Élimine les nœuds doubles (fusion par tolérance);merge_nodes (in_place pour souder les maillages en place)
 Maillage - assemblage;ENLE;Enlève des éléments d'un maillage;—
 Maillage - assemblage;DIFF;Différence de maillages;—
 Maillage - assemblage;INTE;Intersection de maillages;—

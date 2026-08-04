@@ -147,6 +147,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `points_in_torus(mesh: &Mesh, center: &[f64], axis: &[f64], major_radius: f64, minor_radius: f64, tol: Option<f64>) -> Mesh` | `points_in_torus(mesh, center, axis, major_radius, minor_radius, tol=None) -> Mesh` |
 | `points_on_torus(mesh: &Mesh, center: &[f64], axis: &[f64], major_radius: f64, minor_radius: f64, tol: Option<f64>) -> Mesh` | `points_on_torus(mesh, center, axis, major_radius, minor_radius, tol=None) -> Mesh` |
 | `merge_nodes(mesh: &Mesh, tol: f64) -> Mesh` | `merge_nodes(mesh, tol) -> Mesh` |
+| `merge_nodes_in_place(mesh: &Mesh, tol: f64) -> Mesh` (le maillage lui-même) | `merge_nodes(mesh, tol, in_place=True) -> Mesh` (le maillage lui-même) |
 | `read_gmsh(coords: Handle<Coords>, path: &Path) -> Vec<(String, Mesh)>` | `read_gmsh(coords, path) -> dict[str, Mesh]` |
 | `read_gmsh_str(coords: Handle<Coords>, text: &str) -> Vec<(String, Mesh)>` | `read_gmsh_str(coords, text) -> dict[str, Mesh]` |
 | `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` |

@@ -59,6 +59,11 @@ impl Mesh {
         crate::ops::mesh::merge_nodes(self, tol)
     }
 
+    /// Voir [`mesh::merge_nodes_in_place`](fn@crate::ops::mesh::merge_nodes_in_place).
+    pub fn merge_nodes_in_place(&self, tol: f64) -> Result<Mesh> {
+        crate::ops::mesh::merge_nodes_in_place(self, tol)
+    }
+
     /// Voir [`mesh::orient`](fn@crate::ops::mesh::orient).
     pub fn orient(&self) -> Result<Mesh> {
         crate::ops::mesh::orient(self)

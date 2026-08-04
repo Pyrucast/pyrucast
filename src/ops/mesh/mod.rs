@@ -58,7 +58,7 @@ pub use extrude::extrude;
 pub use from_live_nodes::from_live_nodes;
 pub use gmsh::{read_gmsh, read_gmsh_str};
 pub use line::line;
-pub use merge_nodes::merge_nodes;
+pub use merge_nodes::{merge_nodes, merge_nodes_in_place};
 pub use orient::{invert, orient};
 pub use pave_surface::{pave_surface, pave_surface_cancellable};
 pub use pave_volume::{pave_volume, pave_volume_cancellable};

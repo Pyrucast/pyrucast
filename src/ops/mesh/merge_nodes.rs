@@ -3,7 +3,7 @@ use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::{insert, read, write};
 use std::collections::HashMap;
 
 /// Weld together nodes closer than `tol` (Euclidean distance), rewriting the
@@ -67,6 +67,90 @@ pub fn merge_nodes(mesh: &Mesh, tol: f64) -> Result<Mesh> {
     }
 
     Ok(result)
+}
+
+/// Weld together nodes closer than `tol`, rewriting the connectivity of
+/// `mesh`'s submeshes **in place** — the assumed, wanted side effect.
+///
+/// Same clustering as [`merge_nodes`] (smallest [`NodeId`] represents its
+/// cluster and keeps its coordinates), but instead of building new submeshes
+/// it renames the nodes of the existing ones, through
+/// [`SubMesh::remap_nodes`](crate::containers::mesh::SubMesh::remap_nodes).
+///
+/// Returns **the same mesh** — an aggregate over the very same submesh slots,
+/// whose insides have changed. There is no copy anywhere in the call, and
+/// nothing to re-plumb: the value handed back and the argument are the same
+/// mesh seen twice.
+///
+/// **What it buys.** The submesh handles are shared, not copied, by the
+/// aggregate operators: `mesh_a | mesh_b` is a mesh over the *same* slots.
+/// Welding on that union therefore reaches `mesh_a` and `mesh_b` themselves —
+/// after the call, the two meshes really do share the interface nodes, with no
+/// third mesh to carry around and no re-plumbing of whatever already refers to
+/// them. That is the whole point of this variant; the copying [`merge_nodes`]
+/// would leave the originals unwelded.
+///
+/// **The mesh structure is preserved**: same submeshes, same element types,
+/// same number of cells in the same order — only *which node* a cell refers to
+/// changes. Hence the two refusals, both checked over the whole mesh **before
+/// anything is written**, so a rejected call leaves every submesh untouched:
+///
+/// - a cell that would **collapse** (referencing the same representative
+///   twice) is an error, where [`merge_nodes`] drops it — dropping would
+///   change the cell count, which is exactly the invariant in-place callers
+///   rely on. Lower `tol`, or go through the copying variant;
+/// - a **sealed** submesh is an error: a finite-element space, field or matrix
+///   has captured it and reads its node numbering.
+///
+/// Nodes welded away stay in the shared [`Coords`] until nothing references
+/// them, as with [`merge_nodes`].
+pub fn merge_nodes_in_place(mesh: &Mesh, tol: f64) -> Result<Mesh> {
+    if tol < 0.0 {
+        return Err(PyrucastError::Message(format!(
+            "merge_nodes: tol must be ≥ 0, got {tol}"
+        )));
+    }
+    let coords_handle = mesh.coords()?;
+    let representative = build_representatives(mesh, &coords_handle, tol)?;
+
+    // Pre-flight over the whole mesh: an in-place run is all-or-nothing.
+    for (si, sm_handle) in mesh.into_iter().enumerate() {
+        let s = read(sm_handle)?;
+        if s.is_sealed() {
+            return Err(PyrucastError::Message(format!(
+                "merge_nodes(in_place): submesh {si} is sealed — a finite-element \
+                 space, field or matrix already reads its nodes; weld before \
+                 building them, or use the copying merge_nodes"
+            )));
+        }
+        let npc = s.element_type().nodes_per_cell();
+        if npc == 0 {
+            continue;
+        }
+        for (ci, chunk) in s.connectivity().chunks(npc).enumerate() {
+            let mapped: Vec<NodeId> = chunk
+                .iter()
+                .map(|n| representative.get(n).copied().unwrap_or(*n))
+                .collect();
+            if is_degenerate(&mapped) {
+                return Err(PyrucastError::Message(format!(
+                    "merge_nodes(in_place): cell {ci} of submesh {si} ({}) would \
+                     collapse — welding it away would change the cell count, which \
+                     an in-place weld preserves; lower tol, or use the copying \
+                     merge_nodes, which drops degenerate cells",
+                    s.element_type()
+                )));
+            }
+        }
+    }
+
+    for sm_handle in mesh {
+        write(sm_handle)?.remap_nodes(&representative)?;
+    }
+
+    // The same mesh back: an aggregate over the very same submesh slots (the
+    // handles are shared, not deep-copied), now welded.
+    mesh.subset(0..mesh.len())
 }
 
 /// Assign each referenced node a representative id via a uniform spatial grid
@@ -262,6 +346,101 @@ mod tests {
         assert_eq!(merged.node(0, 0, 1).unwrap().id(), near.id());
         assert_eq!(merged.node(0, 1, 1).unwrap().id(), a.id());
         assert_ne!(near.id(), b.id());
+    }
+
+    #[test]
+    fn in_place_welds_through_a_union_and_reaches_both_meshes() {
+        // Two SEG2 pieces meshed apart, meeting at a duplicated node.
+        let coords = coords2();
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let b2 = Node::create_in(coords.clone(), &[1.0 + 1e-9, 0.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
+
+        let mut left = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        left.add_cell(&[a.id(), b.id()]).unwrap();
+        let mut right = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        right.add_cell(&[b2.id(), d.id()]).unwrap();
+
+        // The union shares the two submeshes, so welding it welds them.
+        let both = left.union(&right).unwrap();
+        let welded = merge_nodes_in_place(&both, 1e-6).unwrap();
+        // The same mesh back: same submesh slots, welded insides.
+        assert_eq!(welded.len(), both.len());
+        assert_eq!(welded.get(0).unwrap().index(), both.get(0).unwrap().index());
+
+        // b2 → b in `right` itself — the two pieces now share their node.
+        assert_eq!(right.node(0, 0, 0).unwrap().id(), b.id());
+        assert_eq!(left.node(0, 0, 1).unwrap().id(), b.id());
+        assert_eq!(left.cell_count().unwrap(), 1);
+        assert_eq!(right.cell_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn in_place_moves_refcounts_and_leaves_positions_alone() {
+        let coords = coords2();
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[5.0, 5.0]).unwrap();
+        let b2 = Node::create_in(coords.clone(), &[5.0 + 1e-9, 5.0]).unwrap();
+
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        mesh.add_cell(&[a.id(), b.id()]).unwrap();
+        mesh.add_cell(&[a.id(), b2.id()]).unwrap();
+
+        assert_eq!(read(&coords).unwrap().refcount(b.id()), 2);
+        merge_nodes_in_place(&mesh, 1e-6).unwrap();
+
+        // b2's connectivity unit moved to b; b2 survives through its Node only.
+        assert_eq!(read(&coords).unwrap().refcount(b.id()), 3);
+        assert_eq!(read(&coords).unwrap().refcount(b2.id()), 1);
+        // The representative keeps its own coordinates — no averaging.
+        assert_eq!(
+            read(&coords).unwrap().position(b.id()).unwrap(),
+            &[5.0, 5.0]
+        );
+    }
+
+    #[test]
+    fn in_place_refuses_a_collapsing_cell_without_touching_anything() {
+        let coords = coords2();
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        // c sits on top of b → the SEG2 (b, c) would collapse.
+        let c = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        mesh.add_cell(&[a.id(), b.id()]).unwrap();
+        mesh.add_cell(&[b.id(), c.id()]).unwrap();
+
+        assert!(merge_nodes_in_place(&mesh, 1e-6).is_err());
+        // Nothing was written: the mesh still holds both cells, on c.
+        assert_eq!(mesh.cell_count().unwrap(), 2);
+        assert_eq!(mesh.node(0, 1, 1).unwrap().id(), c.id());
+        // The copying variant is the way out — it drops the degenerate cell.
+        assert_eq!(merge_nodes(&mesh, 1e-6).unwrap().cell_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn in_place_refuses_a_sealed_submesh_without_touching_anything() {
+        let coords = coords2();
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let b2 = Node::create_in(coords.clone(), &[1.0 + 1e-9, 0.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
+
+        let mut sealed = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        sealed.add_cell(&[b2.id(), d.id()]).unwrap();
+        crate::containers::mesh::seal(&sealed.get(0).unwrap()).unwrap();
+
+        let mut open = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        open.add_cell(&[a.id(), b.id()]).unwrap();
+
+        // The open submesh comes first, but the sealed one still vetoes the
+        // whole run before any write.
+        let both = open.union(&sealed).unwrap();
+        assert!(merge_nodes_in_place(&both, 1e-6).is_err());
+        assert_eq!(sealed.node(0, 0, 0).unwrap().id(), b2.id());
+        assert_eq!(open.node(0, 0, 1).unwrap().id(), b.id());
     }
 
     #[test]
