@@ -3154,6 +3154,9 @@ def merge_nodes(mesh: Mesh, tol: builtins.float, in_place: builtins.bool = False
     cell that *would* collapse is an error here instead of being dropped, as is
     a submesh already sealed by a finite-element space, field or matrix. Both
     are checked before anything is written: a rejected call changes nothing.
+    
+    Every call prints a one-line tally on stdout once the weld is done — nodes
+    welded, cells dropped, tolerance used.
     """
 
 def orient(mesh: Mesh) -> Mesh:

@@ -267,7 +267,7 @@ impl SubMesh {
     /// index a caller holds on this submesh (cell numbers, and therefore the
     /// element fields keyed on them) stays valid. That is what makes an
     /// in-place rewrite defensible on a container that otherwise only ever
-    /// grows — it is the seam [`merge_nodes_in_place`](fn@crate::ops::mesh::merge_nodes_in_place)
+    /// grows — it is the seam [`merge_nodes(…, in_place = true)`](fn@crate::ops::mesh::merge_nodes)
     /// welds shared meshes through.
     ///
     /// Refcounts follow the rename: each rewritten slot increfs its new node

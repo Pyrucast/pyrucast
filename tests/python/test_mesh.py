@@ -835,3 +835,18 @@ def test_merge_nodes_in_place_refuses_a_sealed_submesh():
     else:
         raise AssertionError("expected an error on a sealed submesh")
     assert right.node(0, 0, 0).id == b2.id
+
+
+def test_merge_nodes_prints_a_tally(capfd):
+    left, right, _, _ = _two_touching_segments()
+
+    pyrucast.mesh.merge_nodes(left | right, 1e-6)
+    # The line comes from Rust's stdout, hence capfd (fd-level) and not capsys.
+    out = capfd.readouterr().out
+    assert "merge_nodes: 1 node(s) welded" in out
+    assert "0 cell(s) dropped" in out
+
+    # In place, no cell can be dropped — the line says so rather than "0".
+    pyrucast.mesh.merge_nodes(left | right, 1e-6, in_place=True)
+    out = capfd.readouterr().out
+    assert "merge_nodes (in place): 1 node(s) welded, cells untouched" in out

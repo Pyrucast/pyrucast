@@ -1657,6 +1657,19 @@ mesh.unit().add_cell([b2, d])
 joined = pyrucast.mesh.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
 ```
 
+**Bilan à l'écran.** Chaque appel imprime une ligne sur la sortie standard —
+nœuds soudés, mailles supprimées, tolérance employée :
+
+```text
+merge_nodes: 12 node(s) welded, 3 cell(s) dropped, tol = 0.000001
+merge_nodes (in place): 12 node(s) welded, cells untouched, tol = 0.000001
+```
+
+C'est une étape qu'on veut voir passer dans un journal de construction :
+`tol` est un pari sur la géométrie, et cette ligne est ce qui dit s'il était
+bon. En place, la ligne ne parle pas de mailles supprimées : il ne peut pas y
+en avoir, l'opérateur refuse plutôt (voir plus bas).
+
 > `merge_nodes` opère **au sein d'une même `Coords`** (l'invariant du `Mesh`
 > impose déjà une `Coords` commune à tous les sous-maillages). Deux pièces
 > maillées dans des `Coords` séparées ne se soudent donc pas : il faut d'abord
@@ -1711,14 +1724,11 @@ Le retour est **exactement le maillage passé** — les mêmes sous-maillages,
 dont l'intérieur a changé —, pas une copie : en Python, `out is mesh`. On peut
 donc l'ignorer, ou chaîner dessus, au choix.
 
-Côté Rust, ce sont deux fonctions de même signature —
-`ops::mesh::merge_nodes(&mesh, tol)` (copiante) et
-`ops::mesh::merge_nodes_in_place(&mesh, tol)` (le même maillage, soudé) —
-puisque Rust n'a pas d'argument par défaut : un paramètre `in_place` aurait
-obligé **tous** les appels existants à passer `false`. Le drapeau Python n'est
-donc pas une surcharge, c'est le confort des arguments nommés. La brique de
-conteneur sous-jacente est `SubMesh::remap_nodes(&map)`, un **renommage** de
-nœuds à structure constante.
+Côté Rust, c'est le **même** opérateur avec le même drapeau :
+`ops::mesh::merge_nodes(&mesh, tol, in_place)` — miroir strict de la forme
+Python, qui n'ajoute que la valeur par défaut. La brique de conteneur
+sous-jacente est `SubMesh::remap_nodes(&map)`, un **renommage** de nœuds à
+structure constante.
 
 ## Lecture d'un maillage gmsh : `read_gmsh`
 

@@ -9,26 +9,60 @@ use std::collections::HashMap;
 /// Weld together nodes closer than `tol` (Euclidean distance), rewriting the
 /// connectivity to refer to a single representative per cluster.
 ///
-/// The result mirrors `mesh`: same submeshes, in the same order, each keeping
-/// its element type and face colour, but with every reference to a welded-away
-/// node redirected to its cluster representative. The representative is the
-/// node with the **smallest [`NodeId`]** in the cluster, and it **keeps its own
-/// coordinates** (no averaging — a deliberate choice, like the rest of the
-/// pipeline, to avoid silently moving geometry). Welded-away nodes are left in
-/// the shared [`Coords`]; once nothing references them they become collectable
-/// by [`Coords::gc`](crate::coords::Coords::gc).
-///
-/// Cells that collapse — i.e. reference the same representative more than once
-/// after welding (a SEG2 whose two ends merge, a TRI3 with two coincident
-/// corners, …) — are **dropped**, since they are degenerate. POI1 cells, being
-/// single nodes, never collapse and are always kept (de-duplicating colocated
-/// points is [`consolidate`](fn@crate::ops::mesh::consolidate)'s job, not this
-/// one's).
-///
-/// Every node referenced by the result is increfed afresh by the new
-/// submeshes; `mesh` itself is left untouched. Errors if `tol` is negative or
+/// Each cluster is represented by the node with the **smallest [`NodeId`]**,
+/// and that representative **keeps its own coordinates** (no averaging — a
+/// deliberate choice, like the rest of the pipeline, to avoid silently moving
+/// geometry). Welded-away nodes are left in the shared [`Coords`]; once
+/// nothing references them they become collectable by
+/// [`Coords::gc`](crate::coords::Coords::gc). Errors if `tol` is negative or
 /// if `mesh` has no submeshes (no Coords to attach to).
-pub fn merge_nodes(mesh: &Mesh, tol: f64) -> Result<Mesh> {
+///
+/// # `in_place`
+///
+/// `false` — the **copying** weld. The result mirrors `mesh`: same submeshes,
+/// in the same order, each keeping its element type and face colour, with
+/// every reference to a welded-away node redirected. Every node referenced by
+/// the result is increfed afresh by the new submeshes; `mesh` itself is left
+/// untouched. Cells that **collapse** (referencing the same representative
+/// twice: a SEG2 whose two ends merge, a TRI3 with two coincident corners, …)
+/// are **dropped**, being degenerate. POI1 cells, single nodes, never collapse
+/// and are always kept — de-duplicating colocated points is
+/// [`consolidate`](fn@crate::ops::mesh::consolidate)'s job, not this one's.
+///
+/// `true` — the **in-place** weld: the connectivity of `mesh`'s own submeshes
+/// is rewritten, through
+/// [`SubMesh::remap_nodes`](crate::containers::mesh::SubMesh::remap_nodes),
+/// and **the same mesh** comes back — an aggregate over the very same submesh
+/// slots, whose insides have changed. Nothing is copied and nothing has to be
+/// re-plumbed: the value handed back and the argument are one mesh seen twice.
+///
+/// The assumed, wanted side effect is what welding *several* meshes takes.
+/// Since the aggregate operators share their submeshes rather than copying
+/// them, `mesh_a | mesh_b` is a mesh over the same slots — so welding that
+/// union in place reaches `mesh_a` and `mesh_b` themselves, which afterwards
+/// really do share their interface nodes. The copying weld would leave both
+/// originals apart.
+///
+/// It stays defensible because the **mesh structure is preserved**: same
+/// submeshes, same element types, same number of cells in the same order —
+/// only *which node* a cell refers to changes, so every index a caller holds
+/// (cell numbers, and the element fields keyed on them) stays valid. Hence two
+/// refusals, both checked over the whole mesh **before anything is written**,
+/// so a rejected call leaves every submesh untouched:
+///
+/// - a cell that would **collapse** is an error here instead of being dropped
+///   — dropping would change the cell count, which is exactly the invariant
+///   in-place callers rely on. Lower `tol`, or weld by copy;
+/// - a **sealed** submesh is an error: a finite-element space, field or matrix
+///   has captured it and reads its node numbering.
+///
+/// # Tally
+///
+/// Every call prints one line on **stdout** once the weld is done — how many
+/// nodes were welded away, how many cells dropped, at which tolerance. A weld
+/// is a step you want to see in a build log: `tol` is a guess about the
+/// geometry, and this line is what tells you it guessed right.
+pub fn merge_nodes(mesh: &Mesh, tol: f64, in_place: bool) -> Result<Mesh> {
     if tol < 0.0 {
         return Err(PyrucastError::Message(format!(
             "merge_nodes: tol must be ≥ 0, got {tol}"
@@ -38,10 +72,43 @@ pub fn merge_nodes(mesh: &Mesh, tol: f64) -> Result<Mesh> {
 
     // Map every referenced node to its cluster representative.
     let representative = build_representatives(mesh, &coords_handle, tol)?;
+    let welded = representative
+        .iter()
+        .filter(|(id, rep)| *id != *rep)
+        .count();
 
-    // Rebuild every submesh with remapped connectivity, dropping degenerate
-    // cells.
+    let (result, dropped) = if in_place {
+        // An in-place weld never drops a cell — it refuses instead.
+        (weld_in_place(mesh, &representative)?, 0)
+    } else {
+        weld_into_copy(mesh, &coords_handle, &representative)?
+    };
+    println!("{}", summary(welded, dropped, tol, in_place));
+    Ok(result)
+}
+
+/// The tally line printed by every weld: what it changed, in one sentence.
+fn summary(welded: usize, dropped: usize, tol: f64, in_place: bool) -> String {
+    let how = if in_place { " (in place)" } else { "" };
+    let cells = if in_place {
+        // Saying "0 cells dropped" would suggest it could have been otherwise.
+        String::from("cells untouched")
+    } else {
+        format!("{dropped} cell(s) dropped")
+    };
+    format!("merge_nodes{how}: {welded} node(s) welded, {cells}, tol = {tol}")
+}
+
+/// Rebuild every submesh with remapped connectivity, dropping degenerate
+/// cells — the copying half of [`merge_nodes`]. Returns the new mesh and how
+/// many cells were dropped.
+fn weld_into_copy(
+    mesh: &Mesh,
+    coords_handle: &crate::store::Handle<Coords>,
+    representative: &HashMap<NodeId, NodeId>,
+) -> Result<(Mesh, usize)> {
     let mut result = Mesh::empty();
+    let mut dropped = 0;
     for sm_handle in mesh {
         let (et, color, conn) = {
             let s = read(sm_handle)?;
@@ -58,6 +125,7 @@ pub fn merge_nodes(mesh: &Mesh, tol: f64) -> Result<Mesh> {
                 .map(|n| representative.get(n).copied().unwrap_or(*n))
                 .collect();
             if is_degenerate(&mapped) {
+                dropped += 1;
                 continue;
             }
             new_sm.add_cell(&mapped)?;
@@ -66,53 +134,13 @@ pub fn merge_nodes(mesh: &Mesh, tol: f64) -> Result<Mesh> {
         result.add_sub(insert(new_sm))?;
     }
 
-    Ok(result)
+    Ok((result, dropped))
 }
 
-/// Weld together nodes closer than `tol`, rewriting the connectivity of
-/// `mesh`'s submeshes **in place** — the assumed, wanted side effect.
-///
-/// Same clustering as [`merge_nodes`] (smallest [`NodeId`] represents its
-/// cluster and keeps its coordinates), but instead of building new submeshes
-/// it renames the nodes of the existing ones, through
-/// [`SubMesh::remap_nodes`](crate::containers::mesh::SubMesh::remap_nodes).
-///
-/// Returns **the same mesh** — an aggregate over the very same submesh slots,
-/// whose insides have changed. There is no copy anywhere in the call, and
-/// nothing to re-plumb: the value handed back and the argument are the same
-/// mesh seen twice.
-///
-/// **What it buys.** The submesh handles are shared, not copied, by the
-/// aggregate operators: `mesh_a | mesh_b` is a mesh over the *same* slots.
-/// Welding on that union therefore reaches `mesh_a` and `mesh_b` themselves —
-/// after the call, the two meshes really do share the interface nodes, with no
-/// third mesh to carry around and no re-plumbing of whatever already refers to
-/// them. That is the whole point of this variant; the copying [`merge_nodes`]
-/// would leave the originals unwelded.
-///
-/// **The mesh structure is preserved**: same submeshes, same element types,
-/// same number of cells in the same order — only *which node* a cell refers to
-/// changes. Hence the two refusals, both checked over the whole mesh **before
-/// anything is written**, so a rejected call leaves every submesh untouched:
-///
-/// - a cell that would **collapse** (referencing the same representative
-///   twice) is an error, where [`merge_nodes`] drops it — dropping would
-///   change the cell count, which is exactly the invariant in-place callers
-///   rely on. Lower `tol`, or go through the copying variant;
-/// - a **sealed** submesh is an error: a finite-element space, field or matrix
-///   has captured it and reads its node numbering.
-///
-/// Nodes welded away stay in the shared [`Coords`] until nothing references
-/// them, as with [`merge_nodes`].
-pub fn merge_nodes_in_place(mesh: &Mesh, tol: f64) -> Result<Mesh> {
-    if tol < 0.0 {
-        return Err(PyrucastError::Message(format!(
-            "merge_nodes: tol must be ≥ 0, got {tol}"
-        )));
-    }
-    let coords_handle = mesh.coords()?;
-    let representative = build_representatives(mesh, &coords_handle, tol)?;
-
+/// Rename the nodes of `mesh`'s own submeshes — the in-place half of
+/// [`merge_nodes`]. Refuses (before writing anything) a sealed submesh or a
+/// cell that would collapse; see [`merge_nodes`] for why.
+fn weld_in_place(mesh: &Mesh, representative: &HashMap<NodeId, NodeId>) -> Result<Mesh> {
     // Pre-flight over the whole mesh: an in-place run is all-or-nothing.
     for (si, sm_handle) in mesh.into_iter().enumerate() {
         let s = read(sm_handle)?;
@@ -120,7 +148,7 @@ pub fn merge_nodes_in_place(mesh: &Mesh, tol: f64) -> Result<Mesh> {
             return Err(PyrucastError::Message(format!(
                 "merge_nodes(in_place): submesh {si} is sealed — a finite-element \
                  space, field or matrix already reads its nodes; weld before \
-                 building them, or use the copying merge_nodes"
+                 building them, or weld by copy (in_place = false)"
             )));
         }
         let npc = s.element_type().nodes_per_cell();
@@ -136,8 +164,8 @@ pub fn merge_nodes_in_place(mesh: &Mesh, tol: f64) -> Result<Mesh> {
                 return Err(PyrucastError::Message(format!(
                     "merge_nodes(in_place): cell {ci} of submesh {si} ({}) would \
                      collapse — welding it away would change the cell count, which \
-                     an in-place weld preserves; lower tol, or use the copying \
-                     merge_nodes, which drops degenerate cells",
+                     an in-place weld preserves; lower tol, or weld by copy \
+                     (in_place = false), which drops degenerate cells",
                     s.element_type()
                 )));
             }
@@ -145,7 +173,7 @@ pub fn merge_nodes_in_place(mesh: &Mesh, tol: f64) -> Result<Mesh> {
     }
 
     for sm_handle in mesh {
-        write(sm_handle)?.remap_nodes(&representative)?;
+        write(sm_handle)?.remap_nodes(representative)?;
     }
 
     // The same mesh back: an aggregate over the very same submesh slots (the
@@ -277,7 +305,7 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         mesh.add_cell(&[b2.id(), d.id(), c2.id()]).unwrap();
 
-        let merged = merge_nodes(&mesh, 1e-6).unwrap();
+        let merged = merge_nodes(&mesh, 1e-6, false).unwrap();
         assert_eq!(merged.cell_count().unwrap(), 2, "both triangles survive");
 
         // b2 → b and c2 → c, so the second triangle now uses b and c.
@@ -297,7 +325,7 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         mesh.add_cell(&[b.id(), c.id()]).unwrap();
 
-        let merged = merge_nodes(&mesh, 1e-6).unwrap();
+        let merged = merge_nodes(&mesh, 1e-6, false).unwrap();
         assert_eq!(
             merged.cell_count().unwrap(),
             1,
@@ -318,7 +346,7 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         mesh.add_cell(&[a.id(), c.id()]).unwrap();
 
-        let merged = merge_nodes(&mesh, 1e-6).unwrap();
+        let merged = merge_nodes(&mesh, 1e-6, false).unwrap();
         let welded = merged.node(0, 1, 1).unwrap();
         assert_eq!(welded.id(), b.id());
         assert_eq!(
@@ -341,7 +369,7 @@ mod tests {
         mesh.add_cell(&[a.id(), near.id()]).unwrap();
         mesh.add_cell(&[b.id(), exact.id()]).unwrap();
 
-        let merged = merge_nodes(&mesh, 0.0).unwrap();
+        let merged = merge_nodes(&mesh, 0.0, false).unwrap();
         // exact → a (distance 0), but near stays distinct from b (distance 1e-9 > 0).
         assert_eq!(merged.node(0, 0, 1).unwrap().id(), near.id());
         assert_eq!(merged.node(0, 1, 1).unwrap().id(), a.id());
@@ -364,7 +392,7 @@ mod tests {
 
         // The union shares the two submeshes, so welding it welds them.
         let both = left.union(&right).unwrap();
-        let welded = merge_nodes_in_place(&both, 1e-6).unwrap();
+        let welded = merge_nodes(&both, 1e-6, true).unwrap();
         // The same mesh back: same submesh slots, welded insides.
         assert_eq!(welded.len(), both.len());
         assert_eq!(welded.get(0).unwrap().index(), both.get(0).unwrap().index());
@@ -388,7 +416,7 @@ mod tests {
         mesh.add_cell(&[a.id(), b2.id()]).unwrap();
 
         assert_eq!(read(&coords).unwrap().refcount(b.id()), 2);
-        merge_nodes_in_place(&mesh, 1e-6).unwrap();
+        merge_nodes(&mesh, 1e-6, true).unwrap();
 
         // b2's connectivity unit moved to b; b2 survives through its Node only.
         assert_eq!(read(&coords).unwrap().refcount(b.id()), 3);
@@ -412,12 +440,18 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         mesh.add_cell(&[b.id(), c.id()]).unwrap();
 
-        assert!(merge_nodes_in_place(&mesh, 1e-6).is_err());
+        assert!(merge_nodes(&mesh, 1e-6, true).is_err());
         // Nothing was written: the mesh still holds both cells, on c.
         assert_eq!(mesh.cell_count().unwrap(), 2);
         assert_eq!(mesh.node(0, 1, 1).unwrap().id(), c.id());
         // The copying variant is the way out — it drops the degenerate cell.
-        assert_eq!(merge_nodes(&mesh, 1e-6).unwrap().cell_count().unwrap(), 1);
+        assert_eq!(
+            merge_nodes(&mesh, 1e-6, false)
+                .unwrap()
+                .cell_count()
+                .unwrap(),
+            1
+        );
     }
 
     #[test]
@@ -438,9 +472,24 @@ mod tests {
         // The open submesh comes first, but the sealed one still vetoes the
         // whole run before any write.
         let both = open.union(&sealed).unwrap();
-        assert!(merge_nodes_in_place(&both, 1e-6).is_err());
+        assert!(merge_nodes(&both, 1e-6, true).is_err());
         assert_eq!(sealed.node(0, 0, 0).unwrap().id(), b2.id());
         assert_eq!(open.node(0, 0, 1).unwrap().id(), b.id());
+    }
+
+    #[test]
+    fn tally_line_reports_both_welds() {
+        // Copying: cells can be dropped, so they are counted.
+        assert_eq!(
+            summary(3, 1, 1e-6, false),
+            "merge_nodes: 3 node(s) welded, 1 cell(s) dropped, tol = 0.000001"
+        );
+        // In place: no cell can be dropped — saying "0 dropped" would suggest
+        // it could have been otherwise.
+        assert_eq!(
+            summary(3, 0, 1e-6, true),
+            "merge_nodes (in place): 3 node(s) welded, cells untouched, tol = 0.000001"
+        );
     }
 
     #[test]
@@ -450,7 +499,7 @@ mod tests {
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        assert!(merge_nodes(&mesh, -1.0).is_err());
+        assert!(merge_nodes(&mesh, -1.0, false).is_err());
     }
 
     #[test]
@@ -463,7 +512,7 @@ mod tests {
 
         // before: a in SEG2 + Node = 2.
         assert_eq!(read(&coords).unwrap().refcount(a.id()), 2);
-        let merged = merge_nodes(&mesh, 1e-6).unwrap();
+        let merged = merge_nodes(&mesh, 1e-6, false).unwrap();
         // +1 from the result submesh.
         assert_eq!(read(&coords).unwrap().refcount(a.id()), 3);
         drop(merged);

@@ -342,6 +342,9 @@ pub fn consolidate(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// cell that *would* collapse is an error here instead of being dropped, as is
 /// a submesh already sealed by a finite-element space, field or matrix. Both
 /// are checked before anything is written: a rejected call changes nothing.
+///
+/// Every call prints a one-line tally on stdout once the weld is done — nodes
+/// welded, cells dropped, tolerance used.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, tol, in_place=false))]
@@ -351,11 +354,12 @@ pub fn merge_nodes(
     tol: f64,
     in_place: bool,
 ) -> PyResult<Py<PyMesh>> {
+    let result = crate::ops::mesh::merge_nodes(&mesh.borrow(py).inner, tol, in_place)?;
     if in_place {
-        crate::ops::mesh::merge_nodes_in_place(&mesh.borrow(py).inner, tol)?;
+        // The operator welded `mesh`'s own submeshes and handed the same mesh
+        // back; return the caller's object itself, so `out is mesh` holds.
         return Ok(mesh);
     }
-    let result = crate::ops::mesh::merge_nodes(&mesh.borrow(py).inner, tol)?;
     Py::new(py, PyMesh { inner: result })
 }
 
