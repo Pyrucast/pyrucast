@@ -66,7 +66,7 @@ def bord_horizontal(mesh: pc.Mesh, y: float) -> pc.Mesh:
     maillage, pas une ligne recréée à côté (`line` fabriquerait de
     nouveaux nœuds, disjoints de `mesh`)."""
     frontiere = pc.mesh.border(mesh)
-    ordonnee = pc.node_field.coordinates(frontiere, ["Y"])
+    ordonnee = pc.node_field.positions(frontiere, ["Y"])
     noeuds = pc.mesh.select(ordonnee, ge=y - 1e-9, le=y + 1e-9)
     return pc.mesh.elements_on(frontiere, noeuds, strict=True)
 

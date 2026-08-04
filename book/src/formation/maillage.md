@@ -261,7 +261,7 @@ Pour raccorder la couronne à la grille, il faut le bord **droit** de la
 grille. Le reconstruire avec `line` donnerait une ligne jumelle ne partageant
 aucun nœud avec la grille, donc un maillage non conforme et une pièce en deux
 morceaux. On l'**extrait** : `border` donne le contour de la grille, une
-sélection sur la coordonnée X (`field.coordinates` + `field.select`) garde les
+sélection sur la coordonnée X (`field.positions` + `field.select`) garde les
 nœuds de la dernière colonne, et `elements_on(..., strict=True)` remonte aux
 segments dont **tous** les nœuds y sont. Aucun indice n'est écrit à la main.
 

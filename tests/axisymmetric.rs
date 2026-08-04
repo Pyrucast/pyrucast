@@ -218,7 +218,7 @@ fn uniform_dilation_is_an_exact_constant_strain_state() -> Result<()> {
     )?;
     for n in &grid {
         let (r, z) = {
-            let c = n.coord()?;
+            let c = n.position()?;
             (c[0], c[1])
         };
         u.set_value(n.id(), "u_x", C * r)?;
@@ -312,7 +312,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     let ends: Vec<Node> = nodes
         .iter()
         .filter(|n| {
-            let z = n.coord().map(|c| c[1]).unwrap_or(f64::NAN);
+            let z = n.position().map(|c| c[1]).unwrap_or(f64::NAN);
             z.abs() < 1e-12 || (z - H).abs() < 1e-12
         })
         .cloned()
@@ -332,7 +332,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     // ── Displacement against Lamé ──────────────────────────────────────────
     let mut worst_u = 0.0_f64;
     for n in &nodes {
-        let r = n.coord()?[0];
+        let r = n.position()?[0];
         let exact = (1.0 + NU) / E * ((1.0 - 2.0 * NU) * ca * r + cb / r);
         worst_u = worst_u.max((solution.value(n.id(), "u_x")? - exact).abs() / exact.abs());
         assert!(solution.value(n.id(), "u_y")?.abs() < 1e-12, "plane strain");
@@ -352,8 +352,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
         pyrucast::ops::element_field::behavior::integrate(&model, &strain, None, &materials, None)?;
     // The radius at each Gauss point, obtained the same way any field is: the
     // nodal coordinates interpolated onto the quadrature.
-    let gauss_r =
-        element_field::interp_to_gauss(&node_field::coordinates(&solid_mesh, None)?, &fes)?;
+    let gauss_r = element_field::interp_to_gauss(&node_field::positions(&solid_mesh, None)?, &fes)?;
     let (s, rg) = (read(&stress.get(0)?)?, read(&gauss_r.get(0)?)?);
     let mut worst_s = 0.0_f64;
     for cell in 0..s.cell_count() {
@@ -439,7 +438,7 @@ fn internal_forces_match_stiffness_times_displacement() -> Result<()> {
         vec!["u_x".to_string(), "u_y".to_string()],
     )?;
     for n in &grid {
-        let c = n.coord()?;
+        let c = n.position()?;
         let (r, z) = (c[0], c[1]);
         u.set_value(n.id(), "u_x", 1e-3 * (r + 0.3 * z * z))?;
         u.set_value(n.id(), "u_y", 1e-3 * (0.2 * r * z - 0.1 * z))?;
@@ -539,7 +538,7 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
     let exact = |r: f64| TA + (TB - TA) * (r / A).ln() / (B / A).ln();
     for i in 0..=NR {
         let n = &grid[idx(i, 0)];
-        let r = n.coord()?[0];
+        let r = n.position()?[0];
         let t = solution.value(n.id(), "T")?;
         assert!(
             (t - exact(r)).abs() < 0.05,

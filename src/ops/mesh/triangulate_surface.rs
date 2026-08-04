@@ -1834,7 +1834,7 @@ mod tests {
             let npc = types[si].nodes_per_cell();
             for ci in 0..cnt {
                 let pts: Vec<Vec<f64>> = (0..npc)
-                    .map(|ni| mesh.node(si, ci, ni).unwrap().coord().unwrap())
+                    .map(|ni| mesh.node(si, ci, ni).unwrap().position().unwrap())
                     .collect();
                 total += cell_area(&pts);
             }
@@ -1922,7 +1922,7 @@ mod tests {
         }
         let before: HashMap<NodeId, Vec<f64>> = boundary
             .iter()
-            .map(|&nid| (nid, read(&coords).unwrap().coord(nid).unwrap().to_vec()))
+            .map(|&nid| (nid, read(&coords).unwrap().position(nid).unwrap().to_vec()))
             .collect();
 
         // A fine target size that would trigger heavy Ruppert refinement.
@@ -1937,7 +1937,7 @@ mod tests {
         // Every input boundary node is still used, unmoved.
         for (&nid, p0) in &before {
             assert!(used.contains(&nid), "contour node {nid:?} dropped");
-            let p1 = read(&coords).unwrap().coord(nid).unwrap().to_vec();
+            let p1 = read(&coords).unwrap().position(nid).unwrap().to_vec();
             assert_eq!(&p1, p0, "contour node {nid:?} moved");
         }
         // No new node sits on the (axis-aligned) contour edges.
@@ -1945,7 +1945,7 @@ mod tests {
             if boundary.contains(&nid) {
                 continue;
             }
-            let p = read(&coords).unwrap().coord(nid).unwrap().to_vec();
+            let p = read(&coords).unwrap().position(nid).unwrap().to_vec();
             let on_edge = (p[0] <= 1e-12 || (p[0] - 1.0).abs() <= 1e-12)
                 || (p[1] <= 1e-12 || (p[1] - 1.0).abs() <= 1e-12);
             assert!(

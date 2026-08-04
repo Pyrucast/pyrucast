@@ -35,7 +35,7 @@ def test_arc_nodes_lie_on_circle():
     mesh = pyrucast.mesh.arc(a, center, b, 4)
     for ei in range(mesh.cell_count()):
         for corner in range(2):
-            x, y = mesh.node(0, ei, corner).coord()
+            x, y = mesh.node(0, ei, corner).position()
             dist = math.hypot(x - 1.0, y - 1.0)
             assert abs(dist - 2.0) < 1e-10
 

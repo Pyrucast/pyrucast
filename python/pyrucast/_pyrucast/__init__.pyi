@@ -34,7 +34,6 @@ __all__ = [
     "consolidate_mesh",
     "consolidate_node",
     "convert",
-    "coordinates",
     "cos",
     "cosh",
     "deformation",
@@ -80,6 +79,7 @@ __all__ = [
     "points_on_plane",
     "points_on_sphere",
     "points_on_torus",
+    "positions",
     "psca",
     "read_gmsh",
     "read_gmsh_str",
@@ -87,7 +87,7 @@ __all__ = [
     "restrict_like",
     "rotate",
     "select",
-    "set_coordinates",
+    "set_positions",
     "set_swap_dir",
     "sin",
     "sinh",
@@ -439,6 +439,28 @@ class ElementField:
         r"""
         `field < x` → a 0/1 mask field (see `__ge__`).
         """
+    def unit(self) -> SubElementField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubElementField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
     @typing.overload
     def __getitem__(self, key: int) -> SubElementField:
         r"""
@@ -474,28 +496,6 @@ class ElementField:
         r"""
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
-        """
-    def unit(self) -> SubElementField:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubElementField) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
     def consolidate(self) -> ElementField:
@@ -625,6 +625,29 @@ class Evolution:
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
+    def __len__(self) -> builtins.int: ...
+    def unit(self) -> SubEvolution:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubEvolution) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
     @typing.overload
     def __getitem__(self, key: int) -> SubEvolution:
         r"""
@@ -648,29 +671,6 @@ class Evolution:
         `evolution | sub_evolution`, differing only in that the lone curve
         comes first.
         """
-    def unit(self) -> SubEvolution:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubEvolution) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
-    def __len__(self) -> builtins.int: ...
 
 @typing.final
 class FiniteElementSpace:
@@ -716,29 +716,6 @@ class FiniteElementSpace:
         order (shared handles, sealed while captured). The reverse of building a
         `FiniteElementSpace(mesh)`.
         """
-    def __len__(self) -> builtins.int: ...
-    def unit(self) -> SubFiniteElementSpace:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubFiniteElementSpace) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
     @typing.overload
     def __getitem__(self, key: int) -> SubFiniteElementSpace:
         r"""
@@ -761,6 +738,29 @@ class FiniteElementSpace:
         r"""
         `subspace | fes` — the mirror of `fes | subspace`, differing only in
         that the lone subspace comes first.
+        """
+    def __len__(self) -> builtins.int: ...
+    def unit(self) -> SubFiniteElementSpace:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubFiniteElementSpace) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
 
 @typing.final
@@ -881,6 +881,29 @@ class Matrix:
         `factor` (lazy — no value is rewritten). **Not** finalized: call
         `finalize()` (or `assemble` for computed blocks) before solving.
         """
+    def __len__(self) -> builtins.int: ...
+    def unit(self) -> SubMatrix:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubMatrix) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
     @typing.overload
     def __getitem__(self, key: int) -> SubMatrix:
         r"""
@@ -904,29 +927,6 @@ class Matrix:
         `sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
         differing only in that the lone block comes first.
         """
-    def unit(self) -> SubMatrix:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubMatrix) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
-    def __len__(self) -> builtins.int: ...
     def lump(self) -> Matrix:
         r"""
         Voir `pyrucast.matrix.lump`.
@@ -1018,6 +1018,28 @@ class Mesh:
         `field`, `component`, `wireframe`, `revolve`, `revolve_angle` and
         `title`.
         """
+    def unit(self) -> SubMesh:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubMesh) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
     def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubMesh:
@@ -1043,28 +1065,6 @@ class Mesh:
         r"""
         `submesh | mesh` — the mirror of `mesh | submesh`, differing only in
         that the lone zone comes first.
-        """
-    def unit(self) -> SubMesh:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubMesh) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
         """
     def to_poi1(self) -> Mesh:
         r"""
@@ -1194,9 +1194,9 @@ class Mesh:
         r"""
         Voir `pyrucast.mesh.triangulate_volume`.
         """
-    def coordinates(self, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
+    def positions(self, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
         r"""
-        Voir `pyrucast.node_field.coordinates`.
+        Voir `pyrucast.node_field.positions`.
         """
 
 @typing.final
@@ -1452,29 +1452,6 @@ class Model:
         Returns the same kind of `NodeField` over the multiplier nodes; union it
         with `|`. Raises if an index is out of range.
         """
-    def __len__(self) -> builtins.int: ...
-    def unit(self) -> SubModel:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubModel) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
     @typing.overload
     def __getitem__(self, key: int) -> SubModel:
         r"""
@@ -1497,6 +1474,29 @@ class Model:
         r"""
         `sub_model | model` — the mirror of `model | sub_model`, differing
         only in that the lone term comes first.
+        """
+    def __len__(self) -> builtins.int: ...
+    def unit(self) -> SubModel:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubModel) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
@@ -1541,13 +1541,19 @@ class Node:
         r"""
         Stable integer id of this node within its `Coords`.
         """
-    def coord(self) -> builtins.list[builtins.float]:
+    def position(self) -> builtins.list[builtins.float]:
         r"""
         This node's coordinates in the active coordinate set.
         """
-    def set_coord(self, coords: typing.Sequence[builtins.float]) -> None:
+    def set_position(self, coords: typing.Sequence[builtins.float]) -> None:
         r"""
         Overwrite this node's coordinates.
+        """
+    def coords(self) -> Coords:
+        r"""
+        The `Coords` this node belongs to — the same safety net as
+        `Mesh.coords()`, to get the handle back when it has been dropped
+        on the Python side.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -1693,6 +1699,29 @@ class NodeField:
         r"""
         `field < x` → a 0/1 mask field (see `__ge__`).
         """
+    def __len__(self) -> builtins.int: ...
+    def unit(self) -> SubNodeField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubNodeField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
     @typing.overload
     def __getitem__(self, key: int) -> SubNodeField:
         r"""
@@ -1728,29 +1757,6 @@ class NodeField:
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
         """
-    def unit(self) -> SubNodeField:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubNodeField) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
-    def __len__(self) -> builtins.int: ...
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
         Voir `pyrucast.element_field.gradient`.
@@ -2812,16 +2818,6 @@ def convert(mesh: Mesh, element_type: builtins.str) -> Mesh:
     `to_quadratic`. The original mesh is untouched.
     """
 
-def coordinates(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
-    r"""
-    Build a `NodeField` carrying the coordinates of every node of `mesh`
-    — one `SubNodeField` per submesh, on the distinct nodes of its zone.
-    
-    One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
-    requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
-    `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
-    """
-
 def cos(field: typing.Any) -> typing.Any:
     r"""
     Element-wise cosine of a field (radians).
@@ -3299,6 +3295,16 @@ def points_on_torus(mesh: Mesh, center: typing.Sequence[builtins.float], axis: t
     closed, there is no cap to worry about here. **3-D only.**
     """
 
+def positions(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
+    r"""
+    Build a `NodeField` carrying the position of every node of `mesh`
+    — one `SubNodeField` per submesh, on the distinct nodes of its zone.
+    
+    One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
+    requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
+    `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
+    """
+
 def psca(x: typing.Any, y: typing.Any) -> typing.Any:
     r"""
     Node-by-node (or point-by-point) scalar product of two fields — Cast3M's
@@ -3407,7 +3413,7 @@ def select(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: ty
     submesh). Errors if no bound is given, or the lower one exceeds the upper.
     """
 
-def set_coordinates(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
+def set_positions(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
     r"""
     Set node coordinates from `field` (absolute): for every node, the
     active-set coordinate on axis `a` becomes `field.value(node,

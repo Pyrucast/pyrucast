@@ -45,7 +45,7 @@ c.add_node([1.0, 0.0])  # r = 1, z = 0
 c.add_node([-1.0, 0.0])  # erreur : x est un rayon, il doit être ≥ 0
 ```
 
-Un rayon négatif est refusé à l'ajout (et au `set_coord`) plutôt que de
+Un rayon négatif est refusé à l'ajout (et au `set_position`) plutôt que de
 ressortir en `|J|` négatif au fond d'une intégrale. Tout espace éléments finis
 bâti sur ces `Coords` hérite du repère, si bien qu'un corps et son bord ne
 peuvent pas diverger.
@@ -114,8 +114,8 @@ Le détail du niveau slot (générations, swap, compactage) est dans
 ## Plusieurs configurations
 
 Utile pour basculer entre référence / déformée / prédite. La configuration
-active est désignée par index ; lire les coordonnées d'un nœud (`node.coord()`
-en Python, `Coords::coord` côté Rust) renvoie celles de la configuration
+active est désignée par index ; lire les coordonnées d'un nœud (`node.position()`
+en Python, `Coords::position` côté Rust) renvoie celles de la configuration
 active. `add_config(name)` clone la configuration active sous un nouveau nom.
 
 Rust :
@@ -123,7 +123,7 @@ Rust :
 ```rust,ignore
 let c2 = write(&coords).unwrap().add_config("deformed");
 write(&coords).unwrap().select(c2).unwrap();
-// les `set_coord` suivants modifient désormais la configuration "deformed".
+// les `set_position` suivants modifient désormais la configuration "deformed".
 ```
 
 Python :
@@ -140,13 +140,13 @@ print(c.names())  # ['default', 'deformed']
 
 # Basculer sur la configuration déformée et modifier les coordonnées.
 c.select(c2)
-n.set_coord([0.1, 0.05])
+n.set_position([0.1, 0.05])
 
 # Les coordonnées lues dépendent de la configuration active.
 c.select(0)
-print(n.coord())  # [0.0, 0.0]  — configuration de référence
+print(n.position())  # [0.0, 0.0]  — configuration de référence
 c.select(c2)
-print(n.coord())  # [0.1, 0.05] — configuration déformée
+print(n.position())  # [0.1, 0.05] — configuration déformée
 print(c.active)  # 1
 ```
 
@@ -228,7 +228,7 @@ n = c.add_node([0.0, 0.0])  # n est un pyrucast.Node ; refcount = 1
 m = c.add_node([1.0, 0.0])
 
 print(c)  # Coords: dim=2, configs=1 (active="default"), nodes=2 ...
-n.set_coord([0.5, 0.5])
+n.set_position([0.5, 0.5])
 
 # GC ne touche pas tant qu'au moins un Node Python existe.
 assert c.gc() == 0

@@ -545,7 +545,7 @@ impl Context {
                 let c = read(&coords)?;
                 let mut kept = Vec::new();
                 for nid in nodes {
-                    if keep(c.coord(nid)?) {
+                    if keep(c.position(nid)?) {
                         kept.push(nid);
                     }
                 }
@@ -668,7 +668,7 @@ fn default_tol(mesh: &Mesh) -> Result<f64> {
     for sm in mesh {
         let s = read(sm)?;
         for &nid in s.connectivity() {
-            for (k, &v) in c.coord(nid)?.iter().enumerate() {
+            for (k, &v) in c.position(nid)?.iter().enumerate() {
                 lo[k] = lo[k].min(v);
                 hi[k] = hi[k].max(v);
             }

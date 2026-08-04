@@ -627,7 +627,7 @@ mod tests {
             }
             for ci in 0..n {
                 let p: Vec<Vec<f64>> = (0..4)
-                    .map(|k| mesh.node(si, ci, k).unwrap().coord().unwrap())
+                    .map(|k| mesh.node(si, ci, k).unwrap().position().unwrap())
                     .collect();
                 let e = |i: usize, k: usize| p[i][k] - p[0][k];
                 total += (e(1, 0) * (e(2, 1) * e(3, 2) - e(2, 2) * e(3, 1))
@@ -983,7 +983,7 @@ mod tests {
         let given: Vec<Vec<f64>> = {
             let c = read(&coords).unwrap();
             c.iter_live()
-                .map(|id| c.coord(id).unwrap().to_vec())
+                .map(|id| c.position(id).unwrap().to_vec())
                 .collect()
         };
 
@@ -997,7 +997,7 @@ mod tests {
         let marks = mesh.cell_counts().unwrap()[1];
         assert!(marks > 0, "the submesh is there, so it must name something");
         for ci in 0..marks {
-            let p = mesh.node(1, ci, 0).unwrap().coord().unwrap();
+            let p = mesh.node(1, ci, 0).unwrap().position().unwrap();
             assert!(
                 !given.iter().any(|q| q == &p),
                 "{p:?} was the caller's node all along"
@@ -1063,7 +1063,7 @@ mod tests {
         let given: Vec<Vec<f64>> = {
             let c = read(&coords).unwrap();
             c.iter_live()
-                .map(|id| c.coord(id).unwrap().to_vec())
+                .map(|id| c.position(id).unwrap().to_vec())
                 .collect()
         };
 
@@ -1082,7 +1082,7 @@ mod tests {
         for (si, &n) in peeled.cell_counts().unwrap().iter().enumerate() {
             for ci in 0..n {
                 for k in 0..3 {
-                    let p = peeled.node(si, ci, k).unwrap().coord().unwrap();
+                    let p = peeled.node(si, ci, k).unwrap().position().unwrap();
                     if given.iter().any(|q| q == &p) {
                         continue; // one of the caller's own nodes
                     }
@@ -1168,7 +1168,7 @@ mod tests {
         let mut volumes = Vec::with_capacity(n);
         for ci in 0..n {
             let p: [Vec<f64>; 4] =
-                std::array::from_fn(|k| mesh.node(0, ci, k).unwrap().coord().unwrap());
+                std::array::from_fn(|k| mesh.node(0, ci, k).unwrap().position().unwrap());
             let (angle, volume) = shape_of(&p);
             angles.push(angle);
             volumes.push(volume);

@@ -75,8 +75,8 @@ use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
 use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
 use pyrucast::ops::node_field::internal_forces;
-use pyrucast::ops::node_field::{coordinates, restrict, restrict_like};
 use pyrucast::ops::node_field::{flux, FluxDensity};
+use pyrucast::ops::node_field::{positions, restrict, restrict_like};
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
 use pyrucast::Result;
@@ -132,7 +132,7 @@ fn main() -> Result<()> {
     // un maillage POI1 des nœuds LIBRES (hors encastrement) — support cible pour
     // mesurer la norme du résidu sur les seuls DDL libres (`restrict` + `xtx`).
     let tip_id = &mesh.nearest_node(&[length, height / 2.])?;
-    let coords_field = coordinates(&mesh, Some(vec!["X".into()]))?;
+    let coords_field = positions(&mesh, Some(vec!["X".into()]))?;
     let free_mesh = select_nodes(
         &coords_field,
         &Band::new(Some(length / nx as f64 / 2.), None, None, None)?,

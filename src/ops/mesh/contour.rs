@@ -142,7 +142,7 @@ pub fn extract_loops(mesh: &Mesh, op: &str) -> Result<Vec<LoopData>> {
         }
         let world_pts: Result<Vec<Vec<f64>>> = chain
             .iter()
-            .map(|&nid| Ok(c.coord(nid)?.to_vec()))
+            .map(|&nid| Ok(c.position(nid)?.to_vec()))
             .collect();
         loops.push(LoopData {
             node_ids: chain,

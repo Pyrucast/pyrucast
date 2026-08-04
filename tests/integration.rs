@@ -110,7 +110,7 @@ fn node_protects_from_gc() -> Result<()> {
     let h = insert(Coords::new(2)?);
     let n = Node::create_in(h.clone(), &[3.0, 4.0])?;
     let id = n.id();
-    assert_eq!(n.coord()?, vec![3.0, 4.0]);
+    assert_eq!(n.position()?, vec![3.0, 4.0]);
 
     // Cloning shares the id and doubles the refcount.
     let m = n.clone();
@@ -183,9 +183,9 @@ fn triangulate_surface_from_circle_contour() -> Result<()> {
     // (= 8 · 0.5 · r² · sin(2π/8) = 2√2 ≈ 2.8284), whatever the refinement.
     let mut total = 0.0;
     for ci in 0..tri.cell_count()? {
-        let p0 = tri.node(0, ci, 0)?.coord()?;
-        let p1 = tri.node(0, ci, 1)?.coord()?;
-        let p2 = tri.node(0, ci, 2)?.coord()?;
+        let p0 = tri.node(0, ci, 0)?.position()?;
+        let p1 = tri.node(0, ci, 1)?.position()?;
+        let p2 = tri.node(0, ci, 2)?.position()?;
         let area = 0.5 * ((p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0]));
         assert!(area > 0.0, "triangle {} not CCW", ci);
         total += area;

@@ -357,7 +357,7 @@ def test_tri3_dn_dx_constant_known_values():
 
 
 def test_jacobian_reflects_mesh_displacement():
-    """After set_coord on a node, the on-the-fly Jacobian must update."""
+    """After set_position on a node, the on-the-fly Jacobian must update."""
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
@@ -370,7 +370,7 @@ def test_jacobian_reflects_mesh_displacement():
     assert abs(sub.det_jacobian(0, 0) - 0.5) < 1e-12
 
     # Move b from x=1 to x=4: length now 4, |J| = 2.
-    b.set_coord([4.0, 0.0])
+    b.set_position([4.0, 0.0])
     assert abs(sub.det_jacobian(0, 0) - 2.0) < 1e-12
 
 

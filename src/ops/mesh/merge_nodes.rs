@@ -106,7 +106,7 @@ fn build_representatives(
     let mut representative: HashMap<NodeId, NodeId> = HashMap::new();
 
     for &id in &ids {
-        let p = coords.coord(id)?;
+        let p = coords.position(id)?;
         let base: Vec<i64> = p.iter().map(|&x| (x / cell).floor() as i64).collect();
 
         let mut rep = None;
@@ -114,7 +114,7 @@ fn build_representatives(
             let key: Vec<i64> = base.iter().zip(off).map(|(b, o)| b + o).collect();
             if let Some(candidates) = grid.get(&key) {
                 for &c in candidates {
-                    if dist2(p, coords.coord(c)?) <= tol2 {
+                    if dist2(p, coords.position(c)?) <= tol2 {
                         rep = Some(c);
                         break 'search;
                     }
@@ -237,7 +237,10 @@ mod tests {
         let merged = merge_nodes(&mesh, 1e-6).unwrap();
         let welded = merged.node(0, 1, 1).unwrap();
         assert_eq!(welded.id(), b.id());
-        assert_eq!(read(&coords).unwrap().coord(b.id()).unwrap(), &[5.0, 5.0]);
+        assert_eq!(
+            read(&coords).unwrap().position(b.id()).unwrap(),
+            &[5.0, 5.0]
+        );
     }
 
     #[test]

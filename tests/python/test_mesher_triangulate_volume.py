@@ -61,7 +61,7 @@ def _volume(mesh):
         if mesh.element_types()[si] != "TET4":
             continue
         for ci in range(n):
-            p = [mesh.node(si, ci, k).coord() for k in range(4)]
+            p = [mesh.node(si, ci, k).position() for k in range(4)]
             e = [[p[i][k] - p[0][k] for k in range(3)] for i in (1, 2, 3)]
             total += (
                 e[0][0] * (e[1][1] * e[2][2] - e[1][2] * e[2][1])

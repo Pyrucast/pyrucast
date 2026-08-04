@@ -15,7 +15,7 @@ fn axis_index(name: &str) -> Option<usize> {
     }
 }
 
-/// Build a [`NodeField`] carrying the coordinates of every node of `mesh`
+/// Build a [`NodeField`] carrying the position of every node of `mesh`
 /// — one [`SubNodeField`] per submesh, supported on the distinct nodes of
 /// its zone (interface nodes are stored once per zone, with identical
 /// values by construction).
@@ -29,7 +29,7 @@ fn axis_index(name: &str) -> Option<usize> {
 /// Errors if `mesh` has no submeshes, if a requested component is not one
 /// of `"X"` / `"Y"` / `"Z"`, or if it names an axis the Coords does
 /// not have (e.g. `"Z"` on a 2-D mesh).
-pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeField> {
+pub fn positions(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeField> {
     let coords = mesh.coords()?;
     let dim = read(&coords)?.dim() as usize;
 
@@ -48,12 +48,12 @@ pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeF
         .map(|name| {
             let a = axis_index(name).ok_or_else(|| {
                 PyrucastError::Message(format!(
-                    "coordinates: unknown component \"{name}\" (expected X, Y or Z)"
+                    "positions: unknown component \"{name}\" (expected X, Y or Z)"
                 ))
             })?;
             if a >= dim {
                 return Err(PyrucastError::Message(format!(
-                    "coordinates: component \"{name}\" needs dimension ≥ {}, \
+                    "positions: component \"{name}\" needs dimension ≥ {}, \
                      but the Coords is {dim}-D",
                     a + 1
                 )));
@@ -71,7 +71,7 @@ pub fn coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeF
             let c = read(&coords)?;
             nodes
                 .iter()
-                .map(|&nid| c.coord(nid).map(|s| s.to_vec()))
+                .map(|&nid| c.position(nid).map(|s| s.to_vec()))
                 .collect::<Result<_>>()?
         };
         for (ni, coord) in coords.iter().enumerate() {
@@ -95,7 +95,7 @@ mod tests {
     use crate::store::insert;
 
     #[test]
-    fn poi1_mesh_coordinates_xyz() {
+    fn poi1_mesh_positions_xyz() {
         let coords = insert(Coords::new(3).unwrap());
         let a = Node::create_in(coords.clone(), &[1.0, 2.0, 3.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[4.0, 5.0, 6.0]).unwrap();
@@ -103,7 +103,7 @@ mod tests {
         mesh.add_cell(&[a.id()]).unwrap();
         mesh.add_cell(&[b.id()]).unwrap();
 
-        let f = coordinates(&mesh, None).unwrap();
+        let f = positions(&mesh, None).unwrap();
         assert_eq!(f.len(), 1);
         assert_eq!(Field::components(&f).unwrap(), vec!["X", "Y", "Z"]);
         assert_eq!(f.node_count().unwrap(), 2);
@@ -126,7 +126,7 @@ mod tests {
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         tri.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
 
-        let f = coordinates(&tri, None).unwrap();
+        let f = positions(&tri, None).unwrap();
         assert_eq!(f.len(), 1);
         assert_eq!(f.node_count().unwrap(), 4, "shared nodes must appear once");
         assert_eq!(f.value(c.id(), "X").unwrap(), 0.5);
@@ -148,7 +148,7 @@ mod tests {
             mesh.add_sub(insert(sm)).unwrap();
         }
 
-        let f = coordinates(&mesh, None).unwrap();
+        let f = positions(&mesh, None).unwrap();
         assert_eq!(f.len(), 2, "one sub-field per submesh");
         assert_eq!(f.node_count().unwrap(), 4);
         // Interface nodes are duplicated across zones with equal values.
@@ -163,7 +163,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
 
-        let f = coordinates(&mesh, None).unwrap();
+        let f = positions(&mesh, None).unwrap();
         assert_eq!(Field::components(&f).unwrap(), vec!["X", "Y"]);
     }
 
@@ -174,7 +174,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
 
-        let f = coordinates(&mesh, Some(vec!["X".into(), "Z".into()])).unwrap();
+        let f = positions(&mesh, Some(vec!["X".into(), "Z".into()])).unwrap();
         assert_eq!(Field::components(&f).unwrap(), vec!["X", "Z"]);
         assert_eq!(f.value(a.id(), "X").unwrap(), 1.0);
         assert_eq!(f.value(a.id(), "Z").unwrap(), 3.0);
@@ -186,7 +186,7 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
-        assert!(coordinates(&mesh, Some(vec!["W".into()])).is_err());
+        assert!(positions(&mesh, Some(vec!["W".into()])).is_err());
     }
 
     #[test]
@@ -196,11 +196,11 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
         // "Z" needs dim ≥ 3 but the mesh is 2-D.
-        assert!(coordinates(&mesh, Some(vec!["Z".into()])).is_err());
+        assert!(positions(&mesh, Some(vec!["Z".into()])).is_err());
     }
 
     #[test]
     fn rejects_empty_mesh() {
-        assert!(coordinates(&Mesh::empty(), None).is_err());
+        assert!(positions(&Mesh::empty(), None).is_err());
     }
 }

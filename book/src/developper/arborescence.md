@@ -62,7 +62,7 @@ src/
 │   │   ├── tetrahedralization/  # briques 3D Delaunay (prédicats exacts, …)
 │   │   ├── paving/         # front avançant 2D (pave_surface)
 │   │   └── plaster/        # front avançant 3D (pave_volume)
-│   ├── node_field/     # → NodeField : coordinates, divergence, restrict, flux, …
+│   ├── node_field/     # → NodeField : positions, divergence, restrict, flux, …
 │   ├── element_field/  # → ElementField : gradient, deformation, material_field
 │   │   └── behavior.rs     # intégration de la loi de comportement (COMP)
 │   ├── matrix.rs       # → Matrix : stiffness, mass, geometric, tangent, lump

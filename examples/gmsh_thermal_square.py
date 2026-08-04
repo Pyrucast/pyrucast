@@ -161,7 +161,7 @@ def main() -> None:
     tol = 1e-9
     max_err = 0.0
     for node in unique_nodes(plate):
-        x = node.coord()[0]
+        x = node.position()[0]
         expected = T_IMPOSED + (Q / K) * (1.0 - x)
         got = solution.value(node, "T")
         max_err = max(max_err, abs(got - expected))

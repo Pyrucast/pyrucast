@@ -188,7 +188,7 @@ fn side_columns(mesh: &Mesh, label: &str) -> Result<SideColumns> {
         .collect();
     let coord_vals: Vec<Vec<f64>> = ids
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.coord(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
     Ok((coords, ids, coord_vals))
 }
@@ -230,7 +230,7 @@ mod tests {
         // are straight. It's corner 0 of cell (i=2, j=1) = linear index
         // i*n2+j = 7.
         let n = mesh.node(0, 2 * 3 + 1, 0).unwrap();
-        let c = n.coord().unwrap();
+        let c = n.position().unwrap();
         assert!((c[0] - 0.5).abs() < 1e-12, "x={}", c[0]);
         assert!((c[1] - 1.0 / 3.0).abs() < 1e-12, "y={}", c[1]);
     }

@@ -109,7 +109,7 @@ appartient au **nom du module**, pas au nom de la fonction, et le module doit
 être scindé. C'est ce qui donne trois fusions homonymes et sans ambiguïté —
 `mesh::consolidate`, `node_field::consolidate`, `element_field::consolidate` —
 au lieu de trois fonctions suffixées au même endroit. De même `coords::set`
-face à `node_field::coordinates` qui lit.
+face à `node_field::positions` qui lit.
 
 ### Une limite de R3, à connaître
 
@@ -240,7 +240,7 @@ dérivées.
 Le rangement par conteneur produit organise le code Rust
 (`src/ops/<module>/`) **et** l'API Python : une fonction libre
 `ops::<module>::f` est exposée comme `pyrucast.<module>.f`
-(`pyrucast.mesh.to_poi1`, `pyrucast.node_field.coordinates`,
+(`pyrucast.mesh.to_poi1`, `pyrucast.node_field.positions`,
 `pyrucast.matrix.stiffness`, `pyrucast.solver.solve`, …). Les conteneurs
 (`containers::…`) et les atomes (`atoms::…`) restent des classes au top-level
 (`pyrucast.Coords`, `pyrucast.Mesh`, `pyrucast.Node`, …). Le miroir est
@@ -394,7 +394,7 @@ plus haut, sans exception.
 | accesseur / mutation mono-conteneur | méthode | méthode |
 | vue dérivée d'un seul conteneur | méthode | méthode |
 | transformation mesh→mesh | `ops::mesh::*` | `pyrucast.mesh.to_poi1`, `pyrucast.mesh.consolidate`, … |
-| production d'un champ nodal | `ops::node_field::*` | `pyrucast.node_field.coordinates`, `pyrucast.node_field.restrict`, `pyrucast.node_field.merge` |
+| production d'un champ nodal | `ops::node_field::*` | `pyrucast.node_field.positions`, `pyrucast.node_field.restrict`, `pyrucast.node_field.merge` |
 | production d'un champ par éléments | `ops::element_field::*` | `pyrucast.element_field.gradient`, `pyrucast.element_field.material_field` |
 | réduction à un nombre | `ops::measure::*` | `pyrucast.measure.integral`, `pyrucast.measure.xty` |
 | écriture dans le magasin | `ops::coords::*` | `pyrucast.coords.set`, `pyrucast.coords.displace` |
@@ -448,3 +448,11 @@ de module entier, enregistrée dans `tests/python/test_mirror_completeness.py`.
   support d'un seul field). Renommées depuis `to_poi1_submesh` /
   `to_poi1_mesh` pour ne pas se confondre avec l'opérateur
   `ops::mesh::to_poi1(mesh)`.
+- `coords()` est réservé au **retour au conteneur** : sur `Mesh`, `SubMesh`,
+  `NodeField`, `Matrix` et `Node`, il rend le `Coords` porté. Les *valeurs*
+  s'appellent donc **position** partout : `position()` / `set_position(…)`
+  sur `Node` comme sur `Coords`, et `node_field::positions(mesh)` pour le
+  champ qui les lit toutes. Les anciens noms — `coord()` sur un nœud,
+  `coordinates` pour l'opérateur — plaçaient sur un même objet deux méthodes
+  sans argument que rien ne départageait (`mesh.coords()` face à
+  `mesh.coordinates()`), l'une rendant le conteneur, l'autre les valeurs.

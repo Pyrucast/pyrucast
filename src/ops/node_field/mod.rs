@@ -2,7 +2,7 @@
 //!
 //! Two families meet here, because both end on a nodal field:
 //!
-//! - *derivations* — [`coordinates`](fn@coordinates) (a mesh's geometry read
+//! - *derivations* — [`positions`](fn@positions) (a mesh's geometry read
 //!   as a field), [`divergence`](fn@divergence) (the nodal `∇·` of a
 //!   per-element field), [`restrict`](fn@restrict) /
 //!   [`restrict_like`](fn@restrict_like), [`merge`](fn@merge),
@@ -17,20 +17,20 @@
 //! "one module per produced container" rule.
 
 pub mod consolidate;
-pub mod coordinates;
 pub mod divergence;
 pub mod flux;
 pub mod internal_forces;
 pub mod mask;
 pub mod merge;
 pub mod methods;
+pub mod positions;
 pub mod restrict;
 
 pub use consolidate::consolidate;
-pub use coordinates::coordinates;
 pub use divergence::divergence;
 pub use flux::{flux, FluxDensity};
 pub use internal_forces::{internal_forces, internal_forces_continuum};
 pub use mask::{mask, mask_sub};
 pub use merge::merge;
+pub use positions::positions;
 pub use restrict::{restrict, restrict_like};

@@ -125,7 +125,7 @@ impl Envelope {
             node_ids
                 .iter()
                 .map(|&nid| {
-                    let p = c.coord(nid)?;
+                    let p = c.position(nid)?;
                     Ok([p[0], p[1], p[2]])
                 })
                 .collect::<Result<_>>()?
@@ -913,7 +913,7 @@ mod tests {
         let c = read(&coords).unwrap();
         for (i, &nid) in env.node_ids().iter().enumerate() {
             assert!(nodes.contains(&nid));
-            assert_eq!(c.coord(nid).unwrap(), env.points()[i]);
+            assert_eq!(c.position(nid).unwrap(), env.points()[i]);
         }
     }
 }

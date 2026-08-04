@@ -146,7 +146,7 @@ def test_to_quadratic_promotes_linear_mesh():
     shared0 = quad.node(0, 0, 4)  # cell 0 edge (1,2) = (b,d)
     shared1 = quad.node(0, 1, 5)  # cell 1 edge (2,0) = (d,b)
     assert shared0.id == shared1.id
-    assert shared0.coord() == [1.0, 1.0]
+    assert shared0.position() == [1.0, 1.0]
 
     # The promoted mesh is usable as a Lagrange-2 space.
     fes = pyrucast.FiniteElementSpace(quad, interpolation="LAGRANGE2")
@@ -188,5 +188,5 @@ $EndElements
     (_, m) = groups[0] if isinstance(groups, list) else list(groups.items())[0]
     assert m.element_types() == ["TET10"]
     # After the gmsh->pyrucast permutation, local node 8 is the (1,3) midpoint.
-    assert m.node(0, 0, 8).coord() == [0.5, 0.0, 0.5]
-    assert m.node(0, 0, 9).coord() == [0.0, 0.5, 0.5]
+    assert m.node(0, 0, 8).position() == [0.5, 0.0, 0.5]
+    assert m.node(0, 0, 9).position() == [0.0, 0.5, 0.5]

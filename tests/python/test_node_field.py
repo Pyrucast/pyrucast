@@ -239,10 +239,10 @@ def test_values_batch_errors_on_absent_and_bad_arg():
         raise AssertionError("expected TypeError for str argument")
 
 
-# ─── coordinates / set_coordinates / displace ────────────────────────────────
+# ─── coordinates / set_positions / displace ────────────────────────────────
 
 
-def test_coordinates_poi1_mesh_xyz():
+def test_positions_poi1_mesh_xyz():
     c = pyrucast.Coords(3)
     a = c.add_node([1.0, 2.0, 3.0])
     b = c.add_node([4.0, 5.0, 6.0])
@@ -250,7 +250,7 @@ def test_coordinates_poi1_mesh_xyz():
     mesh.unit().add_cell([a])
     mesh.unit().add_cell([b])
 
-    f = pyrucast.node_field.coordinates(mesh)
+    f = pyrucast.node_field.positions(mesh)
     assert f.components() == ["X", "Y", "Z"]
     assert f.node_count() == 2
     assert f.value(a, "X") == 1.0
@@ -259,7 +259,7 @@ def test_coordinates_poi1_mesh_xyz():
     assert f.value(b, "Z") == 6.0
 
 
-def test_coordinates_converts_non_poi1_and_deduplicates():
+def test_positions_converts_non_poi1_and_deduplicates():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
@@ -270,39 +270,39 @@ def test_coordinates_converts_non_poi1_and_deduplicates():
     tri.unit().add_cell([a, b, cc])
     tri.unit().add_cell([b, d, cc])
 
-    f = pyrucast.node_field.coordinates(tri)
+    f = pyrucast.node_field.positions(tri)
     assert f.components() == ["X", "Y"]  # 2-D ⇒ X, Y only
     assert f.node_count() == 4  # shared nodes appear once
     assert f.value(cc, "X") == 0.5
     assert f.value(d, "X") == 1.5
 
 
-def test_coordinates_component_subset():
+def test_positions_component_subset():
     c = pyrucast.Coords(3)
     a = c.add_node([1.0, 2.0, 3.0])
     mesh = pyrucast.Mesh(c, "POI1")
     mesh.unit().add_cell([a])
 
-    f = pyrucast.node_field.coordinates(mesh, ["X", "Z"])
+    f = pyrucast.node_field.positions(mesh, ["X", "Z"])
     assert f.components() == ["X", "Z"]
     assert f.value(a, "X") == 1.0
     assert f.value(a, "Z") == 3.0
 
 
-def test_coordinates_rejects_axis_beyond_dimension():
+def test_positions_rejects_axis_beyond_dimension():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     mesh = pyrucast.Mesh(c, "POI1")
     mesh.unit().add_cell([a])
     try:
-        pyrucast.node_field.coordinates(mesh, ["Z"])  # no Z in 2-D
+        pyrucast.node_field.positions(mesh, ["Z"])  # no Z in 2-D
     except RuntimeError:
         pass
     else:
         raise AssertionError("expected RuntimeError for Z on a 2-D mesh")
 
 
-def test_set_coordinates_writes_positions():
+def test_set_positions_writes_positions():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 1.0])
@@ -311,12 +311,12 @@ def test_set_coordinates_writes_positions():
     mesh.unit().add_cell([b])
 
     # Read current positions into a field, move node a, write it all back.
-    f = pyrucast.node_field.coordinates(mesh)  # components X, Y
+    f = pyrucast.node_field.positions(mesh)  # components X, Y
     f[0][a, "X"] = 10.0
     f[0][a, "Y"] = 20.0
     pyrucast.coords.set(f)  # default components ["X", "Y"]
-    assert a.coord() == [10.0, 20.0]
-    assert b.coord() == [1.0, 1.0]
+    assert a.position() == [10.0, 20.0]
+    assert b.position() == [1.0, 1.0]
 
 
 def test_displace_adds_displacement():
@@ -332,8 +332,8 @@ def test_displace_adds_displacement():
     d[0][a, "uy"] = -1.0
     d[0][b, "ux"] = 2.0
     pyrucast.coords.displace(d)  # default components ["ux", "uy"]
-    assert a.coord() == [5.0, -1.0]
-    assert b.coord() == [3.0, 1.0]
+    assert a.position() == [5.0, -1.0]
+    assert b.position() == [3.0, 1.0]
 
 
 def test_repr_str_node_field():

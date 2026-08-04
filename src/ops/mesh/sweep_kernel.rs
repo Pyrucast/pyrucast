@@ -88,11 +88,11 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
 
     let coords_a: Vec<Vec<f64>> = col_ids_a
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.coord(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
     let coords_b: Vec<Vec<f64>> = col_ids_b
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.coord(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
 
     // layers[k][j] = Node at layer k, column j.
@@ -182,7 +182,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 
     let base_coords: Vec<Vec<f64>> = ordered_ids
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.coord(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
 
     let coord_dim = base_coords[0].len();
@@ -372,11 +372,11 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
     let n_cols = cols_a.len();
     let base_a: Vec<Vec<f64>> = cols_a
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.coord(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
     let base_b: Vec<Vec<f64>> = cols_b
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.coord(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
 
     // layers[k][col]: layer 0 re-acquires mesh_a nodes, layer n_layers

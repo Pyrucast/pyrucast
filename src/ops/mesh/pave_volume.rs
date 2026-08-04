@@ -267,7 +267,7 @@ fn write_positions(coords: &Handle<Coords>, fab: &plaster::front::Fabric) -> Res
     let mut c = crate::store::write(coords)?;
     for (i, p) in fab.pts.iter().enumerate() {
         if fab.movable[i] {
-            c.set_coord(fab.ids[i], &[p.x, p.y, p.z])?;
+            c.set_position(fab.ids[i], &[p.x, p.y, p.z])?;
         }
     }
     Ok(())
@@ -380,8 +380,8 @@ mod tests {
         for i in 0..nodes.len() {
             let a = &nodes[i];
             let b = &nodes[(i + 1) % nodes.len()];
-            let d = ((b.coord().unwrap()[0] - a.coord().unwrap()[0]).powi(2)
-                + (b.coord().unwrap()[2] - a.coord().unwrap()[2]).powi(2))
+            let d = ((b.position().unwrap()[0] - a.position().unwrap()[0]).powi(2)
+                + (b.position().unwrap()[2] - a.position().unwrap()[2]).powi(2))
             .sqrt();
             let k = ((d * n as f64).round() as usize).max(1);
             let seg = crate::ops::mesh::line(a, b, k, ElementType::SEG2).unwrap();
@@ -513,7 +513,7 @@ mod tests {
         for sub in &mesh {
             let s = read(sub).unwrap();
             for &n in s.connectivity() {
-                for x in c.coord(n).unwrap() {
+                for x in c.position(n).unwrap() {
                     assert!(
                         (-1e-9..=1.0 + 1e-9).contains(x),
                         "a node left the box at {x}"
@@ -558,7 +558,7 @@ mod tests {
         let coords = mesh.coords().unwrap();
         let c = read(&coords).unwrap();
         let at = |n: NodeId| {
-            let v = c.coord(n).unwrap();
+            let v = c.position(n).unwrap();
             Point3::new(v[0], v[1], v[2])
         };
         let mut out: HashMap<ElementType, Vec<f64>> = HashMap::new();

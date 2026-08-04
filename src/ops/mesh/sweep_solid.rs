@@ -54,7 +54,7 @@ mod tests {
         assert_eq!(solid.node(0, 1, 5).unwrap().id(), nb[2].id());
         // Interpolated interior layer sits at z = 1.
         let mid = solid.node(0, 0, 3).unwrap();
-        assert!((mid.coord().unwrap()[2] - 1.0).abs() < 1e-12);
+        assert!((mid.position().unwrap()[2] - 1.0).abs() < 1e-12);
     }
 
     #[test]

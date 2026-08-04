@@ -373,7 +373,7 @@ impl SubFiniteElementSpace {
         let mut out = Vec::with_capacity(n_nodes * self.space_dim);
         let c = read(&coords)?;
         for id in ids {
-            out.extend_from_slice(c.coord(id)?);
+            out.extend_from_slice(c.position(id)?);
         }
         Ok(out)
     }
@@ -1201,7 +1201,7 @@ mod tests {
         // Stretch the SEG2 to length 4 (move node b from x=1 to x=4).
         write(&coords)
             .unwrap()
-            .set_coord(b.id(), &[4.0, 0.0])
+            .set_position(b.id(), &[4.0, 0.0])
             .unwrap();
 
         let dj_after = sub.det_jacobian(0, 0).unwrap();

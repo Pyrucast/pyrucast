@@ -171,7 +171,7 @@ impl Contact {
             let c = read(&coords)?;
             slave_ids
                 .iter()
-                .map(|&n| Ok(c.coord(n)?.to_vec()))
+                .map(|&n| Ok(c.position(n)?.to_vec()))
                 .collect::<Result<_>>()?
         };
         let projections = project_points(master, &points)?;

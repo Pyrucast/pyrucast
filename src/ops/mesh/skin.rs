@@ -81,8 +81,8 @@ fn facet_normal(c: &Coords, nodes: &[NodeId]) -> Result<[f64; 3]> {
     let mut n = [0.0f64; 3];
     let k = nodes.len();
     for i in 0..k {
-        let p = c.coord(nodes[i])?;
-        let q = c.coord(nodes[(i + 1) % k])?;
+        let p = c.position(nodes[i])?;
+        let q = c.position(nodes[(i + 1) % k])?;
         n[0] += (p[1] - q[1]) * (p[2] + q[2]);
         n[1] += (p[2] - q[2]) * (p[0] + q[0]);
         n[2] += (p[0] - q[0]) * (p[1] + q[1]);

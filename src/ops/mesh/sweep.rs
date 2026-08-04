@@ -87,7 +87,7 @@ pub(super) fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
                 let c = read(&coords)?;
                 let corners: Vec<Vec<f64>> = cell[..4]
                     .iter()
-                    .map(|&id| -> Result<Vec<f64>> { Ok(c.coord(id)?.to_vec()) })
+                    .map(|&id| -> Result<Vec<f64>> { Ok(c.position(id)?.to_vec()) })
                     .collect::<Result<_>>()?;
                 let dim = corners[0].len();
                 (0..dim)
@@ -130,13 +130,13 @@ mod tests {
         assert_eq!(qua.cell_count().unwrap(), 4);
 
         let n00 = qua.node(0, 0, 0).unwrap();
-        assert_eq!(n00.coord().unwrap(), vec![0.0, 0.0]);
+        assert_eq!(n00.position().unwrap(), vec![0.0, 0.0]);
         let n01 = qua.node(0, 0, 1).unwrap();
-        assert!((n01.coord().unwrap()[0] - 1.0).abs() < 1e-12);
-        assert!((n01.coord().unwrap()[1]).abs() < 1e-12);
+        assert!((n01.position().unwrap()[0] - 1.0).abs() < 1e-12);
+        assert!((n01.position().unwrap()[1]).abs() < 1e-12);
         let n02 = qua.node(0, 0, 2).unwrap();
-        assert!((n02.coord().unwrap()[0] - 1.0).abs() < 1e-12);
-        assert!((n02.coord().unwrap()[1] - 0.5).abs() < 1e-12);
+        assert!((n02.position().unwrap()[0] - 1.0).abs() < 1e-12);
+        assert!((n02.position().unwrap()[1] - 0.5).abs() < 1e-12);
     }
 
     #[test]
@@ -252,7 +252,7 @@ mod tests {
         assert_eq!(qua9.cell_count().unwrap(), 1);
 
         let center = qua9.node(0, 0, 8).unwrap();
-        assert_eq!(center.coord().unwrap(), vec![1.0, 1.0]);
+        assert_eq!(center.position().unwrap(), vec![1.0, 1.0]);
     }
 
     #[test]

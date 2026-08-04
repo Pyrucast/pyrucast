@@ -434,7 +434,7 @@ pub(crate) fn node_field_points(
     let mut points = Vec::new();
     for nid in field.node_ids()? {
         if let Some(val) = view.value_opt(nid, component) {
-            points.push((pad3(c.coord(nid)?), val));
+            points.push((pad3(c.position(nid)?), val));
         }
     }
     Ok(points)
@@ -460,7 +460,7 @@ pub(crate) fn node_field_bbox(
     let c = crate::store::read(&coords)?;
     let mut bb = crate::viz::camera::Bbox3::empty();
     for nid in field.node_ids()? {
-        bb.extend(pad3(c.coord(nid)?));
+        bb.extend(pad3(c.position(nid)?));
     }
     Ok(bb)
 }

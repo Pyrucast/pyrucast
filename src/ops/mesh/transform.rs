@@ -29,7 +29,7 @@ fn map_coords(mesh: &Mesh, mut f: impl FnMut(&[f64]) -> Result<Vec<f64>>) -> Res
     for sm in mesh {
         for &id in read(sm)?.connectivity() {
             if let std::collections::hash_map::Entry::Vacant(e) = fresh.entry(id) {
-                let old = read(&coords)?.coord(id)?.to_vec();
+                let old = read(&coords)?.position(id)?.to_vec();
                 let new_coord = f(&old)?;
                 let node = Node::create_in(coords.clone(), &new_coord)?;
                 e.insert(node.id());
@@ -168,10 +168,13 @@ mod tests {
         // Fresh node, distinct id from the source.
         let n0 = out.node(0, 0, 0).unwrap();
         assert_ne!(n0.id(), src[0].id());
-        assert_eq!(n0.coord().unwrap(), vec![10.0, 5.0]);
-        assert_eq!(out.node(0, 0, 1).unwrap().coord().unwrap(), vec![11.0, 5.0]);
+        assert_eq!(n0.position().unwrap(), vec![10.0, 5.0]);
+        assert_eq!(
+            out.node(0, 0, 1).unwrap().position().unwrap(),
+            vec![11.0, 5.0]
+        );
         // Source is untouched.
-        assert_eq!(src[0].coord().unwrap(), vec![0.0, 0.0]);
+        assert_eq!(src[0].position().unwrap(), vec![0.0, 0.0]);
     }
 
     #[test]
@@ -199,9 +202,9 @@ mod tests {
         let (m, _) = tri2d(&coords, [[1.0, 0.0], [2.0, 0.0], [1.0, 1.0]]);
 
         let out = rotate(&m, PI / 2.0, &[0.0, 0.0], None).unwrap();
-        let n0 = out.node(0, 0, 0).unwrap().coord().unwrap();
+        let n0 = out.node(0, 0, 0).unwrap().position().unwrap();
         assert!((n0[0] - 0.0).abs() < 1e-12 && (n0[1] - 1.0).abs() < 1e-12);
-        let n1 = out.node(0, 0, 1).unwrap().coord().unwrap();
+        let n1 = out.node(0, 0, 1).unwrap().position().unwrap();
         assert!((n1[0] - 0.0).abs() < 1e-12 && (n1[1] - 2.0).abs() < 1e-12);
     }
 
@@ -215,7 +218,7 @@ mod tests {
         m.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
 
         let out = rotate(&m, PI / 2.0, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0])).unwrap();
-        let p0 = out.node(0, 0, 0).unwrap().coord().unwrap();
+        let p0 = out.node(0, 0, 0).unwrap().position().unwrap();
         // (1,0,5) rotated +90° about z → (0,1,5).
         assert!(
             (p0[0]).abs() < 1e-12 && (p0[1] - 1.0).abs() < 1e-12 && (p0[2] - 5.0).abs() < 1e-12

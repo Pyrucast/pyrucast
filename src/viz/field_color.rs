@@ -386,7 +386,7 @@ pub(crate) fn submesh_primitives_smooth(
     let coords: Vec<Point3> = {
         let c = read(&coords)?;
         conn.iter()
-            .map(|&nid| c.coord(nid).map(pad3))
+            .map(|&nid| c.position(nid).map(pad3))
             .collect::<Result<_>>()?
     };
 

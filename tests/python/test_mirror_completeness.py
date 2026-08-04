@@ -155,7 +155,7 @@ PYTHON_ONLY = {
     "consolidate_mesh": "nom plat de `mesh.consolidate`",
     "consolidate_node": "nom plat de `node_field.consolidate`",
     "consolidate_element": "nom plat de `element_field.consolidate`",
-    "set_coordinates": "nom plat de `coords.set`",
+    "set_positions": "nom plat de `coords.set`",
     "select": "dispatch par type sur `mesh::select_nodes` / `select_cells`",
     "integral": "dispatch par type sur `measure::integral` / `integral_element`",
     "integrate_behavior": "nom qualifié de `element_field::behavior::integrate`",

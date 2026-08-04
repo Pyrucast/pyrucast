@@ -77,7 +77,7 @@ pub fn locate_points(host: &Mesh, points: &[Vec<f64>], tol: f64) -> Result<Vec<O
             let ids = &conn[cell * npc..(cell + 1) * npc];
             let coords: Vec<Vec<f64>> = ids
                 .iter()
-                .map(|&n| Ok(c.coord(n)?.to_vec()))
+                .map(|&n| Ok(c.position(n)?.to_vec()))
                 .collect::<Result<_>>()?;
             let dim = coords[0].len();
             let mut lo = coords[0].clone();

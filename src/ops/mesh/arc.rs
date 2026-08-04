@@ -45,9 +45,9 @@ pub fn arc(
         ));
     }
 
-    let a = node_a.coord()?;
-    let c = center.coord()?;
-    let b = node_b.coord()?;
+    let a = node_a.position()?;
+    let c = center.position()?;
+    let b = node_b.position()?;
     let dim = c.len();
     if a.len() != dim || b.len() != dim {
         return Err(PyrucastError::Message(
@@ -145,14 +145,14 @@ mod tests {
         // All nodes lie on the unit circle.
         for ei in 0..3 {
             for corner in 0..2 {
-                let p = mesh.node(0, ei, corner).unwrap().coord().unwrap();
+                let p = mesh.node(0, ei, corner).unwrap().position().unwrap();
                 let dist = (p[0].powi(2) + p[1].powi(2)).sqrt();
                 assert!((dist - 1.0).abs() < 1e-12);
             }
         }
 
         // Midpoint node (t=1/3, 2/3) angles: 30° and 60°.
-        let mid1 = mesh.node(0, 1, 0).unwrap().coord().unwrap();
+        let mid1 = mesh.node(0, 1, 0).unwrap().position().unwrap();
         assert!((mid1[0] - (PI / 6.0).cos()).abs() < 1e-12);
         assert!((mid1[1] - (PI / 6.0).sin()).abs() < 1e-12);
     }
@@ -227,7 +227,7 @@ mod tests {
 
         let mesh = arc(&a, &center, &b, 4, ElementType::SEG2).unwrap();
         for ei in 0..4 {
-            let p = mesh.node(0, ei, 0).unwrap().coord().unwrap();
+            let p = mesh.node(0, ei, 0).unwrap().position().unwrap();
             assert!((p[1]).abs() < 1e-12);
             let dist = (p[0].powi(2) + p[1].powi(2) + p[2].powi(2)).sqrt();
             assert!((dist - 2.0).abs() < 1e-10);

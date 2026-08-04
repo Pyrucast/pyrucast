@@ -182,7 +182,7 @@ impl Embedded {
             let c = read(&coords)?;
             immersed_ids
                 .iter()
-                .map(|&n| Ok(c.coord(n)?.to_vec()))
+                .map(|&n| Ok(c.position(n)?.to_vec()))
                 .collect::<Result<_>>()?
         };
         let tol = tol.unwrap_or(DEFAULT_TOL);

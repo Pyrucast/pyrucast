@@ -6,7 +6,7 @@ famille d'opérateurs, par opposition aux **méthodes** qui restent sur un seul
 conteneur (cf. [Conventions](conventions.md)). Côté Rust elles vivent sous
 `src/ops/<module>`, où le module porte le nom du **conteneur produit** ; côté
 Python elles sont exposées dans le sous-module de même nom
-(`pyrucast.node_field.coordinates`, `pyrucast.matrix.stiffness`, …).
+(`pyrucast.node_field.positions`, `pyrucast.matrix.stiffness`, …).
 
 Les chapitres qui suivent sont organisés **par sujet**, ce qui ne recoupe pas
 toujours le module d'implémentation — la colonne de gauche donne la
@@ -19,7 +19,7 @@ correspondance.
 | `ops::coords` | [Champs](operateurs/champs.md) | `set`, `displace` — les deux seuls opérateurs qui écrivent la géométrie |
 | `ops::measure` | [Champs](operateurs/champs.md) | `integral` / `integral_element` (`∫ f dΩ`), `xtx` / `xty` (produits scalaires globaux) |
 | `ops::geom` | [Géométrie](operateurs/geometrie.md) | `locate_points` (mapping inverse, baignage), `project_points` (projection sur surface, contact) — internes, pas exposées à Python |
-| `ops::node_field`, `ops::element_field`, `ops::field` | [Champs](operateurs/champs.md) | `coordinates`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `frame_deformation`, `interp_to_gauss` (nœuds → Gauss), `thermal_strain` (déformation thermique `EPTH`), `restrict`, `restrict_like` (reprojection sur le support d'un champ cible), `select`, `mask`, `filter_components` / `rename_component` (extraction et renommage de composantes, `EXCO`), `merge`, `node_field.consolidate` / `element_field.consolidate`, `integral` / `integral_element` (intégrale `∫ f dΩ`), `xty` / `xtx` (produits scalaires globaux) / `psca` (produit scalaire nœud par nœud), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
+| `ops::node_field`, `ops::element_field`, `ops::field` | [Champs](operateurs/champs.md) | `positions`, `gradient`, `divergence`, `deformation`, `beam_deformation`, `frame_deformation`, `interp_to_gauss` (nœuds → Gauss), `thermal_strain` (déformation thermique `EPTH`), `restrict`, `restrict_like` (reprojection sur le support d'un champ cible), `select`, `mask`, `filter_components` / `rename_component` (extraction et renommage de composantes, `EXCO`), `merge`, `node_field.consolidate` / `element_field.consolidate`, `integral` / `integral_element` (intégrale `∫ f dΩ`), `xty` / `xtx` (produits scalaires globaux) / `psca` (produit scalaire nœud par nœud), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
 | `ops::matrix` | [Assemblage](operateurs/assemblage.md) | `stiffness`, `mass`, rigidité géométrique `geometric`, tangente cohérente `tangent`, concentration `lump`, composition `assemble` (réassemble depuis les blocs seuls, sans `Model`), chargement réparti `flux`, forces internes `internal_forces` / `internal_forces_continuum` (le `BSIG`, `∫ Bᵀ σ`) |
 | `ops::element_field::behavior` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`) |
 | `ops::solver` | [Solveur](operateurs/solveur.md) | `solve` (LU creux, Lagrange), `solve_eliminate` (condensation MPC), `solve_unilateral` (actif/inactif, relations unilatérales) |
@@ -48,7 +48,7 @@ mesh ──► (Mesh) ──► FiniteElementSpace
 element_field ── material_field ─┤
                                  ▼
 matrix ── stiffness ──────────► (Matrix) ──┐
-node_field ── flux/coordinates ──► (RHS) ──┤
+node_field ── flux/positions ──► (RHS) ──┤
                                            ▼
                           solver ── solve ──► (NodeField solution)
                                            │

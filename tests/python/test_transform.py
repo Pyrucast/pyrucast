@@ -23,10 +23,10 @@ def test_translate_fresh_nodes_original_untouched():
     out = pyrucast.mesh.translate(m, [10.0, 5.0])
     assert out.element_types() == ["TRI3"]
     n0 = out.node(0, 0, 0)
-    assert n0.coord() == [10.0, 5.0]
+    assert n0.position() == [10.0, 5.0]
     # Fresh node, distinct from the source; the source is unchanged.
     assert n0.id != ids[0].id
-    assert ids[0].coord() == [0.0, 0.0]
+    assert ids[0].position() == [0.0, 0.0]
 
 
 def test_rotate_2d_quarter_turn():
@@ -36,7 +36,7 @@ def test_rotate_2d_quarter_turn():
     m.unit().add_cell(ids)
 
     out = pyrucast.mesh.rotate(m, math.pi / 2.0, [0.0, 0.0])
-    x, y = out.node(0, 0, 0).coord()
+    x, y = out.node(0, 0, 0).position()
     assert abs(x - 0.0) < 1e-12 and abs(y - 1.0) < 1e-12
 
 
@@ -44,7 +44,7 @@ def test_rotate_3d_about_z():
     c = pyrucast.Coords(3)
     m, _ = _tri3(c, [[1.0, 0.0, 5.0], [0.0, 1.0, 5.0], [0.0, 0.0, 5.0]])
     out = pyrucast.mesh.rotate(m, math.pi / 2.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
-    x, y, z = out.node(0, 0, 0).coord()
+    x, y, z = out.node(0, 0, 0).position()
     assert abs(x) < 1e-12 and abs(y - 1.0) < 1e-12 and abs(z - 5.0) < 1e-12
 
 

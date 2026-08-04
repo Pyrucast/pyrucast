@@ -36,7 +36,7 @@
 //!
 //! Useful for switching between reference / deformed / predicted
 //! configurations. An active configuration is designated by index;
-//! [`Coords::coord`] reads from the active one.
+//! [`Coords::position`] reads from the active one.
 //!
 //! # Coordinate frame
 //!
@@ -283,7 +283,7 @@ impl Coords {
 
     /// Coordinates of a node in the active configuration. Error if the node was
     /// collected or never existed.
-    pub fn coord(&self, id: NodeId) -> Result<&[f64]> {
+    pub fn position(&self, id: NodeId) -> Result<&[f64]> {
         self.ensure_alive(id)?;
         let d = self.dim as usize;
         let s = id.0 as usize * d;
@@ -291,16 +291,16 @@ impl Coords {
     }
 
     /// Set the coordinates of a node in the active configuration.
-    pub fn set_coord(&mut self, id: NodeId, coords: &[f64]) -> Result<()> {
+    pub fn set_position(&mut self, id: NodeId, coords: &[f64]) -> Result<()> {
         self.ensure_alive(id)?;
         if coords.len() != self.dim as usize {
             return Err(PyrucastError::Message(format!(
-                "set_coord: expected {} coordinates, got {}",
+                "set_position: expected {} coordinates, got {}",
                 self.dim,
                 coords.len()
             )));
         }
-        self.check_radius("set_coord", coords)?;
+        self.check_radius("set_position", coords)?;
         let d = self.dim as usize;
         let s = id.0 as usize * d;
         self.configs[self.active][s..s + d].copy_from_slice(coords);
@@ -467,7 +467,7 @@ impl crate::dump::Dump for Coords {
             .iter_live()
             .map(|id| {
                 let mut row = vec![id.to_string()];
-                match self.coord(id) {
+                match self.position(id) {
                     Ok(c) => row.extend(c.iter().map(|v| fmt_float(*v, opts.precision))),
                     Err(_) => row.extend((0..dim).map(|_| "?".to_string())),
                 }
@@ -514,8 +514,8 @@ mod tests {
         assert!(format!("{err}").contains("negative radius"));
         // On the axis (r = 0) is legitimate.
         let id = c.add_node(&[0.0, 2.0]).unwrap();
-        assert!(c.set_coord(id, &[-0.5, 2.0]).is_err());
-        c.set_coord(id, &[0.5, 2.0]).unwrap();
+        assert!(c.set_position(id, &[-0.5, 2.0]).is_err());
+        c.set_position(id, &[0.5, 2.0]).unwrap();
         // A Cartesian Coords keeps accepting negative x.
         assert!(Coords::new(2).unwrap().add_node(&[-1.0, 0.0]).is_ok());
     }
@@ -585,8 +585,8 @@ mod tests {
         let a = c.add_node(&[42.0]).unwrap();
         c.decref(a).unwrap();
         c.gc();
-        assert!(c.coord(a).is_err());
-        assert!(c.set_coord(a, &[0.0]).is_err());
+        assert!(c.position(a).is_err());
+        assert!(c.set_position(a, &[0.0]).is_err());
         assert!(c.incref(a).is_err());
         assert!(c.decref(a).is_err());
     }
@@ -601,11 +601,11 @@ mod tests {
     }
 
     #[test]
-    fn set_coord_modifies_active_config() {
+    fn set_position_modifies_active_config() {
         let mut c = Coords::new(2).unwrap();
         let a = c.add_node(&[0.0, 0.0]).unwrap();
-        c.set_coord(a, &[3.0, 4.0]).unwrap();
-        assert_eq!(c.coord(a).unwrap(), &[3.0, 4.0]);
+        c.set_position(a, &[3.0, 4.0]).unwrap();
+        assert_eq!(c.position(a).unwrap(), &[3.0, 4.0]);
     }
 
     #[test]
@@ -615,11 +615,11 @@ mod tests {
         let s2 = c.add_config("deformed");
         assert_eq!(s2, 1);
         c.select(s2).unwrap();
-        c.set_coord(a, &[10.0, 20.0]).unwrap();
+        c.set_position(a, &[10.0, 20.0]).unwrap();
         c.select(0).unwrap();
-        assert_eq!(c.coord(a).unwrap(), &[0.0, 0.0]);
+        assert_eq!(c.position(a).unwrap(), &[0.0, 0.0]);
         c.select(1).unwrap();
-        assert_eq!(c.coord(a).unwrap(), &[10.0, 20.0]);
+        assert_eq!(c.position(a).unwrap(), &[10.0, 20.0]);
         assert_eq!(c.names(), &["default".to_string(), "deformed".to_string()]);
     }
 

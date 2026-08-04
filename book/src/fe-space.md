@@ -258,7 +258,7 @@ Le maillage support d'un `FiniteElementSpace` est topologiquement figé, mais se
 Ce choix donne deux propriétés importantes :
 
 1. **Empreinte mémoire indépendante du nombre de cellules.** Un `SubFiniteElementSpace` ne stocke que de l'ordre de \\( n_g \times n_\text{nodes} \times d_r \\) flottants — quelques centaines au plus par sous-espace. À comparer aux GB qu'un précalcul des Jacobiens demanderait sur un maillage 3D fin.
-2. **Robustesse au déplacement.** Réécrire les coordonnées dans la `Coords` (par exemple via `Coords::set_coord`) suffit à mettre à jour automatiquement toutes les évaluations de \\( J \\), \\( |J| \\) et \\( \partial N_i / \partial x_a \\) — pas d'invalidation à signaler, pas de cache à reconstruire.
+2. **Robustesse au déplacement.** Réécrire les coordonnées dans la `Coords` (par exemple via `Coords::set_position`) suffit à mettre à jour automatiquement toutes les évaluations de \\( J \\), \\( |J| \\) et \\( \partial N_i / \partial x_a \\) — pas d'invalidation à signaler, pas de cache à reconstruire.
 
 Le coût est CPU plutôt que mémoire : chaque appel à `jacobian(cell, g)` recalcule la somme \\( J = \sum_i \mathbf{x}_i\, \nabla_\xi N_i \\). En pratique, l'assemblage matrice-élémentaire procède **cellule par cellule** : on calcule \\( J \\), \\( |J| \\), \\( \nabla_x N_i \\) une fois par couple (cellule, Gauss), puis on les réutilise pour tous les termes intégrés. Le surcoût reste donc proportionnel à \\( n_\text{cells} \times n_g \\) — soit le minimum incompressible — et non à \\( n_\text{cells} \times n_g \times n_\text{termes} \\).
 
@@ -356,7 +356,7 @@ let dj_before = read(&sub).unwrap().det_jacobian(0, 0).unwrap();
 assert!((dj_before - 0.5).abs() < 1e-12);
 
 // Étirement : on déplace le second nœud en x=4 → |J| = 2.0 (longueur 4 sur [-1,+1]).
-write(&coords).unwrap().set_coord(b.id(), &[4.0, 0.0]).unwrap();
+write(&coords).unwrap().set_position(b.id(), &[4.0, 0.0]).unwrap();
 let dj_after = read(&sub).unwrap().det_jacobian(0, 0).unwrap();
 assert!((dj_after - 2.0).abs() < 1e-12);
 ```
@@ -423,7 +423,7 @@ print(sub.det_jacobian(0, 0))  # |J| initial
 
 # Déplacement d'un nœud → toutes les évaluations à venir voient les
 # nouvelles coordonnées.
-n1.set_coord([4.0, 0.0])
+n1.set_position([4.0, 0.0])
 print(sub.det_jacobian(0, 0))  # |J| recalculé
 ```
 

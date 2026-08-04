@@ -18,7 +18,7 @@ def test_add_node_returns_node():
     c = pyrucast.Coords(2)
     n = c.add_node([1.0, 2.0])
     assert n.id == 0
-    assert n.coord() == [1.0, 2.0]
+    assert n.position() == [1.0, 2.0]
     assert c.node_count() == 1
     assert c.refcount(n.id) == 1
 
@@ -51,11 +51,21 @@ def test_ids_are_stable_after_gc():
     assert c.capacity() == 2
 
 
-def test_set_coord_via_node():
+def test_set_position_via_node():
     c = pyrucast.Coords(2)
     n = c.add_node([0.0, 0.0])
-    n.set_coord([3.0, 4.0])
-    assert n.coord() == [3.0, 4.0]
+    n.set_position([3.0, 4.0])
+    assert n.position() == [3.0, 4.0]
+
+
+def test_node_coords_returns_owning_coords():
+    # Le `Coords` se récupère depuis le nœud même si la poignée d'origine
+    # a disparu côté Python.
+    n = pyrucast.Coords(2).add_node([1.0, 2.0])
+    pygc.collect()
+    back = n.coords()
+    assert back.dim == 2
+    assert back.acquire(n.id).position() == [1.0, 2.0]
 
 
 def test_configs_select():
@@ -64,11 +74,11 @@ def test_configs_select():
     s2 = c.add_config("deformed")
     assert s2 == 1
     c.select(1)
-    n.set_coord([10.0, 20.0])
+    n.set_position([10.0, 20.0])
     c.select(0)
-    assert n.coord() == [0.0, 0.0]
+    assert n.position() == [0.0, 0.0]
     c.select(1)
-    assert n.coord() == [10.0, 20.0]
+    assert n.position() == [10.0, 20.0]
 
 
 def test_acquire_shares_id():

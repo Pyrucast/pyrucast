@@ -41,10 +41,10 @@ mod tests {
         assert_eq!(qua.cell_count().unwrap(), 6);
 
         let n = qua.node(0, 0, 0).unwrap();
-        assert_eq!(n.coord().unwrap(), vec![0.0, 0.0]);
+        assert_eq!(n.position().unwrap(), vec![0.0, 0.0]);
         let n = qua.node(0, 0, 3).unwrap();
-        assert!((n.coord().unwrap()[0]).abs() < 1e-12);
-        assert!((n.coord().unwrap()[1] - 1.0).abs() < 1e-12);
+        assert!((n.position().unwrap()[0]).abs() < 1e-12);
+        assert!((n.position().unwrap()[1] - 1.0).abs() < 1e-12);
     }
 
     #[test]
@@ -81,7 +81,7 @@ mod tests {
         assert_eq!(hex.node(0, 0, 2).unwrap().id(), n2.id());
         assert_eq!(hex.node(0, 0, 3).unwrap().id(), n3.id());
         let top0 = hex.node(0, 0, 4).unwrap();
-        assert_eq!(top0.coord().unwrap(), vec![0.0, 0.0, 2.0]);
+        assert_eq!(top0.position().unwrap(), vec![0.0, 0.0, 2.0]);
     }
 
     #[test]
@@ -103,7 +103,7 @@ mod tests {
         assert_eq!(penta.node(0, 0, 2).unwrap().id(), n2.id());
         // Top of first layer sits one step (z = 1) above the base.
         let top0 = penta.node(0, 0, 3).unwrap();
-        assert_eq!(top0.coord().unwrap(), vec![0.0, 0.0, 1.0]);
+        assert_eq!(top0.position().unwrap(), vec![0.0, 0.0, 1.0]);
     }
 
     #[test]

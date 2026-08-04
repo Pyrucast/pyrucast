@@ -44,10 +44,10 @@ pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
             (0..n_cells)
                 .map(|cell| {
                     let ids = &conn[cell * npc..(cell + 1) * npc];
-                    let dim = c.coord(ids[0])?.len();
+                    let dim = c.position(ids[0])?.len();
                     let mut centroid = vec![0.0; dim];
                     for &nid in ids {
-                        for (acc, &x) in centroid.iter_mut().zip(c.coord(nid)?) {
+                        for (acc, &x) in centroid.iter_mut().zip(c.position(nid)?) {
                             *acc += x;
                         }
                     }
@@ -107,8 +107,8 @@ mod tests {
         assert_ne!(m0.id(), a.id());
         assert_ne!(m1.id(), b.id());
         let c = read(&coords).unwrap();
-        assert_eq!(c.coord(m0.id()).unwrap(), &[0.0, 0.0]);
-        assert_eq!(c.coord(m1.id()).unwrap(), &[3.0, 1.0]);
+        assert_eq!(c.position(m0.id()).unwrap(), &[0.0, 0.0]);
+        assert_eq!(c.position(m1.id()).unwrap(), &[3.0, 1.0]);
     }
 
     /// A TRI3 element yields a single POI1 node at the triangle's centroid.
@@ -125,7 +125,7 @@ mod tests {
         assert_eq!(bary.cell_count().unwrap(), 1);
         let centroid = bary.node(0, 0, 0).unwrap();
         let cf = read(&coords).unwrap();
-        assert_eq!(cf.coord(centroid.id()).unwrap(), &[1.0, 1.0]);
+        assert_eq!(cf.position(centroid.id()).unwrap(), &[1.0, 1.0]);
     }
 
     /// Submesh structure is preserved: a POI1 + TRI3 input gives two POI1

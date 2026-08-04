@@ -114,7 +114,7 @@ fn geometry(mesh: &Mesh) -> Result<Geometry> {
                 let idx = match index.get(&nid) {
                     Some(&i) => i,
                     None => {
-                        let c = coords.coord(nid)?;
+                        let c = coords.position(nid)?;
                         let mut p = [0.0; 3];
                         p[..dim].copy_from_slice(&c[..dim]);
                         let i = points.len();

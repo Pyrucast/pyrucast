@@ -46,7 +46,7 @@ pub fn circle(
     }
 
     let coords = center.coords();
-    let center_coords = center.coord()?;
+    let center_coords = center.position()?;
     let dim = center_coords.len();
     if !(2..=3).contains(&dim) {
         return Err(PyrucastError::Message(
@@ -106,11 +106,11 @@ mod tests {
         assert_eq!(mesh.cell_count().unwrap(), 4);
 
         let n0 = mesh.node(0, 0, 0).unwrap();
-        assert!((n0.coord().unwrap()[0] - 1.0).abs() < 1e-12);
-        assert!((n0.coord().unwrap()[1]).abs() < 1e-12);
+        assert!((n0.position().unwrap()[0] - 1.0).abs() < 1e-12);
+        assert!((n0.position().unwrap()[1]).abs() < 1e-12);
         let n1 = mesh.node(0, 1, 0).unwrap();
-        assert!((n1.coord().unwrap()[0]).abs() < 1e-12);
-        assert!((n1.coord().unwrap()[1] - 1.0).abs() < 1e-12);
+        assert!((n1.position().unwrap()[0]).abs() < 1e-12);
+        assert!((n1.position().unwrap()[1] - 1.0).abs() < 1e-12);
     }
 
     #[test]
@@ -131,7 +131,7 @@ mod tests {
         let mesh = circle(&center, &[0.0, 0.0, 1.0], 3.0, 8, ElementType::SEG2).unwrap();
 
         for ei in 0..8 {
-            let c = mesh.node(0, ei, 0).unwrap().coord().unwrap();
+            let c = mesh.node(0, ei, 0).unwrap().position().unwrap();
             let dist = ((c[0] - 1.0).powi(2) + (c[1] - 2.0).powi(2)).sqrt();
             assert!((dist - 3.0).abs() < 1e-10, "element {ei}: distance={dist}");
         }
@@ -145,7 +145,7 @@ mod tests {
         assert_eq!(mesh.cell_count().unwrap(), 8);
 
         for ei in 0..8 {
-            let c = mesh.node(0, ei, 0).unwrap().coord().unwrap();
+            let c = mesh.node(0, ei, 0).unwrap().position().unwrap();
             assert!((c[1]).abs() < 1e-12, "element {ei}: y={}", c[1]);
             let dist = (c[0].powi(2) + c[2].powi(2)).sqrt();
             assert!((dist - 2.0).abs() < 1e-10, "element {ei}: distance={dist}");

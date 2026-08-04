@@ -53,9 +53,11 @@ Un `Node` ne se construit jamais « dans le vide » : il naît d'un `Coords`.
 Côté **Python**, le `Node` expose :
 
 - la propriété `id` — l'identifiant entier stable dans son `Coords` ;
-- `coord()` — ses coordonnées dans la configuration active ;
-- `set_coord([x, y, …])` — réécrit ses coordonnées (dans la configuration
+- `position()` — ses coordonnées dans la configuration active ;
+- `set_position([x, y, …])` — réécrit ses coordonnées (dans la configuration
   active) ;
+- `coords()` — le `Coords` auquel il appartient ; filet de secours quand la
+  poignée a été lâchée côté Python, comme `Mesh.coords()` ;
 - l'union `node | node` → un `Mesh` POI1 unitaire sur les deux nœuds (la même
   union `|` que les agrégats, cf. [Agrégat](aggregate.md)) ; et `mesh | node`
   ajoute un point à un `Mesh` POI1 unitaire ;
@@ -69,15 +71,15 @@ a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
 print(a.id)  # 0
-print(a.coord())  # [0.0, 0.0]
-a.set_coord([0.5, 0.5])
+print(a.position())  # [0.0, 0.0]
+a.set_position([0.5, 0.5])
 
 # Union de nœuds → maillage POI1 (deux points).
 poi = a | b
 print(poi)  # Mesh: 1 submesh(es), 2 cell(s) total
 ```
 
-Côté **Rust**, `Node` expose `id()`, `coord()`, `set_coord(&[…])`,
+Côté **Rust**, `Node` expose `id()`, `position()`, `set_position(&[…])`,
 `coords()` (le `Handle<Coords>` porté), plus `Clone`/`Drop` qui gèrent le
 refcount comme décrit ci-dessus.
 

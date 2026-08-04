@@ -26,7 +26,7 @@
 //! let cell = mesh.cell(0, 0).unwrap();
 //! assert_eq!(cell.nodes().unwrap().len(), 3);
 //! for node in cell.nodes().unwrap() {
-//!     let _ = node.coord().unwrap();
+//!     let _ = node.position().unwrap();
 //! }
 //! ```
 
@@ -126,7 +126,7 @@ impl crate::dump::Dump for Cell {
             let mut rows: Vec<Vec<String>> = Vec::with_capacity(ids.len());
             let mut dim = 0usize;
             for &id in &ids {
-                let coord = c.coord(id)?;
+                let coord = c.position(id)?;
                 dim = dim.max(coord.len());
                 let mut row = vec![id.to_string()];
                 row.extend(coord.iter().map(|v| fmt_float(*v, opts.precision)));

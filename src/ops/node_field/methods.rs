@@ -45,9 +45,9 @@ impl ElementField {
 }
 
 impl Mesh {
-    /// Voir [`node_field::coordinates`](fn@crate::ops::node_field::coordinates).
-    pub fn coordinates(&self, components: Option<Vec<String>>) -> Result<NodeField> {
-        crate::ops::node_field::coordinates(self, components)
+    /// Voir [`node_field::positions`](fn@crate::ops::node_field::positions).
+    pub fn positions(&self, components: Option<Vec<String>>) -> Result<NodeField> {
+        crate::ops::node_field::positions(self, components)
     }
 }
 

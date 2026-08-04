@@ -32,7 +32,7 @@ Maillage - transformation;ORIE;Oriente les éléments d'une surface/ligne;orient
 Maillage - transformation;RACC;Raccorde deux maillages (collage);—
 Maillage - transformation;DENS;Fixe la densité (taille de maille) courante;refinement de surface (paramètre)
 Maillage - transformation;BARY;Barycentre d'un maillage / centres des éléments;barycenter
-Maillage - info;COOR;Coordonnées des nœuds d'un maillage;coordinates
+Maillage - info;COOR;Coordonnées des nœuds d'un maillage;positions
 Maillage - info;NOEU;Nœuds d'un maillage;Mesh / Node
 Maillage - info;FACE;Faces (frontières) des éléments;—
 Maillage - info;MESU;Mesure (longueur / aire / volume) d'un maillage;—

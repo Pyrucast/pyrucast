@@ -117,8 +117,8 @@ fn subspace_frame_deformation(
     for cell in 0..n_cells {
         let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
         // Nodal DOFs and coordinates of the two endpoints.
-        let xa = coords.coord(ids[0])?;
-        let xb = coords.coord(ids[1])?;
+        let xa = coords.position(ids[0])?;
+        let xb = coords.position(ids[1])?;
         let da: Vec<f64> = dofs
             .iter()
             .map(|c| view.value(ids[0], c))

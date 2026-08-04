@@ -152,7 +152,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 
 | Rust (`ops::node_field::…`) | Python (`pyrucast.node_field.…`) |
 |---|---|
-| `coordinates(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `coordinates(mesh, components=None) -> NodeField` |
+| `positions(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `positions(mesh, components=None) -> NodeField` |
 | `divergence(field: &ElementField) -> NodeField` | `divergence(field) -> NodeField` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
 | `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |

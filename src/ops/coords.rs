@@ -2,7 +2,7 @@
 //! do.
 //!
 //! They are the write side of
-//! [`node_field::coordinates`](fn@crate::ops::node_field::coordinates), which
+//! [`node_field::positions`](fn@crate::ops::node_field::positions), which
 //! reads the geometry as a nodal field: [`set`](fn@set) puts absolute
 //! positions back, [`displace`](fn@displace) adds an increment. Both act on
 //! the [`Coords`](crate::coords::Coords) the field hangs from, in place.
@@ -67,7 +67,7 @@ fn per_node_values(field: &NodeField, comps: &[String]) -> Result<Vec<(NodeId, V
 /// node `n` of the field, `coord[a] = field.value(n, components[a])` on
 /// the active coordinate set. `components` lists one field-component name
 /// per spatial axis, in axis order; `None` → `["X", "Y", "Z"][..dim]`
-/// (symmetric with [`crate::ops::node_field::coordinates`](fn@crate::ops::node_field::coordinates)). In-place on the field's
+/// (symmetric with [`crate::ops::node_field::positions`](fn@crate::ops::node_field::positions)). In-place on the field's
 /// `Coords`.
 pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let coords = field.coords()?;
@@ -76,7 +76,7 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let targets = per_node_values(field, &comps)?;
     let mut c = write(&coords)?;
     for (nid, coord) in &targets {
-        c.set_coord(*nid, coord)?;
+        c.set_position(*nid, coord)?;
     }
     Ok(())
 }
@@ -94,11 +94,11 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
     let increments = per_node_values(field, &comps)?;
     let mut c = write(&coords)?;
     for (nid, inc) in &increments {
-        let mut coord = c.coord(*nid)?.to_vec();
+        let mut coord = c.position(*nid)?.to_vec();
         for (a, dv) in inc.iter().enumerate() {
             coord[a] += dv;
         }
-        c.set_coord(*nid, &coord)?;
+        c.set_position(*nid, &coord)?;
     }
     Ok(())
 }
@@ -111,7 +111,7 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::ops::node_field::coordinates;
+    use crate::ops::node_field::positions;
     use crate::store::insert;
 
     #[test]
@@ -124,7 +124,7 @@ mod tests {
         mesh.add_cell(&[b.id()]).unwrap();
 
         // Field of target positions (X/Y), round-tripped from the reader.
-        let f = coordinates(&mesh, None).unwrap();
+        let f = positions(&mesh, None).unwrap();
         {
             let mut s = write(&f.get(0).unwrap()).unwrap();
             s.set_value(a.id(), "X", 10.0).unwrap();
@@ -134,8 +134,8 @@ mod tests {
         set(&f, None).unwrap();
         {
             let c = read(&coords).unwrap();
-            assert_eq!(c.coord(a.id()).unwrap(), &[10.0, 20.0]);
-            assert_eq!(c.coord(b.id()).unwrap(), &[1.0, 1.0]);
+            assert_eq!(c.position(a.id()).unwrap(), &[10.0, 20.0]);
+            assert_eq!(c.position(b.id()).unwrap(), &[1.0, 1.0]);
         }
     }
 
@@ -153,8 +153,8 @@ mod tests {
         displace(&NodeField::from_sub(d), None).unwrap();
         {
             let c = read(&coords).unwrap();
-            assert_eq!(c.coord(a.id()).unwrap(), &[5.0, -1.0]);
-            assert_eq!(c.coord(b.id()).unwrap(), &[3.0, 1.0]);
+            assert_eq!(c.position(a.id()).unwrap(), &[5.0, -1.0]);
+            assert_eq!(c.position(b.id()).unwrap(), &[3.0, 1.0]);
         }
     }
 
@@ -178,7 +178,7 @@ mod tests {
         }
 
         displace(&f, None).unwrap();
-        assert_eq!(read(&coords).unwrap().coord(s.id()).unwrap(), &[1.5]);
+        assert_eq!(read(&coords).unwrap().position(s.id()).unwrap(), &[1.5]);
     }
 
     #[test]
@@ -187,7 +187,7 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
-        let f = coordinates(&mesh, None).unwrap();
+        let f = positions(&mesh, None).unwrap();
         // 2-D Coords needs 2 axis components, not 1.
         assert!(set(&f, Some(vec!["X".into()])).is_err());
         // Unknown component name.

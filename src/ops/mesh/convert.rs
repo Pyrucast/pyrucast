@@ -162,7 +162,10 @@ mod tests {
         // The six tets tile the unit cube: their volumes sum to 1.
         let vol = |ids: [NodeId; 4]| -> f64 {
             let c = read(&coords).unwrap();
-            let p: Vec<Vec<f64>> = ids.iter().map(|&i| c.coord(i).unwrap().to_vec()).collect();
+            let p: Vec<Vec<f64>> = ids
+                .iter()
+                .map(|&i| c.position(i).unwrap().to_vec())
+                .collect();
             let e1 = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
             let e2 = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
             let e3 = [p[3][0] - p[0][0], p[3][1] - p[0][1], p[3][2] - p[0][2]];

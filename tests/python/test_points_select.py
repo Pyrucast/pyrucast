@@ -26,7 +26,7 @@ def _cloud(dim, points):
 
 def _coords_of(sel, sub=0):
     """Coordonnées des nœuds sélectionnés dans un sous-maillage, dans l'ordre."""
-    return [sel.node(sub, i, 0).coord() for i in range(sel.cell_counts()[sub])]
+    return [sel.node(sub, i, 0).position() for i in range(sel.cell_counts()[sub])]
 
 
 # --- sphères ---------------------------------------------------------------
@@ -202,7 +202,7 @@ def test_nearest_node_is_the_single_node_query():
     _, m = _cloud(2, [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]])
     node = m.nearest_node([0.9, 0.9])
     assert isinstance(node, pyrucast.Node)
-    assert node.coord() == [1.0, 1.0]
+    assert node.position() == [1.0, 1.0]
 
 
 def test_invalid_arguments_raise():

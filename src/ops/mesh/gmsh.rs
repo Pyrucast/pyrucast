@@ -1050,13 +1050,13 @@ $EndElements
         // A 3-D Coords keeps z.
         let g3 = read_gmsh_str(coords(3), mesh).unwrap();
         assert_eq!(
-            g3[0].1.node(0, 0, 0).unwrap().coord().unwrap(),
+            g3[0].1.node(0, 0, 0).unwrap().position().unwrap(),
             vec![0.0, 0.0, 5.0]
         );
         // A 2-D Coords keeps only x, y — z is dropped.
         let g2 = read_gmsh_str(coords(2), mesh).unwrap();
         assert_eq!(
-            g2[0].1.node(0, 0, 0).unwrap().coord().unwrap(),
+            g2[0].1.node(0, 0, 0).unwrap().position().unwrap(),
             vec![0.0, 0.0]
         );
     }
@@ -1135,7 +1135,7 @@ $EndElements
         assert_eq!(m.element_types().unwrap(), vec![ElementType::PYRA5]);
         assert_eq!(m.cell_count().unwrap(), 1);
         assert_eq!(
-            m.node(0, 0, 4).unwrap().coord().unwrap(),
+            m.node(0, 0, 4).unwrap().position().unwrap(),
             vec![0.0, 0.0, 1.0]
         );
     }
@@ -1175,11 +1175,11 @@ $EndElements
         assert_eq!(m.cell_count().unwrap(), 1);
         // Local node 8 = edge (1,3) midpoint, node 9 = edge (2,3) midpoint.
         assert_eq!(
-            m.node(0, 0, 8).unwrap().coord().unwrap(),
+            m.node(0, 0, 8).unwrap().position().unwrap(),
             vec![0.5, 0.0, 0.5]
         );
         assert_eq!(
-            m.node(0, 0, 9).unwrap().coord().unwrap(),
+            m.node(0, 0, 9).unwrap().position().unwrap(),
             vec![0.0, 0.5, 0.5]
         );
     }
@@ -1234,31 +1234,31 @@ $EndElements
         assert_eq!(m.element_types().unwrap(), vec![ElementType::HEX27]);
         // Faces x-, x+, y-, y+, z-, z+ at local 20..25; body center at 26.
         assert_eq!(
-            m.node(0, 0, 20).unwrap().coord().unwrap(),
+            m.node(0, 0, 20).unwrap().position().unwrap(),
             vec![0.0, 0.5, 0.5]
         );
         assert_eq!(
-            m.node(0, 0, 21).unwrap().coord().unwrap(),
+            m.node(0, 0, 21).unwrap().position().unwrap(),
             vec![1.0, 0.5, 0.5]
         );
         assert_eq!(
-            m.node(0, 0, 22).unwrap().coord().unwrap(),
+            m.node(0, 0, 22).unwrap().position().unwrap(),
             vec![0.5, 0.0, 0.5]
         );
         assert_eq!(
-            m.node(0, 0, 23).unwrap().coord().unwrap(),
+            m.node(0, 0, 23).unwrap().position().unwrap(),
             vec![0.5, 1.0, 0.5]
         );
         assert_eq!(
-            m.node(0, 0, 24).unwrap().coord().unwrap(),
+            m.node(0, 0, 24).unwrap().position().unwrap(),
             vec![0.5, 0.5, 0.0]
         );
         assert_eq!(
-            m.node(0, 0, 25).unwrap().coord().unwrap(),
+            m.node(0, 0, 25).unwrap().position().unwrap(),
             vec![0.5, 0.5, 1.0]
         );
         assert_eq!(
-            m.node(0, 0, 26).unwrap().coord().unwrap(),
+            m.node(0, 0, 26).unwrap().position().unwrap(),
             vec![0.5, 0.5, 0.5]
         );
     }
@@ -1421,7 +1421,7 @@ $EndElements
         assert_eq!(bottom.cell_count().unwrap(), 1);
         // node 3 sits at (1, 1) — checks the f64 payload decoded right.
         assert_eq!(
-            plate.node(0, 0, 2).unwrap().coord().unwrap(),
+            plate.node(0, 0, 2).unwrap().position().unwrap(),
             vec![1.0, 1.0]
         );
     }

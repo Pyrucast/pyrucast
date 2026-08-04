@@ -103,8 +103,8 @@ impl PyCoords {
         Ok(write(&self.handle)?.gc())
     }
 
-    // Per-node coordinate access lives on `Node` (`node.coord()` /
-    // `node.set_coord(...)`): a Node carries its Coords, so the
+    // Per-node coordinate access lives on `Node` (`node.position()` /
+    // `node.set_position(...)`): a Node carries its Coords, so the
     // (config, id) pair is never needed here.
 
     /// Add a named alternative configuration (same nodes, new coordinates);

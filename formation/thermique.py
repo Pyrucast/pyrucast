@@ -12,7 +12,7 @@ conduction **stationnaire** `div(-k·grad T) = q`, en deux temps :
 
 Chaque étape est tracée avant d'être résolue, et les régions chargées sont
 repérées **par leur géométrie** : par forme (`pyrucast.mesh.points_*`) ou par
-coordonnée (`pyrucast.node_field.coordinates` + `pyrucast.mesh.select`). Ni
+coordonnée (`pyrucast.node_field.positions` + `pyrucast.mesh.select`). Ni
 rayonnement ni terme transitoire. Le détail pas à pas est dans le livre, page
 « Calcul thermique ».
 
@@ -27,7 +27,7 @@ solves **steady** conduction `div(-k·grad T) = q` on it, in two steps:
 
 Each step is plotted before being solved, and the loaded regions are located
 **by geometry**: by shape (`pyrucast.mesh.points_*`) or by coordinate
-(`pyrucast.node_field.coordinates` + `pyrucast.mesh.select`). No radiation, no
+(`pyrucast.node_field.positions` + `pyrucast.mesh.select`). No radiation, no
 transient term. The step-by-step walkthrough lives in the book's thermal page.
 
 Lancement / Running ::
@@ -177,7 +177,7 @@ def main() -> None:
     # ANCHOR: face_basse
     # FR — La face convectée, z = 0 : repérée par coordonnée, pas par forme.
     # EN — The convected face, z = 0: located by coordinate, not by shape.
-    z_peau = pc.node_field.coordinates(peau, ["Z"])
+    z_peau = pc.node_field.positions(peau, ["Z"])
     noeuds_bas = pc.mesh.select(z_peau, ge=-TOL, le=TOL)
     face_basse = pc.mesh.elements_on(peau, noeuds_bas, strict=True)
     face_basse.unit().face_color = TURQUOISE
@@ -192,7 +192,7 @@ def main() -> None:
     # ANCHOR: zone_source
     # FR — La zone chauffée : même démarche sur X, en bande, et sur le volume.
     # EN — The heated zone: same approach on X, as a band, over the volume.
-    x_volume = pc.node_field.coordinates(volume, ["X"])
+    x_volume = pc.node_field.positions(volume, ["X"])
     noeuds_source = pc.mesh.select(x_volume, ge=SOURCE_X_MIN, le=SOURCE_X_MAX)
     zone_source = pc.mesh.consolidate(
         pc.mesh.elements_on(volume, noeuds_source, strict=True)

@@ -16,11 +16,11 @@ chargement réparti `flux`), [Comportement](comportement.md), [Solveur](solveur.
 
 | Python | Effet |
 |---|---|
-| `coordinates(mesh, components=None)` | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. `None` ⇒ tous les axes présents dans la dimension du `Coords`. |
+| `positions(mesh, components=None)` | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. `None` ⇒ tous les axes présents dans la dimension du `Coords`. |
 | `coords.set(field, components=None)` | **écrit** les coordonnées du `Coords` actif depuis un champ `"X"/"Y"/"Z"`. |
 | `displace(field, components=None)` | **ajoute** un champ de déplacement aux coordonnées (chaque nœud distinct traité **une seule fois**). |
 
-`coordinates` est le pont géométrie → champ : on en tire un `NodeField` qu'on
+`positions` est le pont géométrie → champ : on en tire un `NodeField` qu'on
 peut tracer, dériver, ou réinjecter après calcul (`displace` pour passer à la
 configuration déformée).
 

@@ -3,6 +3,7 @@
 use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::coords::Coords;
+use crate::py::coords::PyCoords;
 use crate::py::mesh::PyMesh;
 use crate::store::Handle;
 use pyo3::prelude::*;
@@ -47,14 +48,23 @@ impl PyNode {
     }
 
     /// This node's coordinates in the active coordinate set.
-    fn coord(&self) -> PyResult<Vec<f64>> {
-        Ok(self.node.coord()?)
+    fn position(&self) -> PyResult<Vec<f64>> {
+        Ok(self.node.position()?)
     }
 
     /// Overwrite this node's coordinates.
-    fn set_coord(&self, coords: Vec<f64>) -> PyResult<()> {
-        self.node.set_coord(&coords)?;
+    fn set_position(&self, coords: Vec<f64>) -> PyResult<()> {
+        self.node.set_position(&coords)?;
         Ok(())
+    }
+
+    /// The `Coords` this node belongs to — the same safety net as
+    /// `Mesh.coords()`, to get the handle back when it has been dropped
+    /// on the Python side.
+    fn coords(&self) -> PyCoords {
+        PyCoords {
+            handle: self.node.coords(),
+        }
     }
 
     fn __repr__(&self) -> PyResult<String> {

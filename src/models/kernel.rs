@@ -163,7 +163,7 @@ impl<'a> CellGeom<'a> {
     /// Coordinates of local node `local` (0-based within the cell). Read straight
     /// from the held `Coords` (no gather).
     pub fn node_coord(&self, local: usize) -> Result<&[f64]> {
-        self.coords.coord(self.node_ids()[local])
+        self.coords.position(self.node_ids()[local])
     }
 
     /// Fill the lazy `cell_coords` cache on first use (gather from the held
@@ -173,7 +173,7 @@ impl<'a> CellGeom<'a> {
         if cc.is_none() {
             let mut v = Vec::with_capacity(self.n_nodes * self.space_dim);
             for &id in self.node_ids() {
-                v.extend_from_slice(self.coords.coord(id)?);
+                v.extend_from_slice(self.coords.position(id)?);
             }
             *cc = Some(v);
         }

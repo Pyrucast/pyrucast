@@ -659,7 +659,7 @@ impl Mesh {
             }
             let mut best: Option<(NodeId, f64)> = None;
             for &nid in &seen {
-                let x = c.coord(nid)?;
+                let x = c.position(nid)?;
                 let d2: f64 = x.iter().zip(point).map(|(a, b)| (a - b) * (a - b)).sum();
                 // Strictly-less keeps the first (smallest id) on a tie, but `seen`
                 // is a set with no stable order, so compare ids explicitly.

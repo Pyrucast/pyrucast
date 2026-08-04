@@ -67,7 +67,7 @@ def construire_plaque_trouee():
     contour = boucle_ext | pc.mesh.invert(trou)
     plaque = pc.mesh.triangulate_surface(contour, "TRI3", size=0.02)
 
-    y = pc.node_field.coordinates(trou, ["Y"])
+    y = pc.node_field.positions(trou, ["Y"])
     noeuds_bas_trou = pc.mesh.select(y, lt=CENTRE_TROU[1])
     arc_bas = pc.mesh.elements_on(trou, noeuds_bas_trou, strict=True)
 
@@ -102,7 +102,7 @@ def main() -> None:
     # ANCHOR: pas_a_pas
     # DDL libres (hors encastrement) pour normer le résidu de Newton — sans
     # quoi les grandes réactions d'appui masquent la convergence réelle.
-    x = pc.node_field.coordinates(plaque, ["X"])
+    x = pc.node_field.positions(plaque, ["X"])
     ddl_libres = pc.mesh.select(x, gt=1e-6)
 
     data = {

@@ -251,7 +251,7 @@ mod tests {
         let coords = mesh.coords().unwrap();
         let c = read(&coords).unwrap();
         let at = |id: NodeId| {
-            let v = c.coord(id).unwrap();
+            let v = c.position(id).unwrap();
             Point2::new(v[0], v[1])
         };
         let mut r = Report {
@@ -417,13 +417,17 @@ mod tests {
             let s = read(&contour[0]).unwrap();
             s.connectivity()
                 .iter()
-                .map(|&n| (n, c.coord(n).unwrap().to_vec()))
+                .map(|&n| (n, c.position(n).unwrap().to_vec()))
                 .collect()
         };
         let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.15), false).unwrap();
         let c = read(&coords).unwrap();
         for (id, coord) in &before {
-            assert_eq!(&c.coord(*id).unwrap().to_vec(), coord, "node {id:?} moved");
+            assert_eq!(
+                &c.position(*id).unwrap().to_vec(),
+                coord,
+                "node {id:?} moved"
+            );
         }
         // And they are still the ones the mesh is built on.
         let used: HashMap<NodeId, ()> = mesh
@@ -500,7 +504,7 @@ mod tests {
         for sm in &mesh {
             for &node in read(sm).unwrap().connectivity() {
                 assert!(
-                    c.coord(node).unwrap()[1].abs() < 1e-12,
+                    c.position(node).unwrap()[1].abs() < 1e-12,
                     "a node left the y = 0 plane"
                 );
             }
@@ -577,7 +581,7 @@ mod tests {
 
         let c = read(&mesh.coords().unwrap()).unwrap();
         let at = |id: NodeId| {
-            let v = c.coord(id).unwrap();
+            let v = c.position(id).unwrap();
             Point2::new(v[0], v[1])
         };
         let (mut nq, mut nt) = (0usize, 0usize);
@@ -641,7 +645,7 @@ mod tests {
 
         let c = read(&mesh.coords().unwrap()).unwrap();
         let at = |id: NodeId| {
-            let v = c.coord(id).unwrap();
+            let v = c.position(id).unwrap();
             Point2::new(v[0], v[1])
         };
 

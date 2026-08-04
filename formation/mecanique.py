@@ -67,7 +67,7 @@ def construire_plaque_trouee():
 
     # Moitié basse du trou (y < centre) : support de l'effort de la masse
     # suspendue, comme le `PRES 'MASS'` de Cast3M sur une moitié du cercle.
-    y = pc.node_field.coordinates(trou, ["Y"])
+    y = pc.node_field.positions(trou, ["Y"])
     noeuds_bas_trou = pc.mesh.select(y, lt=CENTRE_TROU[1])
     arc_bas = pc.mesh.elements_on(trou, noeuds_bas_trou, strict=True)
 

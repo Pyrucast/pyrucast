@@ -9,7 +9,7 @@ résolution produit elle aussi un champ nodal, mais garde son module :
 from ._pyrucast import (
     mask_node as mask,
     consolidate_node as consolidate,
-    coordinates as coordinates,
+    positions as positions,
     divergence as divergence,
     flux as flux,
     internal_forces as internal_forces,
@@ -22,7 +22,7 @@ from ._pyrucast import (
 __all__ = [
     "mask",
     "consolidate",
-    "coordinates",
+    "positions",
     "divergence",
     "flux",
     "internal_forces",

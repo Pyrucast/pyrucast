@@ -11,7 +11,7 @@ use pyo3::prelude::*;
 /// `Coords` in place.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(name = "set_coordinates")]
+#[pyo3(name = "set_positions")]
 #[pyo3(signature = (field, components=None))]
 pub fn set(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> PyResult<()> {
     crate::ops::coords::set(&field.inner, components)?;

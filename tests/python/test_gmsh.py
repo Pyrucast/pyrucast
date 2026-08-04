@@ -117,10 +117,10 @@ def test_coords_dimension_decides_kept_coordinates():
     # z = 0 here, so 2-D vs 3-D is observable on the node coordinate length.
     c2 = pyrucast.Coords(dim=2)
     g2 = pyrucast.mesh.read_gmsh_str(c2, SQUARE_V2)
-    assert len(g2["plate"].node(0, 0, 0).coord()) == 2
+    assert len(g2["plate"].node(0, 0, 0).position()) == 2
     c3 = pyrucast.Coords(dim=3)
     g3 = pyrucast.mesh.read_gmsh_str(c3, SQUARE_V2)
-    assert len(g3["plate"].node(0, 0, 0).coord()) == 3
+    assert len(g3["plate"].node(0, 0, 0).position()) == 3
 
 
 def test_read_from_file(tmp_path):

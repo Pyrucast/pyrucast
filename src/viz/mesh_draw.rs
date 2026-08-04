@@ -44,7 +44,7 @@ fn read_points(coords: &Handle<Coords>, connectivity: &[NodeId]) -> Result<Vec<P
     let c = read(coords)?;
     connectivity
         .iter()
-        .map(|&nid| c.coord(nid).map(pad3))
+        .map(|&nid| c.position(nid).map(pad3))
         .collect()
 }
 

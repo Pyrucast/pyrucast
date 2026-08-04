@@ -477,7 +477,7 @@ mod tests {
         let c = read(coords).unwrap();
         let p: Vec<Vec<f64>> = tri
             .iter()
-            .map(|&i| c.coord(NodeId(i)).unwrap().to_vec())
+            .map(|&i| c.position(NodeId(i)).unwrap().to_vec())
             .collect();
         0.5 * ((p[1][0] - p[0][0]) * (p[2][1] - p[0][1])
             - (p[2][0] - p[0][0]) * (p[1][1] - p[0][1]))
@@ -487,7 +487,7 @@ mod tests {
         let c = read(coords).unwrap();
         let p: Vec<Vec<f64>> = tet
             .iter()
-            .map(|&i| c.coord(NodeId(i)).unwrap().to_vec())
+            .map(|&i| c.position(NodeId(i)).unwrap().to_vec())
             .collect();
         let a = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
         let b = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];

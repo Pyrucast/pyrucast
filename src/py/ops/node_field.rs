@@ -15,7 +15,7 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-/// Build a `NodeField` carrying the coordinates of every node of `mesh`
+/// Build a `NodeField` carrying the position of every node of `mesh`
 /// — one `SubNodeField` per submesh, on the distinct nodes of its zone.
 ///
 /// One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
@@ -24,9 +24,9 @@ use pyo3::prelude::*;
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, components=None))]
-pub fn coordinates(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResult<PyNodeField> {
+pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
-        inner: crate::ops::node_field::coordinates(&mesh.inner, components)?,
+        inner: crate::ops::node_field::positions(&mesh.inner, components)?,
     })
 }
 
@@ -263,10 +263,10 @@ impl PyNodeField {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyMesh {
-    /// Voir `pyrucast.node_field.coordinates`.
+    /// Voir `pyrucast.node_field.positions`.
     #[pyo3(signature = (components=None))]
-    fn coordinates(slf: PyRef<'_, Self>, components: Option<Vec<String>>) -> PyResult<PyNodeField> {
-        super::node_field::coordinates(slf, components)
+    fn positions(slf: PyRef<'_, Self>, components: Option<Vec<String>>) -> PyResult<PyNodeField> {
+        super::node_field::positions(slf, components)
     }
 }
 

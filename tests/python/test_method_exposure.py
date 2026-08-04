@@ -134,7 +134,7 @@ def test_chaining_actually_works():
     contour = quad.border().consolidate()
     assert contour.cell_count() == 4
 
-    xs = quad.coordinates(["X"])
+    xs = quad.positions(["X"])
     droite = xs.select(ge=1.0)  # champ nodal → Mesh : le module suit la sortie
     assert droite.cell_count() == 2  # deux POI1, les nœuds de x = 1
 

@@ -251,7 +251,7 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # EN — The grid's right edge is not rebuilt: it is extracted.
     border_sr1 = pc.mesh.border(sr1)
     right_nodes = pc.mesh.select(
-        pc.node_field.coordinates(border_sr1, ["X"]), ge=x13 * (n12 - 0.5) / n12
+        pc.node_field.positions(border_sr1, ["X"]), ge=x13 * (n12 - 0.5) / n12
     )
     l1213 = pc.mesh.elements_on(border_sr1, right_nodes, strict=True)
     # ANCHOR_END: bord_droit
@@ -260,10 +260,10 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # FR — Ses deux extrémités, la plus basse et la plus haute en Z.
     # EN — Its two ends, the lowest and the highest in Z.
     p13 = pc.mesh.select(
-        pc.node_field.coordinates(l1213, ["Z"]), le=0.5 / n15 * HEIGHT
+        pc.node_field.positions(l1213, ["Z"]), le=0.5 / n15 * HEIGHT
     ).node(0, 0, 0)
     p12 = pc.mesh.select(
-        pc.node_field.coordinates(l1213, ["Z"]), ge=(n15 - 0.5) / n15 * HEIGHT
+        pc.node_field.positions(l1213, ["Z"]), ge=(n15 - 0.5) / n15 * HEIGHT
     ).node(0, 0, 0)
     # ANCHOR_END: extremites
 

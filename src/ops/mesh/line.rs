@@ -29,8 +29,8 @@ pub fn line(a: &Node, b: &Node, n_elems: usize, element_type: ElementType) -> Re
             "line: nodes belong to different Coords".into(),
         ));
     }
-    let coords_a = a.coord()?;
-    let coords_b = b.coord()?;
+    let coords_a = a.position()?;
+    let coords_b = b.position()?;
     if coords_a.len() != coords_b.len() {
         return Err(PyrucastError::Message(
             "line: nodes have incompatible dimensions".into(),
@@ -83,9 +83,9 @@ mod tests {
         let n00 = mesh.node(0, 0, 0).unwrap();
         let n10 = mesh.node(0, 1, 0).unwrap();
         let n20 = mesh.node(0, 2, 0).unwrap();
-        assert_eq!(n00.coord().unwrap(), vec![0.0]);
-        assert!((n10.coord().unwrap()[0] - 2.0).abs() < 1e-12);
-        assert!((n20.coord().unwrap()[0] - 4.0).abs() < 1e-12);
+        assert_eq!(n00.position().unwrap(), vec![0.0]);
+        assert!((n10.position().unwrap()[0] - 2.0).abs() < 1e-12);
+        assert!((n20.position().unwrap()[0] - 4.0).abs() < 1e-12);
 
         // last node of the last cell = node b
         let n21 = mesh.node(0, 2, 1).unwrap();
@@ -126,9 +126,9 @@ mod tests {
         let n00 = mesh.node(0, 0, 0).unwrap();
         let n01 = mesh.node(0, 0, 1).unwrap();
         let n02 = mesh.node(0, 0, 2).unwrap();
-        assert_eq!(n00.coord().unwrap(), vec![0.0]);
-        assert!((n01.coord().unwrap()[0] - 2.0).abs() < 1e-12);
-        assert!((n02.coord().unwrap()[0] - 1.0).abs() < 1e-12);
+        assert_eq!(n00.position().unwrap(), vec![0.0]);
+        assert!((n01.position().unwrap()[0] - 2.0).abs() < 1e-12);
+        assert!((n02.position().unwrap()[0] - 1.0).abs() < 1e-12);
 
         let n11 = mesh.node(0, 1, 1).unwrap();
         assert_eq!(n11.id(), b.id());

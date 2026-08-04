@@ -6,7 +6,7 @@ b = c.add_node([1.0])
 lab = pc.mesh.line(a, b, 10)
 print(lab)
 # lab.plot()
-xc = pc.node_field.coordinates(lab)
+xc = pc.node_field.positions(lab)
 print(xc)
 for idx in range(len(xc[0].support_submesh())):
     print(idx, xc[0].get(idx, 0))

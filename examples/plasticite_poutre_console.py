@@ -102,7 +102,7 @@ def main():
     # Nœud du bout (mi-hauteur) et maillage POI1 des nœuds LIBRES (X > 0) —
     # support cible pour la norme du résidu sur les seuls DDL libres.
     tip = mesh.nearest_node([length, height / 2.0])
-    coords_field = pyrucast.node_field.coordinates(mesh, ["X"])
+    coords_field = pyrucast.node_field.positions(mesh, ["X"])
     free_mesh = pyrucast.mesh.select(coords_field, ge=length / nx / 2.0)
     imposed_mesh = pyrucast.mesh.to_poi1(left_edge)
     multiplier = pyrucast.mesh.translate(imposed_mesh, [0.0, 0.0])

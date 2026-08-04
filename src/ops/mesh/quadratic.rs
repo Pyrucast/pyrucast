@@ -112,8 +112,8 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
                         // before creating, which takes a write lock).
                         let midpoint: Vec<f64> = {
                             let c = read(&coords)?;
-                            let ca = c.coord(na)?;
-                            let cb = c.coord(nb)?;
+                            let ca = c.position(na)?;
+                            let cb = c.position(nb)?;
                             ca.iter().zip(cb).map(|(&x, &y)| 0.5 * (x + y)).collect()
                         };
                         let node = Node::create_in(coords.clone(), &midpoint)?;
@@ -159,14 +159,17 @@ mod tests {
         assert_eq!(quad.node(0, 0, 1).unwrap().id(), b.id());
         assert_eq!(quad.node(0, 0, 2).unwrap().id(), c.id());
         // Mid node of edge (0,1)=(a,b) sits at the midpoint.
-        assert_eq!(quad.node(0, 0, 3).unwrap().coord().unwrap(), vec![1.0, 0.0]);
+        assert_eq!(
+            quad.node(0, 0, 3).unwrap().position().unwrap(),
+            vec![1.0, 0.0]
+        );
 
         // Shared edge (b,c): cell 0 edge (1,2) = local node 4, cell 1 edge
         // (2,0) = (c,b) = local node 5. Both must be the SAME node.
         let shared_from_0 = quad.node(0, 0, 4).unwrap();
         let shared_from_1 = quad.node(0, 1, 5).unwrap();
         assert_eq!(shared_from_0.id(), shared_from_1.id());
-        assert_eq!(shared_from_0.coord().unwrap(), vec![1.0, 1.0]);
+        assert_eq!(shared_from_0.position().unwrap(), vec![1.0, 1.0]);
     }
 
     #[test]
@@ -181,7 +184,7 @@ mod tests {
         assert_eq!(quad.element_types().unwrap(), vec![ElementType::SEG3]);
         assert_eq!(quad.node(0, 0, 0).unwrap().id(), a.id());
         assert_eq!(quad.node(0, 0, 1).unwrap().id(), b.id());
-        assert_eq!(quad.node(0, 0, 2).unwrap().coord().unwrap(), vec![2.0]);
+        assert_eq!(quad.node(0, 0, 2).unwrap().position().unwrap(), vec![2.0]);
     }
 
     #[test]
@@ -205,12 +208,12 @@ mod tests {
         assert_eq!(quad.element_types().unwrap(), vec![ElementType::TET10]);
         // Mid node of edge (0,1) at local index 4.
         assert_eq!(
-            quad.node(0, 0, 4).unwrap().coord().unwrap(),
+            quad.node(0, 0, 4).unwrap().position().unwrap(),
             vec![0.5, 0.0, 0.0]
         );
         // Mid node of edge (2,3) at local index 9.
         assert_eq!(
-            quad.node(0, 0, 9).unwrap().coord().unwrap(),
+            quad.node(0, 0, 9).unwrap().position().unwrap(),
             vec![0.0, 0.5, 0.5]
         );
     }

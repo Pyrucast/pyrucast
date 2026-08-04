@@ -134,7 +134,7 @@ import pyrucast
 
 # fonctions (opérateurs), rangées par conteneur produit — pas des méthodes :
 poi = pyrucast.mesh.to_poi1(mesh)
-coords = pyrucast.node_field.coordinates(mesh)
+coords = pyrucast.node_field.positions(mesh)
 eps = pyrucast.element_field.deformation(u, fes)
 K = pyrucast.matrix.stiffness(model, materials)
 sol = pyrucast.solver.solve(K, rhs)

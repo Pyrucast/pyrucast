@@ -21,7 +21,7 @@
 //!
 //! let coords = insert(Coords::new(2).unwrap());
 //! let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
-//! assert_eq!(n.coord().unwrap(), vec![1.0, 2.0]);
+//! assert_eq!(n.position().unwrap(), vec![1.0, 2.0]);
 //!
 //! // The GC does not touch a node that a live Node still references.
 //! assert_eq!(write(&coords).unwrap().gc(), 0);
@@ -101,13 +101,13 @@ impl Node {
     }
 
     /// Coordinates (copied) in the `Coords`'s active set.
-    pub fn coord(&self) -> Result<Vec<f64>> {
-        Ok(read(&self.handle)?.coord(self.id)?.to_vec())
+    pub fn position(&self) -> Result<Vec<f64>> {
+        Ok(read(&self.handle)?.position(self.id)?.to_vec())
     }
 
     /// Set the coordinates of the node in the active set.
-    pub fn set_coord(&self, coords: &[f64]) -> Result<()> {
-        write(&self.handle)?.set_coord(self.id, coords)?;
+    pub fn set_position(&self, coords: &[f64]) -> Result<()> {
+        write(&self.handle)?.set_position(self.id, coords)?;
         Ok(())
     }
 }
@@ -139,9 +139,9 @@ impl fmt::Debug for Node {
         // Debug may take the lock to surface the actual values (Display
         // stays lock-free). If the node is no longer reachable, fall back
         // to the error rather than failing to format.
-        match self.coord() {
-            Ok(coord) => s.field("coord", &coord),
-            Err(e) => s.field("coord", &format_args!("<{e}>")),
+        match self.position() {
+            Ok(coord) => s.field("position", &coord),
+            Err(e) => s.field("position", &format_args!("<{e}>")),
         };
         s.finish()
     }
@@ -149,14 +149,14 @@ impl fmt::Debug for Node {
 
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Display stays lock-free; use Debug or `coord()` for the values.
+        // Display stays lock-free; use Debug or `position()` for the values.
         write!(f, "<Node #{}>", self.id)
     }
 }
 
 impl crate::dump::Dump for Node {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
-        match self.coord() {
+        match self.position() {
             Ok(c) => {
                 let coords: Vec<String> = c
                     .iter()
@@ -215,12 +215,12 @@ mod tests {
     }
 
     #[test]
-    fn coord_and_set_coord() {
+    fn position_and_set_position() {
         let coords = insert(Coords::new(2).unwrap());
         let n = Node::create_in(coords, &[1.0, 2.0]).unwrap();
-        assert_eq!(n.coord().unwrap(), vec![1.0, 2.0]);
-        n.set_coord(&[5.0, 6.0]).unwrap();
-        assert_eq!(n.coord().unwrap(), vec![5.0, 6.0]);
+        assert_eq!(n.position().unwrap(), vec![1.0, 2.0]);
+        n.set_position(&[5.0, 6.0]).unwrap();
+        assert_eq!(n.position().unwrap(), vec![5.0, 6.0]);
     }
 
     #[test]
@@ -229,7 +229,7 @@ mod tests {
         let n = Node::create_in(coords, &[1.5, 2.5]).unwrap();
         let d = format!("{:?}", n);
         assert!(d.contains("Node"));
-        assert!(d.contains("coord"));
+        assert!(d.contains("position"));
         assert!(d.contains("1.5") && d.contains("2.5"));
         let s = format!("{}", n);
         assert!(s.starts_with("<Node #"));

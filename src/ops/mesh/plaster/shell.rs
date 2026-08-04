@@ -63,7 +63,7 @@ impl Shell {
             if let Some(&i) = index.get(&id) {
                 return Ok(i);
             }
-            let p = c.coord(id)?;
+            let p = c.position(id)?;
             let i = nodes.len() as u32;
             nodes.push(id);
             points.push(Point3::new(p[0], p[1], p[2]));

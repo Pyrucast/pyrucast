@@ -192,7 +192,7 @@ def main():
 
     # Nœud du bout (mi-hauteur) et maillage POI1 des nœuds LIBRES (X > 0).
     tip = mesh.nearest_node([length, height / 2.0])
-    coords_field = pyrucast.node_field.coordinates(mesh, ["X"])
+    coords_field = pyrucast.node_field.positions(mesh, ["X"])
     free_mesh = pyrucast.mesh.select(coords_field, ge=length / nx / 2.0)
 
     # ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──

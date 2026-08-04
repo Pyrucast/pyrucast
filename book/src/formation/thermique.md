@@ -241,7 +241,7 @@ sont repérées par **coordonnée**, la seconde façon de découper une région.
 ![Surface convectée](img/thermique-cl-convection.svg)
 
 **Une coordonnée est un champ nodal comme un autre.**
-`pyrucast.node_field.coordinates(peau, ["Z"])` rend la coordonnée Z des nœuds de la
+`pyrucast.node_field.positions(peau, ["Z"])` rend la coordonnée Z des nœuds de la
 peau sous forme de `NodeField`, et `pyrucast.mesh.select` garde ceux dont la
 valeur tombe dans une **bande** — `ge=-TOL, le=TOL` pour « z = 0 ». Le résultat
 est un maillage `POI1`, exactement comme celui d'un `points_*` : la suite ne

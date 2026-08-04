@@ -228,9 +228,9 @@ fn corner_indices(c: &Coords, chain: &[NodeId], cos_tol: f64) -> Result<Vec<usiz
     let k = chain.len();
     let mut corners = Vec::new();
     for i in 0..k {
-        let prev = c.coord(chain[(i + k - 1) % k])?;
-        let cur = c.coord(chain[i])?;
-        let next = c.coord(chain[(i + 1) % k])?;
+        let prev = c.position(chain[(i + k - 1) % k])?;
+        let cur = c.position(chain[i])?;
+        let next = c.position(chain[(i + 1) % k])?;
         if let Some(cos_turn) = turn_cosine(prev, cur, next) {
             if cos_turn < cos_tol {
                 corners.push(i);
@@ -293,8 +293,8 @@ mod tests {
         let n = loop_ids.len();
         let mut a = 0.0;
         for i in 0..n {
-            let p = c.coord(loop_ids[i]).unwrap();
-            let q = c.coord(loop_ids[(i + 1) % n]).unwrap();
+            let p = c.position(loop_ids[i]).unwrap();
+            let q = c.position(loop_ids[(i + 1) % n]).unwrap();
             a += p[0] * q[1] - q[0] * p[1];
         }
         a / 2.0

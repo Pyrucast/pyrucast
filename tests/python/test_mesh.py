@@ -298,9 +298,9 @@ def _triangle_area_sum(tri):
     """Signed-area sum over the first (TRI3) submesh."""
     total = 0.0
     for ci in range(tri.cell_counts()[0]):
-        p0 = tri.node(0, ci, 0).coord()
-        p1 = tri.node(0, ci, 1).coord()
-        p2 = tri.node(0, ci, 2).coord()
+        p0 = tri.node(0, ci, 0).position()
+        p1 = tri.node(0, ci, 1).position()
+        p2 = tri.node(0, ci, 2).position()
         total += 0.5 * (
             (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
         )
@@ -357,7 +357,7 @@ def test_triangulate_surface_freezes_contour():
         for si, cnt in enumerate(mesh.cell_counts()):
             for ci in range(cnt):
                 for nd in mesh.cell(si, ci).nodes():
-                    s[nd.id] = tuple(nd.coord())
+                    s[nd.id] = tuple(nd.position())
         return s
 
     before = node_map(contour)
