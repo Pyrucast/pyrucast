@@ -209,6 +209,21 @@ impl Mesh {
         crate::ops::mesh::sweep_solid(self, mesh_b, n_layers)
     }
 
+    /// Voir [`mesh::symmetry_line`](fn@crate::ops::mesh::symmetry_line).
+    pub fn symmetry_line(&self, a: &[f64], b: &[f64]) -> Result<Mesh> {
+        crate::ops::mesh::symmetry_line(self, a, b)
+    }
+
+    /// Voir [`mesh::symmetry_plane`](fn@crate::ops::mesh::symmetry_plane).
+    pub fn symmetry_plane(&self, origin: &[f64], normal: &[f64]) -> Result<Mesh> {
+        crate::ops::mesh::symmetry_plane(self, origin, normal)
+    }
+
+    /// Voir [`mesh::symmetry_point`](fn@crate::ops::mesh::symmetry_point).
+    pub fn symmetry_point(&self, center: &[f64]) -> Result<Mesh> {
+        crate::ops::mesh::symmetry_point(self, center)
+    }
+
     /// Voir [`mesh::to_poi1`](fn@crate::ops::mesh::to_poi1).
     pub fn to_poi1(&self) -> Result<Mesh> {
         crate::ops::mesh::to_poi1(self)

@@ -73,6 +73,6 @@ pub use sweep::sweep;
 pub use sweep_solid::sweep_solid;
 pub use to_poi1::to_poi1;
 pub use transfinite::transfinite;
-pub use transform::{rotate, translate};
+pub use transform::{rotate, symmetry_line, symmetry_plane, symmetry_point, translate};
 pub use triangulate_surface::{triangulate_surface, triangulate_surface_cancellable};
 pub use triangulate_volume::{triangulate_volume, triangulate_volume_cancellable};

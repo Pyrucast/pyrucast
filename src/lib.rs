@@ -107,6 +107,9 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::extrude, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::translate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::rotate, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::symmetry_point, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::symmetry_line, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::symmetry_plane, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::to_quadratic, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::convert, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::triangulate_volume, m)?)?;

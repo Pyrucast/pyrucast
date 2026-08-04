@@ -101,6 +101,9 @@ __all__ = [
     "swap_dir",
     "sweep",
     "sweep_solid",
+    "symmetry_line",
+    "symmetry_plane",
+    "symmetry_point",
     "tan",
     "tangent",
     "tanh",
@@ -439,6 +442,7 @@ class ElementField:
         r"""
         `field < x` → a 0/1 mask field (see `__ge__`).
         """
+    def __len__(self) -> builtins.int: ...
     def unit(self) -> SubElementField:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -497,7 +501,6 @@ class ElementField:
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
         """
-    def __len__(self) -> builtins.int: ...
     def consolidate(self) -> ElementField:
         r"""
         Voir `pyrucast.element_field.consolidate`.
@@ -626,28 +629,6 @@ class Evolution:
         of revolution — see `SubMesh.plot`.
         """
     def __len__(self) -> builtins.int: ...
-    def unit(self) -> SubEvolution:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubEvolution) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
     @typing.overload
     def __getitem__(self, key: int) -> SubEvolution:
         r"""
@@ -670,6 +651,28 @@ class Evolution:
         `sub_evolution | evolution` — the mirror of
         `evolution | sub_evolution`, differing only in that the lone curve
         comes first.
+        """
+    def unit(self) -> SubEvolution:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubEvolution) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
 
 @typing.final
@@ -716,6 +719,29 @@ class FiniteElementSpace:
         order (shared handles, sealed while captured). The reverse of building a
         `FiniteElementSpace(mesh)`.
         """
+    def unit(self) -> SubFiniteElementSpace:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubFiniteElementSpace) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
+    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubFiniteElementSpace:
         r"""
@@ -738,29 +764,6 @@ class FiniteElementSpace:
         r"""
         `subspace | fes` — the mirror of `fes | subspace`, differing only in
         that the lone subspace comes first.
-        """
-    def __len__(self) -> builtins.int: ...
-    def unit(self) -> SubFiniteElementSpace:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubFiniteElementSpace) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
         """
 
 @typing.final
@@ -881,7 +884,6 @@ class Matrix:
         `factor` (lazy — no value is rewritten). **Not** finalized: call
         `finalize()` (or `assemble` for computed blocks) before solving.
         """
-    def __len__(self) -> builtins.int: ...
     def unit(self) -> SubMatrix:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -927,6 +929,7 @@ class Matrix:
         `sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
         differing only in that the lone block comes first.
         """
+    def __len__(self) -> builtins.int: ...
     def lump(self) -> Matrix:
         r"""
         Voir `pyrucast.matrix.lump`.
@@ -1040,7 +1043,6 @@ class Mesh:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubMesh:
         r"""
@@ -1066,6 +1068,7 @@ class Mesh:
         `submesh | mesh` — the mirror of `mesh | submesh`, differing only in
         that the lone zone comes first.
         """
+    def __len__(self) -> builtins.int: ...
     def to_poi1(self) -> Mesh:
         r"""
         Voir `pyrucast.mesh.to_poi1`.
@@ -1177,6 +1180,18 @@ class Mesh:
     def rotate(self, angle: builtins.float, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.rotate`.
+        """
+    def symmetry_point(self, center: typing.Sequence[builtins.float]) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.symmetry_point`.
+        """
+    def symmetry_line(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float]) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.symmetry_line`.
+        """
+    def symmetry_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float]) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.symmetry_plane`.
         """
     def triangulate_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
@@ -1699,29 +1714,6 @@ class NodeField:
         r"""
         `field < x` → a 0/1 mask field (see `__ge__`).
         """
-    def __len__(self) -> builtins.int: ...
-    def unit(self) -> SubNodeField:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubNodeField) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
     @typing.overload
     def __getitem__(self, key: int) -> SubNodeField:
         r"""
@@ -1757,6 +1749,29 @@ class NodeField:
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
         """
+    def unit(self) -> SubNodeField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubNodeField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
+    def __len__(self) -> builtins.int: ...
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
         Voir `pyrucast.element_field.gradient`.
@@ -3564,6 +3579,41 @@ def sweep_solid(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
     Sweep two matching surface meshes into a solid mesh, building `n_layers`
     layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep`:
     TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
+    """
+
+def symmetry_line(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float]) -> Mesh:
+    r"""
+    Mirror `mesh` through the infinite line running through `a` and `b`
+    (Cast3m `SYME … DROIT`), returning a fresh copy with its own nodes (the
+    original is left untouched).
+    
+    In 2-D this is the mirror image about the line; in 3-D it is the half-turn
+    about it (for the mirror image through a plane, use `symmetry_plane`).
+    Orientation-reversing in 2-D only, where the cells are re-ordered (as
+    `invert` does) to keep the copy's Jacobians positive.
+    """
+
+def symmetry_plane(mesh: Mesh, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float]) -> Mesh:
+    r"""
+    Mirror `mesh` through the plane running through `origin` with normal
+    `normal` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
+    (the original is left untouched). `normal` need not be normalized and its
+    sign is irrelevant; in 2-D the "plane" is the line through `origin`
+    perpendicular to `normal`.
+    
+    Always orientation-reversing, so the cells are re-ordered (as `invert`
+    does) to keep the copy's Jacobians positive.
+    """
+
+def symmetry_point(mesh: Mesh, center: typing.Sequence[builtins.float]) -> Mesh:
+    r"""
+    Mirror `mesh` through the point `center` (Cast3m `SYME … POINT`),
+    returning a fresh copy with its own nodes (the original is left
+    untouched). Every node goes to `2·center − x`.
+    
+    In 3-D the map reverses orientation, so the cells are re-ordered (as
+    `invert` does) to keep the copy's Jacobians positive; in 2-D it is a plain
+    half-turn and nothing is re-ordered.
     """
 
 def tan(field: typing.Any) -> typing.Any:

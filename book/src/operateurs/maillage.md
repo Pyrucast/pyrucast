@@ -20,6 +20,9 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
 | `translate(mesh, vector)` | **copie** du maillage translatée de `vector` (nœuds neufs, original intact) |
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
+| `symmetry_point(mesh, center)` | **copie** symétrique par rapport au **point** `center` (Cast3M `SYME`, voir plus bas) |
+| `symmetry_line(mesh, a, b)` | **copie** symétrique par rapport à la **droite** passant par `a` et `b` (demi-tour en 3D) |
+| `symmetry_plane(mesh, origin, normal)` | **copie** symétrique par rapport au **plan** `(origin, normal)` (une droite en 2D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `pave_surface(contour, type, size=None, all_quad=False)` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
@@ -145,13 +148,13 @@ print(surf.element_types(), surf.cell_count())  # ['QUA4'] 8
 > de **même** nombre d'éléments — largement suffisant en pratique et
 > implémentable simplement.
 
-## Copies rigides : `translate` et `rotate`
+## Copies rigides : `translate`, `rotate` et les symétries
 
-`translate(mesh, vector)` et `rotate(mesh, angle, center, axis=None)` renvoient
-une **copie neuve** du maillage — mêmes sous-maillages, mêmes types, mêmes
-couleurs, même connectivité — dont **tous les nœuds sont nouveaux**. Le maillage
-d'origine (et ses nœuds) reste intact ; un nœud partagé entre plusieurs cellules
-de la source reste partagé dans la copie.
+`translate(mesh, vector)`, `rotate(mesh, angle, center, axis=None)` et les trois
+symétries renvoient une **copie neuve** du maillage — mêmes sous-maillages,
+mêmes types, mêmes couleurs, même connectivité — dont **tous les nœuds sont
+nouveaux**. Le maillage d'origine (et ses nœuds) reste intact ; un nœud partagé
+entre plusieurs cellules de la source reste partagé dans la copie.
 
 - `translate` décale chaque nœud de `vector` (dont la longueur doit valoir la
   dimension du maillage).
@@ -159,6 +162,38 @@ de la source reste partagé dans la copie.
   est un point et `axis` est ignoré ; en **3D**, la rotation se fait autour de la
   droite passant par `center` dirigée par `axis` (formule de Rodrigues,
   main droite), et `axis` est obligatoire (il n'a pas besoin d'être normé).
+- `symmetry_point(mesh, center)` envoie chaque nœud sur `2·center − x` :
+  `center` est le milieu de chaque nœud et de son image. C'est le demi-tour
+  autour du point en **2D**, l'inversion centrale en **3D**.
+- `symmetry_line(mesh, a, b)` réfléchit à travers la droite (infinie) passant
+  par `a` et `b` : la composante le long de la droite est gardée, la
+  perpendiculaire est retournée. En **2D** c'est l'image miroir dans la droite ;
+  en **3D** c'est le **demi-tour** autour d'elle (une rotation de π) — pour
+  l'image dans un miroir, c'est `symmetry_plane` qu'il faut.
+- `symmetry_plane(mesh, origin, normal)` réfléchit à travers le plan
+  `(origin, normal)` : `x ↦ x − 2((x − origin)·n̂) n̂`. `normal` n'a pas besoin
+  d'être normée et son signe est indifférent. En **2D**, le « plan » est la
+  droite passant par `origin` perpendiculaire à `normal` — la même application
+  que `symmetry_line`, la droite étant donnée par une normale plutôt que par
+  deux points.
+
+### Orientation des cellules
+
+Une symétrie peut **retourner l'orientation** : le déterminant de sa partie
+linéaire vaut alors `−1`, et la copie brute aurait toutes ses cellules à
+l'envers (jacobien négatif, normales rentrantes sur une peau). Ces opérateurs
+appliquent donc en plus à chaque cellule la permutation de renversement, comme
+[`invert`](#inventaire), de sorte que la copie ait la **même** orientation que
+la source et soit directement calculable. Les cas retournés dépendent de la
+dimension :
+
+| opérateur | 2D | 3D |
+|---|---|---|
+| `symmetry_point` | direct (demi-tour) | retourné |
+| `symmetry_line` | retourné | direct (demi-tour) |
+| `symmetry_plane` | retourné | retourné |
+
+Appliquer `invert` au résultat redonne la connectivité miroir brute.
 
 ```python
 import math
@@ -180,6 +215,10 @@ haut = pyrucast.mesh.translate(face, [0.0, 0.0, 5.0])
 
 # Copie tournée de 30° autour de l'axe z passant par l'origine.
 tournee = pyrucast.mesh.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+
+# Copie symétrique dans le plan y = 0 : la moitié manquante d'une pièce
+# maillée sur son demi-modèle (cellules remises à l'endroit).
+autre_moitie = pyrucast.mesh.symmetry_plane(face, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0])
 ```
 
 ## Tissage d'un solide entre deux surfaces : `sweep_solid`

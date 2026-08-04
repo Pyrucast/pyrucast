@@ -594,6 +594,50 @@ pub fn rotate(
     Ok(PyMesh { inner: result })
 }
 
+/// Mirror `mesh` through the point `center` (Cast3m `SYME … POINT`),
+/// returning a fresh copy with its own nodes (the original is left
+/// untouched). Every node goes to `2·center − x`.
+///
+/// In 3-D the map reverses orientation, so the cells are re-ordered (as
+/// `invert` does) to keep the copy's Jacobians positive; in 2-D it is a plain
+/// half-turn and nothing is re-ordered.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn symmetry_point(mesh: PyRef<PyMesh>, center: Vec<f64>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesh::symmetry_point(&mesh.inner, &center)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Mirror `mesh` through the infinite line running through `a` and `b`
+/// (Cast3m `SYME … DROIT`), returning a fresh copy with its own nodes (the
+/// original is left untouched).
+///
+/// In 2-D this is the mirror image about the line; in 3-D it is the half-turn
+/// about it (for the mirror image through a plane, use `symmetry_plane`).
+/// Orientation-reversing in 2-D only, where the cells are re-ordered (as
+/// `invert` does) to keep the copy's Jacobians positive.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn symmetry_line(mesh: PyRef<PyMesh>, a: Vec<f64>, b: Vec<f64>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesh::symmetry_line(&mesh.inner, &a, &b)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Mirror `mesh` through the plane running through `origin` with normal
+/// `normal` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
+/// (the original is left untouched). `normal` need not be normalized and its
+/// sign is irrelevant; in 2-D the "plane" is the line through `origin`
+/// perpendicular to `normal`.
+///
+/// Always orientation-reversing, so the cells are re-ordered (as `invert`
+/// does) to keep the copy's Jacobians positive.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn symmetry_plane(mesh: PyRef<PyMesh>, origin: Vec<f64>, normal: Vec<f64>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesh::symmetry_plane(&mesh.inner, &origin, &normal)?;
+    Ok(PyMesh { inner: result })
+}
+
 /// Mesh the interior of a closed SEG2 `contour` with `element_type` cells
 /// using a constrained-Delaunay + Ruppert-refinement mesher.
 ///
@@ -1096,6 +1140,25 @@ impl PyMesh {
         axis: Option<Vec<f64>>,
     ) -> PyResult<PyMesh> {
         super::mesh::rotate(slf, angle, center, axis)
+    }
+
+    /// Voir `pyrucast.mesh.symmetry_point`.
+    fn symmetry_point(slf: PyRef<'_, Self>, center: Vec<f64>) -> PyResult<PyMesh> {
+        super::mesh::symmetry_point(slf, center)
+    }
+
+    /// Voir `pyrucast.mesh.symmetry_line`.
+    fn symmetry_line(slf: PyRef<'_, Self>, a: Vec<f64>, b: Vec<f64>) -> PyResult<PyMesh> {
+        super::mesh::symmetry_line(slf, a, b)
+    }
+
+    /// Voir `pyrucast.mesh.symmetry_plane`.
+    fn symmetry_plane(
+        slf: PyRef<'_, Self>,
+        origin: Vec<f64>,
+        normal: Vec<f64>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::symmetry_plane(slf, origin, normal)
     }
 
     /// Voir `pyrucast.mesh.triangulate_surface`.
