@@ -1711,11 +1711,14 @@ Le retour est **exactement le maillage passé** — les mêmes sous-maillages,
 dont l'intérieur a changé —, pas une copie : en Python, `out is mesh`. On peut
 donc l'ignorer, ou chaîner dessus, au choix.
 
-Côté Rust, ce sont deux fonctions distinctes, faute de pouvoir surcharger le
-type de retour : `ops::mesh::merge_nodes(&mesh, tol)` (copiante) et
-`ops::mesh::merge_nodes_in_place(&mesh, tol)`, qui rend le même maillage
-soudé. La brique de conteneur sous-jacente est `SubMesh::remap_nodes(&map)`,
-un **renommage** de nœuds à structure constante.
+Côté Rust, ce sont deux fonctions de même signature —
+`ops::mesh::merge_nodes(&mesh, tol)` (copiante) et
+`ops::mesh::merge_nodes_in_place(&mesh, tol)` (le même maillage, soudé) —
+puisque Rust n'a pas d'argument par défaut : un paramètre `in_place` aurait
+obligé **tous** les appels existants à passer `false`. Le drapeau Python n'est
+donc pas une surcharge, c'est le confort des arguments nommés. La brique de
+conteneur sous-jacente est `SubMesh::remap_nodes(&map)`, un **renommage** de
+nœuds à structure constante.
 
 ## Lecture d'un maillage gmsh : `read_gmsh`
 
