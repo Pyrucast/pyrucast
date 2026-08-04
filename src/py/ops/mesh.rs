@@ -623,18 +623,23 @@ pub fn symmetry_line(mesh: PyRef<PyMesh>, a: Vec<f64>, b: Vec<f64>) -> PyResult<
     Ok(PyMesh { inner: result })
 }
 
-/// Mirror `mesh` through the plane running through `origin` with normal
-/// `normal` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
-/// (the original is left untouched). `normal` need not be normalized and its
-/// sign is irrelevant; in 2-D the "plane" is the line through `origin`
-/// perpendicular to `normal`.
+/// Mirror `mesh` through the plane running through the three points `a`, `b`
+/// and `c` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
+/// (the original is left untouched). Only the plane the three points span
+/// matters, not their order; they must not be aligned.
 ///
-/// Always orientation-reversing, so the cells are re-ordered (as `invert`
-/// does) to keep the copy's Jacobians positive.
+/// 3-D only — in 2-D the mirror about a line is `symmetry_line`. Always
+/// orientation-reversing, so the cells are re-ordered (as `invert` does) to
+/// keep the copy's Jacobians positive.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn symmetry_plane(mesh: PyRef<PyMesh>, origin: Vec<f64>, normal: Vec<f64>) -> PyResult<PyMesh> {
-    let result = crate::ops::mesh::symmetry_plane(&mesh.inner, &origin, &normal)?;
+pub fn symmetry_plane(
+    mesh: PyRef<PyMesh>,
+    a: Vec<f64>,
+    b: Vec<f64>,
+    c: Vec<f64>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesh::symmetry_plane(&mesh.inner, &a, &b, &c)?;
     Ok(PyMesh { inner: result })
 }
 
@@ -1155,10 +1160,11 @@ impl PyMesh {
     /// Voir `pyrucast.mesh.symmetry_plane`.
     fn symmetry_plane(
         slf: PyRef<'_, Self>,
-        origin: Vec<f64>,
-        normal: Vec<f64>,
+        a: Vec<f64>,
+        b: Vec<f64>,
+        c: Vec<f64>,
     ) -> PyResult<PyMesh> {
-        super::mesh::symmetry_plane(slf, origin, normal)
+        super::mesh::symmetry_plane(slf, a, b, c)
     }
 
     /// Voir `pyrucast.mesh.triangulate_surface`.

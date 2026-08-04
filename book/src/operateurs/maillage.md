@@ -22,7 +22,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `symmetry_point(mesh, center)` | **copie** symétrique par rapport au **point** `center` (Cast3M `SYME`, voir plus bas) |
 | `symmetry_line(mesh, a, b)` | **copie** symétrique par rapport à la **droite** passant par `a` et `b` (demi-tour en 3D) |
-| `symmetry_plane(mesh, origin, normal)` | **copie** symétrique par rapport au **plan** `(origin, normal)` (une droite en 2D) |
+| `symmetry_plane(mesh, a, b, c)` | **copie** symétrique par rapport au **plan** passant par trois points (3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `pave_surface(contour, type, size=None, all_quad=False)` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
@@ -170,12 +170,13 @@ entre plusieurs cellules de la source reste partagé dans la copie.
   perpendiculaire est retournée. En **2D** c'est l'image miroir dans la droite ;
   en **3D** c'est le **demi-tour** autour d'elle (une rotation de π) — pour
   l'image dans un miroir, c'est `symmetry_plane` qu'il faut.
-- `symmetry_plane(mesh, origin, normal)` réfléchit à travers le plan
-  `(origin, normal)` : `x ↦ x − 2((x − origin)·n̂) n̂`. `normal` n'a pas besoin
-  d'être normée et son signe est indifférent. En **2D**, le « plan » est la
-  droite passant par `origin` perpendiculaire à `normal` — la même application
-  que `symmetry_line`, la droite étant donnée par une normale plutôt que par
-  deux points.
+- `symmetry_plane(mesh, a, b, c)` réfléchit à travers le plan passant par les
+  **trois points** `a`, `b` et `c` : `x ↦ x − 2((x − a)·n̂) n̂`, où `n̂` est la
+  normale unitaire du plan. Les trois points jouent des rôles symétriques —
+  seul compte le plan qu'ils engendrent, pas leur ordre (une permutation
+  retourne `n̂`, ce à quoi la formule est insensible). **3D uniquement** : en
+  2D, le miroir est `symmetry_line`, qui prend les deux points de la droite.
+  Erreur si les trois points sont alignés (ils n'engendrent alors aucun plan).
 
 ### Orientation des cellules
 
@@ -191,7 +192,7 @@ dimension :
 |---|---|---|
 | `symmetry_point` | direct (demi-tour) | retourné |
 | `symmetry_line` | retourné | direct (demi-tour) |
-| `symmetry_plane` | retourné | retourné |
+| `symmetry_plane` | — (3D seulement) | retourné |
 
 Appliquer `invert` au résultat redonne la connectivité miroir brute.
 
@@ -216,9 +217,12 @@ haut = pyrucast.mesh.translate(face, [0.0, 0.0, 5.0])
 # Copie tournée de 30° autour de l'axe z passant par l'origine.
 tournee = pyrucast.mesh.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
 
-# Copie symétrique dans le plan y = 0 : la moitié manquante d'une pièce
-# maillée sur son demi-modèle (cellules remises à l'endroit).
-autre_moitie = pyrucast.mesh.symmetry_plane(face, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+# Copie symétrique dans le plan y = 0, donné par trois de ses points : la
+# moitié manquante d'une pièce maillée sur son demi-modèle (cellules remises
+# à l'endroit).
+autre_moitie = pyrucast.mesh.symmetry_plane(
+    face, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]
+)
 ```
 
 ## Tissage d'un solide entre deux surfaces : `sweep_solid`

@@ -1189,7 +1189,7 @@ class Mesh:
         r"""
         Voir `pyrucast.mesh.symmetry_line`.
         """
-    def symmetry_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float]) -> Mesh:
+    def symmetry_plane(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], c: typing.Sequence[builtins.float]) -> Mesh:
         r"""
         Voir `pyrucast.mesh.symmetry_plane`.
         """
@@ -3593,16 +3593,16 @@ def symmetry_line(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequ
     `invert` does) to keep the copy's Jacobians positive.
     """
 
-def symmetry_plane(mesh: Mesh, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float]) -> Mesh:
+def symmetry_plane(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], c: typing.Sequence[builtins.float]) -> Mesh:
     r"""
-    Mirror `mesh` through the plane running through `origin` with normal
-    `normal` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
-    (the original is left untouched). `normal` need not be normalized and its
-    sign is irrelevant; in 2-D the "plane" is the line through `origin`
-    perpendicular to `normal`.
+    Mirror `mesh` through the plane running through the three points `a`, `b`
+    and `c` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
+    (the original is left untouched). Only the plane the three points span
+    matters, not their order; they must not be aligned.
     
-    Always orientation-reversing, so the cells are re-ordered (as `invert`
-    does) to keep the copy's Jacobians positive.
+    3-D only — in 2-D the mirror about a line is `symmetry_line`. Always
+    orientation-reversing, so the cells are re-ordered (as `invert` does) to
+    keep the copy's Jacobians positive.
     """
 
 def symmetry_point(mesh: Mesh, center: typing.Sequence[builtins.float]) -> Mesh:

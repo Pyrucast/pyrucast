@@ -21,7 +21,7 @@
 //! |---|---|---|
 //! | [`symmetry_point`] | direct (half-turn) | reversed |
 //! | [`symmetry_line`] | reversed | direct (half-turn about the line) |
-//! | [`symmetry_plane`] | reversed | reversed |
+//! | [`symmetry_plane`] | — (3-D only) | reversed |
 //!
 //! Call [`invert`](fn@super::invert) on the result to get the raw mirrored
 //! connectivity back.
@@ -192,15 +192,20 @@ fn dim_of(mesh: &Mesh, point: &[f64], name: &str, op: &str) -> Result<usize> {
     Ok(dim)
 }
 
+/// Euclidean norm of `v`.
+fn norm(v: &[f64]) -> f64 {
+    v.iter().map(|x| x * x).sum::<f64>().sqrt()
+}
+
 /// `v` normalized, erroring out if it is the zero vector.
 fn unit(v: &[f64], name: &str, op: &str) -> Result<Vec<f64>> {
-    let norm = v.iter().map(|x| x * x).sum::<f64>().sqrt();
-    if norm == 0.0 {
+    let n = norm(v);
+    if n == 0.0 {
         return Err(PyrucastError::Message(format!(
             "{op}: {name} must be non-zero"
         )));
     }
-    Ok(v.iter().map(|x| x / norm).collect())
+    Ok(v.iter().map(|x| x / n).collect())
 }
 
 /// Mirror `mesh` through the point `center`, returning a fresh copy with its
@@ -256,36 +261,62 @@ pub fn symmetry_line(mesh: &Mesh, a: &[f64], b: &[f64]) -> Result<Mesh> {
     })
 }
 
-/// Mirror `mesh` through the plane running through `origin` with normal
-/// `normal`, returning a fresh copy with its own nodes (Cast3m
+/// Mirror `mesh` through the plane running through the three points `a`, `b`
+/// and `c`, returning a fresh copy with its own nodes (Cast3m
 /// `SYME … PLAN`). The original mesh is left untouched.
 ///
-/// Each node is reflected across the plane: `x ↦ x − 2((x − origin)·n̂) n̂`.
-/// `normal` need not be normalized, and its sign is irrelevant. In **2-D**
-/// the "plane" is the line through `origin` perpendicular to `normal` — the
-/// same map as [`symmetry_line`], with the line given by a normal instead of
-/// two points.
+/// Each node is reflected across the plane: `x ↦ x − 2((x − a)·n̂) n̂`, where
+/// `n̂` is the unit normal of the plane. The three points play symmetric
+/// roles — only the plane they span matters, not their order (a permutation
+/// flips `n̂`, which the formula is insensitive to).
+///
+/// **3-D only**: three points define a plane in space. In 2-D the mirror is
+/// [`symmetry_line`], which takes the two points of the line.
 ///
 /// Always orientation-reversing, so the cells are re-ordered — see the
 /// [module documentation](self).
 ///
-/// Errors if `origin` or `normal` do not have the coordinate dimension, or
-/// if `normal` is the zero vector.
-pub fn symmetry_plane(mesh: &Mesh, origin: &[f64], normal: &[f64]) -> Result<Mesh> {
-    dim_of(mesh, origin, "origin", "symmetry_plane")?;
-    dim_of(mesh, normal, "normal", "symmetry_plane")?;
-    let n = unit(normal, "normal", "symmetry_plane")?;
-    // A single flipped direction, whatever the dimension.
-    map_coords(mesh, true, |c| {
-        let gap: f64 = c
+/// Errors if the mesh is not 3-D, if `a`, `b` or `c` is not a 3-D point, or
+/// if the three points are aligned (they then span no plane).
+pub fn symmetry_plane(mesh: &Mesh, a: &[f64], b: &[f64], c: &[f64]) -> Result<Mesh> {
+    let dim = dim_of(mesh, a, "a", "symmetry_plane")?;
+    dim_of(mesh, b, "b", "symmetry_plane")?;
+    dim_of(mesh, c, "c", "symmetry_plane")?;
+    if dim != 3 {
+        return Err(PyrucastError::Message(format!(
+            "symmetry_plane: three points span a plane in 3-D only (the mesh \
+             is {dim}-D — use symmetry_line for the mirror about a line)"
+        )));
+    }
+    let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    let cross = [
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+    ];
+    // ‖ab × ac‖ = ‖ab‖‖ac‖ sin θ: comparing it to the product of the lengths
+    // tests the *angle*, so the check does not depend on the mesh's scale.
+    let norms = norm(&ab) * norm(&ac);
+    if norm(&cross) <= 1e-12 * norms {
+        return Err(PyrucastError::Message(
+            "symmetry_plane: a, b and c are aligned (or coincide) — they span \
+             no plane"
+                .into(),
+        ));
+    }
+    let n = unit(&cross, "the plane normal", "symmetry_plane")?;
+    // A single flipped direction: always orientation-reversing.
+    map_coords(mesh, true, |x| {
+        let gap: f64 = x
             .iter()
-            .zip(origin)
+            .zip(a)
             .zip(&n)
-            .map(|((&x, &o), &ni)| (x - o) * ni)
+            .map(|((&xi, &ai), &ni)| (xi - ai) * ni)
             .sum();
-        Ok(c.iter()
+        Ok(x.iter()
             .zip(&n)
-            .map(|(&x, &ni)| x - 2.0 * gap * ni)
+            .map(|(&xi, &ni)| xi - 2.0 * gap * ni)
             .collect())
     })
 }
@@ -517,8 +548,8 @@ mod tests {
             ],
         );
 
-        // Mirror through z = 0, normal given unnormalized on purpose.
-        let out = symmetry_plane(&m, &[0.0, 0.0, 0.0], &[0.0, 0.0, 3.0]).unwrap();
+        // Mirror through z = 0, given by three of its points.
+        let out = symmetry_plane(&m, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0], &[0.0, 4.0, 0.0]).unwrap();
         assert!(signed_volume(&out) > 0.0);
         let mut got: Vec<Vec<f64>> = (0..4)
             .map(|i| out.node(0, 0, i).unwrap().position().unwrap())
@@ -536,16 +567,26 @@ mod tests {
     }
 
     #[test]
-    fn symmetry_plane_2d_matches_symmetry_line() {
-        let coords = insert(Coords::new(2).unwrap());
-        let (m, _) = tri2d(&coords, [[0.0, 1.0], [1.0, 1.0], [0.0, 3.0]]);
+    fn symmetry_plane_ignores_the_order_of_its_three_points() {
+        let coords = insert(Coords::new(3).unwrap());
+        let m = tet(
+            &coords,
+            [
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 1.0],
+                [0.0, 1.0, 1.0],
+                [0.0, 0.0, 2.0],
+            ],
+        );
 
-        // The line y = x, once by two points, once by its normal.
-        let by_line = symmetry_line(&m, &[0.0, 0.0], &[1.0, 1.0]).unwrap();
-        let by_plane = symmetry_plane(&m, &[0.0, 0.0], &[1.0, -1.0]).unwrap();
-        for i in 0..3 {
-            let a = by_line.node(0, 0, i).unwrap().position().unwrap();
-            let b = by_plane.node(0, 0, i).unwrap().position().unwrap();
+        // Same plane, points given in the other cyclic order: swapping two of
+        // them flips the normal, which the reflection does not see.
+        let p = [[1.0, 1.0, 0.0], [3.0, 1.0, 0.0], [1.0, 2.0, 0.0]];
+        let out = symmetry_plane(&m, &p[0], &p[1], &p[2]).unwrap();
+        let swapped = symmetry_plane(&m, &p[0], &p[2], &p[1]).unwrap();
+        for i in 0..4 {
+            let a = out.node(0, 0, i).unwrap().position().unwrap();
+            let b = swapped.node(0, 0, i).unwrap().position().unwrap();
             assert!(a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 1e-12));
         }
     }
@@ -561,7 +602,7 @@ mod tests {
         m.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         m.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
 
-        let out = symmetry_plane(&m, &[0.0, 0.0], &[0.0, 1.0]).unwrap();
+        let out = symmetry_line(&m, &[0.0, 0.0], &[1.0, 0.0]).unwrap();
         // b sits in slot 2 of the first cell and slot 0 of the second once
         // both are reversed; it must still be one single fresh node.
         assert_eq!(
@@ -573,11 +614,26 @@ mod tests {
     #[test]
     fn symmetry_rejects_bad_geometry() {
         let coords = insert(Coords::new(2).unwrap());
-        let (m, _) = tri2d(&coords, [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]);
-        assert!(symmetry_point(&m, &[0.0, 0.0, 0.0]).is_err());
-        assert!(symmetry_line(&m, &[0.0, 0.0], &[0.0, 0.0]).is_err());
-        assert!(symmetry_plane(&m, &[0.0, 0.0], &[0.0, 0.0]).is_err());
-        assert!(symmetry_plane(&m, &[0.0], &[0.0, 1.0]).is_err());
+        let (flat, _) = tri2d(&coords, [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]);
+        assert!(symmetry_point(&flat, &[0.0, 0.0, 0.0]).is_err());
+        assert!(symmetry_line(&flat, &[0.0, 0.0], &[0.0, 0.0]).is_err());
+        // A plane needs three points in space: no 2-D mesh, no aligned points.
+        assert!(symmetry_plane(&flat, &[0.0, 0.0], &[1.0, 0.0], &[2.0, 0.0]).is_err());
+
+        let coords = insert(Coords::new(3).unwrap());
+        let m = tet(
+            &coords,
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+        );
+        assert!(symmetry_plane(&m, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0], &[0.0, 1.0]).is_err());
+        // Aligned (and, in the second case, coincident) points.
+        assert!(symmetry_plane(&m, &[0.0, 0.0, 0.0], &[1.0, 1.0, 1.0], &[3.0, 3.0, 3.0]).is_err());
+        assert!(symmetry_plane(&m, &[1.0, 2.0, 3.0], &[1.0, 2.0, 3.0], &[0.0, 0.0, 1.0]).is_err());
     }
 
     #[test]

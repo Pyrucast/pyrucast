@@ -215,8 +215,8 @@ impl Mesh {
     }
 
     /// Voir [`mesh::symmetry_plane`](fn@crate::ops::mesh::symmetry_plane).
-    pub fn symmetry_plane(&self, origin: &[f64], normal: &[f64]) -> Result<Mesh> {
-        crate::ops::mesh::symmetry_plane(self, origin, normal)
+    pub fn symmetry_plane(&self, a: &[f64], b: &[f64], c: &[f64]) -> Result<Mesh> {
+        crate::ops::mesh::symmetry_plane(self, a, b, c)
     }
 
     /// Voir [`mesh::symmetry_point`](fn@crate::ops::mesh::symmetry_point).

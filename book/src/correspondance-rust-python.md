@@ -122,7 +122,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> Mesh` | `rotate(mesh, angle, center, axis=None) -> Mesh` |
 | `symmetry_point(mesh: &Mesh, center: &[f64]) -> Mesh` | `symmetry_point(mesh, center) -> Mesh` |
 | `symmetry_line(mesh: &Mesh, a: &[f64], b: &[f64]) -> Mesh` | `symmetry_line(mesh, a, b) -> Mesh` |
-| `symmetry_plane(mesh: &Mesh, origin: &[f64], normal: &[f64]) -> Mesh` | `symmetry_plane(mesh, origin, normal) -> Mesh` |
+| `symmetry_plane(mesh: &Mesh, a: &[f64], b: &[f64], c: &[f64]) -> Mesh` | `symmetry_plane(mesh, a, b, c) -> Mesh` |
 | `triangulate_surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Mesh` | `triangulate_surface(contour, element_type, size=None) -> Mesh` |
 | `pave_surface(contour: &Mesh, element_type: ElementType, size: Option<f64>, all_quad: bool) -> Mesh` | `pave_surface(contour, element_type, size=None, all_quad=False) -> Mesh` |
 | `triangulate_volume(envelope: &Mesh, size: Option<f64>, allow_surface_nodes: bool) -> Mesh` | `triangulate_volume(envelope, size=None, allow_surface_nodes=False) -> Mesh` |

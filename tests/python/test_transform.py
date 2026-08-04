@@ -3,6 +3,8 @@ rotate, the symmetries, sweep_solid, and TRI3 → PENTA6 extrusion."""
 
 import math
 
+import pytest
+
 import pyrucast
 
 
@@ -121,8 +123,10 @@ def test_symmetry_plane_3d_keeps_the_jacobian_positive():
     )
     assert _signed_volume(m) > 0.0
 
-    # Mirror through z = 0 (normal deliberately unnormalized).
-    out = pyrucast.mesh.symmetry_plane(m, [0.0, 0.0, 0.0], [0.0, 0.0, 3.0])
+    # Mirror through z = 0, given by three of its points.
+    out = pyrucast.mesh.symmetry_plane(
+        m, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 4.0, 0.0]
+    )
     assert _signed_volume(out) > 0.0
     assert sorted(out.node(0, 0, i).position() for i in range(4)) == [
         [0.0, 0.0, -2.0],
@@ -147,11 +151,30 @@ def test_symmetry_line_3d_matches_a_half_turn():
 def test_symmetry_is_also_a_mesh_method():
     c = pyrucast.Coords(2)
     m, _ = _tri3(c, [[0.0, 1.0], [1.0, 1.0], [0.0, 3.0]])
-    # The line y = x: by two points, by its normal, and via the methods.
-    by_line = m.symmetry_line([0.0, 0.0], [1.0, 1.0])
-    by_plane = pyrucast.mesh.symmetry_plane(m, [0.0, 0.0], [1.0, -1.0])
+    # The mirror about the x axis, as a method and as a free function.
+    by_method = m.symmetry_line([0.0, 0.0], [1.0, 0.0])
+    by_function = pyrucast.mesh.symmetry_line(m, [0.0, 0.0], [1.0, 0.0])
     for i in range(3):
-        a = by_line.node(0, 0, i).position()
-        b = by_plane.node(0, 0, i).position()
-        assert all(abs(x - y) < 1e-12 for x, y in zip(a, b))
+        assert (
+            by_method.node(0, 0, i).position() == by_function.node(0, 0, i).position()
+        )
     assert m.symmetry_point([0.0, 0.0]).node(0, 0, 0).position() == [0.0, -1.0]
+
+    c3 = pyrucast.Coords(3)
+    m3, _ = _tri3(c3, [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+    plane = m3.symmetry_plane([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+    assert plane.node(0, 0, 0).position() == [0.0, 0.0, -1.0]
+
+
+def test_symmetry_plane_needs_three_non_aligned_points_in_3d():
+    c = pyrucast.Coords(3)
+    m, _ = _tri3(c, [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [0.0, 1.0, 1.0]])
+    with pytest.raises(Exception, match="symmetry_plane"):
+        pyrucast.mesh.symmetry_plane(
+            m, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [2.0, 2.0, 2.0]
+        )
+    # A 2-D mesh has no plane to mirror through: symmetry_line is the one.
+    flat = pyrucast.Coords(2)
+    m2, _ = _tri3(flat, [[0.0, 1.0], [1.0, 1.0], [0.0, 3.0]])
+    with pytest.raises(Exception, match="symmetry_plane"):
+        pyrucast.mesh.symmetry_plane(m2, [0.0, 0.0], [1.0, 0.0], [0.0, 1.0])
