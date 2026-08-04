@@ -116,6 +116,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `transfinite(side1: &Mesh, side2: &Mesh, side3: &Mesh, side4: &Mesh, element_type: ElementType) -> Mesh` | `transfinite(side1, side2, side3, side4, element_type="QUA4") -> Mesh` |
 | `sweep_solid(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_solid(mesh_a, mesh_b, n_layers) -> Mesh` |
 | `extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Mesh` | `extrude(mesh, direction, n_layers) -> Mesh` |
+| `revolve(mesh: &Mesh, angle: f64, n_layers: usize, center: &[f64], axis: Option<&[f64]>) -> Mesh` | `revolve(mesh, angle, n_layers, center, axis=None) -> Mesh` |
 | `to_quadratic(mesh: &Mesh) -> Mesh` | `to_quadratic(mesh) -> Mesh` |
 | `convert(mesh: &Mesh, element_type: ElementType) -> Mesh` | `convert(mesh, element_type) -> Mesh` |
 | `translate(mesh: &Mesh, vector: &[f64]) -> Mesh` | `translate(mesh, vector) -> Mesh` |

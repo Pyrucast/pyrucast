@@ -8,8 +8,8 @@
 //!   polygon-with-holes pipeline).
 //! - [`tetrahedralization`] — 3-D primitives (exact predicates, Delaunay
 //!   kernel) behind the tetrahedral mesher.
-//! - [`sweep_kernel`] — extrusion and SEG2→QUA4 kernel used by
-//!   [`sweep()`](fn@sweep) and [`extrude()`].
+//! - [`sweep_kernel`] — extrusion, revolution and SEG2→QUA4 kernel used
+//!   by [`sweep()`](fn@sweep), [`extrude()`] and [`revolve()`].
 
 pub mod arc;
 pub mod barycenter;
@@ -33,6 +33,7 @@ pub mod plaster;
 pub mod points;
 pub mod predicates;
 pub mod quadratic;
+pub mod revolve;
 pub mod select;
 pub mod skin;
 pub mod sweep;
@@ -67,6 +68,7 @@ pub use points::{
     points_on_torus,
 };
 pub use quadratic::to_quadratic;
+pub use revolve::revolve;
 pub use select::{select_cells, select_nodes, select_sub_cells, select_sub_nodes};
 pub use skin::skin;
 pub use sweep::sweep;

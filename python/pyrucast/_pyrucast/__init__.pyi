@@ -85,6 +85,7 @@ __all__ = [
     "read_gmsh_str",
     "restrict",
     "restrict_like",
+    "revolve",
     "rotate",
     "select",
     "set_positions",
@@ -1160,6 +1161,10 @@ class Mesh:
     def extrude(self, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
         r"""
         Voir `pyrucast.mesh.extrude`.
+        """
+    def revolve(self, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.revolve`.
         """
     def sweep_solid(self, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
         r"""
@@ -3393,6 +3398,20 @@ def restrict_like(field: NodeField, target: NodeField) -> NodeField:
     `(node, component)` pair is filled from `field` when it covers it, `0.0`
     otherwise; nodes and components of `field` absent from `target` are dropped.
     Errors if `target` and `field` are attached to different `Coords`s.
+    """
+
+def revolve(mesh: Mesh, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
+    r"""
+    Revolve `mesh` by `n_layers` layers over a total `angle` (radians) — the
+    rotational companion of `extrude`. SEG2 → QUA4, TRI3 → PENTA6,
+    QUA4 → HEX8.
+    
+    In 2-D the revolution is about the point `center` (counterclockwise for a
+    positive `angle`) and `axis` is ignored; in 3-D it is about the line
+    through `center` directed by `axis` (right-handed), which is then
+    required. `|angle|` may not exceed a full turn, and a full turn closes the
+    ring: the last node layer is the first one again, so there is no seam. No
+    node may lie on the axis — it would collapse the cells touching it.
     """
 
 def rotate(mesh: Mesh, angle: builtins.float, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:

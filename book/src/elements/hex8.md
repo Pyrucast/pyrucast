@@ -2,7 +2,7 @@
 
 Hexaèdre à **8 nœuds**, interpolation **Lagrange-1** (produit tensoriel
 \\( Q1 \\)). Interpolation **trilinéaire** ; l'élément volumique de référence
-pour les maillages structurés. Produit par `extrude` (QUA4 → HEX8).
+pour les maillages structurés. Produit par `extrude` et `revolve` (QUA4 → HEX8).
 
 ## Repère de référence
 

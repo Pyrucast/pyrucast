@@ -189,6 +189,17 @@ impl Mesh {
         crate::ops::mesh::points_on_torus(self, center, axis, major_radius, minor_radius, tol)
     }
 
+    /// Voir [`mesh::revolve`](fn@crate::ops::mesh::revolve).
+    pub fn revolve(
+        &self,
+        angle: f64,
+        n_layers: usize,
+        center: &[f64],
+        axis: Option<&[f64]>,
+    ) -> Result<Mesh> {
+        crate::ops::mesh::revolve(self, angle, n_layers, center, axis)
+    }
+
     /// Voir [`mesh::rotate`](fn@crate::ops::mesh::rotate).
     pub fn rotate(&self, angle: f64, center: &[f64], axis: Option<&[f64]>) -> Result<Mesh> {
         crate::ops::mesh::rotate(self, angle, center, axis)

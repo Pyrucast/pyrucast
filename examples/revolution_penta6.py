@@ -1,15 +1,19 @@
-"""Rigid copies and 3-D sweep demo (`translate`, `rotate`, `sweep_solid`).
+"""Rigid copies and 3-D sweep demo (`translate`, `rotate`, `sweep_solid`,
+`revolve`).
 
-Meshes a small surface, then shows the three new mesh-transform operators:
+Meshes a small surface, then shows the mesh-transform and sweep operators:
 
 - `translate` / `rotate` return a fresh copy of a mesh with its own new
   nodes (the source is left untouched);
 - `sweep_solid` is the 3-D companion of `sweep`: it links two matching
-  surfaces into a solid — TRI3 faces become PENTA6 prisms, QUA4 faces HEX8.
+  surfaces into a solid — TRI3 faces become PENTA6 prisms, QUA4 faces HEX8;
+- `revolve` is the rotational companion of `extrude`: it sweeps the whole
+  solid of revolution in one call, layer after layer.
 
 Combining `rotate` with `sweep_solid` builds one angular slice of a solid
-of revolution; combining `translate` with `sweep_solid` extrudes a surface
-onto a shifted copy (equivalent to a straight `extrude`).
+of revolution — which is exactly one layer of `revolve`; combining
+`translate` with `sweep_solid` extrudes a surface onto a shifted copy
+(equivalent to a straight `extrude`).
 
 Run:
 
@@ -37,6 +41,11 @@ def main() -> None:
     rotated = pc.mesh.rotate(face, math.radians(15.0), [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
     wedge = pc.mesh.sweep_solid(face, rotated, 2)
     print("wedge :", wedge.element_types(), wedge.cell_count(), "cells")
+
+    # The whole solid of revolution, in one call: a full turn in 24 slices.
+    # The ring closes on itself — the last node layer is the first one back.
+    torus = pc.mesh.revolve(face, 2 * math.pi, 24, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    print("torus :", torus.element_types(), torus.cell_count(), "cells")
 
     # A straight prism block: sweep the face onto a translated copy.
     shifted = pc.mesh.translate(face, [0.0, 3.0, 0.0])

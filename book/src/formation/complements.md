@@ -46,13 +46,16 @@ plaque trouée en volume :
 - `pyrucast.mesh.extrude(mesh, direction, n_couches)` — balayage d'un
   maillage `SEG2`/`TRI3`/`QUA4` selon une direction, dans le même espace de
   coordonnées (Cast3M `TRAN`/`VOLU 'TRAN'`) ;
+- `pyrucast.mesh.revolve(mesh, angle, n_couches, centre, axe)` — le même
+  balayage, mais en rotation autour d'un axe ; un tour complet referme le
+  volume engendré (Cast3M `ROTA`/`VOLU 'ROTA'`) ;
 - `pyrucast.mesh.sweep_solid(mesh_a, mesh_b, n_couches)` — balayage entre
   deux profils `TRI3`/`QUA4` non parallèles (Cast3M `REGL` + `VOLU`) ;
 - `pyrucast.mesh.triangulate_volume(enveloppe, taille)` — remplissage `TET4`
   d'une enveloppe `TRI3` fermée par triangulation de Delaunay 3D (Cast3M
   `VOLU` par remplissage).
 
-Aucun de ces trois n'est mis en œuvre dans les scripts de cette formation.
+Aucun de ces quatre n'est mis en œuvre dans les scripts de cette formation.
 
 ## Éléments finis supportés
 

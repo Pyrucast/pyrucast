@@ -15,6 +15,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `circle(center, normal, radius, n_elems, element_type="SEG2")` | un cercle fermé (`SEG2` ou `SEG3`, plan défini par `normal`) |
 | `arc(a, center, b, n_elems, element_type="SEG2")` | un arc de `a` à `b` sur le cercle de centre `center` passant par les deux (le plus court des deux arcs) |
 | `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, TRI3→PENTA6, QUA4→HEX8) |
+| `revolve(mesh, angle, n_layers, center, axis=None)` | **compagnon rotatif** d'`extrude` : balaye un maillage de `angle` (rad) autour de `center` (axe `axis` en 3D), mêmes montées de type ; un tour complet **referme** l'anneau (voir plus bas) |
 | `sweep(mesh_a, mesh_b, n_layers, element_type="QUA4")` | tisse `QUA4`/`TRI3`/`QUA8`/`QUA9`/`TRI6` entre deux lignes `SEG2` (un `QUA4` est toujours construit d'abord, puis converti) |
 | `transfinite(side1, side2, side3, side4, element_type="QUA4")` | **généralisation de `sweep` à 4 côtés** (l'équivalent Cast3M de `DALL`) : interpolation transfinie (patch de Coons) entre quatre lignes `SEG2` formant un contour fermé (voir plus bas) |
 | `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
@@ -247,6 +248,75 @@ surface et sa copie déplacée :
 solide = pyrucast.mesh.sweep_solid(face, tournee, 1)
 print(solide.element_types())  # ['PENTA6']
 ```
+
+## Révolution : `revolve`
+
+`revolve(mesh, angle, n_layers, center, axis=None)` est le **compagnon
+rotatif** d'`extrude` : là où `extrude` translate le maillage source couche
+après couche le long d'un vecteur, `revolve` le fait tourner d'un angle total
+`angle` (en **radians**), en `n_layers` couches d'angle égal. Les montées de
+type sont les mêmes — `SEG2→QUA4`, `TRI3→PENTA6`, `QUA4→HEX8` — et l'ordre des
+nœuds par cellule aussi (couche basse puis couche haute).
+
+- En **2D**, la révolution se fait autour du **point** `center` (sens direct
+  pour un `angle` positif) ; `axis` est ignoré. Seul un `SEG2` a du sens : une
+  surface engendrerait un solide, que des coordonnées 2D ne peuvent pas
+  porter (c'est refusé explicitement).
+- En **3D**, elle se fait autour de la **droite** passant par `center` dirigée
+  par `axis` (main droite) ; `axis` est alors obligatoire et n'a pas besoin
+  d'être normé.
+
+Comme pour `extrude`, la couche 0 **réutilise les nœuds de la source** (les
+nœuds partagés entre cellules le restent) et les autres couches sont créées.
+
+**Un tour complet referme l'anneau.** Avec `angle = 2π`, la dernière couche de
+nœuds *est* la première : le tore/cylindre engendré n'a ni couture ni nœuds en
+double, et rien à souder après coup (pas de `merge_nodes`). Au-delà d'un tour,
+la révolution se recouvrirait elle-même : c'est une erreur.
+
+**Aucun nœud sur l'axe.** Un nœud posé sur l'axe ne bouge pas : toutes les
+cellules qui s'y appuient s'écraseraient en éléments dégénérés (jacobien nul).
+L'opérateur le refuse plutôt que de produire un maillage incalculable — il
+faut décaler la source de l'axe (le trou central d'un disque, l'alésage d'un
+tube).
+
+**Angle négatif.** Il balaye dans l'autre sens et retourne les cellules,
+exactement comme un `extrude` à contre-normale : passez par `orient` sur le
+résultat, ou révolutionnez d'un angle positif depuis la source symétrisée.
+
+```python
+import math
+import pyrucast
+
+c = pyrucast.Coords(dim=2)
+a = c.add_node([1.0, 0.0])
+b = c.add_node([2.0, 0.0])
+
+# Une couronne complète : le segment radial [1, 2] tourné d'un tour en
+# 32 secteurs de QUA4 — refermée, sans couture.
+rayon = pyrucast.mesh.line(a, b, 4)
+couronne = pyrucast.mesh.revolve(rayon, 2 * math.pi, 32, [0.0, 0.0])
+print(couronne.element_types(), couronne.cell_count())  # ['QUA4'] 128
+
+# En 3D : un quart de tube, la section QUA4 balayée autour de l'axe z.
+c3 = pyrucast.Coords(dim=3)
+section = pyrucast.Mesh(c3, "QUA4")
+section.unit().add_cell(
+    [
+        c3.add_node([1.0, 0.0, 0.0]),
+        c3.add_node([2.0, 0.0, 0.0]),
+        c3.add_node([2.0, 0.0, 1.0]),
+        c3.add_node([1.0, 0.0, 1.0]),
+    ]
+)
+quart = pyrucast.mesh.revolve(section, math.pi / 2, 8, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+print(quart.element_types())  # ['HEX8']
+```
+
+`revolve` fait d'un coup ce que `rotate` + `sweep_solid` font tranche par
+tranche : une couche de `revolve` équivaut exactement à `sweep_solid(face,
+rotate(face, angle, …), 1)`. Le passage par `sweep_solid` reste utile quand
+les deux faces ne se déduisent pas l'une de l'autre par une rotation.
 
 ## Passage à l'ordre quadratique : `to_quadratic`
 

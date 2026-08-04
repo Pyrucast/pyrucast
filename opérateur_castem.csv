@@ -13,8 +13,8 @@ Maillage - création;PAVE;Maille un pavé / bloc volumique structuré;—
 Maillage - création;MANU;Maillage manuel (élément défini nœud par nœud);Mesh(coords, type)
 Maillage - création;LIRE;Lit un maillage depuis un fichier externe (gmsh .msh, ASCII/binaire);read_gmsh / read_gmsh_str
 Maillage - génération;TRAN;Translation/extrusion d'un maillage (engendre la dimension supérieure);extrude / translate
-Maillage - génération;ROTA;Rotation / révolution d'un maillage;rotate / sweep_solid
-Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep / sweep_solid / triangulate_volume / pave_volume
+Maillage - génération;ROTA;Rotation / révolution d'un maillage;rotate / revolve
+Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep / sweep_solid / revolve / triangulate_volume / pave_volume
 Maillage - génération;GENE;Génère un maillage par balayage entre deux lignes;sweep
 Maillage - génération;SYME;Symétrie d'un maillage;symmetry_point / symmetry_line / symmetry_plane
 Maillage - génération;HOMO;Homothétie d'un maillage;—

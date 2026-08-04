@@ -2,8 +2,8 @@
 
 Prisme à **6 nœuds**, interpolation **Lagrange-1**. C'est l'**extrusion d'un
 TRI3** le long de \\( \zeta \\) : produit d'un triangle (coordonnées
-barycentriques) par un segment linéaire. Produit par l'opérateur `extrude`
-(TRI3 → PENTA6) et par `sweep_solid`.
+barycentriques) par un segment linéaire. Produit par les opérateurs `extrude`
+et `revolve` (TRI3 → PENTA6), ainsi que par `sweep_solid`.
 
 ## Repère de référence
 

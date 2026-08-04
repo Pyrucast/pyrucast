@@ -1,5 +1,6 @@
 """Python tests for the mesh-transform / 3-D sweep operators: translate,
-rotate, the symmetries, sweep_solid, and TRI3 → PENTA6 extrusion."""
+rotate, the symmetries, sweep_solid, TRI3 → PENTA6 extrusion, and the
+rotational sweep revolve."""
 
 import math
 
@@ -178,3 +179,111 @@ def test_symmetry_plane_needs_three_non_aligned_points_in_3d():
     m2, _ = _tri3(flat, [[0.0, 1.0], [1.0, 1.0], [0.0, 3.0]])
     with pytest.raises(Exception, match="symmetry_plane"):
         pyrucast.mesh.symmetry_plane(m2, [0.0, 0.0], [1.0, 0.0], [0.0, 1.0])
+
+
+def _distinct_node_ids(mesh):
+    """Ids of the distinct nodes used by the cells of a single-submesh mesh."""
+    npc = {"QUA4": 4, "PENTA6": 6, "HEX8": 8}[mesh.element_types()[0]]
+    return {
+        mesh.node(0, c, i).id for c in range(mesh.cell_counts()[0]) for i in range(npc)
+    }
+
+
+def _radial_seg2(coords, n):
+    """SEG2 line from (1, 0) to (2, 0) in `n` segments (2-D)."""
+    a = coords.add_node([1.0, 0.0])
+    b = coords.add_node([2.0, 0.0])
+    return pyrucast.mesh.line(a, b, n, "SEG2")
+
+
+def test_revolve_seg2_to_qua4_2d():
+    c = pyrucast.Coords(2)
+    seg = _radial_seg2(c, 2)
+
+    ring = pyrucast.mesh.revolve(seg, math.pi / 2.0, 3, [0.0, 0.0])
+    assert ring.element_types() == ["QUA4"]
+    assert ring.cell_counts() == [6]
+    # First layer: the source segment, swept 30° round the origin.
+    assert ring.node(0, 0, 0).position() == [1.0, 0.0]
+    x, y = ring.node(0, 0, 3).position()
+    assert abs(x - math.cos(math.pi / 6.0)) < 1e-12
+    assert abs(y - math.sin(math.pi / 6.0)) < 1e-12
+
+
+def test_revolve_full_turn_closes_the_ring():
+    c = pyrucast.Coords(2)
+    seg = _radial_seg2(c, 1)
+
+    ring = pyrucast.mesh.revolve(seg, 2.0 * math.pi, 4, [0.0, 0.0])
+    assert ring.cell_counts() == [4]
+    # 4 angular positions × 2 radial nodes — no duplicated seam layer.
+    assert len(_distinct_node_ids(ring)) == 8
+    assert ring.node(0, 3, 3).id == ring.node(0, 0, 0).id
+
+
+def test_revolve_tri3_to_penta6_3d():
+    c = pyrucast.Coords(3)
+    face, _ = _tri3(c, [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [1.0, 0.0, 1.0]])
+
+    wedge = pyrucast.mesh.revolve(
+        face, math.pi / 6.0, 2, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]
+    )
+    assert wedge.element_types() == ["PENTA6"]
+    assert wedge.cell_counts() == [2]
+    # The last layer sits at the full 30°, at the source radius and height.
+    x, y, z = wedge.node(0, 1, 3).position()
+    assert abs(x - math.cos(math.pi / 6.0)) < 1e-12
+    assert abs(y - math.sin(math.pi / 6.0)) < 1e-12
+    assert abs(z) < 1e-12
+
+
+def test_revolve_matches_rotate_plus_sweep_solid():
+    """One layer of revolve = sweep_solid onto the rotated copy."""
+    c = pyrucast.Coords(3)
+    face, _ = _tri3(c, [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [1.0, 0.0, 1.0]])
+
+    by_revolve = pyrucast.mesh.revolve(
+        face, math.pi / 6.0, 1, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]
+    )
+    turned = pyrucast.mesh.rotate(face, math.pi / 6.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    by_sweep = pyrucast.mesh.sweep_solid(face, turned, 1)
+    for i in range(6):
+        a = by_revolve.node(0, 0, i).position()
+        b = by_sweep.node(0, 0, i).position()
+        assert all(abs(u - v) < 1e-12 for u, v in zip(a, b))
+
+
+def test_revolve_is_also_a_mesh_method():
+    c = pyrucast.Coords(2)
+    seg = _radial_seg2(c, 1)
+    by_method = seg.revolve(math.pi / 2.0, 2, [0.0, 0.0])
+    by_function = pyrucast.mesh.revolve(seg, math.pi / 2.0, 2, [0.0, 0.0])
+    assert by_method.cell_counts() == by_function.cell_counts()
+    for i in range(4):
+        a = by_method.node(0, 0, i).position()
+        b = by_function.node(0, 0, i).position()
+        assert all(abs(u - v) < 1e-12 for u, v in zip(a, b))
+
+
+def test_revolve_rejects_bad_arguments():
+    c = pyrucast.Coords(2)
+    seg = _radial_seg2(c, 1)
+    with pytest.raises(Exception, match="revolve"):
+        pyrucast.mesh.revolve(seg, math.pi, 0, [0.0, 0.0])
+    with pytest.raises(Exception, match="revolve"):
+        pyrucast.mesh.revolve(seg, 0.0, 2, [0.0, 0.0])
+    with pytest.raises(Exception, match="revolve"):
+        pyrucast.mesh.revolve(seg, 3.0 * math.pi, 2, [0.0, 0.0])
+
+    # A node on the axis would collapse the cells touching it.
+    on_axis = pyrucast.mesh.line(
+        c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), 1, "SEG2"
+    )
+    with pytest.raises(Exception, match="axis"):
+        pyrucast.mesh.revolve(on_axis, math.pi, 2, [0.0, 0.0])
+
+    # A 3-D revolution needs an axis.
+    c3 = pyrucast.Coords(3)
+    face, _ = _tri3(c3, [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [1.0, 0.0, 1.0]])
+    with pytest.raises(Exception, match="axis"):
+        pyrucast.mesh.revolve(face, math.pi / 4.0, 2, [0.0, 0.0, 0.0])

@@ -5,6 +5,8 @@
 //! - [`extrude`] — translate every cell of a mesh along a vector by
 //!   `n_layers` layers, bumping element dimension (SEG2 → QUA4,
 //!   TRI3 → PENTA6, QUA4 → HEX8).
+//! - [`revolve`] — the same layered sweep, but rotating about a centre
+//!   (2-D) or an axis (3-D); a full turn closes the ring.
 //! - [`solid_between`] — the 3-D companion of [`qua4_between`]: sweep
 //!   between two matching surface meshes (TRI3 → PENTA6, QUA4 → HEX8).
 
@@ -140,90 +142,108 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
     Ok(mesh)
 }
 
-/// Extrude a mesh by `n_layers` layers along `direction`.
+// ---------------------------------------------------------------------------
+// Layered sweeps (`extrude`, `revolve`)
+// ---------------------------------------------------------------------------
+
+/// The node columns of a mesh: every distinct node, once.
 ///
-/// `direction` is the **total** displacement vector; each intermediate
-/// layer is placed at an evenly spaced fraction. Supported element types:
-/// SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8. Other types produce an error.
-///
-/// Nodes shared between cells in the source mesh remain shared in the
-/// extruded mesh. Source nodes are re-used (refcount incremented);
-/// intermediate layer nodes are newly created.
-///
-/// Node ordering:
-/// - QUA4: `bot[0], bot[1], top[1], top[0]`
-/// - PENTA6: `bot[0..3], top[0..3]`
-/// - HEX8: `bot[0..4], top[0..4]`
-pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> {
-    if n_layers == 0 {
-        return Err(PyrucastError::Message(
-            "extrude: n_layers must be ≥ 1".into(),
-        ));
+/// A layered sweep works column by column — each column is one node of the
+/// source mesh, replicated once per layer — so nodes shared between cells of
+/// the source stay shared in the swept mesh.
+struct Columns {
+    /// Distinct node ids, in first-seen connectivity order.
+    ids: Vec<NodeId>,
+    /// Column index of each id.
+    index: std::collections::HashMap<NodeId, usize>,
+    /// Current position of each column.
+    positions: Vec<Vec<f64>>,
+}
+
+impl Columns {
+    /// Column index of `id` (every id of the source mesh has one).
+    fn of(&self, id: NodeId) -> usize {
+        self.index[&id]
     }
+}
 
+/// Collect the node columns of `mesh`, erroring out (as `op`) if it is empty.
+fn columns(mesh: &Mesh, op: &str) -> Result<Columns> {
     let coords = mesh.coords()?;
-
-    // Collect unique NodeIds across all submeshes, first-seen order.
-    let mut col_map: std::collections::HashMap<NodeId, usize> = std::collections::HashMap::new();
-    let mut ordered_ids: Vec<NodeId> = Vec::new();
+    let mut index: std::collections::HashMap<NodeId, usize> = std::collections::HashMap::new();
+    let mut ids: Vec<NodeId> = Vec::new();
     for sm in mesh {
         for id in read(sm)?.connectivity().to_vec() {
-            col_map.entry(id).or_insert_with(|| {
-                let col = ordered_ids.len();
-                ordered_ids.push(id);
+            index.entry(id).or_insert_with(|| {
+                let col = ids.len();
+                ids.push(id);
                 col
             });
         }
     }
-
-    if ordered_ids.is_empty() {
-        return Err(PyrucastError::Message("extrude: mesh has no cells".into()));
+    if ids.is_empty() {
+        return Err(PyrucastError::Message(format!("{op}: mesh has no cells")));
     }
-
-    let base_coords: Vec<Vec<f64>> = ordered_ids
+    let positions: Vec<Vec<f64>> = ids
         .iter()
         .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
+    Ok(Columns {
+        ids,
+        index,
+        positions,
+    })
+}
 
-    let coord_dim = base_coords[0].len();
-    if direction.len() != coord_dim {
-        return Err(PyrucastError::Message(format!(
-            "extrude: direction has {} components but node dimension is {}",
-            direction.len(),
-            coord_dim
-        )));
-    }
-
-    let step: Vec<f64> = direction.iter().map(|&d| d / n_layers as f64).collect();
-    let n_cols = ordered_ids.len();
+/// Sweep `mesh` into `n_layers` layers of cells, layer `k` sitting where
+/// `place(base_position, k)` puts it.
+///
+/// Layer 0 re-uses the source nodes (refcount incremented); layers `1..` are
+/// newly created — except when `closed` is set, where the last layer *is*
+/// layer 0 again, so a sweep that comes back onto its start (a full turn)
+/// closes on itself instead of duplicating a node layer.
+///
+/// Each submesh of `mesh` yields one submesh of the result, cells ordered
+/// layer by layer. Element mapping and node ordering:
+/// - SEG2 → QUA4: `bot[0], bot[1], top[1], top[0]`
+/// - TRI3 → PENTA6: `bot[0..3], top[0..3]`
+/// - QUA4 → HEX8: `bot[0..4], top[0..4]`
+fn layered(
+    mesh: &Mesh,
+    cols: &Columns,
+    n_layers: usize,
+    closed: bool,
+    op: &str,
+    place: impl Fn(&[f64], usize) -> Vec<f64>,
+) -> Result<Mesh> {
+    let coords = mesh.coords()?;
+    let n_cols = cols.ids.len();
 
     // layers[k][col] = Node at layer k, column col.
     let mut layers: Vec<Vec<Node>> = Vec::with_capacity(n_layers + 1);
-
     layers.push(
-        ordered_ids
+        cols.ids
             .iter()
             .map(|&id| Node::acquire(coords.clone(), id))
             .collect::<Result<Vec<_>>>()?,
     );
-    for k in 1..=n_layers {
+    let last_created = if closed { n_layers - 1 } else { n_layers };
+    for k in 1..=last_created {
         let layer: Vec<Node> = (0..n_cols)
-            .map(|j| {
-                let coord: Vec<f64> = base_coords[j]
-                    .iter()
-                    .zip(step.iter())
-                    .map(|(&c, &s)| c + k as f64 * s)
-                    .collect();
-                Node::create_in(coords.clone(), &coord)
-            })
+            .map(|c| Node::create_in(coords.clone(), &place(&cols.positions[c], k)))
             .collect::<Result<_>>()?;
         layers.push(layer);
     }
-
-    let col = |id: NodeId| *col_map.get(&id).unwrap();
+    if closed {
+        layers.push(
+            cols.ids
+                .iter()
+                .map(|&id| Node::acquire(coords.clone(), id))
+                .collect::<Result<Vec<_>>>()?,
+        );
+    }
 
     let mut result = Mesh::empty();
-
     for sm_handle in mesh {
         let (et, n_cells, conn) = {
             let s = read(sm_handle)?;
@@ -231,25 +251,33 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
         };
         let npc = et.nodes_per_cell();
 
-        let extruded_et = match et {
+        let swept_et = match et {
             ElementType::SEG2 => ElementType::QUA4,
             ElementType::TRI3 => ElementType::PENTA6,
             ElementType::QUA4 => ElementType::HEX8,
             _ => {
                 return Err(PyrucastError::Message(format!(
-                    "extrude: cannot extrude {} elements (supported: SEG2, TRI3, QUA4)",
-                    et
+                    "{op}: cannot sweep {et} elements (supported: SEG2, TRI3, QUA4)"
                 )))
             }
         };
+        let dim = read(&coords)?.dim() as usize;
+        if swept_et.topological_dim() > dim {
+            return Err(PyrucastError::Message(format!(
+                "{op}: sweeping {et} elements produces {swept_et}, which needs 3-D coordinates \
+                 (the mesh is {dim}-D)"
+            )));
+        }
 
-        let mut sm_out = SubMesh::new(coords.clone(), extruded_et);
-
+        let mut sm_out = SubMesh::new(coords.clone(), swept_et);
         for k in 0..n_layers {
             for ci in 0..n_cells {
                 let cell = &conn[ci * npc..(ci + 1) * npc];
-                let bot: Vec<NodeId> = cell.iter().map(|&id| layers[k][col(id)].id()).collect();
-                let top: Vec<NodeId> = cell.iter().map(|&id| layers[k + 1][col(id)].id()).collect();
+                let bot: Vec<NodeId> = cell.iter().map(|&id| layers[k][cols.of(id)].id()).collect();
+                let top: Vec<NodeId> = cell
+                    .iter()
+                    .map(|&id| layers[k + 1][cols.of(id)].id())
+                    .collect();
 
                 match et {
                     ElementType::SEG2 => {
@@ -272,6 +300,202 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
     }
 
     Ok(result)
+}
+
+/// Extrude a mesh by `n_layers` layers along `direction`.
+///
+/// `direction` is the **total** displacement vector; each intermediate
+/// layer is placed at an evenly spaced fraction. Supported element types:
+/// SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8. Other types produce an error.
+///
+/// Nodes shared between cells in the source mesh remain shared in the
+/// extruded mesh. Source nodes are re-used (refcount incremented);
+/// intermediate layer nodes are newly created.
+///
+/// Node ordering:
+/// - QUA4: `bot[0], bot[1], top[1], top[0]`
+/// - PENTA6: `bot[0..3], top[0..3]`
+/// - HEX8: `bot[0..4], top[0..4]`
+pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> {
+    if n_layers == 0 {
+        return Err(PyrucastError::Message(
+            "extrude: n_layers must be ≥ 1".into(),
+        ));
+    }
+    let dim = read(&mesh.coords()?)?.dim() as usize;
+    if direction.len() != dim {
+        return Err(PyrucastError::Message(format!(
+            "extrude: direction has {} components but node dimension is {}",
+            direction.len(),
+            dim
+        )));
+    }
+
+    let cols = columns(mesh, "extrude")?;
+    let step: Vec<f64> = direction.iter().map(|&d| d / n_layers as f64).collect();
+    layered(mesh, &cols, n_layers, false, "extrude", |base, k| {
+        base.iter()
+            .zip(step.iter())
+            .map(|(&c, &s)| c + k as f64 * s)
+            .collect()
+    })
+}
+
+/// Revolve a mesh by `n_layers` layers over a total `angle` (radians) — the
+/// rotational companion of [`extrude`].
+///
+/// Every node is swept along the circle it describes about the rotation
+/// centre (2-D) or axis (3-D), and consecutive angular positions are linked
+/// by one layer of cells: SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
+///
+/// - **2-D** (`center` has 2 components): revolution about the point
+///   `center`, counterclockwise for a positive `angle`; `axis` is ignored.
+///   Only SEG2 sources make sense there (a surface would sweep a 3-D solid,
+///   which 2-D coordinates cannot hold).
+/// - **3-D** (`center` has 3 components): revolution about the line through
+///   `center` directed by `axis` (Rodrigues' formula, right-handed about
+///   `axis`); `axis` is required and need not be normalized.
+///
+/// `angle` runs up to a full turn (`|angle| ≤ 2π`); a full turn **closes**
+/// the sweep — the last node layer is the first one again, so the ring has
+/// no seam and no duplicated nodes.
+///
+/// No node may sit on the axis: it would collapse one edge of every cell
+/// touching it into a degenerate (zero-Jacobian) element.
+///
+/// Nodes shared between cells in the source mesh remain shared in the result.
+/// Source nodes are re-used (refcount incremented); the other layers are
+/// newly created. Node ordering per layer is [`extrude`]'s.
+///
+/// A negative `angle` sweeps the cells the other way round and turns them
+/// inside out, just as an `extrude` against the surface normal does — call
+/// [`orient`](fn@super::orient) on the result, or revolve by a positive
+/// angle from the mirrored source.
+pub fn revolve(
+    mesh: &Mesh,
+    angle: f64,
+    n_layers: usize,
+    center: &[f64],
+    axis: Option<&[f64]>,
+) -> Result<Mesh> {
+    const TWO_PI: f64 = std::f64::consts::TAU;
+    // Relative slack on the full-turn test: enough to catch a 360° written
+    // as `2 * PI` or accumulated in degrees, tight enough not to swallow a
+    // deliberately-not-quite-closed sweep.
+    const TURN_TOL: f64 = 1e-9;
+
+    if n_layers == 0 {
+        return Err(PyrucastError::Message(
+            "revolve: n_layers must be ≥ 1".into(),
+        ));
+    }
+    if !angle.is_finite() || angle == 0.0 {
+        return Err(PyrucastError::Message(
+            "revolve: angle must be a non-zero, finite number of radians".into(),
+        ));
+    }
+    if angle.abs() > TWO_PI * (1.0 + TURN_TOL) {
+        return Err(PyrucastError::Message(format!(
+            "revolve: angle {angle} rad exceeds a full turn (|angle| ≤ 2π); \
+             revolve by 2π to close the ring"
+        )));
+    }
+    let closed = (angle.abs() - TWO_PI).abs() <= TWO_PI * TURN_TOL;
+
+    let dim = read(&mesh.coords()?)?.dim() as usize;
+    if center.len() != dim {
+        return Err(PyrucastError::Message(format!(
+            "revolve: center has {} components but the mesh is {}-D",
+            center.len(),
+            dim
+        )));
+    }
+
+    // Unit axis (3-D only); in 2-D the rotation is fully set by `center`.
+    let unit_axis: Option<[f64; 3]> = match dim {
+        2 => None,
+        3 => {
+            let axis = axis.ok_or_else(|| {
+                PyrucastError::Message("revolve: a 3-D mesh needs a rotation axis".into())
+            })?;
+            if axis.len() != 3 {
+                return Err(PyrucastError::Message(format!(
+                    "revolve: axis has {} components but must be 3-D",
+                    axis.len()
+                )));
+            }
+            let norm = (axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]).sqrt();
+            if norm == 0.0 {
+                return Err(PyrucastError::Message(
+                    "revolve: axis must be non-zero".into(),
+                ));
+            }
+            Some([axis[0] / norm, axis[1] / norm, axis[2] / norm])
+        }
+        other => {
+            return Err(PyrucastError::Message(format!(
+                "revolve: only 2-D and 3-D meshes are supported (got {other}-D)"
+            )))
+        }
+    };
+
+    let cols = columns(mesh, "revolve")?;
+
+    // Every node must be off the axis, else the cells touching it collapse.
+    // The test is relative to the widest radius, so it is scale-free.
+    let radius = |p: &[f64]| -> f64 {
+        match unit_axis {
+            None => ((p[0] - center[0]).powi(2) + (p[1] - center[1]).powi(2)).sqrt(),
+            Some(u) => {
+                let v = [p[0] - center[0], p[1] - center[1], p[2] - center[2]];
+                let along = v[0] * u[0] + v[1] * u[1] + v[2] * u[2];
+                (v.iter().map(|x| x * x).sum::<f64>() - along * along)
+                    .max(0.0)
+                    .sqrt()
+            }
+        }
+    };
+    let radii: Vec<f64> = cols.positions.iter().map(|p| radius(p)).collect();
+    let max_radius = radii.iter().cloned().fold(0.0, f64::max);
+    if max_radius == 0.0 || radii.iter().any(|&r| r <= 1e-10 * max_radius) {
+        return Err(PyrucastError::Message(
+            "revolve: some node lies on the rotation axis, which would collapse \
+             the cells touching it (move the source off the axis)"
+                .into(),
+        ));
+    }
+
+    let step = angle / n_layers as f64;
+    layered(mesh, &cols, n_layers, closed, "revolve", |base, k| {
+        let theta = step * k as f64;
+        let (cos, sin) = (theta.cos(), theta.sin());
+        match unit_axis {
+            None => {
+                let (x, y) = (base[0] - center[0], base[1] - center[1]);
+                vec![center[0] + cos * x - sin * y, center[1] + sin * x + cos * y]
+            }
+            Some(u) => {
+                let v = [
+                    base[0] - center[0],
+                    base[1] - center[1],
+                    base[2] - center[2],
+                ];
+                // Rodrigues: v' = v cosθ + (u×v) sinθ + u (u·v)(1−cosθ).
+                let cross = [
+                    u[1] * v[2] - u[2] * v[1],
+                    u[2] * v[0] - u[0] * v[2],
+                    u[0] * v[1] - u[1] * v[0],
+                ];
+                let dot = u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+                let k = dot * (1.0 - cos);
+                vec![
+                    center[0] + v[0] * cos + cross[0] * sin + u[0] * k,
+                    center[1] + v[1] * cos + cross[1] * sin + u[1] * k,
+                    center[2] + v[2] * cos + cross[2] * sin + u[2] * k,
+                ]
+            }
+        }
+    })
 }
 
 /// Sweep between two matching surface meshes to produce a solid mesh —

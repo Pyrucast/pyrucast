@@ -524,6 +524,30 @@ pub fn extrude(mesh: PyRef<PyMesh>, direction: Vec<f64>, n_layers: usize) -> PyR
     Ok(PyMesh { inner: result })
 }
 
+/// Revolve `mesh` by `n_layers` layers over a total `angle` (radians) — the
+/// rotational companion of `extrude`. SEG2 → QUA4, TRI3 → PENTA6,
+/// QUA4 → HEX8.
+///
+/// In 2-D the revolution is about the point `center` (counterclockwise for a
+/// positive `angle`) and `axis` is ignored; in 3-D it is about the line
+/// through `center` directed by `axis` (right-handed), which is then
+/// required. `|angle|` may not exceed a full turn, and a full turn closes the
+/// ring: the last node layer is the first one again, so there is no seam. No
+/// node may lie on the axis — it would collapse the cells touching it.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, angle, n_layers, center, axis=None))]
+pub fn revolve(
+    mesh: PyRef<PyMesh>,
+    angle: f64,
+    n_layers: usize,
+    center: Vec<f64>,
+    axis: Option<Vec<f64>>,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesh::revolve(&mesh.inner, angle, n_layers, &center, axis.as_deref())?;
+    Ok(PyMesh { inner: result })
+}
+
 /// Sweep two matching surface meshes into a solid mesh, building `n_layers`
 /// layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep`:
 /// TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
@@ -1110,6 +1134,18 @@ impl PyMesh {
     /// Voir `pyrucast.mesh.extrude`.
     fn extrude(slf: PyRef<'_, Self>, direction: Vec<f64>, n_layers: usize) -> PyResult<PyMesh> {
         super::mesh::extrude(slf, direction, n_layers)
+    }
+
+    /// Voir `pyrucast.mesh.revolve`.
+    #[pyo3(signature = (angle, n_layers, center, axis=None))]
+    fn revolve(
+        slf: PyRef<'_, Self>,
+        angle: f64,
+        n_layers: usize,
+        center: Vec<f64>,
+        axis: Option<Vec<f64>>,
+    ) -> PyResult<PyMesh> {
+        super::mesh::revolve(slf, angle, n_layers, center, axis)
     }
 
     /// Voir `pyrucast.mesh.sweep_solid`.
