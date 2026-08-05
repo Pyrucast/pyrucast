@@ -9,10 +9,12 @@ La machinerie **commune** à tous les éléments (transformation isoparamétriqu
 Jacobien, gradient physique \\( \partial N_i/\partial x_a \\), passage à la
 matrice élémentaire) est décrite une fois pour toutes au chapitre
 [Espace éléments finis](../fe-space.md#théorie--élément-isoparamétrique) ; les
-fiches ci-dessous ne répètent que ce qui est **propre** à chaque élément. Le
-code source est `containers/finite_element_space/interpolation.rs` (fonctions de
-forme) et `quadrature.rs` (points de Gauss) ; les conventions de repère et de
-numérotation locale vivent dans `atoms/element_type.rs`.
+fiches ci-dessous ne répètent que ce qui est **propre** à chaque élément. Le code
+source de chaque élément tient dans **un fichier**,
+`atoms/element_kind/<nom>.rs` : fonctions de forme, points de Gauss, facettes,
+domaine de référence et codes d'échange y sont réunis. Les conventions de
+repère et de numérotation locale sont documentées sur la variante
+correspondante d'`atoms/element_type.rs`.
 
 Toutes les fiches suivent le **même plan standard** : *introduction* (nombre de
 nœuds, famille, dimensions), **Repère de référence** (domaine + numérotation

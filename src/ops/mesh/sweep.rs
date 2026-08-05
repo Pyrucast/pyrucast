@@ -31,14 +31,24 @@ pub fn sweep(
     element_type: ElementType,
 ) -> Result<Mesh> {
     let qua4 = crate::ops::mesh::sweep_kernel::qua4_between(mesh_a, mesh_b, n_layers)?;
+    finish_surface(qua4, element_type, "sweep")
+}
+
+/// Deliver a `QUA4` grid as the surface type the caller asked for.
+///
+/// The three structured surface meshers — [`sweep`],
+/// [`transfinite`](super::transfinite), [`pave_surface`](super::pave_surface) —
+/// all build a quadrangle grid first and then owe the same five conversions.
+/// `op` only names the operator in the error message.
+pub(super) fn finish_surface(qua4: Mesh, element_type: ElementType, op: &str) -> Result<Mesh> {
     match element_type {
         ElementType::QUA4 => Ok(qua4),
         ElementType::QUA8 => super::to_quadratic(&qua4),
+        ElementType::QUA9 => qua8_to_qua9(&super::to_quadratic(&qua4)?),
         ElementType::TRI3 => qua4_to_tri3(&qua4),
         ElementType::TRI6 => super::to_quadratic(&qua4_to_tri3(&qua4)?),
-        ElementType::QUA9 => qua8_to_qua9(&super::to_quadratic(&qua4)?),
         other => Err(PyrucastError::Message(format!(
-            "sweep: unsupported element type {other} (expected QUA4, TRI3, QUA8, QUA9, TRI6)"
+            "{op}: unsupported element type {other} (expected QUA4, TRI3, QUA8, QUA9, TRI6)"
         ))),
     }
 }

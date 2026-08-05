@@ -1,157 +1,179 @@
 # Ajouter un élément fini
 
-Ce chapitre liste les points de code à toucher pour ajouter un **type
-d'élément** (un `ElementType`), puis le rendre utilisable comme **élément
-fini** (interpolation + quadrature). L'ajout est **purement additif** : on
-étend des `match` exhaustifs, le compilateur signale tout ce qui reste à
-compléter.
+Ce chapitre liste **tous les points de code à toucher** pour ajouter un type
+d'élément. Comme pour [ajouter une physique](../ajouter-une-physique.md), le
+coût est **O(1) fichier** : il ne dépend pas du nombre d'éléments déjà en
+place.
 
-Deux niveaux, indépendants :
+## Le principe en une phrase
 
-1. **Géométrie seule** — une nouvelle variante d'`ElementType` suffit à
-   construire des [`Mesh`](../mesh.md) / `SubMesh` de ce type (connectivité,
-   refcount, viz).
-2. **Élément fini** — pour poser un [`FiniteElementSpace`](../fe-space.md)
-   dessus, il faut en plus une **interpolation** (fonctions de forme) et une
-   **quadrature** (points de Gauss).
+L'énum [`ElementType`](../mesh.md) ne sert qu'au **stockage** et à la
+**sérialisation** ; **tout le comportement** vit dans une struct par élément
+(sous `src/atoms/element_kind/`) qui implémente le trait `ElementKind`. Un
+unique point de dispatch, `ElementType::as_kind()`, relie les deux. Le code
+générique — `skin`, `orient`, `border`, les localisateurs, l'export, le
+rendu — ne fait **jamais** de `match` par variante.
 
-## 1. Le type d'élément — `atoms/element_type.rs`
+```text
+ElementType  (enum : stockage + sérialisation bincode + nom cast3m)
+├── POI1, SEG2, TRI3, …, HEX27
+├── ALL          -> &'static [ElementType]   ← la seule énumération
+└── as_kind(&self) -> &'static dyn ElementKind   ← l'unique match
 
-Ajouter une variante à l'enum `ElementType` et ses métadonnées :
+ElementKind  (trait : le comportement d'un type d'élément)
+├── Identité (requis)
+│   ├── element_type / ref_nodes / reversal_permutation / corner_count
+│   └── nodes_per_cell, topological_dim, is_quadratic  (fournis, tirés de ref_nodes)
+├── Topologie de référence (défaut : rien)
+│   └── facets -> &[Facet] / edges -> &[[usize; 2]]
+├── Domaine de référence (requis)
+│   └── ref_centroid / ref_measure / contains_ref / clamp_ref
+├── Interpolation (requis)
+│   ├── degree -> Option<Interpolation>
+│   ├── shape_into / dshape_into        (formes sans allocation)
+│   └── shape / dshape                  (fournis : surcouche allouante)
+├── Quadrature
+│   ├── gauss -> (Vec, Vec)             (requis)
+│   └── reduced                         (fourni : centroïde × mesure)
+├── Échange (requis)
+│   └── vtk_code / gmsh_code / gmsh_permutation (défaut : None)
+└── Familles (défaut : None)
+    └── quadratic / linear_parent / split_into
+```
 
-- **nombre de nœuds** par cellule ;
-- **dimension topologique** (0 pour POI1, 1 SEG, 2 face, 3 volume) ;
-- **nom court** cast3m (`"PENTA6"`, `"PYR5"`…), utilisé pour le parse / display
-  côté Python (le type est passé en **chaîne** : `pyrucast.Mesh(c, "PENTA6")`).
+## Les étapes
 
-À ce stade, le type est utilisable géométriquement. Aucun wrapper PyO3
-supplémentaire n'est nécessaire — `ElementType` voyage comme une chaîne.
+Ajouter un élément se réduit à **trois** gestes :
 
-> **Exemple concret** : le prisme `PENTA6` (extrusion d'un TRI3) suit
-> exactement ce chapitre, des métadonnées jusqu'à l'export — un bon patron de
-> référence.
+1. **`src/atoms/element_kind/<mon_element>.rs`** (nouveau) — une struct unité
+   et son `impl ElementKind`. Calquer sur `tri3.rs` (cas linéaire le plus
+   court), `tri6.rs` (quadratique, qui délègue son domaine à son parent
+   linéaire) ou `pyra5.rs` (le cas difficile : fonctions de forme
+   rationnelles et quadrature conique).
+2. **`src/atoms/element_kind/mod.rs`** — un `mod <mon_element>;` et un bras
+   dans `as_kind()`.
+3. **`src/atoms/element_type.rs`** — une variante dans l'énum, son rustdoc,
+   et une entrée dans `ElementType::ALL`.
 
-## 2. L'élément de référence
+Rien d'autre. En particulier :
 
-Avant d'écrire les fonctions de forme, **fixer la convention de l'élément de
-référence** (comme dans le tableau de [Espace éléments finis](../fe-space.md)) :
+- **aucun wrapper PyO3** : `ElementType` traverse la frontière en **chaîne**,
+  et `from_name` se déduit de `ALL` + `name()` ;
+- `nodes_per_cell`, `topological_dim` et `from_name` sur `ElementType`
+  délèguent au trait, et n'ont donc pas de bras à compléter ;
+- `skin`, `orient`, `border`, `convert`, `to_quadratic`, l'export VTK, la
+  lecture gmsh, le rendu et la subdivision colorée sont **génériques** et ne
+  changent pas.
 
-- le **repère** \\( \xi \\) (domaine de référence) ;
-- la **numérotation locale** des nœuds (l'ordre dans la connectivité) ;
-- l'**orientation** (CCW pour les faces, ordre des faces pour les volumes).
+Reste à écrire la doc : une fiche `book/src/elements/<nom>.md`, une entrée
+dans `SUMMARY.md`, une ligne dans les deux tableaux de
+[`elements/index.md`](../elements/index.md), et une ligne dans la table de
+correspondance gmsh d'[`operateurs/maillage.md`](../operateurs/maillage.md).
 
-Cette convention doit être **cohérente** avec le reste du code (orientation des
-triangles de `triangulate_surface`, ordre des nœuds produits par `extrude`…). Elle se
-documente dans le rustdoc d'`ElementType` **et** dans le tableau du chapitre
-[Espace éléments finis](../fe-space.md).
+## Ce que le trait demande, et pourquoi
 
-## 3. L'interpolation — `containers/finite_element_space/interpolation.rs`
+### L'élément de référence
 
-Étendre l'enum `Interpolation` (`Lagrange1` pour les types linéaires,
-`Lagrange2` pour les quadratiques) pour le nouveau type :
+`ref_nodes()` est **la donnée racine** : les coordonnées de chaque nœud dans
+le repère \\( \xi \\), dans l'ordre local. Le nombre de nœuds et la dimension
+topologique s'en déduisent, et c'est la vérité contre laquelle tous les tests
+d'invariants recoupent les autres tables.
 
-- `Interpolation::is_compatible_with(element_type)` — déclarer le couple
-  `(ElementType, Interpolation)` supporté ; le **degré** doit correspondre au
-  type (un type linéaire va avec `Lagrange1`, un type quadratique avec
-  `Lagrange2`) ;
-- les **fonctions de forme** \\( N_i(\xi) \\) (propriété de Kronecker
-  \\( N_i(\xi_j) = \delta_{ij} \\)) ;
-- les **dérivées de référence** `dshape_dxi(et, &xi)` — buffer plat row-major
-  \\( \mathtt{dN}[i \times d_r + k] = \partial N_i / \partial \xi_k \\).
+Fixer d'abord la convention — repère, numérotation locale, orientation (CCW
+pour les faces) — et la documenter dans le rustdoc de la variante.
 
-> Un type **quadratique** (TRI6, QUA8, TET10…) se branche sur l'interpolation
-> `Lagrange2` déjà en place. Un ordre encore supérieur (cubique…) demanderait
-> une nouvelle variante `Lagrange3`. Astuce de validation : recouper les
-> dérivées analytiques par différences finies (comme le fait
-> `check_dshape_matches_fd`).
+> **La convention des nœuds milieux.** Tout le code s'appuie dessus : **les
+> coins d'abord, puis un nœud milieu par arête, dans l'ordre de `edges()`**.
+> Le milieu de l'arête `k` est donc toujours à l'indice local
+> `corner_count() + k`. `QUA9` et `HEX27` ajoutent leurs centres de face et de
+> volume après. C'est ce qui permet à `to_quadratic`, au fil de fer et aux
+> facettes quadratiques de se déduire d'une seule table d'arêtes.
 
-Le Jacobien, son déterminant (y compris le cas **manifold** \\( d_s > d_r \\)),
-et les dérivées physiques \\( \partial N_i / \partial x \\) sont **génériques** :
-ils ne dépendent que des dérivées de référence et des coordonnées — rien à
-écrire de spécifique (cf. [Espace éléments finis](../fe-space.md)).
+### Les facettes
 
-## 4. La quadrature — `containers/finite_element_space/quadrature.rs`
+`facets()` rend les facettes orientées vers l'extérieur — les arêtes d'une
+surface, les faces d'un volume. **Une facette est un élément à part entière** :
+une face de `TET10` est un `TRI6`, une face de `HEX27` est un `QUA9`. Le champ
+`nodes` porte donc les nœuds milieux, et `Facet::corners()` restreint aux
+coins — ce sur quoi deux mailles voisines s'accordent quel que soit leur degré,
+donc ce qui sert de clé d'adjacence.
 
-Étendre l'enum `QuadratureRule` (`Gauss`, `Reduced`) pour fournir, par type :
+C'est cette seule table qui alimente `skin`, `orient`, le culling des faces
+cachées et la subdivision du rendu.
 
-- les **points** \\( \xi_g \\) et **poids** \\( w_g \\) de la règle par défaut
-  (`Gauss`), calibrée pour intégrer exactement la matrice de masse Lagrange-1 ;
-- si pertinent, la règle **réduite** (`Reduced`, un point au centroïde — utile
-  par exemple pour le cisaillement d'une poutre, anti-verrouillage).
+### Le domaine de référence
 
-La somme des poids doit valoir la **mesure de référence** de l'élément (2 pour
-SEG2, 1/2 pour TRI3, 8 pour HEX8…) — c'est un test à ajouter.
+`contains_ref` et `clamp_ref` décrivent le domaine et la projection dessus ;
+`ref_centroid` en donne un point intérieur, qui sert **à la fois** de départ
+au Newton d'inversion et de point de la quadrature réduite. `ref_measure` est
+la mesure du domaine, à laquelle les poids de quadrature doivent sommer.
 
-## 5. Validation à la construction
+### L'interpolation
 
-`SubFiniteElementSpace::new` rejette déjà les couples non supportés : un
-nouveau type sans interpolation/quadrature déclarée échouera proprement. Une
-fois les §3 et §4 faits, la construction passe automatiquement.
+`degree()` déclare le degré Lagrange du type — un `TRI6` *est* quadratique, ce
+n'est pas un choix. `shape_into` et `dshape_into` écrivent dans un tampon
+fourni : c'est la forme à implémenter, parce que l'inversion de la géométrie
+(`locate_points`, `project_points`) les appelle dans une boucle de Newton, où
+une allocation par appel dominerait le coût. `shape`/`dshape` sont les
+surcouches allouantes, fournies.
 
-## 6. Visualisation (optionnel) — `viz/`
+Astuce de validation : recouper les dérivées analytiques par différences
+finies, ce que fait déjà `check_dshape_matches_fd` pour tous les types.
 
-Pour tracer le nouveau type :
+Le Jacobien, son déterminant (y compris le cas **manifold**
+\\( d_s > d_r \\)) et les dérivées physiques \\( \partial N_i / \partial x \\)
+sont **génériques** — rien à écrire.
 
-- **`viz/mesh_draw.rs`** — ajouter un bras au `match` de `submesh_primitives`
-  (convertir une cellule en point / arête / face(s)) et compléter
-  `element_edges` (arêtes du fil de fer). Pour un **volume**, définir la table
-  des faces (à l'image de `TET4_FACES` / `HEX8_FACES` / `PENTA6_FACES`) et
-  l'ajouter à `boundary_faces`, pour que seules les faces de peau soient
-  émises (les faces internes, cachées dans le solide opaque, sont retirées).
-- **`viz/subdivide.rs`** — pour le **rendu interpolé** (couleur variant dans
-  l'élément), ajouter les coordonnées de référence des nœuds (`ref_nodes`) et
-  un bras à `subdivide` qui découpe chaque face en sous-triangles. Un prisme
-  réutilise `tri_face` pour ses deux triangles et `quad_face` pour ses trois
-  faces latérales.
+### La quadrature
 
-Sans cela, le maillage reste calculable mais pas traçable.
+`gauss()` rend les points et poids de la règle par défaut, calibrée pour
+intégrer exactement la matrice de masse Lagrange-1 sur un élément droit. La
+règle **réduite** ne s'écrit pas : c'est le défaut du trait, un point au
+centroïde portant toute la mesure.
 
-## 7. Interopérabilité (optionnel)
+## Les tests que vous obtenez gratuitement
 
-Pour que le type traverse les entrées/sorties et les mailleurs :
+`src/atoms/element_kind/mod.rs` porte une batterie d'invariants qui boucle sur
+`ElementType::ALL` — un type neuf y entre le jour où il est déclaré, sans une
+ligne de test à écrire :
 
-- **export VTK** — `ops/export/vtk.rs` : associer le **code de cellule VTK**
-  (`vtk_cell_type`) ; l'ordre local coïncidant avec VTK, la connectivité est
-  copiée telle quelle (prisme = *wedge*, code 13).
-- **lecture gmsh** — `ops/mesh/gmsh.rs` : associer le **code gmsh**
-  (`element_type_from_gmsh`) ; prisme = code 6.
-- **mailleurs producteurs** — un type volumique se fabrique typiquement par
-  extrusion : `ops/mesh/sweep.rs` engendre PENTA6 depuis un TRI3 (via
-  `extrude` et `sweep_solid`, TRI3 → PENTA6 comme QUA4 → HEX8).
+- métadonnées cohérentes entre l'énum et le trait ;
+- nœuds milieux exactement au milieu de leur arête ;
+- arêtes bien formées, tout coin sur au moins une arête ;
+- facettes de codimension 1, du même degré que leur parent, géométriquement
+  cohérentes avec `ref_nodes` ;
+- jeux de coins de facettes distincts ;
+- centroïde intérieur, nœuds de référence dans le domaine, clamp ramenant
+  dedans ;
+- codes VTK et gmsh uniques, permutations gmsh bijectives ;
+- couple linéaire ↔ quadratique réciproque, à coins et arêtes égaux ;
+- somme des poids = mesure de référence ;
+- partition de l'unité, somme des dérivées nulle, Kronecker aux nœuds,
+  dérivées analytiques contre différences finies.
 
-## 8. Tests
+À ajouter à la main : un test de volume sur un élément droit de géométrie
+connue (`containers/finite_element_space/mod.rs` en a un par type), et un
+aller-retour de sérialisation si des données nouvelles apparaissent.
 
-Les invariants vérifiés par les tests des autres types s'appliquent au nouveau,
-et constituent une bonne checklist :
+## Pourquoi garder l'énum
 
-- **partition de l'unité** : \\( \sum_i N_i(\xi) = 1 \\) en tout \\( \xi \\) ;
-- **somme des dérivées nulle** : \\( \sum_i \partial N_i / \partial \xi_k = 0 \\) ;
-- **somme des poids** = mesure de référence ;
-- **déterminant du Jacobien** sur un élément droit de géométrie connue (par
-  exemple \\( |J| = \\) volume × constante) ;
-- round-trip de **sérialisation** (`Persist`) si des données nouvelles sont
-  introduites.
+Même raison que pour les physiques : `bincode` n'est pas auto-descriptif, et
+`typetag` — nécessaire pour sérialiser un `Box<dyn ElementKind>` — ne le
+supporte pas. On perdrait la persistance. L'énum donne en prime
+l'exhaustivité au compilateur sur `as_kind()`. Le trait n'est jamais
+sérialisé : `as_kind()` rend un `&'static`, reconstruit à la volée depuis la
+variante.
 
-## Récapitulatif
+## Ce que ça a coûté, et rapporté
 
-| Étape | Fichier | Obligatoire pour… |
-|---|---|---|
-| variante + métadonnées | `atoms/element_type.rs` | la géométrie |
-| convention de référence | (doc) `element_type.rs` + [fe-space](../fe-space.md) | l'élément fini |
-| fonctions de forme + dérivées | `containers/finite_element_space/interpolation.rs` | l'élément fini |
-| points / poids de Gauss | `containers/finite_element_space/quadrature.rs` | l'élément fini |
-| facettes orientées + nombre de coins | `ops/mesh/orient.rs` | `orient`, `skin`, `border` |
-| domaine de référence (centre, appartenance, projection) | `ops/geom/locate.rs`, `ops/geom/project.rs` | `locate_points`, `project_points` |
-| primitive de rendu + faces/arêtes | `viz/mesh_draw.rs` | la visualisation |
-| rendu interpolé (subdivision) | `viz/subdivide.rs` | la visualisation colorée |
-| code VTK / gmsh | `ops/export/vtk.rs`, `ops/mesh/gmsh.rs` | les entrées/sorties |
-| tests d'invariants | `tests/` / doctests | le merge |
+Avant ce découpage, le savoir d'un élément était réparti sur **une vingtaine
+de fichiers** et recopié jusqu'à quatre fois : les facettes en trois
+exemplaires, les nœuds de référence en quatre, le centroïde en trois. Huit de
+ces tables retombaient sur `_ => None`, donc s'oubliaient sans un mot du
+compilateur — et trois bugs en vivaient (`skin` muet sur `PYRA5` et sur tout
+élément quadratique, un défaut de rendu silencieusement faux, une liste de
+test à taille figée).
 
-Comme pour [ajouter une physique](../ajouter-une-physique.md), tout le code
-**générique** (assemblage, Jacobien, viz hors `match`) reste inchangé.
-
-> **Repère pratique.** Il n'est pas nécessaire de retrouver ces fichiers à la
-> main : ajoutez la variante à l'énumération et `cargo build` énumère lui-même
-> tous les `match` devenus non exhaustifs. Le tableau ci-dessus dit *quoi*
-> écrire dans chacun ; le compilateur dit *où*. Les deux dernières lignes ont
-> précisément été découvertes ainsi en ajoutant [PYRA5](../elements/pyra5.md).
+Ce chapitre listait alors un tableau « quel fichier pour quoi ». Il n'en a
+plus besoin : il n'y a **plus de liste de fichiers à parcourir**, seulement un
+trait à remplir.

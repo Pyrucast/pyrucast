@@ -116,12 +116,9 @@ pub fn pave_surface_cancellable(
     }
 
     let qua4 = materialize(&parsed, fabrics)?;
-    match element_type {
-        ElementType::QUA4 => Ok(qua4),
-        ElementType::QUA8 => super::to_quadratic(&qua4),
-        ElementType::QUA9 => super::sweep::qua8_to_qua9(&super::to_quadratic(&qua4)?),
-        _ => unreachable!("element type already validated"),
-    }
+    // The quad family only; the up-front validation above already rejected
+    // anything else, so the error arm is unreachable here.
+    super::sweep::finish_surface(qua4, element_type, "pave_surface")
 }
 
 /// Turn the per-domain fabrics into a `Mesh` on the contour's own `Coords`.

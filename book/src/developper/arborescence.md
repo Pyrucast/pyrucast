@@ -29,7 +29,12 @@ src/
 │   ├── node.rs         # Node (accesseur RAII) + NodeId
 │   ├── cell.rs         # Cell (désigne une maille d'un SubMesh)
 │   ├── element.rs      # Element (désigne un élément d'un SubFiniteElementSpace)
-│   ├── element_type.rs # enum ElementType + métadonnées
+│   ├── element_type.rs # enum ElementType (stockage, sérialisation, ALL, as_kind)
+│   ├── element_kind/   # UN FICHIER PAR ÉLÉMENT + le trait qui les lie
+│   │   ├── mod.rs          # trait ElementKind, Facet, as_kind()
+│   │   ├── interpolation.rs# enum Interpolation (façade sur ElementKind::degree)
+│   │   ├── quadrature.rs   # enum QuadratureRule (façade + briques partagées)
+│   │   └── tri3.rs, tri6.rs, hex8.rs, …  # un par type d'élément
 │   ├── point.rs        # Point2 / Point3 / Vector2 / Vector3 (nalgebra)
 │   ├── band.rs         # Band (bande de valeurs ge/gt/le/lt — mask, select)
 │   └── color.rs        # RgbColor (couleur de face, viz)
@@ -38,9 +43,7 @@ src/
 │   ├── mod.rs
 │   ├── mesh.rs         # Mesh, SubMesh
 │   ├── finite_element_space/
-│   │   ├── mod.rs          # FiniteElementSpace, SubFiniteElementSpace
-│   │   ├── interpolation.rs# enum Interpolation (Lagrange1, fonctions de forme)
-│   │   └── quadrature.rs   # enum QuadratureRule (Gauss, Reduced)
+│   │   └── mod.rs          # FiniteElementSpace, SubFiniteElementSpace
 │   ├── field.rs        # traits Field / SubField (contrat commun des champs)
 │   ├── node_field.rs   # NodeField / SubNodeField
 │   ├── element_field.rs# ElementField / SubElementField
@@ -211,7 +214,7 @@ trait `SubModelKind` — voir [Ajouter une physique](../ajouter-une-physique.md)
 
 | Pour ajouter… | Toucher principalement |
 |---|---|
-| un type d'élément | `atoms/element_type.rs`, `containers/finite_element_space/{interpolation,quadrature}.rs` ([guide](ajouter-un-element-fini.md)) |
+| un type d'élément | `atoms/element_kind/<nom>.rs` + 2 lignes dans `atoms/element_kind/mod.rs` + 2 dans `atoms/element_type.rs` ([guide](ajouter-un-element-fini.md)) |
 | une physique | `models/<nom>.rs` + 2 lignes dans `containers/model.rs` + 1 dans `py/model.rs` ([guide](../ajouter-une-physique.md)) |
 | un opérateur | `ops/<conteneur produit>/<nom>.rs` + son wrapper `py/ops/<même module>.rs` + son ré-export dans `python/pyrucast/<même module>.py` |
 | un objet conteneur | `containers/<nom>.rs` + `py/<nom>.rs` + son ré-export dans `python/pyrucast/__init__.py` + un chapitre de doc |

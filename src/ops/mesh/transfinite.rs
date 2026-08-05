@@ -31,16 +31,7 @@ pub fn transfinite(
     element_type: ElementType,
 ) -> Result<Mesh> {
     let qua4 = transfinite_qua4(side1, side2, side3, side4)?;
-    match element_type {
-        ElementType::QUA4 => Ok(qua4),
-        ElementType::QUA8 => super::to_quadratic(&qua4),
-        ElementType::TRI3 => super::sweep::qua4_to_tri3(&qua4),
-        ElementType::TRI6 => super::to_quadratic(&super::sweep::qua4_to_tri3(&qua4)?),
-        ElementType::QUA9 => super::sweep::qua8_to_qua9(&super::to_quadratic(&qua4)?),
-        other => Err(PyrucastError::Message(format!(
-            "transfinite: unsupported element type {other} (expected QUA4, TRI3, QUA8, QUA9, TRI6)"
-        ))),
-    }
+    super::sweep::finish_surface(qua4, element_type, "transfinite")
 }
 
 fn transfinite_qua4(side1: &Mesh, side2: &Mesh, side3: &Mesh, side4: &Mesh) -> Result<Mesh> {

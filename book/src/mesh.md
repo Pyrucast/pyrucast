@@ -50,8 +50,8 @@ Lagrange complets (`QUA9`/`HEX27` = quadrangle/hexaèdre bi-/tri-quadratiques,
 avec nœuds de face et central). Ils se posent avec l'interpolation `LAGRANGE2`
 (cf. [Espace éléments finis](fe-space.md)).
 
-Ajouter un nouveau type d'élément est purement additif (nouvelle variante +
-métadonnées dans `src/atoms/element_type.rs`) — voir
+Ajouter un nouveau type d'élément est purement additif : un fichier
+`src/atoms/element_kind/<nom>.rs` et une variante — voir
 [Ajouter un élément fini](developper/ajouter-un-element-fini.md).
 
 ## Cellule (`Cell`)
