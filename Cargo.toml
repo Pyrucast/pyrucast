@@ -71,6 +71,10 @@ criterion = "0.5"
 name = "parallel"
 harness = false
 
+[[bench]]
+name = "geom"
+harness = false
+
 [features]
 # Compile the Python binding code (the `#[pyclass]` wrappers etc.). Pulls
 # in the optional `pyo3` dependency. On its own, pyo3 links to libpython

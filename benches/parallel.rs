@@ -36,6 +36,19 @@ use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOptions};
 use pyrucast::store::insert;
 
+/// Grid side for the assembly / integration groups.
+///
+/// Sized so the heaviest operation of the group runs for a few hundred
+/// milliseconds. A benchmark that finishes in a few milliseconds cannot be
+/// trusted here: two runs of *identical* code on this machine differ by up to
+/// ±18 % at that scale, which is more than any change worth measuring.
+const ASSEMBLY_N: usize = 400; // 160 000 QUA4 cells
+
+/// Grid side for the solver group, sized on the same principle. The direct
+/// factorisation grows much faster than the assembly, so it needs its own,
+/// smaller mesh.
+const SOLVER_N: usize = 200; // 40 401 unknowns
+
 /// Everything an elasticity benchmark needs on one grid.
 struct Grid {
     model: Model,
@@ -178,24 +191,28 @@ fn spd_system(n: usize) -> (Matrix, NodeField) {
 }
 
 fn bench_assembly(c: &mut Criterion) {
-    let g = elasticity_grid(40); // 1600 QUA4 cells
-    c.bench_function("stiffness elasticity 40x40 QUA4", |b| {
-        b.iter(|| black_box(pyrucast::ops::matrix::stiffness(&g.model, &g.materials).unwrap()))
-    });
-    c.bench_function("integrate elasticity 40x40 QUA4", |b| {
-        b.iter(|| {
-            black_box(
-                pyrucast::ops::element_field::behavior::integrate(
-                    &g.model,
-                    &g.strain,
-                    None,
-                    &g.materials,
-                    None,
+    let g = elasticity_grid(ASSEMBLY_N);
+    c.bench_function(
+        &format!("stiffness elasticity {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
+        |b| b.iter(|| black_box(pyrucast::ops::matrix::stiffness(&g.model, &g.materials).unwrap())),
+    );
+    c.bench_function(
+        &format!("integrate elasticity {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
+        |b| {
+            b.iter(|| {
+                black_box(
+                    pyrucast::ops::element_field::behavior::integrate(
+                        &g.model,
+                        &g.strain,
+                        None,
+                        &g.materials,
+                        None,
+                    )
+                    .unwrap(),
                 )
-                .unwrap(),
-            )
-        })
-    });
+            })
+        },
+    );
 }
 
 /// Plane vs axisymmetric on the same geometry, over the four operations the
@@ -216,7 +233,7 @@ fn bench_axisymmetric(c: &mut Criterion) {
         ("plane", ElasticityModel::PlaneStrain),
         ("axisymmetric", ElasticityModel::Axisymmetric),
     ] {
-        let g = elasticity_grid_with(40, kind);
+        let g = elasticity_grid_with(ASSEMBLY_N, kind);
         let state = pyrucast::ops::element_field::behavior::integrate(
             &g.model,
             &g.strain,
@@ -226,53 +243,75 @@ fn bench_axisymmetric(c: &mut Criterion) {
         )
         .unwrap();
 
-        c.bench_function(&format!("stiffness {tag} 40x40 QUA4"), |b| {
-            b.iter(|| black_box(pyrucast::ops::matrix::stiffness(&g.model, &g.materials).unwrap()))
-        });
-        c.bench_function(&format!("deformation {tag} 40x40 QUA4"), |b| {
-            b.iter(|| black_box(element_field::deformation(&g.displacement, &g.fespace).unwrap()))
-        });
-        c.bench_function(&format!("integrate {tag} 40x40 QUA4"), |b| {
-            b.iter(|| {
-                black_box(
-                    pyrucast::ops::element_field::behavior::integrate(
-                        &g.model,
-                        &g.strain,
-                        None,
-                        &g.materials,
-                        None,
+        c.bench_function(
+            &format!("stiffness {tag} {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
+            |b| {
+                b.iter(|| {
+                    black_box(pyrucast::ops::matrix::stiffness(&g.model, &g.materials).unwrap())
+                })
+            },
+        );
+        c.bench_function(
+            &format!("deformation {tag} {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
+            |b| {
+                b.iter(|| {
+                    black_box(element_field::deformation(&g.displacement, &g.fespace).unwrap())
+                })
+            },
+        );
+        c.bench_function(
+            &format!("integrate {tag} {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
+            |b| {
+                b.iter(|| {
+                    black_box(
+                        pyrucast::ops::element_field::behavior::integrate(
+                            &g.model,
+                            &g.strain,
+                            None,
+                            &g.materials,
+                            None,
+                        )
+                        .unwrap(),
                     )
-                    .unwrap(),
-                )
-            })
-        });
-        c.bench_function(&format!("internal_forces {tag} 40x40 QUA4"), |b| {
-            b.iter(|| {
-                black_box(pyrucast::ops::node_field::internal_forces(&state, &g.model).unwrap())
-            })
-        });
+                })
+            },
+        );
+        c.bench_function(
+            &format!("internal_forces {tag} {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
+            |b| {
+                b.iter(|| {
+                    black_box(pyrucast::ops::node_field::internal_forces(&state, &g.model).unwrap())
+                })
+            },
+        );
     }
 }
 
 fn bench_solver(c: &mut Criterion) {
-    let n = 30; // 961 unknowns
+    let n = SOLVER_N;
     let no_cache = SolveOptions {
         method: SolveMethod::Lu,
         cache: false,
     };
 
     // Fresh factorization on every solve.
-    c.bench_function("solve 30x30 fresh factorization", |b| {
-        let (m, rhs) = spd_system(n);
-        b.iter(|| black_box(solve_with_options(&m, &rhs, &no_cache).unwrap()))
-    });
+    c.bench_function(
+        &format!("solve {SOLVER_N}x{SOLVER_N} fresh factorization"),
+        |b| {
+            let (m, rhs) = spd_system(n);
+            b.iter(|| black_box(solve_with_options(&m, &rhs, &no_cache).unwrap()))
+        },
+    );
 
     // Cached factorization: warm once, then every iteration reuses the factors.
-    c.bench_function("solve 30x30 cached factorization", |b| {
-        let (m, rhs) = spd_system(n);
-        let _ = solve(&m, &rhs).unwrap(); // warm the cache
-        b.iter(|| black_box(solve(&m, &rhs).unwrap()))
-    });
+    c.bench_function(
+        &format!("solve {SOLVER_N}x{SOLVER_N} cached factorization"),
+        |b| {
+            let (m, rhs) = spd_system(n);
+            let _ = solve(&m, &rhs).unwrap(); // warm the cache
+            b.iter(|| black_box(solve(&m, &rhs).unwrap()))
+        },
+    );
 }
 
 criterion_group!(benches, bench_assembly, bench_axisymmetric, bench_solver);
