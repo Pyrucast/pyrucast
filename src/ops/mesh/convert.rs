@@ -29,34 +29,17 @@ use crate::store::{insert, read};
 /// so faces shared by two hexahedra are cut along the same diagonal and the
 /// result stays conforming. Local HEX8 order: bottom face `0-1-2-3` CCW, top
 /// face `4-5-6-7` CCW (node `k+4` above node `k`).
-const HEX8_TO_TET4: [[usize; 4]; 6] = [
-    [0, 1, 2, 6],
-    [0, 2, 3, 6],
-    [0, 3, 7, 6],
-    [0, 7, 4, 6],
-    [0, 4, 5, 6],
-    [0, 5, 1, 6],
-];
-
 /// The cells of the `target` split of one cell of `src`, as local
-/// corner-index tuples — or `None` when `src == target` (handled as a copy).
+/// corner-index tuples. Read off the element itself.
 ///
 /// Returns an error for any unsupported `(src, target)` pair.
 fn split_of(src: ElementType, target: ElementType) -> Result<&'static [&'static [usize]]> {
-    match (src, target) {
-        (ElementType::QUA4, ElementType::TRI3) => Ok(&[&[0, 1, 2], &[0, 2, 3]]),
-        (ElementType::HEX8, ElementType::TET4) => Ok(&[
-            &HEX8_TO_TET4[0],
-            &HEX8_TO_TET4[1],
-            &HEX8_TO_TET4[2],
-            &HEX8_TO_TET4[3],
-            &HEX8_TO_TET4[4],
-            &HEX8_TO_TET4[5],
-        ]),
-        (s, t) => Err(PyrucastError::Message(format!(
-            "convert: no {s} → {t} conversion (supported: identity, QUA4 → TRI3, HEX8 → TET4)"
-        ))),
-    }
+    src.as_kind().split_into(target).ok_or_else(|| {
+        PyrucastError::Message(format!(
+            "convert: no {src} → {target} conversion (supported: identity, \
+             QUA4 → TRI3, HEX8 → TET4)"
+        ))
+    })
 }
 
 /// Convert every submesh of `mesh` to `target`, splitting each cell into cells

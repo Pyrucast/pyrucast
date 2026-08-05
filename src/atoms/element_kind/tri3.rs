@@ -119,4 +119,16 @@ impl ElementKind for Tri3 {
             vec![1.0 / 6.0; 3],
         )
     }
+
+    fn vtk_code(&self) -> u8 {
+        5 // VTK_TRIANGLE
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        2
+    }
+
+    fn quadratic(&self) -> Option<ElementType> {
+        Some(ElementType::TRI6)
+    }
 }

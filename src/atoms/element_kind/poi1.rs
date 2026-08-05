@@ -59,4 +59,12 @@ impl ElementKind for Poi1 {
     fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
         (Vec::new(), Vec::new())
     }
+
+    fn vtk_code(&self) -> u8 {
+        1 // VTK_VERTEX
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        15
+    }
 }

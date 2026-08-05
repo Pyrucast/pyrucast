@@ -89,6 +89,18 @@ impl ElementKind for Qua9 {
     fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
         Qua8.gauss()
     }
+
+    fn vtk_code(&self) -> u8 {
+        28 // VTK_BIQUADRATIC_QUAD
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        10
+    }
+
+    fn linear_parent(&self) -> Option<ElementType> {
+        Some(ElementType::QUA4)
+    }
 }
 
 /// 1-D quadratic Lagrange basis on `[-1, 1]` at `t`, nodes `-1, 0, +1`.

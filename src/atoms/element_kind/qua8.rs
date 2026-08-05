@@ -143,4 +143,16 @@ impl ElementKind for Qua8 {
         }
         (xi, wt)
     }
+
+    fn vtk_code(&self) -> u8 {
+        23 // VTK_QUADRATIC_QUAD
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        16
+    }
+
+    fn linear_parent(&self) -> Option<ElementType> {
+        Some(ElementType::QUA4)
+    }
 }

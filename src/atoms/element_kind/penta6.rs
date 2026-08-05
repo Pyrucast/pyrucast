@@ -164,4 +164,16 @@ impl ElementKind for Penta6 {
         }
         (xi, w)
     }
+
+    fn vtk_code(&self) -> u8 {
+        13 // VTK_WEDGE
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        6
+    }
+
+    fn quadratic(&self) -> Option<ElementType> {
+        Some(ElementType::PENTA15)
+    }
 }

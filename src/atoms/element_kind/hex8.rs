@@ -148,4 +148,28 @@ impl ElementKind for Hex8 {
         }
         (xi, vec![1.0; 8])
     }
+
+    fn vtk_code(&self) -> u8 {
+        12 // VTK_HEXAHEDRON
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        5
+    }
+
+    fn quadratic(&self) -> Option<ElementType> {
+        Some(ElementType::HEX20)
+    }
+
+    /// Six tetrahedra round the main diagonal 0-6.
+    fn split_into(&self, target: ElementType) -> Option<&'static [&'static [usize]]> {
+        (target == ElementType::TET4).then_some(&[
+            &[0, 1, 2, 6],
+            &[0, 2, 3, 6],
+            &[0, 3, 7, 6],
+            &[0, 7, 4, 6],
+            &[0, 4, 5, 6],
+            &[0, 5, 1, 6],
+        ])
+    }
 }

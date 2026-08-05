@@ -209,4 +209,12 @@ impl ElementKind for Pyra5 {
         }
         (xi, w)
     }
+
+    fn vtk_code(&self) -> u8 {
+        14 // VTK_PYRAMID
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        7
+    }
 }

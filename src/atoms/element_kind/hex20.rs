@@ -187,4 +187,22 @@ impl ElementKind for Hex20 {
         }
         (xi, wt)
     }
+
+    fn vtk_code(&self) -> u8 {
+        25 // VTK_QUADRATIC_HEXAHEDRON
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        17
+    }
+
+    fn gmsh_permutation(&self) -> Option<&'static [usize]> {
+        Some(&[
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 9, 16, 18, 19, 17, 10, 12, 14, 15,
+        ])
+    }
+
+    fn linear_parent(&self) -> Option<ElementType> {
+        Some(ElementType::HEX8)
+    }
 }

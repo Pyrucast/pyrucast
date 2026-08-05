@@ -118,4 +118,21 @@ impl ElementKind for Qua4 {
             vec![1.0; 4],
         )
     }
+
+    fn vtk_code(&self) -> u8 {
+        9 // VTK_QUAD
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        3
+    }
+
+    fn quadratic(&self) -> Option<ElementType> {
+        Some(ElementType::QUA8)
+    }
+
+    /// Cut along the diagonal 0-2.
+    fn split_into(&self, target: ElementType) -> Option<&'static [&'static [usize]]> {
+        (target == ElementType::TRI3).then_some(&[&[0, 1, 2], &[0, 2, 3]])
+    }
 }

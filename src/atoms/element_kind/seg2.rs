@@ -67,4 +67,16 @@ impl ElementKind for Seg2 {
         let a = 1.0 / 3.0_f64.sqrt();
         (vec![-a, a], vec![1.0, 1.0])
     }
+
+    fn vtk_code(&self) -> u8 {
+        3 // VTK_LINE
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        1
+    }
+
+    fn quadratic(&self) -> Option<ElementType> {
+        Some(ElementType::SEG3)
+    }
 }

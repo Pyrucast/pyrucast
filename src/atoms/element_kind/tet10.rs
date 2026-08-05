@@ -161,4 +161,21 @@ impl ElementKind for Tet10 {
         }
         (xi, w)
     }
+
+    fn vtk_code(&self) -> u8 {
+        24 // VTK_QUADRATIC_TETRA
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        11
+    }
+
+    /// gmsh swaps the last two mid-edge nodes.
+    fn gmsh_permutation(&self) -> Option<&'static [usize]> {
+        Some(&[0, 1, 2, 3, 4, 5, 6, 7, 9, 8])
+    }
+
+    fn linear_parent(&self) -> Option<ElementType> {
+        Some(ElementType::TET4)
+    }
 }

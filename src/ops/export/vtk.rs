@@ -49,28 +49,11 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::Path;
 
-/// VTK legacy cell-type code for a pyrucast element type.
+/// VTK legacy cell-type code for a pyrucast element type — read off the
+/// element itself, which also documents why the connectivity needs no
+/// reordering (pyrucast's local node order *is* VTK's).
 fn vtk_cell_type(et: ElementType) -> u8 {
-    match et {
-        ElementType::POI1 => 1,
-        ElementType::SEG2 => 3,
-        ElementType::TRI3 => 5,
-        ElementType::QUA4 => 9,
-        ElementType::TET4 => 10,
-        ElementType::PYRA5 => 14, // VTK_PYRAMID
-        ElementType::PENTA6 => 13,
-        ElementType::HEX8 => 12,
-        // Quadratic types: pyrucast's node order already matches VTK's, so
-        // the connectivity is written verbatim (corners then mid-edges).
-        ElementType::SEG3 => 21,    // VTK_QUADRATIC_EDGE
-        ElementType::TRI6 => 22,    // VTK_QUADRATIC_TRIANGLE
-        ElementType::QUA8 => 23,    // VTK_QUADRATIC_QUAD
-        ElementType::TET10 => 24,   // VTK_QUADRATIC_TETRA
-        ElementType::HEX20 => 25,   // VTK_QUADRATIC_HEXAHEDRON
-        ElementType::PENTA15 => 26, // VTK_QUADRATIC_WEDGE
-        ElementType::QUA9 => 28,    // VTK_BIQUADRATIC_QUAD
-        ElementType::HEX27 => 29,   // VTK_TRIQUADRATIC_HEXAHEDRON
-    }
+    et.as_kind().vtk_code()
 }
 
 /// VTK array names cannot carry spaces; swap them for underscores.

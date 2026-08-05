@@ -113,4 +113,16 @@ impl ElementKind for Tet4 {
             vec![1.0 / 24.0; 4],
         )
     }
+
+    fn vtk_code(&self) -> u8 {
+        10 // VTK_TETRA
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        4
+    }
+
+    fn quadratic(&self) -> Option<ElementType> {
+        Some(ElementType::TET10)
+    }
 }

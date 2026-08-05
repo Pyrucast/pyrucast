@@ -113,4 +113,16 @@ impl ElementKind for Tri6 {
     fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
         tri6_gauss()
     }
+
+    fn vtk_code(&self) -> u8 {
+        22 // VTK_QUADRATIC_TRIANGLE
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        9
+    }
+
+    fn linear_parent(&self) -> Option<ElementType> {
+        Some(ElementType::TRI3)
+    }
 }

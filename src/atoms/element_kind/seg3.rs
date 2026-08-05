@@ -64,4 +64,16 @@ impl ElementKind for Seg3 {
         let (p, w) = gauss3_1d();
         (p.to_vec(), w.to_vec())
     }
+
+    fn vtk_code(&self) -> u8 {
+        21 // VTK_QUADRATIC_EDGE
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        8
+    }
+
+    fn linear_parent(&self) -> Option<ElementType> {
+        Some(ElementType::SEG2)
+    }
 }

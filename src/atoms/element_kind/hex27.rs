@@ -138,6 +138,27 @@ impl ElementKind for Hex27 {
     fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
         Hex20.gauss()
     }
+
+    fn vtk_code(&self) -> u8 {
+        29 // VTK_TRIQUADRATIC_HEXAHEDRON
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        12
+    }
+
+    fn gmsh_permutation(&self) -> Option<&'static [usize]> {
+        Some(&[
+            0, 1, 2, 3, 4, 5, 6, 7, // corners
+            8, 11, 13, 9, 16, 18, 19, 17, 10, 12, 14, 15, // edges (as HEX20)
+            22, 23, 21, 24, 20, 25, // faces (x-, x+, y-, y+, z-, z+)
+            26, // body centre
+        ])
+    }
+
+    fn linear_parent(&self) -> Option<ElementType> {
+        Some(ElementType::HEX8)
+    }
 }
 
 /// (ξ, η, ζ) position of each node as indices into the 1-D quadratic basis

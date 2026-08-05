@@ -73,33 +73,20 @@ fn err(msg: impl Into<String>) -> PyrucastError {
 
 /// Map a gmsh element-type code to a pyrucast [`ElementType`].
 fn element_type_from_gmsh(code: u32) -> Result<ElementType> {
-    Ok(match code {
-        1 => ElementType::SEG2,
-        2 => ElementType::TRI3,
-        3 => ElementType::QUA4,
-        4 => ElementType::TET4,
-        5 => ElementType::HEX8,
-        6 => ElementType::PENTA6,
-        7 => ElementType::PYRA5,
-        15 => ElementType::POI1,
-        8 => ElementType::SEG3,
-        9 => ElementType::TRI6,
-        16 => ElementType::QUA8,
-        10 => ElementType::QUA9,
-        11 => ElementType::TET10,
-        17 => ElementType::HEX20,
-        18 => ElementType::PENTA15,
-        12 => ElementType::HEX27,
-        other => {
-            return Err(err(format!(
-                "gmsh: unsupported element type {other} (supported: 1=SEG2, \
-                 2=TRI3, 3=QUA4, 4=TET4, 5=HEX8, 6=PENTA6, 7=PYRA5, 15=POI1; \
-                 quadratic: \
-                 8=SEG3, 9=TRI6, 16=QUA8, 10=QUA9, 11=TET10, 17=HEX20, \
-                 18=PENTA15, 12=HEX27)"
-            )))
-        }
-    })
+    ElementType::ALL
+        .iter()
+        .copied()
+        .find(|et| et.as_kind().gmsh_code() == code)
+        .ok_or_else(|| {
+            let known: Vec<String> = ElementType::ALL
+                .iter()
+                .map(|et| format!("{}={et}", et.as_kind().gmsh_code()))
+                .collect();
+            err(format!(
+                "gmsh: unsupported element type {code} (supported: {})",
+                known.join(", ")
+            ))
+        })
 }
 
 /// Permutation mapping a gmsh element's node order to pyrucast's (VTK) order:
@@ -110,20 +97,7 @@ fn element_type_from_gmsh(code: u32) -> Result<ElementType> {
 /// (and the face nodes of `HEX27`) in a different order than VTK; these tables
 /// realign them (same convention as meshio).
 fn gmsh_node_permutation(et: ElementType) -> Option<&'static [usize]> {
-    match et {
-        ElementType::TET10 => Some(&[0, 1, 2, 3, 4, 5, 6, 7, 9, 8]),
-        ElementType::HEX20 => Some(&[
-            0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 9, 16, 18, 19, 17, 10, 12, 14, 15,
-        ]),
-        ElementType::PENTA15 => Some(&[0, 1, 2, 3, 4, 5, 6, 9, 7, 12, 14, 13, 8, 10, 11]),
-        ElementType::HEX27 => Some(&[
-            0, 1, 2, 3, 4, 5, 6, 7, // corners
-            8, 11, 13, 9, 16, 18, 19, 17, 10, 12, 14, 15, // edges (as HEX20)
-            22, 23, 21, 24, 20, 25, // faces (x-, x+, y-, y+, z-, z+)
-            26, // body center
-        ]),
-        _ => None,
-    }
+    et.as_kind().gmsh_permutation()
 }
 
 // ─── Parsed (pure) representation ────────────────────────────────────────────

@@ -18,55 +18,18 @@ use crate::store::{insert, read};
 use std::collections::HashMap;
 
 /// The quadratic element type of a linear one, together with its edges as
-/// local corner-index pairs — **in the mid-edge node order** expected by the
-/// quadratic type (see [`crate::atoms::element_type`]).
-fn quadratic_of(et: ElementType) -> Result<(ElementType, &'static [(usize, usize)])> {
-    Ok(match et {
-        ElementType::SEG2 => (ElementType::SEG3, &[(0, 1)]),
-        ElementType::TRI3 => (ElementType::TRI6, &[(0, 1), (1, 2), (2, 0)]),
-        ElementType::QUA4 => (ElementType::QUA8, &[(0, 1), (1, 2), (2, 3), (3, 0)]),
-        ElementType::TET4 => (
-            ElementType::TET10,
-            &[(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)],
-        ),
-        ElementType::PENTA6 => (
-            ElementType::PENTA15,
-            &[
-                (0, 1),
-                (1, 2),
-                (2, 0),
-                (3, 4),
-                (4, 5),
-                (5, 3),
-                (0, 3),
-                (1, 4),
-                (2, 5),
-            ],
-        ),
-        ElementType::HEX8 => (
-            ElementType::HEX20,
-            &[
-                (0, 1),
-                (1, 2),
-                (2, 3),
-                (3, 0),
-                (4, 5),
-                (5, 6),
-                (6, 7),
-                (7, 4),
-                (0, 4),
-                (1, 5),
-                (2, 6),
-                (3, 7),
-            ],
-        ),
-        other => {
-            return Err(PyrucastError::Message(format!(
-                "to_quadratic: {other} has no quadratic counterpart \
-                 (supported: SEG2, TRI3, QUA4, TET4, PENTA6, HEX8)"
-            )))
-        }
-    })
+/// local corner-index pairs.
+///
+/// Both come straight from the element: the mid-side node of edge `k` sits at
+/// local index `corner_count() + k`, so the edge list *is* the mid-edge node
+/// order the quadratic type expects (see [`crate::atoms::element_kind`]).
+fn quadratic_of(et: ElementType) -> Result<(ElementType, &'static [[usize; 2]])> {
+    match et.as_kind().quadratic() {
+        Some(q) => Ok((q, et.as_kind().edges())),
+        None => Err(PyrucastError::Message(format!(
+            "to_quadratic: {et} has no quadratic counterpart"
+        ))),
+    }
 }
 
 /// Build the quadratic copy of a linear `mesh`.
@@ -102,7 +65,7 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
             // Corners first (re-used; `add_cell` will incref them).
             nodes.extend_from_slice(cell);
             // Then one mid-edge node per edge, in the quadratic node order.
-            for &(a, b) in edges {
+            for &[a, b] in edges {
                 let (na, nb) = (cell[a], cell[b]);
                 let key = if na.0 <= nb.0 { (na, nb) } else { (nb, na) };
                 let mid_id = match mid.get(&key) {

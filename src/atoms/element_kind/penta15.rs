@@ -199,4 +199,20 @@ impl ElementKind for Penta15 {
         }
         (xi, w)
     }
+
+    fn vtk_code(&self) -> u8 {
+        26 // VTK_QUADRATIC_WEDGE
+    }
+
+    fn gmsh_code(&self) -> u32 {
+        18
+    }
+
+    fn gmsh_permutation(&self) -> Option<&'static [usize]> {
+        Some(&[0, 1, 2, 3, 4, 5, 6, 9, 7, 12, 14, 13, 8, 10, 11])
+    }
+
+    fn linear_parent(&self) -> Option<ElementType> {
+        Some(ElementType::PENTA6)
+    }
 }

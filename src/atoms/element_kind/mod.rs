@@ -185,6 +185,45 @@ pub trait ElementKind: Sync {
     /// every type at once.
     fn gauss(&self) -> (Vec<f64>, Vec<f64>);
 
+    // ── Interchange (required) ──────────────────────────────────────────
+
+    /// Legacy-VTK cell-type code. pyrucast's local node order **is** VTK's, so
+    /// [`crate::ops::export`] writes the connectivity verbatim.
+    fn vtk_code(&self) -> u8;
+
+    /// gmsh element-type code, the other direction of the same contract.
+    fn gmsh_code(&self) -> u32;
+
+    /// Permutation mapping a gmsh cell's node order to pyrucast's:
+    /// `pyrucast[i] = gmsh[perm[i]]`. `None` (the default) when the two orders
+    /// already coincide — every linear type, plus `SEG3`/`TRI6`/`QUA8`/`QUA9`.
+    /// gmsh numbers the mid-side nodes of the quadratic volumes differently.
+    fn gmsh_permutation(&self) -> Option<&'static [usize]> {
+        None
+    }
+
+    // ── Families (provided: standing alone) ─────────────────────────────
+
+    /// This type's quadratic counterpart, if it has one: `TRI3` → `TRI6`.
+    /// The mid-side nodes to create are exactly this element's
+    /// [`edges`](Self::edges), in order.
+    fn quadratic(&self) -> Option<ElementType> {
+        None
+    }
+
+    /// This type's linear parent, if it is quadratic: `TRI6` → `TRI3`. Both
+    /// `QUA8` and `QUA9` answer `QUA4`.
+    fn linear_parent(&self) -> Option<ElementType> {
+        None
+    }
+
+    /// How one cell of this type splits into cells of `target`, as local
+    /// corner-index tuples — `HEX8` into six `TET4`, say. `None` when no such
+    /// split is defined.
+    fn split_into(&self, _target: ElementType) -> Option<&'static [&'static [usize]]> {
+        None
+    }
+
     // ── Provided: derived from ref_nodes ────────────────────────────────
 
     /// Number of nodes per cell.
@@ -420,6 +459,94 @@ mod tests {
                 let mut key = facet.corners().to_vec();
                 key.sort_unstable();
                 assert!(seen.insert(key), "{et}: facet {f} duplicates another");
+            }
+        }
+    }
+
+    /// Interchange codes identify a type: two elements sharing a VTK or gmsh
+    /// code would make an export ambiguous and a read wrong. `gmsh_code` in
+    /// particular is now looked up by scanning, so a duplicate would silently
+    /// shadow one of the two.
+    #[test]
+    fn interchange_codes_are_unique() {
+        let mut vtk = std::collections::HashMap::new();
+        let mut gmsh = std::collections::HashMap::new();
+        for &et in ElementType::ALL {
+            let k = et.as_kind();
+            if let Some(other) = vtk.insert(k.vtk_code(), et) {
+                panic!("{et} and {other} share VTK code {}", k.vtk_code());
+            }
+            if let Some(other) = gmsh.insert(k.gmsh_code(), et) {
+                panic!("{et} and {other} share gmsh code {}", k.gmsh_code());
+            }
+        }
+    }
+
+    /// A gmsh permutation must be a bijection of the element's nodes —
+    /// otherwise a read silently drops or duplicates connectivity.
+    #[test]
+    fn gmsh_permutations_are_bijections() {
+        for &et in ElementType::ALL {
+            let k = et.as_kind();
+            let Some(perm) = k.gmsh_permutation() else {
+                continue;
+            };
+            assert_eq!(perm.len(), k.nodes_per_cell(), "{et}: permutation length");
+            let mut seen = vec![false; perm.len()];
+            for &i in perm {
+                assert!(i < perm.len(), "{et}: index {i} out of range");
+                assert!(!seen[i], "{et}: index {i} repeated");
+                seen[i] = true;
+            }
+        }
+    }
+
+    /// The two directions of the linear ↔ quadratic pairing must agree, and a
+    /// quadratic type must really be its parent's degree bumped: same corner
+    /// count, same edges, one mid-side node per edge.
+    #[test]
+    fn the_quadratic_pairing_is_consistent() {
+        for &et in ElementType::ALL {
+            let k = et.as_kind();
+            if let Some(q) = k.quadratic() {
+                let qk = q.as_kind();
+                assert_eq!(qk.linear_parent(), Some(et), "{et} → {q} is not mutual");
+                assert!(qk.is_quadratic(), "{q} is not quadratic");
+                assert_eq!(qk.corner_count(), k.corner_count(), "{et} → {q}: corners");
+                assert_eq!(qk.edges(), k.edges(), "{et} → {q}: edges");
+                assert_eq!(
+                    qk.nodes_per_cell(),
+                    k.corner_count() + k.edges().len(),
+                    "{et} → {q}: one mid-side node per edge"
+                );
+            }
+            if let Some(l) = k.linear_parent() {
+                let lk = l.as_kind();
+                assert!(!lk.is_quadratic(), "{l} is not linear");
+                assert_eq!(lk.corner_count(), k.corner_count(), "{q}: corners", q = et);
+                assert_eq!(lk.edges(), k.edges(), "{et} ← {l}: edges");
+            }
+        }
+    }
+
+    /// A split names cells of the target type, built from the source's corners.
+    #[test]
+    fn splits_are_well_formed() {
+        for &src in ElementType::ALL {
+            for &target in ElementType::ALL {
+                let Some(cells) = src.as_kind().split_into(target) else {
+                    continue;
+                };
+                let want = target.as_kind().corner_count();
+                for cell in cells {
+                    assert_eq!(cell.len(), want, "{src} → {target}: cell arity");
+                    for &n in *cell {
+                        assert!(
+                            n < src.as_kind().corner_count(),
+                            "{src} → {target}: node {n} is not a corner"
+                        );
+                    }
+                }
             }
         }
     }
