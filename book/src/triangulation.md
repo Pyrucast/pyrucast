@@ -19,7 +19,7 @@ avec la convention d'indices modulo \\(n\\). Le signe de \\(A\\) encode l'orient
 Implémentation : `signed_area` dans `src/ops/mesh/triangulation.rs`.
 
 ```rust,ignore
-use pyrucast::mesh::point::Point2;
+use pyrucast::atoms::Point2;
 use pyrucast::ops::mesh::triangulation::signed_area;
 
 // Carré unitaire CCW — aire = +1.
@@ -43,7 +43,7 @@ assert!((signed_area(&pts_cw) + 1.0).abs() < 1e-12);
 La fonction `ear_clip_2d` est utilisable indépendamment de `triangulate_surface` sur n'importe quel polygone 2D simple :
 
 ```rust,ignore
-use pyrucast::mesh::point::Point2;
+use pyrucast::atoms::Point2;
 use pyrucast::ops::mesh::triangulation::ear_clip_2d;
 
 // Pentagone CCW quelconque.
@@ -87,7 +87,7 @@ L'orientation est détectée d'abord via \\(A\\) ; si \\(A < 0\\), on parcourt l
 ## Plan moyen et base locale : usage direct
 
 ```rust,ignore
-use pyrucast::mesh::point::Point3;
+use pyrucast::atoms::Point3;
 use pyrucast::ops::mesh::triangulation::{newell_normal, in_plane_basis};
 
 // Triangle dans le plan y = 0 (plan xz).
@@ -189,7 +189,7 @@ Les fonctions du module `pyrucast::ops::mesh::triangulation` sont utilisables in
 ### Delaunay pur
 
 ```rust,ignore
-use pyrucast::mesh::point::Point2;
+use pyrucast::atoms::Point2;
 use pyrucast::ops::mesh::triangulation::delaunay_2d;
 
 let pts = vec![
@@ -207,7 +207,7 @@ println!("{} triangles", triangles.len());
 ### Delaunay contraint (CDT) avec trous
 
 ```rust,ignore
-use pyrucast::mesh::point::Point2;
+use pyrucast::atoms::Point2;
 use pyrucast::ops::mesh::triangulation::triangulate_polygon_with_holes;
 
 // Contour extérieur : carré 4×4.
@@ -232,7 +232,7 @@ println!("{} triangles", triangles.len());
 ### CDT avec raffinement de Ruppert
 
 ```rust,ignore
-use pyrucast::mesh::point::Point2;
+use pyrucast::atoms::Point2;
 use pyrucast::ops::mesh::triangulation::{
     triangulate_polygon_with_holes_refined, RefinementOptions,
 };

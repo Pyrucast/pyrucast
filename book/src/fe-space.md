@@ -287,10 +287,10 @@ Constructeur principal — Lagrange-1 partout, quadrature de Gauss par défaut :
 
 ```rust,ignore
 use pyrucast::coords::Coords;
-use pyrucast::mesh::element_type::ElementType;
-use pyrucast::finite_element_space::FiniteElementSpace;
-use pyrucast::mesh::{Mesh, SubMesh};
-use pyrucast::mesh::node::Node;
+use pyrucast::atoms::ElementType;
+use pyrucast::containers::finite_element_space::FiniteElementSpace;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
+use pyrucast::atoms::Node;
 use pyrucast::store::{insert, read};
 
 let coords = insert(Coords::new(2).unwrap());
@@ -316,8 +316,8 @@ for g in 0..s.gauss_count() {
 Constructeur explicite — utile pour mélanger les interpolations / quadratures par sous-maillage :
 
 ```rust,ignore
-use pyrucast::finite_element_space::interpolation::Interpolation;
-use pyrucast::finite_element_space::quadrature::QuadratureRule;
+use pyrucast::atoms::Interpolation;
+use pyrucast::atoms::QuadratureRule;
 
 let fes = FiniteElementSpace::with(
     mesh_h,

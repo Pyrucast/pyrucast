@@ -29,7 +29,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
-| `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (TET4/PENTA6/HEX8) en faces `TRI3`/`QUA4`, **une par face plane** du solide (voir plus bas) |
+| `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (tout type, y compris `PYRA5` et les quadratiques) en faces de **même degré**, **une par face plane** du solide (voir plus bas) |
 | `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
 | `invert(mesh)` | **inverse** l'orientation de toutes les cellules, toute dimension, équivalent Cast3M `INVE` (voir plus bas) |
 | `elements_on(mesh, points, strict=True)` | les **éléments** de `mesh` qui s'**appuient** sur les nœuds de `points` (voir plus bas) |
@@ -1353,9 +1353,13 @@ Côté Rust, `ops::mesh::border(&mesh, angle_deg)`.
 ## Peau d'un volume : `skin`
 
 `skin(mesh, angle_deg=None)` est le pendant **3D** de `border` : il prend un
-maillage volumique (cellules `TET4` / `PENTA6` / `HEX8`) et renvoie sa **peau**
-— la surface extérieure — découpée en **faces planes**, un sous-maillage par
-face.
+maillage volumique et renvoie sa **peau** — la surface extérieure — découpée en
+**faces planes**, un sous-maillage par face.
+
+Il accepte **tous** les types volumiques : `TET4`, `PYRA5`, `PENTA6`, `HEX8` et
+leurs homologues quadratiques `TET10`, `PENTA15`, `HEX20`, `HEX27`. Chaque
+élément déclare lui-même ses facettes, si bien qu'aucun type n'est laissé de
+côté.
 
 Une facette d'élément volumique (une face de `TET4`, de `HEX8`, …) utilisée par
 **exactement une** cellule est une facette de bord ; les facettes intérieures
@@ -1365,11 +1369,19 @@ planes** : deux facettes adjacentes (partageant une arête) appartiennent à la
 même face tant qu'elles restent **quasi coplanaires** — l'angle entre leurs
 normales sortantes est inférieur ou égal à `angle_deg` degrés (défaut **1°**).
 
-Chaque groupe devient un sous-maillage `TRI3` et/ou `QUA4` (une face mêlant
-triangles et quadrangles, p. ex. à une interface `TET4`/`HEX8`, en produit un de
-chaque). Un cube donne ainsi six sous-maillages, un prisme cinq (deux chapeaux
-triangulaires, trois flancs quadrangulaires). Les facettes conservent leur
-orientation sortante ; les nœuds d'origine sont réutilisés (et re-référencés).
+**Une facette est émise dans son propre type** : un `HEX8` donne des `QUA4`,
+un `TET10` donne des `TRI6`, un `HEX27` des `QUA9`. La peau d'un maillage
+quadratique est donc elle-même quadratique et **conserve ses nœuds milieux** —
+on peut la remailler ou poser un chargement dessus sans perdre le degré.
+L'appariement des facettes se décide sur leurs **coins**, ce sur quoi deux
+mailles voisines s'accordent quel que soit leur degré.
+
+Chaque groupe devient un sous-maillage par type de facette (une face mêlant
+triangles et quadrangles, p. ex. à une interface `PYRA5`/`HEX8`, en produit un
+de chaque). Un cube donne ainsi six sous-maillages, un prisme cinq (deux
+chapeaux triangulaires, trois flancs quadrangulaires), une pyramide cinq (la
+base carrée et quatre triangles). Les facettes conservent leur orientation
+sortante ; les nœuds d'origine sont réutilisés (et re-référencés).
 
 ```python
 import pyrucast
@@ -1391,8 +1403,8 @@ print(peau.element_types())  # ['TRI3', 'TRI3', 'QUA4', 'QUA4', 'QUA4', 'QUA4']
 Un `angle_deg` plus grand regroupe des faces plus courbées (un cylindre facetté
 devient une seule paroi) ; un `angle_deg` proche de 0 isole chaque facette. Les
 sous-maillages POI1 sont ignorés. La fonction lève une erreur si le maillage n'a
-aucune cellule volumique, s'il porte des cellules autres que
-POI1/TET4/PENTA6/HEX8, ou si l'espace n'est pas 3D.
+aucune cellule volumique, s'il porte des cellules de dimension topologique
+inférieure (surface, ligne), ou si l'espace n'est pas 3D.
 
 Côté Rust, `ops::mesh::skin(&mesh, angle_deg)`.
 

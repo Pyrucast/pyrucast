@@ -68,9 +68,9 @@ Exemple Rust :
 
 ```rust,ignore
 use pyrucast::coords::Coords;
-use pyrucast::mesh::element_type::ElementType;
-use pyrucast::mesh::SubMesh;
-use pyrucast::mesh::node::Node;
+use pyrucast::atoms::ElementType;
+use pyrucast::containers::mesh::SubMesh;
+use pyrucast::atoms::Node;
 use pyrucast::store::insert;
 use pyrucast::viz::View;
 use std::path::Path;
@@ -129,9 +129,9 @@ Chaque `SubMesh` porte une propriété `face_color` (type `RgbColor`, format `(r
 Côté Rust :
 
 ```rust,ignore
-use pyrucast::mesh::color::RgbColor;
-use pyrucast::mesh::element_type::ElementType;
-use pyrucast::mesh::SubMesh;
+use pyrucast::atoms::RgbColor;
+use pyrucast::atoms::ElementType;
+use pyrucast::containers::mesh::SubMesh;
 
 let mut sm = SubMesh::new(coords, ElementType::TRI3);
 sm.set_face_color(RgbColor::new(220, 60, 60));

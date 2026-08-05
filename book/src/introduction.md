@@ -60,9 +60,9 @@ Exemple minimal en Rust :
 
 ```rust,ignore
 use pyrucast::coords::Coords;
-use pyrucast::mesh::element_type::ElementType;
-use pyrucast::mesh::{Mesh, SubMesh};
-use pyrucast::mesh::node::Node;
+use pyrucast::atoms::ElementType;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
+use pyrucast::atoms::Node;
 use pyrucast::store::insert;
 
 let coords = insert(Coords::new(2).unwrap());

@@ -81,6 +81,13 @@ dérivées, jacobien y compris le cas *manifold*, quadratures `Gauss` et
 `Reduced` — plus la quadrature conique Gauss × Jacobi de la pyramide.
 Axisymétrie portée par `Coords` et intégrée dans la seule mesure `det_j_w`.
 
+Chaque type tient dans **un fichier** `atoms/element_kind/<nom>.rs` implémentant
+le trait `ElementKind` — nœuds de référence, facettes, arêtes, domaine,
+interpolation, quadrature, codes VTK/gmsh, familles. Un unique `match`,
+`ElementType::as_kind()`, relie l'énum au comportement, sur le modèle de
+`SubModel::as_kind()` côté physiques : ajouter un élément coûte un fichier et
+deux variantes, et aucun consommateur générique ne change.
+
 ## Physiques — 13 sous-modèles
 
 Thermique : `HeatConduction`, `Convection` (échange de surface / film).
@@ -199,7 +206,59 @@ matrices.
   symétriques — le drapeau de symétrie existe déjà sur la `Matrix`, et
   `SolveMethod` est le point d'extension prévu.
 - **Passe performance** sur gros maillage, avec les benchs (`benches/parallel.rs`,
-  `script/scaling.sh`) comme instrument.
+  `benches/geom.rs`, `script/scaling.sh`) comme instrument.
+- **Allocateur global** — voir ci-dessous.
+
+### Allocateur global : reprendre les défauts de page des gros champs
+
+**Le problème.** Un opérateur qui produit un champ rend un conteneur **neuf**.
+Sur un maillage sérieux, ce conteneur est énorme : `behavior::integrate` sur
+3,61 M de QUA4 en axisymétrique rend 462 Mo (4 points de Gauss × 4 composantes
+× 8 octets). Au-delà de son seuil, glibc sert un tel bloc par `mmap` et le rend
+par `munmap` au `Drop`. La mémoire revient donc au noyau à chaque appel, et
+l'appel suivant la **refault page par page** : 112 812 pages de 4 Ko, une par
+page, une fois par appel.
+
+Mesuré (`perf stat`, grille 1900×1900) : **11,9 M de défauts de page** pour une
+centaine d'appels — exactement le compte théorique, donc ni fuite ni gaspillage,
+simplement le tarif d'allouer un demi-gigaoctet neuf. Chaque défaut coûte
+**1,07 µs** (entrée noyau, allocation d'une page, remise à zéro de 4 Ko, mise à
+jour de la table), soit **120 ms par appel, ~15 % d'un appel de 819 ms**. La
+bande passante effective tombe à 560 Mo/s : l'opération n'est pas limitée par le
+débit mémoire mais par la latence de remise en service des pages.
+
+Ça ne concerne pas que les benchs : une boucle de Newton ou un transitoire
+rappelle `integrate` à chaque itération, et paie donc à chaque itération.
+
+**La solution.** Remplacer l'allocateur global par un allocateur à arènes
+(`mimalloc` ou `jemalloc`), en une ligne dans `lib.rs` :
+
+```rust
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+```
+
+**Pourquoi ça aide.** Un allocateur à arènes **conserve** les blocs libérés au
+lieu de les rendre au noyau, et les recycle au tour suivant. Les pages restent
+donc mappées : on ne les faulte qu'au premier appel. Vérifié en relevant
+`MALLOC_MMAP_THRESHOLD_`, qui produit le même effet sur glibc — **11,9 M → 402 k
+défauts, soit 30×**, à nombre d'instructions rigoureusement constant (3,506 G vs
+3,511 G). C'est bien du temps noyau supprimé, pas du calcul déplacé.
+
+L'intérêt dépasse `integrate` : l'assemblage et les matrices allouent bien plus
+gros, et profiteraient du même recyclage. C'est aussi portable macOS et Windows,
+là où le réglage `mallopt` équivalent ne vaudrait que pour glibc.
+
+**Ce qu'il en coûte.** Une dépendance de plus au socle, et une empreinte
+résidente plus haute puisque les arènes sont conservées — à surveiller vis-à-vis
+du swap, qui existe précisément pour tenir la mémoire. À mesurer avant/après sur
+`benches/` **et** sur la RSS, pas seulement sur le temps.
+
+**L'alternative, plus profonde.** Une forme `integrate_into(&mut champ, …)` qui
+réutilise le champ du tour précédent supprimerait l'allocation elle-même, pas
+seulement ses défauts. Mais elle élargit le seam `Domain::integrate_behavior`,
+alors que le contrat veut qu'un auteur de physique n'écrive que
+`integrate_point` — chantier de conception à part entière.
 
 ## Sauvegarde et reprise
 
