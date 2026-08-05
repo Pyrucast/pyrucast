@@ -21,6 +21,3 @@ courantes (ajouter une physique, ajouter un élément fini).
   `ElementType`, son interpolation et sa quadrature.
 - [Interrompre une fonction](developper/interrompre-une-fonction.md) — le jeton
   `Cancel` : un `Ctrl+C` ou un *timeout* qui arrête une boucle longue.
-
-La feuille de route (décisions d'architecture verrouillées, état des lieux,
-pistes futures) est dans `ROADMAP.md` à la racine du dépôt.

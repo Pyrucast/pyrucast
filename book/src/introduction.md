@@ -91,8 +91,3 @@ mesh = pyrucast.Mesh(c, "SEG2")
 mesh.unit().add_cell([a, b])
 print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
 ```
-
-## Feuille de route
-
-`ROADMAP.md`, à la racine du dépôt, dresse l'état des lieux — ce qui est fait
-et disponible — puis les pistes envisagées pour la suite.

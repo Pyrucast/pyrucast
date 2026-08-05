@@ -127,7 +127,6 @@ python/pyrucast/
 Cargo.toml          # crate (cdylib + rlib), features, dépendances approuvées
 pyproject.toml      # côté maturin (python-source = python, module-name)
 CONVENTIONS.md      # règles de code (source de la page Conventions)
-ROADMAP.md          # décisions d'architecture, état des lieux, pistes
 script/check.sh     # enchaîne toutes les vérifications
 tests/              # tests d'intégration Rust (*.rs) + tests Python (python/)
 examples/           # scripts Python complets (thermique, treillis, poutres…)
