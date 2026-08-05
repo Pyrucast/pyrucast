@@ -32,7 +32,7 @@
 //! reads the measured hoop `ε_θθ = u_r/r`.
 //!
 //! As for plasticity, the Newton loop driving the load increments lives in
-//! Python (see `ROADMAP.md`); this module provides the point-wise update only.
+//! Python, not in Rust; this module provides the point-wise update only.
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;

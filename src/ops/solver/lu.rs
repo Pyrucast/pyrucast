@@ -1,23 +1,24 @@
-//! Dense linear solver: `A · x = b`.
+//! Sparse direct linear solver: `A · x = b`.
 //!
-//! This module bridges the abstract [`Matrix`] / [`NodeField`] objects
-//! and the dense linear algebra of [`nalgebra`]. It exposes a single
-//! free function — [`solve`] — that:
+//! This module bridges the abstract [`Matrix`] / [`NodeField`] objects and the
+//! sparse linear algebra of [`faer`]. It exposes a single free function —
+//! [`solve`] — that:
 //!
-//! 1. converts the assembled `Matrix` to a dense [`nalgebra::DMatrix`];
+//! 1. converts the assembled `Matrix` to a CSC (`nalgebra_sparse`), then to a
+//!    faer `SparseColMat`;
 //! 2. reads a right-hand-side vector out of the `NodeField`, one entry
 //!    per **row DOF** of the matrix (zones resolved first-found; missing
 //!    entries default to `0.0`);
-//! 3. runs a standard LU factorization (`nalgebra::DMatrix::lu`);
+//! 3. runs a multithreaded **sparse LU** factorization with partial pivoting;
 //! 4. wraps the solution back into a fresh single-zone `NodeField`
 //!    indexed by the **column DOFs** of the matrix.
 //!
-//! This is the minimal harness needed to validate the assembly of
-//! [`crate::containers::model::Model`] end-to-end (Poisson 1-D, etc.). A richer
-//! `LinearSolver` trait (iterative methods, sparse direct factorization,
-//! preconditioners) belongs to Phase 3 of the roadmap and will sit on
-//! top of `nalgebra-sparse` (CSR / CSC views are already available on
-//! `Matrix`).
+//! The factorization is **reusable**: it is cached inside the `Matrix`
+//! ([`SolveOptions::cache`]), so a Newton loop or a multi-load-case run pays
+//! for it once and only redoes descent / back-substitution afterwards —
+//! *factor once, solve many*. [`SolveMethod`] is the seam through which another
+//! back-end (iterative, preconditioned) could be selected later without
+//! touching the call sites.
 //!
 //! # Example
 //!

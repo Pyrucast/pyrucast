@@ -253,8 +253,8 @@ L'assemblage (`stiffness` / `mass`) et la résolution (`solve`) sont des
 **opérateurs** : ils consomment le `Model` (et le matériau, le chargement) et
 sont décrits dans la partie [Détail des opérateurs](operateurs.md) —
 [Assemblage](operateurs/assemblage.md) et [Solveur](operateurs/solveur.md). Le
-solveur fourni est un harnais LU dense ; un `LinearSolver` enfichable arrivera
-en Phase 3.
+solveur est une LU creuse directe (faer), dont la factorisation est mise en
+cache sur la `Matrix` — *factoriser une fois, résoudre souvent*.
 
 Des exemples **complets et à solution analytique** (assemblage + contraintes +
 lecture des inconnues et des réactions) sont déroulés dans
@@ -263,7 +263,25 @@ lecture des inconnues et des réactions) sont déroulés dans
 
 ## Limitations actuelles
 
-- **Mass non assemblée** : `assemble::mass(model)` retourne une matrice vide en v0. L'intégrande `∫ ρc_p · N_i N_j dx` (et son équivalent pour les autres physiques) est additif et sera ajouté quand le besoin transient se présentera.
-- **Physiques disponibles** : `HeatConduction` et `Convection` (échange de surface / film) ([thermique](thermique.md)), `Truss`, `LinearElasticity`, `Timoshenko`, `Frame`, `Frame3d` ([mécanique](mecanique.md)) et les contraintes `Dirichlet` et `Mpc` ([contraintes](contraintes.md)). Toute nouvelle physique est une struct implémentant `SubModelKind` (une variante de l'énum `SubModel` + un bras de `as_kind`, rien d'autre — cf. [Ajouter une physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier, indépendant du nombre de physiques existantes.
-- **Pas de check de cohérence pré-assemblage** : la consistance (matériau définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre sub-models, etc.) est vérifiée au moment de `assemble::stiffness` / `assemble::mass`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose problème, un check eager est facile à ajouter.
-- **Solveur dense seulement** : le `solve` fourni est un harnais de test (LU dense via `nalgebra`). Pour les vrais problèmes Phase 3 introduira un trait `LinearSolver` enfichable (itératifs, direct creux, factorisation Cholesky pour les cas symétriques détectés via le drapeau de la `Matrix`).
+- **Physiques disponibles** : `HeatConduction` et `Convection` (échange de
+  surface / film) ([thermique](thermique.md)) ; `Truss`, `Elasticity`,
+  `Plasticity`, `Mazars`, `Timoshenko`, `Frame`, `Frame3d`
+  ([mécanique](mecanique.md)) ; et les contraintes `Dirichlet`, `Mpc`,
+  `Embedded`, `Contact` ([contraintes](contraintes.md)). Toute nouvelle physique
+  est une struct implémentant `SubModelKind` (une variante de l'énum `SubModel`
+  + un bras de `as_kind`, rien d'autre — cf. [Ajouter une
+  physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier,
+  indépendant du nombre de physiques existantes.
+- **Toutes les physiques n'ont pas tous les genres de matrice** : chacune
+  déclare les `MatrixKind` qu'elle sait produire (raideur, masse, raideur
+  géométrique, tangente cohérente). Assembler un genre qu'une physique n'a pas
+  ne casse rien — elle ne contribue simplement pas.
+- **Pas de check de cohérence pré-assemblage** : la consistance (matériau
+  définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre
+  sub-models, etc.) est vérifiée au moment de `matrix.stiffness` /
+  `matrix.mass`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose
+  problème, un check eager est facile à ajouter.
+- **Un seul back-end de solveur** : la résolution passe par une LU creuse
+  directe (faer), avec cache de factorisation. Ni méthode itérative, ni
+  factorisation Cholesky exploitant le drapeau de symétrie de la `Matrix` —
+  `SolveMethod` est le point d'extension prévu pour cela.

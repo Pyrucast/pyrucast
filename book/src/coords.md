@@ -175,8 +175,9 @@ configurations pour les variantes (référence / déformée / prédite). Des
 
 Une permutation optionnelle (`Vec<u32>`, longueur = `capacity`) sépare
 l'**ordre solveur** de l'**identité** : `permutation[node_id]` donne l'ordre
-solveur associé. La Phase 4 (renumérotation Cuthill–McKee) la calculera pour
-réduire la bande/profil. L'identité (`NodeId`) n'est jamais modifiée.
+solveur associé. Elle est posée par l'appelant aujourd'hui ; une renumérotation
+réduisant la bande/profil (Cuthill–McKee) la calculera. L'identité (`NodeId`)
+n'est jamais modifiée, dans les deux cas.
 
 Rust :
 
@@ -190,7 +191,7 @@ write(&coords).unwrap().add_node(&[0.0, 0.0]).unwrap();
 write(&coords).unwrap().add_node(&[1.0, 0.0]).unwrap();
 write(&coords).unwrap().add_node(&[0.5, 1.0]).unwrap();
 
-// Permutation manuelle (Cuthill–McKee automatique en Phase 4).
+// Permutation posée à la main (le calcul automatique reste à écrire).
 write(&coords).unwrap().set_permutation(vec![2, 0, 1]).unwrap();
 // permutation[0] = 2 : le nœud d'id 0 est en position solveur 2.
 println!("{:?}", read(&coords).unwrap().permutation());

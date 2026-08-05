@@ -1,7 +1,7 @@
 //! pyrucast — finite-element library: Rust core, Python API.
 //!
-//! Inspired by cast3m principles. The phased roadmap and conventions live
-//! in `ROADMAP.md` (repository root) and in the mdbook.
+//! Inspired by cast3m principles. The API conventions live in
+//! `CONVENTIONS.md` (repository root) and in the mdbook.
 //!
 //! # Conventions
 //!

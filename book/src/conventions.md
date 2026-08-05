@@ -241,7 +241,7 @@ assert_eq!(original, restored);
 
 Le swap disque des objets pyrucast (Coords, SubMesh, NodeField…) passe par ce même mécanisme sans intervention de l'utilisateur.
 
-> **Python** : `Persist` n'est pas exposé côté Python — c'est une brique interne du store. La sérialisation des objets depuis Python passera par une API `Session::save` / `Session::load` (Phase 5).
+> **Python** : `Persist` n'est pas exposé côté Python — c'est une brique interne du store. La sérialisation des objets depuis Python passera par une API de sauvegarde / relecture de la session, encore à écrire.
 
 ## Definition of Done par objet
 

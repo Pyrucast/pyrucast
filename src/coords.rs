@@ -29,8 +29,9 @@
 //!
 //! An optional permutation (`Vec<u32>`) separates the **solver order**
 //! from the **identity**: `permutation[node_id]` is the solver-order index
-//! assigned to `node_id`. Phase 4 (Cuthill–McKee renumbering) will
-//! recompute it; the identity (`NodeId`) is never modified.
+//! assigned to `node_id`. It is set by the caller today; a bandwidth-reducing
+//! renumbering (Cuthill–McKee) will compute it. The identity (`NodeId`) is
+//! never modified either way.
 //!
 //! # Multiple configurations
 //!

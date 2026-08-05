@@ -189,7 +189,7 @@ pyrucast.store.set_swap_dir(pathlib.Path("/data/pyrucast_swap"))
 print(pyrucast.store.swap_dir())  # /data/pyrucast_swap
 ```
 
-> `swap_out` sur un objet individuel reste côté Rust pour l'instant. L'API Python exposera une fonction de haut niveau (Phase 5) pour déclencher l'éviction depuis un script.
+> `swap_out` sur un objet individuel reste côté Rust pour l'instant. L'API Python exposera une fonction de haut niveau, encore à écrire, pour déclencher l'éviction depuis un script.
 
 ### États du slot
 
@@ -282,7 +282,7 @@ Marquer les nœuds atteignables impose de parcourir **tous les `SubMesh` du stor
 - `Node::clone`/`drop` : un verrou + une indexation `Vec<u32>`. Sensible *seulement* si on clone/drop beaucoup de `Node` en boucle serrée (rare en FE — on construit le maillage, puis on n'y touche plus).
 - **Complexité conceptuelle** : la logique de rollback dans `add_cell` et la doctrine « deux niveaux de refcount » pèsent plus sur la lisibilité que sur le CPU.
 
-**Choix pyrucast** : refcount pour l'instant. Si la complexité devient gênante, le levier le plus rentable n'est **pas** de remplacer le mécanisme mais de **simplifier le contrat de `Node`** (option 2 ci-dessus, mode cast3m-pur) — cela supprime à la fois le refcount *et* la logique de rollback, sans nécessiter de recharger les objets swappés. À garder en tête pour une éventuelle Phase 7 si on observe que les `Node` « loose » sont peu utilisés en pratique.
+**Choix pyrucast** : refcount pour l'instant. Si la complexité devient gênante, le levier le plus rentable n'est **pas** de remplacer le mécanisme mais de **simplifier le contrat de `Node`** (option 2 ci-dessus, mode cast3m-pur) — cela supprime à la fois le refcount *et* la logique de rollback, sans nécessiter de recharger les objets swappés. À garder en tête si on observe que les `Node` « loose » sont peu utilisés en pratique.
 
 ## Limites connues et évolution prévue
 
@@ -306,7 +306,7 @@ Le store actuel est une fondation correcte mais il a trois angles morts, déjà 
 
 ### Stratégie d'évolution
 
-Le store actuel reste la **bonne fondation** — on ne le remplacera pas. Les évolutions ci-dessus seront ajoutées **quand le besoin se mesure**, pas par anticipation. La séquence prévue, à confirmer par les premières mesures de Phase 6 (durcissement) :
+Le store actuel reste la **bonne fondation** — on ne le remplacera pas. Les évolutions ci-dessus seront ajoutées **quand le besoin se mesure**, pas par anticipation. La séquence prévue, à confirmer par les premières mesures de montée en charge :
 
 1. **D'abord (A)** : indirection + compactage déplaçant, quand des cycles intensifs montreront concrètement des hauts plateaux mémoire. ~100 lignes, ne change pas l'API publique.
 2. **Ensuite (B)** : priorité + éviction automatique, le jour où le swap manuel deviendra insuffisant (typiquement sur les premiers solveurs sur gros maillage).

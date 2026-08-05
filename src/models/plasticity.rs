@@ -32,7 +32,8 @@
 //! that `σ_zz` is then part of the Voigt dual and must **not** be echoed as extra
 //! state.
 //!
-//! Following the locked architecture decision (see `ROADMAP.md`), the Newton
+//! Following the locked architecture decision — non-linear algorithms are
+//! orchestrated in Python, not in Rust — the Newton
 //! loop driving these increments lives in Python; this module provides the
 //! point-wise constitutive update **and** the consistent algorithmic tangent
 //! `D_alg` (emitted alongside the stress, consumed by
