@@ -398,28 +398,19 @@ mod tests {
         }
     }
 
-    /// Every non-POI1 element type, for parametric quadrature tests.
-    const ALL_FE_TYPES: [ElementType; 15] = [
-        ElementType::SEG2,
-        ElementType::TRI3,
-        ElementType::QUA4,
-        ElementType::TET4,
-        ElementType::PYRA5,
-        ElementType::PENTA6,
-        ElementType::HEX8,
-        ElementType::SEG3,
-        ElementType::TRI6,
-        ElementType::QUA8,
-        ElementType::TET10,
-        ElementType::PENTA15,
-        ElementType::HEX20,
-        ElementType::QUA9,
-        ElementType::HEX27,
-    ];
+    /// Every element type carrying a reference frame (i.e. all but `POI1`),
+    /// for the parametric quadrature tests. Derived from
+    /// [`ElementType::ALL`] so a new type is covered the day it is declared.
+    fn all_fe_types() -> impl Iterator<Item = ElementType> {
+        ElementType::ALL
+            .iter()
+            .copied()
+            .filter(|et| et.topological_dim() > 0)
+    }
 
     #[test]
     fn weights_sum_to_reference_volume() {
-        for et in ALL_FE_TYPES {
+        for et in all_fe_types() {
             let (_xi, w) = QuadratureRule::Gauss.points(et).unwrap();
             let s: f64 = w.iter().sum();
             let expected = ref_volume(et);
@@ -435,7 +426,7 @@ mod tests {
 
     #[test]
     fn buffer_layouts() {
-        for et in ALL_FE_TYPES {
+        for et in all_fe_types() {
             let n_g = QuadratureRule::Gauss.point_count(et).unwrap();
             let (xi, w) = QuadratureRule::Gauss.points(et).unwrap();
             assert_eq!(w.len(), n_g);

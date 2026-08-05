@@ -140,6 +140,36 @@ pub enum ElementType {
 }
 
 impl ElementType {
+    /// Every variant, in declaration order.
+    ///
+    /// The single list the rest of the crate iterates over: parsing
+    /// ([`from_name`](Self::from_name)) and the exhaustiveness tests read it
+    /// rather than repeating a literal array that a new variant would silently
+    /// miss. Adding a variant means extending **this** slice — nothing else
+    /// enumerates the element types.
+    ///
+    /// It includes `POI1`, which has no reference frame; a consumer that wants
+    /// only the types carrying one filters on
+    /// [`topological_dim`](Self::topological_dim) `> 0`.
+    pub const ALL: &'static [ElementType] = &[
+        Self::POI1,
+        Self::SEG2,
+        Self::TRI3,
+        Self::QUA4,
+        Self::TET4,
+        Self::PENTA6,
+        Self::PYRA5,
+        Self::HEX8,
+        Self::SEG3,
+        Self::TRI6,
+        Self::QUA8,
+        Self::TET10,
+        Self::PENTA15,
+        Self::HEX20,
+        Self::QUA9,
+        Self::HEX27,
+    ];
+
     /// Number of nodes per cell for this element type.
     pub fn nodes_per_cell(self) -> usize {
         match self {
@@ -243,26 +273,13 @@ impl ElementType {
     }
 
     /// Parse from a short name (case-insensitive).
+    ///
+    /// Derived from [`ALL`](Self::ALL) and [`name`](Self::name), so a new
+    /// variant is parsable as soon as it is declared — there is no separate
+    /// string table to keep in step.
     pub fn from_name(s: &str) -> Option<Self> {
-        match s.to_ascii_uppercase().as_str() {
-            "POI1" => Some(Self::POI1),
-            "SEG2" => Some(Self::SEG2),
-            "TRI3" => Some(Self::TRI3),
-            "QUA4" => Some(Self::QUA4),
-            "TET4" => Some(Self::TET4),
-            "PYRA5" => Some(Self::PYRA5),
-            "PENTA6" => Some(Self::PENTA6),
-            "HEX8" => Some(Self::HEX8),
-            "SEG3" => Some(Self::SEG3),
-            "TRI6" => Some(Self::TRI6),
-            "QUA8" => Some(Self::QUA8),
-            "TET10" => Some(Self::TET10),
-            "PENTA15" => Some(Self::PENTA15),
-            "HEX20" => Some(Self::HEX20),
-            "QUA9" => Some(Self::QUA9),
-            "HEX27" => Some(Self::HEX27),
-            _ => None,
-        }
+        let upper = s.to_ascii_uppercase();
+        Self::ALL.iter().copied().find(|et| et.name() == upper)
     }
 }
 
@@ -315,13 +332,55 @@ mod tests {
         assert_eq!(ElementType::HEX27.topological_dim(), 3);
     }
 
+    /// `ALL` is the list everything else iterates over, so it has to be
+    /// complete. The exhaustive `match` breaks compilation on a new variant,
+    /// and the length assert then forces a look at `ALL` itself.
+    #[test]
+    fn all_lists_every_variant_exactly_once() {
+        for &et in ElementType::ALL {
+            match et {
+                ElementType::POI1
+                | ElementType::SEG2
+                | ElementType::TRI3
+                | ElementType::QUA4
+                | ElementType::TET4
+                | ElementType::PENTA6
+                | ElementType::PYRA5
+                | ElementType::HEX8
+                | ElementType::SEG3
+                | ElementType::TRI6
+                | ElementType::QUA8
+                | ElementType::TET10
+                | ElementType::PENTA15
+                | ElementType::HEX20
+                | ElementType::QUA9
+                | ElementType::HEX27 => {}
+            }
+        }
+        assert_eq!(ElementType::ALL.len(), 16);
+        let mut seen = std::collections::HashSet::new();
+        for &et in ElementType::ALL {
+            assert!(seen.insert(et), "{et} listed twice in ALL");
+        }
+    }
+
+    /// Every variant round-trips through its own name, which is what makes
+    /// `from_name` derivable rather than a table of its own.
+    #[test]
+    fn every_variant_parses_back_from_its_name() {
+        for &et in ElementType::ALL {
+            assert_eq!(ElementType::from_name(et.name()), Some(et), "{et}");
+            assert_eq!(
+                ElementType::from_name(&et.name().to_ascii_lowercase()),
+                Some(et),
+                "{et} (lowercase)"
+            );
+        }
+    }
+
     #[test]
     fn reversal_permutation_is_an_involution_bijection() {
-        use ElementType::*;
-        for et in [
-            POI1, SEG2, TRI3, QUA4, TET4, PENTA6, HEX8, SEG3, TRI6, QUA8, TET10, PENTA15, HEX20,
-            QUA9, HEX27,
-        ] {
+        for &et in ElementType::ALL {
             let p = et.reversal_permutation();
             let npc = et.nodes_per_cell();
             assert_eq!(p.len(), npc, "{et}: permutation length");

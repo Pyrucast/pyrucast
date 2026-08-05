@@ -443,11 +443,13 @@ mod tests {
     /// sends it to. This is the definitive proof of the per-type tables.
     #[test]
     fn reversal_permutation_matches_the_reflection() {
-        use ElementType::*;
-        for et in [
-            SEG2, SEG3, TRI3, TRI6, QUA4, QUA8, QUA9, TET4, TET10, PENTA6, PENTA15, HEX8, HEX20,
-            HEX27,
-        ] {
+        // Every type with a reference frame; `POI1` has no orientation to
+        // reverse. Derived from `ElementType::ALL` so a new type is covered
+        // the day it is declared.
+        for &et in ElementType::ALL
+            .iter()
+            .filter(|et| et.topological_dim() > 0)
+        {
             let nodes = ref_nodes(et);
             let p = et.reversal_permutation();
             for i in 0..nodes.len() {
