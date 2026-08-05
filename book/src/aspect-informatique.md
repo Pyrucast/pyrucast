@@ -129,5 +129,5 @@ la RAM, slot par slot) et à la future **sauvegarde / reprise** d'une session
 ## Pour le développeur
 
 L'organisation des fichiers Rust (où vit chaque morceau) est décrite dans
-[Arborescence](developper/arborescence.md). La feuille de route (phases 0 à 6)
-est dans `ROADMAP.md` à la racine du dépôt.
+[Arborescence](developper/arborescence.md). L'état des lieux et les pistes à
+venir sont dans `ROADMAP.md` à la racine du dépôt.

@@ -1,4 +1,10 @@
-# pyrucast — Feuille de route de développement
+# pyrucast — Feuille de route
+
+Ce document dit **où en est le projet** et **ce qui pourrait venir ensuite**. La
+première partie est un état des lieux daté ; la seconde est une liste de pistes
+**non arbitrées** — elles seront précisées, ordonnées ou abandonnées plus tard.
+
+État arrêté au **5 août 2026** (v0.2.1).
 
 ## Philosophie
 
@@ -10,35 +16,27 @@
 
 | Sujet | Décision |
 |---|---|
-| Mémoire | Store central à handles : arène + indices générationnels + comptage de références + swap disque. Exposé via `Session`. |
-| Primitives géométriques | `nalgebra` (vecteurs et matrices de petite taille — géométrie, maillage, visualisation). |
-| Algèbre linéaire (solveur) | Implémentation maison, derrière un trait `LinearSolver` enfichable (backend externe possible plus tard, sur accord). |
+| Mémoire | Store central à handles : slab + indices générationnels + comptage de références + swap disque. **Global au processus**, adressé par fonctions de module (`insert` / `read` / `write`) — pas d'objet `Session` à passer. |
+| Séparation des couches | `containers/` (structures) ⊥ `ops/` (opérateurs) ⊥ `py/` (binding). Un module d'`ops/` porte le nom du **conteneur qu'il produit**. Les règles complètes sont dans `CONVENTIONS.md`. |
+| Primitives géométriques | `nalgebra` (vecteurs et matrices de petite taille — géométrie, maillage, visualisation), `nalgebra-sparse` pour le stockage creux. |
+| Algèbre linéaire (solveur) | **LU creuse directe `faer`**, multithreadée, avec cache de factorisation sur la `Matrix` (*factoriser une fois, résoudre souvent*). `SolveMethod` est le point d'extension pour un autre back-end. |
 | Sérialisation | `serde` + `bincode` via un trait `Persist` **unique**, partagé entre swap disque et sauvegarde/relecture fichier. |
-| Binding Python | `pyo3` + `maturin`, incrémental objet par objet. |
-| Documentation | `mdbook` (théorie + doctests). |
-| Algorithmes non-linéaires / transitoires | **Orchestrés en Python**, pas en Rust : la boucle de Newton et l'intégration en temps sont des fonctions Python composant les opérateurs du cœur. Le Rust ne fournit que les briques (assemblage, résolution, comportement). |
+| Parallélisme | `rayon`, **toujours actif**, porté *au-dessus* des noyaux de physique : un noyau ne voit ni rayon, ni le store, ni un verrou. |
+| Binding Python | `pyo3` + `maturin`, *mixed layout* : extension plate privée `_pyrucast` + couche Python pure qui la range en sous-modules. |
+| Documentation | `mdbook` (théorie + doctests) + rustdoc, publiés sur GitHub Pages. |
+| Algorithmes non-linéaires / transitoires | **Orchestrés en Python**, pas en Rust (voir plus bas). |
 | Méthode | Largeur d'abord : toutes les structures + bindings + doc/tests avant le numérique lourd. |
+
+Deux décisions ont été **révisées en cours de route**, et le sont ici
+définitivement : le solveur n'est pas une implémentation maison derrière un
+trait `LinearSolver` (c'est `faer`), et le store n'est pas exposé via une
+`Session` (il est global).
 
 ### Dépendances approuvées (socle figé)
 
 Toujours liées : `serde`, `bincode`, `nalgebra`, `nalgebra-sparse`, `faer` (LU creux du solveur), `rayon` (parallélisme), `parking_lot` (verrous du store), `paste` (macros d'agrégat). Optionnelles, derrière une feature : `pyo3`, `pyo3-stub-gen`, et la visualisation `plotters`, `winit`, `softbuffer`. Outillage : `maturin`, `mdbook`, `ruff`, `criterion`. Tout autre ajout = nouvelle demande explicite.
 
-## Persistance : swap et sauvegarde mutualisés (portable Linux ↔ Windows)
-
-Un **seul** trait `Persist` (sérialisation `serde` + `bincode`) sert de socle commun :
-
-- **Swap** : sérialise un objet (slot) isolé pour libérer la RAM, rechargé à l'accès. Orchestré par le Store (indexation des slots, politique d'éviction).
-- **Sauvegarde / reprise** : sérialise le **graphe** d'objets d'une `Session` (un Mesh référence une Coords, un Model un FE space…) avec remappage des handles, dans un conteneur versionné.
-
-Format **portable Linux ↔ Windows** :
-
-- bincode : entiers little-endian normalisés (indépendant de l'endianness hôte), `usize` encodé sur 64 bits (portable 32/64-bit), `f64` IEEE-754.
-- Aucune donnée dépendante de l'OS dans le payload (pas de chemins absolus ni de séparateurs OS ; les slots sont des identifiants opaques).
-- Conteneur fichier = en-tête magique + numéro de version de format + payload `Persist`. La version protège l'évolution du format.
-
-Cœur partagé = `Persist` par objet. Ce qui diffère : le swap orchestre slot par slot ; la sauvegarde orchestre le graphe complet + un manifeste.
-
-## Definition of Done par objet (largeur d'abord + binding incrémental)
+### Definition of Done par objet
 
 1. Struct Rust vivant dans le Store (adressable par `Handle<T>`)
 2. `Debug` (structurel) + `Display` (résumé façon listing cast3m)
@@ -49,103 +47,235 @@ Cœur partagé = `Persist` par objet. Ce qui diffère : le swap orchestre slot p
 
 Un objet n'est terminé que si ces 6 points sont verts.
 
-## Phases
+---
 
-### Phase 0 — Fondations projet & conventions
-- Crate `pyrucast` (cdylib + rlib), `pyo3` / `maturin`, venv Python.
-- Conventions : `PyrucastError` + `Result`, Display vs Debug, trait `Persist`.
-- Harnais : `cargo test`, `cargo test --doc`, `pytest`, `mdbook build` / `mdbook test`.
-- Squelette mdbook (introduction, conventions).
+# Ce qui est fait et disponible
 
-### Phase 1 — Le Store (cœur, prérequis absolu)
-- `Handle<T>` générationnel ; Drop intelligent décrémentant le refcount (libération automatique).
-- Slab + free-list + générations (détection des handles périmés).
-- Refcount + recyclage automatique des slots à 0.
-- Fragmentation : réemploi via free-list + `compact()`.
-- Swap disque : états `Resident / OnDisk / Free`, `swap_out` / `swap_in`, crochet de politique d'éviction ; conteneur portable partagé avec la sauvegarde.
-- `Session` : possède le Store (`Arc`), exposé en Python.
-- Décision ouverte : `Session` explicite vs store global.
+En chiffres : **82 600 lignes de Rust**, 1 046 tests unitaires Rust (+ 20
+fichiers de tests d'intégration), 447 tests Python, 27 doctests, 75 pages de
+book, 26 exemples, 6 scripts de formation, **100 fonctions exposées en Python**.
 
-### Phase 2 — Tous les objets (structures + bindings, sans numérique lourd)
-Dans l'ordre de dépendance, chacun selon la Definition of Done :
-1. **Coords** — jeux de coordonnées, bascule de jeu actif, création/suppression de nœuds à chaud. Séparer identité (id interne stable) et ordre solveur (permutation rechargeable). Décision ouverte : politique de suppression d'un nœud encore référencé par un champ.
-2. **Node** — accesseur utilisateur (handle vers Coords).
-3. **Mesh / SubMesh / `ElementType` (enum)** — un sous-maillage par type ; POI1 = liste de nœuds.
-4. **NodeField** — valeurs sur maillage POI1, multi-composantes nommées.
-5. **FiniteElementSpace** — maillage + formulation EF (éléments de référence, fonctions de forme, points de Gauss : données).
-6. **ElementField** — valeurs par point de Gauss × composante.
-7. **Model** — modèle physique (élasticité, plasticité, thermique…) sur un FE space.
-8. **Matrix** — matrice creuse maison (COO/CSR), construction manuelle, point d'extension assemblage.
+## Socle mémoire
 
-### Phase 3 — Numérique maison (assemblage & résolution)
-Fonctions de forme & dérivées, quadrature, matrices élémentaires, assemblage `Model → Matrix`, solveurs (Gradient Conjugué puis factorisation directe) derrière `LinearSolver`, cas de validation comparé à l'analytique.
+Store à handles générationnels : slab par type, free-list, recyclage, détection
+des handles périmés (`StaleHandle`). Refcount **à deux niveaux** — les slots
+d'un côté, les nœuds d'une `Coords` de l'autre, avec `gc()`. Verrou par objet
+(`RwLock` de cellule), guards possédés permettant la lecture **en place**.
+Swap disque `Resident / OnDisk / Free`, transparent vis-à-vis de `Drop`.
+`compact()` rend la mémoire de queue.
 
-### Phase 4 — Optimisation de la renumérotation
-Réduction de bande/profil maison (type Cuthill–McKee) branchée sur la permutation solveur ; invariance des résultats testée.
+## Conteneurs et atomes
 
-### Phase 5 — Parallélisme à mémoire partagée
-Store thread-safe (verrous shardés / `RwLock` par slot) ; assemblage et solveur parallèles. Décision ouverte : `std::thread` scopé vs `rayon`.
+Les **sept agrégats** — `Mesh`, `FiniteElementSpace`, `NodeField`,
+`ElementField`, `Model`, `Matrix`, `Evolution` — chacun avec sa vue `Sub*`,
+`len` / `[i]` / `|`. Plus `Coords` (le magasin de coordonnées, jeux multiples,
+repère axisymétrique) et les atomes : `Node`, `Cell`, `Element`, `ElementType`,
+`Point*` / `Vector*`, `Band`, `RgbColor`.
 
-### Phase 6 — Durcissement & finition
+## Éléments finis — 16 types
 
-#### Gestion mémoire — évolutions (séquence A → B → C, déclenchées par les mesures)
+`POI1` ; linéaires `SEG2`, `TRI3`, `QUA4`, `TET4`, `PYRA5`, `PENTA6`, `HEX8`
+(Lagrange-1) ; quadratiques `SEG3`, `TRI6`, `QUA8`, `QUA9`, `TET10`, `PENTA15`,
+`HEX20`, `HEX27` (Lagrange-2, sérendipité ou complets). Fonctions de forme et
+dérivées, jacobien y compris le cas *manifold*, quadratures `Gauss` et
+`Reduced` — plus la quadrature conique Gauss × Jacobi de la pyramide.
+Axisymétrie portée par `Coords` et intégrée dans la seule mesure `det_j_w`.
 
-Le store actuel est la fondation : on **ne le remplace pas**. On y ajoute, **quand le besoin se mesure**, les évolutions suivantes :
+## Physiques — 13 sous-modèles
 
-1. **A. Indirection + compactage déplaçant.** Table `id → slot_idx` ; on déplace les slots vivants pour combler les trous au milieu du `Vec`, les handles restent valides (ils référencent l'`id` logique, pas le slot physique). ~100 lignes, API publique inchangée.
-   - *Déclencheur* : hauts plateaux mémoire observés sur cycles intensifs de création/destruction.
-   - *Bénéfice* : résout la fragmentation interne — c'est l'approche historique de cast3m.
+Thermique : `HeatConduction`, `Convection` (échange de surface / film).
+Mécanique : `Truss`, `Elasticity` (contraintes/déformations planes,
+axisymétrique, 3-D), `Plasticity` (von Mises parfaite, tangente cohérente
+validée par différences finies), `Mazars` (endommagement), `Timoshenko`,
+`Frame` (portique 2-D), `Frame3d`. Contraintes : `Dirichlet`, `Mpc`,
+`Embedded` (baignage), `Contact` (nœud-surface, unilatéral).
+Dilatation thermique non couplée (`thermal_strain`, `alpha` en composante
+matériau facultative).
 
-2. **B. Swap annoté + éviction LRU.** Chaque slot porte une priorité (`Pinned` / `Working` / `Scratch`) et un `last_used` ; éviction automatique sous budget RAM. S'appuie sur la composition des `Handle` pour la structure « qui référence quoi ».
-   - *Déclencheur* : le swap manuel devient insuffisant (typiquement sur les premiers solveurs grosse échelle).
-   - *Bénéfice* : swap intelligent façon cast3m moderne, sans appels manuels à `swap_out`.
+Le coût d'ajout d'une physique est **O(1) fichier** : une struct + un
+`impl SubModelKind`, deux lignes de câblage.
 
-3. **C. Arènes par génération** *(à arbitrer)*. Jeune génération (objets transitoires, collectée souvent) + vieille génération (Coords, Mesh, collectée rarement), style GC générationnel.
-   - *À reconsidérer* uniquement quand A et B auront révélé leurs propres limites.
+## Assemblage
 
-Détails et tradeoffs : [book/src/memory-model.md](book/src/memory-model.md) (section *Limites connues et évolution prévue*).
+Quatre genres de matrice derrière une machinerie unique (`MatrixKind`) :
+raideur / conductivité, masse / capacité, raideur géométrique, tangente
+cohérente — plus `lump`. Motif creux mémoïsé **par genre** sur le `Model`,
+matrices élémentaires calculées en parallèle et dispersées dans le CSR par
+**coloration des cellules**, sans matérialiser de COO. Éléments
+multi-quadrature (Timoshenko) sur le même chemin. Forces internes `∫ Bᵀσ`
+(Cast3M `BSIG`) et divergence par le même driver de scatter nodal.
 
-#### Autres travaux de Phase 6
-- Réglage des paramètres de compactage et d'éviction.
-- Benchmarks (high-water mark mémoire, aller-retour swap, assemblage gros maillage).
-- Complétion mdbook (chapitres restants, exemples, galerie).
-- Passe performance générale.
+## Solveur
 
-## Algorithmes non-linéaires & transitoires : orchestration Python
+LU creuse directe (`faer`), factorisation mise en cache sur la `Matrix`.
+Trois voies : **Lagrange** (`solve`, système augmenté), **élimination /
+condensation** (`solve_eliminate`), **active-set unilatéral**
+(`solve_unilateral`). Sortie sur supports de blocs (handles POI1 réutilisés,
+champs soustractibles).
+
+## Maillage
+
+Primitives : `line`, `circle`, `arc`, `transfinite`, `points`.
+Balayages : `sweep`, `extrude` (TRI3 → PENTA6, QUA4 → HEX8), `revolve`,
+`sweep_solid`.
+Mailleurs libres : `triangulate_surface` (Delaunay contraint + Ruppert, trous
+compris, TRI3/QUA4, contours 2-D et 3-D planaires) et `triangulate_volume`
+(prédicats exacts, enveloppe gelée, récupération, raffinement et lissage
+anti-*slivers*).
+Mailleurs frontaux : `pave_surface` (quadrangles) et `pave_volume` (couche
+limite HEX8 + raccord PYRA5 + cœur TET4).
+Topologie et transformations : `skin`, `border`, `orient`, `consolidate`,
+`merge_nodes`, `to_quadratic`, `convert`, `to_poi1`, `translate`, `rotate`,
+symétries, sélections géométriques (sphère, plan, cylindre, cône, tore, ligne).
+Entrées/sorties : lecture **gmsh** (MSH 2.2 et 4.1, ASCII et binaire), export
+**VTK**.
+
+## Champs et opérateurs
+
+Cinématique (`gradient`, `deformation`, `beam_deformation`,
+`frame_deformation`), comportement (`behavior`), matériaux
+(`material_field`, `interp_to_gauss`), positions, `restrict`, `flux`,
+`divergence`, `internal_forces`, masques et arithmétique de champ,
+réductions (`integral`, `xtx`, `xty`), requêtes géométriques
+(`locate_points`, `project_points`, `contact_gaps`), `Evolution` (valeur
+tabulée interpolée). 168 fonctions libres dans `ops/`.
+
+## Parallélisme
+
+`rayon` toujours actif, politique de grain centralisée
+(`parallel::MIN_PARALLEL_LEN`). Drivers `models::kernel` au-dessus de noyaux
+purs et séquentiels ; zéro-copie par guards tenus pendant toute la région
+parallèle. Déterminisme **bit-à-bit** pour les opérateurs write-once et les
+réductions ; déterminisme par coloration (non bit-à-bit) pour l'assemblage et
+les scatters nodaux ; le solveur fait exception (back-end faer).
+
+## API Python
+
+*Mixed layout* : extension plate privée `_pyrucast`, rangée par la couche
+Python pure en sous-modules nommés d'après le conteneur produit
+(`pyrucast.mesh`, `pyrucast.element_field`, `pyrucast.matrix`, …), les
+conteneurs et atomes restant au top-level. Stub `.pyi` versionné.
+Interruption coopérative (`Ctrl+C`) via le trait `Cancel`.
+Orchestration non-linéaire en Python pur : `pyrucast.thermomechanics`
+(pas-à-pas thermo→méca), Newton modifié accéléré par Anderson dans les
+exemples.
+
+## Visualisation
+
+Rendu CPU `plotters` (PNG/SVG) et fenêtre interactive `winit`/`softbuffer` :
+maillages, champs coloriés **par élément** (jamais moyennés entre éléments),
+rendu interpolé par subdivision, courbes, axes, gizmo.
+
+## Outillage
+
+`script/check.sh` (la passe complète, à brancher en CI), `build.sh` / `dev.sh`
+et leurs équivalents PowerShell, `run_examples.sh`, `set_new_version.sh`,
+`scaling.sh`. CI GitHub Actions : publication du book et de la rustdoc sur
+Pages, release multi-OS (Linux, Windows, macOS).
+
+---
+
+# Pistes futures
+
+Rien de ce qui suit n'est arbitré : ni l'ordre, ni le périmètre, ni même le
+fait de le faire. Ces points sont ceux que l'état des lieux a fait apparaître
+comme **manquants**, à préciser plus tard.
+
+## Transitoire et intégration en temps
+
+Le manque fonctionnel le plus visible. La masse et le *lumping* existent ; ce
+qui manque est le **pilotage** : schéma d'intégration en temps (θ-méthode,
+Newmark), et la couche Python qui l'orchestre — l'équivalent d'un `PASAPAS`.
+S'y rattache l'**advection** (`ADVE`), seule brique Cast3M encore absente côté
+matrices.
+
+## Solveur et performance
+
+- **Renumérotation** — `Coords` porte déjà une permutation optionnelle séparant
+  l'ordre solveur de l'identité, mais personne ne la calcule : une réduction de
+  bande/profil (type Cuthill–McKee) reste à écrire, avec l'invariance des
+  résultats en test.
+- **Méthodes itératives** et **factorisation de Cholesky** pour les matrices
+  symétriques — le drapeau de symétrie existe déjà sur la `Matrix`, et
+  `SolveMethod` est le point d'extension prévu.
+- **Passe performance** sur gros maillage, avec les benchs (`benches/parallel.rs`,
+  `script/scaling.sh`) comme instrument.
+
+## Sauvegarde et reprise
+
+La persistance n'est faite qu'à moitié : le trait `Persist` sert au swap, mais
+la **sauvegarde du graphe d'objets** n'existe pas. Il manque le remappage des
+handles, le conteneur fichier versionné (en-tête magique + numéro de format) et
+l'API Python `save` / `load`. Le format binaire visé est portable Linux ↔
+Windows : entiers little-endian normalisés, `usize` sur 64 bits, `f64`
+IEEE-754, aucun chemin ni séparateur dépendant de l'OS dans le *payload*.
+
+## Swap : du manuel à l'automatique
+
+Le swap fonctionne, mais **rien ne le déclenche tout seul** : `swap_out(&h)` est
+manuel, objet par objet, et réservé au Rust. C'est à l'appelant de décider quoi
+évincer et quand — autant dire que personne ne le fait. Deux marches :
+
+1. **exposer le swap côté Python**, pour qu'un script puisse déclencher une
+   éviction ;
+2. **évincer quand c'est nécessaire** — un budget RAM, une priorité par slot et
+   une date de dernier usage, et le store se déleste seul de ce qui est
+   transitoire. C'est l'évolution **B** ci-dessous, et c'est la marche qui rend
+   le swap réellement utile : tant qu'il faut le demander à la main, il ne sert
+   qu'aux cas qu'on a vus venir.
+
+Le swap étant déjà transparent vis-à-vis de `Drop` et adossé au même `Persist`
+que la sauvegarde, la brique manquante est **la politique**, pas le mécanisme.
+
+## Qualité de maillage
+
+Le domaine le plus avancé du code, et le moins planifié. Le point ouvert est
+documenté dans `triangulate_volume.rs` : la **récupération d'arêtes** de
+l'enveloppe est inachevée — une arête bloquée reste tributaire des bascules,
+sinon de `allow_surface_nodes`. S'y ajoutent les mesures de qualité et leur
+suivi dans le temps.
+
+## Évolutions mémoire (conditionnelles)
+
+Le store actuel est la fondation : on **ne le remplace pas**. Trois évolutions
+sont identifiées, chacune **déclenchée par une mesure**, pas par anticipation —
+aucune mesure ne les a encore justifiées. Détails et arbitrages dans
+[book/src/memory-model.md](book/src/memory-model.md).
+
+1. **A. Indirection + compactage déplaçant** — table `id → slot_idx`, les slots
+   vivants se déplacent pour combler les trous, les handles restent valides.
+   ~100 lignes, API publique inchangée. *Déclencheur* : hauts plateaux mémoire
+   sur cycles intensifs de création/destruction.
+2. **B. Swap annoté + éviction LRU** — priorité par slot (`Pinned` / `Working` /
+   `Scratch`) et `last_used`, éviction automatique sous budget RAM. C'est la
+   seconde marche de la piste *Swap* ci-dessus.
+   *Déclencheur* : le swap manuel devient insuffisant.
+3. **C. Arènes par génération** — jeune génération collectée souvent, vieille
+   rarement. À reconsidérer seulement quand A et B auront montré leurs limites.
+
+---
+
+# Annexe — algorithmes non-linéaires et transitoires : orchestration Python
 
 Les schémas non-linéaires (boucle de **Newton**) et l'**intégration en temps**
-(transitoire) ne sont **pas** codés en Rust : ils sont **pilotés côté Python**,
-par des fonctions Python qui composent les opérateurs du cœur.
+ne sont **pas** codés en Rust : ils sont **pilotés côté Python**, par des
+fonctions qui composent les opérateurs du cœur.
 
-C'est exactement le modèle de **Cast3M**, où ces algorithmes ne sont pas des
-opérateurs natifs mais des **procédures GIBIANE** (`PASAPAS`, `UNPAS`,
-`TRANSNON`…) qui enchaînent les opérateurs de base (`RIGI`, `KTAN`, `BSIG`,
-`RESO`, `COMP`, `EXCO`…) dans une boucle. Ici, le langage d'orchestration est
-**Python** au lieu de GIBIANE :
+C'est le modèle de **Cast3M**, où ces algorithmes ne sont pas des opérateurs
+natifs mais des **procédures GIBIANE** (`PASAPAS`, `UNPAS`, `TRANSNON`…)
+enchaînant les opérateurs de base (`RIGI`, `KTAN`, `BSIG`, `RESO`, `COMP`,
+`EXCO`…). Ici, le langage d'orchestration est **Python** au lieu de GIBIANE :
 
-- **Le cœur Rust fournit les briques** : assemblage (`stiffness`, `mass`,
-  matrice tangente à venir), résolution linéaire (`solve` derrière
-  `LinearSolver`), intégration du comportement (`integrate_behavior`),
-  opérations de champ (`deformation`, `merge`, arithmétique…).
-- **Python assemble l'algorithme** : la boucle de Newton (assemblage du résidu
-  et de la tangente, résolution de l'incrément, test de convergence) et le
-  schéma en temps (pas de temps, schéma θ, mise à jour des variables internes)
-  sont des fonctions Python pures appelant ces briques.
+- **le cœur Rust fournit les briques** — assemblage (`stiffness`, `mass`,
+  `geometric`, `tangent`), résolution linéaire (`solve`, `solve_eliminate`,
+  `solve_unilateral`), intégration du comportement (`behavior`), forces
+  internes (`internal_forces`), opérations de champ ;
+- **Python assemble l'algorithme** — boucle de Newton (résidu, tangente,
+  incrément, test de convergence) et schéma en temps sont des fonctions Python
+  appelant ces briques.
 
-Conséquence : un équivalent pyrucast de `pasapas`/`unpas`/`transnon` sera une
-**bibliothèque Python** livrée avec le binding, pas un opérateur Rust. Le cœur
-n'expose donc que ce qui doit être performant ou bas niveau ; la logique de
-pilotage reste lisible et éditable en Python (cf. la colonne « Équivalent
-pyrucast » de `opérateur_castem.csv`, où ces lignes sont marquées comme
-orchestration Python).
-
-> Briques Rust encore manquantes pour ces algorithmes (à planifier en
-> Phase 3+) : matrice de rigidité tangente (`KTAN`), forces internes
-> (`BSIG`), rigidité géométrique (`KSIG`/`KSIGMA`), matrice d'advection
-> (`ADVE`) et schéma d'intégration temporelle (`KEQU`, lumping).
-
-## Décisions ouvertes (non bloquantes)
-
-- Phase 1 : `Session` explicite vs store global.
-- Phase 2 : politique de suppression d'un nœud encore référencé par un champ.
-- Phase 5 : `std::thread` scopé vs `rayon`.
+C'est déjà le cas en pratique : `pyrucast.thermomechanics` déroule un
+pas-à-pas thermo→mécanique, et les exemples déroulent un Newton modifié
+accéléré par Anderson. Un équivalent de `pasapas` / `unpas` / `transnon` sera
+donc une **bibliothèque Python** livrée avec le binding, pas un opérateur Rust
+(cf. la colonne « Équivalent pyrucast » de `opérateur_castem.csv`).

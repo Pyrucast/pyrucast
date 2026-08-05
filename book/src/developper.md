@@ -22,5 +22,5 @@ courantes (ajouter une physique, ajouter un élément fini).
 - [Interrompre une fonction](developper/interrompre-une-fonction.md) — le jeton
   `Cancel` : un `Ctrl+C` ou un *timeout* qui arrête une boucle longue.
 
-La feuille de route générale (phases 0 à 6, décisions d'architecture
-verrouillées) est dans `ROADMAP.md` à la racine du dépôt.
+La feuille de route (décisions d'architecture verrouillées, état des lieux,
+pistes futures) est dans `ROADMAP.md` à la racine du dépôt.
