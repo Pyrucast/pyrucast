@@ -1150,6 +1150,38 @@ mod tests {
         }
     }
 
+    /// The wireframe edges are derived from `ElementKind::edges()` plus the
+    /// mid-side convention, for every type at once — including `PYRA5` and the
+    /// quadratic ones, which the cases below do not reach. A quadratic type
+    /// must yield exactly twice its parent's segments, each geometric edge
+    /// being split at its mid node so the polyline follows the curvature.
+    #[test]
+    fn element_edges_cover_every_type() {
+        for &et in ElementType::ALL {
+            let k = et.as_kind();
+            let edges = element_edges(et);
+            let expected = k.edges().len() * if k.is_quadratic() { 2 } else { 1 };
+            assert_eq!(edges.len(), expected, "{et}: segment count");
+            for e in &edges {
+                for &i in e {
+                    assert!(i < k.nodes_per_cell(), "{et}: node {i} out of range");
+                }
+                assert_ne!(e[0], e[1], "{et}: degenerate segment");
+            }
+            // Every corner is reached, so no part of the outline is missing.
+            // `POI1` draws as a dot and has no edge to reach it by.
+            if k.topological_dim() == 0 {
+                continue;
+            }
+            for c in 0..k.corner_count() {
+                assert!(
+                    edges.iter().any(|e| e[0] == c || e[1] == c),
+                    "{et}: corner {c} is on no segment"
+                );
+            }
+        }
+    }
+
     #[test]
     fn wireframe_emits_every_distinct_edge_including_interior() {
         // The 6-tet cube has 12 cube edges + 6 face diagonals + 1 space

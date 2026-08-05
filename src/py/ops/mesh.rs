@@ -387,14 +387,23 @@ pub fn border(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
 
 /// Extract the boundary surface (skin) of a volume mesh, split by flat face.
 ///
+/// Works on every volume type — TET4, PYRA5, PENTA6, HEX8 and their quadratic
+/// counterparts TET10, PENTA15, HEX20, HEX27.
+///
 /// A volume-element facet (TET4 → 4 triangles, HEX8 → 6 quads, PENTA6 → 2
-/// triangles + 3 quads) used by exactly one cell lies on the boundary; the
-/// boundary facets (pooled across all volume submeshes) are grouped into flat
-/// faces by flooding across shared edges as long as neighbouring facets stay
-/// coplanar (their normals differ by at most `angle_deg`, default 1°).
-/// Returns a Mesh with one TRI3/QUA4 submesh per flat face — e.g. 6 submeshes
-/// for a cube, 5 for a prism (2 caps + 3 sides). Facets keep their
-/// outward orientation; the original nodes are reused.
+/// triangles + 3 quads, PYRA5 → 1 quad + 4 triangles) used by exactly one cell
+/// lies on the boundary; sharing is decided on the facet's corners, so cells of
+/// different degrees still cancel. The boundary facets (pooled across all
+/// volume submeshes) are grouped into flat faces by flooding across shared
+/// edges as long as neighbouring facets stay coplanar (their normals differ by
+/// at most `angle_deg`, default 1°).
+///
+/// **A facet is emitted in its own type**: a HEX8 yields QUA4, a TET10 yields
+/// TRI6, a HEX27 yields QUA9 — so the skin of a quadratic mesh is quadratic
+/// and keeps its mid-side nodes. Returns a Mesh with one submesh per flat face
+/// and per facet type — e.g. 6 submeshes for a cube, 5 for a prism (2 caps +
+/// 3 sides), 5 for a pyramid (base + 4 triangles). Facets keep their outward
+/// orientation; the original nodes are reused.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, angle_deg=None))]
@@ -871,8 +880,10 @@ fn groups_to_dict<'py>(
 /// physical group land under the key `"<ungrouped>"`. The dict preserves the
 /// file order.
 ///
-/// Supported element types: POI1, SEG2, TRI3, QUA4, TET4, HEX8; any other
-/// gmsh type raises.
+/// Every element type pyrucast knows is read: POI1, SEG2, TRI3, QUA4, TET4,
+/// PYRA5, PENTA6, HEX8 and the quadratic SEG3, TRI6, QUA8, QUA9, TET10,
+/// PENTA15, HEX20, HEX27. Any other gmsh type raises, naming the codes it
+/// does accept.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn read_gmsh<'py>(

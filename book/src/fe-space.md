@@ -30,6 +30,7 @@ Chaque `ElementType` fixe son repère de référence \\( \xi \\) et la numérota
 | `TRI3` | \\( \xi, \eta \in [0, 1] \\), \\( \xi + \eta \le 1 \\) | \\( (0,0), (1,0), (0,1) \\) — CCW |
 | `QUA4` | \\( \xi, \eta \in [-1, +1] \\) | \\( (-1,-1), (1,-1), (1,1), (-1,1) \\) — CCW |
 | `TET4` | \\( \xi, \eta, \zeta \in [0, 1] \\), \\( \xi + \eta + \zeta \le 1 \\) | \\( (0,0,0), (1,0,0), (0,1,0), (0,0,1) \\) — face 0-1-2 CCW vue depuis nœud 3 |
+| `PYRA5` | \\( \zeta \in [0, 1] \\), \\( \xi, \eta \in [-(1-\zeta), +(1-\zeta)] \\) | base carrée CCW vue depuis l'apex (nœuds 0..3 en \\( \zeta = 0 \\)) puis l'apex : \\( (-1,-1,0), (1,-1,0), (1,1,0), (-1,1,0), (0,0,1) \\) |
 | `PENTA6` | \\( \xi, \eta \in [0, 1] \\), \\( \xi + \eta \le 1 \\), \\( \zeta \in [0, 1] \\) | triangle inférieur CCW (nœuds 0..2 en \\( \zeta = 0 \\)) puis triangle supérieur CCW (nœuds 3..5 en \\( \zeta = 1 \\)) — extrusion d'un TRI3 |
 | `HEX8` | \\( \xi, \eta, \zeta \in [-1, +1] \\) | face inférieure CCW (nœuds 0..3) puis face supérieure CCW (nœuds 4..7) |
 
@@ -161,6 +162,7 @@ pyrucast utilise une règle « par défaut » par type d'élément, calibrée po
 | `TRI3` | 3 | Hammer mid-edge sur \\( \hat{K} \\) : \\( (\tfrac{1}{2}, 0), (\tfrac{1}{2}, \tfrac{1}{2}), (0, \tfrac{1}{2}) \\), \\( w_g = 1/6 \\) | \\( \deg \le 2 \\) |
 | `QUA4` | 4 | Produit tensoriel 2×2 de Gauss-Legendre : \\( \xi_g = (\pm 1/\sqrt{3}, \pm 1/\sqrt{3}) \\), \\( w_g = 1 \\) | \\( \deg \le 3 \\) par direction |
 | `TET4` | 4 | Hammer : \\( \alpha = \tfrac{5 - \sqrt{5}}{20} \\), \\( \beta = \tfrac{5 + 3\sqrt{5}}{20} \\), points permutations, \\( w_g = 1/24 \\) | \\( \deg \le 2 \\) |
+| `PYRA5` | 8 | Produit **conique** : 2×2 Gauss-Legendre sur la section carrée × Gauss-Jacobi 2 points en \\( \zeta \\) (poids \\( (1-\zeta)^2 \\), nœuds \\( \tfrac13 \mp \tfrac{\sqrt{10}}{15} \\)) | \\( \deg \le 2 \\) |
 | `PENTA6` | 6 | Produit tensoriel de la règle TRI3 (3 points, \\( w = 1/6 \\)) et de Gauss-Legendre 2 points sur \\( \zeta \in [0, 1] \\) (\\( \zeta_g = \tfrac{1}{2} \pm \tfrac{1}{2\sqrt{3}} \\), \\( w = 1/2 \\)) | \\( \deg \le 2 \\) en \\( (\xi, \eta) \\), \\( \le 3 \\) en \\( \zeta \\) |
 | `HEX8` | 8 | Produit tensoriel 2×2×2 de Gauss-Legendre : \\( \xi_g = (\pm 1/\sqrt{3})^3 \\), \\( w_g = 1 \\) | \\( \deg \le 3 \\) par direction |
 | `SEG3` | 3 | Gauss-Legendre 3 points | \\( \deg \le 5 \\) |
@@ -174,7 +176,7 @@ pyrucast utilise une règle « par défaut » par type d'élément, calibrée po
 
 Les types quadratiques utilisent une règle exacte pour leur matrice de masse (degré 4) sur géométrie droite ; l'exactitude des règles custom TRI6 et TET10 est vérifiée par des tests d'intégration de monômes.
 
-La somme des poids vaut le volume de l'élément de référence : 2 pour SEG2/SEG3, 1/2 pour TRI3/TRI6, 4 pour QUA4/QUA8/QUA9, 1/6 pour TET4/TET10, 1/2 pour PENTA6/PENTA15, 8 pour HEX8/HEX20/HEX27 (vérifié par les tests).
+La somme des poids vaut le volume de l'élément de référence : 2 pour SEG2/SEG3, 1/2 pour TRI3/TRI6, 4 pour QUA4/QUA8/QUA9, 1/6 pour TET4/TET10, 4/3 pour PYRA5, 1/2 pour PENTA6/PENTA15, 8 pour HEX8/HEX20/HEX27 (vérifié par les tests, pour tous les types à la fois).
 
 ## Théorie : Jacobien et grandeurs physiques
 
@@ -231,6 +233,7 @@ Le couple \\( (d_r, d_s) \\) possible pour notre v0 :
 | TRI3 | 2 | 2, 3 |
 | QUA4 | 2 | 2, 3 |
 | TET4 | 3 | 3 |
+| PYRA5 | 3 | 3 |
 | PENTA6 | 3 | 3 |
 | HEX8 | 3 | 3 |
 | SEG3 | 1 | 1, 2, 3 |

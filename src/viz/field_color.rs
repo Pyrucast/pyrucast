@@ -376,9 +376,9 @@ pub(crate) fn submesh_primitives_smooth(
         _ => subdivide(et, Interpolation::Lagrange1, n)?,
     };
 
-    // Volume cells: keep only boundary faces. The `Faces` of the
-    // subdivision are in the same order as the element's face table
-    // (TET4_FACES / HEX8_FACES), so the keep-set indexes them directly.
+    // Volume cells: keep only boundary faces. Both the subdivision's `Faces`
+    // and the keep-set walk `ElementKind::facets()` in order, so the set
+    // indexes them directly.
     let keep = crate::viz::mesh_draw::boundary_faces(et, conn);
 
     // All node coordinates of the submesh, padded to 3-D.

@@ -212,6 +212,39 @@ mod tests {
         }
     }
 
+    /// `subdivide` is driven by the topological dimension and by
+    /// `ElementKind::facets()`, so it covers every type without an arm of its
+    /// own. This checks that it really does: each type subdivides, yields the
+    /// shape its dimension calls for, and keeps the partition of unity — the
+    /// quadratic types and `PYRA5` included, which the per-type tests below do
+    /// not reach.
+    #[test]
+    fn every_element_type_subdivides() {
+        for &et in ElementType::ALL {
+            let k = et.as_kind();
+            let interp = k.degree().unwrap_or(Interpolation::Lagrange1);
+            let sub = subdivide(et, interp, 2).unwrap();
+            match (k.topological_dim(), sub) {
+                (0, CellSubdivision::Points) => {}
+                (1, CellSubdivision::Segments { weights, segments }) => {
+                    assert_eq!(segments.len(), 2, "{et}: n segments");
+                    assert_partition_of_unity(&weights);
+                }
+                (2, CellSubdivision::Faces(f)) => {
+                    assert_eq!(f.len(), 1, "{et}: a surface draws as one face");
+                    assert_partition_of_unity(&f[0].weights);
+                }
+                (3, CellSubdivision::Faces(f)) => {
+                    assert_eq!(f.len(), k.facets().len(), "{et}: one face per facet");
+                    for face in &f {
+                        assert_partition_of_unity(&face.weights);
+                    }
+                }
+                (d, _) => panic!("{et}: dimension {d} gave the wrong subdivision"),
+            }
+        }
+    }
+
     #[test]
     fn tri3_counts_and_unity() {
         let n = 4;

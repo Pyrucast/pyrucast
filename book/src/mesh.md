@@ -30,6 +30,7 @@ cast3m).
 | `TRI3` | 3 | 2 | triangle linéaire |
 | `QUA4` | 4 | 2 | quadrangle linéaire |
 | `TET4` | 4 | 3 | tétraèdre linéaire |
+| `PYRA5` | 5 | 3 | pyramide linéaire (raccord hexaèdre ↔ tétraèdre) |
 | `PENTA6` | 6 | 3 | prisme linéaire (extrusion d'un TRI3) |
 | `HEX8` | 8 | 3 | hexaèdre linéaire |
 | `SEG3` | 3 | 1 | segment quadratique |
@@ -41,7 +42,7 @@ cast3m).
 | `HEX20` | 20 | 3 | hexaèdre quadratique (sérendipité) |
 | `HEX27` | 27 | 3 | hexaèdre tri-quadratique (Lagrange complet, centres de face + nœud central) |
 
-Les six derniers types sont **quadratiques** (Lagrange-2) : ils reprennent la
+Les huit derniers types sont **quadratiques** (Lagrange-2) : ils reprennent la
 numérotation des sommets de leur parent linéaire puis ajoutent les nœuds de
 **milieu d'arête**, dans l'ordre d'arêtes de la convention VTK (voir le rustdoc
 d'`ElementType`). `QUA8`, `HEX20` et `PENTA15` sont **sérendipité** (nœuds

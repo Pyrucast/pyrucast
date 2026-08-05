@@ -1,10 +1,12 @@
 //! Finite-element types supported by pyrucast.
 //!
-//! The list is deliberately small; adding a new element type means adding
-//! a variant to [`ElementType`] and completing the metadata functions
-//! ([`nodes_per_cell`](ElementType::nodes_per_cell),
-//! [`topological_dim`](ElementType::topological_dim),
-//! [`name`](ElementType::name)).
+//! This enum carries **storage and serialisation only**: the variant, its
+//! name, and the metadata cheap enough to answer without indirection. What an
+//! element *knows about itself* — reference nodes, facets, shape functions,
+//! quadrature, interchange codes — lives in [`crate::atoms::element_kind`],
+//! one file per type, reached through
+//! [`as_kind`](ElementType::as_kind). Adding a type means writing that file,
+//! then adding a variant here and an entry in [`ALL`](ElementType::ALL).
 //!
 //! # Reference frame and local node numbering
 //!
