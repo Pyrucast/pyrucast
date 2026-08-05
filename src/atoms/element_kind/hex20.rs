@@ -2,7 +2,7 @@
 
 use super::hex8::{Hex8, EDGES};
 use super::qua4::contains_cube;
-use super::{ElementKind, Facet};
+use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
 /// 20-node serendipity hexahedron (Lagrange-2 `HEX8`). Corners 0..7 as
@@ -114,4 +114,59 @@ impl ElementKind for Hex20 {
     }
 
     fn clamp_ref(&self, _xi: &mut [f64]) {}
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange2)
+    }
+
+    /// Serendipity on `[-1, 1]³`: a node's formula is read off its own
+    /// reference coordinates — no zero component means a corner, one zero
+    /// component names the axis the mid-edge node sits on.
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b, c) = (xi[0], xi[1], xi[2]);
+        for (i, n) in REF_NODES.iter().enumerate() {
+            let (p, q, r) = (n[0], n[1], n[2]);
+            out[i] = if p != 0.0 && q != 0.0 && r != 0.0 {
+                0.125
+                    * (1.0 + p * a)
+                    * (1.0 + q * b)
+                    * (1.0 + r * c)
+                    * (p * a + q * b + r * c - 2.0)
+            } else if p == 0.0 {
+                0.25 * (1.0 - a * a) * (1.0 + q * b) * (1.0 + r * c)
+            } else if q == 0.0 {
+                0.25 * (1.0 + p * a) * (1.0 - b * b) * (1.0 + r * c)
+            } else {
+                0.25 * (1.0 + p * a) * (1.0 + q * b) * (1.0 - c * c)
+            };
+        }
+    }
+
+    fn dshape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b, c) = (xi[0], xi[1], xi[2]);
+        for (i, n) in REF_NODES.iter().enumerate() {
+            let (p, q, r) = (n[0], n[1], n[2]);
+            let row = &mut out[3 * i..3 * i + 3];
+            if p != 0.0 && q != 0.0 && r != 0.0 {
+                let (u, v, w) = (1.0 + p * a, 1.0 + q * b, 1.0 + r * c);
+                row[0] = 0.125 * p * v * w * (2.0 * p * a + q * b + r * c - 1.0);
+                row[1] = 0.125 * q * u * w * (p * a + 2.0 * q * b + r * c - 1.0);
+                row[2] = 0.125 * r * u * v * (p * a + q * b + 2.0 * r * c - 1.0);
+            } else if p == 0.0 {
+                let (vy, wz) = (1.0 + q * b, 1.0 + r * c);
+                row[0] = -0.5 * a * vy * wz;
+                row[1] = 0.25 * (1.0 - a * a) * q * wz;
+                row[2] = 0.25 * (1.0 - a * a) * vy * r;
+            } else if q == 0.0 {
+                let (ux, wz) = (1.0 + p * a, 1.0 + r * c);
+                row[0] = 0.25 * p * (1.0 - b * b) * wz;
+                row[1] = -0.5 * b * ux * wz;
+                row[2] = 0.25 * ux * (1.0 - b * b) * r;
+            } else {
+                let (ux, vy) = (1.0 + p * a, 1.0 + q * b);
+                row[0] = 0.25 * p * vy * (1.0 - c * c);
+                row[1] = 0.25 * ux * q * (1.0 - c * c);
+                row[2] = -0.5 * c * ux * vy;
+            }
+        }
+    }
 }

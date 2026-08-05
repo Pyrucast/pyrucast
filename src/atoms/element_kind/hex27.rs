@@ -2,7 +2,8 @@
 
 use super::hex8::{Hex8, EDGES};
 use super::qua4::contains_cube;
-use super::{ElementKind, Facet};
+use super::qua9::{dlag1d, lag1d};
+use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
 /// 27-node tri-quadratic hexahedron (full Lagrange-2 `HEX8`). Corners 0..7 and
@@ -110,4 +111,59 @@ impl ElementKind for Hex27 {
     }
 
     fn clamp_ref(&self, _xi: &mut [f64]) {}
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange2)
+    }
+
+    /// The full `Q2` tensor product: a product of three 1-D quadratic
+    /// Lagrange factors per node.
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (lx, ly, lz) = (lag1d(xi[0]), lag1d(xi[1]), lag1d(xi[2]));
+        for (n, &(i, j, k)) in NODES.iter().enumerate() {
+            out[n] = lx[i] * ly[j] * lz[k];
+        }
+    }
+
+    fn dshape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (lx, ly, lz) = (lag1d(xi[0]), lag1d(xi[1]), lag1d(xi[2]));
+        let (dlx, dly, dlz) = (dlag1d(xi[0]), dlag1d(xi[1]), dlag1d(xi[2]));
+        for (n, &(i, j, k)) in NODES.iter().enumerate() {
+            out[3 * n] = dlx[i] * ly[j] * lz[k];
+            out[3 * n + 1] = lx[i] * dly[j] * lz[k];
+            out[3 * n + 2] = lx[i] * ly[j] * dlz[k];
+        }
+    }
 }
+
+/// (ξ, η, ζ) position of each node as indices into the 1-D quadratic basis
+/// `[node@-1, node@0, node@+1]`: 8 corners, 12 mid-edges (HEX20 order),
+/// 6 face centres (`x-`, `x+`, `y-`, `y+`, `z-`, `z+`), then the body centre.
+const NODES: [(usize, usize, usize); 27] = [
+    (0, 0, 0),
+    (2, 0, 0),
+    (2, 2, 0),
+    (0, 2, 0),
+    (0, 0, 2),
+    (2, 0, 2),
+    (2, 2, 2),
+    (0, 2, 2), // corners 0..7
+    (1, 0, 0),
+    (2, 1, 0),
+    (1, 2, 0),
+    (0, 1, 0), // bottom edges 8..11
+    (1, 0, 2),
+    (2, 1, 2),
+    (1, 2, 2),
+    (0, 1, 2), // top edges 12..15
+    (0, 0, 1),
+    (2, 0, 1),
+    (2, 2, 1),
+    (0, 2, 1), // vertical edges 16..19
+    (0, 1, 1),
+    (2, 1, 1), // faces x-, x+  (20, 21)
+    (1, 0, 1),
+    (1, 2, 1), // faces y-, y+  (22, 23)
+    (1, 1, 0),
+    (1, 1, 2), // faces z-, z+  (24, 25)
+    (1, 1, 1), // body centre   (26)
+];

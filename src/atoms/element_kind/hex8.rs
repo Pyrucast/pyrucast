@@ -1,7 +1,7 @@
 //! `HEX8` — the 8-node hexahedron.
 
 use super::qua4::contains_cube;
-use super::{ElementKind, Facet};
+use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
 /// 8-node hexahedron. Reference: `ξ, η, ζ ∈ [-1, +1]`. Local order: bottom
@@ -108,4 +108,25 @@ impl ElementKind for Hex8 {
     }
 
     fn clamp_ref(&self, _xi: &mut [f64]) {}
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange1)
+    }
+
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b, c) = (xi[0], xi[1], xi[2]);
+        for (i, n) in self.ref_nodes().iter().enumerate() {
+            out[i] = 0.125 * (1.0 + n[0] * a) * (1.0 + n[1] * b) * (1.0 + n[2] * c);
+        }
+    }
+
+    fn dshape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b, c) = (xi[0], xi[1], xi[2]);
+        for (i, n) in self.ref_nodes().iter().enumerate() {
+            let (p, q, r) = (n[0], n[1], n[2]);
+            let (u, v, w) = (1.0 + p * a, 1.0 + q * b, 1.0 + r * c);
+            out[3 * i] = 0.125 * p * v * w;
+            out[3 * i + 1] = 0.125 * q * u * w;
+            out[3 * i + 2] = 0.125 * r * u * v;
+        }
+    }
 }

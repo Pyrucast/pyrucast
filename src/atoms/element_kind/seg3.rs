@@ -1,7 +1,7 @@
 //! `SEG3` — the 3-node quadratic segment.
 
 use super::seg2::{Seg2, EDGES};
-use super::ElementKind;
+use super::{ElementKind, Interpolation};
 use crate::atoms::ElementType;
 
 /// 3-node quadratic segment (Lagrange-2 `SEG2`). Corners 0, 1 at `ξ = ∓1`,
@@ -43,5 +43,19 @@ impl ElementKind for Seg3 {
 
     fn clamp_ref(&self, xi: &mut [f64]) {
         Seg2.clamp_ref(xi);
+    }
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange2)
+    }
+
+    /// Corners at `∓1`, mid node at `0`.
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let x = xi[0];
+        out.copy_from_slice(&[0.5 * x * (x - 1.0), 0.5 * x * (x + 1.0), 1.0 - x * x]);
+    }
+
+    fn dshape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let x = xi[0];
+        out.copy_from_slice(&[x - 0.5, x + 0.5, -2.0 * x]);
     }
 }

@@ -14,7 +14,7 @@
 //! discontinuities of a Gauss-point field stay visible.
 
 use crate::atoms::ElementType;
-use crate::containers::finite_element_space::Interpolation;
+use crate::atoms::Interpolation;
 use crate::error::Result;
 
 /// Subdivision of one face of the reference element.

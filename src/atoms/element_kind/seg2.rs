@@ -1,6 +1,6 @@
 //! `SEG2` — the 2-node segment.
 
-use super::ElementKind;
+use super::{ElementKind, Interpolation};
 use crate::atoms::ElementType;
 
 /// 2-node segment. Reference: `ξ ∈ [-1, +1]`, node 0 at `ξ = -1`, node 1 at
@@ -47,5 +47,19 @@ impl ElementKind for Seg2 {
 
     fn clamp_ref(&self, xi: &mut [f64]) {
         xi[0] = xi[0].clamp(-1.0, 1.0);
+    }
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange1)
+    }
+
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let x = xi[0];
+        out[0] = 0.5 * (1.0 - x);
+        out[1] = 0.5 * (1.0 + x);
+    }
+
+    fn dshape_into(&self, _xi: &[f64], out: &mut [f64]) {
+        out[0] = -0.5;
+        out[1] = 0.5;
     }
 }

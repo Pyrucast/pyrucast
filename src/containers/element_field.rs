@@ -643,8 +643,8 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::atoms::ElementType;
+    use crate::atoms::Interpolation;
     use crate::atoms::Node;
-    use crate::containers::finite_element_space::Interpolation;
     use crate::containers::finite_element_space::QuadratureRule;
     use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
     use crate::containers::mesh::{Mesh, SubMesh};

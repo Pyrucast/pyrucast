@@ -209,13 +209,19 @@ fn bbox_dist2(x: &[f64], lo: &[f64], hi: &[f64]) -> f64 {
 /// Projected Gauss–Newton: the `ξ` (clamped to the reference domain) minimising
 /// `‖x − F(ξ)‖²` over one facet. Clamping handles edge/corner projections.
 fn closest_on_facet(element_type: ElementType, coords: &[Vec<f64>], x: &[f64]) -> Result<Vec<f64>> {
-    let interp = interpolation_for(element_type);
+    let kind = element_type.as_kind();
     let tdim = element_type.topological_dim();
     let sdim = x.len();
+    let npc = element_type.nodes_per_cell();
     let mut xi = reference_centroid(element_type);
 
+    // Scratch buffers reused across the Gauss–Newton steps (see `invert_cell`).
+    let mut n = vec![0.0; npc];
+    let mut dn = vec![0.0; npc * tdim];
+    let mut jac = vec![0.0; sdim * tdim];
+
     for _ in 0..40 {
-        let n = interp.shape(element_type, &xi)?;
+        kind.shape_into(&xi, &mut n);
         // Residual r = x − F(ξ)  (length sdim).
         let mut r = x.to_vec();
         for (i, &ni) in n.iter().enumerate() {
@@ -224,8 +230,8 @@ fn closest_on_facet(element_type: ElementType, coords: &[Vec<f64>], x: &[f64]) -
             }
         }
         // Jacobian J[a][j] = ∂x_a/∂ξ_j  (sdim × tdim).
-        let dn = interp.dshape_dxi(element_type, &xi)?;
-        let mut jac = vec![0.0; sdim * tdim];
+        kind.dshape_into(&xi, &mut dn);
+        jac.fill(0.0);
         for (i, coord) in coords.iter().enumerate() {
             for a in 0..sdim {
                 for j in 0..tdim {

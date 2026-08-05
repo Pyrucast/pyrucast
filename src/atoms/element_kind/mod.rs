@@ -33,9 +33,12 @@
 
 use crate::atoms::ElementType;
 
+pub use interpolation::Interpolation;
+
 mod hex20;
 mod hex27;
 mod hex8;
+mod interpolation;
 mod penta15;
 mod penta6;
 mod poi1;
@@ -146,6 +149,29 @@ pub trait ElementKind: Sync {
     /// to its closest admissible reference point.
     fn clamp_ref(&self, xi: &mut [f64]);
 
+    // ── Interpolation (required) ────────────────────────────────────────
+
+    /// The Lagrange degree this type carries, or `None` for `POI1`, which has
+    /// no reference frame to interpolate over. This is what
+    /// [`Interpolation::is_compatible_with`] answers from: the degree is a
+    /// property **of the element**, not a free choice.
+    fn degree(&self) -> Option<Interpolation>;
+
+    /// Shape functions `N_i(ξ)`, written into `out` (length
+    /// [`nodes_per_cell`](Self::nodes_per_cell)).
+    ///
+    /// The allocation-free form, and the one to implement: inverting the
+    /// geometric mapping ([`crate::ops::geom::locate_points`],
+    /// [`crate::ops::geom::project_points`]) evaluates it dozens of times per
+    /// point inside a Newton loop, where a `Vec` per call would dominate the
+    /// cost. [`shape`](Self::shape) is the allocating convenience over it.
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]);
+
+    /// Reference derivatives `∂N_i/∂ξ_j`, written into `out` row-major:
+    /// `out[i * topological_dim() + j]`, length
+    /// `nodes_per_cell() × topological_dim()`.
+    fn dshape_into(&self, xi: &[f64], out: &mut [f64]);
+
     // ── Provided: derived from ref_nodes ────────────────────────────────
 
     /// Number of nodes per cell.
@@ -162,6 +188,23 @@ pub trait ElementKind: Sync {
     /// corners.
     fn is_quadratic(&self) -> bool {
         self.nodes_per_cell() > self.corner_count()
+    }
+
+    /// Shape functions `N_i(ξ)` as a fresh `Vec`. Convenience over
+    /// [`shape_into`](Self::shape_into) for the callers that are not in a hot
+    /// loop.
+    fn shape(&self, xi: &[f64]) -> Vec<f64> {
+        let mut out = vec![0.0; self.nodes_per_cell()];
+        self.shape_into(xi, &mut out);
+        out
+    }
+
+    /// Reference derivatives as a fresh `Vec`. Convenience over
+    /// [`dshape_into`](Self::dshape_into).
+    fn dshape(&self, xi: &[f64]) -> Vec<f64> {
+        let mut out = vec![0.0; self.nodes_per_cell() * self.topological_dim()];
+        self.dshape_into(xi, &mut out);
+        out
     }
 }
 

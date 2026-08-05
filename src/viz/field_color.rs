@@ -359,8 +359,8 @@ pub(crate) fn submesh_primitives_smooth(
     vmax: f64,
     n: usize,
 ) -> Result<Vec<Primitive>> {
+    use crate::atoms::Interpolation;
     use crate::atoms::Point3;
-    use crate::containers::finite_element_space::Interpolation;
     use crate::viz::mesh_draw::pad3;
     use crate::viz::subdivide::{subdivide, CellSubdivision};
 

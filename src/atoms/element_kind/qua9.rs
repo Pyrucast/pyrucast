@@ -2,7 +2,7 @@
 
 use super::qua4::{clamp_cube, contains_cube, Qua4, EDGES};
 use super::qua8::FACETS;
-use super::{ElementKind, Facet};
+use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
 /// 9-node biquadratic quadrangle (full Lagrange-2 `QUA4`). Corners 0..3,
@@ -61,4 +61,50 @@ impl ElementKind for Qua9 {
     fn clamp_ref(&self, xi: &mut [f64]) {
         clamp_cube(xi);
     }
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange2)
+    }
+
+    /// The full `Q2` tensor product: each shape function is a product of two
+    /// 1-D quadratic Lagrange factors.
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (lx, ly) = (lag1d(xi[0]), lag1d(xi[1]));
+        for (n, &(i, j)) in NODES.iter().enumerate() {
+            out[n] = lx[i] * ly[j];
+        }
+    }
+
+    fn dshape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (lx, ly) = (lag1d(xi[0]), lag1d(xi[1]));
+        let (dlx, dly) = (dlag1d(xi[0]), dlag1d(xi[1]));
+        for (n, &(i, j)) in NODES.iter().enumerate() {
+            out[2 * n] = dlx[i] * ly[j];
+            out[2 * n + 1] = lx[i] * dly[j];
+        }
+    }
 }
+
+/// 1-D quadratic Lagrange basis on `[-1, 1]` at `t`, nodes `-1, 0, +1`.
+/// Shared with `HEX27`, the other full `Q2` element.
+pub(super) fn lag1d(t: f64) -> [f64; 3] {
+    [0.5 * t * (t - 1.0), 1.0 - t * t, 0.5 * t * (t + 1.0)]
+}
+
+/// Its derivative.
+pub(super) fn dlag1d(t: f64) -> [f64; 3] {
+    [t - 0.5, -2.0 * t, t + 0.5]
+}
+
+/// (ξ, η) position of each node as an index into the 1-D basis
+/// `[node@-1, node@0, node@+1]`. Corners 0..3, mid-edges 4..7, centre 8.
+const NODES: [(usize, usize); 9] = [
+    (0, 0),
+    (2, 0),
+    (2, 2),
+    (0, 2), // corners
+    (1, 0),
+    (2, 1),
+    (1, 2),
+    (0, 1), // mid-edges
+    (1, 1), // centre
+];

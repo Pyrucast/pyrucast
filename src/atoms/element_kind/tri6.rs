@@ -1,7 +1,7 @@
 //! `TRI6` — the 6-node quadratic triangle.
 
 use super::tri3::{clamp_simplex, contains_simplex, Tri3, EDGES};
-use super::{ElementKind, Facet};
+use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
 /// 6-node quadratic triangle (Lagrange-2 `TRI3`). Corners 0..2 as `TRI3`,
@@ -69,5 +69,43 @@ impl ElementKind for Tri6 {
 
     fn clamp_ref(&self, xi: &mut [f64]) {
         clamp_simplex(xi);
+    }
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange2)
+    }
+
+    /// Complete quadratic on the unit triangle. `L1 = 1-ξ-η`, `L2 = ξ`,
+    /// `L3 = η`; corners `L_i(2L_i-1)`, mid-edges `4 L_a L_b`.
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b) = (xi[0], xi[1]);
+        let (l1, l2, l3) = (1.0 - a - b, a, b);
+        out.copy_from_slice(&[
+            l1 * (2.0 * l1 - 1.0),
+            l2 * (2.0 * l2 - 1.0),
+            l3 * (2.0 * l3 - 1.0),
+            4.0 * l1 * l2,
+            4.0 * l2 * l3,
+            4.0 * l3 * l1,
+        ]);
+    }
+
+    fn dshape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b) = (xi[0], xi[1]);
+        let (l1, l2, l3) = (1.0 - a - b, a, b);
+        // dL1 = (-1,-1), dL2 = (1,0), dL3 = (0,1).
+        out.copy_from_slice(&[
+            -(4.0 * l1 - 1.0),
+            -(4.0 * l1 - 1.0), // dN0
+            4.0 * l2 - 1.0,
+            0.0, // dN1
+            0.0,
+            4.0 * l3 - 1.0, // dN2
+            4.0 * (l1 - l2),
+            -4.0 * l2, // dN3 = 4(L2 dL1 + L1 dL2)
+            4.0 * l3,
+            4.0 * l2, // dN4 = 4(L3 dL2 + L2 dL3)
+            -4.0 * l3,
+            4.0 * (l1 - l3), // dN5 = 4(L1 dL3 + L3 dL1)
+        ]);
     }
 }

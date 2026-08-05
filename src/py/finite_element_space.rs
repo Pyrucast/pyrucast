@@ -3,7 +3,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::atoms::Element;
-use crate::containers::finite_element_space::Interpolation;
+use crate::atoms::Interpolation;
 use crate::containers::finite_element_space::QuadratureRule;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::error::{PyrucastError, Result};

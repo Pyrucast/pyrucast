@@ -1,7 +1,7 @@
 //! `PENTA15` — the 15-node serendipity prism.
 
 use super::penta6::{contains_prism, Penta6, EDGES};
-use super::{ElementKind, Facet};
+use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
 /// 15-node serendipity prism (Lagrange-2 `PENTA6`). Corners 0..5 as `PENTA6`,
@@ -90,4 +90,95 @@ impl ElementKind for Penta15 {
     }
 
     fn clamp_ref(&self, _xi: &mut [f64]) {}
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange2)
+    }
+
+    /// Serendipity prism: triangle `(L1, L2, L3)` × `ζ ∈ [0, 1]`.
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b, t) = (xi[0], xi[1], xi[2]);
+        let (l1, l2, l3) = (1.0 - a - b, a, b);
+        let bot = |li: f64| li * (2.0 * li - 1.0) * (1.0 - t) - 2.0 * li * t * (1.0 - t);
+        let top = |li: f64| li * (2.0 * li - 1.0) * t - 2.0 * li * t * (1.0 - t);
+        out.copy_from_slice(&[
+            bot(l1),
+            bot(l2),
+            bot(l3),
+            top(l1),
+            top(l2),
+            top(l3),
+            4.0 * l1 * l2 * (1.0 - t), // 6: bottom (0,1)
+            4.0 * l2 * l3 * (1.0 - t), // 7: bottom (1,2)
+            4.0 * l3 * l1 * (1.0 - t), // 8: bottom (2,0)
+            4.0 * l1 * l2 * t,         // 9: top (3,4)
+            4.0 * l2 * l3 * t,         // 10: top (4,5)
+            4.0 * l3 * l1 * t,         // 11: top (5,3)
+            4.0 * l1 * t * (1.0 - t),  // 12: vertical (0,3)
+            4.0 * l2 * t * (1.0 - t),  // 13: vertical (1,4)
+            4.0 * l3 * t * (1.0 - t),  // 14: vertical (2,5)
+        ]);
+    }
+
+    fn dshape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b, t) = (xi[0], xi[1], xi[2]);
+        let (l1, l2, l3) = (1.0 - a - b, a, b);
+        // (a, b) gradients of the triangle coordinates.
+        let dl = [[-1.0, -1.0], [1.0, 0.0], [0.0, 1.0]]; // dL1, dL2, dL3
+        let ls = [l1, l2, l3];
+
+        // Corner node on triangle vertex `i`, `top` selects the ζ = 1 face.
+        let corner = |i: usize, top: bool| {
+            let li = ls[i];
+            let f = li * (2.0 * li - 1.0); // f(Li)
+            let coef = if top {
+                (4.0 * li - 1.0) * t - 2.0 * (t - t * t)
+            } else {
+                (4.0 * li - 1.0) * (1.0 - t) - 2.0 * (t - t * t)
+            };
+            let dc = if top {
+                f - 2.0 * li * (1.0 - 2.0 * t)
+            } else {
+                -f - 2.0 * li * (1.0 - 2.0 * t)
+            };
+            [coef * dl[i][0], coef * dl[i][1], dc]
+        };
+        // Mid-edge triangle node between vertices `i`,`j`, `top` selects ζ = 1.
+        let tri_edge = |i: usize, j: usize, top: bool| {
+            let (la, lb) = (ls[i], ls[j]);
+            let zfac = if top { t } else { 1.0 - t };
+            let da = 4.0 * zfac * (la * dl[j][0] + lb * dl[i][0]);
+            let db = 4.0 * zfac * (la * dl[j][1] + lb * dl[i][1]);
+            let dc = if top { 4.0 * la * lb } else { -4.0 * la * lb };
+            [da, db, dc]
+        };
+        // Vertical mid-edge node on triangle vertex `i` (ζ = 1/2).
+        let vertical = |i: usize| {
+            let li = ls[i];
+            [
+                4.0 * (t - t * t) * dl[i][0],
+                4.0 * (t - t * t) * dl[i][1],
+                4.0 * li * (1.0 - 2.0 * t),
+            ]
+        };
+        let rows = [
+            corner(0, false),
+            corner(1, false),
+            corner(2, false),
+            corner(0, true),
+            corner(1, true),
+            corner(2, true),
+            tri_edge(0, 1, false),
+            tri_edge(1, 2, false),
+            tri_edge(2, 0, false),
+            tri_edge(0, 1, true),
+            tri_edge(1, 2, true),
+            tri_edge(2, 0, true),
+            vertical(0),
+            vertical(1),
+            vertical(2),
+        ];
+        for (i, row) in rows.iter().enumerate() {
+            out[3 * i..3 * i + 3].copy_from_slice(row);
+        }
+    }
 }

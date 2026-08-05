@@ -1,6 +1,6 @@
 //! `TET4` — the 4-node tetrahedron.
 
-use super::{ElementKind, Facet};
+use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
 /// 4-node tetrahedron. Reference: `ξ, η, ζ ∈ [0, 1]`, `ξ + η + ζ ≤ 1`. Local
@@ -79,4 +79,24 @@ impl ElementKind for Tet4 {
 
     /// A volume cell is never projected onto, so there is nothing to clamp.
     fn clamp_ref(&self, _xi: &mut [f64]) {}
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange1)
+    }
+
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b, c) = (xi[0], xi[1], xi[2]);
+        out[0] = 1.0 - a - b - c;
+        out[1] = a;
+        out[2] = b;
+        out[3] = c;
+    }
+
+    fn dshape_into(&self, _xi: &[f64], out: &mut [f64]) {
+        out.copy_from_slice(&[
+            -1.0, -1.0, -1.0, // dN0
+            1.0, 0.0, 0.0, // dN1
+            0.0, 1.0, 0.0, // dN2
+            0.0, 0.0, 1.0, // dN3
+        ]);
+    }
 }

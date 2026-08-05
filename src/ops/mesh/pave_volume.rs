@@ -461,7 +461,7 @@ mod tests {
         for sub in &mesh {
             let space = crate::containers::finite_element_space::SubFiniteElementSpace::new(
                 sub.clone(),
-                crate::containers::finite_element_space::Interpolation::Lagrange1,
+                crate::atoms::Interpolation::Lagrange1,
                 crate::containers::finite_element_space::QuadratureRule::Gauss,
             )
             .unwrap();

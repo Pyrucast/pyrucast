@@ -2,7 +2,7 @@
 //!
 //! Hierarchy mirroring [`crate::containers::mesh`]:
 //!
-//! - [`SubFiniteElementSpace`] — one [`crate::containers::finite_element_space::Interpolation`] and one
+//! - [`SubFiniteElementSpace`] — one [`crate::atoms::Interpolation`] and one
 //!   [`crate::containers::finite_element_space::QuadratureRule`] applied to a single
 //!   [`crate::containers::mesh::SubMesh`]. It stores the **reference-space tables**
 //!   that do not depend on the physical coordinates of the nodes
@@ -56,11 +56,14 @@
 
 use crate::atoms::{Element, ElementIter};
 
-pub mod interpolation;
 pub mod quadrature;
 
-pub use interpolation::Interpolation;
 pub use quadrature::QuadratureRule;
+
+// `Interpolation` is a property **of the element type**, so it lives with the
+// elements in [`crate::atoms::element_kind`]. Re-exported here because an FE
+// space is where one picks it.
+pub use crate::atoms::element_kind::Interpolation;
 
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;

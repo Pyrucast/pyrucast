@@ -12,7 +12,7 @@
 //! [`ElementType`] and the order in which a cell's nodes must be supplied
 //! to [`crate::containers::mesh::SubMesh::add_cell`] / [`crate::containers::mesh::Mesh::add_cell`].
 //! They are the contract between the geometry layer (mesh) and any
-//! interpolation layer ([`crate::containers::finite_element_space::Interpolation`]) built on
+//! interpolation layer ([`crate::atoms::Interpolation`]) built on
 //! top.
 //!
 //! | Variant | Reference domain | Reference node coordinates (in order) |

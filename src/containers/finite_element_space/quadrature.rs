@@ -3,7 +3,7 @@
 //! A [`QuadratureRule`] returns a list of `(ξ_g, w_g)` pairs — reference
 //! coordinates and weights — over the reference element of a given
 //! [`ElementType`]. It is the **numerical** counterpart of an
-//! [`crate::containers::finite_element_space::Interpolation`]: the points at which shape
+//! [`crate::atoms::Interpolation`]: the points at which shape
 //! functions are sampled when integrating.
 //!
 //! The reference frames are those documented on each `ElementType`

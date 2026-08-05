@@ -1,6 +1,6 @@
 //! `TRI3` — the 3-node triangle.
 
-use super::{ElementKind, Facet};
+use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
 /// 3-node triangle. Reference: the unit simplex `ξ, η ∈ [0, 1]`, `ξ + η ≤ 1`.
@@ -89,5 +89,23 @@ impl ElementKind for Tri3 {
 
     fn clamp_ref(&self, xi: &mut [f64]) {
         clamp_simplex(xi);
+    }
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange1)
+    }
+
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b) = (xi[0], xi[1]);
+        out[0] = 1.0 - a - b;
+        out[1] = a;
+        out[2] = b;
+    }
+
+    fn dshape_into(&self, _xi: &[f64], out: &mut [f64]) {
+        out.copy_from_slice(&[
+            -1.0, -1.0, // dN0
+            1.0, 0.0, // dN1
+            0.0, 1.0, // dN2
+        ]);
     }
 }

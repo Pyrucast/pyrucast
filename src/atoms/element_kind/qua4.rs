@@ -1,6 +1,6 @@
 //! `QUA4` — the 4-node quadrangle.
 
-use super::{ElementKind, Facet};
+use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
 /// 4-node quadrangle. Reference: `ξ, η ∈ [-1, +1]`. Local order (CCW):
@@ -79,5 +79,30 @@ impl ElementKind for Qua4 {
 
     fn clamp_ref(&self, xi: &mut [f64]) {
         clamp_cube(xi);
+    }
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange1)
+    }
+
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b) = (xi[0], xi[1]);
+        out[0] = 0.25 * (1.0 - a) * (1.0 - b);
+        out[1] = 0.25 * (1.0 + a) * (1.0 - b);
+        out[2] = 0.25 * (1.0 + a) * (1.0 + b);
+        out[3] = 0.25 * (1.0 - a) * (1.0 + b);
+    }
+
+    fn dshape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b) = (xi[0], xi[1]);
+        out.copy_from_slice(&[
+            -0.25 * (1.0 - b),
+            -0.25 * (1.0 - a), // dN0
+            0.25 * (1.0 - b),
+            -0.25 * (1.0 + a), // dN1
+            0.25 * (1.0 + b),
+            0.25 * (1.0 + a), // dN2
+            -0.25 * (1.0 + b),
+            0.25 * (1.0 - a), // dN3
+        ]);
     }
 }

@@ -16,8 +16,8 @@
 //! For a point on a shared face the first containing cell (in submesh, then
 //! cell order) wins.
 
+use crate::atoms::Interpolation;
 use crate::atoms::{ElementType, NodeId};
-use crate::containers::finite_element_space::Interpolation;
 use crate::containers::mesh::Mesh;
 use crate::error::Result;
 use crate::parallel::*;
@@ -291,13 +291,20 @@ fn invert_cell(
     x: &[f64],
     tol: f64,
 ) -> Result<Option<(Vec<f64>, Vec<f64>)>> {
-    let interp = interpolation_for(element_type);
+    let kind = element_type.as_kind();
     let tdim = element_type.topological_dim();
     let sdim = x.len();
+    let npc = element_type.nodes_per_cell();
     let mut xi = reference_centroid(element_type);
 
+    // Scratch buffers, reused across the up-to-40 Newton steps: `shape_into` /
+    // `dshape_into` write in place, so the loop allocates nothing.
+    let mut n = vec![0.0; npc];
+    let mut dn = vec![0.0; npc * tdim];
+    let mut jac = vec![0.0; sdim * tdim];
+
     for _ in 0..40 {
-        let n = interp.shape(element_type, &xi)?;
+        kind.shape_into(&xi, &mut n);
         // Residual r = x − Σᵢ Nᵢ·Xᵢ  (length sdim).
         let mut r = x.to_vec();
         for (i, &ni) in n.iter().enumerate() {
@@ -306,8 +313,8 @@ fn invert_cell(
             }
         }
         // Jacobian J[a][j] = ∂x_a/∂ξ_j = Σᵢ (∂Nᵢ/∂ξ_j)·X[i][a]  (sdim × tdim).
-        let dn = interp.dshape_dxi(element_type, &xi)?; // [i*tdim + j]
-        let mut jac = vec![0.0; sdim * tdim];
+        kind.dshape_into(&xi, &mut dn); // [i*tdim + j]
+        jac.fill(0.0);
         for (i, coord) in coords.iter().enumerate() {
             for a in 0..sdim {
                 for j in 0..tdim {
@@ -329,7 +336,7 @@ fn invert_cell(
 
     // Accept iff the converged point maps back onto x and lies in the reference
     // domain (a diverged / out-of-cell solve fails one of the two).
-    let n = interp.shape(element_type, &xi)?;
+    kind.shape_into(&xi, &mut n);
     let mut r2 = 0.0;
     for a in 0..sdim {
         let mut xa = 0.0;

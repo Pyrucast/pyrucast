@@ -1,6 +1,6 @@
 //! `PENTA6` — the 6-node prism (pentahedron).
 
-use super::{ElementKind, Facet};
+use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
 /// 6-node prism, the extrusion of a `TRI3` along `ζ`. Reference:
@@ -104,4 +104,46 @@ impl ElementKind for Penta6 {
     }
 
     fn clamp_ref(&self, _xi: &mut [f64]) {}
+    fn degree(&self) -> Option<Interpolation> {
+        Some(Interpolation::Lagrange1)
+    }
+
+    /// Prism = `TRI3` (barycentric ξ, η) ⊗ `SEG2` (linear ζ ∈ [0, 1]).
+    fn shape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b, c) = (xi[0], xi[1], xi[2]);
+        let (l1, l2, l3) = (1.0 - a - b, a, b);
+        out.copy_from_slice(&[
+            l1 * (1.0 - c),
+            l2 * (1.0 - c),
+            l3 * (1.0 - c),
+            l1 * c,
+            l2 * c,
+            l3 * c,
+        ]);
+    }
+
+    fn dshape_into(&self, xi: &[f64], out: &mut [f64]) {
+        let (a, b, c) = (xi[0], xi[1], xi[2]);
+        let (l1, l2, l3) = (1.0 - a - b, a, b);
+        out.copy_from_slice(&[
+            -(1.0 - c),
+            -(1.0 - c),
+            -l1, // dN0
+            1.0 - c,
+            0.0,
+            -l2, // dN1
+            0.0,
+            1.0 - c,
+            -l3, // dN2
+            -c,
+            -c,
+            l1, // dN3
+            c,
+            0.0,
+            l2, // dN4
+            0.0,
+            c,
+            l3, // dN5
+        ]);
+    }
 }
