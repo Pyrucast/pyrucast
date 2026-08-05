@@ -47,6 +47,15 @@ use pyrucast::store::insert;
 /// that in mind.
 const ASSEMBLY_N: usize = 450; // 202 500 QUA4 cells
 
+/// Grid side for the constitutive-law group.
+///
+/// `behavior::integrate` is roughly thirteen times cheaper per cell than the
+/// assembly, so on the assembly's own grid it ran in some 40 ms — short enough
+/// that run-to-run noise reached ±13 %, and the figure said nothing. It gets
+/// its own, much larger mesh instead; it allocates no global matrix, so the
+/// memory stays reasonable where a stiffness of that size would not.
+const INTEGRATE_N: usize = 1900; // 3 610 000 QUA4 cells
+
 /// Grid side for the solver group, sized on the same principle. The direct
 /// factorisation grows much faster than the assembly, so it needs its own,
 /// smaller mesh.
@@ -199,29 +208,43 @@ fn bench_assembly(c: &mut Criterion) {
         &format!("stiffness elasticity {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
         |b| b.iter(|| black_box(pyrucast::ops::matrix::stiffness(&g.model, &g.materials).unwrap())),
     );
-    c.bench_function(
-        &format!("integrate elasticity {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
-        |b| {
-            b.iter(|| {
-                black_box(
-                    pyrucast::ops::element_field::behavior::integrate(
-                        &g.model,
-                        &g.strain,
-                        None,
-                        &g.materials,
-                        None,
+}
+
+/// The constitutive law on its own grid, big enough for the figure to mean
+/// something — see [`INTEGRATE_N`]. Plane and axisymmetric side by side, as in
+/// [`bench_axisymmetric`]: the revolved law carries four Voigt components
+/// instead of three.
+fn bench_integrate(c: &mut Criterion) {
+    for (tag, kind) in [
+        ("plane", ElasticityModel::PlaneStrain),
+        ("axisymmetric", ElasticityModel::Axisymmetric),
+    ] {
+        let g = elasticity_grid_with(INTEGRATE_N, kind);
+        c.bench_function(
+            &format!("integrate {tag} {INTEGRATE_N}x{INTEGRATE_N} QUA4"),
+            |b| {
+                b.iter(|| {
+                    black_box(
+                        pyrucast::ops::element_field::behavior::integrate(
+                            &g.model,
+                            &g.strain,
+                            None,
+                            &g.materials,
+                            None,
+                        )
+                        .unwrap(),
                     )
-                    .unwrap(),
-                )
-            })
-        },
-    );
+                })
+            },
+        );
+    }
 }
 
 /// Plane vs axisymmetric on the same geometry, over the four operations the
 /// revolved formulation touches: the stiffness (hoop row of `B`), the
-/// deformation (the extra `ε_θθ = u_r/r` component), the constitutive law (four
-/// Voigt components instead of three) and the internal forces (the hoop `Bᵀ`).
+/// deformation (the extra `ε_θθ = u_r/r` component) and the internal forces
+/// (the hoop `Bᵀ`). The constitutive law is measured in [`bench_integrate`],
+/// which gives it a grid where its cost is resolvable.
 ///
 /// Read the pairs as a ratio, not an absolute: the axisymmetric case does
 /// genuinely more arithmetic. A plane model must stay level with the pre-existing
@@ -263,23 +286,6 @@ fn bench_axisymmetric(c: &mut Criterion) {
             },
         );
         c.bench_function(
-            &format!("integrate {tag} {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
-            |b| {
-                b.iter(|| {
-                    black_box(
-                        pyrucast::ops::element_field::behavior::integrate(
-                            &g.model,
-                            &g.strain,
-                            None,
-                            &g.materials,
-                            None,
-                        )
-                        .unwrap(),
-                    )
-                })
-            },
-        );
-        c.bench_function(
             &format!("internal_forces {tag} {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
             |b| {
                 b.iter(|| {
@@ -317,5 +323,11 @@ fn bench_solver(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, bench_assembly, bench_axisymmetric, bench_solver);
+criterion_group!(
+    benches,
+    bench_assembly,
+    bench_integrate,
+    bench_axisymmetric,
+    bench_solver
+);
 criterion_main!(benches);
