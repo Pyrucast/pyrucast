@@ -80,91 +80,27 @@ pub(crate) enum Primitive {
 
 // ─── Element-type → primitives ──────────────────────────────────────────────
 
-/// Faces of a TET4 — each oriented outwards (CCW seen from outside).
-pub(crate) const TET4_FACES: [[usize; 3]; 4] = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]];
-
-/// Faces of a HEX8 — bot / top / 4 lateral, in the convention used by
-/// [`crate::ops::mesh::extrude`]: HEX8 = [bot[0..4], top[0..4]], both CCW seen from
-/// outside the lateral surface.
-pub(crate) const HEX8_FACES: [[usize; 4]; 6] = [
-    [0, 3, 2, 1], // bottom (normal opposed to extrusion direction)
-    [4, 5, 6, 7], // top
-    [0, 1, 5, 4],
-    [1, 2, 6, 5],
-    [2, 3, 7, 6],
-    [3, 0, 4, 7],
-];
-
-/// Faces of a PENTA6 (prism) — two triangular caps then three
-/// quadrilateral sides, each oriented outwards, in the convention used by
-/// [`crate::ops::mesh::extrude`]: PENTA6 = [bot[0..3], top[0..3]]. The
-/// caps carry 3 indices, the sides 4, so the faces are stored as slices.
-pub(crate) const PENTA6_FACES: [&[usize]; 5] = [
-    &[0, 2, 1],    // bottom triangle (normal opposed to extrusion direction)
-    &[3, 4, 5],    // top triangle
-    &[0, 1, 4, 3], // side
-    &[1, 2, 5, 4], // side
-    &[2, 0, 3, 5], // side
-];
-
-/// Faces of a PYRA5 (pyramid) — the square base, wound so its normal points
-/// away from the apex, then the four triangles round the sides.
-pub(crate) const PYRA5_FACES: [&[usize]; 5] = [
-    &[0, 3, 2, 1], // base
-    &[0, 1, 4],
-    &[1, 2, 4],
-    &[2, 3, 4],
-    &[3, 0, 4],
-];
-
-/// Edges of each element type, as local node-index pairs — used by the
-/// wireframe rendering style. POI1 has no edge (it draws as a dot).
-#[rustfmt::skip]
-fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
-    match et {
-        ElementType::POI1 => &[],
-        ElementType::SEG2 => &[[0, 1]],
-        ElementType::TRI3 => &[[0, 1], [1, 2], [2, 0]],
-        ElementType::QUA4 => &[[0, 1], [1, 2], [2, 3], [3, 0]],
-        ElementType::TET4 => &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
-        ElementType::PYRA5 => &[
-            [0, 1], [1, 2], [2, 3], [3, 0],
-            [0, 4], [1, 4], [2, 4], [3, 4],
-        ],
-        ElementType::PENTA6 => &[
-            [0, 1], [1, 2], [2, 0],
-            [3, 4], [4, 5], [5, 3],
-            [0, 3], [1, 4], [2, 5],
-        ],
-        ElementType::HEX8 => &[
-            [0, 1], [1, 2], [2, 3], [3, 0],
-            [4, 5], [5, 6], [6, 7], [7, 4],
-            [0, 4], [1, 5], [2, 6], [3, 7],
-        ],
-        // Quadratic types: each geometric edge is split at its mid node so
-        // the wireframe passes through the mid-side nodes.
-        ElementType::SEG3 => &[[0, 2], [2, 1]],
-        ElementType::TRI6 => &[
-            [0, 3], [3, 1], [1, 4], [4, 2], [2, 5], [5, 0],
-        ],
-        ElementType::QUA8 | ElementType::QUA9 => &[
-            [0, 4], [4, 1], [1, 5], [5, 2], [2, 6], [6, 3], [3, 7], [7, 0],
-        ],
-        ElementType::TET10 => &[
-            [0, 4], [4, 1], [1, 5], [5, 2], [2, 6], [6, 0],
-            [0, 7], [7, 3], [1, 8], [8, 3], [2, 9], [9, 3],
-        ],
-        ElementType::PENTA15 => &[
-            [0, 6], [6, 1], [1, 7], [7, 2], [2, 8], [8, 0],
-            [3, 9], [9, 4], [4, 10], [10, 5], [5, 11], [11, 3],
-            [0, 12], [12, 3], [1, 13], [13, 4], [2, 14], [14, 5],
-        ],
-        ElementType::HEX20 | ElementType::HEX27 => &[
-            [0, 8], [8, 1], [1, 9], [9, 2], [2, 10], [10, 3], [3, 11], [11, 0],
-            [4, 12], [12, 5], [5, 13], [13, 6], [6, 14], [14, 7], [7, 15], [15, 4],
-            [0, 16], [16, 4], [1, 17], [17, 5], [2, 18], [18, 6], [3, 19], [19, 7],
-        ],
+/// Edges of an element type as local node-index pairs, for the wireframe
+/// style. Derived from the element's topological
+/// [`edges`](crate::atoms::ElementKind::edges): a quadratic type splits each
+/// edge at its mid node (local index `corner_count + k`, see
+/// [`crate::atoms::element_kind`]) so the polyline follows the curvature.
+/// POI1 has no edge — it draws as a dot.
+pub(crate) fn element_edges(et: ElementType) -> Vec<[usize; 2]> {
+    let k = et.as_kind();
+    let nc = k.corner_count();
+    let quadratic = k.is_quadratic();
+    let mut out = Vec::with_capacity(k.edges().len() * if quadratic { 2 } else { 1 });
+    for (e, &[a, b]) in k.edges().iter().enumerate() {
+        if quadratic {
+            let mid = nc + e;
+            out.push([a, mid]);
+            out.push([mid, b]);
+        } else {
+            out.push([a, b]);
+        }
     }
+    out
 }
 
 /// `(cell, local_face)` pairs whose face lies on the **boundary** of a
@@ -180,18 +116,13 @@ fn element_edges(et: ElementType) -> &'static [[usize; 2]] {
 /// A face is keyed by the **set** of its global node ids (sorted), so the
 /// two cells sharing it produce the same key regardless of orientation.
 pub(crate) fn boundary_faces(et: ElementType, conn: &[NodeId]) -> Option<HashSet<(usize, usize)>> {
-    // Quadratic volumes reuse their linear parent's corner-face tables: the
-    // face key is built from corner node ids (indices < corner count), which
-    // two adjacent cells share, so interior-face culling still works.
-    let faces: Vec<&[usize]> = match et {
-        ElementType::TET4 | ElementType::TET10 => TET4_FACES.iter().map(|f| f.as_slice()).collect(),
-        ElementType::HEX8 | ElementType::HEX20 | ElementType::HEX27 => {
-            HEX8_FACES.iter().map(|f| f.as_slice()).collect()
-        }
-        ElementType::PENTA6 | ElementType::PENTA15 => PENTA6_FACES.to_vec(),
-        ElementType::PYRA5 => PYRA5_FACES.to_vec(),
-        _ => return None,
-    };
+    // Only volumes hide anything behind themselves.
+    if et.topological_dim() != 3 {
+        return None;
+    }
+    // Quadratic volumes key on their **corners**, which two adjacent cells
+    // share whatever their degree, so interior-face culling works uniformly.
+    let faces: Vec<&[usize]> = et.as_kind().facets().iter().map(|f| f.corners()).collect();
     let npc = et.nodes_per_cell();
     if npc == 0 {
         return Some(HashSet::new());
@@ -273,8 +204,15 @@ fn submesh_primitives_impl(
     // inside the opaque solid). `None` for non-volume types → keep all.
     let keep = boundary_faces(et, sm.connectivity());
 
-    match et {
-        ElementType::POI1 => {
+    // The drawing rule depends only on the topological dimension: a point
+    // draws as a dot, a line as its (possibly split) edges, a surface as its
+    // corner polygon, a volume as its outward faces minus the hidden ones.
+    // Quadratic types draw the linearised skin over their corner nodes — the
+    // interpolated renderer in `subdivide` is what shows the curvature.
+    let k = et.as_kind();
+    let nc = k.corner_count();
+    match k.topological_dim() {
+        0 => {
             for i in 0..n_cells {
                 out.push(Primitive::Point {
                     p: pts[i],
@@ -282,168 +220,40 @@ fn submesh_primitives_impl(
                 });
             }
         }
-        ElementType::SEG2 => {
-            for i in 0..n_cells {
-                out.push(Primitive::Segment {
-                    a: pts[2 * i],
-                    b: pts[2 * i + 1],
-                    color: cell_color(i),
-                });
-            }
-        }
-        ElementType::TRI3 => {
-            for i in 0..n_cells {
-                out.push(Primitive::Face {
-                    verts: vec![pts[3 * i], pts[3 * i + 1], pts[3 * i + 2]],
-                    color: cell_color(i),
-                    outline: true,
-                });
-            }
-        }
-        ElementType::QUA4 => {
-            for i in 0..n_cells {
-                out.push(Primitive::Face {
-                    verts: vec![pts[4 * i], pts[4 * i + 1], pts[4 * i + 2], pts[4 * i + 3]],
-                    color: cell_color(i),
-                    outline: true,
-                });
-            }
-        }
-        ElementType::TET4 => {
-            for i in 0..n_cells {
-                let base = 4 * i;
-                let c = cell_color(i);
-                for (fi, face) in TET4_FACES.iter().enumerate() {
-                    if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
-                        continue;
-                    }
-                    out.push(Primitive::Face {
-                        verts: vec![
-                            pts[base + face[0]],
-                            pts[base + face[1]],
-                            pts[base + face[2]],
-                        ],
-                        color: c,
-                        outline: true,
-                    });
-                }
-            }
-        }
-        ElementType::HEX8 => {
-            for i in 0..n_cells {
-                let base = 8 * i;
-                let c = cell_color(i);
-                for (fi, face) in HEX8_FACES.iter().enumerate() {
-                    if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
-                        continue;
-                    }
-                    out.push(Primitive::Face {
-                        verts: vec![
-                            pts[base + face[0]],
-                            pts[base + face[1]],
-                            pts[base + face[2]],
-                            pts[base + face[3]],
-                        ],
-                        color: c,
-                        outline: true,
-                    });
-                }
-            }
-        }
-        ElementType::PYRA5 => {
-            for i in 0..n_cells {
-                let base = 5 * i;
-                let c = cell_color(i);
-                for (fi, face) in PYRA5_FACES.iter().enumerate() {
-                    if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
-                        continue;
-                    }
-                    out.push(Primitive::Face {
-                        verts: face.iter().map(|&li| pts[base + li]).collect(),
-                        color: c,
-                        outline: true,
-                    });
-                }
-            }
-        }
-        ElementType::PENTA6 => {
-            for i in 0..n_cells {
-                let base = 6 * i;
-                let c = cell_color(i);
-                for (fi, face) in PENTA6_FACES.iter().enumerate() {
-                    if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
-                        continue;
-                    }
-                    out.push(Primitive::Face {
-                        verts: face.iter().map(|&li| pts[base + li]).collect(),
-                        color: c,
-                        outline: true,
-                    });
-                }
-            }
-        }
-        // Quadratic types: draw the linearized skin over the corner nodes
-        // (the interpolated renderer in `subdivide` shows the curvature).
-        ElementType::SEG3 => {
-            for i in 0..n_cells {
-                let base = 3 * i;
-                let c = cell_color(i);
-                out.push(Primitive::Segment {
-                    a: pts[base],
-                    b: pts[base + 2],
-                    color: c,
-                });
-                out.push(Primitive::Segment {
-                    a: pts[base + 2],
-                    b: pts[base + 1],
-                    color: c,
-                });
-            }
-        }
-        ElementType::TRI6 => {
-            for i in 0..n_cells {
-                let base = 6 * i;
-                out.push(Primitive::Face {
-                    verts: vec![pts[base], pts[base + 1], pts[base + 2]],
-                    color: cell_color(i),
-                    outline: true,
-                });
-            }
-        }
-        ElementType::QUA8 | ElementType::QUA9 => {
-            let npc = et.nodes_per_cell();
-            for i in 0..n_cells {
-                let base = npc * i;
-                out.push(Primitive::Face {
-                    verts: vec![pts[base], pts[base + 1], pts[base + 2], pts[base + 3]],
-                    color: cell_color(i),
-                    outline: true,
-                });
-            }
-        }
-        ElementType::TET10 | ElementType::HEX20 | ElementType::HEX27 | ElementType::PENTA15 => {
-            let faces: &[&[usize]] = match et {
-                ElementType::TET10 => &[&[0, 2, 1], &[0, 1, 3], &[0, 3, 2], &[1, 2, 3]],
-                ElementType::HEX20 | ElementType::HEX27 => &[
-                    &[0, 3, 2, 1],
-                    &[4, 5, 6, 7],
-                    &[0, 1, 5, 4],
-                    &[1, 2, 6, 5],
-                    &[2, 3, 7, 6],
-                    &[3, 0, 4, 7],
-                ],
-                _ => &PENTA6_FACES, // PENTA15
-            };
-            let npc = et.nodes_per_cell();
+        1 => {
+            let edges = element_edges(et);
             for i in 0..n_cells {
                 let base = npc * i;
                 let c = cell_color(i);
-                for (fi, face) in faces.iter().enumerate() {
+                for e in &edges {
+                    out.push(Primitive::Segment {
+                        a: pts[base + e[0]],
+                        b: pts[base + e[1]],
+                        color: c,
+                    });
+                }
+            }
+        }
+        2 => {
+            for i in 0..n_cells {
+                let base = npc * i;
+                out.push(Primitive::Face {
+                    verts: (0..nc).map(|j| pts[base + j]).collect(),
+                    color: cell_color(i),
+                    outline: true,
+                });
+            }
+        }
+        _ => {
+            for i in 0..n_cells {
+                let base = npc * i;
+                let c = cell_color(i);
+                for (fi, facet) in k.facets().iter().enumerate() {
                     if keep.as_ref().is_some_and(|k| !k.contains(&(i, fi))) {
                         continue;
                     }
                     out.push(Primitive::Face {
-                        verts: face.iter().map(|&li| pts[base + li]).collect(),
+                        verts: facet.corners().iter().map(|&li| pts[base + li]).collect(),
                         color: c,
                         outline: true,
                     });
@@ -981,7 +791,7 @@ pub(crate) fn submesh_wireframe_primitives(sm: &SubMesh) -> Result<Vec<Primitive
     let mut seen: HashSet<(u32, u32)> = HashSet::new();
     for cell in 0..n_cells {
         let base = cell * npc;
-        for e in edges {
+        for e in &edges {
             let (mut ga, mut gb) = (conn[base + e[0]].0, conn[base + e[1]].0);
             if ga > gb {
                 std::mem::swap(&mut ga, &mut gb);

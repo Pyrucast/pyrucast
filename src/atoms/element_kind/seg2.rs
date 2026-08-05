@@ -1,0 +1,51 @@
+//! `SEG2` — the 2-node segment.
+
+use super::ElementKind;
+use crate::atoms::ElementType;
+
+/// 2-node segment. Reference: `ξ ∈ [-1, +1]`, node 0 at `ξ = -1`, node 1 at
+/// `ξ = +1`.
+pub struct Seg2;
+
+/// Shared by `SEG2` and `SEG3`: the segment's ends carry no orientation of
+/// their own, so `facets()` stays empty and the chaining logic in
+/// [`crate::ops::mesh::orient`] handles them directly.
+pub(super) const EDGES: &[[usize; 2]] = &[[0, 1]];
+
+impl ElementKind for Seg2 {
+    fn element_type(&self) -> ElementType {
+        ElementType::SEG2
+    }
+
+    fn ref_nodes(&self) -> &'static [&'static [f64]] {
+        &[&[-1.0], &[1.0]]
+    }
+
+    fn reversal_permutation(&self) -> &'static [usize] {
+        &[1, 0]
+    }
+
+    fn corner_count(&self) -> usize {
+        2
+    }
+
+    fn edges(&self) -> &'static [[usize; 2]] {
+        EDGES
+    }
+
+    fn ref_centroid(&self) -> &'static [f64] {
+        &[0.0]
+    }
+
+    fn ref_measure(&self) -> f64 {
+        2.0
+    }
+
+    fn contains_ref(&self, xi: &[f64], tol: f64) -> bool {
+        xi[0] >= -1.0 - tol && xi[0] <= 1.0 + tol
+    }
+
+    fn clamp_ref(&self, xi: &mut [f64]) {
+        xi[0] = xi[0].clamp(-1.0, 1.0);
+    }
+}

@@ -414,8 +414,8 @@ mod tests {
             let et = s.element_type();
             let npc = et.nodes_per_cell();
             for cell in s.connectivity().chunks(npc) {
-                for f in crate::ops::mesh::orient::facets_of(et) {
-                    let mut key: Vec<NodeId> = f.iter().map(|&i| cell[i]).collect();
+                for f in et.as_kind().facets() {
+                    let mut key: Vec<NodeId> = f.corners().iter().map(|&i| cell[i]).collect();
                     key.sort_unstable_by_key(|n| n.0);
                     *count.entry(key).or_insert(0) += 1;
                 }

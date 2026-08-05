@@ -24,30 +24,6 @@ use std::collections::HashMap;
 /// differ by at most this angle are treated as part of the same flat face.
 const DEFAULT_ANGLE_DEG: f64 = 1.0;
 
-/// Faces of a TET4 — each oriented outwards (CCW seen from outside).
-const TET4_FACES: [&[usize]; 4] = [&[0, 2, 1], &[0, 1, 3], &[0, 3, 2], &[1, 2, 3]];
-
-/// Faces of a HEX8 — bottom / top / four lateral, outward-oriented, in the
-/// `[bot[0..4], top[0..4]]` convention used by [`crate::ops::mesh::extrude`].
-const HEX8_FACES: [&[usize]; 6] = [
-    &[0, 3, 2, 1], // bottom (normal opposed to extrusion direction)
-    &[4, 5, 6, 7], // top
-    &[0, 1, 5, 4],
-    &[1, 2, 6, 5],
-    &[2, 3, 7, 6],
-    &[3, 0, 4, 7],
-];
-
-/// Faces of a PENTA6 prism — two triangular caps then three quadrilateral
-/// sides, outward-oriented, in the `[bot[0..3], top[0..3]]` convention.
-const PENTA6_FACES: [&[usize]; 5] = [
-    &[0, 2, 1],    // bottom triangle (normal opposed to extrusion direction)
-    &[3, 4, 5],    // top triangle
-    &[0, 1, 4, 3], // side
-    &[1, 2, 5, 4], // side
-    &[2, 0, 3, 5], // side
-];
-
 /// Undirected edge key: the two node ids sorted, so an edge and its reverse
 /// share the same key (adjacency is orientation-agnostic).
 fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
@@ -58,25 +34,36 @@ fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
     }
 }
 
-/// Local facets of a volume element type, as slices of local node indices,
-/// each oriented outwards. `None` for non-volume types.
-fn element_facets(et: ElementType) -> Option<&'static [&'static [usize]]> {
-    match et {
-        ElementType::TET4 => Some(&TET4_FACES),
-        ElementType::HEX8 => Some(&HEX8_FACES),
-        ElementType::PENTA6 => Some(&PENTA6_FACES),
-        _ => None,
-    }
+/// Local facets of a **volume** element type, read from the element itself.
+/// `None` for point, line and surface types, which have no skin.
+fn element_facets(et: ElementType) -> Option<&'static [crate::atoms::Facet]> {
+    (et.topological_dim() == 3).then(|| et.as_kind().facets())
 }
 
-/// A boundary facet: its node ids in outward order and its unit normal.
-struct Facet {
+/// A boundary facet of the volume mesh.
+struct BoundaryFacet {
+    /// The facet seen as an element of its own: `TRI3`/`QUA4` off a linear
+    /// cell, `TRI6`/`QUA8`/`QUA9` off a quadratic one.
+    element_type: ElementType,
+    /// Global node ids in `element_type`'s local order — corners first — so the
+    /// facet can be emitted verbatim as a cell.
     nodes: Vec<NodeId>,
+    /// Outward unit normal.
     normal: [f64; 3],
 }
 
+impl BoundaryFacet {
+    /// The facet's corner ids. Adjacency, keying and the normal all read these:
+    /// they are what two neighbouring cells agree on, and the only nodes that
+    /// describe the facet's polygon.
+    fn corners(&self) -> &[NodeId] {
+        &self.nodes[..self.element_type.as_kind().corner_count()]
+    }
+}
+
 /// Newell's method: robust unit normal of a (possibly non-planar) polygon.
-/// Returns `[0.0; 3]` for a degenerate facet.
+/// Returns `[0.0; 3]` for a degenerate facet. `nodes` must be the facet's
+/// **corners**, in boundary order.
 fn facet_normal(c: &Coords, nodes: &[NodeId]) -> Result<[f64; 3]> {
     let mut n = [0.0f64; 3];
     let k = nodes.len();
@@ -96,24 +83,33 @@ fn facet_normal(c: &Coords, nodes: &[NodeId]) -> Result<[f64; 3]> {
     Ok(n)
 }
 
-/// Extract the boundary surface of a **volume** mesh (TET4 / PENTA6 / HEX8
-/// cells) as one TRI3 / QUA4 submesh per **flat face** of the solid.
+/// Extract the boundary surface of a **volume** mesh as one surface submesh
+/// per **flat face** of the solid and per facet type.
+///
+/// Works on every volume type — `TET4`, `PYRA5`, `PENTA6`, `HEX8` and their
+/// quadratic counterparts `TET10`, `PENTA15`, `HEX20`, `HEX27` — because each
+/// element declares its own facets
+/// ([`ElementKind::facets`](crate::atoms::ElementKind::facets)). **A facet is
+/// emitted in its own type**: a `HEX8` yields `QUA4` faces, a `TET10` yields
+/// `TRI6` faces, a `HEX27` yields `QUA9` faces, so the skin of a quadratic
+/// mesh is itself quadratic and keeps its mid-side nodes.
 ///
 /// Every element facet is taken with its outward orientation; a facet used by
 /// exactly one cell is a *boundary* facet (interior facets appear twice and
-/// cancel). Boundary facets from all volume submeshes are pooled together,
-/// then grouped into flat faces: adjacent facets (sharing an edge) join the
-/// same face while their outward normals stay within `angle_deg` degrees of
-/// each other (default 1°). Each group becomes one submesh — one TRI3 and/or
-/// one QUA4 submesh per flat face (a face made of both triangles and quads,
-/// e.g. at a TET4/HEX8 interface, yields both).
+/// cancel). Sharing is decided on the facet's **corners**, so cells of
+/// different degrees still cancel correctly. Boundary facets from all volume
+/// submeshes are pooled together, then grouped into flat faces: adjacent
+/// facets (sharing an edge) join the same face while their outward normals
+/// stay within `angle_deg` degrees of each other (default 1°). Each group
+/// becomes one submesh per facet type — a face made of both triangles and
+/// quads, e.g. at a `PYRA5`/`HEX8` interface, yields both.
 ///
 /// A cube yields six submeshes, a prism five (two triangular caps, three
 /// quadrilateral sides). The original nodes are reused (and re-referenced).
 ///
 /// POI1 submeshes are ignored. Errors if the mesh has no volume cells, if it
-/// carries cells that are neither POI1, TET4, PENTA6 nor HEX8, or if the
-/// coordinate space is not 3-D.
+/// carries cells of a lower topological dimension, or if the coordinate space
+/// is not 3-D.
 pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     let angle = angle_deg.unwrap_or(DEFAULT_ANGLE_DEG);
     let cos_tol = angle.to_radians().cos();
@@ -149,28 +145,31 @@ pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
         }
         let facets = element_facets(et).ok_or_else(|| {
             PyrucastError::Message(format!(
-                "skin: only volume meshes (TET4/PENTA6/HEX8) are supported, got {}",
-                et
+                "skin: only volume meshes are supported, got {} (topological dim {})",
+                et,
+                et.topological_dim()
             ))
         })?;
         any_volume = true;
         let npc = et.nodes_per_cell();
         for cell in conn.chunks(npc) {
             for f in facets {
-                let nodes: Vec<NodeId> = f.iter().map(|&li| cell[li]).collect();
-                *counts.entry(facet_key(&nodes)).or_insert(0) += 1;
+                // Keyed on corners: a facet shared by a linear and a quadratic
+                // cell, or by two cells of any degree, yields the same key.
+                let corners: Vec<NodeId> = f.corners().iter().map(|&li| cell[li]).collect();
+                *counts.entry(facet_key(&corners)).or_insert(0) += 1;
             }
         }
     }
     if !any_volume {
         return Err(PyrucastError::Message(
-            "skin: mesh has no volume cells (TET4/PENTA6/HEX8)".into(),
+            "skin: mesh has no volume cells".into(),
         ));
     }
 
     // 2. Collect the boundary facets (outward-oriented) and their normals, in
     //    a deterministic order so the grouping is reproducible.
-    let mut facets: Vec<Facet> = Vec::new();
+    let mut facets: Vec<BoundaryFacet> = Vec::new();
     {
         let c = read(&coords)?;
         for sm in mesh {
@@ -185,10 +184,15 @@ pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
             let npc = et.nodes_per_cell();
             for cell in conn.chunks(npc) {
                 for f in local {
-                    let nodes: Vec<NodeId> = f.iter().map(|&li| cell[li]).collect();
-                    if counts.get(&facet_key(&nodes)) == Some(&1) {
-                        let normal = facet_normal(&c, &nodes)?;
-                        facets.push(Facet { nodes, normal });
+                    let nodes: Vec<NodeId> = f.nodes.iter().map(|&li| cell[li]).collect();
+                    let n_corners = f.element_type.as_kind().corner_count();
+                    if counts.get(&facet_key(&nodes[..n_corners])) == Some(&1) {
+                        let normal = facet_normal(&c, &nodes[..n_corners])?;
+                        facets.push(BoundaryFacet {
+                            element_type: f.element_type,
+                            nodes,
+                            normal,
+                        });
                     }
                 }
             }
@@ -199,9 +203,10 @@ pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     //    into flat faces, crossing an edge only between near-coplanar facets.
     let mut edge_owners: HashMap<(NodeId, NodeId), Vec<usize>> = HashMap::new();
     for (fi, facet) in facets.iter().enumerate() {
-        let k = facet.nodes.len();
+        let corners = facet.corners();
+        let k = corners.len();
         for i in 0..k {
-            let key = edge_key(facet.nodes[i], facet.nodes[(i + 1) % k]);
+            let key = edge_key(corners[i], corners[(i + 1) % k]);
             edge_owners.entry(key).or_default().push(fi);
         }
     }
@@ -224,9 +229,10 @@ pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
         group_of[seed] = g;
         let mut stack = vec![seed];
         while let Some(fi) = stack.pop() {
-            let k = facets[fi].nodes.len();
+            let corners = facets[fi].corners();
+            let k = corners.len();
             for i in 0..k {
-                let key = edge_key(facets[fi].nodes[i], facets[fi].nodes[(i + 1) % k]);
+                let key = edge_key(corners[i], corners[(i + 1) % k]);
                 for &nb in &edge_owners[&key] {
                     if group_of[nb] == usize::MAX && coplanar(fi, nb) {
                         group_of[nb] = g;
@@ -241,25 +247,25 @@ pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     //    order. Facets keep their outward orientation; nodes are reused.
     let mut result = Mesh::empty();
     for g in 0..n_groups {
-        let mut tris: Vec<&Facet> = Vec::new();
-        let mut quads: Vec<&Facet> = Vec::new();
+        // One submesh per (group, facet type), the types in the order the
+        // parent elements declare them — deterministic, and stable whatever
+        // the facets' discovery order.
+        let mut types: Vec<ElementType> = Vec::new();
         for (fi, facet) in facets.iter().enumerate() {
-            if group_of[fi] != g {
-                continue;
-            }
-            match facet.nodes.len() {
-                3 => tris.push(facet),
-                4 => quads.push(facet),
-                other => {
-                    return Err(PyrucastError::Message(format!(
-                        "skin: unexpected facet with {} nodes",
-                        other
-                    )));
-                }
+            if group_of[fi] == g && !types.contains(&facet.element_type) {
+                types.push(facet.element_type);
             }
         }
-        emit_submesh(&mut result, &coords, ElementType::TRI3, &tris)?;
-        emit_submesh(&mut result, &coords, ElementType::QUA4, &quads)?;
+        types.sort_unstable_by_key(|et| et.name());
+        for et in types {
+            let cells: Vec<&BoundaryFacet> = facets
+                .iter()
+                .enumerate()
+                .filter(|(fi, f)| group_of[*fi] == g && f.element_type == et)
+                .map(|(_, f)| f)
+                .collect();
+            emit_submesh(&mut result, &coords, et, &cells)?;
+        }
     }
     Ok(result)
 }
@@ -269,7 +275,7 @@ fn emit_submesh(
     result: &mut Mesh,
     coords: &Handle<Coords>,
     et: ElementType,
-    facets: &[&Facet],
+    facets: &[&BoundaryFacet],
 ) -> Result<()> {
     if facets.is_empty() {
         return Ok(());
@@ -320,6 +326,112 @@ mod tests {
             vec![ElementType::QUA4; 6],
             "each face is one QUA4"
         );
+        assert_eq!(sk.cell_counts().unwrap(), vec![1; 6]);
+    }
+
+    /// Regression: `skin` used to carry its own facet table listing only
+    /// TET4/HEX8/PENTA6, so a pyramid — the very element `pave_volume`
+    /// produces to join a hex layer to a tet core — was rejected outright.
+    /// Reading the element's own facets covers it.
+    #[test]
+    fn pyramid_gives_a_quad_base_and_four_tri_sides() {
+        let coords = insert(Coords::new(3).unwrap());
+        let pts = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.5, 0.5, 1.0],
+        ];
+        let n: Vec<NodeId> = pts
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
+            .collect();
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::PYRA5));
+        m.add_cell(&n).unwrap();
+
+        let sk = skin(&m, None).unwrap();
+        assert_eq!(sk.len(), 5, "the base and the four slanted sides");
+        let types = sk.element_types().unwrap();
+        assert_eq!(
+            types.iter().filter(|&&t| t == ElementType::QUA4).count(),
+            1,
+            "the square base"
+        );
+        assert_eq!(
+            types.iter().filter(|&&t| t == ElementType::TRI3).count(),
+            4,
+            "the four triangles"
+        );
+    }
+
+    /// Regression: a quadratic volume produced no skin at all. Its faces are
+    /// now emitted in their own quadratic type, mid-side nodes included, so
+    /// the skin of a TET10 is a TRI6 surface rather than a TRI3 one.
+    #[test]
+    fn quadratic_tet_gives_four_tri6_faces_carrying_their_mid_nodes() {
+        let coords = insert(Coords::new(3).unwrap());
+        // Corners of the unit tet, then the six edge midpoints in TET10 order:
+        // (0,1), (1,2), (2,0), (0,3), (1,3), (2,3).
+        let pts = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.5, 0.0, 0.0],
+            [0.5, 0.5, 0.0],
+            [0.0, 0.5, 0.0],
+            [0.0, 0.0, 0.5],
+            [0.5, 0.0, 0.5],
+            [0.0, 0.5, 0.5],
+        ];
+        let n: Vec<NodeId> = pts
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
+            .collect();
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TET10));
+        m.add_cell(&n).unwrap();
+
+        let sk = skin(&m, None).unwrap();
+        assert_eq!(sk.len(), 4, "four faces at sharp dihedral angles");
+        assert_eq!(sk.element_types().unwrap(), vec![ElementType::TRI6; 4]);
+
+        // Every emitted node is one of the ten, and each face carries three
+        // mid-side nodes — i.e. the skin really is quadratic.
+        let c = read(&coords).unwrap();
+        for sub in &sk {
+            let s = read(sub).unwrap();
+            for cell in s.connectivity().chunks(6) {
+                for (i, &node) in cell.iter().enumerate() {
+                    let p = c.position(node).unwrap();
+                    let on_a_half = p.iter().any(|v| (*v - 0.5).abs() < 1e-12);
+                    assert_eq!(
+                        i >= 3,
+                        on_a_half,
+                        "slot {i} should{} be a mid-side node",
+                        if i >= 3 { "" } else { " not" }
+                    );
+                }
+            }
+        }
+    }
+
+    /// A quadratic hex has nine-node faces: the centre node must travel too.
+    #[test]
+    fn hex27_gives_qua9_faces() {
+        let coords = insert(Coords::new(3).unwrap());
+        let k = ElementType::HEX27.as_kind();
+        let n: Vec<NodeId> = k
+            .ref_nodes()
+            .iter()
+            .map(|xi| Node::create_in(coords.clone(), xi).unwrap().id())
+            .collect();
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX27));
+        m.add_cell(&n).unwrap();
+
+        let sk = skin(&m, None).unwrap();
+        assert_eq!(sk.len(), 6);
+        assert_eq!(sk.element_types().unwrap(), vec![ElementType::QUA9; 6]);
         assert_eq!(sk.cell_counts().unwrap(), vec![1; 6]);
     }
 

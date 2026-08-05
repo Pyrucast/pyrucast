@@ -106,7 +106,7 @@ pub fn orient(mesh: &Mesh) -> Result<Mesh> {
             (s.element_type(), s.connectivity().to_vec())
         };
         let npc = et.nodes_per_cell();
-        let nc = corner_count(et);
+        let nc = et.as_kind().corner_count();
         for chunk in conn.chunks(npc) {
             let gid = n_cells;
             for (key, sign) in oriented_facets(et, &chunk[..nc]) {
@@ -189,76 +189,24 @@ pub fn orient(mesh: &Mesh) -> Result<Mesh> {
     Ok(result)
 }
 
-/// Number of **corner** (linear-parent) nodes of an element type — the nodes
-/// that define its facets. Mid-edge/-face/-body nodes come after the corners in
-/// every variant, so a cell's corners are its first `corner_count` nodes.
-fn corner_count(et: ElementType) -> usize {
-    match et {
-        ElementType::POI1 => 1,
-        ElementType::SEG2 | ElementType::SEG3 => 2,
-        ElementType::TRI3 | ElementType::TRI6 => 3,
-        ElementType::QUA4 | ElementType::QUA8 | ElementType::QUA9 => 4,
-        ElementType::TET4 | ElementType::TET10 => 4,
-        ElementType::PYRA5 => 5,
-        ElementType::PENTA6 | ElementType::PENTA15 => 6,
-        ElementType::HEX8 | ElementType::HEX20 | ElementType::HEX27 => 8,
-    }
-}
-
-/// Local corner indices of each outward-oriented facet of an element type
-/// (d ≥ 2). `SEG*` (d = 1) and `POI1` (d = 0) are handled directly in
-/// [`oriented_facets`] and return `&[]` here.
-#[cfg(test)]
-pub(crate) fn facets_of(et: ElementType) -> &'static [&'static [usize]] {
-    boundary_facets(et)
-}
-
-fn boundary_facets(et: ElementType) -> &'static [&'static [usize]] {
-    match et {
-        ElementType::TRI3 | ElementType::TRI6 => &[&[0, 1], &[1, 2], &[2, 0]],
-        ElementType::QUA4 | ElementType::QUA8 | ElementType::QUA9 => {
-            &[&[0, 1], &[1, 2], &[2, 3], &[3, 0]]
-        }
-        ElementType::TET4 | ElementType::TET10 => &[&[1, 2, 3], &[0, 3, 2], &[0, 1, 3], &[0, 2, 1]],
-        // Base first, wound the other way so its normal points away from the
-        // apex, then the four triangles round the sides.
-        ElementType::PYRA5 => &[
-            &[0, 3, 2, 1],
-            &[0, 1, 4],
-            &[1, 2, 4],
-            &[2, 3, 4],
-            &[3, 0, 4],
-        ],
-        ElementType::PENTA6 | ElementType::PENTA15 => &[
-            &[0, 2, 1],
-            &[3, 4, 5],
-            &[0, 1, 4, 3],
-            &[1, 2, 5, 4],
-            &[2, 0, 3, 5],
-        ],
-        ElementType::HEX8 | ElementType::HEX20 | ElementType::HEX27 => &[
-            &[0, 3, 2, 1],
-            &[4, 5, 6, 7],
-            &[0, 1, 5, 4],
-            &[1, 2, 6, 5],
-            &[2, 3, 7, 6],
-            &[0, 4, 7, 3],
-        ],
-        _ => &[],
-    }
-}
-
 /// Oriented facets of one cell as `(sorted-corner-ids key, sign)` pairs.
+///
+/// Reads the element's own facet table
+/// ([`ElementKind::facets`](crate::atoms::ElementKind::facets)) and keeps only
+/// each facet's **corners**: two adjacent cells agree on the corners of the
+/// facet they share whatever their degree, so a quadratic mesh orients exactly
+/// like its linear parent.
 fn oriented_facets(et: ElementType, corners: &[NodeId]) -> Vec<(Vec<NodeId>, i8)> {
     // d = 1: the two ends. Tail is -1, head is +1; two segments sharing a node
     // are consistent iff it is one's head and the other's tail.
     if matches!(et, ElementType::SEG2 | ElementType::SEG3) {
         return vec![(vec![corners[0]], -1), (vec![corners[1]], 1)];
     }
-    boundary_facets(et)
+    et.as_kind()
+        .facets()
         .iter()
         .map(|f| {
-            let nodes: Vec<NodeId> = f.iter().map(|&i| corners[i]).collect();
+            let nodes: Vec<NodeId> = f.corners().iter().map(|&i| corners[i]).collect();
             let sign = facet_sign(&nodes);
             let mut key = nodes;
             key.sort_unstable();
@@ -295,136 +243,6 @@ mod tests {
     use crate::coords::Coords;
     use crate::store::Handle;
 
-    /// Reference-node coordinates of a type, in local order — the ground truth
-    /// against which [`ElementType::reversal_permutation`] is validated.
-    fn ref_nodes(et: ElementType) -> Vec<Vec<f64>> {
-        use ElementType::*;
-        let v = |s: &[&[f64]]| s.iter().map(|c| c.to_vec()).collect::<Vec<_>>();
-        match et {
-            POI1 => v(&[&[0.0]]),
-            SEG2 => v(&[&[-1.0], &[1.0]]),
-            SEG3 => v(&[&[-1.0], &[1.0], &[0.0]]),
-            TRI3 => v(&[&[0.0, 0.0], &[1.0, 0.0], &[0.0, 1.0]]),
-            TRI6 => v(&[
-                &[0.0, 0.0],
-                &[1.0, 0.0],
-                &[0.0, 1.0],
-                &[0.5, 0.0],
-                &[0.5, 0.5],
-                &[0.0, 0.5],
-            ]),
-            QUA4 => v(&[&[-1.0, -1.0], &[1.0, -1.0], &[1.0, 1.0], &[-1.0, 1.0]]),
-            PYRA5 => v(&[
-                &[-1.0, -1.0, 0.0],
-                &[1.0, -1.0, 0.0],
-                &[1.0, 1.0, 0.0],
-                &[-1.0, 1.0, 0.0],
-                &[0.0, 0.0, 1.0],
-            ]),
-            QUA8 => v(&[
-                &[-1.0, -1.0],
-                &[1.0, -1.0],
-                &[1.0, 1.0],
-                &[-1.0, 1.0],
-                &[0.0, -1.0],
-                &[1.0, 0.0],
-                &[0.0, 1.0],
-                &[-1.0, 0.0],
-            ]),
-            QUA9 => {
-                let mut n = ref_nodes(QUA8);
-                n.push(vec![0.0, 0.0]);
-                n
-            }
-            TET4 => v(&[
-                &[0.0, 0.0, 0.0],
-                &[1.0, 0.0, 0.0],
-                &[0.0, 1.0, 0.0],
-                &[0.0, 0.0, 1.0],
-            ]),
-            TET10 => v(&[
-                &[0.0, 0.0, 0.0],
-                &[1.0, 0.0, 0.0],
-                &[0.0, 1.0, 0.0],
-                &[0.0, 0.0, 1.0],
-                &[0.5, 0.0, 0.0],
-                &[0.5, 0.5, 0.0],
-                &[0.0, 0.5, 0.0],
-                &[0.0, 0.0, 0.5],
-                &[0.5, 0.0, 0.5],
-                &[0.0, 0.5, 0.5],
-            ]),
-            PENTA6 => v(&[
-                &[0.0, 0.0, 0.0],
-                &[1.0, 0.0, 0.0],
-                &[0.0, 1.0, 0.0],
-                &[0.0, 0.0, 1.0],
-                &[1.0, 0.0, 1.0],
-                &[0.0, 1.0, 1.0],
-            ]),
-            PENTA15 => v(&[
-                &[0.0, 0.0, 0.0],
-                &[1.0, 0.0, 0.0],
-                &[0.0, 1.0, 0.0],
-                &[0.0, 0.0, 1.0],
-                &[1.0, 0.0, 1.0],
-                &[0.0, 1.0, 1.0],
-                &[0.5, 0.0, 0.0],
-                &[0.5, 0.5, 0.0],
-                &[0.0, 0.5, 0.0],
-                &[0.5, 0.0, 1.0],
-                &[0.5, 0.5, 1.0],
-                &[0.0, 0.5, 1.0],
-                &[0.0, 0.0, 0.5],
-                &[1.0, 0.0, 0.5],
-                &[0.0, 1.0, 0.5],
-            ]),
-            HEX8 => v(&[
-                &[-1.0, -1.0, -1.0],
-                &[1.0, -1.0, -1.0],
-                &[1.0, 1.0, -1.0],
-                &[-1.0, 1.0, -1.0],
-                &[-1.0, -1.0, 1.0],
-                &[1.0, -1.0, 1.0],
-                &[1.0, 1.0, 1.0],
-                &[-1.0, 1.0, 1.0],
-            ]),
-            HEX20 => v(&[
-                &[-1.0, -1.0, -1.0],
-                &[1.0, -1.0, -1.0],
-                &[1.0, 1.0, -1.0],
-                &[-1.0, 1.0, -1.0],
-                &[-1.0, -1.0, 1.0],
-                &[1.0, -1.0, 1.0],
-                &[1.0, 1.0, 1.0],
-                &[-1.0, 1.0, 1.0],
-                &[0.0, -1.0, -1.0],
-                &[1.0, 0.0, -1.0],
-                &[0.0, 1.0, -1.0],
-                &[-1.0, 0.0, -1.0],
-                &[0.0, -1.0, 1.0],
-                &[1.0, 0.0, 1.0],
-                &[0.0, 1.0, 1.0],
-                &[-1.0, 0.0, 1.0],
-                &[-1.0, -1.0, 0.0],
-                &[1.0, -1.0, 0.0],
-                &[1.0, 1.0, 0.0],
-                &[-1.0, 1.0, 0.0],
-            ]),
-            HEX27 => {
-                let mut n = ref_nodes(HEX20);
-                n.push(vec![-1.0, 0.0, 0.0]); // 20 x-
-                n.push(vec![1.0, 0.0, 0.0]); // 21 x+
-                n.push(vec![0.0, -1.0, 0.0]); // 22 y-
-                n.push(vec![0.0, 1.0, 0.0]); // 23 y+
-                n.push(vec![0.0, 0.0, -1.0]); // 24 z-
-                n.push(vec![0.0, 0.0, 1.0]); // 25 z+
-                n.push(vec![0.0, 0.0, 0.0]); // 26 body
-                n
-            }
-        }
-    }
-
     /// The orientation-reversing reflection defining the permutation: swap the
     /// first two axes (2-D/3-D), or negate the single axis (`SEG*`, 1-D).
     fn reflect(coord: &[f64]) -> Vec<f64> {
@@ -450,11 +268,11 @@ mod tests {
             .iter()
             .filter(|et| et.topological_dim() > 0)
         {
-            let nodes = ref_nodes(et);
+            let nodes = et.as_kind().ref_nodes();
             let p = et.reversal_permutation();
             for i in 0..nodes.len() {
-                let want = reflect(&nodes[i]);
-                let got = &nodes[p[i]];
+                let want = reflect(nodes[i]);
+                let got = nodes[p[i]];
                 for (a, b) in want.iter().zip(got.iter()) {
                     assert!(
                         (a - b).abs() < 1e-12,

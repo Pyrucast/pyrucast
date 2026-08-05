@@ -1,0 +1,107 @@
+//! `PENTA6` — the 6-node prism (pentahedron).
+
+use super::{ElementKind, Facet};
+use crate::atoms::ElementType;
+
+/// 6-node prism, the extrusion of a `TRI3` along `ζ`. Reference:
+/// `ξ, η ∈ [0, 1]` with `ξ + η ≤ 1`, `ζ ∈ [0, 1]`. Local order: bottom
+/// triangle CCW (nodes 0..2 at `ζ = 0`), then top triangle CCW (nodes 3..5).
+pub struct Penta6;
+
+pub(super) const EDGES: &[[usize; 2]] = &[
+    [0, 1],
+    [1, 2],
+    [2, 0],
+    [3, 4],
+    [4, 5],
+    [5, 3],
+    [0, 3],
+    [1, 4],
+    [2, 5],
+];
+
+/// Corner faces, outward-oriented: the two triangular caps then the three
+/// quadrilateral sides.
+pub(super) const CORNER_FACES: [&[usize]; 5] = [
+    &[0, 2, 1],
+    &[3, 4, 5],
+    &[0, 1, 4, 3],
+    &[1, 2, 5, 4],
+    &[2, 0, 3, 5],
+];
+
+const FACETS: &[Facet] = &[
+    Facet {
+        element_type: ElementType::TRI3,
+        nodes: CORNER_FACES[0],
+    },
+    Facet {
+        element_type: ElementType::TRI3,
+        nodes: CORNER_FACES[1],
+    },
+    Facet {
+        element_type: ElementType::QUA4,
+        nodes: CORNER_FACES[2],
+    },
+    Facet {
+        element_type: ElementType::QUA4,
+        nodes: CORNER_FACES[3],
+    },
+    Facet {
+        element_type: ElementType::QUA4,
+        nodes: CORNER_FACES[4],
+    },
+];
+
+/// Membership in the reference prism, shared with `PENTA15`.
+pub(super) fn contains_prism(xi: &[f64], tol: f64) -> bool {
+    let (a, b, c) = (xi[0], xi[1], xi[2]);
+    a >= -tol && b >= -tol && a + b <= 1.0 + tol && c >= -tol && c <= 1.0 + tol
+}
+
+impl ElementKind for Penta6 {
+    fn element_type(&self) -> ElementType {
+        ElementType::PENTA6
+    }
+
+    fn ref_nodes(&self) -> &'static [&'static [f64]] {
+        &[
+            &[0.0, 0.0, 0.0],
+            &[1.0, 0.0, 0.0],
+            &[0.0, 1.0, 0.0],
+            &[0.0, 0.0, 1.0],
+            &[1.0, 0.0, 1.0],
+            &[0.0, 1.0, 1.0],
+        ]
+    }
+
+    fn reversal_permutation(&self) -> &'static [usize] {
+        &[0, 2, 1, 3, 5, 4]
+    }
+
+    fn corner_count(&self) -> usize {
+        6
+    }
+
+    fn facets(&self) -> &'static [Facet] {
+        FACETS
+    }
+
+    fn edges(&self) -> &'static [[usize; 2]] {
+        EDGES
+    }
+
+    fn ref_centroid(&self) -> &'static [f64] {
+        &[1.0 / 3.0, 1.0 / 3.0, 0.5]
+    }
+
+    fn ref_measure(&self) -> f64 {
+        0.5
+    }
+
+    fn contains_ref(&self, xi: &[f64], tol: f64) -> bool {
+        contains_prism(xi, tol)
+    }
+
+    fn clamp_ref(&self, _xi: &mut [f64]) {}
+}

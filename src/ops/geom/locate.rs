@@ -438,48 +438,16 @@ pub(super) fn interpolation_for(element_type: ElementType) -> Interpolation {
 }
 
 /// A reference-domain interior point used as the Newton starting guess.
+///
+/// The element's own centroid — the same point the one-point (`Reduced`)
+/// quadrature integrates at.
 pub(super) fn reference_centroid(element_type: ElementType) -> Vec<f64> {
-    use ElementType::*;
-    match element_type {
-        SEG2 | SEG3 => vec![0.0],
-        TRI3 | TRI6 => vec![1.0 / 3.0, 1.0 / 3.0],
-        QUA4 | QUA8 | QUA9 => vec![0.0, 0.0],
-        TET4 | TET10 => vec![0.25, 0.25, 0.25],
-        HEX8 | HEX20 | HEX27 => vec![0.0, 0.0, 0.0],
-        PENTA6 | PENTA15 => vec![1.0 / 3.0, 1.0 / 3.0, 0.5],
-        PYRA5 => vec![0.0, 0.0, 0.25],
-        POI1 => vec![],
-    }
+    element_type.as_kind().ref_centroid().to_vec()
 }
 
 /// Is `ξ` inside `element_type`'s reference domain, allowing `tol` of slack?
 fn contains_reference(element_type: ElementType, xi: &[f64], tol: f64) -> bool {
-    use ElementType::*;
-    match element_type {
-        SEG2 | SEG3 => xi[0] >= -1.0 - tol && xi[0] <= 1.0 + tol,
-        QUA4 | QUA8 | QUA9 => xi.iter().all(|&v| v >= -1.0 - tol && v <= 1.0 + tol),
-        HEX8 | HEX20 | HEX27 => xi.iter().all(|&v| v >= -1.0 - tol && v <= 1.0 + tol),
-        TRI3 | TRI6 => {
-            let (a, b) = (xi[0], xi[1]);
-            a >= -tol && b >= -tol && a + b <= 1.0 + tol
-        }
-        TET4 | TET10 => {
-            let (a, b, c) = (xi[0], xi[1], xi[2]);
-            a >= -tol && b >= -tol && c >= -tol && a + b + c <= 1.0 + tol
-        }
-        PENTA6 | PENTA15 => {
-            let (a, b, c) = (xi[0], xi[1], xi[2]);
-            a >= -tol && b >= -tol && a + b <= 1.0 + tol && c >= -tol && c <= 1.0 + tol
-        }
-        // The square cross-section shrinks as ζ climbs, so the bound on ξ
-        // and η is 1 - ζ rather than a constant.
-        PYRA5 => {
-            let (a, b, c) = (xi[0], xi[1], xi[2]);
-            let half = 1.0 - c + tol;
-            c >= -tol && c <= 1.0 + tol && a.abs() <= half && b.abs() <= half
-        }
-        POI1 => false,
-    }
+    element_type.as_kind().contains_ref(xi, tol)
 }
 
 #[cfg(test)]

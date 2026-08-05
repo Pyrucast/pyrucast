@@ -252,42 +252,7 @@ fn closest_on_facet(element_type: ElementType, coords: &[Vec<f64>], x: &[f64]) -
 
 /// Clamp `ξ` into `element_type`'s reference domain (in place).
 fn clamp_reference(element_type: ElementType, xi: &mut [f64]) {
-    use ElementType::*;
-    match element_type {
-        SEG2 | SEG3 | QUA4 | QUA8 | QUA9 => {
-            for v in xi.iter_mut() {
-                *v = v.clamp(-1.0, 1.0);
-            }
-        }
-        // The cross-section shrinks with ζ, so ζ is clamped first and the
-        // in-plane bound follows from it.
-        PYRA5 => {
-            xi[2] = xi[2].clamp(0.0, 1.0);
-            let half = 1.0 - xi[2];
-            xi[0] = xi[0].clamp(-half, half);
-            xi[1] = xi[1].clamp(-half, half);
-        }
-        TRI3 | TRI6 => {
-            // Clamp to the unit simplex: non-negative, then pull back onto the
-            // hypotenuse if a + b > 1 (the closest point on the line a + b = 1).
-            xi[0] = xi[0].max(0.0);
-            xi[1] = xi[1].max(0.0);
-            let excess = xi[0] + xi[1] - 1.0;
-            if excess > 0.0 {
-                xi[0] -= excess / 2.0;
-                xi[1] -= excess / 2.0;
-                xi[0] = xi[0].max(0.0);
-                xi[1] = xi[1].max(0.0);
-                let s = xi[0] + xi[1];
-                if s > 1.0 {
-                    xi[0] /= s;
-                    xi[1] /= s;
-                }
-            }
-        }
-        // Volume/point cells are rejected before reaching here.
-        POI1 | TET4 | TET10 | HEX8 | HEX20 | HEX27 | PENTA6 | PENTA15 => {}
-    }
+    element_type.as_kind().clamp_ref(xi);
 }
 
 /// Unit facet normal at `ξ`, from the facet's node ordering: the −90°-rotated

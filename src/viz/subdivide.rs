@@ -16,7 +16,6 @@
 use crate::atoms::ElementType;
 use crate::containers::finite_element_space::Interpolation;
 use crate::error::Result;
-use crate::viz::mesh_draw::{HEX8_FACES, PENTA6_FACES, PYRA5_FACES, TET4_FACES};
 
 /// Subdivision of one face of the reference element.
 pub(crate) struct FaceSubdivision {
@@ -44,172 +43,6 @@ pub(crate) enum CellSubdivision {
     Faces(Vec<FaceSubdivision>),
 }
 
-/// Reference coordinates of each node, per element type (the points
-/// where the matching shape function equals 1).
-fn ref_nodes(et: ElementType) -> Vec<Vec<f64>> {
-    match et {
-        ElementType::POI1 => vec![vec![]],
-        ElementType::SEG2 => vec![vec![-1.0], vec![1.0]],
-        ElementType::TRI3 => vec![vec![0.0, 0.0], vec![1.0, 0.0], vec![0.0, 1.0]],
-        ElementType::QUA4 => vec![
-            vec![-1.0, -1.0],
-            vec![1.0, -1.0],
-            vec![1.0, 1.0],
-            vec![-1.0, 1.0],
-        ],
-        ElementType::PYRA5 => vec![
-            vec![-1.0, -1.0, 0.0],
-            vec![1.0, -1.0, 0.0],
-            vec![1.0, 1.0, 0.0],
-            vec![-1.0, 1.0, 0.0],
-            vec![0.0, 0.0, 1.0],
-        ],
-        ElementType::TET4 => vec![
-            vec![0.0, 0.0, 0.0],
-            vec![1.0, 0.0, 0.0],
-            vec![0.0, 1.0, 0.0],
-            vec![0.0, 0.0, 1.0],
-        ],
-        ElementType::PENTA6 => vec![
-            vec![0.0, 0.0, 0.0],
-            vec![1.0, 0.0, 0.0],
-            vec![0.0, 1.0, 0.0],
-            vec![0.0, 0.0, 1.0],
-            vec![1.0, 0.0, 1.0],
-            vec![0.0, 1.0, 1.0],
-        ],
-        ElementType::HEX8 => [
-            (-1.0, -1.0, -1.0),
-            (1.0, -1.0, -1.0),
-            (1.0, 1.0, -1.0),
-            (-1.0, 1.0, -1.0),
-            (-1.0, -1.0, 1.0),
-            (1.0, -1.0, 1.0),
-            (1.0, 1.0, 1.0),
-            (-1.0, 1.0, 1.0),
-        ]
-        .iter()
-        .map(|&(a, b, c)| vec![a, b, c])
-        .collect(),
-        ElementType::SEG3 => vec![vec![-1.0], vec![1.0], vec![0.0]],
-        ElementType::TRI6 => vec![
-            vec![0.0, 0.0],
-            vec![1.0, 0.0],
-            vec![0.0, 1.0],
-            vec![0.5, 0.0],
-            vec![0.5, 0.5],
-            vec![0.0, 0.5],
-        ],
-        ElementType::QUA8 => vec![
-            vec![-1.0, -1.0],
-            vec![1.0, -1.0],
-            vec![1.0, 1.0],
-            vec![-1.0, 1.0],
-            vec![0.0, -1.0],
-            vec![1.0, 0.0],
-            vec![0.0, 1.0],
-            vec![-1.0, 0.0],
-        ],
-        ElementType::QUA9 => vec![
-            vec![-1.0, -1.0],
-            vec![1.0, -1.0],
-            vec![1.0, 1.0],
-            vec![-1.0, 1.0],
-            vec![0.0, -1.0],
-            vec![1.0, 0.0],
-            vec![0.0, 1.0],
-            vec![-1.0, 0.0],
-            vec![0.0, 0.0],
-        ],
-        ElementType::TET10 => vec![
-            vec![0.0, 0.0, 0.0],
-            vec![1.0, 0.0, 0.0],
-            vec![0.0, 1.0, 0.0],
-            vec![0.0, 0.0, 1.0],
-            vec![0.5, 0.0, 0.0],
-            vec![0.5, 0.5, 0.0],
-            vec![0.0, 0.5, 0.0],
-            vec![0.0, 0.0, 0.5],
-            vec![0.5, 0.0, 0.5],
-            vec![0.0, 0.5, 0.5],
-        ],
-        ElementType::PENTA15 => vec![
-            vec![0.0, 0.0, 0.0],
-            vec![1.0, 0.0, 0.0],
-            vec![0.0, 1.0, 0.0],
-            vec![0.0, 0.0, 1.0],
-            vec![1.0, 0.0, 1.0],
-            vec![0.0, 1.0, 1.0],
-            vec![0.5, 0.0, 0.0],
-            vec![0.5, 0.5, 0.0],
-            vec![0.0, 0.5, 0.0],
-            vec![0.5, 0.0, 1.0],
-            vec![0.5, 0.5, 1.0],
-            vec![0.0, 0.5, 1.0],
-            vec![0.0, 0.0, 0.5],
-            vec![1.0, 0.0, 0.5],
-            vec![0.0, 1.0, 0.5],
-        ],
-        ElementType::HEX20 => [
-            (-1.0, -1.0, -1.0),
-            (1.0, -1.0, -1.0),
-            (1.0, 1.0, -1.0),
-            (-1.0, 1.0, -1.0),
-            (-1.0, -1.0, 1.0),
-            (1.0, -1.0, 1.0),
-            (1.0, 1.0, 1.0),
-            (-1.0, 1.0, 1.0),
-            (0.0, -1.0, -1.0),
-            (1.0, 0.0, -1.0),
-            (0.0, 1.0, -1.0),
-            (-1.0, 0.0, -1.0),
-            (0.0, -1.0, 1.0),
-            (1.0, 0.0, 1.0),
-            (0.0, 1.0, 1.0),
-            (-1.0, 0.0, 1.0),
-            (-1.0, -1.0, 0.0),
-            (1.0, -1.0, 0.0),
-            (1.0, 1.0, 0.0),
-            (-1.0, 1.0, 0.0),
-        ]
-        .iter()
-        .map(|&(a, b, c)| vec![a, b, c])
-        .collect(),
-        ElementType::HEX27 => [
-            (-1.0, -1.0, -1.0),
-            (1.0, -1.0, -1.0),
-            (1.0, 1.0, -1.0),
-            (-1.0, 1.0, -1.0),
-            (-1.0, -1.0, 1.0),
-            (1.0, -1.0, 1.0),
-            (1.0, 1.0, 1.0),
-            (-1.0, 1.0, 1.0),
-            (0.0, -1.0, -1.0),
-            (1.0, 0.0, -1.0),
-            (0.0, 1.0, -1.0),
-            (-1.0, 0.0, -1.0),
-            (0.0, -1.0, 1.0),
-            (1.0, 0.0, 1.0),
-            (0.0, 1.0, 1.0),
-            (-1.0, 0.0, 1.0),
-            (-1.0, -1.0, 0.0),
-            (1.0, -1.0, 0.0),
-            (1.0, 1.0, 0.0),
-            (-1.0, 1.0, 0.0),
-            (-1.0, 0.0, 0.0),
-            (1.0, 0.0, 0.0),
-            (0.0, -1.0, 0.0),
-            (0.0, 1.0, 0.0),
-            (0.0, 0.0, -1.0),
-            (0.0, 0.0, 1.0),
-            (0.0, 0.0, 0.0),
-        ]
-        .iter()
-        .map(|&(a, b, c)| vec![a, b, c])
-        .collect(),
-    }
-}
-
 /// Subdivide `et` at level `n` (`n ≥ 1`): TRI3 → n² sub-triangles,
 /// QUA4 → 2n², SEG2 → n segments, TET4 / HEX8 → their outer faces
 /// subdivided likewise.
@@ -219,166 +52,61 @@ pub(crate) fn subdivide(
     n: usize,
 ) -> Result<CellSubdivision> {
     let n = n.max(1);
-    let nodes = ref_nodes(et);
-    match et {
-        ElementType::POI1 => Ok(CellSubdivision::Points),
-        ElementType::SEG2 => {
+    let k = et.as_kind();
+    let nodes = k.ref_nodes();
+    // The skin to draw depends only on the topological dimension. A quadratic
+    // type has the same skin as its linear parent — it is `interp` that bends
+    // each sub-vertex onto the curved geometry.
+    match k.topological_dim() {
+        0 => Ok(CellSubdivision::Points),
+        1 => {
             let mut weights = Vec::with_capacity(n + 1);
-            for k in 0..=n {
-                let xi = -1.0 + 2.0 * k as f64 / n as f64;
+            for j in 0..=n {
+                let xi = -1.0 + 2.0 * j as f64 / n as f64;
                 weights.push(interp.shape(et, &[xi])?);
             }
-            let segments = (0..n).map(|k| [k, k + 1]).collect();
+            let segments = (0..n).map(|j| [j, j + 1]).collect();
             Ok(CellSubdivision::Segments { weights, segments })
         }
-        ElementType::TRI3 => Ok(CellSubdivision::Faces(vec![tri_face(
-            et,
-            interp,
-            n,
-            [&nodes[0], &nodes[1], &nodes[2]],
-        )?])),
-        ElementType::QUA4 => Ok(CellSubdivision::Faces(vec![quad_face(
-            et,
-            interp,
-            n,
-            [&nodes[0], &nodes[1], &nodes[2], &nodes[3]],
-        )?])),
-        ElementType::TET4 => {
-            let mut faces = Vec::with_capacity(4);
-            for f in &TET4_FACES {
-                faces.push(tri_face(
-                    et,
-                    interp,
-                    n,
-                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]]],
-                )?);
-            }
-            Ok(CellSubdivision::Faces(faces))
+        2 => {
+            let c: Vec<&[f64]> = (0..k.corner_count()).map(|j| nodes[j]).collect();
+            Ok(CellSubdivision::Faces(vec![face_of(et, interp, n, &c)?]))
         }
-        ElementType::HEX8 => {
-            let mut faces = Vec::with_capacity(6);
-            for f in &HEX8_FACES {
-                faces.push(quad_face(
-                    et,
-                    interp,
-                    n,
-                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]], &nodes[f[3]]],
-                )?);
-            }
-            Ok(CellSubdivision::Faces(faces))
-        }
-        ElementType::PYRA5 => {
-            let mut faces = Vec::with_capacity(5);
-            faces.push(quad_face(
-                et,
-                interp,
-                n,
-                [&nodes[0], &nodes[3], &nodes[2], &nodes[1]],
-            )?);
-            for f in PYRA5_FACES.iter().filter(|f| f.len() == 3) {
-                faces.push(tri_face(
-                    et,
-                    interp,
-                    n,
-                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]]],
-                )?);
-            }
-            Ok(CellSubdivision::Faces(faces))
-        }
-        ElementType::PENTA6 => {
-            // Two triangular caps + three quadrilateral sides.
-            let mut faces = Vec::with_capacity(5);
-            for f in PENTA6_FACES.iter().filter(|f| f.len() == 3) {
-                faces.push(tri_face(
-                    et,
-                    interp,
-                    n,
-                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]]],
-                )?);
-            }
-            for f in PENTA6_FACES.iter().filter(|f| f.len() == 4) {
-                faces.push(quad_face(
-                    et,
-                    interp,
-                    n,
-                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]], &nodes[f[3]]],
-                )?);
-            }
-            Ok(CellSubdivision::Faces(faces))
-        }
-        // Quadratic types: same skin as the linear parent, but the shape
-        // functions are `interp` (Lagrange-2), so each sub-vertex follows
-        // the curved geometry.
-        ElementType::SEG3 => {
-            let mut weights = Vec::with_capacity(n + 1);
-            for k in 0..=n {
-                let xi = -1.0 + 2.0 * k as f64 / n as f64;
-                weights.push(interp.shape(et, &[xi])?);
-            }
-            let segments = (0..n).map(|k| [k, k + 1]).collect();
-            Ok(CellSubdivision::Segments { weights, segments })
-        }
-        ElementType::TRI6 => Ok(CellSubdivision::Faces(vec![tri_face(
-            et,
-            interp,
-            n,
-            [&nodes[0], &nodes[1], &nodes[2]],
-        )?])),
-        ElementType::QUA8 | ElementType::QUA9 => Ok(CellSubdivision::Faces(vec![quad_face(
-            et,
-            interp,
-            n,
-            [&nodes[0], &nodes[1], &nodes[2], &nodes[3]],
-        )?])),
-        ElementType::TET10 => {
-            let mut faces = Vec::with_capacity(4);
-            for f in &TET4_FACES {
-                faces.push(tri_face(
-                    et,
-                    interp,
-                    n,
-                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]]],
-                )?);
-            }
-            Ok(CellSubdivision::Faces(faces))
-        }
-        ElementType::HEX20 | ElementType::HEX27 => {
-            let mut faces = Vec::with_capacity(6);
-            for f in &HEX8_FACES {
-                faces.push(quad_face(
-                    et,
-                    interp,
-                    n,
-                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]], &nodes[f[3]]],
-                )?);
-            }
-            Ok(CellSubdivision::Faces(faces))
-        }
-        ElementType::PENTA15 => {
-            let mut faces = Vec::with_capacity(5);
-            for f in PENTA6_FACES.iter().filter(|f| f.len() == 3) {
-                faces.push(tri_face(
-                    et,
-                    interp,
-                    n,
-                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]]],
-                )?);
-            }
-            for f in PENTA6_FACES.iter().filter(|f| f.len() == 4) {
-                faces.push(quad_face(
-                    et,
-                    interp,
-                    n,
-                    [&nodes[f[0]], &nodes[f[1]], &nodes[f[2]], &nodes[f[3]]],
-                )?);
+        _ => {
+            let mut faces = Vec::with_capacity(k.facets().len());
+            for f in k.facets() {
+                let c: Vec<&[f64]> = f.corners().iter().map(|&li| nodes[li]).collect();
+                faces.push(face_of(et, interp, n, &c)?);
             }
             Ok(CellSubdivision::Faces(faces))
         }
     }
 }
 
+/// Subdivide one planar facet, triangular or quadrangular, given its corners
+/// in the parent's reference frame.
+fn face_of(
+    et: ElementType,
+    interp: Interpolation,
+    n: usize,
+    corners: &[&[f64]],
+) -> Result<FaceSubdivision> {
+    match corners.len() {
+        3 => tri_face(et, interp, n, [corners[0], corners[1], corners[2]]),
+        4 => quad_face(
+            et,
+            interp,
+            n,
+            [corners[0], corners[1], corners[2], corners[3]],
+        ),
+        other => Err(crate::error::PyrucastError::Message(format!(
+            "subdivide: {et} has a facet with {other} corners (expected 3 or 4)"
+        ))),
+    }
+}
+
 /// Affine combination of reference points: `Σ c_k · p_k`.
-fn combine(points: &[&Vec<f64>], coeffs: &[f64]) -> Vec<f64> {
+fn combine(points: &[&[f64]], coeffs: &[f64]) -> Vec<f64> {
     let dim = points[0].len();
     let mut out = vec![0.0; dim];
     for (p, &c) in points.iter().zip(coeffs) {
@@ -395,7 +123,7 @@ fn tri_face(
     et: ElementType,
     interp: Interpolation,
     n: usize,
-    corners: [&Vec<f64>; 3],
+    corners: [&[f64]; 3],
 ) -> Result<FaceSubdivision> {
     let mut weights = Vec::new();
     // idx(i, j) with i + j ≤ n, rows of decreasing length.
@@ -434,7 +162,7 @@ fn quad_face(
     et: ElementType,
     interp: Interpolation,
     n: usize,
-    corners: [&Vec<f64>; 4],
+    corners: [&[f64]; 4],
 ) -> Result<FaceSubdivision> {
     let mut weights = Vec::with_capacity((n + 1) * (n + 1));
     for j in 0..=n {
