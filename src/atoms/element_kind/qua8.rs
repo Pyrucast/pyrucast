@@ -1,6 +1,7 @@
 //! `QUA8` — the 8-node serendipity quadrangle.
 
 use super::qua4::{clamp_cube, contains_cube, Qua4, EDGES};
+use super::quadrature::gauss3_1d;
 use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
@@ -126,5 +127,20 @@ impl ElementKind for Qua8 {
             -0.5 * (1.0 - b * b),
             -b * (1.0 - a), // 7
         ]);
+    }
+    /// 3×3 tensor product of the 3-point rule (exact to degree 5 per
+    /// direction). Shared with `QUA9`.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        let (p, w) = gauss3_1d();
+        let mut xi = Vec::with_capacity(9 * 2);
+        let mut wt = Vec::with_capacity(9);
+        for j in 0..3 {
+            for i in 0..3 {
+                xi.push(p[i]);
+                xi.push(p[j]);
+                wt.push(w[i] * w[j]);
+            }
+        }
+        (xi, wt)
     }
 }

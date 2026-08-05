@@ -12,8 +12,9 @@
 //! works off `SubFiniteElementSpace`'s precomputed `n_at_g` / `dn_at_g`, so it
 //! never calls a shape function per cell; see `benches/parallel.rs`.
 //!
-//! Sizes are chosen so each case runs for a few hundred milliseconds. Anything
-//! shorter is drowned by run-to-run noise on a normal machine.
+//! Sizes are chosen so each case runs for about half a second. Anything shorter
+//! is drowned by run-to-run noise: on this machine two runs of *identical* code
+//! differ by ±18 % at a few milliseconds and by ±20 % at a few tens.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
@@ -24,9 +25,9 @@ use pyrucast::store::insert;
 
 /// Host block side, in cells: `HOST_N³` hexahedra.
 const HOST_N: usize = 12;
-/// Points located inside the block. Sized for a ~0.5 s run: locating one
-/// point costs well under a microsecond, so it takes a lot of them.
-const N_POINTS: usize = 750_000;
+/// Points located inside the block. Sized for a ~0.5 s run: locating one point
+/// costs well under a microsecond, so it takes a lot of them.
+const N_POINTS: usize = 900_000;
 /// Surface side, in cells, for the projection case.
 const SURFACE_N: usize = 40;
 /// Points projected onto the surface. Far fewer than for `locate`:

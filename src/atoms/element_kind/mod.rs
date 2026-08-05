@@ -34,6 +34,7 @@
 use crate::atoms::ElementType;
 
 pub use interpolation::Interpolation;
+pub use quadrature::QuadratureRule;
 
 mod hex20;
 mod hex27;
@@ -46,6 +47,7 @@ mod pyra5;
 mod qua4;
 mod qua8;
 mod qua9;
+mod quadrature;
 mod seg2;
 mod seg3;
 mod tet10;
@@ -172,6 +174,17 @@ pub trait ElementKind: Sync {
     /// `nodes_per_cell() × topological_dim()`.
     fn dshape_into(&self, xi: &[f64], out: &mut [f64]);
 
+    // ── Quadrature (required: the full rule; the reduced one is derived) ──
+
+    /// The element's standard integration rule, as `(xi, w)`: `xi` flat
+    /// row-major over `n_g × topological_dim()`, `w` of length `n_g`.
+    ///
+    /// Calibrated to integrate the Lagrange-1 mass matrix exactly on a
+    /// straight element. The weights **must** sum to
+    /// [`ref_measure`](Self::ref_measure) — the invariant the tests check for
+    /// every type at once.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>);
+
     // ── Provided: derived from ref_nodes ────────────────────────────────
 
     /// Number of nodes per cell.
@@ -205,6 +218,16 @@ pub trait ElementKind: Sync {
         let mut out = vec![0.0; self.nodes_per_cell() * self.topological_dim()];
         self.dshape_into(xi, &mut out);
         out
+    }
+
+    /// The **reduced** (one-point) integration rule: the centroid, carrying the
+    /// whole reference measure.
+    ///
+    /// Wholly derived — no element writes it. It used to be a seventeen-line
+    /// table that repeated, per type, what [`ref_centroid`](Self::ref_centroid)
+    /// and [`ref_measure`](Self::ref_measure) already said.
+    fn reduced(&self) -> (Vec<f64>, Vec<f64>) {
+        (self.ref_centroid().to_vec(), vec![self.ref_measure()])
     }
 }
 

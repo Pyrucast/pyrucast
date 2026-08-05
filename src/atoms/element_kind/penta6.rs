@@ -146,4 +146,22 @@ impl ElementKind for Penta6 {
             l3, // dN5
         ]);
     }
+    /// Tensor product of the 3-point `TRI3` rule (weights 1/6) with the
+    /// 2-point Gauss rule mapped to `ζ ∈ [0, 1]` (weights 1/2).
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        let g = 0.5 / 3.0_f64.sqrt();
+        let tri = [(0.5, 0.0), (0.5, 0.5), (0.0, 0.5)];
+        let zeta = [0.5 - g, 0.5 + g];
+        let mut xi = Vec::with_capacity(6 * 3);
+        let mut w = Vec::with_capacity(6);
+        for &(a, b) in &tri {
+            for &z in &zeta {
+                xi.push(a);
+                xi.push(b);
+                xi.push(z);
+                w.push((1.0 / 6.0) * 0.5);
+            }
+        }
+        (xi, w)
+    }
 }

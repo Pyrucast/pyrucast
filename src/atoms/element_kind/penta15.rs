@@ -1,6 +1,7 @@
 //! `PENTA15` — the 15-node serendipity prism.
 
 use super::penta6::{contains_prism, Penta6, EDGES};
+use super::quadrature::{gauss3_1d, tri6_gauss};
 use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
@@ -180,5 +181,22 @@ impl ElementKind for Penta15 {
         for (i, row) in rows.iter().enumerate() {
             out[3 * i..3 * i + 3].copy_from_slice(row);
         }
+    }
+    /// Tensor product of the 6-point `TRI6` rule with the 3-point Gauss rule
+    /// mapped to `ζ ∈ [0, 1]` (weights halved).
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        let (tri_xi, tri_w) = tri6_gauss();
+        let (gp, gw) = gauss3_1d();
+        let mut xi = Vec::with_capacity(18 * 3);
+        let mut w = Vec::with_capacity(18);
+        for tg in 0..tri_w.len() {
+            for k in 0..3 {
+                xi.push(tri_xi[2 * tg]);
+                xi.push(tri_xi[2 * tg + 1]);
+                xi.push(0.5 + 0.5 * gp[k]);
+                w.push(tri_w[tg] * 0.5 * gw[k]);
+            }
+        }
+        (xi, w)
     }
 }

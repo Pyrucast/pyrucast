@@ -462,7 +462,7 @@ mod tests {
             let space = crate::containers::finite_element_space::SubFiniteElementSpace::new(
                 sub.clone(),
                 crate::atoms::Interpolation::Lagrange1,
-                crate::containers::finite_element_space::QuadratureRule::Gauss,
+                crate::atoms::QuadratureRule::Gauss,
             )
             .unwrap();
             for c in 0..read(sub).unwrap().cell_count() {

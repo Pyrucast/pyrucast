@@ -54,4 +54,9 @@ impl ElementKind for Poi1 {
 
     /// Zero-length: a point has no direction to differentiate along.
     fn dshape_into(&self, _xi: &[f64], _out: &mut [f64]) {}
+    /// A point has nothing to integrate over; `QuadratureRule` rejects `POI1`
+    /// before ever asking.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        (Vec::new(), Vec::new())
+    }
 }

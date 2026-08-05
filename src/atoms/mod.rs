@@ -39,7 +39,7 @@ pub use band::Band;
 pub use cell::{Cell, CellIter};
 pub use color::RgbColor;
 pub use element::{Element, ElementIter};
-pub use element_kind::{ElementKind, Facet, Interpolation};
+pub use element_kind::{ElementKind, Facet, Interpolation, QuadratureRule};
 pub use element_type::ElementType;
 pub use node::{Node, NodeId};
 pub use point::{Point2, Point3, Vector2, Vector3};

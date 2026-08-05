@@ -99,4 +99,18 @@ impl ElementKind for Tet4 {
             0.0, 0.0, 1.0, // dN3
         ]);
     }
+    /// 4-point Hammer rule on the unit simplex (exact for degree 2).
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        let alpha = (5.0 - 5.0_f64.sqrt()) / 20.0;
+        let beta = (5.0 + 3.0 * 5.0_f64.sqrt()) / 20.0;
+        (
+            vec![
+                alpha, alpha, alpha, //
+                beta, alpha, alpha, //
+                alpha, beta, alpha, //
+                alpha, alpha, beta,
+            ],
+            vec![1.0 / 24.0; 4],
+        )
+    }
 }

@@ -1,6 +1,7 @@
 //! `QUA9` — the 9-node biquadratic quadrangle.
 
 use super::qua4::{clamp_cube, contains_cube, Qua4, EDGES};
+use super::qua8::Qua8;
 use super::qua8::FACETS;
 use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
@@ -81,6 +82,12 @@ impl ElementKind for Qua9 {
             out[2 * n] = dlx[i] * ly[j];
             out[2 * n + 1] = lx[i] * dly[j];
         }
+    }
+
+    /// The same 3×3 rule as `QUA8` — the extra centre node raises the
+    /// interpolation's completeness, not the degree to integrate.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        Qua8.gauss()
     }
 }
 

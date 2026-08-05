@@ -1,5 +1,6 @@
 //! `HEX27` — the 27-node tri-quadratic hexahedron.
 
+use super::hex20::Hex20;
 use super::hex8::{Hex8, EDGES};
 use super::qua4::contains_cube;
 use super::qua9::{dlag1d, lag1d};
@@ -132,6 +133,10 @@ impl ElementKind for Hex27 {
             out[3 * n + 1] = lx[i] * dly[j] * lz[k];
             out[3 * n + 2] = lx[i] * ly[j] * dlz[k];
         }
+    }
+    /// The same 3×3×3 rule as `HEX20`.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        Hex20.gauss()
     }
 }
 

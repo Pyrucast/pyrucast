@@ -2,6 +2,7 @@
 
 use super::hex8::{Hex8, EDGES};
 use super::qua4::contains_cube;
+use super::quadrature::gauss3_1d;
 use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
 
@@ -168,5 +169,22 @@ impl ElementKind for Hex20 {
                 row[2] = -0.5 * c * ux * vy;
             }
         }
+    }
+    /// 3×3×3 tensor product of the 3-point rule. Shared with `HEX27`.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        let (p, w) = gauss3_1d();
+        let mut xi = Vec::with_capacity(27 * 3);
+        let mut wt = Vec::with_capacity(27);
+        for k in 0..3 {
+            for j in 0..3 {
+                for i in 0..3 {
+                    xi.push(p[i]);
+                    xi.push(p[j]);
+                    xi.push(p[k]);
+                    wt.push(w[i] * w[j] * w[k]);
+                }
+            }
+        }
+        (xi, wt)
     }
 }

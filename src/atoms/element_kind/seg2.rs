@@ -62,4 +62,9 @@ impl ElementKind for Seg2 {
         out[0] = -0.5;
         out[1] = 0.5;
     }
+    /// 2-point Gauss-Legendre on `[-1, 1]`.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        let a = 1.0 / 3.0_f64.sqrt();
+        (vec![-a, a], vec![1.0, 1.0])
+    }
 }

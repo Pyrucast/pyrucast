@@ -1,5 +1,6 @@
 //! `SEG3` — the 3-node quadratic segment.
 
+use super::quadrature::gauss3_1d;
 use super::seg2::{Seg2, EDGES};
 use super::{ElementKind, Interpolation};
 use crate::atoms::ElementType;
@@ -57,5 +58,10 @@ impl ElementKind for Seg3 {
     fn dshape_into(&self, xi: &[f64], out: &mut [f64]) {
         let x = xi[0];
         out.copy_from_slice(&[x - 0.5, x + 0.5, -2.0 * x]);
+    }
+    /// 3-point Gauss-Legendre on `[-1, 1]` (exact to degree 5).
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        let (p, w) = gauss3_1d();
+        (p.to_vec(), w.to_vec())
     }
 }

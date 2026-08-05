@@ -645,7 +645,7 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Interpolation;
     use crate::atoms::Node;
-    use crate::containers::finite_element_space::QuadratureRule;
+    use crate::atoms::QuadratureRule;
     use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;

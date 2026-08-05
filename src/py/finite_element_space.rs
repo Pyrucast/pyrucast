@@ -4,7 +4,7 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::Element;
 use crate::atoms::Interpolation;
-use crate::containers::finite_element_space::QuadratureRule;
+use crate::atoms::QuadratureRule;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::error::{PyrucastError, Result};
 use crate::py::element::PyElement;

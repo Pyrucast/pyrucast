@@ -38,16 +38,19 @@ use pyrucast::store::insert;
 
 /// Grid side for the assembly / integration groups.
 ///
-/// Sized so the heaviest operation of the group runs for a few hundred
-/// milliseconds. A benchmark that finishes in a few milliseconds cannot be
-/// trusted here: two runs of *identical* code on this machine differ by up to
-/// ±18 % at that scale, which is more than any change worth measuring.
-const ASSEMBLY_N: usize = 400; // 160 000 QUA4 cells
+/// Sized so the heaviest operation of the group runs for about half a second,
+/// which is the useful compromise: a benchmark finishing in a few milliseconds
+/// cannot be trusted here (two runs of *identical* code differ by ±18 % at that
+/// scale, and still by ±20 % at a few tens), while a second-long assembly costs
+/// several gigabytes of resident memory. Only `behavior::integrate` stays short
+/// — it is some fourteen times cheaper per cell than the assembly; read it with
+/// that in mind.
+const ASSEMBLY_N: usize = 450; // 202 500 QUA4 cells
 
 /// Grid side for the solver group, sized on the same principle. The direct
 /// factorisation grows much faster than the assembly, so it needs its own,
 /// smaller mesh.
-const SOLVER_N: usize = 200; // 40 401 unknowns
+const SOLVER_N: usize = 250; // 63 001 unknowns
 
 /// Everything an elasticity benchmark needs on one grid.
 struct Grid {

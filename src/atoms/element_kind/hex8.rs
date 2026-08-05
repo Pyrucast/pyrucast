@@ -129,4 +129,23 @@ impl ElementKind for Hex8 {
             out[3 * i + 2] = 0.125 * r * u * v;
         }
     }
+    /// 2×2×2 Gauss-Legendre tensor product.
+    ///
+    /// Traversed row-major (`x` fastest), so the bottom face is not strictly
+    /// CCW. That is fine: the rule is symmetric and the order is opaque to
+    /// callers, who only care about `(ξ_g, w_g)` as a set.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        let a = 1.0 / 3.0_f64.sqrt();
+        let mut xi = Vec::with_capacity(8 * 3);
+        for &z in &[-a, a] {
+            for &y in &[-a, a] {
+                for &x in &[-a, a] {
+                    xi.push(x);
+                    xi.push(y);
+                    xi.push(z);
+                }
+            }
+        }
+        (xi, vec![1.0; 8])
+    }
 }

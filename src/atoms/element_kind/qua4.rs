@@ -105,4 +105,17 @@ impl ElementKind for Qua4 {
             0.25 * (1.0 - a), // dN3
         ]);
     }
+    /// 2×2 Gauss-Legendre tensor product, corners in CCW order.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        let a = 1.0 / 3.0_f64.sqrt();
+        (
+            vec![
+                -a, -a, //
+                a, -a, //
+                a, a, //
+                -a, a,
+            ],
+            vec![1.0; 4],
+        )
+    }
 }

@@ -1,5 +1,6 @@
 //! `TRI6` — the 6-node quadratic triangle.
 
+use super::quadrature::tri6_gauss;
 use super::tri3::{clamp_simplex, contains_simplex, Tri3, EDGES};
 use super::{ElementKind, Facet, Interpolation};
 use crate::atoms::ElementType;
@@ -107,5 +108,9 @@ impl ElementKind for Tri6 {
             -4.0 * l3,
             4.0 * (l1 - l3), // dN5 = 4(L1 dL3 + L3 dL1)
         ]);
+    }
+    /// 6-point degree-4 symmetric rule (Dunavant) on the unit triangle.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        tri6_gauss()
     }
 }

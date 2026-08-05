@@ -134,4 +134,31 @@ impl ElementKind for Tet10 {
             out[3 * i..3 * i + 3].copy_from_slice(row);
         }
     }
+    /// Keast degree-4, 11-point rule (reference volume 1/6): one centroid
+    /// point with a negative weight, a 4-orbit and a 6-orbit.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        let a = 1.0 / 14.0;
+        let b = 11.0 / 14.0;
+        let d = 0.399_403_576_166_799;
+        let c = 0.100_596_423_833_201;
+        let (w0, w1, w2) = (-74.0 / 5625.0, 343.0 / 45000.0, 56.0 / 2250.0);
+        let mut xi = vec![0.25, 0.25, 0.25];
+        let mut w = vec![w0];
+        for p in [[a, a, a], [b, a, a], [a, b, a], [a, a, b]] {
+            xi.extend_from_slice(&p);
+            w.push(w1);
+        }
+        for p in [
+            [d, c, c],
+            [c, d, c],
+            [c, c, d],
+            [d, d, c],
+            [d, c, d],
+            [c, d, d],
+        ] {
+            xi.extend_from_slice(&p);
+            w.push(w2);
+        }
+        (xi, w)
+    }
 }

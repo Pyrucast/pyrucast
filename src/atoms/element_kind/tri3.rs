@@ -108,4 +108,15 @@ impl ElementKind for Tri3 {
             0.0, 1.0, // dN2
         ]);
     }
+    /// 3-point Hammer rule at the edge midpoints of the unit triangle.
+    fn gauss(&self) -> (Vec<f64>, Vec<f64>) {
+        (
+            vec![
+                0.5, 0.0, //
+                0.5, 0.5, //
+                0.0, 0.5,
+            ],
+            vec![1.0 / 6.0; 3],
+        )
+    }
 }
