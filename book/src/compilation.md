@@ -11,8 +11,12 @@ documentation. Pour le **simple usage en Python** (quatre commandes), voir
 |---|---|---|
 | Rust (via `rustup`) | stable récent, édition 2021 | Compilation du cœur |
 | Python | ≥ 3.9 (3.13 testé) | API Python et `maturin` |
+| `ruff` | récent | Format du Python (`ruff format`), vérifié par `check.sh` |
 | `mdbook` | ≥ 0.4 | Génération de cette documentation |
 | `mdbook-mermaid` | ≥ 0.14 | Rendu des graphes (ex. [graphe des dépendances](developper/arborescence.md#graphe-des-dépendances-externes)) |
+
+`cargo fmt` et `clippy` viennent avec la toolchain (`rustup component add
+rustfmt clippy` si besoin).
 
 Système (uniquement pour **builds avec l'API Python**, voir features plus bas) :
 
@@ -26,7 +30,7 @@ Système (uniquement pour **builds avec l'API Python**, voir features plus bas) 
 
 ## Mise en place du venv et des outils Python
 
-Le venv (`.venv` à la racine) héberge `maturin` et `pytest`, et sert
+Le venv (`.venv` à la racine) héberge `maturin`, `pytest` et `ruff`, et sert
 d'environnement cible à `maturin develop`.
 
 ### Linux / macOS (bash)
@@ -34,7 +38,7 @@ d'environnement cible à `maturin develop`.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip maturin pytest
+pip install --upgrade pip maturin pytest ruff
 ```
 
 ### Windows (PowerShell)
@@ -42,7 +46,7 @@ pip install --upgrade pip maturin pytest
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install --upgrade pip maturin pytest
+pip install --upgrade pip maturin pytest ruff
 ```
 
 > **Important.** Pour les builds **avec l'API Python** (`maturin`, ou `cargo`
@@ -57,6 +61,8 @@ Les commandes suivantes supposent le venv activé. Elles sont identiques sous
 Windows et Linux.
 
 ```text
+cargo fmt                  # format Rust — à passer AVANT toute vérification
+ruff format .              # format Python — idem
 cargo build                # cœur Rust pur (rlib + cdylib), sans pyo3
 cargo test                 # tests unitaires + intégration + doctests (Rust pur)
 cargo test --doc           # doctests explicitement
@@ -67,10 +73,12 @@ mdbook build book          # génère cette documentation HTML
 mdbook test book           # exécute le code testable de la documentation
 ```
 
-`maturin develop` installe le module en mode *editable* dans
-`.venv/Lib/site-packages/pyrucast/` (Windows) ou
-`.venv/lib/python3.X/site-packages/pyrucast/` (Linux/macOS). Toute modification
-du Rust est intégrée au prochain `maturin develop`.
+Le projet étant un *mixed layout*, `maturin develop` fait deux choses : il
+dépose l'**extension compilée** dans `python/pyrucast/` (à côté des `.py`), et
+installe le paquet en mode *editable* dans le venv — un simple
+`site-packages/pyrucast.pth` pointant vers `python/`, pas une copie. Toute
+modification du Rust est donc intégrée au prochain `maturin develop`, et une
+modification des seuls `.py` est visible immédiatement.
 
 ### Documentation Rust (rustdoc)
 
@@ -107,7 +115,7 @@ compilé (dépendance optionnelle), donc aucun lien à `libpython`.
 | `extension-module` | `python-api` + dit à `pyo3` de **ne pas** se lier à `libpython` (l'interpréteur hôte la fournit au chargement du `.so`) | `python-api`, `pyo3/extension-module` | systématique pour `maturin develop` / `maturin build`. |
 | `viz` | export PNG/SVG (rendu CPU via `plotters`) | — | scripts headless, captures pour la doc, CI. |
 | `viz-interactive` | fenêtre interactive `winit`/`softbuffer` (souris, gizmo) | `viz` | environnement graphique disponible. |
-| `stub-gen` | `python-api` + binaire `stub_gen` qui produit `pyrucast.pyi` | `python-api`, `pyo3-stub-gen` | après modification des bindings, pour rafraîchir le stub vu par les IDE. |
+| `stub-gen` | `python-api` + binaire `stub_gen` qui produit le stub `.pyi` | `python-api`, `pyo3-stub-gen` | après modification des bindings, pour rafraîchir le stub vu par les IDE. |
 
 > **`extension-module` vs `stub-gen`.** `extension-module` produit un `.so`
 > chargé par Python : `pyo3` se passe alors du link à `libpython`. À l'inverse,
@@ -131,7 +139,7 @@ pyrucast = { path = "…", default-features = false }   # Rust pur, pas de pyo3
 use pyrucast::atoms::ElementType;
 use pyrucast::ops::mesh;
 
-let mesh = mesher::triangulate_surface(&contour, ElementType::TRI3, Some(1.0))?;
+let mesh = mesh::triangulate_surface(&contour, ElementType::TRI3, Some(1.0))?;
 ```
 
 Tout le cœur (`containers`, `ops`, `interrupt`, `store`, …) est disponible et
@@ -143,8 +151,7 @@ interrompre un calcul long depuis du Rust pur, voir
 
 Les IDE (Pylance/Pyright, PyCharm) ne savent pas inspecter un `.so` compilé :
 sans stub, les complétions tombent sur `Any`. Le binaire `stub_gen` lit les
-annotations `///` + les macros `#[gen_stub_*]` et écrit un `pyrucast.pyi`
-complet à la racine :
+annotations `///` + les macros `#[gen_stub_*]` et écrit un stub complet :
 
 ```sh
 # Activer le venv comme d'habitude (le binaire link à libpython).
@@ -152,8 +159,13 @@ source .venv/bin/activate
 cargo run --bin stub_gen --features stub-gen
 ```
 
-Régénérer `pyrucast.pyi` à chaque changement de signature Python (nouvelle
-classe, paramètre, docstring `///`). Le fichier est **versionné** dans le repo,
+Le fichier produit est **`python/pyrucast/_pyrucast/__init__.pyi`** — le stub de
+l'extension compilée, à côté du paquet Python (*mixed layout*). Son chemin n'est
+pas choisi par le binaire : `pyo3-stub-gen` le dérive de `python-source` +
+`module-name` dans `pyproject.toml`.
+
+Régénérer le stub à chaque changement de signature Python (nouvelle classe,
+paramètre, docstring `///`). Le fichier est **versionné** dans le repo,
 utilisable tel quel par les IDE.
 
 #### Les dunders polymorphes des agrégats
@@ -188,6 +200,15 @@ un masque 0/1 et non un booléen.
 Le dossier `script/` contient deux niveaux d'automatisation. Tous activent (ou
 créent) le venv automatiquement et s'arrêtent à la première erreur.
 
+Autour d'eux gravitent quelques utilitaires : `dev.sh` / `dev.ps1` (build
+minimal — module Python en release avec la visu interactive + stub, rien
+d'autre), `run_examples.sh` (exemples et formation de bout en bout, appelé par
+`check.sh`), `set_new_version.sh` (passe de version : tout vérifier sans
+warning, reporter le numéro dans `Cargo.toml` / `pyproject.toml`, commit + tag —
+il ne pousse rien), `scaling.sh` (mesure de montée en charge du parallélisme) et
+`generate-formation-figures.sh` (régénère les SVG de la formation, qui sont des
+artefacts commités).
+
 ### `script/check.sh` — vérification rapide (CI)
 
 Enchaîne les vérifications de non-régression :
@@ -196,10 +217,23 @@ Enchaîne les vérifications de non-régression :
 bash script/check.sh
 ```
 
-Successivement : `cargo test`, `cargo test --doc`, `cargo test --features viz`,
-`cargo build --features viz-interactive`, `maturin develop`, `pytest`,
-`cargo doc --no-deps --lib`, `mdbook build`, `mdbook test`. C'est le script à
+Successivement : `cargo fmt --check`, `ruff format --check .`, `cargo test`,
+`cargo test --doc`, `cargo test --features viz`,
+`cargo build --features viz-interactive`,
+`maturin develop --features extension-module,viz`, `pytest`,
+`script/run_examples.sh`, `cargo doc --no-deps --lib` (avec
+`RUSTDOCFLAGS="-D warnings"`), `mdbook build`, `mdbook test`. C'est le script à
 brancher en intégration continue.
+
+Deux points valent d'être notés :
+
+- les **deux vérifications de format viennent en tête** — le script *vérifie*,
+  il ne formate pas. Passer `cargo fmt` et `ruff format .` **avant** de le
+  lancer, sinon il s'arrête au premier pas ;
+- `run_examples.sh` rejoue les **exemples et les scripts de formation** de bout
+  en bout. Ce sont des chaînes de calcul complètes : elles attrapent ce que les
+  tests unitaires laissent passer, typiquement une méthode renommée dont plus
+  personne ne se sert.
 
 ### `script/build.sh` / `script/build.ps1` — build complet + documentation
 
@@ -226,8 +260,9 @@ Il déroule, dans l'ordre :
 3. **Module Python avec visu interactive** — `maturin develop --release
    --features extension-module,viz-interactive`, puis `pytest`.
 4. **Documentation** — `cargo doc` (référence Rust), régénération du stub
-   `pyrucast.pyi`, `mdbook build` + `mdbook test`, et un export **pydoc HTML**
-   de l'API Python (`target/python-doc/pyrucast.html`).
+   `python/pyrucast/_pyrucast/__init__.pyi`, `mdbook build` + `mdbook test`, et
+   un export **pydoc HTML** de l'API Python
+   (`target/python-doc/pyrucast.html`).
 5. **Vérification finale** — le module s'importe et la visualisation est bien
    compilée (`Mesh.plot` présent) ; sinon le script échoue.
 6. **Résumé** — emplacements des trois documentations (book, rustdoc, pydoc) et

@@ -19,25 +19,33 @@ générique (l'agrégat `Model`, l'assembleur, `Dump`) ne fait **jamais** de
 SubModel  (enum : stockage + sérialisation bincode)
 ├── HeatConduction(HeatConduction)
 ├── Dirichlet(Dirichlet)
+├── … une variante par physique
 └── as_kind(&self) -> &dyn SubModelKind   ← l'unique match
 
 SubModelKind  (trait de base : le dénominateur commun de tout sous-modèle)
-├── primal_vars / dual_vars
+├── primal_vars / dual_vars                      ── les variables
+├── physics       -> &'static [Physics]          ── la nature (requise)
 ├── as_domain     -> Option<&dyn Domain>        (défaut : None)  ── seam capacité
 ├── as_constraint -> Option<&dyn Constraint>    (défaut : None)  ── seam capacité
-├── element_matrix                              (noyau cellule ; défaut : erreur)
-├── stiffness_layout                            (bloc calculé ; défaut : None)
-├── contributions                               (défaut : dérivé du layout)
-├── build_stiffness_blocks                      (défaut : dérivé du layout)
-├── build_mass_blocks                           (défaut : vide)
+├── element_matrix / element_mass                (noyaux cellule ; défaut : erreur)
+│   element_geometric / element_tangent
+│   └── matrix_element(kind, …)                  (le dispatcher, fourni)
+├── stiffness_layout / mass_layout               (blocs calculés ; défaut : None)
+│   geometric_layout / tangent_layout
+│   └── matrix_layout(kind)                      (le dispatcher, fourni)
+├── contributions(kind, material)                (défaut : dérivé du layout)
+├── build_stiffness_blocks                       (défaut : dérivé du layout)
+├── internal_force_element                       (défaut : continuum Bᵀσ)
+├── build_internal_forces                        (fourni : pilote le précédent)
 └── label / display / render
 
 Sous-traits « capacité », miroir des natures de sous-modèle (une struct
 n'implémente que celui qui la concerne) :
 ├── Domain      { material_fespace, material_components,
+│                 optional_material_components,
 │                 behavior_fespace, behavior_output_components,
 │                 integrate_point, integrate_behavior (fourni) }
-└── Constraint  { multiplier_mesh }
+└── Constraint  { multiplier_mesh, relations }
 ```
 
 ## Les étapes
@@ -47,15 +55,18 @@ Ajouter une physique se réduit à **quatre** gestes :
 1. **`src/models/<ma_physique>.rs`** (nouveau) — une struct portant ses
    supports + un `impl SubModelKind` + un constructeur `new(...)` faisant le
    travail de construction (calque sur `heat_conduction.rs`, cas simple à
-   1 bloc, ou `dirichlet.rs`, contrainte de Lagrange à 2 blocs portée par des
-   maillages fournis par l'utilisateur). La struct dérive `Serialize,
-   Deserialize` (et `Clone` si ses champs le permettent).
+   1 bloc avec raideur *et* masse, `convection.rs`, cas le plus court, ou
+   `dirichlet.rs`, contrainte de Lagrange à 2 blocs portée par des maillages
+   fournis par l'utilisateur). La struct dérive `Serialize, Deserialize` (et
+   `Clone` si ses champs le permettent).
 2. **`src/models/mod.rs`** — `pub mod <ma_physique>;`.
 3. **`src/containers/model.rs`** — **une** variante dans `enum SubModel` et
    **une** ligne dans `SubModel::as_kind()`. Plus le constructeur public
    `Model::<ma_physique>(...)` (l'API parent).
 4. **`src/py/model.rs`** — un `#[classmethod]` `PyModel::<ma_physique>(...)`.
-   Étant dans `#[pymethods]`, aucun enregistrement n'est nécessaire.
+   Étant dans `#[pymethods]`, aucun enregistrement n'est nécessaire ; et
+   `Model` étant un **conteneur**, il est déjà ré-exporté au top-level du
+   paquet Python — rien à toucher dans `python/pyrucast/`.
 
 Tout le reste est générique et **ne change pas**.
 
@@ -65,38 +76,68 @@ Défini dans `src/models/mod.rs`. Le trait de base ne porte que le **dénominate
 commun** de tout sous-modèle ; chaque **capacité optionnelle** est un **sous-trait
 séparé**, exposé par un *seam* `as_*()` qui rend `None` par défaut. Ces
 sous-traits **font miroir des natures** de sous-modèle : `Domain` (physique
-définie sur une région : matériau + comportement) et `Constraint` (multiplicateurs
-de Lagrange). Une struct n'implémente **que** la capacité qui la concerne : elle
-n'a donc jamais de méthode « présente mais qui erronerait ». Un domaine typique
-implémente `primal_vars`, `dual_vars`, `as_domain` + `Domain`, le noyau
-`element_matrix`, `stiffness_layout`, `label` et `render`. Il **n'écrit pas**
-`build_stiffness_blocks` : le défaut le dérive de `stiffness_layout` +
-`element_matrix`.
+définie sur une région : matériau + comportement) et `Constraint`
+(multiplicateurs de Lagrange). Une struct n'implémente **que** la capacité qui la
+concerne : elle n'a donc jamais de méthode « présente mais qui erronerait ». Un
+domaine typique implémente `primal_vars`, `dual_vars`, `physics`, `as_domain` +
+`Domain`, le noyau `element_matrix`, `stiffness_layout`, `label` et `render`. Il
+**n'écrit pas** `build_stiffness_blocks` : le défaut le dérive de
+`stiffness_layout` + `element_matrix`.
+
+Seules trois méthodes sont **sans défaut** : `primal_vars`, `dual_vars` et
+`physics` (plus `label` / `render` pour l'affichage). Tout le reste se redéfinit
+à la carte.
 
 ```rust,ignore
 pub trait SubModelKind: Sync {
     fn primal_vars(&self) -> Vec<String>;
     fn dual_vars(&self) -> Vec<String>;
+    // Nature(s) de la physique — slice constante, pendant de `label` ; sert
+    // aux sélecteurs `Model::filter` / `Matrix::filter` (match par appartenance) :
+    fn physics(&self) -> &'static [Physics];
     // Seams de capacité — None (défaut) ⇒ la struct n'a pas cette capacité.
     // Une struct qui l'a redéfinit le seam pour rendre `Some(self)` :
     fn as_domain(&self)     -> Option<&dyn Domain>     { None }
     fn as_constraint(&self) -> Option<&dyn Constraint> { None }
-    // Noyau de matrice élémentaire (une cellule) — pur et séquentiel ;
+
+    // ── Noyaux de matrice élémentaire (une cellule) — purs et séquentiels.
     // `geoms` : un CellGeom par espace EF du layout (geoms[0] pour le cas usuel,
-    // plusieurs pour un élément multi-quadrature — poutre/coque) :
+    // plusieurs pour un élément multi-quadrature — poutre/coque).
+    // Défaut : erreur (« cette physique n'a pas ce terme »).
     fn element_matrix(&self, geoms: &[CellGeom],
-        material: Option<&SubElementField>, ke: &mut [f64]) -> Result<()> { /* défaut : erreur */ }
-    // Déclare le bloc *calculé* (assemblage global par scatter colorié parallèle) ;
-    // None (défaut) ⇒ physique assemblée en littéral (Dirichlet, blocs à la main) :
-    fn stiffness_layout(&self) -> Option<StiffnessLayout> { None }
-    // Contributions de raideur, telles que l'assembleur les consomme (défaut :
-    // Computed(layout) si stiffness_layout, sinon Literal(build_stiffness_blocks)) :
-    fn contributions(&self, material: Option<&Handle<SubElementField>>)
-        -> Result<Vec<Contribution>> { /* défaut : dérivé de stiffness_layout */ }
+        material: Option<&SubElementField>, ke: &mut [f64]) -> Result<()>;      // ∫ Bᵀ D B
+    fn element_mass(&self, geoms: &[CellGeom],
+        material: Option<&SubElementField>, ke: &mut [f64]) -> Result<()>;      // ∫ ρ Nᵀ N
+    fn element_geometric(&self, geoms: &[CellGeom],
+        material: Option<&SubElementField>, state: Option<&SubElementField>,
+        ke: &mut [f64]) -> Result<()>;                                          // ∫ Gᵀ σ̂ G
+    fn element_tangent(&self, geoms: &[CellGeom],
+        material: Option<&SubElementField>, state: Option<&SubElementField>,
+        ke: &mut [f64]) -> Result<()>;                                          // ∫ Bᵀ D_alg B
+    // Le dispatcher que pilote l'assembleur — fourni, on ne l'écrit pas :
+    fn matrix_element(&self, kind: MatrixKind, /* … */) -> Result<()> { /* route vers les quatre */ }
+
+    // ── Déclarations structurelles du bloc *calculé*, une par MatrixKind ;
+    // None (défaut) ⇒ pas de terme de ce genre pour cette physique :
+    fn stiffness_layout(&self)  -> Option<MatrixLayout> { None }
+    fn mass_layout(&self)       -> Option<MatrixLayout> { None }
+    fn geometric_layout(&self)  -> Option<MatrixLayout> { None }
+    fn tangent_layout(&self)    -> Option<MatrixLayout> { None }
+    fn matrix_layout(&self, kind: MatrixKind) -> Option<MatrixLayout> { /* fourni */ }
+
+    // Contributions telles que l'assembleur les consomme (défaut : Computed(layout)
+    // si matrix_layout(kind), sinon — pour Stiffness seulement — Literal(build_stiffness_blocks)) :
+    fn contributions(&self, kind: MatrixKind, material: Option<&Handle<SubElementField>>)
+        -> Result<Vec<Contribution>> { /* défaut : dérivé de matrix_layout */ }
     fn build_stiffness_blocks(&self, material: Option<&Handle<SubElementField>>)
         -> Result<Vec<SubMatrix>> { /* défaut : dérivé de stiffness_layout + element_matrix */ }
-    fn build_mass_blocks(&self, _material: Option<&Handle<SubElementField>>)
-        -> Result<Vec<SubMatrix>> { Ok(Vec::new()) }
+
+    // ── Forces internes f = ∫ Bᵀ σ (Cast3m BSIG) — le transposé de B :
+    fn internal_force_element(&self, geoms: &[CellGeom],
+        stress: &SubElementField, fe: &mut [f64]) -> Result<()> { /* défaut : continuum */ }
+    fn build_internal_forces(&self, stress: &Handle<SubElementField>)
+        -> Result<SubNodeField> { /* fourni : pilote le noyau sur le stiffness_layout */ }
+
     fn label(&self) -> &'static str;
     fn display(&self) -> String { format!("SubModel<{}>", self.label()) }
     fn render(&self, opts: &DumpOptions) -> String;
@@ -108,15 +149,24 @@ pub trait SubModelKind: Sync {
 pub trait Domain: Sync {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace>;
     fn material_components(&self) -> Option<&'static [&'static str]> { None }
+    // Composantes acceptées mais non exigées (alpha…) — cf. plus bas :
+    fn optional_material_components(&self) -> &'static [&'static str] { &[] }
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace>;
     fn behavior_output_components(&self) -> Result<Vec<String>>;
-    fn integrate_point(&self, geom: &CellGeom, input: &SubElementField,
-        material: Option<&SubElementField>, g: usize, out: &mut [f64]) -> Result<()>;
-    fn integrate_behavior(&self, input: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>) -> Result<SubElementField> { /* fourni : pilote integrate_point */ }
+    // La loi de comportement en UN point de Gauss, montage incrémental A → B :
+    fn integrate_point(&self, geom: &CellGeom, deformation: &SubElementField,
+        prev: Option<&SubElementField>, material: Option<&SubElementField>,
+        g: usize, dt: Option<f64>, out: &mut [f64]) -> Result<()>;
+    fn integrate_behavior(&self, deformation: &Handle<SubElementField>,
+        prev: Option<&Handle<SubElementField>>,
+        material: Option<&Handle<SubElementField>>,
+        dt: Option<f64>) -> Result<SubElementField> { /* fourni : pilote integrate_point */ }
 }
 pub trait Constraint {
     fn multiplier_mesh(&self) -> &Mesh;
+    // Les relations linéaires imposées, sous forme neutre vis-à-vis de la méthode
+    // d'imposition (Lagrange ou élimination) — cf. « Une contrainte » plus bas :
+    fn relations(&self) -> Result<Vec<Relation>>;
 }
 ```
 
@@ -132,37 +182,92 @@ sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
   les cellules. Matériau et comportement vont **ensemble** : même un élément
   linéaire (barre, poutre) a un comportement, simplement trivial (`N = E·A·ε`).
 - **Contrainte** (multiplicateurs de Lagrange) : `impl Constraint`
-  (`multiplier_mesh()`) + `as_constraint()`. `SubModel::multiplier_nodes()` et
-  `multiplier_mesh()` en découlent. C'est le foyer de la famille contrainte
-  (Dirichlet, à venir MPC / contact fort).
-- **Terme de masse** : redéfinir `build_mass_blocks()` (sinon : pas de masse).
+  (`multiplier_mesh()` + `relations()`) + `as_constraint()`.
+  `SubModel::multiplier_nodes()` et `multiplier_mesh()` en découlent. C'est le
+  foyer de la famille contrainte — `Dirichlet`, `Mpc`, `Embedded`, `Contact`.
+- **Terme de masse, raideur géométrique, tangente cohérente** : déclarer le
+  `*_layout` correspondant et écrire le noyau `element_*` (voir ci-dessous).
 
 Une **contrainte** comme `Dirichlet` n'implémente *que* `Constraint` (plus
 `contributions`, cf. ci-dessous) : elle n'a ni `element_matrix`, ni `Domain` —
 leur absence est un **fait de compilation**, pas une erreur à l'exécution.
 
+### La nature : `physics()`
+
+`physics()` rend une **slice constante** de `Physics` (`Mechanical`, `Thermal`,
+`Constraint`, `Other`) : la classification grossière de la physique, orthogonale
+à l'axe de capacité `Domain`/`Constraint`. Elle est **requise** — chaque physique
+déclare sa nature à son site de définition, une physique couplée en déclarant
+plusieurs. Cette information voyage avec chaque bloc assemblé jusqu'à la
+`SubMatrix`, et alimente les sélecteurs `Model::filter` / `Matrix::filter`, qui
+matchent par **appartenance**. Un `HeatConduction` rend
+`&[Physics::Thermal]`, un `Dirichlet` `&[Physics::Constraint]`.
+
+### Un genre de matrice = un layout + un noyau
+
+L'assemblage est **agnostique au genre de matrice**. L'énum `MatrixKind`
+(`Stiffness`, `Mass`, `Geometric`, `Tangent`) est le discriminant qui fait
+tourner **la même machinerie** — recette, scatter colorié, cache de motif creux
+par genre — avec un noyau élémentaire différent :
+
+| `MatrixKind` | Cast3m | intégrale | layout | noyau |
+|---|---|---|---|---|
+| `Stiffness` | `RIGI` / `COND` | `∫ Bᵀ D B` | `stiffness_layout` | `element_matrix` |
+| `Mass` | `MASS` / `CAPA` | `∫ ρ Nᵀ N` | `mass_layout` | `element_mass` |
+| `Geometric` | `KSIG` | `∫ Gᵀ σ̂ G` | `geometric_layout` | `element_geometric` |
+| `Tangent` | `KTAN` | `∫ Bᵀ D_alg B` | `tangent_layout` | `element_tangent` |
+
+Ajouter un terme à une physique, c'est donc **deux méthodes** : le `*_layout`
+(souvent le même que celui de la raideur — mêmes espaces EF, même support,
+mêmes variables : seul le noyau diffère) et le `element_*`. Une physique sans
+terme d'un genre ne redéfinit rien : son layout reste `None`, elle ne contribue
+pas, et `ops::matrix::mass(...)` sur un modèle qui la contient l'ignore
+simplement. Côté opérateurs, un point d'entrée par genre —
+`ops::matrix::{stiffness, mass, geometric, tangent}`, plus `lump` — tous adossés
+au même `assemble_kind`.
+
+Les deux genres à état (`Geometric`, `Tangent`) reçoivent en plus un `state` : le
+champ produit par `integrate_behavior` (contrainte courante pour la raideur
+géométrique, modules tangents algorithmiques `D_alg` pour la tangente cohérente).
+C'est le couple producteur/consommateur — le noyau de comportement écrit `D_alg`
+dans ses composantes de sortie, `element_tangent` les relit.
+
+### Les forces internes
+
+`build_internal_forces(stress)` est **fourni** : il pilote
+`internal_force_element` en parallèle sur les espaces EF du `stiffness_layout` et
+disperse aux nœuds de son support. Le noyau élémentaire par défaut est celui de
+la mécanique des milieux continus — `f_{i,a} = Σ_g Σ_b (∂N_i/∂x_b) σ_ab`, lu en
+nommage Voigt (`sigma_xx`, `sigma_xy`, …), terme de cerceau compris en
+axisymétrie. Une physique dont le dual n'est **pas** un vecteur déplacement
+(thermique, barre, poutre) redéfinit `internal_force_element`. Pour une loi
+linéaire, le résultat vaut `K·u`.
+
 ### Le parallélisme est gratuit (et invisible)
 
-Les noyaux qu'une physique écrit — `integrate_point` (un point de Gauss) et
-`element_matrix` (la matrice élémentaire d'une cellule) — sont **séquentiels et
-purs** : ils ne voient ni rayon, ni le store, ni un verrou. Les *drivers* de
-`models::kernel` portent la parallélisation et le zéro-copie au-dessus d'eux.
-Voir [Parallélisme](developper/parallelisme.md).
+Les noyaux qu'une physique écrit — `integrate_point` (un point de Gauss),
+`element_matrix` & consorts (la matrice élémentaire d'une cellule),
+`internal_force_element` — sont **séquentiels et purs** : ils ne voient ni rayon,
+ni le store, ni un verrou. Les *drivers* de `models::kernel` portent la
+parallélisation et le zéro-copie au-dessus d'eux. Voir
+[Parallélisme](developper/parallelisme.md).
 
-Concrètement, une physique de continuum déclare `stiffness_layout()` (espaces EF,
-support, variables, ordering) : le défaut de `contributions()` en tire une
+Concrètement, une physique de continuum déclare son layout (espaces EF, support,
+variables, ordering) : le défaut de `contributions()` en tire une
 `Contribution::Computed`, et l'assembleur global bâtit un bloc **calculé** puis
-disperse `element_matrix` directement dans le CSR, en parallèle par coloration des
-cellules — sans matérialiser de COO. La voie **littérale**
+disperse le noyau élémentaire directement dans le CSR, en parallèle par
+coloration des cellules — sans matérialiser de COO. La voie **littérale**
 (`build_stiffness_blocks`) est le second défaut du trait, dérivée du même couple
 `stiffness_layout` + `element_matrix` via `kernel::assemble_block` ; elle sert de
 référence d'équivalence et de repli, mais une physique volumique **ne l'écrit
-plus**. Une contrainte comme `Dirichlet` (aucun `stiffness_layout`, rien
-d'intégré sur une cellule) redéfinit directement `contributions()` pour rendre ses
-blocs C / Cᵀ en `Contribution::Literal` — l'assembleur reste sans aucun cas
-particulier « Dirichlet ».
+plus**.
 
-Le champ `fespaces` du `stiffness_layout` est un **`Vec`** : un seul espace EF
+Une contrainte comme `Dirichlet` (aucun layout, rien d'intégré sur une cellule)
+redéfinit directement `contributions()` : elle rend `Vec::new()` pour tout genre
+autre que `Stiffness`, et ses blocs C / Cᵀ en `Contribution::Literal` pour
+celui-là — l'assembleur reste sans aucun cas particulier « Dirichlet ».
+
+Le champ `fespaces` du `MatrixLayout` est un **`Vec`** : un seul espace EF
 pour une physique de continuum, ou plusieurs — partageant un maillage, ne
 différant que par la quadrature — pour un élément **multi-quadrature**. C'est ce
 que fait la **poutre de Timoshenko** (`fespaces: vec![bending, shear]`, flexion en
@@ -170,6 +275,51 @@ Gauss complet + cisaillement réduit) : `element_matrix` reçoit alors deux
 `CellGeom`, `geoms[0]` pour la flexion et `geoms[1]` pour le cisaillement, et
 l'élément passe par le **même** chemin de scatter parallèle que le reste — la
 sparsité ne dépendant que de la connectivité, pas de la quadrature.
+
+### Une contrainte : les relations, forme neutre
+
+`Constraint::relations()` rend une `Relation` par nœud multiplicateur : son
+`multiplier_node`, la composante duale `imposed_value` où l'utilisateur écrira le
+second membre `g`, la liste des termes `(node, variable, target_dual,
+coefficient)`, et un `sense` (`RelationSense::Equality` par défaut,
+`GreaterEqual` / `LessEqual` pour l'unilatéral, cf.
+[Contact](contraintes/contact.md)).
+
+C'est la **source unique de vérité**, indépendante de la méthode d'imposition :
+la voie Lagrange (`contributions()`) en tire ses blocs C / Cᵀ — via le helper
+partagé `constraint_block_pair` — et la voie par **élimination**
+(`ops::solver::eliminate`) lit les mêmes relations. Ni l'une ni l'autre ne
+re-parse le maillage-par-terme fourni par l'utilisateur. Une nouvelle contrainte
+n'a donc à décrire ses relations **qu'une fois**.
+
+### Le comportement : le montage incrémental A → B
+
+`integrate_point` intègre le pas **A → B** en un point de Gauss :
+
+- `deformation` — la cinématique de **fin de pas** ε(B), produite par un
+  opérateur géométrique (`gradient`, `deformation`, `beam_deformation`) ;
+- `prev` — l'**état convergé au début du pas** A : le flux/contrainte σ(A), les
+  variables internes `VAR(A)`, et pour les lois incrémentales la cinématique
+  ε(A). Vaut `None` au premier pas (configuration de référence) ;
+- `material` — les données matériau de la zone, `Some(_)` ssi la physique déclare
+  un `material_fespace` ;
+- `dt` — l'incrément de temps, `None` pour une loi indépendante du temps (une loi
+  visqueuse erronera s'il manque).
+
+Le noyau écrit dans `out` les composantes déclarées par
+`behavior_output_components()` : l'état matériau en B — σ(B), `VAR(B)`, et
+éventuellement `D_alg` pour une physique qui alimente la tangente cohérente. La
+sortie devient le `prev` du pas suivant.
+
+### Une composante matériau facultative
+
+Un coefficient annexe, consommé par un opérateur tiers et non par l'assemblage
+(typiquement `alpha`, la dilatation thermique lue par
+`ops::element_field::thermal_strain`), se déclare dans
+`optional_material_components()` : il traverse le canal matériau s'il est fourni,
+mais n'est jamais exigé à l'assemblage — seules les composantes **requises**
+discriminent la zone matériau. Ce n'est donc jamais un argument scalaire d'un
+opérateur.
 
 ## Le dispatch — `src/containers/model.rs`
 
@@ -198,17 +348,20 @@ l'assembleur appellent tous `self.as_kind().<méthode>()` — ils sont
 
 ## Ce qui est générique (rien à toucher)
 
-- `src/ops/matrix.rs` : `stiffness()` boucle sur `contributions()` et
-  pilote le matériau via le seam `as_domain()` (`Domain`) ; `mass()` via
-  `build_mass_blocks()`. Aucun `match` par variante.
-- `src/ops/element_field/material_field.rs` et son wrapper `src/py/ops/element_field.rs`.
-- `src/py/ops/matrix.rs` : `stiffness` / `mass` délèguent à `model.inner`.
+- `src/ops/matrix.rs` : `stiffness()` / `mass()` / `geometric()` / `tangent()`
+  délèguent tous à `assemble_kind()`, qui boucle sur `contributions(kind, …)` et
+  pilote le matériau via le seam `as_domain()` (`Domain`). Aucun `match` par
+  variante.
+- `src/ops/element_field/behavior.rs` et `material_field.rs`, avec leur wrapper
+  `src/py/ops/element_field.rs`.
+- `src/ops/node_field/internal_forces.rs` : passe par `build_internal_forces()`.
+- `src/py/ops/matrix.rs` : les assembleurs délèguent à `model.inner`.
 
 ## Pour finir
 
-Régénérer le stub `pyrucast.pyi` via `src/bin/stub_gen.rs`, puis **builder
-+ tester avant de commiter** (`PYO3_PYTHON=/usr/bin/python3.13`, ou
-`script/check.sh` pour la passe complète).
+Régénérer le stub `python/pyrucast/_pyrucast/__init__.pyi` (`cargo run --bin
+stub_gen --features stub-gen`, venv activé), puis **builder + tester avant de
+commiter** — `script/check.sh` pour la passe complète.
 
 ---
 
@@ -226,6 +379,10 @@ physique n°30 ne touche que 4 endroits
 méthodes génériques n'est modifiée. C'est l'inverse du *« shotgun
 surgery »* qu'imposerait un enum où chaque méthode ferait son propre
 `match` : là, ajouter une physique forcerait à éditer une dizaine de sites.
+
+La même propriété tient sur l'autre axe : ajouter un **genre de matrice** a
+coûté un variant de `MatrixKind`, un `*_layout` et un `element_*` par physique
+concernée — l'assembleur, le cache de motif et le scatter n'ont pas bougé.
 
 > Les deux lignes (variante + bras de `as_kind`) pourraient même être
 > générées par une macro `physics_enum! { HeatConduction, Dirichlet, … }`
@@ -254,7 +411,9 @@ une pondération) se traite selon sa nature :
 - **dérivable** (calculable à partir du type/de l'état) → un **défaut dans
   le trait `SubModelKind`** la fournit gratuitement à toutes les physiques, ex.
   `fn weight(&self) -> f64 { 1.0 }`. Le trait « l'impose et l'implémente
-  automatiquement ».
+  automatiquement ». C'est exactement le statut de `physics()`, à ceci près
+  qu'elle est volontairement **sans défaut** : la nature ne se devine pas, on
+  veut que chaque physique la déclare.
 - **stockée et mutable** (saisie à l'exécution) → un trait **ne peut pas**
   porter de champ ni en générer un par défaut : il imposerait un accesseur
   `fn meta(&self) -> &Meta`, mais chaque struct devrait alors stocker le

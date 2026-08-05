@@ -21,7 +21,7 @@
 
 ### Dépendances approuvées (socle figé)
 
-`pyo3`, `maturin`, `mdbook`, `serde`, `bincode`, `nalgebra`. Visualisation (optionnelle) : `plotters`, `winit`, `softbuffer`. Tout autre ajout = nouvelle demande explicite.
+Toujours liées : `serde`, `bincode`, `nalgebra`, `nalgebra-sparse`, `faer` (LU creux du solveur), `rayon` (parallélisme), `parking_lot` (verrous du store), `paste` (macros d'agrégat). Optionnelles, derrière une feature : `pyo3`, `pyo3-stub-gen`, et la visualisation `plotters`, `winit`, `softbuffer`. Outillage : `maturin`, `mdbook`, `ruff`, `criterion`. Tout autre ajout = nouvelle demande explicite.
 
 ## Persistance : swap et sauvegarde mutualisés (portable Linux ↔ Windows)
 

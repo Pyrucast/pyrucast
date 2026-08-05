@@ -256,4 +256,17 @@ Un objet n'est considéré comme terminé que lorsque les six points suivants so
 
 ## Dépendances approuvées
 
-Le socle figé est : `pyo3`, `maturin`, `mdbook`, `serde`, `bincode`. Toute autre dépendance, Rust ou Python, requiert un accord explicite.
+Le socle figé est :
+
+- **toujours lié** — `serde` + `bincode` (persistance), `nalgebra` +
+  `nalgebra-sparse` (primitives et stockage creux), `faer` (LU creux du
+  solveur), `rayon` (parallélisme), `parking_lot` (verrous du store), `paste`
+  (macros d'agrégat) ;
+- **optionnel, derrière une feature** — `pyo3` et `pyo3-stub-gen` (binding et
+  stub), `plotters` / `winit` / `softbuffer` (visualisation) ;
+- **outillage** — `maturin`, `mdbook`, `ruff`, `criterion` (bancs).
+
+Chaque dépendance est **confinée** à un étage et ne fuit pas hors de lui — le
+[graphe des dépendances](developper/arborescence.md#graphe-des-dépendances-externes)
+dit lequel pour chacune. Toute autre dépendance, Rust ou Python, requiert un
+accord explicite.

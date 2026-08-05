@@ -44,8 +44,9 @@ pub enum Interpolation {
     Lagrange1,
     /// Quadratic Lagrange (P2 / Q2 serendipity). One shape function per
     /// geometric node — corners **and** mid-edge nodes. Defined for the
-    /// quadratic element types (`SEG3`, `TRI6`, `QUA8`, `TET10`, `PENTA15`,
-    /// `HEX20`). `QUA8`/`HEX20`/`PENTA15` are serendipity (edge nodes only).
+    /// quadratic element types (`SEG3`, `TRI6`, `QUA8`, `QUA9`, `TET10`,
+    /// `PENTA15`, `HEX20`, `HEX27`). `QUA8`/`HEX20`/`PENTA15` are serendipity
+    /// (edge nodes only); `QUA9`/`HEX27` carry the face/centre nodes too.
     Lagrange2,
 }
 

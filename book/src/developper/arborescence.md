@@ -19,6 +19,8 @@ src/
 ├── error.rs            # PyrucastError + Result (l'unique type d'erreur)
 ├── dump.rs             # trait Dump (3ᵉ niveau d'affichage : contenu intégral)
 ├── aggregate.rs        # trait Aggregate + macros (len/[i]/union, pyméthodes)
+├── parallel.rs         # prelude rayon + politique de grain (MIN_PARALLEL_LEN)
+├── interrupt.rs        # trait Cancel + jetons (NoCancel, AtomicBool, Deadline)
 │
 ├── coords.rs           # LE MAGASIN : Coords (jeux de coordonnées, refcount par nœud)
 │
@@ -29,6 +31,7 @@ src/
 │   ├── element.rs      # Element (désigne un élément d'un SubFiniteElementSpace)
 │   ├── element_type.rs # enum ElementType + métadonnées
 │   ├── point.rs        # Point2 / Point3 / Vector2 / Vector3 (nalgebra)
+│   ├── band.rs         # Band (bande de valeurs ge/gt/le/lt — mask, select)
 │   └── color.rs        # RgbColor (couleur de face, viz)
 │
 ├── containers/         # LES DIVISIBLES (structures de données, aucune dépendance à ops/)
@@ -46,14 +49,21 @@ src/
 │   └── evolution.rs    # Evolution / SubEvolution (valeur tabulée, interpolée)
 │
 ├── models/             # LES PHYSIQUES (une struct + impl SubModelKind par fichier)
-│   ├── mod.rs              # trait SubModelKind (tout le comportement)
+│   ├── mod.rs              # traits SubModelKind / Domain / Constraint, MatrixKind
+│   ├── kernel.rs           # LES DRIVERS parallèles au-dessus des noyaux purs
 │   ├── heat_conduction.rs
+│   ├── convection.rs       # échange surfacique (Robin / film)
 │   ├── truss.rs
 │   ├── elasticity.rs
+│   ├── plasticity.rs       # von Mises parfaite
+│   ├── mazars.rs           # endommagement
 │   ├── timoshenko.rs
 │   ├── frame.rs           # portique 2D
 │   ├── frame3d.rs         # cadre 3D
-│   └── dirichlet.rs       # contrainte (multiplicateurs de Lagrange)
+│   ├── dirichlet.rs       # contrainte (multiplicateurs de Lagrange)
+│   ├── mpc.rs             # relation multi-points
+│   ├── embedded.rs        # baignage (nœuds immergés dans un hôte)
+│   └── contact.rs         # contact nœud-surface (unilatéral)
 │
 ├── ops/                # LES OPÉRATEURS — un module par conteneur produit
 │   ├── mod.rs
@@ -78,27 +88,51 @@ src/
 ├── py/                 # BINDING PyO3 (miroir 1:1 de containers/ + ops/)
 │   ├── mod.rs
 │   ├── coords.rs, node.rs, cell.rs, mesh.rs, …   # un wrapper Py<Foo> par objet
+│   ├── signals.rs      # jeton PySignals (Ctrl+C via Python::check_signals)
 │   └── ops/            # un wrapper par module d'opérateurs
 │
 ├── viz/                # VISUALISATION (feature `viz` / `viz-interactive`)
-│   ├── mod.rs, drawable.rs, mesh_draw.rs, camera.rs, field_color.rs, …
+│   ├── mod.rs, drawable.rs, mesh_draw.rs, camera.rs, field_color.rs,
+│   │                     axes.rs, curve.rs, overlay.rs, revolve.rs
+│   ├── subdivide.rs    # rendu interpolé (découpe des faces)
 │   └── window.rs       # fenêtre interactive (feature `viz-interactive`)
 │
 └── bin/
-    └── stub_gen.rs     # génère pyrucast.pyi (feature `stub-gen`)
+    ├── stub_gen.rs     # génère le stub .pyi (feature `stub-gen`)
+    └── scaling.rs      # mesure de montée en charge (parallélisme)
+```
+
+Le **paquet Python** est à côté des sources Rust : le projet est un *mixed
+layout* maturin, et l'extension compilée est le sous-module **privé**
+`_pyrucast`, plat. La couche Python pure ne fait que le ranger — c'est elle qui
+donne à l'API sa forme publique (`pyrucast.<module>.<verbe>`).
+
+```text
+python/pyrucast/
+├── __init__.py        # conteneurs + atomes au top-level (Mesh, Coords, …)
+├── mesh.py            # un module par module d'ops/ : ré-exporte _pyrucast
+├── node_field.py      #   en rendant leur vrai nom aux homonymes
+├── element_field.py   #   (`consolidate_mesh as consolidate`, …)
+├── matrix.py, field.py, measure.py, export.py, solver.py, coords.py
+├── store.py           # swap_dir / set_swap_dir
+├── thermomechanics.py # couche Python pure de haut niveau
+├── py.typed
+└── _pyrucast/
+    └── __init__.pyi   # stub typé, généré par stub_gen, versionné
 ```
 
 À la racine du dépôt :
 
 ```text
 Cargo.toml          # crate (cdylib + rlib), features, dépendances approuvées
-pyproject.toml      # côté maturin
-pyrucast.pyi        # stub Python typé (généré par stub_gen, versionné)
+pyproject.toml      # côté maturin (python-source = python, module-name)
 CONVENTIONS.md      # règles de code (source de la page Conventions)
 ROADMAP.md          # phases 0 → 6, décisions d'architecture
 script/check.sh     # enchaîne toutes les vérifications
 tests/              # tests d'intégration Rust (*.rs) + tests Python (python/)
 examples/           # scripts Python complets (thermique, treillis, poutres…)
+formation/          # scripts de la formation débutant
+benches/            # bancs criterion (parallel.rs)
 book/               # cette documentation (mdbook)
 ```
 
@@ -167,6 +201,7 @@ crates optionnelles.
 | `containers/` | structures de données + invariants | `ops/`, `py/` |
 | `ops/` | opérateurs croisant des conteneurs | `py/` |
 | `py/` | exposition Python (PyO3), miroir 1:1 | — |
+| `python/pyrucast/` | rangement du module plat `_pyrucast` en sous-modules | — |
 
 Cette stratification garde le cœur de calcul **testable sans Python** (`cargo
 test`) et **réutilisable** en pure crate Rust. Le `models/` est à part : ce
@@ -179,5 +214,12 @@ trait `SubModelKind` — voir [Ajouter une physique](../ajouter-une-physique.md)
 |---|---|
 | un type d'élément | `atoms/element_type.rs`, `containers/finite_element_space/{interpolation,quadrature}.rs` ([guide](ajouter-un-element-fini.md)) |
 | une physique | `models/<nom>.rs` + 2 lignes dans `containers/model.rs` + 1 dans `py/model.rs` ([guide](../ajouter-une-physique.md)) |
-| un opérateur | `ops/<conteneur produit>/<nom>.rs` + son wrapper `py/ops/<même module>.rs` |
-| un objet conteneur | `containers/<nom>.rs` + `py/<nom>.rs` + un chapitre de doc |
+| un opérateur | `ops/<conteneur produit>/<nom>.rs` + son wrapper `py/ops/<même module>.rs` + son ré-export dans `python/pyrucast/<même module>.py` |
+| un objet conteneur | `containers/<nom>.rs` + `py/<nom>.rs` + son ré-export dans `python/pyrucast/__init__.py` + un chapitre de doc |
+
+> **Le troisième site est facile à oublier.** Une fonction libre exposée par
+> PyO3 atterrit dans le module **plat** `_pyrucast` ; tant qu'elle n'est pas
+> ré-exportée dans `python/pyrucast/<module>.py`, elle n'existe pas dans l'API
+> publique. Les homonymes y reprennent au passage leur vrai nom
+> (`consolidate_mesh as consolidate`) — voir
+> [Conventions & philosophie](../conventions.md#le-miroir-python).

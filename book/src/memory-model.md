@@ -267,7 +267,7 @@ Une alternative tentante au refcount par nœud serait un GC **mark-and-sweep** :
 
 **Obstacle 1 — où sont les racines ?**
 
-Les `SubMesh`, `Mesh`, `NodeField` (à venir) vivent dans le store : énumérables. Mais un `Node` utilisateur vit **sur la pile Rust** (ou dans le heap Python via PyO3), pas dans le store. Pour qu'un `Node` se signale à la `Coords` comme racine vivante, il n'y a que deux options :
+Les `SubMesh`, `Mesh`, `NodeField` vivent dans le store : énumérables. Mais un `Node` utilisateur vit **sur la pile Rust** (ou dans le heap Python via PyO3), pas dans le store. Pour qu'un `Node` se signale à la `Coords` comme racine vivante, il n'y a que deux options :
 
 1. Maintenir une **liste séparée** des `Node` vivants dans la `Coords`, mise à jour à `Clone`/`Drop`. C'est un refcount déguisé en `HashSet<NodeId>` — sans gain.
 2. **Changer le contrat** : `Node` devient une vue non-protectrice, et seul un objet du store (typiquement un `SubMesh` POI1) peut maintenir un nœud vivant. C'est exactement le modèle cast3m (« un point isolé n'existe pas en dehors d'un MAILLAGE »). Légitime, mais c'est une rupture d'API plus large que la simplification cherchée.
