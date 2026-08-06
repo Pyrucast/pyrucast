@@ -535,6 +535,66 @@ mod tests {
     }
 
     #[test]
+    fn a_curved_contour_is_not_left_full_of_cracks() {
+        // The core's nodes are held still, but they are *ours*: the weld may
+        // give one up to close a slither between core and contour. Held as
+        // undiscardable — which they were, sharing one flag with the contour's
+        // — the weld could not close those slithers at all, and each one
+        // stayed as a hole in the mesh. A circle is where they abound: this
+        // used to leave 88 boundary edges that were not the contour's.
+        let coords = insert(Coords::new(2).unwrap());
+        let pts: Vec<(f64, f64)> = (0..60)
+            .map(|i| {
+                let t = i as f64 / 60.0 * std::f64::consts::TAU;
+                (t.cos(), t.sin())
+            })
+            .collect();
+        let contour = loop_mesh(coords, &on_grid(&pts, 0.05));
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.05), 0, false).unwrap();
+
+        let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
+        for si in 0..mesh.len() {
+            for cell in mesh.cells(si).unwrap() {
+                let nodes = cell.nodes().unwrap();
+                let k = nodes.len();
+                for i in 0..k {
+                    let (a, b) = (nodes[i].id(), nodes[(i + 1) % k].id());
+                    let key = if a.0 < b.0 { (a, b) } else { (b, a) };
+                    *used.entry(key).or_insert(0) += 1;
+                }
+            }
+        }
+        let mut on_contour: std::collections::HashSet<(NodeId, NodeId)> = Default::default();
+        for cell in contour.cells(0).unwrap() {
+            let n = cell.nodes().unwrap();
+            let (a, b) = (n[0].id(), n[1].id());
+            let key = if a.0 < b.0 { (a, b) } else { (b, a) };
+            assert_eq!(used.get(&key), Some(&1), "contour segment {key:?} was lost");
+            on_contour.insert(key);
+        }
+        // A boundary edge that is not the contour's is a crack. A curve is the
+        // degraded case for a grid and a few survive; five times this many is
+        // the regression to catch.
+        let cracks = used
+            .iter()
+            .filter(|(k, &v)| v == 1 && !on_contour.contains(k))
+            .count();
+        assert!(
+            cracks <= 24,
+            "{cracks} boundary edges are not the contour's"
+        );
+
+        let r = inspect(&mesh);
+        assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
+        assert!(
+            r.area > 0.995 * std::f64::consts::PI,
+            "area {} for {}",
+            r.area,
+            std::f64::consts::PI
+        );
+    }
+
+    #[test]
     fn bad_input_is_rejected_with_a_named_error() {
         let coords = insert(Coords::new(2).unwrap());
         let contour = loop_mesh(

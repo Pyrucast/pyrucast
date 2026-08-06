@@ -959,12 +959,66 @@ Moitié moins de mailles pour une qualité parfaite. Sur un rectangle 0,6 × 0,3
   la hauteur — donc pas localisable, mais elle garde le jacobien à 1. Ce n'est
   pas fait non plus.
 
+### Le contour, nœud par nœud
+
+La garantie est plus forte que « le bord est respecté » : **tous les nœuds du
+contour reviennent, à leur position, avec leur identité**, et le maillage n'a
+aucune autre arête de bord. Un mailleur en grille ne l'hérite pas — il pose ses
+propres nœuds — il ne la tient que parce qu'un nœud de grille tombant sur un
+nœud du contour *est* ce nœud.
+
+Deux drapeaux distincts le portent, et les confondre coûtait cher :
+
+- **immobile** — le nœud ne doit pas bouger au lissage : ceux du contour, et
+  ceux du cœur, qui sont d'équerre par construction et n'ont rien à y gagner ;
+- **inaliénable** — rien ne doit l'abandonner : ceux du contour, et eux seuls.
+  Un nœud du cœur est à nous ; la soudure peut le céder, et c'est ce qui lui
+  permet de refermer une lèvre entre cœur et contour. Tant que les deux
+  drapeaux n'en faisaient qu'un, ces lèvres restaient ouvertes : sur un cercle,
+  **88 arêtes de bord** n'appartenaient pas au contour, soit 22 trous.
+
 ### Dégradation
 
 Une région trop mince pour tenir une seule maille de cœur n'en reçoit aucune,
 et le front la pave seul, exactement comme `pave_surface`. Un contour hors
 grille reçoit une bande large et le même traitement. La dégradation est
 **continue** : au pire la qualité du paveur frontal, jamais une erreur.
+
+Sur un cercle — le cas dégradé par excellence, aucune arête axiale — il reste
+16 arêtes de bord hors contour, soit **4 trous d'une maille**, et 0,18 %
+d'aire manquante. C'est une limite connue et bornée par un test, pas une
+propriété qu'on croit tenir.
+
+### La phase de la grille est déjà la bonne
+
+Une fois l'orientation trouvée, on pourrait vouloir **translater** la grille
+selon ses axes pour améliorer la bande. Deux raisons de ne pas le faire, la
+seconde mesurée.
+
+D'abord, la phase n'est pas libre dans les cas visés : le calage sur les
+arêtes du contour *est* un mécanisme de phase. Une ligne épinglée par une
+arête verticale passe exactement par elle, et `fill` subdivise chaque
+intervalle séparément, si bien que chaque ligne de forme est atteinte
+exactement. Il n'y a rien à gagner là où l'opérateur brille.
+
+La phase n'est donc libre que lorsque rien n'est épinglé — une courbe. Balayage
+de huit phases sur un cercle, la grille ancrée sur le coin de la boîte
+englobante étant la phase 0 :
+
+| phase | mailles | triangles | jacobien min | aire manquante |
+|---|---|---|---|---|
+| **0** | **1 328** | **32** | **0,188** | **0,181 %** |
+| 1/8 | 1 701 | 81 | 0,020 | 0,187 % |
+| 1/4 | 1 326 | 35 | 0,109 | 0,229 % |
+| 3/8 | 1 979 | 112 | 0,000 | 0,199 % |
+| 1/2 | 1 326 | 41 | 0,004 | 0,190 % |
+| 5/8 | 1 763 | 92 | 0,001 | 0,200 % |
+| 3/4 | 1 693 | 116 | 0,001 | 0,217 % |
+| 7/8 | 2 009 | 122 | 0,020 | 0,229 % |
+
+La phase actuelle gagne sur tous les critères, et ce n'est pas un hasard :
+ancrer sur le coin de la boîte fait passer les lignes de grille exactement par
+les points extrêmes du contour, qui sont ses points de tangence.
 
 ## Couche limite hexaédrique : `pave_volume`
 

@@ -400,7 +400,7 @@ pub fn build(
                     // the grid's business and nobody else's.
                     known
                         .at(p)
-                        .unwrap_or_else(|| fab.add(frame.to_local(p), false))
+                        .unwrap_or_else(|| fab.add(frame.to_local(p), false, false))
                 });
             }
             fab.push_quad(q);

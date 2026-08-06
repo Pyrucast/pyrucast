@@ -84,9 +84,16 @@ const FRONT_RELAX: f64 = 0.5;
 /// The mesh a paved domain produced, in the domain's local 2-D frame.
 pub struct Fabric {
     pub pts: Vec<Point2>,
-    /// `false` for a node that must keep its position — every node of the
-    /// user's contour.
+    /// `false` for a node that must keep its position: the contour's, and the
+    /// grid core's, which are square by construction and have nothing to gain
+    /// from being smoothed.
     pub movable: Vec<bool>,
+    /// `true` for a node nothing may **discard** — the caller's contour, and
+    /// only it. Distinct from `movable` on purpose: a core node must not be
+    /// moved, but it may be given up. Conflating the two left the weld unable
+    /// to close a slither made of core nodes, and a slither that cannot be
+    /// welded is a crack in the mesh.
+    pinned: Vec<bool>,
     pub quads: Vec<[u32; 4]>,
     pub tris: Vec<[u32; 3]>,
     /// Store identity of the contour nodes, in the order they occupy the first
@@ -98,9 +105,10 @@ pub struct Fabric {
 }
 
 impl Fabric {
-    fn add(&mut self, p: Point2, movable: bool) -> u32 {
+    fn add(&mut self, p: Point2, movable: bool, pinned: bool) -> u32 {
         self.pts.push(p);
         self.movable.push(movable);
+        self.pinned.push(pinned);
         self.incident.push(Vec::new());
         (self.pts.len() - 1) as u32
     }
@@ -164,6 +172,7 @@ fn pave_inner(
     let mut fab = Fabric {
         pts: Vec::new(),
         movable: Vec::new(),
+        pinned: Vec::new(),
         quads: Vec::new(),
         tris: Vec::new(),
         contour_ids: Vec::new(),
@@ -178,7 +187,7 @@ fn pave_inner(
         let mut verts = Vec::with_capacity(l.pts.len());
         for (k, p) in l.pts.iter().enumerate() {
             fab.contour_ids.push(l.node_ids[k]);
-            verts.push(fab.add(*p, false));
+            verts.push(fab.add(*p, false, true));
         }
         let n = l.pts.len();
         for i in 0..n {
@@ -391,12 +400,13 @@ fn compact(fab: &mut Fabric) {
         return;
     }
     let mut remap = vec![u32::MAX; fab.pts.len()];
-    let (mut pts, mut movable) = (Vec::new(), Vec::new());
+    let (mut pts, mut movable, mut pinned) = (Vec::new(), Vec::new(), Vec::new());
     for i in 0..fab.pts.len() {
         if used[i] {
             remap[i] = pts.len() as u32;
             pts.push(fab.pts[i]);
             movable.push(fab.movable[i]);
+            pinned.push(fab.pinned[i]);
         }
     }
     for q in fab.quads.iter_mut() {
@@ -407,6 +417,7 @@ fn compact(fab: &mut Fabric) {
     }
     fab.pts = pts;
     fab.movable = movable;
+    fab.pinned = pinned;
     fab.incident.clear();
 }
 
@@ -582,7 +593,7 @@ fn chain_is_free(front: &Front, fab: &Fabric, grid: &EdgeGrid, plan: &RowPlan) -
 fn commit(fab: &mut Fabric, front: &mut Front, rep: u32, plan: RowPlan) -> Option<u32> {
     let base = fab.pts.len() as u32;
     for p in &plan.pts {
-        fab.add(*p, true);
+        fab.add(*p, true, false);
     }
     let map = |c: Corner| match c {
         Corner::Old(i) => i,
@@ -699,7 +710,7 @@ fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32, target: f64) -> Res
     }
     let filled = close::close(&fab.pts, &verts);
     for p in &filled.added {
-        fab.add(*p, true);
+        fab.add(*p, true, false);
     }
     for q in filled.quads {
         fab.push_quad(q);
@@ -949,7 +960,10 @@ fn merge_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
     // of the caller's contour nodes — the survivor may well be. This is why
     // both directions are worth trying: when one side is pinned, the other
     // one goes.
-    if !fab.movable[drop as usize] {
+    // Note `pinned` and not `movable`: a grid core's node is held still, but
+    // it is ours and may be given up, which is what lets a slither between
+    // core and contour be welded shut instead of left as a crack.
+    if fab.pinned[drop as usize] {
         return false;
     }
     let touching = fab.incident[drop as usize].clone();
