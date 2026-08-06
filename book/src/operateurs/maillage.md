@@ -693,27 +693,33 @@ un maillage long lève `KeyboardInterrupt`. Côté Rust, la forme
 
 ### Qualité
 
-Plaque 30 × 10 cm percée, taille visée 1,6 mm, 15 652 mailles (99,8 % de
-quadrangles) :
+La qualité d'une maille est la **mean ratio** de son pire coin,
+\\( 2(a \\times b) / (|a|^2 + |b|^2) \\), qui ne vaut 1 que si l'angle est droit
+**et** les deux arêtes égales. Pas le seul sinus de l'angle : celui-ci donne
+1,000 à un rectangle 10:1, et laisse donc la garde du lissage écraser une
+maille tant qu'elle garde ses coins droits.
+
+Plaque 30 × 10 cm percée, contour à 224 segments, taille visée 1,6 mm,
+17 146 mailles (99,8 % de quadrangles) :
 
 | indicateur | valeur |
 |---|---|
-| jacobien normalisé — médiane | **1,000** |
-| jacobien normalisé — moyenne / p5 / p1 / min | 0,967 / 0,84 / 0,60 / 0,069 |
+| qualité — médiane | **0,826** |
+| qualité — moyenne / p5 / p1 / min | 0,835 / 0,65 / 0,39 / 0,003 |
 | mailles inversées | **0** |
-| mailles sous 0,5 | 0,61 % |
+| mailles sous 0,5 | 2,02 % |
 | angle médian | **90,0°** |
-| angles sous 30° | 0,17 % |
-| nœuds intérieurs de valence 4 | **97,4 %** |
-| élancement médian | 1,86 |
+| angles sous 30° | 0,05 % |
+| nœuds intérieurs de valence 4 | **97,2 %** |
+| élancement médian | 1,89 |
 
 Autrement dit : le cœur du maillage est fait de rectangles à angle droit et de
 valence régulière, ce qui est exactement ce qu'on demande à un maillage
-quadrangulaire. Les deux faiblesses résiduelles sont l'**élancement** — les
-mailles sont d'équerre mais environ deux fois plus longues que larges, parce
-que l'espacement le long du front et la distance d'avance évoluent
-indépendamment — et la dispersion de la **taille d'arête**, qui va de 0,4 à
-3,7 mm autour des 1,6 mm demandés.
+quadrangulaire. La faiblesse résiduelle est l'**élancement** — les mailles sont
+d'équerre mais près de deux fois plus longues que larges — et c'est elle que la
+mean ratio fait apparaître là où le sinus la cachait : la médiane à 0,826 dit
+exactement ce que l'élancement de 1,89 dit, quand le jacobien normalisé
+affichait un 1,000 trompeur.
 
 ### Coût
 
@@ -724,13 +730,13 @@ Plaque 30 × 10 cm percée, contour à 224 segments, `--release` :
 
 | taille visée | mailles | temps | débit | µs/maille |
 |---|---|---|---|---|
-| 4 mm | 3 171 | 0,033 s | 96 000 /s | 10,4 |
-| 1,6 mm | 15 652 | 0,17 s | 91 000 /s | 11,0 |
-| 0,4 mm | 181 067 | 1,91 s | 95 000 /s | 10,6 |
-| 0,2 mm | 310 446 | 6,14 s | 51 000 /s | 19,8 |
+| 4 mm | 2 382 | 0,04 s | 58 000 /s | 17,1 |
+| 1,6 mm | 17 146 | 0,28 s | 62 000 /s | 16,1 |
+| 0,4 mm | 57 984 | 1,55 s | 37 000 /s | 26,8 |
+| 0,2 mm | 1 138 336 | 22,5 s | 51 000 /s | 19,8 |
 
-Le coût est **linéaire** — environ 10 µs par maille sur deux ordres de grandeur
-— tant que le front avance sans se coincer. Il double quand les blocages se
+Le coût est **linéaire** — de l'ordre de 20 µs par maille sur deux ordres de
+grandeur — tant que le front avance sans se coincer. Il double quand les blocages se
 multiplient, la boucle repassant alors par les cordes de déblocage et les
 fermetures.
 
@@ -739,7 +745,7 @@ nettoyage topologique et le lissage final. À titre de comparaison sur la même
 géométrie à 1,6 mm, `triangulate_surface` produit 93 000 mailles/s en `QUA4`
 (mais 23 % de triangles) et 178 000 /s en `TRI3`.
 
-1,2 % des mailles ont un jacobien normalisé inférieur à 0,5. Le coût est
+2,0 % des mailles ont une qualité inférieure à 0,5. Le coût est
 essentiellement linéaire : le front croît comme la racine du nombre de mailles,
 et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
 
@@ -776,6 +782,16 @@ et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
   comportant des coins, ou un contour discrétisé près de la taille visée, ne
   rencontre pas ce cas.
 - Pas de champ de taille variable : `size` est uniforme par domaine.
+- **Un bras étroit n'a pas d'intérieur.** C'est la forme aiguë du défaut
+  précédent. Dans un bras de quatre ou cinq mailles de large — une tour de
+  créneau, une nervure — le front avance d'une maille depuis chaque paroi et
+  les deux se rencontrent après deux rangées : il ne reste aucune place où
+  poser des mailles franches, et toute la largeur est ligne de collision. La
+  première couche épouse bien la paroi, mais elle est déjà écrasée par sa
+  jumelle d'en face. Sur le profil crénelé, les tours sortent à un élancement
+  médian de 1,32 contre 1,11 pour `grid_surface`, et le maillage entier coûte
+  407 mailles contre 271. Là encore, pour une forme faite de bras
+  rectilinéaires, c'est `grid_surface` qu'il faut.
 - **Un rectangle ne donne pas une grille.** C'est la limite de fond, et elle
   n'est pas réparable dans un paveur frontal : quatre fronts partis des quatre
   côtés se rencontrent en quatre coutures diagonales convergeant vers deux
@@ -845,16 +861,16 @@ tour, ce que la symétrie d'ordre 4 d'une grille laisse de distinct.
 Sans cela la méthode ne serait qu'un tour de passe-passe ne marchant que sur
 les formes qu'on a dessinées d'équerre. Rectangle 0,6 × 0,3, taille 0,02 :
 
-| angle | avant | après |
+| angle | avant la détection | après |
 |---|---|---|
-| 0° | 450 mailles, 0 triangle, jacobien 1,000 | identique |
-| 5° | 496 (28 tri), jac min 0,218, 64 % parfaites | **450, 0 tri, 1,000, 100 %** |
-| 15° | 470 (20 tri), jac min 0,576, 62 % | **450, 0 tri, 1,000, 100 %** |
-| 30° | 454 (20 tri), jac min **0,138**, 61 % | **450, 0 tri, 1,000, 100 %** |
-| 45° | 500 (30 tri), jac min 0,608, 55 % | **450, 0 tri, 1,000, 100 %** |
+| 0° | 450 mailles, 0 triangle, qualité 1,000 | identique |
+| 5° | 496 (28 tri), 64 % de mailles parfaites | **450, 0 tri, 100 %** |
+| 15° | 470 (20 tri), 62 % | **450, 0 tri, 100 %** |
+| 30° | 454 (20 tri), 61 % | **450, 0 tri, 100 %** |
+| 45° | 500 (30 tri), 55 % | **450, 0 tri, 100 %** |
 
-À 30° le jacobien minimal était descendu à 0,138 — moins bien que
-`pave_surface` seul sur sa pire maille. Le profil crénelé tourné de 23,7°
+À 30° la pire maille était moins bonne qu'avec `pave_surface` seul. Le profil
+crénelé tourné de 23,7°
 retrouve lui aussi ses 4 032 mailles parfaites.
 
 La boîte englobante s'en trouve **resserrée**, pas agrandie : elle est calculée
@@ -926,14 +942,14 @@ Le profil crénelé de 0,6 × 0,3 à sept angles rentrants, taille visée 0,0037
 
 | | `pave_surface` | `grid_surface` |
 |---|---|---|
-| mailles | 7 597 QUA4 + 24 TRI3 | **4 032 QUA4, 0 TRI3** |
-| jacobien normalisé — min | 0,241 | **1,000** |
-| jacobien normalisé — médiane | 0,998 | **1,000** |
-| mailles sous 0,7 | 3,78 % | **0** |
+| mailles | 6 428 QUA4 + 26 TRI3 | **4 032 QUA4, 0 TRI3** |
+| qualité — min | 0,229 | **1,000** |
+| qualité — médiane | 0,854 | **1,000** |
+| mailles sous 0,7 | 3,13 % | **0** |
 | aire couverte | exacte | exacte |
 
-Moitié moins de mailles pour une qualité parfaite. Sur un rectangle 0,6 × 0,3
-à 0,02 : 450 mailles de jacobien 1, contre 650 et 6 triangles.
+Un tiers de mailles en moins pour une qualité parfaite. Sur un rectangle
+0,6 × 0,3 à 0,02 : 450 mailles de qualité 1, contre 650 et 6 triangles.
 
 ### Pièges
 
@@ -1010,16 +1026,16 @@ La phase n'est donc libre que lorsque rien n'est épinglé — une courbe. Balay
 de huit phases sur un cercle, la grille ancrée sur le coin de la boîte
 englobante étant la phase 0 :
 
-| phase | mailles | triangles | jacobien min | fissures |
-|---|---|---|---|---|
-| **0** | **1 260** | **24** | **0,308** | **0** |
-| 1/8 | 1 369 | 40 | 0,111 | 16 |
-| 1/4 | 1 326 | 35 | 0,109 | 21 |
-| 3/8 | 1 395 | 57 | 0,159 | 23 |
-| 1/2 | 1 326 | 41 | 0,004 | 15 |
-| 5/8 | 1 347 | 43 | 0,207 | 11 |
-| 3/4 | 1 336 | 39 | 0,109 | 21 |
-| 7/8 | 1 380 | 48 | 0,002 | 12 |
+| phase | mailles | triangles | fissures |
+|---|---|---|---|
+| **0** | **1 260** | **24** | **0** |
+| 1/8 | 1 369 | 40 | 16 |
+| 1/4 | 1 326 | 35 | 21 |
+| 3/8 | 1 395 | 57 | 23 |
+| 1/2 | 1 326 | 41 | 15 |
+| 5/8 | 1 347 | 43 | 11 |
+| 3/4 | 1 336 | 39 | 21 |
+| 7/8 | 1 380 | 48 | 12 |
 
 La phase actuelle gagne sur tous les critères, et ce n'est pas un hasard :
 ancrer sur le coin de la boîte fait passer les lignes de grille exactement par
@@ -1066,11 +1082,11 @@ qualité incidente ne baisse pas.
 **L'angulaire domine**, et c'est mesuré. Sur le cercle pavé (60 côtés, taille
 0,05, 1 260 mailles) après 60 balayages :
 
-| | jacobien min | p1 | p5 |
+| | qualité min | p1 | p5 |
 |---|---|---|---|
-| brut | 0,308 | 0,648 | 0,843 |
-| laplacien | 0,696 | 0,758 | 0,867 |
-| angulaire | **0,754** | **0,780** | **0,872** |
+| brut | 0,308 | 0,643 | 0,826 |
+| laplacien | 0,703 | 0,741 | 0,871 |
+| angulaire | **0,761** | **0,770** | **0,881** |
 
 Elle gagne sur les trois, et les enchaîner n'apporte rien de plus. Ce n'était
 pas le cas avant que la retraite du front reçoive son plancher : sur le
@@ -1139,20 +1155,20 @@ déplacés.
 
 Cercle pavé par `grid_surface`, 1 260 mailles dont 24 triangles :
 
-| | mailles | triangles | jacobien min | p1 | p5 |
+| | mailles | triangles | qualité min | p1 | p5 |
 |---|---|---|---|---|---|
-| brut | 1 260 | 24 | 0,308 | 0,648 | 0,843 |
-| après la chaîne | 1 252 | **8** | **0,754** | **0,811** | **0,858** |
+| brut | 1 260 | 24 | 0,308 | 0,643 | 0,826 |
+| après la chaîne | 1 252 | **8** | **0,761** | **0,775** | **0,851** |
 
 Une passe de `merge_triangles` seule fait 24 → 8 sur ce cercle, et 42 → 16 sur
 une ellipse.
 
 Les triangles tombent de 24 à 8, et surtout le **pire** quadrangle passe de
-0,308 à 0,754 — un angle minimal de 49°. **Chaque maillage intermédiaire reste
-valide**, et le tour répété converge au lieu de dériver.
+0,308 à 0,761. **Chaque maillage intermédiaire reste valide**, et le tour
+répété converge au lieu de dériver.
 
-Sur le créneau grossier (253 mailles, 6 triangles) : 4 triangles, jacobien
-minimal de 0,313 à 0,386 et premier centile de 0,340 à 0,502.
+Sur le créneau grossier (271 mailles, 6 triangles) : 4 triangles, qualité
+minimale de 0,314 à 0,335 et premier centile de 0,335 à 0,455.
 
 ## Couche limite hexaédrique : `pave_volume`
 

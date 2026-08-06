@@ -104,6 +104,17 @@ pub fn quad_is_valid(q: [Point2; 4]) -> bool {
 /// Shape quality of a quadrangle in `[0, 1]`: the scaled Jacobian, i.e. the
 /// worst of its four corner cross-products normalised by the incident edge
 /// lengths. `1` is a square, `0` a degenerate corner, negative a tangle.
+/// How square a quadrangle is: the worst of its four corners, each scored by
+/// the **mean ratio** `2·(a × b) / (|a|² + |b|²)`.
+///
+/// Not `sin θ`, which is what a normalised Jacobian measures and what this
+/// returned until it was measured. The sine sees only the angle, so a 10:1
+/// rectangle scores a perfect 1 — and the smoothing guard, which refuses a move
+/// that lowers the worst incident quality, was therefore free to squash a cell
+/// flat so long as it kept the corners square. The mean ratio is the same
+/// quantity times `2|a||b| / (|a|² + |b|²)`, which is 1 for equal edges and
+/// falls away as they differ: it reaches 1 only when the corner is square
+/// **and** its two edges are the same length.
 pub fn quad_quality(q: [Point2; 4]) -> f64 {
     let mut worst = f64::INFINITY;
     for i in 0..4 {
@@ -116,7 +127,7 @@ pub fn quad_quality(q: [Point2; 4]) -> f64 {
         if na == 0.0 || nb == 0.0 {
             return 0.0;
         }
-        worst = worst.min((a.x * b.y - a.y * b.x) / (na * nb));
+        worst = worst.min(2.0 * (a.x * b.y - a.y * b.x) / (na * na + nb * nb));
     }
     worst
 }
