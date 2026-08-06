@@ -10,6 +10,13 @@
 //! the interior from the grid and the boundary from the front gives a mesh with
 //! neither weakness.
 //!
+//! ## The grid is laid in the contour's own direction
+//!
+//! The orientation is a free internal choice, so [`preferred_angle`] takes it
+//! from the contour and [`build`] works in that frame throughout, turning back
+//! only at the two points that touch the [`Fabric`]. Without it the whole
+//! method would only pay off on shapes someone happened to draw square-on.
+//!
 //! ## The grid is snapped to the contour, not to the bounding box
 //!
 //! Subdividing the bounding box uniformly is the obvious thing and it is
@@ -22,8 +29,8 @@
 //! edge long enough to matter contributes its coordinate as a line, and the
 //! gaps between consecutive lines are subdivided uniformly at about the target
 //! size. On a rectilinear contour every corner then lands on a grid node and
-//! the core covers the domain up to the band. On a contour with no axis-aligned
-//! edge at all — a circle — no line is contributed and the result degrades
+//! the core covers the domain up to the band. On a contour with no direction
+//! at all — a circle — nothing is contributed and the result degrades
 //! gracefully to the uniform grid over the bounding box.
 //!
 //! ## What comes out
@@ -53,6 +60,142 @@ const SNAP_TOLERANCE: f64 = 0.25;
 /// useful sense — it is a curve whose every edge is axis-aligned by accident.
 /// Snapping then costs more than it buys, and the uniform grid is used.
 const MAX_SNAP_LINES: usize = 4096;
+
+/// Below this share of the perimeter running one way, the contour has no
+/// dominant direction at all — a circle — and turning the grid would only
+/// trade one arbitrary orientation for another.
+const DOMINANT_SHARE: f64 = 0.2;
+
+/// A candidate has to beat the axes by this share of the perimeter to be
+/// preferred to them. A shape already square with the frame must never lose
+/// that to rounding.
+const TURN_MARGIN: f64 = 0.02;
+
+/// Half-width of the window, in radians, inside which an edge counts as
+/// aligned. About a degree: past that an edge of a few cells' length no longer
+/// pins a grid line under [`Grid::over`]'s own test.
+const ALIGN_WINDOW: f64 = 0.017;
+
+/// The frame the grid is laid in: the contour's own preferred direction.
+///
+/// Nothing in the contract ties the grid to the frame's axes — the orientation
+/// is a free internal choice, and taking it from the contour gives a shape
+/// turned by 30° exactly what a square-on shape gets. See [`preferred_angle`].
+#[derive(Clone, Copy)]
+pub struct Frame2 {
+    cos: f64,
+    sin: f64,
+}
+
+impl Frame2 {
+    /// The frame turned by `angle`. Zero is the identity and is short-circuited
+    /// rather than multiplied through by one, so a contour already square with
+    /// the axes comes out bit for bit as it went in.
+    fn at(angle: f64) -> Frame2 {
+        if angle == 0.0 {
+            Frame2 { cos: 1.0, sin: 0.0 }
+        } else {
+            Frame2 {
+                cos: angle.cos(),
+                sin: angle.sin(),
+            }
+        }
+    }
+
+    fn identity(self) -> bool {
+        self.sin == 0.0 && self.cos == 1.0
+    }
+
+    /// A point of the caller's plane, in the grid's frame.
+    fn to_grid(self, p: Point2) -> Point2 {
+        if self.identity() {
+            return p;
+        }
+        Point2::new(
+            self.cos * p.x + self.sin * p.y,
+            -self.sin * p.x + self.cos * p.y,
+        )
+    }
+
+    /// A point of the grid's frame, back in the caller's plane.
+    fn to_local(self, p: Point2) -> Point2 {
+        if self.identity() {
+            return p;
+        }
+        Point2::new(
+            self.cos * p.x - self.sin * p.y,
+            self.sin * p.x + self.cos * p.y,
+        )
+    }
+}
+
+/// The direction the contour mostly runs in, in `[0, π/2)`.
+///
+/// A grid has a four-fold symmetry, so a quarter turn covers every distinct
+/// orientation. Among those, the useful one is the angle that turns the
+/// greatest **length** of contour into axis-aligned edges — because an
+/// axis-aligned edge is exactly what pins a grid line in [`Grid::over`], and a
+/// pinned line is what lets a grid node land on a contour node. The objective
+/// is therefore the mesher's own criterion rather than a stand-in for it.
+///
+/// Two guards, and both earn their place:
+///
+/// - a contour with no dominant direction — a circle, whose edge angles are
+///   spread evenly — gets `0.0`, since turning it would swap one arbitrary
+///   orientation for another and cost the caller reproducibility;
+/// - the axes win ties. A shape already square with the frame is the case this
+///   whole function must not break, and it would be a poor trade to lose it to
+///   a rounding-width improvement somewhere else.
+pub fn preferred_angle(domain: &Domain) -> f64 {
+    let quarter = std::f64::consts::FRAC_PI_2;
+    let mut edges: Vec<(f64, f64)> = Vec::new();
+    let mut perimeter = 0.0;
+    for l in std::iter::once(&domain.outer).chain(&domain.holes) {
+        let n = l.pts.len();
+        for i in 0..n {
+            let d = l.pts[(i + 1) % n] - l.pts[i];
+            let len = d.norm();
+            if len <= 0.0 {
+                continue;
+            }
+            perimeter += len;
+            edges.push((d.y.atan2(d.x).rem_euclid(quarter), len));
+        }
+    }
+    if edges.is_empty() {
+        return 0.0;
+    }
+    edges.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+    // The aligned length at a candidate is the weight of the edges whose angle
+    // falls within the window around it — a sliding window on a circle of
+    // period π/2, so the ends wrap into each other.
+    let aligned_at = |theta: f64| -> f64 {
+        edges
+            .iter()
+            .filter(|(a, _)| {
+                let d = (a - theta).rem_euclid(quarter);
+                d <= ALIGN_WINDOW || d >= quarter - ALIGN_WINDOW
+            })
+            .map(|(_, w)| w)
+            .sum()
+    };
+
+    let axes = aligned_at(0.0);
+    let mut best = (axes, 0.0);
+    for &(a, _) in &edges {
+        let w = aligned_at(a);
+        // Strictly better, so the lowest angle wins a tie and the answer does
+        // not depend on the order the contour was built in.
+        if w > best.0 {
+            best = (w, a);
+        }
+    }
+    if best.0 < DOMINANT_SHARE * perimeter || best.0 <= axes + TURN_MARGIN * perimeter {
+        return 0.0;
+    }
+    best.1
+}
 
 /// A tensor grid: the coordinates of its lines along each axis.
 pub struct Grid {
@@ -186,6 +329,18 @@ pub fn build(
     target: f64,
     band: usize,
 ) -> Core {
+    // ── Turn the domain into the grid's frame ─────────────────────────────
+    // Everything below then works on a contour that is as square with the axes
+    // as it can be made, which is the only thing the grid ever wanted. The
+    // frame comes back out at the two points that touch the fabric, and
+    // nowhere else — see `known` and the emission below.
+    let frame = Frame2::at(preferred_angle(domain));
+    let turned = Domain {
+        outer: turn(&domain.outer, frame),
+        holes: domain.holes.iter().map(|h| turn(h, frame)).collect(),
+    };
+    let domain = &turned;
+
     let grid = Grid::over(domain, target);
     let (nx, ny) = (grid.nx(), grid.ny());
     if nx == 0 || ny == 0 {
@@ -223,7 +378,7 @@ pub fn build(
     }
 
     // ── Pull back only where the core misses the contour ──────────────────
-    let known = ContourNodes::build(fab, contour_loops, target);
+    let known = ContourNodes::build(fab, contour_loops, target, frame);
     let mut keep = clear_of_unmet(&grid, &solid, nx, ny, &known, contour_loops, band);
     tidy(&mut keep, nx, ny);
 
@@ -240,7 +395,12 @@ pub fn build(
             for (k, (di, dj)) in [(0, 0), (1, 0), (1, 1), (0, 1)].into_iter().enumerate() {
                 q[k] = *vert.entry((i + di, j + dj)).or_insert_with(|| {
                     let p = grid.node(i + di, j + dj);
-                    known.at(p).unwrap_or_else(|| fab.add(p, false))
+                    // The contour's own node when there is one, else a fresh
+                    // one — put back in the caller's plane, since the frame is
+                    // the grid's business and nobody else's.
+                    known
+                        .at(p)
+                        .unwrap_or_else(|| fab.add(frame.to_local(p), false))
                 });
             }
             fab.push_quad(q);
@@ -255,6 +415,15 @@ pub fn build(
     }
 }
 
+/// One loop, expressed in the grid's frame. The node ids are the caller's and
+/// travel unchanged: only the geometry turns.
+fn turn(l: &crate::ops::mesh::contour::Loop2D, frame: Frame2) -> crate::ops::mesh::contour::Loop2D {
+    crate::ops::mesh::contour::Loop2D {
+        node_ids: l.node_ids.clone(),
+        pts: l.pts.iter().map(|&p| frame.to_grid(p)).collect(),
+    }
+}
+
 /// The contour's vertices, indexed so a grid node can ask whether it is one.
 struct ContourNodes {
     grid: super::proximity::PointGrid,
@@ -264,9 +433,14 @@ struct ContourNodes {
 }
 
 impl ContourNodes {
-    fn build(fab: &Fabric, loops: &[Vec<u32>], target: f64) -> ContourNodes {
+    fn build(fab: &Fabric, loops: &[Vec<u32>], target: f64, frame: Frame2) -> ContourNodes {
         let ids: Vec<u32> = loops.iter().flatten().copied().collect();
-        let pts: Vec<Point2> = ids.iter().map(|&v| fab.pts[v as usize]).collect();
+        // The fabric holds the caller's plane; the grid asks its questions in
+        // its own frame, so the contour is indexed there.
+        let pts: Vec<Point2> = ids
+            .iter()
+            .map(|&v| frame.to_grid(fab.pts[v as usize]))
+            .collect();
         ContourNodes {
             // A grid line snapped to a contour edge lands on that edge to
             // rounding; anything further off is a different node, and taking
@@ -641,4 +815,99 @@ fn boundary_loops(
         }
     }
     out
+}
+
+// ─── Unit tests ─────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::atoms::NodeId;
+    use crate::ops::mesh::contour::Loop2D;
+
+    fn loop2d(pts: &[(f64, f64)]) -> Loop2D {
+        Loop2D {
+            node_ids: (0..pts.len() as u32).map(NodeId).collect(),
+            pts: pts.iter().map(|&(x, y)| Point2::new(x, y)).collect(),
+        }
+    }
+
+    fn spin(pts: &[(f64, f64)], deg: f64) -> Vec<(f64, f64)> {
+        let t = deg.to_radians();
+        pts.iter()
+            .map(|&(x, y)| (x * t.cos() - y * t.sin(), x * t.sin() + y * t.cos()))
+            .collect()
+    }
+
+    fn only(outer: Loop2D) -> Domain {
+        Domain {
+            outer,
+            holes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_square_on_shape_is_left_exactly_where_it_is() {
+        // The case the whole function must not break: zero, and *exactly*
+        // zero, so the frame short-circuits to the identity and a contour
+        // already on the grid comes back bit for bit.
+        let d = only(loop2d(&[(0.0, 0.0), (3.0, 0.0), (3.0, 1.0), (0.0, 1.0)]));
+        assert_eq!(preferred_angle(&d), 0.0);
+    }
+
+    #[test]
+    fn a_turned_shape_gives_back_its_own_angle() {
+        for deg in [5.0, 23.7, 30.0, 60.0, 88.0] {
+            let d = only(loop2d(&spin(
+                &[(0.0, 0.0), (3.0, 0.0), (3.0, 1.0), (0.0, 1.0)],
+                deg,
+            )));
+            // Modulo the quarter turn the grid is symmetric under.
+            let want = deg.to_radians().rem_euclid(std::f64::consts::FRAC_PI_2);
+            let got = preferred_angle(&d);
+            // Circular distance on the quarter turn.
+            let d = (got - want).rem_euclid(std::f64::consts::FRAC_PI_2);
+            let err = d.min(std::f64::consts::FRAC_PI_2 - d);
+            assert!(err < 1e-9, "{deg}°: got {got}, want {want}");
+        }
+    }
+
+    #[test]
+    fn a_circle_has_no_direction_and_keeps_the_axes() {
+        // Angles spread evenly: no window holds a fifth of the perimeter, so
+        // turning would only swap one arbitrary orientation for another.
+        let pts: Vec<(f64, f64)> = (0..64)
+            .map(|i| {
+                let t = i as f64 / 64.0 * std::f64::consts::TAU;
+                (t.cos(), t.sin())
+            })
+            .collect();
+        assert_eq!(preferred_angle(&only(loop2d(&pts))), 0.0);
+    }
+
+    #[test]
+    fn the_axes_win_a_tie_against_a_marginal_rival() {
+        // A square on the axes with one short chamfer at 30°. The chamfer must
+        // not be allowed to turn the whole grid for the sake of its own length.
+        let d = only(loop2d(&[
+            (0.0, 0.0),
+            (3.0, 0.0),
+            (3.0, 1.0),
+            (0.1, 1.0),
+            (0.0, 0.94),
+        ]));
+        assert_eq!(preferred_angle(&d), 0.0);
+    }
+
+    #[test]
+    fn the_frame_is_a_round_trip() {
+        let f = Frame2::at(0.4);
+        let p = Point2::new(1.25, -3.5);
+        let back = f.to_local(f.to_grid(p));
+        assert!((back - p).norm() < 1e-12, "{back:?} for {p:?}");
+        // And the identity really is the identity, not a multiplication by one.
+        let id = Frame2::at(0.0);
+        assert_eq!(id.to_grid(p), p);
+        assert_eq!(id.to_local(p), p);
+    }
 }

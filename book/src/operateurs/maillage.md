@@ -832,6 +832,46 @@ l'autre faiblesse.
    aucune rangée. Deux fronts vivants se rencontrent où ça tombe ; un seul
    front **atterrit**, sur une interface qu'on a choisie.
 
+### L'orientation est détectée sur le contour
+
+Rien dans le contrat n'attache la grille aux axes du repère : son orientation
+est un choix purement interne. Elle est donc prise **sur le contour** — l'angle
+qui rend axiale la plus grande longueur de contour, cherché sur un quart de
+tour, ce que la symétrie d'ordre 4 d'une grille laisse de distinct.
+
+Sans cela la méthode ne serait qu'un tour de passe-passe ne marchant que sur
+les formes qu'on a dessinées d'équerre. Rectangle 0,6 × 0,3, taille 0,02 :
+
+| angle | avant | après |
+|---|---|---|
+| 0° | 450 mailles, 0 triangle, jacobien 1,000 | identique |
+| 5° | 496 (28 tri), jac min 0,218, 64 % parfaites | **450, 0 tri, 1,000, 100 %** |
+| 15° | 470 (20 tri), jac min 0,576, 62 % | **450, 0 tri, 1,000, 100 %** |
+| 30° | 454 (20 tri), jac min **0,138**, 61 % | **450, 0 tri, 1,000, 100 %** |
+| 45° | 500 (30 tri), jac min 0,608, 55 % | **450, 0 tri, 1,000, 100 %** |
+
+À 30° le jacobien minimal était descendu à 0,138 — moins bien que
+`pave_surface` seul sur sa pire maille. Le profil crénelé tourné de 23,7°
+retrouve lui aussi ses 4 032 mailles parfaites.
+
+La boîte englobante s'en trouve **resserrée**, pas agrandie : elle est calculée
+sur les points déjà tournés. À 30° elle passe de 0,670 × 0,560 — soit 2,08 fois
+l'aire de la pièce, autant de mailles classifiées pour rien — à 0,6 × 0,3.
+
+Deux garde-fous :
+
+- un contour **sans direction dominante** — un cercle, dont les angles d'arête
+  sont répartis uniformément — garde les axes : tourner échangerait une
+  orientation arbitraire contre une autre, au prix de la reproductibilité ;
+- **les axes gagnent les égalités.** Une forme déjà d'équerre est le cas que
+  cette détection ne doit surtout pas casser, et il serait mauvais de le perdre
+  pour un gain de la largeur d'un arrondi ailleurs. Un chanfrein à 30° sur une
+  pièce par ailleurs droite ne fait donc pas tourner toute la grille.
+
+Reste le cas des **directions concurrentes** : une pièce mêlant des bords à 0°
+et à 30° ne peut satisfaire que l'une des deux familles. C'est la plus longue
+qui est servie.
+
 ### Le contour doit être discrétisé pour une grille
 
 C'est la seule chose demandée à l'appelant, et c'est une vraie contrainte. Une
@@ -897,18 +937,6 @@ Moitié moins de mailles pour une qualité parfaite. Sur un rectangle 0,6 × 0,3
 - **`band` vaut 0 et c'est la bonne valeur.** Le cœur recule déjà d'une maille
   partout où il ne rejoint pas le contour. Ne l'augmentez que pour éloigner
   volontairement l'interface du bord.
-- **Une forme tournée** de 30° n'a plus aucune arête axiale à offrir : la
-  grille se réduit à la boîte englobante subdivisée uniformément, aucun nœud
-  de grille ne tombe sur un nœud du contour, et le cœur s'arrête en escalier
-  à une maille du bord. Le cœur **survit** — sur un rectangle 0,6 × 0,3 à
-  0,02, 61 % des mailles sont encore des rectangles parfaits à 30°, et le
-  total reste à 454 mailles contre 656 pour le paveur frontal. Ce qui se
-  dégrade est la **bande** : entre un contour oblique et un escalier sa
-  largeur varie de presque zéro à ~1,4 maille, et c'est l'entrée que le front
-  traite le plus mal. Le jacobien minimal tombe à 0,138, soit moins bien que
-  `pave_surface` (0,253), pendant que la médiane reste à 1,000. Meilleur en
-  volume, moins bon sur sa pire maille : à arbitrer selon ce qu'on lit du
-  calcul.
 - **Pas de gradation, et c'est un choix.** La grille est uniforme par
   intervalle entre lignes. Un quadtree la graduerait — règle 2:1 et gabarits
   de transition — mais le résultat ne vaut pas ce qu'il coûte, et la raison

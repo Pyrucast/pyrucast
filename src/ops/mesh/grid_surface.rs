@@ -22,6 +22,24 @@
 //! the outcome is the structured mesh drawn by hand: every cell a rectangle,
 //! every Jacobian 1, and no triangle anywhere.
 //!
+//! ## The grid is laid in the contour's own direction
+//!
+//! Nothing in the contract ties the grid to the frame's axes: the orientation
+//! is a free internal choice. So it is taken from the contour — the angle that
+//! turns the greatest length of it into axis-aligned edges, sought over a
+//! quarter turn, which is all a grid's four-fold symmetry leaves distinct.
+//!
+//! Without it the method would be a trick that only works on shapes someone
+//! happened to draw square-on. A rectangle turned by 30° used to come out at
+//! 454 cells, 20 of them triangles, with a Jacobian down to 0.138 — worse on
+//! its worst cell than the frontal paver. It now comes out at 450 perfect
+//! rectangles, exactly as if it had never been turned.
+//!
+//! A contour with no dominant direction — a circle, whose edge angles are
+//! spread evenly — keeps the axes, since turning it would swap one arbitrary
+//! orientation for another. And the axes win ties, so a shape already square
+//! with the frame is never lost to a rounding-width improvement elsewhere.
+//!
 //! ## The core meets the contour rather than stopping short of it
 //!
 //! The grid's lines are taken from the contour: every axis-aligned edge long
@@ -359,6 +377,107 @@ mod tests {
             boundary, segments,
             "the mesh boundary has {boundary} edges for {segments} contour segments"
         );
+    }
+
+    /// Turn a polygon by `deg` about the origin.
+    fn spin(pts: &[(f64, f64)], deg: f64) -> Vec<(f64, f64)> {
+        let t = deg.to_radians();
+        pts.iter()
+            .map(|&(x, y)| (x * t.cos() - y * t.sin(), x * t.sin() + y * t.cos()))
+            .collect()
+    }
+
+    #[test]
+    fn a_turned_rectangle_comes_out_as_the_plain_grid_too() {
+        // Nothing in the contract ties the grid to the frame's axes, so it is
+        // laid in the contour's own direction instead. A rectangle turned by
+        // 30° must therefore give exactly what it gives square-on — before the
+        // orientation was detected it gave 454 cells, 20 of them triangles,
+        // and a Jacobian down to 0.138.
+        for deg in [5.0, 15.0, 30.0, 45.0, 88.0] {
+            let coords = insert(Coords::new(2).unwrap());
+            let corners = spin(&[(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)], deg);
+            let contour = loop_mesh(coords, &on_grid(&corners, 0.02));
+            let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
+            let r = inspect(&mesh);
+            assert_eq!((r.quads, r.tris), (450, 0), "at {deg}°");
+            assert_eq!(r.non_conforming, 0, "at {deg}°");
+            assert!(
+                r.min_jacobian > 1.0 - 1e-9,
+                "at {deg}°, jacobian {}",
+                r.min_jacobian
+            );
+            assert!((r.area - 0.18).abs() < 1e-12, "at {deg}°, area {}", r.area);
+        }
+    }
+
+    #[test]
+    fn a_turned_profile_is_meshed_as_if_it_were_square_on() {
+        // The seven re-entrant corners again, at an angle no one would choose.
+        let (u, v) = (0.6 / 9.0, 0.3 / 40.0);
+        let levels = [40.0, 3.0, 6.0, 4.0, 6.0, 4.0, 6.0, 3.0, 40.0];
+        let mut corners: Vec<(f64, f64)> =
+            (0..=levels.len()).map(|i| (i as f64 * u, 0.0)).collect();
+        for (i, l) in levels.iter().enumerate().rev() {
+            corners.push(((i + 1) as f64 * u, l * v));
+            corners.push((i as f64 * u, l * v));
+        }
+
+        let size = 2.0 * v / 4.0;
+        let coords = insert(Coords::new(2).unwrap());
+        let contour = loop_mesh(coords, &on_grid(&spin(&corners, 23.7), size));
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
+        let r = inspect(&mesh);
+        assert_eq!(
+            (r.quads, r.tris),
+            (18 * 2 * levels.iter().sum::<f64>() as usize, 0)
+        );
+        assert_eq!(r.non_conforming, 0);
+        assert!(r.min_jacobian > 1.0 - 1e-9, "jacobian {}", r.min_jacobian);
+    }
+
+    #[test]
+    fn the_contour_survives_the_turn() {
+        // The contract again, on a shape the grid now meets only because it
+        // turned to it: every contour segment is a boundary edge of the mesh,
+        // and the mesh has no other.
+        let coords = insert(Coords::new(2).unwrap());
+        let corners = spin(
+            &[
+                (0.0, 0.0),
+                (3.0, 0.0),
+                (3.0, 0.6),
+                (1.5, 0.6),
+                (1.5, 1.2),
+                (0.0, 1.2),
+            ],
+            30.0,
+        );
+        let pts = on_grid(&corners, 0.1);
+        let contour = loop_mesh(coords, &pts);
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+
+        let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
+        for si in 0..mesh.len() {
+            for cell in mesh.cells(si).unwrap() {
+                let nodes = cell.nodes().unwrap();
+                let k = nodes.len();
+                for i in 0..k {
+                    let (a, b) = (nodes[i].id(), nodes[(i + 1) % k].id());
+                    let key = if a.0 < b.0 { (a, b) } else { (b, a) };
+                    *used.entry(key).or_insert(0) += 1;
+                }
+            }
+        }
+        let mut segments = 0usize;
+        for cell in contour.cells(0).unwrap() {
+            let n = cell.nodes().unwrap();
+            let (a, b) = (n[0].id(), n[1].id());
+            let key = if a.0 < b.0 { (a, b) } else { (b, a) };
+            assert_eq!(used.get(&key), Some(&1), "contour segment {key:?} was lost");
+            segments += 1;
+        }
+        assert_eq!(used.values().filter(|&&u| u == 1).count(), segments);
     }
 
     #[test]

@@ -79,6 +79,30 @@ def test_a_crenellated_profile_has_no_triangle_and_every_jacobian_one():
     assert worst > 1.0 - 1e-9
 
 
+def _spin(pts, deg):
+    t = math.radians(deg)
+    return [
+        (x * math.cos(t) - y * math.sin(t), x * math.sin(t) + y * math.cos(t))
+        for x, y in pts
+    ]
+
+
+def test_a_turned_shape_is_meshed_as_if_it_were_square_on():
+    """L'orientation de la grille est prise sur le contour.
+
+    Rien dans le contrat ne l'attache aux axes du repère, donc une forme
+    tournée obtient exactement ce qu'une forme d'équerre obtient. Avant que
+    l'orientation ne soit détectée, le rectangle à 30° rendait 454 mailles
+    dont 20 triangles, avec un jacobien tombant à 0,138.
+    """
+    corners = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)]
+    for deg in (0.0, 5.0, 30.0, 45.0):
+        coords = pc.Coords(2)
+        contour = _on_grid(coords, _spin(corners, deg), 0.02)
+        mesh = pc.mesh.grid_surface(contour, "QUA4", size=0.02)
+        assert _cells(mesh) == {"QUA4": 450}, f"à {deg}°"
+
+
 def test_a_circle_gets_a_core_and_a_frontal_band():
     coords = pc.Coords(2)
     circle = [
