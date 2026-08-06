@@ -123,6 +123,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::skin, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::orient, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::invert, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::chain, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::merge_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::elements_on, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::points_in_sphere, m)?)?;

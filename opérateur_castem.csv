@@ -29,6 +29,7 @@ Maillage - transformation;PLUS;Translate les coordonnées des nœuds;coords.disp
 Maillage - transformation;TOUR;Tourne (rotation) les coordonnées des nœuds;rotate
 Maillage - transformation;INVE;Inverse l'orientation des éléments;invert
 Maillage - transformation;ORIE;Oriente les éléments d'une surface/ligne;orient
+Maillage - transformation;;Réordonne les mailles d'une ligne (SEG2/SEG3) en chaîne continue;chain
 Maillage - transformation;RACC;Raccorde deux maillages (collage);—
 Maillage - transformation;DENS;Fixe la densité (taille de maille) courante;refinement de surface (paramètre)
 Maillage - transformation;BARY;Barycentre d'un maillage / centres des éléments;barycenter

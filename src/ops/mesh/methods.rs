@@ -29,6 +29,11 @@ impl Mesh {
         crate::ops::mesh::border(self, angle_deg)
     }
 
+    /// Voir [`mesh::chain`](fn@crate::ops::mesh::chain).
+    pub fn chain(&self) -> Result<Mesh> {
+        crate::ops::mesh::chain(self)
+    }
+
     /// Voir [`mesh::consolidate`](fn@crate::ops::mesh::consolidate).
     pub fn consolidate(&self) -> Result<Mesh> {
         crate::ops::mesh::consolidate(self)

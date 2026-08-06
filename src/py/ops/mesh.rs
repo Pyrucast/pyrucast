@@ -428,6 +428,22 @@ pub fn orient(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
+/// Re-order the cells of a line mesh into a continuous chain.
+///
+/// The complement of `orient`: where `orient` fixes the *direction* of the
+/// cells, `chain` fixes their *order* — each SEG2/SEG3 submesh is sorted so
+/// that consecutive cells share a node (and flipped where needed), so reading
+/// the connectivity walks the curve from one end to the other. Each submesh is
+/// chained on its own and must be one continuous chain, open or closed: a node
+/// carrying three segments (branching) or disjoint pieces raise an error.
+/// Returns a fresh mesh sharing the input's nodes.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn chain(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let result = crate::ops::mesh::chain(&mesh.inner)?;
+    Ok(PyMesh { inner: result })
+}
+
 /// Reverse the orientation of every cell of a mesh (cast3m `INVE`).
 ///
 /// Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
@@ -1147,6 +1163,11 @@ impl PyMesh {
     /// Voir `pyrucast.mesh.invert`.
     fn invert(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
         super::mesh::invert(slf)
+    }
+
+    /// Voir `pyrucast.mesh.chain`.
+    fn chain(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
+        super::mesh::chain(slf)
     }
 
     /// Voir `pyrucast.mesh.sweep`.

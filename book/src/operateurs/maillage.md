@@ -32,6 +32,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (tout type, y compris `PYRA5` et les quadratiques) en faces de **même degré**, **une par face plane** du solide (voir plus bas) |
 | `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
 | `invert(mesh)` | **inverse** l'orientation de toutes les cellules, toute dimension, équivalent Cast3M `INVE` (voir plus bas) |
+| `chain(mesh)` | **réordonne** les mailles d'une ligne (`SEG2`/`SEG3`) en **chaîne continue** — le complément d'`orient`, qui corrige le sens mais pas l'ordre (voir plus bas) |
 | `elements_on(mesh, points, strict=True)` | les **éléments** de `mesh` qui s'**appuient** sur les nœuds de `points` (voir plus bas) |
 | `points_in_sphere(mesh, center, radius, tol=None)` | les nœuds **dans** la sphère (le disque en 2D) — famille `points_*`, voir plus bas |
 | `points_on_sphere(mesh, center, radius, tol=None)` | les nœuds **sur** la sphère (le cercle en 2D) |
@@ -1466,6 +1467,58 @@ trou_dedans = pyrucast.mesh.invert(propre)  # sens inversé (intérieur/extérie
 ```
 
 Côté Rust, `ops::mesh::orient(&mesh)` et `ops::mesh::invert(&mesh)`.
+
+## Mise en chaîne d'une ligne : `chain`
+
+`orient` fait *pointer* les segments d'une courbe dans le même sens, mais les
+laisse là où ils sont dans la connectivité. `chain(mesh)` est le complément :
+il les met dans l'**ordre du parcours**, de sorte que lire les mailles l'une
+après l'autre revient à marcher le long de la courbe d'un bout à l'autre.
+
+```text
+  5 6                    1 2
+  1 2      chain  →      2 3
+  3 4                    3 4
+  2 3                    4 5
+  4 5                    5 6
+```
+
+Chaque sous-maillage est chaîné **indépendamment** (il garde ses mailles, son
+type et sa couleur de face) et doit former **une seule chaîne continue** :
+chaque nœud porte un ou deux segments, et les mailles constituent **un seul**
+morceau connexe, ouvert (deux extrémités libres) ou refermé en boucle. Tout le
+reste est une **erreur** — un nœud à trois segments (embranchement), ou
+plusieurs morceaux disjoints. Il faut alors découper l'entrée en un
+sous-maillage par branche.
+
+Les mailles sont **retournées** au besoin en chemin (le nœud milieu d'un `SEG3`
+reste au milieu) : `chain` oriente donc aussi, inutile de passer par `orient`
+d'abord.
+
+### Par où la chaîne commence
+
+Une chaîne ouverte se lit depuis une extrémité libre. Si **exactement une** des
+deux est déjà la **queue** de son segment, c'est elle qui amorce le parcours :
+une courbe déjà orientée de façon cohérente **garde son sens**, et `chain` se
+réduit à une permutation des mailles. Sinon (les deux extrémités sont des
+queues, ou aucune) c'est celle de plus petit numéro de nœud, ce qui rend le
+résultat déterministe. Une boucle fermée n'a pas d'extrémité libre : elle part
+de son plus petit numéro de nœud, dans le sens du segment qui l'a déjà pour
+queue.
+
+```python
+import pyrucast
+
+# Un contour tiré d'une surface : les segments sont là, mais en vrac.
+bord = pyrucast.mesh.border(surf)
+suite = pyrucast.mesh.chain(bord)  # ou bord.chain()
+
+# La connectivité se lit maintenant nœud à nœud le long de la courbe.
+for maille in suite[0]:
+    print([n.id for n in maille])
+```
+
+Côté Rust, `ops::mesh::chain(&mesh)` — ou la méthode `mesh.chain()`.
 
 ## Éléments s'appuyant sur des nœuds : `elements_on`
 

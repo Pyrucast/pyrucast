@@ -29,6 +29,7 @@ __all__ = [
     "barycenter",
     "beam_deformation",
     "border",
+    "chain",
     "circle",
     "consolidate_element",
     "consolidate_mesh",
@@ -1149,6 +1150,10 @@ class Mesh:
     def invert(self) -> Mesh:
         r"""
         Voir `pyrucast.mesh.invert`.
+        """
+    def chain(self) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.chain`.
         """
     def sweep(self, mesh_b: Mesh, n_layers: builtins.int, element_type: builtins.str = 'QUA4') -> Mesh:
         r"""
@@ -2783,6 +2788,19 @@ def border(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mes
     degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
     flat faces). A loop with no such corner stays a single closed loop.
     `angle_deg=None` (the default) keeps every boundary as one closed loop.
+    """
+
+def chain(mesh: Mesh) -> Mesh:
+    r"""
+    Re-order the cells of a line mesh into a continuous chain.
+    
+    The complement of `orient`: where `orient` fixes the *direction* of the
+    cells, `chain` fixes their *order* — each SEG2/SEG3 submesh is sorted so
+    that consecutive cells share a node (and flipped where needed), so reading
+    the connectivity walks the curve from one end to the other. Each submesh is
+    chained on its own and must be one continuous chain, open or closed: a node
+    carrying three segments (branching) or disjoint pieces raise an error.
+    Returns a fresh mesh sharing the input's nodes.
     """
 
 def circle(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int, element_type: builtins.str = 'SEG2') -> Mesh:

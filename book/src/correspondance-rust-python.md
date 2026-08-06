@@ -132,6 +132,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `skin(mesh: &Mesh, angle_deg: Option<f64>) -> Mesh` | `skin(mesh, angle_deg=None) -> Mesh` |
 | `orient(mesh: &Mesh) -> Mesh` | `orient(mesh) -> Mesh` |
 | `invert(mesh: &Mesh) -> Mesh` | `invert(mesh) -> Mesh` |
+| `chain(mesh: &Mesh) -> Mesh` | `chain(mesh) -> Mesh` |
 | `barycenter(mesh: &Mesh) -> Mesh` | `barycenter(mesh) -> Mesh` |
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
 | `elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Mesh` | `elements_on(mesh, points, strict=True) -> Mesh` |

@@ -14,6 +14,7 @@
 pub mod arc;
 pub mod barycenter;
 pub mod border;
+pub mod chain;
 pub mod circle;
 pub mod consolidate;
 pub mod contour;
@@ -50,6 +51,7 @@ pub mod triangulation;
 pub use arc::arc;
 pub use barycenter::barycenter;
 pub use border::border;
+pub use chain::chain;
 pub use circle::circle;
 pub use consolidate::consolidate;
 pub use convert::convert;
