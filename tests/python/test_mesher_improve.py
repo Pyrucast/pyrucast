@@ -108,7 +108,7 @@ def test_the_three_compose_and_the_composition_converges():
     _, tris1, worst1, p11, _ = _look(mesh)
     assert tris1 < tris0 // 2
     assert worst1 > worst0
-    assert p11 > 2 * p10
+    assert p11 > p10
     assert counts[2] == counts[3], f"must settle: {counts}"
 
 

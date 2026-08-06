@@ -987,10 +987,12 @@ et le front la pave seul, exactement comme `pave_surface`. Un contour hors
 grille reçoit une bande large et le même traitement. La dégradation est
 **continue** : au pire la qualité du paveur frontal, jamais une erreur.
 
-Sur un cercle — le cas dégradé par excellence, aucune arête axiale — il reste
-16 arêtes de bord hors contour, soit **4 trous d'une maille**, et 0,18 %
-d'aire manquante. C'est une limite connue et bornée par un test, pas une
-propriété qu'on croit tenir.
+Sur un cercle — le cas dégradé par excellence, aucune arête axiale — il ne
+reste **aucune fissure** : toutes les arêtes de bord sont celles du contour.
+Il manque 0,18 % d'aire, les lèvres que la soudure referme. Ce n'était pas
+acquis : tant que la retraite du front pouvait poser des rangées à 1,5 % de la
+taille demandée, ces rangées laissaient 16 arêtes orphelines, soit 4 trous
+d'une maille.
 
 ### La phase de la grille est déjà la bonne
 
@@ -1008,16 +1010,16 @@ La phase n'est donc libre que lorsque rien n'est épinglé — une courbe. Balay
 de huit phases sur un cercle, la grille ancrée sur le coin de la boîte
 englobante étant la phase 0 :
 
-| phase | mailles | triangles | jacobien min | aire manquante |
+| phase | mailles | triangles | jacobien min | fissures |
 |---|---|---|---|---|
-| **0** | **1 328** | **32** | **0,188** | **0,181 %** |
-| 1/8 | 1 701 | 81 | 0,020 | 0,187 % |
-| 1/4 | 1 326 | 35 | 0,109 | 0,229 % |
-| 3/8 | 1 979 | 112 | 0,000 | 0,199 % |
-| 1/2 | 1 326 | 41 | 0,004 | 0,190 % |
-| 5/8 | 1 763 | 92 | 0,001 | 0,200 % |
-| 3/4 | 1 693 | 116 | 0,001 | 0,217 % |
-| 7/8 | 2 009 | 122 | 0,020 | 0,229 % |
+| **0** | **1 260** | **24** | **0,308** | **0** |
+| 1/8 | 1 369 | 40 | 0,111 | 16 |
+| 1/4 | 1 326 | 35 | 0,109 | 21 |
+| 3/8 | 1 395 | 57 | 0,159 | 23 |
+| 1/2 | 1 326 | 41 | 0,004 | 15 |
+| 5/8 | 1 347 | 43 | 0,207 | 11 |
+| 3/4 | 1 336 | 39 | 0,109 | 21 |
+| 7/8 | 1 380 | 48 | 0,002 | 12 |
 
 La phase actuelle gagne sur tous les critères, et ce n'est pas un hasard :
 ancrer sur le coin de la boîte fait passer les lignes de grille exactement par
@@ -1061,19 +1063,20 @@ celui des paveurs : **aucun nœud de bord ne bouge**, et une position n'est
 retenue que si toutes les mailles incidentes restent valides *et* que la pire
 qualité incidente ne baisse pas.
 
-**Aucune des deux règles ne domine l'autre**, et c'est mesuré. Sur le cercle
-pavé (60 côtés, taille 0,05, 1 328 mailles) après 60 balayages :
+**L'angulaire domine**, et c'est mesuré. Sur le cercle pavé (60 côtés, taille
+0,05, 1 260 mailles) après 60 balayages :
 
 | | jacobien min | p1 | p5 |
 |---|---|---|---|
-| brut | 0,188 | 0,308 | 0,648 |
-| laplacien | 0,234 | **0,448** | 0,773 |
-| angulaire | 0,234 | 0,404 | **0,808** |
-| angulaire ×40 puis laplacien ×20 | 0,234 | **0,452** | **0,813** |
+| brut | 0,308 | 0,648 | 0,843 |
+| laplacien | 0,696 | 0,758 | 0,867 |
+| angulaire | **0,754** | **0,780** | **0,872** |
 
-L'angulaire gagne dans le gros du maillage, le laplacien dans la queue, et
-**les enchaîner bat les deux**. C'est précisément à quoi sert un opérateur
-séparé.
+Elle gagne sur les trois, et les enchaîner n'apporte rien de plus. Ce n'était
+pas le cas avant que la retraite du front reçoive son plancher : sur le
+maillage plus irrégulier d'alors, l'angulaire menait le gros du maillage et le
+laplacien la queue, et il fallait les deux. Le laplacien reste disponible —
+`angular=False` — mais il n'y a plus de raison de le préférer.
 
 ### `cleanup` — la topologie
 
@@ -1112,11 +1115,10 @@ créé :
 2. **Regroupement.** En prenant un quadrangle voisin avec eux, les trois mailles
    font un **hexagone** — 3 + 3 + 4 arêtes moins deux fois les deux partagées —
    qui se coupe en deux quadrangles selon l'une de ses trois grandes diagonales.
-   Là où la fusion offrait un candidat, celui-ci en offre trois. Sur le cercle
-   il fait passer le bilan d'une passe de **12 triangles retirés à 20**, sur 32 ;
-   et prendre **deux** quadrangles plutôt qu'un — la configuration en éventail
-   autour d'un nœud — en retire 4 de plus sur une ellipse (42 → 16 au lieu de
-   42 → 20).
+   Là où la fusion n'offre qu'un candidat — à prendre ou à laisser — celui-ci
+   en offre trois, et c'est ce qui débloque le gros des paires. Prendre **deux**
+   quadrangles plutôt qu'un couvre en plus la configuration en éventail autour
+   d'un nœud, et en retire encore quelques-uns sur une ellipse.
 
    Trois quadrangles donneraient un octogone, qui veut trois quadrangles et
    bien plus de façons de le couper. La limite est mise à deux : le rendement
@@ -1135,18 +1137,22 @@ déplacés.
 
 ### Ce que la chaîne donne
 
-Cercle pavé par `grid_surface`, 1 328 mailles dont 32 triangles :
+Cercle pavé par `grid_surface`, 1 260 mailles dont 24 triangles :
 
-| | triangles | jacobien min | p1 | p5 |
-|---|---|---|---|---|
-| brut | 32 | 0,188 | 0,308 | 0,648 |
-| `merge_triangles` | **12** | 0,001 | — | — |
-| + `cleanup` + lissage | **12** | **0,234** | **0,666** | **0,823** |
-| en répétant le tour | 12 | 0,234 | 0,682 | 0,824 |
+| | mailles | triangles | jacobien min | p1 | p5 |
+|---|---|---|---|---|---|
+| brut | 1 260 | 24 | 0,308 | 0,648 | 0,843 |
+| après la chaîne | 1 252 | **8** | **0,754** | **0,811** | **0,858** |
 
-Les triangles tombent de 32 à 12 en une passe, le premier centile double, et
-**chaque maillage intermédiaire reste valide**. Le tour répété converge au lieu
-de dériver.
+Une passe de `merge_triangles` seule fait 24 → 8 sur ce cercle, et 42 → 16 sur
+une ellipse.
+
+Les triangles tombent de 24 à 8, et surtout le **pire** quadrangle passe de
+0,308 à 0,754 — un angle minimal de 49°. **Chaque maillage intermédiaire reste
+valide**, et le tour répété converge au lieu de dériver.
+
+Sur le créneau grossier (253 mailles, 6 triangles) : 4 triangles, jacobien
+minimal de 0,313 à 0,386 et premier centile de 0,340 à 0,502.
 
 ## Couche limite hexaédrique : `pave_volume`
 

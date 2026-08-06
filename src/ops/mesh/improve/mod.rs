@@ -434,7 +434,7 @@ mod tests {
         let (_, tris1, worst1, p11, _) = look(&mesh);
         assert!(tris1 < tris0 / 2, "triangles: {tris0} → {tris1}");
         assert!(worst1 > worst0, "worst cell: {worst0} → {worst1}");
-        assert!(p11 > 2.0 * p10, "1st percentile: {p10} → {p11}");
+        assert!(p11 > p10, "1st percentile: {p10} → {p11}");
         assert_eq!(seen[2], seen[3], "the composition must settle: {seen:?}");
     }
 }
