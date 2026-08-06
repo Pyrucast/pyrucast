@@ -57,36 +57,6 @@
 //! contour that does not satisfy it is not an error — it just gets more band
 //! and less grid.
 //!
-//! ## Grading: `coarsen`
-//!
-//! `target_size` is the size **at the boundary**, and `coarsen` is how many
-//! times a cell may double away from it. The core becomes a quadtree: leaves
-//! of `2^k × 2^k` base cells, `k` growing with the distance to the boundary,
-//! balanced so that two leaves sharing a side never differ by more than one
-//! level. Each level roughly halves what is left of the cell count — a
-//! rectangle at 2 048 cells drops to 956, then 776 — until the domain runs out
-//! of depth to coarsen into.
-//!
-//! A leaf facing finer ones has a boundary with more than four sides, and each
-//! configuration has its template: two opposite refined sides are cut straight
-//! across with no new node, two adjacent ones give three quadrangles round the
-//! centre, four give the plain four quarters.
-//!
-//! **The odd cases cost one triangle each, and no template can avoid it.** In
-//! any quadrangulation the number of boundary edges is even, since counting
-//! every face's sides gives `4Q = 2·interior + boundary`; a leaf with one
-//! refined side, whose boundary has five, therefore admits no filling by
-//! quadrangles at all. And odd is the *normal* case, not
-//! the exception: grading by distance makes concentric rings, and a leaf along
-//! a ring faces finer ones on its one outward side. Around a tenth of the
-//! cells come out as triangles, carrying the mesh's worst Jacobians (0,70, the
-//! 45° of the transition) against 1,000 everywhere else.
-//!
-//! `all_quad` with `coarsen` refines those leaves away instead. It keeps the
-//! promise — not one triangle — but there is little left of the coarsening:
-//! on the same profile, 4 024 cells against 4 032 ungraded. The two cannot
-//! both be had, and the arithmetic above says why.
-//!
 //! ## When it degrades
 //!
 //! A region too thin to hold a single core cell gets no core, and the front
@@ -116,13 +86,6 @@ use crate::ops::mesh::{contour, paving};
 /// giving the front a couple of cells to work in buys a better band than
 /// letting it fight for a sliver.
 ///
-/// `coarsen` is how many times a cell may double in size away from the
-/// boundary: `target_size` is then the size **at the boundary**, and the
-/// interior — where the field is smooth and the gradients are not — gets cells
-/// up to `2^coarsen` times bigger. Zero keeps the grid uniform. Each level
-/// roughly halves what is left of the cell count, until the domain runs out of
-/// depth to coarsen into.
-///
 /// Contour nodes are reused as they are and never moved. The result carries a
 /// `QUA4` submesh and, only when triangles were left over, a `TRI3` one.
 ///
@@ -133,7 +96,6 @@ pub fn grid_surface(
     element_type: ElementType,
     target_size: Option<f64>,
     band: usize,
-    coarsen: u32,
     all_quad: bool,
 ) -> Result<Mesh> {
     grid_surface_cancellable(
@@ -141,7 +103,6 @@ pub fn grid_surface(
         element_type,
         target_size,
         band,
-        coarsen,
         all_quad,
         &NoCancel,
     )
@@ -154,7 +115,6 @@ pub fn grid_surface_cancellable(
     element_type: ElementType,
     target_size: Option<f64>,
     band: usize,
-    coarsen: u32,
     all_quad: bool,
     cancel: &dyn Cancel,
 ) -> Result<Mesh> {
@@ -176,14 +136,7 @@ pub fn grid_surface_cancellable(
     let parsed = contour::parse(contour, "grid_surface")?;
     let mut fabrics = Vec::with_capacity(parsed.domains.len());
     for d in &parsed.domains {
-        fabrics.push(paving::pave_grid(
-            d,
-            target_size,
-            all_quad,
-            band,
-            coarsen,
-            cancel,
-        )?);
+        fabrics.push(paving::pave_grid(d, target_size, all_quad, band, cancel)?);
     }
 
     let qua4 = paving::materialize(&parsed, fabrics, "grid_surface")?;
@@ -302,7 +255,7 @@ mod tests {
         let coords = insert(Coords::new(2).unwrap());
         let corners = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)];
         let contour = loop_mesh(coords, &on_grid(&corners, 0.02));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.02), 0, 0, false).unwrap();
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
         let r = inspect(&mesh);
         assert_eq!((r.quads, r.tris), (450, 0));
         assert_eq!(r.non_conforming, 0);
@@ -328,7 +281,7 @@ mod tests {
         let size = 2.0 * v / 4.0;
         let coords = insert(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &on_grid(&corners, size));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(size), 0, 0, false).unwrap();
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
         let r = inspect(&mesh);
         // 18 columns per step, twice the level in rows: 18·2·Σlevels.
         let want = 18 * 2 * levels.iter().sum::<f64>() as usize;
@@ -372,7 +325,7 @@ mod tests {
         let outer = loop_mesh(coords.clone(), &outer_pts);
         let hole = loop_mesh(coords, &hole_pts);
         let contour = outer.union(&hole).unwrap();
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, 0, false).unwrap();
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
 
         let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -409,89 +362,6 @@ mod tests {
     }
 
     #[test]
-    fn coarsening_grades_the_interior_and_keeps_the_mesh_conforming() {
-        // Each level roughly halves what is left, until the domain runs out of
-        // depth. The mesh stays conforming, covers the exact area and inverts
-        // nothing — the transitions cost triangles, not validity.
-        let coords = insert(Coords::new(2).unwrap());
-        let corners = [(0.0, 0.0), (1.6, 0.0), (1.6, 0.8), (0.0, 0.8)];
-        let contour = loop_mesh(coords, &on_grid(&corners, 0.025));
-
-        let mut counts = Vec::new();
-        for c in 0..4u32 {
-            let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.025), 0, c, false).unwrap();
-            let r = inspect(&mesh);
-            assert_eq!(r.non_conforming, 0, "coarsen={c}");
-            assert!(
-                r.min_jacobian > 0.7,
-                "coarsen={c}, jacobian {}",
-                r.min_jacobian
-            );
-            assert!(
-                (r.area - 1.28).abs() < 1e-12,
-                "coarsen={c}, area {}",
-                r.area
-            );
-            assert_eq!((r.tris == 0), (c == 0), "coarsen={c} triangles {}", r.tris);
-            counts.push(r.quads + r.tris);
-        }
-        assert_eq!(counts[0], 2048, "ungraded must stay the plain grid");
-        assert!(
-            counts[1] < counts[0] / 2,
-            "one level should halve the count: {counts:?}"
-        );
-        assert!(counts[2] < counts[1], "{counts:?}");
-    }
-
-    #[test]
-    fn grading_never_reaches_the_boundary() {
-        // The size follows the distance to the boundary, so the cells against
-        // it are always at the finest level. That is what lets the contour
-        // contract survive grading untouched — nothing about the shared nodes
-        // or the band knows the interior was coarsened.
-        let coords = insert(Coords::new(2).unwrap());
-        let pts = on_grid(&[(0.0, 0.0), (1.6, 0.0), (1.6, 0.8), (0.0, 0.8)], 0.025);
-        let contour = loop_mesh(coords, &pts);
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.025), 0, 3, false).unwrap();
-
-        let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
-        for si in 0..mesh.len() {
-            for cell in mesh.cells(si).unwrap() {
-                let nodes = cell.nodes().unwrap();
-                let k = nodes.len();
-                for i in 0..k {
-                    let (a, b) = (nodes[i].id(), nodes[(i + 1) % k].id());
-                    let key = if a.0 < b.0 { (a, b) } else { (b, a) };
-                    *used.entry(key).or_insert(0) += 1;
-                }
-            }
-        }
-        let mut segments = 0usize;
-        for cell in contour.cells(0).unwrap() {
-            let n = cell.nodes().unwrap();
-            let (a, b) = (n[0].id(), n[1].id());
-            let key = if a.0 < b.0 { (a, b) } else { (b, a) };
-            assert_eq!(used.get(&key), Some(&1), "contour segment {key:?} was lost");
-            segments += 1;
-        }
-        assert_eq!(used.values().filter(|&&u| u == 1).count(), segments);
-    }
-
-    #[test]
-    fn all_quad_keeps_its_promise_and_most_of_the_grid() {
-        // The other side of the parity bargain: refining the odd leaves away
-        // leaves not one triangle, and very little coarsening.
-        let coords = insert(Coords::new(2).unwrap());
-        let corners = [(0.0, 0.0), (1.6, 0.0), (1.6, 0.8), (0.0, 0.8)];
-        let contour = loop_mesh(coords, &on_grid(&corners, 0.025));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.025), 0, 3, true).unwrap();
-        let r = inspect(&mesh);
-        assert_eq!(r.tris, 0);
-        assert_eq!(r.non_conforming, 0);
-        assert!((r.area - 1.28).abs() < 1e-12, "area {}", r.area);
-    }
-
-    #[test]
     fn a_plate_with_a_hole_keeps_its_hole_and_its_area() {
         // A hole is a clockwise loop and needs no special handling: the cells
         // it covers are simply not solid. The band round it is the part the
@@ -511,7 +381,7 @@ mod tests {
                 .collect::<Vec<_>>(),
         );
         let contour = outer.union(&hole).unwrap();
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, 0, false).unwrap();
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
@@ -534,7 +404,7 @@ mod tests {
                 })
                 .collect::<Vec<_>>(),
         );
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, 0, false).unwrap();
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
@@ -558,7 +428,7 @@ mod tests {
         ] {
             let msg = format!(
                 "{}",
-                grid_surface(&contour, et, size, 0, 0, false).unwrap_err()
+                grid_surface(&contour, et, size, 0, false).unwrap_err()
             );
             assert!(msg.starts_with("grid_surface:"), "{msg}");
         }

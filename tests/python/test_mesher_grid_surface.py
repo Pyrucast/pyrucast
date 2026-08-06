@@ -92,32 +92,6 @@ def test_a_circle_gets_a_core_and_a_frontal_band():
     assert "QUA4" in _cells(mesh)
 
 
-def test_coarsening_grades_the_interior():
-    """`size` devient la taille AU BORD, l'intérieur grossit.
-
-    Chaque niveau divise à peu près par deux ce qui reste. Les transitions
-    coûtent des triangles — un bord à cinq côtés n'admet aucun découpage en
-    quadrangles — mais jamais la conformité ni l'aire.
-    """
-    coords = pc.Coords(2)
-    contour = _on_grid(coords, [(0.0, 0.0), (1.6, 0.0), (1.6, 0.8), (0.0, 0.8)], 0.025)
-
-    counts = []
-    for c in range(3):
-        mesh = pc.mesh.grid_surface(contour, "QUA4", size=0.025, coarsen=c)
-        cells = _cells(mesh)
-        assert (cells.get("TRI3", 0) == 0) == (c == 0)
-        counts.append(mesh.cell_count())
-    assert counts[0] == 2048
-    assert counts[1] < counts[0] // 2
-    assert counts[2] < counts[1]
-
-    # L'autre côté du marché de parité : pas un triangle, presque pas de gain.
-    strict = pc.mesh.grid_surface(contour, "QUA4", size=0.025, coarsen=3, all_quad=True)
-    assert _cells(strict) == {"QUA4": strict.cell_count()}
-    assert strict.cell_count() > counts[0] * 0.9
-
-
 def test_the_mesh_boundary_is_exactly_the_contour():
     """Le contrat, dans sa formulation la plus forte.
 

@@ -111,14 +111,7 @@ def main() -> None:
     # rectilinéaire et le contour a été découpé pour elle, donc la grille
     # atteint le bord partout : il ne reste aucune bande à paver.
     grid = pc.mesh.grid_surface(contour, "QUA4", h)
-    graded = pc.mesh.grid_surface(contour, "QUA4", h, coarsen=2)
     print(f"grid_surface : {dict(zip(grid.element_types(), grid.cell_counts()))}")
-
-    # Avec `coarsen`, `h` devient la taille AU BORD et l'intérieur grossit.
-    # Les transitions coûtent des triangles : un bord à cinq côtés n'admet
-    # aucun découpage en quadrangles, et une gradation concentrique en fait
-    # forcément. C'est le prix des mailles économisées.
-    print(f"  coarsen=2  : {dict(zip(graded.element_types(), graded.cell_counts()))}")
 
 
 if __name__ == "__main__":

@@ -828,14 +828,13 @@ pub fn pave_surface(
 /// letting it fight for a sliver.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (contour, element_type, size=None, band=0, coarsen=0, all_quad=false))]
+#[pyo3(signature = (contour, element_type, size=None, band=0, all_quad=false))]
 pub fn grid_surface(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
     element_type: &str,
     size: Option<f64>,
     band: usize,
-    coarsen: u32,
     all_quad: bool,
 ) -> PyResult<PyMesh> {
     let et = ElementType::from_name(element_type)
@@ -845,7 +844,6 @@ pub fn grid_surface(
         et,
         size,
         band,
-        coarsen,
         all_quad,
         &PySignals(py),
     )?;
@@ -1343,17 +1341,16 @@ impl PyMesh {
     }
 
     /// Voir `pyrucast.mesh.grid_surface`.
-    #[pyo3(signature = (element_type, size=None, band=0, coarsen=0, all_quad=false))]
+    #[pyo3(signature = (element_type, size=None, band=0, all_quad=false))]
     fn grid_surface(
         slf: PyRef<'_, Self>,
         py: Python<'_>,
         element_type: &str,
         size: Option<f64>,
         band: usize,
-        coarsen: u32,
         all_quad: bool,
     ) -> PyResult<PyMesh> {
-        super::mesh::grid_surface(py, slf, element_type, size, band, coarsen, all_quad)
+        super::mesh::grid_surface(py, slf, element_type, size, band, all_quad)
     }
 
     /// Voir `pyrucast.mesh.pave_volume`.
