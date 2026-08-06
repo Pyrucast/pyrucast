@@ -5,10 +5,12 @@
 //! close ([`close`]). Two things keep that from going wrong:
 //!
 //! - **the invariant.** The front is always a set of simple, pairwise disjoint
-//!   loops. Nothing is committed that would break it: a row whose quadrangles
-//!   are not all strictly convex, or whose new edges would cross the front, is
-//!   refused and retried closer in. Every such decision goes through the exact
-//!   predicate in [`geom`], so it is a fact and not an estimate.
+//!   loops, each still turning the way it was born — material on its left.
+//!   Nothing is committed that would break it: a row whose quadrangles are not
+//!   all strictly convex, whose new edges would cross the front, or that would
+//!   leave its loop reversed, is refused and retried closer in. Every such
+//!   decision goes through the exact predicate in [`geom`], so it is a fact
+//!   and not an estimate.
 //! - **the way out.** When two parts of the front come within touching
 //!   distance they are seamed together ([`Front::merge`](front::Front::merge)),
 //!   which splits a loop in two where the domain is concave and joins two loops
@@ -24,14 +26,18 @@ pub mod cleanup;
 pub mod close;
 pub mod front;
 pub mod geom;
+pub mod grid;
 pub mod proximity;
 pub mod row;
 pub mod smooth;
 
-use crate::atoms::{NodeId, Point2};
+use crate::aggregate::Aggregate;
+use crate::atoms::{ElementType, Node, NodeId, Point2};
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::Cancel;
-use crate::ops::mesh::contour::Domain;
+use crate::ops::mesh::contour::{Contour, Domain};
+use crate::store::insert;
 use front::Front;
 use geom::segments_cross;
 use proximity::EdgeGrid;
@@ -62,8 +68,8 @@ const CHORD_CANDIDATES: usize = 8;
 /// Stalled turns tolerated on one loop before it is closed outright.
 const MAX_STALL: u32 = 2;
 
-/// Largest fold, in units of the target cell's area, written off as two
-/// fronts grazing rather than reported as a region that could not be meshed.
+/// Widest fold, in units of the target size, written off as two fronts
+/// grazing rather than reported as a region that could not be meshed.
 const FOLD_TOLERANCE: f64 = 0.5;
 
 /// Smoothing sweeps run over the finished mesh.
@@ -120,6 +126,41 @@ pub fn pave(
     all_quad: bool,
     cancel: &dyn Cancel,
 ) -> Result<Fabric> {
+    pave_inner(domain, target, all_quad, None, cancel)
+}
+
+/// Pave `domain` around a structured core: a tensor grid ([`grid`]) fills the
+/// inside, and the front paves only what the grid could not reach.
+///
+/// The grid shares the contour's nodes wherever a grid node lands on one, so
+/// the two boundaries have edges in common; those cancel, and what is left is
+/// the band. On a rectilinear domain laid out for the grid, nothing is left.
+///
+/// A leftover loop that belongs entirely to the core is **frozen**: it stays
+/// live, so the front sees it, keeps clear of it and seams onto it, but lays
+/// no row of its own. That is the whole difference from treating the core as
+/// an ordinary hole. With two live fronts the collision line floats wherever
+/// the two happen to meet, and it is that line that carries the valence
+/// defects; with one, the front *lands*, on an interface that was chosen.
+///
+/// `band` is extra clearance in cells — see [`grid_surface`](fn@super::grid_surface).
+pub fn pave_grid(
+    domain: &Domain,
+    target: Option<f64>,
+    all_quad: bool,
+    band: usize,
+    cancel: &dyn Cancel,
+) -> Result<Fabric> {
+    pave_inner(domain, target, all_quad, Some(band), cancel)
+}
+
+fn pave_inner(
+    domain: &Domain,
+    target: Option<f64>,
+    all_quad: bool,
+    band: Option<usize>,
+    cancel: &dyn Cancel,
+) -> Result<Fabric> {
     let mut fab = Fabric {
         pts: Vec::new(),
         movable: Vec::new(),
@@ -170,10 +211,27 @@ pub fn pave(
         }
     }
 
+    // ── The structured core, when one was asked for ───────────────────────
+    // It writes its cells straight into the fabric and hands back the loops of
+    // what is left to fill: the contour, the core's boundary, and neither
+    // where the two meet. A loop that is entirely the core's is *frozen* — it
+    // bounds the band on the inside and is landed on, never advanced from.
+    // Anything else, including a loop that runs partly along each, advances
+    // normally.
+    let seeds: Vec<(Vec<u32>, bool)> = match band {
+        None => loops.iter().map(|l| (l.clone(), false)).collect(),
+        Some(band) => grid::build(&mut fab, domain, &loops, target, band).band,
+    };
+
     let mut front = Front::new();
     let mut stack: Vec<(u32, u32)> = Vec::new();
-    for verts in &loops {
-        if verts.len() >= 3 {
+    for (verts, frozen) in &seeds {
+        if verts.len() < 3 {
+            continue;
+        }
+        if *frozen {
+            front.add_frozen_loop(verts);
+        } else {
             stack.push((front.add_loop(verts), 0));
         }
     }
@@ -253,6 +311,65 @@ pub fn pave(
     Ok(fab)
 }
 
+/// Turn the per-domain fabrics into a `Mesh` on the contour's own `Coords`.
+///
+/// `op` names the calling operator and only ever appears in the error.
+pub fn materialize(parsed: &Contour, fabrics: Vec<Fabric>, op: &str) -> Result<Mesh> {
+    let coords = &parsed.coords;
+    let mut quad_sub: Option<SubMesh> = None;
+    let mut tri_sub: Option<SubMesh> = None;
+    let mut kept: Vec<Node> = Vec::new();
+
+    for fab in fabrics {
+        let mut flat: Vec<NodeId> = fab.contour_ids.clone();
+        for p in &fab.pts[fab.contour_ids.len()..] {
+            let node = Node::create_in(coords.clone(), &parsed.frame.to_world(*p, parsed.dim))?;
+            flat.push(node.id());
+            kept.push(node);
+        }
+        if !fab.quads.is_empty() {
+            let sub =
+                quad_sub.get_or_insert_with(|| SubMesh::new(coords.clone(), ElementType::QUA4));
+            for q in &fab.quads {
+                sub.add_cell(&[
+                    flat[q[0] as usize],
+                    flat[q[1] as usize],
+                    flat[q[2] as usize],
+                    flat[q[3] as usize],
+                ])?;
+            }
+        }
+        if !fab.tris.is_empty() {
+            let sub =
+                tri_sub.get_or_insert_with(|| SubMesh::new(coords.clone(), ElementType::TRI3));
+            for t in &fab.tris {
+                sub.add_cell(&[
+                    flat[t[0] as usize],
+                    flat[t[1] as usize],
+                    flat[t[2] as usize],
+                ])?;
+            }
+        }
+    }
+
+    let mut mesh = Mesh::empty();
+    if let Some(q) = quad_sub {
+        if q.cell_count() > 0 {
+            mesh.add_sub(insert(q))?;
+        }
+    }
+    if let Some(t) = tri_sub {
+        if t.cell_count() > 0 {
+            mesh.add_sub(insert(t))?;
+        }
+    }
+    drop(kept);
+    if mesh.is_empty() {
+        return Err(PyrucastError::Message(format!("{op}: produced no cell")));
+    }
+    Ok(mesh)
+}
+
 /// Drop the nodes no cell refers to any more — the ones a doublet removal
 /// took out — and renumber the rest. Contour nodes are kept whatever happens:
 /// they are the caller's, and they occupy the first entries by construction.
@@ -314,13 +431,15 @@ fn try_row(
     // The advance follows the front's own spacing, pulled toward the target so
     // an unevenly discretised contour converges to the wanted size instead of
     // propagating its own irregularity inward for ever.
-    let base: Vec<f64> = (0..n)
+    let mut base: Vec<f64> = (0..n)
         .map(|i| {
             let span = 0.5 * ((p[(i + 1) % n] - p[i]).norm() + (p[i] - p[(i + n - 1) % n]).norm());
             (0.5 * span + 0.5 * target).clamp(0.5 * target, 2.0 * target)
         })
         .collect();
+    aim_at_frozen(front, fab, &p, &mut base, target);
     let grid = EdgeGrid::build(front, &fab.pts, target);
+    let was = crate::ops::mesh::triangulation::signed_area(&p);
 
     let mut scale = vec![1.0f64; n];
     for _ in 0..RETREAT_STEPS {
@@ -328,7 +447,7 @@ fn try_row(
         let want = |i: usize| base[i];
         match row::plan(front, &fab.pts, rep, &sz, &want, all_quad) {
             Ok(plan) => {
-                if chain_is_free(front, fab, &grid, &plan) {
+                if keeps_orientation(&plan, was) && chain_is_free(front, fab, &grid, &plan) {
                     let out = commit(fab, front, rep, plan);
                     if let Some(new_rep) = out {
                         relax_front(fab, front, new_rep);
@@ -354,6 +473,67 @@ fn try_row(
         }
     }
     None
+}
+
+/// How far ahead a frozen loop still counts as the thing being aimed at.
+const AIM_RANGE: f64 = 4.5;
+
+/// Shorten the advance so the front *lands* on a frozen loop instead of
+/// creeping up to it.
+///
+/// Without this, a front facing a structured core two cells away asks for a
+/// full-size row, which would cross the core; the row is refused, retried at
+/// 55 % of the distance, refused again, and the band ends up filled with three
+/// or four squashed rows where two square ones belonged. The retreat is a
+/// reaction to a collision, and it has no idea a collision is *coming*.
+///
+/// So each front node that can see a frozen loop within a few cells divides
+/// the distance to it into the whole number of rows that comes closest to the
+/// target size, and asks for exactly that. The last of those rows arrives on
+/// the core, where the seam takes over. A node that sees no frozen loop keeps
+/// the advance it had.
+fn aim_at_frozen(front: &Front, fab: &Fabric, p: &[Point2], base: &mut [f64], target: f64) {
+    let frozen: Vec<Point2> = front
+        .frozen_slots()
+        .map(|s| fab.pts[front.vertex(s) as usize])
+        .collect();
+    if frozen.is_empty() {
+        return;
+    }
+    let reach = AIM_RANGE * target;
+    let cells = proximity::PointGrid::build(&frozen, target);
+    for (i, b) in base.iter_mut().enumerate() {
+        if let Some(d) = cells.nearest_within(&frozen, p[i], reach) {
+            let rows = (d / target).round().max(1.0);
+            *b = (d / rows).clamp(0.5 * target, 2.0 * target);
+        }
+    }
+}
+
+/// Does the advanced loop still turn the same way as the one it replaces?
+///
+/// A row *consumes* material, so it can only ever shrink the region its loop
+/// bounds — never turn it inside out. The two are told apart by the sign of
+/// the signed area, and not by its magnitude: an outer loop shrinks toward
+/// zero from above, a hole's front grows away from zero from below, and both
+/// keep their sign for as long as they live.
+///
+/// The row that breaks this is the one laid on a ring already thinner than the
+/// cell it wants to lay — two fronts that met head-on and left a slither
+/// between them. Its quadrangles pass every local test, the chain crosses
+/// nothing, and the loop comes out reversed. From then on each further row
+/// *inflates* it: it leaves the material, balloons, and drags every seam it
+/// meets out with it, surfacing much later as a fold nowhere near where it
+/// began. Refusing the row here leaves the slither for [`close_loop`], which
+/// fills or welds it in place.
+fn keeps_orientation(plan: &RowPlan, was: f64) -> bool {
+    if plan.chain.len() < 3 {
+        // The loop closed on itself; there is no successor to orient.
+        return true;
+    }
+    let ring: Vec<Point2> = plan.chain.iter().map(|&i| plan.pts[i as usize]).collect();
+    let now = crate::ops::mesh::triangulation::signed_area(&ring);
+    now == 0.0 || was == 0.0 || now.is_sign_positive() == was.is_sign_positive()
 }
 
 /// Would the advanced front still be a set of simple, disjoint loops?
@@ -486,8 +666,16 @@ fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32, target: f64) -> Res
         // Two fronts meeting head-on normally leave a slither of overlap
         // between them, which is degenerate and covers nothing; discarding
         // that is right. What is not right is discarding a region that was
-        // supposed to hold cells, so the two are told apart by size.
-        if -area <= FOLD_TOLERANCE * target * target {
+        // supposed to hold cells, so the two are told apart by **width**, not
+        // by area: a slither is thin however long it runs, and one spanning
+        // twenty edges encloses twenty times the area of one spanning a single
+        // edge without being any more of a region. Mean width is `2·area/P`,
+        // so the test puts `-area` against half the perimeter times the width
+        // tolerated.
+        let perimeter: f64 = (0..poly.len())
+            .map(|i| (poly[(i + 1) % poly.len()] - poly[i]).norm())
+            .sum();
+        if -area <= FOLD_TOLERANCE * target * 0.5 * perimeter {
             // Two lines of front lying on top of each other. Welding them
             // shut costs nothing and leaves the mesh whole; simply dropping
             // the ring would leave a crack behind, and a crack is a hole in

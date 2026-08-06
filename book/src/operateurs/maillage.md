@@ -26,6 +26,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `symmetry_plane(mesh, a, b, c)` | **copie** symétrique par rapport au **plan** passant par trois points (3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `pave_surface(contour, type, size=None, all_quad=False)` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
+| `grid_surface(contour, type, size=None, band=0, all_quad=False)` | maille les mêmes contours **orientés** par **cœur en grille** cartésienne et **bande frontale** au bord : sur une forme rectilinéaire, la grille régulière que le front ne sait pas produire (voir plus bas) |
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
@@ -573,9 +574,22 @@ invariant n'est jamais supposé, il est **maintenu**.
    qui découpent le secteur en \\( k \\) parts égales.
 2. **Refus et retrait.** Un quadrangle non strictement convexe a un jacobien
    négatif à son coin rentrant : aucun code éléments finis ne peut l'intégrer.
-   Une rangée qui en produirait un, ou dont les arêtes croiseraient le front,
-   est **refusée** ; le planificateur dit *quels* nœuds sont en cause, et la
-   rangée est reprise moins loin à cet endroit seulement.
+   Une rangée qui en produirait un, dont les arêtes croiseraient le front, ou
+   qui laisserait sa boucle **retournée**, est **refusée** ; le planificateur
+   dit *quels* nœuds sont en cause, et la rangée est reprise moins loin à cet
+   endroit seulement. Le retournement est le cas subtil : une rangée consomme
+   de la matière, elle ne peut donc que rétrécir la région bornée par sa
+   boucle, jamais en inverser le sens. Celle qui le fait est celle posée sur
+   une **lèvre** — le résidu que deux fronts se rencontrant de face laissent
+   entre eux, déjà plus mince que la maille voulue. Ses quadrangles passent
+   tous les tests locaux, sa chaîne ne croise rien, et la boucle ressort à
+   l'envers ; à partir de là chaque rangée suivante la *gonfle* au lieu de la
+   réduire, jusqu'à sortir de la matière et entraîner avec elle toute couture
+   rencontrée. Le signe de l'aire orientée distingue les deux cas sans
+   ambiguïté — une boucle extérieure décroît vers zéro par le haut, le front
+   d'un trou s'en éloigne par le bas, et chacune garde son signe sa vie
+   durant. La lèvre refusée est laissée à la fermeture, qui la remplit ou la
+   soude sur place.
 3. **Couture.** Deux nœuds de front qui se rapprochent à moins d'environ une
    demi-maille sont **identifiés**. La même opération *scinde* une boucle
    quand les deux nœuds lui appartiennent — c'est ainsi qu'une géométrie
@@ -759,6 +773,144 @@ et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
   comportant des coins, ou un contour discrétisé près de la taille visée, ne
   rencontre pas ce cas.
 - Pas de champ de taille variable : `size` est uniforme par domaine.
+- **Un rectangle ne donne pas une grille.** C'est la limite de fond, et elle
+  n'est pas réparable dans un paveur frontal : quatre fronts partis des quatre
+  côtés se rencontrent en quatre coutures diagonales convergeant vers deux
+  points singuliers. Sur un rectangle 0,6 × 0,3 à 0,02, le paveur rend 650
+  mailles et 6 triangles là où la grille en demande 450. Pour une forme
+  rectilinéaire, c'est `grid_surface` qu'il faut.
+
+## Cœur en grille, bande frontale : `grid_surface`
+
+`grid_surface(contour, element_type, size=None, band=0, all_quad=False)` prend
+la même entrée que `pave_surface`, rend la même chose, et tient la même
+promesse — **le contour est intouchable**. Seul l'intérieur est obtenu
+autrement.
+
+### Pourquoi
+
+Les deux familles de mailleur quadrangulaire échouent aux endroits **opposés**.
+
+Un **front** est parfait là où il part : sa première rangée épouse exactement
+le contour. Il est douteux là où deux de ses rangées se rencontrent, parce
+qu'il lui faut y réconcilier deux discrétisations qui n'ont aucune raison de
+s'accorder. C'est cette ligne-là qui porte les défauts de valence, les
+triangles résiduels et les mailles aplaties.
+
+Une **grille** est le miroir exact : chaque maille qu'elle pose est un
+rectangle par construction, et toute sa difficulté est au bord.
+
+Prendre l'intérieur de la grille et le bord du front ne laisse donc ni l'une ni
+l'autre faiblesse.
+
+### Méthode
+
+1. **Les lignes de la grille viennent du contour**, pas de la boîte
+   englobante. Toute arête axiale assez longue pour être une caractéristique
+   fixe une ligne à sa coordonnée, et les intervalles entre lignes
+   consécutives sont subdivisés uniformément à peu près à `size`. Un contour
+   sans aucune arête axiale — un cercle — ne fixe rien et on retombe
+   proprement sur la grille uniforme.
+2. **Les mailles entièrement dans la matière sont gardées.** Une arête de bord
+   posée exactement sur une ligne de grille ne coupe *aucune* des deux mailles
+   qu'elle sépare : elle passe entre elles.
+3. **Un nœud de grille qui tombe sur un nœud du contour *est* ce nœud** — le
+   même sommet, pas une copie. Le cœur rejoint donc le bord au lieu de
+   s'arrêter à un cheveu de lui.
+4. **Le cœur recule seulement là où il ne rejoint pas le contour.** Une face
+   du cœur dont les deux extrémités sont des nœuds du contour et qui est un
+   segment du contour est finie ; ailleurs le cœur s'arrête *près* du bord, à
+   une distance quelconque entre zéro et une maille, et la maille derrière
+   cette face est retirée pour laisser au front une maille pleine où
+   travailler. `band` en retire davantage.
+5. **La bande à paver est le contour et le bord du cœur moins les arêtes
+   communes** : un segment parcouru une fois dans chaque sens ne borne rien.
+   Sur un domaine rectilinéaire posé sur la grille, il ne reste rien du tout,
+   aucun front ne tourne, et le maillage *est* la grille.
+6. **Une boucle restante entièrement issue du cœur est gelée.** Elle reste
+   vivante — le front la voit, s'en écarte, se coud dessus — mais ne pose
+   aucune rangée. Deux fronts vivants se rencontrent où ça tombe ; un seul
+   front **atterrit**, sur une interface qu'on a choisie.
+
+### Le contour doit être discrétisé pour une grille
+
+C'est la seule chose demandée à l'appelant, et c'est une vraie contrainte. Une
+grille ne peut rejoindre qu'un contour dont les nœuds tombent sur ses lignes,
+et ses lignes sont dictées par la forme elle-même.
+
+Soit un profil de 0,6 de large fait de neuf créneaux. Les créneaux posent une
+ligne tous les 0,0667 ; des mailles de 0,00375 donnent donc 18 colonnes par
+créneau, à 0,0037037. Une base discrétisée d'un seul tenant en 160 segments de
+0,00375 les manque **toutes**, de 1,2 % — assez pour qu'aucun nœud ne soit
+partagé et que tout le bord retombe sur le front. Couper cette base sous chaque
+créneau, pour que chaque morceau prenne ses 18 segments, ne coûte rien et
+partage tous les nœuds.
+
+La règle est donc : **couper chaque côté aux angles de la forme, et laisser
+chaque morceau prendre un nombre entier de mailles.** Rien ne le vérifie, parce
+qu'un contour qui ne le fait pas n'est pas une erreur — il obtient simplement
+plus de bande et moins de grille.
+
+### Exemple Python
+
+```python
+import pyrucast as pc
+
+H = 0.02  # taille visée
+coords = pc.Coords(2)
+
+# Un L. Chaque côté est coupé en un nombre entier de mailles de H, donc
+# tous ses nœuds tombent sur les lignes que la grille tirera des angles.
+angles = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.2), (0.3, 0.2), (0.3, 0.4), (0.0, 0.4)]
+noeuds = [coords.add_node(list(p)) for p in angles]
+
+contour = None
+for i, a in enumerate(angles):
+    b = angles[(i + 1) % len(angles)]
+    n = round(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5 / H)
+    seg = pc.mesh.line(noeuds[i], noeuds[(i + 1) % len(angles)], n)
+    contour = seg if contour is None else contour | seg
+contour = pc.mesh.consolidate(contour)
+
+maillage = pc.mesh.grid_surface(contour, "QUA4", size=H)
+print(maillage.element_types())  # ['QUA4'] — aucun triangle
+print(maillage.cell_count())  # 450 : la grille exacte du L
+```
+
+### Qualité
+
+Le profil crénelé de 0,6 × 0,3 à sept angles rentrants, taille visée 0,00375 :
+
+| | `pave_surface` | `grid_surface` |
+|---|---|---|
+| mailles | 7 597 QUA4 + 24 TRI3 | **4 032 QUA4, 0 TRI3** |
+| jacobien normalisé — min | 0,241 | **1,000** |
+| jacobien normalisé — médiane | 0,998 | **1,000** |
+| mailles sous 0,7 | 3,78 % | **0** |
+| aire couverte | exacte | exacte |
+
+Moitié moins de mailles pour une qualité parfaite. Sur un rectangle 0,6 × 0,3
+à 0,02 : 450 mailles de jacobien 1, contre 650 et 6 triangles.
+
+### Pièges
+
+- **`band` vaut 0 et c'est la bonne valeur.** Le cœur recule déjà d'une maille
+  partout où il ne rejoint pas le contour. Ne l'augmentez que pour éloigner
+  volontairement l'interface du bord.
+- **Une forme tournée** de 30° n'a plus aucune arête axiale : la grille
+  retombe sur la boîte englobante, le cœur devient un escalier, et la bande
+  reprend tout le travail. La méthode brille sur les formes alignées sur les
+  axes.
+- Pas de gradation : la grille est uniforme par intervalle entre lignes. Un
+  quadtree la graduerait, avec la règle 2:1 et des gabarits de transition —
+  ce n'est pas fait.
+
+### Dégradation
+
+Une région trop mince pour tenir une seule maille de cœur n'en reçoit aucune,
+et le front la pave seul, exactement comme `pave_surface`. Un contour hors
+grille reçoit une bande large et le même traitement. La dégradation est
+**continue** : au pire la qualité du paveur frontal, jamais une erreur.
 
 ## Couche limite hexaédrique : `pave_volume`
 

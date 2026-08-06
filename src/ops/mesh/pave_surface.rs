@@ -52,13 +52,11 @@
 //! triangles to a cell with a negative Jacobian, and validity is never traded
 //! away.
 
-use crate::aggregate::Aggregate;
-use crate::atoms::{ElementType, Node, NodeId};
-use crate::containers::mesh::{Mesh, SubMesh};
+use crate::atoms::ElementType;
+use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use crate::ops::mesh::{contour, paving};
-use crate::store::insert;
 
 /// Pave the interior of `contour` — one or more closed `SEG2` loops, counter-
 /// clockwise outer and clockwise holes, per [`super::border()`]'s convention —
@@ -115,69 +113,10 @@ pub fn pave_surface_cancellable(
         fabrics.push(paving::pave(d, target_size, all_quad, cancel)?);
     }
 
-    let qua4 = materialize(&parsed, fabrics)?;
+    let qua4 = paving::materialize(&parsed, fabrics, "pave_surface")?;
     // The quad family only; the up-front validation above already rejected
     // anything else, so the error arm is unreachable here.
     super::sweep::finish_surface(qua4, element_type, "pave_surface")
-}
-
-/// Turn the per-domain fabrics into a `Mesh` on the contour's own `Coords`.
-fn materialize(parsed: &contour::Contour, fabrics: Vec<paving::Fabric>) -> Result<Mesh> {
-    let coords = &parsed.coords;
-    let mut quad_sub: Option<SubMesh> = None;
-    let mut tri_sub: Option<SubMesh> = None;
-    let mut kept: Vec<Node> = Vec::new();
-
-    for fab in fabrics {
-        let mut flat: Vec<NodeId> = fab.contour_ids.clone();
-        for p in &fab.pts[fab.contour_ids.len()..] {
-            let node = Node::create_in(coords.clone(), &parsed.frame.to_world(*p, parsed.dim))?;
-            flat.push(node.id());
-            kept.push(node);
-        }
-        if !fab.quads.is_empty() {
-            let sub =
-                quad_sub.get_or_insert_with(|| SubMesh::new(coords.clone(), ElementType::QUA4));
-            for q in &fab.quads {
-                sub.add_cell(&[
-                    flat[q[0] as usize],
-                    flat[q[1] as usize],
-                    flat[q[2] as usize],
-                    flat[q[3] as usize],
-                ])?;
-            }
-        }
-        if !fab.tris.is_empty() {
-            let sub =
-                tri_sub.get_or_insert_with(|| SubMesh::new(coords.clone(), ElementType::TRI3));
-            for t in &fab.tris {
-                sub.add_cell(&[
-                    flat[t[0] as usize],
-                    flat[t[1] as usize],
-                    flat[t[2] as usize],
-                ])?;
-            }
-        }
-    }
-
-    let mut mesh = Mesh::empty();
-    if let Some(q) = quad_sub {
-        if q.cell_count() > 0 {
-            mesh.add_sub(insert(q))?;
-        }
-    }
-    if let Some(t) = tri_sub {
-        if t.cell_count() > 0 {
-            mesh.add_sub(insert(t))?;
-        }
-    }
-    drop(kept);
-    if mesh.is_empty() {
-        return Err(PyrucastError::Message(
-            "pave_surface: produced no cell".into(),
-        ));
-    }
-    Ok(mesh)
 }
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────
@@ -185,7 +124,9 @@ fn materialize(parsed: &contour::Contour, fabrics: Vec<paving::Fabric>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atoms::Point2;
+    use crate::aggregate::Aggregate;
+    use crate::atoms::{Node, NodeId, Point2};
+    use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
     use crate::store::{insert, read};
     use std::collections::HashMap;
@@ -373,6 +314,47 @@ mod tests {
         // the front graze each other the remnant between them is dropped
         // rather than filled with cells no solver could integrate.
         assert!((r.area - 2.5).abs() < 1e-3, "area {}", r.area);
+    }
+
+    #[test]
+    fn narrow_bands_meeting_head_on_do_not_turn_the_front_inside_out() {
+        // A crenellated profile: two full-height towers with a run of shallow
+        // notches between them. Every band under a notch is only a handful of
+        // cells deep, so the front coming up from the base and the one coming
+        // down from the notch meet head-on all along it, leaving slithers
+        // behind. A row laid on a slither used to reverse its loop, after
+        // which every further row inflated it until it left the material
+        // entirely — reported, much later and far away, as a fold.
+        let coords = insert(Coords::new(2).unwrap());
+        let (u, v) = (0.6 / 9.0, 0.3 / 40.0);
+        let levels = [40.0, 3.0, 6.0, 4.0, 6.0, 4.0, 6.0, 3.0, 40.0];
+        let mut corners: Vec<(f64, f64)> = vec![(0.0, 0.0), (0.6, 0.0)];
+        for (i, l) in levels.iter().enumerate().rev() {
+            corners.push(((i + 1) as f64 * u, l * v));
+            corners.push((i as f64 * u, l * v));
+        }
+
+        let size = 2.0 * v / 4.0; // four cells across the shortest step
+        let mut pts = Vec::new();
+        let n = corners.len();
+        for i in 0..n {
+            let (a, b) = (corners[i], corners[(i + 1) % n]);
+            let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+            let k = (len / size).round().max(4.0) as usize;
+            for j in 0..k {
+                let t = j as f64 / k as f64;
+                pts.push((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1)));
+            }
+        }
+
+        let contour = loop_mesh(coords, &pts);
+        let mesh = pave_surface(&contour, ElementType::QUA4, Some(size), false).unwrap();
+        let r = inspect(&mesh);
+        assert_eq!(r.non_conforming, 0);
+        assert!(r.min_quality > 0.0, "min quality {}", r.min_quality);
+        // 0.6 × 0.3 towers over a 0.6-wide base, minus the notches.
+        let area: f64 = levels.iter().map(|l| u * l * v).sum();
+        assert!((r.area - area).abs() < 1e-3, "area {} for {area}", r.area);
     }
 
     #[test]

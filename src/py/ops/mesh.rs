@@ -798,6 +798,58 @@ pub fn pave_surface(
     Ok(PyMesh { inner: mesh })
 }
 
+/// Mesh the inside of a closed contour with a structured grid core and a
+/// frontal band — the regular-mesh companion of `pave_surface`.
+///
+/// Same input, same output, same promise that the contour is untouchable: only
+/// the interior is obtained differently. `pave_surface` walks a front inward
+/// until two of its rows meet, and that meeting line carries the valence
+/// defects, the leftover triangles and the flattest cells — even on a plain
+/// rectangle, which comes out as an onion with four diagonal seams.
+/// `grid_surface` lays a tensor grid instead, and leaves the front only what
+/// the grid could not reach.
+///
+/// The grid's lines are taken from the contour: every axis-aligned edge long
+/// enough to be a feature pins a line, and the gaps are subdivided at about
+/// `size`. A grid node landing on a contour node **is** that node, so the core
+/// reaches the boundary rather than stopping short of it. On a rectilinear
+/// domain laid out for the grid there is no band at all and the mesh is the
+/// grid: every cell a rectangle, every Jacobian 1, no triangle.
+///
+/// That last part is the one thing asked of the caller. A grid can only meet a
+/// contour whose nodes fall on grid lines, so **break every side at the
+/// shape's own corners and let each piece take a whole number of cells**. A
+/// contour that does not is not an error — it just gets more band and less
+/// grid, down to the quality of `pave_surface` in the worst case.
+///
+/// `band` is extra clearance in cells between the core and the contour. Zero
+/// is the useful value; raise it only for a contour the grid cannot meet, such
+/// as a curve, where giving the front a couple of cells to work in beats
+/// letting it fight for a sliver.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (contour, element_type, size=None, band=0, all_quad=false))]
+pub fn grid_surface(
+    py: Python<'_>,
+    contour: PyRef<PyMesh>,
+    element_type: &str,
+    size: Option<f64>,
+    band: usize,
+    all_quad: bool,
+) -> PyResult<PyMesh> {
+    let et = ElementType::from_name(element_type)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
+    let mesh = crate::ops::mesh::grid_surface_cancellable(
+        &contour.inner,
+        et,
+        size,
+        band,
+        all_quad,
+        &PySignals(py),
+    )?;
+    Ok(PyMesh { inner: mesh })
+}
+
 /// Mesh the inside of a closed envelope with a hexahedral boundary layer over
 /// a tetrahedral core — the 3-D companion of `pave_surface`.
 ///
@@ -1286,6 +1338,19 @@ impl PyMesh {
         all_quad: bool,
     ) -> PyResult<PyMesh> {
         super::mesh::pave_surface(py, slf, element_type, size, all_quad)
+    }
+
+    /// Voir `pyrucast.mesh.grid_surface`.
+    #[pyo3(signature = (element_type, size=None, band=0, all_quad=false))]
+    fn grid_surface(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        element_type: &str,
+        size: Option<f64>,
+        band: usize,
+        all_quad: bool,
+    ) -> PyResult<PyMesh> {
+        super::mesh::grid_surface(py, slf, element_type, size, band, all_quad)
     }
 
     /// Voir `pyrucast.mesh.pave_volume`.

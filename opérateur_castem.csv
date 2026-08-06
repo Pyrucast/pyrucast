@@ -6,7 +6,7 @@ Maillage - création;C (CERC);Arc de cercle par 3 points;arc
 Maillage - création;COUR;Maille une courbe quelconque;—
 Maillage - création;CONT;Extrait le contour (frontière) d'une surface;border
 Maillage - création;ENVE;Extrait l'enveloppe (peau) d'un volume, découpée par face plane;skin
-Maillage - création;SURF;Maille une surface délimitée par un contour fermé;triangulate_surface / pave_surface
+Maillage - création;SURF;Maille une surface délimitée par un contour fermé;triangulate_surface / pave_surface / grid_surface
 Maillage - création;DALL;Surface structurée entre 4 côtés (interpolation transfinie);transfinite
 Maillage - création;REGL;Surface réglée entre deux lignes;—
 Maillage - création;PAVE;Maille un pavé / bloc volumique structuré;—

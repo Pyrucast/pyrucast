@@ -40,6 +40,7 @@ NO_PYTHON_MODULE = {
 RUST_ONLY = {
     # Variantes `*_cancellable` : côté Python, l'interruption est branchée dans
     # le wrapper de la fonction nominale, pas exposée comme une fonction à part.
+    "grid_surface_cancellable": "l'interruption est câblée dans le wrapper nominal",
     "pave_surface_cancellable": "l'interruption est câblée dans le wrapper nominal",
     "pave_volume_cancellable": "l'interruption est câblée dans le wrapper nominal",
     "triangulate_surface_cancellable": "l'interruption est câblée dans le wrapper nominal",

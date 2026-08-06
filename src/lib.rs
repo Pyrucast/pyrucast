@@ -115,6 +115,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::convert, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::triangulate_volume, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::triangulate_surface, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::grid_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::pave_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::pave_volume, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::to_poi1, m)?)?;

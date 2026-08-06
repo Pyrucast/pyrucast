@@ -34,6 +34,9 @@ struct Slot {
     prev: u32,
     next: u32,
     alive: bool,
+    /// A slot the paver may see but never advance — the boundary of a
+    /// structured core. See [`Front::add_frozen_loop`].
+    frozen: bool,
 }
 
 /// The advancing front. Slots are addressed by stable indices and recycled
@@ -56,6 +59,7 @@ impl Front {
                 prev: i,
                 next: i,
                 alive: true,
+                frozen: false,
             };
             i
         } else {
@@ -65,6 +69,7 @@ impl Front {
                 prev: i,
                 next: i,
                 alive: true,
+                frozen: false,
             });
             i
         }
@@ -85,6 +90,32 @@ impl Front {
             self.link(slots[i], slots[(i + 1) % n]);
         }
         slots[0]
+    }
+
+    /// Add a loop the paver must never advance: it takes part in every
+    /// proximity test, keeps the front clear of what it bounds, and is seamed
+    /// onto like any other — but no row is ever laid from it.
+    ///
+    /// This is how a structured core enters the front. Left as an ordinary
+    /// loop it would advance too, and the two fronts would collide somewhere
+    /// in the middle of the band; frozen, it is *landed on* instead, at a
+    /// place the caller chose.
+    pub fn add_frozen_loop(&mut self, verts: &[u32]) -> u32 {
+        let rep = self.add_loop(verts);
+        for s in self.loop_slots(rep) {
+            self.slots[s as usize].frozen = true;
+        }
+        rep
+    }
+
+    #[inline]
+    pub fn is_frozen(&self, s: u32) -> bool {
+        self.slots[s as usize].frozen
+    }
+
+    /// Every live slot of a frozen loop, in index order.
+    pub fn frozen_slots(&self) -> impl Iterator<Item = u32> + '_ {
+        self.live_slots().filter(|&s| self.is_frozen(s))
     }
 
     #[inline]

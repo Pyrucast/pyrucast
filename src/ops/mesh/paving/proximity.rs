@@ -144,6 +144,90 @@ impl EdgeGrid {
     }
 }
 
+/// The same uniform grid, over points rather than edges.
+///
+/// [`EdgeGrid`] answers "what might this segment hit"; this one answers "how
+/// far is the nearest of *these* points", which is what a row about to land on
+/// a frozen core needs. Reusing `EdgeGrid` with degenerate segments would
+/// work, but it would report bucket contents and leave the caller to measure —
+/// the measuring is the whole question here.
+pub struct PointGrid {
+    lo: Point2,
+    cell: f64,
+    nx: usize,
+    ny: usize,
+    buckets: Vec<Vec<u32>>,
+}
+
+impl PointGrid {
+    pub fn build(pts: &[Point2], hint: f64) -> PointGrid {
+        let (mut lo, mut hi) = (
+            Point2::new(f64::INFINITY, f64::INFINITY),
+            Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+        );
+        for p in pts {
+            lo.x = lo.x.min(p.x);
+            lo.y = lo.y.min(p.y);
+            hi.x = hi.x.max(p.x);
+            hi.y = hi.y.max(p.y);
+        }
+        let n = pts.len().max(1);
+        if !lo.x.is_finite() {
+            lo = Point2::origin();
+            hi = Point2::origin();
+        }
+        let (w, h) = ((hi.x - lo.x).max(hint), (hi.y - lo.y).max(hint));
+        let cell = hint.max((w * h / n as f64).sqrt()).max(1e-300);
+        let nx = ((w / cell).ceil() as usize + 1).min(n + 2);
+        let ny = ((h / cell).ceil() as usize + 1).min(n + 2);
+        let mut g = PointGrid {
+            lo,
+            cell,
+            nx,
+            ny,
+            buckets: vec![Vec::new(); nx * ny],
+        };
+        for (i, p) in pts.iter().enumerate() {
+            let k = g.bucket(*p);
+            g.buckets[k].push(i as u32);
+        }
+        g
+    }
+
+    fn bucket(&self, p: Point2) -> usize {
+        let x = (((p.x - self.lo.x) / self.cell).floor().max(0.0) as usize).min(self.nx - 1);
+        let y = (((p.y - self.lo.y) / self.cell).floor().max(0.0) as usize).min(self.ny - 1);
+        y * self.nx + x
+    }
+
+    /// Distance to the nearest indexed point, or `None` beyond `radius`.
+    pub fn nearest_within(&self, pts: &[Point2], q: Point2, radius: f64) -> Option<f64> {
+        self.nearest_index_within(pts, q, radius)
+            .map(|k| (pts[k] - q).norm())
+    }
+
+    /// Index of the nearest indexed point, or `None` beyond `radius`.
+    pub fn nearest_index_within(&self, pts: &[Point2], q: Point2, radius: f64) -> Option<usize> {
+        let reach = (radius / self.cell).ceil() as i64;
+        let cx = (((q.x - self.lo.x) / self.cell).floor() as i64).clamp(0, self.nx as i64 - 1);
+        let cy = (((q.y - self.lo.y) / self.cell).floor() as i64).clamp(0, self.ny as i64 - 1);
+        let mut best = radius;
+        let mut found = None;
+        for j in (cy - reach).max(0)..=(cy + reach).min(self.ny as i64 - 1) {
+            for i in (cx - reach).max(0)..=(cx + reach).min(self.nx as i64 - 1) {
+                for &k in &self.buckets[j as usize * self.nx + i as usize] {
+                    let d = (pts[k as usize] - q).norm();
+                    if d <= best {
+                        best = d;
+                        found = Some(k as usize);
+                    }
+                }
+            }
+        }
+        found
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
