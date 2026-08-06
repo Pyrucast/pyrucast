@@ -28,6 +28,26 @@ use super::geom::{quad_quality, tri_quality};
 use crate::atoms::{Point2, Vector2};
 use crate::parallel::*;
 
+/// How a candidate position is proposed. The guard that decides whether to
+/// accept it is the same either way — that separation is what makes adding a
+/// rule a matter of one formula.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Rule {
+    /// Barycentre of the one-ring, under-relaxed. Cheap, and what the pavers
+    /// have always used between rows.
+    #[default]
+    Laplacian,
+    /// Each neighbour proposes the position that would make the angle it sees
+    /// symmetric, and the proposals are averaged.
+    ///
+    /// A quadrangle wants right angles, and the barycentre knows nothing about
+    /// angles: on a quadrangle mesh the two rules are not close. For each
+    /// neighbour `n` of `v`, the angle `∠(prev, n, next)` in the ordered ring
+    /// has a bisector; turning `n → v` onto that bisector, keeping its length,
+    /// is `n`'s proposal for where `v` belongs.
+    Angular,
+}
+
 /// Relaxation applied to the Laplacian step. Under-relaxing keeps the pass
 /// from overshooting on the freshly laid row, where neighbours are themselves
 /// still moving.
@@ -96,6 +116,40 @@ impl Incidence {
         inc
     }
 
+    /// The one-ring of `v` in cyclic order, or `None` when it does not close.
+    ///
+    /// Each incident element gives the ordered pair (previous, next) it sees
+    /// around `v`; chaining those pairs walks the ring. At an interior node of
+    /// a manifold mesh the chain closes on itself. At a boundary node it does
+    /// not — which costs nothing, since boundary nodes are pinned and never
+    /// asked for a position.
+    fn ordered_ring(&self, patch: &Patch, v: usize) -> Option<Vec<u32>> {
+        let mut next: Vec<(u32, u32)> = Vec::new();
+        for &e in self.elems_of(v) {
+            if e % 2 == 0 {
+                let c = patch.quads[(e / 2) as usize];
+                let t = c.iter().position(|&x| x as usize == v)?;
+                next.push((c[(t + 3) % 4], c[(t + 1) % 4]));
+            } else {
+                let c = patch.tris[(e / 2) as usize];
+                let t = c.iter().position(|&x| x as usize == v)?;
+                next.push((c[(t + 2) % 3], c[(t + 1) % 3]));
+            }
+        }
+        let start = next.first()?.0;
+        let mut ring = vec![start];
+        let mut cur = start;
+        for _ in 0..next.len() {
+            let step = next.iter().find(|(from, _)| *from == cur)?;
+            if step.1 == start {
+                return (ring.len() == next.len()).then_some(ring);
+            }
+            ring.push(step.1);
+            cur = step.1;
+        }
+        None
+    }
+
     #[inline]
     fn ring_of(&self, v: usize) -> &[u32] {
         &self.ring[self.ring_start[v] as usize..self.ring_start[v + 1] as usize]
@@ -141,6 +195,18 @@ pub fn smooth(
     active: Option<&[u32]>,
     iters: usize,
 ) {
+    smooth_with(pts, patch, inc, active, iters, Rule::default())
+}
+
+/// [`smooth`] under a chosen rule.
+pub fn smooth_with(
+    pts: &mut [Point2],
+    patch: &Patch,
+    inc: &Incidence,
+    active: Option<&[u32]>,
+    iters: usize,
+    rule: Rule,
+) {
     let owned: Vec<u32>;
     let nodes: &[u32] = match active {
         Some(a) => a,
@@ -159,16 +225,12 @@ pub fn smooth(
                 if !patch.movable[v] {
                     return None;
                 }
-                let ring = inc.ring_of(v);
-                if ring.is_empty() {
-                    return None;
-                }
-                let mut c = Vector2::zeros();
-                for &nb in ring {
-                    c += old[nb as usize].coords;
-                }
-                c /= ring.len() as f64;
-                let cand = Point2::from(old[v].coords * (1.0 - RELAX) + c * RELAX);
+                let cand = match rule {
+                    Rule::Laplacian => laplacian(inc, &old, v)?,
+                    Rule::Angular => {
+                        angular(patch, inc, &old, v).or_else(|| laplacian(inc, &old, v))?
+                    }
+                };
                 let before = worst_around(patch, inc, &old, v, old[v]);
                 let after = worst_around(patch, inc, &old, v, cand);
                 (after > 0.0 && after >= before).then_some((vi, cand))
@@ -184,6 +246,68 @@ pub fn smooth(
         }
         repair(pts, &old, patch, &mut moved);
     }
+}
+
+/// The one-ring's barycentre, under-relaxed.
+fn laplacian(inc: &Incidence, old: &[Point2], v: usize) -> Option<Point2> {
+    let ring = inc.ring_of(v);
+    if ring.is_empty() {
+        return None;
+    }
+    let mut c = Vector2::zeros();
+    for &nb in ring {
+        c += old[nb as usize].coords;
+    }
+    c /= ring.len() as f64;
+    Some(Point2::from(old[v].coords * (1.0 - RELAX) + c * RELAX))
+}
+
+/// The average of what each neighbour would want, angle-wise.
+///
+/// At a neighbour `n`, the edges `n → p` and `n → q` to its own ring
+/// neighbours open an angle, and `n → v` ought to **bisect** it: that is what
+/// makes the two cells meeting along `n → v` share the angle evenly instead of
+/// one being pinched. Turning `n → v` onto that bisector, keeping its length,
+/// is `n`'s proposal for where `v` belongs; the mean of the proposals is the
+/// candidate.
+///
+/// A quadrangle wants right angles and the barycentre knows nothing about
+/// angles, which is the whole reason this rule exists beside the Laplacian.
+///
+/// `None` when the ring does not close — a boundary node, which is pinned and
+/// never asked.
+fn angular(patch: &Patch, inc: &Incidence, old: &[Point2], v: usize) -> Option<Point2> {
+    let ring = inc.ordered_ring(patch, v)?;
+    let m = ring.len();
+    if m < 3 {
+        return None;
+    }
+    let mut sum = Vector2::zeros();
+    let mut count = 0usize;
+    for j in 0..m {
+        let n = old[ring[j] as usize];
+        let to_v = old[v] - n;
+        let to_p = old[ring[(j + m - 1) % m] as usize] - n;
+        let to_q = old[ring[(j + 1) % m] as usize] - n;
+        if to_v.norm() == 0.0 || to_p.norm() == 0.0 || to_q.norm() == 0.0 {
+            continue;
+        }
+        let mut bisector = to_p.normalize() + to_q.normalize();
+        if bisector.norm() == 0.0 {
+            continue; // p, n and q in line: no angle to bisect
+        }
+        bisector = bisector.normalize();
+        // The sum of two unit vectors bisects the angle they *enclose*, which
+        // is the reflex one when the corner turns the other way. Siding with
+        // where `v` already is picks the right half in both cases.
+        if bisector.dot(&to_v) < 0.0 {
+            bisector = -bisector;
+        }
+        sum += n.coords + bisector * to_v.norm();
+        count += 1;
+    }
+    let mean = Point2::from(sum / count.max(1) as f64);
+    (count > 0).then(|| Point2::from(old[v].coords * (1.0 - RELAX) + mean.coords * RELAX))
 }
 
 /// Put back every node the sweep left on an invalid element.

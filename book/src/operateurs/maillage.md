@@ -29,6 +29,9 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `grid_surface(contour, type, size=None, band=0, all_quad=False)` | maille les mêmes contours **orientés** par **cœur en grille** cartésienne et **bande frontale** au bord : sur une forme rectilinéaire, la grille régulière que le front ne sait pas produire (voir plus bas) |
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
+| `regularize(mesh, sweeps=20, angular=True, in_place=False)` | **lisse** un maillage de surface existant : déplace ses nœuds intérieurs pour améliorer ses mailles, sans toucher ni à la connectivité ni au bord (voir plus bas) |
+| `cleanup(mesh)` | **corrige la connectivité** d'un maillage de surface : doublets et valences fautives, par bascule de diagonale. Aucun nœud ne bouge (voir plus bas) |
+| `merge_triangles(mesh)` | **retire les triangles** d'un maillage à dominante quadrangulaire, **par paires** — leur nombre a la parité du bord (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (tout type, y compris `PYRA5` et les quadratiques) en faces de **même degré**, **une par face plane** du solide (voir plus bas) |
 | `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
@@ -1019,6 +1022,131 @@ englobante étant la phase 0 :
 La phase actuelle gagne sur tous les critères, et ce n'est pas un hasard :
 ancrer sur le coin de la boîte fait passer les lignes de grille exactement par
 les points extrêmes du contour, qui sont ses points de tangence.
+
+## Améliorer un maillage existant : `regularize`, `cleanup`, `merge_triangles`
+
+Les trois opérateurs font sur n'importe quel maillage ce que les paveurs font
+déjà à leur propre ouvrage en fin de course. Ils sont **séparés et
+composables** : l'ordre utile est en général triangles, puis topologie, puis
+géométrie, mais rien ne l'impose.
+
+### Deux marges, et une seule est de la géométrie
+
+Un maillage peut être mauvais de deux façons sans rapport, et il ne faut pas les
+confondre.
+
+La **géométrie**, c'est où sont les nœuds, et c'est ce qu'un lissage corrige.
+La **topologie**, c'est qui est voisin de qui, et **aucun lissage ne peut y
+toucher** : un nœud intérieur entouré de trois quadrangles a des coins à 120° en
+moyenne, et les déplacer n'y changera rien puisque les angles autour d'un nœud
+somment à 2π quelles que soient les positions. D'où `cleanup` **à côté** de
+`regularize` et non dedans.
+
+### Le bord n'est jamais touché
+
+Tout nœud porté par une arête de bord — une arête qu'une seule maille utilise —
+est épinglé : il ne bouge pas, et rien ne l'abandonne. Le maillage garde donc
+exactement le bord avec lequel il est entré, ce qui est la promesse que les
+paveurs font déjà sur le contour qu'on leur donne.
+
+### `regularize` — la géométrie
+
+`angular=True` (défaut) utilise le lissage **angulaire** : chaque voisin `n`
+propose la position obtenue en amenant `n → v` sur la bissectrice de l'angle que
+`n` voit, à longueur inchangée, et on moyenne les propositions. Elle vise
+l'angle droit là où le laplacien ne vise que le barycentre.
+
+Deux garanties tiennent quelle que soit la règle, parce que le balayage est
+celui des paveurs : **aucun nœud de bord ne bouge**, et une position n'est
+retenue que si toutes les mailles incidentes restent valides *et* que la pire
+qualité incidente ne baisse pas.
+
+**Aucune des deux règles ne domine l'autre**, et c'est mesuré. Sur le cercle
+pavé (60 côtés, taille 0,05, 1 328 mailles) après 60 balayages :
+
+| | jacobien min | p1 | p5 |
+|---|---|---|---|
+| brut | 0,188 | 0,308 | 0,648 |
+| laplacien | 0,234 | **0,448** | 0,773 |
+| angulaire | 0,234 | 0,404 | **0,808** |
+| angulaire ×40 puis laplacien ×20 | 0,234 | **0,452** | **0,813** |
+
+L'angulaire gagne dans le gros du maillage, le laplacien dans la queue, et
+**les enchaîner bat les deux**. C'est précisément à quoi sert un opérateur
+séparé.
+
+### `cleanup` — la topologie
+
+Un **doublet** est un nœud intérieur n'ayant que deux quadrangles autour de lui,
+qui partagent donc *deux* arêtes : le nœud est coincé dans un coin qu'aucun
+lissage n'ouvrira. Une **valence fautive** est un nœud intérieur qui veut quatre
+mailles et en a trois ou cinq.
+
+Le seul geste est la bascule de diagonale : deux quadrangles partageant une
+arête forment un hexagone, qui se recoupe selon l'une de ses trois diagonales.
+Il ne change ni nœud ni bord, et n'est appliqué que s'il fait strictement
+baisser l'erreur de valence en laissant les deux mailles convexes.
+
+Sur un maillage frais sorti d'un paveur, il ne trouve **rien à faire** — le
+paveur passe la même main en fin de course. Son intérêt est ailleurs : un
+maillage lu depuis gmsh, ou sorti de `merge_triangles`.
+
+### `merge_triangles` — les triangles, par paires
+
+En comptant les côtés de chaque face, \( 4Q + 3T = 2E_\text{int} + E_\text{bord} \),
+donc \( T \equiv E_\text{bord} \pmod 2 \) : **le nombre de triangles a la
+parité du nombre d'arêtes de bord**, qui est intouchable. Aucune suite
+d'opérations locales ne peut la changer, et un maillage à nombre impair de
+triangles en garde un.
+
+C'est aussi pourquoi « effondrer un triangle en un nœud » ne marche pas :
+fusionner ses trois coins en un seul coûte une arête à chaque quadrangle
+voisin, qui devient triangle à son tour. Gain net nul.
+
+Trois gestes, tous purement topologiques — aucun nœud ne bouge, aucun n'est
+créé :
+
+1. **Fusion.** Deux triangles partageant une arête font un quadrangle. C'est à
+   prendre ou à laisser : il n'y a qu'un quadrangle possible, et s'il sort
+   rentrant la paire est bloquée.
+2. **Regroupement.** En prenant un quadrangle voisin avec eux, les trois mailles
+   font un **hexagone** — 3 + 3 + 4 arêtes moins deux fois les deux partagées —
+   qui se coupe en deux quadrangles selon l'une de ses trois grandes diagonales.
+   Là où la fusion offrait un candidat, celui-ci en offre trois. Sur le cercle
+   il fait passer le bilan d'une passe de **12 triangles retirés à 20**, sur 32 ;
+   et prendre **deux** quadrangles plutôt qu'un — la configuration en éventail
+   autour d'un nœud — en retire 4 de plus sur une ellipse (42 → 16 au lieu de
+   42 → 20).
+
+   Trois quadrangles donneraient un octogone, qui veut trois quadrangles et
+   bien plus de façons de le couper. La limite est mise à deux : le rendement
+   s'essouffle, pas la recherche.
+3. **Marche.** Un triangle et un quadrangle voisin font un **pentagone**, qui se
+   redécoupe en quadrangle + triangle de cinq façons : le triangle avance d'une
+   maille et va chercher un partenaire plus loin.
+
+Le contour du motif recoupé n'est jamais modifié, dans les trois cas : ces
+gestes **ne peuvent pas** changer le bord du maillage, par construction.
+
+La validité ne se négocie pas, ici comme dans les paveurs : deux triangles dont
+l'union n'est pas convexe restent deux triangles. **Rappelez l'opérateur après
+un lissage** — une fusion refusée le devient souvent une fois les nœuds
+déplacés.
+
+### Ce que la chaîne donne
+
+Cercle pavé par `grid_surface`, 1 328 mailles dont 32 triangles :
+
+| | triangles | jacobien min | p1 | p5 |
+|---|---|---|---|---|
+| brut | 32 | 0,188 | 0,308 | 0,648 |
+| `merge_triangles` | **12** | 0,001 | — | — |
+| + `cleanup` + lissage | **12** | **0,234** | **0,666** | **0,823** |
+| en répétant le tour | 12 | 0,234 | 0,682 | 0,824 |
+
+Les triangles tombent de 32 à 12 en une passe, le premier centile double, et
+**chaque maillage intermédiaire reste valide**. Le tour répété converge au lieu
+de dériver.
 
 ## Couche limite hexaédrique : `pave_volume`
 

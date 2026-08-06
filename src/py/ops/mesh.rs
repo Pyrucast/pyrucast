@@ -798,6 +798,71 @@ pub fn pave_surface(
     Ok(PyMesh { inner: mesh })
 }
 
+/// Move the interior nodes of a surface mesh to improve its cells, leaving the
+/// connectivity and the boundary exactly as they are.
+///
+/// `sweeps` is how many passes to run. `angular=True` (the default) uses
+/// angle-based smoothing, which aims at the right angles a quadrangle wants;
+/// `False` uses the plain Laplacian, which aims at the one-ring's barycentre
+/// and knows nothing about angles. `in_place=True` writes the new positions
+/// onto your own nodes and hands the same mesh back; otherwise the moved nodes
+/// are duplicated and a fresh mesh comes out, the boundary's nodes being
+/// shared since they never moved.
+///
+/// Two guarantees hold whatever the rule: **no node on the boundary ever
+/// moves**, and a position is taken only when every incident cell stays valid
+/// and the worst incident quality does not get worse.
+///
+/// Smoothing cannot change who is next to whom, so it cannot fix a node with
+/// the wrong number of cells around it — the angles around a node sum to 2π
+/// whatever the positions. That is `cleanup`'s job, and running it first is
+/// usually what unlocks the smoothing.
+///
+/// TRI3 and QUA4 only, in 2-D. POI1 and SEG2 submeshes are ignored.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, sweeps=20, angular=true, in_place=false))]
+pub fn regularize(
+    mesh: PyRef<PyMesh>,
+    sweeps: usize,
+    angular: bool,
+    in_place: bool,
+) -> PyResult<PyMesh> {
+    let out = crate::ops::mesh::regularize(&mesh.inner, sweeps, angular, in_place)?;
+    Ok(PyMesh { inner: out })
+}
+
+/// Fix the connectivity of a surface mesh: remove its doublets and switch the
+/// diagonals that lower the valence error. No node moves.
+///
+/// A **doublet** is an interior node with only two quadrangles around it,
+/// which therefore share two edges; the node sits in a wedge no smoothing can
+/// open. A node of the **wrong valence** wants four cells and has three or
+/// five, giving corners of 120° or 72° on average — and the angles around a
+/// node sum to 2π whatever the positions, so smoothing will never square them.
+///
+/// The only move is the diagonal switch: two quadrangles sharing an edge form
+/// a hexagon, which splits across any of its three diagonals. It changes no
+/// node and no boundary, and is applied only when it strictly lowers the
+/// valence error and leaves both cells convex.
+///
+/// Triangles are read for incidence and never touched — that is
+/// `merge_triangles`'s job.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn cleanup(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let out = crate::ops::mesh::cleanup(&mesh.inner)?;
+    Ok(PyMesh { inner: out })
+}
+
+/// Remove the triangles from a quadrangle-dominant mesh, in pairs.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn merge_triangles(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
+    let out = crate::ops::mesh::merge_triangles(&mesh.inner)?;
+    Ok(PyMesh { inner: out })
+}
+
 /// Mesh the inside of a closed contour with a structured grid core and a
 /// frontal band — the regular-mesh companion of `pave_surface`.
 ///
@@ -1338,6 +1403,27 @@ impl PyMesh {
         all_quad: bool,
     ) -> PyResult<PyMesh> {
         super::mesh::pave_surface(py, slf, element_type, size, all_quad)
+    }
+
+    /// Voir `pyrucast.mesh.regularize`.
+    #[pyo3(signature = (sweeps=20, angular=true, in_place=false))]
+    fn regularize(
+        slf: PyRef<'_, Self>,
+        sweeps: usize,
+        angular: bool,
+        in_place: bool,
+    ) -> PyResult<PyMesh> {
+        super::mesh::regularize(slf, sweeps, angular, in_place)
+    }
+
+    /// Voir `pyrucast.mesh.cleanup`.
+    fn cleanup(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
+        super::mesh::cleanup(slf)
+    }
+
+    /// Voir `pyrucast.mesh.merge_triangles`.
+    fn merge_triangles(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
+        super::mesh::merge_triangles(slf)
     }
 
     /// Voir `pyrucast.mesh.grid_surface`.

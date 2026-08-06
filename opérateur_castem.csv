@@ -176,3 +176,6 @@ Langage GIBIANE;EGA;Test d'égalité;Python natif (==)
 Langage GIBIANE;ET;Et logique;Python natif (and)
 Langage GIBIANE;OU;Ou logique;Python natif (or)
 Langage GIBIANE;NON;Non logique;Python natif (not)
+Maillage - qualité;REGE;Régularise un maillage (lissage des nœuds);regularize
+Maillage - qualité;;Corrige la connectivité (doublets, valences);cleanup
+Maillage - qualité;;Retire les triangles d'un maillage quadrangulaire;merge_triangles
