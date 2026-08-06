@@ -897,13 +897,39 @@ Moitié moins de mailles pour une qualité parfaite. Sur un rectangle 0,6 × 0,3
 - **`band` vaut 0 et c'est la bonne valeur.** Le cœur recule déjà d'une maille
   partout où il ne rejoint pas le contour. Ne l'augmentez que pour éloigner
   volontairement l'interface du bord.
-- **Une forme tournée** de 30° n'a plus aucune arête axiale : la grille
-  retombe sur la boîte englobante, le cœur devient un escalier, et la bande
-  reprend tout le travail. La méthode brille sur les formes alignées sur les
-  axes.
-- Pas de gradation : la grille est uniforme par intervalle entre lignes. Un
-  quadtree la graduerait, avec la règle 2:1 et des gabarits de transition —
-  ce n'est pas fait.
+- **Une forme tournée** de 30° n'a plus aucune arête axiale à offrir : la
+  grille se réduit à la boîte englobante subdivisée uniformément, aucun nœud
+  de grille ne tombe sur un nœud du contour, et le cœur s'arrête en escalier
+  à une maille du bord. Le cœur **survit** — sur un rectangle 0,6 × 0,3 à
+  0,02, 61 % des mailles sont encore des rectangles parfaits à 30°, et le
+  total reste à 454 mailles contre 656 pour le paveur frontal. Ce qui se
+  dégrade est la **bande** : entre un contour oblique et un escalier sa
+  largeur varie de presque zéro à ~1,4 maille, et c'est l'entrée que le front
+  traite le plus mal. Le jacobien minimal tombe à 0,138, soit moins bien que
+  `pave_surface` (0,253), pendant que la médiane reste à 1,000. Meilleur en
+  volume, moins bon sur sa pire maille : à arbitrer selon ce qu'on lit du
+  calcul.
+- **Pas de gradation, et c'est un choix.** La grille est uniforme par
+  intervalle entre lignes. Un quadtree la graduerait — règle 2:1 et gabarits
+  de transition — mais le résultat ne vaut pas ce qu'il coûte, et la raison
+  est géométrique, pas algorithmique : passer de \\( n \\) nœuds à
+  \\( n/2 \\) le long d'une interface **en gardant tous les angles droits est
+  impossible**. La maille qui absorbe la réduction a trois nœuds d'un côté et
+  deux de l'autre — ce n'est plus un rectangle, par construction. Tout
+  raffinement local conforme paie donc en angles à 45°, et un quadtree en
+  paie beaucoup : la gradation par distance au bord fait des couronnes
+  concentriques, chaque feuille de couronne a **un** côté raffiné, un bord à
+  cinq arêtes n'admet aucun découpage en quadrangles (dans tout
+  quadrillage \\( 4Q = 2E_\text{int} + E_\text{bord} \\), donc
+  \\( E_\text{bord} \\) est pair), et il faut un triangle par feuille. Mesuré
+  sur un rectangle : 60 % de mailles en moins, mais un dixième de triangles et
+  un jacobien minimal qui tombe de 1,000 à 0,70.
+
+  La seule gradation compatible avec des rectangles parfaits est celle qui ne
+  change **aucun** compte de nœuds : espacer les lignes de la grille en
+  progression géométrique. Elle est par axe — une colonne fine traverse toute
+  la hauteur — donc pas localisable, mais elle garde le jacobien à 1. Ce n'est
+  pas fait non plus.
 
 ### Dégradation
 
