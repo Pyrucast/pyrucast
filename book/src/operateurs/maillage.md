@@ -26,7 +26,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `symmetry_plane(mesh, a, b, c)` | **copie** symétrique par rapport au **plan** passant par trois points (3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `pave_surface(contour, type, size=None, all_quad=False)` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
-| `grid_surface(contour, type, size=None, band=0, all_quad=False)` | maille les mêmes contours **orientés** par **cœur en grille** cartésienne et **bande frontale** au bord : sur une forme rectilinéaire, la grille régulière que le front ne sait pas produire (voir plus bas) |
+| `grid_surface(contour, type, size=None, band=0, coarsen=0, all_quad=False)` | maille les mêmes contours **orientés** par **cœur en grille** cartésienne et **bande frontale** au bord : sur une forme rectilinéaire, la grille régulière que le front ne sait pas produire (voir plus bas) |
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
@@ -782,7 +782,8 @@ et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
 
 ## Cœur en grille, bande frontale : `grid_surface`
 
-`grid_surface(contour, element_type, size=None, band=0, all_quad=False)` prend
+`grid_surface(contour, element_type, size=None, band=0, coarsen=0, all_quad=False)`
+prend
 la même entrée que `pave_surface`, rend la même chose, et tient la même
 promesse — **le contour est intouchable**. Seul l'intérieur est obtenu
 autrement.
@@ -891,6 +892,42 @@ Le profil crénelé de 0,6 × 0,3 à sept angles rentrants, taille visée 0,0037
 
 Moitié moins de mailles pour une qualité parfaite. Sur un rectangle 0,6 × 0,3
 à 0,02 : 450 mailles de jacobien 1, contre 650 et 6 triangles.
+
+### Gradation : `coarsen`
+
+`size` est la taille **au bord** et `coarsen` le nombre de fois qu'une maille
+peut doubler en s'en éloignant. Le cœur devient un quadtree : des feuilles de
+`2^k × 2^k` mailles de base, `k` croissant avec la distance au bord, équilibré
+pour que deux feuilles partageant un côté ne diffèrent jamais de plus d'un
+niveau. Chaque niveau divise à peu près par deux ce qui reste, jusqu'à ce que
+le domaine manque de profondeur.
+
+| `coarsen` | rectangle 1,6 × 0,8 à 0,025 | profil crénelé à 0,00375 |
+|---|---|---|
+| 0 | 2 048 mailles, 0 triangle | 4 032 mailles, 0 triangle |
+| 1 | 956 (80 triangles) | 2 540 (254) |
+| 2 | 776 (112) | 2 468 (324) |
+| 3 | 764 (120) | 2 468 (324) |
+
+Une feuille qui fait face à des feuilles plus fines a un bord à plus de quatre
+côtés, et chaque configuration a son gabarit : deux côtés **opposés** raffinés
+se coupent d'un trait sans aucun nœud neuf, deux côtés **adjacents** donnent
+trois quadrangles autour du centre, **quatre** donnent les quatre quarts.
+
+**Les cas impairs coûtent un triangle chacun, et aucun gabarit ne l'évite.**
+Dans tout découpage en quadrangles le nombre d'arêtes de bord est pair —
+\( 4Q = 2 E_	ext{int} + E_	ext{bord} \) — donc une feuille à **un** côté
+raffiné, dont le bord en compte cinq, n'admet aucun remplissage en quadrangles.
+Et l'impair est le cas **normal**, pas l'exception : une gradation pilotée par
+la distance fait des couronnes concentriques, et une feuille le long d'une
+couronne fait face à des plus fines sur son unique côté extérieur. Environ un
+dixième des mailles sort en triangles, qui portent les pires jacobiens du
+maillage — 0,70, les 45° de la transition — contre 1,000 partout ailleurs.
+
+`all_quad` avec `coarsen` raffine ces feuilles au lieu de les templater. La
+promesse est tenue — pas un triangle — mais il ne reste presque rien de la
+gradation : 4 024 mailles contre 4 032 sans gradation du tout. On ne peut pas
+avoir les deux, et l'arithmétique ci-dessus dit pourquoi.
 
 ### Pièges
 

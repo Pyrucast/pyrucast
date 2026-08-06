@@ -149,16 +149,17 @@ pub fn pave_grid(
     target: Option<f64>,
     all_quad: bool,
     band: usize,
+    coarsen: u32,
     cancel: &dyn Cancel,
 ) -> Result<Fabric> {
-    pave_inner(domain, target, all_quad, Some(band), cancel)
+    pave_inner(domain, target, all_quad, Some((band, coarsen)), cancel)
 }
 
 fn pave_inner(
     domain: &Domain,
     target: Option<f64>,
     all_quad: bool,
-    band: Option<usize>,
+    band: Option<(usize, u32)>,
     cancel: &dyn Cancel,
 ) -> Result<Fabric> {
     let mut fab = Fabric {
@@ -220,7 +221,9 @@ fn pave_inner(
     // normally.
     let seeds: Vec<(Vec<u32>, bool)> = match band {
         None => loops.iter().map(|l| (l.clone(), false)).collect(),
-        Some(band) => grid::build(&mut fab, domain, &loops, target, band).band,
+        Some((band, coarsen)) => {
+            grid::build(&mut fab, domain, &loops, target, band, coarsen, all_quad).band
+        }
     };
 
     let mut front = Front::new();
