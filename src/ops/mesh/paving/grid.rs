@@ -47,18 +47,52 @@ use crate::atoms::Point2;
 use crate::ops::mesh::contour::{point_in_polygon, Domain};
 use std::collections::{HashMap, HashSet};
 
-/// An axis-aligned edge shorter than this many target sizes does not get to
-/// place a grid line: it is a corner cut or a discretisation artefact, not a
-/// feature of the shape.
-const FEATURE_EDGE: f64 = 0.999;
+/// Two candidate lines closer than this many target sizes are merged into one,
+/// at their mean. It is a floor on the width of a column of cells, and hence on
+/// how flat a cell can be: at 0.5 a column is at worst half the target wide.
+///
+/// It doubles as the length below which an aligned edge does not get to place
+/// the line it *lies on* — an edge shorter than the cell it would pin is a
+/// corner cut, not a feature. The lines that **cross** it are placed whatever
+/// its length, since those come from its nodes.
+const MERGE_FLOOR: f64 = 0.5;
 
-/// Two snap lines closer than this many target sizes are the same line. Below
-/// it a column of cells could not hold a sane aspect ratio anyway.
-const SNAP_TOLERANCE: f64 = 0.25;
+/// An aligned chain shorter than this many target sizes does not get to place
+/// the line it lies on: it is a corner cut, a chamfer or two chords of a small
+/// hole, not a feature of the shape.
+///
+/// The chain's own length is what is measured, never its pieces'. Asking the
+/// question piece by piece — which is what this operator used to do — made the
+/// answer depend on the caller's discretisation and on nothing else: the same
+/// wall placed a line when its pieces came out at 1.125 target sizes and placed
+/// none at 0.975.
+const FEATURE_SPAN: f64 = 1.0;
 
-/// Beyond this many lines per axis the contour is not rectilinear in any
-/// useful sense — it is a curve whose every edge is axis-aligned by accident.
-/// Snapping then costs more than it buys, and the uniform grid is used.
+/// How far an edge may stray, per unit it runs, and still count as aligned —
+/// a quarter of a cell over a cell's length, so about 14°.
+///
+/// It is a reach, not a precision: the line an edge places has to stay close
+/// enough to the edge to be worth placing, and a quarter cell is that. Measured
+/// on a circle, whose chords are the only edges that ever sit near the
+/// boundary of the window: at this width its meshing loses 24 triangles out of
+/// 24 and gains none, where a window three times narrower keeps them all and
+/// one half again wider brings 74.
+///
+/// Not to be confused with [`ALIGN_WINDOW`], which is far tighter and answers a
+/// different question — *which way does the shape run*, not *what does this
+/// edge ask for*.
+const ALIGN_SLOPE: f64 = 0.25;
+
+/// Two points closer than this many target sizes are the same node. Not a
+/// tolerance so much as an equality: a grid line placed on a contour node lands
+/// on it to rounding, and anything further off is a different node, which
+/// taking for the same one would tear the mesh.
+const SAME_NODE: f64 = 0.0025;
+
+/// Beyond this many lines per axis, give up on the contour and use the uniform
+/// grid. [`MERGE_FLOOR`] already bounds the count at twice what the uniform
+/// grid would hold, so this only ever catches a domain whose extent dwarfs its
+/// target size — where the mesh was never going to fit in memory anyway.
 const MAX_SNAP_LINES: usize = 4096;
 
 /// Below this share of the perimeter running one way, the contour has no
@@ -204,8 +238,21 @@ pub struct Grid {
 }
 
 impl Grid {
-    /// Lay a grid over `domain` with cells of about `target`, its lines snapped
-    /// to the contour's axis-aligned edges.
+    /// Lay a grid over `domain` with cells of about `target`, its lines taken
+    /// from the contour's own nodes.
+    ///
+    /// A grid line is not there to *lie along* a contour edge, it is there to
+    /// **cross** it — perpendicular, through its nodes. So a vertical wall of
+    /// five nodes asks for five *horizontal* lines, one per node, and it is the
+    /// horizontal edges bounding it that ask for the vertical line it lies on,
+    /// since they share its corners. An aligned edge does both: it places the
+    /// line it lies on, and its nodes place the lines crossing it.
+    ///
+    /// The consequence is the whole point: between two corners of the shape the
+    /// number of lines is **read off the contour** instead of being recomputed
+    /// as `round(length / target)`. There is then no arrangement of roundings
+    /// under which the caller's discretisation and the mesher's disagree, which
+    /// is what used to send a whole wall to the band for a 2 % difference.
     pub fn over(domain: &Domain, target: f64) -> Grid {
         let pts = &domain.outer.pts;
         let (mut x0, mut x1) = (f64::INFINITY, f64::NEG_INFINITY);
@@ -217,25 +264,36 @@ impl Grid {
             y1 = y1.max(p.y);
         }
 
-        // A vertical edge pins an x line, a horizontal one pins a y line. Both
-        // ends of the domain's extent are lines whatever happens.
+        // Both ends of the domain's extent are lines whatever happens.
         let (mut sx, mut sy) = (vec![x0, x1], vec![y0, y1]);
+        // An edge counts as aligned when it strays less than this out of every
+        // unit it runs — the same window `preferred_angle` judges alignment by,
+        // since it is judging it for this very purpose.
+        let slope = ALIGN_SLOPE;
+        // A horizontal chain dictates the vertical lines crossing it, and vice
+        // versa — that is the whole rule.
+        let (mut across_x, mut across_y): (Vec<Run>, Vec<Run>) = (Vec::new(), Vec::new());
         for l in std::iter::once(&domain.outer).chain(&domain.holes) {
-            let n = l.pts.len();
-            for i in 0..n {
-                let (a, b) = (l.pts[i], l.pts[(i + 1) % n]);
-                let (dx, dy) = ((b.x - a.x).abs(), (b.y - a.y).abs());
-                if dx <= SNAP_TOLERANCE * target * 0.5 && dy >= FEATURE_EDGE * target {
-                    sx.push(0.5 * (a.x + b.x));
-                } else if dy <= SNAP_TOLERANCE * target * 0.5 && dx >= FEATURE_EDGE * target {
-                    sy.push(0.5 * (a.y + b.y));
+            for run in runs(l, slope) {
+                let span = run.along[run.along.len() - 1] - run.along[0];
+                if span >= FEATURE_SPAN * target {
+                    if run.horizontal {
+                        sy.push(run.mean);
+                    } else {
+                        sx.push(run.mean);
+                    }
+                }
+                if run.horizontal {
+                    across_x.push(run);
+                } else {
+                    across_y.push(run);
                 }
             }
         }
 
         Grid {
-            xs: fill(cluster(sx, SNAP_TOLERANCE * target), target),
-            ys: fill(cluster(sy, SNAP_TOLERANCE * target), target),
+            xs: weave(cluster(sx, MERGE_FLOOR * target), &across_x, target),
+            ys: weave(cluster(sy, MERGE_FLOOR * target), &across_y, target),
         }
     }
 
@@ -259,6 +317,81 @@ impl Grid {
     }
 }
 
+/// One maximal chain of consecutive contour edges sharing an alignment.
+struct Run {
+    horizontal: bool,
+    /// The coordinate the chain lies on: its mean `y` when horizontal, `x`
+    /// otherwise.
+    mean: f64,
+    /// Its own nodes, along the axis it runs in, ascending. These are the
+    /// coordinates of the lines that **cross** the chain, and taking them as
+    /// they are is what makes the grid meet the contour instead of guessing at
+    /// where the caller put its nodes.
+    along: Vec<f64>,
+}
+
+/// Group `l`'s edges into maximal aligned chains, `slope` being how far an edge
+/// may stray per unit it runs and still count as aligned.
+///
+/// A wall cut into four segments is one wall, and it is the wall's own length
+/// that says whether the shape has a feature there — not its pieces'. Asking
+/// the question piece by piece made the answer depend on the caller's
+/// discretisation and on nothing else: the same wall placed a grid line when
+/// its pieces came out at 1.125 target sizes and placed none at 0.975.
+fn runs(l: &crate::ops::mesh::contour::Loop2D, slope: f64) -> Vec<Run> {
+    let n = l.pts.len();
+    if n < 2 {
+        return Vec::new();
+    }
+    let class = |i: usize| -> Option<bool> {
+        let (a, b) = (l.pts[i], l.pts[(i + 1) % n]);
+        let (dx, dy) = ((b.x - a.x).abs(), (b.y - a.y).abs());
+        if dy <= slope * dx && dx > 0.0 {
+            Some(true)
+        } else if dx <= slope * dy && dy > 0.0 {
+            Some(false)
+        } else {
+            None
+        }
+    };
+
+    // Start where the class changes, so a chain straddling the loop's seam is
+    // not cut in two by the arbitrary place the loop happens to open at.
+    let start = (0..n)
+        .find(|&i| class(i) != class((i + n - 1) % n))
+        .unwrap_or(0);
+
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < n {
+        let Some(horizontal) = class((start + i) % n) else {
+            i += 1;
+            continue;
+        };
+        let mut j = i + 1;
+        while j < n && class((start + j) % n) == Some(horizontal) {
+            j += 1;
+        }
+        let (mut across, mut along) = (0.0, Vec::with_capacity(j - i + 1));
+        for t in i..=j {
+            let p = l.pts[(start + t) % n];
+            let (a, b) = if horizontal { (p.y, p.x) } else { (p.x, p.y) };
+            across += a;
+            along.push(b);
+        }
+        if along[0] > along[along.len() - 1] {
+            along.reverse();
+        }
+        out.push(Run {
+            horizontal,
+            mean: across / along.len() as f64,
+            along,
+        });
+        i = j;
+    }
+    out
+}
+
 /// Sort, then merge coordinates closer than `tol` into their mean.
 fn cluster(mut v: Vec<f64>, tol: f64) -> Vec<f64> {
     v.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -278,9 +411,16 @@ fn cluster(mut v: Vec<f64>, tol: f64) -> Vec<f64> {
     out
 }
 
-/// Subdivide each gap between consecutive lines uniformly, as close to
-/// `target` as a whole number of cells allows.
-fn fill(lines: Vec<f64>, target: f64) -> Vec<f64> {
+/// Subdivide each gap between consecutive `lines`, taking the subdivision from
+/// a contour chain of `across` whenever one spans the gap end to end, and
+/// falling back to a uniform `round(gap / target)` cells where none does.
+///
+/// Reading the count off the contour is not a refinement, it is the only way to
+/// get it right. A wall 5.5 target sizes long is five cells or six depending on
+/// which side of the halfway mark the arithmetic lands, and the caller has
+/// already made that choice; recomputing it here means disagreeing with it
+/// sooner or later, and one disagreement sends the whole wall to the band.
+fn weave(lines: Vec<f64>, across: &[Run], target: f64) -> Vec<f64> {
     if lines.len() < 2 {
         return lines;
     }
@@ -293,12 +433,58 @@ fn fill(lines: Vec<f64>, target: f64) -> Vec<f64> {
     let mut out = vec![lines[0]];
     for w in lines.windows(2) {
         let (a, b) = (w[0], w[1]);
-        let k = (((b - a) / target).round() as usize).max(1);
-        for i in 1..=k {
-            out.push(a + (b - a) * i as f64 / k as f64);
+        match dictated(a, b, across, target) {
+            Some(run) => {
+                // Mapped onto the gap rather than spliced raw: the gap's ends
+                // are clustered means and may sit a rounding away from the
+                // chain's own, and a line has to be exactly where it is.
+                let (lo, hi) = (run[0], run[run.len() - 1]);
+                let scale = (b - a) / (hi - lo);
+                for &v in &run[1..run.len() - 1] {
+                    out.push(a + (v - lo) * scale);
+                }
+            }
+            None => {
+                let k = (((b - a) / target).round() as usize).max(1);
+                for i in 1..k {
+                    out.push(a + (b - a) * i as f64 / k as f64);
+                }
+            }
         }
+        out.push(b);
     }
     out
+}
+
+/// The nodes of a contour chain spanning `(a, b)` end to end, if there is one
+/// whose cells are all of a sane size.
+///
+/// The window on each end is half the merge floor, which is exactly what keeps
+/// it unambiguous: two distinct lines are at least a whole merge floor apart,
+/// so no chain end can fall in two windows at once.
+fn dictated(a: f64, b: f64, across: &[Run], target: f64) -> Option<&[f64]> {
+    let reach = MERGE_FLOOR * target * 0.5;
+    let mut best: Option<(f64, &[f64])> = None;
+    for run in across {
+        let v = &run.along[..];
+        if (v[0] - a).abs() > reach || (v[v.len() - 1] - b).abs() > reach {
+            continue;
+        }
+        // Every cell it asks for has to be one: not thinner than the floor a
+        // merge would have imposed, and not wider than the reciprocal.
+        if v.windows(2).any(|w| {
+            let d = w[1] - w[0];
+            d < MERGE_FLOOR * target || d > target / MERGE_FLOOR
+        }) {
+            continue;
+        }
+        // Between rival chains, the one whose cells sit closest to the target.
+        let err = (((b - a) / (v.len() - 1) as f64) / target).ln().abs();
+        if best.is_none_or(|(e, _)| err < e) {
+            best = Some((err, v));
+        }
+    }
+    best.map(|(_, v)| v)
 }
 
 /// The structured core, once written into the fabric.
@@ -442,10 +628,7 @@ impl ContourNodes {
             .map(|&v| frame.to_grid(fab.pts[v as usize]))
             .collect();
         ContourNodes {
-            // A grid line snapped to a contour edge lands on that edge to
-            // rounding; anything further off is a different node, and taking
-            // it for the same one would tear the mesh.
-            tol: SNAP_TOLERANCE * target * 0.01,
+            tol: SAME_NODE * target,
             grid: super::proximity::PointGrid::build(&pts, target),
             pts,
             ids,
@@ -843,6 +1026,81 @@ mod tests {
         Domain {
             outer,
             holes: Vec::new(),
+        }
+    }
+
+    /// A closed loop through `corners`, each side cut into a whole number of
+    /// pieces of about `h` — the discretisation a caller hands in.
+    fn cut(corners: &[(f64, f64)], h: f64) -> Loop2D {
+        let n = corners.len();
+        let mut pts = Vec::new();
+        for i in 0..n {
+            let (a, b) = (corners[i], corners[(i + 1) % n]);
+            let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+            let k = ((len / h).round() as usize).max(1);
+            for j in 0..k {
+                let t = j as f64 / k as f64;
+                pts.push((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1)));
+            }
+        }
+        loop2d(&pts)
+    }
+
+    #[test]
+    fn a_wall_places_its_line_whatever_its_pieces_measure() {
+        // Whether the grid sees a wall must depend on the wall, not on the
+        // caller's arithmetic. A wall of length L is cut into round(L/h) pieces
+        // of L/round(L/h), which lands either side of h as L varies — so
+        // judging the pieces made this a coin toss, and the shape below used to
+        // lose its wall for two of these seven steps.
+        let h = 0.1;
+        for tenths in 2..9u32 {
+            let step = tenths as f64 * 0.1 + 0.01;
+            let d = only(cut(
+                &[
+                    (0.0, 0.0),
+                    (1.0, 0.0),
+                    (1.0, 1.0),
+                    (0.53, 1.0),
+                    (0.53, step),
+                    (0.0, step),
+                ],
+                h,
+            ));
+            let g = Grid::over(&d, h);
+            assert!(
+                g.xs.iter().any(|x| (x - 0.53).abs() < 1e-9),
+                "the wall at x=0.53 was missed with the step at y={step}: {:?}",
+                g.xs
+            );
+        }
+    }
+
+    #[test]
+    fn the_lines_follow_the_contour_rather_than_recompute_it() {
+        // A rectangle 0.55 tall at a target of 0.1 is five cells or six
+        // depending on which way the halfway mark is rounded, and the caller
+        // has already chosen: it cut its sides into five. The grid has to make
+        // the same choice, and the only way to be sure of that is to read it
+        // off the contour rather than round again.
+        let mut pts = Vec::new();
+        for i in 0..10 {
+            pts.push((i as f64 * 0.1, 0.0));
+        }
+        for i in 0..5 {
+            pts.push((1.0, i as f64 * 0.11));
+        }
+        for i in 0..10 {
+            pts.push((1.0 - i as f64 * 0.1, 0.55));
+        }
+        for i in 0..5 {
+            pts.push((0.0, 0.55 - i as f64 * 0.11));
+        }
+        let g = Grid::over(&only(loop2d(&pts)), 0.1);
+        let want = [0.0, 0.11, 0.22, 0.33, 0.44, 0.55];
+        assert_eq!(g.ys.len(), want.len(), "ys = {:?}", g.ys);
+        for (got, w) in g.ys.iter().zip(want) {
+            assert!((got - w).abs() < 1e-9, "ys = {:?}", g.ys);
         }
     }
 

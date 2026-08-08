@@ -42,10 +42,23 @@
 //!
 //! ## The core meets the contour rather than stopping short of it
 //!
-//! The grid's lines are taken from the contour: every axis-aligned edge long
-//! enough to be a feature pins a line at its coordinate, and the gaps between
-//! consecutive lines are subdivided uniformly at about the target size. A grid
-//! node that then lands on a contour node **is** that node — the same vertex,
+//! The grid's lines are taken from the contour, in two steps. First the
+//! shape's own structure: consecutive contour edges running the same way are
+//! grouped into a **chain**, and a chain at least a cell long pins a line at
+//! the coordinate it lies on. It is the chain's length that is judged, never
+//! its pieces' — a wall is a wall whether the caller cut it in three or in
+//! thirty.
+//!
+//! Then the subdivision between two consecutive lines. Where a chain of the
+//! contour spans that gap end to end, **its own nodes are the lines**: the
+//! caller has already decided how many pieces the side takes, and recomputing
+//! that decision here only means disagreeing with it sooner or later. A side
+//! 5.5 cells long is five or six depending on which way the halfway mark
+//! rounds, and one disagreement sends the whole side to the band. Where no
+//! chain spans the gap, it is subdivided uniformly at about the target size, as
+//! there is then nothing to agree with.
+//!
+//! A grid node that lands on a contour node **is** that node — the same vertex,
 //! not a copy — so the core reaches the boundary instead of stopping a hair
 //! short of it.
 //!
@@ -70,10 +83,14 @@
 //! Cutting that base under each step instead, so each piece gets its own 18
 //! segments, costs nothing and shares every node.
 //!
-//! The rule is therefore: **break every side at the shape's own corners, and
-//! let each piece take a whole number of cells.** Nothing checks it, because a
-//! contour that does not satisfy it is not an error — it just gets more band
-//! and less grid.
+//! The rule is therefore: **break every side at the shape's own corners.** How
+//! many cells each piece then takes is the caller's business and no longer has
+//! to be guessed at — the grid follows whatever cutting it is given, so a side
+//! cut into five where the arithmetic would have said six is honoured, not
+//! overruled. What the grid cannot do is honour two cuttings of the same span
+//! at once, and a side running past a corner asks exactly that. Nothing checks
+//! it, because a contour that does not satisfy it is not an error — it just
+//! gets more band and less grid.
 //!
 //! ## When it degrades
 //!
