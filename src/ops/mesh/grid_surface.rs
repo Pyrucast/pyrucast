@@ -58,6 +58,12 @@
 //! chain spans the gap, it is subdivided uniformly at about the target size, as
 //! there is then nothing to agree with.
 //!
+//! Facing walls rarely agree, and they are reconciled by separating what can be
+//! split from what cannot. The **number** of lines comes from the chain that
+//! spans the gap, because a count is a whole number and one wall has to lose.
+//! Their **positions** are the mean over every chain asking for that same
+//! number, so no wall is left twice as far from the grid as it needed to be.
+//!
 //! A grid node that lands on a contour node **is** that node — the same vertex,
 //! not a copy — so the core reaches the boundary instead of stopping a hair
 //! short of it. And where it only nearly lands, it goes and fetches it: nothing

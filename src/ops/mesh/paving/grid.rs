@@ -33,6 +33,14 @@
 //! caller has already decided how many pieces that side takes, and recomputing
 //! the decision is how the two come to disagree.
 //!
+//! Rival chains are settled by splitting the count from the positions. A
+//! **count** is a whole number and admits no compromise: two facing walls cut
+//! into five and into six leave one of them to lose, and it is the chain
+//! spanning the gap that wins, since only it has an opinion about *this* gap.
+//! **Positions** are not whole numbers, so every chain asking for that same
+//! count gets an equal say in where the lines fall. Neither wall is then exactly
+//! right, but neither is twice as wrong as it had to be.
+//!
 //! What is still off by a fraction of a cell is fetched: the grid node nearest
 //! to a contour node goes and stands on it, and the rows bend at their ends to
 //! suit. The contour never moves — it is the grid that gives way, which is the
@@ -457,16 +465,7 @@ fn weave(lines: Vec<f64>, across: &[Run], target: f64) -> Vec<f64> {
     for w in lines.windows(2) {
         let (a, b) = (w[0], w[1]);
         match dictated(a, b, across, target) {
-            Some(run) => {
-                // Mapped onto the gap rather than spliced raw: the gap's ends
-                // are clustered means and may sit a rounding away from the
-                // chain's own, and a line has to be exactly where it is.
-                let (lo, hi) = (run[0], run[run.len() - 1]);
-                let scale = (b - a) / (hi - lo);
-                for &v in &run[1..run.len() - 1] {
-                    out.push(a + (v - lo) * scale);
-                }
-            }
+            Some(inner) => out.extend(inner),
             None => {
                 let k = (((b - a) / target).round() as usize).max(1);
                 for i in 1..k {
@@ -479,35 +478,84 @@ fn weave(lines: Vec<f64>, across: &[Run], target: f64) -> Vec<f64> {
     out
 }
 
-/// The nodes of a contour chain spanning `(a, b)` end to end, if there is one
-/// whose cells are all of a sane size.
+/// The lines a contour chain asks for strictly inside `(a, b)`, averaged over
+/// every chain that asks for the same number of them.
 ///
-/// The window on each end is half the merge floor, which is exactly what keeps
-/// it unambiguous: two distinct lines are at least a whole merge floor apart,
-/// so no chain end can fall in two windows at once.
-fn dictated(a: f64, b: f64, across: &[Run], target: f64) -> Option<&[f64]> {
+/// **The count and the positions are settled separately, and they have to be.**
+/// A count is a whole number: two facing walls cut into five and into six have
+/// no compromise, one of them must lose. Positions are not, and where two walls
+/// agree on the count but not on where the lines fall, splitting the difference
+/// is free — it costs no node and halves the worst bend the grid will have to
+/// make to reach either of them.
+///
+/// It is also what keeps the method robust. Honouring one wall exactly and
+/// leaving the other to bend spends the whole offset on one side: on an L 1.03
+/// by 0.98 that is 0.2 of a cell, four fifths of what [`ANCHOR_REACH`] allows,
+/// and a slightly more divergent shape would put that wall out of reach
+/// altogether and send it to the band. Halving it buys back the margin.
+///
+/// The window on each end is half the merge floor, which is what keeps the
+/// spanning test unambiguous: two distinct lines are at least a whole merge
+/// floor apart, so no chain end can fall in two windows at once.
+fn dictated(a: f64, b: f64, across: &[Run], target: f64) -> Option<Vec<f64>> {
     let reach = MERGE_FLOOR * target * 0.5;
-    let mut best: Option<(f64, &[f64])> = None;
-    for run in across {
-        let v = &run.along[..];
-        if (v[0] - a).abs() > reach || (v[v.len() - 1] - b).abs() > reach {
-            continue;
-        }
-        // Every cell it asks for has to be one: not thinner than the floor a
-        // merge would have imposed, and not wider than the reciprocal.
-        if v.windows(2).any(|w| {
+    let sane = |v: &[f64]| {
+        !v.windows(2).any(|w| {
             let d = w[1] - w[0];
+            // Every cell it asks for has to be one: not thinner than the floor
+            // a merge would have imposed, nor wider than the reciprocal.
             d < MERGE_FLOOR * target || d > target / MERGE_FLOOR
-        }) {
+        })
+    };
+
+    // The count comes from a chain that spans the gap end to end — only such a
+    // chain has an opinion on how many cells fit between *these* two lines.
+    // Between rivals, the one whose cells sit closest to the target.
+    let mut best: Option<(f64, usize, Vec<f64>)> = None;
+    for (k, run) in across.iter().enumerate() {
+        let v = &run.along[..];
+        if (v[0] - a).abs() > reach || (v[v.len() - 1] - b).abs() > reach || !sane(v) {
             continue;
         }
-        // Between rival chains, the one whose cells sit closest to the target.
         let err = (((b - a) / (v.len() - 1) as f64) / target).ln().abs();
-        if best.is_none_or(|(e, _)| err < e) {
-            best = Some((err, v));
+        if best.as_ref().is_none_or(|(e, ..)| err < *e) {
+            // Mapped onto the gap rather than taken raw: the gap's ends are
+            // clustered means and may sit a rounding away from the chain's own,
+            // and a line has to be exactly where it is.
+            let (lo, scale) = (v[0], (b - a) / (v[v.len() - 1] - v[0]));
+            let mapped = v[1..v.len() - 1].iter().map(|x| a + (x - lo) * scale);
+            best = Some((err, k, mapped.collect()));
         }
     }
-    best.map(|(_, v)| v)
+    let (_, spanner, mut inner) = best?;
+
+    // Now the positions. Every other chain crossing the gap and asking for the
+    // same number of lines gets an equal say in where they go — including the
+    // ones that run past the gap's ends and so had none in the count. One vote
+    // each: the chain that set the count has had its say already.
+    let mut voters = 1.0f64;
+    for (k, run) in across.iter().enumerate() {
+        if k == spanner {
+            continue;
+        }
+        let said: Vec<f64> = run
+            .along
+            .iter()
+            .copied()
+            .filter(|&x| x > a + reach && x < b - reach)
+            .collect();
+        if said.len() != inner.len() || !sane(&said) {
+            continue;
+        }
+        voters += 1.0;
+        for (slot, &v) in inner.iter_mut().zip(&said) {
+            *slot += v;
+        }
+    }
+    for slot in &mut inner {
+        *slot /= voters;
+    }
+    Some(inner)
 }
 
 /// The structured core, once written into the fabric.
@@ -1205,6 +1253,42 @@ mod tests {
                 g.xs.iter().any(|x| (x - 0.53).abs() < 1e-9),
                 "the wall at x=0.53 was missed with the step at y={step}: {:?}",
                 g.xs
+            );
+        }
+    }
+
+    #[test]
+    fn rival_walls_meet_in_the_middle_rather_than_one_winning() {
+        // An L 1.03 by 0.98 at a target of 0.1: the right wall spans y in
+        // [0, 0.47] and cuts it in five, at a pitch of 0.094; the left spans
+        // [0, 0.98] and cuts it in ten, at 0.098. Both want to say where the
+        // horizontal lines go and they disagree.
+        //
+        // Only the right one spans the gap, so only it has a say in *how many*
+        // lines there are — a count is a whole number and admits no compromise.
+        // Where they go is another matter, and there the two split the
+        // difference. Letting the spanning wall take all of it would leave the
+        // other to bend by 0.02, four fifths of `ANCHOR_REACH`; halved, both
+        // bend by 0.01.
+        let d = only(cut(
+            &[
+                (0.0, 0.0),
+                (1.03, 0.0),
+                (1.03, 0.47),
+                (0.41, 0.47),
+                (0.41, 0.98),
+                (0.0, 0.98),
+            ],
+            0.1,
+        ));
+        let g = Grid::over(&d, 0.1);
+        for (k, want) in [0.096, 0.192, 0.288, 0.384].into_iter().enumerate() {
+            assert!(
+                (g.ys[k + 1] - want).abs() < 1e-9,
+                "ys[{}] = {}, wanted the mean {want} of 0.094·k and 0.098·k — {:?}",
+                k + 1,
+                g.ys[k + 1],
+                g.ys
             );
         }
     }
