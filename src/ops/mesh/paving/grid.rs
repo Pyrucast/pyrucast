@@ -25,13 +25,22 @@
 //! cell along that step would be cut — the core would stop short of the whole
 //! feature and the band would have to fill it with rows.
 //!
-//! So the grid lines are chosen from the contour itself: every axis-aligned
-//! edge long enough to matter contributes its coordinate as a line, and the
-//! gaps between consecutive lines are subdivided uniformly at about the target
-//! size. On a rectilinear contour every corner then lands on a grid node and
-//! the core covers the domain up to the band. On a contour with no direction
-//! at all — a circle — nothing is contributed and the result degrades
-//! gracefully to the uniform grid over the bounding box.
+//! So the grid lines are chosen from the contour itself, and in two ways.
+//! Consecutive edges running the same way are grouped into a **chain**; a chain
+//! at least a cell long contributes the coordinate it lies on as a line, which
+//! is the shape's structure. Then, between two lines, a chain spanning the gap
+//! end to end contributes **its own nodes** as the lines crossing it — the
+//! caller has already decided how many pieces that side takes, and recomputing
+//! the decision is how the two come to disagree.
+//!
+//! What is still off by a fraction of a cell is fetched: the grid node nearest
+//! to a contour node goes and stands on it, and the rows bend at their ends to
+//! suit. The contour never moves — it is the grid that gives way, which is the
+//! only order that leaves the caller's mesh alone.
+//!
+//! On a contour with no direction at all — a circle — no chain is long enough
+//! to contribute and the result degrades gracefully to the uniform grid over
+//! the bounding box.
 //!
 //! ## What comes out
 //!
@@ -83,11 +92,27 @@ const FEATURE_SPAN: f64 = 1.0;
 /// edge ask for*.
 const ALIGN_SLOPE: f64 = 0.25;
 
-/// Two points closer than this many target sizes are the same node. Not a
-/// tolerance so much as an equality: a grid line placed on a contour node lands
-/// on it to rounding, and anything further off is a different node, which
-/// taking for the same one would tear the mesh.
-const SAME_NODE: f64 = 0.0025;
+/// How far, in target sizes, a grid node may be pulled off its lines to land on
+/// a contour node.
+///
+/// Nothing says a grid line has to be straight. Where one passes a contour node
+/// it just misses, the node of the grid nearest to it goes and fetches it, and
+/// the two cells hanging off that node take up the slack — the line runs
+/// straight through the interior and bends at its ends. **The contour does not
+/// move**; it is the grid that gives way, which is the only order that keeps
+/// the caller's mesh untouched.
+///
+/// Half of [`MERGE_FLOOR`], and that is what makes it safe rather than merely
+/// small: no gap between two lines is thinner than the merge floor, so a corner
+/// can never reach halfway across its own cell and no cell can be turned inside
+/// out. The quality guard in [`Anchors::build`] is there for what is ugly, not
+/// for what is impossible.
+const ANCHOR_REACH: f64 = 0.25;
+
+/// A cell whose worst corner falls below this after bending gives its anchor
+/// back. Well under what the band would have offered in its place, since a cell
+/// that stays is only worth keeping if it beats the alternative.
+const ANCHOR_FLOOR: f64 = 0.3;
 
 /// Beyond this many lines per axis, give up on the contour and use the uniform
 /// grid. [`MERGE_FLOOR`] already bounds the count at twice what the uniform
@@ -241,18 +266,21 @@ impl Grid {
     /// Lay a grid over `domain` with cells of about `target`, its lines taken
     /// from the contour's own nodes.
     ///
-    /// A grid line is not there to *lie along* a contour edge, it is there to
-    /// **cross** it — perpendicular, through its nodes. So a vertical wall of
-    /// five nodes asks for five *horizontal* lines, one per node, and it is the
-    /// horizontal edges bounding it that ask for the vertical line it lies on,
-    /// since they share its corners. An aligned edge does both: it places the
-    /// line it lies on, and its nodes place the lines crossing it.
+    /// Two things come from the contour, and they answer different questions.
     ///
-    /// The consequence is the whole point: between two corners of the shape the
-    /// number of lines is **read off the contour** instead of being recomputed
-    /// as `round(length / target)`. There is then no arrangement of roundings
-    /// under which the caller's discretisation and the mesher's disagree, which
-    /// is what used to send a whole wall to the band for a 2 % difference.
+    /// **Where the lines are**: an aligned chain at least a cell long pins a
+    /// line at the coordinate it lies on. That is the shape's structure — its
+    /// walls and its ledges.
+    ///
+    /// **How the space between them is cut**: where a chain of the contour
+    /// spans a gap end to end, its own nodes are the lines. A chain running one
+    /// way is crossed by the lines of the other family, so a horizontal chain
+    /// dictates vertical lines and a vertical one horizontal lines. This is the
+    /// half that matters most, because the caller has already chosen how many
+    /// pieces a side takes, and recomputing that choice here only means
+    /// disagreeing with it sooner or later — a side 5.5 cells long is five or
+    /// six depending on which way the halfway mark rounds, and one disagreement
+    /// sends the whole side to the band.
     pub fn over(domain: &Domain, target: f64) -> Grid {
         let pts = &domain.outer.pts;
         let (mut x0, mut x1) = (f64::INFINITY, f64::NEG_INFINITY);
@@ -266,12 +294,7 @@ impl Grid {
 
         // Both ends of the domain's extent are lines whatever happens.
         let (mut sx, mut sy) = (vec![x0, x1], vec![y0, y1]);
-        // An edge counts as aligned when it strays less than this out of every
-        // unit it runs — the same window `preferred_angle` judges alignment by,
-        // since it is judging it for this very purpose.
         let slope = ALIGN_SLOPE;
-        // A horizontal chain dictates the vertical lines crossing it, and vice
-        // versa — that is the whole rule.
         let (mut across_x, mut across_y): (Vec<Run>, Vec<Run>) = (Vec::new(), Vec::new());
         for l in std::iter::once(&domain.outer).chain(&domain.holes) {
             for run in runs(l, slope) {
@@ -563,9 +586,14 @@ pub fn build(
         }
     }
 
+    // ── Send the grid to fetch the contour where it nearly touches it ─────
+    // Before the pull-back and not after: what the core is allowed to keep
+    // depends on where it reaches, and bending is what makes it reach.
+    let known = ContourNodes::build(fab, contour_loops, frame);
+    let anchors = Anchors::build(&grid, &known, &solid, nx, ny, target);
+
     // ── Pull back only where the core misses the contour ──────────────────
-    let known = ContourNodes::build(fab, contour_loops, target, frame);
-    let mut keep = clear_of_unmet(&grid, &solid, nx, ny, &known, contour_loops, band);
+    let mut keep = clear_of_unmet(&solid, nx, ny, &anchors, contour_loops, band);
     tidy(&mut keep, nx, ny);
 
     // ── Emit the cells, sharing the contour's nodes where they coincide ───
@@ -580,13 +608,13 @@ pub fn build(
             let mut q = [0u32; 4];
             for (k, (di, dj)) in [(0, 0), (1, 0), (1, 1), (0, 1)].into_iter().enumerate() {
                 q[k] = *vert.entry((i + di, j + dj)).or_insert_with(|| {
-                    let p = grid.node(i + di, j + dj);
-                    // The contour's own node when there is one, else a fresh
-                    // one — put back in the caller's plane, since the frame is
-                    // the grid's business and nobody else's.
-                    known
-                        .at(p)
-                        .unwrap_or_else(|| fab.add(frame.to_local(p), false, false))
+                    // The contour's own node when this one went to fetch it,
+                    // else a fresh one on the lines — put back in the caller's
+                    // plane, since the frame is the grid's business and nobody
+                    // else's.
+                    anchors.id(i + di, j + dj).unwrap_or_else(|| {
+                        fab.add(frame.to_local(grid.node(i + di, j + dj)), false, false)
+                    })
                 });
             }
             fab.push_quad(q);
@@ -610,16 +638,14 @@ fn turn(l: &crate::ops::mesh::contour::Loop2D, frame: Frame2) -> crate::ops::mes
     }
 }
 
-/// The contour's vertices, indexed so a grid node can ask whether it is one.
+/// The contour's vertices, in the grid's frame, alongside their fabric ids.
 struct ContourNodes {
-    grid: super::proximity::PointGrid,
     pts: Vec<Point2>,
     ids: Vec<u32>,
-    tol: f64,
 }
 
 impl ContourNodes {
-    fn build(fab: &Fabric, loops: &[Vec<u32>], target: f64, frame: Frame2) -> ContourNodes {
+    fn build(fab: &Fabric, loops: &[Vec<u32>], frame: Frame2) -> ContourNodes {
         let ids: Vec<u32> = loops.iter().flatten().copied().collect();
         // The fabric holds the caller's plane; the grid asks its questions in
         // its own frame, so the contour is indexed there.
@@ -627,18 +653,121 @@ impl ContourNodes {
             .iter()
             .map(|&v| frame.to_grid(fab.pts[v as usize]))
             .collect();
-        ContourNodes {
-            tol: SAME_NODE * target,
-            grid: super::proximity::PointGrid::build(&pts, target),
-            pts,
-            ids,
+        ContourNodes { pts, ids }
+    }
+}
+
+/// Which contour node each grid node has gone to fetch.
+///
+/// A grid line has no obligation to stay straight. Where one passes a contour
+/// node it just misses, the nearest node of the grid goes and gets it, and the
+/// two cells hanging off that node absorb the offset: the line runs straight
+/// through the interior and bends at its ends. That is what pays for a contour
+/// the grid cannot meet exactly — and it costs the caller nothing, because
+/// **the contour never moves**. Only the grid gives way.
+///
+/// The pairing is one to one in both directions. Two grid nodes fetching the
+/// same contour node would collapse onto each other and take their cell with
+/// them; one grid node serving two contour nodes cannot be in two places.
+struct Anchors {
+    to: HashMap<(usize, usize), (u32, Point2)>,
+}
+
+impl Anchors {
+    fn build(
+        grid: &Grid,
+        known: &ContourNodes,
+        solid: &[bool],
+        nx: usize,
+        ny: usize,
+        target: f64,
+    ) -> Anchors {
+        let reach = ANCHOR_REACH * target;
+        // One candidate per contour node: the grid node nearest to it. A second
+        // choice would be a longer reach for a node whose first choice already
+        // has a closer claimant, which is not a bargain worth the bookkeeping.
+        let mut want: Vec<(f64, usize, (usize, usize))> = Vec::new();
+        for (k, p) in known.pts.iter().enumerate() {
+            let ij = (nearest_line(&grid.xs, p.x), nearest_line(&grid.ys, p.y));
+            let d = (grid.node(ij.0, ij.1) - *p).norm();
+            if d <= reach {
+                want.push((d, k, ij));
+            }
+        }
+        // Nearest first — so a node that already sits exactly on the grid is
+        // served before anything else can take its place — and ties settled by
+        // contour node, so the result does not depend on the order the loops
+        // happened to be walked in.
+        want.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.cmp(&b.1)));
+
+        let mut to: HashMap<(usize, usize), (u32, Point2)> = HashMap::new();
+        let mut taken = vec![false; known.pts.len()];
+        for (_, k, ij) in want {
+            if taken[k] || to.contains_key(&ij) {
+                continue;
+            }
+            taken[k] = true;
+            to.insert(ij, (known.ids[k], known.pts[k]));
+        }
+
+        let mut anchors = Anchors { to };
+        anchors.settle(grid, solid, nx, ny);
+        anchors
+    }
+
+    /// Give back the anchors of every cell they leave worse than the band would
+    /// have been. Each pass only ever hands anchors back, so the loop closes.
+    fn settle(&mut self, grid: &Grid, solid: &[bool], nx: usize, ny: usize) {
+        loop {
+            let mut giving_back: Vec<(usize, usize)> = Vec::new();
+            for j in 0..ny {
+                for i in 0..nx {
+                    if !solid[j * nx + i] {
+                        continue;
+                    }
+                    let corners = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)];
+                    if !corners.iter().any(|c| self.to.contains_key(c)) {
+                        continue;
+                    }
+                    let q = corners.map(|(a, b)| self.point(grid, a, b));
+                    if super::geom::quad_quality(q) < ANCHOR_FLOOR {
+                        giving_back.extend(corners.iter().filter(|c| self.to.contains_key(c)));
+                    }
+                }
+            }
+            if giving_back.is_empty() {
+                return;
+            }
+            for c in giving_back {
+                self.to.remove(&c);
+            }
         }
     }
 
-    /// The contour vertex at `p`, if there is one.
-    fn at(&self, p: Point2) -> Option<u32> {
-        let k = self.grid.nearest_index_within(&self.pts, p, self.tol)?;
-        Some(self.ids[k])
+    /// The contour node this grid node fetched, if it fetched one.
+    fn id(&self, i: usize, j: usize) -> Option<u32> {
+        self.to.get(&(i, j)).map(|&(v, _)| v)
+    }
+
+    /// Where this grid node actually is: on the contour node it fetched, or on
+    /// its lines when it fetched none.
+    fn point(&self, grid: &Grid, i: usize, j: usize) -> Point2 {
+        self.to
+            .get(&(i, j))
+            .map_or_else(|| grid.node(i, j), |&(_, p)| p)
+    }
+}
+
+/// The index of the line of `lines` nearest to `v`.
+fn nearest_line(lines: &[f64], v: f64) -> usize {
+    let k = lines.partition_point(|&x| x < v);
+    if k == 0 {
+        return 0;
+    }
+    if k == lines.len() || v - lines[k - 1] <= lines[k] - v {
+        k - 1
+    } else {
+        k
     }
 }
 
@@ -793,11 +922,10 @@ fn column(lines: &[f64], v: f64) -> usize {
 /// gets the best of both: the straight sides keep their grid right up to the
 /// contour, and only the round part pays for a band.
 fn clear_of_unmet(
-    grid: &Grid,
     solid: &[bool],
     nx: usize,
     ny: usize,
-    known: &ContourNodes,
+    anchors: &Anchors,
     contour_loops: &[Vec<u32>],
     band: usize,
 ) -> Vec<bool> {
@@ -809,10 +937,15 @@ fn clear_of_unmet(
             on_contour.insert((a.min(b), a.max(b)));
         }
     }
-    let met = |a: Point2, b: Point2| match (known.at(a), known.at(b)) {
-        (Some(u), Some(v)) => on_contour.contains(&(u.min(v), u.max(v))),
-        _ => false,
-    };
+    // A face lies on the contour when both its grid nodes went and fetched a
+    // contour node and the two they fetched are neighbours on it. Asked of the
+    // anchors rather than of the geometry, so a face that only reaches the
+    // contour by bending counts exactly as much as one that was already there.
+    let met =
+        |a: (usize, usize), b: (usize, usize)| match (anchors.id(a.0, a.1), anchors.id(b.0, b.1)) {
+            (Some(u), Some(v)) => on_contour.contains(&(u.min(v), u.max(v))),
+            _ => false,
+        };
 
     let at = |i: i64, j: i64| -> bool {
         i >= 0
@@ -839,7 +972,7 @@ fn clear_of_unmet(
                 if at(i + di, j + dj) {
                     continue;
                 }
-                if !met(grid.node(a.0, a.1), grid.node(b.0, b.1)) {
+                if !met(a, b) {
                     unmet[v * nx + u] = true;
                     break;
                 }

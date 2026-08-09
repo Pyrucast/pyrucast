@@ -60,7 +60,11 @@
 //!
 //! A grid node that lands on a contour node **is** that node — the same vertex,
 //! not a copy — so the core reaches the boundary instead of stopping a hair
-//! short of it.
+//! short of it. And where it only nearly lands, it goes and fetches it: nothing
+//! obliges a grid line to stay straight, so the node of the grid closest to a
+//! contour node within a quarter cell moves onto it and the two rows hanging
+//! off it bend at that end. **The contour itself never moves** — not a node of
+//! the caller's mesh is touched — because it is always the grid that gives way.
 //!
 //! What is left for the front is the contour and the core's boundary minus the
 //! edges they share, since a segment walked once each way bounds nothing at
@@ -549,6 +553,47 @@ mod tests {
             "area {}",
             r.area
         );
+    }
+
+    #[test]
+    fn a_shape_off_the_grid_is_fetched_rather_than_banded() {
+        // A step at 0.53 by 0.61 on a target of 0.1 shares its corner with the
+        // grid and nothing else: every node along it misses a line by a
+        // fraction of a cell. Rather than hand the whole side to the front, the
+        // nodes of the grid nearest to them go and fetch them, and the rows
+        // bend to suit. The plate used to come back with two triangles and a
+        // cell ten times longer than it was wide; it now comes back whole.
+        let coords = insert(Coords::new(2).unwrap());
+        let corners = [
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.53, 1.0),
+            (0.53, 0.61),
+            (0.0, 0.61),
+        ];
+        let pts = on_grid(&corners, 0.1);
+        let before: Vec<(f64, f64)> = pts.clone();
+        let contour = loop_mesh(coords.clone(), &pts);
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+
+        let r = inspect(&mesh);
+        assert_eq!(r.tris, 0, "a bent row should not need a triangle");
+        assert_eq!(r.non_conforming, 0);
+        assert!(
+            r.min_jacobian > 0.9,
+            "worst cell {} — bending is supposed to keep them square",
+            r.min_jacobian
+        );
+        // The shoelace of the six corners, to the last digit: bending moves the
+        // grid about but it may not eat into the domain nor spill out of it.
+        assert!((r.area - 0.7933).abs() < 1e-9, "area {}", r.area);
+
+        // The bending is the grid's alone: not one node of the contour moved.
+        for (cell, want) in contour.cells(0).unwrap().zip(before.chunks(1)) {
+            let p = cell.nodes().unwrap()[0].position().unwrap();
+            assert_eq!((p[0], p[1]), want[0]);
+        }
     }
 
     #[test]
