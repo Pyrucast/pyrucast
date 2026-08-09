@@ -25,32 +25,13 @@
 //! cell along that step would be cut — the core would stop short of the whole
 //! feature and the band would have to fill it with rows.
 //!
-//! So the grid lines are chosen from the contour itself, **one per node**.
-//! Consecutive edges running the same way are grouped into a **chain**; every
-//! node of a chain asks for the line that crosses it, and a chain a cell long
-//! or more also asks for the line it lies on. Candidates closer together than
-//! half a cell then merge at their mean, so two facing walls that disagree
-//! meet in the middle rather than one of them winning outright. Only the gaps
-//! the contour left empty are subdivided, and there uniformly.
-//!
-//! Taking the lines one per node is what keeps the caller's own subdivision. It
-//! is also what avoids nailing a line onto a feature and subdividing either
-//! side of it: that reads as respect for the shape, and is in fact how a wall
-//! ends up forced into a different number of rows than the wall facing it — 5+6
-//! on one side against 4+7 on the other, and a row with nowhere to go.
-//!
-//! What is left off by a fraction of a cell is fetched: the grid node nearest
-//! to a contour node goes and stands on it, and the rows bend at their ends to
-//! suit. The contour never moves — it is the grid that gives way, which is the
-//! only order that leaves the caller's mesh alone. **Cells are then judged on
-//! where their corners are**, bent and all; judging them on the straight grid
-//! is what used to condemn a whole row for a ledge sitting a hundredth of a
-//! cell off a line.
-//!
-//! A contour with no direction at all — a circle — gets none of this. Its
-//! chords lie near an axis by accident, so following their nodes would trade a
-//! regular grid for the happenstance of where its vertices fell: it gets the
-//! uniform grid over its extent, and no fetching.
+//! So the grid lines are chosen from the contour itself: every axis-aligned
+//! edge long enough to matter contributes its coordinate as a line, and the
+//! gaps between consecutive lines are subdivided uniformly at about the target
+//! size. On a rectilinear contour every corner then lands on a grid node and
+//! the core covers the domain up to the band. On a contour with no direction
+//! at all — a circle — nothing is contributed and the result degrades
+//! gracefully to the uniform grid over the bounding box.
 //!
 //! ## What comes out
 //!
@@ -102,27 +83,17 @@ const FEATURE_SPAN: f64 = 1.0;
 /// edge ask for*.
 const ALIGN_SLOPE: f64 = 0.25;
 
-/// How far, in target sizes, a grid node may be pulled off its lines to land on
-/// a contour node.
-///
-/// Nothing says a grid line has to be straight. Where one passes a contour node
-/// it just misses, the node of the grid nearest to it goes and fetches it, and
-/// the two cells hanging off that node take up the slack — the line runs
-/// straight through the interior and bends at its ends. **The contour does not
-/// move**; it is the grid that gives way, which is the only order that keeps
-/// the caller's mesh untouched.
-///
-/// Half of [`MERGE_FLOOR`], and that is what makes it safe rather than merely
-/// small: no gap between two lines is thinner than the merge floor, so a corner
-/// can never reach halfway across its own cell and no cell can be turned inside
-/// out. The quality guard in [`Anchors::build`] is there for what is ugly, not
-/// for what is impossible.
-const ANCHOR_REACH: f64 = 0.25;
+/// Two points closer than this many target sizes are the same node. Not a
+/// tolerance so much as an equality: a grid line placed on a contour node lands
+/// on it to rounding, and anything further off is a different node, which
+/// taking for the same one would tear the mesh.
+const SAME_NODE: f64 = 0.0025;
 
-/// A cell whose worst corner falls below this after bending gives its anchor
-/// back. Well under what the band would have offered in its place, since a cell
-/// that stays is only worth keeping if it beats the alternative.
-const ANCHOR_FLOOR: f64 = 0.3;
+/// Beyond this many lines per axis, give up on the contour and use the uniform
+/// grid. [`MERGE_FLOOR`] already bounds the count at twice what the uniform
+/// grid would hold, so this only ever catches a domain whose extent dwarfs its
+/// target size — where the mesh was never going to fit in memory anyway.
+const MAX_SNAP_LINES: usize = 4096;
 
 /// Below this share of the perimeter running one way, the contour has no
 /// dominant direction at all — a circle — and turning the grid would only
@@ -154,7 +125,7 @@ impl Frame2 {
     /// The frame turned by `angle`. Zero is the identity and is short-circuited
     /// rather than multiplied through by one, so a contour already square with
     /// the axes comes out bit for bit as it went in.
-    fn at(angle: f64) -> Frame2 {
+    pub(super) fn at(angle: f64) -> Frame2 {
         if angle == 0.0 {
             Frame2 { cos: 1.0, sin: 0.0 }
         } else {
@@ -170,7 +141,7 @@ impl Frame2 {
     }
 
     /// A point of the caller's plane, in the grid's frame.
-    fn to_grid(self, p: Point2) -> Point2 {
+    pub(super) fn to_grid(self, p: Point2) -> Point2 {
         if self.identity() {
             return p;
         }
@@ -181,7 +152,7 @@ impl Frame2 {
     }
 
     /// A point of the grid's frame, back in the caller's plane.
-    fn to_local(self, p: Point2) -> Point2 {
+    pub(super) fn to_local(self, p: Point2) -> Point2 {
         if self.identity() {
             return p;
         }
@@ -264,30 +235,24 @@ pub fn preferred_angle(domain: &Domain) -> f64 {
 pub struct Grid {
     pub xs: Vec<f64>,
     pub ys: Vec<f64>,
-    /// Whether the lines were taken from the contour at all. A shape with no
-    /// direction — a circle — gets the uniform grid over its extent instead,
-    /// and with it the plain treatment throughout: no node of it is worth
-    /// fetching, since its chords lie near an axis only by accident.
-    pub follows: bool,
 }
 
 impl Grid {
     /// Lay a grid over `domain` with cells of about `target`, its lines taken
     /// from the contour's own nodes.
     ///
-    /// Every node of an aligned chain asks for the line that **crosses** it, and
-    /// a chain long enough also asks for the line it **lies on**. Candidates
-    /// closer than half a cell then merge at their mean, so two facing walls
-    /// that disagree meet in the middle instead of one of them winning outright.
+    /// A grid line is not there to *lie along* a contour edge, it is there to
+    /// **cross** it — perpendicular, through its nodes. So a vertical wall of
+    /// five nodes asks for five *horizontal* lines, one per node, and it is the
+    /// horizontal edges bounding it that ask for the vertical line it lies on,
+    /// since they share its corners. An aligned edge does both: it places the
+    /// line it lies on, and its nodes place the lines crossing it.
     ///
-    /// Taking the lines one per node is what keeps the caller's own subdivision:
-    /// a side 5.5 cells long is five or six depending on which way the halfway
-    /// mark rounds, the caller has already chosen, and recomputing that choice
-    /// here only means disagreeing with it sooner or later. It also refuses to
-    /// nail a line onto a feature and subdivide either side of it — which reads
-    /// as respect for the shape and is in fact how a facing wall gets forced
-    /// into a different number of rows than the wall opposite.
-    ///
+    /// The consequence is the whole point: between two corners of the shape the
+    /// number of lines is **read off the contour** instead of being recomputed
+    /// as `round(length / target)`. There is then no arrangement of roundings
+    /// under which the caller's discretisation and the mesher's disagree, which
+    /// is what used to send a whole wall to the band for a 2 % difference.
     pub fn over(domain: &Domain, target: f64) -> Grid {
         let pts = &domain.outer.pts;
         let (mut x0, mut x1) = (f64::INFINITY, f64::NEG_INFINITY);
@@ -301,10 +266,15 @@ impl Grid {
 
         // Both ends of the domain's extent are lines whatever happens.
         let (mut sx, mut sy) = (vec![x0, x1], vec![y0, y1]);
-        let follows = has_a_direction(domain);
+        // An edge counts as aligned when it strays less than this out of every
+        // unit it runs — the same window `preferred_angle` judges alignment by,
+        // since it is judging it for this very purpose.
+        let slope = ALIGN_SLOPE;
+        // A horizontal chain dictates the vertical lines crossing it, and vice
+        // versa — that is the whole rule.
         let (mut across_x, mut across_y): (Vec<Run>, Vec<Run>) = (Vec::new(), Vec::new());
         for l in std::iter::once(&domain.outer).chain(&domain.holes) {
-            for run in runs(l, ALIGN_SLOPE) {
+            for run in runs(l, slope) {
                 let span = run.along[run.along.len() - 1] - run.along[0];
                 if span >= FEATURE_SPAN * target {
                     if run.horizontal {
@@ -321,20 +291,9 @@ impl Grid {
             }
         }
 
-        if follows {
-            // `across_x` holds the horizontal chains, whose `along` is in x: it
-            // is they who ask for the vertical lines.
-            for run in &across_x {
-                sx.extend_from_slice(&run.along);
-            }
-            for run in &across_y {
-                sy.extend_from_slice(&run.along);
-            }
-        }
         Grid {
-            xs: spread(cluster(sx, MERGE_FLOOR * target), target),
-            ys: spread(cluster(sy, MERGE_FLOOR * target), target),
-            follows,
+            xs: weave(cluster(sx, MERGE_FLOOR * target), &across_x, target),
+            ys: weave(cluster(sy, MERGE_FLOOR * target), &across_y, target),
         }
     }
 
@@ -348,6 +307,13 @@ impl Grid {
 
     fn node(&self, i: usize, j: usize) -> Point2 {
         Point2::new(self.xs[i], self.ys[j])
+    }
+
+    fn centre(&self, i: usize, j: usize) -> Point2 {
+        Point2::new(
+            0.5 * (self.xs[i] + self.xs[i + 1]),
+            0.5 * (self.ys[j] + self.ys[j + 1]),
+        )
     }
 }
 
@@ -426,48 +392,6 @@ fn runs(l: &crate::ops::mesh::contour::Loop2D, slope: f64) -> Vec<Run> {
     out
 }
 
-/// Does the contour run one way enough for its nodes to be worth following?
-///
-/// Judged in the tight [`ALIGN_WINDOW`], not in the reach [`ALIGN_SLOPE`] the
-/// lines themselves are chosen by, and the two answer different questions. A
-/// circle has a third of its perimeter within fourteen degrees of an axis and
-/// none of it within one: its chords sit near an axis by accident, and taking
-/// their nodes for grid lines would trade a regular grid for the happenstance
-/// of where its vertices fell.
-fn has_a_direction(domain: &Domain) -> bool {
-    let slope = ALIGN_WINDOW.tan();
-    let (mut aligned, mut perimeter) = (0.0, 0.0);
-    for l in std::iter::once(&domain.outer).chain(&domain.holes) {
-        let n = l.pts.len();
-        for i in 0..n {
-            let d = l.pts[(i + 1) % n] - l.pts[i];
-            perimeter += d.norm();
-            if d.y.abs() <= slope * d.x.abs() || d.x.abs() <= slope * d.y.abs() {
-                aligned += d.norm();
-            }
-        }
-    }
-    aligned >= DOMINANT_SHARE * perimeter
-}
-
-/// Subdivide uniformly the gaps the contour left empty. Where its nodes put the
-/// lines, they are already where they should be and are not touched.
-fn spread(lines: Vec<f64>, target: f64) -> Vec<f64> {
-    if lines.len() < 2 {
-        return lines;
-    }
-    let mut out = vec![lines[0]];
-    for w in lines.windows(2) {
-        let (a, b) = (w[0], w[1]);
-        let k = (((b - a) / target).round() as usize).max(1);
-        for i in 1..k {
-            out.push(a + (b - a) * i as f64 / k as f64);
-        }
-        out.push(b);
-    }
-    out
-}
-
 /// Sort, then merge coordinates closer than `tol` into their mean.
 fn cluster(mut v: Vec<f64>, tol: f64) -> Vec<f64> {
     v.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -485,6 +409,82 @@ fn cluster(mut v: Vec<f64>, tol: f64) -> Vec<f64> {
         out.push(sum / count as f64);
     }
     out
+}
+
+/// Subdivide each gap between consecutive `lines`, taking the subdivision from
+/// a contour chain of `across` whenever one spans the gap end to end, and
+/// falling back to a uniform `round(gap / target)` cells where none does.
+///
+/// Reading the count off the contour is not a refinement, it is the only way to
+/// get it right. A wall 5.5 target sizes long is five cells or six depending on
+/// which side of the halfway mark the arithmetic lands, and the caller has
+/// already made that choice; recomputing it here means disagreeing with it
+/// sooner or later, and one disagreement sends the whole wall to the band.
+fn weave(lines: Vec<f64>, across: &[Run], target: f64) -> Vec<f64> {
+    if lines.len() < 2 {
+        return lines;
+    }
+    if lines.len() > MAX_SNAP_LINES {
+        // Not a rectilinear shape: keep the extent, drop the rest.
+        let (a, b) = (lines[0], lines[lines.len() - 1]);
+        let k = (((b - a) / target).round() as usize).max(1);
+        return (0..=k).map(|i| a + (b - a) * i as f64 / k as f64).collect();
+    }
+    let mut out = vec![lines[0]];
+    for w in lines.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        match dictated(a, b, across, target) {
+            Some(run) => {
+                // Mapped onto the gap rather than spliced raw: the gap's ends
+                // are clustered means and may sit a rounding away from the
+                // chain's own, and a line has to be exactly where it is.
+                let (lo, hi) = (run[0], run[run.len() - 1]);
+                let scale = (b - a) / (hi - lo);
+                for &v in &run[1..run.len() - 1] {
+                    out.push(a + (v - lo) * scale);
+                }
+            }
+            None => {
+                let k = (((b - a) / target).round() as usize).max(1);
+                for i in 1..k {
+                    out.push(a + (b - a) * i as f64 / k as f64);
+                }
+            }
+        }
+        out.push(b);
+    }
+    out
+}
+
+/// The nodes of a contour chain spanning `(a, b)` end to end, if there is one
+/// whose cells are all of a sane size.
+///
+/// The window on each end is half the merge floor, which is exactly what keeps
+/// it unambiguous: two distinct lines are at least a whole merge floor apart,
+/// so no chain end can fall in two windows at once.
+fn dictated(a: f64, b: f64, across: &[Run], target: f64) -> Option<&[f64]> {
+    let reach = MERGE_FLOOR * target * 0.5;
+    let mut best: Option<(f64, &[f64])> = None;
+    for run in across {
+        let v = &run.along[..];
+        if (v[0] - a).abs() > reach || (v[v.len() - 1] - b).abs() > reach {
+            continue;
+        }
+        // Every cell it asks for has to be one: not thinner than the floor a
+        // merge would have imposed, and not wider than the reciprocal.
+        if v.windows(2).any(|w| {
+            let d = w[1] - w[0];
+            d < MERGE_FLOOR * target || d > target / MERGE_FLOOR
+        }) {
+            continue;
+        }
+        // Between rival chains, the one whose cells sit closest to the target.
+        let err = (((b - a) / (v.len() - 1) as f64) / target).ln().abs();
+        if best.is_none_or(|(e, _)| err < e) {
+            best = Some((err, v));
+        }
+    }
+    best.map(|(_, v)| v)
 }
 
 /// The structured core, once written into the fabric.
@@ -536,37 +536,36 @@ pub fn build(
         };
     }
 
-    // ── Send the grid to fetch the contour where it nearly touches it ─────
-    // First of all, and that order is the whole point. A cell is judged on
-    // where its corners **are**, and bending is what puts them there: a ledge
-    // sitting a hundredth of a cell off a line runs through the interior of a
-    // whole row of the straight grid and condemns it, when all it needed was
-    // for that row to come and meet it.
-    let known = ContourNodes::build(fab, contour_loops, frame);
-    let mut anchors = match grid.follows {
-        true => Anchors::build(&grid, &known, target),
-        // Nothing to fetch on a shape whose nodes the grid was not laid for:
-        // with no anchor, every cell is its plain rectangle and the whole of
-        // what follows falls back to the straight treatment on its own.
-        false => Anchors::none(),
-    };
-
     // ── Which cells are entirely in the material ──────────────────────────
-    // A cell is solid when the boundary misses it and its centroid is inside.
-    // Both questions are asked of the bent cell.
-    //
-    // The two settle each other: dropping an anchor moves corners back onto
-    // the lines, which can let the boundary through a cell that had been
-    // spared, so the classification is worth asking again. Each pass only ever
-    // hands anchors back, so the loop closes — and on a contour the grid can
-    // meet it does not go round twice.
-    let mut solid = classify(&grid, &anchors, domain, nx, ny);
-    while anchors.settle(&grid, &solid, nx, ny) {
-        solid = classify(&grid, &anchors, domain, nx, ny);
+    // A cell is solid when the boundary misses it and its centre is inside.
+    // Marking every cell a boundary edge's bounding box touches is
+    // conservative — it can only shrink the core — and on a contour
+    // discretised at about the target size it over-marks almost nothing.
+    let mut cut = vec![false; nx * ny];
+    for l in std::iter::once(&domain.outer).chain(&domain.holes) {
+        let n = l.pts.len();
+        for i in 0..n {
+            let (a, b) = (l.pts[i], l.pts[(i + 1) % n]);
+            for (ci, cj) in cells_touching(&grid, a, b) {
+                cut[cj * nx + ci] = true;
+            }
+        }
+    }
+    let mut solid = vec![false; nx * ny];
+    for j in 0..ny {
+        for i in 0..nx {
+            if cut[j * nx + i] {
+                continue;
+            }
+            let c = grid.centre(i, j);
+            solid[j * nx + i] = point_in_polygon(c, &domain.outer.pts)
+                && !domain.holes.iter().any(|h| point_in_polygon(c, &h.pts));
+        }
     }
 
     // ── Pull back only where the core misses the contour ──────────────────
-    let mut keep = clear_of_unmet(&solid, nx, ny, &anchors, contour_loops, band);
+    let known = ContourNodes::build(fab, contour_loops, target, frame);
+    let mut keep = clear_of_unmet(&grid, &solid, nx, ny, &known, contour_loops, band);
     tidy(&mut keep, nx, ny);
 
     // ── Emit the cells, sharing the contour's nodes where they coincide ───
@@ -581,13 +580,13 @@ pub fn build(
             let mut q = [0u32; 4];
             for (k, (di, dj)) in [(0, 0), (1, 0), (1, 1), (0, 1)].into_iter().enumerate() {
                 q[k] = *vert.entry((i + di, j + dj)).or_insert_with(|| {
-                    // The contour's own node when this one went to fetch it,
-                    // else a fresh one on the lines — put back in the caller's
-                    // plane, since the frame is the grid's business and nobody
-                    // else's.
-                    anchors.id(i + di, j + dj).unwrap_or_else(|| {
-                        fab.add(frame.to_local(grid.node(i + di, j + dj)), false, false)
-                    })
+                    let p = grid.node(i + di, j + dj);
+                    // The contour's own node when there is one, else a fresh
+                    // one — put back in the caller's plane, since the frame is
+                    // the grid's business and nobody else's.
+                    known
+                        .at(p)
+                        .unwrap_or_else(|| fab.add(frame.to_local(p), false, false))
                 });
             }
             fab.push_quad(q);
@@ -604,21 +603,26 @@ pub fn build(
 
 /// One loop, expressed in the grid's frame. The node ids are the caller's and
 /// travel unchanged: only the geometry turns.
-fn turn(l: &crate::ops::mesh::contour::Loop2D, frame: Frame2) -> crate::ops::mesh::contour::Loop2D {
+pub(super) fn turn(
+    l: &crate::ops::mesh::contour::Loop2D,
+    frame: Frame2,
+) -> crate::ops::mesh::contour::Loop2D {
     crate::ops::mesh::contour::Loop2D {
         node_ids: l.node_ids.clone(),
         pts: l.pts.iter().map(|&p| frame.to_grid(p)).collect(),
     }
 }
 
-/// The contour's vertices, in the grid's frame, alongside their fabric ids.
+/// The contour's vertices, indexed so a grid node can ask whether it is one.
 struct ContourNodes {
+    grid: super::proximity::PointGrid,
     pts: Vec<Point2>,
     ids: Vec<u32>,
+    tol: f64,
 }
 
 impl ContourNodes {
-    fn build(fab: &Fabric, loops: &[Vec<u32>], frame: Frame2) -> ContourNodes {
+    fn build(fab: &Fabric, loops: &[Vec<u32>], target: f64, frame: Frame2) -> ContourNodes {
         let ids: Vec<u32> = loops.iter().flatten().copied().collect();
         // The fabric holds the caller's plane; the grid asks its questions in
         // its own frame, so the contour is indexed there.
@@ -626,118 +630,18 @@ impl ContourNodes {
             .iter()
             .map(|&v| frame.to_grid(fab.pts[v as usize]))
             .collect();
-        ContourNodes { pts, ids }
-    }
-}
-
-/// Which contour node each grid node has gone to fetch.
-///
-/// A grid line has no obligation to stay straight. Where one passes a contour
-/// node it just misses, the nearest node of the grid goes and gets it, and the
-/// two cells hanging off that node absorb the offset: the line runs straight
-/// through the interior and bends at its ends. That is what pays for a contour
-/// the grid cannot meet exactly — and it costs the caller nothing, because
-/// **the contour never moves**. Only the grid gives way.
-///
-/// The pairing is one to one in both directions. Two grid nodes fetching the
-/// same contour node would collapse onto each other and take their cell with
-/// them; one grid node serving two contour nodes cannot be in two places.
-struct Anchors {
-    to: HashMap<(usize, usize), (u32, Point2)>,
-}
-
-impl Anchors {
-    fn build(grid: &Grid, known: &ContourNodes, target: f64) -> Anchors {
-        let reach = ANCHOR_REACH * target;
-        // One candidate per contour node: the grid node nearest to it. A second
-        // choice would be a longer reach for a node whose first choice already
-        // has a closer claimant, which is not a bargain worth the bookkeeping.
-        let mut want: Vec<(f64, usize, (usize, usize))> = Vec::new();
-        for (k, p) in known.pts.iter().enumerate() {
-            let ij = (nearest_line(&grid.xs, p.x), nearest_line(&grid.ys, p.y));
-            let d = (grid.node(ij.0, ij.1) - *p).norm();
-            if d <= reach {
-                want.push((d, k, ij));
-            }
+        ContourNodes {
+            tol: SAME_NODE * target,
+            grid: super::proximity::PointGrid::build(&pts, target),
+            pts,
+            ids,
         }
-        // Nearest first — so a node that already sits exactly on the grid is
-        // served before anything else can take its place — and ties settled by
-        // contour node, so the result does not depend on the order the loops
-        // happened to be walked in.
-        want.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.cmp(&b.1)));
-
-        let mut to: HashMap<(usize, usize), (u32, Point2)> = HashMap::new();
-        let mut taken = vec![false; known.pts.len()];
-        for (_, k, ij) in want {
-            if taken[k] || to.contains_key(&ij) {
-                continue;
-            }
-            taken[k] = true;
-            to.insert(ij, (known.ids[k], known.pts[k]));
-        }
-
-        Anchors { to }
     }
 
-    /// Give back the anchors of every solid cell they leave worse than the band
-    /// would have been, and say whether any were handed back — the caller has
-    /// to reclassify if so, since a corner returning to its lines can let the
-    /// boundary back into a cell.
-    fn settle(&mut self, grid: &Grid, solid: &[bool], nx: usize, ny: usize) -> bool {
-        let mut giving_back: Vec<(usize, usize)> = Vec::new();
-        for j in 0..ny {
-            for i in 0..nx {
-                if !solid[j * nx + i] {
-                    continue;
-                }
-                let corners = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)];
-                if !corners.iter().any(|c| self.to.contains_key(c)) {
-                    continue;
-                }
-                if super::geom::quad_quality(self.cell(grid, i, j)) < ANCHOR_FLOOR {
-                    giving_back.extend(corners.iter().filter(|c| self.to.contains_key(c)));
-                }
-            }
-        }
-        for c in &giving_back {
-            self.to.remove(c);
-        }
-        !giving_back.is_empty()
-    }
-
-    /// The contour node this grid node fetched, if it fetched one.
-    fn id(&self, i: usize, j: usize) -> Option<u32> {
-        self.to.get(&(i, j)).map(|&(v, _)| v)
-    }
-
-    /// Where this grid node actually is: on the contour node it fetched, or on
-    /// its lines when it fetched none.
-    fn point(&self, grid: &Grid, i: usize, j: usize) -> Point2 {
-        self.to
-            .get(&(i, j))
-            .map_or_else(|| grid.node(i, j), |&(_, p)| p)
-    }
-
-    fn none() -> Anchors {
-        Anchors { to: HashMap::new() }
-    }
-
-    /// Cell `(i, j)` as it actually is, counter-clockwise.
-    fn cell(&self, grid: &Grid, i: usize, j: usize) -> [Point2; 4] {
-        [(0, 0), (1, 0), (1, 1), (0, 1)].map(|(di, dj)| self.point(grid, i + di, j + dj))
-    }
-}
-
-/// The index of the line of `lines` nearest to `v`.
-fn nearest_line(lines: &[f64], v: f64) -> usize {
-    let k = lines.partition_point(|&x| x < v);
-    if k == 0 {
-        return 0;
-    }
-    if k == lines.len() || v - lines[k - 1] <= lines[k] - v {
-        k - 1
-    } else {
-        k
+    /// The contour vertex at `p`, if there is one.
+    fn at(&self, p: Point2) -> Option<u32> {
+        let k = self.grid.nearest_index_within(&self.pts, p, self.tol)?;
+        Some(self.ids[k])
     }
 }
 
@@ -751,7 +655,7 @@ fn nearest_line(lines: &[f64], v: f64) -> usize {
 /// between them, which is nothing at all, goes with them. What survives chains
 /// into the loops the front works on — and on a rectilinear domain on the
 /// grid, nothing survives and there is no front to run.
-fn band_loops(contour: &[Vec<u32>], core: &[Vec<u32>]) -> Vec<(Vec<u32>, bool)> {
+pub(super) fn band_loops(contour: &[Vec<u32>], core: &[Vec<u32>]) -> Vec<(Vec<u32>, bool)> {
     let mut edges: HashMap<(u32, u32), bool> = HashMap::new();
     for (l, from_core) in contour
         .iter()
@@ -809,30 +713,23 @@ fn band_loops(contour: &[Vec<u32>], core: &[Vec<u32>]) -> Vec<(Vec<u32>, bool)> 
 /// just runs between them. Testing bounding boxes instead would mark both, the
 /// outermost ring of cells would be lost on every axis-aligned shape, and the
 /// core would stop one cell short of a contour it could have met exactly.
-fn cells_touching(
-    grid: &Grid,
-    anchors: &Anchors,
-    nx: usize,
-    ny: usize,
-    a: Point2,
-    b: Point2,
-) -> Vec<(usize, usize)> {
-    // The index window comes from the straight grid, so it is widened by one
-    // cell each way: a corner may have been fetched up to a quarter cell off
-    // its lines, and the segment that fetched it lies that much outside the
-    // window its own coordinates would give.
-    let span = |lines: &[f64], lo: f64, hi: f64, n: usize| {
-        (
-            column(lines, lo).saturating_sub(1),
-            (column(lines, hi) + 1).min(n - 1),
-        )
-    };
-    let (i0, i1) = span(&grid.xs, a.x.min(b.x), a.x.max(b.x), nx);
-    let (j0, j1) = span(&grid.ys, a.y.min(b.y), a.y.max(b.y), ny);
+fn cells_touching(grid: &Grid, a: Point2, b: Point2) -> Vec<(usize, usize)> {
+    let i0 = column(&grid.xs, a.x.min(b.x));
+    let i1 = column(&grid.xs, a.x.max(b.x));
+    let j0 = column(&grid.ys, a.y.min(b.y));
+    let j1 = column(&grid.ys, a.y.max(b.y));
     let mut out = Vec::new();
     for j in j0..=j1 {
         for i in i0..=i1 {
-            if enters(a, b, anchors.cell(grid, i, j)) {
+            let eps = 1e-9 * (grid.xs[i + 1] - grid.xs[i]).min(grid.ys[j + 1] - grid.ys[j]);
+            if enters(
+                a,
+                b,
+                grid.xs[i] + eps,
+                grid.xs[i + 1] - eps,
+                grid.ys[j] + eps,
+                grid.ys[j + 1] - eps,
+            ) {
                 out.push((i, j));
             }
         }
@@ -840,36 +737,24 @@ fn cells_touching(
     out
 }
 
-/// Does the segment `a → b` meet the **open** interior of the convex,
-/// counter-clockwise quadrangle `q`?
-///
-/// Liang–Barsky against the four sides rather than against a box, because a
-/// cell whose corners have been fetched is no longer a rectangle. Each side is
-/// pushed inward by a rounding, which is what keeps a segment lying *along* a
-/// side from counting as entering — the property the whole core depends on,
-/// since a contour edge that runs between two cells cuts neither.
-fn enters(a: Point2, b: Point2, q: [Point2; 4]) -> bool {
-    let d = b - a;
+/// Does the segment `a → b` meet the box `[x0, x1] × [y0, y1]`?
+/// Liang–Barsky, kept to the clipping test itself.
+fn enters(a: Point2, b: Point2, x0: f64, x1: f64, y0: f64, y1: f64) -> bool {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
     let (mut t0, mut t1) = (0.0f64, 1.0f64);
-    for k in 0..4 {
-        let (p0, p1) = (q[k], q[(k + 1) % 4]);
-        let e = p1 - p0;
-        // Inward normal of a counter-clockwise side, unnormalised; the epsilon
-        // is scaled by its length so it stays a true distance.
-        let n = Point2::new(-e.y, e.x);
-        let len = n.coords.norm();
-        if len == 0.0 {
-            continue;
-        }
-        let num = n.x * (a.x - p0.x) + n.y * (a.y - p0.y) - 1e-9 * len;
-        let den = n.x * d.x + n.y * d.y;
-        if den == 0.0 {
-            if num < 0.0 {
+    for (p, q) in [
+        (-dx, a.x - x0),
+        (dx, x1 - a.x),
+        (-dy, a.y - y0),
+        (dy, y1 - a.y),
+    ] {
+        if p == 0.0 {
+            if q < 0.0 {
                 return false; // parallel to this side and outside it
             }
         } else {
-            let r = -num / den;
-            if den > 0.0 {
+            let r = q / p;
+            if p < 0.0 {
                 t0 = t0.max(r);
             } else {
                 t1 = t1.min(r);
@@ -882,39 +767,8 @@ fn enters(a: Point2, b: Point2, q: [Point2; 4]) -> bool {
     true
 }
 
-/// Mark the cells the boundary misses and whose centroid is in the material —
-/// both judged on the cell as it actually is, corners fetched and all.
-fn classify(grid: &Grid, anchors: &Anchors, domain: &Domain, nx: usize, ny: usize) -> Vec<bool> {
-    let mut cut = vec![false; nx * ny];
-    for l in std::iter::once(&domain.outer).chain(&domain.holes) {
-        let n = l.pts.len();
-        for i in 0..n {
-            let (a, b) = (l.pts[i], l.pts[(i + 1) % n]);
-            for (ci, cj) in cells_touching(grid, anchors, nx, ny, a, b) {
-                cut[cj * nx + ci] = true;
-            }
-        }
-    }
-    let mut solid = vec![false; nx * ny];
-    for j in 0..ny {
-        for i in 0..nx {
-            if cut[j * nx + i] {
-                continue;
-            }
-            let q = anchors.cell(grid, i, j);
-            let c = Point2::new(
-                0.25 * (q[0].x + q[1].x + q[2].x + q[3].x),
-                0.25 * (q[0].y + q[1].y + q[2].y + q[3].y),
-            );
-            solid[j * nx + i] = point_in_polygon(c, &domain.outer.pts)
-                && !domain.holes.iter().any(|h| point_in_polygon(c, &h.pts));
-        }
-    }
-    solid
-}
-
 /// The index of the cell column containing `v`, clamped to the grid.
-fn column(lines: &[f64], v: f64) -> usize {
+pub(super) fn column(lines: &[f64], v: f64) -> usize {
     match lines.binary_search_by(|x| x.partial_cmp(&v).unwrap()) {
         Ok(i) => i.min(lines.len() - 2),
         Err(0) => 0,
@@ -942,10 +796,11 @@ fn column(lines: &[f64], v: f64) -> usize {
 /// gets the best of both: the straight sides keep their grid right up to the
 /// contour, and only the round part pays for a band.
 fn clear_of_unmet(
+    grid: &Grid,
     solid: &[bool],
     nx: usize,
     ny: usize,
-    anchors: &Anchors,
+    known: &ContourNodes,
     contour_loops: &[Vec<u32>],
     band: usize,
 ) -> Vec<bool> {
@@ -957,15 +812,10 @@ fn clear_of_unmet(
             on_contour.insert((a.min(b), a.max(b)));
         }
     }
-    // A face lies on the contour when both its grid nodes went and fetched a
-    // contour node and the two they fetched are neighbours on it. Asked of the
-    // anchors rather than of the geometry, so a face that only reaches the
-    // contour by bending counts exactly as much as one that was already there.
-    let met =
-        |a: (usize, usize), b: (usize, usize)| match (anchors.id(a.0, a.1), anchors.id(b.0, b.1)) {
-            (Some(u), Some(v)) => on_contour.contains(&(u.min(v), u.max(v))),
-            _ => false,
-        };
+    let met = |a: Point2, b: Point2| match (known.at(a), known.at(b)) {
+        (Some(u), Some(v)) => on_contour.contains(&(u.min(v), u.max(v))),
+        _ => false,
+    };
 
     let at = |i: i64, j: i64| -> bool {
         i >= 0
@@ -992,7 +842,7 @@ fn clear_of_unmet(
                 if at(i + di, j + dj) {
                     continue;
                 }
-                if !met(a, b) {
+                if !met(grid.node(a.0, a.1), grid.node(b.0, b.1)) {
                     unmet[v * nx + u] = true;
                     break;
                 }
@@ -1035,7 +885,7 @@ fn clear_of_unmet(
 /// Drop the cells that would make the core's boundary unusable: spurs, which
 /// hang by one edge, and diagonal pinches, where two cells meet at a corner
 /// only and the boundary would pass through that node twice.
-fn tidy(keep: &mut [bool], nx: usize, ny: usize) {
+pub(super) fn tidy(keep: &mut [bool], nx: usize, ny: usize) {
     loop {
         let mut changed = false;
         let at = |k: &[bool], i: i64, j: i64| -> bool {
@@ -1086,7 +936,7 @@ fn tidy(keep: &mut [bool], nx: usize, ny: usize) {
 /// Every edge with a kept cell on one side and nothing on the other is a
 /// boundary edge. Emitting each of them with the core on its **right** makes
 /// the walk clockwise around the core, which is what a hole is.
-fn boundary_loops(
+pub(super) fn boundary_loops(
     keep: &[bool],
     nx: usize,
     ny: usize,
@@ -1221,51 +1071,10 @@ mod tests {
                 h,
             ));
             let g = Grid::over(&d, h);
-            // Within fetching distance, not on it to the last bit: the wall
-            // shares the say with the bottom edge, so the line lands between
-            // the two and the wall is reached by bending. What must never
-            // happen is the line being nowhere near — which is what judging
-            // the wall by its pieces used to cause, twice in these seven.
             assert!(
-                g.xs.iter().any(|x| (x - 0.53).abs() <= ANCHOR_REACH * h),
-                "no line within reach of the wall at x=0.53, step at y={step}: {:?}",
+                g.xs.iter().any(|x| (x - 0.53).abs() < 1e-9),
+                "the wall at x=0.53 was missed with the step at y={step}: {:?}",
                 g.xs
-            );
-        }
-    }
-
-    #[test]
-    fn rival_walls_meet_in_the_middle_rather_than_one_winning() {
-        // An L 1.03 by 0.98 at a target of 0.1: the right wall spans y in
-        // [0, 0.47] and cuts it in five, at a pitch of 0.094; the left spans
-        // [0, 0.98] and cuts it in ten, at 0.098. Both want to say where the
-        // horizontal lines go and they disagree.
-        //
-        // Only the right one spans the gap, so only it has a say in *how many*
-        // lines there are — a count is a whole number and admits no compromise.
-        // Where they go is another matter, and there the two split the
-        // difference. Letting the spanning wall take all of it would leave the
-        // other to bend by 0.02, four fifths of `ANCHOR_REACH`; halved, both
-        // bend by 0.01.
-        let d = only(cut(
-            &[
-                (0.0, 0.0),
-                (1.03, 0.0),
-                (1.03, 0.47),
-                (0.41, 0.47),
-                (0.41, 0.98),
-                (0.0, 0.98),
-            ],
-            0.1,
-        ));
-        let g = Grid::over(&d, 0.1);
-        for (k, want) in [0.096, 0.192, 0.288, 0.384].into_iter().enumerate() {
-            assert!(
-                (g.ys[k + 1] - want).abs() < 1e-9,
-                "ys[{}] = {}, wanted the mean {want} of 0.094·k and 0.098·k — {:?}",
-                k + 1,
-                g.ys[k + 1],
-                g.ys
             );
         }
     }

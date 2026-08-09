@@ -117,6 +117,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::triangulate_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::cleanup, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::grid_surface, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::grid_surface2, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::merge_triangles, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::regularize, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::pave_surface, m)?)?;

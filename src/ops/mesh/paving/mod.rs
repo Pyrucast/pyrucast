@@ -27,6 +27,7 @@ pub mod close;
 pub mod front;
 pub mod geom;
 pub mod grid;
+pub mod grid2;
 pub mod proximity;
 pub mod row;
 pub mod smooth;
@@ -165,14 +166,26 @@ pub fn pave_grid(
     band: usize,
     cancel: &dyn Cancel,
 ) -> Result<Fabric> {
-    pave_inner(domain, target, all_quad, Some(band), cancel)
+    pave_inner(domain, target, all_quad, Some((band, false)), cancel)
+}
+
+/// Like [`pave_grid`], but with the core built by [`grid2`] — lines one per
+/// contour node, bands too thin collapsed, rows free to bend.
+pub fn pave_grid2(
+    domain: &Domain,
+    target: Option<f64>,
+    all_quad: bool,
+    band: usize,
+    cancel: &dyn Cancel,
+) -> Result<Fabric> {
+    pave_inner(domain, target, all_quad, Some((band, true)), cancel)
 }
 
 fn pave_inner(
     domain: &Domain,
     target: Option<f64>,
     all_quad: bool,
-    band: Option<usize>,
+    band: Option<(usize, bool)>,
     cancel: &dyn Cancel,
 ) -> Result<Fabric> {
     let mut fab = Fabric {
@@ -235,7 +248,8 @@ fn pave_inner(
     // normally.
     let seeds: Vec<(Vec<u32>, bool)> = match band {
         None => loops.iter().map(|l| (l.clone(), false)).collect(),
-        Some(band) => grid::build(&mut fab, domain, &loops, target, band).band,
+        Some((band, false)) => grid::build(&mut fab, domain, &loops, target, band).band,
+        Some((band, true)) => grid2::build(&mut fab, domain, &loops, target, band).band,
     };
 
     let mut front = Front::new();

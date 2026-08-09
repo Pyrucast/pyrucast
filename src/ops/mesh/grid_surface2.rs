@@ -1,103 +1,57 @@
-//! Grid-cored paving of a closed contour into quadrangles.
+//! Grid-cored paving, second method: the lines come one per contour node and
+//! the rows are free to bend.
 //!
-//! Same input and same output as [`pave_surface`](fn@super::pave_surface), and
-//! the same guarantee that the contour is untouchable — only the interior is
-//! obtained differently. Where `pave_surface` walks a front inward until two of
-//! its rows meet, `grid_surface` fills everything more than a few cells from
-//! the boundary with a **tensor grid**, and lets the front pave only the strip
-//! that is left.
+//! Same input, same output and the same untouchable contour as
+//! [`grid_surface`](fn@super::grid_surface), which it does not replace. Only
+//! the way the grid is laid differs, and neither way wins everywhere — hence
+//! two operators rather than one.
 //!
-//! ## Why this exists
+//! ## What it does differently
 //!
-//! The two families of quadrangle mesher fail at opposite ends. A front is
-//! perfect where it starts, since its first row follows the contour exactly,
-//! and doubtful where two of its rows meet, since there it must reconcile two
-//! discretisations that have no reason to agree — that meeting line is what
-//! carries the valence defects, the leftover triangles and the flattest cells.
-//! A grid is the mirror image: every cell is a rectangle by construction, and
-//! all of its difficulty is at the boundary. Taking the interior from the grid
-//! and the boundary from the front leaves neither weakness in the result.
+//! `grid_surface` pins a line on the coordinate each aligned chain lies on, and
+//! subdivides between two lines by whichever chain spans them end to end. Every
+//! line is straight and every cell of the core is a rectangle.
 //!
-//! On a rectilinear contour whose dimensions are multiples of the target size,
-//! the outcome is the structured mesh drawn by hand: every cell a rectangle,
-//! every Jacobian 1, and no triangle anywhere.
+//! `grid_surface2` instead gives **every node of the contour the line that
+//! crosses it**, then:
 //!
-//! ## The grid is laid in the contour's own direction
+//! - halves any interval wider than twice the mean step the contour carries;
+//! - collapses any band thinner than half that step, **edge by edge** — each
+//!   edge welds onto the contour node at one of its ends, or onto its midpoint
+//!   when neither end is one;
+//! - fetches what is left: a grid node within a quarter cell of a contour node
+//!   moves onto it;
+//! - and judges every cell on the shape it ends up with, not on the lines it
+//!   came from.
 //!
-//! Nothing in the contract ties the grid to the frame's axes: the orientation
-//! is a free internal choice. So it is taken from the contour — the angle that
-//! turns the greatest length of it into axis-aligned edges, sought over a
-//! quarter turn, which is all a grid's four-fold symmetry leaves distinct.
+//! A row is therefore a polyline, not a line. That is the whole point: one row
+//! can meet two facing walls at two different heights, which no straight line
+//! can do, and it is what lets a wall cut into ten face a wall cut into eleven.
 //!
-//! Without it the method would be a trick that only works on shapes someone
-//! happened to draw square-on. A rectangle turned by 30° used to come out at
-//! 454 cells, 20 of them triangles, with a Jacobian down to 0.138 — worse on
-//! its worst cell than the frontal paver. It now comes out at 450 perfect
-//! rectangles, exactly as if it had never been turned.
+//! ## Which to reach for
 //!
-//! A contour with no dominant direction — a circle, whose edge angles are
-//! spread evenly — keeps the axes, since turning it would swap one arbitrary
-//! orientation for another. And the axes win ties, so a shape already square
-//! with the frame is never lost to a rounding-width improvement elsewhere.
+//! Measured on the same shapes, at the same target size, worst cell by mean
+//! ratio — `grid_surface` first, `grid_surface2` second:
 //!
-//! ## The core meets the contour rather than stopping short of it
+//! | shape | `grid_surface` | `grid_surface2` |
+//! |---|---|---|
+//! | plate with a step off the grid | 0.405 | **0.963** |
+//! | L, arbitrary dimensions | 0.448 | **0.979** |
+//! | L whose walls disagree by one node | 0.307 | **0.606** |
+//! | L whose walls split a stretch 5+6 against 4+7 | 0.421 | **0.963** |
+//! | crenellated profile, base in one run | 0.286 | **0.353** |
+//! | circle | **0.288**, 8 triangles | 0.344, 40 triangles |
 //!
-//! The grid's lines are taken from the contour, in two steps. First the
-//! shape's own structure: consecutive contour edges running the same way are
-//! grouped into a **chain**, and a chain at least a cell long pins a line at
-//! the coordinate it lies on. It is the chain's length that is judged, never
-//! its pieces' — a wall is a wall whether the caller cut it in three or in
-//! thirty.
-//!
-//! Then the subdivision between two consecutive lines. Where a chain of the
-//! contour spans that gap end to end, **its own nodes are the lines**: the
-//! caller has already decided how many pieces the side takes, and recomputing
-//! that decision here only means disagreeing with it sooner or later. A side
-//! 5.5 cells long is five or six depending on which way the halfway mark
-//! rounds, and one disagreement sends the whole side to the band. Where no
-//! chain spans the gap, it is subdivided uniformly at about the target size, as
-//! there is then nothing to agree with.
-//!
-//! A grid node that lands on a contour node **is** that node — the same vertex,
-//! not a copy — so the core reaches the boundary instead of stopping a hair
-//! short of it.
-//!
-//! What is left for the front is the contour and the core's boundary minus the
-//! edges they share, since a segment walked once each way bounds nothing at
-//! all. On a rectilinear domain laid out on the grid nothing is left, no front
-//! runs, and the mesh is the grid. Elsewhere the leftovers chain into loops the
-//! front paves as usual — with one difference: a loop belonging entirely to the
-//! core is **frozen**. It stays live, so the front sees it, keeps clear of it
-//! and seams onto it, but lays no row of its own. Two live fronts meet wherever
-//! they happen to; one front *lands*, on an interface that was chosen.
-//!
-//! ## The contour has to be discretised for a grid
-//!
-//! This is the one thing asked of the caller, and it is a real constraint. A
-//! grid can only meet a contour whose nodes fall on grid lines, and the grid's
-//! lines are dictated by the shape's own features. Take a profile 0.6 wide made
-//! of nine steps: the steps put lines every 0.0667, so cells of about 0.00375
-//! give 18 columns per step, at 0.0037037. A base discretised as one straight
-//! run of 160 segments of 0.00375 misses every one of them, by 1.2 % — enough
-//! that not a single node is shared and the whole boundary falls to the front.
-//! Cutting that base under each step instead, so each piece gets its own 18
-//! segments, costs nothing and shares every node.
-//!
-//! The rule is therefore: **break every side at the shape's own corners.** How
-//! many cells each piece then takes is the caller's business and no longer has
-//! to be guessed at — the grid follows whatever cutting it is given, so a side
-//! cut into five where the arithmetic would have said six is honoured, not
-//! overruled. What the grid cannot do is honour two cuttings of the same span
-//! at once, and a side running past a corner asks exactly that. Nothing checks
-//! it, because a contour that does not satisfy it is not an error — it just
-//! gets more band and less grid.
+//! So: **`grid_surface2` for a rectilinear shape**, all the more so when its
+//! sides were not cut at the corners facing them, and **`grid_surface` for
+//! anything curved**, where following the contour's nodes means following the
+//! accident of where its vertices fell.
 //!
 //! ## When it degrades
 //!
 //! A region too thin to hold a single core cell gets no core, and the front
-//! paves it alone exactly as `pave_surface` would. A contour off the grid gets
-//! a wide band and the same treatment. The degradation is continuous: at worst
-//! the quality of the frontal paver, never an error.
+//! paves it alone exactly as `pave_surface` would. The degradation is
+//! continuous: at worst the quality of the frontal paver, never an error.
 
 use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
@@ -125,15 +79,15 @@ use crate::ops::mesh::{contour, paving};
 /// `QUA4` submesh and, only when triangles were left over, a `TRI3` one.
 ///
 /// This is the uninterruptible convenience form; for a long mesh a caller may
-/// want to stop early, use [`grid_surface_cancellable`].
-pub fn grid_surface(
+/// want to stop early, use [`grid_surface2_cancellable`].
+pub fn grid_surface2(
     contour: &Mesh,
     element_type: ElementType,
     target_size: Option<f64>,
     band: usize,
     all_quad: bool,
 ) -> Result<Mesh> {
-    grid_surface_cancellable(
+    grid_surface2_cancellable(
         contour,
         element_type,
         target_size,
@@ -143,9 +97,9 @@ pub fn grid_surface(
     )
 }
 
-/// Like [`grid_surface`], but polls `cancel` between rows so meshing can be
+/// Like [`grid_surface2`], but polls `cancel` between rows so meshing can be
 /// stopped early (returning [`PyrucastError::Interrupted`]).
-pub fn grid_surface_cancellable(
+pub fn grid_surface2_cancellable(
     contour: &Mesh,
     element_type: ElementType,
     target_size: Option<f64>,
@@ -158,24 +112,24 @@ pub fn grid_surface_cancellable(
         ElementType::QUA4 | ElementType::QUA8 | ElementType::QUA9
     ) {
         return Err(PyrucastError::Message(format!(
-            "grid_surface: element_type must be QUA4, QUA8 or QUA9, got {element_type}"
+            "grid_surface2: element_type must be QUA4, QUA8 or QUA9, got {element_type}"
         )));
     }
     if let Some(h) = target_size {
         if h <= 0.0 || h.is_nan() {
             return Err(PyrucastError::Message(format!(
-                "grid_surface: target_size must be > 0, got {h}"
+                "grid_surface2: target_size must be > 0, got {h}"
             )));
         }
     }
-    let parsed = contour::parse(contour, "grid_surface")?;
+    let parsed = contour::parse(contour, "grid_surface2")?;
     let mut fabrics = Vec::with_capacity(parsed.domains.len());
     for d in &parsed.domains {
-        fabrics.push(paving::pave_grid(d, target_size, all_quad, band, cancel)?);
+        fabrics.push(paving::pave_grid2(d, target_size, all_quad, band, cancel)?);
     }
 
-    let qua4 = paving::materialize(&parsed, fabrics, "grid_surface")?;
-    super::sweep::finish_surface(qua4, element_type, "grid_surface")
+    let qua4 = paving::materialize(&parsed, fabrics, "grid_surface2")?;
+    super::sweep::finish_surface(qua4, element_type, "grid_surface2")
 }
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────
@@ -290,7 +244,7 @@ mod tests {
         let coords = insert(Coords::new(2).unwrap());
         let corners = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)];
         let contour = loop_mesh(coords, &on_grid(&corners, 0.02));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
+        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
         let r = inspect(&mesh);
         assert_eq!((r.quads, r.tris), (450, 0));
         assert_eq!(r.non_conforming, 0);
@@ -316,7 +270,7 @@ mod tests {
         let size = 2.0 * v / 4.0;
         let coords = insert(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &on_grid(&corners, size));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
+        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
         let r = inspect(&mesh);
         // 18 columns per step, twice the level in rows: 18·2·Σlevels.
         let want = 18 * 2 * levels.iter().sum::<f64>() as usize;
@@ -360,7 +314,7 @@ mod tests {
         let outer = loop_mesh(coords.clone(), &outer_pts);
         let hole = loop_mesh(coords, &hole_pts);
         let contour = outer.union(&hole).unwrap();
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
 
         let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -415,7 +369,7 @@ mod tests {
             let coords = insert(Coords::new(2).unwrap());
             let corners = spin(&[(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)], deg);
             let contour = loop_mesh(coords, &on_grid(&corners, 0.02));
-            let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
+            let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
             let r = inspect(&mesh);
             assert_eq!((r.quads, r.tris), (450, 0), "at {deg}°");
             assert_eq!(r.non_conforming, 0, "at {deg}°");
@@ -443,7 +397,7 @@ mod tests {
         let size = 2.0 * v / 4.0;
         let coords = insert(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &on_grid(&spin(&corners, 23.7), size));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
+        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
         let r = inspect(&mesh);
         assert_eq!(
             (r.quads, r.tris),
@@ -472,7 +426,7 @@ mod tests {
         );
         let pts = on_grid(&corners, 0.1);
         let contour = loop_mesh(coords, &pts);
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
 
         let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -517,7 +471,7 @@ mod tests {
                 .collect::<Vec<_>>(),
         );
         let contour = outer.union(&hole).unwrap();
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
@@ -540,7 +494,7 @@ mod tests {
                 })
                 .collect::<Vec<_>>(),
         );
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
@@ -549,6 +503,47 @@ mod tests {
             "area {}",
             r.area
         );
+    }
+
+    #[test]
+    fn a_shape_off_the_grid_is_fetched_rather_than_banded() {
+        // A step at 0.53 by 0.61 on a target of 0.1 shares its corner with the
+        // grid and nothing else: every node along it misses a line by a
+        // fraction of a cell. Rather than hand the whole side to the front, the
+        // nodes of the grid nearest to them go and fetch them, and the rows
+        // bend to suit. The plate used to come back with two triangles and a
+        // cell ten times longer than it was wide; it now comes back whole.
+        let coords = insert(Coords::new(2).unwrap());
+        let corners = [
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.53, 1.0),
+            (0.53, 0.61),
+            (0.0, 0.61),
+        ];
+        let pts = on_grid(&corners, 0.1);
+        let before: Vec<(f64, f64)> = pts.clone();
+        let contour = loop_mesh(coords.clone(), &pts);
+        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+
+        let r = inspect(&mesh);
+        assert_eq!(r.tris, 0, "a bent row should not need a triangle");
+        assert_eq!(r.non_conforming, 0);
+        assert!(
+            r.min_jacobian > 0.9,
+            "worst cell {} — bending is supposed to keep them square",
+            r.min_jacobian
+        );
+        // The shoelace of the six corners, to the last digit: bending moves the
+        // grid about but it may not eat into the domain nor spill out of it.
+        assert!((r.area - 0.7933).abs() < 1e-9, "area {}", r.area);
+
+        // The bending is the grid's alone: not one node of the contour moved.
+        for (cell, want) in contour.cells(0).unwrap().zip(before.chunks(1)) {
+            let p = cell.nodes().unwrap()[0].position().unwrap();
+            assert_eq!((p[0], p[1]), want[0]);
+        }
     }
 
     #[test]
@@ -567,7 +562,7 @@ mod tests {
             })
             .collect();
         let contour = loop_mesh(coords, &on_grid(&pts, 0.05));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.05), 0, false).unwrap();
+        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.05), 0, false).unwrap();
 
         let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -624,9 +619,9 @@ mod tests {
         ] {
             let msg = format!(
                 "{}",
-                grid_surface(&contour, et, size, 0, false).unwrap_err()
+                grid_surface2(&contour, et, size, 0, false).unwrap_err()
             );
-            assert!(msg.starts_with("grid_surface:"), "{msg}");
+            assert!(msg.starts_with("grid_surface2:"), "{msg}");
         }
     }
 }

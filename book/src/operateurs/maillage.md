@@ -27,6 +27,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `pave_surface(contour, type, size=None, all_quad=False)` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
 | `grid_surface(contour, type, size=None, band=0, all_quad=False)` | maille les mêmes contours **orientés** par **cœur en grille** cartésienne et **bande frontale** au bord : sur une forme rectilinéaire, la grille régulière que le front ne sait pas produire (voir plus bas) |
+| `grid_surface2(contour, type, size=None, band=0, all_quad=False)` | même chose, mais les lignes viennent **une par nœud du contour** et les rangées ont le droit de plier : meilleur sur les formes rectilinéaires mal découpées, moins bon sur les courbes (voir plus bas) |
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `regularize(mesh, sweeps=20, angular=True, in_place=False)` | **lisse** un maillage de surface existant : déplace ses nœuds intérieurs pour améliorer ses mailles, sans toucher ni à la connectivité ni au bord (voir plus bas) |
@@ -1040,6 +1041,65 @@ englobante étant la phase 0 :
 La phase actuelle gagne sur tous les critères, et ce n'est pas un hasard :
 ancrer sur le coin de la boîte fait passer les lignes de grille exactement par
 les points extrêmes du contour, qui sont ses points de tangence.
+
+## Lignes par nœud, rangées pliées : `grid_surface2`
+
+`grid_surface2(contour, element_type, size=None, band=0, all_quad=False)` prend
+les mêmes contours, rend le même maillage, respecte le même contour intouchable
+que `grid_surface`. **Il ne le remplace pas** : la façon de poser la grille
+diffère, et aucune des deux ne gagne partout.
+
+### La différence
+
+`grid_surface` pose une ligne sur la coordonnée où repose chaque côté aligné,
+puis découpe l'espace entre deux lignes d'après le côté qui l'enjambe de bout en
+bout. Toutes les lignes sont droites et toute maille du cœur est un rectangle.
+
+`grid_surface2` donne à **chaque nœud du contour la ligne qui le traverse**,
+puis :
+
+- coupe en deux tout intervalle plus large que deux fois le pas moyen que porte
+  le contour ;
+- **effondre arête par arête** toute bande plus mince que la moitié de ce pas —
+  chaque arête se soude sur le nœud de contour d'une de ses extrémités, ou sur
+  son milieu quand aucune n'en est un ;
+- va chercher le reste : un nœud de grille à moins d'un quart de maille d'un
+  nœud du contour se déplace dessus ;
+- et juge chaque maille sur la forme qu'elle a finalement, pas sur les lignes
+  dont elle vient.
+
+Une rangée est donc une **polyligne**, pas une ligne. C'est tout l'intérêt :
+une même rangée peut rejoindre deux parois qui se font face à deux hauteurs
+différentes, ce qu'aucune droite ne sait faire. Une paroi découpée en dix peut
+ainsi faire face à une paroi découpée en onze — `grid_surface` doit en choisir
+une et envoie l'autre à la bande.
+
+### Lequel prendre
+
+Mesuré sur les mêmes formes, à la même taille visée, pire maille en *mean
+ratio* :
+
+| forme | `grid_surface` | `grid_surface2` |
+|---|---|---|
+| plaque à marche hors grille | 0,405 | **0,963** |
+| L à cotes quelconques | 0,448 | **0,979** |
+| L dont les parois diffèrent d'un nœud | 0,307 | **0,606** |
+| L dont les parois découpent 5+6 contre 4+7 | 0,421 | **0,963** |
+| profil crénelé, base d'un seul tenant | 0,286 | **0,353** |
+| cercle R = 1 | **0,288**, 8 triangles | 0,344, **40 triangles** |
+
+Donc : **`grid_surface2` pour une forme rectilinéaire**, d'autant plus si ses
+côtés n'ont pas été coupés aux angles qui leur font face ; **`grid_surface`
+pour tout ce qui est courbe**, où suivre les nœuds du contour revient à suivre
+le hasard de l'endroit où ses sommets sont tombés.
+
+### Exemple Python
+
+```python
+maillage = pc.mesh.grid_surface2(contour, "QUA4", size=H)
+# ou, en méthode :
+maillage = contour.grid_surface2("QUA4", size=H)
+```
 
 ## Améliorer un maillage existant : `regularize`, `cleanup`, `merge_triangles`
 
