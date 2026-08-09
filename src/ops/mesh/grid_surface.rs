@@ -42,27 +42,21 @@
 //!
 //! ## The core meets the contour rather than stopping short of it
 //!
-//! The grid's lines are taken from the contour, in two steps. First the
-//! shape's own structure: consecutive contour edges running the same way are
-//! grouped into a **chain**, and a chain at least a cell long pins a line at
-//! the coordinate it lies on. It is the chain's length that is judged, never
-//! its pieces' — a wall is a wall whether the caller cut it in three or in
-//! thirty.
+//! The grid's lines are taken from the contour, **one per node**. Consecutive
+//! edges running the same way are grouped into a chain; every node of a chain
+//! asks for the line that crosses it, and a chain a cell long or more also asks
+//! for the line it lies on. Candidates too close together merge at their mean,
+//! so two facing walls that disagree meet in the middle instead of one of them
+//! being honoured exactly and the other left to shift for itself. Only the gaps
+//! the contour left empty are subdivided, and there uniformly.
 //!
-//! Then the subdivision between two consecutive lines. Where a chain of the
-//! contour spans that gap end to end, **its own nodes are the lines**: the
-//! caller has already decided how many pieces the side takes, and recomputing
-//! that decision here only means disagreeing with it sooner or later. A side
-//! 5.5 cells long is five or six depending on which way the halfway mark
-//! rounds, and one disagreement sends the whole side to the band. Where no
-//! chain spans the gap, it is subdivided uniformly at about the target size, as
-//! there is then nothing to agree with.
-//!
-//! Facing walls rarely agree, and they are reconciled by separating what can be
-//! split from what cannot. The **number** of lines comes from the chain that
-//! spans the gap, because a count is a whole number and one wall has to lose.
-//! Their **positions** are the mean over every chain asking for that same
-//! number, so no wall is left twice as far from the grid as it needed to be.
+//! That is what keeps the caller's own subdivision, and the caller has one: a
+//! side 5.5 cells long is five or six depending on which way the halfway mark
+//! rounds, and recomputing that choice here means disagreeing with it sooner or
+//! later. It is also why no line is nailed onto a feature and the space either
+//! side of it subdivided independently — that sounds like respect for the shape
+//! and is in fact how a wall gets forced into a different number of rows than
+//! the wall facing it, leaving a row with nowhere to go.
 //!
 //! A grid node that lands on a contour node **is** that node — the same vertex,
 //! not a copy — so the core reaches the boundary instead of stopping a hair
@@ -83,24 +77,26 @@
 //!
 //! ## The contour has to be discretised for a grid
 //!
-//! This is the one thing asked of the caller, and it is a real constraint. A
-//! grid can only meet a contour whose nodes fall on grid lines, and the grid's
-//! lines are dictated by the shape's own features. Take a profile 0.6 wide made
-//! of nine steps: the steps put lines every 0.0667, so cells of about 0.00375
-//! give 18 columns per step, at 0.0037037. A base discretised as one straight
-//! run of 160 segments of 0.00375 misses every one of them, by 1.2 % — enough
-//! that not a single node is shared and the whole boundary falls to the front.
-//! Cutting that base under each step instead, so each piece gets its own 18
-//! segments, costs nothing and shares every node.
+//! Only one thing is asked of the caller, and it is about **counts**, not
+//! positions. Positions are negotiable: two facing walls that disagree meet at
+//! their mean and the grid bends the rest of the way. Counts are not. If one
+//! side of a stretch is cut into five pieces and the other into six, one of
+//! those nodes has nowhere to go, and no arrangement of lines invents a row for
+//! it. So:
 //!
-//! The rule is therefore: **break every side at the shape's own corners.** How
-//! many cells each piece then takes is the caller's business and no longer has
-//! to be guessed at — the grid follows whatever cutting it is given, so a side
-//! cut into five where the arithmetic would have said six is honoured, not
-//! overruled. What the grid cannot do is honour two cuttings of the same span
-//! at once, and a side running past a corner asks exactly that. Nothing checks
-//! it, because a contour that does not satisfy it is not an error — it just
-//! gets more band and less grid.
+//! **Break every side wherever a feature of the shape projects onto it** — not
+//! only where that side itself turns. On an L 1.03 wide, a left wall running
+//! past the ledge in one piece puts four rows below it where the right side
+//! puts five; adding a single node at the ledge's height splits the wall into
+//! five and six, and the worst cell goes from 0.42 to 0.99.
+//!
+//! Missing it is no longer disastrous, which it once was. That profile of nine
+//! steps, with its base discretised as one straight run of 160 segments instead
+//! of nine pieces of eighteen, used to lose its whole base to the front; it now
+//! comes out at the same 16 128 cells as the well-cut version, with 28 in the
+//! band against 16 and a worst cell of 0.64 against 1.00. Nothing checks the
+//! rule, because a contour that breaks it is not an error — it just pays a
+//! little quality for it.
 //!
 //! ## When it degrades
 //!
