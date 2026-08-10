@@ -35,17 +35,23 @@
 //!
 //! | shape | `grid_surface` | `grid_surface2` |
 //! |---|---|---|
+//! | rectangle, and any shape square on the grid | **0.999** | **0.999** |
 //! | plate with a step off the grid | 0.405 | **0.963** |
-//! | L, arbitrary dimensions | 0.448 | **0.979** |
-//! | L whose walls disagree by one node | 0.307 | **0.606** |
-//! | L whose walls split a stretch 5+6 against 4+7 | 0.421 | **0.963** |
-//! | crenellated profile, base in one run | 0.286 | **0.353** |
+//! | L, arbitrary dimensions | 0.437 | **0.979** |
+//! | L whose sides split a stretch 5+6 against 4+7 | 0.421 | **0.963** |
+//! | L whose sides disagree by one node | 0.307 | **0.606** |
+//! | crenellated profile, base cut under each bar | 0.382 | **0.916** |
+//! | crenellated profile, base in one run | 0.287 | **0.651** |
+//! | house with a pitched roof | 0.304 | **0.479** |
+//! | square with one rounded corner | 0.266 | **0.308** |
 //! | circle | **0.288**, 8 triangles | 0.344, 40 triangles |
 //!
 //! So: **`grid_surface2` for a rectilinear shape**, all the more so when its
 //! sides were not cut at the corners facing them, and **`grid_surface` for
 //! anything curved**, where following the contour's nodes means following the
-//! accident of where its vertices fell.
+//! accident of where its vertices fell. On a curve the two are close and both
+//! are beaten by `triangulate_surface`; the book's *Mailler une géométrie*
+//! page compares all four side by side.
 //!
 //! ## When it degrades
 //!
