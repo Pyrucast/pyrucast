@@ -1058,8 +1058,10 @@ bout. Toutes les lignes sont droites et toute maille du cœur est un rectangle.
 `grid_surface2` donne à **chaque nœud du contour la ligne qui le traverse**,
 puis :
 
-- coupe en deux tout intervalle plus large que deux fois le pas moyen que porte
-  le contour ;
+- coupe en mailles entières tout intervalle valant entre deux et trois fois le
+  pas moyen que porte le contour, et **abandonne au-delà** : un vide que le
+  contour ne borde pas revient au front d'un seul tenant plutôt qu'en rangées
+  qui n'existent que pour être érodées ;
 - **effondre arête par arête** toute bande plus mince que la moitié de ce pas —
   chaque arête se soude sur le nœud de contour d'une de ses extrémités, ou sur
   son milieu quand aucune n'en est un ;
@@ -1088,9 +1090,9 @@ ratio* :
 | L dont les côtés diffèrent d'un nœud | 0,307 | **0,606** |
 | profil crénelé, base coupée sous chaque barre | 0,382 | **0,916** |
 | profil crénelé, base d'un seul tenant | 0,287 | **0,651** |
-| maison à toit à deux pentes | 0,304 | **0,479** |
+| maison à toit à deux pentes | 0,304 | **0,475**, 1 triangle contre 11 |
 | carré à un angle arrondi | 0,266 | **0,308** |
-| cercle R = 1 | **0,288**, 8 triangles | 0,344, **40 triangles** |
+| cercle R = 1 | **0,288**, p5 **0,796** | **0,005 — à ne pas utiliser** |
 
 La comparaison des quatre mailleurs surfaciques, figures à l'appui, est sur la
 page [Mailler une géométrie](../mailler.md).

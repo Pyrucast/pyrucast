@@ -940,9 +940,10 @@ pub fn grid_surface(
 /// where its vertices happened to fall. Measured worst cell, `grid_surface`
 /// then `grid_surface2`: plate with a step off the grid 0.405 / 0.963, L with
 /// arbitrary dimensions 0.437 / 0.979, crenellated profile with its base in one
-/// run 0.287 / 0.651, house with a pitched roof 0.304 / 0.479, circle
-/// 0.288 / 0.344 but 8 triangles against 40. The book's *Mailler une géométrie*
-/// page puts all four surface meshers side by side.
+/// run 0.287 / 0.651, house with a pitched roof 0.304 / 0.475. On a **circle**
+/// the order reverses hard — 0.288 against 0.005 — and `grid_surface2` should
+/// not be used: nothing dictates a grid line over most of a curve. The book's
+/// *Mailler une géométrie* page puts all four surface meshers side by side.
 ///
 /// `size` and `band` mean what they mean for `grid_surface`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]

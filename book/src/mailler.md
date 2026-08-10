@@ -132,17 +132,26 @@ Ici le classement s'inverse, et c'est le seul endroit où il le fait.
 
 | forme | | triangulate | pave | grid | grid2 |
 |---|---|---:|---:|---:|---:|
-| maison | mailles | 1 723 | 621 | 477 | **415** |
-| | pire | 0,484 | **0,491** | 0,304 | 0,479 |
+| maison | mailles | 1 723 | 621 | 477 | **454** |
+| | pire | 0,484 | **0,491** | 0,304 | 0,475 |
 | carré arrondi | mailles | 1 866 | 678 | 445 | **420** |
 | | pire | **0,474** | 0,360 | 0,266 | 0,308 |
-| cercle R = 1 | mailles | 6 114 | 2 339 | 1 260 | **1 132** |
-| | pire | **0,424** | 0,031 | 0,288 | 0,344 |
+| cercle R = 1 | mailles | 6 114 | 2 339 | **1 260** | 2 044 |
+| | pire | **0,424** | 0,031 | **0,288** | 0,005 |
 
 Une grille ne peut pas suivre une oblique : elle la découpe en escalier, et tout
 ce qui s'en approche est rendu au paveur frontal. Sur la maison, le pavage
 épouse les deux pentes du toit et l'emporte d'un cheveu ; sur le cercle,
 `triangulate_surface` est le meilleur des quatre.
+
+**Sur une forme sans direction dominante, `grid_surface2` n'est pas un
+candidat.** Il prend l'écartement de ses lignes sur le contour, et un cercle
+n'en dicte aucun : rien ne pose de ligne entre `y = 0,24` et `y = 1`, le vide y
+vaut quinze fois l'écartement moyen, et le cœur s'effondre — 0,005, une maille
+au bord de la dégénérescence. `grid_surface`, lui, rend 0,288 avec un 5ᵉ
+centile de 0,796, de loin le meilleur des quatre. **Sur une courbe, prenez
+`grid_surface`, ou `triangulate_surface` si la qualité du pire élément
+commande.**
 
 Le cercle mérite un mot de plus. `pave_surface` y tombe à **0,031** — ses
 rangées se rejoignent au centre en une étoile à quatre branches, et c'est cette
@@ -153,18 +162,24 @@ mais il ne monte jamais non plus.
 
 ### Ce qu'il faut retenir
 
-**Le coût en mailles est le classement le plus stable, et il ne s'inverse
-jamais** : `grid_surface2` ≤ `grid_surface` < `pave_surface` <
-`triangulate_surface`, avec un facteur quatre entre les extrêmes à qualité au
-moins égale sur toute forme rectilinéaire. Pour un calcul, c'est le facteur qui
-compte juste après la qualité.
+**Le coût en mailles est le classement le plus stable** : sur les dix formes
+rectilinéaires ou peu obliques, `grid_surface2` ≤ `grid_surface` <
+`pave_surface` < `triangulate_surface`, avec un facteur quatre entre les
+extrêmes à qualité au moins égale. Pour un calcul, c'est le facteur qui compte
+juste après la qualité. Le cercle est la seule exception, et il l'est dans les
+deux colonnes à la fois : `grid_surface2` y rend **plus** de mailles pour une
+qualité effondrée, ce qui est la façon la plus nette de dire qu'il n'est pas
+fait pour ça.
 
 En pratique :
 
 - **forme rectilinéaire** — `grid_surface2`, et d'autant plus si ses côtés
   n'ont pas été coupés aux angles qui leur font face ;
-- **forme courbe ou franchement oblique** — `triangulate_surface` si la qualité
-  du pire élément commande, `pave_surface` s'il faut des quadrangles ;
+- **forme courbe** — `triangulate_surface` si la qualité du pire élément
+  commande, `grid_surface` s'il faut des quadrangles ; **jamais
+  `grid_surface2`**, qui y perd son cœur ;
+- **forme franchement oblique** — `pave_surface`, dont les rangées épousent la
+  pente ;
 - **quadrangles obligatoires** — `pave_surface` accepte `all_quad=True` et
   refuse par une erreur claire un contour dont la parité l'interdit ;
 - **triangles voulus** — `triangulate_surface`, seul à en produire par
@@ -172,16 +187,22 @@ En pratique :
 
 ### Deux limites connues
 
-**Les rangées à deux fois la moyenne.** `grid_surface2` prend l'écartement de
-ses lignes sur le contour ; là où le contour ne dit rien — le triangle du toit
-de la maison, qu'aucune paroi verticale ne borde — il comble le vide en le
-coupant en deux jusqu'à ce que l'intervalle ne dépasse plus deux fois la
-moyenne. Quand ce vide vaut une puissance de deux fois la moyenne, la coupe
-atterrit **exactement** sur deux fois : dix mailles de la maison sortent ainsi
-deux fois plus hautes que les autres. C'est la borne haute admise, et la
-corriger en coupant d'emblée en parts égales a été essayé — le maillage empire,
-parce que ces rangées supplémentaires ne servent qu'à être érodées par
-l'oblique et morcellent le travail du front.
+**Un vide que le contour ne borde pas n'est pas maillé en grille.**
+`grid_surface2` prend l'écartement de ses lignes sur le contour ; là où le
+contour ne dit rien — le triangle du toit de la maison, qu'aucune paroi
+verticale ne borde — il coupe le vide en mailles entières tant qu'il ne dépasse
+pas **trois fois** l'écartement moyen, et **l'abandonne au front au-delà**.
+Remplir un tel vide de rangées ne crée pas du cœur : ces rangées n'existent que
+pour être érodées par l'oblique qui les traverse, et elles morcellent le travail
+du front au lieu de lui donner une région propre. Mesuré sur la maison :
+l'abandon coûte **un** triangle là où le remplissage en coûtait cinq, et le 5ᵉ
+centile monte de 0,644 à 0,676.
+
+C'est aussi ce qui coûte le cercle, dont les vides valent quinze fois
+l'écartement moyen. Aucun seuil ne sépare les deux cas — abandonner un vide de
+huit moyennes abandonne a fortiori un vide de quinze — et c'est un choix
+assumé : `grid_surface2` sert les formes rectilinéaires, `grid_surface` sert les
+courbes.
 
 **Le cercle est un objectif instable.** Sur une forme sans direction dominante,
 déplacer la grille d'un millième change la pire maille du simple au décuple. Les

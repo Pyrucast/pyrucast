@@ -42,16 +42,17 @@
 //! | L whose sides disagree by one node | 0.307 | **0.606** |
 //! | crenellated profile, base cut under each bar | 0.382 | **0.916** |
 //! | crenellated profile, base in one run | 0.287 | **0.651** |
-//! | house with a pitched roof | 0.304 | **0.479** |
+//! | house with a pitched roof | 0.304 | **0.475**, 1 triangle against 11 |
 //! | square with one rounded corner | 0.266 | **0.308** |
-//! | circle | **0.288**, 8 triangles | 0.344, 40 triangles |
+//! | circle | **0.288**, p5 **0.796** | 0.005 — do not use |
 //!
 //! So: **`grid_surface2` for a rectilinear shape**, all the more so when its
 //! sides were not cut at the corners facing them, and **`grid_surface` for
 //! anything curved**, where following the contour's nodes means following the
-//! accident of where its vertices fell. On a curve the two are close and both
-//! are beaten by `triangulate_surface`; the book's *Mailler une géométrie*
-//! page compares all four side by side.
+//! accident of where its vertices fell. On a curve `grid_surface2` is not a
+//! candidate at all: nothing dictates a line over most of a circle, the empty
+//! gaps run to fifteen times the mean step, and the core is given up. The
+//! book's *Mailler une géométrie* page compares all four side by side.
 //!
 //! ## When it degrades
 //!
