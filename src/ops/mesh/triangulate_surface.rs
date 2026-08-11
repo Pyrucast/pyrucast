@@ -1546,6 +1546,24 @@ fn mesh_domain(
         (Vec::new(), Vec::new())
     };
 
+    // The rule every mesher answers to: nothing leaves turned inside out or
+    // flat. The Delaunay pipeline earns it by construction — the flood fill
+    // keeps the triangles the super-triangle left counter-clockwise, the flips
+    // and the smoothing each refuse a move that would invert one, and the
+    // recombination only pairs two triangles into a convex quadrangle. This
+    // asks anyway, because a guarantee nothing checks is a guarantee only until
+    // one of those four stops holding.
+    super::triangulation::reject_cells_turned_the_wrong_way(
+        &cdt.pts,
+        || {
+            tris.iter()
+                .map(|t| t.as_slice())
+                .chain(quads.iter().map(|q| q.as_slice()))
+                .chain(leftover_tris.iter().map(|t| t.as_slice()))
+        },
+        "triangulate_surface",
+    )?;
+
     Ok(DomainResult {
         boundary_node_ids,
         pts: cdt.pts,

@@ -58,7 +58,9 @@
 //!
 //! A region too thin to hold a single core cell gets no core, and the front
 //! paves it alone exactly as `pave_surface` would. The degradation is
-//! continuous: at worst the quality of the frontal paver, never an error.
+//! continuous: at worst the quality of the frontal paver — but bounded below by
+//! validity, since a mesh holding a cell turned inside out is **refused**
+//! rather than returned.
 
 use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
@@ -132,7 +134,14 @@ pub fn grid_surface2_cancellable(
     let parsed = contour::parse(contour, "grid_surface2")?;
     let mut fabrics = Vec::with_capacity(parsed.domains.len());
     for d in &parsed.domains {
-        fabrics.push(paving::pave_grid2(d, target_size, all_quad, band, cancel)?);
+        fabrics.push(paving::pave_grid2(
+            d,
+            target_size,
+            all_quad,
+            band,
+            cancel,
+            "grid_surface2",
+        )?);
     }
 
     let qua4 = paving::materialize(&parsed, fabrics, "grid_surface2")?;
@@ -611,6 +620,32 @@ mod tests {
             r.area,
             std::f64::consts::PI
         );
+    }
+
+    #[test]
+    fn a_mesh_with_a_cell_inside_out_is_refused_rather_than_returned() {
+        // An octagon at this size is where this mesher tangles: its core is a
+        // staircase the band cannot follow, the front ends up round a ring that
+        // holds the core like a hole, and the closure decomposes across it. The
+        // result used to come back with six cells turned inside out or flat —
+        // three of them exactly flat, one a whole cell's worth reversed — for a
+        // mesh whose area was otherwise right to 0,2 %. That is the shape of
+        // the trap: a mesh that looks fine in every aggregate and cannot be
+        // integrated. It is now refused, and the message says where.
+        let coords = insert(Coords::new(2).unwrap());
+        let corners: Vec<(f64, f64)> = (0..8)
+            .map(|i| {
+                let t = i as f64 / 8.0 * std::f64::consts::TAU;
+                (t.cos(), t.sin())
+            })
+            .collect();
+        let contour = loop_mesh(coords, &on_grid(&corners, 0.05));
+        let msg = format!(
+            "{}",
+            grid_surface2(&contour, ElementType::QUA4, Some(0.05), 0, false).unwrap_err()
+        );
+        assert!(msg.starts_with("grid_surface2:"), "{msg}");
+        assert!(msg.contains("came out turned inside out or flat"), "{msg}");
     }
 
     #[test]

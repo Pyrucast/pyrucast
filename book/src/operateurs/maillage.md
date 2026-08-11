@@ -495,6 +495,17 @@ quad = pyrucast.mesh.triangulate_surface(combined, "QUA4", size=0.5)
 print(quad.element_types())  # ['QUA4', 'TRI3'] en général
 ```
 
+### Refus final
+
+Comme tous les mailleurs, `triangulate_surface` mesure ses mailles avant de les
+rendre et **sort en erreur** plutôt que d'en livrer une retournée ou plate — un
+jacobien négatif ou nul n'est intégrable par aucun code éléments finis. Il le
+gagne par construction (le flood-fill garde les triangles dans le sens du
+super-triangle, les bascules et le lissage refusent tout mouvement qui en
+retournerait un, la recombinaison n'apparie que des quadrangles convexes), mais
+la vérification est faite quand même : une garantie que rien ne contrôle n'en
+est une que tant que les quatre tiennent.
+
 ### Interruption
 
 Un maillage trop long s'**interrompt** par `Ctrl+C` : `triangulate_surface`
@@ -616,6 +627,15 @@ invariant n'est jamais supposé, il est **maintenu**.
    déplace jamais un nœud du contour. Dans cet ordre : lisser un nœud qui n'a
    pas le bon nombre de mailles autour de lui ne fait qu'étaler l'erreur sur
    ses voisins.
+7. **Refus final.** Chaque maille est mesurée : aucune ne sort d'aire nulle ou
+   négative. Toutes les étapes ci-dessus ont déjà leur garde, exacte et locale ;
+   celle-ci est le filet sous toutes les autres, et ce qu'elle attrape est une
+   garde qui a laissé passer quelque chose. Le maillage n'est alors **pas
+   rendu** : l'opérateur sort en erreur, en situant la pire maille. Une maille
+   retournée a un jacobien négatif et une maille plate n'en a pas ; ni l'une ni
+   l'autre n'est intégrable, donc un maillage qui en porte une n'est pas un
+   maillage médiocre mais un maillage faux. **Mieux vaut une erreur qu'un
+   maillage faux** — c'est la règle, et elle vaut pour tous les mailleurs.
 
 Le nettoyage corrige ce que le lissage ne peut pas atteindre, parce que c'est
 de la **connectivité** et non de la géométrie :
@@ -1010,7 +1030,13 @@ Deux drapeaux distincts le portent, et les confondre coûtait cher :
 Une région trop mince pour tenir une seule maille de cœur n'en reçoit aucune,
 et le front la pave seul, exactement comme `pave_surface`. Un contour hors
 grille reçoit une bande large et le même traitement. La dégradation est
-**continue** : au pire la qualité du paveur frontal, jamais une erreur.
+**continue** : au pire la qualité du paveur frontal.
+
+Continue, mais bornée par le bas par la **validité**. Si le front s'emmêle au
+point de laisser une maille retournée ou plate, l'opérateur **refuse** au lieu
+de rendre le maillage : un jacobien négatif n'est pas une maille médiocre mais
+une maille fausse, qu'aucun code éléments finis n'intègre. Mieux vaut
+l'apprendre ici qu'à l'assemblage.
 
 Sur un cercle — le cas dégradé par excellence, aucune arête axiale — il ne
 reste **aucune fissure** : toutes les arêtes de bord sont celles du contour.

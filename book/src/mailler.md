@@ -39,6 +39,14 @@ façon de comparer les quatre sur un pied d'égalité. On donne aussi le
 **5ᵉ centile**, qui dit ce que valent les mailles médiocres et non la seule
 plus mauvaise.
 
+En pratique cette mesure ne descend jamais à zéro dans les tableaux qui suivent,
+et ce n'est pas une chance : **les quatre mailleurs refusent de rendre un
+maillage portant une maille retournée ou plate**. Une telle maille a un jacobien
+négatif ou nul, qu'aucun code éléments finis n'intègre — ce n'est pas un
+maillage médiocre mais un maillage faux, et mieux vaut une erreur qui situe la
+maille fautive. Un mailleur qui échoue là où un autre passe est donc un résultat
+en soi, à lire dans les tableaux comme tel.
+
 ### Une forme rectilinéaire posée sur la grille
 
 C'est le cas le plus favorable aux mailleurs en grille, et la différence est

@@ -97,7 +97,12 @@
 //! A region too thin to hold a single core cell gets no core, and the front
 //! paves it alone exactly as `pave_surface` would. A contour off the grid gets
 //! a wide band and the same treatment. The degradation is continuous: at worst
-//! the quality of the frontal paver, never an error.
+//! the quality of the frontal paver.
+//!
+//! Continuous, but not unbounded. Where the front tangles badly enough to leave
+//! a cell turned inside out, the operator **refuses** rather than return it: a
+//! negative Jacobian is not a poor mesh but a wrong one, and it is worth more
+//! to hear so here than at assembly.
 
 use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
@@ -171,7 +176,14 @@ pub fn grid_surface_cancellable(
     let parsed = contour::parse(contour, "grid_surface")?;
     let mut fabrics = Vec::with_capacity(parsed.domains.len());
     for d in &parsed.domains {
-        fabrics.push(paving::pave_grid(d, target_size, all_quad, band, cancel)?);
+        fabrics.push(paving::pave_grid(
+            d,
+            target_size,
+            all_quad,
+            band,
+            cancel,
+            "grid_surface",
+        )?);
     }
 
     let qua4 = paving::materialize(&parsed, fabrics, "grid_surface")?;

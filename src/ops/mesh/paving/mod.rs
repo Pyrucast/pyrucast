@@ -19,8 +19,14 @@
 //!
 //! Paving can stall — a loop that neither advances nor seams. That is not
 //! treated as a failure: after a few stalled turns the loop is handed to
-//! [`close`], which fills any simple polygon. The paver can degrade, but it
-//! cannot fail to return a conforming mesh.
+//! [`close`], which fills any simple polygon. The paver can degrade, and what
+//! it degrades to is quality, never validity — nothing leaves here holding a
+//! cell that is turned inside out or flat, since such a cell has a negative
+//! Jacobian and no solver can integrate it. The last word belongs to
+//! [`reject_cells_turned_the_wrong_way`](crate::ops::mesh::triangulation::reject_cells_turned_the_wrong_way),
+//! which refuses the fabric outright rather than hand one back. It is a last
+//! resort and not a way out: every guard upstream exists so that it never
+//! fires, and where a valid mesh can be laid it is laid.
 
 pub mod cleanup;
 pub mod close;
@@ -140,8 +146,9 @@ pub fn pave(
     target: Option<f64>,
     all_quad: bool,
     cancel: &dyn Cancel,
+    op: &str,
 ) -> Result<Fabric> {
-    pave_inner(domain, target, all_quad, None, cancel)
+    pave_inner(domain, target, all_quad, None, cancel, op)
 }
 
 /// Pave `domain` around a structured core: a tensor grid ([`grid`]) fills the
@@ -165,8 +172,9 @@ pub fn pave_grid(
     all_quad: bool,
     band: usize,
     cancel: &dyn Cancel,
+    op: &str,
 ) -> Result<Fabric> {
-    pave_inner(domain, target, all_quad, Some((band, false)), cancel)
+    pave_inner(domain, target, all_quad, Some((band, false)), cancel, op)
 }
 
 /// Like [`pave_grid`], but with the core built by [`grid2`] — lines one per
@@ -177,8 +185,9 @@ pub fn pave_grid2(
     all_quad: bool,
     band: usize,
     cancel: &dyn Cancel,
+    op: &str,
 ) -> Result<Fabric> {
-    pave_inner(domain, target, all_quad, Some((band, true)), cancel)
+    pave_inner(domain, target, all_quad, Some((band, true)), cancel, op)
 }
 
 fn pave_inner(
@@ -187,6 +196,7 @@ fn pave_inner(
     all_quad: bool,
     band: Option<(usize, bool)>,
     cancel: &dyn Cancel,
+    op: &str,
 ) -> Result<Fabric> {
     let mut fab = Fabric {
         pts: Vec::new(),
@@ -229,7 +239,7 @@ fn pave_inner(
             if !verts.len().is_multiple_of(2) {
                 let which = if k == 0 { "outer boundary" } else { "hole" };
                 return Err(PyrucastError::Message(format!(
-                    "pave_surface: all_quad was asked for, but the {which} loop has {} \
+                    "{op}: all_quad was asked for, but the {which} loop has {} \
                      segments — an odd number. A polygon with an odd number of sides has no \
                      filling by quadrangles alone, and paving cannot change that parity. \
                      Re-mesh that loop with an even number of segments.",
@@ -283,7 +293,7 @@ fn pave_inner(
             continue;
         }
         if n <= CLOSE_AT || steps > cap {
-            close_loop(&mut fab, &mut front, rep, target)?;
+            close_loop(&mut fab, &mut front, rep, target, op)?;
             continue;
         }
         if stalls > MAX_STALL {
@@ -291,7 +301,7 @@ fn pave_inner(
             // outright would fill a large polygon with a decomposition, which
             // is a far worse mesh than two more rows would have been.
             if !unstick(&fab, &mut front, rep, target, all_quad, &mut stack) {
-                close_loop(&mut fab, &mut front, rep, target)?;
+                close_loop(&mut fab, &mut front, rep, target, op)?;
             }
             continue;
         }
@@ -337,7 +347,29 @@ fn pave_inner(
     let mut pts = std::mem::take(&mut fab.pts);
     smooth::smooth(&mut pts, &patch, &inc, None, FINAL_SWEEPS);
     fab.pts = pts;
+
+    all_cells_are_the_right_way_round(&fab, op)?;
     Ok(fab)
+}
+
+/// Refuse a fabric holding a cell that is not strictly the right way round.
+///
+/// The last word on what leaves this module: every route in has its own guard,
+/// exact and local, and this is the net under all of them. What it catches is a
+/// guard that let something through — see
+/// [`reject_cells_turned_the_wrong_way`](crate::ops::mesh::triangulation::reject_cells_turned_the_wrong_way)
+/// for why nothing may leave without it.
+fn all_cells_are_the_right_way_round(fab: &Fabric, op: &str) -> Result<()> {
+    crate::ops::mesh::triangulation::reject_cells_turned_the_wrong_way(
+        &fab.pts,
+        || {
+            fab.quads
+                .iter()
+                .map(|q| q.as_slice())
+                .chain(fab.tris.iter().map(|t| t.as_slice()))
+        },
+        op,
+    )
 }
 
 /// Turn the per-domain fabrics into a `Mesh` on the contour's own `Coords`.
@@ -685,7 +717,7 @@ fn relax_front(fab: &mut Fabric, front: &Front, rep: u32) {
 }
 
 /// Fill what is left of a loop with elements and retire it.
-fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32, target: f64) -> Result<()> {
+fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32, target: f64, op: &str) -> Result<()> {
     let verts: Vec<u32> = front
         .loop_slots(rep)
         .iter()
@@ -739,9 +771,9 @@ fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32, target: f64) -> Res
                 .coords
                 / poly.len() as f64;
             return Err(PyrucastError::Message(format!(
-                "pave_surface: the advancing front folded onto itself near ({:.6}, {:.6}) in \
-                 the meshing plane, leaving a region that cannot be filled. The contour there \
-                 is too coarse or too uneven for the element size asked of it: discretise it \
+                "{op}: the advancing front folded onto itself near ({:.6}, {:.6}) in the \
+                 meshing plane, leaving a region that cannot be filled. The contour there is \
+                 too coarse or too uneven for the element size asked of it: discretise it \
                  closer to the target size, or ask for a larger one.",
                 centre.x, centre.y
             )));

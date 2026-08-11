@@ -110,7 +110,13 @@ pub fn pave_surface_cancellable(
     let parsed = contour::parse(contour, "pave_surface")?;
     let mut fabrics = Vec::with_capacity(parsed.domains.len());
     for d in &parsed.domains {
-        fabrics.push(paving::pave(d, target_size, all_quad, cancel)?);
+        fabrics.push(paving::pave(
+            d,
+            target_size,
+            all_quad,
+            cancel,
+            "pave_surface",
+        )?);
     }
 
     let qua4 = paving::materialize(&parsed, fabrics, "pave_surface")?;

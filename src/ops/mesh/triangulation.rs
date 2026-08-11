@@ -117,6 +117,66 @@ pub fn signed_area(points: &[Point2]) -> f64 {
     0.5 * s
 }
 
+/// Refuse a set of planar cells if any one of them is not strictly the right
+/// way round, naming `op` and locating the worst.
+///
+/// The rule every mesher answers to, and the reason it is worth a shared
+/// function: a cell turned inside out has a **negative Jacobian**, which no
+/// finite-element code can integrate, and a flat one has none at all. A mesh
+/// carrying either is not a poorer mesh, it is a wrong one — better an error
+/// the caller can act on than a mesh they cannot compute on.
+///
+/// Judged corner by corner and not by area, since that is what the Jacobian
+/// follows: a quadrangle with a reflex corner encloses a perfectly positive
+/// area and is negative right there. `cells` is a closure because the check
+/// walks them twice — once for the worst, once to count.
+pub fn reject_cells_turned_the_wrong_way<'a, I, F>(pts: &[Point2], cells: F, op: &str) -> Result<()>
+where
+    F: Fn() -> I,
+    I: Iterator<Item = &'a [u32]>,
+{
+    let worst_corner = |c: &[u32]| -> f64 {
+        let k = c.len();
+        (0..k)
+            .map(|i| {
+                crate::ops::mesh::predicates::orient2d(
+                    &[
+                        pts[c[(i + k - 1) % k] as usize].x,
+                        pts[c[(i + k - 1) % k] as usize].y,
+                    ],
+                    &[pts[c[i] as usize].x, pts[c[i] as usize].y],
+                    &[
+                        pts[c[(i + 1) % k] as usize].x,
+                        pts[c[(i + 1) % k] as usize].y,
+                    ],
+                )
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    let Some(worst) = cells()
+        .filter(|c| worst_corner(c) <= 0.0)
+        .min_by(|a, b| worst_corner(a).partial_cmp(&worst_corner(b)).unwrap())
+    else {
+        return Ok(());
+    };
+
+    let count = cells().filter(|c| worst_corner(c) <= 0.0).count();
+    let centre = worst
+        .iter()
+        .fold(Point2::origin(), |acc, &v| acc + pts[v as usize].coords)
+        .coords
+        / worst.len() as f64;
+    Err(PyrucastError::Message(format!(
+        "{op}: {count} cell(s) came out turned inside out or flat, the worst of them near \
+         ({:.6}, {:.6}) in the meshing plane. Such a cell has a negative Jacobian, which no \
+         finite-element code can integrate, so the mesh is refused rather than handed back: \
+         an error you can act on beats a mesh you cannot compute on. The contour there is \
+         likely too coarse or too uneven for the element size asked of it — discretise it \
+         closer to the target size, or ask for a larger one.",
+        centre.x, centre.y
+    )))
+}
+
 /// Cross product `(b - a) × (c - a)` in 2-D — the *perp dot* product.
 #[inline]
 pub(crate) fn cross2(a: Point2, b: Point2, c: Point2) -> f64 {
