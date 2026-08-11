@@ -87,7 +87,7 @@ et `grid_surface2` se séparent nettement.
 | plaque à marche (0,53 ; 0,61) | mailles | 366 | 138 | 86 | **80** |
 | | pire | 0,481 | 0,187 | 0,405 | **0,963** |
 | L à cotes quelconques | mailles | 308 | 118 | 76 | **70** |
-| | pire | 0,459 | 0,401 | 0,437 | **0,979** |
+| | pire | 0,459 | 0,401 | 0,448 | **0,979** |
 | L étiré à 1,02 | mailles | 319 | 120 | 81 | **74** |
 | | pire | 0,477 | 0,396 | 0,307 | **0,606** |
 | L étiré à 1,10 | mailles | 336 | 123 | 80 | **74** |
@@ -120,7 +120,7 @@ la sensibilité d'un mailleur à la discrétisation du contour.
 |---|---|---:|---:|---:|---:|
 | base coupée | mailles | 2 050 | 871 | 474 | **456** |
 | | pire | 0,412 | 0,327 | 0,382 | **0,916** |
-| base d'un seul tenant | mailles | 2 089 | 872 | 487 | **456** |
+| base d'un seul tenant | mailles | 2 089 | 868 | 487 | **456** |
 | | pire | 0,419 | 0,326 | 0,287 | **0,651** |
 
 `grid_surface2` rend **exactement le même nombre de mailles dans les deux cas**.
@@ -142,8 +142,8 @@ Ici le classement s'inverse, et c'est le seul endroit où il le fait.
 |---|---|---:|---:|---:|---:|
 | maison | mailles | 1 723 | 621 | 477 | **454** |
 | | pire | 0,484 | **0,491** | 0,304 | 0,475 |
-| carré arrondi | mailles | 1 866 | 678 | 445 | **420** |
-| | pire | **0,474** | 0,360 | 0,266 | 0,308 |
+| carré arrondi | mailles | 1 866 | 678 | 444 | **418** |
+| | pire | **0,474** | 0,360 | 0,222 | 0,406 |
 | cercle R = 1 | mailles | 6 114 | 2 339 | **1 260** | 2 044 |
 | | pire | **0,424** | 0,031 | **0,288** | 0,005 |
 

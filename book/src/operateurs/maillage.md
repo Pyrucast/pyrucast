@@ -1119,13 +1119,13 @@ ratio* :
 |---|---|---|
 | rectangle, et toute forme pile sur la grille | **0,999** | **0,999** |
 | plaque à marche hors grille | 0,405 | **0,963** |
-| L à cotes quelconques | 0,437 | **0,979** |
+| L à cotes quelconques | 0,448 | **0,979** |
 | L dont les côtés découpent 5+6 contre 4+7 | 0,421 | **0,963** |
 | L dont les côtés diffèrent d'un nœud | 0,307 | **0,606** |
 | profil crénelé, base coupée sous chaque barre | 0,382 | **0,916** |
 | profil crénelé, base d'un seul tenant | 0,287 | **0,651** |
 | maison à toit à deux pentes | 0,304 | **0,475**, 1 triangle contre 11 |
-| carré à un angle arrondi | 0,266 | **0,308** |
+| carré à un angle arrondi | 0,222 | **0,406** |
 | cercle R = 1 | **0,288**, p5 **0,796** | **0,005 — à ne pas utiliser** |
 
 La comparaison des quatre mailleurs surfaciques, figures à l'appui, est sur la

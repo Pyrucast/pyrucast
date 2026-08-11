@@ -37,13 +37,13 @@
 //! |---|---|---|
 //! | rectangle, and any shape square on the grid | **0.999** | **0.999** |
 //! | plate with a step off the grid | 0.405 | **0.963** |
-//! | L, arbitrary dimensions | 0.437 | **0.979** |
+//! | L, arbitrary dimensions | 0.448 | **0.979** |
 //! | L whose sides split a stretch 5+6 against 4+7 | 0.421 | **0.963** |
 //! | L whose sides disagree by one node | 0.307 | **0.606** |
 //! | crenellated profile, base cut under each bar | 0.382 | **0.916** |
 //! | crenellated profile, base in one run | 0.287 | **0.651** |
 //! | house with a pitched roof | 0.304 | **0.475**, 1 triangle against 11 |
-//! | square with one rounded corner | 0.266 | **0.308** |
+//! | square with one rounded corner | 0.222 | **0.406** |
 //! | circle | **0.288**, p5 **0.796** | 0.005 — do not use |
 //!
 //! So: **`grid_surface2` for a rectilinear shape**, all the more so when its

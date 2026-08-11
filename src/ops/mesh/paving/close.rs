@@ -99,11 +99,31 @@ fn fill(pts: &[Point2], v: &[u32], base: u32, out: &mut Closure) {
                 // else — but only across the diagonal **through the reflex
                 // corner**: the other one falls outside the quadrangle and
                 // yields an inverted triangle, which is no improvement at all.
-                let r = (0..4)
-                    .find(|&i| orient(c[(i + 3) % 4], c[i], c[(i + 1) % 4]) <= 0.0)
-                    .unwrap_or(0);
-                out.tris.push([v[r], v[(r + 1) % 4], v[(r + 2) % 4]]);
-                out.tris.push([v[r], v[(r + 2) % 4], v[(r + 3) % 4]]);
+                //
+                // Which corner is the reflex one is a question with an answer
+                // only while the quadrangle is simple. Let two of its sides
+                // cross and it has two, or none that helps, and the diagonal
+                // named by the first is as likely to be the wrong one — that is
+                // where the reversed slivers came from. So both diagonals are
+                // weighed and the one that leaves two sound triangles wins;
+                // the reflex corner only decides when neither does.
+                let diagonal = |r: usize| {
+                    [
+                        [v[r], v[(r + 1) % 4], v[(r + 2) % 4]],
+                        [v[r], v[(r + 2) % 4], v[(r + 3) % 4]],
+                    ]
+                };
+                let sound = |r: usize| {
+                    diagonal(r).iter().all(|t| {
+                        orient(at(pts, out, t[0]), at(pts, out, t[1]), at(pts, out, t[2])) > 0.0
+                    })
+                };
+                let r = (0..2).find(|&r| sound(r)).unwrap_or_else(|| {
+                    (0..4)
+                        .find(|&i| orient(c[(i + 3) % 4], c[i], c[(i + 1) % 4]) <= 0.0)
+                        .unwrap_or(0)
+                });
+                out.tris.extend(diagonal(r));
             }
         }
         _ => {
@@ -167,11 +187,29 @@ fn centre_split(c: &[Point2; 4]) -> Option<Point2> {
     None
 }
 
-/// Last resort: a triangle fan from the vertex that gives the best worst
-/// triangle. Always succeeds on a simple polygon that is star-shaped from
-/// that vertex, and is harmless otherwise since the caller has already
-/// exhausted every quadrangle-preserving option.
+/// Last resort, once every quadrangle-preserving option is exhausted: cut the
+/// polygon into triangles.
+///
+/// **Ears first.** Ear clipping walks the polygon's own corners and so follows
+/// any shape that is simple, star-shaped or not; a fan only works from a vertex
+/// that sees the whole polygon, and on anything else it reaches straight across
+/// a concavity and lays a triangle outside the material — reversed, with a
+/// negative Jacobian. The fan is kept for the case ear clipping refuses, which
+/// is a polygon whose sides cross: it has no triangulation at all, and the fan
+/// at least covers it.
 fn fan(pts: &[Point2], v: &[u32], out: &mut Closure) {
+    let poly: Vec<Point2> = v.iter().map(|&i| pts[i as usize]).collect();
+    if let Ok(ears) = crate::ops::mesh::triangulation::ear_clip_2d(&poly) {
+        let sound = ears
+            .iter()
+            .all(|t| orient(poly[t[0]], poly[t[1]], poly[t[2]]) > 0.0);
+        if sound {
+            out.tris
+                .extend(ears.iter().map(|t| [v[t[0]], v[t[1]], v[t[2]]]));
+            return;
+        }
+    }
+
     let n = v.len();
     let mut best = (f64::NEG_INFINITY, 0usize);
     for a in 0..n {
