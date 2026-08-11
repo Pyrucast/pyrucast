@@ -603,7 +603,15 @@ invariant n'est jamais supposé, il est **maintenu**.
    corde, et les deux moitiés reprennent le pavage.
 5. **Fermeture.** Une boucle réduite à six nœuds ou moins est remplie par
    décomposition, sans jamais découper une arête (ce qui laisserait un nœud
-   en T, donc un maillage non conforme).
+   en T, donc un maillage non conforme). Encore faut-il qu'elle soit
+   remplissable : une boucle qui **se croise** ne l'est pas, ses deux lobes
+   tournant en sens contraire, et toute décomposition en laisse au moins un
+   morceau **retourné**. Le signe de l'aire ne suffit pas à les repérer — quand
+   les deux lobes se valent, l'aire qu'ils enferment s'annule presque et le
+   signe qui reste est celui du plus gros, un accident. La boucle est donc aussi
+   interrogée sur sa **simplicité** ; si elle est mince, elle est soudée comme
+   une lèvre. C'est ce qui manquait : sur un cercle, deux mailles ressortaient
+   à jacobien négatif.
 6. **Nettoyage topologique**, puis **lissage** sous garde de validité qui ne
    déplace jamais un nœud du contour. Dans cet ordre : lisser un nœud qui n'a
    pas le bon nombre de mailles autour de lui ne fait qu'étaler l'erreur sur

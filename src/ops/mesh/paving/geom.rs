@@ -86,6 +86,43 @@ fn overlap_1d(a: Point2, b: Point2, p: Point2) -> bool {
     p.x >= a.x.min(b.x) && p.x <= a.x.max(b.x) && p.y >= a.y.min(b.y) && p.y <= a.y.max(b.y)
 }
 
+/// Is the closed polygon through `p` **simple** — do two of its sides meet
+/// anywhere other than at the vertex they share?
+///
+/// A simple polygon always admits a filling whose every element turns the same
+/// way as it does; one that crosses itself admits none, since the two lobes on
+/// either side of the crossing turn opposite ways. So this is the predicate
+/// that says whether a front loop can be closed at all, and the sign of its
+/// area is not: a fold whose two lobes nearly cancel keeps whichever sign the
+/// larger one happens to have.
+///
+/// Exact, and not quadratic: the answer is [`segments_cross`] on every pair of
+/// sides sharing no endpoint, but the pairs worth asking about are found
+/// through a grid. Asking all of them is what a front of ten thousand nodes
+/// cannot afford.
+pub fn polygon_is_simple(p: &[Point2]) -> bool {
+    let n = p.len();
+    if n < 4 {
+        return true;
+    }
+    let grid = super::proximity::EdgeGrid::of_ring(p, 0.0);
+    for i in 0..n {
+        let (a, b) = (p[i], p[(i + 1) % n]);
+        for j in grid.near_segment(a, b) {
+            let j = j as usize;
+            // Skip the side itself and the two it shares an endpoint with:
+            // touching there is the polygon being closed, not a crossing.
+            if j == i || (j + 1) % n == i || (i + 1) % n == j {
+                continue;
+            }
+            if segments_cross(a, b, p[j], p[(j + 1) % n]) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// Is the quadrangle `q` (in order) convex and counter-clockwise?
 ///
 /// This is exactly the condition for a `QUA4` to have a strictly positive
@@ -223,6 +260,42 @@ mod tests {
             p(2.0, 0.0),
             p(3.0, 0.0)
         ));
+    }
+
+    #[test]
+    fn a_fold_is_seen_even_when_its_area_stays_positive() {
+        // The predicate the paver leans on to know a loop can be filled, and
+        // the reason it is not the sign of the area: this pentagon is a front
+        // that crossed itself, yet its two lobes leave a positive remainder.
+        // It is the shape that used to be filled with a reversed sliver.
+        let fold = [
+            p(0.739_583_257_097_729_7, -0.311_133_281_363_632_94),
+            p(0.801_277_069_162_058_2, -0.261_809_826_963_276_04),
+            p(0.777_038_034_503_386_2, -0.259_915_317_245_687_84),
+            p(0.773_227_538_342_794_9, -0.280_237_839_791_400_27),
+            p(0.759_661_065_245_258_8, -0.295_096_673_379_862_95),
+        ];
+        assert!(crate::ops::mesh::triangulation::signed_area(&fold) > 0.0);
+        assert!(!polygon_is_simple(&fold));
+
+        // The plain cases either way.
+        let square = [p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0), p(0.0, 1.0)];
+        assert!(polygon_is_simple(&square));
+        let l = [
+            p(0.0, 0.0),
+            p(2.0, 0.0),
+            p(2.0, 1.0),
+            p(1.0, 1.0),
+            p(1.0, 2.0),
+            p(0.0, 2.0),
+        ];
+        assert!(polygon_is_simple(&l));
+        // A bow tie: the crossing is proper, and its area cancels to zero.
+        let bow = [p(0.0, 0.0), p(1.0, 0.0), p(0.0, 1.0), p(1.0, 1.0)];
+        assert!(!polygon_is_simple(&bow));
+        // A side running back over the previous one, touching no vertex.
+        let spike = [p(0.0, 0.0), p(2.0, 0.0), p(1.0, 0.0), p(1.0, 1.0)];
+        assert!(!polygon_is_simple(&spike));
     }
 
     #[test]

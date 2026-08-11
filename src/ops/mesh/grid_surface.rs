@@ -226,6 +226,10 @@ mod tests {
         area: f64,
         min_jacobian: f64,
         non_conforming: usize,
+        /// Cells enclosing a non-positive area — the ones `min_jacobian` cannot
+        /// see, since it judges every cell after putting it the right way
+        /// round.
+        inverted: usize,
     }
 
     fn inspect(mesh: &Mesh) -> Report {
@@ -235,6 +239,7 @@ mod tests {
             area: 0.0,
             min_jacobian: f64::INFINITY,
             non_conforming: 0,
+            inverted: 0,
         };
         let mut edges: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -258,6 +263,9 @@ mod tests {
                         .map(|i| p[i].x * p[(i + 1) % k].y - p[(i + 1) % k].x * p[i].y)
                         .sum::<f64>();
                 r.area += signed.abs();
+                if signed <= 0.0 {
+                    r.inverted += 1;
+                }
                 let p: Vec<Point2> = if signed < 0.0 {
                     p.iter().rev().copied().collect()
                 } else {
@@ -520,6 +528,7 @@ mod tests {
         let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
+        assert_eq!(r.inverted, 0);
         assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
         let want = 3.0 - std::f64::consts::PI * 0.35 * 0.35;
         assert!((r.area - want).abs() < 5e-3, "area {} for {want}", r.area);
@@ -543,6 +552,7 @@ mod tests {
         let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
+        assert_eq!(r.inverted, 0);
         assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
         assert!(
             (r.area - std::f64::consts::PI).abs() < 0.02,
@@ -602,6 +612,7 @@ mod tests {
         );
 
         let r = inspect(&mesh);
+        assert_eq!(r.inverted, 0);
         assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
         assert!(
             r.area > 0.995 * std::f64::consts::PI,
@@ -609,6 +620,37 @@ mod tests {
             r.area,
             std::f64::consts::PI
         );
+    }
+
+    #[test]
+    fn a_circle_is_meshed_without_a_single_reversed_cell() {
+        // Where the band closes on a curve, two lines of front can end up lying
+        // across each other, and the ring left between them is a fold: it has
+        // no filling at all, since its two lobes turn opposite ways. The paver
+        // knew to weld such a ring shut rather than fill it, but recognised it
+        // by the sign of its area — and when the lobes are of comparable size
+        // that sign is the larger one's, an accident. These two circles are
+        // where it came out positive: each used to leave a reversed sliver, a
+        // cell with a negative Jacobian that no solver can integrate.
+        //
+        // The polygon and not the size is what the test pins down: a circle is
+        // a chaotic target, and either of these would pass again at a hair's
+        // different size for no reason worth recording.
+        for (sides, h) in [(12usize, 0.1), (30, 0.15)] {
+            let corners: Vec<(f64, f64)> = (0..sides)
+                .map(|i| {
+                    let t = i as f64 / sides as f64 * std::f64::consts::TAU;
+                    (t.cos(), t.sin())
+                })
+                .collect();
+            let coords = insert(Coords::new(2).unwrap());
+            let contour = loop_mesh(coords, &on_grid(&corners, h));
+            let mesh = grid_surface(&contour, ElementType::QUA4, Some(h), 0, false).unwrap();
+            let r = inspect(&mesh);
+            assert_eq!(r.inverted, 0, "{sides} sides at h={h}");
+            assert_eq!(r.non_conforming, 0, "{sides} sides at h={h}");
+            assert!(r.min_jacobian > 0.0, "{sides} sides at h={h}");
+        }
     }
 
     #[test]

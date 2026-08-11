@@ -609,24 +609,10 @@ fn chain_is_free(front: &Front, fab: &Fabric, grid: &EdgeGrid, plan: &RowPlan) -
             }
         }
     }
-    // And against itself. Asking every pair would be quadratic in the front
-    // length, which on a fine mesh is the dominant cost of the whole paver.
+    // And against itself: an advanced front that crosses itself has left the
+    // invariant, whatever it does to the rest of the front.
     let ring: Vec<Point2> = plan.chain.iter().map(|&i| at(i)).collect();
-    let own = EdgeGrid::of_ring(&ring, 0.0);
-    for i in 0..m {
-        let (a, b) = (ring[i], ring[(i + 1) % m]);
-        for j in own.near_segment(a, b) {
-            let j = j as usize;
-            // Skip itself and the two edges it shares an endpoint with.
-            if j == i || (j + 1) % m == i || (i + 1) % m == j {
-                continue;
-            }
-            if segments_cross(a, b, ring[j], ring[(j + 1) % m]) {
-                return false;
-            }
-        }
-    }
-    true
+    geom::polygon_is_simple(&ring)
 }
 
 /// Write a planned row into the mesh and advance the front over it.
@@ -705,48 +691,65 @@ fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32, target: f64) -> Res
         .iter()
         .map(|&s| front.vertex(s))
         .collect();
+    front.kill_loop(rep);
+
     // A front loop bounds material on its left, so a closed one encloses
-    // positive area. A non-positive one means two parts of the front folded
-    // over each other, and whatever is between them cannot be meshed. Dropping
-    // it silently would return a mesh with a hole in it, so it is an error —
-    // and one worth locating, since it always comes from a contour that is too
-    // coarse or too uneven for the size asked of it.
+    // positive area and does not cross itself. Either failing means two lines
+    // of front have folded over each other.
+    //
+    // Two lines of front meeting head-on normally leave a slither of overlap
+    // between them, which is degenerate and covers nothing; discarding that is
+    // right. What is not right is discarding a region that was supposed to hold
+    // cells, so the two are told apart by **width**, not by area: a slither is
+    // thin however long it runs, and one spanning twenty edges encloses twenty
+    // times the area of one spanning a single edge without being any more of a
+    // region. Mean width is `2·area/P`, so the test puts the area against half
+    // the perimeter times the width tolerated.
+    //
+    // The sign of the area does not see every slither, which is why the loop is
+    // asked whether it is *simple* as well. A fold whose two lobes are of
+    // comparable size encloses almost nothing either way, and the sign left
+    // over is the larger lobe's — an accident. Filling such a loop is what used
+    // to leave reversed cells in the mesh: no decomposition of a self-crossing
+    // polygon can have every piece turning the same way, so at least one comes
+    // out with a negative Jacobian, and a circle produced two of them.
     let poly: Vec<Point2> = verts.iter().map(|&v| fab.pts[v as usize]).collect();
     let area = crate::ops::mesh::triangulation::signed_area(&poly);
-    if area <= 0.0 {
-        // Two fronts meeting head-on normally leave a slither of overlap
-        // between them, which is degenerate and covers nothing; discarding
-        // that is right. What is not right is discarding a region that was
-        // supposed to hold cells, so the two are told apart by **width**, not
-        // by area: a slither is thin however long it runs, and one spanning
-        // twenty edges encloses twenty times the area of one spanning a single
-        // edge without being any more of a region. Mean width is `2·area/P`,
-        // so the test puts `-area` against half the perimeter times the width
-        // tolerated.
+    if area <= 0.0 || !geom::polygon_is_simple(&poly) {
         let perimeter: f64 = (0..poly.len())
             .map(|i| (poly[(i + 1) % poly.len()] - poly[i]).norm())
             .sum();
-        if -area <= FOLD_TOLERANCE * target * 0.5 * perimeter {
-            // Two lines of front lying on top of each other. Welding them
-            // shut costs nothing and leaves the mesh whole; simply dropping
-            // the ring would leave a crack behind, and a crack is a hole in
-            // the connectivity even when it has no area worth speaking of.
-            weld(fab, front, rep);
-            front.kill_loop(rep);
+        if area.abs() <= FOLD_TOLERANCE * target * 0.5 * perimeter {
+            // Welding the two lines shut costs nothing and leaves the mesh
+            // whole; simply dropping the ring would leave a crack behind, and a
+            // crack is a hole in the connectivity even when it has no area
+            // worth speaking of.
+            weld(fab, &verts);
             return Ok(());
         }
-        let centre = poly
-            .iter()
-            .fold(Point2::origin(), |acc, p| acc + p.coords)
-            .coords
-            / poly.len() as f64;
-        return Err(PyrucastError::Message(format!(
-            "pave_surface: the advancing front folded onto itself near ({:.6}, {:.6}) in the \
-             meshing plane, leaving a region that cannot be filled. The contour there is too \
-             coarse or too uneven for the element size asked of it: discretise it closer to \
-             the target size, or ask for a larger one.",
-            centre.x, centre.y
-        )));
+        if area <= 0.0 {
+            // Wide *and* the wrong way round: the front turned itself inside
+            // out, and the region between its two lines is one no filling can
+            // reach. Dropping it silently would return a mesh with a hole in
+            // it, so it is an error — and one worth locating, since it always
+            // comes from a contour too coarse or too uneven for the size asked.
+            let centre = poly
+                .iter()
+                .fold(Point2::origin(), |acc, p| acc + p.coords)
+                .coords
+                / poly.len() as f64;
+            return Err(PyrucastError::Message(format!(
+                "pave_surface: the advancing front folded onto itself near ({:.6}, {:.6}) in \
+                 the meshing plane, leaving a region that cannot be filled. The contour there \
+                 is too coarse or too uneven for the element size asked of it: discretise it \
+                 closer to the target size, or ask for a larger one.",
+                centre.x, centre.y
+            )));
+        }
+        // Wide, tangled, and still holding the material it was born with: a
+        // tangle over a real region is not a slither to weld nor a reversal to
+        // refuse. The decomposition covers it bar the sliver or two the tangle
+        // itself costs, and that is a better answer than no mesh at all.
     }
     let filled = close::close(&fab.pts, &verts);
     for p in &filled.added {
@@ -756,7 +759,6 @@ fn close_loop(fab: &mut Fabric, front: &mut Front, rep: u32, target: f64) -> Res
         fab.push_quad(q);
     }
     fab.tris.extend(filled.tris);
-    front.kill_loop(rep);
     Ok(())
 }
 
@@ -833,12 +835,8 @@ fn unstick(
 /// is wrong: a flattened ring is a lens, and its two ends are the *thin* part.
 /// Whatever refuses to merge is left alone: the ring is retired either way,
 /// and a refused weld costs a crack, not correctness.
-fn weld(fab: &mut Fabric, front: &Front, rep: u32) {
-    let mut verts: Vec<u32> = front
-        .loop_slots(rep)
-        .iter()
-        .map(|&s| front.vertex(s))
-        .collect();
+fn weld(fab: &mut Fabric, ring: &[u32]) {
+    let mut verts: Vec<u32> = ring.to_vec();
     while verts.len() >= 4 {
         let n = verts.len();
         let mut best: Option<(f64, usize, usize)> = None;
