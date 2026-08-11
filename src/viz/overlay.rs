@@ -26,6 +26,11 @@ const BAR_RIGHT_MARGIN: i32 = 58;
 const BAR_TOP_MARGIN: i32 = 48;
 const BAR_BOTTOM_MARGIN: i32 = 36;
 const BAR_TICKS: usize = 5;
+/// Number of constant-colour bands making up the gradient. Sampling it per
+/// pixel costs one rectangle per row, which a vector backend writes as one
+/// tag each — some 500 tags, tens of kilobytes, for a bar 16 px wide. At this
+/// count a band is a few pixels tall and the ramp still reads as continuous.
+const BAR_BANDS: i32 = 64;
 
 /// Pixel-space rectangle `(x, y, width, height)` of the button, in the
 /// drawing area's local coordinate system (top-left origin). Centred at
@@ -133,19 +138,24 @@ where
         return Ok(());
     }
 
-    // Gradient: one filled row per pixel. `colormap` with the same
-    // `cmap` / `(vmin, vmax)` as the cells keeps the bar and the mesh
-    // consistent, including the degenerate (vmax ≤ vmin) → midpoint case.
-    for py in 0..bar_h {
-        let t = 1.0 - py as f64 / (bar_h - 1) as f64; // 1 at top, 0 at bottom
+    // Gradient: a stack of constant-colour bands, each sampled at its own
+    // middle. `colormap` with the same `cmap` / `(vmin, vmax)` as the cells
+    // keeps the bar and the mesh consistent, including the degenerate
+    // (vmax ≤ vmin) → midpoint case.
+    let bands = BAR_BANDS.min(bar_h);
+    for k in 0..bands {
+        let y0 = bar_top + k * bar_h / bands;
+        let y1 = bar_top + (k + 1) * bar_h / bands;
+        if y1 <= y0 {
+            continue;
+        }
+        let mid = (y0 + y1) as f64 / 2.0 - bar_top as f64;
+        let t = 1.0 - mid / (bar_h - 1) as f64; // 1 at top, 0 at bottom
         let value = vmin + t * (vmax - vmin);
         let c = crate::viz::field_color::colormap(cmap, value, vmin, vmax);
         let style = ShapeStyle::from(&RGBColor(c.r, c.g, c.b)).filled();
-        let y = bar_top + py;
-        // 1-px-tall row: a zero-height rectangle (y..y) fills nothing,
-        // so span y..y+1.
         area.draw(&Rectangle::new(
-            [(bar_x, y), (bar_x + BAR_WIDTH - 1, y + 1)],
+            [(bar_x, y0), (bar_x + BAR_WIDTH - 1, y1)],
             style,
         ))
         .map_err(pl_err)?;
@@ -481,6 +491,35 @@ mod tests {
         assert!(buf.contains("0.000"));
         assert!(buf.contains("1.000"));
         assert!(buf.contains("2.000"));
+    }
+
+    #[test]
+    fn draw_colorbar_gradient_is_banded_not_per_pixel() {
+        let mut buf = String::new();
+        {
+            let backend = SVGBackend::with_string(&mut buf, (400, 300));
+            let area = backend.into_drawing_area();
+            area.fill(&WHITE).unwrap();
+            draw_colorbar(&area, crate::viz::Colormap::Viridis, 0.0, 2.0).unwrap();
+            area.present().unwrap();
+        }
+        // The gradient rectangles, plus the canvas fill and the bar's border.
+        let rects = buf.matches("<rect").count();
+        assert!(
+            rects <= BAR_BANDS as usize + 2,
+            "gradient drawn in {rects} rectangles, expected at most {}",
+            BAR_BANDS + 2
+        );
+        // Ends still carry the extremes of the colormap: Viridis runs from
+        // dark violet at `vmin` to yellow at `vmax`.
+        let top = crate::viz::field_color::colormap(crate::viz::Colormap::Viridis, 2.0, 0.0, 2.0);
+        let bottom =
+            crate::viz::field_color::colormap(crate::viz::Colormap::Viridis, 0.0, 0.0, 2.0);
+        assert!(top.r > 200 && top.g > 200, "top band should be yellow");
+        assert!(
+            bottom.r < 100 && bottom.g < 100,
+            "bottom band should be dark"
+        );
     }
 
     #[test]

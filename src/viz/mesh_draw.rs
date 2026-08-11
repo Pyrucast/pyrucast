@@ -465,22 +465,63 @@ fn intersect_y(s: (f64, f64), e: (f64, f64), yb: f64) -> (f64, f64) {
 }
 
 /// Clip every edge of a closed vertex loop against the viewport, returning
-/// the visible sub-segments. Each edge is clipped on its own so an edge that
-/// leaves and re-enters the window doesn't get bridged by a false chord.
-fn clip_loop_edges(verts: &[(f64, f64)], vp: &Viewport) -> Vec<((f64, f64), (f64, f64))> {
+/// the visible outline as **polylines**. Each edge is still clipped on its
+/// own so an edge that leaves and re-enters the window doesn't get bridged by
+/// a false chord, but consecutive survivors are chained into one polyline
+/// rather than emitted as separate two-point pieces.
+///
+/// The chaining is what it costs to draw: a backend charges per drawn series,
+/// and the SVG one repeats the full stroke style on every tag it writes. A
+/// quadrangle outline is one polyline of five points instead of four of two,
+/// which is most of the weight of a mesh figure.
+fn clip_loop_chains(verts: &[(f64, f64)], vp: &Viewport) -> Vec<Vec<(f64, f64)>> {
     let n = verts.len();
     if n < 2 {
         return Vec::new();
     }
-    let mut out = Vec::with_capacity(n);
+    // Fast path: nothing is cut, so the loop closes on itself.
+    if verts.iter().all(|&v| vp.contains(v)) {
+        let mut closed = Vec::with_capacity(n + 1);
+        closed.extend_from_slice(verts);
+        closed.push(verts[0]);
+        return vec![closed];
+    }
+
+    let mut chains: Vec<Vec<(f64, f64)>> = Vec::new();
+    // Whether the previous edge was drawn — a dropped edge breaks the chain.
+    let mut running = false;
     for i in 0..n {
         let a = verts[i];
         let b = verts[(i + 1) % n];
-        if let Some(seg) = vp.clip_segment(a, b) {
-            out.push(seg);
+        let Some((ca, cb)) = vp.clip_segment(a, b) else {
+            running = false;
+            continue;
+        };
+        // This edge continues the previous one exactly when their shared
+        // vertex survived the clip, i.e. when it lies inside the viewport.
+        if running && vp.contains(a) {
+            let chain = chains.last_mut().expect("running implies a chain");
+            // Pin the joint to the vertex itself: reconstructing it as
+            // `a + 1·(b - a)` on the previous edge drifts by an ulp or two.
+            *chain.last_mut().expect("chains hold >= 2 points") = a;
+            chain.push(cb);
+        } else {
+            chains.push(vec![ca, cb]);
         }
+        running = true;
     }
-    out
+
+    // The loop is closed: when it was only cut away from vertex 0, the last
+    // chain and the first are one polyline that got split at the seam.
+    if chains.len() > 1 && running && vp.contains(verts[0]) {
+        let mut tail = chains.pop().expect("len > 1");
+        let head = std::mem::take(&mut chains[0]);
+        // Both sides hold the seam vertex; keep the head's copy, which is
+        // `verts[0]` untouched, over the tail's drifted `a + 1·(b - a)`.
+        tail.pop();
+        chains[0] = tail.into_iter().chain(head).collect();
+    }
+    chains
 }
 
 /// Common rendering core: project, sort far → near, draw points / segments
@@ -677,19 +718,19 @@ where
                     .draw_series(std::iter::once(Polygon::new(clipped.clone(), face_style)))
                     .map_err(pl_err)?;
                 if *outline {
-                    // Draw the outline edge-by-edge, clipping each edge so the
-                    // boundary follows the window instead of the axis border.
-                    for (ca, cb) in clip_loop_edges(verts, &viewport) {
+                    // Draw the outline clipped to the window, so the boundary
+                    // follows it instead of the axis border.
+                    for chain in clip_loop_chains(verts, &viewport) {
                         chart
-                            .draw_series(LineSeries::new(vec![ca, cb], edge_style))
+                            .draw_series(LineSeries::new(chain, edge_style))
                             .map_err(pl_err)?;
                     }
                 }
             }
             ProjPrim::Wire { verts, .. } => {
-                for (ca, cb) in clip_loop_edges(verts, &viewport) {
+                for chain in clip_loop_chains(verts, &viewport) {
                     chart
-                        .draw_series(LineSeries::new(vec![ca, cb], edge_style))
+                        .draw_series(LineSeries::new(chain, edge_style))
                         .map_err(pl_err)?;
                 }
             }
@@ -912,6 +953,59 @@ mod tests {
             assert!(p.0 >= vp.xmin - 1e-9 && p.0 <= vp.xmax + 1e-9);
             assert!(p.1 >= vp.ymin - 1e-9 && p.1 <= vp.ymax + 1e-9);
         }
+    }
+
+    #[test]
+    fn clip_loop_chains_of_an_inside_loop_is_one_closed_polyline() {
+        let vp = unit_viewport();
+        let quad = [(0.2, 0.2), (0.8, 0.2), (0.8, 0.8), (0.2, 0.8)];
+        let chains = clip_loop_chains(&quad, &vp);
+        assert_eq!(chains.len(), 1, "an uncut loop draws as a single polyline");
+        // Five points: the four corners, closed back onto the first.
+        assert_eq!(chains[0].len(), 5);
+        assert_eq!(chains[0][..4], quad);
+        assert_eq!(chains[0][4], quad[0]);
+    }
+
+    #[test]
+    fn clip_loop_chains_never_bridges_across_a_dropped_edge() {
+        let vp = unit_viewport();
+        // A long thin loop crossing the viewport twice: it enters on the left,
+        // leaves on the right, comes back — the outside stretches must not be
+        // joined by a chord cutting straight through the window.
+        let loop_pts = [(-1.0, 0.3), (2.0, 0.3), (2.0, 0.6), (-1.0, 0.6)];
+        let chains = clip_loop_chains(&loop_pts, &vp);
+        assert_eq!(chains.len(), 2, "the two crossings stay separate");
+        for chain in &chains {
+            for p in chain {
+                assert!(p.0 >= vp.xmin - 1e-9 && p.0 <= vp.xmax + 1e-9);
+                assert!(p.1 >= vp.ymin - 1e-9 && p.1 <= vp.ymax + 1e-9);
+            }
+        }
+    }
+
+    #[test]
+    fn clip_loop_chains_rejoins_a_loop_cut_away_from_its_seam() {
+        let vp = unit_viewport();
+        // A triangle poking out past two edges: what stays visible is the
+        // hypotenuse's middle, plus one run going up the left side, through
+        // vertex 0, and back along the bottom. That last run straddles the
+        // seam at vertex 0 and must come back whole, not split in two.
+        let tri = [(0.2, 0.2), (1.5, 0.2), (0.2, 1.5)];
+        let chains = clip_loop_chains(&tri, &vp);
+        assert_eq!(chains.len(), 2);
+        let through_seam = &chains[0];
+        assert_eq!(through_seam.len(), 3);
+        assert_eq!(through_seam[0], (0.2, 1.0));
+        assert_eq!(through_seam[1], tri[0], "the seam vertex is kept exactly");
+        assert_eq!(through_seam[2], (1.0, 0.2));
+    }
+
+    #[test]
+    fn clip_loop_chains_of_a_loop_outside_is_empty() {
+        let vp = unit_viewport();
+        let tri = [(2.0, 2.0), (3.0, 2.0), (2.0, 3.0)];
+        assert!(clip_loop_chains(&tri, &vp).is_empty());
     }
 
     #[test]
