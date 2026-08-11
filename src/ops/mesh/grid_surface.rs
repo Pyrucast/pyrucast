@@ -635,6 +635,29 @@ mod tests {
     }
 
     #[test]
+    fn a_coarse_circle_is_meshed_where_the_front_used_to_fold() {
+        // Twenty sides at a fifth of the radius: the band is wide, the rows are
+        // few, and the front relaxes hard. That relaxation used to slide two
+        // stretches of it across each other — every quadrangle behind them
+        // stayed convex, so nothing local complained — and the crossed ring it
+        // left could not be filled: the operator gave up with "the advancing
+        // front folded onto itself". Held to a simple loop, it paves.
+        let coords = insert(Coords::new(2).unwrap());
+        let corners: Vec<(f64, f64)> = (0..20)
+            .map(|i| {
+                let t = i as f64 / 20.0 * std::f64::consts::TAU;
+                (t.cos(), t.sin())
+            })
+            .collect();
+        let contour = loop_mesh(coords, &on_grid(&corners, 0.2));
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.2), 0, false).unwrap();
+        let r = inspect(&mesh);
+        assert_eq!(r.inverted, 0);
+        assert_eq!(r.non_conforming, 0);
+        assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
+    }
+
+    #[test]
     fn a_circle_is_meshed_without_a_single_reversed_cell() {
         // Where the band closes on a curve, two lines of front can end up lying
         // across each other, and the ring left between them is a fold: it has

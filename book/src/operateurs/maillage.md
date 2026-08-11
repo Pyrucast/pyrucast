@@ -605,14 +605,29 @@ invariant n'est jamais supposé, il est **maintenu**.
    d'un trou s'en éloigne par le bas, et chacune garde son signe sa vie
    durant. La lèvre refusée est laissée à la fermeture, qui la remplit ou la
    soude sur place.
-3. **Couture.** Deux nœuds de front qui se rapprochent à moins d'environ une
+3. **Détente.** Une rangée fraîchement posée garde les coudes que le placement
+   sur les bissectrices lui a laissés, et ils se composent : un nœud à 216°
+   offre à ses voisins un secteur qu'aucun gabarit ne remplit bien, la rangée
+   suivante est refusée et la boucle cale. Le front est donc relâché **le long
+   de lui-même** — un nœud n'a de voisins engagés que derrière lui, un laplacien
+   ordinaire le ramènerait d'où il vient. Chaque déplacement est pesé sur les
+   quadrangles que le nœud porte déjà ; mais ceux-ci sont tous *derrière* lui et
+   ne voient rien de la ligne devant, si bien que deux portions du front peuvent
+   glisser l'une sur l'autre sans qu'aucun test local ne bronche. La boucle est
+   donc **aussi interrogée sur sa simplicité**, et une détente qui la lui coûte
+   est reprise en entier. Sans cela, un cercle à vingt côtés maillé au cinquième
+   de son rayon rendait une boucle croisée, donc irremplissable, et le mailleur
+   abandonnait ; il le pave. Mesuré une fois par appel plutôt qu'une fois par
+   passe : **+14 %** contre +31 % sur un maillage que le front pose seul, pour
+   les mêmes cas sauvés — et gratuit dès qu'une grille fait le travail.
+4. **Couture.** Deux nœuds de front qui se rapprochent à moins d'environ une
    demi-maille sont **identifiés**. La même opération *scinde* une boucle
    quand les deux nœuds lui appartiennent — c'est ainsi qu'une géométrie
    concave se divise — et *joint* deux boucles sinon — c'est ainsi qu'un trou
    est absorbé. Les trous n'ont donc aucun traitement particulier.
-4. **Déblocage.** Une boucle qui n'avance plus est **coupée en deux** par une
+5. **Déblocage.** Une boucle qui n'avance plus est **coupée en deux** par une
    corde, et les deux moitiés reprennent le pavage.
-5. **Fermeture.** Une boucle réduite à six nœuds ou moins est remplie par
+6. **Fermeture.** Une boucle réduite à six nœuds ou moins est remplie par
    décomposition, sans jamais découper une arête (ce qui laisserait un nœud
    en T, donc un maillage non conforme). Encore faut-il qu'elle soit
    remplissable : une boucle qui **se croise** ne l'est pas, ses deux lobes
@@ -623,11 +638,11 @@ invariant n'est jamais supposé, il est **maintenu**.
    interrogée sur sa **simplicité** ; si elle est mince, elle est soudée comme
    une lèvre. C'est ce qui manquait : sur un cercle, deux mailles ressortaient
    à jacobien négatif.
-6. **Nettoyage topologique**, puis **lissage** sous garde de validité qui ne
+7. **Nettoyage topologique**, puis **lissage** sous garde de validité qui ne
    déplace jamais un nœud du contour. Dans cet ordre : lisser un nœud qui n'a
    pas le bon nombre de mailles autour de lui ne fait qu'étaler l'erreur sur
    ses voisins.
-7. **Refus final.** Chaque maille est mesurée : aucune ne sort d'aire nulle ou
+8. **Refus final.** Chaque maille est mesurée : aucune ne sort d'aire nulle ou
    négative. Toutes les étapes ci-dessus ont déjà leur garde, exacte et locale ;
    celle-ci est le filet sous toutes les autres, et ce qu'elle attrape est une
    garde qui a laissé passer quelque chose. Le maillage n'est alors **pas
