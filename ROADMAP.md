@@ -88,10 +88,12 @@ interpolation, quadrature, codes VTK/gmsh, familles. Un unique `match`,
 `SubModel::as_kind()` côté physiques : ajouter un élément coûte un fichier et
 deux variantes, et aucun consommateur générique ne change.
 
-## Physiques — 14 sous-modèles
+## Physiques — 15 sous-modèles
 
 Thermique : `HeatConduction`, `Convection` (échange de surface / film).
-Diffusion : `Fick` (concentration `c` / flux `j`, nature `Diffusion` propre).
+Diffusion : `Fick` (concentration `c` / flux `j`, nature `Diffusion` propre),
+`InterfaceTransfer` (échange `h(c₁ − c₂)` entre deux maillages non conformes en
+nœuds, variante thermique comprise).
 Mécanique : `Truss`, `Elasticity` (contraintes/déformations planes,
 axisymétrique, 3-D), `Plasticity` (von Mises parfaite, tangente cohérente
 validée par différences finies), `Mazars` (endommagement), `Timoshenko`,
@@ -114,6 +116,12 @@ Le coût d'ajout d'une physique est **O(1) fichier** : une struct + un
 `impl SubModelKind`, deux lignes de câblage.
 
 ## Assemblage
+
+Trois formes de contribution (`Contribution`) : `Computed` (intégrée à la volée
+et dispersée dans le CSR), `Literal` (valeurs déjà remplies — Dirichlet, MPC) et
+`Coupling` (bloc **inter-maillages**, lignes sur un maillage et colonnes sur un
+autre ; son scatter est séquentiel, un coloriage sur une seule connectivité ne
+prouvant plus la disjonction).
 
 Quatre genres de matrice derrière une machinerie unique (`MatrixKind`) :
 raideur / conductivité, masse / capacité, raideur géométrique, tangente

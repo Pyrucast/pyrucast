@@ -43,6 +43,7 @@ pub mod fick;
 pub mod frame;
 pub mod frame3d;
 pub mod heat_conduction;
+pub mod interface_transfer;
 pub mod kernel;
 pub mod mazars;
 pub mod mpc;
@@ -127,10 +128,6 @@ pub struct MatrixLayout {
 /// sub-model on one uniform path — the discriminant is the variant, not a
 /// per-type `match` in the assembler.
 ///
-/// Today two variants suffice; a `Coupling { row_submodel, col_submodel, .. }`
-/// will join them when an inter-sub-model coupling physics lands (the enum is
-/// the extension point — see the *Physics → SubModelKind + Contribution* design
-/// note).
 pub enum Contribution {
     /// A block integrated on the fly and scattered straight into the global CSR
     /// (no values materialised): the fast path of every volumetric physics. The
@@ -140,6 +137,41 @@ pub enum Contribution {
     /// One-or-more blocks whose values the sub-model has already filled in
     /// (`Dirichlet`'s C / Cᵀ, MPC, …). Scattered by the literal path.
     Literal(Vec<SubMatrix>),
+    /// An **off-diagonal** block coupling two distinct meshes — integrated on the
+    /// fly like [`Computed`](Self::Computed), but with its rows on one mesh and
+    /// its columns on another (an interface exchange law, `h(c₁ − c₂)`).
+    ///
+    /// Everything below this seam was already row/col-asymmetric —
+    /// [`SubMatrix::computed`](crate::containers::matrix::SubMatrix::computed)
+    /// takes both supports, and so do the scatter and the kernel drivers. Only
+    /// [`MatrixLayout`] collapsed them into one field, which is why this is a
+    /// separate layout rather than an extra field there: adding one would have
+    /// touched every existing physics for a need none of them has.
+    Coupling(CouplingLayout),
+}
+
+/// Structural declaration of an **inter-mesh** block: rows integrated on one
+/// mesh, columns on another, paired cell by cell.
+///
+/// The two sides must be **conforming** — same element type, same cell count,
+/// cell `i` of one facing cell `i` of the other. That is checked when the block
+/// is built, and reported rather than approximated: a non-matching interface is
+/// a meshing problem, not something an assembler should paper over.
+pub struct CouplingLayout {
+    /// FE subspaces carrying the **rows** (the primary drives the cell loop).
+    pub fespaces: Vec<Handle<SubFiniteElementSpace>>,
+    /// FE subspaces carrying the **columns**, on the facing mesh.
+    pub col_fespaces: Vec<Handle<SubFiniteElementSpace>>,
+    /// POI1 sub-mesh giving the block's row node sequence.
+    pub row_support: Handle<SubMesh>,
+    /// POI1 sub-mesh giving the block's column node sequence.
+    pub col_support: Handle<SubMesh>,
+    /// Row variable names (dual).
+    pub dual_vars: Vec<String>,
+    /// Column variable names (primal).
+    pub primal_vars: Vec<String>,
+    /// `(node_local, var)` ↔ matrix-index ordering.
+    pub ordering: DofOrdering,
 }
 
 /// The **nature** of a physics — its coarse classification, orthogonal to the
@@ -355,6 +387,30 @@ pub trait SubModelKind: Sync {
     ) -> Result<()> {
         Err(PyrucastError::Message(format!(
             "{}: no tangent kernel — element_tangent is undefined",
+            self.label()
+        )))
+    }
+
+    /// Local element **coupling** matrix of one facing cell pair — the kernel
+    /// behind [`Contribution::Coupling`]. `row_geoms` describes the cell on the
+    /// row mesh, `col_geoms` the facing cell on the column mesh; `ke` is
+    /// `(row nodes × dual) × (col nodes × primal)`, same node-major layout as
+    /// [`element_matrix`](Self::element_matrix).
+    ///
+    /// It is the physics' job to carry the **sign**: an exchange law contributes
+    /// `+h∫NᵢNⱼ` on its two diagonal blocks and `−h∫NᵢNⱼ` off-diagonal, and since
+    /// the two go through different kernels there is no factor to thread through
+    /// the assembler. Default errors.
+    fn coupling_element(
+        &self,
+        _kind: MatrixKind,
+        _row_geoms: &[CellGeom],
+        _col_geoms: &[CellGeom],
+        _material: Option<&SubElementField>,
+        _ke: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(format!(
+            "{}: no coupling kernel — coupling_element is undefined",
             self.label()
         )))
     }

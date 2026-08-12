@@ -1,0 +1,259 @@
+//! Exchange law across an interface — the first inter-mesh coupling.
+//!
+//! Two unit squares laid side by side, `[0,1]×[0,1]` and `[1,2]×[0,1]`, that do
+//! **not** share their junction: at `x = 1` each carries its own pair of nodes,
+//! and the two bodies are tied only by the exchange law `j·n = h(c₁ − c₂)`.
+//!
+//! A uniform flux density `q` enters at `x = 0` and the concentration is imposed
+//! at `x = 2`. In steady state the same `q` crosses everything, so the profile
+//! is piecewise linear with a **jump** at the interface:
+//!
+//! ```text
+//! drop across each square : q/D          jump across the interface : q/h
+//! ```
+//!
+//! The jump is the whole point. It is what an interface law adds over a shared
+//! node, and it is carried entirely by the two **off-diagonal** blocks — those
+//! whose rows live on one mesh and whose columns live on the other, which is
+//! what `Contribution::Coupling` exists for. A stiff interface (`h → ∞`)
+//! recovers the continuous solution, which the second test checks.
+//!
+//! Single source for the « transfert d'interface » example of the diffusion book
+//! chapter; runs under `cargo test`.
+
+// ANCHOR: example
+use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::{ElementType, Node};
+use pyrucast::containers::element_field::ElementField;
+use pyrucast::containers::finite_element_space::FiniteElementSpace;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
+use pyrucast::containers::model::Model;
+use pyrucast::containers::node_field::{NodeField, SubNodeField};
+use pyrucast::coords::Coords;
+use pyrucast::models::interface_transfer::TransferKind;
+use pyrucast::models::symmetry::MaterialSymmetry;
+use pyrucast::ops::mesh;
+use pyrucast::ops::node_field::FluxDensity;
+use pyrucast::ops::solver::lu::solve;
+use pyrucast::store::insert;
+use pyrucast::Result;
+
+const D: f64 = 2.0; // diffusivity, both squares
+const Q: f64 = 10.0; // flux density injected at x = 0
+const C_RIGHT: f64 = 1.0; // concentration imposed at x = 2
+
+#[test]
+fn an_interface_law_makes_the_field_jump() -> Result<()> {
+    const H: f64 = 5.0; // transfer coefficient
+    let (geom, solution) = solve_two_squares(H)?;
+
+    let c = |n: &Node| solution.value(n.id(), "c");
+    let far_left = c(&geom.left[0])?; // (0, 0)
+    let left_face = c(&geom.left[1])?; // (1, 0), left side
+    let right_face = c(&geom.right[0])?; // (1, 0), right side
+    let far_right = c(&geom.right[1])?; // (2, 0)
+
+    let tol = 1e-10;
+    assert!((far_right - C_RIGHT).abs() < tol, "c(2) = {far_right}");
+    // Slope q/D over the unit width of each square.
+    assert!(
+        (far_left - left_face - Q / D).abs() < tol,
+        "left square: {far_left} → {left_face}"
+    );
+    assert!(
+        (right_face - far_right - Q / D).abs() < tol,
+        "right square: {right_face} → {far_right}"
+    );
+    // …and the jump across the interface is q/h — the exchange law itself.
+    let jump = left_face - right_face;
+    assert!(
+        (jump - Q / H).abs() < tol,
+        "jump = {jump}, expected {}",
+        Q / H
+    );
+    Ok(())
+}
+// ANCHOR_END: example
+
+/// A stiff interface (`h → ∞`) must recover the single continuous body: the jump
+/// vanishes as `q/h`, so the two facing values converge to each other.
+#[test]
+fn a_stiff_interface_recovers_a_continuous_body() -> Result<()> {
+    let mut previous = f64::INFINITY;
+    for h in [1e2, 1e4, 1e6] {
+        let (geom, solution) = solve_two_squares(h)?;
+        let jump =
+            solution.value(geom.left[1].id(), "c")? - solution.value(geom.right[0].id(), "c")?;
+        assert!(
+            (jump - Q / h).abs() < 1e-8 * jump.abs().max(1.0),
+            "h = {h}: jump {jump} ≠ {}",
+            Q / h
+        );
+        assert!(
+            jump < previous,
+            "the jump must shrink with h: {jump} ≥ {previous}"
+        );
+        previous = jump;
+    }
+    assert!(previous < 1e-4, "residual jump {previous}");
+    Ok(())
+}
+
+/// The exchange term is symmetric overall (`+K −K / −K +K`), so the assembled
+/// stiffness stays symmetric even though **each** coupling block alone is not.
+/// That is the structural check that the four blocks land where they should.
+#[test]
+fn the_four_blocks_sum_to_a_symmetric_operator() -> Result<()> {
+    let (_, model, materials) = two_square_model(3.0)?;
+    let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
+    let dense = k.dense()?;
+    let n = k.row_dofs()?.len();
+    assert_eq!(dense.len(), n * n);
+    for i in 0..n {
+        for j in 0..n {
+            let (a, b) = (dense[i * n + j], dense[j * n + i]);
+            assert!((a - b).abs() < 1e-12, "K[{i},{j}] = {a} ≠ {b} = K[{j},{i}]");
+        }
+    }
+    // The coupling really is there: some entry links a left-side DOF to a
+    // right-side one, which a pair of independent bodies could never produce.
+    let coupling = (0..n)
+        .flat_map(|i| (0..n).map(move |j| (i, j)))
+        .any(|(i, j)| i != j && dense[i * n + j].abs() > 1e-12);
+    assert!(coupling, "the interface must couple the two meshes");
+    Ok(())
+}
+
+/// A non-conforming interface is a meshing problem, and is reported as one
+/// rather than resolved by a silent projection.
+#[test]
+fn a_non_conforming_interface_is_rejected() -> Result<()> {
+    let coords = insert(Coords::new(2)?);
+    let node = |x: f64, y: f64| Node::create_in(coords.clone(), &[x, y]);
+    let edge = |a: &Node, b: &Node| -> Result<FiniteElementSpace> {
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        m.add_cell(&[a.id(), b.id()])?;
+        FiniteElementSpace::lagrange1(&m)
+    };
+    let (a0, a1) = (node(1.0, 0.0)?, node(1.0, 1.0)?);
+    // The facing edge sits at x = 1.5: the two sides do not describe one surface.
+    let (b0, b1) = (node(1.5, 0.0)?, node(1.5, 1.0)?);
+    let err =
+        Model::interface_transfer(&edge(&a0, &a1)?, &edge(&b0, &b1)?, TransferKind::Mass, 1e-9)
+            .unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("not node-conforming"), "unexpected: {msg}");
+    Ok(())
+}
+
+// ─── Fixtures ───────────────────────────────────────────────────────────────
+
+/// The two squares' nodes, `[bottom-left, bottom-right, top-right, top-left]`.
+struct Geometry {
+    left: Vec<Node>,
+    right: Vec<Node>,
+}
+
+/// Two QUA4 squares with **duplicated** nodes at `x = 1`, their diffusion models,
+/// and the interface law tying them.
+fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
+    let coords = insert(Coords::new(2)?);
+    let node = |x: f64, y: f64| Node::create_in(coords.clone(), &[x, y]);
+
+    // Left square [0,1]², right square [1,2]×[0,1]. The two pairs at x = 1 are
+    // distinct node objects at the same position: that is what lets `c` jump.
+    let left = vec![
+        node(0.0, 0.0)?,
+        node(1.0, 0.0)?,
+        node(1.0, 1.0)?,
+        node(0.0, 1.0)?,
+    ];
+    let right = vec![
+        node(1.0, 0.0)?,
+        node(2.0, 0.0)?,
+        node(2.0, 1.0)?,
+        node(1.0, 1.0)?,
+    ];
+
+    let square = |ns: &[Node]| -> Result<FiniteElementSpace> {
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+        m.add_cell(&ns.iter().map(|n| n.id()).collect::<Vec<_>>())?;
+        FiniteElementSpace::lagrange1(&m)
+    };
+    let edge = |a: &Node, b: &Node| -> Result<FiniteElementSpace> {
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        m.add_cell(&[a.id(), b.id()])?;
+        FiniteElementSpace::lagrange1(&m)
+    };
+
+    // The interface: the x = 1 edge of each square, node for node
+    // (bottom → top on both sides, so local node k faces local node k).
+    let face_left = edge(&left[1], &left[2])?;
+    let face_right = edge(&right[0], &right[3])?;
+
+    // Concentration imposed on the far-right edge (x = 2).
+    let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&[
+        right[1].clone(),
+        right[2].clone(),
+    ])?);
+    let multiplier = mesh::barycenter(&imposed)?;
+
+    let model = Model::fick(&square(&left)?, MaterialSymmetry::Isotropic)?
+        .union(&Model::fick(&square(&right)?, MaterialSymmetry::Isotropic)?)?
+        .union(&Model::interface_transfer(
+            &face_left,
+            &face_right,
+            TransferKind::Mass,
+            1e-9,
+        )?)?
+        .union(&Model::dirichlet(
+            "c".into(),
+            "j".into(),
+            &imposed,
+            &multiplier,
+            None,
+            None,
+            Default::default(),
+        )?)?;
+
+    // One material field for the whole model: the squares ask for `D`, the
+    // interface for `h`, and each resolves its own zone by its components.
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("D", D), ("h", h)])?;
+    Ok((Geometry { left, right }, model, materials))
+}
+
+/// Build, load and solve the two-square problem for a given transfer coefficient.
+fn solve_two_squares(h: f64) -> Result<(Geometry, NodeField)> {
+    let (geom, model, materials) = two_square_model(h)?;
+    let coords = geom.left[0].coords();
+
+    // Uniform flux density Q on the far-left edge (x = 0), as consistent nodal
+    // loads.
+    let mut inlet = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+    inlet.add_cell(&[geom.left[0].id(), geom.left[3].id()])?;
+    let inlet_fes = FiniteElementSpace::lagrange1(&inlet)?;
+    let influx = pyrucast::ops::node_field::flux(&inlet_fes.get(0)?, FluxDensity::Uniform(Q), "j")?;
+
+    // The imposed concentration, on the Dirichlet multiplier nodes.
+    let mult_mesh = model.multiplier_mesh()?;
+    let mut imposed_sm = SubMesh::new(coords, ElementType::POI1);
+    let mut mults = Vec::new();
+    for i in 0..mult_mesh.len() {
+        let cells = pyrucast::store::read(&mult_mesh.get(i)?)?.cell_count();
+        for cell in 0..cells {
+            let id = mult_mesh.node(i, cell, 0)?.id();
+            imposed_sm.add_cell(&[id])?;
+            mults.push(id);
+        }
+    }
+    let imposed_sm = insert(imposed_sm);
+    let mut imposed = SubNodeField::from_poi1(&imposed_sm, vec!["imposed_c".into()])?;
+    for id in &mults {
+        imposed.set_value(*id, "imposed_c", C_RIGHT)?;
+    }
+
+    let rhs = NodeField::from_sub(influx).union(&NodeField::from_sub(imposed))?;
+    let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
+    let solution = solve(&stiffness, &rhs)?;
+    Ok((geom, solution))
+}

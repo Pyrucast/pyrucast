@@ -29,7 +29,9 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   [convection de surface](thermique.md#convection-de-surface-robin--film)
   (Robin / film, `q·n = h(T − T_ext)`).
 - [Diffusion (loi de Fick)](diffusion.md) — `∇·(D∇c) = 0`, concentration `c` et
-  flux de matière `j` ; même opérateur que la conduction, nature distincte.
+  flux de matière `j` ; même opérateur que la conduction, nature distincte. Avec
+  le [transfert d'interface](diffusion.md#transfert-à-travers-une-interface)
+  `j·n = h(c₁ − c₂)`, qui laisse le champ sauter entre deux corps.
 - [Mécanique](mecanique.md) — barre, élasticité linéaire, poutres et
   portiques :
   - [Barre / treillis](mecanique/truss.md)

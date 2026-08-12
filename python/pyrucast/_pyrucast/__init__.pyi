@@ -1294,6 +1294,25 @@ class Model:
         which reads the optional `poro`.
         """
     @classmethod
+    def interface_transfer(cls, side_a: FiniteElementSpace, side_b: FiniteElementSpace, kind: typing.Optional[builtins.str] = None, tol: typing.Optional[builtins.float] = None) -> Model:
+        r"""
+        `Model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
+        exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
+        that do **not** share their nodes. `kind` is `"mass"` (the default:
+        concentration `c`, flux `j`, nature `"diffusion"`) or `"thermal"` (a
+        contact resistance: `T`, `q`, nature `"thermal"`); `h` is supplied at
+        assembly time.
+        
+        `side_a` and `side_b` are the two facing **boundary** FE spaces, which
+        must be conforming — same element type, same cell count, and local node
+        `k` of a cell facing local node `k` of its counterpart, within `tol`
+        (default `1e-9`). A non-matching interface raises rather than being
+        projected.
+        
+        This is what lets the field **jump** across the interface: with a shared
+        node it could not. The jump is `q/h` for a flux density `q`.
+        """
+    @classmethod
     def convection(cls, fespace: FiniteElementSpace) -> Model:
         r"""
         `Model.convection(fespace)` — surface-convection (Robin / film) model

@@ -125,8 +125,8 @@ use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
     contact, convection, dirichlet, elasticity, embedded, fick, frame, frame3d, heat_conduction,
-    mazars, mpc, plasticity, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense,
-    SubModelKind,
+    interface_transfer, mazars, mpc, plasticity, timoshenko, truss, Constraint, MatrixKind,
+    Physics, RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -204,6 +204,9 @@ pub enum SubModel {
     // inserting one in the middle would silently misread every saved model.
     /// Fickian diffusion (concentration / mass flux) — see [`fick::Fick`].
     Fick(fick::Fick),
+    /// Exchange law across an interface between two meshes — see
+    /// [`interface_transfer::InterfaceTransfer`].
+    InterfaceTransfer(interface_transfer::InterfaceTransfer),
 }
 
 impl SubModel {
@@ -227,6 +230,7 @@ impl SubModel {
             SubModel::Frame(p) => p,
             SubModel::Frame3d(p) => p,
             SubModel::Fick(p) => p,
+            SubModel::InterfaceTransfer(p) => p,
         }
     }
 
@@ -303,6 +307,21 @@ impl SubModel {
         Ok(SubModel::Fick(fick::Fick::with_symmetry(
             fespace, symmetry,
         )?))
+    }
+
+    /// Interface-exchange sub-model between two **conforming** boundary FE
+    /// subspaces — `j·n = h(c₁ − c₂)`, or its thermal twin. The transfer
+    /// coefficient `h` is supplied at assembly time. See
+    /// [`interface_transfer::InterfaceTransfer::new`].
+    pub fn interface_transfer(
+        side_a: Handle<SubFiniteElementSpace>,
+        side_b: Handle<SubFiniteElementSpace>,
+        kind: interface_transfer::TransferKind,
+        tol: f64,
+    ) -> Result<Self> {
+        Ok(SubModel::InterfaceTransfer(
+            interface_transfer::InterfaceTransfer::new(side_a, side_b, kind, tol)?,
+        ))
     }
 
     /// Perfect-plasticity sub-model on an FE subspace, with the given 2-D/3-D
@@ -878,6 +897,39 @@ impl Model {
         let mut model = Self::empty();
         for sub in fes {
             model.add_sub(insert(SubModel::fick(sub.clone(), symmetry)?))?;
+        }
+        Ok(model)
+    }
+
+    /// Interface-exchange `Model` between two conforming boundary FE spaces —
+    /// one [`SubModel::InterfaceTransfer`] per subspace pair, taken in order.
+    /// Parent-level named constructor; `h` is supplied at assembly time.
+    ///
+    /// The two spaces must hold the **same number** of subspaces: an interface
+    /// pairs zone with zone, and a mismatch is a modelling error, not something
+    /// to resolve by convention.
+    pub fn interface_transfer(
+        side_a: &FiniteElementSpace,
+        side_b: &FiniteElementSpace,
+        kind: interface_transfer::TransferKind,
+        tol: f64,
+    ) -> Result<Self> {
+        if side_a.len() != side_b.len() {
+            return Err(PyrucastError::Message(format!(
+                "interface_transfer: the two sides must hold the same number of FE subspaces \
+                 — {} facing {}",
+                side_a.len(),
+                side_b.len()
+            )));
+        }
+        let mut model = Self::empty();
+        for (a, b) in side_a.into_iter().zip(side_b) {
+            model.add_sub(insert(SubModel::interface_transfer(
+                a.clone(),
+                b.clone(),
+                kind,
+                tol,
+            )?))?;
         }
         Ok(model)
     }

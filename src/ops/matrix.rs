@@ -189,6 +189,7 @@ fn build_contribution(
                 material,
                 kind,
                 state,
+                col_fespaces: Vec::new(),
             };
             vec![SubMatrix::computed(
                 layout.support.clone(),
@@ -197,6 +198,28 @@ fn build_contribution(
                 layout.primal_vars,
                 layout.ordering,
                 layout.symmetric,
+                recipe,
+            )?]
+        }
+        // An inter-mesh block: same computed path, but rows and columns on
+        // different supports. Never symmetric on its own — only the four blocks
+        // of an exchange law are, together, exactly as for Dirichlet's C / Cᵀ.
+        Contribution::Coupling(layout) => {
+            let recipe = ComputedRecipe {
+                submodel: sub_h.clone(),
+                fespaces: layout.fespaces,
+                material,
+                kind,
+                state,
+                col_fespaces: layout.col_fespaces,
+            };
+            vec![SubMatrix::computed(
+                layout.row_support,
+                layout.col_support,
+                layout.dual_vars,
+                layout.primal_vars,
+                layout.ordering,
+                false,
                 recipe,
             )?]
         }
@@ -365,6 +388,16 @@ mod tests {
                             blocks.extend(phys.build_stiffness_blocks(material.as_ref())?);
                         }
                         Contribution::Literal(bs) => blocks.extend(bs),
+                        // The literal path exists as the bit-for-bit equivalence
+                        // reference of the *computed* single-mesh path; an
+                        // inter-mesh block has no such counterpart to compare to.
+                        Contribution::Coupling(_) => {
+                            return Err(crate::error::PyrucastError::Message(format!(
+                                "{}: an inter-mesh coupling block has no literal form — \
+                                 use the computed path (ops::matrix::stiffness)",
+                                phys.label()
+                            )))
+                        }
                     }
                 }
                 blocks
@@ -789,6 +822,7 @@ mod tests {
                             material,
                             kind: MatrixKind::Stiffness,
                             state: None,
+                            col_fespaces: Vec::new(),
                         },
                     )
                     .unwrap()

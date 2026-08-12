@@ -4,6 +4,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::models::elasticity::ElasticityModel;
+use crate::models::interface_transfer::TransferKind;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{mpc, Physics, RelationSense};
 use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
@@ -168,6 +169,43 @@ impl PyModel {
     ) -> PyResult<Self> {
         let s = parse_symmetry("fick", symmetry)?;
         let inner = Model::fick(&fespace.inner, s)?;
+        Ok(Self { inner })
+    }
+
+    /// `Model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
+    /// exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
+    /// that do **not** share their nodes. `kind` is `"mass"` (the default:
+    /// concentration `c`, flux `j`, nature `"diffusion"`) or `"thermal"` (a
+    /// contact resistance: `T`, `q`, nature `"thermal"`); `h` is supplied at
+    /// assembly time.
+    ///
+    /// `side_a` and `side_b` are the two facing **boundary** FE spaces, which
+    /// must be conforming — same element type, same cell count, and local node
+    /// `k` of a cell facing local node `k` of its counterpart, within `tol`
+    /// (default `1e-9`). A non-matching interface raises rather than being
+    /// projected.
+    ///
+    /// This is what lets the field **jump** across the interface: with a shared
+    /// node it could not. The jump is `q/h` for a flux density `q`.
+    #[classmethod]
+    #[pyo3(signature = (side_a, side_b, kind=None, tol=None))]
+    fn interface_transfer(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        side_a: PyRef<PyFiniteElementSpace>,
+        side_b: PyRef<PyFiniteElementSpace>,
+        kind: Option<&str>,
+        tol: Option<f64>,
+    ) -> PyResult<Self> {
+        let k = match kind {
+            None => TransferKind::Mass,
+            Some(t) => TransferKind::from_tag(t).ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "interface_transfer: unknown kind '{t}' (expected mass|thermal)"
+                ))
+            })?,
+        };
+        let inner =
+            Model::interface_transfer(&side_a.inner, &side_b.inner, k, tol.unwrap_or(1e-9))?;
         Ok(Self { inner })
     }
 

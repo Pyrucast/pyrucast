@@ -115,6 +115,72 @@ système est bloc-diagonal. Un vrai **couplage** — une diffusivité fonction d
 température, ou une thermodiffusion — se pilote depuis Python, en réassemblant la
 partie diffusive à chaque pas avec un champ matériau recalculé.
 
+### Transfert à travers une interface
+
+Deux corps qui se touchent ne partagent pas forcément leurs nœuds. Un contact
+imparfait, un revêtement, un joint, une membrane laissent le champ **sauter** à
+la traversée, tandis qu'un flux la franchit proportionnellement à ce saut :
+
+\\[
+j\cdot n = h\,\big(c_1 - c_2\big)
+\\]
+
+`h` est le coefficient de transfert (son inverse est la résistance de contact).
+La même loi décrit une résistance de contact **thermique**, avec `T` et `q` — d'où
+le paramètre `kind` du constructeur.
+
+```python
+model = (
+    pyrucast.Model.fick(gauche)
+    | pyrucast.Model.fick(droite)
+    | pyrucast.Model.interface_transfer(face_gauche, face_droite)
+)
+materials = pyrucast.element_field.material_field(model, [("D", 2.0), ("h", 5.0)])
+```
+
+#### Quatre blocs, dont deux hors-diagonale
+
+La forme faible du terme d'échange sur l'interface `Γ` est
+`∮_Γ h (c₁ − c₂)(δc₁ − δc₂) dΓ`, qui se développe en une structure 2×2 sur les
+degrés de liberté des deux côtés :
+
+```text
+⎡ +K  −K ⎤          avec   K_ij = h ∫_Γ N_i N_j dΓ
+⎣ −K  +K ⎦
+```
+
+Les deux blocs diagonaux sont des blocs *calculés* ordinaires. Les deux autres
+ont leurs **lignes sur un maillage et leurs colonnes sur l'autre** : c'est le
+genre de contribution `Coupling`, dont ce modèle est le premier utilisateur (voir
+[Ajouter une physique](ajouter-une-physique.md#un-bloc-inter-maillages--coupling)).
+Le **signe** est porté par le noyau et non par un facteur : le bloc diagonal rend
+`+h∫NᵢNⱼ`, le bloc de couplage `−h∫NᵢNⱼ`, et comme chacun choisit son noyau
+depuis sa propre variante de contribution, l'assembleur n'a rien à savoir des
+interfaces. Chaque bloc de couplage pris seul est **non symétrique** ; leur
+réunion l'est — exactement comme la paire C / Cᵀ de Dirichlet.
+
+#### Conformité
+
+Les deux côtés doivent être **conformes** : même type d'élément, même nombre de
+mailles, maille `i` face à maille `i`, et nœud local `k` face au nœud local `k`.
+C'est vérifié géométriquement à la construction — les nœuds appariés doivent être
+colocalisés — et **signalé** plutôt qu'approché. Une interface non conforme est un
+problème de maillage ; la rattraper par une projection silencieuse fabriquerait
+des flux faux sans le dire.
+
+#### Ce que ça vaut comme vérification
+
+Deux carrés côte à côte, un flux `q` injecté d'un côté, la concentration imposée
+de l'autre : le profil est linéaire par morceaux avec une chute `q/D` dans chaque
+carré et un **saut `q/h`** à l'interface. C'est ce saut qui distingue une
+interface d'un nœud partagé, et il est porté entièrement par les blocs
+hors-diagonale. Quand `h → ∞`, le saut s'efface et l'on retrouve le corps
+continu.
+
+```rust,ignore
+{{#include ../../tests/interface_transfer.rs:example}}
+```
+
 ### Régime transitoire
 
 La matrice de stockage s'assemble avec `matrix.mass(...)`, qui exige alors la

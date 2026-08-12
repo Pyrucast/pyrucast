@@ -175,6 +175,12 @@ pub struct ComputedRecipe {
     /// for the state-dependent kinds (geometric stiffness, consistent tangent).
     #[serde(default)]
     pub state: Option<Handle<SubElementField>>,
+    /// FE subspaces carrying the **columns** when this block couples two meshes
+    /// (an interface exchange law). **Empty** — the overwhelming case — means
+    /// rows and columns live on the same mesh and `fespaces` drives both; the
+    /// scatter routes on exactly that emptiness.
+    #[serde(default)]
+    pub col_fespaces: Vec<Handle<SubFiniteElementSpace>>,
 }
 
 /// Default value of [`SubMatrix::factor`] for pre-existing serialized data

@@ -267,6 +267,55 @@ redéfinit directement `contributions()` : elle rend `Vec::new()` pour tout genr
 autre que `Stiffness`, et ses blocs C / Cᵀ en `Contribution::Literal` pour
 celui-là — l'assembleur reste sans aucun cas particulier « Dirichlet ».
 
+### Un bloc inter-maillages : `Coupling`
+
+Une physique d'**interface** (l'échange `h(c₁ − c₂)` entre deux corps qui ne
+partagent pas leurs nœuds) a besoin de blocs dont les **lignes vivent sur un
+maillage et les colonnes sur un autre**. C'est la troisième variante,
+`Contribution::Coupling(CouplingLayout)`.
+
+Tout ce qui est *sous* ce seam était déjà asymétrique lignes/colonnes :
+`SubMatrix::computed` prend deux supports, et le scatter comme les drivers de
+noyau les passent séparément. Le seul point qui les confondait était le champ
+unique `MatrixLayout.support` — d'où un layout séparé plutôt qu'un champ de plus,
+qui aurait touché les treize physiques existantes pour un besoin qu'aucune n'a :
+
+```rust,ignore
+pub struct CouplingLayout {
+    pub fespaces: Vec<Handle<SubFiniteElementSpace>>,      // côté ligne
+    pub col_fespaces: Vec<Handle<SubFiniteElementSpace>>,  // côté colonne
+    pub row_support: Handle<SubMesh>,
+    pub col_support: Handle<SubMesh>,
+    pub dual_vars: Vec<String>,
+    pub primal_vars: Vec<String>,
+    pub ordering: DofOrdering,
+}
+```
+
+Pas de champ `symmetric` : un bloc de couplage n'est jamais symétrique seul —
+seule la réunion des quatre l'est, comme la paire C / Cᵀ.
+
+Le noyau correspondant est `coupling_element(kind, row_geoms, col_geoms,
+material, ke)` : il reçoit **deux** `CellGeom`, la maille du côté ligne et la
+maille en vis-à-vis du côté colonne. Le driver
+`kernel::coupling_block_triplets_per_cell` parcourt les deux connectivités en pas
+à pas ; il exige des maillages **conformes** (même type d'élément, même nombre de
+mailles, maille `i` face à maille `i`) et le signale sinon.
+
+C'est aussi le noyau qui porte le **signe** — `+h∫NᵢNⱼ` en diagonale via
+`element_matrix`, `−h∫NᵢNⱼ` hors diagonale via `coupling_element` — puisque
+chaque bloc choisit son noyau depuis sa propre variante de contribution.
+L'assembleur n'a rien à savoir des interfaces.
+
+Une réserve de mise en œuvre : le scatter d'un bloc de couplage est **séquentiel**
+(ses matrices élémentaires restent, elles, calculées en parallèle). Le coloriage
+qui rend le scatter parallèle sûr repose sur *une* connectivité ; avec deux, il ne
+prouve plus rien. Une interface porte un maillage de bord — c'est sans effet
+mesurable, et cela évite d'inventer un coloriage à deux côtés pour un gain nul.
+
+Voir [`interface_transfer`](diffusion.md#transfert-à-travers-une-interface), son
+premier utilisateur.
+
 Le champ `fespaces` du `MatrixLayout` est un **`Vec`** : un seul espace EF
 pour une physique de continuum, ou plusieurs — partageant un maillage, ne
 différant que par la quadrature — pour un élément **multi-quadrature**. C'est ce
