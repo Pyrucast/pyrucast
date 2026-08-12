@@ -111,6 +111,7 @@ constructeurs et les variables, vus du `Model` :
 | `truss(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
 | `elasticity(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` | [Élasticité](mecanique/elasticite.md) |
 | `elasticity_with_symmetry(fes, model, sym)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E_1…G_23` / `C_11…C_66` + repère | [Orthotropie](mecanique/orthotropie.md) |
+| `follower_pressure(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `p` | [Pression suiveuse](mecanique/pression-suiveuse.md) |
 | `timoshenko(fes)` | `w, theta` | `f_w, m_theta` | `E, I, G, A_s` | [Timoshenko](mecanique/timoshenko.md) |
 | `frame(fes)` | `u_x, u_y, rz` | `f_x, f_y, m_z` | `E, A, I, G, A_s` | [Portique 2D](mecanique/portique.md) |
 | `frame3d(fes)` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Cadre 3D](mecanique/cadre3d.md) |
@@ -135,7 +136,7 @@ de physique » là où les capacités répondent à « domaine ou contrainte » 
 
 | Nature (`Physics`) | Physiques |
 |---|---|
-| `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `timoshenko`, `frame`, `frame3d` |
+| `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `timoshenko`, `frame`, `frame3d`, `follower_pressure` |
 | `Thermal`    | `heat_conduction`, `convection`, `radiation`, `interface_transfer` (variante `thermal`) |
 | `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` |
 | `Other`      | nature « autre / rien » explicite (aucune physique de base ne la déclare) |

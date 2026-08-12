@@ -39,6 +39,7 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   - [Barre / treillis](mecanique/truss.md)
   - [Élasticité linéaire](mecanique/elasticite.md)
   - [Élasticité orthotrope et anisotrope](mecanique/orthotropie.md)
+  - [Pression suiveuse](mecanique/pression-suiveuse.md)
   - [Plasticité parfaite (von Mises)](mecanique/plasticite.md)
   - [Endommagement de Mazars](mecanique/mazars.md)
   - [Poutre de Timoshenko](mecanique/timoshenko.md)

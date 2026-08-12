@@ -196,6 +196,31 @@ impl PyModel {
         Ok(Self { inner })
     }
 
+    /// `Model.follower_pressure(fespace)` — a pressure that **turns with the
+    /// surface** it acts on, on a *boundary* `fespace` (an edge mesh in 2-D, a
+    /// surface mesh in 3-D). Material: `p`, the pressure.
+    ///
+    /// Unlike a dead load built once with `flux(...)`, its direction depends on
+    /// the current displacement, so it is recomputed at each residual
+    /// evaluation:
+    ///
+    /// ```text
+    /// u → element_field.gradient → integrate_behavior → node_field.internal_forces
+    /// ```
+    ///
+    /// It contributes **no matrix** — only internal forces. A positive `p`
+    /// pushes *against* the boundary mesh's own normal, which follows its
+    /// winding: orienting the boundary outwards gives the usual compressive
+    /// sign.
+    #[classmethod]
+    fn follower_pressure(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+    ) -> PyResult<Self> {
+        let inner = Model::follower_pressure(&fespace.inner)?;
+        Ok(Self { inner })
+    }
+
     /// `Model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
     /// exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
     /// that do **not** share their nodes. `kind` is `"mass"` (the default:

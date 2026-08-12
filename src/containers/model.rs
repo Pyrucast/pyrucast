@@ -124,9 +124,9 @@ use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
-    contact, convection, dirichlet, elasticity, embedded, fick, frame, frame3d, heat_conduction,
-    interface_transfer, mazars, mpc, plasticity, radiation, timoshenko, truss, Constraint,
-    MatrixKind, Physics, RelationSense, SubModelKind,
+    contact, convection, dirichlet, elasticity, embedded, fick, follower_pressure, frame, frame3d,
+    heat_conduction, interface_transfer, mazars, mpc, plasticity, radiation, timoshenko, truss,
+    Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -210,6 +210,9 @@ pub enum SubModel {
     /// Radiation to infinity (Stefan-Boltzmann boundary) — see
     /// [`radiation::Radiation`].
     Radiation(radiation::Radiation),
+    /// Follower pressure on a boundary — see
+    /// [`follower_pressure::FollowerPressure`].
+    FollowerPressure(follower_pressure::FollowerPressure),
 }
 
 impl SubModel {
@@ -235,6 +238,7 @@ impl SubModel {
             SubModel::Fick(p) => p,
             SubModel::InterfaceTransfer(p) => p,
             SubModel::Radiation(p) => p,
+            SubModel::FollowerPressure(p) => p,
         }
     }
 
@@ -320,6 +324,15 @@ impl SubModel {
     /// assembly time. See [`radiation::Radiation::new`].
     pub fn radiation(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         Ok(SubModel::Radiation(radiation::Radiation::new(fespace)?))
+    }
+
+    /// Follower-pressure sub-model on a **boundary** FE subspace — a pressure
+    /// that turns with the surface it acts on. The pressure `p` is supplied at
+    /// assembly time. See [`follower_pressure::FollowerPressure::new`].
+    pub fn follower_pressure(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        Ok(SubModel::FollowerPressure(
+            follower_pressure::FollowerPressure::new(fespace)?,
+        ))
     }
 
     /// Interface-exchange sub-model between two **conforming** boundary FE
@@ -921,6 +934,16 @@ impl Model {
         let mut model = Self::empty();
         for sub in fes {
             model.add_sub(insert(SubModel::radiation(sub.clone())?))?;
+        }
+        Ok(model)
+    }
+
+    /// Follower-pressure `Model` spanning **every** subspace of a *boundary*
+    /// `fes`. Parent-level named constructor; `p` is supplied at assembly time.
+    pub fn follower_pressure(fes: &FiniteElementSpace) -> Result<Self> {
+        let mut model = Self::empty();
+        for sub in fes {
+            model.add_sub(insert(SubModel::follower_pressure(sub.clone())?))?;
         }
         Ok(model)
     }

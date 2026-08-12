@@ -1313,6 +1313,26 @@ class Model:
         **and** `"radiation"`.
         """
     @classmethod
+    def follower_pressure(cls, fespace: FiniteElementSpace) -> Model:
+        r"""
+        `Model.follower_pressure(fespace)` — a pressure that **turns with the
+        surface** it acts on, on a *boundary* `fespace` (an edge mesh in 2-D, a
+        surface mesh in 3-D). Material: `p`, the pressure.
+        
+        Unlike a dead load built once with `flux(...)`, its direction depends on
+        the current displacement, so it is recomputed at each residual
+        evaluation:
+        
+        ```text
+        u → element_field.gradient → integrate_behavior → node_field.internal_forces
+        ```
+        
+        It contributes **no matrix** — only internal forces. A positive `p`
+        pushes *against* the boundary mesh's own normal, which follows its
+        winding: orienting the boundary outwards gives the usual compressive
+        sign.
+        """
+    @classmethod
     def interface_transfer(cls, side_a: FiniteElementSpace, side_b: FiniteElementSpace, kind: typing.Optional[builtins.str] = None, tol: typing.Optional[builtins.float] = None) -> Model:
         r"""
         `Model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the

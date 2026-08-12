@@ -250,6 +250,95 @@ impl<'a> CellGeom<'a> {
         r
     }
 
+    /// The cell's **tangent vectors** at Gauss point `g` — the columns of the
+    /// Jacobian, `a_k = ∂x/∂ξ_k`, one per reference direction (`ref_dim` vectors
+    /// of length `space_dim`).
+    ///
+    /// They are the raw material of surface kinematics: the deformed tangents
+    /// are `ā_k = a_k + ∂u/∂ξ_k`, and everything about how a surface stretches
+    /// and turns follows from them. A physics working on a **manifold** wants
+    /// these rather than the tangential gradient `∇_s u`, because `∇_s u` has no
+    /// component along the normal and so cannot be completed into a deformation
+    /// gradient: `I + ∇_s u` goes singular under a quarter-turn, while the
+    /// tangents never do.
+    pub fn tangents(&self, g: usize) -> Result<Vec<Vec<f64>>> {
+        self.ensure_cell_coords()?;
+        let cc = self.cell_coords.borrow();
+        let cc = cc.as_ref().unwrap();
+        let (d, r) = (self.space_dim, self.rd.ref_dim);
+        let jac = build_jacobian(cc, &self.rd.dn_ref[g], d, r, self.n_nodes);
+        // `build_jacobian` lays the tangents out as `jac[a * r + k]`: column `k`
+        // is the tangent along reference direction `k`.
+        Ok((0..r)
+            .map(|k| (0..d).map(|a| jac[a * r + k]).collect())
+            .collect())
+    }
+
+    /// The (unnormalised) normal of a boundary cell from its tangents — the
+    /// cross product in 3-D, the tangent turned by −90° in 2-D. Its **norm** is
+    /// the surface measure per unit reference parameter, which is what makes it
+    /// usable for an area ratio as well as a direction.
+    ///
+    /// Shared by [`normal`](Self::normal) and by the surface kinematics of a
+    /// follower load, which needs the same construction on the *deformed*
+    /// tangents.
+    pub fn normal_from_tangents(tangents: &[Vec<f64>]) -> Result<Vec<f64>> {
+        match tangents {
+            [t] => Ok(vec![t[1], -t[0]]),
+            [a1, a2] => Ok(vec![
+                a1[1] * a2[2] - a1[2] * a2[1],
+                a1[2] * a2[0] - a1[0] * a2[2],
+                a1[0] * a2[1] - a1[1] * a2[0],
+            ]),
+            _ => Err(PyrucastError::Message(format!(
+                "normal_from_tangents: a normal needs 1 tangent (2-D) or 2 (3-D), got {}",
+                tangents.len()
+            ))),
+        }
+    }
+
+    /// Unit **normal** of a boundary cell at Gauss point `g`, in the reference
+    /// configuration.
+    ///
+    /// Defined only on a **manifold** (`ref_dim == space_dim − 1`): a boundary
+    /// edge in 2-D, a boundary face in 3-D. A cell that fills its space has no
+    /// normal, and asking for one is a modelling error, so it errors rather than
+    /// returning a convention.
+    ///
+    /// The direction follows the cell's own **winding** — it is the mesh, not
+    /// this accessor, that decides which side is « outside ». That is why the
+    /// physics needing a normal (a pressure, a signed flux) are the ones that
+    /// must care about their boundary mesh's orientation, while those that do
+    /// not ([`convection`](crate::models::convection),
+    /// [`radiation`](crate::models::radiation)) never call this: their direction
+    /// is already consumed in writing `q·n`, and
+    /// [`det_j_w`](Self::det_j_w) returns an orientation-invariant magnitude.
+    ///
+    /// - 2-D: the edge tangent `t` rotated by −90°, `n = (t_y, −t_x)/|t|`.
+    /// - 3-D: `n = (a₁ × a₂)/|a₁ × a₂|`, the two Jacobian columns.
+    pub fn normal(&self, g: usize) -> Result<Vec<f64>> {
+        let (d, r) = (self.space_dim, self.rd.ref_dim);
+        if r + 1 != d {
+            return Err(PyrucastError::Message(format!(
+                "CellGeom::normal: a {r}-D cell in a {d}-D space has no normal — a normal is \
+                 defined on a boundary (a {}-D cell here)",
+                d - 1
+            )));
+        }
+        let mut n = Self::normal_from_tangents(&self.tangents(g)?)?;
+        let norm = n.iter().map(|v| v * v).sum::<f64>().sqrt();
+        if norm <= f64::EPSILON {
+            return Err(PyrucastError::Message(format!(
+                "CellGeom::normal: cell {} is degenerate at Gauss point {g} (null normal)",
+                self.cell
+            )));
+        }
+        for v in &mut n {
+            *v /= norm;
+        }
+        Ok(n)
+    }
+
     /// `|J|_g · w_g` — the integration weight of Gauss point `g`.
     ///
     /// On an **axisymmetric** geometry this is `2πr_g · |J|_g · w_g`: the

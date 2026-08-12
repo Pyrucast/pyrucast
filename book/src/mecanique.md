@@ -15,6 +15,8 @@ réactions).
 - [Élasticité linéaire](mecanique/elasticite.md) — continuum 2-D (CP/DP) et 3-D.
 - [Élasticité orthotrope et anisotrope](mecanique/orthotropie.md) — la symétrie
   matériau, repère donné par vecteurs.
+- [Pression suiveuse](mecanique/pression-suiveuse.md) — une charge dont la
+  direction tourne avec la surface.
 - [Plasticité parfaite (von Mises)](mecanique/plasticite.md) — J2 sans
   écrouissage, retour radial (état interne `εᵖ`, `p`).
 - [Endommagement de Mazars](mecanique/mazars.md) — endommagement isotrope du

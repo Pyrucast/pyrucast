@@ -88,7 +88,7 @@ interpolation, quadrature, codes VTK/gmsh, familles. Un unique `match`,
 `SubModel::as_kind()` côté physiques : ajouter un élément coûte un fichier et
 deux variantes, et aucun consommateur générique ne change.
 
-## Physiques — 16 sous-modèles
+## Physiques — 17 sous-modèles
 
 Thermique : `HeatConduction`, `Convection` (échange de surface / film),
 `Radiation` (rayonnement à l'infini `σε(T⁴ − T_∞⁴)` : rigidité linéarisée autour
@@ -100,7 +100,9 @@ nœuds, variante thermique comprise).
 Mécanique : `Truss`, `Elasticity` (contraintes/déformations planes,
 axisymétrique, 3-D), `Plasticity` (von Mises parfaite, tangente cohérente
 validée par différences finies), `Mazars` (endommagement), `Timoshenko`,
-`Frame` (portique 2-D), `Frame3d`. Contraintes : `Dirichlet`, `Mpc`,
+`Frame` (portique 2-D), `Frame3d`, `FollowerPressure` (charge dont la direction
+tourne avec la surface, bâtie sur les tangentes déformées et non sur Nanson —
+`I + ∇_s u` n'est pas un gradient de transformation sur une variété). Contraintes : `Dirichlet`, `Mpc`,
 `Embedded` (baignage), `Contact` (nœud-surface, unilatéral).
 Dilatation thermique non couplée (`thermal_strain`, `alpha` en composante
 matériau facultative).
