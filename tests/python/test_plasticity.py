@@ -45,7 +45,7 @@ def _vm_plane_stress(sxx, syy, sxy):
 def test_plasticity_caps_at_yield_plane_stress():
     E, NU, SY = 210_000.0, 0.3, 250.0
     c, nodes, fes = _unit_quad()
-    model = pyrucast.Model.plasticity(fes, "plane_stress")
+    model = pyrucast.Model.plasticity_perfect(fes, "plane_stress")
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("sigma_y", SY)]
     )
@@ -72,7 +72,7 @@ def test_plasticity_caps_at_yield_plane_stress():
 def test_plasticity_elastic_below_yield():
     E, NU, SY = 210_000.0, 0.3, 250.0
     c, nodes, fes = _unit_quad()
-    model = pyrucast.Model.plasticity(fes, "plane_stress")
+    model = pyrucast.Model.plasticity_perfect(fes, "plane_stress")
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("sigma_y", SY)]
     )
@@ -90,7 +90,7 @@ def test_plasticity_rejects_inconsistent_model():
     _c, _n, fes = _unit_quad()
     for bad in ("solid", "nonsense"):
         try:
-            pyrucast.Model.plasticity(fes, bad)
+            pyrucast.Model.plasticity_perfect(fes, bad)
         except (ValueError, RuntimeError):
             pass
         else:

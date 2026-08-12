@@ -196,7 +196,7 @@ def main():
     free_mesh = pyrucast.mesh.select(coords_field, ge=length / nx / 2.0)
 
     # ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
-    model = pyrucast.Model.plasticity(fes, "plane_stress")
+    model = pyrucast.Model.plasticity_perfect(fes, "plane_stress")
     imposed_mesh = pyrucast.mesh.to_poi1(left_edge)
     multiplier = pyrucast.mesh.translate(imposed_mesh, [0.0, 0.0])
     model = model | pyrucast.Model.dirichlet("u_x", "f_x", imposed_mesh, multiplier)

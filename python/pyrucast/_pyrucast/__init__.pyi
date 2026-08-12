@@ -1391,14 +1391,49 @@ class Model:
         in 3-D — which are orthonormalised internally.
         """
     @classmethod
-    def plasticity(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+    def plasticity_perfect(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
         r"""
-        `Model.plasticity(fespace, model)` — perfect von Mises elastoplasticity
-        spanning every subspace of `fespace`. `model` is `"plane_stress"` /
-        `"plane_strain"` / `"axisymmetric"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity
-        (`u_x, u_y(, u_z)`); material (`E`, `nu`, `sigma_y`) is supplied at
-        assembly / integration time. The behaviour integration (`COMP`) carries
-        the plastic-strain + cumulated-`p` internal state (`VAR0`→`VAR1`).
+        `Model.plasticity_perfect(fespace, model)` — **perfect** (non-hardening)
+        von Mises elastoplasticity spanning every subspace of `fespace`. `model`
+        is `"plane_stress"` / `"plane_strain"` / `"axisymmetric"` (2-D) or
+        `"solid"` (3-D). Same DOFs as elasticity (`u_x, u_y(, u_z)`); material
+        (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time. The
+        behaviour integration (`COMP`) carries the plastic-strain +
+        cumulated-`p` internal state (`VAR0`→`VAR1`) and emits the consistent
+        tangent `D_alg`.
+        """
+    @classmethod
+    def plasticity_isotropic(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.plasticity_isotropic(fespace, model)` — von Mises with **linear
+        isotropic hardening**, `σ_y(p) = σ_y + H·p`. Material `E`, `nu`,
+        `sigma_y`, `H`; everything else as `plasticity_perfect` (`H = 0` would
+        give it back exactly).
+        """
+    @classmethod
+    def drucker_prager(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.drucker_prager(fespace, model)` — pressure-sensitive plasticity
+        with **non-associated** flow: `f = q + α·I₁ − k`, plastic potential
+        `g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),
+        `psi` (dilatancy).
+        
+        `ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils
+        and rocks, whose measured dilatancy is far below what friction alone
+        would imply. A non-associated law has a **non-symmetric** tangent.
+        Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
+        """
+    @classmethod
+    def ottosen(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.ottosen(fespace, model)` — Ottosen's four-parameter criterion for
+        concrete, whose strength depends on the pressure **and** on the Lode
+        angle (so tension and compression differ). Material `E`, `nu`, `a`, `b`,
+        `k_1`, `k_2`, `sigma_c`.
+        
+        Integrated by a cutting-plane return with a numerically differentiated
+        normal: the criterion is exact, and the gradient — long enough that a
+        hand-derived one could not be checked — is a central difference.
         """
     @classmethod
     def mazars(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:

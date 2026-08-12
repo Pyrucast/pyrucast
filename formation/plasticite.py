@@ -83,7 +83,7 @@ def main() -> None:
     encastrement = pc.mesh.to_poi1(bord_gauche)
     multiplicateur = pc.mesh.translate(encastrement, [0.0, 0.0])
 
-    modele = pc.Model.plasticity(fes, "plane_stress")
+    modele = pc.Model.plasticity_perfect(fes, "plane_stress")
     modele = modele | pc.Model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
     modele = modele | pc.Model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
     materiaux = pc.element_field.material_field(

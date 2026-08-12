@@ -129,5 +129,5 @@ for r in data["results"]:
 
 Démonstration complète (plaque chauffée, dilatation libre, contrôle analytique
 `u = α·ΔT·x`) : `examples/thermomecanique_pas_a_pas.py`. Passer de
-`Model.elasticity` à `Model.plasticity` suffit pour une mécanique
+`Model.elasticity` à `Model.plasticity_perfect` suffit pour une mécanique
 élasto-plastique — le même appel gère la boucle non linéaire.

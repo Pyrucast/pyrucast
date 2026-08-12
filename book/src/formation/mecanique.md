@@ -75,7 +75,7 @@ ce cas par la procédure `PASAPAS`, pyrucast fournit
 `pyrucast.thermomechanics.step_by_step` : la boucle sur les pas de charge,
 un Newton **modifié** (rigidité élastique, réassemblée une fois par pas) et
 son **accélération d'Anderson**. Il suffit de remplacer
-`Model.elasticity` par `Model.plasticity` :
+`Model.elasticity` par `Model.plasticity_perfect` :
 
 ```python
 {{#include ../../../formation/plasticite.py:modele_plastique}}
@@ -101,7 +101,7 @@ linéairement en pseudo-temps — Cast3M `EVOL 'MANU'` :
 > les nœuds d'abscisse `x > 0`). C'est l'équivalent, en plus explicite, du
 > traitement automatique des blocages par Cast3M dans `RESO`/`PASAPAS`.
 
-> **Non disponible dans pyrucast.** `Model.plasticity` ne consomme pas
+> **Non disponible dans pyrucast.** `Model.plasticity_perfect` ne consomme pas
 > encore la composante matériau optionnelle `alpha` — la dépendance de
 > `sigma_y` à la température (Cast3M section 9.2 : `EVOL 'MANU' 'T' ... 'SIGY' ...`)
 > n'a donc pas d'équivalent testé ici ; seule la plasticité **isotherme**

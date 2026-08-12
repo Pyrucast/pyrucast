@@ -1,11 +1,18 @@
-//! Perfect (non-hardening) von Mises elastoplasticity — J2 radial return.
+//! Rate-independent elastoplasticity — the physics, for **any** yield law.
 //!
 //! Same kinematics and DOFs as [`crate::models::elasticity`] (displacement
 //! `u_x, u_y(, u_z)`, nodal force `f_x, …`), and the **same elastic stiffness**
 //! as iteration operator: the non-linearity lives entirely in the behaviour
-//! integration (`COMP`). Material components `E` (Young), `nu` (Poisson) and
-//! `sigma_y` (yield stress). The flow rule is associated J2 with **no
-//! hardening**, so the equivalent stress is capped at `sigma_y`.
+//! integration (`COMP`).
+//!
+//! The **yield law** is an attribute, [`PlasticLaw`], not a physics of its own —
+//! von Mises (perfect or isotropically hardening), Drucker-Prager, Ottosen all
+//! share these DOFs, this state and this incremental montage, differing only in
+//! their surface and flow rule. That mirrors Cast3M, where `PLASTIQUE PARFAIT`,
+//! `PLASTIQUE ISOTROPE`, `PLASTIQUE DRUCKER_PRAGER` and `PLASTIQUE OTTOSEN` are
+//! variants of one formulation. Each law's return map lives in
+//! [`crate::models::plastic`]; the material components it needs are declared
+//! there too, so this file never grows when a law is added.
 //!
 //! The integration is history-dependent and uses the **incremental montage**
 //! A → B: the end-of-step strain `ε(B)` comes in as `deformation`, while the
@@ -46,18 +53,16 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
+use crate::models::plastic::{self, MatParams, PlasticLaw, PrevState};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
-/// Material components required by perfect plasticity.
-const MATERIAL_COMPONENTS: &[&str] = &["E", "nu", "sigma_y"];
-
 /// Full 3-D tensor component suffixes, in the internal state order
 /// `[xx, yy, zz, yz, xz, xy]` (off-diagonals are **tensor** strains, `ε_ij`).
-const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
+use crate::models::plastic::TENSOR_SUFFIXES;
 /// Index pairs `(i, j)` matching [`TENSOR_SUFFIXES`].
 const TENSOR_PAIRS: [(usize, usize); 6] = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)];
 
@@ -142,13 +147,25 @@ pub struct Plasticity {
     pub(crate) support: Handle<SubMesh>,
     pub(crate) space_dim: usize,
     pub(crate) model: ElasticityModel,
+    pub(crate) law: PlasticLaw,
 }
 
 impl Plasticity {
-    /// Perfect plasticity on an FE subspace, with the given 2-D/3-D model.
-    /// Errors if `model` is inconsistent with the space dimension (same rule as
-    /// [`crate::models::elasticity::Elasticity::new`]).
+    /// **Perfect** (non-hardening) von Mises plasticity on an FE subspace — the
+    /// default law, and the one this physics shipped with.
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
+        Self::with_law(fespace, model, PlasticLaw::Perfect)
+    }
+
+    /// Elastoplasticity with an explicit yield law, on an FE subspace with the
+    /// given 2-D/3-D model. Errors if `model` is inconsistent with the space
+    /// dimension (same rule as
+    /// [`crate::models::elasticity::Elasticity::new`]).
+    pub fn with_law(
+        fespace: Handle<SubFiniteElementSpace>,
+        model: ElasticityModel,
+        law: PlasticLaw,
+    ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, axisymmetric) = {
             let s = read(&fespace)?;
             (
@@ -192,6 +209,7 @@ impl Plasticity {
             support,
             space_dim,
             model,
+            law,
         })
     }
 }
@@ -322,7 +340,7 @@ impl Domain for Plasticity {
     }
 
     fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
+        Some(self.law.material_components())
     }
 
     /// `rho` (density) — required only by the mass matrix, never by the
@@ -364,8 +382,7 @@ impl Domain for Plasticity {
     ) -> Result<()> {
         let mat = material.expect("Plasticity declares a material_fespace ⇒ material is supplied");
         let (cell, d) = (geom.cell, self.space_dim);
-        let (lambda, mu) = lame(mat.value(cell, 0, "E")?, mat.value(cell, 0, "nu")?);
-        let sigma_y = mat.value(cell, 0, "sigma_y")?;
+        let params = MatParams::new(mat, cell)?;
 
         // End-of-step strain ε(B).
         let eps_b = read_strain(deformation, cell, g, d, self.model)?;
@@ -379,7 +396,7 @@ impl Domain for Plasticity {
         };
 
         let (sigma, eps_p_new, p_new, eps_b_full) =
-            radial_return_incremental(&eps_b, &prev_state, lambda, mu, sigma_y, self.model);
+            plastic::incremental_step(self.law, &eps_b, &prev_state, &params, self.model)?;
 
         let v = stress_names(d, self.model).len();
         for r in 0..v {
@@ -396,11 +413,10 @@ impl Domain for Plasticity {
             out[v + 13] = sigma[2];
         }
 
-        // Consistent tangent D_alg at the converged step, from the trial stress
-        // recomputed at the solved ε(B) (which carries the plane-stress ε_zz).
-        // Emitted (upper triangle) right after the state, in `ktan_i_j` order.
-        let sig_trial = elastic_predictor(&eps_b_full, &prev_state, lambda, mu);
-        let d3 = consistent_tangent_3d(&sig_trial, lambda, mu, sigma_y);
+        // Consistent tangent D_alg at the converged step, evaluated at the solved
+        // ε(B) (which carries the plane-stress ε_zz). Emitted (upper triangle)
+        // right after the state, in `ktan_i_j` order.
+        let d3 = plastic::consistent_tangent(self.law, &eps_b_full, &prev_state, &params)?;
         let dv = crate::models::symmetry::reduce_to_model(&d3, self.model);
         let base = v + 13 + usize::from(echoes_sigma_zz(d, self.model));
         let mut idx = base;
@@ -414,249 +430,11 @@ impl Domain for Plasticity {
     }
 }
 
-// ─── Constitutive core (pure, store-free) ────────────────────────────────────
-
-/// Lamé coefficients `(λ, μ)` from `E`, `nu`.
-fn lame(e: f64, nu: f64) -> (f64, f64) {
-    let lambda = e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
-    let mu = e / (2.0 * (1.0 + nu));
-    (lambda, mu)
-}
-
-/// Isotropic elastic stress (full 3-D, order `[xx, yy, zz, yz, xz, xy]`) from a
-/// **tensor** strain `eps`: `σ = λ tr(ε) I + 2μ ε`.
-fn elastic_stress(eps: &[f64; 6], lambda: f64, mu: f64) -> [f64; 6] {
-    let tr = eps[0] + eps[1] + eps[2];
-    [
-        lambda * tr + 2.0 * mu * eps[0],
-        lambda * tr + 2.0 * mu * eps[1],
-        lambda * tr + 2.0 * mu * eps[2],
-        2.0 * mu * eps[3],
-        2.0 * mu * eps[4],
-        2.0 * mu * eps[5],
-    ]
-}
-
-/// von Mises equivalent stress `q = √(3/2 · s:s)` of the deviator of `sigma`
-/// (full 3-D Voigt; off-diagonals counted with the factor 2 of `s:s`).
-fn von_mises(sigma: &[f64; 6]) -> f64 {
-    let mean = (sigma[0] + sigma[1] + sigma[2]) / 3.0;
-    let s = [
-        sigma[0] - mean,
-        sigma[1] - mean,
-        sigma[2] - mean,
-        sigma[3],
-        sigma[4],
-        sigma[5],
-    ];
-    let ss =
-        s[0] * s[0] + s[1] * s[1] + s[2] * s[2] + 2.0 * (s[3] * s[3] + s[4] * s[4] + s[5] * s[5]);
-    (1.5 * ss).sqrt()
-}
-
-/// The converged state at the **start of the step A**, read from `prev` — the
-/// input to the incremental montage. All full 3-D.
-struct PrevState {
-    /// Strain `ε(A)`.
-    eps: [f64; 6],
-    /// Stress `σ(A)`.
-    sigma: [f64; 6],
-    /// Plastic strain `ε_p(A)`.
-    eps_p: [f64; 6],
-    /// Cumulated plastic strain `p(A)`.
-    p: f64,
-}
-
-/// Elastic predictor of the **incremental** montage: `σ_trial = σ(A) + C:Δε`
-/// with `Δε = ε(B) − ε(A)` (all full 3-D). Algebraically identical to
-/// `C:(ε(B) − ε_p(A))` in small strain — since `σ(A) = C:(ε(A) − ε_p(A))` after
-/// a converged return — but this is the form that carries the previous stress
-/// explicitly, the shape a large-strain law reuses (with `σ(A)` rotated and
-/// `Δε` an objective increment).
-fn elastic_predictor(eps_b: &[f64; 6], prev: &PrevState, lambda: f64, mu: f64) -> [f64; 6] {
-    let deps: [f64; 6] = std::array::from_fn(|i| eps_b[i] - prev.eps[i]);
-    let c_deps = elastic_stress(&deps, lambda, mu);
-    std::array::from_fn(|i| prev.sigma[i] + c_deps[i])
-}
-
-/// Project a trial stress onto the yield surface (perfect J2), returning the
-/// updated `(stress, eps_p, p)` (all full 3-D).
-fn return_map_from_trial(
-    sig_trial: &[f64; 6],
-    prev: &PrevState,
-    mu: f64,
-    sigma_y: f64,
-) -> ([f64; 6], [f64; 6], f64) {
-    let q = von_mises(sig_trial);
-    let f = q - sigma_y;
-    if f <= 0.0 || q == 0.0 {
-        return (*sig_trial, prev.eps_p, prev.p); // elastic
-    }
-    // Perfect plasticity: Δp = f / (3μ); deviator scales by σ_y / q.
-    let dp = f / (3.0 * mu);
-    let mean = (sig_trial[0] + sig_trial[1] + sig_trial[2]) / 3.0;
-    let s_trial = [
-        sig_trial[0] - mean,
-        sig_trial[1] - mean,
-        sig_trial[2] - mean,
-        sig_trial[3],
-        sig_trial[4],
-        sig_trial[5],
-    ];
-    let scale = sigma_y / q;
-    // Flow direction n = (3/2) s_trial / q ; Δε_p = Δp · n.
-    let factor = 1.5 * dp / q;
-    let mut sigma = [0.0; 6];
-    let mut eps_p = prev.eps_p;
-    for i in 0..6 {
-        let s_new = s_trial[i] * scale;
-        sigma[i] = if i < 3 { s_new + mean } else { s_new };
-        // Plastic strain is a tensor: off-diagonals get the engineering ÷2? No —
-        // n is built from the stress deviator with the same (1,2) weighting as a
-        // tensor, so Δε_p_ij = factor · s_trial_ij directly.
-        eps_p[i] += factor * s_trial[i];
-    }
-    (sigma, eps_p, prev.p + dp)
-}
-
-/// Incremental radial return A → B for **one** Gauss point. Given the
-/// end-of-step strain `ε(B)`, the start-of-step state `prev` (`ε(A)`, `σ(A)`,
-/// `ε_p(A)`, `p(A)`) and the material, returns the updated
-/// `(σ(B), ε_p(B), p(B), ε(B))` — all full 3-D. The returned `ε(B)` carries the
-/// solved out-of-plane strain in plane stress (for the echo). For plane stress
-/// the out-of-plane normal strain `ε_zz(B)` is solved so that `σ_zz(B) = 0`.
-fn radial_return_incremental(
-    eps_b: &[f64; 6],
-    prev: &PrevState,
-    lambda: f64,
-    mu: f64,
-    sigma_y: f64,
-    model: ElasticityModel,
-) -> ([f64; 6], [f64; 6], f64, [f64; 6]) {
-    if model == ElasticityModel::PlaneStress {
-        return plane_stress_incremental(eps_b, prev, lambda, mu, sigma_y);
-    }
-    // Solid / plane strain: ε(B) fully prescribed (plane strain has
-    // ε_zz = ε_yz = ε_xz = 0 already).
-    let sig_trial = elastic_predictor(eps_b, prev, lambda, mu);
-    let (sigma, eps_p, p) = return_map_from_trial(&sig_trial, prev, mu, sigma_y);
-    (sigma, eps_p, p, *eps_b)
-}
-
-/// Plane-stress incremental return: solve `σ_zz(B) = 0` for `ε_zz(B)` by the
-/// secant method, each evaluation running a full 3-D incremental return. The
-/// in-plane strains `ε_xx(B), ε_yy(B), ε_xy(B)` are fixed; `ε_yz(B) = ε_xz(B) = 0`.
-fn plane_stress_incremental(
-    eps_in_b: &[f64; 6],
-    prev: &PrevState,
-    lambda: f64,
-    mu: f64,
-    sigma_y: f64,
-) -> ([f64; 6], [f64; 6], f64, [f64; 6]) {
-    let eval = |ezz: f64| {
-        let mut eps_b = *eps_in_b;
-        eps_b[2] = ezz;
-        eps_b[3] = 0.0;
-        eps_b[4] = 0.0;
-        let sig_trial = elastic_predictor(&eps_b, prev, lambda, mu);
-        let (sigma, eps_p, p) = return_map_from_trial(&sig_trial, prev, mu, sigma_y);
-        (sigma, eps_p, p, eps_b)
-    };
-    // Initial guess: previous ε_zz(A) plus the elastic plane-stress out-of-plane
-    // increment −ν/(1−ν)·(Δε_xx + Δε_yy).
-    let nu_term = lambda / (lambda + 2.0 * mu); // = ν/(1−ν)
-    let mut z0 = prev.eps[2] - nu_term * (eps_in_b[0] - prev.eps[0] + eps_in_b[1] - prev.eps[1]);
-    let mut z1 = z0 + 1e-6_f64.max(z0.abs() * 1e-3);
-    let mut f0 = eval(z0).0[2];
-    let mut f1 = eval(z1).0[2];
-    for _ in 0..50 {
-        if f1.abs() < 1e-10 * (mu + 1.0) {
-            break;
-        }
-        let denom = f1 - f0;
-        if denom.abs() < f64::MIN_POSITIVE {
-            break;
-        }
-        let z2 = z1 - f1 * (z1 - z0) / denom;
-        z0 = z1;
-        f0 = f1;
-        z1 = z2;
-        f1 = eval(z1).0[2];
-    }
-    eval(z1)
-}
-
-/// Full-3-D engineering-Voigt (order `[xx, yy, zz, yz, xz, xy]`) **consistent
-/// tangent** `D_alg = ∂σ(B)/∂ε(B)` of the perfect-J2 radial return, evaluated at
-/// the trial stress `σ_trial` (the elastic predictor at the converged `ε(B)`).
-///
-/// Exact derivative of the return-mapped stress: elastic (`q_trial ≤ σ_y`) gives
-/// the elastic modulus `C`; plastic gives `K·1⊗1 + a·(I_dev − n⊗n)` with
-/// `a = 2μ σ_y / q_trial`, `n` the unit deviatoric flow direction, `K = λ + 2μ/3`.
-fn consistent_tangent_3d(
-    sig_trial: &[f64; 6],
-    lambda: f64,
-    mu: f64,
-    sigma_y: f64,
-) -> [[f64; 6]; 6] {
-    let k = lambda + 2.0 * mu / 3.0;
-    let q = von_mises(sig_trial);
-    let plastic = q > sigma_y && q > 0.0;
-    // Deviatoric coefficient: 2μ when elastic, 2μ σ_y/q when plastic.
-    let coef = if plastic {
-        2.0 * mu * sigma_y / q
-    } else {
-        2.0 * mu
-    };
-
-    let mut d = [[0.0_f64; 6]; 6];
-    // K·1⊗1 on the normal (top-left 3×3) block.
-    for row in d.iter_mut().take(3) {
-        for e in row.iter_mut().take(3) {
-            *e += k;
-        }
-    }
-    // coef · I_dev (engineering: normal block ⅔/−⅓, shear diagonal ½).
-    for (i, row) in d.iter_mut().enumerate().take(3) {
-        for (j, e) in row.iter_mut().enumerate().take(3) {
-            *e += coef * if i == j { 2.0 / 3.0 } else { -1.0 / 3.0 };
-        }
-    }
-    for i in 3..6 {
-        d[i][i] += coef * 0.5;
-    }
-    // − coef · n⊗n (plastic only), n the unit deviatoric flow direction.
-    if plastic {
-        let mean = (sig_trial[0] + sig_trial[1] + sig_trial[2]) / 3.0;
-        let s = [
-            sig_trial[0] - mean,
-            sig_trial[1] - mean,
-            sig_trial[2] - mean,
-            sig_trial[3],
-            sig_trial[4],
-            sig_trial[5],
-        ];
-        let s_norm = (s[0] * s[0]
-            + s[1] * s[1]
-            + s[2] * s[2]
-            + 2.0 * (s[3] * s[3] + s[4] * s[4] + s[5] * s[5]))
-            .sqrt();
-        if s_norm > 0.0 {
-            let nv: [f64; 6] = std::array::from_fn(|i| s[i] / s_norm);
-            for i in 0..6 {
-                for j in 0..6 {
-                    d[i][j] -= coef * nv[i] * nv[j];
-                }
-            }
-        }
-    }
-    d
-}
-
-// The reduction of the full-3-D tangent to the model's `v×v` matrix lives in
-// [`crate::models::symmetry::reduce_to_model`]: it is a property of the
-// **kinematics**, not of the constitutive law that produced the 6×6, so the
-// anisotropic elastic path and every plastic tangent share it.
+// The constitutive core — the elastic predictor, the return maps, the
+// plane-stress secant loop and the consistent tangents — lives in
+// [`crate::models::plastic`], shared by every yield law. What remains here is
+// the physics: the DOFs, the layouts, and the plumbing between the field
+// components and the full-3-D state the laws work in.
 
 // ─── Field <-> array plumbing ────────────────────────────────────────────────
 
@@ -813,7 +591,10 @@ mod tests {
         let pl = unit_quad(ElasticityModel::PlaneStrain);
         assert_eq!(pl.primal_vars(), vec!["u_x", "u_y"]);
         assert_eq!(pl.dual_vars(), vec!["f_x", "f_y"]);
-        assert_eq!(pl.material_components(), Some(MATERIAL_COMPONENTS));
+        assert_eq!(
+            pl.material_components(),
+            Some(PlasticLaw::Perfect.material_components())
+        );
     }
 
     /// Below yield the response is purely elastic: equivalent stress < σ_y and
@@ -835,7 +616,7 @@ mod tests {
             .integrate_behavior(&strain, None, Some(&mat), None)
             .unwrap();
         // Confined uniaxial *strain* (only ε_xx ≠ 0): σ_xx = (λ+2μ)·ε.
-        let (lambda, mu) = lame(e, nu);
+        let (lambda, mu) = plastic::lame(e, nu);
         for g in 0..out.gauss_count() {
             assert!(
                 (out.value(0, g, "sigma_xx").unwrap() - (lambda + 2.0 * mu) * 1e-4).abs() < 1e-6
@@ -871,7 +652,11 @@ mod tests {
                 out.value(0, g, "sigma_xz").unwrap(),
                 out.value(0, g, "sigma_xy").unwrap(),
             ];
-            assert!((von_mises(&s) - sy).abs() < 1e-3, "q = {}", von_mises(&s));
+            assert!(
+                (plastic::von_mises_stress(&s) - sy).abs() < 1e-3,
+                "q = {}",
+                plastic::von_mises_stress(&s)
+            );
             assert!(out.value(0, g, "p").unwrap() > 0.0);
         }
     }
@@ -1013,9 +798,9 @@ mod tests {
             unloaded.value(0, 0, "sigma_xy").unwrap(),
         ];
         assert!(
-            von_mises(&s) < sy - 1.0,
+            plastic::von_mises_stress(&s) < sy - 1.0,
             "elastic unload must drop below σ_y, got q = {}",
-            von_mises(&s)
+            plastic::von_mises_stress(&s)
         );
     }
 

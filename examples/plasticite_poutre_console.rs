@@ -143,7 +143,7 @@ fn main() -> Result<()> {
 
     // ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
     println!("▸ Modèle : plasticité J2 (contraintes planes) + encastrement…");
-    let mut model = Model::plasticity(&fes, ElasticityModel::PlaneStress)?;
+    let mut model = Model::plasticity_perfect(&fes, ElasticityModel::PlaneStress)?;
 
     model = model.union(&Model::dirichlet(
         "u_x".into(),

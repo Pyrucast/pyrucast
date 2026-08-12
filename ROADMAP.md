@@ -98,8 +98,10 @@ Diffusion : `Fick` (concentration `c` / flux `j`, nature `Diffusion` propre),
 `InterfaceTransfer` (échange `h(c₁ − c₂)` entre deux maillages non conformes en
 nœuds, variante thermique comprise).
 Mécanique : `Truss`, `Elasticity` (contraintes/déformations planes,
-axisymétrique, 3-D), `Plasticity` (von Mises parfaite, tangente cohérente
-validée par différences finies), `Mazars` (endommagement), `Timoshenko`,
+axisymétrique, 3-D), `Plasticity` (la **loi d'écoulement en attribut** : von Mises parfaite ou à
+écrouissage isotrope, Drucker-Prager non associé avec traitement du sommet,
+Ottosen à quatre paramètres intégrée par plan sécant ; tangentes toutes
+confrontées à une différence finie des forces internes), `Mazars` (endommagement), `Timoshenko`,
 `Frame` (portique 2-D), `Frame3d`, `FollowerPressure` (charge dont la direction
 tourne avec la surface, bâtie sur les tangentes déformées et non sur Nanson —
 `I + ∇_s u` n'est pas un gradient de transformation sur une variété). Contraintes : `Dirichlet`, `Mpc`,

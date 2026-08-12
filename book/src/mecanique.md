@@ -19,6 +19,8 @@ réactions).
   direction tourne avec la surface.
 - [Plasticité parfaite (von Mises)](mecanique/plasticite.md) — J2 sans
   écrouissage, retour radial (état interne `εᵖ`, `p`).
+- [Lois d'écoulement plastique](mecanique/lois-plastiques.md) — la loi comme
+  attribut : écrouissage isotrope, Drucker-Prager, Ottosen.
 - [Endommagement de Mazars](mecanique/mazars.md) — endommagement isotrope du
   béton, deux variables (état interne `κ`).
 - [Poutre de Timoshenko](mecanique/timoshenko.md) — flexion + cisaillement,

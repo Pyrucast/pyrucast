@@ -125,8 +125,8 @@ use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
     contact, convection, dirichlet, elasticity, embedded, fick, follower_pressure, frame, frame3d,
-    heat_conduction, interface_transfer, mazars, mpc, plasticity, radiation, timoshenko, truss,
-    Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
+    heat_conduction, interface_transfer, mazars, mpc, plastic, plasticity, radiation, timoshenko,
+    truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -350,15 +350,26 @@ impl SubModel {
         ))
     }
 
-    /// Perfect-plasticity sub-model on an FE subspace, with the given 2-D/3-D
-    /// model. Material (`E`, `nu`, `sigma_y`) is supplied at assembly /
-    /// integration time. See [`plasticity::Plasticity::new`].
-    pub fn plasticity(
+    /// **Perfect** (non-hardening) von Mises plasticity on an FE subspace, with
+    /// the given 2-D/3-D model. Material (`E`, `nu`, `sigma_y`) is supplied at
+    /// assembly / integration time. See [`plasticity::Plasticity::new`].
+    pub fn plasticity_perfect(
         fespace: Handle<SubFiniteElementSpace>,
         model: ElasticityModel,
     ) -> Result<Self> {
-        Ok(SubModel::Plasticity(plasticity::Plasticity::new(
-            fespace, model,
+        Self::plasticity_with_law(fespace, model, plastic::PlasticLaw::Perfect)
+    }
+
+    /// Elastoplasticity with an explicit yield law — the general constructor.
+    /// The material each law needs is declared by
+    /// [`PlasticLaw::material_components`](plastic::PlasticLaw::material_components).
+    pub fn plasticity_with_law(
+        fespace: Handle<SubFiniteElementSpace>,
+        model: ElasticityModel,
+        law: plastic::PlasticLaw,
+    ) -> Result<Self> {
+        Ok(SubModel::Plasticity(plasticity::Plasticity::with_law(
+            fespace, model, law,
         )?))
     }
 
@@ -1033,13 +1044,29 @@ impl Model {
         Ok(out)
     }
 
-    /// Perfect-plasticity `Model` spanning **every** subspace of `fes` (same
+    /// **Perfect** von Mises plasticity `Model` spanning **every** subspace of `fes` (same
     /// 2-D/3-D `model` for all). Parent-level named constructor; material
     /// (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time.
-    pub fn plasticity(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Self> {
+    pub fn plasticity_perfect(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Self> {
+        Self::plasticity_with_law(fes, model, plastic::PlasticLaw::Perfect)
+    }
+
+    /// Elastoplastic `Model` spanning **every** subspace of `fes`, with an
+    /// explicit yield law (von Mises perfect or hardening, Drucker-Prager,
+    /// Ottosen). Parent-level named constructor; the material each law needs is
+    /// supplied at assembly / integration time.
+    pub fn plasticity_with_law(
+        fes: &FiniteElementSpace,
+        model: ElasticityModel,
+        law: plastic::PlasticLaw,
+    ) -> Result<Self> {
         let mut out = Self::empty();
         for sub in fes {
-            out.add_sub(insert(SubModel::plasticity(sub.clone(), model)?))?;
+            out.add_sub(insert(SubModel::plasticity_with_law(
+                sub.clone(),
+                model,
+                law,
+            )?))?;
         }
         Ok(out)
     }

@@ -41,6 +41,8 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   - [Élasticité orthotrope et anisotrope](mecanique/orthotropie.md)
   - [Pression suiveuse](mecanique/pression-suiveuse.md)
   - [Plasticité parfaite (von Mises)](mecanique/plasticite.md)
+  - [Lois d'écoulement plastique](mecanique/lois-plastiques.md) — écrouissage
+    isotrope, Drucker-Prager, Ottosen
   - [Endommagement de Mazars](mecanique/mazars.md)
   - [Poutre de Timoshenko](mecanique/timoshenko.md)
   - [Portique 2D](mecanique/portique.md)

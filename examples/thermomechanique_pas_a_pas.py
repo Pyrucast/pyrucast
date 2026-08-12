@@ -9,7 +9,7 @@ mécanique non linéaire (Newton modifié + accélération d'Anderson), le coupl
 L'utilisateur ne fournit qu'un **dictionnaire** (maillage, modèle, charges,
 matériaux, instants) ; il le récupère complété des résultats par pas. Pour une
 mécanique élasto-plastique, il suffit de remplacer ``Model.elasticity`` par
-``Model.plasticity`` : le même appel gère la boucle non linéaire.
+``Model.plasticity_perfect`` : le même appel gère la boucle non linéaire.
 
 Lancement ::
 

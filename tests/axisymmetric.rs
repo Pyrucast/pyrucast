@@ -572,12 +572,12 @@ fn model_and_geometry_must_agree() -> Result<()> {
 
     // The same two-way rule holds for the non-linear laws.
     for err in [
-        Model::plasticity(&axi, ElasticityModel::PlaneStrain).unwrap_err(),
+        Model::plasticity_perfect(&axi, ElasticityModel::PlaneStrain).unwrap_err(),
         Model::mazars(&axi, ElasticityModel::PlaneStrain).unwrap_err(),
     ] {
         assert!(format!("{err}").contains("axisymmetric geometry"));
     }
-    assert!(Model::plasticity(&axi, ElasticityModel::Axisymmetric).is_ok());
+    assert!(Model::plasticity_perfect(&axi, ElasticityModel::Axisymmetric).is_ok());
     assert!(Model::mazars(&axi, ElasticityModel::Axisymmetric).is_ok());
     Ok(())
 }
@@ -606,7 +606,7 @@ fn a_boundary_mesh_is_not_a_solid() -> Result<()> {
         };
         for err in [
             Model::elasticity(&fes, model).unwrap_err(),
-            Model::plasticity(&fes, model).unwrap_err(),
+            Model::plasticity_perfect(&fes, model).unwrap_err(),
             Model::mazars(&fes, model).unwrap_err(),
         ] {
             assert!(
@@ -657,7 +657,7 @@ fn nonlinear_cell(
     };
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
     let model = match kind {
-        "plasticity" => Model::plasticity(&fes, model_kind)?,
+        "plasticity" => Model::plasticity_perfect(&fes, model_kind)?,
         _ => Model::mazars(&fes, model_kind)?,
     };
     let props: Vec<(&str, f64)> = if kind == "plasticity" {

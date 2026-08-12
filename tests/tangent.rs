@@ -204,7 +204,7 @@ fn tangent_matches_fd_solid_hex() -> Result<()> {
 
 fn plasticity_model(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Model> {
     let mut m = Model::empty();
-    m.add_sub(insert(SubModel::plasticity(fes.get(0)?, model)?))?;
+    m.add_sub(insert(SubModel::plasticity_perfect(fes.get(0)?, model)?))?;
     Ok(m)
 }
 

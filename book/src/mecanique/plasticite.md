@@ -140,7 +140,7 @@ s'écrit en Python ; voici l'usage **d'un pas** de la brique d'intégration :
 ```python
 import pyrucast
 
-model = pyrucast.Model.plasticity(fes, "plane_stress")
+model = pyrucast.Model.plasticity_perfect(fes, "plane_stress")
 materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("nu", 0.3), ("sigma_y", 250.0)]
 )

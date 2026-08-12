@@ -11,11 +11,11 @@ MECANIQUE - linéaire;ELASTIQUE STATIQUE;Représentation par une solution élast
 MECANIQUE - linéaire;ELASTIQUE IMPEDANCE;Support d'impédance (POI1 / SEG2) : raideur, amortisseur;—
 MECANIQUE - non linéaire externe;NON_LINEAIRE EQUIPLAS;Élasticité non linéaire identique en charge au plastique isotrope;—
 MECANIQUE - non linéaire externe;NON_LINEAIRE UTILISATEUR;Loi de comportement externe programmée par l'utilisateur (UMAT);— (une loi s'ajoute en Rust : voir « Ajouter une physique »)
-MECANIQUE - plasticité;PLASTIQUE ISOTROPE;von Mises à écrouissage isotrope (option par défaut);—
-MECANIQUE - plasticité;PLASTIQUE PARFAIT;von Mises sans écrouissage (J2, retour radial);Model.plasticity (tangente cohérente D_alg incluse)
+MECANIQUE - plasticité;PLASTIQUE ISOTROPE;von Mises à écrouissage isotrope (option par défaut);Model.plasticity_isotropic (E, nu, sigma_y, H) — écrouissage isotrope linéaire
+MECANIQUE - plasticité;PLASTIQUE PARFAIT;von Mises sans écrouissage (J2, retour radial);Model.plasticity_perfect (tangente cohérente D_alg incluse)
 MECANIQUE - plasticité;PLASTIQUE CINEMATIQUE;von Mises à écrouissage cinématique linéaire;—
 MECANIQUE - plasticité;PLASTIQUE DRUCKER_PARFAIT;Drucker-Prager à écoulement associé, sans écrouissage;—
-MECANIQUE - plasticité;PLASTIQUE DRUCKER_PRAGER;Drucker-Prager à écoulement non associé avec écrouissage;—
+MECANIQUE - plasticité;PLASTIQUE DRUCKER_PRAGER;Drucker-Prager à écoulement non associé avec écrouissage;Model.drucker_prager (alpha, k, psi) — écoulement non associé, sommet traité
 MECANIQUE - plasticité;PLASTIQUE DRUCKER_PRAGER_2;Béton adoucissant à deux seuils (Rankine traction + Drucker-Prager compression);—
 MECANIQUE - plasticité;PLASTIQUE DP_SOL;Drucker-Prager non associé à écrouissage non linéaire (sols);—
 MECANIQUE - plasticité;PLASTIQUE BETON;Modèle béton (contraintes planes uniquement);—
@@ -55,7 +55,7 @@ MECANIQUE - plasticité;PLASTIQUE CISAIL_NL;Cisaillement / effort tranchant adou
 MECANIQUE - plasticité;PLASTIQUE INFILL_UNI;Endommagement-plasticité unilatéral pour murs de remplissage en maçonnerie (barre);—
 MECANIQUE - plasticité;PLASTIQUE PARFAIT_UNI;Acier élastoplastique à écrouissage cinématique (section de poutre);—
 MECANIQUE - plasticité;PLASTIQUE PARFAIT_ANCRAGE;PARFAIT_UNI couplé au glissement acier/béton d'Eligehausen;—
-MECANIQUE - plasticité;PLASTIQUE OTTOSEN;Matériaux fragiles, approche fissuration fictive avec paramètre de taille;—
+MECANIQUE - plasticité;PLASTIQUE OTTOSEN;Matériaux fragiles, approche fissuration fictive avec paramètre de taille;Model.ottosen (a, b, k_1, k_2, sigma_c) — plan sécant, normale numérique
 MECANIQUE - plasticité;PLASTIQUE OTTOVARI;OTTOSEN à paramètres matériau variables (massifs volumiques);—
 MECANIQUE - plasticité;PLASTIQUE BETOCYCL;Dégradation cyclique en compression, deux surfaces de Rankine (maçonnerie 2D);—
 MECANIQUE - plasticité;PLASTIQUE STEINBERG;Steinberg-Cochran-Guinan : comportement des métaux sous choc;—

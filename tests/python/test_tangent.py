@@ -42,7 +42,7 @@ def _tangent_for(model, fes, materials, u):
 def test_elastic_tangent_equals_stiffness():
     E, NU, SY = 70_000.0, 0.3, 200.0
     c, n, fes = _unit_quad()
-    model = pyrucast.Model.plasticity(fes, "plane_strain")
+    model = pyrucast.Model.plasticity_perfect(fes, "plane_strain")
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("sigma_y", SY)]
     )
@@ -61,7 +61,7 @@ def test_elastic_tangent_equals_stiffness():
 def test_plastic_tangent_symmetric_and_softened():
     E, NU, SY = 70_000.0, 0.3, 200.0
     c, n, fes = _unit_quad()
-    model = pyrucast.Model.plasticity(fes, "plane_strain")
+    model = pyrucast.Model.plasticity_perfect(fes, "plane_strain")
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("sigma_y", SY)]
     )

@@ -48,6 +48,7 @@ pub mod interface_transfer;
 pub mod kernel;
 pub mod mazars;
 pub mod mpc;
+pub mod plastic;
 pub mod plasticity;
 pub mod radiation;
 pub mod symmetry;

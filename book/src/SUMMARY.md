@@ -32,6 +32,7 @@
     - [Élasticité orthotrope et anisotrope](mecanique/orthotropie.md)
     - [Pression suiveuse](mecanique/pression-suiveuse.md)
     - [Plasticité parfaite (von Mises)](mecanique/plasticite.md)
+    - [Lois d'écoulement plastique](mecanique/lois-plastiques.md)
     - [Endommagement de Mazars](mecanique/mazars.md)
     - [Poutre de Timoshenko](mecanique/timoshenko.md)
     - [Portique 2D](mecanique/portique.md)

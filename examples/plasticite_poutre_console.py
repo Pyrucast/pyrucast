@@ -108,7 +108,7 @@ def main():
     multiplier = pyrucast.mesh.translate(imposed_mesh, [0.0, 0.0])
 
     # ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
-    model = pyrucast.Model.plasticity(fes, "plane_stress")
+    model = pyrucast.Model.plasticity_perfect(fes, "plane_stress")
     model = model | pyrucast.Model.dirichlet("u_x", "f_x", imposed_mesh, multiplier)
     model = model | pyrucast.Model.dirichlet("u_y", "f_y", imposed_mesh, multiplier)
     materials = pyrucast.element_field.material_field(

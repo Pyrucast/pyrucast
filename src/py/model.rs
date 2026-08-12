@@ -5,6 +5,7 @@ use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::interface_transfer::TransferKind;
+use crate::models::plastic::PlasticLaw;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{mpc, Physics, RelationSense};
 use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
@@ -26,6 +27,25 @@ fn parse_symmetry(what: &str, tag: Option<&str>) -> PyResult<MaterialSymmetry> {
             ))
         }),
     }
+}
+
+/// Build an elastoplastic `Model` for a given yield law, parsing the kinematic
+/// tag. Shared by the four per-law classmethods, which differ only in the law
+/// they name — the material contract follows from it.
+fn plasticity_with(
+    fespace: &PyFiniteElementSpace,
+    model: &str,
+    law: PlasticLaw,
+) -> PyResult<PyModel> {
+    let m = ElasticityModel::from_tag(model).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err(format!(
+            "plasticity ({law}): unknown model '{model}' \
+             (expected plane_stress|plane_strain|axisymmetric|solid)"
+        ))
+    })?;
+    Ok(PyModel {
+        inner: Model::plasticity_with_law(&fespace.inner, m, law)?,
+    })
 }
 
 /// A **view** into one sub-model of a `Model`, obtained by indexing
@@ -322,26 +342,69 @@ impl PyModel {
         Ok(Self { inner })
     }
 
-    /// `Model.plasticity(fespace, model)` — perfect von Mises elastoplasticity
-    /// spanning every subspace of `fespace`. `model` is `"plane_stress"` /
-    /// `"plane_strain"` / `"axisymmetric"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity
-    /// (`u_x, u_y(, u_z)`); material (`E`, `nu`, `sigma_y`) is supplied at
-    /// assembly / integration time. The behaviour integration (`COMP`) carries
-    /// the plastic-strain + cumulated-`p` internal state (`VAR0`→`VAR1`).
+    /// `Model.plasticity_perfect(fespace, model)` — **perfect** (non-hardening)
+    /// von Mises elastoplasticity spanning every subspace of `fespace`. `model`
+    /// is `"plane_stress"` / `"plane_strain"` / `"axisymmetric"` (2-D) or
+    /// `"solid"` (3-D). Same DOFs as elasticity (`u_x, u_y(, u_z)`); material
+    /// (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time. The
+    /// behaviour integration (`COMP`) carries the plastic-strain +
+    /// cumulated-`p` internal state (`VAR0`→`VAR1`) and emits the consistent
+    /// tangent `D_alg`.
     #[classmethod]
-    fn plasticity(
+    fn plasticity_perfect(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         fespace: PyRef<PyFiniteElementSpace>,
         model: &str,
     ) -> PyResult<Self> {
-        let m = ElasticityModel::from_tag(model).ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "plasticity: unknown model '{model}' \
-                 (expected plane_stress|plane_strain|axisymmetric|solid)"
-            ))
-        })?;
-        let inner = Model::plasticity(&fespace.inner, m)?;
-        Ok(Self { inner })
+        plasticity_with(&fespace, model, PlasticLaw::Perfect)
+    }
+
+    /// `Model.plasticity_isotropic(fespace, model)` — von Mises with **linear
+    /// isotropic hardening**, `σ_y(p) = σ_y + H·p`. Material `E`, `nu`,
+    /// `sigma_y`, `H`; everything else as `plasticity_perfect` (`H = 0` would
+    /// give it back exactly).
+    #[classmethod]
+    fn plasticity_isotropic(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+        model: &str,
+    ) -> PyResult<Self> {
+        plasticity_with(&fespace, model, PlasticLaw::Isotropic)
+    }
+
+    /// `Model.drucker_prager(fespace, model)` — pressure-sensitive plasticity
+    /// with **non-associated** flow: `f = q + α·I₁ − k`, plastic potential
+    /// `g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),
+    /// `psi` (dilatancy).
+    ///
+    /// `ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils
+    /// and rocks, whose measured dilatancy is far below what friction alone
+    /// would imply. A non-associated law has a **non-symmetric** tangent.
+    /// Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
+    #[classmethod]
+    fn drucker_prager(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+        model: &str,
+    ) -> PyResult<Self> {
+        plasticity_with(&fespace, model, PlasticLaw::DruckerPrager)
+    }
+
+    /// `Model.ottosen(fespace, model)` — Ottosen's four-parameter criterion for
+    /// concrete, whose strength depends on the pressure **and** on the Lode
+    /// angle (so tension and compression differ). Material `E`, `nu`, `a`, `b`,
+    /// `k_1`, `k_2`, `sigma_c`.
+    ///
+    /// Integrated by a cutting-plane return with a numerically differentiated
+    /// normal: the criterion is exact, and the gradient — long enough that a
+    /// hand-derived one could not be checked — is a central difference.
+    #[classmethod]
+    fn ottosen(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+        model: &str,
+    ) -> PyResult<Self> {
+        plasticity_with(&fespace, model, PlasticLaw::Ottosen)
     }
 
     /// `Model.mazars(fespace, model)` — Mazars isotropic damage spanning every
