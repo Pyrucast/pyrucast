@@ -125,8 +125,8 @@ use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
     contact, convection, dirichlet, elasticity, embedded, fick, frame, frame3d, heat_conduction,
-    interface_transfer, mazars, mpc, plasticity, timoshenko, truss, Constraint, MatrixKind,
-    Physics, RelationSense, SubModelKind,
+    interface_transfer, mazars, mpc, plasticity, radiation, timoshenko, truss, Constraint,
+    MatrixKind, Physics, RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -207,6 +207,9 @@ pub enum SubModel {
     /// Exchange law across an interface between two meshes — see
     /// [`interface_transfer::InterfaceTransfer`].
     InterfaceTransfer(interface_transfer::InterfaceTransfer),
+    /// Radiation to infinity (Stefan-Boltzmann boundary) — see
+    /// [`radiation::Radiation`].
+    Radiation(radiation::Radiation),
 }
 
 impl SubModel {
@@ -231,6 +234,7 @@ impl SubModel {
             SubModel::Frame3d(p) => p,
             SubModel::Fick(p) => p,
             SubModel::InterfaceTransfer(p) => p,
+            SubModel::Radiation(p) => p,
         }
     }
 
@@ -307,6 +311,15 @@ impl SubModel {
         Ok(SubModel::Fick(fick::Fick::with_symmetry(
             fespace, symmetry,
         )?))
+    }
+
+    /// Radiation-to-infinity sub-model on a **boundary** FE subspace —
+    /// `q·n = σε(T⁴ − T_∞⁴)`. Same DOFs (`"T"`/`"q"`) as
+    /// [`Self::heat_conduction`], so it couples straight into the conduction
+    /// stiffness. Material (`emis`, `T_inf`, optionally `sigma`) is supplied at
+    /// assembly time. See [`radiation::Radiation::new`].
+    pub fn radiation(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        Ok(SubModel::Radiation(radiation::Radiation::new(fespace)?))
     }
 
     /// Interface-exchange sub-model between two **conforming** boundary FE
@@ -897,6 +910,17 @@ impl Model {
         let mut model = Self::empty();
         for sub in fes {
             model.add_sub(insert(SubModel::fick(sub.clone(), symmetry)?))?;
+        }
+        Ok(model)
+    }
+
+    /// Radiation-to-infinity `Model` spanning **every** subspace of a *boundary*
+    /// `fes`. Parent-level named constructor; the emissivity and far-field
+    /// temperature are supplied at assembly time.
+    pub fn radiation(fes: &FiniteElementSpace) -> Result<Self> {
+        let mut model = Self::empty();
+        for sub in fes {
+            model.add_sub(insert(SubModel::radiation(sub.clone())?))?;
         }
         Ok(model)
     }

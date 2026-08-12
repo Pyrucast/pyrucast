@@ -88,9 +88,12 @@ interpolation, quadrature, codes VTK/gmsh, familles. Un unique `match`,
 `SubModel::as_kind()` côté physiques : ajouter un élément coûte un fichier et
 deux variantes, et aucun consommateur générique ne change.
 
-## Physiques — 15 sous-modèles
+## Physiques — 16 sous-modèles
 
-Thermique : `HeatConduction`, `Convection` (échange de surface / film).
+Thermique : `HeatConduction`, `Convection` (échange de surface / film),
+`Radiation` (rayonnement à l'infini `σε(T⁴ − T_∞⁴)` : rigidité linéarisée autour
+de `T_∞`, résidu exact, tangente cohérente validée par différences finies ;
+première physique à déclarer **deux** natures, `[Thermal, Radiation]`).
 Diffusion : `Fick` (concentration `c` / flux `j`, nature `Diffusion` propre),
 `InterfaceTransfer` (échange `h(c₁ − c₂)` entre deux maillages non conformes en
 nœuds, variante thermique comprise).

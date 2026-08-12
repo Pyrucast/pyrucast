@@ -172,6 +172,30 @@ impl PyModel {
         Ok(Self { inner })
     }
 
+    /// `Model.radiation(fespace)` — radiation to infinity on a *boundary*
+    /// `fespace`: `q·n = σε(T⁴ − T_∞⁴)`. Same DOFs (`"T"`/`"q"`) as
+    /// `heat_conduction`, so it composes with `|`:
+    /// `Model.heat_conduction(bulk) | Model.radiation(boundary)`.
+    ///
+    /// Material: `emis` (emissivity) and `T_inf` (far-field temperature), plus an
+    /// optional `sigma` overriding the SI Stefan-Boltzmann constant. With the
+    /// default `sigma`, `T` is an **absolute** temperature — a fourth power has
+    /// no invariance to shift an origin through.
+    ///
+    /// Unlike convection this law is non-linear, so it contributes three terms:
+    /// the linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual
+    /// `∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent
+    /// `4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`. Its natures are `"thermal"`
+    /// **and** `"radiation"`.
+    #[classmethod]
+    fn radiation(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+    ) -> PyResult<Self> {
+        let inner = Model::radiation(&fespace.inner)?;
+        Ok(Self { inner })
+    }
+
     /// `Model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
     /// exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
     /// that do **not** share their nodes. `kind` is `"mass"` (the default:

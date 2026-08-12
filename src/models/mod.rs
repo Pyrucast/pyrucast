@@ -48,6 +48,7 @@ pub mod kernel;
 pub mod mazars;
 pub mod mpc;
 pub mod plasticity;
+pub mod radiation;
 pub mod symmetry;
 pub mod timoshenko;
 pub mod truss;

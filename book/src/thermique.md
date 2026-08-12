@@ -220,6 +220,73 @@ Avec `∇T = (1, 0)`, le flux est la première colonne de `K` :
 extra-diagonal n'est non nul que si le matériau est à la fois anisotrope **et**
 désaligné — précisément le cas qu'une rotation fausse manquerait.
 
+### Rayonnement à l'infini (Stefan-Boltzmann)
+
+Une surface qui échange avec un environnement lointain à \\(T_\infty\\) rayonne
+
+\\[
+q\cdot n = \sigma\,\varepsilon\,\big(T^4 - T_\infty^4\big)
+\\]
+
+où \\(\sigma\\) est la constante de Stefan-Boltzmann et \\(\varepsilon\\)
+l'émissivité. Primale `"T"`, duale `"q"` — les **mêmes** degrés de liberté que la
+conduction, donc un bord rayonnant se couple directement dans sa rigidité, comme
+la convection. Et comme elle, il n'a besoin d'**aucune normale** : la direction
+est déjà consommée en écrivant `q·n`, il ne reste sous l'intégrale qu'un scalaire
+et la mesure de surface.
+
+#### Ce qui change par rapport à la convection : c'est non linéaire
+
+La loi de Newton est linéaire en `T`, si bien que la convection ne contribue
+qu'une matrice de film constante. `T⁴` ne l'est pas, d'où **trois** termes :
+
+| terme | expression | rôle |
+|---|---|---|
+| rigidité | `4σεT_∞³ ∫ NᵢNⱼ dΓ` | le film radiatif **linéarisé**, un opérateur constant — le `h_r` classique |
+| force interne | `∫ Nᵢ σε(T⁴ − T_∞⁴) dΓ` | le résidu, exact |
+| tangente | `4σεT³ ∫ NᵢNⱼ dΓ` | la tangente cohérente à la température courante |
+
+Linéariser la rigidité autour de \\(T_\infty\\) plutôt qu'autour de l'état
+courant est ce qui la laisse être une matrice **constante** : c'est l'opérateur
+dont on part pour une boucle de Newton, et à lui seul une itération de Picard
+tout à fait utilisable. La **tangente** porte la vraie non-linéarité : elle relit
+`T` dans l'état produit par l'intégration du comportement — le même couple
+producteur/consommateur que le `D_alg` plastique.
+
+#### Deux natures
+
+Le rayonnement déclare `[Thermal, Radiation]`. Un bord rayonnant fait partie du
+problème thermique — `filter("thermal")` doit le rendre — tandis que
+`filter("radiation")` isole le terme non linéaire à part, pour l'assembler ou
+l'inspecter seul. C'est le premier usage du caractère **ensembliste** de
+`physics()`.
+
+#### Unités
+
+`sigma` vaut par défaut la constante SI, et `T` est alors une température
+**absolue** (Kelvin) : une puissance quatrième n'a aucune invariance permettant
+de translater une origine. Dans un autre système d'unités, fournir `sigma` comme
+composante matériau.
+
+```python
+model = pyrucast.Model.heat_conduction(volume) | pyrucast.Model.radiation(bord)
+materials = pyrucast.element_field.material_field(
+    model, [("k", 20.0), ("emis", 0.8), ("T_inf", 300.0)]
+)
+```
+
+#### Ce que ça vaut comme vérification
+
+Deux choses se contrôlent sans acrobatie analytique : le flux rayonné doit valoir
+exactement `σε(T⁴ − T_∞⁴)` fois l'aire, et la **tangente doit être la dérivée du
+résidu**. Une loi en `T⁴` est précisément là où une tangente incohérente se cache
+— Newton ramperait au lieu de converger quadratiquement — d'où sa comparaison à
+une différence finie :
+
+```rust,ignore
+{{#include ../../tests/radiation.rs:example}}
+```
+
 ### Convection de surface (Robin / film)
 
 Le modèle `Convection` (`src/models/convection.rs`) ajoute un **échange

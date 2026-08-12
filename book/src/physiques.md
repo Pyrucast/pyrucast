@@ -27,7 +27,9 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   la [conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope)
   (tenseur `K`) et la
   [convection de surface](thermique.md#convection-de-surface-robin--film)
-  (Robin / film, `q·n = h(T − T_ext)`).
+  (Robin / film, `q·n = h(T − T_ext)`), plus le
+  [rayonnement à l'infini](thermique.md#rayonnement-à-linfini-stefan-boltzmann)
+  (`q·n = σε(T⁴ − T_∞⁴)`, non linéaire, à tangente cohérente).
 - [Diffusion (loi de Fick)](diffusion.md) — `∇·(D∇c) = 0`, concentration `c` et
   flux de matière `j` ; même opérateur que la conduction, nature distincte. Avec
   le [transfert d'interface](diffusion.md#transfert-à-travers-une-interface)
@@ -50,7 +52,8 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   - [Contact (nœud-surface)](contraintes/contact.md)
 
 Ce regroupement est la **nature physique** (`Physics`) que chaque variante
-déclare : `Thermal` (conduction), `Diffusion` (Fick), `Mechanical` (barre →
+déclare : `Thermal` (conduction), `Radiation` (rayonnement, en plus de
+`Thermal`), `Diffusion` (Fick), `Mechanical` (barre →
 cadre 3D) et `Constraint` (les contraintes de Lagrange). On sélectionne les sous-modèles
 d'une nature avec `model.filter(Physics::Mechanical)` (et les blocs d'une
 matrice avec `k.filter(...)`) — voir

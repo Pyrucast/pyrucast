@@ -180,7 +180,7 @@ THERMIQUE;CONDUCTION ORTHOTROPE;Conduction orthotrope (conductivité par directi
 THERMIQUE;CONDUCTION ANISOTROPE;Conduction anisotrope (tenseur de conductivité complet);Model.heat_conduction_with_symmetry (symmetry=anisotropic) — k_11..k_33 + repère V1/V2
 THERMIQUE;CONVECTION;Convection de surface (Robin / film, q·n = h(T − T_ext));Model.convection (h) ; échange entre DEUX surfaces en vis-à-vis (résistance de contact) : Model.interface_transfer(kind=thermal)
 THERMIQUE;CONVECTION SUPERIEURE / INFERIEURE;Face d'échange d'une coque (supérieure ou inférieure);—
-THERMIQUE;RAYONNEMENT INFINI;Rayonnement vers l'infini;—
+THERMIQUE;RAYONNEMENT INFINI;Rayonnement vers l'infini;Model.radiation (emis, T_inf ; sigma facultatif) — rigidité linéarisée + tangente cohérente
 THERMIQUE;RAYONNEMENT FAC_A_FAC;Rayonnement face à face entre deux surfaces;—
 THERMIQUE;RAYONNEMENT CAVITE;Rayonnement d'une surface sur elle-même (options CONVEXE, FERME, SYMETRIQUE, FAC_FORME, ABSO);—
 THERMIQUE;PHASE;Changement de phase avec chaleur latente (extension non linéaire de la conduction);—

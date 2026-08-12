@@ -1294,6 +1294,25 @@ class Model:
         which reads the optional `poro`.
         """
     @classmethod
+    def radiation(cls, fespace: FiniteElementSpace) -> Model:
+        r"""
+        `Model.radiation(fespace)` — radiation to infinity on a *boundary*
+        `fespace`: `q·n = σε(T⁴ − T_∞⁴)`. Same DOFs (`"T"`/`"q"`) as
+        `heat_conduction`, so it composes with `|`:
+        `Model.heat_conduction(bulk) | Model.radiation(boundary)`.
+        
+        Material: `emis` (emissivity) and `T_inf` (far-field temperature), plus an
+        optional `sigma` overriding the SI Stefan-Boltzmann constant. With the
+        default `sigma`, `T` is an **absolute** temperature — a fourth power has
+        no invariance to shift an origin through.
+        
+        Unlike convection this law is non-linear, so it contributes three terms:
+        the linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual
+        `∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent
+        `4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`. Its natures are `"thermal"`
+        **and** `"radiation"`.
+        """
+    @classmethod
     def interface_transfer(cls, side_a: FiniteElementSpace, side_b: FiniteElementSpace, kind: typing.Optional[builtins.str] = None, tol: typing.Optional[builtins.float] = None) -> Model:
         r"""
         `Model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the

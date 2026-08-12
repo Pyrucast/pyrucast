@@ -105,6 +105,7 @@ constructeurs et les variables, vus du `Model` :
 | `heat_conduction(fes)` | `T` | `q` | `k` | [Thermique](thermique.md) |
 | `heat_conduction_with_symmetry(fes, sym)` | `T` | `q` | `k_1…` / `k_11…` + repère | [Conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
 | `convection(fes)` | `T` | `q` | `h` | [Thermique](thermique.md#convection-de-surface-robin--film) |
+| `radiation(fes)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
 | `fick(fes, sym)` | `c` | `j` | `D` (ou `D_1…` / `D_11…` + repère) ; `poro` facultatif | [Diffusion](diffusion.md) |
 | `interface_transfer(a, b, kind, tol)` | `c` ou `T` | `j` ou `q` | `h` | [Transfert d'interface](diffusion.md#transfert-à-travers-une-interface) |
 | `truss(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
@@ -135,11 +136,11 @@ de physique » là où les capacités répondent à « domaine ou contrainte » 
 | Nature (`Physics`) | Physiques |
 |---|---|
 | `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `timoshenko`, `frame`, `frame3d` |
-| `Thermal`    | `heat_conduction`, `convection` |
+| `Thermal`    | `heat_conduction`, `convection`, `radiation`, `interface_transfer` (variante `thermal`) |
 | `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` |
 | `Other`      | nature « autre / rien » explicite (aucune physique de base ne la déclare) |
 | `Diffusion`  | `fick`, `interface_transfer` (variante `mass`) |
-| `Radiation`  | *(à venir)* — portée **en plus** de `Thermal` par un bord radiatif |
+| `Radiation`  | `radiation` — portée **en plus** de `Thermal`, donc `filter("thermal")` le rend aussi |
 
 Côté Python, les mêmes natures sont des chaînes : `"mechanical"`, `"thermal"`,
 `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`.
