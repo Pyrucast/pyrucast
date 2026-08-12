@@ -720,13 +720,71 @@ fn render_to_file<D: Drawable>(
             area.present().map_err(|e| map_err(Box::new(e)))?;
         }
         SaveFormat::Svg => {
-            let backend = SVGBackend::new(path, (w, h));
-            let area = backend.into_drawing_area();
-            draw_root(&area, object, &view, title)?;
-            area.present().map_err(|e| map_err(Box::new(e)))?;
+            // Rendered to a string rather than straight to the file: the
+            // markup goes through `shrink_svg` on the way out.
+            let mut markup = String::new();
+            {
+                let backend = SVGBackend::with_string(&mut markup, (w, h));
+                let area = backend.into_drawing_area();
+                draw_root(&area, object, &view, title)?;
+                area.present().map_err(|e| map_err(Box::new(e)))?;
+            }
+            std::fs::write(path, shrink_svg(&markup))?;
         }
     }
     Ok(())
+}
+
+/// Strip the style attributes the SVG backend repeats on every single tag it
+/// writes, which on a mesh figure outweigh the geometry three to one.
+///
+/// Every rewrite here leans on the format being inherited rather than
+/// restated, so the picture comes out pixel for pixel the same:
+///
+/// - `opacity="1"` is the SVG default and says nothing;
+/// - `fill="none"` only ever qualifies a polyline — every other shape the
+///   backend emits carries its own `fill` — so it can sit on the root element
+///   and reach them all;
+/// - whichever `stroke-width` the figure uses most — 2 for a bare mesh, 1 once
+///   a field paints the faces and the edges thin out — moves to the root too,
+///   the other widths keeping their own value.
+///
+/// That last one needs every stroked tag to state its width, and the backend
+/// leaves the attribute out wherever the default of 1 already applies. Those
+/// tags are given it back first, which is a no-op on the picture and makes
+/// the hoist safe.
+fn shrink_svg(markup: &str) -> String {
+    let out = markup.replace(" opacity=\"1\"", "");
+    let out = pin_implicit_stroke_widths(&out.replace("<polyline fill=\"none\" ", "<polyline "));
+
+    let prevailing = ["0", "1", "2"]
+        .into_iter()
+        .max_by_key(|w| out.matches(&format!(" stroke-width=\"{w}\"")).count())
+        .expect("the list is not empty");
+    let out = out.replace(&format!(" stroke-width=\"{prevailing}\""), "");
+    out.replacen(
+        "<svg ",
+        &format!("<svg fill=\"none\" stroke-width=\"{prevailing}\" "),
+        1,
+    )
+}
+
+/// Spell out the stroke width of tags that stroke without one, which the SVG
+/// default puts at 1. Restating a default changes nothing on screen; it only
+/// keeps such a tag from picking up a hoisted width meant for its neighbours.
+fn pin_implicit_stroke_widths(markup: &str) -> String {
+    let mut out = String::with_capacity(markup.len());
+    for piece in markup.split_inclusive('>') {
+        match piece.rfind(if piece.ends_with("/>") { "/>" } else { ">" }) {
+            Some(cut) if piece.contains("stroke=\"#") && !piece.contains("stroke-width=") => {
+                out.push_str(&piece[..cut]);
+                out.push_str(" stroke-width=\"1\"");
+                out.push_str(&piece[cut..]);
+            }
+            _ => out.push_str(piece),
+        }
+    }
+    out
 }
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────
@@ -772,5 +830,56 @@ mod tests {
         ));
         assert!(SaveFormat::from_path(&PathBuf::from("a.jpg")).is_err());
         assert!(SaveFormat::from_path(&PathBuf::from("noext")).is_err());
+    }
+
+    #[test]
+    fn shrink_svg_hoists_what_every_tag_repeats() {
+        let markup = concat!(
+            r#"<svg width="8" height="8" xmlns="http://www.w3.org/2000/svg">"#,
+            r##"<polyline fill="none" opacity="1" stroke="#000000" stroke-width="2" points="0,0 1,1 "/>"##,
+            r##"<polyline fill="none" opacity="1" stroke="#000000" stroke-width="2" points="1,1 2,0 "/>"##,
+            r##"<polyline fill="none" opacity="1" stroke="#FF0000" stroke-width="1" points="0,2 2,2 "/>"##,
+            r##"<polygon opacity="1" fill="#B4C8E6" points="0,0 1,0 1,1 "/>"##,
+            "</svg>",
+        );
+        let out = super::shrink_svg(markup);
+        assert!(!out.contains("opacity=\"1\""), "opacity is the SVG default");
+        assert!(
+            out.contains(r#"<svg fill="none" stroke-width="2""#),
+            "fill and the prevailing width move onto the root"
+        );
+        assert!(
+            out.contains(r##"<polyline stroke="#000000" points="0,0 1,1 "/>"##),
+            "an edge at the prevailing width states neither"
+        );
+        // The odd one out keeps saying how thick it is.
+        assert!(out.contains(r##"<polyline stroke="#FF0000" stroke-width="1""##));
+        // A shape that paints itself keeps saying so, or it would inherit
+        // `none` from the root and vanish.
+        assert!(out.contains(r##"<polygon fill="#B4C8E6""##));
+    }
+
+    #[test]
+    fn shrink_svg_pins_an_implicit_width_before_hoisting() {
+        // This rectangle strokes without saying how thick: it rides the SVG
+        // default of 1, and would thicken under the mesh's hoisted 2.
+        let markup = concat!(
+            r#"<svg width="8" height="8">"#,
+            r##"<rect fill="none" stroke="#6E6E6E" x="0" y="0" width="4" height="4"/>"##,
+            r##"<polyline stroke="#000000" stroke-width="2" points="0,0 1,1 "/>"##,
+            r##"<polyline stroke="#000000" stroke-width="2" points="1,1 2,2 "/>"##,
+            "</svg>",
+        );
+        let out = super::shrink_svg(markup);
+        assert!(
+            out.contains(r#"<svg fill="none" stroke-width="2""#),
+            "the mesh width still gets hoisted"
+        );
+        assert!(
+            out.contains(
+                r##"stroke="#6E6E6E" x="0" y="0" width="4" height="4" stroke-width="1"/>"##
+            ),
+            "the rectangle is pinned to the default it was riding"
+        );
     }
 }
