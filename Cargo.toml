@@ -48,6 +48,10 @@ rayon = "1"
 plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "bitmap_encoder", "svg_backend", "ttf", "line_series", "all_series"], optional = true }
 winit = { version = "0.30", optional = true }
 softbuffer = { version = "0.4", optional = true }
+# Gzip for the `.svgz` output. Already compiled as part of the visualization
+# stack (plotters-bitmap → image → png → flate2), so naming it here costs
+# nothing beyond the direct dependency.
+flate2 = { version = "1", optional = true }
 # Stub-file generator: produces `pyrucast.pyi` so IDEs see signatures
 # + docstrings instead of `Any`. Activated by the `stub-gen` feature
 # and consumed by the `stub_gen` binary.
@@ -85,8 +89,8 @@ python-api = ["dep:pyo3"]
 # pyo3 NOT to link to libpython, since the host interpreter provides
 # it at runtime. Enabled by maturin when packaging the .so.
 extension-module = ["python-api", "pyo3/extension-module"]
-# Off-screen visualization (PNG / SVG export). Pure CPU rendering.
-viz = ["dep:plotters"]
+# Off-screen visualization (PNG / SVG / SVGZ export). Pure CPU rendering.
+viz = ["dep:plotters", "dep:flate2"]
 # Interactive visualization (mouse-driven window).
 # Implies `viz`; requires a display server at runtime.
 viz-interactive = ["viz", "dep:winit", "dep:softbuffer"]

@@ -59,8 +59,22 @@ Toute la sortie passe par la même méthode `plot(view, save)` exposée sur `Sub
 | `None` | ouvre une fenêtre interactive (souris : rotation au glisser, molette : zoom) | `viz-interactive` |
 | `Some(path)` avec extension `.png` | écrit un PNG | `viz` |
 | `Some(path)` avec extension `.svg` | écrit un SVG vectoriel | `viz` |
+| `Some(path)` avec extension `.svgz` | écrit le même SVG, gzippé | `viz` |
 
 Tout autre extension est rejetée avec une erreur explicite. Le format vectoriel est ce qui rend ce socle particulièrement utile pour les figures de rapport : on conserve un trait propre quel que soit le zoom.
+
+### `.svgz` : quand une étude sort des figures par centaines
+
+`.svgz` n'est pas un autre rendu, c'est le `.svg` compressé : le dézipper rend le fichier octet pour octet. Il pèse environ le dixième, parce qu'un maillage produit un balisage très répétitif, et se lit nativement dans un navigateur ou dans Inkscape.
+
+Il est fait pour **s'accumuler sur un disque**, pas pour être publié. Sur le web le gain est nul : les serveurs compressent déjà le `.svg` à la volée, si bien qu'un `.svgz` ne change pas un octet transféré — et il rendrait binaires des fichiers que git suit très bien en texte. C'est pourquoi les figures de ce livre restent en `.svg`.
+
+```python
+mesh.plot(save="piece.svg")  # à versionner, à publier
+mesh.plot(save="piece.svgz")  # à empiler par centaines
+```
+
+Le `.svg` lui-même est déjà allégé à l'écriture : le générateur de SVG répète le style complet sur chaque balise, et pyrucast retire ce que le format sait hériter — un dessin identique au pixel près, pour environ la moitié des octets.
 
 Dans la fenêtre interactive uniquement, le point de vue courant `view=(yaw, pitch, scale)` s'affiche en permanence en haut à droite — le même ordre que le tuple accepté par `view=`, pour recopier tel quel l'angle atteint à la souris/molette dans un appel `plot()` ultérieur.
 

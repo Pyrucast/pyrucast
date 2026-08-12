@@ -441,7 +441,8 @@ impl SubMesh {
     /// - `save = None` ⇒ open an interactive window (requires feature
     ///   `viz-interactive`).
     /// - `save = Some(path)` ⇒ write an image file; the format is inferred
-    ///   from the extension (`.png` or `.svg`).
+    ///   from the extension (`.png`, `.svg`, or `.svgz` for the same SVG
+    ///   gzipped — around a tenth of the bytes on disk).
     ///
     /// Every supported element type is rendered: POI1 as dots, SEG2 as
     /// segments, TRI3 / QUA4 as filled polygons, and TET4 / HEX8 as their

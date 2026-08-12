@@ -140,7 +140,8 @@ impl PySubMesh {
     /// Visualize this submesh.
     ///
     /// - `save=None`: interactive window (requires `viz-interactive`).
-    /// - `save="<path>.png"` or `.svg`: image file.
+    /// - `save="<path>.png"`, `.svg` or `.svgz`: image file. `.svgz` is the
+    ///   same SVG gzipped — around a tenth of the bytes on disk.
     /// - `view`: optional `(yaw, pitch, scale)` triple; default is iso.
     /// - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
     ///   corner (default `True`). In the interactive window, the key

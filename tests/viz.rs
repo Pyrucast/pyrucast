@@ -62,6 +62,50 @@ fn submesh_exports_svg() {
 }
 
 #[test]
+fn submesh_exports_svgz() {
+    let sm = build_two_triangles();
+    let dir = tmpdir();
+    let path = dir.join("tri.svgz");
+    sm.plot(Some(View::front()), Some(&path)).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    assert_eq!(
+        &bytes[..2],
+        &[0x1f, 0x8b],
+        "should carry the gzip signature"
+    );
+    let mut text = String::new();
+    std::io::Read::read_to_string(&mut flate2::read::GzDecoder::new(&bytes[..]), &mut text)
+        .expect("should gunzip to valid UTF-8");
+    assert!(text.contains("<svg"), "should unwrap to SVG");
+}
+
+#[test]
+fn svgz_is_the_svg_compressed_and_nothing_else() {
+    let sm = build_two_triangles();
+    let dir = tmpdir();
+    let plain = dir.join("tri.svg");
+    let zipped = dir.join("tri.svgz");
+    sm.plot(Some(View::front()), Some(&plain)).unwrap();
+    sm.plot(Some(View::front()), Some(&zipped)).unwrap();
+
+    let expected = std::fs::read(&plain).unwrap();
+    let raw = std::fs::read(&zipped).unwrap();
+    let mut unzipped = Vec::new();
+    std::io::Read::read_to_end(&mut flate2::read::GzDecoder::new(&raw[..]), &mut unzipped).unwrap();
+    assert_eq!(
+        unzipped, expected,
+        "gunzipping the .svgz must give back the .svg byte for byte"
+    );
+    // The whole point: markup this repetitive compresses hard.
+    assert!(
+        raw.len() * 2 < expected.len(),
+        "expected the .svgz to more than halve {} bytes, got {}",
+        expected.len(),
+        raw.len()
+    );
+}
+
+#[test]
 fn submesh_default_view_is_iso() {
     let sm = build_two_triangles();
     let dir = tmpdir();

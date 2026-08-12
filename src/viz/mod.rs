@@ -1,4 +1,4 @@
-//! Visualization — PNG / SVG export and (optionally) interactive window.
+//! Visualization — PNG / SVG / SVGZ export and (optionally) interactive window.
 //!
 //! Gated behind the `viz` feature: pure-CPU rendering via `plotters` so the
 //! whole stack works on Linux and Windows without GPU drivers. The optional
@@ -14,6 +14,9 @@
 //! - [`Drawable`] (in [`drawable`]) is the internal trait every visualizable
 //!   object implements; backends iterate over it the same way for PNG, SVG
 //!   and the live window.
+//! - `shrink_svg` strips from the vector output what the SVG backend repeats
+//!   on every tag; `.svgz` gzips that same markup, for figures kept by the
+//!   hundred rather than published.
 //!
 //! # Example
 //!
@@ -199,6 +202,9 @@ impl ColorScale {
 pub(crate) enum SaveFormat {
     Png,
     Svg,
+    /// The same SVG, gzipped. Same drawing, same markup, about a tenth of the
+    /// bytes on disk — for piling up figures rather than for publishing them.
+    Svgz,
 }
 
 impl SaveFormat {
@@ -210,12 +216,15 @@ impl SaveFormat {
         {
             Some(ref s) if s == "png" => Ok(SaveFormat::Png),
             Some(ref s) if s == "svg" => Ok(SaveFormat::Svg),
+            // Only `.svgz` — `figure.svg.gz` has `gz` for an extension and
+            // falls through to the error, which is the honest answer.
+            Some(ref s) if s == "svgz" => Ok(SaveFormat::Svgz),
             Some(other) => Err(PyrucastError::Message(format!(
-                "unsupported viz extension: \"{}\" (expected .png or .svg)",
+                "unsupported viz extension: \"{}\" (expected .png, .svg or .svgz)",
                 other
             ))),
             None => Err(PyrucastError::Message(
-                "viz output path has no extension (expected .png or .svg)".into(),
+                "viz output path has no extension (expected .png, .svg or .svgz)".into(),
             )),
         }
     }
@@ -719,9 +728,10 @@ fn render_to_file<D: Drawable>(
             draw_root(&area, object, &view, title)?;
             area.present().map_err(|e| map_err(Box::new(e)))?;
         }
-        SaveFormat::Svg => {
-            // Rendered to a string rather than straight to the file: the
-            // markup goes through `shrink_svg` on the way out.
+        // One drawing for both: `.svgz` is the `.svg` this would have written,
+        // run through gzip. Rendered to a string rather than straight to the
+        // file so the markup can go through `shrink_svg` on the way out.
+        SaveFormat::Svg | SaveFormat::Svgz => {
             let mut markup = String::new();
             {
                 let backend = SVGBackend::with_string(&mut markup, (w, h));
@@ -729,7 +739,16 @@ fn render_to_file<D: Drawable>(
                 draw_root(&area, object, &view, title)?;
                 area.present().map_err(|e| map_err(Box::new(e)))?;
             }
-            std::fs::write(path, shrink_svg(&markup))?;
+            let markup = shrink_svg(&markup);
+            if matches!(fmt, SaveFormat::Svgz) {
+                use std::io::Write as _;
+                let file = std::fs::File::create(path)?;
+                let mut gz = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+                gz.write_all(markup.as_bytes())?;
+                gz.finish()?;
+            } else {
+                std::fs::write(path, markup)?;
+            }
         }
     }
     Ok(())
@@ -828,8 +847,14 @@ mod tests {
             SaveFormat::from_path(&PathBuf::from("a.svg")).unwrap(),
             SaveFormat::Svg
         ));
+        assert!(matches!(
+            SaveFormat::from_path(&PathBuf::from("a.svgz")).unwrap(),
+            SaveFormat::Svgz
+        ));
         assert!(SaveFormat::from_path(&PathBuf::from("a.jpg")).is_err());
         assert!(SaveFormat::from_path(&PathBuf::from("noext")).is_err());
+        // `a.svg.gz` names `gz` as its extension, which is nothing we write.
+        assert!(SaveFormat::from_path(&PathBuf::from("a.svg.gz")).is_err());
     }
 
     #[test]
