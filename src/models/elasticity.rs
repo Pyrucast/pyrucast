@@ -26,14 +26,50 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
-/// Material components required by linear elasticity.
+/// Material components required by **isotropic** linear elasticity.
 const MATERIAL_COMPONENTS: &[&str] = &["E", "nu"];
+/// Orthotropic constants plus the in-plane material axis (2-D).
+const ORTHOTROPIC_2D: &[&str] = &[
+    "E_1", "E_2", "E_3", "nu_12", "nu_13", "nu_23", "G_12", "G_13", "G_23", "V1X", "V1Y",
+];
+/// Orthotropic constants plus the two material axes (3-D).
+const ORTHOTROPIC_3D: &[&str] = &[
+    "E_1", "E_2", "E_3", "nu_12", "nu_13", "nu_23", "G_12", "G_13", "G_23", "V1X", "V1Y", "V1Z",
+    "V2X", "V2Y", "V2Z",
+];
+/// The 21 anisotropic constants plus the in-plane material axis (2-D).
+const ANISOTROPIC_2D: &[&str] = &[
+    "C_11", "C_12", "C_13", "C_14", "C_15", "C_16", "C_22", "C_23", "C_24", "C_25", "C_26", "C_33",
+    "C_34", "C_35", "C_36", "C_44", "C_45", "C_46", "C_55", "C_56", "C_66", "V1X", "V1Y",
+];
+/// The 21 anisotropic constants plus the two material axes (3-D).
+const ANISOTROPIC_3D: &[&str] = &[
+    "C_11", "C_12", "C_13", "C_14", "C_15", "C_16", "C_22", "C_23", "C_24", "C_25", "C_26", "C_33",
+    "C_34", "C_35", "C_36", "C_44", "C_45", "C_46", "C_55", "C_56", "C_66", "V1X", "V1Y", "V1Z",
+    "V2X", "V2Y", "V2Z",
+];
+
+/// The material contract of a symmetry in a space of dimension `space_dim`:
+/// the constants of the law, followed by the frame components it needs. Because
+/// the assembler resolves a material zone by its **required component set**
+/// ([`crate::ops::matrix::assemble_kind`]), these disjoint contracts let an
+/// isotropic and an orthotropic zone live on one mesh without any consolidation.
+fn material_contract(symmetry: MaterialSymmetry, space_dim: usize) -> &'static [&'static str] {
+    match (symmetry, space_dim) {
+        (MaterialSymmetry::Isotropic, _) => MATERIAL_COMPONENTS,
+        (MaterialSymmetry::Orthotropic, 2) => ORTHOTROPIC_2D,
+        (MaterialSymmetry::Orthotropic, _) => ORTHOTROPIC_3D,
+        (MaterialSymmetry::Anisotropic, 2) => ANISOTROPIC_2D,
+        (MaterialSymmetry::Anisotropic, _) => ANISOTROPIC_3D,
+    }
+}
 
 /// Which 2-D assumption (or 3-D solid) to use for the constitutive matrix.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -135,8 +171,15 @@ pub(crate) fn check_continuum_dimensions(
 
 /// Linear-elasticity physics on an FE subspace.
 ///
-/// Material data (`E`, `nu`) is supplied at assembly time via
-/// [`crate::ops::matrix::stiffness`], not stored here.
+/// Material data is supplied at assembly time via
+/// [`crate::ops::matrix::stiffness`], not stored here — `E`, `nu` for the
+/// isotropic default, the orthotropic or anisotropic constants plus the material
+/// axes otherwise (see [`crate::models::symmetry`]).
+///
+/// Two orthogonal axes: `model` is the **kinematic** hypothesis (plane stress,
+/// plane strain, axisymmetric, solid) and `symmetry` is the **material** one.
+/// They combine freely — an orthotropic axisymmetric body is as ordinary as an
+/// isotropic plane one.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Elasticity {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -144,12 +187,23 @@ pub struct Elasticity {
     pub(crate) support: Handle<SubMesh>,
     pub(crate) space_dim: usize,
     pub(crate) model: ElasticityModel,
+    pub(crate) symmetry: MaterialSymmetry,
 }
 
 impl Elasticity {
-    /// Linear elasticity on an FE subspace, with the given 2-D/3-D model.
-    /// Errors if `model` is inconsistent with the space dimension.
+    /// **Isotropic** linear elasticity on an FE subspace, with the given
+    /// 2-D/3-D model. Errors if `model` is inconsistent with the space dimension.
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
+        Self::with_symmetry(fespace, model, MaterialSymmetry::Isotropic)
+    }
+
+    /// Linear elasticity with an explicit material symmetry — the general
+    /// constructor, of which [`new`](Self::new) is the isotropic case.
+    pub fn with_symmetry(
+        fespace: Handle<SubFiniteElementSpace>,
+        model: ElasticityModel,
+        symmetry: MaterialSymmetry,
+    ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, axisymmetric) = {
             let s = read(&fespace)?;
             (
@@ -196,6 +250,7 @@ impl Elasticity {
             support,
             space_dim,
             model,
+            symmetry,
         })
     }
 }
@@ -261,7 +316,7 @@ impl SubModelKind for Elasticity {
     ) -> Result<()> {
         let geom = &geoms[0];
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
-        element_stiffness(geom, mat, self.model, ke)
+        element_stiffness(geom, mat, self.model, self.symmetry, ke)
     }
 
     fn element_matrix(
@@ -272,7 +327,7 @@ impl SubModelKind for Elasticity {
     ) -> Result<()> {
         let geom = &geoms[0];
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
-        element_stiffness(geom, mat, self.model, ke)
+        element_stiffness(geom, mat, self.model, self.symmetry, ke)
     }
 
     fn element_mass(
@@ -299,9 +354,9 @@ impl SubModelKind for Elasticity {
         let dual = self.dual_vars().join(", ");
         let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
         format!(
-            "SubModel<Elasticity({:?})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
+            "SubModel<Elasticity({:?}, {})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
-            self.model
+            self.model, self.symmetry
         )
     }
 }
@@ -312,7 +367,7 @@ impl Domain for Elasticity {
     }
 
     fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
+        Some(material_contract(self.symmetry, self.space_dim))
     }
 
     /// `alpha` (thermal-expansion coefficient) — accepted through the material
@@ -331,7 +386,7 @@ impl Domain for Elasticity {
         Ok(stress_names(self.space_dim, self.model))
     }
 
-    /// Linear stress σ = D·ε at one Gauss point (material `E`, `nu` per cell).
+    /// Linear stress σ = D·ε at one Gauss point (material constants per cell).
     fn integrate_point(
         &self,
         geom: &CellGeom,
@@ -344,9 +399,7 @@ impl Domain for Elasticity {
     ) -> Result<()> {
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
         let (cell, d) = (geom.cell, self.space_dim);
-        let e = mat.value(cell, 0, "E")?;
-        let nu = mat.value(cell, 0, "nu")?;
-        let dmat = constitutive(e, nu, self.model, d);
+        let dmat = symmetry::elastic_constitutive(mat, cell, self.symmetry, self.model, d)?;
         let strain = voigt_strain(&|name| input.value(cell, g, name), d, self.model)?;
         for (r, drow) in dmat.iter().enumerate() {
             out[r] = drow.iter().zip(&strain).map(|(dv, s)| dv * s).sum();
@@ -496,18 +549,14 @@ pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
     model: ElasticityModel,
+    symmetry: MaterialSymmetry,
     ke: &mut [f64],
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
     let dofs = space_dim * n_nodes;
-    // E, nu read at Gauss 0 — constant material per cell.
-    let d = constitutive(
-        material.value(geom.cell, 0, "E")?,
-        material.value(geom.cell, 0, "nu")?,
-        model,
-        space_dim,
-    );
+    // Constants read at Gauss 0 — constant material per cell.
+    let d = symmetry::elastic_constitutive(material, geom.cell, symmetry, model, space_dim)?;
     let v = d.len();
     for g in 0..geom.n_gauss {
         // On a body of revolution the hoop row needs `N` and `r` at this point.

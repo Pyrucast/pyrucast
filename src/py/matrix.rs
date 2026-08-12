@@ -233,12 +233,14 @@ impl PyMatrix {
 
     /// `Matrix.filter(physics)` — a new `Matrix` holding only the blocks **whose
     /// nature set contains** the given physics (`"mechanical"`, `"thermal"`,
-    /// `"constraint"`, `"other"`). The result is **not** finalized — call
-    /// `assemble` (or `finalize` for literal-only blocks) before solving.
+    /// `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
+    /// **not** finalized — call `assemble` (or `finalize` for literal-only
+    /// blocks) before solving.
     fn filter(&self, physics: &str) -> PyResult<Self> {
         let p = Physics::from_tag(physics).ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err(format!(
-                "filter: unknown physics '{physics}' (expected mechanical|thermal|constraint|other)"
+                "filter: unknown physics '{physics}' (expected {})",
+                Physics::tag_list()
             ))
         })?;
         Ok(Self {

@@ -49,8 +49,8 @@ Maillage - info;POIN SPHE;Nœuds d'un maillage situés sur une sphère (un cercl
 Maillage - info;POIN CYLI;Nœuds d'un maillage situés sur un cylindre (surface latérale, disques exclus);points_on_cylinder ; intérieur par points_in_cylinder
 Maillage - info;POIN CONE;Nœuds d'un maillage situés sur un cône (tronqué, surface latérale);points_on_cone ; intérieur par points_in_cone
 Maillage - info;POIN TORE;Nœuds d'un maillage situés sur un tore à section circulaire (3D);points_on_torus ; intérieur par points_in_torus
-Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément fini);Model.* (heat_conduction, elasticity, plasticity, mazars…) ; formulation mécanique en argument (plane_stress, plane_strain, axisymmetric, solid) — élasticité, plasticité et Mazars ; nature physique par bloc via physics() ; filtrage par nature via Model.filter / Matrix.filter
-Modèle et matériau;MATE;Définit le champ de propriétés matériau;material_field / sub_material_field
+Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément fini);Model.* (heat_conduction, elasticity, plasticity, mazars…) ; formulation mécanique en argument (plane_stress, plane_strain, axisymmetric, solid) — élasticité, plasticité et Mazars ; nature physique par bloc via physics() ; filtrage par nature via Model.filter / Matrix.filter ; symétrie matériau en argument (isotropic, orthotropic, anisotropic) — élasticité, conduction, Fick ; diffusion via Model.fick
+Modèle et matériau;MATE;Définit le champ de propriétés matériau;material_field / sub_material_field ; le repère d'orthotropie passe par des composantes vectorielles V1X/V1Y(/V1Z, V2X..V2Z), comme MATE 'DIRECTION' V1 V2
 Modèle et matériau;CARA;Caractéristiques géométriques (sections de poutres/coques);material_field (composantes section)
 Modèle et matériau;COMP;Intègre la loi de comportement (déf -> contraintes);integrate_behavior
 Modèle et matériau;ELAS;Renvoie les caractéristiques élastiques;modèle elasticity + material_field

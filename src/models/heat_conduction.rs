@@ -11,6 +11,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
+use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
@@ -22,8 +23,34 @@ pub const DUAL_VAR: &str = "q";
 /// Required component on the material `SubElementField` (isotropic
 /// conductivity).
 pub const MATERIAL_COMPONENT: &str = "k";
-/// Material contract returned by [`SubModelKind::material_components`].
+/// Material contract returned by [`SubModelKind::material_components`] for the
+/// isotropic default.
 const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
+/// Orthotropic conductivities plus the in-plane material axis (2-D).
+const ORTHOTROPIC_2D: &[&str] = &["k_1", "k_2", "k_3", "V1X", "V1Y"];
+/// Orthotropic conductivities plus the two material axes (3-D).
+const ORTHOTROPIC_3D: &[&str] = &[
+    "k_1", "k_2", "k_3", "V1X", "V1Y", "V1Z", "V2X", "V2Y", "V2Z",
+];
+/// The symmetric conductivity tensor plus the in-plane material axis (2-D).
+const ANISOTROPIC_2D: &[&str] = &["k_11", "k_12", "k_13", "k_22", "k_23", "k_33", "V1X", "V1Y"];
+/// The symmetric conductivity tensor plus the two material axes (3-D).
+const ANISOTROPIC_3D: &[&str] = &[
+    "k_11", "k_12", "k_13", "k_22", "k_23", "k_33", "V1X", "V1Y", "V1Z", "V2X", "V2Y", "V2Z",
+];
+
+/// The material contract of a symmetry in a space of dimension `space_dim` —
+/// disjoint component sets, so an isotropic and an orthotropic conduction zone
+/// resolve separately on one mesh (see [`crate::ops::matrix::assemble_kind`]).
+fn material_contract(symmetry: MaterialSymmetry, space_dim: usize) -> &'static [&'static str] {
+    match (symmetry, space_dim) {
+        (MaterialSymmetry::Isotropic, _) => MATERIAL_COMPONENTS,
+        (MaterialSymmetry::Orthotropic, 2) => ORTHOTROPIC_2D,
+        (MaterialSymmetry::Orthotropic, _) => ORTHOTROPIC_3D,
+        (MaterialSymmetry::Anisotropic, 2) => ANISOTROPIC_2D,
+        (MaterialSymmetry::Anisotropic, _) => ANISOTROPIC_3D,
+    }
+}
 /// Extra material components consumed **only** by the heat-capacity (mass)
 /// matrix: density `rho` and specific heat `cp` (so the volumetric heat capacity
 /// is `ρ·cp`). Optional — the conductivity assembly does not need them.
@@ -67,16 +94,37 @@ pub struct HeatConduction {
     /// built once at construction. Reused as the row/col support of every
     /// assembled stiffness block — no per-assembly rebuild.
     pub(crate) support: Handle<SubMesh>,
+    pub(crate) space_dim: usize,
+    pub(crate) symmetry: MaterialSymmetry,
 }
 
 impl HeatConduction {
-    /// Heat-conduction physics on an FE subspace. Builds the stable POI1
-    /// [`SubMesh`] covering the subspace's unique nodes (reused as the
+    /// **Isotropic** heat-conduction physics on an FE subspace. Builds the stable
+    /// POI1 [`SubMesh`] covering the subspace's unique nodes (reused as the
     /// row/col support of every assembled block).
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        let submesh = read(&fespace)?.submesh();
+        Self::with_symmetry(fespace, MaterialSymmetry::Isotropic)
+    }
+
+    /// Heat conduction with an explicit material symmetry — the general
+    /// constructor, of which [`new`](Self::new) is the isotropic case. An
+    /// orthotropic or anisotropic conductivity carries its material axes through
+    /// the material field (see [`crate::models::symmetry`]).
+    pub fn with_symmetry(
+        fespace: Handle<SubFiniteElementSpace>,
+        symmetry: MaterialSymmetry,
+    ) -> Result<Self> {
+        let (submesh, space_dim) = {
+            let s = read(&fespace)?;
+            (s.submesh(), s.space_dim())
+        };
         let support = read(&submesh)?.to_poi1()?;
-        Ok(Self { fespace, support })
+        Ok(Self {
+            fespace,
+            support,
+            space_dim,
+            symmetry,
+        })
     }
 }
 
@@ -120,6 +168,7 @@ impl SubModelKind for HeatConduction {
         element_stiffness(
             geom,
             material.expect("HeatConduction requires a material field"),
+            self.symmetry,
             ke,
         )
     }
@@ -179,8 +228,9 @@ impl SubModelKind for HeatConduction {
         let dual = self.dual_vars().join(", ");
         let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
         format!(
-            "SubModel<HeatConduction>\n  primal var(s): {primal}\n  \
-             dual var(s):   {dual}\n  support: {n} node(s)"
+            "SubModel<HeatConduction({})>\n  primal var(s): {primal}\n  \
+             dual var(s):   {dual}\n  support: {n} node(s)",
+            self.symmetry
         )
     }
 }
@@ -191,7 +241,7 @@ impl Domain for HeatConduction {
     }
 
     fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
+        Some(material_contract(self.symmetry, self.space_dim))
     }
 
     /// `rho` + `cp` — required only by the heat-capacity (mass) matrix, never by
@@ -224,10 +274,15 @@ impl Domain for HeatConduction {
         let mat =
             material.expect("HeatConduction declares a material_fespace ⇒ material is supplied");
         let (cell, space_dim) = (geom.cell, geom.space_dim);
-        let k = mat.value(cell, g, MATERIAL_COMPONENT)?;
         let grad_names = deformation_components(space_dim);
+        let k3 =
+            symmetry::transport_tensor(mat, cell, g, self.symmetry, space_dim, MATERIAL_COMPONENT)?;
         for a in 0..space_dim {
-            out[a] = k * input.value(cell, g, &grad_names[a])?;
+            let mut acc = 0.0;
+            for b in 0..space_dim {
+                acc += k3[(a, b)] * input.value(cell, g, &grad_names[b])?;
+            }
+            out[a] = acc;
         }
         Ok(())
     }
@@ -241,21 +296,55 @@ impl Domain for HeatConduction {
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
+    symmetry: MaterialSymmetry,
     ke: &mut [f64],
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
+    // An oriented conductivity is built **once per cell** — its constants and its
+    // material axes are cell-wise. Isotropy keeps reading its scalar at each
+    // Gauss point, so a conductivity varying inside a cell still works.
+    let tensor = if symmetry.has_frame() {
+        Some(symmetry::transport_tensor(
+            material,
+            geom.cell,
+            0,
+            symmetry,
+            space_dim,
+            MATERIAL_COMPONENT,
+        )?)
+    } else {
+        None
+    };
     for g in 0..geom.n_gauss {
         let dn = geom.dn_dx(g)?;
         let det_j_w = geom.det_j_w(g)?;
-        let k = material.value(geom.cell, g, MATERIAL_COMPONENT)?;
-        for i in 0..n_nodes {
-            for j in 0..n_nodes {
-                let mut grad_dot = 0.0;
-                for a in 0..space_dim {
-                    grad_dot += dn[i * space_dim + a] * dn[j * space_dim + a];
+        match &tensor {
+            None => {
+                let k = material.value(geom.cell, g, MATERIAL_COMPONENT)?;
+                for i in 0..n_nodes {
+                    for j in 0..n_nodes {
+                        let mut grad_dot = 0.0;
+                        for a in 0..space_dim {
+                            grad_dot += dn[i * space_dim + a] * dn[j * space_dim + a];
+                        }
+                        ke[i * n_nodes + j] += k * grad_dot * det_j_w;
+                    }
                 }
-                ke[i * n_nodes + j] += k * grad_dot * det_j_w;
+            }
+            // `∇N_iᵀ · K · ∇N_j` — the isotropic dot product is its `K = k·I` case.
+            Some(k3) => {
+                for i in 0..n_nodes {
+                    for j in 0..n_nodes {
+                        let mut acc = 0.0;
+                        for a in 0..space_dim {
+                            for b in 0..space_dim {
+                                acc += dn[i * space_dim + a] * k3[(a, b)] * dn[j * space_dim + b];
+                            }
+                        }
+                        ke[i * n_nodes + j] += acc * det_j_w;
+                    }
+                }
             }
         }
     }

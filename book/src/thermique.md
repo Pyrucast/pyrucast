@@ -66,6 +66,10 @@ semi-discret est \\( C\,\dot T + K\,T = F \\) ; l'intégration en temps
 | **duale** (lignes, second membre) | `"q"` | flux de chaleur |
 | **matériau** | `"k"` | conductivité (au point de Gauss) ; `rho`, `cp` **facultatifs** (capacité) |
 
+La conductivité peut être **orientée** — voir
+[Conduction orthotrope et anisotrope](#conduction-orthotrope-et-anisotrope) plus
+bas ; `"k"` est alors remplacée par les constantes de la symétrie choisie.
+
 ## Mise en donnée (Rust, testé)
 
 Le pipeline est toujours le même :
@@ -161,6 +165,60 @@ coin \\(Q\,h/2\\) (somme \\(Q\\)) — mais on n'a plus à le calculer à la main
 
 > Version Python : `examples/thermal_square_2d.py` (lancer avec
 > `python examples/thermal_square_2d.py` après `maturin develop`).
+
+### Conduction orthotrope et anisotrope
+
+Un matériau feuilleté, fibré ou laminé ne conduit pas la chaleur de la même façon
+dans toutes les directions. La conductivité devient alors un **tenseur** `K`, et
+la rigidité
+
+\\[
+K_{ij} = \int_\Omega \nabla N_i^{\mathsf T}\, \mathbf{K}\, \nabla N_j \, d\Omega
+\\]
+
+dont le cas isotrope `K = k·I` redonne le produit scalaire habituel.
+
+C'est le **même axe de symétrie matériau** qu'en mécanique (chapitre
+[Élasticité orthotrope](mecanique/orthotropie.md)), avec un tenseur d'ordre 2 au
+lieu de 4 :
+
+| symétrie | composantes matériau |
+|---|---|
+| `isotropic` (défaut) | `k` |
+| `orthotropic` | `k_1`, `k_2`, `k_3` + le repère matériau |
+| `anisotropic` | `k_11`, `k_12`, `k_13`, `k_22`, `k_23`, `k_33` + le repère |
+
+Le repère est donné par des **vecteurs** — `V1X, V1Y` en 2-D, `V1X…V1Z,
+V2X…V2Z` en 3-D — comme `MATE 'DIRECTION' V1 V2` de Cast3M. Ils sont
+orthonormalisés en interne.
+
+```python
+model = pyrucast.Model.heat_conduction(fes, symmetry="orthotropic")
+materials = pyrucast.element_field.material_field(
+    model,
+    [("k_1", 12.0), ("k_2", 3.0), ("k_3", 12.0), ("V1X", cos_a), ("V1Y", sin_a)],
+)
+```
+
+La conductivité isotrope reste lue **au point de Gauss**, donc variable à
+l'intérieur d'une maille ; les constantes orientées sont lues par maille, comme
+les modules mécaniques.
+
+L'exemple Rust est un **test de patch**, qui est ce qu'appelle une conductivité
+orientée : un champ de température linéaire est harmonique pour *n'importe quel*
+tenseur constant, donc l'imposer au bord doit le reproduire à l'intérieur quelle
+que soit `K`. Le test ne s'arrête pas là — il relit le **flux** produit et le
+compare à `K·∇T` calculé à la main, ce qui est le seul moyen de prendre la
+rotation en défaut :
+
+```rust,ignore
+{{#include ../../tests/anisotropic_conduction.rs:example}}
+```
+
+Avec `∇T = (1, 0)`, le flux est la première colonne de `K` :
+`K_xx = k₁cos²θ + k₂sin²θ` et `K_yx = (k₁ − k₂)·cosθ·sinθ`. Le terme
+extra-diagonal n'est non nul que si le matériau est à la fois anisotrope **et**
+désaligné — précisément le cas qu'une rotation fausse manquerait.
 
 ### Convection de surface (Robin / film)
 

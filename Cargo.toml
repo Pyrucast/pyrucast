@@ -11,7 +11,7 @@ repository = "https://github.com/Pyrucast/pyrucast"
 # the Python companion package and teaching material are irrelevant there.
 exclude = [
     "book/", "python/", "formation/", "tests/python/", "examples/*.py",
-    "profile.json.gz", "opérateur_castem.csv",
+    "profile.json.gz", "opérateur_castem.csv", "modèle_castem.csv",
     # Dev-only tooling and internal notes, irrelevant to a crates.io consumer.
     ".claude/", ".github/", "recall.config.json", "script/",
     ".git-blame-ignore-revs", "ROADMAP.md", "CONVENTIONS.md",

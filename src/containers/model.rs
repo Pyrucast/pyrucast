@@ -122,9 +122,10 @@ use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
+use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
-    contact, convection, dirichlet, elasticity, embedded, frame, frame3d, heat_conduction, mazars,
-    mpc, plasticity, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense,
+    contact, convection, dirichlet, elasticity, embedded, fick, frame, frame3d, heat_conduction,
+    mazars, mpc, plasticity, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense,
     SubModelKind,
 };
 use crate::store::{insert, read, Handle};
@@ -199,6 +200,10 @@ pub enum SubModel {
     Frame(frame::Frame),
     /// 3-D Timoshenko frame (space frame, 6 DOF/node) — see [`frame3d::Frame3d`].
     Frame3d(frame3d::Frame3d),
+    // New variants go **at the end**: `bincode` serialises the variant index, so
+    // inserting one in the middle would silently misread every saved model.
+    /// Fickian diffusion (concentration / mass flux) — see [`fick::Fick`].
+    Fick(fick::Fick),
 }
 
 impl SubModel {
@@ -221,6 +226,7 @@ impl SubModel {
             SubModel::Timoshenko(p) => p,
             SubModel::Frame(p) => p,
             SubModel::Frame3d(p) => p,
+            SubModel::Fick(p) => p,
         }
     }
 
@@ -231,8 +237,18 @@ impl SubModel {
     /// the model immutable and material-independent. See
     /// [`heat_conduction::HeatConduction::new`] for the support it builds.
     pub fn heat_conduction(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        Self::heat_conduction_with_symmetry(fespace, MaterialSymmetry::Isotropic)
+    }
+
+    /// Heat conduction with an explicit material symmetry — an orthotropic or
+    /// anisotropic conductivity carries its constants **and its axes** through
+    /// the material field. See [`crate::models::symmetry`].
+    pub fn heat_conduction_with_symmetry(
+        fespace: Handle<SubFiniteElementSpace>,
+        symmetry: MaterialSymmetry,
+    ) -> Result<Self> {
         Ok(SubModel::HeatConduction(
-            heat_conduction::HeatConduction::new(fespace)?,
+            heat_conduction::HeatConduction::with_symmetry(fespace, symmetry)?,
         ))
     }
 
@@ -254,15 +270,38 @@ impl SubModel {
         Ok(SubModel::Truss(truss::Truss::new(fespace)?))
     }
 
-    /// Linear-elasticity sub-model on an FE subspace, with the given 2-D/3-D
-    /// model. Material data (`E`, `nu`) is supplied at assembly time. See
-    /// [`elasticity::Elasticity::new`].
+    /// **Isotropic** linear-elasticity sub-model on an FE subspace, with the
+    /// given 2-D/3-D model. Material data (`E`, `nu`) is supplied at assembly
+    /// time. See [`elasticity::Elasticity::new`].
     pub fn elasticity(
         fespace: Handle<SubFiniteElementSpace>,
         model: ElasticityModel,
     ) -> Result<Self> {
-        Ok(SubModel::Elasticity(elasticity::Elasticity::new(
-            fespace, model,
+        Self::elasticity_with_symmetry(fespace, model, MaterialSymmetry::Isotropic)
+    }
+
+    /// Linear elasticity with an explicit material symmetry — orthotropic and
+    /// anisotropic materials carry their constants **and their axes** through the
+    /// material field. See [`crate::models::symmetry`] for the contracts.
+    pub fn elasticity_with_symmetry(
+        fespace: Handle<SubFiniteElementSpace>,
+        model: ElasticityModel,
+        symmetry: MaterialSymmetry,
+    ) -> Result<Self> {
+        Ok(SubModel::Elasticity(elasticity::Elasticity::with_symmetry(
+            fespace, model, symmetry,
+        )?))
+    }
+
+    /// Fickian-diffusion sub-model on an FE subspace (primal `c`, dual `j`).
+    /// Material data (the diffusivity, isotropic or oriented) is supplied at
+    /// assembly time. See [`fick::Fick::with_symmetry`].
+    pub fn fick(
+        fespace: Handle<SubFiniteElementSpace>,
+        symmetry: MaterialSymmetry,
+    ) -> Result<Self> {
+        Ok(SubModel::Fick(fick::Fick::with_symmetry(
+            fespace, symmetry,
         )?))
     }
 
@@ -811,9 +850,34 @@ impl Model {
     /// Compose heterogeneous physics with `union` (Python `|`), e.g.
     /// `Model::heat_conduction(&fes)?.union(&Model::dirichlet(...)?)?`.
     pub fn heat_conduction(fes: &FiniteElementSpace) -> Result<Self> {
+        Self::heat_conduction_with_symmetry(fes, MaterialSymmetry::Isotropic)
+    }
+
+    /// Heat-conduction `Model` spanning **every** subspace of `fes`, with an
+    /// explicit material symmetry. Parent-level named constructor; the
+    /// conductivity (`k`, or `k_1…` / `k_11…` plus the material axes) is supplied
+    /// at assembly time.
+    pub fn heat_conduction_with_symmetry(
+        fes: &FiniteElementSpace,
+        symmetry: MaterialSymmetry,
+    ) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
-            model.add_sub(insert(SubModel::heat_conduction(sub.clone())?))?;
+            model.add_sub(insert(SubModel::heat_conduction_with_symmetry(
+                sub.clone(),
+                symmetry,
+            )?))?;
+        }
+        Ok(model)
+    }
+
+    /// Fickian-diffusion `Model` spanning **every** subspace of `fes` (same
+    /// symmetry for all). Parent-level named constructor; the diffusivity is
+    /// supplied at assembly time.
+    pub fn fick(fes: &FiniteElementSpace, symmetry: MaterialSymmetry) -> Result<Self> {
+        let mut model = Self::empty();
+        for sub in fes {
+            model.add_sub(insert(SubModel::fick(sub.clone(), symmetry)?))?;
         }
         Ok(model)
     }
@@ -847,9 +911,25 @@ impl Model {
     /// 2-D/3-D `model` for all). Parent-level named constructor; material
     /// (`E`, `nu`) is supplied at assembly time.
     pub fn elasticity(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Self> {
+        Self::elasticity_with_symmetry(fes, model, MaterialSymmetry::Isotropic)
+    }
+
+    /// Linear-elasticity `Model` spanning **every** subspace of `fes`, with an
+    /// explicit material symmetry. Parent-level named constructor; the elastic
+    /// constants and, for an oriented material, its axes are supplied at assembly
+    /// time.
+    pub fn elasticity_with_symmetry(
+        fes: &FiniteElementSpace,
+        model: ElasticityModel,
+        symmetry: MaterialSymmetry,
+    ) -> Result<Self> {
         let mut out = Self::empty();
         for sub in fes {
-            out.add_sub(insert(SubModel::elasticity(sub.clone(), model)?))?;
+            out.add_sub(insert(SubModel::elasticity_with_symmetry(
+                sub.clone(),
+                model,
+                symmetry,
+            )?))?;
         }
         Ok(out)
     }

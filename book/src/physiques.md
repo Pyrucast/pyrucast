@@ -24,12 +24,17 @@ Certaines physiques omettent une rubrique sans objet (p. ex. pas d'exemple Rust
 dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
 
 - [Conduction thermique](thermique.md) — `-∇·(k∇T) = 0`, l'exemple canonique,
-  et la [convection de surface](thermique.md#convection-de-surface-robin--film)
+  la [conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope)
+  (tenseur `K`) et la
+  [convection de surface](thermique.md#convection-de-surface-robin--film)
   (Robin / film, `q·n = h(T − T_ext)`).
+- [Diffusion (loi de Fick)](diffusion.md) — `∇·(D∇c) = 0`, concentration `c` et
+  flux de matière `j` ; même opérateur que la conduction, nature distincte.
 - [Mécanique](mecanique.md) — barre, élasticité linéaire, poutres et
   portiques :
   - [Barre / treillis](mecanique/truss.md)
   - [Élasticité linéaire](mecanique/elasticite.md)
+  - [Élasticité orthotrope et anisotrope](mecanique/orthotropie.md)
   - [Plasticité parfaite (von Mises)](mecanique/plasticite.md)
   - [Endommagement de Mazars](mecanique/mazars.md)
   - [Poutre de Timoshenko](mecanique/timoshenko.md)
@@ -43,8 +48,8 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   - [Contact (nœud-surface)](contraintes/contact.md)
 
 Ce regroupement est la **nature physique** (`Physics`) que chaque variante
-déclare : `Thermal` (conduction), `Mechanical` (barre → cadre 3D) et
-`Constraint` (les contraintes de Lagrange). On sélectionne les sous-modèles
+déclare : `Thermal` (conduction), `Diffusion` (Fick), `Mechanical` (barre →
+cadre 3D) et `Constraint` (les contraintes de Lagrange). On sélectionne les sous-modèles
 d'une nature avec `model.filter(Physics::Mechanical)` (et les blocs d'une
 matrice avec `k.filter(...)`) — voir
 [Nature physique et filtrage](model.md#nature-physique-et-filtrage).

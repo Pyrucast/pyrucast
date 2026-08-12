@@ -197,7 +197,13 @@ impl SubModelKind for Mazars {
         // Iteration operator = elastic (undamaged) stiffness. Reuse the
         // elasticity element kernel; it reads only `E` and `nu`.
         let mat = material.expect("Mazars requires a material field");
-        elasticity::element_stiffness(geom, mat, self.model, ke)
+        elasticity::element_stiffness(
+            geom,
+            mat,
+            self.model,
+            crate::models::symmetry::MaterialSymmetry::Isotropic,
+            ke,
+        )
     }
 
     fn element_mass(

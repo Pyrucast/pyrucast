@@ -31,6 +31,7 @@ __all__ = [
     "border",
     "chain",
     "circle",
+    "cleanup",
     "consolidate_element",
     "consolidate_mesh",
     "consolidate_node",
@@ -49,6 +50,8 @@ __all__ = [
     "from_live_nodes",
     "geometric",
     "gradient",
+    "grid_surface",
+    "grid_surface2",
     "integral",
     "integrate_behavior",
     "internal_forces",
@@ -66,6 +69,7 @@ __all__ = [
     "material_field_per_sub_model",
     "merge",
     "merge_nodes",
+    "merge_triangles",
     "orient",
     "pave_surface",
     "pave_volume",
@@ -84,6 +88,7 @@ __all__ = [
     "psca",
     "read_gmsh",
     "read_gmsh_str",
+    "regularize",
     "restrict",
     "restrict_like",
     "revolve",
@@ -444,29 +449,6 @@ class ElementField:
         r"""
         `field < x` → a 0/1 mask field (see `__ge__`).
         """
-    def __len__(self) -> builtins.int: ...
-    def unit(self) -> SubElementField:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubElementField) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
     @typing.overload
     def __getitem__(self, key: int) -> SubElementField:
         r"""
@@ -503,6 +485,29 @@ class ElementField:
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
         """
+    def unit(self) -> SubElementField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubElementField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
+    def __len__(self) -> builtins.int: ...
     def consolidate(self) -> ElementField:
         r"""
         Voir `pyrucast.element_field.consolidate`.
@@ -630,7 +635,6 @@ class Evolution:
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
-    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubEvolution:
         r"""
@@ -654,6 +658,7 @@ class Evolution:
         `evolution | sub_evolution`, differing only in that the lone curve
         comes first.
         """
+    def __len__(self) -> builtins.int: ...
     def unit(self) -> SubEvolution:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -743,7 +748,6 @@ class FiniteElementSpace:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubFiniteElementSpace:
         r"""
@@ -767,6 +771,7 @@ class FiniteElementSpace:
         `subspace | fes` — the mirror of `fes | subspace`, differing only in
         that the lone subspace comes first.
         """
+    def __len__(self) -> builtins.int: ...
 
 @typing.final
 class Matrix:
@@ -817,8 +822,9 @@ class Matrix:
         r"""
         `Matrix.filter(physics)` — a new `Matrix` holding only the blocks **whose
         nature set contains** the given physics (`"mechanical"`, `"thermal"`,
-        `"constraint"`, `"other"`). The result is **not** finalized — call
-        `assemble` (or `finalize` for literal-only blocks) before solving.
+        `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
+        **not** finalized — call `assemble` (or `finalize` for literal-only
+        blocks) before solving.
         """
     def physics(self) -> builtins.list[builtins.str]:
         r"""
@@ -908,6 +914,7 @@ class Matrix:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
+    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubMatrix:
         r"""
@@ -931,7 +938,6 @@ class Matrix:
         `sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
         differing only in that the lone block comes first.
         """
-    def __len__(self) -> builtins.int: ...
     def lump(self) -> Matrix:
         r"""
         Voir `pyrucast.matrix.lump`.
@@ -1023,28 +1029,6 @@ class Mesh:
         `field`, `component`, `wireframe`, `revolve`, `revolve_angle` and
         `title`.
         """
-    def unit(self) -> SubMesh:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubMesh) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
     @typing.overload
     def __getitem__(self, key: int) -> SubMesh:
         r"""
@@ -1071,6 +1055,28 @@ class Mesh:
         that the lone zone comes first.
         """
     def __len__(self) -> builtins.int: ...
+    def unit(self) -> SubMesh:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubMesh) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
     def to_poi1(self) -> Mesh:
         r"""
         Voir `pyrucast.mesh.to_poi1`.
@@ -1211,6 +1217,26 @@ class Mesh:
         r"""
         Voir `pyrucast.mesh.pave_surface`.
         """
+    def regularize(self, sweeps: builtins.int = 20, angular: builtins.bool = True, in_place: builtins.bool = False) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.regularize`.
+        """
+    def cleanup(self) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.cleanup`.
+        """
+    def merge_triangles(self) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.merge_triangles`.
+        """
+    def grid_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.grid_surface`.
+        """
+    def grid_surface2(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.grid_surface2`.
+        """
     def pave_volume(self, layers: builtins.int = 1, thickness: typing.Optional[builtins.float] = None, size: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.pave_volume`.
@@ -1238,13 +1264,34 @@ class Model:
         `Model()` — an empty model; add physics with `|`.
         """
     @classmethod
-    def heat_conduction(cls, fespace: FiniteElementSpace) -> Model:
+    def heat_conduction(cls, fespace: FiniteElementSpace, symmetry: typing.Optional[builtins.str] = None) -> Model:
         r"""
-        `Model.heat_conduction(fespace)` — heat-conduction model spanning
-        **every** subspace of `fespace` (one zone per subspace). A
+        `Model.heat_conduction(fespace, symmetry=None)` — heat-conduction model
+        spanning **every** subspace of `fespace` (one zone per subspace). A
         single-subspace space gives the unit case; several give one zone
         each. Compose heterogeneous physics with `|`:
         `Model.heat_conduction(fes) | Model.dirichlet(...)`.
+        
+        `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
+        `"anisotropic"`, and selects which conductivity the material field must
+        carry: the scalar `k`, the principal `k_1, k_2, k_3`, or the symmetric
+        tensor `k_11 … k_33`. The two oriented ones also require the material
+        axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D.
+        """
+    @classmethod
+    def fick(cls, fespace: FiniteElementSpace, symmetry: typing.Optional[builtins.str] = None) -> Model:
+        r"""
+        `Model.fick(fespace, symmetry=None)` — Fickian-diffusion model spanning
+        **every** subspace of `fespace`. DOFs are the concentration `c` (primal)
+        and the mass flux `j` (dual); its physics nature is `"diffusion"`, so
+        `model.filter("diffusion")` isolates it from a thermal or mechanical
+        model it is composed with.
+        
+        `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
+        `"anisotropic"`, selecting the diffusivity the material field must carry:
+        `D`, `D_1, D_2, D_3`, or the symmetric `D_11 … D_33` — the oriented ones
+        plus the material axes. The transient (storage) term is the mass matrix,
+        which reads the optional `poro`.
         """
     @classmethod
     def convection(cls, fespace: FiniteElementSpace) -> Model:
@@ -1266,17 +1313,24 @@ class Model:
         coordinates. Material (`E`, `A`) is supplied at assembly time.
         """
     @classmethod
-    def elasticity(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+    def elasticity(cls, fespace: FiniteElementSpace, model: builtins.str, symmetry: typing.Optional[builtins.str] = None) -> Model:
         r"""
-        `Model.elasticity(fespace, model)` — linear-elasticity model spanning
-        every subspace of `fespace`. `model` is `"plane_stress"`,
+        `Model.elasticity(fespace, model, symmetry=None)` — linear-elasticity
+        model spanning every subspace of `fespace`. `model` is `"plane_stress"`,
         `"plane_strain"` or `"axisymmetric"` (2-D), or `"solid"` (3-D). DOFs are
-        the vector displacement `u_x, u_y(, u_z)`; material (`E`, `nu`) is
-        supplied at assembly time.
+        the vector displacement `u_x, u_y(, u_z)`; material is supplied at
+        assembly time.
         
         `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
         (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the model,
         the `2πr` integration measure from the geometry, and the two must agree.
+        
+        `symmetry` is the **material** axis, independent of the kinematic one:
+        `"isotropic"` (the default, material `E`, `nu`), `"orthotropic"`
+        (`E_1, E_2, E_3, nu_12, nu_13, nu_23, G_12, G_13, G_23`) or
+        `"anisotropic"` (the 21 constants `C_11 … C_66`). The two oriented ones
+        also require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`
+        in 3-D — which are orthonormalised internally.
         """
     @classmethod
     def plasticity(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
@@ -1438,8 +1492,12 @@ class Model:
         r"""
         `Model.filter(physics)` — a new `Model` holding only the sub-models **whose
         nature set contains** the given physics. `physics` is a tag: `"mechanical"`,
-        `"thermal"`, `"constraint"` or `"other"`. Sub-model order is preserved; the
-        result may be empty.
+        `"thermal"`, `"constraint"`, `"other"`, `"diffusion"` or `"radiation"`.
+        Sub-model order is preserved; the result may be empty.
+        
+        A coupled physics declares several natures and is therefore returned by
+        each of its filters — a radiation boundary is both `"thermal"` and
+        `"radiation"`.
         """
     def multiplier_mesh(self) -> Mesh:
         r"""
@@ -1477,29 +1535,6 @@ class Model:
         Returns the same kind of `NodeField` over the multiplier nodes; union it
         with `|`. Raises if an index is out of range.
         """
-    @typing.overload
-    def __getitem__(self, key: int) -> SubModel:
-        r"""
-        `model[i]` → the `SubModel` view of term i (a physics term, a
-        Dirichlet condition, an MPC, ...).
-        """
-    @typing.overload
-    def __getitem__(self, key: slice) -> Model:
-        r"""
-        `model[i:j:k]` → a fresh `Model` holding the sliced terms, shared
-        with this one (no deep copy).
-        """
-    def __or__(self, other: Model  |  SubModel) -> Model:
-        r"""
-        `model | other` → a fresh `Model` holding the terms of both, in
-        first-seen order and deduplicated by store slot. This is how a problem
-        is composed: physics | boundary conditions | constraints.
-        """
-    def __ror__(self, other: SubModel) -> Model:
-        r"""
-        `sub_model | model` — the mirror of `model | sub_model`, differing
-        only in that the lone term comes first.
-        """
     def __len__(self) -> builtins.int: ...
     def unit(self) -> SubModel:
         r"""
@@ -1522,6 +1557,29 @@ class Model:
         Print the full content (third display level) to stdout:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
+        """
+    @typing.overload
+    def __getitem__(self, key: int) -> SubModel:
+        r"""
+        `model[i]` → the `SubModel` view of term i (a physics term, a
+        Dirichlet condition, an MPC, ...).
+        """
+    @typing.overload
+    def __getitem__(self, key: slice) -> Model:
+        r"""
+        `model[i:j:k]` → a fresh `Model` holding the sliced terms, shared
+        with this one (no deep copy).
+        """
+    def __or__(self, other: Model  |  SubModel) -> Model:
+        r"""
+        `model | other` → a fresh `Model` holding the terms of both, in
+        first-seen order and deduplicated by store slot. This is how a problem
+        is composed: physics | boundary conditions | constraints.
+        """
+    def __ror__(self, other: SubModel) -> Model:
+        r"""
+        `sub_model | model` — the mirror of `model | sub_model`, differing
+        only in that the lone term comes first.
         """
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
@@ -1759,6 +1817,7 @@ class NodeField:
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
         """
+    def __len__(self) -> builtins.int: ...
     def unit(self) -> SubNodeField:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -1781,7 +1840,6 @@ class NodeField:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __len__(self) -> builtins.int: ...
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
         Voir `pyrucast.element_field.gradient`.
@@ -2400,7 +2458,8 @@ class SubMesh:
         Visualize this submesh.
         
         - `save=None`: interactive window (requires `viz-interactive`).
-        - `save="<path>.png"` or `.svg`: image file.
+        - `save="<path>.png"`, `.svg` or `.svgz`: image file. `.svgz` is the
+          same SVG gzipped — around a tenth of the bytes on disk.
         - `view`: optional `(yaw, pitch, scale)` triple; default is iso.
         - `show_axes`: draw the X/Y/Z orientation gizmo in the bottom-left
           corner (default `True`). In the interactive window, the key
@@ -2812,6 +2871,26 @@ def circle(center: Node, normal: typing.Sequence[builtins.float], radius: builti
     `element_type` is `"SEG2"` (default) or `"SEG3"`.
     """
 
+def cleanup(mesh: Mesh) -> Mesh:
+    r"""
+    Fix the connectivity of a surface mesh: remove its doublets and switch the
+    diagonals that lower the valence error. No node moves.
+    
+    A **doublet** is an interior node with only two quadrangles around it,
+    which therefore share two edges; the node sits in a wedge no smoothing can
+    open. A node of the **wrong valence** wants four cells and has three or
+    five, giving corners of 120° or 72° on average — and the angles around a
+    node sum to 2π whatever the positions, so smoothing will never square them.
+    
+    The only move is the diagonal switch: two quadrangles sharing an edge form
+    a hexagon, which splits across any of its three diagonals. It changes no
+    node and no boundary, and is applied only when it strictly lowers the
+    valence error and leaves both cells convex.
+    
+    Triangles are read for incidence and never touched — that is
+    `merge_triangles`'s job.
+    """
+
 def consolidate_element(field: ElementField) -> ElementField:
     r"""
     Fuse the zones of an element `field` sharing the same `FiniteElementSpace`
@@ -2979,6 +3058,73 @@ def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     differentiated w.r.t. every spatial axis, giving an `ElementField` with
     one component `grad_<name>_<axis>` per (input component, axis) pair
     (`grad_T_x`, …). Feed the result to `integrate_behavior`.
+    """
+
+def grid_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False) -> Mesh:
+    r"""
+    Mesh the inside of a closed contour with a structured grid core and a
+    frontal band — the regular-mesh companion of `pave_surface`.
+    
+    Same input, same output, same promise that the contour is untouchable: only
+    the interior is obtained differently. `pave_surface` walks a front inward
+    until two of its rows meet, and that meeting line carries the valence
+    defects, the leftover triangles and the flattest cells — even on a plain
+    rectangle, which comes out as an onion with four diagonal seams.
+    `grid_surface` lays a tensor grid instead, and leaves the front only what
+    the grid could not reach.
+    
+    The grid's lines are taken from the contour: every axis-aligned edge long
+    enough to be a feature pins a line, and the gaps are subdivided at about
+    `size`. A grid node landing on a contour node **is** that node, so the core
+    reaches the boundary rather than stopping short of it. On a rectilinear
+    domain laid out for the grid there is no band at all and the mesh is the
+    grid: every cell a rectangle, every Jacobian 1, no triangle.
+    
+    That last part is the one thing asked of the caller. A grid can only meet a
+    contour whose nodes fall on grid lines, so **break every side at the
+    shape's own corners and let each piece take a whole number of cells**. A
+    contour that does not is not an error — it just gets more band and less
+    grid, down to the quality of `pave_surface` in the worst case.
+    
+    `band` is extra clearance in cells between the core and the contour. Zero
+    is the useful value; raise it only for a contour the grid cannot meet, such
+    as a curve, where giving the front a couple of cells to work in beats
+    letting it fight for a sliver.
+    """
+
+def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False) -> Mesh:
+    r"""
+    Mesh the inside of a closed contour with a structured grid core and a
+    frontal band, taking the grid's lines **one per contour node**.
+    
+    The second of the two grid meshers, and the sibling of `grid_surface`, which
+    it does not replace: same input, same output, same untouchable contour, and
+    neither wins everywhere.
+    
+    `grid_surface` pins a line on the coordinate each aligned side lies on, and
+    subdivides between two lines by whichever side spans them end to end. Every
+    line is straight. `grid_surface2` gives every node of the contour the line
+    that crosses it, collapses the bands too thin to be cells — welding each of
+    their edges onto the contour node at one end, or onto its midpoint — and
+    lets a grid node within a quarter cell of a contour node move onto it.
+    
+    A row is therefore a polyline rather than a line, and that is the point: one
+    row can meet two facing walls at two different heights, so a wall cut into
+    ten can face a wall cut into eleven. `grid_surface` has to pick one of them
+    and sends the other to the band.
+    
+    **Reach for `grid_surface2` on a rectilinear shape**, all the more so when
+    its sides were not cut at the corners facing them; **reach for
+    `grid_surface` on anything curved**, where the contour's nodes only tell you
+    where its vertices happened to fall. Measured worst cell, `grid_surface`
+    then `grid_surface2`: plate with a step off the grid 0.405 / 0.963, L with
+    arbitrary dimensions 0.437 / 0.979, crenellated profile with its base in one
+    run 0.287 / 0.651, house with a pitched roof 0.304 / 0.475. On a **circle**
+    the order reverses hard — 0.288 against 0.005 — and `grid_surface2` should
+    not be used: nothing dictates a grid line over most of a curve. The book's
+    *Mailler une géométrie* page puts all four surface meshers side by side.
+    
+    `size` and `band` mean what they mean for `grid_surface`.
     """
 
 def integral(field: typing.Any, component: builtins.str, fespace: typing.Optional[FiniteElementSpace] = None) -> builtins.float:
@@ -3175,6 +3321,11 @@ def merge_nodes(mesh: Mesh, tol: builtins.float, in_place: builtins.bool = False
     
     Every call prints a one-line tally on stdout once the weld is done — nodes
     welded, cells dropped, tolerance used.
+    """
+
+def merge_triangles(mesh: Mesh) -> Mesh:
+    r"""
+    Remove the triangles from a quadrangle-dominant mesh, in pairs.
     """
 
 def orient(mesh: Mesh) -> Mesh:
@@ -3395,6 +3546,31 @@ def read_gmsh_str(coords: Coords, text: builtins.str) -> dict:
     r"""
     Like `read_gmsh`, but parsing the `.msh` text already held in a string
     instead of reading from a path. Same `dict[str, Mesh]` result.
+    """
+
+def regularize(mesh: Mesh, sweeps: builtins.int = 20, angular: builtins.bool = True, in_place: builtins.bool = False) -> Mesh:
+    r"""
+    Move the interior nodes of a surface mesh to improve its cells, leaving the
+    connectivity and the boundary exactly as they are.
+    
+    `sweeps` is how many passes to run. `angular=True` (the default) uses
+    angle-based smoothing, which aims at the right angles a quadrangle wants;
+    `False` uses the plain Laplacian, which aims at the one-ring's barycentre
+    and knows nothing about angles. `in_place=True` writes the new positions
+    onto your own nodes and hands the same mesh back; otherwise the moved nodes
+    are duplicated and a fresh mesh comes out, the boundary's nodes being
+    shared since they never moved.
+    
+    Two guarantees hold whatever the rule: **no node on the boundary ever
+    moves**, and a position is taken only when every incident cell stays valid
+    and the worst incident quality does not get worse.
+    
+    Smoothing cannot change who is next to whom, so it cannot fix a node with
+    the wrong number of cells around it — the angles around a node sum to 2π
+    whatever the positions. That is `cleanup`'s job, and running it first is
+    usually what unlocks the smoothing.
+    
+    TRI3 and QUA4 only, in 2-D. POI1 and SEG2 submeshes are ignored.
     """
 
 def restrict(field: NodeField, mesh: Mesh) -> NodeField:

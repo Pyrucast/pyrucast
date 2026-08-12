@@ -39,6 +39,7 @@ pub mod convection;
 pub mod dirichlet;
 pub mod elasticity;
 pub mod embedded;
+pub mod fick;
 pub mod frame;
 pub mod frame3d;
 pub mod heat_conduction;
@@ -46,6 +47,7 @@ pub mod kernel;
 pub mod mazars;
 pub mod mpc;
 pub mod plasticity;
+pub mod symmetry;
 pub mod timoshenko;
 pub mod truss;
 
@@ -170,11 +172,22 @@ pub enum Physics {
     /// « Autre / rien » — a nature for a block that fits none of the above but is
     /// still explicitly classified (as opposed to simply untagged).
     Other,
+    /// Mass transport — Fickian diffusion and its interface laws. Distinct from
+    /// [`Thermal`](Self::Thermal) despite sharing the Laplacian: the variables
+    /// are a concentration and a mass flux, not a temperature and a heat flux,
+    /// and a coupled problem must be able to select one without the other.
+    Diffusion,
+    /// Radiative exchange. Carried **in addition to**
+    /// [`Thermal`](Self::Thermal) by a radiation sub-model — so it stays part of
+    /// a thermal assembly, while `filter("radiation")` isolates the non-linear
+    /// boundary term on its own.
+    Radiation,
 }
 
 impl Physics {
     /// Parse from a lowercase tag (`"mechanical"`, `"thermal"`, `"constraint"`,
-    /// `"other"`) — the Python-facing spelling, mirroring
+    /// `"other"`, `"diffusion"`, `"radiation"`) — the Python-facing spelling,
+    /// mirroring
     /// [`ElasticityModel::from_tag`](crate::models::elasticity::ElasticityModel::from_tag).
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
@@ -182,6 +195,8 @@ impl Physics {
             "thermal" => Some(Self::Thermal),
             "constraint" => Some(Self::Constraint),
             "other" => Some(Self::Other),
+            "diffusion" => Some(Self::Diffusion),
+            "radiation" => Some(Self::Radiation),
             _ => None,
         }
     }
@@ -193,7 +208,30 @@ impl Physics {
             Self::Thermal => "thermal",
             Self::Constraint => "constraint",
             Self::Other => "other",
+            Self::Diffusion => "diffusion",
+            Self::Radiation => "radiation",
         }
+    }
+
+    /// Every nature, in declaration order — the single source for the tag list
+    /// quoted in the `filter` error messages, so a new nature cannot be added
+    /// without the messages following.
+    pub const ALL: [Physics; 6] = [
+        Self::Mechanical,
+        Self::Thermal,
+        Self::Constraint,
+        Self::Other,
+        Self::Diffusion,
+        Self::Radiation,
+    ];
+
+    /// The accepted tags, `|`-joined — for error messages.
+    pub fn tag_list() -> String {
+        Self::ALL
+            .iter()
+            .map(|p| p.to_tag())
+            .collect::<Vec<_>>()
+            .join("|")
     }
 }
 

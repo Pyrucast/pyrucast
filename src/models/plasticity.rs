@@ -245,7 +245,13 @@ impl SubModelKind for Plasticity {
         // [`crate::ops::matrix::tangent`]. Reuse the elasticity element kernel
         // verbatim; it reads only `E` and `nu` from the material.
         let mat = material.expect("Plasticity requires a material field");
-        elasticity::element_stiffness(geom, mat, self.model, ke)
+        elasticity::element_stiffness(
+            geom,
+            mat,
+            self.model,
+            crate::models::symmetry::MaterialSymmetry::Isotropic,
+            ke,
+        )
     }
 
     fn element_mass(
@@ -395,7 +401,7 @@ impl Domain for Plasticity {
         // Emitted (upper triangle) right after the state, in `ktan_i_j` order.
         let sig_trial = elastic_predictor(&eps_b_full, &prev_state, lambda, mu);
         let d3 = consistent_tangent_3d(&sig_trial, lambda, mu, sigma_y);
-        let dv = tangent_matrix_model(&d3, self.model);
+        let dv = crate::models::symmetry::reduce_to_model(&d3, self.model);
         let base = v + 13 + usize::from(echoes_sigma_zz(d, self.model));
         let mut idx = base;
         for i in 0..dv.len() {
@@ -647,39 +653,10 @@ fn consistent_tangent_3d(
     d
 }
 
-/// Reduce the full-3-D consistent tangent to the model's `v×v` engineering-Voigt
-/// matrix: the `[xx, yy, xy]` block for plane strain, its **static condensation**
-/// on `ε_zz` (so `σ_zz = 0`) for plane stress, the `[rr, zz, θθ, rz]` block for
-/// axisymmetric, the full `6×6` for the solid.
-fn tangent_matrix_model(d3: &[[f64; 6]; 6], model: ElasticityModel) -> Vec<Vec<f64>> {
-    match model {
-        // Axisymmetric: the plain [rr, zz, θθ, rz] sub-block. No condensation —
-        // all four strains are prescribed (the hoop is measured, not assumed), so
-        // the 3-D tangent restricts directly.
-        ElasticityModel::Axisymmetric => AXI_TO_3D
-            .iter()
-            .map(|&i| AXI_TO_3D.iter().map(|&j| d3[i][j]).collect())
-            .collect(),
-        ElasticityModel::Solid => d3.iter().map(|r| r.to_vec()).collect(),
-        ElasticityModel::PlaneStrain => {
-            let idx = [0usize, 1, 5];
-            idx.iter()
-                .map(|&i| idx.iter().map(|&j| d3[i][j]).collect())
-                .collect()
-        }
-        ElasticityModel::PlaneStress => {
-            // Condense the out-of-plane normal `zz` (index 2) so σ_zz = 0:
-            // D2[i][j] = D3[i][j] − D3[i][2]·D3[2][j]/D3[2][2].
-            let z = 2usize;
-            let dzz = d3[z][z];
-            let cond = |i: usize, j: usize| d3[i][j] - d3[i][z] * d3[z][j] / dzz;
-            let idx = [0usize, 1, 5];
-            idx.iter()
-                .map(|&i| idx.iter().map(|&j| cond(i, j)).collect())
-                .collect()
-        }
-    }
-}
+// The reduction of the full-3-D tangent to the model's `v×v` matrix lives in
+// [`crate::models::symmetry::reduce_to_model`]: it is a property of the
+// **kinematics**, not of the constitutive law that produced the 6×6, so the
+// anisotropic elastic path and every plastic tangent share it.
 
 // ─── Field <-> array plumbing ────────────────────────────────────────────────
 

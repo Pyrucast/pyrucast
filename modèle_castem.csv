@@ -1,7 +1,7 @@
 Formulation Cast3M;Modèle Cast3M;Description courte;Équivalent pyrucast
 MECANIQUE - linéaire;ELASTIQUE ISOTROPE;Élasticité linéaire isotrope (E, nu) — comportement par défaut;Model.elasticity (plane_stress / plane_strain / axisymmetric / solid)
-MECANIQUE - linéaire;ELASTIQUE ORTHOTROPE;Élasticité orthotrope (3 modules, 3 coefficients de Poisson);—
-MECANIQUE - linéaire;ELASTIQUE ANISOTROPE;Élasticité anisotrope générale (matrice de Hooke complète);—
+MECANIQUE - linéaire;ELASTIQUE ORTHOTROPE;Élasticité orthotrope (3 modules, 3 coefficients de Poisson);Model.elasticity_with_symmetry (symmetry=orthotropic) — E_1..G_23 + repère V1/V2
+MECANIQUE - linéaire;ELASTIQUE ANISOTROPE;Élasticité anisotrope générale (matrice de Hooke complète);Model.elasticity_with_symmetry (symmetry=anisotropic) — les 21 constantes C_11..C_66 + repère V1/V2
 MECANIQUE - linéaire;ELASTIQUE UNIDIRECTIONNEL;Élasticité de composite unidirectionnel (fibres);—
 MECANIQUE - linéaire;ELASTIQUE HOMOGENEISE;Comportement homogénéisé (éléments TRIH/QUAH/CUBH);—
 MECANIQUE - linéaire;ELASTIQUE SECTION;Comportement d'une section droite de poutre (modèle à fibres);—
@@ -176,8 +176,8 @@ MECANIQUE - option globale;DERIVEE LINEAIRE / GRADIENT_F;Petites perturbations o
 MECANIQUE - option globale;INTEGRE N1;Nombre de points d'intégration dans l'épaisseur des coques;—
 MECANIQUE - option globale;CONS / PHAS;Nom de constituant / de phase (multicouches, multiphases);—
 THERMIQUE;CONDUCTION ISOTROPE;Conduction de Fourier isotrope (conductivité k) — comportement par défaut;Model.heat_conduction (k, plus rho et cp facultatifs pour la capacité)
-THERMIQUE;CONDUCTION ORTHOTROPE;Conduction orthotrope (conductivité par direction);—
-THERMIQUE;CONDUCTION ANISOTROPE;Conduction anisotrope (tenseur de conductivité complet);—
+THERMIQUE;CONDUCTION ORTHOTROPE;Conduction orthotrope (conductivité par direction);Model.heat_conduction_with_symmetry (symmetry=orthotropic) — k_1, k_2, k_3 + repère V1/V2
+THERMIQUE;CONDUCTION ANISOTROPE;Conduction anisotrope (tenseur de conductivité complet);Model.heat_conduction_with_symmetry (symmetry=anisotropic) — k_11..k_33 + repère V1/V2
 THERMIQUE;CONVECTION;Convection de surface (Robin / film, q·n = h(T − T_ext));Model.convection (h)
 THERMIQUE;CONVECTION SUPERIEURE / INFERIEURE;Face d'échange d'une coque (supérieure ou inférieure);—
 THERMIQUE;RAYONNEMENT INFINI;Rayonnement vers l'infini;—
@@ -212,9 +212,9 @@ EULER;EULER;Écoulement compressible non visqueux (volumes finis);—
 DARCY;ISOTROPE;Écoulement en milieu poreux, perméabilité isotrope;—
 DARCY;ORTHOTROPE;Perméabilité orthotrope;—
 DARCY;ANISOTROPE;Perméabilité anisotrope (tenseur complet);—
-DIFFUSION;FICK ISOTROPE;Loi de Fick J = −D·grad(C), diffusivité isotrope (modèle par défaut);—
-DIFFUSION;FICK ORTHOTROPE;Loi de Fick à diffusivité orthotrope;—
-DIFFUSION;FICK ANISOTROPE;Loi de Fick à diffusivité anisotrope;—
+DIFFUSION;FICK ISOTROPE;Loi de Fick J = −D·grad(C), diffusivité isotrope (modèle par défaut);Model.fick (symmetry=isotropic) — primale c, duale j ; stockage poro facultatif
+DIFFUSION;FICK ORTHOTROPE;Loi de Fick à diffusivité orthotrope;Model.fick (symmetry=orthotropic) — D_1, D_2, D_3 + repère V1/V2
+DIFFUSION;FICK ANISOTROPE;Loi de Fick à diffusivité anisotrope;Model.fick (symmetry=anisotropic) — D_11..D_33 + repère V1/V2
 DIFFUSION;ADVECTION (CONSERVATIVE);Transport de matière par un champ de vitesse;—
 DIFFUSION;INCO MOT2 (MOT3);Noms libres des inconnues primale et duale;équivalent implicite : les composantes de champ sont nommées librement
 ELECTROSTATIQUE;ELECTROSTATIQUE;Formulation électrostatique;—

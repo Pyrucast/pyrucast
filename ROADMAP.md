@@ -88,9 +88,10 @@ interpolation, quadrature, codes VTK/gmsh, familles. Un unique `match`,
 `SubModel::as_kind()` côté physiques : ajouter un élément coûte un fichier et
 deux variantes, et aucun consommateur générique ne change.
 
-## Physiques — 13 sous-modèles
+## Physiques — 14 sous-modèles
 
 Thermique : `HeatConduction`, `Convection` (échange de surface / film).
+Diffusion : `Fick` (concentration `c` / flux `j`, nature `Diffusion` propre).
 Mécanique : `Truss`, `Elasticity` (contraintes/déformations planes,
 axisymétrique, 3-D), `Plasticity` (von Mises parfaite, tangente cohérente
 validée par différences finies), `Mazars` (endommagement), `Timoshenko`,
@@ -98,6 +99,16 @@ validée par différences finies), `Mazars` (endommagement), `Timoshenko`,
 `Embedded` (baignage), `Contact` (nœud-surface, unilatéral).
 Dilatation thermique non couplée (`thermal_strain`, `alpha` en composante
 matériau facultative).
+
+**Symétrie matériau** (`MaterialSymmetry`, `src/models/symmetry.rs`) : axe
+orthogonal à l'hypothèse cinématique, partagé par `Elasticity`,
+`HeatConduction` et `Fick` — isotrope (défaut, inchangé), orthotrope,
+anisotrope. Le repère d'orthotropie est donné par des **vecteurs** portés par le
+champ matériau (`V1X/V1Y`, plus `V1Z` et `V2*` en 3-D), comme
+`MATE 'DIRECTION' V1 V2` de Cast3M. La rotation du tenseur d'élasticité passe
+par l'ordre 4 plutôt que par une matrice de Bond, ce qui supprime toute
+convention d'indices ; l'isotropie court-circuite ce chemin et garde ses nombres
+exacts.
 
 Le coût d'ajout d'une physique est **O(1) fichier** : une struct + un
 `impl SubModelKind`, deux lignes de câblage.

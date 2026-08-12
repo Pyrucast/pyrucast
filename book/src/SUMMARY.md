@@ -25,9 +25,11 @@
 
 - [Vue d'ensemble](physiques.md)
   - [Conduction thermique](thermique.md)
+  - [Diffusion (loi de Fick)](diffusion.md)
   - [Mécanique](mecanique.md)
     - [Barre / treillis](mecanique/truss.md)
     - [Élasticité linéaire](mecanique/elasticite.md)
+    - [Élasticité orthotrope et anisotrope](mecanique/orthotropie.md)
     - [Plasticité parfaite (von Mises)](mecanique/plasticite.md)
     - [Endommagement de Mazars](mecanique/mazars.md)
     - [Poutre de Timoshenko](mecanique/timoshenko.md)

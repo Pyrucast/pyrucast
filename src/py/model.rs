@@ -4,6 +4,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::models::elasticity::ElasticityModel;
+use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{mpc, Physics, RelationSense};
 use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
 use crate::py::mesh::PyMesh;
@@ -11,6 +12,20 @@ use crate::py::node::PyNode;
 use crate::py::node_field::PyNodeField;
 use crate::store::{read, Handle};
 use pyo3::prelude::*;
+
+/// Parse the optional `symmetry` tag shared by every physics that reads an
+/// oriented material (`elasticity`, `heat_conduction`, `fick`). `None` means the
+/// isotropic default, so adding the axis broke no existing call.
+fn parse_symmetry(what: &str, tag: Option<&str>) -> PyResult<MaterialSymmetry> {
+    match tag {
+        None => Ok(MaterialSymmetry::Isotropic),
+        Some(t) => MaterialSymmetry::from_tag(t).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "{what}: unknown symmetry '{t}' (expected isotropic|orthotropic|anisotropic)"
+            ))
+        }),
+    }
+}
 
 /// A **view** into one sub-model of a `Model`, obtained by indexing
 /// (`model[i]`) — never constructed directly. Build physics at the parent
@@ -110,17 +125,49 @@ impl PyModel {
         })
     }
 
-    /// `Model.heat_conduction(fespace)` — heat-conduction model spanning
-    /// **every** subspace of `fespace` (one zone per subspace). A
+    /// `Model.heat_conduction(fespace, symmetry=None)` — heat-conduction model
+    /// spanning **every** subspace of `fespace` (one zone per subspace). A
     /// single-subspace space gives the unit case; several give one zone
     /// each. Compose heterogeneous physics with `|`:
     /// `Model.heat_conduction(fes) | Model.dirichlet(...)`.
+    ///
+    /// `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
+    /// `"anisotropic"`, and selects which conductivity the material field must
+    /// carry: the scalar `k`, the principal `k_1, k_2, k_3`, or the symmetric
+    /// tensor `k_11 … k_33`. The two oriented ones also require the material
+    /// axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D.
     #[classmethod]
+    #[pyo3(signature = (fespace, symmetry=None))]
     fn heat_conduction(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         fespace: PyRef<PyFiniteElementSpace>,
+        symmetry: Option<&str>,
     ) -> PyResult<Self> {
-        let inner = Model::heat_conduction(&fespace.inner)?;
+        let s = parse_symmetry("heat_conduction", symmetry)?;
+        let inner = Model::heat_conduction_with_symmetry(&fespace.inner, s)?;
+        Ok(Self { inner })
+    }
+
+    /// `Model.fick(fespace, symmetry=None)` — Fickian-diffusion model spanning
+    /// **every** subspace of `fespace`. DOFs are the concentration `c` (primal)
+    /// and the mass flux `j` (dual); its physics nature is `"diffusion"`, so
+    /// `model.filter("diffusion")` isolates it from a thermal or mechanical
+    /// model it is composed with.
+    ///
+    /// `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
+    /// `"anisotropic"`, selecting the diffusivity the material field must carry:
+    /// `D`, `D_1, D_2, D_3`, or the symmetric `D_11 … D_33` — the oriented ones
+    /// plus the material axes. The transient (storage) term is the mass matrix,
+    /// which reads the optional `poro`.
+    #[classmethod]
+    #[pyo3(signature = (fespace, symmetry=None))]
+    fn fick(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+        symmetry: Option<&str>,
+    ) -> PyResult<Self> {
+        let s = parse_symmetry("fick", symmetry)?;
+        let inner = Model::fick(&fespace.inner, s)?;
         Ok(Self { inner })
     }
 
@@ -153,20 +200,29 @@ impl PyModel {
         Ok(Self { inner })
     }
 
-    /// `Model.elasticity(fespace, model)` — linear-elasticity model spanning
-    /// every subspace of `fespace`. `model` is `"plane_stress"`,
+    /// `Model.elasticity(fespace, model, symmetry=None)` — linear-elasticity
+    /// model spanning every subspace of `fespace`. `model` is `"plane_stress"`,
     /// `"plane_strain"` or `"axisymmetric"` (2-D), or `"solid"` (3-D). DOFs are
-    /// the vector displacement `u_x, u_y(, u_z)`; material (`E`, `nu`) is
-    /// supplied at assembly time.
+    /// the vector displacement `u_x, u_y(, u_z)`; material is supplied at
+    /// assembly time.
     ///
     /// `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
     /// (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the model,
     /// the `2πr` integration measure from the geometry, and the two must agree.
+    ///
+    /// `symmetry` is the **material** axis, independent of the kinematic one:
+    /// `"isotropic"` (the default, material `E`, `nu`), `"orthotropic"`
+    /// (`E_1, E_2, E_3, nu_12, nu_13, nu_23, G_12, G_13, G_23`) or
+    /// `"anisotropic"` (the 21 constants `C_11 … C_66`). The two oriented ones
+    /// also require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`
+    /// in 3-D — which are orthonormalised internally.
     #[classmethod]
+    #[pyo3(signature = (fespace, model, symmetry=None))]
     fn elasticity(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         fespace: PyRef<PyFiniteElementSpace>,
         model: &str,
+        symmetry: Option<&str>,
     ) -> PyResult<Self> {
         let m = ElasticityModel::from_tag(model).ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err(format!(
@@ -174,7 +230,8 @@ impl PyModel {
                  (expected plane_stress|plane_strain|axisymmetric|solid)"
             ))
         })?;
-        let inner = Model::elasticity(&fespace.inner, m)?;
+        let s = parse_symmetry("elasticity", symmetry)?;
+        let inner = Model::elasticity_with_symmetry(&fespace.inner, m, s)?;
         Ok(Self { inner })
     }
 
@@ -466,12 +523,17 @@ impl PyModel {
 
     /// `Model.filter(physics)` — a new `Model` holding only the sub-models **whose
     /// nature set contains** the given physics. `physics` is a tag: `"mechanical"`,
-    /// `"thermal"`, `"constraint"` or `"other"`. Sub-model order is preserved; the
-    /// result may be empty.
+    /// `"thermal"`, `"constraint"`, `"other"`, `"diffusion"` or `"radiation"`.
+    /// Sub-model order is preserved; the result may be empty.
+    ///
+    /// A coupled physics declares several natures and is therefore returned by
+    /// each of its filters — a radiation boundary is both `"thermal"` and
+    /// `"radiation"`.
     fn filter(&self, physics: &str) -> PyResult<Self> {
         let p = Physics::from_tag(physics).ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err(format!(
-                "filter: unknown physics '{physics}' (expected mechanical|thermal|constraint|other)"
+                "filter: unknown physics '{physics}' (expected {})",
+                Physics::tag_list()
             ))
         })?;
         Ok(Self {
