@@ -21,6 +21,8 @@ réactions).
   écrouissage, retour radial (état interne `εᵖ`, `p`).
 - [Lois d'écoulement plastique](mecanique/lois-plastiques.md) — la loi comme
   attribut : écrouissage isotrope, Drucker-Prager, Ottosen.
+- [Fluage et viscoplasticité](mecanique/fluage.md) — les lois dépendantes du
+  temps, qui exigent `dt`.
 - [Endommagement de Mazars](mecanique/mazars.md) — endommagement isotrope du
   béton, deux variables (état interne `κ`).
 - [Poutre de Timoshenko](mecanique/timoshenko.md) — flexion + cisaillement,

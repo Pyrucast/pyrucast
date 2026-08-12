@@ -26,7 +26,9 @@
 //! exact answer beats a converged one.
 
 use crate::error::Result;
-use crate::models::plastic::{deviator, elastic_tangent, von_mises_stress, MatParams, PrevState};
+use crate::models::plastic::{
+    deviator, elastic_tangent, von_mises_stress, MatParams, PlasticStep, PrevState,
+};
 
 /// Radial return onto `q = σ_y + H·p`.
 ///
@@ -37,13 +39,13 @@ pub fn return_map(
     prev: &PrevState,
     mat: &MatParams,
     hardening: f64,
-) -> Result<([f64; 6], [f64; 6], f64)> {
+) -> Result<PlasticStep> {
     let sigma_y0 = mat.get("sigma_y")?;
     let q = von_mises_stress(trial);
     let yield_now = sigma_y0 + hardening * prev.p;
     let f = q - yield_now;
     if f <= 0.0 || q == 0.0 {
-        return Ok((*trial, prev.eps_p, prev.p)); // elastic
+        return Ok(PlasticStep::elastic(trial, prev)); // elastic
     }
     // Consistency: q − 3μΔp = σ_y + H(p + Δp).
     let dp = f / (3.0 * mat.mu + hardening);
@@ -61,7 +63,12 @@ pub fn return_map(
         sigma[i] = if i < 3 { s_new + mean } else { s_new };
         eps_p[i] += factor * s_trial[i];
     }
-    Ok((sigma, eps_p, prev.p + dp))
+    Ok(PlasticStep {
+        sigma,
+        eps_p,
+        p: prev.p + dp,
+        vars: Vec::new(),
+    })
 }
 
 /// The consistent tangent `D_alg = ∂σ(B)/∂ε(B)` of the radial return, evaluated

@@ -357,6 +357,9 @@ impl Domain for Plasticity {
         let mut comps = stress_names(self.space_dim, self.model);
         comps.extend(state_names());
         comps.extend(echo_names(self.space_dim, self.model));
+        // The law's **own** internal variables (a back stress, a damage…), which
+        // is how a law grows its state without any other file changing.
+        comps.extend(self.law.internal_names());
         // Consistent algorithmic tangent D_alg (upper triangle) — consumed by
         // the tangent assembler (`crate::ops::matrix::tangent`).
         comps.extend(elasticity::tangent_component_names(
@@ -377,7 +380,7 @@ impl Domain for Plasticity {
         prev: Option<&SubElementField>,
         material: Option<&SubElementField>,
         g: usize,
-        _dt: Option<f64>,
+        dt: Option<f64>,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Plasticity declares a material_fespace ⇒ material is supplied");
@@ -393,32 +396,45 @@ impl Domain for Plasticity {
             sigma: read_prev_stress(prev, cell, g),
             eps_p: read_prev_plastic_strain(prev, cell, g),
             p: prev_opt(prev, cell, g, "p"),
+            // The law's own variables, in the order it declared them.
+            vars: self
+                .law
+                .internal_names()
+                .iter()
+                .map(|n| prev_opt(prev, cell, g, n))
+                .collect(),
         };
 
-        let (sigma, eps_p_new, p_new, eps_b_full) =
-            plastic::incremental_step(self.law, &eps_b, &prev_state, &params, self.model)?;
+        let (step, eps_b_full) =
+            plastic::incremental_step(self.law, &eps_b, &prev_state, &params, self.model, dt)?;
 
         let v = stress_names(d, self.model).len();
         for r in 0..v {
-            out[r] = voigt_stress(&sigma, d, self.model, r);
+            out[r] = voigt_stress(&step.sigma, d, self.model, r);
         }
-        out[v..v + 6].copy_from_slice(&eps_p_new); // ε_p(B)
-        out[v + 6] = p_new; // p(B)
-                            // Echo the full-3-D end-of-step strain ε(B), so `prev` carries ε(A) next
-                            // step (in plane stress this includes the solved out-of-plane ε_zz).
+        out[v..v + 6].copy_from_slice(&step.eps_p); // ε_p(B)
+        out[v + 6] = step.p; // p(B)
+                             // Echo the full-3-D end-of-step strain ε(B), so `prev` carries ε(A) next
+                             // step (in plane stress this includes the solved out-of-plane ε_zz).
         out[v + 7..v + 13].copy_from_slice(&eps_b_full);
         // The plane 2-D duals omit σ_zz; echo it so σ(A) is fully recoverable.
         // Axisymmetric already carries it (the hoop), so it must not be echoed.
+        let mut base = v + 13;
         if echoes_sigma_zz(d, self.model) {
-            out[v + 13] = sigma[2];
+            out[base] = step.sigma[2];
+            base += 1;
         }
+        // The law's own internal variables, right after the common state.
+        for (i, value) in step.vars.iter().enumerate() {
+            out[base + i] = *value;
+        }
+        base += step.vars.len();
 
         // Consistent tangent D_alg at the converged step, evaluated at the solved
         // ε(B) (which carries the plane-stress ε_zz). Emitted (upper triangle)
         // right after the state, in `ktan_i_j` order.
-        let d3 = plastic::consistent_tangent(self.law, &eps_b_full, &prev_state, &params)?;
+        let d3 = plastic::consistent_tangent(self.law, &eps_b_full, &prev_state, &params, dt)?;
         let dv = crate::models::symmetry::reduce_to_model(&d3, self.model);
-        let base = v + 13 + usize::from(echoes_sigma_zz(d, self.model));
         let mut idx = base;
         for i in 0..dv.len() {
             for j in i..dv.len() {

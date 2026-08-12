@@ -38,8 +38,7 @@
 
 use crate::error::Result;
 use crate::models::plastic::{
-    deviator, elastic_tangent, i1, require_positive, von_mises_stress, MatParams, PlasticLaw,
-    PrevState,
+    deviator, i1, require_positive, von_mises_stress, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
 
 /// Read `(α, k, ψ)` and reject a non-physical set.
@@ -51,18 +50,14 @@ fn params(mat: &MatParams) -> Result<(f64, f64, f64)> {
 }
 
 /// Return onto the Drucker-Prager cone, with the apex case handled separately.
-pub fn return_map(
-    trial: &[f64; 6],
-    prev: &PrevState,
-    mat: &MatParams,
-) -> Result<([f64; 6], [f64; 6], f64)> {
+pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result<PlasticStep> {
     let (alpha, k, psi) = params(mat)?;
     let (mu, bulk) = (mat.mu, mat.bulk());
     let q_tr = von_mises_stress(trial);
     let i1_tr = i1(trial);
     let f = q_tr + alpha * i1_tr - k;
     if f <= 0.0 {
-        return Ok((*trial, prev.eps_p, prev.p)); // elastic
+        return Ok(PlasticStep::elastic(trial, prev)); // elastic
     }
 
     // Smooth (flank) return. The flow direction ∂g/∂σ = (3/2)s/q + ψI, and the
@@ -88,7 +83,12 @@ pub fn return_map(
                 eps_p[i] += psi * dlambda;
             }
         }
-        return Ok((sigma, eps_p, prev.p + dlambda));
+        return Ok(PlasticStep {
+            sigma,
+            eps_p,
+            p: prev.p + dlambda,
+            vars: Vec::new(),
+        });
     }
 
     // Apex return: the flank solution would push the equivalent stress negative,
@@ -107,7 +107,7 @@ fn apex_return(
     mat: &MatParams,
     alpha: f64,
     k: f64,
-) -> Result<([f64; 6], [f64; 6], f64)> {
+) -> Result<PlasticStep> {
     let mean_new = if alpha.abs() > f64::EPSILON {
         k / alpha / 3.0
     } else {
@@ -128,7 +128,12 @@ fn apex_return(
     // The equivalent plastic strain shed in this step, in the same measure the
     // flank return uses (the multiplier of the deviatoric flow).
     let dp = von_mises_stress(trial) / (3.0 * mat.mu);
-    Ok((sigma, eps_p, prev.p + dp))
+    Ok(PlasticStep {
+        sigma,
+        eps_p,
+        p: prev.p + dp,
+        vars: Vec::new(),
+    })
 }
 
 // ─── On the tangent ─────────────────────────────────────────────────────────

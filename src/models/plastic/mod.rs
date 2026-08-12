@@ -66,6 +66,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod drucker_prager;
 pub mod ottosen;
+pub mod viscous;
 pub mod von_mises;
 
 /// Full 3-D tensor component suffixes, in the internal state order
@@ -90,6 +91,20 @@ pub enum PlasticLaw {
     /// Ottosen's four-parameter criterion — concrete, with a Lode-angle
     /// dependence that distinguishes tension from compression.
     Ottosen,
+    // ── Rate-**dependent** laws. New variants go at the end: `bincode`
+    // serialises the index.
+    /// Norton-Odqvist secondary creep, `ṗ = (q/K)^n` — no yield threshold.
+    CreepNorton,
+    /// Blackburn creep: a saturating primary stage plus a steady secondary one.
+    CreepBlackburn,
+    /// Lemaitre primary creep, by strain hardening.
+    CreepLemaitre,
+    /// Chaboche viscoplasticity — kinematic (Armstrong-Frederick) and isotropic
+    /// hardening, usable under cyclic loading.
+    ViscoplasticChaboche,
+    /// The above coupled to Lemaitre's ductile damage — tertiary creep and
+    /// rupture.
+    ViscoplasticLemaitreChaboche,
 }
 
 impl PlasticLaw {
@@ -101,6 +116,11 @@ impl PlasticLaw {
             "isotropic" => Some(Self::Isotropic),
             "drucker_prager" => Some(Self::DruckerPrager),
             "ottosen" => Some(Self::Ottosen),
+            "creep_norton" => Some(Self::CreepNorton),
+            "creep_blackburn" => Some(Self::CreepBlackburn),
+            "creep_lemaitre" => Some(Self::CreepLemaitre),
+            "viscoplastic_chaboche" => Some(Self::ViscoplasticChaboche),
+            "viscoplastic_lemaitre_chaboche" => Some(Self::ViscoplasticLemaitreChaboche),
             _ => None,
         }
     }
@@ -112,17 +132,27 @@ impl PlasticLaw {
             Self::Isotropic => "isotropic",
             Self::DruckerPrager => "drucker_prager",
             Self::Ottosen => "ottosen",
+            Self::CreepNorton => "creep_norton",
+            Self::CreepBlackburn => "creep_blackburn",
+            Self::CreepLemaitre => "creep_lemaitre",
+            Self::ViscoplasticChaboche => "viscoplastic_chaboche",
+            Self::ViscoplasticLemaitreChaboche => "viscoplastic_lemaitre_chaboche",
         }
     }
 
     /// Every law, in declaration order — the source of the `|`-joined tag list
     /// quoted in error messages, so a new law cannot be added without them
     /// following.
-    pub const ALL: [PlasticLaw; 4] = [
+    pub const ALL: [PlasticLaw; 9] = [
         Self::Perfect,
         Self::Isotropic,
         Self::DruckerPrager,
         Self::Ottosen,
+        Self::CreepNorton,
+        Self::CreepBlackburn,
+        Self::CreepLemaitre,
+        Self::ViscoplasticChaboche,
+        Self::ViscoplasticLemaitreChaboche,
     ];
 
     /// The accepted tags, `|`-joined — for error messages.
@@ -142,6 +172,13 @@ impl PlasticLaw {
             Self::Isotropic => &["E", "nu", "sigma_y", "H"],
             Self::DruckerPrager => &["E", "nu", "alpha", "k", "psi"],
             Self::Ottosen => &["E", "nu", "a", "b", "k_1", "k_2", "sigma_c"],
+            Self::CreepNorton => &["E", "nu", "K", "n"],
+            Self::CreepBlackburn => &["E", "nu", "A_1", "alpha_1", "r_1", "B_s", "beta_s"],
+            Self::CreepLemaitre => &["E", "nu", "K", "N", "M"],
+            Self::ViscoplasticChaboche => &["E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q"],
+            Self::ViscoplasticLemaitreChaboche => &[
+                "E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q", "S", "s", "D_c",
+            ],
         }
     }
 
@@ -157,19 +194,72 @@ impl PlasticLaw {
         matches!(self, Self::Perfect | Self::Isotropic)
     }
 
-    /// Project a trial stress onto this law's yield surface, returning the
-    /// updated `(σ, ε_p, p)` — all full 3-D.
+    /// The law's **own** internal variables, beyond `ε_p` and `p`. Empty for a
+    /// law that needs nothing more; a back stress or a damage otherwise.
+    ///
+    /// These become extra components of the behaviour output, so a law can grow
+    /// its state without any other file changing.
+    pub fn internal_names(self) -> Vec<String> {
+        match self {
+            Self::Perfect
+            | Self::Isotropic
+            | Self::DruckerPrager
+            | Self::Ottosen
+            | Self::CreepNorton
+            | Self::CreepLemaitre => Vec::new(),
+            // The primary creep strain, tracked apart from the total so the law
+            // integrates correctly under a varying load.
+            Self::CreepBlackburn => vec!["p_prim".to_string()],
+            // The back stress (a full tensor) and the isotropic drag.
+            Self::ViscoplasticChaboche => back_stress_names(false),
+            // …plus the damage.
+            Self::ViscoplasticLemaitreChaboche => back_stress_names(true),
+        }
+    }
+
+    /// Whether this law is **rate-dependent** — it needs the time increment, and
+    /// erroring without one is better than silently integrating a viscous law as
+    /// if it were instantaneous.
+    pub fn is_viscous(self) -> bool {
+        matches!(
+            self,
+            Self::CreepNorton
+                | Self::CreepBlackburn
+                | Self::CreepLemaitre
+                | Self::ViscoplasticChaboche
+                | Self::ViscoplasticLemaitreChaboche
+        )
+    }
+
+    /// Project a trial stress onto this law's yield surface.
+    ///
+    /// `dt` is the time increment: `None` for a rate-independent law, and
+    /// **required** by a viscous one.
     pub fn return_map(
         &self,
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-    ) -> Result<([f64; 6], [f64; 6], f64)> {
+        dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        if self.is_viscous() && dt.is_none() {
+            return Err(PyrucastError::Message(format!(
+                "plasticity ({self}): this law is rate-dependent and needs a time increment —                  pass `dt` to integrate_behavior"
+            )));
+        }
         match self {
             Self::Perfect => von_mises::return_map(trial, prev, mat, 0.0),
             Self::Isotropic => von_mises::return_map(trial, prev, mat, mat.get("H")?),
             Self::DruckerPrager => drucker_prager::return_map(trial, prev, mat),
             Self::Ottosen => ottosen::return_map(trial, prev, mat),
+            // Viscous from here on: `dt` is present, the guard above saw to it.
+            Self::CreepNorton => viscous::norton(trial, prev, mat, dt.unwrap()),
+            Self::CreepBlackburn => viscous::blackburn(trial, prev, mat, dt.unwrap()),
+            Self::CreepLemaitre => viscous::lemaitre(trial, prev, mat, dt.unwrap()),
+            Self::ViscoplasticChaboche => viscous::chaboche(trial, prev, mat, dt.unwrap(), false),
+            Self::ViscoplasticLemaitreChaboche => {
+                viscous::chaboche(trial, prev, mat, dt.unwrap(), true)
+            }
         }
     }
 }
@@ -178,6 +268,17 @@ impl std::fmt::Display for PlasticLaw {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.to_tag())
     }
+}
+
+/// The internal-variable names of a Chaboche-family law: the back stress
+/// (a full 3-D tensor), the isotropic drag, and optionally the damage.
+fn back_stress_names(damage: bool) -> Vec<String> {
+    let mut names: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("X_{s}")).collect();
+    names.push("R".to_string());
+    if damage {
+        names.push("damage".to_string());
+    }
+    names
 }
 
 // ─── Material parameters at one Gauss point ─────────────────────────────────
@@ -286,7 +387,7 @@ pub fn von_mises_stress(sigma: &[f64; 6]) -> f64 {
 
 /// The converged state at the **start of the step A** — the input to the
 /// incremental montage. All full 3-D.
-#[derive(Clone, Copy)]
+#[derive(Clone, Default)]
 pub struct PrevState {
     /// Strain `ε(A)`.
     pub eps: [f64; 6],
@@ -296,6 +397,44 @@ pub struct PrevState {
     pub eps_p: [f64; 6],
     /// Cumulated plastic strain `p(A)`.
     pub p: f64,
+    /// The law's **own** internal variables at A, in
+    /// [`PlasticLaw::internal_names`] order — a back stress, a damage, whatever
+    /// the law carries beyond `ε_p` and `p`. Empty for the laws that carry
+    /// nothing more, which is most of them.
+    pub vars: Vec<f64>,
+}
+
+impl PrevState {
+    /// Internal variable `i`, or `0` when the state does not carry it (the first
+    /// step, where A is the reference configuration).
+    pub fn var(&self, i: usize) -> f64 {
+        self.vars.get(i).copied().unwrap_or(0.0)
+    }
+}
+
+/// The updated state at the **end of the step B**, as a law returns it.
+pub struct PlasticStep {
+    /// Stress `σ(B)`, full 3-D.
+    pub sigma: [f64; 6],
+    /// Plastic strain `ε_p(B)`, full 3-D.
+    pub eps_p: [f64; 6],
+    /// Cumulated plastic strain `p(B)`.
+    pub p: f64,
+    /// The law's own internal variables at B, in [`PlasticLaw::internal_names`]
+    /// order.
+    pub vars: Vec<f64>,
+}
+
+impl PlasticStep {
+    /// An **elastic** step: the trial stress stands, nothing evolves.
+    pub fn elastic(trial: &[f64; 6], prev: &PrevState) -> Self {
+        Self {
+            sigma: *trial,
+            eps_p: prev.eps_p,
+            p: prev.p,
+            vars: prev.vars.clone(),
+        }
+    }
 }
 
 /// Elastic predictor of the **incremental** montage: `σ_trial = σ(A) + C:Δε`
@@ -323,14 +462,14 @@ pub fn incremental_step(
     prev: &PrevState,
     mat: &MatParams,
     model: ElasticityModel,
-) -> Result<([f64; 6], [f64; 6], f64, [f64; 6])> {
+    dt: Option<f64>,
+) -> Result<(PlasticStep, [f64; 6])> {
     if model == ElasticityModel::PlaneStress {
-        return plane_stress_step(law, eps_b, prev, mat);
+        return plane_stress_step(law, eps_b, prev, mat, dt);
     }
     // Solid / plane strain / axisymmetric: ε(B) is fully prescribed.
     let trial = elastic_predictor(eps_b, prev, mat.lambda, mat.mu);
-    let (sigma, eps_p, p) = law.return_map(&trial, prev, mat)?;
-    Ok((sigma, eps_p, p, *eps_b))
+    Ok((law.return_map(&trial, prev, mat, dt)?, *eps_b))
 }
 
 /// Plane stress, around any law: solve `σ_zz(B) = 0` for `ε_zz(B)` by the secant
@@ -344,23 +483,23 @@ fn plane_stress_step(
     eps_in_b: &[f64; 6],
     prev: &PrevState,
     mat: &MatParams,
-) -> Result<([f64; 6], [f64; 6], f64, [f64; 6])> {
-    let eval = |ezz: f64| -> Result<([f64; 6], [f64; 6], f64, [f64; 6])> {
+    dt: Option<f64>,
+) -> Result<(PlasticStep, [f64; 6])> {
+    let eval = |ezz: f64| -> Result<(PlasticStep, [f64; 6])> {
         let mut eps_b = *eps_in_b;
         eps_b[2] = ezz;
         eps_b[3] = 0.0;
         eps_b[4] = 0.0;
         let trial = elastic_predictor(&eps_b, prev, mat.lambda, mat.mu);
-        let (sigma, eps_p, p) = law.return_map(&trial, prev, mat)?;
-        Ok((sigma, eps_p, p, eps_b))
+        Ok((law.return_map(&trial, prev, mat, dt)?, eps_b))
     };
     // Initial guess: ε_zz(A) plus the elastic plane-stress out-of-plane
     // increment −ν/(1−ν)·(Δε_xx + Δε_yy).
     let nu_term = mat.lambda / (mat.lambda + 2.0 * mat.mu); // = ν/(1−ν)
     let mut z0 = prev.eps[2] - nu_term * (eps_in_b[0] - prev.eps[0] + eps_in_b[1] - prev.eps[1]);
     let mut z1 = z0 + 1e-6_f64.max(z0.abs() * 1e-3);
-    let mut f0 = eval(z0)?.0[2];
-    let mut f1 = eval(z1)?.0[2];
+    let mut f0 = eval(z0)?.0.sigma[2];
+    let mut f1 = eval(z1)?.0.sigma[2];
     for _ in 0..50 {
         if f1.abs() < 1e-10 * (mat.mu + 1.0) {
             break;
@@ -373,7 +512,7 @@ fn plane_stress_step(
         z0 = z1;
         f0 = f1;
         z1 = z2;
-        f1 = eval(z1)?.0[2];
+        f1 = eval(z1)?.0.sigma[2];
     }
     eval(z1)
 }
@@ -392,8 +531,9 @@ pub fn consistent_tangent(
     eps_b: &[f64; 6],
     prev: &PrevState,
     mat: &MatParams,
+    dt: Option<f64>,
 ) -> Result<[[f64; 6]; 6]> {
-    let d = raw_consistent_tangent(law, eps_b, prev, mat)?;
+    let d = raw_consistent_tangent(law, eps_b, prev, mat, dt)?;
     // `D_alg` travels through the state field as its **upper triangle**
     // (`ktan_i_j`, i ≤ j) and is read back mirrored, so the format can only
     // carry a symmetric tangent. Non-associated flow produces a genuinely
@@ -425,6 +565,7 @@ fn raw_consistent_tangent(
     eps_b: &[f64; 6],
     prev: &PrevState,
     mat: &MatParams,
+    dt: Option<f64>,
 ) -> Result<[[f64; 6]; 6]> {
     if law.has_analytic_tangent() {
         let trial = elastic_predictor(eps_b, prev, mat.lambda, mat.mu);
@@ -435,7 +576,7 @@ fn raw_consistent_tangent(
         };
         return Ok(von_mises::tangent(&trial, mat, hardening, prev.p));
     }
-    finite_difference_tangent(law, eps_b, prev, mat)
+    finite_difference_tangent(law, eps_b, prev, mat, dt)
 }
 
 /// `∂σ/∂ε` by central differences on the return map, in engineering Voigt.
@@ -448,6 +589,7 @@ fn finite_difference_tangent(
     eps_b: &[f64; 6],
     prev: &PrevState,
     mat: &MatParams,
+    dt: Option<f64>,
 ) -> Result<[[f64; 6]; 6]> {
     // A strain-sized step: relative to the strain itself when it is meaningful,
     // to the elastic strain scale otherwise.
@@ -463,7 +605,7 @@ fn finite_difference_tangent(
             let mut e = *eps_b;
             e[j] += sign * h;
             let trial = elastic_predictor(&e, prev, mat.lambda, mat.mu);
-            Ok(law.return_map(&trial, prev, mat)?.0)
+            Ok(law.return_map(&trial, prev, mat, dt)?.sigma)
         };
         let (sp, sm) = (run(1.0)?, run(-1.0)?);
         // Engineering shear: γ = 2ε, so a column against a tensor shear is twice

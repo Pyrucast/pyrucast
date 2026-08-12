@@ -100,8 +100,11 @@ nœuds, variante thermique comprise).
 Mécanique : `Truss`, `Elasticity` (contraintes/déformations planes,
 axisymétrique, 3-D), `Plasticity` (la **loi d'écoulement en attribut** : von Mises parfaite ou à
 écrouissage isotrope, Drucker-Prager non associé avec traitement du sommet,
-Ottosen à quatre paramètres intégrée par plan sécant ; tangentes toutes
-confrontées à une différence finie des forces internes), `Mazars` (endommagement), `Timoshenko`,
+Ottosen à quatre paramètres intégrée par plan sécant ; puis les lois
+**dépendantes du temps** — fluages de Norton, Lemaitre et Blackburn,
+viscoplasticité de Chaboche et sa variante endommageable de Lemaitre-Chaboche,
+qui erronent en l'absence de `dt` ; tangentes toutes confrontées à une différence
+finie des forces internes), `Mazars` (endommagement), `Timoshenko`,
 `Frame` (portique 2-D), `Frame3d`, `FollowerPressure` (charge dont la direction
 tourne avec la surface, bâtie sur les tangentes déformées et non sur Nanson —
 `I + ∇_s u` n'est pas un gradient de transformation sur une variété). Contraintes : `Dirichlet`, `Mpc`,

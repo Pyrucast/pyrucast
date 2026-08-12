@@ -94,11 +94,11 @@ MECANIQUE - endommagement;ENDOMMAGEMENT EFEM;Mise en œuvre de la méthode EFEM 
 MECANIQUE - endommagement;ENDOMMAGEMENT RICBET;Béton cyclique/sismique : dissymétrie, déformations permanentes, hystérésis (3D);—
 MECANIQUE - endommagement;ENDOMMAGEMENT RICCOQ;Endommagement simplifié régularisé par l'énergie de fissuration (coques);—
 MECANIQUE - endommagement;ENDOMMAGEMENT CONCYC;Endommagement scalaire cyclique régularisé (non local ou Hillerborg);—
-MECANIQUE - fluage;FLUAGE NORTON;Fluage de Norton;—
-MECANIQUE - fluage;FLUAGE BLACKBURN;Fluage de Blackburn;—
+MECANIQUE - fluage;FLUAGE NORTON;Fluage de Norton;Model.creep_norton (K, n) — pas de seuil, dt obligatoire
+MECANIQUE - fluage;FLUAGE BLACKBURN;Fluage de Blackburn;Model.creep_blackburn (A_1, alpha_1, r_1, B_s, beta_s) — primaire saturant + secondaire
 MECANIQUE - fluage;FLUAGE RCCMR_316;Fluage RCC-MR pour l'acier 316-SS;—
 MECANIQUE - fluage;FLUAGE RCCMR_304;Fluage RCC-MR pour l'acier 304-SS;—
-MECANIQUE - fluage;FLUAGE LEMAITRE;Fluage de Lemaitre;—
+MECANIQUE - fluage;FLUAGE LEMAITRE;Fluage de Lemaitre;Model.creep_lemaitre (K, N, M) — écrouissage en déformation
 MECANIQUE - fluage;FLUAGE POLYNOMIAL;Fluage polynomial;—
 MECANIQUE - fluage;FLUAGE CERAMIQUE;Céramiques : Norton au-dessus d'une température de transition, Ottosen en dessous;—
 MECANIQUE - fluage;FLUAGE MAXWELL;Maxwell généralisé (4 branches obligatoires + 4 facultatives);—
@@ -112,12 +112,12 @@ MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM BETON_URGC;Modèle de béton
 MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM BETON_INSA;Modèle de béton (INSA);—
 MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM BETON_DYNAR_LMT;Béton pour la dynamique rapide;—
 MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM ENDO_PLAS;Béton plastique endommageable;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE CHABOCHE;Viscoplastique de Chaboche;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE CHABOCHE;Viscoplastique de Chaboche;Model.viscoplasticity_chaboche (k, K, n, C_1, gamma_1, b, Q) — rappel Armstrong-Frederick
 MECANIQUE - viscoplasticité;VISCOPLASTIQUE GUIONNET;Viscoplastique de Guionnet;—
 MECANIQUE - viscoplasticité;VISCOPLASTIQUE ONERA;Chaboche unifié avec restauration de l'écrouissage en température;—
 MECANIQUE - viscoplasticité;VISCOPLASTIQUE OHNO;ONERA-Chaboche modifié Ohno;—
 MECANIQUE - viscoplasticité;VISCOPLASTIQUE MERIC_CAILLETAUD;Monocristal : Chaboche sur systèmes de glissement cristallins;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE VISCODOMMAGE;Viscoplastique endommageable de Lemaitre et Chaboche;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE VISCODOMMAGE;Viscoplastique endommageable de Lemaitre et Chaboche;Model.viscoplasticity_lemaitre_chaboche (+ S, s, D_c) — contrainte effective sigma/(1-D)
 MECANIQUE - viscoplasticité;VISCOPLASTIQUE PARFAIT;Viscoplastique parfait;—
 MECANIQUE - viscoplasticité;VISCOPLASTIQUE POUDRE_A;Modèle d'Abouaf pour les poudres;—
 MECANIQUE - viscoplasticité;VISCOPLASTIQUE DDI;Modèle à deux déformations inélastiques;—

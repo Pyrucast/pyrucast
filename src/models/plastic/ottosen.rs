@@ -42,7 +42,7 @@
 
 use crate::error::{PyrucastError, Result};
 use crate::models::plastic::{
-    elastic_stress, i1, j2, j3, require_positive, MatParams, PlasticLaw, PrevState,
+    elastic_stress, i1, j2, j3, require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
 
 /// Ottosen's yield function, exactly as written above. Negative inside the
@@ -92,14 +92,10 @@ fn numerical_normal(sigma: &[f64; 6], mat: &MatParams, scale: f64) -> Result<[f6
 /// re-evaluated at the current iterate rather than solved for implicitly. It
 /// converges robustly on a strongly curved surface without needing second
 /// derivatives, which is what makes it the right choice here.
-pub fn return_map(
-    trial: &[f64; 6],
-    prev: &PrevState,
-    mat: &MatParams,
-) -> Result<([f64; 6], [f64; 6], f64)> {
+pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result<PlasticStep> {
     let sc = mat.get("sigma_c")?;
     if yield_function(trial, mat)? <= 0.0 {
-        return Ok((*trial, prev.eps_p, prev.p)); // elastic
+        return Ok(PlasticStep::elastic(trial, prev)); // elastic
     }
 
     let mut sigma = *trial;
@@ -144,5 +140,10 @@ pub fn return_map(
                 .into(),
         ));
     }
-    Ok((sigma, eps_p, p))
+    Ok(PlasticStep {
+        sigma,
+        eps_p,
+        p,
+        vars: Vec::new(),
+    })
 }

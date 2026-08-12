@@ -1436,6 +1436,65 @@ class Model:
         hand-derived one could not be checked — is a central difference.
         """
     @classmethod
+    def creep_norton(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.creep_norton(fespace, model)` — Norton-Odqvist secondary creep,
+        `ṗ = (q/K)^n`. Material `E`, `nu`, `K`, `n`.
+        
+        There is **no yield threshold**: any stress creeps, however slowly. Like
+        every rate-dependent law it needs the time increment —
+        `integrate_behavior(..., dt=...)` — and raises without one, because
+        integrating a creep law as if it were instantaneous would give a
+        plausible wrong answer.
+        """
+    @classmethod
+    def creep_blackburn(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.creep_blackburn(fespace, model)` — a **saturating primary** creep
+        stage plus a steady secondary one, with Blackburn's `sinh` stress
+        dependence (which spans decades of stress where a power law cannot).
+        Material `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s`.
+        
+        The primary strain is tracked as its own internal variable (`p_prim`), so
+        the law integrates correctly under a varying load.
+        """
+    @classmethod
+    def creep_lemaitre(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.creep_lemaitre(fespace, model)` — Lemaitre primary creep by
+        **strain** hardening, `ṗ = (q/K)^N · p^(−M)`. Material `E`, `nu`, `K`,
+        `N`, `M`.
+        
+        The accumulated strain itself slows the flow, producing a decelerating
+        primary stage with no explicit time dependence — which is what makes it
+        usable under a varying load, where a time-hardening form would be wrong.
+        """
+    @classmethod
+    def viscoplasticity_chaboche(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.viscoplasticity_chaboche(fespace, model)` — a Norton flow on the
+        shifted overstress `J(σ − X) − R − k`, with Armstrong-Frederick kinematic
+        hardening and saturating isotropic hardening. Material `E`, `nu`, `k`,
+        `K`, `n`, `C_1`, `gamma_1`, `b`, `Q`.
+        
+        The back stress `X` is what makes the law usable under **cyclic**
+        loading: it translates the yield surface, so reverse yielding happens
+        early — the Bauschinger effect, which no isotropic law can produce. It
+        costs seven internal variables (`X_xx…X_xy`, `R`).
+        """
+    @classmethod
+    def viscoplasticity_lemaitre_chaboche(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.viscoplasticity_lemaitre_chaboche(fespace, model)` — Chaboche
+        viscoplasticity coupled to Lemaitre's ductile **damage**: the flow is
+        driven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`. Material
+        as above, plus `S`, `s`, `D_c`.
+        
+        A damaged material flows faster, which damages it more — the coupling
+        that produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the
+        internal state.
+        """
+    @classmethod
     def mazars(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
         r"""
         `Model.mazars(fespace, model)` — Mazars isotropic damage spanning every

@@ -43,6 +43,8 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   - [Plasticité parfaite (von Mises)](mecanique/plasticite.md)
   - [Lois d'écoulement plastique](mecanique/lois-plastiques.md) — écrouissage
     isotrope, Drucker-Prager, Ottosen
+  - [Fluage et viscoplasticité](mecanique/fluage.md) — Norton, Lemaitre,
+    Blackburn, Chaboche et sa variante endommageable
   - [Endommagement de Mazars](mecanique/mazars.md)
   - [Poutre de Timoshenko](mecanique/timoshenko.md)
   - [Portique 2D](mecanique/portique.md)
