@@ -132,6 +132,60 @@ modèle (cf. ci-dessous).
 
 Pour **ajouter** une physique, voir [Ajouter une physique](ajouter-une-physique.md).
 
+## Ce que chaque physique calcule
+
+Le tableau ci-dessus dit *quelles variables* porte chaque physique. Celui-ci dit
+**ce qu'elle sait produire** : les genres de matrice qu'elle déclare
+([`MatrixKind`](#un-genre-de-matrice--un-layout--un-noyau)), la nature de son
+intégration de comportement, et la particularité de calcul qui la distingue.
+
+Une case vide n'est pas un manque : une physique qui ne déclare pas un genre n'y
+contribue simplement rien, et l'assembleur l'ignore. `matrix.mass(...)` sur un
+modèle qui contient une pression suiveuse ne voit qu'elle n'a pas de masse.
+
+| Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
+|---|---|---|---|---|---|
+| `heat_conduction` | — | — | capacité `ρ·cp` | flux `K·∇T` | symétrie matériau iso/ortho/aniso ; `k` lu **par point de Gauss** |
+| `convection` | — | — | — | `h·T` | aveugle à l'orientation du bord (la normale est déjà dans `q·n`) |
+| `radiation` | **oui** `4σεT³` | — | — | flux **+** `ktan` | non linéaire ; rigidité **linéarisée autour de `T_∞`** donc constante ; deux natures `[Thermal, Radiation]` |
+| `fick` | — | — | stockage `poro` | flux `D·∇c` | nature `Diffusion` propre ; flux nommé `j_*` pour cohabiter avec la thermique |
+| `interface_transfer` | — | — | — | `h·(c₁−c₂)` | **quatre blocs**, dont deux `Coupling` inter-maillages ; scatter séquentiel ; conformité vérifiée jusqu'au nœud |
+| `truss` | — | oui `N/L·P` | oui `ρA` | `N = E A ε` | forme fermée globale, sans matrice de repère |
+| `elasticity` | oui **≡ K** | oui | oui | `σ = D·ε` | loi linéaire ⇒ la tangente *est* la rigidité ; symétrie matériau |
+| `follower_pressure` | — | — | — | traction `−p·n(u)` | **aucune matrice** (`contributions` vide) ; direction recalculée à chaque résidu ; seule physique sensible au sens de parcours du bord |
+| `plasticity` | **oui** `D_alg` | oui | oui | σ, `ε_p`, `p` + variables de loi | dix lois en attribut ; tangente analytique (von Mises) ou **numérique** ; toujours **symétrisée** ; les lois visqueuses **exigent `dt`** |
+| `damage` | — | oui | oui | σ, `damage`, histoire | trois lois ; **pas de tangente** — l'opérateur d'itération reste la rigidité non endommagée |
+| `timoshenko` | — | — | oui | `M`, `V` | **multi-quadrature** : flexion complète, cisaillement réduit |
+| `bernoulli` | — | — | — | efforts de section | Hermite, **exact aux nœuds** ; ne demande ni `G` ni `A_s` |
+| `frame` / `frame3d` | — | oui | oui | efforts de section | repère local déduit automatiquement de la géométrie |
+| `shell` | — | — | — | `N`, `M`, `Q` | multi-quadrature ; six DDL par nœud ; vrillage lié à la rotation de membrane |
+| `dirichlet` `mpc` `embedded` `contact` | — | — | — | — | aucun layout : blocs `Literal` C / Cᵀ montés directement |
+
+### Trois choses que ce tableau ne dit pas
+
+**Les forces internes ne suivent pas toujours `Bᵀσ`.** Le défaut est le noyau de
+la mécanique des milieux continus, `f_i = ∫ ∂N_i/∂x · σ`. Une physique dont la
+duale n'est pas un vecteur déplacement le redéfinit : la thermique et la
+diffusion appliquent `Bᵀ` à un flux scalaire, tandis que la convection, le
+rayonnement, le transfert d'interface et la **pression suiveuse** pondèrent par
+`N` et non par `Bᵀ` — leur intégrande est une densité surfacique, pas une
+grandeur conjuguée d'un gradient.
+
+**La tangente stockée est symétrique.** `D_alg` transite par le champ d'état sous
+forme de triangle supérieur (`ktan_i_j`, i ≤ j) et est relue en miroir. Une loi à
+écoulement **non associé** (Drucker-Prager) a pourtant une tangente non
+symétrique : elle est donc symétrisée, ce qui coûte à Newton son taux quadratique
+sur cette loi et rien d'autre. Voir
+[Lois d'écoulement plastique](mecanique/lois-plastiques.md#la-tangente-cohérente-et-deux-limites-assumées).
+
+**Une loi peut porter son propre état.** Au-delà de `ε_p` et `p`, une loi déclare
+ce qu'elle veut par `internal_names()` : la déformation primaire de Blackburn, la
+contrainte de rappel de Chaboche (un tenseur complet), la porosité de Gurson, les
+deux histoires de Damage TC. Le premier pas passe un vecteur **vide** — et non
+un vecteur de zéros — pour qu'une loi démarrant d'une constante matériau puisse
+distinguer « pas encore d'état » de « état nul ».
+
+
 ## Nature physique et filtrage
 
 Chaque physique déclare un **ensemble de natures** — sa classification grossière,
