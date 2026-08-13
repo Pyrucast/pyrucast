@@ -147,7 +147,7 @@ MECANIQUE - impédance;IMPEDANCE REUSS;Frein visqueux en série avec un ressort 
 MECANIQUE - impédance;IMPEDANCE COMPLEXE;Élastique + frein visqueux, restreint au calcul fréquentiel;—;—;—
 MECANIQUE - élément fini;BARR (SEG2);Barre (traction/compression seule);mechanical;—;Model.truss (E, A)
 MECANIQUE - élément fini;BAEX (SEG2);Barre excentrée;—;—;—
-MECANIQUE - élément fini;POUT (SEG2/SEG3);Poutre d'Euler-Bernoulli (2D ou 3D);mechanical;planar_1d · frame_2d · frame_3d;Model.bernoulli (planar_1d / frame_2d / frame_3d) — interpolation d'Hermite, exacte aux nœuds
+MECANIQUE - élément fini;POUT (SEG2/SEG3);Poutre d'Euler-Bernoulli (2D ou 3D);mechanical;—;Model.bernoulli (espace HERMITE3 ; configuration 1-D/plan/spatial déduite du maillage) — exacte aux nœuds
 MECANIQUE - élément fini;TIMO (SEG2);Poutre de Timoshenko (cisaillement transverse);mechanical;—;Model.timoshenko (flexion pure 1D) / Model.frame (portique 2D) / Model.frame3d (cadre 3D)
 MECANIQUE - élément fini;TUYA / TUFI (SEG2/SEG3);Tuyau droit, coude, tuyau fissuré;—;—;—
 MECANIQUE - élément fini;JOI1 (SEG2);Joint unidimensionnel à deux nœuds;—;—;—

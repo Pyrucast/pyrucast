@@ -1554,13 +1554,16 @@ class Model:
         the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
         """
     @classmethod
-    def bernoulli(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+    def bernoulli(cls, fespace: FiniteElementSpace) -> Model:
         r"""
-        `Model.bernoulli(fespace, model)` — the classical **Euler-Bernoulli**
-        beam, where plane sections stay normal to the deflected axis and there is
-        no transverse shear at all. `model` is `"planar_1d"` (DOFs `w`, `theta`;
-        material `E`, `I`), `"frame_2d"` (`u_x, u_y, r_z`; `+ A`) or
-        `"frame_3d"` (six DOFs; `+ I_y, I_z, J, G`).
+        `Model.bernoulli(fespace)` — the classical **Euler-Bernoulli** beam,
+        where plane sections stay normal to the deflected axis and there is no
+        transverse shear at all.
+        
+        The configuration follows the mesh: a 1-D `Coords` gives a pure-bending
+        beam (DOFs `w`, `theta`; material `E`, `I`), a 2-D one a plane frame
+        (`u_x, u_y, r_z`; `+ A`), a 3-D one a space frame (six DOFs;
+        `+ I_y, I_z, J, G`). Read them back with `model.primal_vars()`.
         
         The deflection is interpolated by **cubic Hermite** functions, so the
         subspace must be `HERMITE3` — build it with
@@ -1570,10 +1573,10 @@ class Model:
         Lagrange subspace would carry a linear deflection, of zero curvature, and
         is refused.
         
-        Prefer `timoshenko` / `frame` / `frame3d` for a stocky member, where the
-        shear compliance matters. Reaching Bernoulli by making the shear area
-        huge would work in exact arithmetic and lock in floating point, which is
-        why this is a physics of its own rather than a limiting case.
+        Prefer `timoshenko` for a stocky member, where the shear compliance
+        matters. Reaching Bernoulli by making the shear area huge would work in
+        exact arithmetic and lock in floating point, which is why this is a
+        physics of its own rather than a limiting case.
         """
     @classmethod
     def shell(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:

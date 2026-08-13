@@ -64,36 +64,34 @@ pub enum BeamModel {
 }
 
 impl BeamModel {
-    /// Parse from a lowercase tag (`"planar_1d"`, `"frame_2d"`, `"frame_3d"`).
-    pub fn from_tag(tag: &str) -> Option<Self> {
-        match tag {
-            "planar_1d" => Some(Self::Planar1d),
-            "frame_2d" => Some(Self::Frame2d),
-            "frame_3d" => Some(Self::Frame3d),
-            _ => None,
+    /// The configuration a beam is in, **read from the geometry**.
+    ///
+    /// It was once an argument, and it could only ever take the one value
+    /// matching the mesh: every constructor rejected the others outright. An
+    /// argument that can hold exactly one value carries no information — it
+    /// only offers a way to contradict oneself — so the configuration is
+    /// derived instead.
+    ///
+    /// Everything that distinguishes the three (degrees of freedom, material,
+    /// section forces, whether there is an axial term, a torsion, a rotation to
+    /// the global axes) follows from the dimension, and none of it is a choice.
+    pub fn from_space_dim(space_dim: usize) -> Result<Self> {
+        match space_dim {
+            1 => Ok(Self::Planar1d),
+            2 => Ok(Self::Frame2d),
+            3 => Ok(Self::Frame3d),
+            d => Err(PyrucastError::Message(format!(
+                "a beam lives in a 1-, 2- or 3-D configuration, got {d}-D"
+            ))),
         }
     }
 
-    /// The lowercase tag (the inverse of [`from_tag`](Self::from_tag)).
+    /// The lowercase name of the configuration — for messages and rendering.
     pub fn to_tag(self) -> &'static str {
         match self {
             Self::Planar1d => "planar_1d",
             Self::Frame2d => "frame_2d",
             Self::Frame3d => "frame_3d",
-        }
-    }
-
-    /// The accepted tags, `|`-joined — for error messages.
-    pub fn tag_list() -> String {
-        ["planar_1d", "frame_2d", "frame_3d"].join("|")
-    }
-
-    /// The space dimension this configuration lives in.
-    fn space_dim(self) -> usize {
-        match self {
-            Self::Planar1d => 1,
-            Self::Frame2d => 2,
-            Self::Frame3d => 3,
         }
     }
 
@@ -152,7 +150,7 @@ pub struct Bernoulli {
 impl Bernoulli {
     /// Euler-Bernoulli beam on a `SEG2` FE subspace. Errors unless the subspace
     /// is `SEG2` in a configuration matching `model`.
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, model: BeamModel) -> Result<Self> {
+    pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         let (submesh, space_dim, element, axisymmetric, interpolation) = {
             let s = read(&fespace)?;
             (
@@ -176,12 +174,8 @@ impl Bernoulli {
                  would carry a linear deflection, whose curvature is identically zero."
             )));
         }
-        if space_dim != model.space_dim() {
-            return Err(PyrucastError::Message(format!(
-                "Bernoulli: the {model} model lives in a {}-D space, but the subspace is {space_dim}-D",
-                model.space_dim()
-            )));
-        }
+        let model = BeamModel::from_space_dim(space_dim)
+            .map_err(|e| PyrucastError::Message(format!("Bernoulli: {e}")))?;
         if axisymmetric {
             return Err(PyrucastError::Message(
                 "Bernoulli: a segment in a meridian plane is a shell of revolution, not a beam"

@@ -8,13 +8,20 @@ normales** à l'axe déformé, si bien que la rotation de section *est* la pente
 différence avec [Timoshenko](timoshenko.md), le [portique 2D](portique.md) et le
 [cadre 3D](cadre3d.md), qui conservent une souplesse de cisaillement.
 
-Trois configurations partagent la même théorie :
+Trois configurations partagent la même théorie, et **la dimension du maillage
+les départage** — il n'y a rien à choisir :
 
-| `model` | DDL par nœud | matériau | ce qui s'ajoute à la flexion |
+| `Coords` | DDL par nœud | matériau | ce qui s'ajoute à la flexion |
 |---|---|---|---|
-| `planar_1d` | `w`, `theta` | `E, I` | rien — flexion pure |
-| `frame_2d` | `u_x, u_y, r_z` | `+ A` | l'effort axial, et une rotation vers les axes globaux |
-| `frame_3d` | 6 DDL | `+ I_y, I_z, J, G` | l'axial, la torsion, et la flexion selon **deux** axes principaux |
+| 1-D | `w`, `theta` | `E, I` | rien — flexion pure |
+| 2-D | `u_x, u_y, r_z` | `+ A` | l'effort axial, et une rotation vers les axes globaux |
+| 3-D | 6 DDL | `+ I_y, I_z, J, G` | l'axial, la torsion, et la flexion selon **deux** axes principaux |
+
+Ce fut un argument, qui ne pouvait prendre que la valeur correspondant au
+maillage : toute autre était refusée. Un argument à valeur unique ne transporte
+aucune information — il n'offre qu'un moyen de se contredire — donc la
+configuration se **déduit**. Les noms de DDL obtenus se relisent par
+`model.primal_vars()`.
 
 ## Équations continues résolues
 
@@ -81,7 +88,7 @@ espace `HERMITE3` :
 
 ```python
 fes = pyrucast.FiniteElementSpace(maillage, interpolation="HERMITE3")
-poutre = pyrucast.Model.bernoulli(fes, "planar_1d")
+poutre = pyrucast.Model.bernoulli(fes)  # 1-D ⇒ flexion pure
 ```
 
 Un espace de Lagrange porterait une flèche linéaire, de courbure identiquement
@@ -135,7 +142,7 @@ structural.
 ## Exemple Python
 
 ```python
-model = pyrucast.Model.bernoulli(fes, "frame_2d")
+model = pyrucast.Model.bernoulli(fes)  # Coords 2-D ⇒ portique plan
 materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("A", 1e-2), ("I", 1e-4)]
 )

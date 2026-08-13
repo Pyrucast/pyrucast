@@ -337,13 +337,8 @@ impl SubModel {
 
     /// Euler-Bernoulli beam sub-model on a `SEG2` FE subspace, in the given
     /// configuration. See [`bernoulli::Bernoulli::new`].
-    pub fn bernoulli(
-        fespace: Handle<SubFiniteElementSpace>,
-        model: bernoulli::BeamModel,
-    ) -> Result<Self> {
-        Ok(SubModel::Bernoulli(bernoulli::Bernoulli::new(
-            fespace, model,
-        )?))
+    pub fn bernoulli(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        Ok(SubModel::Bernoulli(bernoulli::Bernoulli::new(fespace)?))
     }
 
     /// Shell sub-model on a **surface** FE subspace in 3-D. See
@@ -989,10 +984,10 @@ impl Model {
 
     /// Euler-Bernoulli beam `Model` spanning **every** subspace of `fes`.
     /// Parent-level named constructor; material is supplied at assembly time.
-    pub fn bernoulli(fes: &FiniteElementSpace, model: bernoulli::BeamModel) -> Result<Self> {
+    pub fn bernoulli(fes: &FiniteElementSpace) -> Result<Self> {
         let mut out = Self::empty();
         for sub in fes {
-            out.add_sub(insert(SubModel::bernoulli(sub.clone(), model)?))?;
+            out.add_sub(insert(SubModel::bernoulli(sub.clone())?))?;
         }
         Ok(out)
     }

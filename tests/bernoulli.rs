@@ -28,7 +28,6 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
-use pyrucast::models::bernoulli::BeamModel;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
@@ -49,7 +48,7 @@ fn a_cantilever_under_a_tip_load_matches_its_closed_form() -> Result<()> {
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
     // Clamped at A: both the deflection and the rotation are held.
-    let mut model = Model::bernoulli(&fes, BeamModel::Planar1d)?;
+    let mut model = Model::bernoulli(&fes)?;
     for (var, dual) in [("w", "f_w"), ("theta", "m_theta")] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         let multiplier = mesh::barycenter(&imposed)?;
@@ -128,7 +127,7 @@ fn a_plane_frame_carries_axial_and_bending_independently() -> Result<()> {
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
-    let mut model = Model::bernoulli(&fes, BeamModel::Frame2d)?;
+    let mut model = Model::bernoulli(&fes)?;
     for (var, dual) in [("u_x", "f_x"), ("u_y", "f_y"), ("r_z", "m_z")] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         let multiplier = mesh::barycenter(&imposed)?;
@@ -175,7 +174,7 @@ fn a_space_frame_twists_by_its_closed_form() -> Result<()> {
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
-    let mut model = Model::bernoulli(&fes, BeamModel::Frame3d)?;
+    let mut model = Model::bernoulli(&fes)?;
     for (var, dual) in [
         ("u_x", "f_x"),
         ("u_y", "f_y"),
@@ -276,7 +275,7 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
         rhs.set_value(b.id(), "f_w", P)?;
         let rhs = NodeField::from_sub(rhs);
 
-        let bern = clamp(Model::bernoulli(&fes_bern, BeamModel::Planar1d)?)?;
+        let bern = clamp(Model::bernoulli(&fes_bern)?)?;
         let bern_mat = pyrucast::ops::element_field::material_field(&bern, &[("E", E), ("I", I)])?;
         let w_bern = solve(&pyrucast::ops::matrix::stiffness(&bern, &bern_mat)?, &rhs)?
             .value(b.id(), "w")?;
@@ -325,7 +324,7 @@ fn beam_1d() -> Result<(
 }
 
 fn clamped_1d(a: &Node, fes: &FiniteElementSpace) -> Result<Model> {
-    let mut model = Model::bernoulli(fes, BeamModel::Planar1d)?;
+    let mut model = Model::bernoulli(fes)?;
     for (var, dual) in [("w", "f_w"), ("theta", "m_theta")] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(a))?);
         let multiplier = mesh::barycenter(&imposed)?;

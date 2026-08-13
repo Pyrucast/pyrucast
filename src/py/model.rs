@@ -3,7 +3,6 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
-use crate::models::bernoulli::BeamModel;
 use crate::models::damage::DamageLaw;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::interface_transfer::TransferKind;
@@ -593,11 +592,14 @@ impl PyModel {
         Ok(Self { inner })
     }
 
-    /// `Model.bernoulli(fespace, model)` — the classical **Euler-Bernoulli**
-    /// beam, where plane sections stay normal to the deflected axis and there is
-    /// no transverse shear at all. `model` is `"planar_1d"` (DOFs `w`, `theta`;
-    /// material `E`, `I`), `"frame_2d"` (`u_x, u_y, r_z`; `+ A`) or
-    /// `"frame_3d"` (six DOFs; `+ I_y, I_z, J, G`).
+    /// `Model.bernoulli(fespace)` — the classical **Euler-Bernoulli** beam,
+    /// where plane sections stay normal to the deflected axis and there is no
+    /// transverse shear at all.
+    ///
+    /// The configuration follows the mesh: a 1-D `Coords` gives a pure-bending
+    /// beam (DOFs `w`, `theta`; material `E`, `I`), a 2-D one a plane frame
+    /// (`u_x, u_y, r_z`; `+ A`), a 3-D one a space frame (six DOFs;
+    /// `+ I_y, I_z, J, G`). Read them back with `model.primal_vars()`.
     ///
     /// The deflection is interpolated by **cubic Hermite** functions, so the
     /// subspace must be `HERMITE3` — build it with
@@ -607,24 +609,17 @@ impl PyModel {
     /// Lagrange subspace would carry a linear deflection, of zero curvature, and
     /// is refused.
     ///
-    /// Prefer `timoshenko` / `frame` / `frame3d` for a stocky member, where the
-    /// shear compliance matters. Reaching Bernoulli by making the shear area
-    /// huge would work in exact arithmetic and lock in floating point, which is
-    /// why this is a physics of its own rather than a limiting case.
+    /// Prefer `timoshenko` for a stocky member, where the shear compliance
+    /// matters. Reaching Bernoulli by making the shear area huge would work in
+    /// exact arithmetic and lock in floating point, which is why this is a
+    /// physics of its own rather than a limiting case.
     #[classmethod]
     fn bernoulli(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         fespace: PyRef<PyFiniteElementSpace>,
-        model: &str,
     ) -> PyResult<Self> {
-        let m = BeamModel::from_tag(model).ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "bernoulli: unknown model '{model}' (expected {})",
-                BeamModel::tag_list()
-            ))
-        })?;
         Ok(Self {
-            inner: Model::bernoulli(&fespace.inner, m)?,
+            inner: Model::bernoulli(&fespace.inner)?,
         })
     }
 
