@@ -42,12 +42,12 @@ Newton restant **pilotée en Python** (voir
   `K = ∫ Bᵀ D_el B dΩ`, opérateur d'itération ;
 - **comportement** (`COMP`) : la mise à jour `σ`, `D`, `κ` point par point.
 
-La boucle de Newton résout \\( K\,\delta u = F_{\text{ext}} - F_{\text{int}} \\)
+La boucle de Newton résout \\( K\\,\delta u = F_{\text{ext}} - F_{\text{int}} \\)
 avec les **forces internes** endommagées
 
 \\[
-F_{\text{int}} = \int_\Omega B^\top \sigma\, d\Omega, \qquad
-\sigma = (1 - D)\,D_{\text{el}} : \varepsilon,
+F_{\text{int}} = \int_\Omega B^\top \sigma\\, d\Omega, \qquad
+\sigma = (1 - D)\\,D_{\text{el}} : \varepsilon,
 \\]
 
 où \\( B \\) est la matrice déformation-déplacement de

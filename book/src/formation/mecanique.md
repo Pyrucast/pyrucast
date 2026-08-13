@@ -46,7 +46,7 @@ Trois briques, à la main, sans opérateur « tout-en-un » — comme en Cast3M
 2. `pyrucast.element_field.integrate_behavior` : la pseudo-contrainte thermique
    \\( \sigma\_{\text{th}} = D : \varepsilon\_{\text{th}} \\) ;
 3. `pyrucast.node_field.internal_forces` : la charge nodale équivalente
-   \\( F\_{\text{th}} = \int B^T \sigma\_{\text{th}} \, dV \\) (Cast3M
+   \\( F\_{\text{th}} = \int B^T \sigma\_{\text{th}} \\, dV \\) (Cast3M
    `BSIG`).
 
 Le second membre se combine par **addition de champs** (`+`), pas par union

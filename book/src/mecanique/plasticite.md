@@ -40,12 +40,12 @@ expose :
 \\( \delta u \\) du système linéarisé
 
 \\[
-K_t\,\delta u = F_{\text{ext}} - F_{\text{int}}, \qquad
-F_{\text{int}} = \int_\Omega B^\top \sigma\, d\Omega \;(\text{`BSIG`}),
+K_t\\,\delta u = F_{\text{ext}} - F_{\text{int}}, \qquad
+F_{\text{int}} = \int_\Omega B^\top \sigma\\, d\Omega \\;(\text{`BSIG`}),
 \\]
 
 où la contrainte \\( \sigma \\) au point de Gauss sort du retour radial. La
-tangente cohérente \\( K_t = \int_\Omega B^\top D_{\text{alg}} B\, d\Omega \\)
+tangente cohérente \\( K_t = \int_\Omega B^\top D_{\text{alg}} B\\, d\Omega \\)
 utilise le **module algorithmique** \\( D_{\text{alg}} = \partial\sigma/\partial\varepsilon \\)
 (dérivée exacte de l'application de retour), garantissant la convergence
 quadratique — au lieu de la rigidité élastique \\( D \\) du Newton modifié.

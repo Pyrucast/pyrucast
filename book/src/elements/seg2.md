@@ -42,6 +42,6 @@ Gauss-Legendre à **2 points**, exacte pour les polynômes de degré \\( \le 3 \
 - Dimensions valides : \\( d_r = 1 \\), \\( d_s \in \{1, 2, 3\} \\) (segment
   plongé dans une droite, un plan ou l'espace).
 - Sur une géométrie droite, \\( |J| = L/2 \\) (\\( L \\) = longueur physique),
-  et la matrice de masse Lagrange-1 \\( \int N_i N_j\,ds = \tfrac{L}{6}\begin{bmatrix}2&1\\\\1&2\end{bmatrix} \\)
+  et la matrice de masse Lagrange-1 \\( \int N_i N_j\\,ds = \tfrac{L}{6}\begin{bmatrix}2&1\\\\1&2\end{bmatrix} \\)
   est intégrée exactement par la règle à 2 points.
 - Version quadratique : [SEG3](seg3.md).

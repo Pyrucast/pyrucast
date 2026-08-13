@@ -20,7 +20,7 @@ rigidité combine quatre comportements découplés :
 La matrice locale 12×12 est tournée dans le repère global :
 
 \\[
-K = T^\top\,K_{\text{loc}}\,T,
+K = T^\top\\,K_{\text{loc}}\\,T,
 \\]
 
 où `T` répète, sur les quatre triplets de DOFs, la rotation `R = [x'; y'; z']`.

@@ -19,7 +19,7 @@ La matrice locale `K_loc` (6×6, DOFs `[u'_A, w'_A, θ_A, u'_B, w'_B, θ_B]`) es
 tournée dans le repère **global** :
 
 \\[
-K = T^\top\,K_{\text{loc}}\,T,
+K = T^\top\\,K_{\text{loc}}\\,T,
 \\]
 
 où `T` est bâtie des cosinus directeurs de l'élément (`c = \cos\alpha`,
@@ -32,9 +32,9 @@ découplées :
 - **axial** — sur les DOFs \\( (u'_A, u'_B) \\) :
   \\( \dfrac{EA}{L}\begin{bmatrix}1 & -1 \\\\ -1 & 1\end{bmatrix} \\) ;
 - **flexion** — sur \\( (\theta_A, \theta_B) \\), bloc
-  \\( K_b = \int E I\, B_b^\top B_b\, dx \\) ;
+  \\( K_b = \int E I\\, B_b^\top B_b\\, dx \\) ;
 - **cisaillement** — sur \\( (w'_A, \theta_A, w'_B, \theta_B) \\), bloc
-  \\( K_s = \int G A_s\, B_s^\top B_s\, dx \\) intégré de façon **réduite**,
+  \\( K_s = \int G A_s\\, B_s^\top B_s\\, dx \\) intégré de façon **réduite**,
 
 avec les mêmes opérateurs discrets \\( B_b, B_s \\) que la
 [poutre de Timoshenko](timoshenko.md#forme-discrétisée).

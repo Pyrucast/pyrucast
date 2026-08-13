@@ -1384,7 +1384,7 @@ de \\( t \\) vers l'intérieur, se rencontrent :
 
 soit trois équations à trois inconnues à un coin, davantage sur une surface
 lisse, moins sur une arête. Résoudre au sens des **moindres carrés**, par les
-équations normales \\( (N^{\!\top}\!N)\,\mathbf{d} = -t\,N^{\!\top}\mathbf{1} \\),
+équations normales \\( (N^{\\!\top}\\!N)\\,\mathbf{d} = -t\\,N^{\\!\top}\mathbf{1} \\),
 couvre les trois cas d'un coup et rend l'intersection exacte quand elle
 existe. Au coin du cube : \\( \mathbf{d} = -t(1,1,1) \\).
 
@@ -1736,7 +1736,7 @@ dont les quatre coins sont des nœuds de l'enveloppe. Rien à insérer pour le
 casser, rien à bouger puisque ses coins sont les vôtres, et le retrait
 d'arête n'y arrive pas non plus. C'est devenu rare : aucune des enveloppes de
 la suite de tests ne l'obtient plus. La mesure est
-\\( \eta = 12\,(3V)^{2/3} / \sum \ell^2 \\), qui vaut 1 pour un tétraèdre
+\\( \eta = 12\\,(3V)^{2/3} / \sum \ell^2 \\), qui vaut 1 pour un tétraèdre
 régulier et 0 pour un plat ; le seuil de \\( 10^{-4} \\) est calibré et non
 choisi — les cellules saines restent au-dessus de \\( 4\cdot10^{-2} \\), une
 cellule réellement plate tombe sous \\( 10^{-7} \\).

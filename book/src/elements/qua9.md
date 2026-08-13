@@ -29,15 +29,15 @@ Produit tensoriel des **fonctions de Lagrange quadratiques 1-D** sur
 \ell_{+}(t) = \tfrac12 t(t+1),
 \\]
 
-et \\( N_i(\xi, \eta) = \ell_a(\xi)\,\ell_b(\eta) \\), où \\( (\ell_a, \ell_b) \\)
+et \\( N_i(\xi, \eta) = \ell_a(\xi)\\,\ell_b(\eta) \\), où \\( (\ell_a, \ell_b) \\)
 sélectionne la position (\\( -, 0, + \\)) du nœud dans chaque direction. Ainsi le
 nœud central est \\( N_8 = (1-\xi^2)(1-\eta^2) \\).
 
 ## Dérivées de référence
 
 \\[
-\frac{\partial N_i}{\partial \xi} = \ell_a'(\xi)\,\ell_b(\eta), \qquad
-\frac{\partial N_i}{\partial \eta} = \ell_a(\xi)\,\ell_b'(\eta),
+\frac{\partial N_i}{\partial \xi} = \ell_a'(\xi)\\,\ell_b(\eta), \qquad
+\frac{\partial N_i}{\partial \eta} = \ell_a(\xi)\\,\ell_b'(\eta),
 \\]
 
 avec \\( \ell_{-}'(t) = t - \tfrac12 \\), \\( \ell_0'(t) = -2t \\),

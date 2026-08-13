@@ -33,8 +33,8 @@ N_3 &= 4 L_1 L_2, & N_4 &= 4 L_2 L_3, & N_5 &= 4 L_3 L_1.
 
 Avec \\( \nabla_\xi L_1 = (-1,-1) \\), \\( \nabla_\xi L_2 = (1,0) \\),
 \\( \nabla_\xi L_3 = (0,1) \\), les sommets donnent
-\\( \nabla_\xi N_i = (4L_i - 1)\,\nabla_\xi L_i \\) et les milieux
-\\( \nabla_\xi N = 4(L_b\,\nabla_\xi L_a + L_a\,\nabla_\xi L_b) \\). Par exemple :
+\\( \nabla_\xi N_i = (4L_i - 1)\\,\nabla_\xi L_i \\) et les milieux
+\\( \nabla_\xi N = 4(L_b\\,\nabla_\xi L_a + L_a\\,\nabla_\xi L_b) \\). Par exemple :
 
 \\[
 \nabla_\xi N_0 = \big(-(4L_1-1),\ -(4L_1-1)\big), \qquad

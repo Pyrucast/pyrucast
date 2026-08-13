@@ -4,7 +4,7 @@ Une **contrainte multi-points** (MPC) impose une **relation linéaire** entre
 degrés de liberté :
 
 \\[
-\sum_k a_k \, u(n_k, v_k) = g .
+\sum_k a_k \\, u(n_k, v_k) = g .
 \\]
 
 C'est une [contrainte](../contraintes.md) imposée par **multiplicateurs de

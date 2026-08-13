@@ -21,7 +21,7 @@ Produit tensoriel des **fonctions de Lagrange quadratiques 1-D** sur
 \ell_{+}(t) = \tfrac12 t(t+1),
 \\]
 
-et \\( N_i(\xi, \eta, \zeta) = \ell_a(\xi)\,\ell_b(\eta)\,\ell_c(\zeta) \\), où
+et \\( N_i(\xi, \eta, \zeta) = \ell_a(\xi)\\,\ell_b(\eta)\\,\ell_c(\zeta) \\), où
 \\( (\ell_a, \ell_b, \ell_c) \\) sélectionne la position (\\( -, 0, + \\)) du nœud
 dans chaque direction. Le centre de volume est
 \\( N_{26} = (1-\xi^2)(1-\eta^2)(1-\zeta^2) \\).
@@ -29,7 +29,7 @@ dans chaque direction. Le centre de volume est
 ## Dérivées de référence
 
 \\[
-\frac{\partial N_i}{\partial \xi} = \ell_a'(\xi)\,\ell_b(\eta)\,\ell_c(\zeta),
+\frac{\partial N_i}{\partial \xi} = \ell_a'(\xi)\\,\ell_b(\eta)\\,\ell_c(\zeta),
 \\]
 
 et de même pour \\( \partial_\eta \\), \\( \partial_\zeta \\), avec

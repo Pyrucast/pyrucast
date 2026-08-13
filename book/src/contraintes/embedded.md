@@ -6,7 +6,7 @@ l'espace. Pour un nœud immergé `p` logé dans la maille hôte de fonctions de 
 `Nᵢ(ξ)`, et pour chaque composante `c` :
 
 \\[
-u_c(p) - \sum_i N_i(\xi_p)\, u_c(\text{hôte}_i) = g_c
+u_c(p) - \sum_i N_i(\xi_p)\\, u_c(\text{hôte}_i) = g_c
 \qquad (g_c = 0 : \text{liaison rigide}).
 \\]
 

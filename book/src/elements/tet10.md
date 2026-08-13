@@ -35,8 +35,8 @@ N_7 &= 4 L_0 L_3, \quad N_8 = 4 L_1 L_3, \quad N_9 = 4 L_2 L_3.
 
 Avec les gradients barycentriques \\( \nabla_\xi L_0 = (-1,-1,-1) \\),
 \\( \nabla_\xi L_1 = (1,0,0) \\), etc. : sommets
-\\( \nabla_\xi N_i = (4L_i - 1)\,\nabla_\xi L_i \\), milieux
-\\( \nabla_\xi N = 4(L_b\,\nabla_\xi L_a + L_a\,\nabla_\xi L_b) \\).
+\\( \nabla_\xi N_i = (4L_i - 1)\\,\nabla_\xi L_i \\), milieux
+\\( \nabla_\xi N = 4(L_b\\,\nabla_\xi L_a + L_a\\,\nabla_\xi L_b) \\).
 
 ## Quadrature (défaut)
 

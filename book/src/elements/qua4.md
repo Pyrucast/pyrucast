@@ -20,7 +20,7 @@ l'élément. Peut être plongé dans une `Coords` 3-D (surface).
 Pour le nœud \\( i \\) de coordonnées de référence \\( (\xi_i, \eta_i) \\) :
 
 \\[
-N_i(\xi, \eta) = \tfrac{1}{4}\,(1 + \xi_i\,\xi)\,(1 + \eta_i\,\eta).
+N_i(\xi, \eta) = \tfrac{1}{4}\\,(1 + \xi_i\\,\xi)\\,(1 + \eta_i\\,\eta).
 \\]
 
 Explicitement :
@@ -35,8 +35,8 @@ N_2 &= \tfrac14(1+\xi)(1+\eta), & N_3 &= \tfrac14(1-\xi)(1+\eta).
 ## Dérivées de référence
 
 \\[
-\frac{\partial N_i}{\partial \xi} = \tfrac14\,\xi_i\,(1 + \eta_i\,\eta), \qquad
-\frac{\partial N_i}{\partial \eta} = \tfrac14\,\eta_i\,(1 + \xi_i\,\xi).
+\frac{\partial N_i}{\partial \xi} = \tfrac14\\,\xi_i\\,(1 + \eta_i\\,\eta), \qquad
+\frac{\partial N_i}{\partial \eta} = \tfrac14\\,\eta_i\\,(1 + \xi_i\\,\xi).
 \\]
 
 ## Quadrature (défaut)

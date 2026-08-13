@@ -21,22 +21,22 @@ dans le triangle **et** correction sérendipité en \\( t \\) :
 
 \\[
 \begin{aligned}
-N^{\text{bas}}_i &= L_i(2L_i-1)(1-t) - 2 L_i\,t(1-t), \\\\
-N^{\text{haut}}_i &= L_i(2L_i-1)\,t - 2 L_i\,t(1-t).
+N^{\text{bas}}_i &= L_i(2L_i-1)(1-t) - 2 L_i\\,t(1-t), \\\\
+N^{\text{haut}}_i &= L_i(2L_i-1)\\,t - 2 L_i\\,t(1-t).
 \end{aligned}
 \\]
 
 **Milieux d'arête du triangle** (bas puis haut) :
 
 \\[
-N = 4 L_a L_b\,(1-t) \quad(\text{bas}), \qquad
-N = 4 L_a L_b\,t \quad(\text{haut}).
+N = 4 L_a L_b\\,(1-t) \quad(\text{bas}), \qquad
+N = 4 L_a L_b\\,t \quad(\text{haut}).
 \\]
 
 **Milieux verticaux** (sur les sommets du triangle, \\( \zeta = \tfrac12 \\)) :
 
 \\[
-N = 4 L_i\,t(1 - t).
+N = 4 L_i\\,t(1 - t).
 \\]
 
 ## Dérivées de référence

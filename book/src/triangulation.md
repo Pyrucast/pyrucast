@@ -7,7 +7,7 @@ Ce chapitre rassemble les fondements mathématiques utilisés par `triangulate_s
 Soit \\( P_0, P_1, \dots, P_{n-1} \\) les sommets d'un polygone simple fermé (l'arête \\( P_{n-1} P_0 \\) ferme la boucle implicitement). Son **aire signée** est
 
 \\[
-A = \frac{1}{2} \sum_{i=0}^{n-1} \left( x_i\, y_{i+1} - x_{i+1}\, y_i \right)
+A = \frac{1}{2} \sum_{i=0}^{n-1} \left( x_i\\, y_{i+1} - x_{i+1}\\, y_i \right)
 \\]
 
 avec la convention d'indices modulo \\(n\\). Le signe de \\(A\\) encode l'orientation :
@@ -145,7 +145,7 @@ Si \\(\|\vec{n}\| \approx 0\\), le polygone est dégénéré (colinéaire ou aut
 2. On orthogonalise par Gram-Schmidt :
 
    \\[
-   \vec{u}' = \vec{e} - (\vec{e} \cdot \hat{n})\, \hat{n},
+   \vec{u}' = \vec{e} - (\vec{e} \cdot \hat{n})\\, \hat{n},
    \qquad
    \vec{u} = \frac{\vec{u}'}{\|\vec{u}'\|}
    \\]
@@ -264,7 +264,7 @@ Cette propriété équivaut à **maximiser l'angle minimum** sur l'ensemble des 
 Pour un triangle \\((A, B, C)\\) orienté CCW, le point \\(D\\) est **strictement dans** son disque circonscrit si et seulement si
 
 \\[
-\det\!
+\det\\!
 \begin{pmatrix}
 a_x - d_x & a_y - d_y & (a_x - d_x)^2 + (a_y - d_y)^2 \\\\
 b_x - d_x & b_y - d_y & (b_x - d_x)^2 + (b_y - d_y)^2 \\\\
@@ -371,7 +371,7 @@ L'insertion **contrainte** (Bowyer-Watson modifié) propage la cavité en BFS de
 La preuve de **terminaison** de Ruppert (renforcée par Shewchuk en 1996) tient pour
 
 \\[
-\alpha_{\min} \le 20.7^{\circ} \approx \arcsin\!\frac{1}{2\sqrt{2}}
+\alpha_{\min} \le 20.7^{\circ} \approx \arcsin\\!\frac{1}{2\sqrt{2}}
 \\]
 
 Au-delà de cette borne, certaines configurations très étirées peuvent conduire à des cycles d'insertion (chaque point inséré crée un nouveau triangle « skinny »). pyrucast plafonne le nombre total d'insertions à \\( 50 \cdot n_\text{contour} + 1000 \\) ; si la limite est atteinte, la fonction renvoie une erreur explicite plutôt que de boucler indéfiniment.

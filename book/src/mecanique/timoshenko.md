@@ -14,26 +14,26 @@ La rigidité est la somme d'un terme de **flexion** et d'un terme de
 **cisaillement** :
 
 \\[
-K_b = \int E\,I\,(\theta')^2\,dx \quad(\text{flexion}), \qquad
-K_s = \int G\,A_s\,(w' - \theta)^2\,dx \quad(\text{cisaillement}).
+K_b = \int E\\,I\\,(\theta')^2\\,dx \quad(\text{flexion}), \qquad
+K_s = \int G\\,A_s\\,(w' - \theta)^2\\,dx \quad(\text{cisaillement}).
 \\]
 
 ## Forme discrétisée
 
 Sur un SEG2 (\\( N_1, N_2 \\) linéaires), les DOFs élémentaires sont
 \\( [w_1, \theta_1, w_2, \theta_2] \\). Les déformations généralisées s'écrivent
-\\( \kappa = B_b\,d_e \\) et \\( \gamma = B_s\,d_e \\) avec
+\\( \kappa = B_b\\,d_e \\) et \\( \gamma = B_s\\,d_e \\) avec
 
 \\[
-B_b = \big[\,0,\ N_1',\ 0,\ N_2'\,\big], \qquad
-B_s = \big[\,N_1',\ -N_1,\ N_2',\ -N_2\,\big],
+B_b = \big[\\,0,\ N_1',\ 0,\ N_2'\\,\big], \qquad
+B_s = \big[\\,N_1',\ -N_1,\ N_2',\ -N_2\\,\big],
 \\]
 
 d'où les deux blocs de rigidité
 
 \\[
-K_b = \int_{\Omega_e} E I\, B_b^\top B_b\, dx \ (\text{Gauss complet}), \qquad
-K_s = \int_{\Omega_e} G A_s\, B_s^\top B_s\, dx \ (\text{1 point, réduit}).
+K_b = \int_{\Omega_e} E I\\, B_b^\top B_b\\, dx \ (\text{Gauss complet}), \qquad
+K_s = \int_{\Omega_e} G A_s\\, B_s^\top B_s\\, dx \ (\text{1 point, réduit}).
 \\]
 
 Les deux termes sont intégrés sur **deux `SubFiniteElementSpace`** du même

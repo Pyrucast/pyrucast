@@ -58,7 +58,7 @@ Ces conventions sont cohérentes avec celles déjà imposées ailleurs dans le c
 Soit un élément avec \\( n \\) nœuds, de coordonnées physiques \\( \mathbf{x}_1, \dots, \mathbf{x}_n \in \mathbb{R}^{d_s} \\) (avec \\( d_s \\) la dimension géométrique de la `Coords`). La **transformation géométrique** \\( \chi : \hat{K} \to K \\) qui envoie l'élément de référence \\( \hat{K} \\) sur l'élément physique \\( K \\) est interpolée par les mêmes fonctions de forme :
 
 \\[
-\mathbf{x}(\xi) = \chi(\xi) = \sum_{i=1}^{n} N_i(\xi)\, \mathbf{x}_i
+\mathbf{x}(\xi) = \chi(\xi) = \sum_{i=1}^{n} N_i(\xi)\\, \mathbf{x}_i
 \\]
 
 C'est l'hypothèse **isoparamétrique** : la géométrie est interpolée exactement comme un champ scalaire. Avec une interpolation Lagrange-1, \\( \chi \\) est affine sur les simplexes (SEG2, TRI3, TET4) et tri-linéaire sur les tenseurs (QUA4, HEX8).
@@ -98,16 +98,16 @@ N_4 = \zeta
 
 **HEX8** (tri-linéaire sur \\( [-1, +1]^3 \\)). Pour le nœud \\( i \\) de coordonnées de référence \\( (\xi_i, \eta_i, \zeta_i) \in \{-1, +1\}^3 \\),
 \\[
-N_i(\xi, \eta, \zeta) = \tfrac{1}{8}\,
-(1 + \xi_i\, \xi)\,
-(1 + \eta_i\, \eta)\,
-(1 + \zeta_i\, \zeta)
+N_i(\xi, \eta, \zeta) = \tfrac{1}{8}\\,
+(1 + \xi_i\\, \xi)\\,
+(1 + \eta_i\\, \eta)\\,
+(1 + \zeta_i\\, \zeta)
 \\]
 
 **PENTA6** (prisme, produit d'un TRI3 par un SEG2 linéaire sur \\( \zeta \in [0, 1] \\)). Avec les coordonnées barycentriques du triangle \\( L_1 = 1 - \xi - \eta \\), \\( L_2 = \xi \\), \\( L_3 = \eta \\),
 \\[
-N_j(\xi, \eta, \zeta) = L_j\,(1 - \zeta) \quad (j = 1, 2, 3), \qquad
-N_{j+3}(\xi, \eta, \zeta) = L_j\,\zeta \quad (j = 1, 2, 3)
+N_j(\xi, \eta, \zeta) = L_j\\,(1 - \zeta) \quad (j = 1, 2, 3), \qquad
+N_{j+3}(\xi, \eta, \zeta) = L_j\\,\zeta \quad (j = 1, 2, 3)
 \\]
 
 Une propriété immédiate, vérifiée par les tests unitaires : \\( \sum_i N_i(\xi) = 1 \\) en tout \\( \xi \\) (partition de l'unité).
@@ -116,14 +116,14 @@ Une propriété immédiate, vérifiée par les tests unitaires : \\( \sum_i N_i(
 
 L'interpolation `Lagrange2` couvre les six types quadratiques. Pour les Lagrange complets, avec les coordonnées barycentriques \\( L_i \\) :
 
-- **SEG3** : \\( N_0 = \tfrac12\xi(\xi-1),\; N_1 = \tfrac12\xi(\xi+1),\; N_2 = 1-\xi^2 \\).
+- **SEG3** : \\( N_0 = \tfrac12\xi(\xi-1),\\; N_1 = \tfrac12\xi(\xi+1),\\; N_2 = 1-\xi^2 \\).
 - **TRI6 / TET10** : sommets \\( L_i(2L_i-1) \\), milieux d'arête \\( 4 L_a L_b \\).
 
 Les sérendipité n'ont pas de nœud de face/intérieur :
 
 - **QUA8** : sommet \\( \tfrac14(1+\xi_i\xi)(1+\eta_i\eta)(\xi_i\xi+\eta_i\eta-1) \\) ; milieu \\( \tfrac12(1-\xi^2)(1+\eta_i\eta) \\) ou \\( \tfrac12(1+\xi_i\xi)(1-\eta^2) \\) selon l'arête.
-- **QUA9** : produit tensoriel complet \\( N_i(\xi,\eta) = \ell_{a}(\xi)\,\ell_{b}(\eta) \\) des trois fonctions de Lagrange 1D \\( \ell_{-}(t)=\tfrac12 t(t-1),\; \ell_0(t)=1-t^2,\; \ell_{+}(t)=\tfrac12 t(t+1) \\).
-- **HEX27** : produit tensoriel 3D \\( N_i(\xi,\eta,\zeta) = \ell_{a}(\xi)\,\ell_{b}(\eta)\,\ell_{c}(\zeta) \\) des mêmes fonctions 1D.
+- **QUA9** : produit tensoriel complet \\( N_i(\xi,\eta) = \ell_{a}(\xi)\\,\ell_{b}(\eta) \\) des trois fonctions de Lagrange 1D \\( \ell_{-}(t)=\tfrac12 t(t-1),\\; \ell_0(t)=1-t^2,\\; \ell_{+}(t)=\tfrac12 t(t+1) \\).
+- **HEX27** : produit tensoriel 3D \\( N_i(\xi,\eta,\zeta) = \ell_{a}(\xi)\\,\ell_{b}(\eta)\\,\ell_{c}(\zeta) \\) des mêmes fonctions 1D.
 - **HEX20** : sommet \\( \tfrac18(1+\xi_i\xi)(1+\eta_i\eta)(1+\zeta_i\zeta)(\xi_i\xi+\eta_i\eta+\zeta_i\zeta-2) \\) ; milieu \\( \tfrac14(1-\xi^2)(1+\eta_i\eta)(1+\zeta_i\zeta) \\) (et permutations).
 - **PENTA15** : produit du TRI6 par un facteur quadratique en \\( \zeta \\), avec correction sérendipité aux sommets.
 
@@ -147,9 +147,9 @@ Le buffer plat des dérivées de référence retourné par `Interpolation::dshap
 Pour intégrer une fonction \\( f \\) sur l'élément physique, on remonte à l'élément de référence par le changement de variables \\( \mathbf{x} = \chi(\xi) \\) :
 
 \\[
-\int_K f(\mathbf{x})\, d\mathbf{x}
-= \int_{\hat{K}} f(\chi(\xi))\, |J(\xi)|\, d\xi
-\approx \sum_{g=1}^{n_g} w_g\, f(\chi(\xi_g))\, |J(\xi_g)|
+\int_K f(\mathbf{x})\\, d\mathbf{x}
+= \int_{\hat{K}} f(\chi(\xi))\\, |J(\xi)|\\, d\xi
+\approx \sum_{g=1}^{n_g} w_g\\, f(\chi(\xi_g))\\, |J(\xi_g)|
 \\]
 
 avec \\( |J| \\) le **déterminant** (au sens généralisé, défini ci-dessous) du Jacobien. Le couple \\( (\xi_g, w_g) \\) est la règle de quadrature.
@@ -185,7 +185,7 @@ La somme des poids vaut le volume de l'élément de référence : 2 pour SEG2/SE
 Le **Jacobien** de la transformation \\( \chi \\) est la matrice de dérivées
 \\[
 J_{a,k}(\xi) = \frac{\partial x_a}{\partial \xi_k}
-= \sum_{i=1}^{n} \mathbf{x}_{i,a}\, \frac{\partial N_i}{\partial \xi_k}(\xi)
+= \sum_{i=1}^{n} \mathbf{x}_{i,a}\\, \frac{\partial N_i}{\partial \xi_k}(\xi)
 \quad
 \text{de taille } d_s \times d_r
 \\]
@@ -198,9 +198,9 @@ Quand le maillage et son espace ambiant ont la même dimension (par exemple TRI3
 La dérivation des fonctions de forme par rapport aux coordonnées physiques utilise l'inverse de \\( J \\) :
 \\[
 \frac{\partial N_i}{\partial x_a}
-= \sum_{k=1}^{d_r} (J^{-1})_{k, a} \, \frac{\partial N_i}{\partial \xi_k}
+= \sum_{k=1}^{d_r} (J^{-1})_{k, a} \\, \frac{\partial N_i}{\partial \xi_k}
 \quad \Longleftrightarrow \quad
-\nabla_x N_i = J^{-T}\, \nabla_\xi N_i
+\nabla_x N_i = J^{-T}\\, \nabla_\xi N_i
 \\]
 
 ### Cas manifold : \\( d_s > d_r \\)
@@ -209,17 +209,17 @@ Un sous-maillage peut être **plongé** dans un espace de dimension supérieure 
 
 Dans ce cas, \\( J \\) est rectangulaire (taille \\( d_s \times d_r \\)). Le déterminant standard n'a plus de sens, mais on peut définir la **métrique tirée en arrière** :
 \\[
-G(\xi) = J(\xi)^T\, J(\xi) \quad \text{de taille } d_r \times d_r
+G(\xi) = J(\xi)^T\\, J(\xi) \quad \text{de taille } d_r \times d_r
 \\]
 \\( G \\) est symétrique définie positive (sous condition de non-dégénérescence). L'élément de mesure devient
 \\[
-d\mu = \sqrt{\det G}\, d\xi
+d\mu = \sqrt{\det G}\\, d\xi
 \\]
 qui s'utilise comme \\( |J| \\) dans la quadrature. La fonction `det_jacobian` retourne ce \\( \sqrt{\det G} \\) — toujours positif par construction.
 
 Le **gradient tangent** d'un champ sur la surface (la projection du vrai gradient sur l'espace tangent) est donné par la pseudo-inverse :
 \\[
-\nabla_s N_i = J\, G^{-1}\, \nabla_\xi N_i
+\nabla_s N_i = J\\, G^{-1}\\, \nabla_\xi N_i
 \\]
 La fonction `SubFiniteElementSpace::dn_dx` retourne ces composantes, dans le repère ambiant à \\( d_s \\) dimensions. Pour \\( d_s = d_r \\), ces formules se réduisent à celles du cas standard (\\( J G^{-1} = J^{-T} \\)).
 
@@ -263,7 +263,7 @@ Ce choix donne deux propriétés importantes :
 1. **Empreinte mémoire indépendante du nombre de cellules.** Un `SubFiniteElementSpace` ne stocke que de l'ordre de \\( n_g \times n_\text{nodes} \times d_r \\) flottants — quelques centaines au plus par sous-espace. À comparer aux GB qu'un précalcul des Jacobiens demanderait sur un maillage 3D fin.
 2. **Robustesse au déplacement.** Réécrire les coordonnées dans la `Coords` (par exemple via `Coords::set_position`) suffit à mettre à jour automatiquement toutes les évaluations de \\( J \\), \\( |J| \\) et \\( \partial N_i / \partial x_a \\) — pas d'invalidation à signaler, pas de cache à reconstruire.
 
-Le coût est CPU plutôt que mémoire : chaque appel à `jacobian(cell, g)` recalcule la somme \\( J = \sum_i \mathbf{x}_i\, \nabla_\xi N_i \\). En pratique, l'assemblage matrice-élémentaire procède **cellule par cellule** : on calcule \\( J \\), \\( |J| \\), \\( \nabla_x N_i \\) une fois par couple (cellule, Gauss), puis on les réutilise pour tous les termes intégrés. Le surcoût reste donc proportionnel à \\( n_\text{cells} \times n_g \\) — soit le minimum incompressible — et non à \\( n_\text{cells} \times n_g \times n_\text{termes} \\).
+Le coût est CPU plutôt que mémoire : chaque appel à `jacobian(cell, g)` recalcule la somme \\( J = \sum_i \mathbf{x}_i\\, \nabla_\xi N_i \\). En pratique, l'assemblage matrice-élémentaire procède **cellule par cellule** : on calcule \\( J \\), \\( |J| \\), \\( \nabla_x N_i \\) une fois par couple (cellule, Gauss), puis on les réutilise pour tous les termes intégrés. Le surcoût reste donc proportionnel à \\( n_\text{cells} \times n_g \\) — soit le minimum incompressible — et non à \\( n_\text{cells} \times n_g \times n_\text{termes} \\).
 
 Si une mesure montrait un jour que ce recalcul devient un goulot d'étranglement, un cache invalidé sur incrément d'un compteur de version du `Coords` pourrait être ajouté sans changer l'API publique — déclenché par la mesure, pas par anticipation.
 

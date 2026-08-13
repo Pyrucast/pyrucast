@@ -18,8 +18,8 @@ La **forme faible** (multiplication par un déplacement virtuel \\( v \\),
 intégration par parties) s'écrit : trouver \\( u \\) tel que pour tout \\( v \\),
 
 \\[
-\int_\Omega \varepsilon(v) : \mathbb{D} : \varepsilon(u)\,d\Omega
-= \int_\Omega v\cdot b\,d\Omega + \int_{\Gamma_N} v\cdot t\,d\Gamma,
+\int_\Omega \varepsilon(v) : \mathbb{D} : \varepsilon(u)\\,d\Omega
+= \int_\Omega v\cdot b\\,d\Omega + \int_{\Gamma_N} v\cdot t\\,d\Gamma,
 \\]
 
 où \\( t \\) est la traction imposée sur le bord de Neumann \\( \Gamma_N \\).
@@ -27,7 +27,7 @@ où \\( t \\) est la traction imposée sur le bord de Neumann \\( \Gamma_N \\).
 ## Forme discrétisée
 
 En convention de **Voigt** (déformation *ingénieur* \\( \gamma = 2\varepsilon \\)),
-le champ discret \\( u_h = \sum_i N_i u_i \\) donne \\( \varepsilon = B\,u_e \\),
+le champ discret \\( u_h = \sum_i N_i u_i \\) donne \\( \varepsilon = B\\,u_e \\),
 avec la matrice **déformation-déplacement** \\( B \\) bâtie des dérivées
 physiques \\( \partial N_i/\partial x_a \\) (voir
 [`dn_dx`](../fe-space.md#théorie--jacobien-et-grandeurs-physiques)). En 2-D
@@ -58,13 +58,13 @@ B_i = \begin{bmatrix}
 La **rigidité** élémentaire est alors, intégrée par quadrature de Gauss,
 
 \\[
-K_e = \int_{\Omega_e} B^\top D\, B\, d\Omega
-\;\approx\; \sum_g B(\xi_g)^\top D\, B(\xi_g)\,|J(\xi_g)|\,w_g,
+K_e = \int_{\Omega_e} B^\top D\\, B\\, d\Omega
+\\;\approx\\; \sum_g B(\xi_g)^\top D\\, B(\xi_g)\\,|J(\xi_g)|\\,w_g,
 \\]
 
 écrite aux positions `(NodeId_i, f_a) × (NodeId_j, u_b)` (ordre des DOFs
 **nœud-majeur**). Le second membre nodal cohérent d'une traction de bord est
-\\( f_i = \int_{\Gamma_N} N_i\,t\,d\Gamma \\) (opérateur
+\\( f_i = \int_{\Gamma_N} N_i\\,t\\,d\Gamma \\) (opérateur
 [`flux`](../thermique.md#exemple--un-carré)).
 
 ### Matrice constitutive `D`
@@ -95,7 +95,7 @@ D = c\begin{bmatrix}
 \\]
 
 - **`solid`** (3-D), même \\( c \\), avec le module de cisaillement
-  \\( G = c\,\tfrac{1-2\nu}{2} \\) :
+  \\( G = c\\,\tfrac{1-2\nu}{2} \\) :
 
 \\[
 D = \begin{bmatrix}
@@ -131,9 +131,9 @@ des `Coords` déclarées axisymétriques (\\( x = r \ge 0 \\), \\( y = z \\)) �
 ont deux origines distinctes :
 
 1. **la mesure d'intégration**, portée par la *géométrie* :
-   \\( d\Omega = 2\pi r\,|J|\,d\xi \\). Elle vaut pour **toutes** les intégrales
+   \\( d\Omega = 2\pi r\\,|J|\\,d\xi \\). Elle vaut pour **toutes** les intégrales
    — rigidité, masse, conductivité, flux réparti, volumes, forces internes, y
-   compris sur les sous-maillages de bord `SEG2`, dont \\( \int 2\pi r\,N \\)
+   compris sur les sous-maillages de bord `SEG2`, dont \\( \int 2\pi r\\,N \\)
    donne directement l'effort sur l'anneau. Rien à écrire : c'est
    `CellGeom::det_j_w` qui l'applique, en un seul point ;
 2. **la déformation orthoradiale**, portée par le *modèle* :
@@ -201,7 +201,7 @@ valeurs **nodales** sont superconvergentes en \\( O(h^{2p}) \\) :
 passent de \\( O(h) \\) à \\( O(h^2) \\).
 
 Le cas **exact** existe néanmoins : lorsque \\( c_2 = 0 \\) — dilatation uniforme
-\\( u_r = c\,r \\) — l'état de déformation est constant et même Q1 le reproduit à
+\\( u_r = c\\,r \\) — l'état de déformation est constant et même Q1 le reproduit à
 la précision machine (c'est le patch test de la suite de validation).
 
 ### Matrice de masse
@@ -209,8 +209,8 @@ la précision machine (c'est le patch test de la suite de validation).
 Pour la dynamique, la **masse consistante** (composante matériau `rho`) est
 
 \\[
-M_e = \int_{\Omega_e} \rho\,N^\top N\, d\Omega
-\;\approx\; \sum_g \rho\,N(\xi_g)^\top N(\xi_g)\,|J(\xi_g)|\,w_g,
+M_e = \int_{\Omega_e} \rho\\,N^\top N\\, d\Omega
+\\;\approx\\; \sum_g \rho\\,N(\xi_g)^\top N(\xi_g)\\,|J(\xi_g)|\\,w_g,
 \\]
 
 où \\( N \\) place \\( N_i \\) sur chaque composante de translation — assemblée
@@ -259,7 +259,7 @@ n'agit que sur le second membre et sur la contrainte réelle :
 
 \\[
 \sigma = D : (\varepsilon(u) - \varepsilon_{th}), \qquad
-f_{th} = \int_\Omega B^\top D\, \varepsilon_{th}\, d\Omega.
+f_{th} = \int_\Omega B^\top D\\, \varepsilon_{th}\\, d\Omega.
 \\]
 
 Aucune physique nouvelle : on compose les briques existantes. `alpha` est fourni

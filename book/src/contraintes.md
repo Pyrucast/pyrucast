@@ -43,7 +43,7 @@ d'agrandir le système, on **élimine** chaque relation : un terme *esclave* `s`
 est exprimé par les *maîtres*,
 
 \\[
-u_s = \frac{1}{a_s}\Big(g - \sum_{k \neq s} a_k\, u_k\Big),
+u_s = \frac{1}{a_s}\Big(g - \sum_{k \neq s} a_k\\, u_k\Big),
 \\]
 
 d'où une transformation globale `u = T·û + u₀` (`û` = DOFs retenus). Le système

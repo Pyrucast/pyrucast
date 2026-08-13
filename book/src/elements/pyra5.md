@@ -32,7 +32,7 @@ fonctions bilinéaires dans les coordonnées **mises à l'échelle**
 \\( \xi/m,\ \eta/m \\), pondérées par \\( m \\) :
 
 \\[
-N_i = \frac{m}{4}\left(1 + \xi_i\,\frac{\xi}{m}\right)\left(1 + \eta_i\,\frac{\eta}{m}\right)
+N_i = \frac{m}{4}\left(1 + \xi_i\\,\frac{\xi}{m}\right)\left(1 + \eta_i\\,\frac{\eta}{m}\right)
 \quad (i = 0 \dots 3), \qquad N_4 = \zeta,
 \\]
 
@@ -40,7 +40,7 @@ où \\( (\xi_i, \eta_i) \\) sont les signes du nœud \\( i \\) sur la base.
 Développé :
 
 \\[
-N_i = \frac{1}{4}\left(m + \xi_i\,\xi + \eta_i\,\eta + \xi_i\eta_i\,\frac{\xi\eta}{m}\right).
+N_i = \frac{1}{4}\left(m + \xi_i\\,\xi + \eta_i\\,\eta + \xi_i\eta_i\\,\frac{\xi\eta}{m}\right).
 \\]
 
 Le terme croisé \\( \xi\eta/m \\) est la **partie rationnelle** — et la raison
@@ -54,9 +54,9 @@ l'élément de référence (\\( |\xi|, |\eta| \le m \\), donc il vaut au plus
 Avec \\( u = \xi/m \\), \\( v = \eta/m \\) :
 
 \\[
-\frac{\partial N_i}{\partial \xi} = \frac{\xi_i}{4}\,(1 + \eta_i v), \qquad
-\frac{\partial N_i}{\partial \eta} = \frac{\eta_i}{4}\,(1 + \xi_i u), \qquad
-\frac{\partial N_i}{\partial \zeta} = \frac{1}{4}\,(-1 + \xi_i\eta_i\,u v),
+\frac{\partial N_i}{\partial \xi} = \frac{\xi_i}{4}\\,(1 + \eta_i v), \qquad
+\frac{\partial N_i}{\partial \eta} = \frac{\eta_i}{4}\\,(1 + \xi_i u), \qquad
+\frac{\partial N_i}{\partial \zeta} = \frac{1}{4}\\,(-1 + \xi_i\eta_i\\,u v),
 \\]
 
 et \\( \nabla_\xi N_4 = (0, 0, 1) \\). Les trois sommes sur les cinq nœuds
@@ -75,7 +75,7 @@ C'est le poids de Jacobi qui fait l'affaire. En écrivant un point sous la forme
 le changement de variables fait apparaître
 
 \\[
-\mathrm{d}\xi\,\mathrm{d}\eta = (1-\zeta)^2\,\mathrm{d}a\,\mathrm{d}b,
+\mathrm{d}\xi\\,\mathrm{d}\eta = (1-\zeta)^2\\,\mathrm{d}a\\,\mathrm{d}b,
 \\]
 
 soit exactement le rétrécissement de la section vers le sommet. Intégrer la

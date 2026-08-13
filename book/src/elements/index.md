@@ -25,15 +25,15 @@ propriétés, renvois vers les variantes).
 ## Rappel : de la fonction de forme à la matrice
 
 Sur chaque élément, un champ est interpolé par ses valeurs nodales,
-\\( u(\xi) = \sum_i N_i(\xi)\,u_i \\), et **la géométrie de la même façon**
-(hypothèse isoparamétrique), \\( \mathbf{x}(\xi) = \sum_i N_i(\xi)\,\mathbf{x}_i \\).
+\\( u(\xi) = \sum_i N_i(\xi)\\,u_i \\), et **la géométrie de la même façon**
+(hypothèse isoparamétrique), \\( \mathbf{x}(\xi) = \sum_i N_i(\xi)\\,\mathbf{x}_i \\).
 Toute matrice élémentaire est une intégrale sur l'élément physique ramenée à
 l'élément de référence par le Jacobien \\( J = \partial\mathbf{x}/\partial\xi \\) :
 
 \\[
-\int_K \phi(\mathbf{x})\,d\mathbf{x}
-= \int_{\hat K} \phi(\chi(\xi))\,|J(\xi)|\,d\xi
-\approx \sum_{g} w_g\,\phi(\xi_g)\,|J(\xi_g)|,
+\int_K \phi(\mathbf{x})\\,d\mathbf{x}
+= \int_{\hat K} \phi(\chi(\xi))\\,|J(\xi)|\\,d\xi
+\approx \sum_{g} w_g\\,\phi(\xi_g)\\,|J(\xi_g)|,
 \\]
 
 et les dérivées physiques viennent de l'inverse du Jacobien,

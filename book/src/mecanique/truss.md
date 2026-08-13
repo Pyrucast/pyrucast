@@ -8,7 +8,7 @@ Fonctionne à l'identique en 1-D, 2-D et 3-D.
 La barre suit la loi axiale 1-D et son équilibre le long de l'axe `s` :
 
 \\[
-N = E\,A\,\varepsilon, \qquad
+N = E\\,A\\,\varepsilon, \qquad
 \varepsilon = \frac{du}{ds}, \qquad
 \frac{dN}{ds} + f = 0,
 \\]
@@ -24,8 +24,8 @@ Avec l'interpolation linéaire `SEG2`, la déformation est **constante** par
 **globale** (en `d` dimensions) s'écrit
 
 \\[
-K_e = \frac{E\,A}{L}
-\begin{bmatrix} c\,c^\top & -c\,c^\top \\\\ -c\,c^\top & c\,c^\top \end{bmatrix},
+K_e = \frac{E\\,A}{L}
+\begin{bmatrix} c\\,c^\top & -c\\,c^\top \\\\ -c\\,c^\top & c\\,c^\top \end{bmatrix},
 \\]
 
 écrite aux positions `(NodeId_i, f_a) × (NodeId_j, u_b)`. En 1-D, `c = 1` et l'on

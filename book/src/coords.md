@@ -15,7 +15,7 @@ l'équivalent du `OPTI MODE AXIS` de Cast3M, et sa place est bien la géométrie
 le repère change la **mesure d'intégration** elle-même,
 
 \\[
-d\Omega = 2\pi r \, |J| \, d\xi,
+d\Omega = 2\pi r \\, |J| \\, d\xi,
 \\]
 
 donc rigidité, masse, conductivité, flux réparti, volumes et forces internes

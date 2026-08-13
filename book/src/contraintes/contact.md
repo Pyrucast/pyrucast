@@ -7,7 +7,7 @@ maître la plus proche (poids de projection `Nᵢ(ξ)`, normale `n`, jeu initial
 signé `g₀`), et la non-pénétration linéarisée s'écrit, par nœud esclave :
 
 \\[
-g_0 + n \cdot u(s) - \sum_i N_i(\xi)\, n \cdot u(\text{maître}_i) \ \geq\ 0.
+g_0 + n \cdot u(s) - \sum_i N_i(\xi)\\, n \cdot u(\text{maître}_i) \ \geq\ 0.
 \\]
 
 C'est une **relation unilatérale** (`≥`, cf. la section [Relations

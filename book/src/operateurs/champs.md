@@ -210,7 +210,7 @@ pendant nodal de `integrate_pointwise`.
 Interpole un champ **nodal** vers les points de Gauss (valeurs, pas dérivées) :
 
 \\[
-f(\xi_g) = \sum_i f_i\, N_i(\xi_g).
+f(\xi_g) = \sum_i f_i\\, N_i(\xi_g).
 \\]
 
 Le résultat porte les **mêmes composantes** que l'entrée, une valeur par
@@ -223,7 +223,7 @@ température nodale aux points de Gauss avant `thermal_strain`.
 Gradient d'un champ nodal aux points de Gauss, cellule par cellule :
 
 \\[
-\nabla f = \sum_i f_i\, \nabla N_i \quad \text{évalué en chaque } \xi_g.
+\nabla f = \sum_i f_i\\, \nabla N_i \quad \text{évalué en chaque } \xi_g.
 \\]
 
 Une composante de sortie `<comp>_<axe>` par couple (composante d'entrée, axe).
@@ -253,7 +253,7 @@ Déformation thermique de libre dilatation (Cast3M `EPTH`), pour la
 thermomécanique **non couplée** :
 
 \\[
-\varepsilon_{th} = \alpha\,(T - T_{ref})\,\big[\,1,1,(1),0,0,0\,\big].
+\varepsilon_{th} = \alpha\\,(T - T_{ref})\\,\big[\\,1,1,(1),0,0,0\\,\big].
 \\]
 
 `temperature` est un champ **par éléments** portant `"T"` (p. ex. produit par
@@ -275,8 +275,8 @@ Divergence **faible** (consistante) d'un champ vectoriel par éléments — l'ad
 de `gradient` :
 
 \\[
-d_i = \int_\Omega \nabla N_i \cdot F\, d\Omega
-\approx \sum_{\text{cell}} \sum_g (\nabla N_i \cdot F)\big|_g\, |J|_g\, w_g,
+d_i = \int_\Omega \nabla N_i \cdot F\\, d\Omega
+\approx \sum_{\text{cell}} \sum_g (\nabla N_i \cdot F)\big|_g\\, |J|_g\\, w_g,
 \\]
 
 accumulé par nœud. C'est l'opérateur `Bᵀ`, transposé du gradient : il vérifie
@@ -352,7 +352,7 @@ pas de vis-à-vis et **ne contribue pas**.
 Produit scalaire **global** des deux champs entiers :
 
 \\[
-x \cdot y = \sum_i \sum_c x_{i,c}\, y_{i,c},
+x \cdot y = \sum_i \sum_c x_{i,c}\\, y_{i,c},
 \\]
 
 la somme parcourant **toutes** les valeurs. Le résultat est un unique `float` :
@@ -375,7 +375,7 @@ Produit scalaire **nœud par nœud** (ou point par point) — réduction sur les
 **composantes seules**, le support est conservé :
 
 \\[
-p_i = \sum_c x_{i,c}\, y_{i,c}.
+p_i = \sum_c x_{i,c}\\, y_{i,c}.
 \\]
 
 Le résultat est un nouveau champ de la même saveur que les entrées, portant une
@@ -396,7 +396,7 @@ Intègre un champ sur son support par la **quadrature éléments finis**,
 de force distribuée) :
 
 \\[
-\int_\Omega f \, d\Omega \;=\; \sum_{\text{cell}} \sum_g f(\text{cell}, g)\, |J|_g\, w_g .
+\int_\Omega f \\, d\Omega \\;=\\; \sum_{\text{cell}} \sum_g f(\text{cell}, g)\\, |J|_g\\, w_g .
 \\]
 
 - sur un **`NodeField`** : les valeurs nodales sont relevées aux points de Gauss

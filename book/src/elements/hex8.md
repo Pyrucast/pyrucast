@@ -21,13 +21,13 @@ supérieure CCW (nœuds 4..7).
 Pour le nœud \\( i \\) de coordonnées de référence \\( (\xi_i, \eta_i, \zeta_i) \in \{-1,+1\}^3 \\) :
 
 \\[
-N_i(\xi, \eta, \zeta) = \tfrac{1}{8}\,(1 + \xi_i\,\xi)\,(1 + \eta_i\,\eta)\,(1 + \zeta_i\,\zeta).
+N_i(\xi, \eta, \zeta) = \tfrac{1}{8}\\,(1 + \xi_i\\,\xi)\\,(1 + \eta_i\\,\eta)\\,(1 + \zeta_i\\,\zeta).
 \\]
 
 ## Dérivées de référence
 
 \\[
-\frac{\partial N_i}{\partial \xi} = \tfrac18\,\xi_i\,(1 + \eta_i\,\eta)(1 + \zeta_i\,\zeta),
+\frac{\partial N_i}{\partial \xi} = \tfrac18\\,\xi_i\\,(1 + \eta_i\\,\eta)(1 + \zeta_i\\,\zeta),
 \\]
 
 et de même par permutation circulaire pour \\( \partial_\eta \\) et

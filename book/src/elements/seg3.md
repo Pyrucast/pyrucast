@@ -16,8 +16,8 @@ Segment à **3 nœuds**, interpolation **Lagrange-2** complète. Parent linéair
 ## Fonctions de forme
 
 \\[
-N_0 = \tfrac12\,\xi(\xi - 1), \qquad
-N_1 = \tfrac12\,\xi(\xi + 1), \qquad
+N_0 = \tfrac12\\,\xi(\xi - 1), \qquad
+N_1 = \tfrac12\\,\xi(\xi + 1), \qquad
 N_2 = 1 - \xi^2.
 \\]
 

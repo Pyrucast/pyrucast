@@ -18,7 +18,7 @@ Pour un nœud de coordonnées de référence \\( (p, q, r) \\) :
 **Sommets** (\\( p, q, r = \pm1 \\)) — noter le facteur \\( -2 \\) :
 
 \\[
-N_i = \tfrac18\,(1 + p\xi)(1 + q\eta)(1 + r\zeta)\,(p\xi + q\eta + r\zeta - 2).
+N_i = \tfrac18\\,(1 + p\xi)(1 + q\eta)(1 + r\zeta)\\,(p\xi + q\eta + r\zeta - 2).
 \\]
 
 **Milieux d'arête**, selon la direction de l'arête (celle où la coordonnée est

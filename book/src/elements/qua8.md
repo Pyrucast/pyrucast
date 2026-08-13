@@ -21,7 +21,7 @@ milieu d'arête. Variante complète (avec nœud central) : [QUA9](qua9.md).
 **Sommets** (\\( (\xi_i, \eta_i) \in \{-1,+1\}^2 \\)) :
 
 \\[
-N_i = \tfrac14\,(1 + \xi_i\xi)(1 + \eta_i\eta)\,(\xi_i\xi + \eta_i\eta - 1).
+N_i = \tfrac14\\,(1 + \xi_i\xi)(1 + \eta_i\eta)\\,(\xi_i\xi + \eta_i\eta - 1).
 \\]
 
 **Milieux d'arête** :

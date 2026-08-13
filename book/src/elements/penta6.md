@@ -23,8 +23,8 @@ Avec les barycentriques du triangle \\( L_1 = 1-\xi-\eta \\), \\( L_2 = \xi \\),
 \\( L_3 = \eta \\) et le facteur linéaire en \\( \zeta \\) :
 
 \\[
-N_j = L_j\,(1 - \zeta) \quad (j = 0, 1, 2), \qquad
-N_{j+3} = L_{j+1}\,\zeta \quad (j = 0, 1, 2).
+N_j = L_j\\,(1 - \zeta) \quad (j = 0, 1, 2), \qquad
+N_{j+3} = L_{j+1}\\,\zeta \quad (j = 0, 1, 2).
 \\]
 
 (les nœuds 0..2 portent \\( L_1, L_2, L_3 \\) à \\( \zeta=0 \\) ; les nœuds
