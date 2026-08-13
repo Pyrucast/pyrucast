@@ -134,91 +134,11 @@ Pour **ajouter** une physique, voir [Ajouter une physique](ajouter-une-physique.
 
 ## Ce que chaque physique calcule
 
-Le tableau ci-dessus dit *quelles variables* porte chaque physique. Celui-ci dit
-**ce qu'elle sait produire** : les genres de matrice qu'elle déclare
-([`MatrixKind`](#un-genre-de-matrice--un-layout--un-noyau)), la nature de son
-intégration de comportement, et la particularité de calcul qui la distingue.
-
-Une case vide n'est pas un manque : une physique qui ne déclare pas un genre n'y
-contribue simplement rien, et l'assembleur l'ignore. `matrix.mass(...)` sur un
-modèle qui contient une pression suiveuse ne voit qu'elle n'a pas de masse.
-
-| Physique | `tangent` — et par quelle voie | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
-|---|---|---|---|---|---|
-| `heat_conduction` | — | — | capacité `ρ·cp` | flux `K·∇T` | symétrie matériau iso/ortho/aniso ; `k` lu **par point de Gauss** |
-| `convection` | — | — | — | `h·T` | aveugle à l'orientation du bord (la normale est déjà dans `q·n`) |
-| `radiation` | **analytique** — `4σεT³` | — | — | flux **+** `ktan` | non linéaire ; rigidité **linéarisée autour de `T_∞`** donc constante ; deux natures `[Thermal, Radiation]` |
-| `fick` | — | — | stockage `poro` | flux `D·∇c` | nature `Diffusion` propre ; flux nommé `j_*` pour cohabiter avec la thermique |
-| `interface_transfer` | — | — | — | `h·(c₁−c₂)` | **quatre blocs**, dont deux `Coupling` inter-maillages ; scatter séquentiel ; conformité vérifiée jusqu'au nœud |
-| `truss` | — | oui `N/L·P` | oui `ρA` | `N = E A ε` | forme fermée globale, sans matrice de repère |
-| `elasticity` | **analytique** — c'est `K` | oui | oui | `σ = D·ε` | loi linéaire ⇒ la tangente *est* la rigidité ; symétrie matériau |
-| `follower_pressure` | — | — | — | traction `−p·n(u)` | **aucune matrice** (`contributions` vide) ; direction recalculée à chaque résidu ; seule physique sensible au sens de parcours du bord |
-| `plasticity` | **analytique** (2 lois) / **par perturbation** (8 lois) | oui | oui | σ, `ε_p`, `p` + variables de loi | dix lois en attribut ; tangente toujours **symétrisée** ; les lois visqueuses **exigent `dt`** |
-| `damage` | *aucune* | oui | oui | σ, `damage`, histoire | trois lois ; l'opérateur d'itération reste la rigidité **non endommagée** |
-| `timoshenko` | — | — | oui | `M`, `V` | **multi-quadrature** : flexion complète, cisaillement réduit |
-| `bernoulli` | — | — | — | efforts de section | Hermite, **exact aux nœuds** ; ne demande ni `G` ni `A_s` |
-| `frame` / `frame3d` | — | oui | oui | efforts de section | repère local déduit automatiquement de la géométrie |
-| `shell` | — | — | — | `N`, `M`, `Q` | multi-quadrature ; six DDL par nœud ; vrillage lié à la rotation de membrane |
-| `dirichlet` `mpc` `embedded` `contact` | — | — | — | — | aucun layout : blocs `Literal` C / Cᵀ montés directement |
-
-### « Par perturbation » veut dire différences finies centrées
-
-Pour les huit lois qui n'ont pas de tangente en forme fermée, `D_alg` est obtenu
-en **perturbant la déformation** et en relançant le retour, composante par
-composante :
-
-\\[
-D_{ij} \simeq \frac{\sigma_i(\varepsilon + h\\,e_j) - \sigma_i(\varepsilon - h\\,e_j)}{2h},
-\qquad h = 10^{-6}\\,\lVert \varepsilon \rVert_\infty .
-\\]
-
-Six composantes de Voigt, deux évaluations chacune : **douze appels** au retour
-par point de Gauss. Le pas doit rester bien au-dessus du bruit du retour (celui
-d'Ottosen ou de Gurson converge à une tolérance, pas exactement) et bien en
-dessous de l'échelle de courbure de la surface ; `1e-6·‖ε‖` tient
-confortablement entre les deux. Les colonnes de cisaillement sont divisées par
-deux en sortie, ce qui transforme `∂σ/∂ε_ij` en `∂σ/∂γ_ij` — la convention
-ingénieur du reste du dépôt.
-
-| voie | lois |
-|---|---|
-| **analytique** | `plasticity_perfect`, `plasticity_isotropic` (le module algorithmique J2) |
-| **par perturbation** | `drucker_prager`, `ottosen`, `gurson`, les trois fluages, les deux Chaboche |
-
-Le partage n'est pas une question de difficulté mais de **vérifiabilité** : seule
-la forme fermée de von Mises a été confrontée à une différence finie et validée.
-La dérivation analytique de Drucker-Prager, écrite d'abord, était fausse de 24 %
-— plausible, et fausse ; seul l'oracle numérique l'a dit. Une tangente obtenue
-par perturbation ne peut pas être mal dérivée, coûte douze évaluations d'une mise
-à jour bon marché, et laisse Newton converger. C'est un bon échange.
-
-Le rayonnement, lui, a bien une tangente **analytique** (`4σεT³ ∫NᵢNⱼ`) : sa
-non-linéarité est une puissance scalaire d'une seule variable, pas une carte de
-projection.
-
-### Trois choses que ce tableau ne dit pas
-
-**Les forces internes ne suivent pas toujours `Bᵀσ`.** Le défaut est le noyau de
-la mécanique des milieux continus, `f_i = ∫ ∂N_i/∂x · σ`. Une physique dont la
-duale n'est pas un vecteur déplacement le redéfinit : la thermique et la
-diffusion appliquent `Bᵀ` à un flux scalaire, tandis que la convection, le
-rayonnement, le transfert d'interface et la **pression suiveuse** pondèrent par
-`N` et non par `Bᵀ` — leur intégrande est une densité surfacique, pas une
-grandeur conjuguée d'un gradient.
-
-**La tangente stockée est symétrique.** `D_alg` transite par le champ d'état sous
-forme de triangle supérieur (`ktan_i_j`, i ≤ j) et est relue en miroir. Une loi à
-écoulement **non associé** (Drucker-Prager) a pourtant une tangente non
-symétrique : elle est donc symétrisée, ce qui coûte à Newton son taux quadratique
-sur cette loi et rien d'autre. Voir
-[Lois d'écoulement plastique](mecanique/lois-plastiques.md#la-tangente-cohérente-et-deux-limites-assumées).
-
-**Une loi peut porter son propre état.** Au-delà de `ε_p` et `p`, une loi déclare
-ce qu'elle veut par `internal_names()` : la déformation primaire de Blackburn, la
-contrainte de rappel de Chaboche (un tenseur complet), la porosité de Gurson, les
-deux histoires de Damage TC. Le premier pas passe un vecteur **vide** — et non
-un vecteur de zéros — pour qu'une loi démarrant d'une constante matériau puisse
-distinguer « pas encore d'état » de « état nul ».
+Le tableau ci-dessus dit *quelles variables* porte chaque physique. Ce qu'elle
+**sait produire** — les genres de matrice qu'elle déclare, la voie par laquelle
+elle obtient sa tangente, son intégration de comportement et sa particularité de
+calcul — est rassemblé physique par physique dans
+[Détails des physiques](physiques.md#ce-que-chacune-sait-produire).
 
 
 ## Nature physique et filtrage
