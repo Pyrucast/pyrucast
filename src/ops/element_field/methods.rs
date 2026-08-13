@@ -4,7 +4,7 @@
 //! libre reste la forme canonique ; ces méthodes ne contiennent aucune logique.
 //!
 //! Ne sont **pas** exposés ici, faute de sens pour toute instance du type :
-//! `deformation`, `beam_deformation`, `frame_deformation` (elles exigent des
+//! `deformation`, `beam_deformation` (elles exigent des
 //! composantes de déplacement `u_x`/`u_y`/`u_z`) et `thermal_strain` (elle
 //! exige une température, et un `alpha` dans le matériau). Elles restent des
 //! fonctions libres seules.

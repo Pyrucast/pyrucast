@@ -57,7 +57,6 @@ RENAMED = {
 NO_METHOD = {
     "deformation": "exige des composantes de déplacement u_x/u_y/u_z",
     "beam_deformation": "exige déplacements + rotations",
-    "frame_deformation": "exige déplacements + rotations, dans un repère orienté",
     "thermal_strain": "exige une température, et alpha dans le matériau",
     "internal_forces": "exige la contrainte de Voigt (sigma_xx, sigma_zz…)",
     "internal_forces_continuum": "exige la contrainte de Voigt",

@@ -30,7 +30,7 @@ exclusions, chacune avec sa raison.
 Deux points à connaître, illustrés plus bas : le nom peut changer entre les
 deux formes (`matrix.stiffness(model, mats)` / `model.stiffness_matrix(mats)`,
 `element_field.sub_material_field(sub, …)` / `sub_model.material_field(…)`),
-et les cinématiques (`deformation`, `beam_deformation`, `frame_deformation`,
+et les cinématiques (`deformation`, `beam_deformation`,
 `thermal_strain`) n'ont **pas** de méthode : elles exigent des composantes
 nommées, elles n'auraient pas de sens sur un champ quelconque. Même raison pour
 `internal_forces`, qui lit la contrainte de Voigt par nom.
@@ -187,8 +187,7 @@ par la sortie.
 | `deformation(u: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `deformation(u, fespace) -> ElementField` |
 | `interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `interp_to_gauss(field, fespace) -> ElementField` |
 | `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref) -> ElementField` |
-| `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `beam_deformation(field, fespace) -> ElementField` |
-| `frame_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `frame_deformation(field, fespace) -> ElementField` (portique orienté : `eps, kappa, gamma` en 2-D, `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` en 3-D) |
+| `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `beam_deformation(field, fespace) -> ElementField` (1-D, plan ou spatial selon le maillage) |
 | `consolidate(field: &ElementField) -> ElementField` | `consolidate(field) -> ElementField` (fusionne les zones d'une même fespace) |
 | `mask(field: &ElementField, band: &Band, …) -> ElementField` | `mask(field, ge=None, …) -> ElementField` ; accepte aussi un `SubElementField` |
 | `sub_material_field(sub: &SubModel, pairs: &[(&str, f64)]) -> SubElementField` | `sub_material_field(sub_model, components_and_values) -> SubElementField` |

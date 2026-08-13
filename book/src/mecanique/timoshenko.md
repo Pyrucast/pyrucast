@@ -97,8 +97,7 @@ rigidité n'utilisant que l'aire de cisaillement.
 
 Le comportement (`COMP`) rend les efforts de section par une loi **linéaire**,
 à partir des déformations généralisées produites par
-[`beam_deformation`](../operateurs/champs.md) en 1-D et
-[`frame_deformation`](../operateurs/champs.md) en 2-D/3-D.
+[`beam_deformation`](../operateurs/champs.md), un opérateur pour les trois configurations.
 
 ## Mise en donnée (Rust, testé)
 
@@ -136,8 +135,8 @@ rigidité, signalée plutôt que cachée, et le prochain point à traiter. La
 rigidité géométrique demande un effort axial pour raidir la barre : la
 configuration 1-D, en flexion pure, n'en déclare donc aucune.
 
-**Reconstruction des efforts.** `beam_deformation` et `frame_deformation`
-rendent des déformations **élément-constantes**, héritées de l'élément linéaire.
+**Reconstruction des efforts.** `beam_deformation` rend des déformations
+**élément-constantes**, héritées de l'élément linéaire.
 Avec l'élément exact, la courbure varie dans la maille : la reconstruction est
 donc une approximation, assumée par la formulation. Le repère local, lui, est
 déduit automatiquement de la géométrie (référence globale Z, ou Y pour une barre

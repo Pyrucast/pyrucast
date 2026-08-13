@@ -9,7 +9,7 @@ Ce test lit la **surface publique** de chaque module d'`ops` — les `pub use`
 et les `pub fn` de son fichier racine, la liste que le développeur tient déjà
 pour Rust — et vérifie que chaque nom se retrouve dans le sous-module Python
 correspondant. C'est le trou par lequel
-`ops::element_field::frame_deformation` est restée sans binding : le garde-fou
+`ops::element_field::beam_deformation` est restée sans binding : le garde-fou
 des méthodes (`test_method_exposure.py`) lit le **stub**, donc il ne peut pas
 voir une fonction qui n'y est pas. Les deux tests sont complémentaires — l'un
 garde la projection Rust → Python, l'autre la projection fonction → méthode.
@@ -203,6 +203,6 @@ def test_python_only_entries_are_documented():
         assert reason.strip(), f"{fn} : dérogation sans raison écrite"
 
 
-def test_frame_deformation_is_reachable():
+def test_beam_deformation_is_reachable():
     """Régression nommée : c'est la fonction qui a motivé ce test."""
-    assert hasattr(pyrucast.element_field, "frame_deformation")
+    assert hasattr(pyrucast.element_field, "beam_deformation")

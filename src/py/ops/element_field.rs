@@ -98,33 +98,22 @@ pub fn thermal_strain(
     Ok(PyElementField { inner: ef })
 }
 
-/// Generalised section strains of an **oriented** `SEG2` frame element at the
-/// Gauss points — the co-rotational counterpart of `beam_deformation` for the
-/// `frame` (2-D) and `frame3d` (3-D) physics.
+/// Generalised **section strains** of a beam at the Gauss points, in whichever
+/// configuration the mesh puts it — the geometric producer of the behaviour
+/// input for `timoshenko` and `bernoulli`.
 ///
-/// Where `beam_deformation` expects a 1-D `(w, theta)` beam already aligned
-/// with its axis, a frame element sits arbitrarily in space and carries the
-/// full displacement + rotation at each node: this operator builds the
-/// element's local axes, rotates the nodal triples into them, then evaluates
-/// the section strains from the local DOFs. Components are `eps, kappa, gamma`
-/// in 2-D and `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` in 3-D.
+/// | `Coords` | DOFs read | components produced |
+/// |---|---|---|
+/// | 1-D | `w, theta` | `kappa, gamma` |
+/// | 2-D | `u_x, u_y, r_z` | `eps, kappa, gamma` |
+/// | 3-D | six | `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` |
+///
+/// For an oriented element it builds the local axes, rotates the nodal triples
+/// into them, then evaluates the strains from the local DOFs. This replaces
+/// `frame_deformation`, which was the same operator for the 2-D and 3-D cases.
 ///
 /// Feed the result to `integrate_behavior` to obtain the section forces
 /// (`N = E·A·eps`, `M = E·I·kappa`, `V = G·A_s·gamma`).
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn frame_deformation(
-    field: PyRef<PyNodeField>,
-    fespace: PyRef<PyFiniteElementSpace>,
-) -> PyResult<PyElementField> {
-    let ef = crate::ops::element_field::frame_deformation(&field.inner, &fespace.inner)?;
-    Ok(PyElementField { inner: ef })
-}
-
-/// Timoshenko-beam section strains `(kappa, gamma)` of a `(w, theta)` node
-/// field at the Gauss points of `fespace`. Feed the result to
-/// `integrate_behavior` of a Timoshenko model to obtain the section forces
-/// `M = E·I·κ` and `V = G·A_s·γ`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn beam_deformation(

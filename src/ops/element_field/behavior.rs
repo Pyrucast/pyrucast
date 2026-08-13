@@ -103,7 +103,7 @@ mod tests {
     use crate::containers::model::SubModel;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
-    use crate::ops::element_field::{frame_deformation, gradient};
+    use crate::ops::element_field::{beam_deformation, gradient};
     use crate::ops::element_field::{material_field, material_field_per_sub_model};
 
     /// SEG2 of length `L`, HeatConduction model (+ optional Dirichlet on the
@@ -231,7 +231,7 @@ mod tests {
         }
     }
 
-    /// Full chain `frame_deformation → integrate` for a 2-D `Frame`: a known
+    /// Full chain `beam_deformation → integrate` for a plane frame: a known
     /// displacement/rotation state on a horizontal element (local = global)
     /// gives the hand-computed section forces `N = E·A·ε`, `M = E·I·κ`,
     /// `V = G·A_s·γ`.
@@ -264,7 +264,7 @@ mod tests {
         sol.set_value(b.id(), "r_z", 0.25 * l).unwrap();
         let sol = NodeField::from_sub(sol);
 
-        let def = frame_deformation(&sol, &fes).unwrap();
+        let def = beam_deformation(&sol, &fes).unwrap();
         let materials = material_field(
             &model,
             &[("E", e), ("A", area), ("I", i), ("G", g), ("A_s", a_s)],

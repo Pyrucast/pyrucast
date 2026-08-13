@@ -279,7 +279,7 @@ calculée.
 #### Ce que ça ne règle pas
 
 La reconstruction des efforts reste à la charge de la formulation.
-`frame_deformation` rend toujours des déformations élément-constantes ; la
+`beam_deformation` rend toujours des déformations élément-constantes ; la
 différence est que c'est désormais une **approximation assumée par la
 formulation**, et non la conséquence tacite d'une base mal déclarée.
 
