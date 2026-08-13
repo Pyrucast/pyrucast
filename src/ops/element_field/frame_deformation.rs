@@ -1,8 +1,8 @@
 //! Generalised section strains of an oriented `SEG2` beam (frame) at the Gauss
 //! points — the co-rotational counterpart of
 //! [`crate::ops::element_field::beam_deformation`](fn@crate::ops::element_field::beam_deformation)
-//! for the [`Frame`](crate::models::frame::Frame) (2-D) and
-//! [`Frame3d`](crate::models::frame3d::Frame3d) (3-D) physics.
+//! for the [`Timoshenko`](crate::models::timoshenko::Timoshenko) beam in its
+//! **plane** and **space** configurations.
 //!
 //! Where `beam_deformation` works on a 1-D `(w, θ)` beam already aligned with
 //! the axis, a frame element is oriented arbitrarily in space and carries the
@@ -43,7 +43,7 @@ const COMPONENTS_2D: &[&str] = &["eps", "kappa", "gamma"];
 /// Output component names of the 3-D frame section strains.
 const COMPONENTS_3D: &[&str] = &["eps", "kappa_y", "kappa_z", "torsion", "gamma_y", "gamma_z"];
 /// Displacement + rotation DOFs read from the nodal field, per space dim.
-const DOFS_2D: &[&str] = &["u_x", "u_y", "rz"];
+const DOFS_2D: &[&str] = &["u_x", "u_y", "r_z"];
 const DOFS_3D: &[&str] = &["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"];
 
 /// Generalised section strains of a frame displacement/rotation `field` at the
@@ -172,7 +172,7 @@ fn strains_2d(xa: &[f64], xb: &[f64], da: &[f64], db: &[f64]) -> Vec<f64> {
 /// frame, from the endpoint coordinates and the nodal DOFs
 /// `[u_x, u_y, u_z, r_x, r_y, r_z]`.
 ///
-/// The local axes match the [`Frame3d`](crate::models::frame3d) stiffness
+/// The local axes match the [`frame3d`](crate::models::frame3d) stiffness
 /// kernel (`x'` along the beam, `y'`/`z'` from an automatic global reference).
 /// With local displacement `(u', v', w')` and rotation `(θx', θy', θz')`:
 /// axial `ε = u'_,x`, torsion `= θx'_,x`, curvatures `κ_y = θy'_,x`,
@@ -215,7 +215,7 @@ fn normalize(a: [f64; 3]) -> [f64; 3] {
 }
 
 /// Local axes `R = [x'; y'; z']` (rows, in global coords) from the beam
-/// direction `d` — identical to the [`Frame3d`](crate::models::frame3d)
+/// direction `d` — identical to the [`frame3d`](crate::models::frame3d)
 /// stiffness kernel so strains and forces share one orientation convention.
 fn local_axes(d: [f64; 3]) -> [[f64; 3]; 3] {
     let x = normalize(d);
@@ -275,13 +275,13 @@ mod tests {
         let l = 2.0;
         let (fes, a, b, support) = one_element(2, &[0.0, 0.0], &[l, 0.0]);
         let mut f =
-            SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into(), "rz".into()])
+            SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into(), "r_z".into()])
                 .unwrap();
         // u_x = x·0.5 (ε = 0.5), rz = x·0.25 (κ = 0.25), u_y = 0 (γ = −θ_centre).
         f.set_value(a.id(), "u_x", 0.0).unwrap();
         f.set_value(b.id(), "u_x", 0.5 * l).unwrap();
-        f.set_value(a.id(), "rz", 0.0).unwrap();
-        f.set_value(b.id(), "rz", 0.25 * l).unwrap();
+        f.set_value(a.id(), "r_z", 0.0).unwrap();
+        f.set_value(b.id(), "r_z", 0.25 * l).unwrap();
         let f = NodeField::from_sub(f);
 
         let def = frame_deformation(&f, &fes).unwrap();
@@ -302,7 +302,7 @@ mod tests {
         let l = 2.0;
         let (fes, a, b, support) = one_element(2, &[0.0, 0.0], &[0.0, l]);
         let mut f =
-            SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into(), "rz".into()])
+            SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into(), "r_z".into()])
                 .unwrap();
         // Axial along global y.
         f.set_value(a.id(), "u_y", 0.0).unwrap();
@@ -350,11 +350,11 @@ mod tests {
     #[test]
     fn rejects_missing_dof() {
         let (fes, _a, _b, support) = one_element(2, &[0.0, 0.0], &[1.0, 0.0]);
-        // Missing the rotation `rz`.
+        // Missing the rotation `r_z`.
         let f = NodeField::from_sub(
             SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap(),
         );
         let err = frame_deformation(&f, &fes).unwrap_err();
-        assert!(format!("{err}").contains("must carry a 'rz'"));
+        assert!(format!("{err}").contains("must carry a 'r_z'"));
     }
 }

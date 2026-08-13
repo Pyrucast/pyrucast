@@ -1599,26 +1599,27 @@ class Model:
     @classmethod
     def timoshenko(cls, fespace: FiniteElementSpace) -> Model:
         r"""
-        `Model.timoshenko(fespace)` — Timoshenko-beam model spanning every
-        subspace of `fespace` (1-D `SEG2`). DOFs `w` (deflection) and `theta`
-        (rotation); reduced shear integration avoids locking. Material
-        (`E`, `I`, `G`, `A_s`) is supplied at assembly time.
-        """
-    @classmethod
-    def frame(cls, fespace: FiniteElementSpace) -> Model:
-        r"""
-        `Model.frame(fespace)` — planar frame / portique model spanning every
-        subspace of `fespace` (2-D `SEG2`): an oriented Timoshenko beam carrying
-        axial + bending + shear. DOFs `u_x, u_y, rz`; material
-        (`E`, `A`, `I`, `G`, `A_s`) is supplied at assembly time.
-        """
-    @classmethod
-    def frame3d(cls, fespace: FiniteElementSpace) -> Model:
-        r"""
-        `Model.frame3d(fespace)` — 3-D Timoshenko frame (space frame) spanning
-        every subspace of `fespace` (3-D `SEG2`). 6 DOFs/node: `u_x, u_y, u_z,
-        r_x, r_y, r_z`. Section axes are auto-oriented (global-Z reference).
-        Material (`E, A, I_y, I_z, J, G, A_sy, A_sz`) is supplied at assembly time.
+        `Model.timoshenko(fespace)` — the **shear-deformable** beam, in whichever
+        configuration the mesh puts it (`SEG2` throughout):
+        
+        | `Coords` | DOFs per node | material | section forces |
+        |---|---|---|---|
+        | 1-D | `w`, `theta` | `E, I, G, A_s` | `M, V` |
+        | 2-D | `u_x, u_y, r_z` | `+ A` | `N, M, V` |
+        | 3-D | six | `E, A, I_y, I_z, J, G, A_sy, A_sz` | `N, M_y, M_z, T, V_y, V_z` |
+        
+        This replaces `Model.frame` and `Model.frame3d`, which were the same
+        physics in 2-D and 3-D. Read the DOF names back with
+        `model.primal_vars()`.
+        
+        The element is the **exact** one — the closed form driven by
+        `Φ = 12EI/(G·A_s·L²)` — so one element per member suffices. Its shape
+        functions depend on the material through `Φ`, hence no space can tabulate
+        them: build the subspace with
+        `FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")`.
+        
+        Prefer `bernoulli` for a slender member, where the shear compliance is
+        negligible.
         """
     @classmethod
     def dirichlet(cls, imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None, sense: typing.Optional[builtins.str] = None) -> Model:

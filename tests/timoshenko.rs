@@ -12,7 +12,7 @@
 
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
-use pyrucast::atoms::{ElementType, Node};
+use pyrucast::atoms::{ElementType, Interpolation, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
@@ -43,7 +43,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     for i in 0..N {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
     // ── Modèle : poutre + encastrement à gauche (w = θ = 0) ────────────────
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
@@ -117,7 +117,7 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
     for i in 0..N {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);

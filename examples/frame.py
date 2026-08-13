@@ -42,10 +42,10 @@ def main() -> None:
     base = coords.add_node([0.0, 0.0])
     tip = coords.add_node([L * c, L * s])
     mesh = pyrucast.mesh.line(base, tip, N)  # ligne de N SEG2 à 45° (`line`)
-    fes = pyrucast.FiniteElementSpace(mesh)
+    fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
-    model = pyrucast.Model.frame(fes)
-    for var, dual in (("u_x", "f_x"), ("u_y", "f_y"), ("rz", "m_z")):
+    model = pyrucast.Model.timoshenko(fes)
+    for var, dual in (("u_x", "f_x"), ("u_y", "f_y"), ("r_z", "m_z")):
         model = model | _clamp(base, var, dual)
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)]

@@ -108,8 +108,8 @@ mod tests {
     use crate::coords::Coords;
     use crate::models::elasticity::ElasticityModel;
     use crate::ops::element_field::behavior::integrate;
+    use crate::ops::element_field::deformation;
     use crate::ops::element_field::material_field;
-    use crate::ops::element_field::{beam_deformation, deformation};
 
     /// Elasticity on a single TRI3: for a linear law the internal forces equal
     /// `K·u` applied to the (linear) displacement solution.
@@ -245,49 +245,5 @@ mod tests {
         assert!((fv.value(a.id(), "f_y").unwrap() + n * c[1]).abs() < tol);
         assert!((fv.value(b.id(), "f_x").unwrap() - n * c[0]).abs() < tol);
         assert!((fv.value(b.id(), "f_y").unwrap() - n * c[1]).abs() < tol);
-    }
-
-    /// Beam (Timoshenko): the internal forces equal `K·u` for the linear law.
-    #[test]
-    fn beam_internal_forces_match_k_times_u() {
-        let coords = insert(Coords::new(1).unwrap());
-        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-        let b = Node::create_in(coords.clone(), &[2.0]).unwrap();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
-        mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-
-        let mut model = Model::empty();
-        model
-            .add_sub(insert(SubModel::timoshenko(fes.get(0).unwrap()).unwrap()))
-            .unwrap();
-        let materials =
-            material_field(&model, &[("E", 3.0), ("I", 2.0), ("G", 5.0), ("A_s", 2.0)]).unwrap();
-
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
-        let mut u = SubNodeField::from_poi1(&support, vec!["w".into(), "theta".into()]).unwrap();
-        u.set_value(a.id(), "w", 0.0).unwrap();
-        u.set_value(a.id(), "theta", 0.0).unwrap();
-        u.set_value(b.id(), "w", 0.5).unwrap();
-        u.set_value(b.id(), "theta", 0.2).unwrap();
-        let u = NodeField::from_sub(u);
-
-        let sect = beam_deformation(&u, &fes).unwrap();
-        let stress = integrate(&model, &sect, None, &materials, None).unwrap();
-        let f_int = internal_forces(&stress, &model).unwrap();
-
-        let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
-        let ku = (&k * &u).unwrap();
-
-        let fv = f_int.view().unwrap();
-        let kv = ku.view().unwrap();
-        let tol = 1e-9;
-        for nid in [a.id(), b.id()] {
-            for comp in ["f_w", "m_theta"] {
-                let got = fv.value(nid, comp).unwrap();
-                let want = kv.value(nid, comp).unwrap();
-                assert!((got - want).abs() < tol, "{comp}@{nid:?}: {got} ≠ {want}");
-            }
-        }
     }
 }

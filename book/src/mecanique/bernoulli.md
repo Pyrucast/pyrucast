@@ -5,8 +5,8 @@
 La théorie classique des poutres : les sections planes restent planes **et
 normales** à l'axe déformé, si bien que la rotation de section *est* la pente,
 `θ = w'`, et qu'il n'y a aucun cisaillement transverse. C'est là toute la
-différence avec [Timoshenko](timoshenko.md), le [portique 2D](portique.md) et le
-[cadre 3D](cadre3d.md), qui conservent une souplesse de cisaillement.
+différence avec [Timoshenko](timoshenko.md), le [portique 2D](timoshenko.md) et le
+[cadre 3D](timoshenko.md), qui conservent une souplesse de cisaillement.
 
 Trois configurations partagent la même théorie, et **la dimension du maillage
 les départage** — il n'y a rien à choisir :
@@ -124,7 +124,7 @@ L'effort axial y est ajouté par le terme de barre \\( EA/L \\), qui ne s'y coup
 pas.
 
 Le repère local 3-D est déduit automatiquement d'une référence globale Z (globale
-Y pour une barre quasi verticale), comme pour le [cadre 3D](cadre3d.md) : aucune
+Y pour une barre quasi verticale), comme pour le [cadre 3D](timoshenko.md) : aucune
 donnée d'orientation à fournir, ce qui convient aux sections symétriques.
 
 ## Variables et matériau

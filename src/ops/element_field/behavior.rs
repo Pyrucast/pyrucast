@@ -244,23 +244,24 @@ mod tests {
         let b = Node::create_in(coords.clone(), &[l, 0.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let fes =
+            FiniteElementSpace::new(&mesh, crate::atoms::Interpolation::ModelEmbedded).unwrap();
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::frame(fes.get(0).unwrap()).unwrap()))
+            .add_sub(insert(SubModel::timoshenko(fes.get(0).unwrap()).unwrap()))
             .unwrap();
 
         // Kinematics: u_x = 0.5·x ⇒ ε = 0.5; rz = 0.25·x ⇒ κ = 0.25;
         // u_y = 0, so γ = w'/L − θ_centre = 0 − (0 + 0.5)/2 = −0.25.
         let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
         let mut sol =
-            SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into(), "rz".into()])
+            SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into(), "r_z".into()])
                 .unwrap();
         sol.set_value(a.id(), "u_x", 0.0).unwrap();
         sol.set_value(b.id(), "u_x", 0.5 * l).unwrap();
-        sol.set_value(a.id(), "rz", 0.0).unwrap();
-        sol.set_value(b.id(), "rz", 0.25 * l).unwrap();
+        sol.set_value(a.id(), "r_z", 0.0).unwrap();
+        sol.set_value(b.id(), "r_z", 0.25 * l).unwrap();
         let sol = NodeField::from_sub(sol);
 
         let def = frame_deformation(&sol, &fes).unwrap();

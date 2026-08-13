@@ -38,8 +38,6 @@
     - [Lois d'endommagement](mecanique/endommagement.md)
     - [Poutre d'Euler-Bernoulli](mecanique/bernoulli.md)
     - [Poutre de Timoshenko](mecanique/timoshenko.md)
-    - [Portique 2D](mecanique/portique.md)
-    - [Cadre 3D](mecanique/cadre3d.md)
     - [Coques](mecanique/coques.md)
   - [Contraintes](contraintes.md)
     - [Dirichlet](contraintes/dirichlet.md)

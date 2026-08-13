@@ -22,7 +22,7 @@ La cinématique naturelle d'une coque compte cinq degrés de liberté — trois
 translations et deux rotations de la fibre normale. Mais le cinquième et le
 sixième ne se distinguent que dans le repère **local**, alors qu'un assembleur
 global numérote les DDL par leur nom. L'élément en porte donc six,
-`u_x…u_z, r_x…r_z`, exactement comme le [cadre 3D](cadre3d.md) — ce qui permet
+`u_x…u_z, r_x…r_z`, exactement comme le [cadre 3D](timoshenko.md) — ce qui permet
 aussi à une coque et à un portique spatial de partager des nœuds sans adaptateur.
 
 Le sixième, la rotation autour de la normale, est le DDL de **vrillage**, et une

@@ -18,7 +18,7 @@ def test_cantilever_converges_without_locking():
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(N):
         mesh.unit().add_cell([nodes[i], nodes[i + 1]])
-    fes = pyrucast.FiniteElementSpace(mesh)
+    fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
     model = pyrucast.Model.timoshenko(fes)
     model = model | _clamp(nodes[0], "w", "f_w")
@@ -50,7 +50,7 @@ def test_section_forces_cantilever():
     mesh = pyrucast.Mesh(c, "SEG2")
     for i in range(N):
         mesh.unit().add_cell([nodes[i], nodes[i + 1]])
-    fes = pyrucast.FiniteElementSpace(mesh)
+    fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
     model = pyrucast.Model.timoshenko(fes)
     model = model | _clamp(nodes[0], "w", "f_w")
@@ -81,7 +81,7 @@ def test_timoshenko_vars():
     b = c.add_node([1.0])
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.unit().add_cell([a, b])
-    fes = pyrucast.FiniteElementSpace(mesh)
+    fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
     model = pyrucast.Model.timoshenko(fes)
     assert model.primal_vars() == ["w", "theta"]
     assert model.dual_vars() == ["f_w", "m_theta"]

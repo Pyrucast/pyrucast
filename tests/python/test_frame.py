@@ -24,10 +24,10 @@ def test_inclined_cantilever_perpendicular_load():
     mesh = pyrucast.Mesh(coords, "SEG2")
     for i in range(N):
         mesh.unit().add_cell([nodes[i], nodes[i + 1]])
-    fes = pyrucast.FiniteElementSpace(mesh)
+    fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
-    model = pyrucast.Model.frame(fes)
-    for var, dual in (("u_x", "f_x"), ("u_y", "f_y"), ("rz", "m_z")):
+    model = pyrucast.Model.timoshenko(fes)
+    for var, dual in (("u_x", "f_x"), ("u_y", "f_y"), ("r_z", "m_z")):
         model = model | _clamp(nodes[0], var, dual)
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)]
@@ -53,7 +53,7 @@ def test_frame_vars():
     b = coords.add_node([1.0, 0.0])
     mesh = pyrucast.Mesh(coords, "SEG2")
     mesh.unit().add_cell([a, b])
-    fes = pyrucast.FiniteElementSpace(mesh)
-    model = pyrucast.Model.frame(fes)
-    assert model.primal_vars() == ["u_x", "u_y", "rz"]
+    fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
+    model = pyrucast.Model.timoshenko(fes)
+    assert model.primal_vars() == ["u_x", "u_y", "r_z"]
     assert model.dual_vars() == ["f_x", "f_y", "m_z"]

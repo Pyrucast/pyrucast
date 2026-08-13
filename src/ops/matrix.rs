@@ -512,31 +512,44 @@ mod tests {
         (model, materials)
     }
 
-    /// A Timoshenko beam over an `n_elems`-element SEG2 chain (1-D). Exercises the
+    /// A thick shell over an `n`×1 strip of `QUA4` facets in 3-D. Exercises the
     /// **multi-fespace** computed path: each block integrates two FE subspaces
-    /// (bending full Gauss + shear reduced) sharing one mesh, and interior nodes
-    /// are shared so the parallel scatter genuinely colours the cells.
-    fn timoshenko_beam(n_elems: usize) -> (Model, ElementField) {
-        let coords = insert(Coords::new(1).unwrap());
-        let nodes: Vec<Node> = (0..=n_elems)
-            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
-            .collect();
-        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-        for i in 0..n_elems {
-            sm.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
+    /// (membrane/bending at full Gauss + transverse shear reduced) sharing one
+    /// mesh, and interior nodes are shared so the parallel scatter genuinely
+    /// colours the cells.
+    ///
+    /// It used to be a Timoshenko beam, which carried the same two-quadrature
+    /// layout. The beam now assembles an exact closed form on a single space, so
+    /// the shell is what still exercises this path.
+    fn multi_fespace_shell(n: usize) -> (Model, ElementField) {
+        let coords = insert(Coords::new(3).unwrap());
+        let mut row = Vec::new();
+        for i in 0..=n {
+            let x = i as f64;
+            row.push((
+                Node::create_in(coords.clone(), &[x, 0.0, 0.0]).unwrap(),
+                Node::create_in(coords.clone(), &[x, 1.0, 0.0]).unwrap(),
+            ));
+        }
+        let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
+        for i in 0..n {
+            let (a0, a1) = &row[i];
+            let (b0, b1) = &row[i + 1];
+            sm.add_cell(&[a0.id(), b0.id(), b1.id(), a1.id()]).unwrap();
         }
         let mesh = Mesh::from_submesh(sm);
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::timoshenko(fes.get(0).unwrap()).unwrap()))
+            .add_sub(insert(
+                SubModel::shell(fes.get(0).unwrap(), crate::models::shell::ShellModel::Thick)
+                    .unwrap(),
+            ))
             .unwrap();
-        let materials = material_field_per_sub_model(
-            &model,
-            &[&[("E", 3.0), ("I", 2.0), ("G", 5.0), ("A_s", 2.0)]],
-        )
-        .unwrap();
+        let materials =
+            material_field_per_sub_model(&model, &[&[("E", 2.1e5), ("nu", 0.3), ("h", 0.02)]])
+                .unwrap();
         (model, materials)
     }
 
@@ -675,14 +688,14 @@ mod tests {
         assert_eq!(a.to_csr().unwrap().values(), b.to_csr().unwrap().values());
     }
 
-    /// A **multi-fespace** element (Timoshenko: bending full-Gauss + shear
-    /// reduced, two subspaces over one mesh) assembles through the computed
-    /// serial scatter **bit-for-bit** identically to its literal reference — the
-    /// two `CellGeom` per cell produce the exact same triplet stream as the
-    /// single-block driver.
+    /// A **multi-fespace** element (a thick shell: membrane/bending at full
+    /// Gauss + transverse shear reduced, two subspaces over one mesh) assembles
+    /// through the computed serial scatter **bit-for-bit** identically to its
+    /// literal reference — the two `CellGeom` per cell produce the exact same
+    /// triplet stream as the single-block driver.
     #[test]
-    fn timoshenko_multi_fespace_serial_equals_literal_bit_for_bit() {
-        let (model, materials) = timoshenko_beam(5);
+    fn multi_fespace_serial_equals_literal_bit_for_bit() {
+        let (model, materials) = multi_fespace_shell(5);
         let k = assemble_computed_blocks(&model, &materials);
         let pattern = crate::ops::scatter::build_pattern(&k).unwrap();
         let csr = crate::ops::scatter::scatter_serial(&k, &pattern).unwrap();
@@ -695,11 +708,11 @@ mod tests {
         assert_eq!(csr.values(), csr_ref.values());
     }
 
-    /// Same Timoshenko beam through the **parallel** colour-driven scatter (the
-    /// real `stiffness` path): identical sparsity, values within tolerance.
+    /// The same shell through the **parallel** colour-driven scatter (the real
+    /// `stiffness` path): identical sparsity, values within tolerance.
     #[test]
-    fn timoshenko_multi_fespace_parallel_matches_literal_within_tol() {
-        let (model, materials) = timoshenko_beam(5);
+    fn multi_fespace_parallel_matches_literal_within_tol() {
+        let (model, materials) = multi_fespace_shell(5);
         let k_new = stiffness(&model, &materials).unwrap();
         let k_ref = assemble_literal_reference(&model, &materials).unwrap();
         let csr_new = k_new.to_csr().unwrap();

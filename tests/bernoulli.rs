@@ -228,11 +228,9 @@ fn a_space_frame_twists_by_its_closed_form() -> Result<()> {
 fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
     const P: f64 = 50.0;
     const G: f64 = 80_000.0;
-    // Bernoulli is nodally exact with one element; Timoshenko's linear
-    // interpolation is not, and needs a mesh to converge. Comparing the two
-    // theories therefore means giving **both** enough elements that the
-    // discretisation is out of the picture — otherwise the comparison measures
-    // the mesh rather than the physics.
+    // Both elements are now nodally exact, so one per member would do. The mesh
+    // is kept anyway: it costs nothing and it proves the comparison is about the
+    // two **theories**, not about either one's discretisation.
     const N_ELEMS: usize = 40;
     let tip = |shear_area: f64, length: f64| -> Result<(f64, f64)> {
         let coords = insert(Coords::new(1)?);
@@ -250,7 +248,7 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
         // Lagrange ones. Two spaces over the **same** mesh is exactly what the
         // comparison means.
         let fes_bern = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
-        let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
+        let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
         let clamp = |model: Model| -> Result<Model> {
             let mut m = model;

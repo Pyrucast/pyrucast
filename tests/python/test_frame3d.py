@@ -22,7 +22,7 @@ def test_cantilever_bending_and_torsion():
         mesh.unit().add_cell([nodes[i], nodes[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
-    model = pyrucast.Model.frame3d(fes)
+    model = pyrucast.Model.timoshenko(fes)
     for var, dual in (
         ("u_x", "f_x"),
         ("u_y", "f_y"),
@@ -79,6 +79,6 @@ def test_frame3d_vars():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
-    model = pyrucast.Model.frame3d(fes)
+    model = pyrucast.Model.timoshenko(fes)
     assert model.primal_vars() == ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"]
     assert model.dual_vars() == ["f_x", "f_y", "f_z", "m_x", "m_y", "m_z"]

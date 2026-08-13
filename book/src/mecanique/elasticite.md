@@ -169,7 +169,7 @@ La **thermique** n'a rien de spécifique à faire : le flux \\( q = -k\nabla T \
 est déjà purement méridien, et le facteur \\( 2\pi r \\) suffit à produire le
 profil logarithmique d'un cylindre creux. La [plasticité](plasticite.md) et
 [Mazars](mazars.md) supportent l'axisymétrie, leur état interne étant déjà
-stocké en 3-D complet. En revanche [barre](truss.md) et [portique](portique.md)
+stocké en 3-D complet. En revanche [barre](truss.md) et [portique](timoshenko.md)
 la **refusent** : un segment du plan méridien engendre une coque de révolution,
 que leurs noyaux ne modélisent pas.
 

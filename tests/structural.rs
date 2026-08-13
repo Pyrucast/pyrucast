@@ -18,7 +18,7 @@ fn bar_2d(dx: f64, dy: f64) -> Result<(FiniteElementSpace, Node, Node, f64)> {
     let b = Node::create_in(coords.clone(), &[dx, dy])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
     Ok((fes, a, b, (dx * dx + dy * dy).sqrt()))
 }
 
@@ -117,7 +117,7 @@ fn frame_consistent_mass_matches_closed_form() -> Result<()> {
     const I: f64 = 0.5;
     const L: f64 = 2.0;
     let (fes, a, b, len) = bar_2d(L, 0.0)?; // horizontal ⇒ T = identity
-    let model = Model::frame(&fes)?;
+    let model = Model::timoshenko(&fes)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[
@@ -138,10 +138,10 @@ fn frame_consistent_mass_matches_closed_form() -> Result<()> {
     assert!((m.get(a.id(), "f_x", a.id(), "u_x")? - 2.0 * ma).abs() < tol);
     assert!((m.get(a.id(), "f_y", a.id(), "u_y")? - 2.0 * ma).abs() < tol);
     assert!((m.get(a.id(), "f_x", b.id(), "u_x")? - ma).abs() < tol);
-    assert!((m.get(a.id(), "m_z", a.id(), "rz")? - 2.0 * mi).abs() < tol);
-    assert!((m.get(a.id(), "m_z", b.id(), "rz")? - mi).abs() < tol);
+    assert!((m.get(a.id(), "m_z", a.id(), "r_z")? - 2.0 * mi).abs() < tol);
+    assert!((m.get(a.id(), "m_z", b.id(), "r_z")? - mi).abs() < tol);
     // No translation ↔ rotation coupling.
-    assert!(m.get(a.id(), "f_x", a.id(), "rz")?.abs() < tol);
+    assert!(m.get(a.id(), "f_x", a.id(), "r_z")?.abs() < tol);
 
     // Total = 2ρAL + ρIL.
     let total: f64 = m.to_dmatrix()?.sum();
@@ -157,7 +157,7 @@ fn frame_geometric_stiffens_transverse_only() -> Result<()> {
     const N: f64 = 9.0;
     const L: f64 = 3.0;
     let (fes, a, b, len) = bar_2d(L, 0.0)?; // horizontal ⇒ transverse is u_y
-    let model = Model::frame(&fes)?;
+    let model = Model::timoshenko(&fes)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", 1.0), ("A", 1.0), ("I", 1.0), ("G", 1.0), ("A_s", 1.0)],
@@ -173,7 +173,7 @@ fn frame_geometric_stiffens_transverse_only() -> Result<()> {
     assert!((kg.get(a.id(), "f_y", b.id(), "u_y")? + g).abs() < tol);
     // Axial and rotation carry no geometric term.
     assert!(kg.get(a.id(), "f_x", a.id(), "u_x")?.abs() < tol);
-    assert!(kg.get(a.id(), "m_z", a.id(), "rz")?.abs() < tol);
+    assert!(kg.get(a.id(), "m_z", a.id(), "r_z")?.abs() < tol);
     Ok(())
 }
 
@@ -190,7 +190,7 @@ fn timoshenko_consistent_mass_matches_closed_form() -> Result<()> {
     let b = Node::create_in(coords.clone(), &[L])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
     let model = Model::timoshenko(&fes)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -257,7 +257,7 @@ fn frame3d_consistent_mass_matches_closed_form() -> Result<()> {
     const IZ: f64 = 0.7;
     const L: f64 = 2.0;
     let (fes, a, _b) = bar_3d(L)?; // along x ⇒ local axes = global ⇒ T = identity
-    let model = Model::frame3d(&fes)?;
+    let model = Model::timoshenko(&fes)?;
     let materials = frame3d_materials(&model, IY, IZ, AREA, RHO)?;
 
     let m = pyrucast::ops::matrix::mass(&model, &materials)?;
@@ -276,7 +276,7 @@ fn frame3d_geometric_stiffens_both_transverse() -> Result<()> {
     const N: f64 = 8.0;
     const L: f64 = 4.0;
     let (fes, a, b) = bar_3d(L)?;
-    let model = Model::frame3d(&fes)?;
+    let model = Model::timoshenko(&fes)?;
     let materials = frame3d_materials(&model, 1.0, 1.0, 1.0, 1.0)?;
     let sub = SubElementField::from_uniform_per_component(fes.get(0)?, vec!["N".into()], &[N])?;
     let mut state = ElementField::empty();

@@ -13,7 +13,7 @@
 
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
-use pyrucast::atoms::{ElementType, Node};
+use pyrucast::atoms::{ElementType, Interpolation, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
@@ -52,7 +52,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     for i in 0..N {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
     // ── Modèle : portique + encastrement complet à la base ─────────────────
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
@@ -68,10 +68,10 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
             Default::default(),
         )
     };
-    let mut model = Model::frame(&fes)?;
+    let mut model = Model::timoshenko(&fes)?;
     model = model.union(&clamp(&nodes[0], "u_x", "f_x")?)?;
     model = model.union(&clamp(&nodes[0], "u_y", "f_y")?)?;
-    model = model.union(&clamp(&nodes[0], "rz", "m_z")?)?;
+    model = model.union(&clamp(&nodes[0], "r_z", "m_z")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

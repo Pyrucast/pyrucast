@@ -1,6 +1,6 @@
 //! Timoshenko-beam section strains of a `(w, theta)` nodal field at the Gauss
 //! points — the geometric producer of the behaviour input for
-//! [`crate::models::timoshenko::Timoshenko`].
+//! [`crate::models::timoshenko::Timoshenko`] in its **1-D** configuration.
 //!
 //! Per element it evaluates the **curvature** `κ = θ'` and the **shear strain**
 //! `γ = w' − θ`. Both are taken **element-constant** — `θ'`/`w'` are constant

@@ -125,9 +125,8 @@ use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
     bernoulli, contact, convection, damage, dirichlet, elasticity, embedded, fick,
-    follower_pressure, frame, frame3d, heat_conduction, interface_transfer, mpc, plastic,
-    plasticity, radiation, shell, timoshenko, truss, Constraint, MatrixKind, Physics,
-    RelationSense, SubModelKind,
+    follower_pressure, heat_conduction, interface_transfer, mpc, plastic, plasticity, radiation,
+    shell, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -196,12 +195,13 @@ pub enum SubModel {
     /// Damage — Mazars, tension/compression, or orthotropic SiC/SiC; see
     /// [`damage::Damage`].
     Mazars(damage::Damage),
-    /// Timoshenko beam (shear-deformable bending) — see [`timoshenko::Timoshenko`].
+    /// Timoshenko beam — shear-deformable, in a 1-D, plane or space
+    /// configuration read from the mesh. See [`timoshenko::Timoshenko`].
+    ///
+    /// > The `Frame` and `Frame3d` variants that once sat here were the same
+    /// > physics in 2-D and 3-D; they are gone, and the two indices after this
+    /// > one shifted with them. That is a `bincode` break, taken knowingly.
     Timoshenko(timoshenko::Timoshenko),
-    /// Planar frame / portique (axial + bending + shear) — see [`frame::Frame`].
-    Frame(frame::Frame),
-    /// 3-D Timoshenko frame (space frame, 6 DOF/node) — see [`frame3d::Frame3d`].
-    Frame3d(frame3d::Frame3d),
     // New variants go **at the end**: `bincode` serialises the variant index, so
     // inserting one in the middle would silently misread every saved model.
     /// Fickian diffusion (concentration / mass flux) — see [`fick::Fick`].
@@ -240,8 +240,6 @@ impl SubModel {
             SubModel::Plasticity(p) => p,
             SubModel::Mazars(p) => p,
             SubModel::Timoshenko(p) => p,
-            SubModel::Frame(p) => p,
-            SubModel::Frame3d(p) => p,
             SubModel::Fick(p) => p,
             SubModel::InterfaceTransfer(p) => p,
             SubModel::Radiation(p) => p,
@@ -418,20 +416,6 @@ impl SubModel {
     /// [`timoshenko::Timoshenko::new`].
     pub fn timoshenko(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         Ok(SubModel::Timoshenko(timoshenko::Timoshenko::new(fespace)?))
-    }
-
-    /// Planar-frame sub-model on a 2-D `SEG2` FE subspace (axial + bending +
-    /// shear, any orientation). Material (`E`, `A`, `I`, `G`, `A_s`) is supplied
-    /// at assembly time. See [`frame::Frame::new`].
-    pub fn frame(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        Ok(SubModel::Frame(frame::Frame::new(fespace)?))
-    }
-
-    /// 3-D Timoshenko-frame sub-model on a 3-D `SEG2` FE subspace (6 DOF/node).
-    /// Material (`E, A, I_y, I_z, J, G, A_sy, A_sz`) is supplied at assembly
-    /// time. See [`frame3d::Frame3d::new`].
-    pub fn frame3d(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        Ok(SubModel::Frame3d(frame3d::Frame3d::new(fespace)?))
     }
 
     /// Dirichlet sub-model: enforce `imposed_variable = u_d` on the nodes of
@@ -1154,28 +1138,6 @@ impl Model {
         let mut out = Self::empty();
         for sub in fes {
             out.add_sub(insert(SubModel::timoshenko(sub.clone())?))?;
-        }
-        Ok(out)
-    }
-
-    /// Planar-frame `Model` spanning **every** subspace of `fes`. Parent-level
-    /// named constructor; material (`E`, `A`, `I`, `G`, `A_s`) is supplied at
-    /// assembly time.
-    pub fn frame(fes: &FiniteElementSpace) -> Result<Self> {
-        let mut out = Self::empty();
-        for sub in fes {
-            out.add_sub(insert(SubModel::frame(sub.clone())?))?;
-        }
-        Ok(out)
-    }
-
-    /// 3-D Timoshenko-frame `Model` spanning **every** subspace of `fes`.
-    /// Parent-level named constructor; material
-    /// (`E, A, I_y, I_z, J, G, A_sy, A_sz`) is supplied at assembly time.
-    pub fn frame3d(fes: &FiniteElementSpace) -> Result<Self> {
-        let mut out = Self::empty();
-        for sub in fes {
-            out.add_sub(insert(SubModel::frame3d(sub.clone())?))?;
         }
         Ok(out)
     }

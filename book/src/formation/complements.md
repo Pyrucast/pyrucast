@@ -12,8 +12,7 @@ composantes matériau nommées portant la géométrie de la section.
 |---|---|---|
 | `Model.truss(fes)` | `MODE ... 'BARR'` | `u_x,u_y(,u_z)` / `f_x,f_y(,f_z)` |
 | `Model.timoshenko(fes)` | `MODE ... 'TIMO'` | `w, theta` / `f_w, m_theta` |
-| `Model.frame(fes)` | `MODE ... 'POUT'` (2D, portique) | `u_x, u_y, rz` / `f_x, f_y, m_z` |
-| `Model.frame3d(fes)` | `MODE ... 'POUT'` (3D, cadre) | 6 primales/duales (translations + rotations) |
+| `Model.timoshenko(fes)` | `MODE ... 'POUT'` | selon la dimension : `w, theta` en 1-D, `u_x, u_y, r_z` en plan, six DDL dans l'espace |
 
 Barre en traction — comparée à la solution analytique
 \\( u_x = F \cdot L / (E \cdot A) \\), export du résultat au format VTK :

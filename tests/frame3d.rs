@@ -70,7 +70,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
             Default::default(),
         )
     };
-    let mut model = Model::frame3d(&fes)?;
+    let mut model = Model::timoshenko(&fes)?;
     for (var, dual) in [
         ("u_x", "f_x"),
         ("u_y", "f_y"),

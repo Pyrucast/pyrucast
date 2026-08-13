@@ -44,7 +44,7 @@ def main() -> None:
     mesh = pyrucast.mesh.line(base, tip, N)  # console le long de X (`line`)
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
-    model = pyrucast.Model.frame3d(fes)
+    model = pyrucast.Model.timoshenko(fes)
     for var, dual in (
         ("u_x", "f_x"),
         ("u_y", "f_y"),
