@@ -85,6 +85,14 @@ struct RefData {
     dn_ref: Vec<Vec<f64>>,
     /// Gauss weights.
     weights: Vec<f64>,
+    /// Number of **field** shape functions — `n_nodes` except under a C¹
+    /// interpolation, where each node carries a value *and* a slope.
+    shape_count: usize,
+    /// Field `N_i(ξ_g)` and `∂²N_i/∂ξ²(ξ_g)` per Gauss point. Empty unless the
+    /// field basis differs from the geometric one, so a Lagrange space
+    /// snapshots exactly what it did before.
+    field_n_ref: Vec<Vec<f64>>,
+    field_d2n_ref: Vec<Vec<f64>>,
 }
 
 impl RefData {
@@ -98,6 +106,15 @@ impl RefData {
             dn_ref.push(fe.dn_at_g(g)?.to_vec());
             weights.push(fe.gauss_weight(g)?);
         }
+        // A C¹ space carries a second basis; a Lagrange one leaves these empty
+        // and the accessors fall back to the geometric tables.
+        let (mut field_n_ref, mut field_d2n_ref) = (Vec::new(), Vec::new());
+        if fe.interpolation().is_hermite() {
+            for g in 0..n_gauss {
+                field_n_ref.push(fe.field_n_at_g(g)?.to_vec());
+                field_d2n_ref.push(fe.field_d2n_at_g(g)?.to_vec());
+            }
+        }
         Ok(Self {
             n_nodes: fe.nodes_per_cell()?,
             n_gauss,
@@ -107,8 +124,22 @@ impl RefData {
             n_ref,
             dn_ref,
             weights,
+            shape_count: fe.shape_count()?,
+            field_n_ref,
+            field_d2n_ref,
         })
     }
+}
+
+/// Multiply the **slope** slots of a C¹ basis row by the Jacobian.
+///
+/// The basis alternates value, slope, value, slope — one pair per node — so the
+/// odd indices are the ones whose reference degree of freedom is `∂w/∂ξ`.
+fn scale_slope_slots(row: &[f64], j: f64) -> Vec<f64> {
+    row.iter()
+        .enumerate()
+        .map(|(i, v)| if i % 2 == 1 { v * j } else { *v })
+        .collect()
 }
 
 /// Geometry of one cell, computed **without touching the store**: coordinates
@@ -193,6 +224,71 @@ impl<'a> CellGeom<'a> {
     /// Shape-function values `N_i(ξ_g)` at Gauss point `g`.
     pub fn n_at_g(&self, g: usize) -> Result<&[f64]> {
         Ok(&self.rd.n_ref[g])
+    }
+
+    /// Number of **field** shape functions — `n_nodes` for a Lagrange space,
+    /// twice that under a C¹ interpolation.
+    pub fn shape_count(&self) -> usize {
+        self.rd.shape_count
+    }
+
+    /// Field shape values at Gauss point `g`, already scaled to act on
+    /// **physical** degrees of freedom.
+    ///
+    /// Under a C¹ interpolation the odd slots are slope functions, whose
+    /// reference degree of freedom is `∂w/∂ξ` while the physical one is
+    /// `∂w/∂x`: they carry an extra factor `J`. For a Lagrange space this is
+    /// [`n_at_g`](Self::n_at_g) unchanged.
+    pub fn field_n_at_g(&self, g: usize) -> Result<Vec<f64>> {
+        if self.rd.field_n_ref.is_empty() {
+            return Ok(self.rd.n_ref[g].clone());
+        }
+        let j = self.segment_jacobian()?;
+        Ok(scale_slope_slots(&self.rd.field_n_ref[g], j))
+    }
+
+    /// Field second derivatives `∂²N_i/∂x²` at Gauss point `g`, acting on
+    /// physical degrees of freedom — the **curvature operator** of a C¹ element.
+    ///
+    /// Defined for a straight 1-D reference element, which is where a C¹ basis
+    /// exists today. The chain rule is then simply `∂²/∂x² = J⁻² ∂²/∂ξ²`: the
+    /// `∂J/∂ξ` term that would appear on a curved element vanishes, because a
+    /// `SEG2` has a constant Jacobian by construction.
+    ///
+    /// # Errors
+    ///
+    /// The space is not C¹, or its reference element is not a segment.
+    pub fn field_d2n_dx2(&self, g: usize) -> Result<Vec<f64>> {
+        if self.rd.field_d2n_ref.is_empty() {
+            return Err(PyrucastError::Message(
+                "CellGeom: this subspace has no C¹ field basis, so no curvature operator".into(),
+            ));
+        }
+        let j = self.segment_jacobian()?;
+        // `J` scales the slope columns to physical DOFs, `J⁻²` maps the
+        // reference second derivative to a physical one.
+        let scaled = scale_slope_slots(&self.rd.field_d2n_ref[g], j);
+        Ok(scaled.iter().map(|v| v / (j * j)).collect())
+    }
+
+    /// `J = ∂x/∂ξ` of a straight segment: **signed** in a 1-D space (where the
+    /// slope degree of freedom is taken along the global axis, so a cell whose
+    /// nodes run backwards must flip it), and the arc length `L/2` when the
+    /// segment is embedded in a plane or in space — there the consumer has
+    /// already rotated into a local axis running from node 0 to node 1.
+    fn segment_jacobian(&self) -> Result<f64> {
+        if self.rd.ref_dim != 1 {
+            return Err(PyrucastError::Message(format!(
+                "CellGeom: a C¹ basis needs a 1-D reference element, got ref_dim {}",
+                self.rd.ref_dim
+            )));
+        }
+        let (a, b) = (self.node_coord(0)?.to_vec(), self.node_coord(1)?.to_vec());
+        if self.space_dim == 1 {
+            return Ok((b[0] - a[0]) / 2.0);
+        }
+        let l2: f64 = (0..self.space_dim).map(|i| (b[i] - a[i]).powi(2)).sum();
+        Ok(l2.sqrt() / 2.0)
     }
 
     /// Physical coordinates of Gauss point `g`, `x_a = Σ_i N_i(ξ_g) · x_{i,a}`

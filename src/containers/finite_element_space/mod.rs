@@ -101,10 +101,24 @@ pub struct SubFiniteElementSpace {
     gauss_xi: Vec<f64>,
     /// `n_g` Gauss weights.
     gauss_w: Vec<f64>,
-    /// Flat `n_g × n_nodes` values of `N_i(ξ_g)`.
+    /// Flat `n_g × n_nodes` values of the **geometric** `N_i(ξ_g)` — the
+    /// element's own Lagrange basis, which maps reference to physical space.
+    /// Identical to the field basis for every Lagrange interpolation.
     n_at_g: Vec<f64>,
-    /// Flat `n_g × n_nodes × ref_dim` values of `∂N_i/∂ξ_j(ξ_g)`.
+    /// Flat `n_g × n_nodes × ref_dim` values of the geometric `∂N_i/∂ξ_j(ξ_g)`.
     dn_at_g: Vec<f64>,
+    /// Flat `n_g × shape_count` values of the **field** basis. Empty when it
+    /// coincides with the geometric one (every Lagrange space), so the common
+    /// case costs no memory and the accessor falls back.
+    #[serde(default)]
+    field_n_at_g: Vec<f64>,
+    /// Flat `n_g × shape_count × ref_dim` field `∂N_i/∂ξ_j(ξ_g)`. Same fallback.
+    #[serde(default)]
+    field_dn_at_g: Vec<f64>,
+    /// Flat `n_g × shape_count × ref_dim` field `∂²N_i/∂ξ_j²(ξ_g)`. Only the C¹
+    /// families fill it; empty otherwise.
+    #[serde(default)]
+    field_d2n_at_g: Vec<f64>,
 
     /// Cell colouring for conflict-free parallel assembly, computed once and
     /// memoised. Topological (depends only on the frozen connectivity), so it is
@@ -164,12 +178,39 @@ impl SubFiniteElementSpace {
         let (gauss_xi, gauss_w) = quadrature.points(et)?;
         let n_g = gauss_w.len();
 
+        // The **geometry** is always the element's own Lagrange degree: it is
+        // what maps ξ to x, and a `SEG2` is a straight segment whatever field
+        // it carries. A Hermite space is therefore *subparametric*, and the two
+        // bases part company — which is exactly why they are tabulated apart.
+        let geometry = et.as_kind().degree().ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "SubFiniteElementSpace: {et} has no Lagrange degree to carry its geometry"
+            ))
+        })?;
         let mut n_at_g = Vec::with_capacity(n_g * n_nodes);
         let mut dn_at_g = Vec::with_capacity(n_g * n_nodes * ref_dim);
         for g in 0..n_g {
             let xi = &gauss_xi[g * ref_dim..(g + 1) * ref_dim];
-            n_at_g.extend_from_slice(&interpolation.shape(et, xi)?);
-            dn_at_g.extend_from_slice(&interpolation.dshape_dxi(et, xi)?);
+            n_at_g.extend_from_slice(&geometry.shape(et, xi)?);
+            dn_at_g.extend_from_slice(&geometry.dshape_dxi(et, xi)?);
+        }
+
+        // The field basis, tabulated only when it differs — a Lagrange space
+        // reads the geometric tables and stores nothing extra.
+        let (mut field_n_at_g, mut field_dn_at_g, mut field_d2n_at_g) =
+            (Vec::new(), Vec::new(), Vec::new());
+        if interpolation != geometry {
+            let count = interpolation.shape_count(et);
+            field_n_at_g.reserve(n_g * count);
+            field_dn_at_g.reserve(n_g * count * ref_dim);
+            for g in 0..n_g {
+                let xi = &gauss_xi[g * ref_dim..(g + 1) * ref_dim];
+                field_n_at_g.extend_from_slice(&interpolation.shape(et, xi)?);
+                field_dn_at_g.extend_from_slice(&interpolation.dshape_dxi(et, xi)?);
+                if interpolation.is_hermite() {
+                    field_d2n_at_g.extend_from_slice(&interpolation.d2shape_dxi2(et, xi)?);
+                }
+            }
         }
 
         // Capturing the submesh in a finite-element space freezes its
@@ -187,6 +228,9 @@ impl SubFiniteElementSpace {
             gauss_w,
             n_at_g,
             dn_at_g,
+            field_n_at_g,
+            field_dn_at_g,
+            field_d2n_at_g,
             coloring: OnceLock::new(),
         })
     }
@@ -279,8 +323,13 @@ impl SubFiniteElementSpace {
         Ok(self.gauss_w[g])
     }
 
-    /// `N_i(ξ_g)` for all nodes `i` at the `g`-th Gauss point
-    /// (length `nodes_per_cell`).
+    /// **Geometric** `N_i(ξ_g)` for all nodes `i` at the `g`-th Gauss point
+    /// (length `nodes_per_cell`) — the basis that maps ξ to x.
+    ///
+    /// It is also the *field* basis for every Lagrange space, which is why
+    /// nothing outside a C¹ element has ever had to distinguish the two. Under
+    /// a C¹ interpolation they differ: use
+    /// [`field_n_at_g`](Self::field_n_at_g) to interpolate the unknown.
     pub fn n_at_g(&self, g: usize) -> Result<&[f64]> {
         self.check_g(g)?;
         let n_nodes = self.nodes_per_cell()?;
@@ -297,6 +346,59 @@ impl SubFiniteElementSpace {
         let ref_dim = self.ref_dim()?;
         let stride = n_nodes * ref_dim;
         Ok(&self.dn_at_g[g * stride..(g + 1) * stride])
+    }
+
+    // ── The field basis ─────────────────────────────────────────────────────
+    //
+    // Identical to the geometric one for every Lagrange space — the accessors
+    // below then fall back to it, so a caller never has to ask which case it is
+    // in. They part company only under a C¹ interpolation, where the field
+    // carries two functions per node and the geometry still one.
+
+    /// Number of **field** shape functions per cell: the cell's nodes for a
+    /// Lagrange space, twice that for a C¹ one.
+    pub fn shape_count(&self) -> Result<usize> {
+        Ok(self.interpolation.shape_count(self.element_type()?))
+    }
+
+    /// Field shape values `N_i(ξ_g)`, length [`shape_count`](Self::shape_count).
+    pub fn field_n_at_g(&self, g: usize) -> Result<&[f64]> {
+        if self.field_n_at_g.is_empty() {
+            return self.n_at_g(g);
+        }
+        self.check_g(g)?;
+        let count = self.shape_count()?;
+        Ok(&self.field_n_at_g[g * count..(g + 1) * count])
+    }
+
+    /// Field reference derivatives `∂N_i/∂ξ_j(ξ_g)`, flat row-major of length
+    /// `shape_count × ref_dim`.
+    pub fn field_dn_at_g(&self, g: usize) -> Result<&[f64]> {
+        if self.field_dn_at_g.is_empty() {
+            return self.dn_at_g(g);
+        }
+        self.check_g(g)?;
+        let stride = self.shape_count()? * self.ref_dim()?;
+        Ok(&self.field_dn_at_g[g * stride..(g + 1) * stride])
+    }
+
+    /// Field reference **second** derivatives `∂²N_i/∂ξ_j²(ξ_g)`.
+    ///
+    /// # Errors
+    ///
+    /// The space is not C¹ — a Lagrange basis has none tabulated. See
+    /// [`Interpolation::d2shape_dxi2`].
+    pub fn field_d2n_at_g(&self, g: usize) -> Result<&[f64]> {
+        self.check_g(g)?;
+        if self.field_d2n_at_g.is_empty() {
+            return Err(PyrucastError::Message(format!(
+                "SubFiniteElementSpace: interpolation {} tabulates no second derivatives \
+                 (only the C¹ families do)",
+                self.interpolation
+            )));
+        }
+        let stride = self.shape_count()? * self.ref_dim()?;
+        Ok(&self.field_d2n_at_g[g * stride..(g + 1) * stride])
     }
 
     // ── Physical quantities (on-the-fly) ────────────────────────────────────

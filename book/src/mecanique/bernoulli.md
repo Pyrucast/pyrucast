@@ -71,23 +71,29 @@ mauvaise.
 
 L'équation étant du quatrième ordre, sa forme faible demande une interpolation
 **\\( C^1 \\)** : le déplacement *et* sa pente doivent être continus d'un élément
-au suivant. C'est exactement ce que fournit l'interpolation **d'Hermite
-cubique**, qui prend pour degrés de liberté la flèche et la rotation à chaque
-extrémité (\\( \xi = x/L \\)) :
+au suivant. C'est exactement ce que fournit la famille
+**[`Hermite3`](../fe-space.md#fonctions-de-forme-cubiques-dhermite-hermite-3)**,
+qui prend pour degrés de liberté la flèche et la pente à chaque extrémité — deux
+fonctions de forme par nœud au lieu d'une.
 
-\\[
-\begin{aligned}
-N_1 &= 1 - 3\xi^2 + 2\xi^3, &\qquad N_2 &= L\\,(\xi - 2\xi^2 + \xi^3),\\\\
-N_3 &= 3\xi^2 - 2\xi^3,     &\qquad N_4 &= L\\,(-\xi^2 + \xi^3).
-\end{aligned}
-\\]
+Ce n'est donc pas une interpolation de Lagrange, et le modèle **exige** un
+espace `HERMITE3` :
+
+```python
+fes = pyrucast.FiniteElementSpace(maillage, interpolation="HERMITE3")
+poutre = pyrucast.Model.bernoulli(fes, "planar_1d")
+```
+
+Un espace de Lagrange porterait une flèche linéaire, de courbure identiquement
+nulle : le modèle le refuse plutôt que d'assembler une raideur qui ne
+correspondrait pas à la base déclarée.
 
 La courbure est alors **linéaire** sur l'élément, donc l'espace d'approximation
 contient exactement la solution d'une travée chargée seulement à ses
 extrémités : l'élément est *exact aux nœuds* pour toute charge laissant la travée
 libre d'efforts répartis — c'est pourquoi un élément par barre suffit pour un
-portique. La raideur \\( K_b = \int_0^L EI\\,N''^\top N''\\,dx \\) s'intègre alors
-en forme fermée :
+portique. La raideur \\( K_b = \int_0^L EI\\,N''^\top N''\\,dx \\) est **intégrée**
+depuis cette base, et vaut exactement la forme fermée classique :
 
 \\[
 K_b = \frac{EI}{L^3}
@@ -99,6 +105,13 @@ K_b = \frac{EI}{L^3}
 \end{bmatrix},
 \qquad \text{DDL } [\\,w_A,\ \theta_A,\ w_B,\ \theta_B\\,].
 \\]
+
+L'intégration plutôt que la forme fermée est un choix : elle laisse **une seule
+source de vérité**, et rend l'interpolation déclarée *porteuse*. Une base fausse
+produirait désormais une raideur fausse, que les tests de poutre attraperaient ;
+avec une matrice écrite en dur, elle aurait pu être n'importe quoi. La forme
+fermée reste, comme **oracle de test** — c'est elle que `tests/hermite.rs`
+compare à l'intégrale, à la précision machine.
 
 L'effort axial y est ajouté par le terme de barre \\( EA/L \\), qui ne s'y couple
 pas.

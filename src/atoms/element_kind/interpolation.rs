@@ -6,12 +6,19 @@
 //! here forwards to [`ElementType::as_kind`], so a new element type needs no
 //! change in this file.
 //!
-//! The pairing is a bijection today — a `TRI3` is Lagrange-1 and a `TRI6` is
-//! Lagrange-2, never the other way round — which is exactly what
-//! [`ElementKind::degree`](super::ElementKind::degree) states and
-//! [`is_compatible_with`](Interpolation::is_compatible_with) checks. Keeping
-//! the enum separate leaves room for sub-/super-parametric elements, where the
-//! field's degree would part company with the geometry's.
+//! That holds for the **Lagrange** families, whose pairing with an element type
+//! is a bijection — a `TRI3` is Lagrange-1 and a `TRI6` is Lagrange-2, never the
+//! other way round, which is what
+//! [`ElementKind::degree`](super::ElementKind::degree) states.
+//!
+//! [`Hermite3`](Interpolation::Hermite3) is the exception that shows why the
+//! enum is worth keeping separate. Its basis has **two functions per node** —
+//! a value and a slope — so it cannot be a property of the element type, and it
+//! lives in [`super::hermite`] instead. A `SEG2` therefore carries a Lagrange-1
+//! *or* a Hermite-3 field depending on what the space declares, while its
+//! **geometry** stays Lagrange-1 in both cases: the element becomes
+//! subparametric, which is precisely the case this enum existed to leave room
+//! for.
 
 use crate::atoms::ElementType;
 use crate::error::{PyrucastError, Result};
@@ -35,14 +42,59 @@ pub enum Interpolation {
     /// `PENTA15`, `HEX20`, `HEX27`). `QUA8`/`HEX20`/`PENTA15` are serendipity
     /// (edge nodes only); `QUA9`/`HEX27` carry the face/centre nodes too.
     Lagrange2,
+    /// Cubic **Hermite** (C¹), on `SEG2` only. **Two** shape functions per node
+    /// — a value and a slope — so a segment carries four, and the interpolated
+    /// field is continuous *in its derivative* across elements. That is what a
+    /// fourth-order equation such as Euler-Bernoulli's `(EIw'')'' = q` demands,
+    /// and what no Lagrange basis provides.
+    ///
+    /// The geometry stays Lagrange-1: the element is **subparametric**.
+    ///
+    /// > New variants go at the **end** — `bincode` serialises the index.
+    Hermite3,
 }
 
 impl Interpolation {
-    /// Whether this interpolation is defined for `element_type` — i.e. whether
-    /// it is that element's own degree. `POI1` has no reference frame and is
-    /// always rejected.
+    /// Whether this interpolation is defined for `element_type`.
+    ///
+    /// For the Lagrange families this asks whether it is that element's own
+    /// degree; `Hermite3` is defined on `SEG2` alone. `POI1` has no reference
+    /// frame and is always rejected.
     pub fn is_compatible_with(self, element_type: ElementType) -> bool {
-        element_type.as_kind().degree() == Some(self)
+        match self {
+            Self::Lagrange1 | Self::Lagrange2 => element_type.as_kind().degree() == Some(self),
+            Self::Hermite3 => element_type == ElementType::SEG2,
+        }
+    }
+
+    /// Number of **shape functions** per cell — which is the number of nodes
+    /// only for the Lagrange families.
+    ///
+    /// This is the stride every reference-space table is built on. Reading it
+    /// instead of `nodes_per_cell()` is what lets a basis carry more than one
+    /// function per node.
+    pub fn shape_count(self, element_type: ElementType) -> usize {
+        match self {
+            Self::Lagrange1 | Self::Lagrange2 => element_type.nodes_per_cell(),
+            Self::Hermite3 => super::hermite::HERMITE3_SHAPE_COUNT,
+        }
+    }
+
+    /// Degrees of freedom each node carries **per scalar field**: 1 for
+    /// Lagrange (the value), 2 for Hermite (the value and its slope).
+    ///
+    /// A physics reads this to know whether a nodal variable it declares is an
+    /// independent field or the derivative of another one.
+    pub fn dofs_per_node(self) -> usize {
+        match self {
+            Self::Lagrange1 | Self::Lagrange2 => 1,
+            Self::Hermite3 => 2,
+        }
+    }
+
+    /// Whether the basis is C¹ — i.e. interpolates a slope as well as a value.
+    pub fn is_hermite(self) -> bool {
+        matches!(self, Self::Hermite3)
     }
 
     /// Short name (cast3m-style).
@@ -50,6 +102,7 @@ impl Interpolation {
         match self {
             Self::Lagrange1 => "LAGRANGE1",
             Self::Lagrange2 => "LAGRANGE2",
+            Self::Hermite3 => "HERMITE3",
         }
     }
 
@@ -58,14 +111,16 @@ impl Interpolation {
         match s.to_ascii_uppercase().as_str() {
             "LAGRANGE1" | "LAG1" => Some(Self::Lagrange1),
             "LAGRANGE2" | "LAG2" => Some(Self::Lagrange2),
+            "HERMITE3" | "HER3" => Some(Self::Hermite3),
             _ => None,
         }
     }
 
     /// Evaluate the shape functions `N_i(ξ)` at the reference point `xi`.
     ///
-    /// Returns a flat `Vec<f64>` of length `element_type.nodes_per_cell()`
-    /// ordered like the cell's nodes. `xi` must have length
+    /// Returns a flat `Vec<f64>` of length
+    /// [`shape_count`](Self::shape_count) — the cell's nodes for Lagrange, and
+    /// `[w_A, w'_A, w_B, w'_B]` for Hermite. `xi` must have length
     /// `element_type.topological_dim()`.
     ///
     /// # Errors
@@ -75,13 +130,16 @@ impl Interpolation {
     ///   that is not the element's own, …).
     pub fn shape(self, element_type: ElementType, xi: &[f64]) -> Result<Vec<f64>> {
         self.check(element_type, xi)?;
-        Ok(element_type.as_kind().shape(xi))
+        Ok(match self {
+            Self::Lagrange1 | Self::Lagrange2 => element_type.as_kind().shape(xi),
+            Self::Hermite3 => super::hermite::shape(xi[0]).to_vec(),
+        })
     }
 
     /// Evaluate the reference derivatives `∂N_i/∂ξ_j` at `xi`.
     ///
     /// Returns a flat row-major buffer of length
-    /// `nodes_per_cell × topological_dim`, where entry
+    /// `shape_count × topological_dim`, where entry
     /// `[i * topological_dim + j]` is `∂N_i/∂ξ_j`.
     ///
     /// # Errors
@@ -89,7 +147,33 @@ impl Interpolation {
     /// Same as [`shape`](Self::shape).
     pub fn dshape_dxi(self, element_type: ElementType, xi: &[f64]) -> Result<Vec<f64>> {
         self.check(element_type, xi)?;
-        Ok(element_type.as_kind().dshape(xi))
+        Ok(match self {
+            Self::Lagrange1 | Self::Lagrange2 => element_type.as_kind().dshape(xi),
+            Self::Hermite3 => super::hermite::dshape(xi[0]).to_vec(),
+        })
+    }
+
+    /// Evaluate the reference **second** derivatives `∂²N_i/∂ξ²` at `xi`.
+    ///
+    /// Defined for `Hermite3` only, and that is not an oversight: a C¹ basis is
+    /// the case where a second derivative is a *primary* quantity — the
+    /// curvature a beam is bent by. The Lagrange families would need
+    /// second-derivative tables in every element file, plus the
+    /// `∂J/∂ξ` term of the chain rule on a curved element, and nothing consumes
+    /// them yet; adding an untested path would be worse than erroring.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`shape`](Self::shape), plus a Lagrange family.
+    pub fn d2shape_dxi2(self, element_type: ElementType, xi: &[f64]) -> Result<Vec<f64>> {
+        self.check(element_type, xi)?;
+        match self {
+            Self::Hermite3 => Ok(super::hermite::d2shape(xi[0]).to_vec()),
+            Self::Lagrange1 | Self::Lagrange2 => Err(PyrucastError::Message(format!(
+                "interpolation {self}: second derivatives are only defined for the C¹ families \
+                 (HERMITE3); a Lagrange basis has none tabulated"
+            ))),
+        }
     }
 
     /// Validate the pair and the point's arity in one go — the guard both

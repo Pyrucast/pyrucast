@@ -36,6 +36,7 @@ use crate::atoms::ElementType;
 pub use interpolation::Interpolation;
 pub use quadrature::QuadratureRule;
 
+mod hermite;
 mod hex20;
 mod hex27;
 mod hex8;

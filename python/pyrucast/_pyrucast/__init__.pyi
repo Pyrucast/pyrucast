@@ -1562,9 +1562,13 @@ class Model:
         material `E`, `I`), `"frame_2d"` (`u_x, u_y, r_z`; `+ A`) or
         `"frame_3d"` (six DOFs; `+ I_y, I_z, J, G`).
         
-        Hermite cubic interpolation makes it **nodally exact** wherever the
-        interior carries no distributed load — one element per member suffices
-        for a frame.
+        The deflection is interpolated by **cubic Hermite** functions, so the
+        subspace must be `HERMITE3` — build it with
+        `FiniteElementSpace(mesh, interpolation="HERMITE3")`. That basis is what
+        makes the element **nodally exact** wherever the interior carries no
+        distributed load, so one element per member suffices for a frame; a
+        Lagrange subspace would carry a linear deflection, of zero curvature, and
+        is refused.
         
         Prefer `timoshenko` / `frame` / `frame3d` for a stocky member, where the
         shear compliance matters. Reaching Bernoulli by making the shear area

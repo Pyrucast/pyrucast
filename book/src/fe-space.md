@@ -129,6 +129,101 @@ Les sérendipité n'ont pas de nœud de face/intérieur :
 
 Toutes vérifient Kronecker (\\( N_i(\xi_j)=\delta_{ij} \\)), partition de l'unité, et leurs dérivées analytiques sont recoupées par différences finies dans les tests.
 
+### Fonctions de forme cubiques d'Hermite (Hermite-3)
+
+Les deux familles précédentes sont **C⁰** : le champ est continu d'un élément au
+suivant, sa dérivée ne l'est pas. Cela suffit à toute équation du second ordre,
+et à rien d'autre. Une poutre d'Euler-Bernoulli obéit à
+\\( (EIw'')'' = q \\), du **quatrième** ordre, dont la forme faible exige un
+champ **C¹** — flèche *et* pente continues.
+
+C'est ce que fournit `Hermite3`, sur `SEG2` uniquement :
+
+\\[
+\begin{aligned}
+H_1 &= \tfrac14(2 - 3\xi + \xi^3), &\qquad H_2 &= \tfrac14(1 - \xi - \xi^2 + \xi^3),\\\\
+H_3 &= \tfrac14(2 + 3\xi - \xi^3), &\qquad H_4 &= \tfrac14(-1 - \xi + \xi^2 + \xi^3).
+\end{aligned}
+\\]
+
+La propriété de Kronecker y porte sur **deux** grandeurs à la fois : à chaque
+extrémité, une fonction vaut 1 et a une pente nulle, l'autre vaut 0 et a une
+pente 1, et les deux fonctions de l'extrémité opposée s'annulent dans les deux.
+D'où l'ordre des degrés de liberté, \\( [w_A,\ w'_A,\ w_B,\ w'_B] \\) — une
+valeur et une pente par nœud.
+
+#### Deux conséquences structurelles
+
+**Quatre fonctions pour deux nœuds.** Le nombre de fonctions de forme cesse
+d'être le nombre de nœuds ; c'est `shape_count()` qui le donne, et tous les
+tableaux de référence sont dimensionnés dessus. `nodes_per_cell()` reste ce
+qu'il était, et continue de dimensionner la **géométrie**.
+
+**L'élément devient sous-paramétrique.** La géométrie d'un `SEG2` est un segment
+droit, interpolée en Lagrange-1, quel que soit le champ qu'il porte. L'espace
+tabule donc **deux** bases :
+
+| base | longueur | rôle |
+|---|---|---|
+| géométrique (`n_at_g`) | `nodes_per_cell` | le jacobien \\( \partial x/\partial\xi \\) |
+| de champ (`field_n_at_g`) | `shape_count` | l'inconnue |
+
+Elles coïncident pour toute interpolation de Lagrange, et l'accesseur de champ
+se rabat alors sur la géométrique — d'où un coût mémoire nul dans le cas
+courant, et aucun consommateur existant à modifier.
+
+#### Dérivées secondes
+
+`Hermite3` est la seule famille à tabuler \\( \partial^2 N_i/\partial\xi^2 \\),
+et c'est cohérent : la courbure est une grandeur **primaire** pour un élément
+C¹, alors qu'une base de Lagrange n'en a aucun usage. Sur `SEG2` elles sont
+linéaires en \\( \xi \\) — donc la courbure **varie** dans l'élément, là où un
+`SEG2` de Lagrange en donnerait une identiquement nulle.
+
+Le passage au physique est une simple règle de chaîne, le terme
+\\( \partial J/\partial\xi \\) disparaissant puisqu'un segment a un jacobien
+constant :
+
+\\[
+\frac{\partial^2 N_i}{\partial x^2} = \frac{1}{J^2}\\,
+\frac{\partial^2 N_i}{\partial \xi^2}, \qquad J = \frac{L}{2}.
+\\]
+
+#### La pente de référence n'est pas la rotation
+
+`H₂` et `H₄` portent une pente \\( \partial w/\partial\xi \\), tandis que le
+degré de liberté d'une poutre est \\( \theta = \partial w/\partial x \\). Les
+deux diffèrent du jacobien, \\( \partial w/\partial\xi = J\\,\partial w/\partial x \\).
+
+Ce facteur est **délibérément absent** des fonctions de forme : c'est exactement
+le passage référence → physique que toute autre base traverse, donc il vit là où
+tous les autres jacobiens sont appliqués. Écrite autrement — avec un `L` dans la
+fonction de forme — la base cesserait d'être une grandeur de l'élément de
+référence, et ne pourrait plus être tabulée une fois par type d'élément.
+
+#### Ce qui le vérifie
+
+La raideur d'Euler-Bernoulli est le seul oracle capable de falsifier cette base :
+
+\\[
+K = \int_0^L EI \left(\frac{\partial^2 N}{\partial x^2}\right)^{\\!\top}
+\frac{\partial^2 N}{\partial x^2}\\, dx
+= \frac{EI}{L^3}
+\begin{bmatrix}
+ 12 & 6L & -12 & 6L \\\\
+ 6L & 4L^2 & -6L & 2L^2 \\\\
+-12 & -6L & 12 & -6L \\\\
+ 6L & 2L^2 & -6L & 4L^2
+\end{bmatrix}.
+\\]
+
+`tests/hermite.rs` intègre le membre de gauche depuis la base tabulée et le
+compare à la forme fermée classique, à la précision machine. Une erreur dans les
+fonctions, dans leurs dérivées secondes ou dans le facteur jacobien des pentes
+atterrit dans cette comparaison — ce qui vaut mieux que seize assertions sur la
+base seule. L'intégrande étant quadratique en \\( \xi \\), deux points de Gauss
+l'intègrent **exactement**.
+
 ### Dérivées de référence
 
 Les **dérivées de référence** \\( \partial N_i / \partial \xi_k \\) suivent par dérivation directe. Pour Lagrange-1 sur les simplexes (TRI3, TET4) et sur SEG2, ces dérivées sont **constantes** sur l'élément. Sur QUA4 et HEX8 — et sur tous les types quadratiques — elles sont polynomiales en les coordonnées de référence.
@@ -432,7 +527,7 @@ print(sub.det_jacobian(0, 0))  # |J| recalculé
 
 ## Limitations actuelles
 
-- Deux interpolations : `Lagrange1` (types linéaires) et `Lagrange2` (types quadratiques `SEG3`, `TRI6`, `QUA8`, `QUA9`, `TET10`, `PENTA15`, `HEX20`, `HEX27`). Le **degré** doit correspondre au type d'élément : un maillage quadratique se pose avec `interpolation="LAGRANGE2"` (le constructeur par défaut `LAGRANGE1` refuse un type quadratique, et inversement). Les ordres supérieurs (Lagrange-3…) restent à venir.
+- Trois interpolations : `Lagrange1` (types linéaires), `Lagrange2` (types quadratiques `SEG3`, `TRI6`, `QUA8`, `QUA9`, `TET10`, `PENTA15`, `HEX20`, `HEX27`) et `Hermite3` (C¹, sur `SEG2` seul). Pour les familles de Lagrange le **degré** doit correspondre au type d'élément : un maillage quadratique se pose avec `interpolation="LAGRANGE2"` (le constructeur par défaut `LAGRANGE1` refuse un type quadratique, et inversement). `HERMITE3`, lui, se pose sur un `SEG2` **sans** en être le degré — c'est le cas sous-paramétrique. Les ordres supérieurs (Lagrange-3…) restent à venir.
 - Deux quadratures : `QuadratureRule::Gauss` (la règle standard par défaut par `ElementType`) et `QuadratureRule::Reduced` (**intégration réduite** : un point au centroïde, exact pour les constantes — utilisée par exemple pour le terme de cisaillement de la [poutre de Timoshenko](mecanique/timoshenko.md), anti-verrouillage). Les variantes d'ordre supérieur viendront comme nouvelles variantes. Voir le [tableau croisé quadrature × élément](elements/index.md#catalogue-de-quadrature) pour la compatibilité couple par couple.
 - `POI1` n'est pas un élément fini (pas de repère de référence). Un sous-maillage POI1 dans le maillage support fait échouer la construction du `FiniteElementSpace`.
 - Pas encore de cache invalidable des grandeurs physiques (\\( J \\), \\( |J| \\), \\( \nabla_x N_i \\)) : tout est recalculé à la volée. Une optimisation à base d'invalidation par compteur de version pourra être ajoutée si la mesure le justifie, sans changement d'API.

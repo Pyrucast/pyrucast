@@ -153,18 +153,27 @@ impl Bernoulli {
     /// Euler-Bernoulli beam on a `SEG2` FE subspace. Errors unless the subspace
     /// is `SEG2` in a configuration matching `model`.
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: BeamModel) -> Result<Self> {
-        let (submesh, space_dim, element, axisymmetric) = {
+        let (submesh, space_dim, element, axisymmetric, interpolation) = {
             let s = read(&fespace)?;
             (
                 s.submesh(),
                 s.space_dim(),
                 read(&s.submesh())?.element_type(),
                 s.is_axisymmetric(),
+                s.interpolation(),
             )
         };
         if element != ElementType::SEG2 {
             return Err(PyrucastError::Message(format!(
                 "Bernoulli: a beam needs SEG2 elements, got {element:?}"
+            )));
+        }
+        if !interpolation.is_hermite() {
+            return Err(PyrucastError::Message(format!(
+                "Bernoulli: the beam interpolates its deflection with cubic Hermite functions, so \
+                 it needs a HERMITE3 subspace — got {interpolation}. Build it with \
+                 `FiniteElementSpace::new(&mesh, Interpolation::Hermite3)`. A Lagrange subspace \
+                 would carry a linear deflection, whose curvature is identically zero."
             )));
         }
         if space_dim != model.space_dim() {
@@ -241,26 +250,28 @@ impl SubModelKind for Bernoulli {
 
         match self.model {
             BeamModel::Planar1d => {
-                let local = bending_4x4(e * mat.value(cell, 0, "I")?, l);
+                let local = bending_4x4(geom, e * mat.value(cell, 0, "I")?)?;
                 copy(&local, ke, 4);
             }
             BeamModel::Frame2d => {
                 let local = plane_frame(
+                    geom,
                     e * mat.value(cell, 0, "A")?,
                     e * mat.value(cell, 0, "I")?,
                     l,
-                );
+                )?;
                 let t = rotation_2d(dir[0], dir[1]);
                 congruent(&local, &t, ke, 6);
             }
             BeamModel::Frame3d => {
                 let local = space_frame(
+                    geom,
                     e * mat.value(cell, 0, "A")?,
                     e * mat.value(cell, 0, "I_y")?,
                     e * mat.value(cell, 0, "I_z")?,
                     mat.value(cell, 0, "G")? * mat.value(cell, 0, "J")?,
                     l,
-                );
+                )?;
                 let t = rotation_3d(&dir);
                 congruent(&local, &t, ke, 12);
             }
@@ -351,44 +362,63 @@ impl Domain for Bernoulli {
 
 // ─── The closed forms ───────────────────────────────────────────────────────
 
-/// The Hermite bending stiffness over `[w_A, θ_A, w_B, θ_B]`.
+/// The Hermite bending stiffness over `[w_A, θ_A, w_B, θ_B]`,
+/// `∫ EI (∂²N/∂x²)ᵀ(∂²N/∂x²) dx`.
 ///
 /// This is the whole of Euler-Bernoulli: everything else in this file surrounds
 /// it with an axial term, a torsion, or a rotation.
-fn bending_4x4(ei: f64, l: f64) -> Vec<Vec<f64>> {
-    let c = ei / (l * l * l);
-    let l2 = l * l;
-    vec![
-        vec![12.0 * c, 6.0 * l * c, -12.0 * c, 6.0 * l * c],
-        vec![6.0 * l * c, 4.0 * l2 * c, -6.0 * l * c, 2.0 * l2 * c],
-        vec![-12.0 * c, -6.0 * l * c, 12.0 * c, -6.0 * l * c],
-        vec![6.0 * l * c, 2.0 * l2 * c, -6.0 * l * c, 4.0 * l2 * c],
-    ]
+///
+/// It is **integrated**, from the `HERMITE3` basis the subspace declares, and
+/// not from the classical closed form. The two agree to machine precision — the
+/// integrand is quadratic in ξ, so two Gauss points are exact — and
+/// `tests/hermite.rs` asserts it. Integrating is nevertheless the right choice:
+/// it leaves one source of truth, and it makes the declared interpolation
+/// **load-bearing**. A basis that was wrong would now produce a wrong stiffness
+/// and fail the beam tests, where before it could have been anything at all.
+fn bending_4x4(geom: &CellGeom, ei: f64) -> Result<Vec<Vec<f64>>> {
+    let mut k = vec![vec![0.0_f64; 4]; 4];
+    for g in 0..geom.n_gauss {
+        let b = geom.field_d2n_dx2(g)?;
+        let w = geom.det_j_w(g)?;
+        for a in 0..4 {
+            for c in 0..4 {
+                k[a][c] += ei * b[a] * b[c] * w;
+            }
+        }
+    }
+    Ok(k)
 }
 
 /// Plane frame, local DOFs `[u'_A, w'_A, θ_A, u'_B, w'_B, θ_B]`.
-fn plane_frame(ea: f64, ei: f64, l: f64) -> Vec<Vec<f64>> {
+fn plane_frame(geom: &CellGeom, ea: f64, ei: f64, l: f64) -> Result<Vec<Vec<f64>>> {
     let mut k = vec![vec![0.0; 6]; 6];
     let ka = ea / l;
     k[0][0] = ka;
     k[3][3] = ka;
     k[0][3] = -ka;
     k[3][0] = -ka;
-    let b = bending_4x4(ei, l);
+    let b = bending_4x4(geom, ei)?;
     let idx = [1usize, 2, 4, 5];
     for (a, &ia) in idx.iter().enumerate() {
         for (c, &ic) in idx.iter().enumerate() {
             k[ia][ic] += b[a][c];
         }
     }
-    k
+    Ok(k)
 }
 
 /// Space frame, local DOFs `[u, v, w, θ_x, θ_y, θ_z]` per node.
 ///
 /// The two bending planes are the Timoshenko closed form with `Φ = 0` — which is
 /// exactly what dropping the shear compliance means.
-fn space_frame(ea: f64, ei_y: f64, ei_z: f64, gj: f64, l: f64) -> Vec<Vec<f64>> {
+fn space_frame(
+    geom: &CellGeom,
+    ea: f64,
+    ei_y: f64,
+    ei_z: f64,
+    gj: f64,
+    l: f64,
+) -> Result<Vec<Vec<f64>>> {
     let mut k = vec![vec![0.0; 12]; 12];
     // Axial, on u_A (0) and u_B (6).
     let ka = ea / l;
@@ -404,7 +434,7 @@ fn space_frame(ea: f64, ei_y: f64, ei_z: f64, gj: f64, l: f64) -> Vec<Vec<f64>> 
     k[9][3] = -kt;
 
     // Bending in the x-y plane (deflection v, rotation θ_z), stiffness EI_z.
-    let b_xy = bending_4x4(ei_z, l);
+    let b_xy = bending_4x4(geom, ei_z)?;
     let idx_xy = [1usize, 5, 7, 11];
     for (a, &ia) in idx_xy.iter().enumerate() {
         for (c, &ic) in idx_xy.iter().enumerate() {
@@ -414,7 +444,7 @@ fn space_frame(ea: f64, ei_y: f64, ei_z: f64, gj: f64, l: f64) -> Vec<Vec<f64>> 
     // Bending in the x-z plane (deflection w, rotation θ_y), stiffness EI_y. The
     // sign of the rotation is opposite there — a positive θ_y bends towards −z —
     // so the coupling terms flip.
-    let b_xz = bending_4x4(ei_y, l);
+    let b_xz = bending_4x4(geom, ei_y)?;
     let idx_xz = [2usize, 4, 8, 10];
     let sign = [1.0, -1.0, 1.0, -1.0];
     for (a, &ia) in idx_xz.iter().enumerate() {
@@ -422,7 +452,7 @@ fn space_frame(ea: f64, ei_y: f64, ei_z: f64, gj: f64, l: f64) -> Vec<Vec<f64>> 
             k[ia][ic] += sign[a] * sign[c] * b_xz[a][c];
         }
     }
-    k
+    Ok(k)
 }
 
 /// The 2-D rotation `T` (6×6) mapping global DOFs to local, per node

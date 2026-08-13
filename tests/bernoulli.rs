@@ -22,7 +22,7 @@
 
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
-use pyrucast::atoms::{ElementType, Node};
+use pyrucast::atoms::{ElementType, Interpolation, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
@@ -46,7 +46,7 @@ fn a_cantilever_under_a_tip_load_matches_its_closed_form() -> Result<()> {
     let b = Node::create_in(coords.clone(), &[L])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
     // Clamped at A: both the deflection and the rotation are held.
     let mut model = Model::bernoulli(&fes, BeamModel::Planar1d)?;
@@ -126,7 +126,7 @@ fn a_plane_frame_carries_axial_and_bending_independently() -> Result<()> {
     let b = Node::create_in(coords.clone(), &[L, 0.0])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
     let mut model = Model::bernoulli(&fes, BeamModel::Frame2d)?;
     for (var, dual) in [("u_x", "f_x"), ("u_y", "f_y"), ("r_z", "m_z")] {
@@ -173,7 +173,7 @@ fn a_space_frame_twists_by_its_closed_form() -> Result<()> {
     let b = Node::create_in(coords.clone(), &[L, 0.0, 0.0])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
     let mut model = Model::bernoulli(&fes, BeamModel::Frame3d)?;
     for (var, dual) in [
@@ -246,7 +246,12 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
         for i in 0..N_ELEMS {
             mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
         }
-        let fes = FiniteElementSpace::lagrange1(&mesh)?;
+        // The two theories no longer share a space: Bernoulli interpolates its
+        // deflection with cubic Hermite functions, Timoshenko with linear
+        // Lagrange ones. Two spaces over the **same** mesh is exactly what the
+        // comparison means.
+        let fes_bern = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
+        let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
         let clamp = |model: Model| -> Result<Model> {
             let mut m = model;
@@ -271,7 +276,7 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
         rhs.set_value(b.id(), "f_w", P)?;
         let rhs = NodeField::from_sub(rhs);
 
-        let bern = clamp(Model::bernoulli(&fes, BeamModel::Planar1d)?)?;
+        let bern = clamp(Model::bernoulli(&fes_bern, BeamModel::Planar1d)?)?;
         let bern_mat = pyrucast::ops::element_field::material_field(&bern, &[("E", E), ("I", I)])?;
         let w_bern = solve(&pyrucast::ops::matrix::stiffness(&bern, &bern_mat)?, &rhs)?
             .value(b.id(), "w")?;
@@ -315,7 +320,7 @@ fn beam_1d() -> Result<(
     let b = Node::create_in(coords.clone(), &[L])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
     Ok((a, b, fes, coords))
 }
 
