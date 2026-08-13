@@ -52,6 +52,7 @@ pub mod mpc;
 pub mod plastic;
 pub mod plasticity;
 pub mod radiation;
+pub mod shell;
 pub mod symmetry;
 pub mod timoshenko;
 pub mod truss;

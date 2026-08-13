@@ -1572,6 +1572,24 @@ class Model:
         why this is a physics of its own rather than a limiting case.
         """
     @classmethod
+    def shell(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.shell(fespace, model)` — a **shell**: a surface carrying membrane
+        forces and bending moments, on a TRI3/QUA4 mesh in 3-D. `model` is
+        `"thick"` (Reissner-Mindlin). Material `E`, `nu`, `h` (thickness), plus
+        an optional `k_s` (shear-correction factor, `5/6` by default) and `rho`.
+        
+        Six DOFs per node (`u_x…u_z, r_x…r_z`), as for `frame3d`, so a shell and
+        a space frame share nodes directly. The sixth — the **drilling** rotation
+        about the normal — is tied to the membrane's own in-plane rotation, which
+        removes the singularity a flat facet would otherwise have without
+        resisting a rigid rotation of that facet.
+        
+        The transverse shear is integrated at **reduced** quadrature: at full
+        quadrature it would overwhelm the bending term by `1/h²` as the shell
+        thins and the element would refuse to bend at all (shear locking).
+        """
+    @classmethod
     def timoshenko(cls, fespace: FiniteElementSpace) -> Model:
         r"""
         `Model.timoshenko(fespace)` — Timoshenko-beam model spanning every

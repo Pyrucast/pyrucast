@@ -151,7 +151,7 @@ MECANIQUE - élément fini;POUT (SEG2/SEG3);Poutre d'Euler-Bernoulli (2D ou 3D);
 MECANIQUE - élément fini;TIMO (SEG2);Poutre de Timoshenko (cisaillement transverse);Model.timoshenko (flexion pure 1D) / Model.frame (portique 2D) / Model.frame3d (cadre 3D)
 MECANIQUE - élément fini;TUYA / TUFI (SEG2/SEG3);Tuyau droit, coude, tuyau fissuré;—
 MECANIQUE - élément fini;JOI1 (SEG2);Joint unidimensionnel à deux nœuds;—
-MECANIQUE - élément fini;COQ2 / COQ3 / COQ4 / COQ6 / COQ8;Coques minces et épaisses;—
+MECANIQUE - élément fini;COQ2 / COQ3 / COQ4 / COQ6 / COQ8;Coques minces et épaisses;Model.shell (thick) — Reissner-Mindlin sur TRI3/QUA4, 6 DDL/nœud, cisaillement sous-intégré
 MECANIQUE - élément fini;DKT / DST / SHB8;Coque de Kirchhoff discrète, avec cisaillement transverse, coque volumique;—
 MECANIQUE - élément fini;TRI3 / QUA4 / TET4 / PRI6 / CUB8 (massifs);Éléments massifs linéaires;Mesh TRI3 / QUA4 / TET4 / PENTA6 / HEX8 + Model.elasticity
 MECANIQUE - élément fini;TRI6 / QUA8 / TE10 / PRI15 / CU20 (massifs);Éléments massifs quadratiques;Mesh TRI6 / QUA8 / TET10 / PENTA15 / HEX20 (+ QUA9 / HEX27) + Model.elasticity

@@ -53,6 +53,7 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   - [Poutre de Timoshenko](mecanique/timoshenko.md)
   - [Portique 2D](mecanique/portique.md)
   - [Cadre 3D](mecanique/cadre3d.md)
+  - [Coques](mecanique/coques.md) — Reissner-Mindlin, six DDL par nœud
 - [Contraintes](contraintes.md) — conditions limites imposées par
   multiplicateurs de Lagrange :
   - [Dirichlet](contraintes/dirichlet.md)

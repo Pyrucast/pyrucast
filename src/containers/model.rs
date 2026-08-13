@@ -126,8 +126,8 @@ use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
     bernoulli, contact, convection, damage, dirichlet, elasticity, embedded, fick,
     follower_pressure, frame, frame3d, heat_conduction, interface_transfer, mpc, plastic,
-    plasticity, radiation, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense,
-    SubModelKind,
+    plasticity, radiation, shell, timoshenko, truss, Constraint, MatrixKind, Physics,
+    RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -218,6 +218,8 @@ pub enum SubModel {
     /// Euler-Bernoulli beam (1-D, plane frame, space frame) — see
     /// [`bernoulli::Bernoulli`].
     Bernoulli(bernoulli::Bernoulli),
+    /// Shell — see [`shell::Shell`].
+    Shell(shell::Shell),
 }
 
 impl SubModel {
@@ -245,6 +247,7 @@ impl SubModel {
             SubModel::Radiation(p) => p,
             SubModel::FollowerPressure(p) => p,
             SubModel::Bernoulli(p) => p,
+            SubModel::Shell(p) => p,
         }
     }
 
@@ -341,6 +344,12 @@ impl SubModel {
         Ok(SubModel::Bernoulli(bernoulli::Bernoulli::new(
             fespace, model,
         )?))
+    }
+
+    /// Shell sub-model on a **surface** FE subspace in 3-D. See
+    /// [`shell::Shell::new`].
+    pub fn shell(fespace: Handle<SubFiniteElementSpace>, model: shell::ShellModel) -> Result<Self> {
+        Ok(SubModel::Shell(shell::Shell::new(fespace, model)?))
     }
 
     /// Follower-pressure sub-model on a **boundary** FE subspace — a pressure
@@ -984,6 +993,16 @@ impl Model {
         let mut out = Self::empty();
         for sub in fes {
             out.add_sub(insert(SubModel::bernoulli(sub.clone(), model)?))?;
+        }
+        Ok(out)
+    }
+
+    /// Shell `Model` spanning **every** subspace of a *surface* `fes`.
+    /// Parent-level named constructor; material is supplied at assembly time.
+    pub fn shell(fes: &FiniteElementSpace, model: shell::ShellModel) -> Result<Self> {
+        let mut out = Self::empty();
+        for sub in fes {
+            out.add_sub(insert(SubModel::shell(sub.clone(), model)?))?;
         }
         Ok(out)
     }

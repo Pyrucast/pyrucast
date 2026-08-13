@@ -8,6 +8,7 @@ use crate::models::damage::DamageLaw;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::interface_transfer::TransferKind;
 use crate::models::plastic::PlasticLaw;
+use crate::models::shell::ShellModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{mpc, Physics, RelationSense};
 use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
@@ -620,6 +621,37 @@ impl PyModel {
         })?;
         Ok(Self {
             inner: Model::bernoulli(&fespace.inner, m)?,
+        })
+    }
+
+    /// `Model.shell(fespace, model)` — a **shell**: a surface carrying membrane
+    /// forces and bending moments, on a TRI3/QUA4 mesh in 3-D. `model` is
+    /// `"thick"` (Reissner-Mindlin). Material `E`, `nu`, `h` (thickness), plus
+    /// an optional `k_s` (shear-correction factor, `5/6` by default) and `rho`.
+    ///
+    /// Six DOFs per node (`u_x…u_z, r_x…r_z`), as for `frame3d`, so a shell and
+    /// a space frame share nodes directly. The sixth — the **drilling** rotation
+    /// about the normal — is tied to the membrane's own in-plane rotation, which
+    /// removes the singularity a flat facet would otherwise have without
+    /// resisting a rigid rotation of that facet.
+    ///
+    /// The transverse shear is integrated at **reduced** quadrature: at full
+    /// quadrature it would overwhelm the bending term by `1/h²` as the shell
+    /// thins and the element would refuse to bend at all (shear locking).
+    #[classmethod]
+    fn shell(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+        model: &str,
+    ) -> PyResult<Self> {
+        let m = ShellModel::from_tag(model).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "shell: unknown model '{model}' (expected {})",
+                ShellModel::tag_list()
+            ))
+        })?;
+        Ok(Self {
+            inner: Model::shell(&fespace.inner, m)?,
         })
     }
 

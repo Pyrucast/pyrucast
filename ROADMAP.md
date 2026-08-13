@@ -110,7 +110,8 @@ SiC/SiC orthotrope, dont les directions d'endommagement sont le repère de
 tissage réutilisé de l'orthotropie élastique), `Timoshenko`,
 `Frame` (portique 2-D), `Frame3d`, `Bernoulli` (poutre sans cisaillement
 transverse, 1-D / plan / spatial, exacte aux nœuds par interpolation d'Hermite),
-`FollowerPressure` (charge dont la direction
+`Shell` (Reissner-Mindlin, six DDL par nœud, vrillage lié à la rotation de
+membrane, cisaillement sous-intégré contre le blocage), `FollowerPressure` (charge dont la direction
 tourne avec la surface, bâtie sur les tangentes déformées et non sur Nanson —
 `I + ∇_s u` n'est pas un gradient de transformation sur une variété). Contraintes : `Dirichlet`, `Mpc`,
 `Embedded` (baignage), `Contact` (nœud-surface, unilatéral).
