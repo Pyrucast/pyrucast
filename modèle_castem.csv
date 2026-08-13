@@ -1,256 +1,256 @@
-Formulation Cast3M;Modèle Cast3M;Description courte;Équivalent pyrucast
-MECANIQUE - linéaire;ELASTIQUE ISOTROPE;Élasticité linéaire isotrope (E, nu) — comportement par défaut;Model.elasticity (plane_stress / plane_strain / axisymmetric / solid)
-MECANIQUE - linéaire;ELASTIQUE ORTHOTROPE;Élasticité orthotrope (3 modules, 3 coefficients de Poisson);Model.elasticity_with_symmetry (symmetry=orthotropic) — E_1..G_23 + repère V1/V2
-MECANIQUE - linéaire;ELASTIQUE ANISOTROPE;Élasticité anisotrope générale (matrice de Hooke complète);Model.elasticity_with_symmetry (symmetry=anisotropic) — les 21 constantes C_11..C_66 + repère V1/V2
-MECANIQUE - linéaire;ELASTIQUE UNIDIRECTIONNEL;Élasticité de composite unidirectionnel (fibres);—
-MECANIQUE - linéaire;ELASTIQUE HOMOGENEISE;Comportement homogénéisé (éléments TRIH/QUAH/CUBH);—
-MECANIQUE - linéaire;ELASTIQUE SECTION;Comportement d'une section droite de poutre (modèle à fibres);—
-MECANIQUE - linéaire;ELASTIQUE ARMATURE;Armature active/passive de béton armé (élément BARR);— (la liaison cinématique armature/béton se fait par Model.embedded)
-MECANIQUE - linéaire;ELASTIQUE MODAL;Représentation des déplacements sur une base de modes propres;—
-MECANIQUE - linéaire;ELASTIQUE STATIQUE;Représentation par une solution élastique (base statique);—
-MECANIQUE - linéaire;ELASTIQUE IMPEDANCE;Support d'impédance (POI1 / SEG2) : raideur, amortisseur;—
-MECANIQUE - non linéaire externe;NON_LINEAIRE EQUIPLAS;Élasticité non linéaire identique en charge au plastique isotrope;—
-MECANIQUE - non linéaire externe;NON_LINEAIRE UTILISATEUR;Loi de comportement externe programmée par l'utilisateur (UMAT);— (une loi s'ajoute en Rust : voir « Ajouter une physique »)
-MECANIQUE - plasticité;PLASTIQUE ISOTROPE;von Mises à écrouissage isotrope (option par défaut);Model.plasticity_isotropic (E, nu, sigma_y, H) — écrouissage isotrope linéaire
-MECANIQUE - plasticité;PLASTIQUE PARFAIT;von Mises sans écrouissage (J2, retour radial);Model.plasticity_perfect (tangente cohérente D_alg incluse)
-MECANIQUE - plasticité;PLASTIQUE CINEMATIQUE;von Mises à écrouissage cinématique linéaire;—
-MECANIQUE - plasticité;PLASTIQUE DRUCKER_PARFAIT;Drucker-Prager à écoulement associé, sans écrouissage;—
-MECANIQUE - plasticité;PLASTIQUE DRUCKER_PRAGER;Drucker-Prager à écoulement non associé avec écrouissage;Model.drucker_prager (alpha, k, psi) — écoulement non associé, sommet traité
-MECANIQUE - plasticité;PLASTIQUE DRUCKER_PRAGER_2;Béton adoucissant à deux seuils (Rankine traction + Drucker-Prager compression);—
-MECANIQUE - plasticité;PLASTIQUE DP_SOL;Drucker-Prager non associé à écrouissage non linéaire (sols);—
-MECANIQUE - plasticité;PLASTIQUE BETON;Modèle béton (contraintes planes uniquement);—
-MECANIQUE - plasticité;PLASTIQUE CHABOCHE1;Chaboche à un centre (+ écrouissage isotrope);—
-MECANIQUE - plasticité;PLASTIQUE CHABOCHE2;Chaboche à deux centres (+ écrouissage isotrope);—
-MECANIQUE - plasticité;PLASTIQUE TUYAU_FISSURE;Plasticité parfaite/écrouissable pour l'élément TUFI;—
-MECANIQUE - plasticité;PLASTIQUE ENDOMMAGEABLE;Élastoplastique endommageable (Lemaitre-Chaboche);—
-MECANIQUE - plasticité;PLASTIQUE GAUVAIN;Modèle de Gauvain;—
-MECANIQUE - plasticité;PLASTIQUE BILIN_MOMY;Flexion bilinéaire pour éléments POUT/TIMO;—
-MECANIQUE - plasticité;PLASTIQUE BILIN_EFFZ;Cisaillement bilinéaire pour éléments POUT/TIMO;—
-MECANIQUE - plasticité;PLASTIQUE TAKEDA_MOMY;Flexion de Takeda pour éléments POUT/TIMO;—
-MECANIQUE - plasticité;PLASTIQUE TAKEMO_EFFZ;Cisaillement de Takeda pour éléments POUT/TIMO;—
-MECANIQUE - plasticité;PLASTIQUE BA1D;Modèle global de poteau en béton armé en flexion (POUT);—
-MECANIQUE - plasticité;PLASTIQUE LINESPRING;Plasticité parfaite/écrouissable pour l'élément LINESPRING;—
-MECANIQUE - plasticité;PLASTIQUE UBIQUITOUS;Modèle Ubiquitous (plans de faiblesse répartis);—
-MECANIQUE - plasticité;PLASTIQUE GLOBAL;Lois globales par type de sollicitation (béton armé);—
-MECANIQUE - plasticité;PLASTIQUE CAM_CLAY;Élastique non linéaire en volume, plastique en volume et distorsion;—
-MECANIQUE - plasticité;PLASTIQUE HUJEUX;Sols et milieux granulaires (volume + distorsion);—
-MECANIQUE - plasticité;PLASTIQUE GURSON;Surface de Gurson dépendant de la pression, porosité en variable interne (3D/axi);Model.gurson (q_1, q_2, q_3, f_0, f_c, f_f) — porosité en variable interne, coalescence f*
-MECANIQUE - plasticité;PLASTIQUE JOINT_DILATANT;Joint Mohr-Coulomb à écoulement non associé (2D);—
-MECANIQUE - plasticité;PLASTIQUE JOINT_SOFT;Joint Mohr-Coulomb adoucissant sans dilatance (2D);—
-MECANIQUE - plasticité;PLASTIQUE JOINT_COAT;Joint en cisaillement : plasticité isotrope, adoucissement, endommagement;—
-MECANIQUE - plasticité;PLASTIQUE ANCRAGE_ELIGEHAUSEN;Loi d'ancrage d'Eligehausen adoucissante en cisaillement;—
-MECANIQUE - plasticité;PLASTIQUE COULOMB;Joint dilatant Mohr-Coulomb à écoulement associé;—
-MECANIQUE - plasticité;PLASTIQUE INTJOI;Interface acier/béton avec corrosion (endommagement + glissement);—
-MECANIQUE - plasticité;PLASTIQUE AMADEI;Joint non linéaire incrémental adoucissant en cisaillement;—
-MECANIQUE - plasticité;PLASTIQUE ACIER_UNI;Acier de Menegotto-Pinto (barre / section de poutre à fibres);—
-MECANIQUE - plasticité;PLASTIQUE ACIER_ANCRAGE;ACIER_UNI couplé au glissement acier/béton d'Eligehausen;—
-MECANIQUE - plasticité;PLASTIQUE BETON_UNI;Béton de Hognestad (barre / section de poutre à fibres);—
-MECANIQUE - plasticité;PLASTIQUE BETON_BAEL;Béton du BAEL (barre / section de poutre à fibres);—
-MECANIQUE - plasticité;PLASTIQUE MAZARS;Endommagement scalaire de Mazars porté par le modèle à fibres;— (voir ENDOMMAGEMENT MAZARS pour la version massive)
-MECANIQUE - plasticité;PLASTIQUE INTIMP;Acier corrodé couplé à une interface acier/béton RICINT (multifibre);—
-MECANIQUE - plasticité;PLASTIQUE UNILATERAL;Endommagement à 2 variables scalaires, chargements cycliques (La Borderie, fibres);—
-MECANIQUE - plasticité;PLASTIQUE FRAGILE_UNI;Endommagement fragile unilatéral traction/compression (fibres);—
-MECANIQUE - plasticité;PLASTIQUE STRUT_UNI;Effort tranchant non linéaire (bielle béton + cadre) sur section à fibres;—
-MECANIQUE - plasticité;PLASTIQUE CISAIL_NL;Cisaillement / effort tranchant adoucissant (poutres Timoshenko et fibres);—
-MECANIQUE - plasticité;PLASTIQUE INFILL_UNI;Endommagement-plasticité unilatéral pour murs de remplissage en maçonnerie (barre);—
-MECANIQUE - plasticité;PLASTIQUE PARFAIT_UNI;Acier élastoplastique à écrouissage cinématique (section de poutre);—
-MECANIQUE - plasticité;PLASTIQUE PARFAIT_ANCRAGE;PARFAIT_UNI couplé au glissement acier/béton d'Eligehausen;—
-MECANIQUE - plasticité;PLASTIQUE OTTOSEN;Matériaux fragiles, approche fissuration fictive avec paramètre de taille;Model.ottosen (a, b, k_1, k_2, sigma_c) — plan sécant, normale numérique
-MECANIQUE - plasticité;PLASTIQUE OTTOVARI;OTTOSEN à paramètres matériau variables (massifs volumiques);—
-MECANIQUE - plasticité;PLASTIQUE BETOCYCL;Dégradation cyclique en compression, deux surfaces de Rankine (maçonnerie 2D);—
-MECANIQUE - plasticité;PLASTIQUE STEINBERG;Steinberg-Cochran-Guinan : comportement des métaux sous choc;—
-MECANIQUE - plasticité;PLASTIQUE ZERILLI;Zerilli-Armstrong : contrainte d'écoulement par la théorie des dislocations;—
-MECANIQUE - plasticité;PLASTIQUE PRESTON;Preston-Tonks-Wallace : écoulement par dislocations et analyse dimensionnelle;—
-MECANIQUE - plasticité;PLASTIQUE HINTE;Joint dégradant jusqu'à rupture, indépendant du temps (éléments raccord 2D);—
-MECANIQUE - plasticité;PLASTIQUE J2;von Mises à écrouissage isotrope exponentiel/linéaire, tangente cohérente;— (Model.plasticity est le J2 sans écrouissage)
-MECANIQUE - plasticité;PLASTIQUE RH_COULOMB;Mohr-Coulomb hyperbolique, plasticité parfaite associée, tangente cohérente;—
-MECANIQUE - plasticité;PLASTIQUE MRS_LADE;MRS-Lade pour granulaires sans cohésion (cap-modèle, écrouissage conique);—
-MECANIQUE - plasticité;PLASTIQUE VMT_FEFP;von Mises-Tresca en hyperélasticité et déformations finies;—
-MECANIQUE - plasticité;PLASTIQUE RHMC_FEFP;Mohr-Coulomb hyperbolique en hyperélasticité et déformations finies;—
-MECANIQUE - plasticité;PLASTIQUE POWDER_FEFP;Plasticité elliptique dépendant de la densité (compaction de poudre);—
-MECANIQUE - plasticité;PLASTIQUE POWDERCAP_FEFP;Variante à cap du modèle de compaction de poudre;—
-MECANIQUE - plasticité;PLASTIQUE RICBET_UNI;Endommagement cyclique/sismique du béton avec hystérésis locale (fibres);—
-MECANIQUE - plasticité;PLASTIQUE LIAISON_ACBE;Adhérence acier-béton unidimensionnelle avec décharge (COA2/COS2 3D);—
-MECANIQUE - plasticité;PLASTIQUE OUGLOVA;Élastoplastique endommageable de l'acier corrodé (3D/2D/1D/multifibre);—
-MECANIQUE - plasticité;PLASTIQUE IWPR3D_SOL;Nested yield surfaces de Prevost (10 surfaces, anisotropie plastique);—
-MECANIQUE - plasticité;PLASTIQUE NORTON;Fluage de Norton unidirectionnel sur section de poutre (fibres);—
-MECANIQUE - plasticité;PLASTIQUE POLYNOMIAL;Fluage polynomial unidirectionnel sur section de poutre (fibres);—
-MECANIQUE - plasticité;PLASTIQUE BLACKBURN;Fluage de Blackburn unidirectionnel sur section de poutre (fibres);—
-MECANIQUE - plasticité;PLASTIQUE BLACKBURN_2;Variante du fluage de Blackburn unidirectionnel (fibres);—
-MECANIQUE - plasticité;PLASTIQUE LEMAITRE;Fluage de Lemaitre unidirectionnel sur section de poutre (fibres);—
-MECANIQUE - endommagement;ENDOMMAGEMENT MAZARS;Endommagement scalaire du béton, chargements monotones;Model.mazars (E, nu, eps_d0, A_t, B_t, A_c, B_c)
-MECANIQUE - endommagement;ENDOMMAGEMENT UNILATERAL;Endommagement à 2 variables scalaires, chargements cycliques;—
-MECANIQUE - endommagement;ENDOMMAGEMENT ROTATING_CRACK;Endommagement à fissure tournante pour le béton;—
-MECANIQUE - endommagement;ENDOMMAGEMENT SIC_SIC;Endommagement du composite céramique SiC/SiC;Model.damage_sic_sic — endommagement orthotrope, une variable par direction de tissage
-MECANIQUE - endommagement;ENDOMMAGEMENT MVM;von Mises modifié : dommage scalaire non local, matériau quasi-fragile;—
-MECANIQUE - endommagement;ENDOMMAGEMENT SICSCAL;Endommagement scalaire à 3 variables du tissé SiCf/SiC (ONERA);—
-MECANIQUE - endommagement;ENDOMMAGEMENT SICTENS;Endommagement pseudo-tensoriel à 5 variables du tissé SiCf/SiC (ONERA);—
-MECANIQUE - endommagement;ENDOMMAGEMENT DAMAGE_TC;Deux variables (traction/compression), régularisé par énergie de fissuration;Model.damage_tc (f_t, f_c, A_t, A_c) — d+ et d- séparés, effet unilatéral
-MECANIQUE - endommagement;ENDOMMAGEMENT DESMORAT;Endommagement anisotrope du béton, chargements monotones (non local possible);—
-MECANIQUE - endommagement;ENDOMMAGEMENT FATSIN;Endommagement scalaire isotrope en fatigue sinusoïdale (local ou non local);—
-MECANIQUE - endommagement;ENDOMMAGEMENT RICRAG;Endommagement scalaire du béton, cycles alternés modérés (2D/3D);—
-MECANIQUE - endommagement;ENDOMMAGEMENT GLRC_DM;Endommagement scalaire du béton armé en contraintes/déformations généralisées (coques);—
-MECANIQUE - endommagement;ENDOMMAGEMENT EFEM;Mise en œuvre de la méthode EFEM (Embedded Finite Element Method);—
-MECANIQUE - endommagement;ENDOMMAGEMENT RICBET;Béton cyclique/sismique : dissymétrie, déformations permanentes, hystérésis (3D);—
-MECANIQUE - endommagement;ENDOMMAGEMENT RICCOQ;Endommagement simplifié régularisé par l'énergie de fissuration (coques);—
-MECANIQUE - endommagement;ENDOMMAGEMENT CONCYC;Endommagement scalaire cyclique régularisé (non local ou Hillerborg);—
-MECANIQUE - fluage;FLUAGE NORTON;Fluage de Norton;Model.creep_norton (K, n) — pas de seuil, dt obligatoire
-MECANIQUE - fluage;FLUAGE BLACKBURN;Fluage de Blackburn;Model.creep_blackburn (A_1, alpha_1, r_1, B_s, beta_s) — primaire saturant + secondaire
-MECANIQUE - fluage;FLUAGE RCCMR_316;Fluage RCC-MR pour l'acier 316-SS;—
-MECANIQUE - fluage;FLUAGE RCCMR_304;Fluage RCC-MR pour l'acier 304-SS;—
-MECANIQUE - fluage;FLUAGE LEMAITRE;Fluage de Lemaitre;Model.creep_lemaitre (K, N, M) — écrouissage en déformation
-MECANIQUE - fluage;FLUAGE POLYNOMIAL;Fluage polynomial;—
-MECANIQUE - fluage;FLUAGE CERAMIQUE;Céramiques : Norton au-dessus d'une température de transition, Ottosen en dessous;—
-MECANIQUE - fluage;FLUAGE MAXWELL;Maxwell généralisé (4 branches obligatoires + 4 facultatives);—
-MECANIQUE - fluage;FLUAGE MAXOTT;Couplage OTTOSEN (fragile) et MAXWELL (fluage);—
-MECANIQUE - fluage;FLUAGE KELVIN;Fluage propre du béton : chaîne de Kelvin-Voigt (3 systèmes + ressort);—
-MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM PSURY;Endommagement P/Y;—
-MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM ROUSSELIER;Endommagement ductile de Rousselier;—
-MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM GURSON2;Gurson modifié par Needleman et Tvergaard;—
-MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM DRAGON;Endommageable quasi-fragile de Dragon;—
-MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM BETON_URGC;Modèle de béton (URGC);—
-MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM BETON_INSA;Modèle de béton (INSA);—
-MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM BETON_DYNAR_LMT;Béton pour la dynamique rapide;—
-MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM ENDO_PLAS;Béton plastique endommageable;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE CHABOCHE;Viscoplastique de Chaboche;Model.viscoplasticity_chaboche (k, K, n, C_1, gamma_1, b, Q) — rappel Armstrong-Frederick
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE GUIONNET;Viscoplastique de Guionnet;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE ONERA;Chaboche unifié avec restauration de l'écrouissage en température;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE OHNO;ONERA-Chaboche modifié Ohno;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE MERIC_CAILLETAUD;Monocristal : Chaboche sur systèmes de glissement cristallins;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE VISCODOMMAGE;Viscoplastique endommageable de Lemaitre et Chaboche;Model.viscoplasticity_lemaitre_chaboche (+ S, s, D_c) — contrainte effective sigma/(1-D)
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE PARFAIT;Viscoplastique parfait;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE POUDRE_A;Modèle d'Abouaf pour les poudres;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE DDI;Modèle à deux déformations inélastiques;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE KOCKS;Viscoplastique de Kocks;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE NOUAILHAS_A;Viscoplastique de Nouailhas;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE NOUAILHAS_B;Viscoplastique de Chaboche (variante Nouailhas);—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE VISK2;Viscoplastique à 2 variables internes, base écrouissage cinématique;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE VISCOHINTE;Joint dégradant jusqu'à rupture, dépendant du temps (éléments raccord);—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE MISTRAL;Modèle général de déformation MISTRAL (requiert un élastique orthotrope);—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE GATT_MONERIE;Viscoplasticité du combustible UO2;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE UO2;GATT_MONERIE couplé au comportement fragile en traction (Ottosen);—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE VISCODD;Écrouissage isotrope + endommagement ductile isotrope et fluage anisotrope;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE SYCO1;Loi de Symonds & Cowper standard;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE SYCO2;Loi de Symonds & Cowper modifiée;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE FLUENDO3D;Fluage couplé plasticité-endommagement, pressions intra-poreuses (RAG, DEF), renforts;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE ENDO3D;FLUENDO3D sans viscosité ni renforts, avec critère plastique Cam-Clay;—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE INCLUSION3D;Homogénéisation analytique micro-mécanique (élasticité + fluage + plasticité);—
-MECANIQUE - viscoplasticité;VISCOPLASTIQUE BETON_THM;Viscoélastique-endommagement du béton avec degré d'hydratation;—
-MECANIQUE - viscoplasticité externe;VISCO_EXTERNE GENERAL;Déformation inélastique gonflement + fluage, critère de von Mises;—
-MECANIQUE - viscoplasticité externe;VISCO_EXTERNE DRUCKER_PRAGER;Critère de Drucker-Prager pour la loi viscoplastique externe;—
-MECANIQUE - viscoplasticité externe;VISCO_EXTERNE COHESION;Loi viscoplastique externe avec cohésion;—
-MECANIQUE - viscoplasticité externe;VISCO_EXTERNE CONSOLIDATION;Loi viscoplastique externe avec consolidation;—
-MECANIQUE - viscoplasticité externe;VISCO_EXTERNE UTILISATEUR;Loi viscoplastique externe programmée par l'utilisateur;—
-MECANIQUE - impédance;IMPEDANCE ELASTIQUE;Impédance purement élastique linéaire (POI1 / SEG2);—
-MECANIQUE - impédance;IMPEDANCE VOIGT;Frein visqueux en parallèle d'un ressort linéaire;—
-MECANIQUE - impédance;IMPEDANCE REUSS;Frein visqueux en série avec un ressort linéaire;—
-MECANIQUE - impédance;IMPEDANCE COMPLEXE;Élastique + frein visqueux, restreint au calcul fréquentiel;—
-MECANIQUE - élément fini;BARR (SEG2);Barre (traction/compression seule);Model.truss (E, A)
-MECANIQUE - élément fini;BAEX (SEG2);Barre excentrée;—
-MECANIQUE - élément fini;POUT (SEG2/SEG3);Poutre d'Euler-Bernoulli (2D ou 3D);Model.bernoulli (planar_1d / frame_2d / frame_3d) — interpolation d'Hermite, exacte aux nœuds
-MECANIQUE - élément fini;TIMO (SEG2);Poutre de Timoshenko (cisaillement transverse);Model.timoshenko (flexion pure 1D) / Model.frame (portique 2D) / Model.frame3d (cadre 3D)
-MECANIQUE - élément fini;TUYA / TUFI (SEG2/SEG3);Tuyau droit, coude, tuyau fissuré;—
-MECANIQUE - élément fini;JOI1 (SEG2);Joint unidimensionnel à deux nœuds;—
-MECANIQUE - élément fini;COQ2 / COQ3 / COQ4 / COQ6 / COQ8;Coques minces et épaisses;Model.shell (thick) — Reissner-Mindlin sur TRI3/QUA4, 6 DDL/nœud, cisaillement sous-intégré
-MECANIQUE - élément fini;DKT / DST / SHB8;Coque de Kirchhoff discrète, avec cisaillement transverse, coque volumique;—
-MECANIQUE - élément fini;TRI3 / QUA4 / TET4 / PRI6 / CUB8 (massifs);Éléments massifs linéaires;Mesh TRI3 / QUA4 / TET4 / PENTA6 / HEX8 + Model.elasticity
-MECANIQUE - élément fini;TRI6 / QUA8 / TE10 / PRI15 / CU20 (massifs);Éléments massifs quadratiques;Mesh TRI6 / QUA8 / TET10 / PENTA15 / HEX20 (+ QUA9 / HEX27) + Model.elasticity
-MECANIQUE - élément fini;Q4RI / Q8RI;Intégration réduite (1x1, 2x2 points de Gauss);—
-MECANIQUE - élément fini;ICT3 / ICQ4 / ICT6 / ICQ8 / ICT4 / ICC8;Éléments massifs incompressibles (formulation mixte);—
-MECANIQUE - élément fini;BBAR;Termes sphériques projetés (anti-verrouillage volumique);—
-MECANIQUE - élément fini;POJS / TRIS / QUAS;Éléments de section de poutre (modèle à fibres);—
-MECANIQUE - élément fini;TRIH / QUAH / CUBH / TRH6;Éléments homogénéisés;—
-MECANIQUE - élément fini;POLY;Polygone à nombre quelconque de côtés;—
-MECANIQUE - élément fini;M1D2 / M1D3;Massif unidimensionnel (plan, axi, sphérique);—
-MECANIQUE - élément fini;CERC (POI1);Cerce (axisymétrique / Fourier);—
-MECANIQUE - option de calcul;PLAN CONT;Contraintes planes;ElasticityModel::PlaneStress (« plane_stress »)
-MECANIQUE - option de calcul;PLAN DEFO;Déformations planes;ElasticityModel::PlaneStrain (« plane_strain »)
-MECANIQUE - option de calcul;AXIS;Axisymétrie (méridienne, contrainte orthoradiale);ElasticityModel::Axisymmetric (« axisymmetric ») + Coords axisymétriques
-MECANIQUE - option de calcul;TRID;Massif tridimensionnel;ElasticityModel::Solid (« solid »)
-MECANIQUE - option de calcul;PLAN GENE;Déformation plane généralisée (point support DPGE);—
-MECANIQUE - option de calcul;FOUR;Décomposition en séries de Fourier (harmonique axisymétrique);—
-MECANIQUE - option de calcul;UNID;Unidimensionnel (plan, axi, sphérique);—
-MECANIQUE - option globale;FUSION;Remise à zéro des variables internes au-delà de la température de fusion;—
-MECANIQUE - option globale;NON_LOCAL MOYE / SB / HELM;Régularisation non locale (moyenne intégrale ou équation de Helmholtz);—
-MECANIQUE - option globale;DERIVEE LINEAIRE / GRADIENT_F;Petites perturbations ou grandes transformations (gradient F);— (pyrucast est en petites perturbations)
-MECANIQUE - option globale;INTEGRE N1;Nombre de points d'intégration dans l'épaisseur des coques;—
-MECANIQUE - option globale;CONS / PHAS;Nom de constituant / de phase (multicouches, multiphases);—
-THERMIQUE;CONDUCTION ISOTROPE;Conduction de Fourier isotrope (conductivité k) — comportement par défaut;Model.heat_conduction (k, plus rho et cp facultatifs pour la capacité)
-THERMIQUE;CONDUCTION ORTHOTROPE;Conduction orthotrope (conductivité par direction);Model.heat_conduction_with_symmetry (symmetry=orthotropic) — k_1, k_2, k_3 + repère V1/V2
-THERMIQUE;CONDUCTION ANISOTROPE;Conduction anisotrope (tenseur de conductivité complet);Model.heat_conduction_with_symmetry (symmetry=anisotropic) — k_11..k_33 + repère V1/V2
-THERMIQUE;CONVECTION;Convection de surface (Robin / film, q·n = h(T − T_ext));Model.convection (h) ; échange entre DEUX surfaces en vis-à-vis (résistance de contact) : Model.interface_transfer(kind=thermal)
-THERMIQUE;CONVECTION SUPERIEURE / INFERIEURE;Face d'échange d'une coque (supérieure ou inférieure);—
-THERMIQUE;RAYONNEMENT INFINI;Rayonnement vers l'infini;Model.radiation (emis, T_inf ; sigma facultatif) — rigidité linéarisée + tangente cohérente
-THERMIQUE;RAYONNEMENT FAC_A_FAC;Rayonnement face à face entre deux surfaces;—
-THERMIQUE;RAYONNEMENT CAVITE;Rayonnement d'une surface sur elle-même (options CONVEXE, FERME, SYMETRIQUE, FAC_FORME, ABSO);—
-THERMIQUE;PHASE;Changement de phase avec chaleur latente (extension non linéaire de la conduction);—
-THERMIQUE;ADVECTION;Transport de chaleur par un champ de vitesse;—
-THERMIQUE;SOURCE;Densité volumique de chaleur appliquée sur le maillage;ops::node_field::flux (densité uniforme ou par champ)
-THERMIQUE;SOURCE GAUSSIENNE SPHERIQUE;Source gaussienne à distribution sphérique (massifs 2D/3D);—
-THERMIQUE;SOURCE GAUSSIENNE ELLIPTIQUE;Source gaussienne à distribution elliptique (massifs 2D/3D);—
-THERMIQUE;SOURCE GAUSSIENNE ELARGIE;Source gaussienne élargie (3D uniquement);—
-CONTACT;CONTACT UNILATERAL;Contact sans frottement, décollement autorisé (option par défaut);Model.contact + solve_unilateral (active-set nœud-surface)
-CONTACT;CONTACT BILATERAL;Contact sans décollement (conditions écrites sur les zones en contact);Model.mpc (relation d'égalité)
-CONTACT;FROTTANT COULOMB;Frottement de Coulomb entre deux lignes (2D) ou surfaces (3D);—
-CONTACT;FROTTANT FROCABLE;Frottement des câbles de précontrainte selon le BPEL99;—
-CONTACT;SYME / MESC;Traitement symétrique ou maître-esclave du contact;Model.contact (maître-esclave uniquement)
-CONTACT;FAIB;Formulation faible : non-pénétration imposée en moyenne par élément;—
-CONTACT;MORT;Formulation mortar, multiplicateurs de Lagrange linéaires (2D);—
-CONTRAINTE;CONTRAINTE ROTATION;Contrainte cinématique sur la rotation autour d'un axe;— (relation à écrire à la main avec Model.mpc)
-CONTRAINTE;CONTRAINTE DEPLACEMENT;Contrainte cinématique sur le déplacement selon un vecteur;Model.dirichlet / Model.mpc
-CONTRAINTE;CONTRAINTE RELATION;Contrainte cinématique par relation linéaire;Model.mpc (sens =, ≥ ou ≤) / Model.embedded (baignage)
-POREUX;ELASTIQUE ISOTROPE;Milieu poreux à comportement élastique isotrope;—
-POREUX;PLASTIQUE ISOTROPE;von Mises à écrouissage isotrope en milieu poreux;—
-POREUX;PLASTIQUE PARFAIT;von Mises sans écrouissage en milieu poreux;—
-POREUX;PLASTIQUE CINEMATIQUE;von Mises à écrouissage cinématique linéaire en milieu poreux;—
-POREUX;PLASTIQUE DRUCKER_PRAGER;Drucker-Prager non associé en milieu poreux;—
-POREUX;PLASTIQUE DRUCKER_PARFAIT;Drucker-Prager simplifié (parfait) en milieu poreux;—
-LIQUIDE;LIQUIDE;Formulation fluide (aucun matériau à préciser);—
-LIQUIDE;LIQUIDE MECANIQUE;Formulation couplée fluide-structure;—
-NAVIER_STOKES;NAVIER_STOKES;Écoulement visqueux incompressible (éléments LINE, MACRO, QUAF…);—
-EULER;EULER;Écoulement compressible non visqueux (volumes finis);—
-DARCY;ISOTROPE;Écoulement en milieu poreux, perméabilité isotrope;—
-DARCY;ORTHOTROPE;Perméabilité orthotrope;—
-DARCY;ANISOTROPE;Perméabilité anisotrope (tenseur complet);—
-DIFFUSION;FICK ISOTROPE;Loi de Fick J = −D·grad(C), diffusivité isotrope (modèle par défaut);Model.fick (symmetry=isotropic) — primale c, duale j ; stockage poro facultatif ; échange d'interface j·n = h(c1 − c2) : Model.interface_transfer
-DIFFUSION;FICK ORTHOTROPE;Loi de Fick à diffusivité orthotrope;Model.fick (symmetry=orthotropic) — D_1, D_2, D_3 + repère V1/V2
-DIFFUSION;FICK ANISOTROPE;Loi de Fick à diffusivité anisotrope;Model.fick (symmetry=anisotropic) — D_11..D_33 + repère V1/V2
-DIFFUSION;ADVECTION (CONSERVATIVE);Transport de matière par un champ de vitesse;—
-DIFFUSION;INCO MOT2 (MOT3);Noms libres des inconnues primale et duale;équivalent implicite : les composantes de champ sont nommées librement
-ELECTROSTATIQUE;ELECTROSTATIQUE;Formulation électrostatique;—
-MAGNETODYNAMIQUE;POTENTIEL_VECTEUR ISOTROPE;Magnétodynamique en coques minces, perméabilité isotrope;—
-MAGNETODYNAMIQUE;POTENTIEL_VECTEUR ORTHOTROPE;Magnétodynamique en coques minces, perméabilité orthotrope;—
-CHANGEMENT_PHASE;PARFAIT;Changement de phase parfait (une primale, une duale à déclarer);—
-CHANGEMENT_PHASE;SOLUBILITE;Solubilité liquide/gaz (deux primales, deux duales à déclarer);—
-METALLURGIE;TYPE KOIS;Transformation métallurgique de Koistinen-Marburger;—
-METALLURGIE;TYPE LEBL;Transformation métallurgique de Leblond-Devaux;—
-MELANGE;CEREM;Transition de phase de l'acier 16MND5;—
-MELANGE;PARALLELE;Combinaison linéaire de modèles élémentaires munis de noms de phases;—
-MELANGE;ZTMAX;Changement d'état avec transition (variable d'état : température par défaut);—
-FISSURE;PARF;Vapeur d'eau traitée en gaz parfait (défaut);—
-FISSURE;REEL;Vapeur d'eau traitée en gaz réel;—
-FISSURE;MASS;Condensation en masse (vapeur condensée transportée par le fluide, défaut);—
-FISSURE;FILM;Condensation en film adhérant à la paroi;—
-FISSURE;POISEU_BLASIUS;Frottement en canal rectangulaire lisse (défaut);—
-FISSURE;POISEU_COLEBROOK;Frottement en canal rectangulaire rugueux;—
-FISSURE;FROTTEMENT1 à FROTTEMENT4;Lois de frottement à coefficients choisis par l'utilisateur;—
-THERMOHYDRIQUE;SCHREFLER;Couplage thermohydrique en milieu poreux insaturé à 4 phases;—
-THERMOHYDRIQUE;BETON_THM;Thermo-hygro-chimique du béton (pg, pc, T + hydratation et endommagement chimique);—
-LIAISON;POINT_PLAN;Liaison point-plan (bases A et B);—
-LIAISON;POINT_PLAN FLUIDE;Liaison point-plan avec effet fluide;—
-LIAISON;POINT_PLAN FROTTEMENT;Liaison point-plan avec frottement;—
-LIAISON;POINT_POINT;Liaison point-point;—
-LIAISON;POINT_POINT FROTTEMENT;Liaison point-point avec frottement;—
-LIAISON;POINT_POINT DEPLACEMENT_PLASTIQUE;Liaison point-point à déplacement plastique;—
-LIAISON;POINT_POINT ROTATION_PLASTIQUE;Liaison point-point à rotation plastique;—
-LIAISON;POINT_CERCLE;Liaison point-cercle (options MOBILE, FROTTEMENT);—
-LIAISON;CERCLE_PLAN FROTTEMENT;Liaison cercle-plan avec frottement;—
-LIAISON;CERCLE_CERCLE FROTTEMENT;Liaison cercle-cercle avec frottement;—
-LIAISON;PROFIL_PROFIL INTERIEUR / EXTERIEUR;Liaison profil-profil (intérieure ou extérieure);—
-LIAISON;LIGNE_LIGNE FROTTEMENT;Liaison ligne-ligne avec frottement;—
-LIAISON;LIGNE_CERCLE FROTTEMENT;Liaison ligne-cercle avec frottement;—
-LIAISON;PALIER_FLUIDE RHODE_LI;Palier fluide (modèle de Rhode & Li);—
-LIAISON;COUPLAGE DEPLACEMENT / VITESSE;Couplage en déplacement ou en vitesse (base modale);—
-LIAISON;POLYNOMIALE;Liaison polynomiale (base modale);—
-LIAISON;NEWMARK MODAL;Liaison de Newmark en base modale (PASAPAS uniquement);—
-CHARGEMENT;PRESSION;Chargement de pression sur une surface orientée;Model.follower_pressure (p) — charge suiveuse, direction recalculée à chaque résidu
+Formulation Cast3M;Modèle Cast3M;Description courte;Nature (Physics);Tag API;Équivalent pyrucast
+MECANIQUE - linéaire;ELASTIQUE ISOTROPE;Élasticité linéaire isotrope (E, nu) — comportement par défaut;mechanical;isotropic;Model.elasticity (plane_stress / plane_strain / axisymmetric / solid)
+MECANIQUE - linéaire;ELASTIQUE ORTHOTROPE;Élasticité orthotrope (3 modules, 3 coefficients de Poisson);mechanical;orthotropic;Model.elasticity_with_symmetry (symmetry=orthotropic) — E_1..G_23 + repère V1/V2
+MECANIQUE - linéaire;ELASTIQUE ANISOTROPE;Élasticité anisotrope générale (matrice de Hooke complète);mechanical;anisotropic;Model.elasticity_with_symmetry (symmetry=anisotropic) — les 21 constantes C_11..C_66 + repère V1/V2
+MECANIQUE - linéaire;ELASTIQUE UNIDIRECTIONNEL;Élasticité de composite unidirectionnel (fibres);—;—;—
+MECANIQUE - linéaire;ELASTIQUE HOMOGENEISE;Comportement homogénéisé (éléments TRIH/QUAH/CUBH);—;—;—
+MECANIQUE - linéaire;ELASTIQUE SECTION;Comportement d'une section droite de poutre (modèle à fibres);—;—;—
+MECANIQUE - linéaire;ELASTIQUE ARMATURE;Armature active/passive de béton armé (élément BARR);—;—;— (la liaison cinématique armature/béton se fait par Model.embedded)
+MECANIQUE - linéaire;ELASTIQUE MODAL;Représentation des déplacements sur une base de modes propres;—;—;—
+MECANIQUE - linéaire;ELASTIQUE STATIQUE;Représentation par une solution élastique (base statique);—;—;—
+MECANIQUE - linéaire;ELASTIQUE IMPEDANCE;Support d'impédance (POI1 / SEG2) : raideur, amortisseur;—;—;—
+MECANIQUE - non linéaire externe;NON_LINEAIRE EQUIPLAS;Élasticité non linéaire identique en charge au plastique isotrope;—;—;—
+MECANIQUE - non linéaire externe;NON_LINEAIRE UTILISATEUR;Loi de comportement externe programmée par l'utilisateur (UMAT);—;—;— (une loi s'ajoute en Rust : voir « Ajouter une physique »)
+MECANIQUE - plasticité;PLASTIQUE ISOTROPE;von Mises à écrouissage isotrope (option par défaut);mechanical;isotropic;Model.plasticity_isotropic (E, nu, sigma_y, H) — écrouissage isotrope linéaire
+MECANIQUE - plasticité;PLASTIQUE PARFAIT;von Mises sans écrouissage (J2, retour radial);mechanical;perfect;Model.plasticity_perfect (tangente cohérente D_alg incluse)
+MECANIQUE - plasticité;PLASTIQUE CINEMATIQUE;von Mises à écrouissage cinématique linéaire;—;—;—
+MECANIQUE - plasticité;PLASTIQUE DRUCKER_PARFAIT;Drucker-Prager à écoulement associé, sans écrouissage;—;—;—
+MECANIQUE - plasticité;PLASTIQUE DRUCKER_PRAGER;Drucker-Prager à écoulement non associé avec écrouissage;mechanical;drucker_prager;Model.drucker_prager (alpha, k, psi) — écoulement non associé, sommet traité
+MECANIQUE - plasticité;PLASTIQUE DRUCKER_PRAGER_2;Béton adoucissant à deux seuils (Rankine traction + Drucker-Prager compression);—;—;—
+MECANIQUE - plasticité;PLASTIQUE DP_SOL;Drucker-Prager non associé à écrouissage non linéaire (sols);—;—;—
+MECANIQUE - plasticité;PLASTIQUE BETON;Modèle béton (contraintes planes uniquement);—;—;—
+MECANIQUE - plasticité;PLASTIQUE CHABOCHE1;Chaboche à un centre (+ écrouissage isotrope);—;—;—
+MECANIQUE - plasticité;PLASTIQUE CHABOCHE2;Chaboche à deux centres (+ écrouissage isotrope);—;—;—
+MECANIQUE - plasticité;PLASTIQUE TUYAU_FISSURE;Plasticité parfaite/écrouissable pour l'élément TUFI;—;—;—
+MECANIQUE - plasticité;PLASTIQUE ENDOMMAGEABLE;Élastoplastique endommageable (Lemaitre-Chaboche);—;—;—
+MECANIQUE - plasticité;PLASTIQUE GAUVAIN;Modèle de Gauvain;—;—;—
+MECANIQUE - plasticité;PLASTIQUE BILIN_MOMY;Flexion bilinéaire pour éléments POUT/TIMO;—;—;—
+MECANIQUE - plasticité;PLASTIQUE BILIN_EFFZ;Cisaillement bilinéaire pour éléments POUT/TIMO;—;—;—
+MECANIQUE - plasticité;PLASTIQUE TAKEDA_MOMY;Flexion de Takeda pour éléments POUT/TIMO;—;—;—
+MECANIQUE - plasticité;PLASTIQUE TAKEMO_EFFZ;Cisaillement de Takeda pour éléments POUT/TIMO;—;—;—
+MECANIQUE - plasticité;PLASTIQUE BA1D;Modèle global de poteau en béton armé en flexion (POUT);—;—;—
+MECANIQUE - plasticité;PLASTIQUE LINESPRING;Plasticité parfaite/écrouissable pour l'élément LINESPRING;—;—;—
+MECANIQUE - plasticité;PLASTIQUE UBIQUITOUS;Modèle Ubiquitous (plans de faiblesse répartis);—;—;—
+MECANIQUE - plasticité;PLASTIQUE GLOBAL;Lois globales par type de sollicitation (béton armé);—;—;—
+MECANIQUE - plasticité;PLASTIQUE CAM_CLAY;Élastique non linéaire en volume, plastique en volume et distorsion;—;—;—
+MECANIQUE - plasticité;PLASTIQUE HUJEUX;Sols et milieux granulaires (volume + distorsion);—;—;—
+MECANIQUE - plasticité;PLASTIQUE GURSON;Surface de Gurson dépendant de la pression, porosité en variable interne (3D/axi);mechanical;gurson;Model.gurson (q_1, q_2, q_3, f_0, f_c, f_f) — porosité en variable interne, coalescence f*
+MECANIQUE - plasticité;PLASTIQUE JOINT_DILATANT;Joint Mohr-Coulomb à écoulement non associé (2D);—;—;—
+MECANIQUE - plasticité;PLASTIQUE JOINT_SOFT;Joint Mohr-Coulomb adoucissant sans dilatance (2D);—;—;—
+MECANIQUE - plasticité;PLASTIQUE JOINT_COAT;Joint en cisaillement : plasticité isotrope, adoucissement, endommagement;—;—;—
+MECANIQUE - plasticité;PLASTIQUE ANCRAGE_ELIGEHAUSEN;Loi d'ancrage d'Eligehausen adoucissante en cisaillement;—;—;—
+MECANIQUE - plasticité;PLASTIQUE COULOMB;Joint dilatant Mohr-Coulomb à écoulement associé;—;—;—
+MECANIQUE - plasticité;PLASTIQUE INTJOI;Interface acier/béton avec corrosion (endommagement + glissement);—;—;—
+MECANIQUE - plasticité;PLASTIQUE AMADEI;Joint non linéaire incrémental adoucissant en cisaillement;—;—;—
+MECANIQUE - plasticité;PLASTIQUE ACIER_UNI;Acier de Menegotto-Pinto (barre / section de poutre à fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE ACIER_ANCRAGE;ACIER_UNI couplé au glissement acier/béton d'Eligehausen;—;—;—
+MECANIQUE - plasticité;PLASTIQUE BETON_UNI;Béton de Hognestad (barre / section de poutre à fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE BETON_BAEL;Béton du BAEL (barre / section de poutre à fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE MAZARS;Endommagement scalaire de Mazars porté par le modèle à fibres;—;—;— (voir ENDOMMAGEMENT MAZARS pour la version massive)
+MECANIQUE - plasticité;PLASTIQUE INTIMP;Acier corrodé couplé à une interface acier/béton RICINT (multifibre);—;—;—
+MECANIQUE - plasticité;PLASTIQUE UNILATERAL;Endommagement à 2 variables scalaires, chargements cycliques (La Borderie, fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE FRAGILE_UNI;Endommagement fragile unilatéral traction/compression (fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE STRUT_UNI;Effort tranchant non linéaire (bielle béton + cadre) sur section à fibres;—;—;—
+MECANIQUE - plasticité;PLASTIQUE CISAIL_NL;Cisaillement / effort tranchant adoucissant (poutres Timoshenko et fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE INFILL_UNI;Endommagement-plasticité unilatéral pour murs de remplissage en maçonnerie (barre);—;—;—
+MECANIQUE - plasticité;PLASTIQUE PARFAIT_UNI;Acier élastoplastique à écrouissage cinématique (section de poutre);—;—;—
+MECANIQUE - plasticité;PLASTIQUE PARFAIT_ANCRAGE;PARFAIT_UNI couplé au glissement acier/béton d'Eligehausen;—;—;—
+MECANIQUE - plasticité;PLASTIQUE OTTOSEN;Matériaux fragiles, approche fissuration fictive avec paramètre de taille;mechanical;ottosen;Model.ottosen (a, b, k_1, k_2, sigma_c) — plan sécant, normale numérique
+MECANIQUE - plasticité;PLASTIQUE OTTOVARI;OTTOSEN à paramètres matériau variables (massifs volumiques);—;—;—
+MECANIQUE - plasticité;PLASTIQUE BETOCYCL;Dégradation cyclique en compression, deux surfaces de Rankine (maçonnerie 2D);—;—;—
+MECANIQUE - plasticité;PLASTIQUE STEINBERG;Steinberg-Cochran-Guinan : comportement des métaux sous choc;—;—;—
+MECANIQUE - plasticité;PLASTIQUE ZERILLI;Zerilli-Armstrong : contrainte d'écoulement par la théorie des dislocations;—;—;—
+MECANIQUE - plasticité;PLASTIQUE PRESTON;Preston-Tonks-Wallace : écoulement par dislocations et analyse dimensionnelle;—;—;—
+MECANIQUE - plasticité;PLASTIQUE HINTE;Joint dégradant jusqu'à rupture, indépendant du temps (éléments raccord 2D);—;—;—
+MECANIQUE - plasticité;PLASTIQUE J2;von Mises à écrouissage isotrope exponentiel/linéaire, tangente cohérente;—;—;— (Model.plasticity est le J2 sans écrouissage)
+MECANIQUE - plasticité;PLASTIQUE RH_COULOMB;Mohr-Coulomb hyperbolique, plasticité parfaite associée, tangente cohérente;—;—;—
+MECANIQUE - plasticité;PLASTIQUE MRS_LADE;MRS-Lade pour granulaires sans cohésion (cap-modèle, écrouissage conique);—;—;—
+MECANIQUE - plasticité;PLASTIQUE VMT_FEFP;von Mises-Tresca en hyperélasticité et déformations finies;—;—;—
+MECANIQUE - plasticité;PLASTIQUE RHMC_FEFP;Mohr-Coulomb hyperbolique en hyperélasticité et déformations finies;—;—;—
+MECANIQUE - plasticité;PLASTIQUE POWDER_FEFP;Plasticité elliptique dépendant de la densité (compaction de poudre);—;—;—
+MECANIQUE - plasticité;PLASTIQUE POWDERCAP_FEFP;Variante à cap du modèle de compaction de poudre;—;—;—
+MECANIQUE - plasticité;PLASTIQUE RICBET_UNI;Endommagement cyclique/sismique du béton avec hystérésis locale (fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE LIAISON_ACBE;Adhérence acier-béton unidimensionnelle avec décharge (COA2/COS2 3D);—;—;—
+MECANIQUE - plasticité;PLASTIQUE OUGLOVA;Élastoplastique endommageable de l'acier corrodé (3D/2D/1D/multifibre);—;—;—
+MECANIQUE - plasticité;PLASTIQUE IWPR3D_SOL;Nested yield surfaces de Prevost (10 surfaces, anisotropie plastique);—;—;—
+MECANIQUE - plasticité;PLASTIQUE NORTON;Fluage de Norton unidirectionnel sur section de poutre (fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE POLYNOMIAL;Fluage polynomial unidirectionnel sur section de poutre (fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE BLACKBURN;Fluage de Blackburn unidirectionnel sur section de poutre (fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE BLACKBURN_2;Variante du fluage de Blackburn unidirectionnel (fibres);—;—;—
+MECANIQUE - plasticité;PLASTIQUE LEMAITRE;Fluage de Lemaitre unidirectionnel sur section de poutre (fibres);—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT MAZARS;Endommagement scalaire du béton, chargements monotones;mechanical;mazars;Model.mazars (E, nu, eps_d0, A_t, B_t, A_c, B_c)
+MECANIQUE - endommagement;ENDOMMAGEMENT UNILATERAL;Endommagement à 2 variables scalaires, chargements cycliques;—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT ROTATING_CRACK;Endommagement à fissure tournante pour le béton;—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT SIC_SIC;Endommagement du composite céramique SiC/SiC;mechanical;sic_sic;Model.damage_sic_sic — endommagement orthotrope, une variable par direction de tissage
+MECANIQUE - endommagement;ENDOMMAGEMENT MVM;von Mises modifié : dommage scalaire non local, matériau quasi-fragile;—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT SICSCAL;Endommagement scalaire à 3 variables du tissé SiCf/SiC (ONERA);—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT SICTENS;Endommagement pseudo-tensoriel à 5 variables du tissé SiCf/SiC (ONERA);—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT DAMAGE_TC;Deux variables (traction/compression), régularisé par énergie de fissuration;mechanical;damage_tc;Model.damage_tc (f_t, f_c, A_t, A_c) — d+ et d- séparés, effet unilatéral
+MECANIQUE - endommagement;ENDOMMAGEMENT DESMORAT;Endommagement anisotrope du béton, chargements monotones (non local possible);—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT FATSIN;Endommagement scalaire isotrope en fatigue sinusoïdale (local ou non local);—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT RICRAG;Endommagement scalaire du béton, cycles alternés modérés (2D/3D);—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT GLRC_DM;Endommagement scalaire du béton armé en contraintes/déformations généralisées (coques);—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT EFEM;Mise en œuvre de la méthode EFEM (Embedded Finite Element Method);—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT RICBET;Béton cyclique/sismique : dissymétrie, déformations permanentes, hystérésis (3D);—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT RICCOQ;Endommagement simplifié régularisé par l'énergie de fissuration (coques);—;—;—
+MECANIQUE - endommagement;ENDOMMAGEMENT CONCYC;Endommagement scalaire cyclique régularisé (non local ou Hillerborg);—;—;—
+MECANIQUE - fluage;FLUAGE NORTON;Fluage de Norton;mechanical;creep_norton;Model.creep_norton (K, n) — pas de seuil, dt obligatoire
+MECANIQUE - fluage;FLUAGE BLACKBURN;Fluage de Blackburn;mechanical;creep_blackburn;Model.creep_blackburn (A_1, alpha_1, r_1, B_s, beta_s) — primaire saturant + secondaire
+MECANIQUE - fluage;FLUAGE RCCMR_316;Fluage RCC-MR pour l'acier 316-SS;—;—;—
+MECANIQUE - fluage;FLUAGE RCCMR_304;Fluage RCC-MR pour l'acier 304-SS;—;—;—
+MECANIQUE - fluage;FLUAGE LEMAITRE;Fluage de Lemaitre;mechanical;creep_lemaitre;Model.creep_lemaitre (K, N, M) — écrouissage en déformation
+MECANIQUE - fluage;FLUAGE POLYNOMIAL;Fluage polynomial;—;—;—
+MECANIQUE - fluage;FLUAGE CERAMIQUE;Céramiques : Norton au-dessus d'une température de transition, Ottosen en dessous;—;—;—
+MECANIQUE - fluage;FLUAGE MAXWELL;Maxwell généralisé (4 branches obligatoires + 4 facultatives);—;—;—
+MECANIQUE - fluage;FLUAGE MAXOTT;Couplage OTTOSEN (fragile) et MAXWELL (fluage);—;—;—
+MECANIQUE - fluage;FLUAGE KELVIN;Fluage propre du béton : chaîne de Kelvin-Voigt (3 systèmes + ressort);—;—;—
+MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM PSURY;Endommagement P/Y;—;—;—
+MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM ROUSSELIER;Endommagement ductile de Rousselier;—;—;—
+MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM GURSON2;Gurson modifié par Needleman et Tvergaard;—;—;—
+MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM DRAGON;Endommageable quasi-fragile de Dragon;—;—;—
+MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM BETON_URGC;Modèle de béton (URGC);—;—;—
+MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM BETON_INSA;Modèle de béton (INSA);—;—;—
+MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM BETON_DYNAR_LMT;Béton pour la dynamique rapide;—;—;—
+MECANIQUE - plastique endommageable;PLASTIQUE_ENDOM ENDO_PLAS;Béton plastique endommageable;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE CHABOCHE;Viscoplastique de Chaboche;mechanical;viscoplastic_chaboche;Model.viscoplasticity_chaboche (k, K, n, C_1, gamma_1, b, Q) — rappel Armstrong-Frederick
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE GUIONNET;Viscoplastique de Guionnet;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE ONERA;Chaboche unifié avec restauration de l'écrouissage en température;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE OHNO;ONERA-Chaboche modifié Ohno;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE MERIC_CAILLETAUD;Monocristal : Chaboche sur systèmes de glissement cristallins;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE VISCODOMMAGE;Viscoplastique endommageable de Lemaitre et Chaboche;mechanical;viscoplastic_lemaitre_chaboche;Model.viscoplasticity_lemaitre_chaboche (+ S, s, D_c) — contrainte effective sigma/(1-D)
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE PARFAIT;Viscoplastique parfait;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE POUDRE_A;Modèle d'Abouaf pour les poudres;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE DDI;Modèle à deux déformations inélastiques;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE KOCKS;Viscoplastique de Kocks;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE NOUAILHAS_A;Viscoplastique de Nouailhas;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE NOUAILHAS_B;Viscoplastique de Chaboche (variante Nouailhas);—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE VISK2;Viscoplastique à 2 variables internes, base écrouissage cinématique;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE VISCOHINTE;Joint dégradant jusqu'à rupture, dépendant du temps (éléments raccord);—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE MISTRAL;Modèle général de déformation MISTRAL (requiert un élastique orthotrope);—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE GATT_MONERIE;Viscoplasticité du combustible UO2;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE UO2;GATT_MONERIE couplé au comportement fragile en traction (Ottosen);—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE VISCODD;Écrouissage isotrope + endommagement ductile isotrope et fluage anisotrope;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE SYCO1;Loi de Symonds & Cowper standard;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE SYCO2;Loi de Symonds & Cowper modifiée;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE FLUENDO3D;Fluage couplé plasticité-endommagement, pressions intra-poreuses (RAG, DEF), renforts;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE ENDO3D;FLUENDO3D sans viscosité ni renforts, avec critère plastique Cam-Clay;—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE INCLUSION3D;Homogénéisation analytique micro-mécanique (élasticité + fluage + plasticité);—;—;—
+MECANIQUE - viscoplasticité;VISCOPLASTIQUE BETON_THM;Viscoélastique-endommagement du béton avec degré d'hydratation;—;—;—
+MECANIQUE - viscoplasticité externe;VISCO_EXTERNE GENERAL;Déformation inélastique gonflement + fluage, critère de von Mises;—;—;—
+MECANIQUE - viscoplasticité externe;VISCO_EXTERNE DRUCKER_PRAGER;Critère de Drucker-Prager pour la loi viscoplastique externe;—;—;—
+MECANIQUE - viscoplasticité externe;VISCO_EXTERNE COHESION;Loi viscoplastique externe avec cohésion;—;—;—
+MECANIQUE - viscoplasticité externe;VISCO_EXTERNE CONSOLIDATION;Loi viscoplastique externe avec consolidation;—;—;—
+MECANIQUE - viscoplasticité externe;VISCO_EXTERNE UTILISATEUR;Loi viscoplastique externe programmée par l'utilisateur;—;—;—
+MECANIQUE - impédance;IMPEDANCE ELASTIQUE;Impédance purement élastique linéaire (POI1 / SEG2);—;—;—
+MECANIQUE - impédance;IMPEDANCE VOIGT;Frein visqueux en parallèle d'un ressort linéaire;—;—;—
+MECANIQUE - impédance;IMPEDANCE REUSS;Frein visqueux en série avec un ressort linéaire;—;—;—
+MECANIQUE - impédance;IMPEDANCE COMPLEXE;Élastique + frein visqueux, restreint au calcul fréquentiel;—;—;—
+MECANIQUE - élément fini;BARR (SEG2);Barre (traction/compression seule);mechanical;—;Model.truss (E, A)
+MECANIQUE - élément fini;BAEX (SEG2);Barre excentrée;—;—;—
+MECANIQUE - élément fini;POUT (SEG2/SEG3);Poutre d'Euler-Bernoulli (2D ou 3D);mechanical;planar_1d · frame_2d · frame_3d;Model.bernoulli (planar_1d / frame_2d / frame_3d) — interpolation d'Hermite, exacte aux nœuds
+MECANIQUE - élément fini;TIMO (SEG2);Poutre de Timoshenko (cisaillement transverse);mechanical;—;Model.timoshenko (flexion pure 1D) / Model.frame (portique 2D) / Model.frame3d (cadre 3D)
+MECANIQUE - élément fini;TUYA / TUFI (SEG2/SEG3);Tuyau droit, coude, tuyau fissuré;—;—;—
+MECANIQUE - élément fini;JOI1 (SEG2);Joint unidimensionnel à deux nœuds;—;—;—
+MECANIQUE - élément fini;COQ2 / COQ3 / COQ4 / COQ6 / COQ8;Coques minces et épaisses;mechanical;thick;Model.shell (thick) — Reissner-Mindlin sur TRI3/QUA4, 6 DDL/nœud, cisaillement sous-intégré
+MECANIQUE - élément fini;DKT / DST / SHB8;Coque de Kirchhoff discrète, avec cisaillement transverse, coque volumique;—;—;—
+MECANIQUE - élément fini;TRI3 / QUA4 / TET4 / PRI6 / CUB8 (massifs);Éléments massifs linéaires;mechanical;—;Mesh TRI3 / QUA4 / TET4 / PENTA6 / HEX8 + Model.elasticity
+MECANIQUE - élément fini;TRI6 / QUA8 / TE10 / PRI15 / CU20 (massifs);Éléments massifs quadratiques;mechanical;—;Mesh TRI6 / QUA8 / TET10 / PENTA15 / HEX20 (+ QUA9 / HEX27) + Model.elasticity
+MECANIQUE - élément fini;Q4RI / Q8RI;Intégration réduite (1x1, 2x2 points de Gauss);—;—;—
+MECANIQUE - élément fini;ICT3 / ICQ4 / ICT6 / ICQ8 / ICT4 / ICC8;Éléments massifs incompressibles (formulation mixte);—;—;—
+MECANIQUE - élément fini;BBAR;Termes sphériques projetés (anti-verrouillage volumique);—;—;—
+MECANIQUE - élément fini;POJS / TRIS / QUAS;Éléments de section de poutre (modèle à fibres);—;—;—
+MECANIQUE - élément fini;TRIH / QUAH / CUBH / TRH6;Éléments homogénéisés;—;—;—
+MECANIQUE - élément fini;POLY;Polygone à nombre quelconque de côtés;—;—;—
+MECANIQUE - élément fini;M1D2 / M1D3;Massif unidimensionnel (plan, axi, sphérique);—;—;—
+MECANIQUE - élément fini;CERC (POI1);Cerce (axisymétrique / Fourier);—;—;—
+MECANIQUE - option de calcul;PLAN CONT;Contraintes planes;mechanical;plane_stress;ElasticityModel::PlaneStress (« plane_stress »)
+MECANIQUE - option de calcul;PLAN DEFO;Déformations planes;mechanical;plane_strain;ElasticityModel::PlaneStrain (« plane_strain »)
+MECANIQUE - option de calcul;AXIS;Axisymétrie (méridienne, contrainte orthoradiale);mechanical;axisymmetric;ElasticityModel::Axisymmetric (« axisymmetric ») + Coords axisymétriques
+MECANIQUE - option de calcul;TRID;Massif tridimensionnel;mechanical;solid;ElasticityModel::Solid (« solid »)
+MECANIQUE - option de calcul;PLAN GENE;Déformation plane généralisée (point support DPGE);—;—;—
+MECANIQUE - option de calcul;FOUR;Décomposition en séries de Fourier (harmonique axisymétrique);—;—;—
+MECANIQUE - option de calcul;UNID;Unidimensionnel (plan, axi, sphérique);—;—;—
+MECANIQUE - option globale;FUSION;Remise à zéro des variables internes au-delà de la température de fusion;—;—;—
+MECANIQUE - option globale;NON_LOCAL MOYE / SB / HELM;Régularisation non locale (moyenne intégrale ou équation de Helmholtz);—;—;—
+MECANIQUE - option globale;DERIVEE LINEAIRE / GRADIENT_F;Petites perturbations ou grandes transformations (gradient F);—;—;— (pyrucast est en petites perturbations)
+MECANIQUE - option globale;INTEGRE N1;Nombre de points d'intégration dans l'épaisseur des coques;—;—;—
+MECANIQUE - option globale;CONS / PHAS;Nom de constituant / de phase (multicouches, multiphases);—;—;—
+THERMIQUE;CONDUCTION ISOTROPE;Conduction de Fourier isotrope (conductivité k) — comportement par défaut;thermal;isotropic;Model.heat_conduction (k, plus rho et cp facultatifs pour la capacité)
+THERMIQUE;CONDUCTION ORTHOTROPE;Conduction orthotrope (conductivité par direction);thermal;orthotropic;Model.heat_conduction_with_symmetry (symmetry=orthotropic) — k_1, k_2, k_3 + repère V1/V2
+THERMIQUE;CONDUCTION ANISOTROPE;Conduction anisotrope (tenseur de conductivité complet);thermal;anisotropic;Model.heat_conduction_with_symmetry (symmetry=anisotropic) — k_11..k_33 + repère V1/V2
+THERMIQUE;CONVECTION;Convection de surface (Robin / film, q·n = h(T − T_ext));thermal;kind=thermal;Model.convection (h) — échange entre DEUX surfaces en vis-à-vis (résistance de contact) : Model.interface_transfer(kind=thermal)
+THERMIQUE;CONVECTION SUPERIEURE / INFERIEURE;Face d'échange d'une coque (supérieure ou inférieure);—;—;—
+THERMIQUE;RAYONNEMENT INFINI;Rayonnement vers l'infini;thermal · radiation;—;Model.radiation (emis, T_inf — sigma facultatif) — rigidité linéarisée + tangente cohérente
+THERMIQUE;RAYONNEMENT FAC_A_FAC;Rayonnement face à face entre deux surfaces;—;—;—
+THERMIQUE;RAYONNEMENT CAVITE;Rayonnement d'une surface sur elle-même (options CONVEXE, FERME, SYMETRIQUE, FAC_FORME, ABSO);—;—;—
+THERMIQUE;PHASE;Changement de phase avec chaleur latente (extension non linéaire de la conduction);—;—;—
+THERMIQUE;ADVECTION;Transport de chaleur par un champ de vitesse;—;—;—
+THERMIQUE;SOURCE;Densité volumique de chaleur appliquée sur le maillage;—;—;ops::node_field::flux (densité uniforme ou par champ)
+THERMIQUE;SOURCE GAUSSIENNE SPHERIQUE;Source gaussienne à distribution sphérique (massifs 2D/3D);—;—;—
+THERMIQUE;SOURCE GAUSSIENNE ELLIPTIQUE;Source gaussienne à distribution elliptique (massifs 2D/3D);—;—;—
+THERMIQUE;SOURCE GAUSSIENNE ELARGIE;Source gaussienne élargie (3D uniquement);—;—;—
+CONTACT;CONTACT UNILATERAL;Contact sans frottement, décollement autorisé (option par défaut);constraint;—;Model.contact + solve_unilateral (active-set nœud-surface)
+CONTACT;CONTACT BILATERAL;Contact sans décollement (conditions écrites sur les zones en contact);constraint;—;Model.mpc (relation d'égalité)
+CONTACT;FROTTANT COULOMB;Frottement de Coulomb entre deux lignes (2D) ou surfaces (3D);—;—;—
+CONTACT;FROTTANT FROCABLE;Frottement des câbles de précontrainte selon le BPEL99;—;—;—
+CONTACT;SYME / MESC;Traitement symétrique ou maître-esclave du contact;constraint;—;Model.contact (maître-esclave uniquement)
+CONTACT;FAIB;Formulation faible : non-pénétration imposée en moyenne par élément;—;—;—
+CONTACT;MORT;Formulation mortar, multiplicateurs de Lagrange linéaires (2D);—;—;—
+CONTRAINTE;CONTRAINTE ROTATION;Contrainte cinématique sur la rotation autour d'un axe;—;—;— (relation à écrire à la main avec Model.mpc)
+CONTRAINTE;CONTRAINTE DEPLACEMENT;Contrainte cinématique sur le déplacement selon un vecteur;constraint;—;Model.dirichlet / Model.mpc
+CONTRAINTE;CONTRAINTE RELATION;Contrainte cinématique par relation linéaire;constraint;—;Model.mpc (sens =, ≥ ou ≤) / Model.embedded (baignage)
+POREUX;ELASTIQUE ISOTROPE;Milieu poreux à comportement élastique isotrope;—;—;—
+POREUX;PLASTIQUE ISOTROPE;von Mises à écrouissage isotrope en milieu poreux;—;—;—
+POREUX;PLASTIQUE PARFAIT;von Mises sans écrouissage en milieu poreux;—;—;—
+POREUX;PLASTIQUE CINEMATIQUE;von Mises à écrouissage cinématique linéaire en milieu poreux;—;—;—
+POREUX;PLASTIQUE DRUCKER_PRAGER;Drucker-Prager non associé en milieu poreux;—;—;—
+POREUX;PLASTIQUE DRUCKER_PARFAIT;Drucker-Prager simplifié (parfait) en milieu poreux;—;—;—
+LIQUIDE;LIQUIDE;Formulation fluide (aucun matériau à préciser);—;—;—
+LIQUIDE;LIQUIDE MECANIQUE;Formulation couplée fluide-structure;—;—;—
+NAVIER_STOKES;NAVIER_STOKES;Écoulement visqueux incompressible (éléments LINE, MACRO, QUAF…);—;—;—
+EULER;EULER;Écoulement compressible non visqueux (volumes finis);—;—;—
+DARCY;ISOTROPE;Écoulement en milieu poreux, perméabilité isotrope;—;—;—
+DARCY;ORTHOTROPE;Perméabilité orthotrope;—;—;—
+DARCY;ANISOTROPE;Perméabilité anisotrope (tenseur complet);—;—;—
+DIFFUSION;FICK ISOTROPE;Loi de Fick J = −D·grad(C), diffusivité isotrope (modèle par défaut);diffusion;isotropic · kind=mass;Model.fick (symmetry=isotropic) — primale c, duale j — stockage poro facultatif — échange d'interface j·n = h(c1 − c2) : Model.interface_transfer
+DIFFUSION;FICK ORTHOTROPE;Loi de Fick à diffusivité orthotrope;diffusion;orthotropic;Model.fick (symmetry=orthotropic) — D_1, D_2, D_3 + repère V1/V2
+DIFFUSION;FICK ANISOTROPE;Loi de Fick à diffusivité anisotrope;diffusion;anisotropic;Model.fick (symmetry=anisotropic) — D_11..D_33 + repère V1/V2
+DIFFUSION;ADVECTION (CONSERVATIVE);Transport de matière par un champ de vitesse;—;—;—
+DIFFUSION;INCO MOT2 (MOT3);Noms libres des inconnues primale et duale;—;—;équivalent implicite : les composantes de champ sont nommées librement
+ELECTROSTATIQUE;ELECTROSTATIQUE;Formulation électrostatique;—;—;—
+MAGNETODYNAMIQUE;POTENTIEL_VECTEUR ISOTROPE;Magnétodynamique en coques minces, perméabilité isotrope;—;—;—
+MAGNETODYNAMIQUE;POTENTIEL_VECTEUR ORTHOTROPE;Magnétodynamique en coques minces, perméabilité orthotrope;—;—;—
+CHANGEMENT_PHASE;PARFAIT;Changement de phase parfait (une primale, une duale à déclarer);—;—;—
+CHANGEMENT_PHASE;SOLUBILITE;Solubilité liquide/gaz (deux primales, deux duales à déclarer);—;—;—
+METALLURGIE;TYPE KOIS;Transformation métallurgique de Koistinen-Marburger;—;—;—
+METALLURGIE;TYPE LEBL;Transformation métallurgique de Leblond-Devaux;—;—;—
+MELANGE;CEREM;Transition de phase de l'acier 16MND5;—;—;—
+MELANGE;PARALLELE;Combinaison linéaire de modèles élémentaires munis de noms de phases;—;—;—
+MELANGE;ZTMAX;Changement d'état avec transition (variable d'état : température par défaut);—;—;—
+FISSURE;PARF;Vapeur d'eau traitée en gaz parfait (défaut);—;—;—
+FISSURE;REEL;Vapeur d'eau traitée en gaz réel;—;—;—
+FISSURE;MASS;Condensation en masse (vapeur condensée transportée par le fluide, défaut);—;—;—
+FISSURE;FILM;Condensation en film adhérant à la paroi;—;—;—
+FISSURE;POISEU_BLASIUS;Frottement en canal rectangulaire lisse (défaut);—;—;—
+FISSURE;POISEU_COLEBROOK;Frottement en canal rectangulaire rugueux;—;—;—
+FISSURE;FROTTEMENT1 à FROTTEMENT4;Lois de frottement à coefficients choisis par l'utilisateur;—;—;—
+THERMOHYDRIQUE;SCHREFLER;Couplage thermohydrique en milieu poreux insaturé à 4 phases;—;—;—
+THERMOHYDRIQUE;BETON_THM;Thermo-hygro-chimique du béton (pg, pc, T + hydratation et endommagement chimique);—;—;—
+LIAISON;POINT_PLAN;Liaison point-plan (bases A et B);—;—;—
+LIAISON;POINT_PLAN FLUIDE;Liaison point-plan avec effet fluide;—;—;—
+LIAISON;POINT_PLAN FROTTEMENT;Liaison point-plan avec frottement;—;—;—
+LIAISON;POINT_POINT;Liaison point-point;—;—;—
+LIAISON;POINT_POINT FROTTEMENT;Liaison point-point avec frottement;—;—;—
+LIAISON;POINT_POINT DEPLACEMENT_PLASTIQUE;Liaison point-point à déplacement plastique;—;—;—
+LIAISON;POINT_POINT ROTATION_PLASTIQUE;Liaison point-point à rotation plastique;—;—;—
+LIAISON;POINT_CERCLE;Liaison point-cercle (options MOBILE, FROTTEMENT);—;—;—
+LIAISON;CERCLE_PLAN FROTTEMENT;Liaison cercle-plan avec frottement;—;—;—
+LIAISON;CERCLE_CERCLE FROTTEMENT;Liaison cercle-cercle avec frottement;—;—;—
+LIAISON;PROFIL_PROFIL INTERIEUR / EXTERIEUR;Liaison profil-profil (intérieure ou extérieure);—;—;—
+LIAISON;LIGNE_LIGNE FROTTEMENT;Liaison ligne-ligne avec frottement;—;—;—
+LIAISON;LIGNE_CERCLE FROTTEMENT;Liaison ligne-cercle avec frottement;—;—;—
+LIAISON;PALIER_FLUIDE RHODE_LI;Palier fluide (modèle de Rhode & Li);—;—;—
+LIAISON;COUPLAGE DEPLACEMENT / VITESSE;Couplage en déplacement ou en vitesse (base modale);—;—;—
+LIAISON;POLYNOMIALE;Liaison polynomiale (base modale);—;—;—
+LIAISON;NEWMARK MODAL;Liaison de Newmark en base modale (PASAPAS uniquement);—;—;—
+CHARGEMENT;PRESSION;Chargement de pression sur une surface orientée;mechanical;—;Model.follower_pressure (p) — charge suiveuse, direction recalculée à chaque résidu
