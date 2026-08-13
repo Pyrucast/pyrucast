@@ -298,13 +298,27 @@ gradient analytique invérifiable contre un gradient numérique qui ne peut pas
 ## La tangente cohérente, et deux limites assumées
 
 Seule von Mises garde une tangente **analytique**, parce que seule sa forme
-fermée a été confrontée à une différence finie.
+fermée a été confrontée à une différence finie. Toutes les autres l'obtiennent
+**par perturbation** — des différences centrées sur le retour lui-même, une
+colonne par composante de déformation :
+
+\\[
+D_{ij} \simeq \frac{\sigma_i(\varepsilon + h\\,e_j) - \sigma_i(\varepsilon - h\\,e_j)}{2h},
+\qquad h = 10^{-6}\\,\lVert \varepsilon \rVert_\infty ,
+\\]
+
+soit **douze appels** au retour par point de Gauss. Le pas doit rester bien
+au-dessus du bruit du retour — celui d'Ottosen ou de Gurson converge à une
+tolérance, pas exactement — et bien en dessous de l'échelle de courbure de la
+surface ; `1e-6·‖ε‖` tient confortablement entre les deux. Les colonnes de
+cisaillement sont divisées par deux en sortie, ce qui transforme `∂σ/∂ε_ij` en
+`∂σ/∂γ_ij`, la convention ingénieur du reste du dépôt.
 
 > La dérivation analytique de Drucker-Prager, écrite d'abord, était **fausse de
 > 24 %** — plausible, et fausse. Seul l'oracle par différences finies de
-> `tests/plastic_laws.rs` l'a dit. La tangente numérique qui l'a remplacée ne
-> peut pas être mal dérivée, coûte douze évaluations d'une mise à jour fermée, et
-> laisse la convergence de Newton quadratique.
+> `tests/plastic_laws.rs` l'a dit. La tangente par perturbation qui l'a
+> remplacée ne peut pas être mal dérivée, coûte douze évaluations d'une mise à
+> jour fermée, et laisse la convergence de Newton quadratique.
 
 **La tangente stockée est symétrique.** `D_alg` voyage dans le champ d'état sous
 forme de triangle supérieur (`ktan_i_j`, i ≤ j) et est relue en miroir : le format

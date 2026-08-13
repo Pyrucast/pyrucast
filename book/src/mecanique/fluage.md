@@ -239,8 +239,8 @@ Blackburn **sature**, que la contrainte de rappel de Chaboche s'établit puis
 plafonne sous `C/γ`, et que l'endommagement croît sans jamais guérir ni dépasser
 `D_c`. Et que toutes **refusent** d'intégrer sans `dt`.
 
-**Tangente.** Aucune de ces lois n'a de tangente analytique : toutes prennent la
-voie numérique décrite au chapitre
+**Tangente.** Aucune de ces lois n'a de tangente analytique : toutes l'obtiennent
+**par perturbation**, comme décrit au chapitre
 [Lois d'écoulement plastique](lois-plastiques.md#la-tangente-cohérente-et-deux-limites-assumées).
 
 **Ce qui n'est pas couvert.** Une seule contrainte de rappel (la version de base
