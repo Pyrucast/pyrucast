@@ -52,89 +52,26 @@ use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
-/// Which configuration a Bernoulli beam is in — the kinematics, not the theory.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum BeamModel {
-    /// Pure bending in a 1-D configuration: deflection and section rotation.
-    Planar1d,
-    /// Plane frame: axial + bending, rotated to the global axes.
-    Frame2d,
-    /// Space frame: axial, torsion and bending about two principal axes.
-    Frame3d,
-}
+pub use crate::models::beam::BeamModel;
 
-impl BeamModel {
-    /// The configuration a beam is in, **read from the geometry**.
-    ///
-    /// It was once an argument, and it could only ever take the one value
-    /// matching the mesh: every constructor rejected the others outright. An
-    /// argument that can hold exactly one value carries no information — it
-    /// only offers a way to contradict oneself — so the configuration is
-    /// derived instead.
-    ///
-    /// Everything that distinguishes the three (degrees of freedom, material,
-    /// section forces, whether there is an axial term, a torsion, a rotation to
-    /// the global axes) follows from the dimension, and none of it is a choice.
-    pub fn from_space_dim(space_dim: usize) -> Result<Self> {
-        match space_dim {
-            1 => Ok(Self::Planar1d),
-            2 => Ok(Self::Frame2d),
-            3 => Ok(Self::Frame3d),
-            d => Err(PyrucastError::Message(format!(
-                "a beam lives in a 1-, 2- or 3-D configuration, got {d}-D"
-            ))),
-        }
-    }
-
-    /// The lowercase name of the configuration — for messages and rendering.
-    pub fn to_tag(self) -> &'static str {
-        match self {
-            Self::Planar1d => "planar_1d",
-            Self::Frame2d => "frame_2d",
-            Self::Frame3d => "frame_3d",
-        }
-    }
-
-    fn primal(self) -> &'static [&'static str] {
-        match self {
-            Self::Planar1d => &["w", "theta"],
-            Self::Frame2d => &["u_x", "u_y", "r_z"],
-            Self::Frame3d => &["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"],
-        }
-    }
-
-    fn dual(self) -> &'static [&'static str] {
-        match self {
-            Self::Planar1d => &["f_w", "m_theta"],
-            Self::Frame2d => &["f_x", "f_y", "m_z"],
-            Self::Frame3d => &["f_x", "f_y", "f_z", "m_x", "m_y", "m_z"],
-        }
-    }
-
-    /// The material a configuration needs. No `G`, no `A_s` where there is no
-    /// shear — asking for a constant a theory does not use is a way of inviting
-    /// the wrong one.
-    fn material(self) -> &'static [&'static str] {
-        match self {
-            Self::Planar1d => &["E", "I"],
-            Self::Frame2d => &["E", "A", "I"],
-            Self::Frame3d => &["E", "A", "I_y", "I_z", "J", "G"],
-        }
-    }
-
-    /// The section forces the behaviour reports.
-    fn behavior(self) -> &'static [&'static str] {
-        match self {
-            Self::Planar1d => &["M"],
-            Self::Frame2d => &["N", "M"],
-            Self::Frame3d => &["N", "M_y", "M_z", "T"],
-        }
+/// The material a configuration needs. No `G`, no `A_s` where there is no
+/// shear — asking for a constant a theory does not use is a way of inviting the
+/// wrong one.
+fn material_of(model: BeamModel) -> &'static [&'static str] {
+    match model {
+        BeamModel::Planar1d => &["E", "I"],
+        BeamModel::Frame2d => &["E", "A", "I"],
+        BeamModel::Frame3d => &["E", "A", "I_y", "I_z", "J", "G"],
     }
 }
 
-impl std::fmt::Display for BeamModel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_tag())
+/// The section forces the behaviour reports — no shear force, there being no
+/// shear strain to produce one.
+fn behavior_of(model: BeamModel) -> &'static [&'static str] {
+    match model {
+        BeamModel::Planar1d => &["M"],
+        BeamModel::Frame2d => &["N", "M"],
+        BeamModel::Frame3d => &["N", "M_y", "M_z", "T"],
     }
 }
 
@@ -299,7 +236,7 @@ impl Domain for Bernoulli {
     }
 
     fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(self.model.material())
+        Some(material_of(self.model))
     }
 
     fn optional_material_components(&self) -> &'static [&'static str] {
@@ -311,9 +248,7 @@ impl Domain for Bernoulli {
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(self
-            .model
-            .behavior()
+        Ok(behavior_of(self.model)
             .iter()
             .map(|s| s.to_string())
             .collect())
