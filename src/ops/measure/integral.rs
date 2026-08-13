@@ -54,7 +54,7 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
             let ids = geom.node_ids();
             let mut acc = 0.0;
             for g in 0..geom.n_gauss {
-                let n = geom.n_at_g(g)?; // shape values N_i(ξ_g)
+                let n = geom.field_n_at_g(g)?; // field shape values N_i(ξ_g)
                 let mut fg = 0.0;
                 for i in 0..geom.n_nodes {
                     fg += vals[&ids[i]] * n[i];

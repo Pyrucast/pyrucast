@@ -52,6 +52,27 @@ pub enum Interpolation {
     ///
     /// > New variants go at the **end** — `bincode` serialises the index.
     Hermite3,
+    /// **No field basis at all**: the formulation owns it.
+    ///
+    /// A structural element whose element matrix is a closed form — a bar, a
+    /// frame — never evaluates a shape function. Its basis was integrated once,
+    /// on paper, and only the result is in the code. Declaring a Lagrange
+    /// interpolation on such a space states something the physics does not use,
+    /// and — worse — something that may be **false**: the closed form of an
+    /// exact frame element comes from cubic/quadratic functions, not linear
+    /// ones.
+    ///
+    /// This variant says so. The **geometry** stays Lagrange, so coordinates,
+    /// Jacobian and measure are all well defined and the whole assembly
+    /// plumbing is unchanged; only the interpolation of the *unknown* is
+    /// declared absent. Any operator that tries to evaluate a field inside such
+    /// an element gets an error naming the situation, instead of silently
+    /// falling back to a linear basis the formulation never used.
+    ///
+    /// It is named for **where the basis lives**, not for how the integral was
+    /// done: a formulation could own its basis and still integrate it
+    /// internally, and this would still be the right declaration.
+    ModelEmbedded,
 }
 
 impl Interpolation {
@@ -64,7 +85,15 @@ impl Interpolation {
         match self {
             Self::Lagrange1 | Self::Lagrange2 => element_type.as_kind().degree() == Some(self),
             Self::Hermite3 => element_type == ElementType::SEG2,
+            // Any element whose geometry is defined: the field basis is the
+            // model's business, the space only has to place the points.
+            Self::ModelEmbedded => element_type.as_kind().degree().is_some(),
         }
+    }
+
+    /// Whether the space declares **no** field basis, the formulation owning it.
+    pub fn is_model_embedded(self) -> bool {
+        matches!(self, Self::ModelEmbedded)
     }
 
     /// Number of **shape functions** per cell — which is the number of nodes
@@ -77,6 +106,9 @@ impl Interpolation {
         match self {
             Self::Lagrange1 | Self::Lagrange2 => element_type.nodes_per_cell(),
             Self::Hermite3 => super::hermite::HERMITE3_SHAPE_COUNT,
+            // None, and that is the statement — not "zero functions" but "not
+            // this space's to say".
+            Self::ModelEmbedded => 0,
         }
     }
 
@@ -89,6 +121,7 @@ impl Interpolation {
         match self {
             Self::Lagrange1 | Self::Lagrange2 => 1,
             Self::Hermite3 => 2,
+            Self::ModelEmbedded => 0,
         }
     }
 
@@ -103,6 +136,7 @@ impl Interpolation {
             Self::Lagrange1 => "LAGRANGE1",
             Self::Lagrange2 => "LAGRANGE2",
             Self::Hermite3 => "HERMITE3",
+            Self::ModelEmbedded => "MODEL_EMBEDDED",
         }
     }
 
@@ -112,6 +146,7 @@ impl Interpolation {
             "LAGRANGE1" | "LAG1" => Some(Self::Lagrange1),
             "LAGRANGE2" | "LAG2" => Some(Self::Lagrange2),
             "HERMITE3" | "HER3" => Some(Self::Hermite3),
+            "MODEL_EMBEDDED" | "MODELEMBEDDED" | "EMBEDDED" => Some(Self::ModelEmbedded),
             _ => None,
         }
     }
@@ -130,10 +165,21 @@ impl Interpolation {
     ///   that is not the element's own, …).
     pub fn shape(self, element_type: ElementType, xi: &[f64]) -> Result<Vec<f64>> {
         self.check(element_type, xi)?;
-        Ok(match self {
-            Self::Lagrange1 | Self::Lagrange2 => element_type.as_kind().shape(xi),
-            Self::Hermite3 => super::hermite::shape(xi[0]).to_vec(),
-        })
+        match self {
+            Self::Lagrange1 | Self::Lagrange2 => Ok(element_type.as_kind().shape(xi)),
+            Self::Hermite3 => Ok(super::hermite::shape(xi[0]).to_vec()),
+            Self::ModelEmbedded => Err(Self::embedded_refusal("shape functions")),
+        }
+    }
+
+    /// The message every field evaluator shares — one wording, so a caller
+    /// meets the same explanation whichever accessor it reached for.
+    fn embedded_refusal(what: &str) -> PyrucastError {
+        PyrucastError::Message(format!(
+            "interpolation MODEL_EMBEDDED declares no field basis, so it has no {what}: the \
+             formulation owns its interpolation (a closed-form structural element). Interpolating \
+             a field inside such an element is the formulation's business, not the space's."
+        ))
     }
 
     /// Evaluate the reference derivatives `∂N_i/∂ξ_j` at `xi`.
@@ -147,10 +193,11 @@ impl Interpolation {
     /// Same as [`shape`](Self::shape).
     pub fn dshape_dxi(self, element_type: ElementType, xi: &[f64]) -> Result<Vec<f64>> {
         self.check(element_type, xi)?;
-        Ok(match self {
-            Self::Lagrange1 | Self::Lagrange2 => element_type.as_kind().dshape(xi),
-            Self::Hermite3 => super::hermite::dshape(xi[0]).to_vec(),
-        })
+        match self {
+            Self::Lagrange1 | Self::Lagrange2 => Ok(element_type.as_kind().dshape(xi)),
+            Self::Hermite3 => Ok(super::hermite::dshape(xi[0]).to_vec()),
+            Self::ModelEmbedded => Err(Self::embedded_refusal("reference derivatives")),
+        }
     }
 
     /// Evaluate the reference **second** derivatives `∂²N_i/∂ξ²` at `xi`.
@@ -173,6 +220,7 @@ impl Interpolation {
                 "interpolation {self}: second derivatives are only defined for the C¹ families \
                  (HERMITE3); a Lagrange basis has none tabulated"
             ))),
+            Self::ModelEmbedded => Err(Self::embedded_refusal("second derivatives")),
         }
     }
 

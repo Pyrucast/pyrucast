@@ -42,7 +42,7 @@ def main() -> None:
     base = c.add_node([0.0, 0.0, 0.0])
     tip = c.add_node([L, 0.0, 0.0])
     mesh = pyrucast.mesh.line(base, tip, N)  # console le long de X (`line`)
-    fes = pyrucast.FiniteElementSpace(mesh)
+    fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
     model = pyrucast.Model.frame3d(fes)
     for var, dual in (

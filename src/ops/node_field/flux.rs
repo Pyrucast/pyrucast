@@ -87,7 +87,7 @@ pub fn flux(
             let geom = &geoms[0];
             let cell = geom.cell;
             for g in 0..geom.n_gauss {
-                let shape = geom.n_at_g(g)?;
+                let shape = geom.field_n_at_g(g)?;
                 let phi = densities.as_deref().map_or(uniform, |d| d[cell][g]);
                 let w = geom.det_j_w(g)? * phi;
                 for i in 0..geom.n_nodes {

@@ -271,6 +271,11 @@ impl FitOperator {
         let mut a = na::DMatrix::zeros(n_g, npc);
         let mut atw = na::DMatrix::zeros(npc, n_g);
         for g in 0..n_g {
+            // The **geometric** basis, deliberately: what is drawn for a cell is
+            // its geometry — a straight segment, a flat facet — and the colour
+            // has to vary along what is drawn. This is a picture, not a computed
+            // field value, so it stays defined even where a formulation owns its
+            // interpolation and refuses to interpolate for a computation.
             let row = s.n_at_g(g)?;
             let w = s.gauss_weight(g)?;
             for i in 0..npc {
@@ -854,7 +859,7 @@ mod tests {
             let s = read(&fespace).unwrap();
             let mut zone = crate::store::write(&ef.get(0).unwrap()).unwrap();
             for g in 0..s.gauss_count() {
-                let n = s.n_at_g(g).unwrap();
+                let n = s.n_at_g(g).unwrap(); // geometric: colouring what is drawn
                 let f: f64 = (0..3).map(|i| n[i] * target[i]).sum();
                 zone.set(0, g, 0, f).unwrap();
             }

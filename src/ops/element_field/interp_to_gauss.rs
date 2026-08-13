@@ -30,7 +30,7 @@ pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Resul
     for sub in fespace {
         // Point kernel: value at Gauss g = Σ_i N_i(g) · f_i, per component.
         let sf = kernel::nodal_pointwise(sub, &view, components.clone(), |geom, field, g, out| {
-            let shape = geom.n_at_g(g)?;
+            let shape = geom.field_n_at_g(g)?;
             let ids = geom.node_ids();
             for (c, comp) in components.iter().enumerate() {
                 let mut v = 0.0;

@@ -67,6 +67,21 @@ impl Frame3d {
                 "Frame3d: space frame requires a 3-D configuration, got {space_dim}-D"
             )));
         }
+        // The closed form below is the **exact** Timoshenko element: its shape
+        // functions are cubic in the deflection and quadratic in the rotation
+        // (that is where the `Φ` terms come from), and they depend on the
+        // material through `Φ` — so they are not a basis a space can tabulate.
+        // The space must therefore declare that this formulation owns its
+        // interpolation, rather than claim a Lagrange one it does not use.
+        let interpolation = read(&fespace)?.interpolation();
+        if !interpolation.is_model_embedded() {
+            return Err(PyrucastError::Message(format!(
+                "Frame3d: this element is the exact Timoshenko frame, whose interpolation is \
+                 cubic/quadratic and depends on the material through Φ — it is owned by the \
+                 formulation, not by the space. Build the subspace with \
+                 `Interpolation::ModelEmbedded`; got {interpolation}."
+            )));
+        }
         let support = read(&submesh)?.to_poi1()?;
         Ok(Self { fespace, support })
     }
@@ -498,7 +513,7 @@ mod tests {
     use crate::aggregate::Aggregate;
     use crate::atoms::{Node, NodeId};
     use crate::containers::field::SubField;
-    use crate::containers::finite_element_space::FiniteElementSpace;
+    use crate::containers::finite_element_space::{FiniteElementSpace, Interpolation};
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
     use crate::store::insert;
@@ -509,7 +524,7 @@ mod tests {
         let b = Node::create_in(coords.clone(), &[bx, by, bz]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded).unwrap();
         let frame = Frame3d::new(fes.get(0).unwrap()).unwrap();
         (frame, a.id(), b.id())
     }

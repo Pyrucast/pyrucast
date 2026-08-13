@@ -199,7 +199,7 @@ impl SubFiniteElementSpace {
         // reads the geometric tables and stores nothing extra.
         let (mut field_n_at_g, mut field_dn_at_g, mut field_d2n_at_g) =
             (Vec::new(), Vec::new(), Vec::new());
-        if interpolation != geometry {
+        if interpolation != geometry && !interpolation.is_model_embedded() {
             let count = interpolation.shape_count(et);
             field_n_at_g.reserve(n_g * count);
             field_dn_at_g.reserve(n_g * count * ref_dim);
@@ -352,17 +352,38 @@ impl SubFiniteElementSpace {
     //
     // Identical to the geometric one for every Lagrange space — the accessors
     // below then fall back to it, so a caller never has to ask which case it is
-    // in. They part company only under a C¹ interpolation, where the field
-    // carries two functions per node and the geometry still one.
+    // in. They part company under a C¹ interpolation, where the field carries
+    // two functions per node and the geometry still one, and they part company
+    // entirely under `MODEL_EMBEDDED`, where there is no field basis to give.
+
+    /// The guard the three field accessors share: a `MODEL_EMBEDDED` space has
+    /// no field basis, and says so instead of handing back the geometric one.
+    ///
+    /// The distinction matters *because* the geometric basis is available and
+    /// would look plausible — the silent fallback is exactly what this variant
+    /// exists to prevent.
+    fn reject_if_model_embedded(&self, what: &str) -> Result<()> {
+        if self.interpolation.is_model_embedded() {
+            return Err(PyrucastError::Message(format!(
+                "SubFiniteElementSpace: this space is MODEL_EMBEDDED — it declares no field \
+                 basis, so it has no {what}. Its formulation owns the interpolation (a \
+                 closed-form structural element), so evaluating a field inside one of its \
+                 elements is that formulation's business."
+            )));
+        }
+        Ok(())
+    }
 
     /// Number of **field** shape functions per cell: the cell's nodes for a
-    /// Lagrange space, twice that for a C¹ one.
+    /// Lagrange space, twice that for a C¹ one, and **zero** when the
+    /// formulation owns the basis.
     pub fn shape_count(&self) -> Result<usize> {
         Ok(self.interpolation.shape_count(self.element_type()?))
     }
 
     /// Field shape values `N_i(ξ_g)`, length [`shape_count`](Self::shape_count).
     pub fn field_n_at_g(&self, g: usize) -> Result<&[f64]> {
+        self.reject_if_model_embedded("shape values")?;
         if self.field_n_at_g.is_empty() {
             return self.n_at_g(g);
         }
@@ -374,6 +395,7 @@ impl SubFiniteElementSpace {
     /// Field reference derivatives `∂N_i/∂ξ_j(ξ_g)`, flat row-major of length
     /// `shape_count × ref_dim`.
     pub fn field_dn_at_g(&self, g: usize) -> Result<&[f64]> {
+        self.reject_if_model_embedded("reference derivatives")?;
         if self.field_dn_at_g.is_empty() {
             return self.dn_at_g(g);
         }
@@ -389,6 +411,7 @@ impl SubFiniteElementSpace {
     /// The space is not C¹ — a Lagrange basis has none tabulated. See
     /// [`Interpolation::d2shape_dxi2`].
     pub fn field_d2n_at_g(&self, g: usize) -> Result<&[f64]> {
+        self.reject_if_model_embedded("second derivatives")?;
         self.check_g(g)?;
         if self.field_d2n_at_g.is_empty() {
             return Err(PyrucastError::Message(format!(

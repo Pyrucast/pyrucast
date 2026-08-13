@@ -17,7 +17,7 @@
 
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
-use pyrucast::atoms::{ElementType, Node};
+use pyrucast::atoms::{ElementType, Interpolation, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
@@ -54,7 +54,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     for i in 0..N {
         mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
     }
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
     // ── Modèle : cadre 3-D + encastrement complet (6 DOFs) à la base ───────
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {

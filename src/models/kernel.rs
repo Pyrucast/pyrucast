@@ -93,6 +93,10 @@ struct RefData {
     /// snapshots exactly what it did before.
     field_n_ref: Vec<Vec<f64>>,
     field_d2n_ref: Vec<Vec<f64>>,
+    /// Whether the space declares **no** field basis (the formulation owns it).
+    /// Distinct from "the field tables are empty because they equal the
+    /// geometric ones" — hence a flag rather than a length test.
+    model_embedded: bool,
 }
 
 impl RefData {
@@ -127,6 +131,7 @@ impl RefData {
             shape_count: fe.shape_count()?,
             field_n_ref,
             field_d2n_ref,
+            model_embedded: fe.interpolation().is_model_embedded(),
         })
     }
 }
@@ -240,6 +245,7 @@ impl<'a> CellGeom<'a> {
     /// `∂w/∂x`: they carry an extra factor `J`. For a Lagrange space this is
     /// [`n_at_g`](Self::n_at_g) unchanged.
     pub fn field_n_at_g(&self, g: usize) -> Result<Vec<f64>> {
+        self.reject_if_model_embedded("shape values")?;
         if self.rd.field_n_ref.is_empty() {
             return Ok(self.rd.n_ref[g].clone());
         }
@@ -259,6 +265,7 @@ impl<'a> CellGeom<'a> {
     ///
     /// The space is not C¹, or its reference element is not a segment.
     pub fn field_d2n_dx2(&self, g: usize) -> Result<Vec<f64>> {
+        self.reject_if_model_embedded("second derivatives")?;
         if self.rd.field_d2n_ref.is_empty() {
             return Err(PyrucastError::Message(
                 "CellGeom: this subspace has no C¹ field basis, so no curvature operator".into(),
@@ -269,6 +276,19 @@ impl<'a> CellGeom<'a> {
         // reference second derivative to a physical one.
         let scaled = scale_slope_slots(&self.rd.field_d2n_ref[g], j);
         Ok(scaled.iter().map(|v| v / (j * j)).collect())
+    }
+
+    /// The guard the field accessors share — see
+    /// [`SubFiniteElementSpace`](crate::containers::finite_element_space::SubFiniteElementSpace).
+    fn reject_if_model_embedded(&self, what: &str) -> Result<()> {
+        if self.rd.model_embedded {
+            return Err(PyrucastError::Message(format!(
+                "CellGeom: this subspace is MODEL_EMBEDDED — it declares no field basis, so it \
+                 has no {what}. Its formulation owns the interpolation, so evaluating a field \
+                 inside one of its elements is that formulation's business."
+            )));
+        }
+        Ok(())
     }
 
     /// `J = ∂x/∂ξ` of a straight segment: **signed** in a 1-D space (where the

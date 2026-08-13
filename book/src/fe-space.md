@@ -224,6 +224,65 @@ atterrit dans cette comparaison — ce qui vaut mieux que seize assertions sur l
 base seule. L'intégrande étant quadratique en \\( \xi \\), deux points de Gauss
 l'intègrent **exactement**.
 
+### Pas de base du tout : `MODEL_EMBEDDED`
+
+Un élément structurel dont la matrice élémentaire est une **forme fermée** —
+une barre, un portique — n'évalue jamais une fonction de forme. Son intégrale a
+été faite une fois, au crayon, et seul le résultat figure dans le code.
+
+Déclarer une interpolation de Lagrange sur un tel espace énonce quelque chose
+que la physique n'utilise pas, et parfois quelque chose de **faux** : la forme
+fermée de l'élément de portique exact vient de fonctions cubiques et
+quadratiques, pas linéaires.
+
+`MODEL_EMBEDDED` le dit. C'est la troisième combinaison des deux bases :
+
+| espace | géométrie | champ |
+|---|---|---|
+| `LAGRANGE1` / `LAGRANGE2` | Lagrange | la même |
+| `HERMITE3` | Lagrange-1 | Hermite, 4 fonctions |
+| `MODEL_EMBEDDED` | Lagrange | **absente, par déclaration** |
+
+La géométrie reste entièrement définie — coordonnées, jacobien, mesure — donc
+toute la plomberie d'assemblage est inchangée : champ matériau, sortie de
+comportement, layout, coloriage, dispersion parallèle. Seule l'interpolation de
+**l'inconnue** n'appartient pas à l'espace.
+
+#### Le refus a des dents
+
+Un accesseur de champ sur un tel espace **erronne**, en nommant la situation,
+plutôt que de rendre la base géométrique. La distinction compte *parce que* la
+base géométrique est disponible et paraîtrait plausible : c'est exactement le
+repli silencieux que cette variante existe pour empêcher.
+
+Ce qui suppose que les consommateurs posent la question au bon endroit. Les
+opérateurs qui interpolent une **inconnue** sont donc passés à l'accesseur de
+champ :
+
+| opérateur | ce qu'il interpole |
+|---|---|
+| `node_field::flux` | la fonction test d'une charge répartie |
+| `element_field::deformation` | `u_r`, pour la déformation orthoradiale |
+| `element_field::interp_to_gauss` | nodal → points de Gauss |
+| `measure::integral` | le champ intégré |
+
+Sur une poutre, le premier est le plus parlant : la charge répartie cohérente
+vaut `qL/2` **et** `qL²/12` en moment, ce qui suppose de connaître la base. Un
+repli linéaire donnerait `qL/2` sans moment — plausible, et faux. Refuser est la
+bonne réponse.
+
+**La visualisation, elle, reste sur la base géométrique**, et délibérément : ce
+qu'on colorie est ce qu'on dessine — un segment droit, une facette plane — donc
+la couleur doit varier le long du tracé. C'est une image, pas une valeur
+calculée.
+
+#### Ce que ça ne règle pas
+
+La reconstruction des efforts reste à la charge de la formulation.
+`frame_deformation` rend toujours des déformations élément-constantes ; la
+différence est que c'est désormais une **approximation assumée par la
+formulation**, et non la conséquence tacite d'une base mal déclarée.
+
 ### Dérivées de référence
 
 Les **dérivées de référence** \\( \partial N_i / \partial \xi_k \\) suivent par dérivation directe. Pour Lagrange-1 sur les simplexes (TRI3, TET4) et sur SEG2, ces dérivées sont **constantes** sur l'élément. Sur QUA4 et HEX8 — et sur tous les types quadratiques — elles sont polynomiales en les coordonnées de référence.
@@ -527,7 +586,7 @@ print(sub.det_jacobian(0, 0))  # |J| recalculé
 
 ## Limitations actuelles
 
-- Trois interpolations : `Lagrange1` (types linéaires), `Lagrange2` (types quadratiques `SEG3`, `TRI6`, `QUA8`, `QUA9`, `TET10`, `PENTA15`, `HEX20`, `HEX27`) et `Hermite3` (C¹, sur `SEG2` seul). Pour les familles de Lagrange le **degré** doit correspondre au type d'élément : un maillage quadratique se pose avec `interpolation="LAGRANGE2"` (le constructeur par défaut `LAGRANGE1` refuse un type quadratique, et inversement). `HERMITE3`, lui, se pose sur un `SEG2` **sans** en être le degré — c'est le cas sous-paramétrique. Les ordres supérieurs (Lagrange-3…) restent à venir.
+- Quatre interpolations : `Lagrange1` (types linéaires), `Lagrange2` (types quadratiques `SEG3`, `TRI6`, `QUA8`, `QUA9`, `TET10`, `PENTA15`, `HEX20`, `HEX27`), `Hermite3` (C¹, sur `SEG2` seul) et `ModelEmbedded` (aucune base de champ : la formulation possède la sienne). Pour les familles de Lagrange le **degré** doit correspondre au type d'élément : un maillage quadratique se pose avec `interpolation="LAGRANGE2"` (le constructeur par défaut `LAGRANGE1` refuse un type quadratique, et inversement). `HERMITE3`, lui, se pose sur un `SEG2` **sans** en être le degré — c'est le cas sous-paramétrique. Les ordres supérieurs (Lagrange-3…) restent à venir.
 - Deux quadratures : `QuadratureRule::Gauss` (la règle standard par défaut par `ElementType`) et `QuadratureRule::Reduced` (**intégration réduite** : un point au centroïde, exact pour les constantes — utilisée par exemple pour le terme de cisaillement de la [poutre de Timoshenko](mecanique/timoshenko.md), anti-verrouillage). Les variantes d'ordre supérieur viendront comme nouvelles variantes. Voir le [tableau croisé quadrature × élément](elements/index.md#catalogue-de-quadrature) pour la compatibilité couple par couple.
 - `POI1` n'est pas un élément fini (pas de repère de référence). Un sous-maillage POI1 dans le maillage support fait échouer la construction du `FiniteElementSpace`.
 - Pas encore de cache invalidable des grandeurs physiques (\\( J \\), \\( |J| \\), \\( \nabla_x N_i \\)) : tout est recalculé à la volée. Une optimisation à base d'invalidation par compteur de version pourra être ajoutée si la mesure le justifie, sans changement d'API.

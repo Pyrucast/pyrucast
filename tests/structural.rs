@@ -2,7 +2,7 @@
 //! exercised end-to-end through the public API against closed forms.
 
 use pyrucast::aggregate::Aggregate;
-use pyrucast::atoms::{ElementType, Node};
+use pyrucast::atoms::{ElementType, Interpolation, Node};
 use pyrucast::containers::element_field::{ElementField, SubElementField};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -225,7 +225,11 @@ fn bar_3d(len: f64) -> Result<(FiniteElementSpace, Node, Node)> {
     let b = Node::create_in(coords.clone(), &[len, 0.0, 0.0])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
-    Ok((FiniteElementSpace::lagrange1(&mesh)?, a, b))
+    Ok((
+        FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?,
+        a,
+        b,
+    ))
 }
 
 fn frame3d_materials(model: &Model, iy: f64, iz: f64, area: f64, rho: f64) -> Result<ElementField> {

@@ -84,7 +84,7 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
             }
             if axisymmetric {
                 // ε_θθ = u_r / r, with u_r interpolated at the Gauss point.
-                let n = geom.n_at_g(g)?;
+                let n = geom.field_n_at_g(g)?;
                 let mut u_r = 0.0;
                 for k in 0..geom.n_nodes {
                     u_r += field.value(ids[k], &components[0])? * n[k];
