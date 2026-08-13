@@ -35,6 +35,7 @@
     - [Lois d'écoulement plastique](mecanique/lois-plastiques.md)
     - [Fluage et viscoplasticité](mecanique/fluage.md)
     - [Endommagement de Mazars](mecanique/mazars.md)
+    - [Lois d'endommagement](mecanique/endommagement.md)
     - [Poutre de Timoshenko](mecanique/timoshenko.md)
     - [Portique 2D](mecanique/portique.md)
     - [Cadre 3D](mecanique/cadre3d.md)

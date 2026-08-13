@@ -153,7 +153,7 @@ fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
 /// ([`flux`](fn@crate::ops::node_field::flux)) or convection, not a solid — and a
 /// structural element (bar, beam) is a different physics with its own kernel.
 /// Shared by [`Elasticity`], [`Plasticity`](crate::models::plasticity) and
-/// [`Mazars`](crate::models::mazars).
+/// [`Mazars`](crate::models::damage).
 pub(crate) fn check_continuum_dimensions(
     label: &str,
     space_dim: usize,
@@ -543,7 +543,7 @@ fn b_matrix(
 /// written into `ke` (flat row-major, side `space_dim·n_nodes`, **node-major /
 /// component-minor** dof order `dof = node·space_dim + component`). Pure and
 /// sequential — driven in parallel by [`crate::models::kernel::assemble_block`].
-/// Reused as-is by [`crate::models::plasticity`] and [`crate::models::mazars`]
+/// Reused as-is by [`crate::models::plasticity`] and [`crate::models::damage`]
 /// (their iteration operator is the elastic stiffness).
 pub fn element_stiffness(
     geom: &CellGeom,
@@ -597,7 +597,7 @@ pub fn element_stiffness(
 /// block-diagonal, so `M[(i,a),(j,b)] = δ_ab ρ ∫ N_i N_j`. Density `ρ` is read
 /// from the material component `rho` (constant per cell). Pure and sequential,
 /// law-independent — reused as-is by [`crate::models::plasticity`] and
-/// [`crate::models::mazars`].
+/// [`crate::models::damage`].
 pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
@@ -631,7 +631,7 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// displacement component's diagonal block (`δ_ab`). The current Cauchy stress
 /// `σ` (Voigt-named) is read from `state` per Gauss point. Pure and sequential,
 /// law-independent — reused as-is by [`crate::models::plasticity`] and
-/// [`crate::models::mazars`].
+/// [`crate::models::damage`].
 pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let d = geom.space_dim;

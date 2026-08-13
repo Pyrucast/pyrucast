@@ -3,6 +3,7 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
+use crate::models::damage::DamageLaw;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::interface_transfer::TransferKind;
 use crate::models::plastic::PlasticLaw;
@@ -32,6 +33,19 @@ fn parse_symmetry(what: &str, tag: Option<&str>) -> PyResult<MaterialSymmetry> {
 /// Build an elastoplastic `Model` for a given yield law, parsing the kinematic
 /// tag. Shared by the four per-law classmethods, which differ only in the law
 /// they name — the material contract follows from it.
+/// Build a damage `Model` for a given law, parsing the kinematic tag.
+fn damage_with(fespace: &PyFiniteElementSpace, model: &str, law: DamageLaw) -> PyResult<PyModel> {
+    let m = ElasticityModel::from_tag(model).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err(format!(
+            "damage ({law}): unknown model '{model}' \
+             (expected plane_stress|plane_strain|axisymmetric|solid)"
+        ))
+    })?;
+    Ok(PyModel {
+        inner: Model::damage_with_law(&fespace.inner, m, law)?,
+    })
+}
+
 fn plasticity_with(
     fespace: &PyFiniteElementSpace,
     model: &str,
@@ -489,6 +503,70 @@ impl PyModel {
         model: &str,
     ) -> PyResult<Self> {
         plasticity_with(&fespace, model, PlasticLaw::ViscoplasticLemaitreChaboche)
+    }
+
+    /// `Model.damage_tc(fespace, model)` — **two** damage variables, tension
+    /// and compression apart: `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`,
+    /// `f_t`, `f_c`, `A_t`, `A_c`.
+    ///
+    /// Mazars blends its two branches into one scalar, so a material damaged in
+    /// compression is equally damaged in tension and a crack that **closes**
+    /// cannot carry load again. Keeping the two apart recovers the compressive
+    /// stiffness on closure — the unilateral effect — which is what makes the
+    /// law usable under cyclic loading. State: `r_plus`, `r_minus`, `d_plus`,
+    /// `d_minus`.
+    #[classmethod]
+    fn damage_tc(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+        model: &str,
+    ) -> PyResult<Self> {
+        damage_with(&fespace, model, DamageLaw::DamageTc)
+    }
+
+    /// `Model.damage_sic_sic(fespace, model)` — **orthotropic** damage of a
+    /// woven SiC/SiC ceramic-matrix composite: one damage per weave direction.
+    /// Material `E`, `nu`, then `eps_0_i`, `eps_c_i`, `d_max_i` for `i = 1..3`,
+    /// plus the material axes (`V1X, V1Y[, V1Z, V2X…]`).
+    ///
+    /// The matrix cracks in planes normal to the tows while the fibres keep
+    /// carrying load, so the stiffness falls **by direction** and by very
+    /// different amounts — which no scalar damage can express. The directions
+    /// are the same material axes an orthotropic elasticity uses, so a curved
+    /// part gets them right cell by cell.
+    ///
+    /// Each damage **saturates** at `d_max_i` rather than reaching one: matrix
+    /// cracking does not take the whole stiffness, and a law that let it would
+    /// predict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`.
+    #[classmethod]
+    fn damage_sic_sic(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+        model: &str,
+    ) -> PyResult<Self> {
+        damage_with(&fespace, model, DamageLaw::SicSic)
+    }
+
+    /// `Model.gurson(fespace, model)` — Gurson-Tvergaard-Needleman plasticity
+    /// of a **porous** metal, where the porosity shrinks the yield surface.
+    /// Material `E`, `nu`, `sigma_y`, `q_1`, `q_2`, `q_3`, `f_0`, `f_c`, `f_f`.
+    ///
+    /// A ductile metal fails because voids grow and coalesce, not because a
+    /// stress is reached. The `cosh` term makes the surface **pressure
+    /// sensitive**, so voids grow under triaxial tension and close under
+    /// compression — which a J2 law cannot express, and which is why it can
+    /// never predict ductile rupture. Beyond `f_c` the effective porosity
+    /// accelerates towards `1/q_1`, modelling coalescence.
+    ///
+    /// The porosity is exposed as the internal variable `porosity`, starting
+    /// from `f_0`. Void **nucleation** is not modelled — only growth.
+    #[classmethod]
+    fn gurson(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+        model: &str,
+    ) -> PyResult<Self> {
+        plasticity_with(&fespace, model, PlasticLaw::Gurson)
     }
 
     /// `Model.mazars(fespace, model)` — Mazars isotropic damage spanning every

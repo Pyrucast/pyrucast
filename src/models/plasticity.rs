@@ -396,13 +396,19 @@ impl Domain for Plasticity {
             sigma: read_prev_stress(prev, cell, g),
             eps_p: read_prev_plastic_strain(prev, cell, g),
             p: prev_opt(prev, cell, g, "p"),
-            // The law's own variables, in the order it declared them.
-            vars: self
-                .law
-                .internal_names()
-                .iter()
-                .map(|n| prev_opt(prev, cell, g, n))
-                .collect(),
+            // The law's own variables, in the order it declared them. Left
+            // **empty** on the first step, where `prev` is `None`: a law whose
+            // state starts from a material constant (Gurson's initial porosity)
+            // must be able to tell « no state yet » from « state that is zero ».
+            vars: match prev {
+                None => Vec::new(),
+                Some(_) => self
+                    .law
+                    .internal_names()
+                    .iter()
+                    .map(|n| prev_opt(prev, cell, g, n))
+                    .collect(),
+            },
         };
 
         let (step, eps_b_full) =

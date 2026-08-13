@@ -124,8 +124,8 @@ use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
-    contact, convection, dirichlet, elasticity, embedded, fick, follower_pressure, frame, frame3d,
-    heat_conduction, interface_transfer, mazars, mpc, plastic, plasticity, radiation, timoshenko,
+    contact, convection, damage, dirichlet, elasticity, embedded, fick, follower_pressure, frame,
+    frame3d, heat_conduction, interface_transfer, mpc, plastic, plasticity, radiation, timoshenko,
     truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
 use crate::store::{insert, read, Handle};
@@ -192,8 +192,9 @@ pub enum SubModel {
     Elasticity(elasticity::Elasticity),
     /// Perfect von Mises elastoplasticity — see [`plasticity::Plasticity`].
     Plasticity(plasticity::Plasticity),
-    /// Mazars isotropic damage — see [`mazars::Mazars`].
-    Mazars(mazars::Mazars),
+    /// Damage — Mazars, tension/compression, or orthotropic SiC/SiC; see
+    /// [`damage::Damage`].
+    Mazars(damage::Damage),
     /// Timoshenko beam (shear-deformable bending) — see [`timoshenko::Timoshenko`].
     Timoshenko(timoshenko::Timoshenko),
     /// Planar frame / portique (axial + bending + shear) — see [`frame::Frame`].
@@ -375,9 +376,21 @@ impl SubModel {
 
     /// Mazars-damage sub-model on an FE subspace, with the given 2-D/3-D model.
     /// Material (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
-    /// assembly / integration time. See [`mazars::Mazars::new`].
+    /// assembly / integration time. See [`damage::Damage::new`].
     pub fn mazars(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        Ok(SubModel::Mazars(mazars::Mazars::new(fespace, model)?))
+        Self::damage_with_law(fespace, model, damage::DamageLaw::Mazars)
+    }
+
+    /// Damage with an explicit law — Mazars, the tension/compression pair, or the
+    /// orthotropic SiC/SiC. See [`damage::Damage::with_law`].
+    pub fn damage_with_law(
+        fespace: Handle<SubFiniteElementSpace>,
+        model: ElasticityModel,
+        law: damage::DamageLaw,
+    ) -> Result<Self> {
+        Ok(SubModel::Mazars(damage::Damage::with_law(
+            fespace, model, law,
+        )?))
     }
 
     /// Timoshenko-beam sub-model on a 1-D `SEG2` FE subspace (full Gauss).
@@ -1076,9 +1089,20 @@ impl Model {
     /// (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at assembly
     /// / integration time.
     pub fn mazars(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Self> {
+        Self::damage_with_law(fes, model, damage::DamageLaw::Mazars)
+    }
+
+    /// Damage `Model` spanning **every** subspace of `fes`, with an explicit
+    /// law. Parent-level named constructor; the material each law needs is
+    /// supplied at assembly / integration time.
+    pub fn damage_with_law(
+        fes: &FiniteElementSpace,
+        model: ElasticityModel,
+        law: damage::DamageLaw,
+    ) -> Result<Self> {
         let mut out = Self::empty();
         for sub in fes {
-            out.add_sub(insert(SubModel::mazars(sub.clone(), model)?))?;
+            out.add_sub(insert(SubModel::damage_with_law(sub.clone(), model, law)?))?;
         }
         Ok(out)
     }

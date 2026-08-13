@@ -104,7 +104,10 @@ Ottosen à quatre paramètres intégrée par plan sécant ; puis les lois
 **dépendantes du temps** — fluages de Norton, Lemaitre et Blackburn,
 viscoplasticité de Chaboche et sa variante endommageable de Lemaitre-Chaboche,
 qui erronent en l'absence de `dt` ; tangentes toutes confrontées à une différence
-finie des forces internes), `Mazars` (endommagement), `Timoshenko`,
+finie des forces internes), `Damage` (**loi en attribut** elle aussi : Mazars scalaire, Damage TC à deux
+variables — la seule qui rende sa raideur à une fissure qui se referme — et
+SiC/SiC orthotrope, dont les directions d'endommagement sont le repère de
+tissage réutilisé de l'orthotropie élastique), `Timoshenko`,
 `Frame` (portique 2-D), `Frame3d`, `FollowerPressure` (charge dont la direction
 tourne avec la surface, bâtie sur les tangentes déformées et non sur Nanson —
 `I + ∇_s u` n'est pas un gradient de transformation sur une variété). Contraintes : `Dirichlet`, `Mpc`,

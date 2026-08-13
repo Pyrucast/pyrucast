@@ -46,6 +46,8 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   - [Fluage et viscoplasticité](mecanique/fluage.md) — Norton, Lemaitre,
     Blackburn, Chaboche et sa variante endommageable
   - [Endommagement de Mazars](mecanique/mazars.md)
+  - [Lois d'endommagement](mecanique/endommagement.md) — Damage TC, SiC/SiC
+    orthotrope, plasticité poreuse de Gurson
   - [Poutre de Timoshenko](mecanique/timoshenko.md)
   - [Portique 2D](mecanique/portique.md)
   - [Cadre 3D](mecanique/cadre3d.md)

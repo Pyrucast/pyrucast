@@ -25,6 +25,8 @@ réactions).
   temps, qui exigent `dt`.
 - [Endommagement de Mazars](mecanique/mazars.md) — endommagement isotrope du
   béton, deux variables (état interne `κ`).
+- [Lois d'endommagement](mecanique/endommagement.md) — la loi comme attribut :
+  Damage TC, SiC/SiC orthotrope, Gurson.
 - [Poutre de Timoshenko](mecanique/timoshenko.md) — flexion + cisaillement,
   intégration réduite (anti-verrouillage).
 - [Portique 2D](mecanique/portique.md) — poutre orientée (axial + flexion +

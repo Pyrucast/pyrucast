@@ -65,6 +65,7 @@ use crate::models::elasticity::ElasticityModel;
 use serde::{Deserialize, Serialize};
 
 pub mod drucker_prager;
+pub mod gurson;
 pub mod ottosen;
 pub mod viscous;
 pub mod von_mises;
@@ -105,6 +106,9 @@ pub enum PlasticLaw {
     /// The above coupled to Lemaitre's ductile damage — tertiary creep and
     /// rupture.
     ViscoplasticLemaitreChaboche,
+    /// Gurson-Tvergaard-Needleman — plasticity of a porous metal, where the
+    /// porosity itself shrinks the yield surface. Ductile rupture.
+    Gurson,
 }
 
 impl PlasticLaw {
@@ -121,6 +125,7 @@ impl PlasticLaw {
             "creep_lemaitre" => Some(Self::CreepLemaitre),
             "viscoplastic_chaboche" => Some(Self::ViscoplasticChaboche),
             "viscoplastic_lemaitre_chaboche" => Some(Self::ViscoplasticLemaitreChaboche),
+            "gurson" => Some(Self::Gurson),
             _ => None,
         }
     }
@@ -137,13 +142,14 @@ impl PlasticLaw {
             Self::CreepLemaitre => "creep_lemaitre",
             Self::ViscoplasticChaboche => "viscoplastic_chaboche",
             Self::ViscoplasticLemaitreChaboche => "viscoplastic_lemaitre_chaboche",
+            Self::Gurson => "gurson",
         }
     }
 
     /// Every law, in declaration order — the source of the `|`-joined tag list
     /// quoted in error messages, so a new law cannot be added without them
     /// following.
-    pub const ALL: [PlasticLaw; 9] = [
+    pub const ALL: [PlasticLaw; 10] = [
         Self::Perfect,
         Self::Isotropic,
         Self::DruckerPrager,
@@ -153,6 +159,7 @@ impl PlasticLaw {
         Self::CreepLemaitre,
         Self::ViscoplasticChaboche,
         Self::ViscoplasticLemaitreChaboche,
+        Self::Gurson,
     ];
 
     /// The accepted tags, `|`-joined — for error messages.
@@ -178,6 +185,9 @@ impl PlasticLaw {
             Self::ViscoplasticChaboche => &["E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q"],
             Self::ViscoplasticLemaitreChaboche => &[
                 "E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q", "S", "s", "D_c",
+            ],
+            Self::Gurson => &[
+                "E", "nu", "sigma_y", "q_1", "q_2", "q_3", "f_0", "f_c", "f_f",
             ],
         }
     }
@@ -207,6 +217,8 @@ impl PlasticLaw {
             | Self::Ottosen
             | Self::CreepNorton
             | Self::CreepLemaitre => Vec::new(),
+            // The porosity, which **is** the state of a porous law.
+            Self::Gurson => vec!["porosity".to_string()],
             // The primary creep strain, tracked apart from the total so the law
             // integrates correctly under a varying load.
             Self::CreepBlackburn => vec!["p_prim".to_string()],
@@ -260,6 +272,7 @@ impl PlasticLaw {
             Self::ViscoplasticLemaitreChaboche => {
                 viscous::chaboche(trial, prev, mat, dt.unwrap(), true)
             }
+            Self::Gurson => gurson::return_map(trial, prev, mat),
         }
     }
 }

@@ -34,7 +34,7 @@ MECANIQUE - plasticité;PLASTIQUE UBIQUITOUS;Modèle Ubiquitous (plans de faible
 MECANIQUE - plasticité;PLASTIQUE GLOBAL;Lois globales par type de sollicitation (béton armé);—
 MECANIQUE - plasticité;PLASTIQUE CAM_CLAY;Élastique non linéaire en volume, plastique en volume et distorsion;—
 MECANIQUE - plasticité;PLASTIQUE HUJEUX;Sols et milieux granulaires (volume + distorsion);—
-MECANIQUE - plasticité;PLASTIQUE GURSON;Surface de Gurson dépendant de la pression, porosité en variable interne (3D/axi);—
+MECANIQUE - plasticité;PLASTIQUE GURSON;Surface de Gurson dépendant de la pression, porosité en variable interne (3D/axi);Model.gurson (q_1, q_2, q_3, f_0, f_c, f_f) — porosité en variable interne, coalescence f*
 MECANIQUE - plasticité;PLASTIQUE JOINT_DILATANT;Joint Mohr-Coulomb à écoulement non associé (2D);—
 MECANIQUE - plasticité;PLASTIQUE JOINT_SOFT;Joint Mohr-Coulomb adoucissant sans dilatance (2D);—
 MECANIQUE - plasticité;PLASTIQUE JOINT_COAT;Joint en cisaillement : plasticité isotrope, adoucissement, endommagement;—
@@ -81,11 +81,11 @@ MECANIQUE - plasticité;PLASTIQUE LEMAITRE;Fluage de Lemaitre unidirectionnel su
 MECANIQUE - endommagement;ENDOMMAGEMENT MAZARS;Endommagement scalaire du béton, chargements monotones;Model.mazars (E, nu, eps_d0, A_t, B_t, A_c, B_c)
 MECANIQUE - endommagement;ENDOMMAGEMENT UNILATERAL;Endommagement à 2 variables scalaires, chargements cycliques;—
 MECANIQUE - endommagement;ENDOMMAGEMENT ROTATING_CRACK;Endommagement à fissure tournante pour le béton;—
-MECANIQUE - endommagement;ENDOMMAGEMENT SIC_SIC;Endommagement du composite céramique SiC/SiC;—
+MECANIQUE - endommagement;ENDOMMAGEMENT SIC_SIC;Endommagement du composite céramique SiC/SiC;Model.damage_sic_sic — endommagement orthotrope, une variable par direction de tissage
 MECANIQUE - endommagement;ENDOMMAGEMENT MVM;von Mises modifié : dommage scalaire non local, matériau quasi-fragile;—
 MECANIQUE - endommagement;ENDOMMAGEMENT SICSCAL;Endommagement scalaire à 3 variables du tissé SiCf/SiC (ONERA);—
 MECANIQUE - endommagement;ENDOMMAGEMENT SICTENS;Endommagement pseudo-tensoriel à 5 variables du tissé SiCf/SiC (ONERA);—
-MECANIQUE - endommagement;ENDOMMAGEMENT DAMAGE_TC;Deux variables (traction/compression), régularisé par énergie de fissuration;—
+MECANIQUE - endommagement;ENDOMMAGEMENT DAMAGE_TC;Deux variables (traction/compression), régularisé par énergie de fissuration;Model.damage_tc (f_t, f_c, A_t, A_c) — d+ et d- séparés, effet unilatéral
 MECANIQUE - endommagement;ENDOMMAGEMENT DESMORAT;Endommagement anisotrope du béton, chargements monotones (non local possible);—
 MECANIQUE - endommagement;ENDOMMAGEMENT FATSIN;Endommagement scalaire isotrope en fatigue sinusoïdale (local ou non local);—
 MECANIQUE - endommagement;ENDOMMAGEMENT RICRAG;Endommagement scalaire du béton, cycles alternés modérés (2D/3D);—

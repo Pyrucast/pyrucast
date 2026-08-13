@@ -36,6 +36,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod contact;
 pub mod convection;
+pub mod damage;
 pub mod dirichlet;
 pub mod elasticity;
 pub mod embedded;
@@ -46,7 +47,6 @@ pub mod frame3d;
 pub mod heat_conduction;
 pub mod interface_transfer;
 pub mod kernel;
-pub mod mazars;
 pub mod mpc;
 pub mod plastic;
 pub mod plasticity;

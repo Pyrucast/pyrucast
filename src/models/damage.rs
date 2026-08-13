@@ -1,4 +1,4 @@
-//! Mazars isotropic damage — classic two-variable formulation (Mazars 1986).
+//! Scalar and orthotropic **damage** — the physics, for any damage law.
 //!
 //! Same kinematics and DOFs as [`crate::models::elasticity`], and the **same
 //! elastic stiffness** as iteration operator. The constitutive update is a
@@ -34,6 +34,10 @@
 //! As for plasticity, the Newton loop driving the load increments lives in
 //! Python, not in Rust; this module provides the point-wise update only.
 
+pub mod damage_tc;
+pub mod mazars;
+pub mod sic_sic;
+
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
@@ -44,13 +48,163 @@ use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
-use nalgebra::Matrix3;
 use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
-/// Material components required by the Mazars model.
-const MATERIAL_COMPONENTS: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"];
+/// Which damage law a [`Damage`] sub-model obeys.
+///
+/// The same attribute pattern as [`PlasticLaw`](crate::models::plastic::PlasticLaw):
+/// the DOFs, the elastic operator and the incremental montage are shared, and
+/// only the law that turns a strain into a degraded stress differs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DamageLaw {
+    /// Mazars — one scalar, two branches blended. Concrete.
+    #[default]
+    Mazars,
+    /// Two damages, tension and compression apart — recovers the compressive
+    /// stiffness when a crack closes.
+    DamageTc,
+    /// Orthotropic damage of a woven ceramic-matrix composite, one damage per
+    /// weave direction.
+    SicSic,
+}
+
+impl DamageLaw {
+    /// Parse from a lowercase tag (`"mazars"`, `"damage_tc"`, `"sic_sic"`).
+    pub fn from_tag(tag: &str) -> Option<Self> {
+        match tag {
+            "mazars" => Some(Self::Mazars),
+            "damage_tc" => Some(Self::DamageTc),
+            "sic_sic" => Some(Self::SicSic),
+            _ => None,
+        }
+    }
+
+    /// The lowercase tag (the inverse of [`from_tag`](Self::from_tag)).
+    pub fn to_tag(self) -> &'static str {
+        match self {
+            Self::Mazars => "mazars",
+            Self::DamageTc => "damage_tc",
+            Self::SicSic => "sic_sic",
+        }
+    }
+
+    /// Every law, in declaration order.
+    pub const ALL: [DamageLaw; 3] = [Self::Mazars, Self::DamageTc, Self::SicSic];
+
+    /// The accepted tags, `|`-joined — for error messages.
+    pub fn tag_list() -> String {
+        Self::ALL
+            .iter()
+            .map(|l| l.to_tag())
+            .collect::<Vec<_>>()
+            .join("|")
+    }
+
+    /// The material components this law requires.
+    pub fn material_components(self, space_dim: usize) -> &'static [&'static str] {
+        match self {
+            Self::Mazars => mazars::MATERIAL,
+            Self::DamageTc => damage_tc::MATERIAL,
+            Self::SicSic if space_dim == 2 => sic_sic::MATERIAL_2D,
+            Self::SicSic => sic_sic::MATERIAL_3D,
+        }
+    }
+
+    /// The law's internal variables, beyond the reported `damage`.
+    pub fn internal_names(self) -> Vec<String> {
+        match self {
+            Self::Mazars => vec!["kappa".into()],
+            Self::DamageTc => vec![
+                "r_plus".into(),
+                "r_minus".into(),
+                "d_plus".into(),
+                "d_minus".into(),
+            ],
+            Self::SicSic => vec![
+                "kappa_1".into(),
+                "kappa_2".into(),
+                "kappa_3".into(),
+                "d_1".into(),
+                "d_2".into(),
+                "d_3".into(),
+            ],
+        }
+    }
+
+    /// One step of the law, at a Gauss point.
+    pub fn update(
+        self,
+        eps: &[f64; 6],
+        prev: &[f64],
+        mat: &MatRead,
+        space_dim: usize,
+    ) -> Result<DamageUpdate> {
+        match self {
+            Self::Mazars => mazars::update(eps, prev, mat),
+            Self::DamageTc => damage_tc::update(eps, prev, mat),
+            Self::SicSic => sic_sic::update(eps, prev, mat, space_dim),
+        }
+    }
+}
+
+impl std::fmt::Display for DamageLaw {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.to_tag())
+    }
+}
+
+/// What a damage law returns for one Gauss point.
+pub struct DamageUpdate {
+    /// The degraded stress, full 3-D Voigt.
+    pub sigma: [f64; 6],
+    /// A scalar summary of the damage, for visualisation. The **state** is
+    /// `vars`; a law with several damages reports the worst here.
+    pub damage: f64,
+    /// The law's internal variables, in [`DamageLaw::internal_names`] order.
+    pub vars: Vec<f64>,
+}
+
+/// A cell's material, read by name — the same shape every law wants.
+pub struct MatRead<'a> {
+    /// The material field, exposed so a law can reach the shared frame reader.
+    pub field: &'a SubElementField,
+    /// The cell this reads.
+    pub cell: usize,
+}
+
+impl MatRead<'_> {
+    /// A material component of this cell, by name.
+    pub fn get(&self, name: &str) -> Result<f64> {
+        self.field.value(self.cell, 0, name)
+    }
+}
+
+/// Lamé coefficients `(λ, μ)` from `E`, `nu` — shared by every law.
+pub fn lame(e: f64, nu: f64) -> (f64, f64) {
+    let lambda = e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
+    let mu = e / (2.0 * (1.0 + nu));
+    (lambda, mu)
+}
+
+/// Isotropic elastic (effective) stress, full 3-D Voigt, from a **tensor** strain.
+pub fn elastic_stress(eps: &[f64; 6], lambda: f64, mu: f64) -> [f64; 6] {
+    let tr = eps[0] + eps[1] + eps[2];
+    [
+        lambda * tr + 2.0 * mu * eps[0],
+        lambda * tr + 2.0 * mu * eps[1],
+        lambda * tr + 2.0 * mu * eps[2],
+        2.0 * mu * eps[3],
+        2.0 * mu * eps[4],
+        2.0 * mu * eps[5],
+    ]
+}
+
+/// Positive part `⟨x⟩₊ = max(x, 0)`.
+pub fn pos(x: f64) -> f64 {
+    x.max(0.0)
+}
 
 /// Where each **axisymmetric** Voigt slot `[rr, zz, θθ, rz]` sits in the full
 /// 3-D order `[xx, yy, zz, yz, xz, xy]` — the damage law itself stays 3-D
@@ -88,23 +242,34 @@ fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
     }
 }
 
-/// Mazars damage on an FE subspace. Same supports as
+/// Damage on an FE subspace. Same supports as
 /// [`crate::models::elasticity::Elasticity`]; material is supplied at
 /// assembly / integration time.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Mazars {
+pub struct Damage {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the subspace's unique nodes (row/col support).
     pub(crate) support: Handle<SubMesh>,
     pub(crate) space_dim: usize,
     pub(crate) model: ElasticityModel,
+    pub(crate) law: DamageLaw,
 }
 
-impl Mazars {
-    /// Mazars damage on an FE subspace, with the given 2-D/3-D model. Errors if
+impl Damage {
+    /// **Mazars** damage on an FE subspace — the default law.
+    pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
+        Self::with_law(fespace, model, DamageLaw::Mazars)
+    }
+
+    /// Damage with an explicit law, on an FE subspace with the given 2-D/3-D
+    /// model. Errors if
     /// `model` is inconsistent with the space dimension (same rule as
     /// [`crate::models::elasticity::Elasticity::new`]).
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
+    pub fn with_law(
+        fespace: Handle<SubFiniteElementSpace>,
+        model: ElasticityModel,
+        law: DamageLaw,
+    ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, axisymmetric) = {
             let s = read(&fespace)?;
             (
@@ -114,7 +279,7 @@ impl Mazars {
                 s.is_axisymmetric(),
             )
         };
-        crate::models::elasticity::check_continuum_dimensions("Mazars", space_dim, ref_dim)?;
+        crate::models::elasticity::check_continuum_dimensions("Damage", space_dim, ref_dim)?;
         #[allow(clippy::match_like_matches_macro)]
         let ok = match (space_dim, model) {
             (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,
@@ -124,7 +289,7 @@ impl Mazars {
         };
         if !ok {
             return Err(PyrucastError::Message(format!(
-                "Mazars: model {model:?} is incompatible with a {space_dim}-D space \
+                "Damage: model {model:?} is incompatible with a {space_dim}-D space \
                  (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ solid)"
             )));
         }
@@ -132,11 +297,11 @@ impl Mazars {
         if axisymmetric != model.is_axisymmetric() {
             return Err(PyrucastError::Message(if axisymmetric {
                 format!(
-                    "Mazars: model {model:?} on an axisymmetric geometry — a body of \
+                    "Damage: model {model:?} on an axisymmetric geometry — a body of \
                      revolution requires the `axisymmetric` model"
                 )
             } else {
-                "Mazars: the `axisymmetric` model requires an axisymmetric geometry \
+                "Damage: the `axisymmetric` model requires an axisymmetric geometry \
                  (build the Coords with Coords::axisymmetric)"
                     .into()
             }));
@@ -147,11 +312,12 @@ impl Mazars {
             support,
             space_dim,
             model,
+            law,
         })
     }
 }
 
-impl SubModelKind for Mazars {
+impl SubModelKind for Damage {
     fn primal_vars(&self) -> Vec<String> {
         (0..self.space_dim).map(primal_name).collect()
     }
@@ -196,7 +362,7 @@ impl SubModelKind for Mazars {
         let geom = &geoms[0];
         // Iteration operator = elastic (undamaged) stiffness. Reuse the
         // elasticity element kernel; it reads only `E` and `nu`.
-        let mat = material.expect("Mazars requires a material field");
+        let mat = material.expect("Damage requires a material field");
         elasticity::element_stiffness(
             geom,
             mat,
@@ -213,7 +379,7 @@ impl SubModelKind for Mazars {
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("Mazars requires a material field");
+        let mat = material.expect("Damage requires a material field");
         elasticity::element_mass(geom, mat, ke)
     }
 
@@ -234,7 +400,7 @@ impl SubModelKind for Mazars {
     }
 
     fn label(&self) -> &'static str {
-        "Mazars"
+        "Damage"
     }
 
     fn render(&self, _opts: &DumpOptions) -> String {
@@ -242,20 +408,20 @@ impl SubModelKind for Mazars {
         let dual = self.dual_vars().join(", ");
         let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
         format!(
-            "SubModel<Mazars({:?})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
+            "SubModel<Damage({:?}, {})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
-            self.model
+            self.model, self.law
         )
     }
 }
 
-impl Domain for Mazars {
+impl Domain for Damage {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
 
     fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
+        Some(self.law.material_components(self.space_dim))
     }
 
     /// `rho` (density) — required only by the mass matrix.
@@ -270,12 +436,13 @@ impl Domain for Mazars {
     fn behavior_output_components(&self) -> Result<Vec<String>> {
         let mut comps = stress_names(self.space_dim, self.model);
         comps.push("damage".into());
-        comps.push("kappa".into());
+        // The law's own history and per-direction damages.
+        comps.extend(self.law.internal_names());
         Ok(comps)
     }
 
-    /// Mazars damage update at one Gauss point. Output layout = stress (Voigt,
-    /// `v`) + `damage` + `kappa`.
+    /// One damage step at a Gauss point. Output layout = stress (Voigt, `v`) +
+    /// the reported `damage` + the law's own internal variables.
     fn integrate_point(
         &self,
         geom: &CellGeom,
@@ -286,136 +453,42 @@ impl Domain for Mazars {
         _dt: Option<f64>,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Mazars declares a material_fespace ⇒ material is supplied");
+        let mat = material.expect("Damage declares a material_fespace ⇒ material is supplied");
         let (cell, d) = (geom.cell, self.space_dim);
-        let p = MazarsParams {
-            e: mat.value(cell, 0, "E")?,
-            nu: mat.value(cell, 0, "nu")?,
-            eps_d0: mat.value(cell, 0, "eps_d0")?,
-            a_t: mat.value(cell, 0, "A_t")?,
-            b_t: mat.value(cell, 0, "B_t")?,
-            a_c: mat.value(cell, 0, "A_c")?,
-            b_c: mat.value(cell, 0, "B_c")?,
+        let read = MatRead { field: mat, cell };
+        // End-of-step strain ε(B); the law's history from `prev` (absent on the
+        // first step, where every variable starts at zero).
+        let eps = read_strain(deformation, cell, g, d, read.get("nu")?, self.model)?;
+        // Left **empty** on the first step, where `prev` is `None`, so a law can
+        // tell « no state yet » from « state that is zero ».
+        let prev_vars: Vec<f64> = match prev {
+            None => Vec::new(),
+            Some(_) => self
+                .law
+                .internal_names()
+                .iter()
+                .map(|n| prev_opt(prev, cell, g, n))
+                .collect(),
         };
-        // End-of-step strain ε(B); history variable κ(A) from `prev` (floored at
-        // `eps_d0` in the update, so `None`/absent — the first step — is fine).
-        let eps = read_strain(deformation, cell, g, d, p.nu, self.model)?;
-        let kappa_old = prev_opt(prev, cell, g, "kappa");
-        let (sigma, damage, kappa) = mazars_update(&eps, kappa_old, &p);
+
+        let update = self.law.update(&eps, &prev_vars, &read, d)?;
         let v = stress_names(d, self.model).len();
         for r in 0..v {
-            out[r] = voigt_stress(&sigma, d, self.model, r);
+            out[r] = voigt_stress(&update.sigma, d, self.model, r);
         }
-        out[v] = damage;
-        out[v + 1] = kappa;
+        out[v] = update.damage;
+        for (i, value) in update.vars.iter().enumerate() {
+            out[v + 1 + i] = *value;
+        }
         Ok(())
     }
 }
 
-// ─── Constitutive core (pure, store-free) ────────────────────────────────────
-
-/// Material parameters of the Mazars model at one Gauss point.
-struct MazarsParams {
-    e: f64,
-    nu: f64,
-    eps_d0: f64,
-    a_t: f64,
-    b_t: f64,
-    a_c: f64,
-    b_c: f64,
-}
-
-/// Lamé coefficients `(λ, μ)` from `E`, `nu`.
-fn lame(e: f64, nu: f64) -> (f64, f64) {
-    let lambda = e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
-    let mu = e / (2.0 * (1.0 + nu));
-    (lambda, mu)
-}
-
-/// Isotropic elastic (effective) stress, full 3-D Voigt `[xx, yy, zz, yz, xz, xy]`
-/// from a **tensor** strain: `σ̃ = λ tr(ε) I + 2μ ε`.
-fn elastic_stress(eps: &[f64; 6], lambda: f64, mu: f64) -> [f64; 6] {
-    let tr = eps[0] + eps[1] + eps[2];
-    [
-        lambda * tr + 2.0 * mu * eps[0],
-        lambda * tr + 2.0 * mu * eps[1],
-        lambda * tr + 2.0 * mu * eps[2],
-        2.0 * mu * eps[3],
-        2.0 * mu * eps[4],
-        2.0 * mu * eps[5],
-    ]
-}
-
-/// One damage branch `D = 1 − eps_d0(1−A)/κ − A / exp(B (κ − eps_d0))`,
-/// clamped to `[0, 1)`.
-fn damage_branch(kappa: f64, eps_d0: f64, a: f64, b: f64) -> f64 {
-    let d = 1.0 - eps_d0 * (1.0 - a) / kappa - a / (b * (kappa - eps_d0)).exp();
-    d.clamp(0.0, 1.0 - 1e-12)
-}
-
-/// Mazars point update. Returns `(stress, damage, kappa)` (stress full 3-D Voigt).
-fn mazars_update(eps: &[f64; 6], kappa_old: f64, p: &MazarsParams) -> ([f64; 6], f64, f64) {
-    let (lambda, mu) = lame(p.e, p.nu);
-    let sigma_eff = elastic_stress(eps, lambda, mu);
-
-    // Principal strains (coaxial with the effective stress, isotropic elasticity).
-    let tensor = Matrix3::new(
-        eps[0], eps[5], eps[4], // [εxx, εxy, εxz]
-        eps[5], eps[1], eps[3], // [εxy, εyy, εyz]
-        eps[4], eps[3], eps[2], // [εxz, εyz, εzz]
-    );
-    let e_pr = tensor.symmetric_eigenvalues();
-
-    // Equivalent strain ε̃ = √(Σ ⟨ε_I⟩₊²).
-    let eps_eq = (e_pr.iter().map(|&x| pos(x).powi(2)).sum::<f64>()).sqrt();
-
-    // History variable: never below the threshold, never decreasing.
-    let kappa = kappa_old.max(p.eps_d0).max(eps_eq);
-    if kappa <= p.eps_d0 {
-        return (sigma_eff, 0.0, kappa); // undamaged
-    }
-
-    // Tension/compression split of the effective principal stresses
-    // σ̃_I = λ·tr + 2μ·ε_I, then strains induced by each part via the
-    // isotropic compliance (all coaxial ⇒ work in principal space).
-    let tr = e_pr[0] + e_pr[1] + e_pr[2];
-    let st: [f64; 3] = std::array::from_fn(|i| lambda * tr + 2.0 * mu * e_pr[i]);
-    let stp: [f64; 3] = std::array::from_fn(|i| pos(st[i]));
-    let stn: [f64; 3] = std::array::from_fn(|i| st[i].min(0.0));
-    let sum_p: f64 = stp.iter().sum();
-    let sum_n: f64 = stn.iter().sum();
-    // ε^t_I = [(1+ν)σ̃⁺_I − ν Σσ̃⁺] / E ; ε^c_I likewise from σ̃⁻.
-    let eps_t: [f64; 3] = std::array::from_fn(|i| ((1.0 + p.nu) * stp[i] - p.nu * sum_p) / p.e);
-    let eps_c: [f64; 3] = std::array::from_fn(|i| ((1.0 + p.nu) * stn[i] - p.nu * sum_n) / p.e);
-
-    let denom = eps_eq * eps_eq;
-    let mut alpha_t = 0.0;
-    let mut alpha_c = 0.0;
-    if denom > 0.0 {
-        for i in 0..3 {
-            let w = pos(e_pr[i]);
-            alpha_t += pos(eps_t[i]) * w;
-            alpha_c += pos(eps_c[i]) * w;
-        }
-        alpha_t /= denom;
-        alpha_c /= denom;
-    }
-    let alpha_t = alpha_t.clamp(0.0, 1.0);
-    let alpha_c = alpha_c.clamp(0.0, 1.0);
-
-    let d_t = damage_branch(kappa, p.eps_d0, p.a_t, p.b_t);
-    let d_c = damage_branch(kappa, p.eps_d0, p.a_c, p.b_c);
-    // β fixed to 1 (no shear correction).
-    let damage = (alpha_t * d_t + alpha_c * d_c).clamp(0.0, 1.0 - 1e-12);
-
-    let sigma: [f64; 6] = std::array::from_fn(|i| (1.0 - damage) * sigma_eff[i]);
-    (sigma, damage, kappa)
-}
-
-/// Positive part `⟨x⟩₊ = max(x, 0)`.
-fn pos(x: f64) -> f64 {
-    x.max(0.0)
-}
+// The constitutive cores live in [`crate::models::damage`]'s submodules, one
+// per law — shared helpers (Lamé, the elastic stress, the positive part) in the
+// module root below. What remains here is the physics: the DOFs, the layouts,
+// and the plumbing between the field components and the full-3-D strain the
+// laws work in.
 
 // ─── Field <-> array plumbing ────────────────────────────────────────────────
 
@@ -492,7 +565,7 @@ mod tests {
     use crate::coords::Coords;
     use crate::store::insert;
 
-    fn unit_quad(model: ElasticityModel) -> Mazars {
+    fn unit_quad(model: ElasticityModel) -> Damage {
         let coords = insert(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -501,13 +574,13 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
         mesh.add_cell(&[a.id(), b.id(), c.id(), dd.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        Mazars::new(fes.get(0).unwrap(), model).unwrap()
+        Damage::new(fes.get(0).unwrap(), model).unwrap()
     }
 
-    fn material(mz: &Mazars) -> Handle<SubElementField> {
+    fn material(mz: &Damage) -> Handle<SubElementField> {
         let mut mat = SubElementField::new(
             mz.fespace.clone(),
-            MATERIAL_COMPONENTS.iter().map(|s| s.to_string()).collect(),
+            mazars::MATERIAL.iter().map(|s| s.to_string()).collect(),
         )
         .unwrap();
         mat.set_uniform("E", 30_000.0).unwrap(); // ~ concrete (MPa)
@@ -520,7 +593,7 @@ mod tests {
         insert(mat)
     }
 
-    fn strain_field(mz: &Mazars, eps_xx: f64) -> Handle<SubElementField> {
+    fn strain_field(mz: &Damage, eps_xx: f64) -> Handle<SubElementField> {
         let mut s = SubElementField::new(
             mz.fespace.clone(),
             vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into()],
@@ -535,7 +608,7 @@ mod tests {
         let mz = unit_quad(ElasticityModel::PlaneStress);
         assert_eq!(mz.primal_vars(), vec!["u_x", "u_y"]);
         assert_eq!(mz.dual_vars(), vec!["f_x", "f_y"]);
-        assert_eq!(mz.material_components(), Some(MATERIAL_COMPONENTS));
+        assert_eq!(mz.material_components(), Some(mazars::MATERIAL));
     }
 
     /// Below the damage threshold the response is elastic: D = 0 and σ_xx is
@@ -621,7 +694,7 @@ mod tests {
         mesh.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())
             .unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let mz = Mazars::new(fes.get(0).unwrap(), ElasticityModel::Solid).unwrap();
+        let mz = Damage::new(fes.get(0).unwrap(), ElasticityModel::Solid).unwrap();
         let mat = material(&mz);
         let mut s = SubElementField::new(
             mz.fespace.clone(),
