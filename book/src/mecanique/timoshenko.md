@@ -128,11 +128,33 @@ Et le cadre spatial, avec sa torsion :
 
 ## Compléments
 
-**Masse et rigidité géométrique.** La masse cohérente assemblée est celle de
-l'élément **linéaire**, pas de l'élément exact — pratique d'ingénierie usuelle,
-et ce que cette physique a toujours assemblé. C'est une incohérence avec la
-rigidité, signalée plutôt que cachée, et le prochain point à traiter. La
-rigidité géométrique demande un effort axial pour raidir la barre : la
+**Masse.** La masse cohérente est celle du **même** élément, intégrée des mêmes
+fonctions de forme que sa rigidité :
+
+\\[
+M = \int_0^L \rho A\\, N_w^\top N_w\\, dx
+  + \int_0^L \rho I\\, N_\theta^\top N_\theta\\, dx,
+\\]
+
+le second terme étant l'**inertie de rotation** de la section. Rigidité et masse
+décrivent enfin une seule poutre. Seuls l'axial et la torsion gardent la forme
+du champ linéaire `(ρL/6)[[2,1],[1,2]]`, exacte pour ce qu'ils interpolent
+réellement.
+
+Elle est **intégrée**, et non recopiée de la table publiée de polynômes en `Φ`.
+Cette table est juste, mais un coefficient mal retranscrit sur vingt donnerait
+une matrice plausible, symétrique et définie positive — décrivant une autre
+poutre. C'est le mode de défaillance qui avait coûté une tangente fausse plus
+tôt dans ce projet. Une intégration ne se retranscrit pas : les fonctions de
+forme sont celles de la rigidité, et quatre points de Gauss rendent la
+quadrature exacte (l'intégrande est de degré 6).
+
+Ce qui l'épingle : à `Φ = 0` elle redonne la table classique
+`ρAL/420 · [156, 22L, 54, −13L ; …]`, douze nombres que personne ne conteste ;
+une translation rigide porte exactement `ρAL` quel que soit `Φ` ; et le
+couplage flèche-rotation, absent de la masse linéaire, est bien là.
+
+**Rigidité géométrique.** Elle demande un effort axial pour raidir la barre : la
 configuration 1-D, en flexion pure, n'en déclare donc aucune.
 
 **Reconstruction des efforts.** `beam_deformation` rend des déformations

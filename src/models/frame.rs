@@ -127,22 +127,23 @@ fn transpose(a: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
 /// Local 6×6 **consistent mass** (linear element): `(ρAL/6)[[2,1],[1,2]]` on each
 /// translation (`u'`, `w'`) and `(ρIL/6)[[2,1],[1,2]]` on the rotation `θ`
 /// (rotary inertia). No translation–rotation coupling for the linear kinematics.
-fn local_mass(rho_a: f64, rho_i: f64, l: f64) -> [[f64; 6]; 6] {
+fn local_mass(rho_a: f64, rho_i: f64, ei: f64, gas: f64, l: f64) -> [[f64; 6]; 6] {
     let mut m = [[0.0_f64; 6]; 6];
+    // Axial: a bar's consistent mass, `(ρAL/6)[[2,1],[1,2]]`, exact for the
+    // linear axial field the element really carries.
     let ma = rho_a * l / 6.0;
-    let mi = rho_i * l / 6.0;
-    for &(i, j) in &[(0usize, 3usize), (1, 4)] {
-        // translations u' (0,3) and w' (1,4)
-        m[i][i] += 2.0 * ma;
-        m[j][j] += 2.0 * ma;
-        m[i][j] += ma;
-        m[j][i] += ma;
+    m[0][0] += 2.0 * ma;
+    m[3][3] += 2.0 * ma;
+    m[0][3] += ma;
+    m[3][0] += ma;
+    // Bending: the exact element's own consistent mass, on [w'_A, θ_A, w'_B, θ_B].
+    let b = crate::models::beam::mass_4x4(rho_a, rho_i, ei, Some(gas), l);
+    let idx = [1usize, 2, 4, 5];
+    for (a, &ia) in idx.iter().enumerate() {
+        for (c, &ic) in idx.iter().enumerate() {
+            m[ia][ic] += b[a][c];
+        }
     }
-    // rotation θ (2,5)
-    m[2][2] += 2.0 * mi;
-    m[5][5] += 2.0 * mi;
-    m[2][5] += mi;
-    m[5][2] += mi;
     m
 }
 
@@ -181,7 +182,9 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
     })?;
     let rho_a = rho * material.value(cell, 0, "A")?;
     let rho_i = rho * material.value(cell, 0, "I")?;
-    let ml = local_mass(rho_a, rho_i, l);
+    let ei = material.value(cell, 0, "E")? * material.value(cell, 0, "I")?;
+    let gas = material.value(cell, 0, "G")? * material.value(cell, 0, "A_s")?;
+    let ml = local_mass(rho_a, rho_i, ei, gas, l);
     let t = rotation(c, s);
     write_6x6(ke, &matmul(&transpose(&t), &matmul(&ml, &t)));
     Ok(())

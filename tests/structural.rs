@@ -133,22 +133,30 @@ fn frame_consistent_mass_matches_closed_form() -> Result<()> {
     let m = pyrucast::ops::matrix::mass(&model, &materials)?;
     let tol = 1e-12;
     let ma = RHO * AREA * len / 6.0; // ρAL/6
-    let mi = RHO * I * len / 6.0; // ρIL/6
-                                  // Translations: (ρAL/6)[[2,1],[1,2]]; rotation: (ρIL/6)[[2,1],[1,2]].
+                                     // The **axial** direction still carries the linear field's mass, which is
+                                     // exact for what it interpolates — a bar stretches linearly.
     assert!((m.get(a.id(), "f_x", a.id(), "u_x")? - 2.0 * ma).abs() < tol);
-    assert!((m.get(a.id(), "f_y", a.id(), "u_y")? - 2.0 * ma).abs() < tol);
     assert!((m.get(a.id(), "f_x", b.id(), "u_x")? - ma).abs() < tol);
-    assert!((m.get(a.id(), "m_z", a.id(), "r_z")? - 2.0 * mi).abs() < tol);
-    assert!((m.get(a.id(), "m_z", b.id(), "r_z")? - mi).abs() < tol);
+    // The **transverse** direction takes the exact element's mass: a rigid
+    // translation still carries exactly ρAL, and w now couples to the rotation.
+    let total = m.get(a.id(), "f_y", a.id(), "u_y")?
+        + m.get(a.id(), "f_y", b.id(), "u_y")?
+        + m.get(b.id(), "f_y", a.id(), "u_y")?
+        + m.get(b.id(), "f_y", b.id(), "u_y")?;
+    assert!((total - RHO * AREA * len).abs() < 1e-10 * RHO * AREA * len);
+    assert!(m.get(a.id(), "f_y", a.id(), "r_z")?.abs() > 1e-6);
     // No translation ↔ rotation coupling.
     assert!(m.get(a.id(), "f_x", a.id(), "r_z")?.abs() < tol);
 
-    // Total = 2ρAL + ρIL.
-    let total: f64 = m.to_dmatrix()?.sum();
-    assert!(
-        (total - (2.0 * RHO * AREA * len + RHO * I * len)).abs() < 1e-10,
-        "total = {total}"
-    );
+    // The x direction carries the member's mass too — the sum over the whole
+    // matrix is *not* an invariant of the exact element (it mixes translations
+    // with rotations, which have different units), so the check is made
+    // direction by direction, where it means something.
+    let total_x = m.get(a.id(), "f_x", a.id(), "u_x")?
+        + m.get(a.id(), "f_x", b.id(), "u_x")?
+        + m.get(b.id(), "f_x", a.id(), "u_x")?
+        + m.get(b.id(), "f_x", b.id(), "u_x")?;
+    assert!((total_x - RHO * AREA * len).abs() < 1e-10 * RHO * AREA * len);
     Ok(())
 }
 
@@ -205,14 +213,28 @@ fn timoshenko_consistent_mass_matches_closed_form() -> Result<()> {
     )?;
 
     let m = pyrucast::ops::matrix::mass(&model, &materials)?;
-    let tol = 1e-12;
-    let ma = RHO * AREA * L / 6.0;
-    let mi = RHO * I * L / 6.0;
-    assert!((m.get(a.id(), "f_w", a.id(), "w")? - 2.0 * ma).abs() < tol);
-    assert!((m.get(a.id(), "f_w", b.id(), "w")? - ma).abs() < tol);
-    assert!((m.get(a.id(), "m_theta", a.id(), "theta")? - 2.0 * mi).abs() < tol);
-    // No w ↔ theta coupling.
-    assert!(m.get(a.id(), "f_w", a.id(), "theta")?.abs() < tol);
+    // The mass is now the **exact element's**, integrated from the same shape
+    // functions as its stiffness. Two properties pin it, and neither is a
+    // transcribed coefficient.
+    //
+    // 1. A rigid translation carries exactly the mass of the member. Nothing an
+    //    interpolation does may change that, whatever `Φ`.
+    let total = m.get(a.id(), "f_w", a.id(), "w")?
+        + m.get(a.id(), "f_w", b.id(), "w")?
+        + m.get(b.id(), "f_w", a.id(), "w")?
+        + m.get(b.id(), "f_w", b.id(), "w")?;
+    assert!(
+        (total - RHO * AREA * L).abs() < 1e-10 * RHO * AREA * L,
+        "rigid translation carries {total}, expected {}",
+        RHO * AREA * L
+    );
+    // 2. Deflection and rotation are now **coupled** — the linear element's
+    //    mass had no such term, and that absence is exactly what made it
+    //    inconsistent with an exact stiffness.
+    assert!(
+        m.get(a.id(), "f_w", a.id(), "theta")?.abs() > 1e-6,
+        "the exact mass must couple w and theta"
+    );
     Ok(())
 }
 
@@ -256,18 +278,34 @@ fn frame3d_consistent_mass_matches_closed_form() -> Result<()> {
     const IY: f64 = 0.4;
     const IZ: f64 = 0.7;
     const L: f64 = 2.0;
-    let (fes, a, _b) = bar_3d(L)?; // along x ⇒ local axes = global ⇒ T = identity
+    let (fes, a, b) = bar_3d(L)?; // along x ⇒ local axes = global ⇒ T = identity
     let model = Model::timoshenko(&fes)?;
     let materials = frame3d_materials(&model, IY, IZ, AREA, RHO)?;
 
     let m = pyrucast::ops::matrix::mass(&model, &materials)?;
     let tol = 1e-12;
     let diag = |sec: f64| 2.0 * RHO * sec * L / 6.0;
+    // Axial and torsion keep the linear field's mass — exact for what those two
+    // degrees of freedom actually interpolate.
     assert!((m.get(a.id(), "f_x", a.id(), "u_x")? - diag(AREA)).abs() < tol); // u'
-    assert!((m.get(a.id(), "f_y", a.id(), "u_y")? - diag(AREA)).abs() < tol); // v'
     assert!((m.get(a.id(), "m_x", a.id(), "r_x")? - diag(IY + IZ)).abs() < tol); // torsion I_p
-    assert!((m.get(a.id(), "m_y", a.id(), "r_y")? - diag(IY)).abs() < tol);
-    assert!((m.get(a.id(), "m_z", a.id(), "r_z")? - diag(IZ)).abs() < tol);
+                                                                                 // The two bending planes take the exact element's mass. Each still carries
+                                                                                 // exactly the member's mass under a rigid translation…
+    for (dual, primal) in [("f_y", "u_y"), ("f_z", "u_z")] {
+        let total = m.get(a.id(), dual, a.id(), primal)?
+            + m.get(a.id(), dual, b.id(), primal)?
+            + m.get(b.id(), dual, a.id(), primal)?
+            + m.get(b.id(), dual, b.id(), primal)?;
+        assert!(
+            (total - RHO * AREA * L).abs() < 1e-10 * RHO * AREA * L,
+            "{dual}: {total} vs {}",
+            RHO * AREA * L
+        );
+    }
+    // …and now couples the deflection to the rotation of its own plane, which
+    // the linear mass never did.
+    assert!(m.get(a.id(), "f_y", a.id(), "r_z")?.abs() > 1e-6);
+    assert!(m.get(a.id(), "f_z", a.id(), "r_y")?.abs() > 1e-6);
     Ok(())
 }
 

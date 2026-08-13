@@ -220,17 +220,43 @@ pub fn element_stiffness(
 /// each rotation — polar `I_p = I_y + I_z` for the torsion `θx'`, `I_y` for
 /// `θy'`, `I_z` for `θz'`. No translation–rotation coupling for the linear
 /// kinematics.
-fn local_mass(rho: f64, area: f64, iy: f64, iz: f64, l: f64) -> [[f64; 12]; 12] {
+#[allow(clippy::too_many_arguments)]
+fn local_mass(
+    rho: f64,
+    area: f64,
+    iy: f64,
+    iz: f64,
+    e: f64,
+    g: f64,
+    a_sy: f64,
+    a_sz: f64,
+    l: f64,
+) -> [[f64; 12]; 12] {
     let mut m = [[0.0_f64; 12]; 12];
-    // (local dof, rotary second-moment) for each of the six per-node DOFs.
-    let inertia = [area, area, area, iy + iz, iy, iz];
-    for (var, &sec) in inertia.iter().enumerate() {
+    // Axial (0,6) and torsion (3,9): the linear field's consistent mass, exact
+    // for what those two degrees of freedom actually interpolate.
+    for (var, sec) in [(0usize, area), (3, iy + iz)] {
         let ms = rho * sec * l / 6.0;
-        let (i, j) = (var, var + 6); // node A / node B
+        let (i, j) = (var, var + 6);
         m[i][i] += 2.0 * ms;
         m[j][j] += 2.0 * ms;
         m[i][j] += ms;
         m[j][i] += ms;
+    }
+    // The two bending planes take the exact element's mass, with the same index
+    // maps and sign convention as the stiffness above.
+    let b_xy = crate::models::beam::mass_4x4(rho * area, rho * iz, e * iz, Some(g * a_sy), l);
+    for (a, &ia) in [1usize, 5, 7, 11].iter().enumerate() {
+        for (c, &ic) in [1usize, 5, 7, 11].iter().enumerate() {
+            m[ia][ic] += b_xy[a][c];
+        }
+    }
+    let b_xz = crate::models::beam::mass_4x4(rho * area, rho * iy, e * iy, Some(g * a_sz), l);
+    let sign = [1.0, -1.0, 1.0, -1.0];
+    for (a, &ia) in [2usize, 4, 8, 10].iter().enumerate() {
+        for (c, &ic) in [2usize, 4, 8, 10].iter().enumerate() {
+            m[ia][ic] += sign[a] * sign[c] * b_xz[a][c];
+        }
     }
     m
 }
@@ -270,6 +296,10 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
         material.value(cell, 0, "A")?,
         material.value(cell, 0, "I_y")?,
         material.value(cell, 0, "I_z")?,
+        material.value(cell, 0, "E")?,
+        material.value(cell, 0, "G")?,
+        material.value(cell, 0, "A_sy")?,
+        material.value(cell, 0, "A_sz")?,
         l,
     );
     let t = rotation(&local_axes(d));

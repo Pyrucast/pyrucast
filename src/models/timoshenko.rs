@@ -38,12 +38,12 @@
 //! theories now line up: Bernoulli integrates a Hermite basis it declares,
 //! Timoshenko owns an exact one it declares owning.
 //!
-//! ## Mass: still the linear-element form
+//! ## Mass
 //!
-//! The consistent mass below is that of a **linear** element, not of the exact
-//! one — the usual engineering practice, and what this physics has always
-//! assembled. It is an inconsistency with the stiffness, stated here rather
-//! than hidden, and the next thing to fix.
+//! The consistent mass is the **same element's**, integrated from the same
+//! shape functions — so stiffness and mass finally describe one beam. Only the
+//! axial and torsional degrees of freedom keep the linear field's
+//! `(ρL/6)[[2,1],[1,2]]`, which is exact for what they actually interpolate.
 
 use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
@@ -52,7 +52,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::beam::{bending_4x4, BeamModel};
+use crate::models::beam::{bending_4x4, mass_4x4, BeamModel};
 use crate::models::{frame, frame3d, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
@@ -352,14 +352,20 @@ fn planar_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> R
             "Timoshenko mass matrix: material component `rho` (density) is required".into(),
         )
     })?;
-    let ma = rho * material.value(cell, 0, "A")? * l / 6.0;
-    let mi = rho * material.value(cell, 0, "I")? * l / 6.0;
-    for (var, coef) in [(0usize, ma), (1usize, mi)] {
-        let (i, j) = (var, var + 2);
-        ke[i * 4 + i] += 2.0 * coef;
-        ke[j * 4 + j] += 2.0 * coef;
-        ke[i * 4 + j] += coef;
-        ke[j * 4 + i] += coef;
+    let i = material.value(cell, 0, "I")?;
+    let ei = material.value(cell, 0, "E")? * i;
+    let gas = material.value(cell, 0, "G")? * material.value(cell, 0, "A_s")?;
+    let m = mass_4x4(
+        rho * material.value(cell, 0, "A")?,
+        rho * i,
+        ei,
+        Some(gas),
+        l,
+    );
+    for (r, row) in m.iter().enumerate() {
+        for (c, v) in row.iter().enumerate() {
+            ke[r * 4 + c] += v;
+        }
     }
     Ok(())
 }

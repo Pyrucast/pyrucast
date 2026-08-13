@@ -204,4 +204,195 @@ mod tests {
             }
         }
     }
+    /// At `Φ = 0` the shape functions are the Hermite cubics, and the rotation
+    /// interpolation is their own derivative — `θ = w'`, which *is*
+    /// Euler-Bernoulli. The two theories stay one derivation apart.
+    #[test]
+    fn without_shear_the_rotation_is_the_slope() {
+        let l = 1.7;
+        for k in 0..=10 {
+            let xi = k as f64 / 10.0;
+            let (n_w, n_t) = shape_functions(0.0, l, xi);
+            // d(N_w)/dx by a central difference, against N_θ.
+            let h = 1e-6;
+            let (plus, _) = shape_functions(0.0, l, xi + h);
+            let (minus, _) = shape_functions(0.0, l, xi - h);
+            for i in 0..4 {
+                let dn_dx = (plus[i] - minus[i]) / (2.0 * h * l);
+                assert!(
+                    (dn_dx - n_t[i]).abs() < 1e-6,
+                    "N{}'({xi}) = {dn_dx} vs Nθ = {}",
+                    i + 1,
+                    n_t[i]
+                );
+            }
+            let _ = n_w;
+        }
+    }
+
+    /// The shear-free consistent mass is the classical Euler-Bernoulli table,
+    /// `ρAL/420 · [156, 22L, 54, −13L; …]` — twelve numbers nobody disputes,
+    /// and an oracle this integration owes nothing to.
+    #[test]
+    fn without_shear_the_mass_is_the_classical_table() {
+        let (rho_a, l) = (2.5, 1.7);
+        let m = mass_4x4(rho_a, 0.0, 1.0, None, l);
+        let c = rho_a * l / 420.0;
+        let (l2, ll) = (l * l, l);
+        let want = [
+            [156.0 * c, 22.0 * ll * c, 54.0 * c, -13.0 * ll * c],
+            [22.0 * ll * c, 4.0 * l2 * c, 13.0 * ll * c, -3.0 * l2 * c],
+            [54.0 * c, 13.0 * ll * c, 156.0 * c, -22.0 * ll * c],
+            [-13.0 * ll * c, -3.0 * l2 * c, -22.0 * ll * c, 4.0 * l2 * c],
+        ];
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!(
+                    (m[i][j] - want[i][j]).abs() < 1e-10 * want[0][0],
+                    "[{i}][{j}]: {} vs {}",
+                    m[i][j],
+                    want[i][j]
+                );
+            }
+        }
+    }
+
+    /// Whatever `Φ`, a **rigid translation** carries exactly the mass of the
+    /// member, `ρA·L`. This is the one property no interpolation may break, and
+    /// it is what a mistyped coefficient would show up in.
+    #[test]
+    fn a_rigid_translation_carries_the_whole_mass() {
+        let (rho_a, rho_i, ei, l) = (2.5, 0.4, 3.0, 1.7);
+        for gas in [None, Some(1e-2), Some(1.0), Some(1e6)] {
+            let m = mass_4x4(rho_a, rho_i, ei, gas, l);
+            let unit = [1.0, 0.0, 1.0, 0.0]; // w = 1 everywhere
+            let total: f64 = (0..4)
+                .map(|a| (0..4).map(|b| unit[a] * m[a][b] * unit[b]).sum::<f64>())
+                .sum();
+            assert!(
+                (total - rho_a * l).abs() < 1e-10 * rho_a * l,
+                "gas={gas:?}: {total} vs {}",
+                rho_a * l
+            );
+        }
+    }
+
+    /// The mass is symmetric and positive definite — checked through its
+    /// diagonal and its quadratic form on a spread of vectors, since a mass that
+    /// were not would let an eigenvalue solver return an imaginary frequency.
+    #[test]
+    fn the_mass_is_symmetric_and_positive() {
+        let m = mass_4x4(2.5, 0.4, 3.0, Some(1.0), 1.7);
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!(
+                    (m[i][j] - m[j][i]).abs() < 1e-12,
+                    "asymmetric at [{i}][{j}]"
+                );
+            }
+            assert!(m[i][i] > 0.0, "non-positive diagonal at {i}");
+        }
+        for v in [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [1.0, -1.0, 1.0, -1.0],
+            [0.3, 0.7, -0.2, 0.9],
+        ] {
+            let q: f64 = (0..4)
+                .map(|a| (0..4).map(|b| v[a] * m[a][b] * v[b]).sum::<f64>())
+                .sum();
+            assert!(q > 0.0, "non-positive quadratic form: {q}");
+        }
+    }
+
+    /// Shear compliance **redistributes** mass without creating any: the total
+    /// is invariant (above), while the rotation terms change. A mass that
+    /// ignored `Φ` would be identical for every shear stiffness.
+    #[test]
+    fn shear_compliance_changes_the_rotational_terms() {
+        let (rho_a, rho_i, ei, l) = (2.5, 0.4, 3.0, 1.7);
+        let stiff = mass_4x4(rho_a, rho_i, ei, Some(1e6), l);
+        let soft = mass_4x4(rho_a, rho_i, ei, Some(0.5), l);
+        assert!(
+            (stiff[1][1] - soft[1][1]).abs() > 1e-3 * stiff[1][1],
+            "Φ leaves the rotational mass untouched: {} vs {}",
+            stiff[1][1],
+            soft[1][1]
+        );
+    }
+}
+
+// ─── The consistent mass ────────────────────────────────────────────────────
+
+/// The **shape functions** of the exact element, at `ξ = x/L ∈ [0, 1]`.
+///
+/// Returned as `(N_w, N_θ)`: the deflection interpolation and the *independent*
+/// rotation interpolation, both over `[w_A, θ_A, w_B, θ_B]`. They are cubic and
+/// quadratic respectively, and both carry `Φ`.
+///
+/// At `Φ = 0` they collapse to the Hermite cubics and to their own derivative —
+/// `θ = w'`, which is Euler-Bernoulli. A test asserts exactly that, so the two
+/// theories stay one derivation apart here as well.
+fn shape_functions(phi: f64, l: f64, xi: f64) -> ([f64; 4], [f64; 4]) {
+    let (x2, x3) = (xi * xi, xi * xi * xi);
+    let d = 1.0 / (1.0 + phi);
+    let n_w = [
+        d * (2.0 * x3 - 3.0 * x2 - phi * xi + 1.0 + phi),
+        d * l * (x3 - (2.0 + phi / 2.0) * x2 + (1.0 + phi / 2.0) * xi),
+        d * (-2.0 * x3 + 3.0 * x2 + phi * xi),
+        d * l * (x3 - (1.0 - phi / 2.0) * x2 - (phi / 2.0) * xi),
+    ];
+    let n_t = [
+        d * (6.0 / l) * (x2 - xi),
+        d * (3.0 * x2 - (4.0 + phi) * xi + 1.0 + phi),
+        d * (6.0 / l) * (xi - x2),
+        d * (3.0 * x2 - (2.0 - phi) * xi),
+    ];
+    (n_w, n_t)
+}
+
+/// Four-point Gauss-Legendre on `[0, 1]` — exact to degree 7, where the mass
+/// integrand reaches 6.
+const GAUSS_01: [(f64, f64); 4] = [
+    (0.069_431_844_202_973_71, 0.173_927_422_568_726_9),
+    (0.330_009_478_207_571_9, 0.326_072_577_431_273_1),
+    (0.669_990_521_792_428_1, 0.326_072_577_431_273_1),
+    (0.930_568_155_797_026_3, 0.173_927_422_568_726_9),
+];
+
+/// The **consistent mass** of the exact beam element, over
+/// `[w_A, θ_A, w_B, θ_B]`:
+///
+/// ```text
+/// M = ∫ ρA · N_wᵀ N_w dx  +  ∫ ρI · N_θᵀ N_θ dx
+/// ```
+///
+/// the second term being the **rotary inertia** of the section.
+///
+/// It is *integrated* from the element's own shape functions rather than
+/// transcribed from the published table of `Φ`-polynomials. That table is
+/// correct, but a coefficient mistyped out of twenty would produce a plausible,
+/// symmetric, positive-definite matrix describing a different beam — the
+/// failure mode that cost a wrong tangent earlier in this project. Integrating
+/// cannot be mistyped: the shape functions are the same ones the stiffness
+/// uses, and four Gauss points make the quadrature exact.
+///
+/// `gas = None` drops the shear compliance (`Φ = 0`) and yields the classical
+/// Euler-Bernoulli consistent mass.
+pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> Vec<Vec<f64>> {
+    let phi = match gas {
+        Some(g) if g.abs() > f64::MIN_POSITIVE => 12.0 * ei / (g * l * l),
+        _ => 0.0,
+    };
+    let mut m = vec![vec![0.0_f64; 4]; 4];
+    for (xi, w) in GAUSS_01 {
+        let (n_w, n_t) = shape_functions(phi, l, xi);
+        let dx = w * l; // dx = L dξ
+        for a in 0..4 {
+            for b in 0..4 {
+                m[a][b] += (rho_a * n_w[a] * n_w[b] + rho_i * n_t[a] * n_t[b]) * dx;
+            }
+        }
+    }
+    m
 }
