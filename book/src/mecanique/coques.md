@@ -32,7 +32,7 @@ membrane,
 
 \\[
 \omega_z = \tfrac12\left(\frac{\partial v}{\partial x} - \frac{\partial u}{\partial y}\right),
-\qquad K_\text{vrillage} = \alpha\,G h \int (\theta_z - \omega_z)^2\, dA
+\qquad K_\text{vrillage} = \alpha\\,G h \int (\theta_z - \omega_z)^2\\, dA
 \\]
 
 ce qui est un énoncé physique (la rotation de vrillage doit suivre celle de la
@@ -54,25 +54,89 @@ Les dérivées locales, elles, ne coûtent rien : le gradient tangentiel
 
 ## Reissner-Mindlin (`thick`)
 
-La fibre normale reste droite mais **non normale** : sa rotation est un champ
-indépendant, si bien que le cisaillement transverse `γ = ∇w + θ` est une
-déformation à part entière.
+### Équations continues résolues
 
-```text
-membrane   ε = [∂u/∂x, ∂v/∂y, ∂u/∂y + ∂v/∂x]
-flexion    κ = [∂θ_y/∂x, −∂θ_x/∂y, ∂θ_y/∂y − ∂θ_x/∂x]
-cisaillement γ = [∂w/∂x + θ_y, ∂w/∂y − θ_x]
-```
+La fibre normale reste droite mais **non normale**. Sa rotation est un champ
+indépendant, ce qui donne une cinématique affine dans l'épaisseur
+(\\( z \in [-h/2,\ h/2] \\)) :
 
-```text
-D_m = Eh/(1−ν²)·[[1, ν, 0], [ν, 1, 0], [0, 0, (1−ν)/2]]
-D_b = D_m · h²/12
-D_s = k_s·G·h                        k_s = 5/6 par défaut
-```
+\\[
+u_x(x,y,z) = u(x,y) + z\\,\theta_y, \quad
+u_y(x,y,z) = v(x,y) - z\\,\theta_x, \quad
+u_z = w(x,y).
+\\]
 
-La loi de flexion est celle de membrane multipliée par `h²/12` : c'est tout le
-contenu de « les sections restent planes » — le même matériau en contraintes
-planes, intégré dans l'épaisseur avec un poids `z²`.
+Les déformations s'y séparent en trois familles — membrane, flexion et
+cisaillement transverse :
+
+\\[
+\varepsilon =
+\begin{bmatrix}
+\partial u/\partial x \\\\
+\partial v/\partial y \\\\
+\partial u/\partial y + \partial v/\partial x
+\end{bmatrix},
+\quad
+\kappa =
+\begin{bmatrix}
+\partial \theta_y/\partial x \\\\
+-\\,\partial \theta_x/\partial y \\\\
+\partial \theta_y/\partial y - \partial \theta_x/\partial x
+\end{bmatrix},
+\quad
+\gamma =
+\begin{bmatrix}
+\partial w/\partial x + \theta_y \\\\
+\partial w/\partial y - \theta_x
+\end{bmatrix},
+\\]
+
+la déformation dans le plan à la cote `z` valant
+\\( \varepsilon(z) = \varepsilon + z\\,\kappa \\). C'est \\( \gamma \\) qui fait
+toute la différence avec Kirchhoff-Love, où l'on impose \\( \gamma = 0 \\), donc
+\\( \theta = -\nabla w \\), et où la courbure redevient un jeu de dérivées
+**secondes** de la seule flèche.
+
+### Les lois de section
+
+L'intégration dans l'épaisseur d'un matériau homogène en contraintes planes
+découple les trois familles et donne, avec
+\\( N = \int \sigma\\,dz \\), \\( M = \int z\\,\sigma\\,dz \\) et
+\\( T = \int \tau\\,dz \\) :
+
+\\[
+D_m = \frac{Eh}{1-\nu^2}
+\begin{bmatrix}
+1 & \nu & 0 \\\\
+\nu & 1 & 0 \\\\
+0 & 0 & \tfrac{1-\nu}{2}
+\end{bmatrix},
+\qquad
+D_b = \frac{h^2}{12}\\,D_m,
+\qquad
+D_s = k_s\\,G\\,h .
+\\]
+
+La loi de flexion est celle de membrane multipliée par \\( h^2/12 \\) : c'est
+tout le contenu de « les sections restent planes » — le même matériau en
+contraintes planes, intégré dans l'épaisseur avec un poids \\( z^2 \\)
+(\\( \int_{-h/2}^{h/2} z^2 dz = h^3/12 \\)).
+
+Le facteur \\( k_s = 5/6 \\) corrige le fait que la cinématique impose un
+cisaillement **uniforme** dans l'épaisseur là où la solution exacte est
+parabolique et nulle aux peaux ; il est choisi pour restituer la bonne énergie de
+cisaillement d'une section rectangulaire, et se règle par la composante matériau
+`k_s`.
+
+La raideur élémentaire est alors la somme des trois formes,
+
+\\[
+K_e = \int_A \Big(
+B_m^\top D_m B_m + B_b^\top D_b B_b + B_s^\top D_s B_s
+\Big)\\,dA,
+\\]
+
+**chacune avec sa quadrature** — et c'est là le point suivant.
 
 ### Pourquoi le cisaillement est intégré réduit
 

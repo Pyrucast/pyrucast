@@ -20,27 +20,46 @@ quadratique), avec un degré de liberté scalaire par nœud.
 
 La première loi de Fick relie le flux au gradient de concentration :
 
-```text
-j = −D · ∇c
-```
+\\[
+\mathbf j = -\\,\mathsf D\\,\nabla c
+\\]
 
 et la conservation de l'espèce, en régime transitoire avec un coefficient de
-stockage `φ` (la porosité, pour une espèce diffusant dans un solide poreux) :
+stockage \\( \varphi \\) (la porosité, pour une espèce diffusant dans un solide
+poreux) :
 
-```text
-φ ∂c/∂t + ∇·j = 0     ⇔     φ ∂c/∂t − ∇·(D ∇c) = 0
-```
+\\[
+\varphi\\,\frac{\partial c}{\partial t} + \nabla\\!\cdot\mathbf j = 0
+\qquad\Longleftrightarrow\qquad
+\varphi\\,\frac{\partial c}{\partial t} - \nabla\\!\cdot(\mathsf D\\,\nabla c) = 0 .
+\\]
 
-En stationnaire c'est l'équation de Laplace pondérée par `D`. La forme faible,
-après intégration par parties, donne la rigidité `∫ ∇N_i · D · ∇N_j` et, pour le
-terme instationnaire, la matrice de « masse » `∫ φ N_i N_j`.
+En stationnaire c'est l'équation de Laplace pondérée par \\( \mathsf D \\). C'est
+**la même équation** que la conduction thermique, à un changement de noms près
+(\\( c \leftrightarrow T \\), \\( \mathsf D \leftrightarrow k \\),
+\\( \varphi \leftrightarrow \rho c_p \\)) — d'où un modèle qui partage la
+totalité du noyau de [conduction thermique](thermique.md), et n'en diffère que
+par ses variables et sa nature physique.
+
+La forme faible, après intégration par parties, s'écrit : trouver `c` tel que
+pour tout `δc` admissible,
+
+\\[
+\int_\Omega \varphi\\,\delta c\\,\dot c\\; d\Omega
++ \int_\Omega \nabla \delta c \cdot \mathsf D\\,\nabla c\\; d\Omega
+= -\int_{\partial\Omega} \delta c\\;\mathbf j\\!\cdot\\!\mathbf n\\; d\Gamma .
+\\]
 
 ## Forme discrétisée
 
-```text
-K_ij = ∫_Ω ∇N_iᵀ · D · ∇N_j dΩ        (rigidité de diffusion — Cast3M COND)
-C_ij = ∫_Ω φ · N_i N_j dΩ             (stockage — Cast3M CAPA)
-```
+\\[
+K_{ij} = \int_\Omega \nabla N_i^\top\\,\mathsf D\\;\nabla N_j\\; d\Omega
+\quad \text{(rigidité de diffusion — Cast3M \texttt{COND})},
+\\]
+\\[
+C_{ij} = \int_\Omega \varphi\\,N_i\\,N_j\\; d\Omega
+\quad \text{(stockage — Cast3M \texttt{CAPA})}.
+\\]
 
 `D` est un **tenseur**, dont le cas isotrope `D = D·I` redonne le produit
 scalaire habituel `∇N_i · ∇N_j`. Les trois symétries matériau décrites au
@@ -122,7 +141,7 @@ imparfait, un revêtement, un joint, une membrane laissent le champ **sauter** �
 la traversée, tandis qu'un flux la franchit proportionnellement à ce saut :
 
 \\[
-j\cdot n = h\,\big(c_1 - c_2\big)
+j\cdot n = h\\,\big(c_1 - c_2\big)
 \\]
 
 `h` est le coefficient de transfert (son inverse est la résistance de contact).
@@ -140,14 +159,20 @@ materials = pyrucast.element_field.material_field(model, [("D", 2.0), ("h", 5.0)
 
 #### Quatre blocs, dont deux hors-diagonale
 
-La forme faible du terme d'échange sur l'interface `Γ` est
-`∮_Γ h (c₁ − c₂)(δc₁ − δc₂) dΓ`, qui se développe en une structure 2×2 sur les
-degrés de liberté des deux côtés :
+La forme faible du terme d'échange sur l'interface \\( \Gamma \\) est
 
-```text
-⎡ +K  −K ⎤          avec   K_ij = h ∫_Γ N_i N_j dΓ
-⎣ −K  +K ⎦
-```
+\\[
+\int_\Gamma h\\,(c_1 - c_2)\\,(\delta c_1 - \delta c_2)\\; d\Gamma,
+\\]
+
+qui se développe en une structure \\( 2\times2 \\) sur les degrés de liberté des
+deux côtés :
+
+\\[
+\begin{bmatrix} +K & -K \\\\ -K & +K \end{bmatrix},
+\qquad
+K_{ij} = h \int_\Gamma N_i\\,N_j\\; d\Gamma .
+\\]
 
 Les deux blocs diagonaux sont des blocs *calculés* ordinaires. Les deux autres
 ont leurs **lignes sur un maillage et leurs colonnes sur l'autre** : c'est le

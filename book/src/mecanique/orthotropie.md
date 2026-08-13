@@ -29,30 +29,39 @@ Les mêmes qu'en élasticité linéaire — équilibre `∇·σ + f = 0` en peti
 déformations, avec `ε = ½(∇u + ∇uᵀ)`. C'est la **loi de comportement** qui se
 généralise :
 
-```text
-σ_ij = C_ijkl · ε_kl
-```
+\\[
+\sigma_{ij} = C_{ijkl}\\,\varepsilon_{kl}
+\\]
 
-où `C` est le tenseur d'élasticité d'ordre 4. Ses symétries (`C_ijkl = C_jikl =
-C_ijlk = C_klij`) le réduisent à une matrice `6×6` symétrique en notation de
-Voigt, soit **21 constantes** dans le cas général.
+où \\( C \\) est le tenseur d'élasticité d'ordre 4. Ses symétries — mineures
+\\( C_{ijkl} = C_{jikl} = C_{ijlk} \\), qui viennent de celles de
+\\( \sigma \\) et \\( \varepsilon \\), et **majeure**
+\\( C_{ijkl} = C_{klij} \\), qui vient de l'existence d'un potentiel élastique
+\\( W = \tfrac12\\,\varepsilon : C : \varepsilon \\) — le réduisent d'un tenseur à
+81 composantes à une matrice \\( 6\times6 \\) symétrique en notation de Voigt,
+soit **21 constantes** dans le cas général.
 
 L'**orthotropie** est le cas où le matériau possède trois plans de symétrie
 orthogonaux. Dans ses axes propres, la souplesse `S = C⁻¹` se découple : les
 termes normaux ne sont couplés qu'entre eux, et chaque cisaillement est isolé.
 
-```text
-       ⎡  1/E₁    −ν₁₂/E₁  −ν₁₃/E₁                    ⎤
-       ⎢ −ν₁₂/E₁   1/E₂    −ν₂₃/E₂                    ⎥
-   S = ⎢ −ν₁₃/E₁  −ν₂₃/E₂   1/E₃                      ⎥
-       ⎢                            1/G₂₃             ⎥
-       ⎢                                   1/G₁₃      ⎥
-       ⎣                                        1/G₁₂ ⎦
-```
+\\[
+S =
+\begin{bmatrix}
+1/E_1 & -\nu_{21}/E_2 & -\nu_{31}/E_3 & & & \\\\
+-\nu_{12}/E_1 & 1/E_2 & -\nu_{32}/E_3 & & & \\\\
+-\nu_{13}/E_1 & -\nu_{23}/E_2 & 1/E_3 & & & \\\\
+ & & & 1/G_{23} & & \\\\
+ & & & & 1/G_{13} & \\\\
+ & & & & & 1/G_{12}
+\end{bmatrix}
+\\]
 
-Les relations de réciprocité `ν_ji/E_j = ν_ij/E_i` rendent la matrice symétrique,
-d'où **neuf** constantes seulement : trois modules d'Young, trois coefficients de
-Poisson, trois modules de cisaillement.
+Les relations de réciprocité \\( \nu_{ji}/E_j = \nu_{ij}/E_i \\) rendent la
+matrice symétrique, d'où **neuf** constantes seulement : trois modules d'Young,
+trois coefficients de Poisson, trois modules de cisaillement. Le bloc normal et
+les trois cisaillements sont **découplés**, ce qui est la définition même de
+l'orthotropie : une traction selon un axe propre ne produit aucun cisaillement.
 
 > **Attention** — un jeu de constantes n'est pas physique par construction : `S`
 > doit rester définie positive, ce qui impose `ν_ij² < E_i/E_j`. pyrucast le
@@ -97,9 +106,13 @@ opérateur `B`. Ce qui change tient en trois étapes, faites une fois par maille
 La rotation passe par le **tenseur d'ordre 4**, pas par une matrice de Bond
 `6×6` :
 
-```text
-C'_pqrs = R_pi R_qj R_rk R_sl C_ijkl
-```
+\\[
+C'_{pqrs} = R_{pi}\\,R_{qj}\\,R_{rk}\\,R_{sl}\\;C_{ijkl},
+\qquad
+R = \big[\\,V_1\ \ V_2\ \ V_1 \times V_2\\,\big],
+\\]
+
+`R` étant la rotation qui porte les axes matériau sur les axes globaux.
 
 C'est un choix délibéré. En cisaillement **ingénieur** (`γ = 2ε`), le passage
 Voigt ↔ tenseur ne porte **aucun facteur** — `C_ijkl = D[voigt(i,j)][voigt(k,l)]`

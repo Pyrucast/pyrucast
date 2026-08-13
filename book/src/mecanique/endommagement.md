@@ -18,16 +18,69 @@ S'y ajoute, du côté plastique, la **plasticité poreuse** de Gurson
 (`Model.gurson`), où l'endommagement est une porosité qui rétrécit la surface de
 charge — voir plus bas.
 
+## Équations continues résolues
+
+Les trois lois partagent le cadre de la **mécanique de l'endommagement continu**
+en variables d'état, avec la contrainte **effective** \\( \tilde\sigma \\) comme
+pivot :
+
+- **contrainte effective** : \\( \tilde\sigma = D_{\text{el}} : \varepsilon \\),
+  celle qu'aurait le matériau sain sous la même déformation ;
+- **dégradation** : \\( \sigma = (\mathbb I - \mathbb D) : \tilde\sigma \\), où
+  l'opérateur \\( \mathbb D \\) est un scalaire (Mazars), une paire de scalaires
+  agissant sur des parts spectrales (Damage TC), ou un tenseur diagonal dans les
+  axes matériau (SiC/SiC) ;
+- **moteur** : un scalaire \\( \tau \\) construit sur \\( \varepsilon \\) ou
+  \\( \tilde\sigma \\) — c'est lui qui décide *ce à quoi* la loi est sensible ;
+- **seuil et irréversibilité** : une variable d'histoire
+  \\( r = \max\big(r_0,\ \max_{t' \le t}\tau(t')\big) \\), non décroissante ;
+- **adoucissement** : \\( d = \Phi(r) \\), croissante, avec \\( \Phi(r_0) = 0 \\).
+
+Il n'y a **pas de déformation permanente** : à décharge complète, la contrainte
+revient à zéro par une droite de pente \\( (1-d)E \\). C'est ce qui distingue un
+endommagement d'une plasticité, et pourquoi ces lois n'ont pas de retour sur une
+surface — la mise à jour est explicite, en un pas, sans itérer.
+
+Toute la variété des trois lois tient donc dans **trois choix** : celui du
+moteur \\( \tau \\), celui de la forme de \\( \Phi \\), et celui de la structure
+de \\( \mathbb D \\).
+
 ## Mazars — un scalaire
 
-L'endommagement est piloté par une déformation équivalente construite sur les
-déformations principales positives, `ε̃ = √(Σ⟨ε_I⟩₊²)` : il répond à l'extension
-et est aveugle à la compression hydrostatique. Deux branches, traction et
-compression, sont mélangées par des poids `α_t`, `α_c` issus du découpage de la
-contrainte effective — c'est ce qui permet à une seule loi de décrire un matériau
-un ordre de grandeur plus résistant en compression.
+Le moteur est une **déformation équivalente** construite sur les déformations
+principales positives,
 
-La variable d'histoire unique est `κ = max_t ε̃` : l'endommagement ne guérit pas.
+\\[
+\tilde\varepsilon = \sqrt{\textstyle\sum_I \langle \varepsilon_I \rangle_+^2},
+\qquad \kappa = \max_t \tilde\varepsilon,
+\\]
+
+qui répond à l'extension et est aveugle à la compression hydrostatique. Deux
+branches, traction et compression, partagent la même forme,
+
+\\[
+D_\bullet(\kappa) = 1 - \frac{\varepsilon_{d0}(1 - A_\bullet)}{\kappa}
+- \frac{A_\bullet}{\exp\big(B_\bullet(\kappa - \varepsilon_{d0})\big)},
+\qquad \bullet \in \{t, c\},
+\\]
+
+et sont mélangées par des poids issus du découpage de la contrainte effective :
+
+\\[
+D = \alpha_t D_t + \alpha_c D_c,
+\qquad
+\alpha_t = \frac{\sum_I \langle\varepsilon^t_I\rangle_+ \langle\varepsilon_I\rangle_+}
+{\tilde\varepsilon^{\\,2}},
+\\]
+
+où \\( \varepsilon^t \\) est la déformation qu'induirait la seule part **positive**
+de \\( \tilde\sigma \\) (idem \\( \alpha_c \\) avec la part négative, et
+\\( \alpha_t + \alpha_c = 1 \\) sur un trajet proportionnel). C'est ce mélange
+qui permet à une seule loi de décrire un matériau un ordre de grandeur plus
+résistant en compression. La variable d'histoire unique étant
+\\( \kappa \\), l'endommagement ne guérit pas. Le détail — dont l'axisymétrie
+et la condensation en contraintes planes — est en page
+[Endommagement de Mazars](mazars.md).
 
 ## Damage TC — deux variables
 
@@ -38,7 +91,7 @@ fissure qui se **referme** et reprend de la charge.
 Damage TC les garde séparées :
 
 \\[
-\sigma = (1 - d^+)\,\tilde\sigma^+ + (1 - d^-)\,\tilde\sigma^-
+\sigma = (1 - d^+)\\,\tilde\sigma^+ + (1 - d^-)\\,\tilde\sigma^-
 \\]
 
 où `σ̃⁺` et `σ̃⁻` sont les parties positive et négative de la contrainte
@@ -47,11 +100,43 @@ propre variable, si bien qu'un déchargement de la traction vers la compression
 retrouve la raideur en compression — l'**effet unilatéral**, ce qui rend la loi
 utilisable en cyclique.
 
-Chaque endommagement a son moteur et son histoire : une énergie élastique en
-traction, une mesure octaédrique en compression (qui répond au confinement et non
-à la seule extension), et deux lois d'adoucissement distinctes — exponentielle en
-traction, une fissure est fragile ; durcissante puis adoucissante en compression,
-le béton s'écrase, il ne casse pas net.
+Chaque endommagement a **son** moteur et **son** histoire :
+
+\\[
+\tau^+ = \sqrt{\tilde\sigma^+ \\!:\\! \varepsilon},
+\qquad
+\tau^- = \sqrt{\sqrt3\\,\big|K\\,\tilde\sigma^-_{\text{oct}} + \tilde\tau^-_{\text{oct}}\big|},
+\\]
+\\[
+r^\pm = \max\big(r_0^\pm,\ \max_t \tau^\pm\big),
+\qquad
+r_0^+ = \frac{f_t}{\sqrt E},
+\qquad
+r_0^- = \frac{f_c}{\sqrt E}.
+\\]
+
+En traction, le moteur est l'**énergie élastique** stockée par la part positive.
+En compression, c'est une mesure **octaédrique** — contrainte normale
+\\( \tilde\sigma^-_{\text{oct}} = \tfrac13\operatorname{tr}\tilde\sigma^- \\) et
+cisaillement \\( \tilde\tau^-_{\text{oct}} \\) — qui répond au **confinement**, et
+non à la seule extension. Le coefficient `K = 0,171` est la valeur usuelle,
+déduite du rapport des résistances biaxiale et uniaxiale.
+
+Les deux lois d'adoucissement sont distinctes, et c'est délibéré :
+
+\\[
+d^+ = 1 - \frac{r_0^+}{r^+}\\,
+\exp\\!\Big[A_t\Big(1 - \frac{r^+}{r_0^+}\Big)\Big],
+\\]
+\\[
+d^- = 1 - \frac{r_0^-}{r^-}(1 - A_c)
+- A_c \exp\\!\Big[2\Big(1 - \frac{r^-}{r_0^-}\Big)\Big].
+\\]
+
+Adoucissement **exponentiel** en traction — une fissure est fragile, la
+contrainte tombe dès le pic ; forme **durcissante puis adoucissante** en
+compression — le béton s'écrase avec un plateau, il ne casse pas net. `A_t`
+règle la pente de la première, `A_c` la résistance résiduelle de la seconde.
 
 ## SiC/SiC — endommagement orthotrope
 
@@ -64,13 +149,33 @@ fissures. La raideur chute donc **par direction**, et très inégalement.
 Aucun endommagement scalaire ne peut exprimer cela. Cette loi porte **un
 endommagement par direction matériau** :
 
-```text
-d_i = d_max,i · (1 − exp(−(⟨ε_i⟩₊ − ε_0,i)/ε_c,i))      pour ⟨ε_i⟩₊ > ε_0,i
-```
+\\[
+\kappa_i = \max_t \big\langle \varepsilon^{\text{mat}}_{ii} \big\rangle_+,
+\qquad
+d_i = d_{\max,i}\Big(1 - e^{-(\kappa_i - \varepsilon_{0,i})/\varepsilon_{c,i}}\Big)
+\quad \text{si } \kappa_i > \varepsilon_{0,i},
+\\]
 
-La partie positive est essentielle : une fissure de matrice s'ouvre en
-**extension** et se referme en compression, si bien qu'une direction comprimée
-n'est pas dégradée du tout.
+où \\( \varepsilon^{\text{mat}} = R^\top \varepsilon\\,R \\) est la déformation
+**dans les axes matériau**. Chaque direction a son seuil de première fissuration
+\\( \varepsilon_{0,i} \\), sa vitesse de saturation \\( \varepsilon_{c,i} \\) et
+son plafond \\( d_{\max,i} \\). La partie positive est essentielle : une fissure
+de matrice s'ouvre en **extension** et se referme en compression, si bien qu'une
+direction comprimée n'est pas dégradée du tout.
+
+La dégradation s'applique dans ces mêmes axes, terme par terme :
+
+\\[
+\sigma^{\text{mat}}_{ij} = \sqrt{1 - d_i}\\,\sqrt{1 - d_j}\\;
+\tilde\sigma^{\text{mat}}_{ij},
+\qquad
+\sigma = R\\,\sigma^{\text{mat}}\\,R^\top .
+\\]
+
+Le produit \\( \sqrt{1-d_i}\sqrt{1-d_j} \\) garde l'opérateur **symétrique** et
+dégrade un terme de couplage autant que la plus faible des deux directions qu'il
+couple ; chaque cisaillement prend la paire qu'il cisaille. À \\( d_i = d_j = d \\)
+on retrouve exactement le facteur scalaire \\( (1-d) \\).
 
 ### Le repère est le tissage
 
@@ -95,7 +200,7 @@ elles ne portent plus. La surface de Gurson fait de la porosité `f` une variabl
 interne explicite, qui **rétrécit** la surface de charge :
 
 \\[
-\Phi = \left(\frac{q}{\sigma_y}\right)^2 + 2q_1 f^* \cosh\!\left(\frac{3q_2\sigma_m}{2\sigma_y}\right) - (1 + q_3 f^{*2})
+\Phi = \left(\frac{q}{\sigma_y}\right)^2 + 2q_1 f^* \cosh\\!\left(\frac{3q_2\sigma_m}{2\sigma_y}\right) - (1 + q_3 f^{*2})
 \\]
 
 À `f = 0` cela redonne exactement von Mises. Le `cosh` rend la contraction
@@ -105,13 +210,34 @@ qui fait qu'une loi J2 ne peut jamais prédire une rupture ductile.
 
 **Coalescence** — au-delà d'une porosité critique les cavités coalescent et
 l'effondrement s'accélère. Tvergaard et Needleman le modélisent en donnant à la
-surface une porosité *effective* `f*` qui atteint `1/q₁` — surface réduite à
-rien — à la porosité de rupture `f_f`.
+surface une porosité *effective* \\( f^* \\), **bilinéaire** en `f` :
 
-**Croissance** — `ḟ = (1 − f)·tr(ε̇_p)`, conservation de la masse et rien de
-plus. L'écoulement plastique sur cette surface n'est **pas** isochore, ce qui le
-distingue précisément de von Mises. La germination n'est **pas** modélisée : seule
-la croissance depuis une porosité initiale `f_0`.
+\\[
+f^* =
+\begin{cases}
+f & \text{si } f \le f_c,\\\\
+f_c + \big(\tfrac{1}{q_1} - f_c\big)\dfrac{f - f_c}{f_f - f_c} & \text{sinon,}
+\end{cases}
+\\]
+
+qui atteint \\( 1/q_1 \\) — surface réduite à rien, \\( \Phi \equiv 0 \\) — à la
+porosité de rupture \\( f_f \\). La pente au-delà de \\( f_c \\) est
+l'accélération de la coalescence ; sans elle le modèle prédit une ductilité très
+supérieure à la réalité.
+
+**Croissance** — la conservation de la masse, et rien de plus :
+
+\\[
+\dot f = (1 - f)\\,\operatorname{tr}\dot\varepsilon^p .
+\\]
+
+L'écoulement plastique sur cette surface n'est donc **pas isochore** — c'est
+exactement ce qui le distingue de von Mises, et ce qui rend la croissance
+possible. Le retour se fait par **plan sécant** à normale numérique, comme pour
+[Ottosen](lois-plastiques.md#intégrée-par-plan-sécant-avec-une-normale-numérique),
+la porosité étant remise à jour à chaque itération à partir de la part
+volumique de l'incrément plastique. La **germination** n'est pas modélisée :
+seule la croissance depuis une porosité initiale \\( f_0 \\).
 
 ## Mise en donnée (Rust, testé)
 

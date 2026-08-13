@@ -22,7 +22,6 @@
 use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::element_field::ElementField;
-use pyrucast::containers::field::SubField;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;

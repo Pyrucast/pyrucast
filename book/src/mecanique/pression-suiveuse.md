@@ -10,9 +10,11 @@ L'ignorer n'est exact qu'en petits déplacements. Sur une membrane qui se gonfle
 une coque qui flambe, une aube qui tourne, la différence n'est pas un détail :
 c'est elle qui décide de la charge critique.
 
-```text
-t = −p · n(u)          n(u) : la normale de la surface déformée
-```
+\\[
+\mathbf t = -p\\,\mathbf n(u),
+\\]
+
+\\( \mathbf n(u) \\) étant la normale de la surface **déformée**.
 
 Les degrés de liberté sont ceux de la mécanique — déplacement `u_x, u_y(, u_z)`,
 force nodale `f_x, …` — et le modèle vit sur un maillage de **bord** : SEG2 en
@@ -40,7 +42,7 @@ Python comme les autres non-linéarités.
 Le travail virtuel de la pression sur la configuration **déformée** :
 
 \\[
-\delta W = -\int_{\gamma} p\, \mathbf{n}\cdot\delta\mathbf{u}\; da
+\delta W = -\int_{\gamma} p\\, \mathbf{n}\cdot\delta\mathbf{u}\\; da
 \\]
 
 où \\(\gamma\\) et \\(\mathbf{n}\\) sont la surface et la normale *actuelles*.
@@ -60,10 +62,20 @@ Les deux viennent des tangentes de la surface. Si \\(a_k = \partial x/\partial
 et la normale multipliée par le rapport d'aires est leur produit vectoriel (leur
 rotation de −90° en 2-D), divisé par celui de référence :
 
-```text
-t = −p · (ā₁ × ā₂) / |a₁ × a₂|         (3-D)
-t = −p · (ā_y, −ā_x) / |a|             (2-D)
-```
+\\[
+\mathbf t = -p\\;\frac{\bar a_1 \times \bar a_2}{\lVert a_1 \times a_2 \rVert}
+\quad \text{(3-D)},
+\qquad
+\mathbf t = -p\\;\frac{(\bar a_y,\\; -\bar a_x)}{\lVert a \rVert}
+\quad \text{(2-D)},
+\\]
+
+les forces s'en déduisant par la mesure de **référence**, comme n'importe quelle
+force interne :
+
+\\[
+f_i = \int_{\Gamma_0} N_i\\,\mathbf t\\; d\Gamma_0 .
+\\]
 
 Garder la traction **référentielle** est ce qui permet à l'intégrale des forces
 internes d'utiliser la mesure de référence habituelle : la formulation reste
@@ -71,7 +83,7 @@ totalement lagrangienne, et sans déplacement elle redonne exactement `t = −p�
 
 ### Pourquoi pas Nanson
 
-\\(n\,da = \det(F)\,F^{-T}N\,dA\\) est la route classique, et c'est la
+\\(n\\,da = \det(F)\\,F^{-T}N\\,dA\\) est la route classique, et c'est la
 **mauvaise** ici. Sur une variété, le gradient tangentiel n'a aucune composante
 selon la normale : \\(I + \nabla_s u\\) n'est donc pas un gradient de
 transformation. Un quart de tour de la surface envoie son déterminant à zéro et
