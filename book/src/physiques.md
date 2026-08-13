@@ -48,6 +48,8 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   - [Endommagement de Mazars](mecanique/mazars.md)
   - [Lois d'endommagement](mecanique/endommagement.md) — Damage TC, SiC/SiC
     orthotrope, plasticité poreuse de Gurson
+  - [Poutre d'Euler-Bernoulli](mecanique/bernoulli.md) — 1-D, plan, spatial ;
+    exacte aux nœuds
   - [Poutre de Timoshenko](mecanique/timoshenko.md)
   - [Portique 2D](mecanique/portique.md)
   - [Cadre 3D](mecanique/cadre3d.md)

@@ -108,7 +108,9 @@ finie des forces internes), `Damage` (**loi en attribut** elle aussi : Mazars sc
 variables — la seule qui rende sa raideur à une fissure qui se referme — et
 SiC/SiC orthotrope, dont les directions d'endommagement sont le repère de
 tissage réutilisé de l'orthotropie élastique), `Timoshenko`,
-`Frame` (portique 2-D), `Frame3d`, `FollowerPressure` (charge dont la direction
+`Frame` (portique 2-D), `Frame3d`, `Bernoulli` (poutre sans cisaillement
+transverse, 1-D / plan / spatial, exacte aux nœuds par interpolation d'Hermite),
+`FollowerPressure` (charge dont la direction
 tourne avec la surface, bâtie sur les tangentes déformées et non sur Nanson —
 `I + ∇_s u` n'est pas un gradient de transformation sur une variété). Contraintes : `Dirichlet`, `Mpc`,
 `Embedded` (baignage), `Contact` (nœud-surface, unilatéral).

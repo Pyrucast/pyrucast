@@ -34,6 +34,7 @@ use crate::error::{PyrucastError, Result};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
+pub mod bernoulli;
 pub mod contact;
 pub mod convection;
 pub mod damage;

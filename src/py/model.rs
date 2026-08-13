@@ -3,6 +3,7 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
+use crate::models::bernoulli::BeamModel;
 use crate::models::damage::DamageLaw;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::interface_transfer::TransferKind;
@@ -589,6 +590,37 @@ impl PyModel {
         })?;
         let inner = Model::mazars(&fespace.inner, m)?;
         Ok(Self { inner })
+    }
+
+    /// `Model.bernoulli(fespace, model)` — the classical **Euler-Bernoulli**
+    /// beam, where plane sections stay normal to the deflected axis and there is
+    /// no transverse shear at all. `model` is `"planar_1d"` (DOFs `w`, `theta`;
+    /// material `E`, `I`), `"frame_2d"` (`u_x, u_y, r_z`; `+ A`) or
+    /// `"frame_3d"` (six DOFs; `+ I_y, I_z, J, G`).
+    ///
+    /// Hermite cubic interpolation makes it **nodally exact** wherever the
+    /// interior carries no distributed load — one element per member suffices
+    /// for a frame.
+    ///
+    /// Prefer `timoshenko` / `frame` / `frame3d` for a stocky member, where the
+    /// shear compliance matters. Reaching Bernoulli by making the shear area
+    /// huge would work in exact arithmetic and lock in floating point, which is
+    /// why this is a physics of its own rather than a limiting case.
+    #[classmethod]
+    fn bernoulli(
+        _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
+        fespace: PyRef<PyFiniteElementSpace>,
+        model: &str,
+    ) -> PyResult<Self> {
+        let m = BeamModel::from_tag(model).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "bernoulli: unknown model '{model}' (expected {})",
+                BeamModel::tag_list()
+            ))
+        })?;
+        Ok(Self {
+            inner: Model::bernoulli(&fespace.inner, m)?,
+        })
     }
 
     /// `Model.timoshenko(fespace)` — Timoshenko-beam model spanning every

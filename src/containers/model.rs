@@ -124,9 +124,10 @@ use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
-    contact, convection, damage, dirichlet, elasticity, embedded, fick, follower_pressure, frame,
-    frame3d, heat_conduction, interface_transfer, mpc, plastic, plasticity, radiation, timoshenko,
-    truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
+    bernoulli, contact, convection, damage, dirichlet, elasticity, embedded, fick,
+    follower_pressure, frame, frame3d, heat_conduction, interface_transfer, mpc, plastic,
+    plasticity, radiation, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense,
+    SubModelKind,
 };
 use crate::store::{insert, read, Handle};
 use serde::{Deserialize, Serialize};
@@ -214,6 +215,9 @@ pub enum SubModel {
     /// Follower pressure on a boundary — see
     /// [`follower_pressure::FollowerPressure`].
     FollowerPressure(follower_pressure::FollowerPressure),
+    /// Euler-Bernoulli beam (1-D, plane frame, space frame) — see
+    /// [`bernoulli::Bernoulli`].
+    Bernoulli(bernoulli::Bernoulli),
 }
 
 impl SubModel {
@@ -240,6 +244,7 @@ impl SubModel {
             SubModel::InterfaceTransfer(p) => p,
             SubModel::Radiation(p) => p,
             SubModel::FollowerPressure(p) => p,
+            SubModel::Bernoulli(p) => p,
         }
     }
 
@@ -325,6 +330,17 @@ impl SubModel {
     /// assembly time. See [`radiation::Radiation::new`].
     pub fn radiation(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         Ok(SubModel::Radiation(radiation::Radiation::new(fespace)?))
+    }
+
+    /// Euler-Bernoulli beam sub-model on a `SEG2` FE subspace, in the given
+    /// configuration. See [`bernoulli::Bernoulli::new`].
+    pub fn bernoulli(
+        fespace: Handle<SubFiniteElementSpace>,
+        model: bernoulli::BeamModel,
+    ) -> Result<Self> {
+        Ok(SubModel::Bernoulli(bernoulli::Bernoulli::new(
+            fespace, model,
+        )?))
     }
 
     /// Follower-pressure sub-model on a **boundary** FE subspace — a pressure
@@ -960,6 +976,16 @@ impl Model {
             model.add_sub(insert(SubModel::radiation(sub.clone())?))?;
         }
         Ok(model)
+    }
+
+    /// Euler-Bernoulli beam `Model` spanning **every** subspace of `fes`.
+    /// Parent-level named constructor; material is supplied at assembly time.
+    pub fn bernoulli(fes: &FiniteElementSpace, model: bernoulli::BeamModel) -> Result<Self> {
+        let mut out = Self::empty();
+        for sub in fes {
+            out.add_sub(insert(SubModel::bernoulli(sub.clone(), model)?))?;
+        }
+        Ok(out)
     }
 
     /// Follower-pressure `Model` spanning **every** subspace of a *boundary*

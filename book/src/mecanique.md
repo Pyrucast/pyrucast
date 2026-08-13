@@ -27,6 +27,8 @@ réactions).
   béton, deux variables (état interne `κ`).
 - [Lois d'endommagement](mecanique/endommagement.md) — la loi comme attribut :
   Damage TC, SiC/SiC orthotrope, Gurson.
+- [Poutre d'Euler-Bernoulli](mecanique/bernoulli.md) — sans cisaillement
+  transverse, interpolation d'Hermite (1-D / plan / spatial).
 - [Poutre de Timoshenko](mecanique/timoshenko.md) — flexion + cisaillement,
   intégration réduite (anti-verrouillage).
 - [Portique 2D](mecanique/portique.md) — poutre orientée (axial + flexion +

@@ -1554,6 +1554,24 @@ class Model:
         the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
         """
     @classmethod
+    def bernoulli(cls, fespace: FiniteElementSpace, model: builtins.str) -> Model:
+        r"""
+        `Model.bernoulli(fespace, model)` — the classical **Euler-Bernoulli**
+        beam, where plane sections stay normal to the deflected axis and there is
+        no transverse shear at all. `model` is `"planar_1d"` (DOFs `w`, `theta`;
+        material `E`, `I`), `"frame_2d"` (`u_x, u_y, r_z`; `+ A`) or
+        `"frame_3d"` (six DOFs; `+ I_y, I_z, J, G`).
+        
+        Hermite cubic interpolation makes it **nodally exact** wherever the
+        interior carries no distributed load — one element per member suffices
+        for a frame.
+        
+        Prefer `timoshenko` / `frame` / `frame3d` for a stocky member, where the
+        shear compliance matters. Reaching Bernoulli by making the shear area
+        huge would work in exact arithmetic and lock in floating point, which is
+        why this is a physics of its own rather than a limiting case.
+        """
+    @classmethod
     def timoshenko(cls, fespace: FiniteElementSpace) -> Model:
         r"""
         `Model.timoshenko(fespace)` — Timoshenko-beam model spanning every
