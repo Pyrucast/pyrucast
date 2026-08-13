@@ -219,18 +219,14 @@ fn local_stiffness(ea: f64, ei: f64, gas: f64, l: f64) -> [[f64; 6]; 6] {
     k[3][3] += ka;
     k[0][3] -= ka;
     k[3][0] -= ka;
-    // Bending (E·I) couples θ_A (2) and θ_B (5): B_b = [θ'].
-    let kb = ei / l;
-    k[2][2] += kb;
-    k[5][5] += kb;
-    k[2][5] -= kb;
-    k[5][2] -= kb;
-    // Shear (G·A_s), reduced: γ = w' − θ, B_s over [w'_A, θ_A, w'_B, θ_B].
-    let bs = [-1.0 / l, -0.5, 1.0 / l, -0.5];
-    let idx = [1usize, 2, 4, 5];
-    for a in 0..4 {
-        for b in 0..4 {
-            k[idx[a]][idx[b]] += gas * l * bs[a] * bs[b];
+    // Bending **and** shear together, from the exact Timoshenko block: it
+    // solves the two coupled equations in closed form rather than
+    // approximating them with a linear element and a reduced quadrature.
+    let b = crate::models::beam::bending_4x4(ei, Some(gas), l);
+    let idx = [1usize, 2, 4, 5]; // [w'_A, θ_A, w'_B, θ_B]
+    for (a, &ia) in idx.iter().enumerate() {
+        for (c, &ic) in idx.iter().enumerate() {
+            k[ia][ic] += b[a][c];
         }
     }
     k
@@ -451,9 +447,14 @@ mod tests {
         // Axial in x.
         assert!((k.get(a, "f_x", a, "u_x") - ea / l).abs() < tol);
         assert!((k.get(a, "f_x", b, "u_x") + ea / l).abs() < tol);
-        // Shear / bending in (u_y, rz).
-        assert!((k.get(a, "f_y", a, "u_y") - gas / l).abs() < tol);
-        assert!((k.get(a, "m_z", a, "rz") - (ei / l + gas * l / 4.0)).abs() < tol);
+        // Shear / bending in (u_y, rz). The exact element combines the two
+        // compliances **in series** — bend the member and shear it, and the two
+        // give way one after the other — which is the physical statement the
+        // `Φ` correction encodes.
+        let series = 1.0 / (l * l * l / (12.0 * ei) + l / gas);
+        assert!((k.get(a, "f_y", a, "u_y") - series).abs() < tol);
+        let phi = 12.0 * ei / (gas * l * l);
+        assert!((k.get(a, "m_z", a, "rz") - (4.0 + phi) * ei / (l * (1.0 + phi))).abs() < tol);
         // Axial and bending are decoupled for a horizontal element.
         assert!(k.get(a, "f_x", a, "u_y").abs() < tol);
         assert!(k.get(a, "f_x", a, "rz").abs() < tol);
@@ -472,7 +473,9 @@ mod tests {
         let tol = 1e-9;
         // Axial now along y, shear along x.
         assert!((k.get(a, "f_y", a, "u_y") - ea / l).abs() < tol);
-        assert!((k.get(a, "f_x", a, "u_x") - gas / l).abs() < tol);
+        let ei = e * i;
+        let series = 1.0 / (l * l * l / (12.0 * ei) + l / gas);
+        assert!((k.get(a, "f_x", a, "u_x") - series).abs() < tol);
         // Still decoupled (axial ⟂ bending).
         assert!(k.get(a, "f_y", a, "u_x").abs() < tol);
     }
