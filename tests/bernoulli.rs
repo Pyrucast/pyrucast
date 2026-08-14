@@ -23,6 +23,7 @@
 // ANCHOR: example
 use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::{ElementType, Interpolation, Node};
+use pyrucast::containers::field::SubField;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
@@ -30,7 +31,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::{insert, read};
 use pyrucast::Result;
 
 const E: f64 = 210_000.0;
@@ -337,4 +338,47 @@ fn clamped_1d(a: &Node, fes: &FiniteElementSpace) -> Result<Model> {
         )?)?;
     }
     Ok(model)
+}
+
+/// The section forces of a Bernoulli beam — the chain
+/// `beam_deformation → integrate_behavior`, which no test exercised until the
+/// day it turned out not to work at all.
+///
+/// A cantilever under a tip moment `M` carries that **same moment everywhere**:
+/// `M' = V = 0`. It is the one loading whose moment a beam of any theory must
+/// reproduce exactly, and it pins both ends of the chain at once.
+///
+/// The recovery asks for a material, since the curvature distribution depends
+/// on `Φ = 12EI/(G·A_s·L²)`. A Bernoulli material carries no `G` and no `A_s` —
+/// its theory has no shear — and that **absence** is what says `Φ = 0`. The
+/// operator therefore needs no model to tell the two theories apart. Before
+/// this test it demanded `G` outright and a Bernoulli beam could not recover
+/// its own forces.
+#[test]
+fn a_bernoulli_beam_recovers_its_section_forces() -> Result<()> {
+    const M: f64 = 30.0;
+    let (a, b, fes, _coords) = beam_1d()?;
+    let model = clamped_1d(&a, &fes)?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("I", I)])?;
+
+    let load_sm = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
+    let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["m_theta".into()])?;
+    rhs.set_value(b.id(), "m_theta", M)?;
+    let rhs = NodeField::from_sub(rhs);
+    let u = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
+
+    let strains = pyrucast::ops::element_field::beam_deformation(&u, &fes, &materials)?;
+    let forces = pyrucast::ops::element_field::behavior::integrate(
+        &model, &strains, None, &materials, None,
+    )?;
+    let f = read(&forces.get(0)?)?;
+    assert_eq!(f.components(), &["M".to_string()]);
+    for g in 0..f.gauss_count() {
+        let m = f.value(0, g, "M")?;
+        assert!(
+            (m - M).abs() < 1e-9 * M,
+            "a tip moment is carried unchanged along the span: M({g}) = {m}"
+        );
+    }
+    Ok(())
 }

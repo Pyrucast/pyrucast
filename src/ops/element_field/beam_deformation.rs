@@ -18,6 +18,12 @@
 //!    `ε = u'`, curvature `κ = θ'`, and **reduced** shear `γ = w' − θ` with the
 //!    rotation taken at the element centre.
 //!
+//! The **material** is required, `Φ = 12EI/(G·A_s·L²)` deciding how the
+//! curvature is distributed. A material carrying no shear constants — a
+//! [Bernoulli](crate::models::bernoulli) beam's, which asks for neither `G` nor
+//! `A_s` — means `Φ = 0`, so the same operator serves both theories without
+//! being told which. The material contract each declares already says it.
+//!
 //! | `Coords` | DOFs read | components produced |
 //! |---|---|---|
 //! | 1-D | `w, theta` | `kappa, gamma` |
@@ -179,8 +185,17 @@ fn subspace_beam_deformation(
 /// `Φ` of a bending plane, from the material at this cell.
 fn phi_of(mat: &SubElementField, cell: usize, l: f64, i_name: &str, a_s_name: &str) -> Result<f64> {
     let ei = mat.value(cell, 0, "E")? * mat.value(cell, 0, i_name)?;
-    let gas = mat.value(cell, 0, "G")? * mat.value(cell, 0, a_s_name)?;
-    Ok(crate::models::beam::phi(ei, Some(gas), l))
+    // A material carrying **no shear constants** has `Φ = 0`, and that is not a
+    // fallback: each theory declares its own material contract, and
+    // [Bernoulli](crate::models::bernoulli) deliberately asks for neither `G`
+    // nor `A_s`. The absence *is* the statement that there is no shear
+    // compliance — so this operator needs no model to tell the two theories
+    // apart, the material it is handed having already said which.
+    let gas = match (mat.value(cell, 0, "G"), mat.value(cell, 0, a_s_name)) {
+        (Ok(g), Ok(a_s)) => Some(g * a_s),
+        _ => None,
+    };
+    Ok(crate::models::beam::phi(ei, gas, l))
 }
 
 /// 1-D beam section strains `(kappa, gamma)` at `t = x/L`, from the nodal DOFs
