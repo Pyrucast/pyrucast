@@ -624,9 +624,13 @@ impl PyModel {
     }
 
     /// `Model.shell(fespace, model)` — a **shell**: a surface carrying membrane
-    /// forces and bending moments, on a TRI3/QUA4 mesh in 3-D. `model` is
-    /// `"thick"` (Reissner-Mindlin). Material `E`, `nu`, `h` (thickness), plus
-    /// an optional `k_s` (shear-correction factor, `5/6` by default) and `rho`.
+    /// forces and bending moments, on a TRI3/QUA4 mesh in 3-D. Material `E`,
+    /// `nu`, `h` (thickness), plus an optional `rho`.
+    ///
+    /// | `model` | transverse shear | when |
+    /// |---|---|---|
+    /// | `"thick"` | yes, integrated **reduced** | the general case |
+    /// | `"kirchhoff"` | imposed zero at discrete points | thin shells |
     ///
     /// Six DOFs per node (`u_x…u_z, r_x…r_z`), as for `frame3d`, so a shell and
     /// a space frame share nodes directly. The sixth — the **drilling** rotation
@@ -634,9 +638,17 @@ impl PyModel {
     /// removes the singularity a flat facet would otherwise have without
     /// resisting a rigid rotation of that facet.
     ///
-    /// The transverse shear is integrated at **reduced** quadrature: at full
-    /// quadrature it would overwhelm the bending term by `1/h²` as the shell
-    /// thins and the element would refuse to bend at all (shear locking).
+    /// `"thick"` (Reissner-Mindlin) integrates the transverse shear at
+    /// **reduced** quadrature: at full quadrature it would overwhelm the bending
+    /// term by `1/h²` as the shell thins and the element would refuse to bend at
+    /// all (shear locking). It takes an optional `k_s`, the shear-correction
+    /// factor (`5/6` by default).
+    ///
+    /// `"kirchhoff"` (DKT on a triangle, DKQ on a quadrangle) has no transverse
+    /// shear at all: `γ = 0` is imposed at the corners and along each side, so
+    /// the thin limit is exact by construction and there is nothing left to
+    /// lock. It reports six generalised forces rather than eight — a thin plate
+    /// has no constitutive `Q`, only a reaction.
     #[classmethod]
     fn shell(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,

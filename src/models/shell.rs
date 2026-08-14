@@ -15,7 +15,6 @@
 //! |---|---|---|---|
 //! | `thick` (Reissner-Mindlin) | yes, reduced-integrated | TRI3, QUA4 | the general case |
 //! | `kirchhoff` (DKT/DKQ) | imposed zero at discrete points | TRI3, QUA4 | thin shells, no locking by construction |
-//! | `thin` (Kirchhoff-Love) | none at all | TRI6, QUA8, QUA9 | thin shells, needs second derivatives |
 //!
 //! ## Six DOFs per node, and the drilling one
 //!
@@ -46,6 +45,7 @@
 //! coordinates — the first edge, and the facet normal — which makes it exact for
 //! a flat facet and a well-behaved average for a slightly warped one.
 
+pub mod kirchhoff;
 pub mod thick;
 
 use crate::atoms::ElementType;
@@ -68,10 +68,13 @@ const PRIMAL: [&str; 6] = ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"];
 const DUAL: [&str; 6] = ["f_x", "f_y", "f_z", "m_x", "m_y", "m_z"];
 /// Required material: the elastic constants and the thickness.
 const MATERIAL_COMPONENTS: &[&str] = &["E", "nu", "h"];
-/// The generalised forces a shell behaviour reports: membrane, bending, shear.
+/// The generalised forces a shell behaviour reports: membrane, bending, and —
+/// where the formulation has one — transverse shear.
 const BEHAVIOR: [&str; 8] = [
     "N_xx", "N_yy", "N_xy", "M_xx", "M_yy", "M_xy", "Q_xz", "Q_yz",
 ];
+/// The six a formulation without transverse shear reports: `BEHAVIOR` cut short.
+const BEHAVIOR_NO_SHEAR: usize = 6;
 
 /// Which shell formulation a [`Shell`] uses.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,13 +83,20 @@ pub enum ShellModel {
     /// integrated **reduced** against locking. The general case.
     #[default]
     Thick,
+    /// Discrete Kirchhoff (DKT on TRI3, DKQ on QUA4): the transverse shear is
+    /// **imposed zero** at discrete points rather than integrated, so the thin
+    /// limit is exact by construction and there is nothing left to lock.
+    ///
+    /// > New variants go at the **end** — `bincode` serialises the index.
+    Kirchhoff,
 }
 
 impl ShellModel {
-    /// Parse from a lowercase tag (`"thick"`).
+    /// Parse from a lowercase tag (`"thick"`, `"kirchhoff"`).
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
             "thick" => Some(Self::Thick),
+            "kirchhoff" => Some(Self::Kirchhoff),
             _ => None,
         }
     }
@@ -95,12 +105,20 @@ impl ShellModel {
     pub fn to_tag(self) -> &'static str {
         match self {
             Self::Thick => "thick",
+            Self::Kirchhoff => "kirchhoff",
         }
     }
 
     /// The accepted tags, `|`-joined — for error messages.
     pub fn tag_list() -> String {
-        ["thick"].join("|")
+        ["thick", "kirchhoff"].join("|")
+    }
+
+    /// Whether the formulation carries a transverse shear at all. A discrete
+    /// Kirchhoff element does not: it has no shear strain, no shear subspace and
+    /// no shear force to report.
+    pub fn has_transverse_shear(self) -> bool {
+        matches!(self, Self::Thick)
     }
 }
 
@@ -116,8 +134,9 @@ pub struct Shell {
     /// Full-quadrature subspace — membrane and bending.
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// Reduced-quadrature subspace over the **same** submesh — the transverse
-    /// shear, whose full integration is what locks a thin shell.
-    pub(crate) shear: Handle<SubFiniteElementSpace>,
+    /// shear, whose full integration is what locks a thin shell. `None` for a
+    /// formulation that has no transverse shear to integrate.
+    pub(crate) shear: Option<Handle<SubFiniteElementSpace>>,
     /// POI1 support over the unique nodes (row/col support).
     pub(crate) support: Handle<SubMesh>,
     pub(crate) model: ShellModel,
@@ -145,12 +164,21 @@ impl Shell {
             )));
         }
         // The shear subspace shares the mesh and differs only by quadrature —
-        // the same multi-quadrature pattern as the Timoshenko beam.
-        let shear = insert(SubFiniteElementSpace::new(
-            submesh.clone(),
-            Interpolation::Lagrange1,
-            QuadratureRule::Reduced,
-        )?);
+        // the same multi-quadrature pattern as the Timoshenko beam. A discrete
+        // Kirchhoff element has no shear term at all, so it declares none: a
+        // second subspace would be an integration the formulation never does.
+        let shear = model.has_transverse_shear().then(|| {
+            SubFiniteElementSpace::new(
+                submesh.clone(),
+                Interpolation::Lagrange1,
+                QuadratureRule::Reduced,
+            )
+            .map(insert)
+        });
+        let shear = match shear {
+            Some(r) => Some(r?),
+            None => None,
+        };
         let support = read(&submesh)?.to_poi1()?;
         Ok(Self {
             fespace,
@@ -174,12 +202,16 @@ impl SubModelKind for Shell {
         Some(self)
     }
 
-    /// **Two** FE subspaces: the full quadrature drives the cell loop and the
-    /// membrane/bending terms, the reduced one the transverse shear. Exactly the
-    /// multi-quadrature layout the Timoshenko beam introduced.
+    /// **Two** FE subspaces where there is a shear to integrate: the full
+    /// quadrature drives the cell loop and the membrane/bending terms, the
+    /// reduced one the transverse shear — exactly the multi-quadrature layout
+    /// the Timoshenko beam introduced. A discrete Kirchhoff element declares
+    /// one, having no second integration to do.
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
+        let mut fespaces = vec![self.fespace.clone()];
+        fespaces.extend(self.shear.clone());
         Some(MatrixLayout {
-            fespaces: vec![self.fespace.clone(), self.shear.clone()],
+            fespaces,
             support: self.support.clone(),
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
@@ -197,6 +229,7 @@ impl SubModelKind for Shell {
         let mat = material.expect("Shell declares a material_fespace");
         match self.model {
             ShellModel::Thick => thick::element_stiffness(&geoms[0], &geoms[1], mat, ke),
+            ShellModel::Kirchhoff => kirchhoff::element_stiffness(&geoms[0], mat, ke),
         }
     }
 
@@ -230,17 +263,31 @@ impl Domain for Shell {
     }
 
     /// `rho` for a mass matrix, `k_s` to override the shear-correction factor
-    /// (`5/6` by default, the value for a homogeneous rectangular section).
+    /// (`5/6` by default, the value for a homogeneous rectangular section) —
+    /// the latter only where there is a shear to correct.
     fn optional_material_components(&self) -> &'static [&'static str] {
-        &["rho", "k_s"]
+        match self.model {
+            ShellModel::Thick => &["rho", "k_s"],
+            ShellModel::Kirchhoff => &["rho"],
+        }
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
 
+    /// Membrane and bending always; the two shear forces only where the
+    /// formulation has a shear strain to derive them from. A discrete Kirchhoff
+    /// element does not: its `Q` is a **reaction**, recovered from the gradient
+    /// of the moments, not a constitutive product — reporting it here would
+    /// state a law that does not exist.
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(BEHAVIOR.iter().map(|s| s.to_string()).collect())
+        let n = if self.model.has_transverse_shear() {
+            BEHAVIOR.len()
+        } else {
+            BEHAVIOR_NO_SHEAR
+        };
+        Ok(BEHAVIOR[..n].iter().map(|s| s.to_string()).collect())
     }
 
     /// The generalised forces from the generalised strains — a linear law, as
@@ -267,7 +314,6 @@ impl Domain for Shell {
         );
         let dm = thick::membrane_law(e, nu, h);
         let db = thick::bending_law(e, nu, h);
-        let ds = thick::shear_law(e, nu, h, thick::shear_factor(mat, cell));
 
         let eps = [
             input.value(cell, g, "eps_xx")?,
@@ -279,16 +325,19 @@ impl Domain for Shell {
             input.value(cell, g, "kappa_yy")?,
             input.value(cell, g, "kappa_xy")?,
         ];
-        let gamma = [
-            input.value(cell, g, "gamma_xz")?,
-            input.value(cell, g, "gamma_yz")?,
-        ];
         for i in 0..3 {
             out[i] = (0..3).map(|j| dm[i][j] * eps[j]).sum();
             out[3 + i] = (0..3).map(|j| db[i][j] * kappa[j]).sum();
         }
-        for i in 0..2 {
-            out[6 + i] = ds * gamma[i];
+        if self.model.has_transverse_shear() {
+            let ds = thick::shear_law(e, nu, h, thick::shear_factor(mat, cell));
+            let gamma = [
+                input.value(cell, g, "gamma_xz")?,
+                input.value(cell, g, "gamma_yz")?,
+            ];
+            for i in 0..2 {
+                out[6 + i] = ds * gamma[i];
+            }
         }
         Ok(())
     }
@@ -355,6 +404,112 @@ pub fn local_derivatives(
             ]
         })
         .collect())
+}
+
+/// The node coordinates in the element's own plane, `[i] = (x, y)`.
+///
+/// The first node is the origin and the first edge the `x` axis, so a flat facet
+/// is described exactly by two numbers per node. This is what a formulation
+/// needs when its basis is written on the **geometry** rather than on the
+/// reference element — a discrete-Kirchhoff element, whose side coefficients are
+/// built from edge lengths and directions.
+pub fn local_coords(geom: &CellGeom, frame: &[[f64; 3]; 3]) -> Result<Vec<[f64; 2]>> {
+    let origin = geom.node_coord(0)?.to_vec();
+    (0..geom.n_nodes)
+        .map(|i| {
+            let p = geom.node_coord(i)?;
+            let d: [f64; 3] = std::array::from_fn(|k| p[k] - origin[k]);
+            Ok([
+                (0..3).map(|k| d[k] * frame[0][k]).sum(),
+                (0..3).map(|k| d[k] * frame[1][k]).sum(),
+            ])
+        })
+        .collect()
+}
+
+/// Weight of the drilling constraint, relative to `G·h`.
+///
+/// Small enough not to stiffen the shell, large enough to remove the
+/// singularity. The constraint it weights is physical (`θ_z` should follow the
+/// membrane rotation), so the answer is insensitive to the exact value over
+/// several decades — which is what one wants from a regularisation.
+const DRILLING_WEIGHT: f64 = 1e-3;
+
+/// The membrane and drilling terms, at full quadrature — the part of a flat
+/// facet that owes nothing to the bending theory, and which every formulation
+/// therefore shares.
+///
+/// `local` is the `6 n × 6 n` matrix in the element frame, accumulated into.
+pub fn membrane_and_drilling(
+    geom: &CellGeom,
+    frame: &[[f64; 3]; 3],
+    e: f64,
+    nu: f64,
+    h: f64,
+    local: &mut [Vec<f64>],
+) -> Result<()> {
+    let n = geom.n_nodes;
+    let side = 6 * n;
+    let dm = thick::membrane_law(e, nu, h);
+    let g_mod = e / (2.0 * (1.0 + nu));
+
+    for g in 0..geom.n_gauss {
+        let dn = local_derivatives(geom, frame, g)?;
+        let shape = geom.n_at_g(g)?;
+        let w = geom.det_j_w(g)?;
+
+        // Membrane `ε` on (u, v) — local DOFs 6i+0, 6i+1.
+        let mut bm = vec![vec![0.0; side]; 3];
+        // Drilling residual `θ_z − ω_z` on (u, v, θ_z).
+        let mut bd = vec![0.0; side];
+        for i in 0..n {
+            let (dx, dy) = (dn[i][0], dn[i][1]);
+            let (u, v, tz) = (6 * i, 6 * i + 1, 6 * i + 5);
+            bm[0][u] = dx;
+            bm[1][v] = dy;
+            bm[2][u] = dy;
+            bm[2][v] = dx;
+
+            // ω_z = ½(∂v/∂x − ∂u/∂y), so the residual picks up its negative.
+            bd[u] = 0.5 * dy;
+            bd[v] = -0.5 * dx;
+            bd[tz] = shape[i];
+        }
+        accumulate(local, &bm, &dm, w, side);
+        // The drilling constraint is a scalar: its « law » is one coefficient.
+        let kd = DRILLING_WEIGHT * g_mod * h * w;
+        for a in 0..side {
+            if bd[a] == 0.0 {
+                continue;
+            }
+            for b in 0..side {
+                local[a][b] += kd * bd[a] * bd[b];
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `local += Bᵀ D B · w` for a 3-component strain.
+pub fn accumulate(local: &mut [Vec<f64>], b: &[Vec<f64>], d: &[[f64; 3]; 3], w: f64, side: usize) {
+    // `D B` first: three rows, so the inner loop stays short and the intermediate
+    // is what a reader can check against the law above.
+    let mut db = vec![vec![0.0; side]; 3];
+    for (r, row) in db.iter_mut().enumerate() {
+        for (c, e) in row.iter_mut().enumerate() {
+            *e = (0..3).map(|k| d[r][k] * b[k][c]).sum();
+        }
+    }
+    for a in 0..side {
+        let contributes = (0..3).any(|k| b[k][a] != 0.0);
+        if !contributes {
+            continue;
+        }
+        for bcol in 0..side {
+            let acc: f64 = (0..3).map(|k| b[k][a] * db[k][bcol]).sum();
+            local[a][bcol] += acc * w;
+        }
+    }
 }
 
 /// Carry a local element matrix to the global axes: `ke += Tᵀ K_loc T`, with `T`

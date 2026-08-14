@@ -1,4 +1,5 @@
-//! Reissner-Mindlin shells, on the two things a shell element must get right.
+//! Shells, on the things a shell element must get right — for both
+//! formulations, since they answer the same question two ways.
 //!
 //! **Bending.** A clamped square plate under a uniform load has a textbook
 //! deflection `w = α·qa⁴/D` with `α = 0.00126` and `D = Eh³/12(1−ν²)`. A mesh of
@@ -6,18 +7,23 @@
 //! within the discretisation error, and for **convergence** as the mesh refines.
 //!
 //! **Not locking.** As the plate thins, the transverse-shear stiffness overwhelms
-//! the bending one by `1/h²`. Integrated fully, the element then refuses to bend
-//! at all — shear locking — and the deflection collapses towards zero however
-//! fine the mesh. Reduced integration is the cure, and the test that proves it
-//! works is the only one that matters here: the **normalised** deflection
-//! `w·D/qa⁴` must stay put as the thickness falls by two decades. A locking
-//! element fails it by orders of magnitude.
+//! the bending one by `1/h²`. Integrated fully, a Reissner-Mindlin element then
+//! refuses to bend at all — shear locking — and the deflection collapses towards
+//! zero however fine the mesh. Reduced integration is the cure, and the test that
+//! proves it works is the only one that matters there: the **normalised**
+//! deflection `w·D/qa⁴` must stay put as the thickness falls by two decades. A
+//! locking element fails it by orders of magnitude.
+//!
+//! A discrete Kirchhoff element has no shear term at all, so it cannot lock —
+//! and the test says so far more sharply: its normalised deflection is not merely
+//! stable, it is *invariant* to machine precision, the thickness entering the
+//! bending stiffness as a single factor `h³` and nowhere else.
 //!
 //! Membrane behaviour is checked separately, and so is the drilling degree of
 //! freedom — which must remove the singularity **without** resisting a rigid
 //! rotation of the facet about its own normal.
 //!
-//! Single source for the « coque épaisse » example of the book; runs under
+//! Single source for the « coques » examples of the book; runs under
 //! `cargo test`.
 
 // ANCHOR: example
@@ -45,7 +51,7 @@ const Q: f64 = 1.0;
 #[test]
 fn a_clamped_plate_matches_its_textbook_deflection() -> Result<()> {
     let h = 0.01; // thin enough to compare with plate theory, thick enough to be safe
-    let w = central_deflection(12, h)?;
+    let w = central_deflection(12, h, ShellModel::Thick, ElementType::QUA4)?;
     // Timoshenko & Woinowsky-Krieger: w_max = 0.00126 · qa⁴/D.
     let d = E * h * h * h / (12.0 * (1.0 - NU * NU));
     let exact = 0.00126 * Q * A.powi(4) / d;
@@ -57,14 +63,93 @@ fn a_clamped_plate_matches_its_textbook_deflection() -> Result<()> {
 }
 // ANCHOR_END: example
 
+/// The same plate, by the discrete Kirchhoff quadrangle (DKQ). A thin-plate
+/// element compared with a thin-plate solution: the agreement should be better
+/// than the Mindlin facet's, not merely comparable.
+// ANCHOR: kirchhoff
+#[test]
+fn a_clamped_plate_matches_its_textbook_deflection_in_discrete_kirchhoff() -> Result<()> {
+    let h = 0.01;
+    let d = E * h * h * h / (12.0 * (1.0 - NU * NU));
+    let exact = 0.00126 * Q * A.powi(4) / d;
+    for element in [ElementType::QUA4, ElementType::TRI3] {
+        let w = central_deflection(12, h, ShellModel::Kirchhoff, element)?;
+        assert!(
+            (w - exact).abs() < 0.03 * exact,
+            "{element:?}: central deflection {w}, textbook {exact}"
+        );
+    }
+    Ok(())
+}
+// ANCHOR_END: kirchhoff
+
+/// **The** test for a discrete Kirchhoff element, and it is a stronger statement
+/// than the Mindlin one: there is no shear term to overwhelm the bending, so the
+/// normalised deflection does not merely *settle* as the plate thins — it does
+/// not move at all. The thickness enters the bending stiffness as one factor
+/// `h³`, and the pure-bending problem is therefore exactly scale-free.
+#[test]
+fn the_discrete_kirchhoff_element_has_nothing_to_lock() -> Result<()> {
+    for element in [ElementType::QUA4, ElementType::TRI3] {
+        let mut normalised = Vec::new();
+        for h in [0.05, 0.01, 0.002, 0.0005] {
+            let w = central_deflection(8, h, ShellModel::Kirchhoff, element)?;
+            let d = E * h * h * h / (12.0 * (1.0 - NU * NU));
+            normalised.push(w * d / (Q * A.powi(4)));
+        }
+        let first = normalised[0];
+        for &v in &normalised[1..] {
+            assert!(
+                (v - first).abs() < 1e-6 * first,
+                "{element:?}: the normalised deflection must be thickness-invariant: \
+                 {normalised:?}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The discrete Kirchhoff plate converges too — but **not** from below, and the
+/// test says so on purpose.
+///
+/// The Mindlin facet is a compatible displacement model, so its energy is bounded
+/// and its deflection can only rise towards the answer. A discrete Kirchhoff
+/// element is not: eliminating the mid-side rotations under constraints that hold
+/// only at points leaves an interpolation that is not continuous across an edge,
+/// and the variational bound goes with it. So the statement to check is
+/// convergence *itself* — each refinement lands closer to the exact value, and
+/// the steps shrink — not the side it arrives from.
+#[test]
+fn the_discrete_kirchhoff_deflection_converges_with_the_mesh() -> Result<()> {
+    let h = 0.01;
+    let d = E * h * h * h / (12.0 * (1.0 - NU * NU));
+    let exact = 0.00126 * Q * A.powi(4) / d;
+    for element in [ElementType::QUA4, ElementType::TRI3] {
+        let coarse = central_deflection(4, h, ShellModel::Kirchhoff, element)?;
+        let medium = central_deflection(8, h, ShellModel::Kirchhoff, element)?;
+        let fine = central_deflection(16, h, ShellModel::Kirchhoff, element)?;
+        let error = |w: f64| (w - exact).abs();
+        assert!(
+            error(fine) < error(medium) && error(medium) < error(coarse),
+            "{element:?}: {coarse} {medium} {fine}, towards {exact}"
+        );
+        let (first, second) = ((medium - coarse).abs(), (fine - medium).abs());
+        assert!(
+            second < 0.5 * first,
+            "{element:?}: the increments must shrink: {coarse} {medium} {fine}"
+        );
+    }
+    Ok(())
+}
+
 /// The deflection must **converge** as the mesh refines, and from below — a
 /// displacement formulation is too stiff, and gets less so.
 #[test]
 fn the_deflection_converges_with_the_mesh() -> Result<()> {
     let h = 0.01;
-    let coarse = central_deflection(4, h)?;
-    let medium = central_deflection(8, h)?;
-    let fine = central_deflection(16, h)?;
+    let coarse = central_deflection(4, h, ShellModel::Thick, ElementType::QUA4)?;
+    let medium = central_deflection(8, h, ShellModel::Thick, ElementType::QUA4)?;
+    let fine = central_deflection(16, h, ShellModel::Thick, ElementType::QUA4)?;
     assert!(coarse < medium && medium < fine, "{coarse} {medium} {fine}");
     // …and the increments shrink: the sequence is converging, not drifting.
     assert!(
@@ -82,7 +167,7 @@ fn the_deflection_converges_with_the_mesh() -> Result<()> {
 fn the_element_does_not_lock_as_the_plate_thins() -> Result<()> {
     let mut normalised = Vec::new();
     for h in [0.05, 0.01, 0.002, 0.0005] {
-        let w = central_deflection(8, h)?;
+        let w = central_deflection(8, h, ShellModel::Thick, ElementType::QUA4)?;
         let d = E * h * h * h / (12.0 * (1.0 - NU * NU));
         normalised.push(w * d / (Q * A.powi(4)));
     }
@@ -104,13 +189,24 @@ fn the_element_does_not_lock_as_the_plate_thins() -> Result<()> {
 
 /// A shell carries membrane forces too: stretched in its own plane, it must
 /// behave as a plane-stress sheet, `u = NL/(Eh)`.
+///
+/// Both formulations answer, and must answer **identically**: the membrane term
+/// owes nothing to the bending theory and is one shared routine, so a difference
+/// here would mean one of them had grown a private copy.
 #[test]
 fn a_stretched_shell_behaves_as_a_membrane() -> Result<()> {
+    for formulation in [ShellModel::Thick, ShellModel::Kirchhoff] {
+        membrane_stretch(formulation)?;
+    }
+    Ok(())
+}
+
+fn membrane_stretch(formulation: ShellModel) -> Result<()> {
     let h = 0.02;
-    let (grid, fes, coords, n) = plate(4)?;
+    let (grid, fes, coords, n) = plate(4, ElementType::QUA4)?;
     let idx = |i: usize, j: usize| j * (n + 1) + i;
 
-    let mut model = Model::shell(&fes, ShellModel::Thick)?;
+    let mut model = Model::shell(&fes, formulation)?;
     // Roller on the x = 0 edge (u_x), one point pinned in y and z, and every
     // rotation held: a pure membrane state.
     let left: Vec<Node> = (0..=n).map(|j| grid[idx(0, j)].clone()).collect();
@@ -157,9 +253,16 @@ fn a_stretched_shell_behaves_as_a_membrane() -> Result<()> {
 /// penalty, the tempting shortcut, would fail this.
 #[test]
 fn a_rigid_drilling_rotation_costs_no_energy() -> Result<()> {
+    for formulation in [ShellModel::Thick, ShellModel::Kirchhoff] {
+        rigid_drilling(formulation)?;
+    }
+    Ok(())
+}
+
+fn rigid_drilling(formulation: ShellModel) -> Result<()> {
     let h = 0.02;
-    let (grid, fes, _coords, n) = plate(2)?;
-    let model = Model::shell(&fes, ShellModel::Thick)?;
+    let (grid, fes, _coords, n) = plate(2, ElementType::QUA4)?;
+    let model = Model::shell(&fes, formulation)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU), ("h", h)])?;
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
@@ -198,6 +301,58 @@ fn a_rigid_drilling_rotation_costs_no_energy() -> Result<()> {
     Ok(())
 }
 
+/// A rigid **tilt** of the whole plate — `w = x` with the rotation that goes
+/// with it — must cost no energy either. Assembled, this checks what the element
+/// tables cannot: the sign convention tying the deflection to the rotation, and
+/// the local→global rotation that carries it.
+///
+/// Kirchhoff reads `β = −∇w`, and the shell's rotation is `β_x = θ_y`, so the
+/// tilt is `u_z = x` with `r_y = −1`. A formulation that got that sign backwards
+/// would double the rotation instead of cancelling it, and would resist a motion
+/// that bends nothing.
+#[test]
+fn a_rigid_tilt_of_the_plate_costs_no_energy() -> Result<()> {
+    let h = 0.02;
+    for formulation in [ShellModel::Thick, ShellModel::Kirchhoff] {
+        for element in [ElementType::QUA4, ElementType::TRI3] {
+            let (grid, fes, _coords, _) = plate(2, element)?;
+            let model = Model::shell(&fes, formulation)?;
+            let materials = pyrucast::ops::element_field::material_field(
+                &model,
+                &[("E", E), ("nu", NU), ("h", h)],
+            )?;
+            let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
+
+            let sm = insert(SubMesh::poi1_from_nodes(&grid)?);
+            let mut field = SubNodeField::from_poi1(&sm, comps_of())?;
+            for node in &grid {
+                field.set_value(node.id(), "u_z", node.position()?[0])?;
+                field.set_value(node.id(), "r_y", -1.0)?;
+            }
+            let tilt = NodeField::from_sub(field);
+            let energy = energy_of(&k, &tilt, &grid)?;
+
+            // The scale to judge « zero » against: the same rotation with a flat
+            // plate under it, which really does bend.
+            let mut bent = SubNodeField::from_poi1(&sm, comps_of())?;
+            for node in &grid {
+                bent.set_value(node.id(), "r_y", -1.0)?;
+            }
+            let scale = energy_of(&k, &NodeField::from_sub(bent), &grid)?;
+            assert!(
+                scale > 0.0,
+                "{formulation} {element:?}: nothing to compare to"
+            );
+            assert!(
+                energy.abs() < 1e-9 * scale,
+                "{formulation} {element:?}: a rigid tilt must cost no energy: \
+                 {energy} against {scale}"
+            );
+        }
+    }
+    Ok(())
+}
+
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
 /// The six shell DOF names.
@@ -231,10 +386,12 @@ fn energy_of(
     Ok(energy)
 }
 
-/// An `n×n` QUA4 plate on `[0, A]²`, flat in the `z = 0` plane of a 3-D space.
+/// An `n×n` plate on `[0, A]²`, flat in the `z = 0` plane of a 3-D space, in
+/// QUA4 facets or in TRI3 ones (each cell cut along the same diagonal).
 #[allow(clippy::type_complexity)]
 fn plate(
     n: usize,
+    element: ElementType,
 ) -> Result<(
     Vec<Node>,
     FiniteElementSpace,
@@ -253,15 +410,24 @@ fn plate(
         }
     }
     let idx = |i: usize, j: usize| j * (n + 1) + i;
-    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), element));
     for j in 0..n {
         for i in 0..n {
-            mesh.add_cell(&[
+            let (a, b, c, d) = (
                 grid[idx(i, j)].id(),
                 grid[idx(i + 1, j)].id(),
                 grid[idx(i + 1, j + 1)].id(),
                 grid[idx(i, j + 1)].id(),
-            ])?;
+            );
+            match element {
+                ElementType::QUA4 => {
+                    mesh.add_cell(&[a, b, c, d])?;
+                }
+                _ => {
+                    mesh.add_cell(&[a, b, c])?;
+                    mesh.add_cell(&[a, c, d])?;
+                }
+            }
         }
     }
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
@@ -285,11 +451,16 @@ fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
 
 /// The central deflection of a clamped square plate under a uniform pressure,
 /// on an `n×n` mesh of thickness `h`.
-fn central_deflection(n: usize, h: f64) -> Result<f64> {
-    let (grid, fes, coords, _) = plate(n)?;
+fn central_deflection(
+    n: usize,
+    h: f64,
+    formulation: ShellModel,
+    element: ElementType,
+) -> Result<f64> {
+    let (grid, fes, coords, _) = plate(n, element)?;
     let idx = |i: usize, j: usize| j * (n + 1) + i;
 
-    let mut model = Model::shell(&fes, ShellModel::Thick)?;
+    let mut model = Model::shell(&fes, formulation)?;
     // Clamped all round: every DOF held on the boundary.
     let mut boundary = Vec::new();
     for j in 0..=n {

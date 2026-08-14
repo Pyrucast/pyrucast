@@ -44,7 +44,9 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::error::Result;
-use crate::models::shell::{local_derivatives, local_frame, to_global};
+use crate::models::shell::{
+    accumulate, local_derivatives, local_frame, membrane_and_drilling, to_global,
+};
 use crate::models::CellGeom;
 
 /// The membrane law `D_m` of a homogeneous section (plane stress × thickness).
@@ -79,14 +81,6 @@ pub fn shear_factor(material: &SubElementField, cell: usize) -> f64 {
     }
 }
 
-/// Weight of the drilling constraint, relative to `G·h`.
-///
-/// Small enough not to stiffen the shell, large enough to remove the
-/// singularity. The constraint it weights is physical (`θ_z` should follow the
-/// membrane rotation), so the answer is insensitive to the exact value over
-/// several decades — which is what one wants from a regularisation.
-const DRILLING_WEIGHT: f64 = 1e-3;
-
 /// The local element stiffness of one facet, carried to the global axes.
 ///
 /// `full` carries the membrane and bending terms, `reduced` the transverse
@@ -105,56 +99,31 @@ pub fn element_stiffness(
         material.value(cell, 0, "nu")?,
         material.value(cell, 0, "h")?,
     );
-    let dm = membrane_law(e, nu, h);
     let db = bending_law(e, nu, h);
     let ds = shear_law(e, nu, h, shear_factor(material, cell));
-    let g_mod = e / (2.0 * (1.0 + nu));
 
     let frame = local_frame(full)?;
     let mut local = vec![vec![0.0_f64; side]; side];
 
-    // ── Membrane, bending and drilling: full quadrature ────────────────────
+    // ── Membrane and drilling: the part shared with every formulation ──────
+    membrane_and_drilling(full, &frame, e, nu, h, &mut local)?;
+
+    // ── Bending: full quadrature, on the independent fibre rotation ────────
     for g in 0..full.n_gauss {
         let dn = local_derivatives(full, &frame, g)?;
-        let shape = full.n_at_g(g)?;
         let w = full.det_j_w(g)?;
 
-        // Membrane `ε` on (u, v) — local DOFs 6i+0, 6i+1.
-        let mut bm = vec![vec![0.0; side]; 3];
         // Bending `κ` on (θ_x, θ_y) — local DOFs 6i+3, 6i+4.
         let mut bb = vec![vec![0.0; side]; 3];
-        // Drilling residual `θ_z − ω_z` on (u, v, θ_z).
-        let mut bd = vec![0.0; side];
         for i in 0..n {
             let (dx, dy) = (dn[i][0], dn[i][1]);
-            let (u, v, tx, ty, tz) = (6 * i, 6 * i + 1, 6 * i + 3, 6 * i + 4, 6 * i + 5);
-            bm[0][u] = dx;
-            bm[1][v] = dy;
-            bm[2][u] = dy;
-            bm[2][v] = dx;
-
+            let (tx, ty) = (6 * i + 3, 6 * i + 4);
             bb[0][ty] = dx;
             bb[1][tx] = -dy;
             bb[2][ty] = dy;
             bb[2][tx] = -dx;
-
-            // ω_z = ½(∂v/∂x − ∂u/∂y), so the residual picks up its negative.
-            bd[u] = 0.5 * dy;
-            bd[v] = -0.5 * dx;
-            bd[tz] = shape[i];
         }
-        accumulate(&mut local, &bm, &dm, w, side);
         accumulate(&mut local, &bb, &db, w, side);
-        // The drilling constraint is a scalar: its « law » is one coefficient.
-        let kd = DRILLING_WEIGHT * g_mod * h * w;
-        for a in 0..side {
-            if bd[a] == 0.0 {
-                continue;
-            }
-            for b in 0..side {
-                local[a][b] += kd * bd[a] * bd[b];
-            }
-        }
     }
 
     // ── Transverse shear: reduced quadrature, against locking ──────────────
@@ -186,26 +155,4 @@ pub fn element_stiffness(
 
     to_global(&local, &frame, n, ke);
     Ok(())
-}
-
-/// `local += Bᵀ D B · w` for a 3-component strain.
-fn accumulate(local: &mut [Vec<f64>], b: &[Vec<f64>], d: &[[f64; 3]; 3], w: f64, side: usize) {
-    // `D B` first: three rows, so the inner loop stays short and the intermediate
-    // is what a reader can check against the law above.
-    let mut db = vec![vec![0.0; side]; 3];
-    for (r, row) in db.iter_mut().enumerate() {
-        for (c, e) in row.iter_mut().enumerate() {
-            *e = (0..3).map(|k| d[r][k] * b[k][c]).sum();
-        }
-    }
-    for a in 0..side {
-        let contributes = (0..3).any(|k| b[k][a] != 0.0);
-        if !contributes {
-            continue;
-        }
-        for bcol in 0..side {
-            let acc: f64 = (0..3).map(|k| b[k][a] * db[k][bcol]).sum();
-            local[a][bcol] += acc * w;
-        }
-    }
 }

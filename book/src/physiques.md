@@ -53,7 +53,8 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   - [Poutre de Timoshenko](mecanique/timoshenko.md)
   - [Portique 2D](mecanique/timoshenko.md)
   - [Cadre 3D](mecanique/timoshenko.md)
-  - [Coques](mecanique/coques.md) — Reissner-Mindlin, six DDL par nœud
+  - [Coques](mecanique/coques.md) — Reissner-Mindlin ou Kirchhoff discret, six
+    DDL par nœud
 - [Contraintes](contraintes.md) — conditions limites imposées par
   multiplicateurs de Lagrange :
   - [Dirichlet](contraintes/dirichlet.md)
@@ -116,7 +117,7 @@ constructeurs (`from_tag`) : c'est ce qu'on écrit, pas une paraphrase.
 | [`truss`](mecanique/truss.md) | — | oui `N/L·P` | oui `ρA` | `N = E·A·ε` | Forme fermée **globale** : la direction vient des coordonnées, sans matrice de repère. Marche en 1-D, 2-D et 3-D sans changement. |
 | [`bernoulli`](mecanique/bernoulli.md)<br>`aucun tag` | — | oui¹ | oui | `M`<br>`N, M`<br>`N, M_y, M_z, T` | Seule physique bâtie sur une interpolation **C¹** : elle exige un espace `HERMITE3`, dont la base cubique la rend **exacte aux nœuds** — un élément par barre suffit. La configuration (1-D, plan, spatial) se **déduit** de la dimension du maillage. Ne demande **ni `G` ni `A_s`** : réclamer une constante qu'une théorie n'utilise pas, c'est inviter la mauvaise. |
 | [`timoshenko`](mecanique/timoshenko.md)<br>`aucun tag` | — | oui¹ | oui | `M, V`<br>`N, M, V`<br>`N, M_y, M_z, T, V_y, V_z` | **Une** physique pour les trois configurations, lues sur la dimension du maillage — elle remplace `frame` et `frame3d`. Élément **exact** (forme fermée en `Φ = 12EI/G·A_s·L²`), donc espace `MODEL_EMBEDDED` : la base dépend du matériau, aucun espace ne peut la tabuler. ¹ sauf en flexion pure, qui n'a pas d'effort axial. |
-| [`shell`](mecanique/coques.md)<br>`thick` | — | — | — | `N_xx…N_xy`<br>`M_xx…M_xy`<br>`Q_xz, Q_yz` | **Multi-quadrature** — membrane et flexion au Gauss complet, cisaillement transverse en intégration réduite, ce qui empêche le blocage. **Six DDL** par nœud, les mêmes que la poutre en configuration spatiale, donc coque et portique partagent des nœuds sans adaptateur. Le vrillage est lié à la rotation de membrane, pas pénalisé : une pénalité diagonale s'opposerait à une rotation rigide, qui ne coûte rien. |
+| [`shell`](mecanique/coques.md)<br>`thick`, `kirchhoff` | — | — | — | `N_xx…N_xy`<br>`M_xx…M_xy`<br>`Q_xz, Q_yz` (`thick` seul) | **Six DDL** par nœud, les mêmes que la poutre en configuration spatiale, donc coque et portique partagent des nœuds sans adaptateur. Le vrillage est lié à la rotation de membrane, pas pénalisé : une pénalité diagonale s'opposerait à une rotation rigide, qui ne coûte rien. `thick` (Reissner-Mindlin) est **multi-quadrature** — membrane et flexion au Gauss complet, cisaillement transverse en intégration réduite, ce qui empêche le blocage. `kirchhoff` (DKT/DKQ) n'a aucun cisaillement : `γ = 0` est imposé aux sommets et le long de chaque arête, la limite mince est donc exacte par construction et il ne reste rien à bloquer — mais aussi aucun `Q` de comportement, l'effort tranchant d'une plaque mince étant une réaction. |
 
 ### Contraintes — multiplicateurs de Lagrange, `filter("constraint")`
 

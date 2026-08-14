@@ -152,7 +152,7 @@ MECANIQUE - élément fini;TIMO (SEG2);Poutre de Timoshenko (cisaillement transv
 MECANIQUE - élément fini;TUYA / TUFI (SEG2/SEG3);Tuyau droit, coude, tuyau fissuré;—;—;—
 MECANIQUE - élément fini;JOI1 (SEG2);Joint unidimensionnel à deux nœuds;—;—;—
 MECANIQUE - élément fini;COQ2 / COQ3 / COQ4 / COQ6 / COQ8;Coques minces et épaisses;mechanical;thick;Model.shell (thick) — Reissner-Mindlin sur TRI3/QUA4, 6 DDL/nœud, cisaillement sous-intégré
-MECANIQUE - élément fini;DKT / DST / SHB8;Coque de Kirchhoff discrète, avec cisaillement transverse, coque volumique;—;—;—
+MECANIQUE - élément fini;DKT / DST / SHB8;Coque de Kirchhoff discrète, avec cisaillement transverse, coque volumique;mechanical;kirchhoff;Model.shell (kirchhoff) — DKT sur TRI3 et DKQ sur QUA4, 6 DDL/nœud, aucun cisaillement transverse (DST et SHB8 restent à faire)
 MECANIQUE - élément fini;TRI3 / QUA4 / TET4 / PRI6 / CUB8 (massifs);Éléments massifs linéaires;mechanical;—;Mesh TRI3 / QUA4 / TET4 / PENTA6 / HEX8 + Model.elasticity
 MECANIQUE - élément fini;TRI6 / QUA8 / TE10 / PRI15 / CU20 (massifs);Éléments massifs quadratiques;mechanical;—;Mesh TRI6 / QUA8 / TET10 / PENTA15 / HEX20 (+ QUA9 / HEX27) + Model.elasticity
 MECANIQUE - élément fini;Q4RI / Q8RI;Intégration réduite (1x1, 2x2 points de Gauss);—;—;—

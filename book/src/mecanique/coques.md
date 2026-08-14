@@ -15,6 +15,11 @@ sont partagés, seul le traitement flexion/cisaillement change.
 | formulation | cisaillement transverse | éléments |
 |---|---|---|
 | `thick` (Reissner-Mindlin) | oui, intégré réduit | TRI3, QUA4 |
+| `kirchhoff` (DKT/DKQ) | imposé nul en des points discrets | TRI3, QUA4 |
+
+Membrane et vrillage sont **une seule routine** partagée : ils ne doivent rien à
+la théorie de flexion, et un test vérifie que les deux formulations donnent bien
+le même allongement de membrane.
 
 ## Six DDL par nœud, et celui de vrillage
 
@@ -151,16 +156,102 @@ et le calcul converge. C'est le même remède et le même mécanisme que pour la
 [poutre de Timoshenko](timoshenko.md) — d'où le partage de la structure
 multi-quadrature plutôt que deux inventions parallèles.
 
+## Kirchhoff discret (`kirchhoff`)
+
+### Ce que dit la théorie, et pourquoi on ne l'écrit pas telle quelle
+
+Kirchhoff-Love impose que la fibre normale reste **normale** :
+\\( \gamma = \nabla w + \beta = 0 \\), donc \\( \beta = -\nabla w \\) et la
+courbure redevient un jeu de dérivées **secondes** de la seule flèche :
+
+\\[
+\kappa = \begin{bmatrix}
+-\\,\partial^2 w/\partial x^2 \\\\
+-\\,\partial^2 w/\partial y^2 \\\\
+-\\,2\\,\partial^2 w/\partial x \partial y
+\end{bmatrix}.
+\\]
+
+C'est une équation d'ordre quatre, et un élément conforme pour elle réclame une
+base C¹ — la [poutre de Bernoulli](bernoulli.md) en dimension un, où le cubique
+d'Hermite la fournit. En dimension deux, la même construction (le bicubique
+d'Hermite, quatre DDL par nœud dont le vrillage \\( \partial^2 w/\partial x
+\partial y \\)) n'est conforme que sur des **rectangles alignés aux axes** :
+ailleurs le jacobien varie, la conversion des DDL nodaux diffère d'un élément à
+l'autre au nœud partagé, et la continuité C¹ est perdue. Aucun mailleur d'ici ne
+produit une telle grille.
+
+### Ce qu'on écrit à la place
+
+La réponse du **Kirchhoff discret** est de garder la rotation comme champ
+interpolé et de n'imposer \\( \gamma = 0 \\) qu'en des points choisis. Rien n'est
+jamais dérivé deux fois, la base reste Lagrange, et la limite mince est exacte
+par construction plutôt qu'approchée depuis un cisaillement qu'il faudrait
+empêcher de bloquer.
+
+La rotation \\( \beta \\) est interpolée **quadratiquement** — les six fonctions
+d'un `TRI6`, les huit d'un `QUA8` — sur un élément dont la géométrie reste
+linéaire. Ses valeurs de milieu d'arête sont ensuite éliminées, arête par arête,
+par trois énoncés :
+
+| énoncé | où | ce qu'il donne |
+|---|---|---|
+| \\( \gamma = 0 \\) | à chaque sommet | \\( \beta_i = -\nabla w_i \\) |
+| \\( \gamma_s = 0 \\) | au milieu de chaque arête | \\( \beta_{sk} = -\tfrac{3}{2l}(w_j - w_i) - \tfrac14(\beta_{si} + \beta_{sj}) \\) |
+| \\( \beta_n \\) linéaire | le long de chaque arête | \\( \beta_{nk} = \tfrac12(\beta_{ni} + \beta_{nj}) \\) |
+
+Le deuxième lit la pente à mi-portée de la **cubique** que suit la flèche le long
+d'une arête : c'est par là que l'exactitude d'une poutre d'Euler-Bernoulli entre
+dans une plaque, sans qu'aucune base d'Hermite soit jamais assemblée.
+
+Après élimination, chaque fonction de milieu d'arête porte une combinaison fixe
+des DDL de sommet, et tout l'élément tient en cinq nombres par arête :
+
+\\[
+a = \frac{-x_{ij}}{l^2}, \quad
+b = \frac{3}{4}\frac{x_{ij} y_{ij}}{l^2}, \quad
+c = \frac{\tfrac14 x_{ij}^2 - \tfrac12 y_{ij}^2}{l^2}, \quad
+d = \frac{-y_{ij}}{l^2}, \quad
+e = \frac{\tfrac14 y_{ij}^2 - \tfrac12 x_{ij}^2}{l^2}.
+\\]
+
+\\( a \\) et \\( d \\) portent la flèche dans la rotation — ils sont **impairs**
+dans le sens de l'arête, d'où le changement de signe entre ses deux extrémités ;
+\\( b \\), \\( c \\) et \\( e \\) projettent une rotation de sommet sur la
+tangente et la normale de l'arête, et sont pairs.
+
+DKT et DKQ ne diffèrent **que** par le nombre de sommets, la base quadratique et
+la quadrature : c'est donc une seule routine, pas deux. Les tables \\( H_x \\),
+\\( H_y \\) publiées par Batoz pour l'un et pour l'autre en ressortent, et c'est
+ce que vérifie le test unitaire — l'élimination est gardée comme une **matrice
+sur les fonctions de forme** plutôt que comme le \\( H_x(\xi, \eta) \\) assemblé
+de la littérature, si bien que \\( \partial H/\partial \xi = C \cdot \partial
+N/\partial \xi \\) réutilise la même matrice et qu'aucune seconde table n'est à
+tenir cohérente avec la première.
+
+### Ce qu'il n'a pas
+
+Pas de déformation de cisaillement, donc pas de \\( Q \\) issu d'une loi de
+comportement : l'effort tranchant d'une plaque mince est une **réaction**,
+retrouvée par le gradient des moments. Le comportement s'arrête aux six
+résultantes de membrane et de flexion, là où `thick` en rend huit.
+
 ## Mise en donnée (Rust, testé)
 
 ```rust,ignore
 {{#include ../../../tests/shell.rs:example}}
 ```
 
+La même plaque en Kirchhoff discret, triangles et quadrangles :
+
+```rust,ignore
+{{#include ../../../tests/shell.rs:kirchhoff}}
+```
+
 ## Exemple Python
 
 ```python
-model = pyrucast.Model.shell(fes, "thick")
+model = pyrucast.Model.shell(fes, "thick")  # ou "kirchhoff"
 materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("nu", 0.3), ("h", 0.01)]
 )
@@ -183,7 +274,31 @@ correctement sous-intégré la conserve.
 S'y ajoutent le comportement de membrane, exact à `1e-9`, et le vrillage rigide
 qui ne coûte pas d'énergie tout en laissant un vrillage parasite en coûter.
 
+Pour le **Kirchhoff discret**, l'énoncé de non-blocage est plus tranchant
+encore : la flèche normalisée n'est pas seulement stable quand la plaque
+s'amincit, elle est *invariante* à la précision machine — l'épaisseur n'entre
+dans la raideur de flexion que par un facteur \\( h^3 \\), et le problème de
+flexion pure est donc exactement sans échelle. Le test l'exige à `1e-6` près sur
+deux décades et demie, pour DKT comme pour DKQ.
+
+La convergence, elle, ne se dit **pas** de la même manière : la facette de
+Mindlin est un modèle en déplacements compatible, donc sa flèche ne peut que
+monter vers la réponse. Un élément à Kirchhoff discret ne l'est pas — éliminer
+les rotations de milieu d'arête sous des contraintes qui ne tiennent qu'en des
+points laisse une interpolation discontinue au travers d'une arête, et la borne
+variationnelle s'en va avec. Le test vérifie donc la convergence elle-même
+(chaque raffinement tombe plus près, les incréments décroissent), pas le côté
+d'où elle arrive : sur cette plaque encastrée, la DKQ converge par le **haut**.
+
+Enfin, une bascule rigide de la plaque — `w = x` et la rotation qui l'accompagne
+— ne doit coûter aucune énergie. Assemblé, ce test attrape ce que les tables
+d'élément ne peuvent pas : la convention de signe liant la flèche à la rotation
+(\\( \beta = -\nabla w \\), donc `r_y = −1` pour `u_z = x`), et la rotation
+local → global qui la transporte.
+
 **Ce qui n'est pas couvert.** Pas de matrice de masse ni de raideur géométrique
 pour l'instant ; pas de coque courbe au sens propre — une facette plane par
 élément, ce qui est la formulation usuelle des coques facettisées et demande un
-maillage plus fin sur une forte courbure.
+maillage plus fin sur une forte courbure. Aucun opérateur de déformation de
+coque non plus : les lois de section sont écrites et testées par la raideur, mais
+la reconstruction des résultantes depuis un champ solution reste à faire.

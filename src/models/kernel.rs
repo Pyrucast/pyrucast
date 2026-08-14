@@ -79,6 +79,8 @@ struct RefData {
     /// Whether the geometry is a body of revolution — the `2πr` factor of
     /// [`CellGeom::det_j_w`].
     axisymmetric: bool,
+    /// Reference coordinates `ξ_g` of each Gauss point.
+    gauss_xi: Vec<Vec<f64>>,
     /// Shape values `N_i(ξ_g)` per Gauss point.
     n_ref: Vec<Vec<f64>>,
     /// Reference derivatives `∂N_i/∂ξ_k(ξ_g)` per Gauss point.
@@ -102,10 +104,12 @@ struct RefData {
 impl RefData {
     fn snapshot(fe: &SubFiniteElementSpace) -> Result<Self> {
         let n_gauss = fe.gauss_count();
+        let mut gauss_xi = Vec::with_capacity(n_gauss);
         let mut n_ref = Vec::with_capacity(n_gauss);
         let mut dn_ref = Vec::with_capacity(n_gauss);
         let mut weights = Vec::with_capacity(n_gauss);
         for g in 0..n_gauss {
+            gauss_xi.push(fe.gauss_xi(g)?.to_vec());
             n_ref.push(fe.n_at_g(g)?.to_vec());
             dn_ref.push(fe.dn_at_g(g)?.to_vec());
             weights.push(fe.gauss_weight(g)?);
@@ -125,6 +129,7 @@ impl RefData {
             space_dim: fe.space_dim(),
             ref_dim: fe.ref_dim()?,
             axisymmetric: fe.is_axisymmetric(),
+            gauss_xi,
             n_ref,
             dn_ref,
             weights,
@@ -229,6 +234,25 @@ impl<'a> CellGeom<'a> {
     /// Shape-function values `N_i(ξ_g)` at Gauss point `g`.
     pub fn n_at_g(&self, g: usize) -> Result<&[f64]> {
         Ok(&self.rd.n_ref[g])
+    }
+
+    /// Reference coordinates `ξ_g` of Gauss point `g`, of length `ref_dim`.
+    ///
+    /// What a formulation carrying **its own** basis needs: the quadrature is
+    /// the subspace's, but the functions to evaluate at it are the element's own
+    /// — a discrete-Kirchhoff shell interpolates its rotations quadratically over
+    /// a mesh the space declares linear.
+    pub fn gauss_xi(&self, g: usize) -> Result<&[f64]> {
+        self.rd
+            .gauss_xi
+            .get(g)
+            .map(|v| v.as_slice())
+            .ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "CellGeom: Gauss point {g} out of range ({} points)",
+                    self.n_gauss
+                ))
+            })
     }
 
     /// Number of **field** shape functions — `n_nodes` for a Lagrange space,

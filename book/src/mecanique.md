@@ -34,6 +34,6 @@ réactions).
 - [Portique 2D](mecanique/timoshenko.md) — poutre orientée (axial + flexion +
   cisaillement), transformation local→global.
 - [Coques](mecanique/coques.md) — surface à six DDL par nœud, Reissner-Mindlin
-  à cisaillement sous-intégré.
+  à cisaillement sous-intégré ou Kirchhoff discret (DKT/DKQ) sans cisaillement.
 - [Cadre 3D](mecanique/timoshenko.md) — space frame 6 DOF/nœud (axial + torsion +
   flexion 2 plans), orientation automatique.

@@ -118,7 +118,7 @@ constructeurs et les variables, vus du `Model` :
 | `timoshenko(fes)` | `w, theta` | `f_w, m_theta` | `E, I, G, A_s` | [Timoshenko](mecanique/timoshenko.md) |
 | `frame(fes)` | `u_x, u_y, rz` | `f_x, f_y, m_z` | `E, A, I, G, A_s` | [Portique 2D](mecanique/timoshenko.md) |
 | `frame3d(fes)` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Cadre 3D](mecanique/timoshenko.md) |
-| `shell(fes, model)` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, nu, h` | [Coques](mecanique/coques.md) |
+| `shell(fes, model)`<br>`thick`, `kirchhoff` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, nu, h` | [Coques](mecanique/coques.md) |
 | `dirichlet(…)` | `lambda_<v>` | `imposed_<v>` | — | [Dirichlet](contraintes/dirichlet.md) |
 | `mpc(…)` | `lambda_mpc` | `mpc_rhs` | — | [Multi-points](contraintes/mpc.md) |
 | `embedded(…)` | `lambda_<v>` | `imposed_<v>` | — | [Baignage](contraintes/embedded.md) |
