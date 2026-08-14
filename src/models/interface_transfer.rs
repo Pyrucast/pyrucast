@@ -57,6 +57,7 @@ use crate::containers::mesh::SubMesh;
 use crate::coords::Coords;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::models::owned_components;
 use crate::models::{
     CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
@@ -302,8 +303,8 @@ impl Domain for InterfaceTransfer {
         self.side_a.clone()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
+    fn material_components(&self) -> Option<Vec<String>> {
+        Some(owned_components(MATERIAL_COMPONENTS))
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {

@@ -11,6 +11,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
+use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
@@ -240,8 +241,11 @@ impl Domain for HeatConduction {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(material_contract(self.symmetry, self.space_dim))
+    fn material_components(&self) -> Option<Vec<String>> {
+        Some(owned_components(material_contract(
+            self.symmetry,
+            self.space_dim,
+        )))
     }
 
     /// `rho` + `cp` — required only by the heat-capacity (mass) matrix, never by

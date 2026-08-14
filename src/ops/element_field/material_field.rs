@@ -26,10 +26,10 @@ pub fn sub_material_field(
     let optional = sub.optional_material_components();
     let mut components: Vec<String> = Vec::with_capacity(required.len() + optional.len());
     let mut values: Vec<f64> = Vec::with_capacity(required.len() + optional.len());
-    for req in required {
+    for req in &required {
         let v = components_and_values
             .iter()
-            .find(|(c, _)| c == req)
+            .find(|(c, _)| *c == req)
             .map(|(_, v)| *v)
             .ok_or_else(|| {
                 PyrucastError::Message(format!(
@@ -38,7 +38,7 @@ pub fn sub_material_field(
                     req, required
                 ))
             })?;
-        components.push((*req).to_string());
+        components.push(req.clone());
         values.push(v);
     }
     // Optional components: kept only when the caller supplies them.

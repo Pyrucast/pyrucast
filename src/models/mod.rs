@@ -790,6 +790,12 @@ pub(crate) fn constraint_block_pair(
     Ok((c, ct))
 }
 
+/// A static component list in the owned form [`Domain::material_components`]
+/// returns — the one line every physics whose contract is fixed needs.
+pub fn owned_components(names: &[&str]) -> Vec<String> {
+    names.iter().map(|s| s.to_string()).collect()
+}
+
 /// A **domain** sub-model — an optional capability, not part of the base
 /// [`SubModelKind`] contract. A domain is a physics defined *over a region*: it
 /// reads material data **and** integrates a constitutive law over its cells. A
@@ -820,7 +826,16 @@ pub trait Domain: Sync {
     /// Material component names this domain requires, or `None` if it declares a
     /// material FE subspace but constrains no particular component. Default:
     /// `None`.
-    fn material_components(&self) -> Option<&'static [&'static str]> {
+    ///
+    /// **Owned**, not `&'static`: a physics whose variables are given by the
+    /// caller derives its coefficient names from them — a transfer law wants one
+    /// `h_<variable>` per transferred quantity, which no static table can hold.
+    /// The DOF names ([`SubModelKind::primal_vars`]) had always been owned for
+    /// the same reason; this closes the asymmetry. It is read once per sub-model
+    /// when the material field is built, so the allocation is not on any hot
+    /// path. Most implementers hand a static list to
+    /// [`owned_components`](fn@owned_components) and are done.
+    fn material_components(&self) -> Option<Vec<String>> {
         None
     }
 

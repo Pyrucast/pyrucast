@@ -78,7 +78,7 @@ pub fn integrate(
         // resolves each physics' own zone without an explicit consolidate.
         let material = match mat_fespace {
             Some(fe) => Some(match mat_components {
-                Some(required) => materials.sub_for_fespace_with(&fe, required)?,
+                Some(required) => materials.sub_for_fespace_with(&fe, &required)?,
                 None => materials.sub_for_fespace(&fe)?,
             }),
             None => None,

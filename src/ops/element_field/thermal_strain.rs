@@ -61,7 +61,7 @@ pub fn thermal_strain(
         // several component-disjoint material zones (e.g. thermal `k` +
         // mechanical `E`/`nu`/`alpha`) resolves the expansion zone without an
         // explicit consolidate.
-        let mat_sub = material.sub_for_fespace_with(sub, &[ALPHA])?;
+        let mat_sub = material.sub_for_fespace_with(sub, &[ALPHA.to_string()])?;
         let (space_dim, axisymmetric) = {
             let s = read(sub)?;
             (s.space_dim(), s.is_axisymmetric())

@@ -46,6 +46,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
+use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
@@ -420,8 +421,10 @@ impl Domain for Damage {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(self.law.material_components(self.space_dim))
+    fn material_components(&self) -> Option<Vec<String>> {
+        Some(owned_components(
+            self.law.material_components(self.space_dim),
+        ))
     }
 
     /// `rho` (density) — required only by the mass matrix.
@@ -608,7 +611,10 @@ mod tests {
         let mz = unit_quad(ElasticityModel::PlaneStress);
         assert_eq!(mz.primal_vars(), vec!["u_x", "u_y"]);
         assert_eq!(mz.dual_vars(), vec!["f_x", "f_y"]);
-        assert_eq!(mz.material_components(), Some(mazars::MATERIAL));
+        assert_eq!(
+            mz.material_components(),
+            Some(owned_components(mazars::MATERIAL))
+        );
     }
 
     /// Below the damage threshold the response is elastic: D = 0 and σ_xx is

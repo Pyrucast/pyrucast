@@ -53,6 +53,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
+use crate::models::owned_components;
 use crate::models::plastic::{self, MatParams, PlasticLaw, PrevState};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
@@ -339,8 +340,8 @@ impl Domain for Plasticity {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(self.law.material_components())
+    fn material_components(&self) -> Option<Vec<String>> {
+        Some(owned_components(self.law.material_components()))
     }
 
     /// `rho` (density) — required only by the mass matrix, never by the
@@ -615,7 +616,7 @@ mod tests {
         assert_eq!(pl.dual_vars(), vec!["f_x", "f_y"]);
         assert_eq!(
             pl.material_components(),
-            Some(PlasticLaw::Perfect.material_components())
+            Some(owned_components(PlasticLaw::Perfect.material_components()))
         );
     }
 

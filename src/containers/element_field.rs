@@ -513,15 +513,13 @@ impl ElementField {
     pub(crate) fn sub_for_fespace_with(
         &self,
         fespace: &Handle<SubFiniteElementSpace>,
-        required: &[&str],
+        required: &[String],
     ) -> Result<Handle<SubElementField>> {
         let mut matching: Vec<Handle<SubElementField>> = Vec::new();
         for h in self.subs_for_fespace(fespace)? {
             let carries_all = {
                 let comps = read(&h)?.components().to_vec();
-                required
-                    .iter()
-                    .all(|&r| comps.iter().any(|c| c.as_str() == r))
+                required.iter().all(|r| comps.contains(r))
             };
             if carries_all {
                 matching.push(h);

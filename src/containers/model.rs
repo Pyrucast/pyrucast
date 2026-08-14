@@ -758,7 +758,7 @@ impl SubModel {
     /// Material component names this sub-model expects, or `None` if it
     /// doesn't need material data. Thin pass-through of
     /// [`Domain::material_components`](crate::models::Domain::material_components).
-    pub fn material_components(&self) -> Option<&'static [&'static str]> {
+    pub fn material_components(&self) -> Option<Vec<String>> {
         self.as_kind()
             .as_domain()
             .and_then(|d| d.material_components())
@@ -1457,6 +1457,7 @@ mod tests {
     use crate::containers::mesh::Mesh;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
+    use crate::models::owned_components;
     use crate::store::{insert, write};
 
     /// Returns `(coords, a_id, b_id, model, materials)`.
@@ -1933,7 +1934,7 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let sub = fes.get(0).unwrap();
         let hc = SubModel::heat_conduction(sub).unwrap();
-        assert_eq!(hc.material_components(), Some(&["k"][..]));
+        assert_eq!(hc.material_components(), Some(owned_components(&["k"])));
 
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());

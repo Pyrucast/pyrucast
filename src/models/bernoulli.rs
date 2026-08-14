@@ -48,6 +48,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
@@ -284,8 +285,8 @@ impl Domain for Bernoulli {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(material_of(self.model))
+    fn material_components(&self) -> Option<Vec<String>> {
+        Some(owned_components(material_of(self.model)))
     }
 
     /// `rho` for the mass, and — in the 1-D configuration — the full area `A`,

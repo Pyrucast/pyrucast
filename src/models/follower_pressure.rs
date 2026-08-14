@@ -80,6 +80,7 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::models::owned_components;
 use crate::models::{
     CellGeom, Contribution, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
@@ -225,8 +226,8 @@ impl Domain for FollowerPressure {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<&'static [&'static str]> {
-        Some(MATERIAL_COMPONENTS)
+    fn material_components(&self) -> Option<Vec<String>> {
+        Some(owned_components(MATERIAL_COMPONENTS))
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
