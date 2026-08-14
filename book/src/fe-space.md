@@ -276,12 +276,14 @@ qu'on colorie est ce qu'on dessine — un segment droit, une facette plane — d
 la couleur doit varier le long du tracé. C'est une image, pas une valeur
 calculée.
 
-#### Ce que ça ne règle pas
+#### Et ce que la formulation doit alors fournir elle-même
 
-La reconstruction des efforts reste à la charge de la formulation.
-`beam_deformation` rend toujours des déformations élément-constantes ; la
-différence est que c'est désormais une **approximation assumée par la
-formulation**, et non la conséquence tacite d'une base mal déclarée.
+La reconstruction des efforts passe à la charge de la formulation, puisque
+l'espace ne peut plus interpoler. `beam_deformation` évalue donc les
+déformations depuis les fonctions de forme **de l'élément**, ce qui l'oblige à
+recevoir le matériau : `Φ` en dépend. C'est le prix, et il est juste — on ne
+peut pas reconstituer la courbure d'une poutre sans connaître sa raideur de
+cisaillement.
 
 ### Dérivées de référence
 

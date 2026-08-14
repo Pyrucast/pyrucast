@@ -66,7 +66,7 @@ def test_section_forces_cantilever():
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 
     # (κ, γ) puis efforts de section M, V.
-    deformation = pyrucast.element_field.beam_deformation(solution, fes)
+    deformation = pyrucast.element_field.beam_deformation(solution, fes, materials)
     forces = pyrucast.element_field.integrate_behavior(model, deformation, materials)
     sub = forces[0]
     for cell in range(sub.cell_count()):

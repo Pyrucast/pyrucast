@@ -157,12 +157,25 @@ couplage flèche-rotation, absent de la masse linéaire, est bien là.
 **Rigidité géométrique.** Elle demande un effort axial pour raidir la barre : la
 configuration 1-D, en flexion pure, n'en déclare donc aucune.
 
-**Reconstruction des efforts.** `beam_deformation` rend des déformations
-**élément-constantes**, héritées de l'élément linéaire.
-Avec l'élément exact, la courbure varie dans la maille : la reconstruction est
-donc une approximation, assumée par la formulation. Le repère local, lui, est
-déduit automatiquement de la géométrie (référence globale Z, ou Y pour une barre
-verticale), ce qui convient aux sections symétriques.
+**Reconstruction des efforts.** `beam_deformation` évalue les déformations
+**à chaque point de Gauss**, depuis les fonctions de forme de l'élément — les
+mêmes que sa rigidité et sa masse. Ce qu'elle rend dit alors la physique :
+
+- la **courbure varie linéairement**, donc le moment aussi, ce qu'impose
+  `M' = V` ;
+- le **cisaillement est constant**, ce qu'impose `V' = 0` sur une travée non
+  chargée.
+
+L'élément linéaire ne pouvait rendre ni l'un ni l'autre : sa courbure était
+constante et son cisaillement oscillait, d'où une moyenne pour tout.
+
+L'opérateur **exige le matériau**, et c'est la signature honnête : `Φ` en
+dépend, donc la distribution de courbure aussi. On ne reconstitue pas la
+courbure d'une poutre sans connaître sa raideur de cisaillement.
+
+Le repère local, lui, est déduit automatiquement de la géométrie (référence
+globale Z, ou Y pour une barre verticale), ce qui convient aux sections
+symétriques.
 
 **Le repère de rotation.** Le portique plan nommait sa rotation `rz` quand tout
 le reste du dépôt écrivait `r_z`. La fusion l'a fait sortir immédiatement — une

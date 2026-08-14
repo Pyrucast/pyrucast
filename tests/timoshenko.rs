@@ -149,7 +149,7 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
     let solution = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 
     // (κ, γ) puis efforts de section M = EI·κ, V = GA_s·γ.
-    let deformation = pyrucast::ops::element_field::beam_deformation(&solution, &fes)?;
+    let deformation = pyrucast::ops::element_field::beam_deformation(&solution, &fes, &materials)?;
     let forces = pyrucast::ops::element_field::behavior::integrate(
         &model,
         &deformation,

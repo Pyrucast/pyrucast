@@ -112,15 +112,23 @@ pub fn thermal_strain(
 /// into them, then evaluates the strains from the local DOFs. This replaces
 /// `frame_deformation`, which was the same operator for the 2-D and 3-D cases.
 ///
+/// The **material** is required, and that is the honest signature: the
+/// element's interpolation depends on `Φ = 12EI/(G·A_s·L²)`, so its curvature
+/// distribution cannot be recovered without knowing the shear stiffness. An
+/// operator that took no material could only ever report a mean.
+///
 /// Feed the result to `integrate_behavior` to obtain the section forces
-/// (`N = E·A·eps`, `M = E·I·kappa`, `V = G·A_s·gamma`).
+/// (`N = E·A·eps`, `M = E·I·kappa`, `V = G·A_s·gamma`). The moment then varies
+/// along the element, as `M' = V` requires, while the shear stays constant.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn beam_deformation(
     field: PyRef<PyNodeField>,
     fespace: PyRef<PyFiniteElementSpace>,
+    material: PyRef<PyElementField>,
 ) -> PyResult<PyElementField> {
-    let ef = crate::ops::element_field::beam_deformation(&field.inner, &fespace.inner)?;
+    let ef =
+        crate::ops::element_field::beam_deformation(&field.inner, &fespace.inner, &material.inner)?;
     Ok(PyElementField { inner: ef })
 }
 

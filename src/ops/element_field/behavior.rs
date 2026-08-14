@@ -264,12 +264,12 @@ mod tests {
         sol.set_value(b.id(), "r_z", 0.25 * l).unwrap();
         let sol = NodeField::from_sub(sol);
 
-        let def = beam_deformation(&sol, &fes).unwrap();
         let materials = material_field(
             &model,
             &[("E", e), ("A", area), ("I", i), ("G", g), ("A_s", a_s)],
         )
         .unwrap();
+        let def = beam_deformation(&sol, &fes, &materials).unwrap();
 
         let state = integrate(&model, &def, None, &materials, None).unwrap();
         assert_eq!(state.len(), 1);
@@ -278,11 +278,25 @@ mod tests {
             s.components(),
             &["N".to_string(), "M".to_string(), "V".to_string()]
         );
+        let sub = read(&fes.get(0).unwrap()).unwrap();
+        // The axial force is constant — a bar's field really is linear — and so
+        // is the shear, an unloaded span carrying a constant `V`.
+        let v0 = s.value(0, 0, "V").unwrap();
         for gp in 0..s.gauss_count() {
-            assert!((s.value(0, gp, "N").unwrap() - e * area * 0.5).abs() < 1e-12); // 6.0
-            assert!((s.value(0, gp, "M").unwrap() - e * i * 0.25).abs() < 1e-12); // 1.5
-            assert!((s.value(0, gp, "V").unwrap() - g * a_s * (-0.25)).abs() < 1e-12);
-            // −2.5
+            assert!((s.value(0, gp, "N").unwrap() - e * area * 0.5).abs() < 1e-12);
+            assert!((s.value(0, gp, "V").unwrap() - v0).abs() < 1e-12);
         }
+        // The **moment** varies: `M' = V`. What pins it is its integral, which
+        // is `E·I·Δθ` whatever the shear compliance.
+        let integral: f64 = (0..sub.gauss_count())
+            .map(|gp| s.value(0, gp, "M").unwrap() * sub.gauss_weight(gp).unwrap())
+            .sum::<f64>()
+            * l
+            / 2.0;
+        assert!(
+            (integral - e * i * 0.25 * l).abs() < 1e-10,
+            "∫M = {integral}, expected {}",
+            e * i * 0.25 * l
+        );
     }
 }

@@ -64,12 +64,22 @@ const DOFS_3D: &[&str] = &["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"];
 /// in 2-D, or `u_x, u_y, u_z, r_x, r_y, r_z` in 3-D. Each subspace must be
 /// oriented `SEG2` in that same configuration (as required by the frame
 /// physics).
-pub fn beam_deformation(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
+pub fn beam_deformation(
+    field: &NodeField,
+    fespace: &FiniteElementSpace,
+    material: &ElementField,
+) -> Result<ElementField> {
     let components = Field::components(field)?;
     let view = field.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        out.add_sub(insert(subspace_beam_deformation(sub, &view, &components)?))?;
+        let mat = material.sub_for_fespace(sub)?;
+        out.add_sub(insert(subspace_beam_deformation(
+            sub,
+            &view,
+            &components,
+            &mat,
+        )?))?;
     }
     Ok(out)
 }
@@ -80,6 +90,7 @@ fn subspace_beam_deformation(
     fespace: &Handle<SubFiniteElementSpace>,
     view: &NodeFieldView,
     components: &[String],
+    material: &Handle<SubElementField>,
 ) -> Result<SubElementField> {
     // One read guard on the subspace, held for every property we read off it.
     let s = read(fespace)?;
@@ -114,6 +125,7 @@ fn subspace_beam_deformation(
 
     // Hold the mesh guard over the whole loop and read the connectivity in
     // place (sequential loop ⇒ no need to copy it out).
+    let mat = read(material)?;
     let submesh = s.submesh();
     let mesh = read(&submesh)?;
     let conn = mesh.connectivity();
@@ -140,42 +152,74 @@ fn subspace_beam_deformation(
             .map(|c| view.value(ids[1], c))
             .collect::<Result<_>>()?;
 
-        let strains = match space_dim {
-            1 => strains_1d(xa, xb, &da, &db),
-            2 => strains_2d(xa, xb, &da, &db),
-            _ => strains_3d(xa, xb, &da, &db),
-        };
-
+        // Evaluated **at each Gauss point** from the element's own
+        // interpolation: the curvature varies along an unloaded span (`M' = V`)
+        // and only the shear is constant (`V' = 0`). The previous recovery
+        // reported one element-constant value for both, because a linear
+        // element has nothing else to report.
         for g in 0..n_g {
+            let xi = s.gauss_xi(g)?[0];
+            // SEG2's reference runs over [-1, 1]; the beam's own functions over
+            // [0, 1].
+            let t = 0.5 * (xi + 1.0);
+            let strains = match space_dim {
+                1 => strains_1d(&mat, cell, xa, xb, &da, &db, t)?,
+                2 => strains_2d(&mat, cell, xa, xb, &da, &db, t)?,
+                _ => strains_3d(&mat, cell, xa, xb, &da, &db, t)?,
+            };
+            debug_assert_eq!(strains.len(), n_comp);
             for (c, &v) in strains.iter().enumerate() {
                 field.set(cell, g, c, v)?;
             }
         }
-        debug_assert_eq!(strains.len(), n_comp);
     }
     Ok(field)
 }
 
-/// 1-D beam section strains `(kappa, gamma)` from the nodal DOFs `[w, theta]`.
+/// `Φ` of a bending plane, from the material at this cell.
+fn phi_of(mat: &SubElementField, cell: usize, l: f64, i_name: &str, a_s_name: &str) -> Result<f64> {
+    let ei = mat.value(cell, 0, "E")? * mat.value(cell, 0, i_name)?;
+    let gas = mat.value(cell, 0, "G")? * mat.value(cell, 0, a_s_name)?;
+    Ok(crate::models::beam::phi(ei, Some(gas), l))
+}
+
+/// 1-D beam section strains `(kappa, gamma)` at `t = x/L`, from the nodal DOFs
+/// `[w, theta]`.
 ///
 /// There is no local frame to build and no axial term: the axis *is* the mesh,
 /// and a pure-bending beam has no direction to stretch along.
-fn strains_1d(xa: &[f64], xb: &[f64], da: &[f64], db: &[f64]) -> Vec<f64> {
+#[allow(clippy::too_many_arguments)]
+fn strains_1d(
+    mat: &SubElementField,
+    cell: usize,
+    xa: &[f64],
+    xb: &[f64],
+    da: &[f64],
+    db: &[f64],
+    t: f64,
+) -> Result<Vec<f64>> {
     let l = (xb[0] - xa[0]).abs();
-    let (wa, ta) = (da[0], da[1]);
-    let (wb, tb) = (db[0], db[1]);
-    let kappa = (tb - ta) / l;
-    let gamma = (wb - wa) / l - 0.5 * (ta + tb);
-    vec![kappa, gamma]
+    let ph = phi_of(mat, cell, l, "I", "A_s")?;
+    let d = [da[0], da[1], db[0], db[1]];
+    let (kappa, gamma) = crate::models::beam::section_strains(ph, l, &d, t);
+    Ok(vec![kappa, gamma])
 }
 
 /// 2-D frame section strains `(eps, kappa, gamma)` in the element's local
-/// frame, from the endpoint coordinates and the nodal DOFs `[u_x, u_y, rz]`.
+/// frame, at `t = x/L`, from the nodal DOFs `[u_x, u_y, r_z]`.
 ///
-/// Local kinematics on the length-`L` element (`u' = axial displ., w' =
-/// transverse displ., θ = rotation`): axial `ε = (u'_B − u'_A)/L`, curvature
-/// `κ = (θ_B − θ_A)/L`, reduced shear `γ = (w'_B − w'_A)/L − (θ_A + θ_B)/2`.
-fn strains_2d(xa: &[f64], xb: &[f64], da: &[f64], db: &[f64]) -> Vec<f64> {
+/// The axial strain stays **element-constant**, and correctly so: the axial
+/// field of a bar really is linear.
+#[allow(clippy::too_many_arguments)]
+fn strains_2d(
+    mat: &SubElementField,
+    cell: usize,
+    xa: &[f64],
+    xb: &[f64],
+    da: &[f64],
+    db: &[f64],
+    t: f64,
+) -> Result<Vec<f64>> {
     let (dx, dy) = (xb[0] - xa[0], xb[1] - xa[1]);
     let l = (dx * dx + dy * dy).sqrt();
     let (c, s) = (dx / l, dy / l);
@@ -187,23 +231,30 @@ fn strains_2d(xa: &[f64], xb: &[f64], da: &[f64], db: &[f64]) -> Vec<f64> {
     let (ta, tb) = (da[2], db[2]); // rotation is frame-invariant in 2-D
 
     let eps = (ub - ua) / l;
-    let kappa = (tb - ta) / l;
-    let gamma = (wb - wa) / l - 0.5 * (ta + tb);
-    vec![eps, kappa, gamma]
+    let ph = phi_of(mat, cell, l, "I", "A_s")?;
+    let (kappa, gamma) = crate::models::beam::section_strains(ph, l, &[wa, ta, wb, tb], t);
+    Ok(vec![eps, kappa, gamma])
 }
 
 /// 3-D frame section strains
 /// `(eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z)` in the element's local
-/// frame, from the endpoint coordinates and the nodal DOFs
-/// `[u_x, u_y, u_z, r_x, r_y, r_z]`.
+/// frame, at `t = x/L`, from the nodal DOFs `[u_x, u_y, u_z, r_x, r_y, r_z]`.
 ///
 /// The local axes match the [`frame3d`](crate::models::frame3d) stiffness
 /// kernel (`x'` along the beam, `y'`/`z'` from an automatic global reference).
-/// With local displacement `(u', v', w')` and rotation `(θx', θy', θz')`:
-/// axial `ε = u'_,x`, torsion `= θx'_,x`, curvatures `κ_y = θy'_,x`,
-/// `κ_z = θz'_,x`, reduced shears `γ_y = v'_,x − θz'`, `γ_z = w'_,x + θy'`
-/// (centre rotations).
-fn strains_3d(xa: &[f64], xb: &[f64], da: &[f64], db: &[f64]) -> Vec<f64> {
+/// The two bending planes each carry their **own** `Φ`, through `A_sy` and
+/// `A_sz`; the axial and the torsion stay element-constant, their fields being
+/// genuinely linear.
+#[allow(clippy::too_many_arguments)]
+fn strains_3d(
+    mat: &SubElementField,
+    cell: usize,
+    xa: &[f64],
+    xb: &[f64],
+    da: &[f64],
+    db: &[f64],
+    t: f64,
+) -> Result<Vec<f64>> {
     let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
     let l = norm(d);
     let r = local_axes(d); // rows: x', y', z' in global coords
@@ -214,12 +265,27 @@ fn strains_3d(xa: &[f64], xb: &[f64], da: &[f64], db: &[f64]) -> Vec<f64> {
 
     let eps = (ub[0] - ua[0]) / l; // u'_,x
     let torsion = (rb[0] - ra[0]) / l; // θx'_,x
-    let kappa_y = (rb[1] - ra[1]) / l; // θy'_,x
-    let kappa_z = (rb[2] - ra[2]) / l; // θz'_,x
-                                       // Reduced shear (centre rotation): γ_y = v'_,x − θz', γ_z = w'_,x + θy'.
-    let gamma_y = (ub[1] - ua[1]) / l - 0.5 * (ra[2] + rb[2]);
-    let gamma_z = (ub[2] - ua[2]) / l + 0.5 * (ra[1] + rb[1]);
-    vec![eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z]
+
+    // x'-y' plane: deflection v', rotation θz' — the pair maps straight onto the
+    // (w, θ) of the shared block, giving `κ_z = θz'_,x` and `γ_y = v'_,x − θz'`.
+    let phi_y = phi_of(mat, cell, l, "I_z", "A_sy")?;
+    let (kappa_z, gamma_y) =
+        crate::models::beam::section_strains(phi_y, l, &[ua[1], ra[2], ub[1], rb[2]], t);
+    // x'-z' plane: the rotation's sign is opposite — a positive θy' bends
+    // towards −z — so it is fed negated. The curvature comes back negated with
+    // it; the shear does not, `γ_z = w'_,x + θy'` being exactly what the flip
+    // produces.
+    let phi_z = phi_of(mat, cell, l, "I_y", "A_sz")?;
+    let (minus_kappa_y, gamma_z) =
+        crate::models::beam::section_strains(phi_z, l, &[ua[2], -ra[1], ub[2], -rb[1]], t);
+    Ok(vec![
+        eps,
+        -minus_kappa_y,
+        kappa_z,
+        torsion,
+        gamma_y,
+        gamma_z,
+    ])
 }
 
 // ─── 3-D geometry helpers (mirror `models::frame3d`) ─────────────────────────
@@ -293,8 +359,40 @@ mod tests {
         (fes, na, nb, support)
     }
 
-    /// Horizontal 2-D element (local = global): pure axial stretch, pure
-    /// curvature and pure reduced shear map straight through.
+    /// A uniform material on a subspace, with whatever components the
+    /// configuration needs to build `Φ`.
+    fn material(fes: &FiniteElementSpace, pairs: &[(&str, f64)]) -> ElementField {
+        let names: Vec<String> = pairs.iter().map(|(c, _)| (*c).to_string()).collect();
+        let mut m = SubElementField::new(fes.get(0).unwrap(), names).unwrap();
+        for (c, v) in pairs {
+            m.set_uniform(c, *v).unwrap();
+        }
+        let mut out = ElementField::empty();
+        out.add_sub(insert(m)).unwrap();
+        out
+    }
+
+    /// `∫₀^L κ dx = θ(L) − θ(0)`, by construction of the curvature. It holds
+    /// for **any** `Φ`, which is what makes it the right assertion: the old
+    /// tests pinned a constant curvature, and a constant is precisely what the
+    /// exact element does not have.
+    fn integrated_curvature(
+        s: &SubElementField,
+        fes: &FiniteElementSpace,
+        comp: &str,
+        l: f64,
+    ) -> f64 {
+        let sub = read(&fes.get(0).unwrap()).unwrap();
+        (0..sub.gauss_count())
+            .map(|g| s.value(0, g, comp).unwrap() * sub.gauss_weight(g).unwrap())
+            .sum::<f64>()
+            * l
+            / 2.0 // SEG2's reference measure is 2, the element's length is L
+    }
+
+    /// Horizontal 2-D element (local = global): the axial strain is constant
+    /// and exact, the curvature integrates to the rotation it came from, and
+    /// the shear is constant along the span.
     #[test]
     fn horizontal_2d_strains() {
         let l = 2.0;
@@ -302,26 +400,34 @@ mod tests {
         let mut f =
             SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into(), "r_z".into()])
                 .unwrap();
-        // u_x = x·0.5 (ε = 0.5), rz = x·0.25 (κ = 0.25), u_y = 0 (γ = −θ_centre).
         f.set_value(a.id(), "u_x", 0.0).unwrap();
         f.set_value(b.id(), "u_x", 0.5 * l).unwrap();
         f.set_value(a.id(), "r_z", 0.0).unwrap();
         f.set_value(b.id(), "r_z", 0.25 * l).unwrap();
         let f = NodeField::from_sub(f);
+        let mat = material(
+            &fes,
+            &[("E", 1.0), ("A", 1.0), ("I", 1.0), ("G", 1.0), ("A_s", 1.0)],
+        );
 
-        let def = beam_deformation(&f, &fes).unwrap();
+        let def = beam_deformation(&f, &fes, &mat).unwrap();
         let s = read(&def.get(0).unwrap()).unwrap();
         assert_eq!(s.components(), &["eps", "kappa", "gamma"]);
         for g in 0..s.gauss_count() {
             assert!((s.value(0, g, "eps").unwrap() - 0.5).abs() < 1e-12);
-            assert!((s.value(0, g, "kappa").unwrap() - 0.25).abs() < 1e-12);
-            // w' = 0, θ_centre = (0 + 0.5)/2 = 0.25 ⇒ γ = −0.25.
-            assert!((s.value(0, g, "gamma").unwrap() + 0.25).abs() < 1e-12);
+        }
+        // The curvature integrates to Δθ = 0.25·L.
+        let total = integrated_curvature(&s, &fes, "kappa", l);
+        assert!((total - 0.25 * l).abs() < 1e-10, "∫κ = {total}");
+        // The shear is constant — an unloaded span carries a constant `V`.
+        let g0 = s.value(0, 0, "gamma").unwrap();
+        for g in 1..s.gauss_count() {
+            assert!((s.value(0, g, "gamma").unwrap() - g0).abs() < 1e-12);
         }
     }
 
-    /// Vertical 2-D element (α = 90°): a global-y displacement is the *axial*
-    /// stretch, a global-x displacement is the transverse (shear) one.
+    /// The same element stood on end: the strains are read in the **local**
+    /// frame, so rotating the member and its DOFs together changes nothing.
     #[test]
     fn vertical_2d_strains_are_rotated() {
         let l = 2.0;
@@ -329,49 +435,72 @@ mod tests {
         let mut f =
             SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into(), "r_z".into()])
                 .unwrap();
-        // Axial along global y.
+        // Axial is now along y.
         f.set_value(a.id(), "u_y", 0.0).unwrap();
         f.set_value(b.id(), "u_y", 0.5 * l).unwrap();
+        f.set_value(a.id(), "r_z", 0.0).unwrap();
+        f.set_value(b.id(), "r_z", 0.25 * l).unwrap();
         let f = NodeField::from_sub(f);
+        let mat = material(
+            &fes,
+            &[("E", 1.0), ("A", 1.0), ("I", 1.0), ("G", 1.0), ("A_s", 1.0)],
+        );
 
-        let def = beam_deformation(&f, &fes).unwrap();
+        let def = beam_deformation(&f, &fes, &mat).unwrap();
         let s = read(&def.get(0).unwrap()).unwrap();
-        assert!((s.value(0, 0, "eps").unwrap() - 0.5).abs() < 1e-12);
-        // No rotation, no transverse displacement ⇒ κ = γ = 0.
-        assert!(s.value(0, 0, "kappa").unwrap().abs() < 1e-12);
-        assert!(s.value(0, 0, "gamma").unwrap().abs() < 1e-12);
+        for g in 0..s.gauss_count() {
+            assert!((s.value(0, g, "eps").unwrap() - 0.5).abs() < 1e-12);
+        }
+        let total = integrated_curvature(&s, &fes, "kappa", l);
+        assert!((total - 0.25 * l).abs() < 1e-10, "∫κ = {total}");
     }
 
-    /// Horizontal 3-D X-beam (local = global): axial on u_x, torsion on r_x,
-    /// curvatures on r_y/r_z, shears on u_y/u_z.
+    /// 3-D: the axial and the torsion stay constant (their fields really are
+    /// linear), and each bending plane's curvature integrates to its own
+    /// rotation difference.
     #[test]
     fn horizontal_3d_strains() {
         let l = 2.0;
         let (fes, a, b, support) = one_element(3, &[0.0, 0.0, 0.0], &[l, 0.0, 0.0]);
-        let dofs: Vec<String> = DOFS_3D.iter().map(|s| s.to_string()).collect();
-        let mut f = SubNodeField::from_poi1(&support, dofs).unwrap();
-        f.set_value(a.id(), "u_x", 0.0).unwrap();
-        f.set_value(b.id(), "u_x", 0.5 * l).unwrap(); // ε = 0.5
-        f.set_value(a.id(), "r_x", 0.0).unwrap();
-        f.set_value(b.id(), "r_x", 0.3 * l).unwrap(); // torsion = 0.3
-        f.set_value(a.id(), "r_z", 0.0).unwrap();
-        f.set_value(b.id(), "r_z", 0.2 * l).unwrap(); // κ_z = 0.2
+        let mut f = SubNodeField::from_poi1(
+            &support,
+            ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"]
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect(),
+        )
+        .unwrap();
+        f.set_value(b.id(), "u_x", 0.5 * l).unwrap();
+        f.set_value(b.id(), "r_x", 0.1 * l).unwrap();
+        f.set_value(b.id(), "r_z", 0.25 * l).unwrap();
+        let _ = a;
         let f = NodeField::from_sub(f);
-
-        let def = beam_deformation(&f, &fes).unwrap();
-        let s = read(&def.get(0).unwrap()).unwrap();
-        assert_eq!(
-            s.components(),
-            &["eps", "kappa_y", "kappa_z", "torsion", "gamma_y", "gamma_z"]
+        let mat = material(
+            &fes,
+            &[
+                ("E", 1.0),
+                ("A", 1.0),
+                ("I_y", 1.0),
+                ("I_z", 1.0),
+                ("G", 1.0),
+                ("A_sy", 1.0),
+                ("A_sz", 1.0),
+            ],
         );
-        assert!((s.value(0, 0, "eps").unwrap() - 0.5).abs() < 1e-12);
-        assert!((s.value(0, 0, "torsion").unwrap() - 0.3).abs() < 1e-12);
-        assert!((s.value(0, 0, "kappa_z").unwrap() - 0.2).abs() < 1e-12);
-        assert!(s.value(0, 0, "kappa_y").unwrap().abs() < 1e-12);
-        // v' = 0 but θz' at centre = (0 + 0.4)/2 = 0.2 ⇒ γ_y = −θz'_centre.
-        assert!((s.value(0, 0, "gamma_y").unwrap() + 0.2).abs() < 1e-12);
+
+        let def = beam_deformation(&f, &fes, &mat).unwrap();
+        let s = read(&def.get(0).unwrap()).unwrap();
+        for g in 0..s.gauss_count() {
+            assert!((s.value(0, g, "eps").unwrap() - 0.5).abs() < 1e-12);
+            assert!((s.value(0, g, "torsion").unwrap() - 0.1).abs() < 1e-12);
+        }
+        // The x'-y' plane bends: ∫κ_z = Δθ_z.
+        let total = integrated_curvature(&s, &fes, "kappa_z", l);
+        assert!((total - 0.25 * l).abs() < 1e-10, "∫κ_z = {total}");
     }
 
+    /// The field must carry every DOF of the configuration, said up front
+    /// rather than as a missing-component failure deep in the loop.
     #[test]
     fn rejects_missing_dof() {
         let (fes, _a, _b, support) = one_element(2, &[0.0, 0.0], &[1.0, 0.0]);
@@ -379,7 +508,11 @@ mod tests {
         let f = NodeField::from_sub(
             SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap(),
         );
-        let err = beam_deformation(&f, &fes).unwrap_err();
+        let mat = material(
+            &fes,
+            &[("E", 1.0), ("A", 1.0), ("I", 1.0), ("G", 1.0), ("A_s", 1.0)],
+        );
+        let err = beam_deformation(&f, &fes, &mat).unwrap_err();
         assert!(format!("{err}").contains("must carry a 'r_z'"));
     }
 }

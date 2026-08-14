@@ -115,13 +115,8 @@ impl std::fmt::Display for BeamModel {
 /// (`Φ = 0`) and returns the Euler-Bernoulli matrix — used by the beam whose
 /// theory has no shear, so that the two share one derivation instead of two.
 pub fn bending_4x4(ei: f64, gas: Option<f64>, l: f64) -> Vec<Vec<f64>> {
-    let phi = match gas {
-        // `Φ` is the ratio of bending to shear compliance. A vanishing `G·A_s`
-        // would mean a member with no shear stiffness at all, which is not a
-        // beam; guarding keeps the division meaningful rather than infinite.
-        Some(g) if g.abs() > f64::MIN_POSITIVE => 12.0 * ei / (g * l * l),
-        _ => 0.0,
-    };
+    // `Φ` is the ratio of bending to shear compliance.
+    let phi = phi(ei, gas, l);
     let c = ei / (l * l * l * (1.0 + phi));
     let (l2, k1, k2) = (l * l, 12.0 * c, 6.0 * l * c);
     let k3 = (4.0 + phi) * l2 * c;
@@ -320,6 +315,56 @@ mod tests {
             soft[1][1]
         );
     }
+
+    /// The shear strain is **constant** along the element and the curvature
+    /// **linear** — `V' = 0` and `M' = V` on an unloaded span. The linear
+    /// element could report neither: its curvature was constant and its shear
+    /// oscillated, which is why the old recovery had to average.
+    #[test]
+    fn the_shear_is_constant_and_the_curvature_linear() {
+        let (l, ph) = (1.7, 0.8);
+        let d = [0.0, 0.0, 0.5, 0.2]; // a clamped-free state
+        let sample: Vec<(f64, f64)> = (0..=10)
+            .map(|k| section_strains(ph, l, &d, k as f64 / 10.0))
+            .collect();
+        // γ constant.
+        for (_, g) in &sample {
+            assert!(
+                (g - sample[0].1).abs() < 1e-12,
+                "shear varies: {g} vs {}",
+                sample[0].1
+            );
+        }
+        // κ linear: its second difference vanishes.
+        for w in sample.windows(3) {
+            let d2 = w[0].0 - 2.0 * w[1].0 + w[2].0;
+            assert!(d2.abs() < 1e-12, "curvature is not linear: {d2}");
+        }
+        // …and it genuinely varies, so "linear" is not "constant".
+        assert!((sample[0].0 - sample[10].0).abs() > 1e-6);
+    }
+
+    /// Without shear compliance the curvature is the second derivative of the
+    /// deflection, and the shear strain vanishes — Euler-Bernoulli, once more
+    /// as the `Φ = 0` limit rather than as a separate derivation.
+    #[test]
+    fn without_shear_the_strain_is_bernoullis() {
+        let l = 1.7;
+        let d = [0.1, -0.2, 0.5, 0.3];
+        for k in 0..=10 {
+            let xi = k as f64 / 10.0;
+            let (kappa, gamma) = section_strains(0.0, l, &d, xi);
+            assert!(gamma.abs() < 1e-12, "shear-free γ = {gamma}");
+            // κ against a central difference of the deflection interpolation.
+            let h = 1e-4;
+            let w_of = |x: f64| -> f64 {
+                let (n_w, _) = shape_functions(0.0, l, x);
+                (0..4).map(|i| n_w[i] * d[i]).sum()
+            };
+            let fd = (w_of(xi + h) - 2.0 * w_of(xi) + w_of(xi - h)) / (h * h * l * l);
+            assert!((kappa - fd).abs() < 1e-4, "κ({xi}) = {kappa} vs w'' = {fd}");
+        }
+    }
 }
 
 // ─── The consistent mass ────────────────────────────────────────────────────
@@ -380,10 +425,7 @@ const GAUSS_01: [(f64, f64); 4] = [
 /// `gas = None` drops the shear compliance (`Φ = 0`) and yields the classical
 /// Euler-Bernoulli consistent mass.
 pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> Vec<Vec<f64>> {
-    let phi = match gas {
-        Some(g) if g.abs() > f64::MIN_POSITIVE => 12.0 * ei / (g * l * l),
-        _ => 0.0,
-    };
+    let phi = phi(ei, gas, l);
     let mut m = vec![vec![0.0_f64; 4]; 4];
     for (xi, w) in GAUSS_01 {
         let (n_w, n_t) = shape_functions(phi, l, xi);
@@ -395,4 +437,55 @@ pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> Ve
         }
     }
     m
+}
+
+// ─── Section strains, from the element's own interpolation ──────────────────
+
+/// The generalised strains of the exact element at `ξ = x/L ∈ [0, 1]`, over
+/// `[w_A, θ_A, w_B, θ_B]`: the **curvature** `κ = θ'` and the **shear strain**
+/// `γ = w' − θ`.
+///
+/// Both come from the same shape functions the stiffness and mass use, so the
+/// three finally describe one element. And they say something the linear
+/// element could not:
+///
+/// - `κ` is **linear** in `ξ` — the moment varies along an unloaded span, as
+///   `M' = V` requires;
+/// - `γ` is **constant**, and equals `−Φ/(L(1+Φ))` per unit of the first degree
+///   of freedom: an unloaded span carries a constant shear force, which is
+///   `V' = 0`.
+///
+/// Both depend on the material through `Φ`. A recovery that did not take a
+/// material could therefore only ever report a mean — which is what the
+/// previous one did.
+pub fn section_strains(phi: f64, l: f64, d: &[f64; 4], xi: f64) -> (f64, f64) {
+    let dd = 1.0 / (1.0 + phi);
+    // ∂N_θ/∂ξ — the curvature is its physical derivative, `κ = (1/L)·∂N_θ/∂ξ·d`.
+    let dn_t = [
+        dd * (6.0 / l) * (2.0 * xi - 1.0),
+        dd * (6.0 * xi - (4.0 + phi)),
+        dd * (6.0 / l) * (1.0 - 2.0 * xi),
+        dd * (6.0 * xi - (2.0 - phi)),
+    ];
+    // ∂N_w/∂ξ, for `γ = (1/L)·∂N_w/∂ξ·d − N_θ·d`.
+    let (x2, _) = (xi * xi, ());
+    let dn_w = [
+        dd * (6.0 * x2 - 6.0 * xi - phi),
+        dd * l * (3.0 * x2 - (4.0 + phi) * xi + 1.0 + phi / 2.0),
+        dd * (-6.0 * x2 + 6.0 * xi + phi),
+        dd * l * (3.0 * x2 - (2.0 - phi) * xi - phi / 2.0),
+    ];
+    let (_, n_t) = shape_functions(phi, l, xi);
+    let kappa: f64 = (0..4).map(|i| dn_t[i] * d[i]).sum::<f64>() / l;
+    let gamma: f64 = (0..4).map(|i| (dn_w[i] / l - n_t[i]) * d[i]).sum();
+    (kappa, gamma)
+}
+
+/// `Φ = 12EI/(G·A_s·L²)`, the ratio the whole element hangs on. `gas = None`
+/// means no shear compliance.
+pub fn phi(ei: f64, gas: Option<f64>, l: f64) -> f64 {
+    match gas {
+        Some(g) if g.abs() > f64::MIN_POSITIVE => 12.0 * ei / (g * l * l),
+        _ => 0.0,
+    }
 }

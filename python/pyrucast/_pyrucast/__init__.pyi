@@ -3067,7 +3067,7 @@ def barycenter(mesh: Mesh) -> Mesh:
     nodes from a set of constrained points.
     """
 
-def beam_deformation(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
+def beam_deformation(field: NodeField, fespace: FiniteElementSpace, material: ElementField) -> ElementField:
     r"""
     Generalised **section strains** of a beam at the Gauss points, in whichever
     configuration the mesh puts it — the geometric producer of the behaviour
@@ -3083,8 +3083,14 @@ def beam_deformation(field: NodeField, fespace: FiniteElementSpace) -> ElementFi
     into them, then evaluates the strains from the local DOFs. This replaces
     `frame_deformation`, which was the same operator for the 2-D and 3-D cases.
     
+    The **material** is required, and that is the honest signature: the
+    element's interpolation depends on `Φ = 12EI/(G·A_s·L²)`, so its curvature
+    distribution cannot be recovered without knowing the shear stiffness. An
+    operator that took no material could only ever report a mean.
+    
     Feed the result to `integrate_behavior` to obtain the section forces
-    (`N = E·A·eps`, `M = E·I·kappa`, `V = G·A_s·gamma`).
+    (`N = E·A·eps`, `M = E·I·kappa`, `V = G·A_s·gamma`). The moment then varies
+    along the element, as `M' = V` requires, while the shear stays constant.
     """
 
 def border(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
