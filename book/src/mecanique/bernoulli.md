@@ -151,6 +151,18 @@ k = pyrucast.matrix.stiffness(model, materials)
 
 ## Compléments
 
+**Masse et rigidité géométrique.** La masse cohérente vient du même bloc que
+celui de [Timoshenko](timoshenko.md#compléments), pris à `Φ = 0` : Bernoulli
+n'apporte donc aucune dérivation propre, il est le bout sans cisaillement d'une
+seule. Ce que ce bloc rend à `Φ = 0` **est** la table classique
+`ρAL/420·[156, 22L, 54, −13L ; …]`, ce qu'un test affirme.
+
+La rigidité géométrique demande un effort axial pour raidir la barre : la
+configuration 1-D, en flexion pure, n'en déclare donc aucune — elle ne
+contribue rien plutôt que d'erroner, un modèle qui ne déclare pas un genre étant
+simplement ignoré de l'assembleur.
+
+
 **Ce que valent les tests.** Un élément de poutre gagne sa place en étant *exact
 aux nœuds* : les tests comparent donc aux formules du cours à la **précision
 machine** (1e-12), et non à une tolérance de discrétisation. Console sous charge

@@ -220,6 +220,14 @@ pub fn element_stiffness(
 /// each rotation — polar `I_p = I_y + I_z` for the torsion `θx'`, `I_y` for
 /// `θy'`, `I_z` for `θz'`. No translation–rotation coupling for the linear
 /// kinematics.
+/// `G·A_s`, or `None` when either constant is absent.
+fn gas(g: Option<f64>, a_s: Option<f64>) -> Option<f64> {
+    match (g, a_s) {
+        (Some(g), Some(a)) => Some(g * a),
+        _ => None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn local_mass(
     rho: f64,
@@ -227,9 +235,9 @@ fn local_mass(
     iy: f64,
     iz: f64,
     e: f64,
-    g: f64,
-    a_sy: f64,
-    a_sz: f64,
+    g: Option<f64>,
+    a_sy: Option<f64>,
+    a_sz: Option<f64>,
     l: f64,
 ) -> [[f64; 12]; 12] {
     let mut m = [[0.0_f64; 12]; 12];
@@ -245,13 +253,13 @@ fn local_mass(
     }
     // The two bending planes take the exact element's mass, with the same index
     // maps and sign convention as the stiffness above.
-    let b_xy = crate::models::beam::mass_4x4(rho * area, rho * iz, e * iz, Some(g * a_sy), l);
+    let b_xy = crate::models::beam::mass_4x4(rho * area, rho * iz, e * iz, gas(g, a_sy), l);
     for (a, &ia) in [1usize, 5, 7, 11].iter().enumerate() {
         for (c, &ic) in [1usize, 5, 7, 11].iter().enumerate() {
             m[ia][ic] += b_xy[a][c];
         }
     }
-    let b_xz = crate::models::beam::mass_4x4(rho * area, rho * iy, e * iy, Some(g * a_sz), l);
+    let b_xz = crate::models::beam::mass_4x4(rho * area, rho * iy, e * iy, gas(g, a_sz), l);
     let sign = [1.0, -1.0, 1.0, -1.0];
     for (a, &ia) in [2usize, 4, 8, 10].iter().enumerate() {
         for (c, &ic) in [2usize, 4, 8, 10].iter().enumerate() {
@@ -297,9 +305,10 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
         material.value(cell, 0, "I_y")?,
         material.value(cell, 0, "I_z")?,
         material.value(cell, 0, "E")?,
-        material.value(cell, 0, "G")?,
-        material.value(cell, 0, "A_sy")?,
-        material.value(cell, 0, "A_sz")?,
+        // Absent shear constants mean `Φ = 0`; see `frame::element_mass`.
+        material.value(cell, 0, "G").ok(),
+        material.value(cell, 0, "A_sy").ok(),
+        material.value(cell, 0, "A_sz").ok(),
         l,
     );
     let t = rotation(&local_axes(d));

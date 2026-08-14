@@ -382,3 +382,112 @@ fn a_bernoulli_beam_recovers_its_section_forces() -> Result<()> {
     }
     Ok(())
 }
+
+/// The **mass** of a Bernoulli beam, in the three configurations.
+///
+/// Nothing here recopies a coefficient: what pins the matrix is that a rigid
+/// translation carries exactly the mass of the member, `ρAL`. It holds in every
+/// configuration and needs no theory to state.
+///
+/// The mass is the shared block's `Φ = 0` end — `models::beam` already asserts
+/// that this reduces to the classical `ρAL/420·[156, 22L, 54, −13L; …]`, so
+/// Bernoulli contributes no derivation of its own.
+#[test]
+fn a_bernoulli_beam_has_a_consistent_mass() -> Result<()> {
+    const RHO: f64 = 2.5;
+    const AREA: f64 = 3.0;
+
+    // 1-D.
+    let (a, b, fes, _c) = beam_1d()?;
+    let model = Model::bernoulli(&fes)?;
+    let mat = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("I", I), ("A", AREA), ("rho", RHO)],
+    )?;
+    let m = pyrucast::ops::matrix::mass(&model, &mat)?;
+    let total = m.get(a.id(), "f_w", a.id(), "w")?
+        + m.get(a.id(), "f_w", b.id(), "w")?
+        + m.get(b.id(), "f_w", a.id(), "w")?
+        + m.get(b.id(), "f_w", b.id(), "w")?;
+    assert!(
+        (total - RHO * AREA * L).abs() < 1e-10 * RHO * AREA * L,
+        "1-D: a rigid translation carries {total}, expected {}",
+        RHO * AREA * L
+    );
+    // The deflection couples to the rotation — the Hermite interpolation says
+    // so, and a lumped or linear mass would not.
+    assert!(m.get(a.id(), "f_w", a.id(), "theta")?.abs() > 1e-6);
+
+    // 2-D: the same, once the element is rotated into the plane.
+    let coords = insert(Coords::new(2)?);
+    let a2 = Node::create_in(coords.clone(), &[0.0, 0.0])?;
+    let b2 = Node::create_in(coords.clone(), &[L, 0.0])?;
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    mesh.add_cell(&[a2.id(), b2.id()])?;
+    let fes2 = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
+    let model2 = Model::bernoulli(&fes2)?;
+    let mat2 = pyrucast::ops::element_field::material_field(
+        &model2,
+        &[("E", E), ("A", AREA), ("I", I), ("rho", RHO)],
+    )?;
+    let m2 = pyrucast::ops::matrix::mass(&model2, &mat2)?;
+    for (dual, primal) in [("f_x", "u_x"), ("f_y", "u_y")] {
+        let t = m2.get(a2.id(), dual, a2.id(), primal)?
+            + m2.get(a2.id(), dual, b2.id(), primal)?
+            + m2.get(b2.id(), dual, a2.id(), primal)?
+            + m2.get(b2.id(), dual, b2.id(), primal)?;
+        assert!(
+            (t - RHO * AREA * L).abs() < 1e-10 * RHO * AREA * L,
+            "2-D {dual}: {t}"
+        );
+    }
+    Ok(())
+}
+
+/// A pure-bending beam declares **no** geometric stiffness — it has no axial
+/// force to be stiffened by.
+///
+/// It therefore contributes nothing rather than erroring: a physics that
+/// declares no layout is simply ignored by the assembler, which is the
+/// repository's standing rule — "an empty cell is not a gap". The plane and
+/// space configurations, which do carry an axial force, contribute.
+#[test]
+fn only_an_axial_configuration_can_buckle() -> Result<()> {
+    let (_a, _b, fes, _c) = beam_1d()?;
+    let model = Model::bernoulli(&fes)?;
+    let mat = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("I", I)])?;
+    let sub = pyrucast::containers::element_field::SubElementField::from_uniform_per_component(
+        fes.get(0)?,
+        vec!["N".into()],
+        &[10.0],
+    )?;
+    let mut state = pyrucast::containers::element_field::ElementField::empty();
+    state.add_sub(insert(sub))?;
+    let kg = pyrucast::ops::matrix::geometric(&model, &mat, &state)?;
+    assert_eq!(
+        kg.len(),
+        0,
+        "a pure-bending beam has no axial force to buckle under, so it contributes no block"
+    );
+
+    // The plane configuration does.
+    let coords = insert(Coords::new(2)?);
+    let a2 = Node::create_in(coords.clone(), &[0.0, 0.0])?;
+    let b2 = Node::create_in(coords.clone(), &[L, 0.0])?;
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    mesh.add_cell(&[a2.id(), b2.id()])?;
+    let fes2 = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
+    let model2 = Model::bernoulli(&fes2)?;
+    let mat2 =
+        pyrucast::ops::element_field::material_field(&model2, &[("E", E), ("A", 1.0), ("I", I)])?;
+    let sub2 = pyrucast::containers::element_field::SubElementField::from_uniform_per_component(
+        fes2.get(0)?,
+        vec!["N".into()],
+        &[10.0],
+    )?;
+    let mut state2 = pyrucast::containers::element_field::ElementField::empty();
+    state2.add_sub(insert(sub2))?;
+    let kg2 = pyrucast::ops::matrix::geometric(&model2, &mat2, &state2)?;
+    assert!(kg2.get(a2.id(), "f_y", a2.id(), "u_y")?.abs() > 1e-9);
+    Ok(())
+}

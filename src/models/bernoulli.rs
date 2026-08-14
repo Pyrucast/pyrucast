@@ -167,6 +167,55 @@ impl SubModelKind for Bernoulli {
         })
     }
 
+    /// Mass and geometric stiffness share the stiffness layout.
+    fn mass_layout(&self) -> Option<MatrixLayout> {
+        self.stiffness_layout()
+    }
+
+    /// The geometric stiffness needs an axial force to be stiffened by, which a
+    /// pure-bending configuration does not have.
+    fn geometric_layout(&self) -> Option<MatrixLayout> {
+        match self.model {
+            BeamModel::Planar1d => None,
+            _ => self.stiffness_layout(),
+        }
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material.expect("Bernoulli declares a material_fespace");
+        match self.model {
+            BeamModel::Planar1d => planar_mass(geom, mat, ke),
+            BeamModel::Frame2d => crate::models::frame::element_mass(geom, mat, ke),
+            BeamModel::Frame3d => crate::models::frame3d::element_mass(geom, mat, ke),
+        }
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: Option<&SubElementField>,
+        state: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let stress = state.expect("the geometric stiffness requires the axial force `N`");
+        match self.model {
+            BeamModel::Planar1d => Err(PyrucastError::Message(
+                "Bernoulli: a pure-bending beam carries no axial force, so it has no geometric \
+                 stiffness — use a 2-D or 3-D configuration"
+                    .into(),
+            )),
+            BeamModel::Frame2d => crate::models::frame::element_geometric(geom, stress, ke),
+            BeamModel::Frame3d => crate::models::frame3d::element_geometric(geom, stress, ke),
+        }
+    }
+
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
@@ -239,8 +288,13 @@ impl Domain for Bernoulli {
         Some(material_of(self.model))
     }
 
+    /// `rho` for the mass, and — in the 1-D configuration — the full area `A`,
+    /// which only the mass needs (a pure-bending beam's stiffness uses none).
     fn optional_material_components(&self) -> &'static [&'static str] {
-        &["rho"]
+        match self.model {
+            BeamModel::Planar1d => &["A", "rho"],
+            _ => &["rho"],
+        }
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
@@ -472,4 +526,35 @@ fn congruent(local: &[Vec<f64>], t: &[Vec<f64>], ke: &mut [f64], side: usize) {
             ke[i * side + j] += acc;
         }
     }
+}
+
+/// Consistent **mass** of a 1-D Euler-Bernoulli beam, on `[w_A, θ_A, w_B, θ_B]`.
+///
+/// The shared block with **no** shear compliance: `Φ = 0` there, and what comes
+/// back is the classical `ρAL/420·[156, 22L, 54, −13L; …]`, which
+/// `models::beam` asserts against that very table. Bernoulli therefore adds no
+/// derivation of its own — it is the `Φ → 0` end of one.
+fn planar_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
+    let cell = geom.cell;
+    let (xa, xb) = (geom.node_coord(0)?, geom.node_coord(1)?);
+    let l = (xb[0] - xa[0]).abs();
+    let rho = material.value(cell, 0, "rho").map_err(|_| {
+        PyrucastError::Message(
+            "Bernoulli mass matrix: material component `rho` (density) is required".into(),
+        )
+    })?;
+    let i = material.value(cell, 0, "I")?;
+    let m = crate::models::beam::mass_4x4(
+        rho * material.value(cell, 0, "A")?,
+        rho * i,
+        material.value(cell, 0, "E")? * i,
+        None,
+        l,
+    );
+    for (r, row) in m.iter().enumerate() {
+        for (c, v) in row.iter().enumerate() {
+            ke[r * 4 + c] += v;
+        }
+    }
+    Ok(())
 }
