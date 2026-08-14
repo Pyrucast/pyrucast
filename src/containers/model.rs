@@ -312,10 +312,18 @@ impl SubModel {
         )?))
     }
 
-    /// Fickian-diffusion sub-model on an FE subspace (primal `c`, dual `j`).
-    /// Material data (the diffusivity, isotropic or oriented) is supplied at
-    /// assembly time. See [`fick::Fick::with_symmetry`].
-    pub fn fick(
+    /// Fickian-diffusion sub-model on an FE subspace (primal `c`, dual `j`),
+    /// **isotropic**. Material data (the diffusivity) is supplied at assembly
+    /// time. See [`fick::Fick::with_symmetry`].
+    pub fn fick(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+        Self::fick_with_symmetry(fespace, MaterialSymmetry::Isotropic)
+    }
+
+    /// Fickian diffusion with an explicit material symmetry — an orthotropic or
+    /// anisotropic diffusivity carries its constants **and its axes** through
+    /// the material field, exactly as [`Self::heat_conduction_with_symmetry`]
+    /// does. See [`crate::models::symmetry`].
+    pub fn fick_with_symmetry(
         fespace: Handle<SubFiniteElementSpace>,
         symmetry: MaterialSymmetry,
     ) -> Result<Self> {
@@ -944,13 +952,23 @@ impl Model {
         Ok(model)
     }
 
-    /// Fickian-diffusion `Model` spanning **every** subspace of `fes` (same
-    /// symmetry for all). Parent-level named constructor; the diffusivity is
+    /// Fickian-diffusion `Model` spanning **every** subspace of `fes`,
+    /// **isotropic**. Parent-level named constructor; the diffusivity is
     /// supplied at assembly time.
-    pub fn fick(fes: &FiniteElementSpace, symmetry: MaterialSymmetry) -> Result<Self> {
+    pub fn fick(fes: &FiniteElementSpace) -> Result<Self> {
+        Self::fick_with_symmetry(fes, MaterialSymmetry::Isotropic)
+    }
+
+    /// Fickian-diffusion `Model` spanning **every** subspace of `fes`, with an
+    /// explicit material symmetry (the same for all). The diffusivity (`D`, or
+    /// `D_1…` / `D_11…` plus the material axes) is supplied at assembly time.
+    pub fn fick_with_symmetry(
+        fes: &FiniteElementSpace,
+        symmetry: MaterialSymmetry,
+    ) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
-            model.add_sub(insert(SubModel::fick(sub.clone(), symmetry)?))?;
+            model.add_sub(insert(SubModel::fick_with_symmetry(sub.clone(), symmetry)?))?;
         }
         Ok(model)
     }

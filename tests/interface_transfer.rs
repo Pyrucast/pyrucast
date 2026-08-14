@@ -31,7 +31,6 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::models::interface_transfer::TransferKind;
-use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
@@ -198,8 +197,8 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
     ])?);
     let multiplier = mesh::barycenter(&imposed)?;
 
-    let model = Model::fick(&square(&left)?, MaterialSymmetry::Isotropic)?
-        .union(&Model::fick(&square(&right)?, MaterialSymmetry::Isotropic)?)?
+    let model = Model::fick(&square(&left)?)?
+        .union(&Model::fick(&square(&right)?)?)?
         .union(&Model::interface_transfer(
             &face_left,
             &face_right,

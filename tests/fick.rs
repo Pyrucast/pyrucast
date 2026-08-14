@@ -29,7 +29,6 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
-use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
@@ -62,7 +61,7 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     let multiplier = mesh::barycenter(&imposed)?;
     let mult = multiplier.node(0, 0, 0)?.id();
 
-    let diffusion = Model::fick(&fes, MaterialSymmetry::Isotropic)?;
+    let diffusion = Model::fick(&fes)?;
     let dirichlet = Model::dirichlet(
         "c".into(),
         "j".into(),
@@ -132,8 +131,7 @@ fn diffusion_and_conduction_coexist_and_filter_apart() -> Result<()> {
     }
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
-    let model =
-        Model::fick(&fes, MaterialSymmetry::Isotropic)?.union(&Model::heat_conduction(&fes)?)?;
+    let model = Model::fick(&fes)?.union(&Model::heat_conduction(&fes)?)?;
     assert_eq!(model.len(), 2);
 
     // One material field carrying both zones; each physics picks its own.

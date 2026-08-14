@@ -203,7 +203,7 @@ impl PyModel {
         symmetry: Option<&str>,
     ) -> PyResult<Self> {
         let s = parse_symmetry("fick", symmetry)?;
-        let inner = Model::fick(&fespace.inner, s)?;
+        let inner = Model::fick_with_symmetry(&fespace.inner, s)?;
         Ok(Self { inner })
     }
 
