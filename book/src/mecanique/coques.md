@@ -152,9 +152,20 @@ ne peut satisfaire qu'en refusant de fléchir : le déplacement s'effondre vers
 zéro et aucun raffinement ne le récupère. C'est le **blocage en cisaillement**.
 
 L'intégrer en un seul point relâche la contrainte en moyenne, l'élément fléchit,
-et le calcul converge. C'est le même remède et le même mécanisme que pour la
-[poutre de Timoshenko](timoshenko.md) — d'où le partage de la structure
-multi-quadrature plutôt que deux inventions parallèles.
+et le calcul converge. La [poutre de Timoshenko](timoshenko.md) a connu le même
+blocage et y a répondu de la même manière ; elle a depuis été remplacée par un
+élément **exact**, qui possède son interpolation au lieu d'en intégrer une. La
+coque épaisse est donc aujourd'hui le seul élément multi-quadrature du code : le
+patron reste général, son utilisateur ne l'est plus.
+
+Et le second sous-espace n'est **pas** un argument de `Model.shell` : rien en lui
+n'appartient à l'appelant (même sous-maillage, même interpolation, seule la
+quadrature change), et `element_matrix` lit les deux `CellGeom` comme *une seule*
+maille — un invariant qu'il vaut mieux établir par construction que valider après
+coup. Le choix qui est réel, lui, est bien un argument : la formulation.
+
+Le remède alternatif est de ne pas avoir de contrainte du tout — c'est le
+Kirchhoff discret, ci-dessous, qui n'a rien à bloquer.
 
 ## Kirchhoff discret (`kirchhoff`)
 

@@ -37,9 +37,16 @@
 //! That is **shear locking**.
 //!
 //! Integrating the shear at a single point relaxes the constraint to a mean, the
-//! element bends, and the answer converges. It is the same cure, and the same
-//! mechanism, as the [Timoshenko beam](crate::models::timoshenko) — which is why
-//! the two share the multi-quadrature layout rather than each inventing one.
+//! element bends, and the answer converges. The [Timoshenko
+//! beam](crate::models::timoshenko) once met the same locking and was answered
+//! the same way; it has since been replaced by an element that is *exact*, and
+//! owns its interpolation rather than integrating one. So this is now the only
+//! multi-quadrature element in the crate — the pattern is general, its user is
+//! not.
+//!
+//! The alternative to relaxing the constraint is not to have one:
+//! [discrete Kirchhoff](super::kirchhoff) drops the shear strain outright, and
+//! has nothing left to lock.
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;

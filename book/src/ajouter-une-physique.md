@@ -319,11 +319,19 @@ premier utilisateur.
 Le champ `fespaces` du `MatrixLayout` est un **`Vec`** : un seul espace EF
 pour une physique de continuum, ou plusieurs — partageant un maillage, ne
 différant que par la quadrature — pour un élément **multi-quadrature**. C'est ce
-que fait la **poutre de Timoshenko** (`fespaces: vec![bending, shear]`, flexion en
-Gauss complet + cisaillement réduit) : `element_matrix` reçoit alors deux
-`CellGeom`, `geoms[0]` pour la flexion et `geoms[1]` pour le cisaillement, et
-l'élément passe par le **même** chemin de scatter parallèle que le reste — la
-sparsité ne dépendant que de la connectivité, pas de la quadrature.
+que fait la **coque de Reissner-Mindlin** (`fespaces: vec![full, shear]`, membrane
+et flexion en Gauss complet + cisaillement transverse réduit, contre le blocage) :
+`element_matrix` reçoit alors deux `CellGeom`, `geoms[0]` pour la membrane et la
+flexion, `geoms[1]` pour le cisaillement, et l'élément passe par le **même**
+chemin de scatter parallèle que le reste — la sparsité ne dépendant que de la
+connectivité, pas de la quadrature.
+
+Le second espace est construit par la physique, pas reçu en argument : il est
+entièrement déterminé par le premier, et les deux `CellGeom` doivent désigner
+*la même maille*, un invariant qu'on préfère établir plutôt que vérifier. Une
+même physique peut d'ailleurs en déclarer un nombre variable selon sa
+formulation — la coque en Kirchhoff discret n'en déclare qu'un, n'ayant aucun
+cisaillement à intégrer.
 
 ### Une contrainte : les relations, forme neutre
 

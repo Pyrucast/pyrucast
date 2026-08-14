@@ -163,10 +163,13 @@ impl Shell {
                 "Shell ({model}): expected TRI3 or QUA4, got {element:?}"
             )));
         }
-        // The shear subspace shares the mesh and differs only by quadrature —
-        // the same multi-quadrature pattern as the Timoshenko beam. A discrete
-        // Kirchhoff element has no shear term at all, so it declares none: a
-        // second subspace would be an integration the formulation never does.
+        // The shear subspace shares the mesh and differs only by quadrature. It
+        // is built here rather than asked for: nothing about it is the caller's
+        // to choose, and `element_matrix` reads the two `CellGeom` as **one**
+        // cell — an invariant worth establishing by construction rather than
+        // validating. A discrete Kirchhoff element has no shear term at all, so
+        // it declares none: a second subspace would be an integration the
+        // formulation never does.
         let shear = model.has_transverse_shear().then(|| {
             SubFiniteElementSpace::new(
                 submesh.clone(),
@@ -204,9 +207,12 @@ impl SubModelKind for Shell {
 
     /// **Two** FE subspaces where there is a shear to integrate: the full
     /// quadrature drives the cell loop and the membrane/bending terms, the
-    /// reduced one the transverse shear — exactly the multi-quadrature layout
-    /// the Timoshenko beam introduced. A discrete Kirchhoff element declares
-    /// one, having no second integration to do.
+    /// reduced one the transverse shear. That is the whole of the
+    /// multi-quadrature layout, and this is currently its only user.
+    ///
+    /// A discrete Kirchhoff element declares **one**, having no second
+    /// integration to do — which is the layout saying what the formulation is,
+    /// rather than a shape it has to fit.
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         let mut fespaces = vec![self.fespace.clone()];
         fespaces.extend(self.shear.clone());
