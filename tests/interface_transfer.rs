@@ -37,6 +37,9 @@ use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
 use pyrucast::Result;
 
+/// The diffusing species — every name of the Fick physics carries it.
+const SPECIES: &str = "H2";
+
 const D: f64 = 2.0; // diffusivity, both squares
 const Q: f64 = 10.0; // flux density injected at x = 0
 const C_RIGHT: f64 = 1.0; // concentration imposed at x = 2
@@ -46,7 +49,7 @@ fn an_interface_law_makes_the_field_jump() -> Result<()> {
     const H: f64 = 5.0; // transfer coefficient
     let (geom, solution) = solve_two_squares(H)?;
 
-    let c = |n: &Node| solution.value(n.id(), "c");
+    let c = |n: &Node| solution.value(n.id(), &format!("c_{SPECIES}"));
     let far_left = c(&geom.left[0])?; // (0, 0)
     let left_face = c(&geom.left[1])?; // (1, 0), left side
     let right_face = c(&geom.right[0])?; // (1, 0), right side
@@ -81,8 +84,8 @@ fn a_stiff_interface_recovers_a_continuous_body() -> Result<()> {
     let mut previous = f64::INFINITY;
     for h in [1e2, 1e4, 1e6] {
         let (geom, solution) = solve_two_squares(h)?;
-        let jump =
-            solution.value(geom.left[1].id(), "c")? - solution.value(geom.right[0].id(), "c")?;
+        let jump = solution.value(geom.left[1].id(), &format!("c_{SPECIES}"))?
+            - solution.value(geom.right[0].id(), &format!("c_{SPECIES}"))?;
         assert!(
             (jump - Q / h).abs() < 1e-8 * jump.abs().max(1.0),
             "h = {h}: jump {jump} ≠ {}",
@@ -140,7 +143,7 @@ fn a_non_conforming_interface_is_rejected() -> Result<()> {
     let err = Model::interface_transfer(
         &edge(&a0, &a1)?,
         &edge(&b0, &b1)?,
-        vec![("c".into(), "j".into())],
+        vec![(format!("c_{SPECIES}"), format!("j_{SPECIES}"))],
         Physics::Diffusion,
         1e-9,
     )
@@ -202,18 +205,18 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
     ])?);
     let multiplier = mesh::barycenter(&imposed)?;
 
-    let model = Model::fick(&square(&left)?)?
-        .union(&Model::fick(&square(&right)?)?)?
+    let model = Model::fick(&square(&left)?, SPECIES)?
+        .union(&Model::fick(&square(&right)?, SPECIES)?)?
         .union(&Model::interface_transfer(
             &face_left,
             &face_right,
-            vec![("c".into(), "j".into())],
+            vec![(format!("c_{SPECIES}"), format!("j_{SPECIES}"))],
             Physics::Diffusion,
             1e-9,
         )?)?
         .union(&Model::dirichlet(
-            "c".into(),
-            "j".into(),
+            format!("c_{SPECIES}"),
+            format!("j_{SPECIES}"),
             &imposed,
             &multiplier,
             None,
@@ -223,7 +226,10 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
 
     // One material field for the whole model: the squares ask for `D`, the
     // interface for `h`, and each resolves its own zone by its components.
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("D", D), ("h_c", h)])?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[(&format!("D_{SPECIES}"), D), (&format!("h_c_{SPECIES}"), h)],
+    )?;
     Ok((Geometry { left, right }, model, materials))
 }
 
@@ -237,7 +243,11 @@ fn solve_two_squares(h: f64) -> Result<(Geometry, NodeField)> {
     let mut inlet = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     inlet.add_cell(&[geom.left[0].id(), geom.left[3].id()])?;
     let inlet_fes = FiniteElementSpace::lagrange1(&inlet)?;
-    let influx = pyrucast::ops::node_field::flux(&inlet_fes.get(0)?, FluxDensity::Uniform(Q), "j")?;
+    let influx = pyrucast::ops::node_field::flux(
+        &inlet_fes.get(0)?,
+        FluxDensity::Uniform(Q),
+        &format!("j_{SPECIES}"),
+    )?;
 
     // The imposed concentration, on the Dirichlet multiplier nodes.
     let mult_mesh = model.multiplier_mesh()?;
@@ -252,9 +262,9 @@ fn solve_two_squares(h: f64) -> Result<(Geometry, NodeField)> {
         }
     }
     let imposed_sm = insert(imposed_sm);
-    let mut imposed = SubNodeField::from_poi1(&imposed_sm, vec!["imposed_c".into()])?;
+    let mut imposed = SubNodeField::from_poi1(&imposed_sm, vec![format!("imposed_c_{SPECIES}")])?;
     for id in &mults {
-        imposed.set_value(*id, "imposed_c", C_RIGHT)?;
+        imposed.set_value(*id, &format!("imposed_c_{SPECIES}"), C_RIGHT)?;
     }
 
     let rhs = NodeField::from_sub(influx).union(&NodeField::from_sub(imposed))?;

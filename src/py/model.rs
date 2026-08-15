@@ -194,26 +194,32 @@ impl PyModel {
         Ok(Self { inner })
     }
 
-    /// `Model.fick(fespace, symmetry=None)` — Fickian-diffusion model spanning
-    /// **every** subspace of `fespace`. DOFs are the concentration `c` (primal)
-    /// and the mass flux `j` (dual); its physics nature is `"diffusion"`, so
-    /// `model.filter("diffusion")` isolates it from a thermal or mechanical
-    /// model it is composed with.
+    /// `Model.fick(fespace, species, symmetry=None)` — Fickian diffusion of one
+    /// named **species**, spanning every subspace of `fespace`.
+    ///
+    /// Every name carries the species: DOFs are `c_<species>` (primal) and
+    /// `j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux
+    /// `j_<species>_x…`. Two species therefore share a mesh without colliding —
+    /// and no bare `c` can be mistaken for anything else. Its physics nature is
+    /// `"diffusion"`, so `model.filter("diffusion")` isolates it from a thermal
+    /// or mechanical model it is composed with.
     ///
     /// `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
     /// `"anisotropic"`, selecting the diffusivity the material field must carry:
-    /// `D`, `D_1, D_2, D_3`, or the symmetric `D_11 … D_33` — the oriented ones
-    /// plus the material axes. The transient (storage) term is the mass matrix,
-    /// which reads the optional `poro`.
+    /// `D_<species>`, `D_1_<species> …`, or the symmetric `D_11_<species> …` —
+    /// the oriented ones plus the material axes `V1X, V1Y, …`. Those axes and
+    /// the optional storage `poro` keep **bare** names: they belong to the
+    /// medium, not to what diffuses through it.
     #[classmethod]
-    #[pyo3(signature = (fespace, symmetry=None))]
+    #[pyo3(signature = (fespace, species, symmetry=None))]
     fn fick(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         fespace: PyRef<PyFiniteElementSpace>,
+        species: &str,
         symmetry: Option<&str>,
     ) -> PyResult<Self> {
         let s = parse_symmetry("fick", symmetry)?;
-        let inner = Model::fick_with_symmetry(&fespace.inner, s)?;
+        let inner = Model::fick_with_symmetry(&fespace.inner, s, species)?;
         Ok(Self { inner })
     }
 

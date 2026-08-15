@@ -323,8 +323,8 @@ impl SubModel {
     /// Fickian-diffusion sub-model on an FE subspace (primal `c`, dual `j`),
     /// **isotropic**. Material data (the diffusivity) is supplied at assembly
     /// time. See [`fick::Fick::with_symmetry`].
-    pub fn fick(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        Self::fick_with_symmetry(fespace, MaterialSymmetry::Isotropic)
+    pub fn fick(fespace: Handle<SubFiniteElementSpace>, species: &str) -> Result<Self> {
+        Self::fick_with_symmetry(fespace, MaterialSymmetry::Isotropic, species)
     }
 
     /// Fickian diffusion with an explicit material symmetry — an orthotropic or
@@ -334,9 +334,10 @@ impl SubModel {
     pub fn fick_with_symmetry(
         fespace: Handle<SubFiniteElementSpace>,
         symmetry: MaterialSymmetry,
+        species: &str,
     ) -> Result<Self> {
         Ok(SubModel::Fick(fick::Fick::with_symmetry(
-            fespace, symmetry,
+            fespace, symmetry, species,
         )?))
     }
 
@@ -964,8 +965,8 @@ impl Model {
     /// Fickian-diffusion `Model` spanning **every** subspace of `fes`,
     /// **isotropic**. Parent-level named constructor; the diffusivity is
     /// supplied at assembly time.
-    pub fn fick(fes: &FiniteElementSpace) -> Result<Self> {
-        Self::fick_with_symmetry(fes, MaterialSymmetry::Isotropic)
+    pub fn fick(fes: &FiniteElementSpace, species: &str) -> Result<Self> {
+        Self::fick_with_symmetry(fes, MaterialSymmetry::Isotropic, species)
     }
 
     /// Fickian-diffusion `Model` spanning **every** subspace of `fes`, with an
@@ -974,10 +975,15 @@ impl Model {
     pub fn fick_with_symmetry(
         fes: &FiniteElementSpace,
         symmetry: MaterialSymmetry,
+        species: &str,
     ) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
-            model.add_sub(insert(SubModel::fick_with_symmetry(sub.clone(), symmetry)?))?;
+            model.add_sub(insert(SubModel::fick_with_symmetry(
+                sub.clone(),
+                symmetry,
+                species,
+            )?))?;
         }
         Ok(model)
     }

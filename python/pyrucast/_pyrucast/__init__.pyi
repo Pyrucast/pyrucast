@@ -1278,19 +1278,24 @@ class Model:
         axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D.
         """
     @classmethod
-    def fick(cls, fespace: FiniteElementSpace, symmetry: typing.Optional[builtins.str] = None) -> Model:
+    def fick(cls, fespace: FiniteElementSpace, species: builtins.str, symmetry: typing.Optional[builtins.str] = None) -> Model:
         r"""
-        `Model.fick(fespace, symmetry=None)` — Fickian-diffusion model spanning
-        **every** subspace of `fespace`. DOFs are the concentration `c` (primal)
-        and the mass flux `j` (dual); its physics nature is `"diffusion"`, so
-        `model.filter("diffusion")` isolates it from a thermal or mechanical
-        model it is composed with.
+        `Model.fick(fespace, species, symmetry=None)` — Fickian diffusion of one
+        named **species**, spanning every subspace of `fespace`.
+        
+        Every name carries the species: DOFs are `c_<species>` (primal) and
+        `j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux
+        `j_<species>_x…`. Two species therefore share a mesh without colliding —
+        and no bare `c` can be mistaken for anything else. Its physics nature is
+        `"diffusion"`, so `model.filter("diffusion")` isolates it from a thermal
+        or mechanical model it is composed with.
         
         `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
         `"anisotropic"`, selecting the diffusivity the material field must carry:
-        `D`, `D_1, D_2, D_3`, or the symmetric `D_11 … D_33` — the oriented ones
-        plus the material axes. The transient (storage) term is the mass matrix,
-        which reads the optional `poro`.
+        `D_<species>`, `D_1_<species> …`, or the symmetric `D_11_<species> …` —
+        the oriented ones plus the material axes `V1X, V1Y, …`. Those axes and
+        the optional storage `poro` keep **bare** names: they belong to the
+        medium, not to what diffuses through it.
         """
     @classmethod
     def radiation(cls, fespace: FiniteElementSpace) -> Model:

@@ -35,11 +35,14 @@ def _two_squares():
 def test_interface_declares_its_variables_and_material():
     _c, left, right, _square, edge = _two_squares()
     model = pyrucast.Model.interface_transfer(
-        edge(left[1], left[2]), edge(right[0], right[3]), [("c", "j")], "diffusion"
+        edge(left[1], left[2]),
+        edge(right[0], right[3]),
+        [("c_H2", "j_H2")],
+        "diffusion",
     )
-    assert model[0].primal_vars() == ["c"]
-    assert model[0].dual_vars() == ["j"]
-    assert model[0].material_components() == ["h_c"]
+    assert model[0].primal_vars() == ["c_H2"]
+    assert model[0].dual_vars() == ["j_H2"]
+    assert model[0].material_components() == ["h_c_H2"]
     assert model[0].physics() == ["diffusion"]
 
 
@@ -87,7 +90,9 @@ def test_a_non_conforming_interface_is_rejected():
     # A construction-time modelling error surfaces as `RuntimeError`; only the
     # tag parsing (a bad argument) is a `ValueError`.
     try:
-        pyrucast.Model.interface_transfer(edge(a), edge(b), [("c", "j")], "diffusion")
+        pyrucast.Model.interface_transfer(
+            edge(a), edge(b), [("c_H2", "j_H2")], "diffusion"
+        )
     except RuntimeError as exc:
         assert "not node-conforming" in str(exc)
     else:  # pragma: no cover - the constructor must refuse
@@ -98,7 +103,10 @@ def test_an_unknown_physics_is_rejected():
     _c, left, right, _square, edge = _two_squares()
     try:
         pyrucast.Model.interface_transfer(
-            edge(left[1], left[2]), edge(right[0], right[3]), [("c", "j")], "magnetic"
+            edge(left[1], left[2]),
+            edge(right[0], right[3]),
+            [("c_H2", "j_H2")],
+            "magnetic",
         )
     except ValueError as exc:
         assert "magnetic" in str(exc)
@@ -130,19 +138,24 @@ def test_the_field_jumps_by_q_over_h():
     multiplier = pyrucast.mesh.barycenter(imposed)
 
     model = (
-        pyrucast.Model.fick(square(left))
-        | pyrucast.Model.fick(square(right))
+        pyrucast.Model.fick(square(left), "H2")
+        | pyrucast.Model.fick(square(right), "H2")
         | pyrucast.Model.interface_transfer(
-            edge(left[1], left[2]), edge(right[0], right[3]), [("c", "j")], "diffusion"
+            edge(left[1], left[2]),
+            edge(right[0], right[3]),
+            [("c_H2", "j_H2")],
+            "diffusion",
         )
-        | pyrucast.Model.dirichlet("c", "j", imposed, multiplier)
+        | pyrucast.Model.dirichlet("c_H2", "j_H2", imposed, multiplier)
     )
-    materials = pyrucast.element_field.material_field(model, [("D", d), ("h_c", h)])
+    materials = pyrucast.element_field.material_field(
+        model, [("D_H2", d), ("h_c_H2", h)]
+    )
 
     # Uniform flux density on the far-left edge, as consistent nodal loads.
     inlet = pyrucast.Mesh(c, "SEG2")
     inlet.unit().add_cell([left[0], left[3]])
-    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inlet)[0], q, "j")
+    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inlet)[0], q, "j_H2")
 
     # The imposed concentration, on the two multiplier nodes.
     mult_mesh = model.multiplier_mesh()
@@ -150,17 +163,17 @@ def test_the_field_jumps_by_q_over_h():
     load = pyrucast.Mesh(c, "POI1")
     for m in mults:
         load.unit().add_cell([m])
-    imposed_field = pyrucast.NodeField(load, ["imposed_c"])
+    imposed_field = pyrucast.NodeField(load, ["imposed_c_H2"])
     for m in mults:
-        imposed_field[0].set_value(m, "imposed_c", c_right)
+        imposed_field[0].set_value(m, "imposed_c_H2", c_right)
 
     solution = pyrucast.solver.solve(
         pyrucast.matrix.stiffness(model, materials), rhs | imposed_field
     )
 
-    left_face = solution.value(left[1], "c")
-    right_face = solution.value(right[0], "c")
-    assert abs(solution.value(right[1], "c") - c_right) < 1e-10
+    left_face = solution.value(left[1], "c_H2")
+    right_face = solution.value(right[0], "c_H2")
+    assert abs(solution.value(right[1], "c_H2") - c_right) < 1e-10
     assert abs((left_face - right_face) - q / h) < 1e-10
     # Each square drops q/D across its unit width.
-    assert abs((solution.value(left[0], "c") - left_face) - q / d) < 1e-10
+    assert abs((solution.value(left[0], "c_H2") - left_face) - q / d) < 1e-10

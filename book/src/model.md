@@ -106,8 +106,8 @@ constructeurs et les variables, vus du `Model` :
 | `heat_conduction_with_symmetry(fes, sym)` | `T` | `q` | `k_1…` / `k_11…` + repère | [Conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
 | `boundary_transfer(fes, comps, physics)` | libres | libres | `h_<primale>` | [Échange de surface](thermique.md#convection-de-surface-robin--film) |
 | `radiation(fes)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
-| `fick(fes)` | `c` | `j` | `D` ; `poro` facultatif | [Diffusion](diffusion.md) |
-| `fick_with_symmetry(fes, sym)` | `c` | `j` | `D_1…` / `D_11…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
+| `fick(fes, espèce)` | `c_<espèce>` | `j_<espèce>` | `D_<espèce>` ; `poro` facultatif | [Diffusion](diffusion.md) |
+| `fick_with_symmetry(fes, sym, espèce)` | `c_<espèce>` | `j_<espèce>` | `D_1_<espèce>…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
 | `interface_transfer(a, b, comps, physics, tol)` | libres | libres | `h_<primale>` | [Transfert d'interface](diffusion.md#transfert-à-travers-une-interface) |
 | `truss(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
 | `elasticity(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` | [Élasticité](mecanique/elasticite.md) |

@@ -2,10 +2,32 @@
 //! `K_ij = ∫ ∇N_i · D · ∇N_j dx`.
 //!
 //! The mass-transport twin of [`heat_conduction`](crate::models::heat_conduction):
-//! same Laplacian, different variables. Primal `"c"` (concentration, columns),
-//! dual `"j"` (mass flux, rows). Fick's first law is `j = −D·∇c`; as in
+//! same Laplacian, different variables. Fick's first law is `j = −D·∇c`; as in
 //! conduction, what is stored is the **weak-form** flux `D·∇c`, so that
 //! `∫ Bᵀ·flux = K·c` and the behaviour matches the stiffness in the linear case.
+//!
+//! ## Every name carries its species
+//!
+//! A diffusion problem rarely has one diffusing species, and two of them share
+//! neither their concentration, their flux, nor their diffusivity. The species
+//! is therefore **named at construction** and carried by every quantity that
+//! belongs to it:
+//!
+//! ```text
+//! species "H2"      primal  c_H2        dual  j_H2
+//!                   material D_H2  (D_1_H2, D_11_H2, … when oriented)
+//!                   behaviour  grad_c_H2_x → j_H2_x
+//! ```
+//!
+//! Two `Fick` sub-models with different species then live on the **same mesh**
+//! without colliding — their DOFs are distinct names, so the assembler puts them
+//! side by side with no special case. It also removes the older ambiguity with
+//! heat conduction, whose `T`/`q` no longer risk meeting a bare `c`/`j`.
+//!
+//! What is **not** suffixed is what belongs to the medium rather than to the
+//! species: the storage coefficient `poro` and the material axes `V1X`, `V1Y`, …
+//! A porous solid has one porosity and one weaving frame, whatever diffuses
+//! through it.
 //!
 //! Its nature is [`Physics::Diffusion`], not `Thermal`: sharing an operator is
 //! not sharing a physics, and a coupled thermo-diffusive model must be able to
@@ -29,24 +51,25 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
 
-/// Column DOF name (concentration).
-pub const PRIMAL_VAR: &str = "c";
-/// Row DOF name (mass flux).
-pub const DUAL_VAR: &str = "j";
-/// The coefficient's name — the isotropic diffusivity, and the prefix of the
-/// oriented ones (`D_1`, `D_11`, …).
-pub const MATERIAL_COMPONENT: &str = "D";
+/// Column DOF name of a species — `c_H2`.
+pub fn primal_var(species: &str) -> String {
+    format!("c_{species}")
+}
+
+/// Row DOF name of a species — `j_H2`.
+pub fn dual_var(species: &str) -> String {
+    format!("j_{species}")
+}
 /// Storage (capacity) coefficient, consumed **only** by the mass matrix.
 const STORAGE_COMPONENTS: &[&str] = &["poro"];
 
 /// Isotropic contract.
-const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
+const MATERIAL_COMPONENTS: &[&str] = &["D"];
 /// Orthotropic diffusivities plus the in-plane material axis (2-D).
 const ORTHOTROPIC_2D: &[&str] = &["D_1", "D_2", "D_3", "V1X", "V1Y"];
 /// Orthotropic diffusivities plus the two material axes (3-D).
@@ -60,8 +83,27 @@ const ANISOTROPIC_3D: &[&str] = &[
     "D_11", "D_12", "D_13", "D_22", "D_23", "D_33", "V1X", "V1Y", "V1Z", "V2X", "V2Y", "V2Z",
 ];
 
-/// The material contract of a symmetry in a space of dimension `space_dim`.
-fn material_contract(symmetry: MaterialSymmetry, space_dim: usize) -> &'static [&'static str] {
+/// The material contract of a symmetry, **with the species** carried by every
+/// diffusivity and by nothing else.
+///
+/// The species goes last (`D_1_H2`, not `D_H2_1`), so stripping it is one rule
+/// whatever the symmetry. The axes `V1X…V2Z` keep their bare names: they are the
+/// medium's frame, shared by everything that diffuses through it.
+fn material_contract(symmetry: MaterialSymmetry, space_dim: usize, species: &str) -> Vec<String> {
+    static_contract(symmetry, space_dim)
+        .iter()
+        .map(|name| {
+            if name.starts_with('D') {
+                format!("{name}_{species}")
+            } else {
+                (*name).to_string()
+            }
+        })
+        .collect()
+}
+
+/// The species-free contract, one table per symmetry.
+fn static_contract(symmetry: MaterialSymmetry, space_dim: usize) -> &'static [&'static str] {
     match (symmetry, space_dim) {
         (MaterialSymmetry::Isotropic, _) => MATERIAL_COMPONENTS,
         (MaterialSymmetry::Orthotropic, 2) => ORTHOTROPIC_2D,
@@ -76,26 +118,28 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 
 /// Behaviour-**input** components (`grad_c_x`, …) — what
 /// [`crate::ops::element_field::gradient`](fn@crate::ops::element_field::gradient)
-/// names the gradient of a field whose component is [`PRIMAL_VAR`].
-fn gradient_components(space_dim: usize) -> Vec<String> {
+/// names the gradient of a field whose component is [`primal_var`].
+fn gradient_components(space_dim: usize, species: &str) -> Vec<String> {
+    let primal = primal_var(species);
     (0..space_dim)
-        .map(|a| format!("grad_{PRIMAL_VAR}_{}", AXES[a]))
+        .map(|a| format!("grad_{primal}_{}", AXES[a]))
         .collect()
 }
 
 /// Behaviour-**output** components (`j_x`, …) — the weak-form flux `D·∇c`. Named
 /// after the dual variable rather than `flux_*`, so a model carrying both
 /// conduction and diffusion keeps two unambiguous flux fields.
-fn flux_components(space_dim: usize) -> Vec<String> {
+fn flux_components(space_dim: usize, species: &str) -> Vec<String> {
+    let dual = dual_var(species);
     (0..space_dim)
-        .map(|a| format!("{DUAL_VAR}_{}", AXES[a]))
+        .map(|a| format!("{dual}_{}", AXES[a]))
         .collect()
 }
 
-/// Fickian diffusion on an FE subspace.
+/// Fickian diffusion of **one named species** on an FE subspace.
 ///
-/// - primal variable: `"c"` (concentration, columns).
-/// - dual variable:   `"j"` (mass flux, row labels).
+/// - primal variable: `c_<species>` (concentration, columns).
+/// - dual variable:   `j_<species>` (mass flux, row labels).
 /// - Material data is supplied at assembly time, not stored here.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Fick {
@@ -104,20 +148,35 @@ pub struct Fick {
     pub(crate) support: Handle<SubMesh>,
     pub(crate) space_dim: usize,
     pub(crate) symmetry: MaterialSymmetry,
+    /// The diffusing species, carried by every name this physics declares.
+    pub(crate) species: String,
 }
 
 impl Fick {
-    /// **Isotropic** Fickian diffusion on an FE subspace.
-    pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        Self::with_symmetry(fespace, MaterialSymmetry::Isotropic)
+    /// **Isotropic** Fickian diffusion of `species` on an FE subspace.
+    pub fn new(fespace: Handle<SubFiniteElementSpace>, species: &str) -> Result<Self> {
+        Self::with_symmetry(fespace, MaterialSymmetry::Isotropic, species)
     }
 
     /// Fickian diffusion with an explicit material symmetry — the general
     /// constructor, of which [`new`](Self::new) is the isotropic case.
+    ///
+    /// The species names the concentration, the flux and the diffusivity; an
+    /// empty one is refused, since it would give back the bare `c`/`j` the
+    /// suffix exists to avoid.
     pub fn with_symmetry(
         fespace: Handle<SubFiniteElementSpace>,
         symmetry: MaterialSymmetry,
+        species: &str,
     ) -> Result<Self> {
+        if species.is_empty() {
+            return Err(PyrucastError::Message(
+                "Fick: a diffusing species must be named — its concentration, flux and \
+                 diffusivity all carry the name (`c_H2`, `j_H2`, `D_H2`), which is what lets \
+                 two species share a mesh"
+                    .into(),
+            ));
+        }
         let (submesh, space_dim) = {
             let s = read(&fespace)?;
             (s.submesh(), s.space_dim())
@@ -128,17 +187,18 @@ impl Fick {
             support,
             space_dim,
             symmetry,
+            species: species.to_string(),
         })
     }
 }
 
 impl SubModelKind for Fick {
     fn primal_vars(&self) -> Vec<String> {
-        vec![PRIMAL_VAR.to_string()]
+        vec![primal_var(&self.species)]
     }
 
     fn dual_vars(&self) -> Vec<String> {
-        vec![DUAL_VAR.to_string()]
+        vec![dual_var(&self.species)]
     }
 
     fn as_domain(&self) -> Option<&dyn Domain> {
@@ -172,6 +232,7 @@ impl SubModelKind for Fick {
             &geoms[0],
             material.expect("Fick requires a material field"),
             self.symmetry,
+            &self.species,
             ke,
         )
     }
@@ -199,7 +260,7 @@ impl SubModelKind for Fick {
     ) -> Result<()> {
         let geom = &geoms[0];
         let d = geom.space_dim;
-        let names = flux_components(d);
+        let names = flux_components(d, &self.species);
         for g in 0..geom.n_gauss {
             let dn = geom.dn_dx(g)?;
             let w = geom.det_j_w(g)?;
@@ -239,11 +300,15 @@ impl Domain for Fick {
         self.fespace.clone()
     }
 
+    /// Every diffusivity carries the species and goes last (`D_H2`, `D_1_H2`,
+    /// `D_11_H2`); the material axes `V1X…V2Z` keep their bare names, being the
+    /// medium's frame rather than the species' business.
     fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(material_contract(
+        Some(material_contract(
             self.symmetry,
             self.space_dim,
-        )))
+            &self.species,
+        ))
     }
 
     /// `poro` — required only by the storage (mass) matrix, never by the
@@ -257,7 +322,7 @@ impl Domain for Fick {
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(flux_components(self.space_dim))
+        Ok(flux_components(self.space_dim, &self.species))
     }
 
     /// Fick's law: weak-form flux `D·∇c` at one Gauss point.
@@ -273,9 +338,9 @@ impl Domain for Fick {
     ) -> Result<()> {
         let mat = material.expect("Fick declares a material_fespace ⇒ material is supplied");
         let (cell, space_dim) = (geom.cell, geom.space_dim);
-        let names = gradient_components(space_dim);
-        let d3 =
-            symmetry::transport_tensor(mat, cell, g, self.symmetry, space_dim, MATERIAL_COMPONENT)?;
+        let names = gradient_components(space_dim, &self.species);
+        let prefix = format!("D_{}", self.species);
+        let d3 = symmetry::transport_tensor(mat, cell, g, self.symmetry, space_dim, &prefix)?;
         for a in 0..space_dim {
             let mut acc = 0.0;
             for b in 0..space_dim {
@@ -295,6 +360,7 @@ pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
     symmetry: MaterialSymmetry,
+    species: &str,
     ke: &mut [f64],
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
@@ -308,7 +374,7 @@ pub fn element_stiffness(
             0,
             symmetry,
             space_dim,
-            MATERIAL_COMPONENT,
+            &format!("D_{species}"),
         )?)
     } else {
         None
@@ -318,7 +384,7 @@ pub fn element_stiffness(
         let det_j_w = geom.det_j_w(g)?;
         match &tensor {
             None => {
-                let d = material.value(geom.cell, g, MATERIAL_COMPONENT)?;
+                let d = material.value(geom.cell, g, &format!("D_{species}"))?;
                 for i in 0..n_nodes {
                     for j in 0..n_nodes {
                         let mut grad_dot = 0.0;

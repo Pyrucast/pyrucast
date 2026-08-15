@@ -33,6 +33,7 @@ Après avoir compilé l'extension dans le venv ::
 import pyrucast
 
 # ── Données du problème ──────────────────────────────────────────────────────
+SPECIES = "H2"  # l'espèce qui diffuse — tous les noms la portent
 D = 2.0  # diffusivité
 J = 10.0  # flux d'espèce injecté en x = 0
 C_IMPOSED = 1.0  # concentration imposée en x = 1
@@ -60,18 +61,18 @@ def profil_stationnaire() -> None:
     multiplier = pyrucast.mesh.barycenter(imposed)
     mult = multiplier.node(0, 0, 0)
 
-    model = pyrucast.Model.fick(fes) | pyrucast.Model.dirichlet(
-        "c", "j", imposed, multiplier
+    model = pyrucast.Model.fick(fes, SPECIES) | pyrucast.Model.dirichlet(
+        f"c_{SPECIES}", f"j_{SPECIES}", imposed, multiplier
     )
-    materials = pyrucast.element_field.material_field(model, [("D", D)])
+    materials = pyrucast.element_field.material_field(model, [(f"D_{SPECIES}", D)])
 
     # ── Chargement : flux J en x = 0, valeur imposée au multiplicateur ───────
     load = pyrucast.Mesh(c, "POI1")
     load.unit().add_cell([nodes[0]])
     load.unit().add_cell([mult])
-    rhs = pyrucast.NodeField(load, ["imposed_c", "j"])
-    rhs[0].set_value(nodes[0], "j", J)
-    rhs[0].set_value(mult, "imposed_c", C_IMPOSED)
+    rhs = pyrucast.NodeField(load, [f"imposed_c_{SPECIES}", f"j_{SPECIES}"])
+    rhs[0].set_value(nodes[0], f"j_{SPECIES}", J)
+    rhs[0].set_value(mult, f"imposed_c_{SPECIES}", C_IMPOSED)
 
     # ── Assemblage + résolution ─────────────────────────────────────────────
     stiffness = pyrucast.matrix.stiffness(model, materials)
@@ -85,11 +86,11 @@ def profil_stationnaire() -> None:
     for i, node in enumerate(nodes):
         x = i * h
         attendu = C_IMPOSED + (J / D) * (1.0 - x)
-        obtenu = solution.value(node, "c")
+        obtenu = solution.value(node, f"c_{SPECIES}")
         print(f"  {x:5.3f}   {obtenu:10.6f}   {attendu:12.6f}")
         assert abs(obtenu - attendu) < 1e-10
 
-    reaction = solution.value(mult, "lambda_c")
+    reaction = solution.value(mult, f"lambda_c_{SPECIES}")
     print()
     print(f"  Bilan de matière : réaction = {reaction:.6f}, flux injecté = {J}")
     assert abs(reaction - J) < 1e-10
@@ -98,11 +99,13 @@ def profil_stationnaire() -> None:
 def couplage_avec_la_thermique() -> None:
     """Diffusion et conduction sur le même maillage : deux physiques distinctes."""
     _c, _nodes, fes, _h = ligne(3)
-    model = pyrucast.Model.fick(fes) | pyrucast.Model.heat_conduction(fes)
+    model = pyrucast.Model.fick(fes, SPECIES) | pyrucast.Model.heat_conduction(fes)
 
     # Un seul champ matériau porte les deux jeux : l'assembleur résout chaque
     # zone par les composantes que sa physique exige (`D` ici, `k` là).
-    materials = pyrucast.element_field.material_field(model, [("D", D), ("k", K)])
+    materials = pyrucast.element_field.material_field(
+        model, [(f"D_{SPECIES}", D), ("k", K)]
+    )
     pyrucast.matrix.stiffness(model, materials)
 
     print()

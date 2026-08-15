@@ -30,8 +30,9 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   (Robin / film, `q·n = h(T − T_ext)`), plus le
   [rayonnement à l'infini](thermique.md#rayonnement-à-linfini-stefan-boltzmann)
   (`q·n = σε(T⁴ − T_∞⁴)`, non linéaire, à tangente cohérente).
-- [Diffusion (loi de Fick)](diffusion.md) — `∇·(D∇c) = 0`, concentration `c` et
-  flux de matière `j` ; même opérateur que la conduction, nature distincte. Avec
+- [Diffusion (loi de Fick)](diffusion.md) — `∇·(D∇c) = 0`, concentration
+  `c_<espèce>` et flux de matière `j_<espèce>`, l'espèce étant nommée à la
+  construction ; même opérateur que la conduction, nature distincte. Avec
   le [transfert d'interface](diffusion.md#transfert-à-travers-une-interface)
   `j·n = h(c₁ − c₂)`, qui laisse le champ sauter entre deux corps.
 - [Mécanique](mecanique.md) — barre, élasticité linéaire, poutres et
@@ -94,11 +95,11 @@ constructeurs (`from_tag`) : c'est ce qu'on écrit, pas une paraphrase.
 | [`boundary_transfer`](thermique.md#convection-de-surface-robin--film)<br>composantes libres | — | — | — | `h·a` | **Aveugle à l'orientation** du maillage de bord : la normale est déjà consommée en écrivant `q·n = h(T − T_ext)`, et la mesure d'intégration est une magnitude. |
 | [`radiation`](thermique.md#rayonnement-à-linfini-stefan-boltzmann) | **analytique**<br>`4σεT³` | — | — | `σε(T⁴ − T_∞⁴)`<br>**+** `ktan` | Non linéaire. La rigidité est le film **linéarisé autour de `T_∞`**, donc constante : c'est l'opérateur dont part Newton. La tangente porte la vraie non-linéarité. Seule physique à déclarer **deux natures**, `[Thermal, Radiation]`. |
 
-### Diffusion — primale `c`, duale `j`, `filter("diffusion")`
+### Diffusion — primale `c_<espèce>`, duale `j_<espèce>`, `filter("diffusion")`
 
 | Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
 |---|---|---|---|---|---|
-| [`fick`](diffusion.md)<br>`isotropic` `orthotropic` `anisotropic` | — | — | stockage `poro` | flux `D·∇c` | Même opérateur que la conduction, **nature distincte** : partager un laplacien n'est pas partager une physique, et un problème couplé doit pouvoir sélectionner l'une sans l'autre. Flux nommé `j_*` pour cohabiter sans ambiguïté. |
+| [`fick`](diffusion.md)<br>`isotropic` `orthotropic` `anisotropic` | — | — | stockage `poro` | flux `D·∇c` | Même opérateur que la conduction, **nature distincte** : partager un laplacien n'est pas partager une physique, et un problème couplé doit pouvoir sélectionner l'une sans l'autre. **L'espèce est nommée à la construction** et portée par chaque nom (`c_H2`, `j_H2`, `D_H2`), ce qui laisse deux espèces partager un maillage — mais pas par ce qui appartient au milieu (`poro`, les axes `V1X…`). |
 | [`interface_transfer`](diffusion.md#transfert-à-travers-une-interface)<br>composantes libres | — | — | — | `h·(c₁ − c₂)` | **Quatre blocs** — deux diagonaux, deux `Coupling` dont les lignes vivent sur un maillage et les colonnes sur l'autre. Leur scatter est **séquentiel** : le coloriage qui rend le scatter parallèle sûr repose sur une seule connectivité. Conformité vérifiée jusqu'au nœud. |
 
 ### Mécanique — milieux continus, primales `u`, duales `f`, `filter("mechanical")`

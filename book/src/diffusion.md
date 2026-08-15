@@ -115,8 +115,8 @@ est `c`.
 Les deux physiques peuvent vivre sur le **même maillage** sans se gêner :
 
 ```python
-model = pyrucast.Model.fick(fes) | pyrucast.Model.heat_conduction(fes)
-materials = pyrucast.element_field.material_field(model, [("D", 2.0), ("k", 5.0)])
+model = pyrucast.Model.fick(fes, "H2") | pyrucast.Model.heat_conduction(fes)
+materials = pyrucast.element_field.material_field(model, [("D_H2", 2.0), ("k", 5.0)])
 k = pyrucast.matrix.stiffness(model, materials)
 
 len(model.filter("diffusion"))  # 1
@@ -144,20 +144,22 @@ la traversée, tandis qu'un flux la franchit proportionnellement à ce saut :
 j\cdot n = h\\,\big(c_1 - c_2\big)
 \\]
 
-`h_c` est le coefficient de transfert (son inverse est la résistance de
-contact) : un par grandeur transférée, nommé d'après elle.
-La même loi décrit une résistance de contact **thermique**, avec `T` et `q` — d'où
-le paramètre `kind` du constructeur.
+`h_c_H2` est le coefficient de transfert (son inverse est la résistance de
+contact) : un par grandeur transférée, nommé d'après elle. La même loi décrit une
+résistance de contact **thermique** — on lui passe alors `[("T", "q")]` et la
+nature `"thermal"` — ou un joint collé, avec les couples de déplacement.
 
 ```python
 model = (
-    pyrucast.Model.fick(gauche)
-    | pyrucast.Model.fick(droite)
+    pyrucast.Model.fick(gauche, "H2")
+    | pyrucast.Model.fick(droite, "H2")
     | pyrucast.Model.interface_transfer(
-        face_gauche, face_droite, [("c", "j")], "diffusion"
+        face_gauche, face_droite, [("c_H2", "j_H2")], "diffusion"
     )
 )
-materials = pyrucast.element_field.material_field(model, [("D", 2.0), ("h_c", 5.0)])
+materials = pyrucast.element_field.material_field(
+    model, [("D_H2", 2.0), ("h_c_H2", 5.0)]
+)
 ```
 
 #### Quatre blocs, dont deux hors-diagonale

@@ -29,11 +29,15 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::models::fick::{dual_var, primal_var};
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
 use pyrucast::Result;
+
+/// The diffusing species — every name of this physics carries it.
+const SPECIES: &str = "H2";
 
 #[test]
 fn fick_line_recovers_the_linear_profile() -> Result<()> {
@@ -61,10 +65,10 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     let multiplier = mesh::barycenter(&imposed)?;
     let mult = multiplier.node(0, 0, 0)?.id();
 
-    let diffusion = Model::fick(&fes)?;
+    let diffusion = Model::fick(&fes, SPECIES)?;
     let dirichlet = Model::dirichlet(
-        "c".into(),
-        "j".into(),
+        primal_var(SPECIES),
+        dual_var(SPECIES),
         &imposed,
         &multiplier,
         None,
@@ -74,7 +78,8 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     let model = diffusion.union(&dirichlet)?;
 
     // ── Matériau : diffusivité uniforme ────────────────────────────────────
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("D", D)])?;
+    let materials =
+        pyrucast::ops::element_field::material_field(&model, &[(&format!("D_{SPECIES}"), D)])?;
 
     // ── Chargement : flux J en x = 0, concentration imposée au multiplicateur
     let node0 = nodes[0].id();
@@ -82,9 +87,15 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     load_sm.add_cell(&[node0])?;
     load_sm.add_cell(&[mult])?;
     let load_sm = insert(load_sm);
-    let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["imposed_c".into(), "j".into()])?;
-    rhs.set_value(node0, "j", J)?;
-    rhs.set_value(mult, "imposed_c", C_IMPOSED)?;
+    let mut rhs = SubNodeField::from_poi1(
+        &load_sm,
+        vec![
+            format!("imposed_{}", primal_var(SPECIES)),
+            dual_var(SPECIES),
+        ],
+    )?;
+    rhs.set_value(node0, &dual_var(SPECIES), J)?;
+    rhs.set_value(mult, &format!("imposed_{}", primal_var(SPECIES)), C_IMPOSED)?;
     let rhs = NodeField::from_sub(rhs);
 
     // ── Assemblage + résolution ────────────────────────────────────────────
@@ -96,14 +107,14 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     for (i, node) in nodes.iter().enumerate() {
         let x = i as f64 * h;
         let expected = C_IMPOSED + (J / D) * (1.0 - x);
-        let got = solution.value(node.id(), "c")?;
+        let got = solution.value(node.id(), &primal_var(SPECIES))?;
         assert!(
             (got - expected).abs() < tol,
             "c(x={x}) : {got} ≠ {expected}"
         );
     }
     // Bilan de matière : la réaction au bord imposé équilibre le flux injecté.
-    let reaction = solution.value(mult, "lambda_c")?;
+    let reaction = solution.value(mult, &format!("lambda_{}", primal_var(SPECIES)))?;
     assert!((reaction - J).abs() < tol, "réaction λ : {reaction} ≠ {J}");
     Ok(())
 }
@@ -131,11 +142,14 @@ fn diffusion_and_conduction_coexist_and_filter_apart() -> Result<()> {
     }
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
-    let model = Model::fick(&fes)?.union(&Model::heat_conduction(&fes)?)?;
+    let model = Model::fick(&fes, SPECIES)?.union(&Model::heat_conduction(&fes)?)?;
     assert_eq!(model.len(), 2);
 
     // One material field carrying both zones; each physics picks its own.
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("D", D), ("k", K)])?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[(&format!("D_{SPECIES}"), D), ("k", K)],
+    )?;
     let full = pyrucast::ops::matrix::stiffness(&model, &materials)?;
 
     // The nature selectors split the model — and the assembled matrix — apart.
