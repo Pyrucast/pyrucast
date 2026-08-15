@@ -358,6 +358,12 @@ impl Domain for Plasticity {
     ///
     /// `rho` is required only by the mass matrix, never by the
     /// stiffness/behaviour assembly.
+    ///
+    /// One exception, and it is a **name** collision rather than a design:
+    /// Drucker-Prager already requires `alpha` for the pressure sensitivity of
+    /// its yield surface. There is one slot of that name, the required meaning
+    /// wins, and thermal expansion is therefore out of reach for that law
+    /// alone.
     fn optional_material_components(&self) -> &'static [&'static str] {
         &["alpha", "rho"]
     }

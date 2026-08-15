@@ -41,8 +41,20 @@ pub fn sub_material_field(
         components.push(req.clone());
         values.push(v);
     }
-    // Optional components: kept only when the caller supplies them.
+    // Optional components: kept only when the caller supplies them — and never
+    // when the physics already **requires** that name.
+    //
+    // A name can mean two things in two physics: `alpha` is the thermal
+    // expansion everywhere, and the pressure sensitivity of a Drucker-Prager
+    // yield surface. A law requiring it has already claimed the slot, and
+    // appending the optional one would declare the component twice. The
+    // required meaning wins, silently — which is the honest outcome: there is
+    // one slot and one value, and the law that needs it to compute is the one
+    // that gets it.
     for opt in optional {
+        if required.iter().any(|r| r == opt) {
+            continue;
+        }
         if let Some((_, v)) = components_and_values.iter().find(|(c, _)| c == opt) {
             components.push((*opt).to_string());
             values.push(*v);
