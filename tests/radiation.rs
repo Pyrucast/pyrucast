@@ -213,7 +213,7 @@ struct Fixture {
 fn radiating_square() -> Result<(Fixture, ElementField)> {
     let coords = insert(Coords::new(2)?);
     let node = |x: f64, y: f64| Node::create_in(coords.clone(), &[x, y]);
-    let corners = vec![
+    let corners = [
         node(0.0, 0.0)?,
         node(1.0, 0.0)?,
         node(1.0, 1.0)?,

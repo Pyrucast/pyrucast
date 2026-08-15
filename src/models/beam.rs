@@ -129,6 +129,129 @@ pub fn bending_4x4(ei: f64, gas: Option<f64>, l: f64) -> Vec<Vec<f64>> {
     ]
 }
 
+// ─── The consistent mass ────────────────────────────────────────────────────
+
+/// The **shape functions** of the exact element, at `ξ = x/L ∈ [0, 1]`.
+///
+/// Returned as `(N_w, N_θ)`: the deflection interpolation and the *independent*
+/// rotation interpolation, both over `[w_A, θ_A, w_B, θ_B]`. They are cubic and
+/// quadratic respectively, and both carry `Φ`.
+///
+/// At `Φ = 0` they collapse to the Hermite cubics and to their own derivative —
+/// `θ = w'`, which is Euler-Bernoulli. A test asserts exactly that, so the two
+/// theories stay one derivation apart here as well.
+fn shape_functions(phi: f64, l: f64, xi: f64) -> ([f64; 4], [f64; 4]) {
+    let (x2, x3) = (xi * xi, xi * xi * xi);
+    let d = 1.0 / (1.0 + phi);
+    let n_w = [
+        d * (2.0 * x3 - 3.0 * x2 - phi * xi + 1.0 + phi),
+        d * l * (x3 - (2.0 + phi / 2.0) * x2 + (1.0 + phi / 2.0) * xi),
+        d * (-2.0 * x3 + 3.0 * x2 + phi * xi),
+        d * l * (x3 - (1.0 - phi / 2.0) * x2 - (phi / 2.0) * xi),
+    ];
+    let n_t = [
+        d * (6.0 / l) * (x2 - xi),
+        d * (3.0 * x2 - (4.0 + phi) * xi + 1.0 + phi),
+        d * (6.0 / l) * (xi - x2),
+        d * (3.0 * x2 - (2.0 - phi) * xi),
+    ];
+    (n_w, n_t)
+}
+
+/// Four-point Gauss-Legendre on `[0, 1]` — exact to degree 7, where the mass
+/// integrand reaches 6.
+const GAUSS_01: [(f64, f64); 4] = [
+    (0.069_431_844_202_973_71, 0.173_927_422_568_726_9),
+    (0.330_009_478_207_571_9, 0.326_072_577_431_273_1),
+    (0.669_990_521_792_428_1, 0.326_072_577_431_273_1),
+    (0.930_568_155_797_026_3, 0.173_927_422_568_726_9),
+];
+
+/// The **consistent mass** of the exact beam element, over
+/// `[w_A, θ_A, w_B, θ_B]`:
+///
+/// ```text
+/// M = ∫ ρA · N_wᵀ N_w dx  +  ∫ ρI · N_θᵀ N_θ dx
+/// ```
+///
+/// the second term being the **rotary inertia** of the section.
+///
+/// It is *integrated* from the element's own shape functions rather than
+/// transcribed from the published table of `Φ`-polynomials. That table is
+/// correct, but a coefficient mistyped out of twenty would produce a plausible,
+/// symmetric, positive-definite matrix describing a different beam — the
+/// failure mode that cost a wrong tangent earlier in this project. Integrating
+/// cannot be mistyped: the shape functions are the same ones the stiffness
+/// uses, and four Gauss points make the quadrature exact.
+///
+/// `gas = None` drops the shear compliance (`Φ = 0`) and yields the classical
+/// Euler-Bernoulli consistent mass.
+pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> Vec<Vec<f64>> {
+    let phi = phi(ei, gas, l);
+    let mut m = vec![vec![0.0_f64; 4]; 4];
+    for (xi, w) in GAUSS_01 {
+        let (n_w, n_t) = shape_functions(phi, l, xi);
+        let dx = w * l; // dx = L dξ
+        for a in 0..4 {
+            for b in 0..4 {
+                m[a][b] += (rho_a * n_w[a] * n_w[b] + rho_i * n_t[a] * n_t[b]) * dx;
+            }
+        }
+    }
+    m
+}
+
+// ─── Section strains, from the element's own interpolation ──────────────────
+
+/// The generalised strains of the exact element at `ξ = x/L ∈ [0, 1]`, over
+/// `[w_A, θ_A, w_B, θ_B]`: the **curvature** `κ = θ'` and the **shear strain**
+/// `γ = w' − θ`.
+///
+/// Both come from the same shape functions the stiffness and mass use, so the
+/// three finally describe one element. And they say something the linear
+/// element could not:
+///
+/// - `κ` is **linear** in `ξ` — the moment varies along an unloaded span, as
+///   `M' = V` requires;
+/// - `γ` is **constant**, and equals `−Φ/(L(1+Φ))` per unit of the first degree
+///   of freedom: an unloaded span carries a constant shear force, which is
+///   `V' = 0`.
+///
+/// Both depend on the material through `Φ`. A recovery that did not take a
+/// material could therefore only ever report a mean — which is what the
+/// previous one did.
+pub fn section_strains(phi: f64, l: f64, d: &[f64; 4], xi: f64) -> (f64, f64) {
+    let dd = 1.0 / (1.0 + phi);
+    // ∂N_θ/∂ξ — the curvature is its physical derivative, `κ = (1/L)·∂N_θ/∂ξ·d`.
+    let dn_t = [
+        dd * (6.0 / l) * (2.0 * xi - 1.0),
+        dd * (6.0 * xi - (4.0 + phi)),
+        dd * (6.0 / l) * (1.0 - 2.0 * xi),
+        dd * (6.0 * xi - (2.0 - phi)),
+    ];
+    // ∂N_w/∂ξ, for `γ = (1/L)·∂N_w/∂ξ·d − N_θ·d`.
+    let (x2, _) = (xi * xi, ());
+    let dn_w = [
+        dd * (6.0 * x2 - 6.0 * xi - phi),
+        dd * l * (3.0 * x2 - (4.0 + phi) * xi + 1.0 + phi / 2.0),
+        dd * (-6.0 * x2 + 6.0 * xi + phi),
+        dd * l * (3.0 * x2 - (2.0 - phi) * xi - phi / 2.0),
+    ];
+    let (_, n_t) = shape_functions(phi, l, xi);
+    let kappa: f64 = (0..4).map(|i| dn_t[i] * d[i]).sum::<f64>() / l;
+    let gamma: f64 = (0..4).map(|i| (dn_w[i] / l - n_t[i]) * d[i]).sum();
+    (kappa, gamma)
+}
+
+/// `Φ = 12EI/(G·A_s·L²)`, the ratio the whole element hangs on. `gas = None`
+/// means no shear compliance.
+pub fn phi(ei: f64, gas: Option<f64>, l: f64) -> f64 {
+    match gas {
+        Some(g) if g.abs() > f64::MIN_POSITIVE => 12.0 * ei / (g * l * l),
+        _ => 0.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,128 +487,5 @@ mod tests {
             let fd = (w_of(xi + h) - 2.0 * w_of(xi) + w_of(xi - h)) / (h * h * l * l);
             assert!((kappa - fd).abs() < 1e-4, "κ({xi}) = {kappa} vs w'' = {fd}");
         }
-    }
-}
-
-// ─── The consistent mass ────────────────────────────────────────────────────
-
-/// The **shape functions** of the exact element, at `ξ = x/L ∈ [0, 1]`.
-///
-/// Returned as `(N_w, N_θ)`: the deflection interpolation and the *independent*
-/// rotation interpolation, both over `[w_A, θ_A, w_B, θ_B]`. They are cubic and
-/// quadratic respectively, and both carry `Φ`.
-///
-/// At `Φ = 0` they collapse to the Hermite cubics and to their own derivative —
-/// `θ = w'`, which is Euler-Bernoulli. A test asserts exactly that, so the two
-/// theories stay one derivation apart here as well.
-fn shape_functions(phi: f64, l: f64, xi: f64) -> ([f64; 4], [f64; 4]) {
-    let (x2, x3) = (xi * xi, xi * xi * xi);
-    let d = 1.0 / (1.0 + phi);
-    let n_w = [
-        d * (2.0 * x3 - 3.0 * x2 - phi * xi + 1.0 + phi),
-        d * l * (x3 - (2.0 + phi / 2.0) * x2 + (1.0 + phi / 2.0) * xi),
-        d * (-2.0 * x3 + 3.0 * x2 + phi * xi),
-        d * l * (x3 - (1.0 - phi / 2.0) * x2 - (phi / 2.0) * xi),
-    ];
-    let n_t = [
-        d * (6.0 / l) * (x2 - xi),
-        d * (3.0 * x2 - (4.0 + phi) * xi + 1.0 + phi),
-        d * (6.0 / l) * (xi - x2),
-        d * (3.0 * x2 - (2.0 - phi) * xi),
-    ];
-    (n_w, n_t)
-}
-
-/// Four-point Gauss-Legendre on `[0, 1]` — exact to degree 7, where the mass
-/// integrand reaches 6.
-const GAUSS_01: [(f64, f64); 4] = [
-    (0.069_431_844_202_973_71, 0.173_927_422_568_726_9),
-    (0.330_009_478_207_571_9, 0.326_072_577_431_273_1),
-    (0.669_990_521_792_428_1, 0.326_072_577_431_273_1),
-    (0.930_568_155_797_026_3, 0.173_927_422_568_726_9),
-];
-
-/// The **consistent mass** of the exact beam element, over
-/// `[w_A, θ_A, w_B, θ_B]`:
-///
-/// ```text
-/// M = ∫ ρA · N_wᵀ N_w dx  +  ∫ ρI · N_θᵀ N_θ dx
-/// ```
-///
-/// the second term being the **rotary inertia** of the section.
-///
-/// It is *integrated* from the element's own shape functions rather than
-/// transcribed from the published table of `Φ`-polynomials. That table is
-/// correct, but a coefficient mistyped out of twenty would produce a plausible,
-/// symmetric, positive-definite matrix describing a different beam — the
-/// failure mode that cost a wrong tangent earlier in this project. Integrating
-/// cannot be mistyped: the shape functions are the same ones the stiffness
-/// uses, and four Gauss points make the quadrature exact.
-///
-/// `gas = None` drops the shear compliance (`Φ = 0`) and yields the classical
-/// Euler-Bernoulli consistent mass.
-pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> Vec<Vec<f64>> {
-    let phi = phi(ei, gas, l);
-    let mut m = vec![vec![0.0_f64; 4]; 4];
-    for (xi, w) in GAUSS_01 {
-        let (n_w, n_t) = shape_functions(phi, l, xi);
-        let dx = w * l; // dx = L dξ
-        for a in 0..4 {
-            for b in 0..4 {
-                m[a][b] += (rho_a * n_w[a] * n_w[b] + rho_i * n_t[a] * n_t[b]) * dx;
-            }
-        }
-    }
-    m
-}
-
-// ─── Section strains, from the element's own interpolation ──────────────────
-
-/// The generalised strains of the exact element at `ξ = x/L ∈ [0, 1]`, over
-/// `[w_A, θ_A, w_B, θ_B]`: the **curvature** `κ = θ'` and the **shear strain**
-/// `γ = w' − θ`.
-///
-/// Both come from the same shape functions the stiffness and mass use, so the
-/// three finally describe one element. And they say something the linear
-/// element could not:
-///
-/// - `κ` is **linear** in `ξ` — the moment varies along an unloaded span, as
-///   `M' = V` requires;
-/// - `γ` is **constant**, and equals `−Φ/(L(1+Φ))` per unit of the first degree
-///   of freedom: an unloaded span carries a constant shear force, which is
-///   `V' = 0`.
-///
-/// Both depend on the material through `Φ`. A recovery that did not take a
-/// material could therefore only ever report a mean — which is what the
-/// previous one did.
-pub fn section_strains(phi: f64, l: f64, d: &[f64; 4], xi: f64) -> (f64, f64) {
-    let dd = 1.0 / (1.0 + phi);
-    // ∂N_θ/∂ξ — the curvature is its physical derivative, `κ = (1/L)·∂N_θ/∂ξ·d`.
-    let dn_t = [
-        dd * (6.0 / l) * (2.0 * xi - 1.0),
-        dd * (6.0 * xi - (4.0 + phi)),
-        dd * (6.0 / l) * (1.0 - 2.0 * xi),
-        dd * (6.0 * xi - (2.0 - phi)),
-    ];
-    // ∂N_w/∂ξ, for `γ = (1/L)·∂N_w/∂ξ·d − N_θ·d`.
-    let (x2, _) = (xi * xi, ());
-    let dn_w = [
-        dd * (6.0 * x2 - 6.0 * xi - phi),
-        dd * l * (3.0 * x2 - (4.0 + phi) * xi + 1.0 + phi / 2.0),
-        dd * (-6.0 * x2 + 6.0 * xi + phi),
-        dd * l * (3.0 * x2 - (2.0 - phi) * xi - phi / 2.0),
-    ];
-    let (_, n_t) = shape_functions(phi, l, xi);
-    let kappa: f64 = (0..4).map(|i| dn_t[i] * d[i]).sum::<f64>() / l;
-    let gamma: f64 = (0..4).map(|i| (dn_w[i] / l - n_t[i]) * d[i]).sum();
-    (kappa, gamma)
-}
-
-/// `Φ = 12EI/(G·A_s·L²)`, the ratio the whole element hangs on. `gas = None`
-/// means no shear compliance.
-pub fn phi(ei: f64, gas: Option<f64>, l: f64) -> f64 {
-    match gas {
-        Some(g) if g.abs() > f64::MIN_POSITIVE => 12.0 * ei / (g * l * l),
-        _ => 0.0,
     }
 }

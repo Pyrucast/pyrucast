@@ -13,20 +13,20 @@
 //! `I`, `G`, `A_s`. Besides the stiffness it assembles the consistent **mass**
 //! (translational `ρA` + rotary `ρI`, optional `rho`) and the **geometric
 //! stiffness** under the axial force `N` (linear-element forms, rotated `Tᵀ·T`).
+//!
+//! ## What is left here
+//!
+//! Only the 2-D configuration's kernels, driven by
+//! [`Timoshenko`](crate::models::timoshenko::Timoshenko). The physics itself
+//! lives there: a plane frame is a beam in a 2-D configuration, not a model of
+//! its own — everything that used to distinguish it (three DOFs per node, an
+//! axial term, a rotation to the global axes) follows from the dimension of the
+//! mesh. What remains is what is genuinely two-dimensional: the local closed
+//! forms and the rotation that carries them to the global axes.
 
 use crate::containers::element_field::SubElementField;
 use crate::error::{PyrucastError, Result};
 use crate::models::CellGeom;
-
-/// The 2-D configuration's kernels, driven by
-/// [`Timoshenko`](crate::models::timoshenko::Timoshenko).
-///
-/// The physics itself lives there: a plane frame is a beam in a 2-D
-/// configuration, not a model of its own — everything that used to distinguish
-/// it (three DOFs per node, an axial term, a rotation to the global axes)
-/// follows from the dimension of the mesh. What is left here is what is genuinely
-/// two-dimensional: the local closed forms and the rotation that carries them to
-/// the global axes.
 
 /// Local 6×6 frame stiffness (DOFs `[u'_A, w'_A, θ_A, u'_B, w'_B, θ_B]`) from
 /// `E·A`, `E·I`, `G·A_s` and length `L` — axial + bending + reduced shear.

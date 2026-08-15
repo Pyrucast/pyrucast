@@ -410,6 +410,11 @@ impl Cube {
             }
         }
 
+        // Both orders are read — `[i][j]` **and** `[j][i]`, to symmetrise — and
+        // each index is also split into a node and an axis. Iterating the rows
+        // would give access to one order only, so the range loop is the honest
+        // form here.
+        #[allow(clippy::needless_range_loop)]
         for j in 0..ndof {
             let (jn, ja) = (j / 3, j % 3);
             for i in 0..ndof {

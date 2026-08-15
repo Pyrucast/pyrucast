@@ -122,7 +122,10 @@ mod tests {
     /// not on the basis.)
     #[test]
     fn both_rigid_body_modes_are_exact_and_curvature_free() {
-        let modes: [([f64; 4], fn(f64) -> f64); 2] = [
+        /// The four degrees of freedom of a rigid mode, and the deflection they
+        /// are meant to reproduce.
+        type RigidMode = ([f64; 4], fn(f64) -> f64);
+        let modes: [RigidMode; 2] = [
             ([1.0, 0.0, 1.0, 0.0], |_| 1.0), // translation w = 1
             ([-1.0, 1.0, 1.0, 1.0], |x| x),  // rotation    w = ξ
         ];

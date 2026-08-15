@@ -93,6 +93,10 @@ fn side_coeffs(p: &[[f64; 2]], i: usize, j: usize, cell: usize) -> Result<SideCo
     })
 }
 
+/// The elimination of one rotation, as a matrix on the quadratic shape
+/// functions: `[degree of freedom][shape function]`.
+type Elimination = Vec<Vec<f64>>;
+
 /// The two rotations as linear forms in the quadratic shape functions:
 /// `β_x = Σ_m N_m · (Σ_q C_x[q][m] u_q)`, and the same for `β_y`.
 ///
@@ -105,7 +109,7 @@ fn side_coeffs(p: &[[f64; 2]], i: usize, j: usize, cell: usize) -> Result<SideCo
 /// as the assembled `H_x(ξ, η)` of the literature, is what makes the derivative
 /// free: `∂H/∂ξ = C · ∂N/∂ξ` uses the same `C`, so no second table has to be
 /// written or kept consistent with the first.
-fn constraint_matrices(p: &[[f64; 2]], cell: usize) -> Result<(Vec<Vec<f64>>, Vec<Vec<f64>>)> {
+fn constraint_matrices(p: &[[f64; 2]], cell: usize) -> Result<(Elimination, Elimination)> {
     let n = p.len();
     let n_shape = 2 * n;
     let n_dof = 3 * n;

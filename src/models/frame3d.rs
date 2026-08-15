@@ -20,19 +20,19 @@
 //! it assembles the consistent **mass** (translational `ρA` + rotary
 //! `ρI_p`/`ρI_y`/`ρI_z`, optional `rho`) and the **geometric stiffness** under
 //! the axial force `N` — linear-element forms, rotated `Tᵀ·T`.
+//!
+//! ## What is left here
+//!
+//! Only the 3-D configuration's kernels, driven by
+//! [`Timoshenko`](crate::models::timoshenko::Timoshenko). The physics itself
+//! lives there: a space frame is a beam in a 3-D configuration, not a model of
+//! its own. What remains is what is genuinely three-dimensional — the local axes
+//! taken from a global-Z reference, the two bending planes with their sign
+//! convention, the torsion, and the 12×12 rotation.
 
 use crate::containers::element_field::SubElementField;
 use crate::error::{PyrucastError, Result};
 use crate::models::CellGeom;
-
-/// The 3-D configuration's kernels, driven by
-/// [`Timoshenko`](crate::models::timoshenko::Timoshenko).
-///
-/// The physics itself lives there: a space frame is a beam in a 3-D
-/// configuration, not a model of its own. What is left here is what is genuinely
-/// three-dimensional — the local axes taken from a global-Z reference, the two
-/// bending planes with their sign convention, the torsion, and the 12×12
-/// rotation.
 
 // ─── Geometry helpers ────────────────────────────────────────────────────────
 
