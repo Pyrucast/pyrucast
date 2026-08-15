@@ -15,7 +15,7 @@ MECANIQUE - plasticité;PLASTIQUE ISOTROPE;von Mises à écrouissage isotrope (o
 MECANIQUE - plasticité;PLASTIQUE PARFAIT;von Mises sans écrouissage (J2, retour radial);mechanical;perfect;Model.plasticity_perfect (tangente cohérente D_alg incluse)
 MECANIQUE - plasticité;PLASTIQUE CINEMATIQUE;von Mises à écrouissage cinématique linéaire;—;—;—
 MECANIQUE - plasticité;PLASTIQUE DRUCKER_PARFAIT;Drucker-Prager à écoulement associé, sans écrouissage;—;—;—
-MECANIQUE - plasticité;PLASTIQUE DRUCKER_PRAGER;Drucker-Prager à écoulement non associé avec écrouissage;mechanical;drucker_prager;Model.drucker_prager (alpha, k, psi) — écoulement non associé, sommet traité
+MECANIQUE - plasticité;PLASTIQUE DRUCKER_PRAGER;Drucker-Prager à écoulement non associé avec écrouissage;mechanical;drucker_prager;Model.drucker_prager (alpha, k, psi) — écoulement non associé, sommet traité — `alpha` y désigne la sensibilité à la pression, si bien que la dilatation thermique (`alpha` elle aussi) lui est inaccessible
 MECANIQUE - plasticité;PLASTIQUE DRUCKER_PRAGER_2;Béton adoucissant à deux seuils (Rankine traction + Drucker-Prager compression);—;—;—
 MECANIQUE - plasticité;PLASTIQUE DP_SOL;Drucker-Prager non associé à écrouissage non linéaire (sols);—;—;—
 MECANIQUE - plasticité;PLASTIQUE BETON;Modèle béton (contraintes planes uniquement);—;—;—
@@ -147,8 +147,8 @@ MECANIQUE - impédance;IMPEDANCE REUSS;Frein visqueux en série avec un ressort 
 MECANIQUE - impédance;IMPEDANCE COMPLEXE;Élastique + frein visqueux, restreint au calcul fréquentiel;—;—;—
 MECANIQUE - élément fini;BARR (SEG2);Barre (traction/compression seule);mechanical;—;Model.truss (E, A)
 MECANIQUE - élément fini;BAEX (SEG2);Barre excentrée;—;—;—
-MECANIQUE - élément fini;POUT (SEG2/SEG3);Poutre d'Euler-Bernoulli (2D ou 3D);mechanical;—;Model.bernoulli (espace HERMITE3 ; configuration 1-D/plan/spatial déduite du maillage) — exacte aux nœuds
-MECANIQUE - élément fini;TIMO (SEG2);Poutre de Timoshenko (cisaillement transverse);mechanical;—;Model.timoshenko (espace MODEL_EMBEDDED ; configuration 1-D/plan/spatial déduite du maillage) — élément exact, corrigé par Φ
+MECANIQUE - élément fini;POUT (SEG2/SEG3);Poutre d'Euler-Bernoulli (2D ou 3D);mechanical;—;Model.bernoulli (espace HERMITE3 — configuration 1-D/plan/spatial déduite du maillage) — exacte aux nœuds
+MECANIQUE - élément fini;TIMO (SEG2);Poutre de Timoshenko (cisaillement transverse);mechanical;—;Model.timoshenko (espace MODEL_EMBEDDED — configuration 1-D/plan/spatial déduite du maillage) — élément exact, corrigé par Φ
 MECANIQUE - élément fini;TUYA / TUFI (SEG2/SEG3);Tuyau droit, coude, tuyau fissuré;—;—;—
 MECANIQUE - élément fini;JOI1 (SEG2);Joint unidimensionnel à deux nœuds;—;—;—
 MECANIQUE - élément fini;COQ2 / COQ3 / COQ4 / COQ6 / COQ8;Coques minces et épaisses;mechanical;thick;Model.shell (thick) — Reissner-Mindlin sur TRI3/QUA4, 6 DDL/nœud, cisaillement sous-intégré
@@ -212,7 +212,7 @@ EULER;EULER;Écoulement compressible non visqueux (volumes finis);—;—;—
 DARCY;ISOTROPE;Écoulement en milieu poreux, perméabilité isotrope;—;—;—
 DARCY;ORTHOTROPE;Perméabilité orthotrope;—;—;—
 DARCY;ANISOTROPE;Perméabilité anisotrope (tenseur complet);—;—;—
-DIFFUSION;FICK ISOTROPE;Loi de Fick J = −D·grad(C), diffusivité isotrope (modèle par défaut);diffusion;isotropic · kind=mass;Model.fick (symmetry=isotropic) — espèce nommée à la construction : primale c_<espèce>, duale j_<espèce>, diffusivité D_<espèce> — stockage poro facultatif — échange d'interface j·n = h(c1 − c2) : Model.interface_transfer
+DIFFUSION;FICK ISOTROPE;Loi de Fick J = −D·grad(C), diffusivité isotrope (modèle par défaut);diffusion;isotropic;Model.fick (symmetry=isotropic) — espèce nommée à la construction : primale c_<espèce>, duale j_<espèce>, diffusivité D_<espèce> — stockage poro facultatif — échange d'interface j·n = h(c1 − c2) : Model.interface_transfer
 DIFFUSION;FICK ORTHOTROPE;Loi de Fick à diffusivité orthotrope;diffusion;orthotropic;Model.fick (symmetry=orthotropic) — D_1_<espèce>, D_2_<espèce>, D_3_<espèce> + repère V1/V2 (les axes du milieu ne portent pas l'espèce)
 DIFFUSION;FICK ANISOTROPE;Loi de Fick à diffusivité anisotrope;diffusion;anisotropic;Model.fick (symmetry=anisotropic) — D_11_<espèce>..D_33_<espèce> + repère V1/V2
 DIFFUSION;ADVECTION (CONSERVATIVE);Transport de matière par un champ de vitesse;—;—;—
