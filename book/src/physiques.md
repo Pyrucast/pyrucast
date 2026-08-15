@@ -35,6 +35,11 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   construction ; même opérateur que la conduction, nature distincte. Avec
   le [transfert d'interface](diffusion.md#transfert-à-travers-une-interface)
   `j·n = h(c₁ − c₂)`, qui laisse le champ sauter entre deux corps.
+- [Échanges (frontière et interface)](echanges.md) — la loi `h(a − b)`, partagée
+  par l'échange avec une ambiante et le transfert entre deux maillages : une
+  seule loi, dont la seule différence est que l'autre côté soit une donnée ou une
+  inconnue. Générique en composantes, donc aussi bien un film thermique qu'une
+  fondation élastique.
 - [Mécanique](mecanique.md) — barre, élasticité linéaire, poutres et
   portiques :
   - [Barre / treillis](mecanique/truss.md)
@@ -92,7 +97,7 @@ constructeurs (`from_tag`) : c'est ce qu'on écrit, pas une paraphrase.
 | Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
 |---|---|---|---|---|---|
 | [`heat_conduction`](thermique.md)<br>`isotropic` `orthotropic` `anisotropic` | — | — | capacité `ρ·cp` | flux `K·∇T` | Symétrie matériau **iso / ortho / aniso**. La conductivité isotrope est lue **par point de Gauss** — donc variable à l'intérieur d'une maille ; les constantes orientées le sont par maille. |
-| [`boundary_transfer`](thermique.md#convection-de-surface-robin--film)<br>composantes libres | — | — | — | `h·a` | **Aveugle à l'orientation** du maillage de bord : la normale est déjà consommée en écrivant `q·n = h(T − T_ext)`, et la mesure d'intégration est une magnitude. |
+| [`boundary_transfer`](echanges.md)<br>composantes libres | — | — | — | `h·a` | **Aveugle à l'orientation** du maillage de bord : la normale est déjà consommée en écrivant `q·n = h(T − T_ext)`, et la mesure d'intégration est une magnitude. |
 | [`radiation`](thermique.md#rayonnement-à-linfini-stefan-boltzmann) | **analytique**<br>`4σεT³` | — | — | `σε(T⁴ − T_∞⁴)`<br>**+** `ktan` | Non linéaire. La rigidité est le film **linéarisé autour de `T_∞`**, donc constante : c'est l'opérateur dont part Newton. La tangente porte la vraie non-linéarité. Seule physique à déclarer **deux natures**, `[Thermal, Radiation]`. |
 
 ### Diffusion — primale `c_<espèce>`, duale `j_<espèce>`, `filter("diffusion")`
@@ -100,7 +105,7 @@ constructeurs (`from_tag`) : c'est ce qu'on écrit, pas une paraphrase.
 | Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
 |---|---|---|---|---|---|
 | [`fick`](diffusion.md)<br>`isotropic` `orthotropic` `anisotropic` | — | — | stockage `poro` | flux `D·∇c` | Même opérateur que la conduction, **nature distincte** : partager un laplacien n'est pas partager une physique, et un problème couplé doit pouvoir sélectionner l'une sans l'autre. **L'espèce est nommée à la construction** et portée par chaque nom (`c_H2`, `j_H2`, `D_H2`), ce qui laisse deux espèces partager un maillage — mais pas par ce qui appartient au milieu (`poro`, les axes `V1X…`). |
-| [`interface_transfer`](diffusion.md#transfert-à-travers-une-interface)<br>composantes libres | — | — | — | `h·(c₁ − c₂)` | **Quatre blocs** — deux diagonaux, deux `Coupling` dont les lignes vivent sur un maillage et les colonnes sur l'autre. Leur scatter est **séquentiel** : le coloriage qui rend le scatter parallèle sûr repose sur une seule connectivité. Conformité vérifiée jusqu'au nœud. |
+| [`interface_transfer`](echanges.md)<br>composantes libres | — | — | — | `h·(c₁ − c₂)` | **Quatre blocs** — deux diagonaux, deux `Coupling` dont les lignes vivent sur un maillage et les colonnes sur l'autre. Leur scatter est **séquentiel** : le coloriage qui rend le scatter parallèle sûr repose sur une seule connectivité. Conformité vérifiée jusqu'au nœud. |
 
 ### Mécanique — milieux continus, primales `u`, duales `f`, `filter("mechanical")`
 

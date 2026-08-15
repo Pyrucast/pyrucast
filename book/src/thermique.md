@@ -306,23 +306,25 @@ bord de la forme faible de la conduction, elle se scinde en deux ingrédients :
 \underbrace{f_i = h\\,T_\text{ext} \int_\Gamma N_i\\,d\Gamma}_{\text{charge (second membre)}}
 \\]
 
-Le modèle partage les variables **`"T"`** / **`"q"`** de la conduction, donc un
-sous-modèle `BoundaryTransfer` sur un maillage de bord **se couple directement** dans
-la raideur d'un `HeatConduction`. Le coefficient `h_T` — un par grandeur
-transférée, nommé d'après elle — voyage dans le champ
-matériau comme `k` (composante **`"h"`**).
+On le construit en lui passant les couples de variables à échanger — ici ceux de
+la conduction, ce qui fait que le terme **se couple directement** dans la raideur
+d'un `HeatConduction` :
+
+```python
+pyrucast.Model.boundary_transfer(bord_fes, [("T", "q")], "thermal")
+```
 
 | | nom | rôle |
 |---|---|---|
 | **primale** | `"T"` | température (partagée avec `HeatConduction`) |
 | **duale** | `"q"` | flux de chaleur (partagé) |
-| **matériau** | `"h"` | coefficient d'échange (film) |
+| **matériau** | `"h_T"` | coefficient d'échange (film), nommé d'après la grandeur |
 
-**Aucune normale à choisir.** La normale est déjà « consommée » en passant de
-\\(q\cdot n\\) à \\(h(T-T_\text{ext})\\) ; ce qui reste sous l'intégrale est un
-**scalaire** fois la mesure de surface \\(d\Gamma = |J| = \sqrt{\det(J^\top J)}\\),
-une magnitude **indépendante de l'orientation** du maillage de bord (contrairement
-à une pression ou à un flux signé).
+> Ce modèle n'a rien de thermique : la même loi décrit un transfert de masse en
+> surface ou une fondation élastique, selon les composantes qu'on lui donne, et
+> il partage son noyau avec le transfert d'interface. Voir
+> **[Échanges](echanges.md)** pour la loi commune, la structure en quatre blocs
+> et le choix entre un échange et une contrainte.
 
 **Mise en donnée.** Le modèle fournit la matrice de film ; la part externe
 \\(h\\,T_\text{ext}\\) est un **chargement**, bâti avec le **même** opérateur

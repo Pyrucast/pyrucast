@@ -145,9 +145,14 @@ j\cdot n = h\\,\big(c_1 - c_2\big)
 \\]
 
 `h_c_H2` est le coefficient de transfert (son inverse est la résistance de
-contact) : un par grandeur transférée, nommé d'après elle. La même loi décrit une
-résistance de contact **thermique** — on lui passe alors `[("T", "q")]` et la
-nature `"thermal"` — ou un joint collé, avec les couples de déplacement.
+contact) : un par grandeur transférée, nommé d'après elle.
+
+> Ce modèle n'a rien de diffusif non plus : on lui passe `[("T", "q")]` et la
+> nature `"thermal"` pour une résistance de contact, les couples de déplacement
+> pour un joint collé de raideur finie. La loi commune, sa structure en **quatre
+> blocs** dont deux hors-diagonale, l'exigence de **conformité** des deux côtés
+> et le critère qui départage un échange d'une contrainte MPC sont dans
+> **[Échanges](echanges.md)**.
 
 ```python
 model = (
@@ -161,42 +166,6 @@ materials = pyrucast.element_field.material_field(
     model, [("D_H2", 2.0), ("h_c_H2", 5.0)]
 )
 ```
-
-#### Quatre blocs, dont deux hors-diagonale
-
-La forme faible du terme d'échange sur l'interface \\( \Gamma \\) est
-
-\\[
-\int_\Gamma h\\,(c_1 - c_2)\\,(\delta c_1 - \delta c_2)\\; d\Gamma,
-\\]
-
-qui se développe en une structure \\( 2\times2 \\) sur les degrés de liberté des
-deux côtés :
-
-\\[
-\begin{bmatrix} +K & -K \\\\ -K & +K \end{bmatrix},
-\qquad
-K_{ij} = h \int_\Gamma N_i\\,N_j\\; d\Gamma .
-\\]
-
-Les deux blocs diagonaux sont des blocs *calculés* ordinaires. Les deux autres
-ont leurs **lignes sur un maillage et leurs colonnes sur l'autre** : c'est le
-genre de contribution `Coupling`, dont ce modèle est le premier utilisateur (voir
-[Ajouter une physique](ajouter-une-physique.md#un-bloc-inter-maillages--coupling)).
-Le **signe** est porté par le noyau et non par un facteur : le bloc diagonal rend
-`+h∫NᵢNⱼ`, le bloc de couplage `−h∫NᵢNⱼ`, et comme chacun choisit son noyau
-depuis sa propre variante de contribution, l'assembleur n'a rien à savoir des
-interfaces. Chaque bloc de couplage pris seul est **non symétrique** ; leur
-réunion l'est — exactement comme la paire C / Cᵀ de Dirichlet.
-
-#### Conformité
-
-Les deux côtés doivent être **conformes** : même type d'élément, même nombre de
-mailles, maille `i` face à maille `i`, et nœud local `k` face au nœud local `k`.
-C'est vérifié géométriquement à la construction — les nœuds appariés doivent être
-colocalisés — et **signalé** plutôt qu'approché. Une interface non conforme est un
-problème de maillage ; la rattraper par une projection silencieuse fabriquerait
-des flux faux sans le dire.
 
 #### Ce que ça vaut comme vérification
 

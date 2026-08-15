@@ -26,6 +26,7 @@
 - [Vue d'ensemble](physiques.md)
   - [Conduction thermique](thermique.md)
   - [Diffusion (loi de Fick)](diffusion.md)
+  - [Échanges (frontière et interface)](echanges.md)
   - [Mécanique](mecanique.md)
     - [Barre / treillis](mecanique/truss.md)
     - [Élasticité linéaire](mecanique/elasticite.md)
