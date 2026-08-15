@@ -143,3 +143,87 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     Ok(())
 }
 // ANCHOR_END: example
+
+/// Thermal expansion and **plasticity** must be able to coexist.
+///
+/// They could not: `alpha` is resolved by
+/// [`thermal_strain`](pyrucast::ops::element_field::thermal_strain), which picks
+/// its material zone *by that very component*, and `material_field` drops an
+/// optional component the physics does not declare. `Plasticity` and `Damage`
+/// declared only `rho`, so a dilating material simply could not yield — the
+/// operator found no zone carrying `alpha` and said so.
+///
+/// Nothing in the return mapping ever touches `alpha`: the expansion is
+/// subtracted *before* the mechanical law sees anything. The omission was
+/// therefore free to fix and free of consequence, which is exactly why it went
+/// unnoticed.
+///
+/// One QUA4 cell, fully constrained expansion, plane stress: the thermal stress
+/// is `σ_xx = σ_yy = E·α·ΔT/(1−ν)`, below a yield chosen well above it, so the
+/// plastic law returns its elastic predictor and the exact value must come out.
+#[test]
+fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
+    const E: f64 = 210_000.0;
+    const NU: f64 = 0.3;
+    const ALPHA: f64 = 1e-5;
+    const T_REF: f64 = 20.0;
+    const DT: f64 = 100.0;
+    // σ = E·α·ΔT/(1−ν) = 300, so a yield of 600 keeps the step elastic.
+    const SIGMA_Y: f64 = 600.0;
+
+    let coords = insert(Coords::new(2)?);
+    let corners: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p))
+        .collect::<Result<_>>()?;
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+    mesh.add_cell(&corners.iter().map(|n| n.id()).collect::<Vec<_>>())?;
+    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+
+    let support = insert(SubMesh::poi1_from_nodes(&corners)?);
+    let mut t_nodal = SubNodeField::from_poi1(&support, vec!["T".into()])?;
+    for n in &corners {
+        t_nodal.set_value(n.id(), "T", T_REF + DT)?;
+    }
+    let t_elem = interp_to_gauss(&NodeField::from_sub(t_nodal), &fes)?;
+
+    let expected = E * ALPHA * DT / (1.0 - NU);
+    for (label, model, values) in [
+        (
+            "plasticity",
+            Model::plasticity_perfect(&fes, ElasticityModel::PlaneStress)?,
+            vec![("E", E), ("nu", NU), ("sigma_y", SIGMA_Y), ("alpha", ALPHA)],
+        ),
+        (
+            "damage",
+            Model::mazars(&fes, ElasticityModel::PlaneStress)?,
+            vec![
+                ("E", E),
+                ("nu", NU),
+                ("eps_d0", 1.0),
+                ("A_t", 0.8),
+                ("B_t", 20_000.0),
+                ("A_c", 1.4),
+                ("B_c", 1_900.0),
+                ("alpha", ALPHA),
+            ],
+        ),
+    ] {
+        let materials = pyrucast::ops::element_field::material_field(&model, &values)?;
+        // The operator resolves its zone *by* `alpha`: before the fix this line
+        // is where a plastic or damaging material stopped.
+        let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF)?;
+        let sigma = pyrucast::ops::element_field::behavior::integrate(
+            &model, &eps_th, None, &materials, None,
+        )?;
+        let sub = read(&sigma.get(0)?)?;
+        for g in 0..sub.gauss_count() {
+            let sxx = sub.value(0, g, "sigma_xx")?;
+            assert!(
+                (sxx - expected).abs() < 1e-9 * expected,
+                "{label}: σ_xx = {sxx}, exact {expected}"
+            );
+        }
+    }
+    Ok(())
+}

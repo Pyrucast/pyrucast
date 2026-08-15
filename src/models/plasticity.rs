@@ -344,10 +344,22 @@ impl Domain for Plasticity {
         Some(owned_components(self.law.material_components()))
     }
 
-    /// `rho` (density) — required only by the mass matrix, never by the
+    /// `alpha` (thermal expansion) and `rho` (density) — the same pair
+    /// [`elasticity`] accepts, and for the same
+    /// reasons.
+    ///
+    /// `alpha` is read by an **ancillary** operator,
+    /// [`thermal_strain`](fn@crate::ops::element_field::thermal_strain), which
+    /// subtracts the expansion before the mechanical law sees anything: the
+    /// return mapping never touches it. Leaving it out therefore excluded
+    /// thermal expansion from plasticity and damage for no reason at all —
+    /// `material_field` drops a component the physics does not declare, so the
+    /// operator then found no zone carrying it.
+    ///
+    /// `rho` is required only by the mass matrix, never by the
     /// stiffness/behaviour assembly.
     fn optional_material_components(&self) -> &'static [&'static str] {
-        &["rho"]
+        &["alpha", "rho"]
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {

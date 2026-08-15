@@ -122,7 +122,9 @@ tourne avec la surface, bâtie sur les tangentes déformées et non sur Nanson �
 `I + ∇_s u` n'est pas un gradient de transformation sur une variété). Contraintes : `Dirichlet`, `Mpc`,
 `Embedded` (baignage), `Contact` (nœud-surface, unilatéral).
 Dilatation thermique non couplée (`thermal_strain`, `alpha` en composante
-matériau facultative).
+matériau facultative — acceptée par l'élasticité, la plasticité et
+l'endommagement : la dilatation est retranchée avant que la loi mécanique ne voie
+quoi que ce soit, donc rien n'interdisait qu'un matériau qui se dilate plastifie).
 
 **Symétrie matériau** (`MaterialSymmetry`, `src/models/symmetry.rs`) : axe
 orthogonal à l'hypothèse cinématique, partagé par `Elasticity`,
