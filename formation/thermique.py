@@ -211,12 +211,16 @@ def main() -> None:
     # FR — La convection s'ajoute dans la matrice : `|` sur les mêmes ddl.
     # EN — Convection adds into the matrix: `|` on the very same dofs.
     basse_fes = pc.FiniteElementSpace(face_basse)
-    modele = pc.Model.heat_conduction(fes) | pc.Model.convection(basse_fes)
+    modele = pc.Model.heat_conduction(fes) | pc.Model.boundary_transfer(
+        basse_fes, [("T", "q")], "thermal"
+    )
     modele = modele | pc.Model.dirichlet("T", "q", alesage, multiplicateur_T)
 
     # FR — Un seul champ matériau : « k » pour la conduction, « h » pour le film.
     # EN — A single material field: "k" for conduction, "h" for the film.
-    materiaux = pc.element_field.material_field(modele, [("k", K_COND), ("h", H_CONV)])
+    materiaux = pc.element_field.material_field(
+        modele, [("k", K_COND), ("h_T", H_CONV)]
+    )
     # ANCHOR_END: modele_complet
 
     # ANCHOR: charges_complet

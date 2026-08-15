@@ -62,7 +62,7 @@
 //! ([`CellGeom::normal`](crate::models::kernel::CellGeom::normal)). A positive
 //! `p` pushes **against** it — compressive — so an outward-wound boundary gives
 //! the usual sign. This is the one place where a boundary mesh's orientation
-//! matters: contrast [`convection`](crate::models::convection), whose direction
+//! matters: contrast [`boundary_transfer`](crate::models::boundary_transfer), whose direction
 //! is already consumed in writing `q·n` and which is therefore
 //! orientation-blind.
 //!

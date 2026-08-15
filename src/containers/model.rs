@@ -124,7 +124,7 @@ use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
-    bernoulli, contact, convection, damage, dirichlet, elasticity, embedded, fick,
+    bernoulli, boundary_transfer, contact, damage, dirichlet, elasticity, embedded, fick,
     follower_pressure, heat_conduction, interface_transfer, mpc, plastic, plasticity, radiation,
     shell, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
@@ -171,9 +171,9 @@ fn insert_relation_value(
 pub enum SubModel {
     /// Linear heat conduction — see [`heat_conduction::HeatConduction`].
     HeatConduction(heat_conduction::HeatConduction),
-    /// Surface convection (Robin / film) boundary — see
-    /// [`convection::Convection`].
-    Convection(convection::Convection),
+    /// Surface exchange with an imposed ambient (Robin / film) — see
+    /// [`boundary_transfer::BoundaryTransfer`].
+    BoundaryTransfer(boundary_transfer::BoundaryTransfer),
     /// Dirichlet constraint via Lagrange multipliers — see
     /// [`dirichlet::Dirichlet`].
     Dirichlet(dirichlet::Dirichlet),
@@ -230,7 +230,7 @@ impl SubModel {
     pub fn as_kind(&self) -> &dyn SubModelKind {
         match self {
             SubModel::HeatConduction(p) => p,
-            SubModel::Convection(p) => p,
+            SubModel::BoundaryTransfer(p) => p,
             SubModel::Dirichlet(p) => p,
             SubModel::Mpc(p) => p,
             SubModel::Embedded(p) => p,
@@ -271,16 +271,24 @@ impl SubModel {
         ))
     }
 
-    /// Surface-convection (Robin / film) sub-model on a boundary FE subspace.
+    /// Surface exchange with an imposed ambient (Robin / film) on a boundary FE
+    /// subspace, on the `(primal, dual)` pairs given.
     ///
-    /// Same DOFs (`"T"`/`"q"`) as [`Self::heat_conduction`], so it couples into
-    /// the conduction stiffness. The film coefficient `"h"` is supplied at
-    /// assembly time via [`crate::ops::matrix::stiffness`]; the external
-    /// temperature enters as a load (`h·T_ext ∫N_i dΓ`) built with
-    /// [`flux`](fn@crate::ops::node_field::flux). See
-    /// [`convection::Convection::new`].
-    pub fn convection(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        Ok(SubModel::Convection(convection::Convection::new(fespace)?))
+    /// Naming the bulk physics' own DOFs is what makes the boundary term couple
+    /// straight into it — `[("T", "q")]` beside a conduction, `[("c_H2",
+    /// "j_H2")]` beside a diffusion, the three displacement pairs for an elastic
+    /// foundation. The coefficients `h_<primal>` are supplied at assembly time
+    /// via [`crate::ops::matrix::stiffness`]; the ambient value enters as a load
+    /// (`h·a_ext ∫N_i dΓ`) built with [`flux`](fn@crate::ops::node_field::flux).
+    /// See [`boundary_transfer::BoundaryTransfer::new`].
+    pub fn boundary_transfer(
+        fespace: Handle<SubFiniteElementSpace>,
+        components: Vec<(String, String)>,
+        physics: Physics,
+    ) -> Result<Self> {
+        Ok(SubModel::BoundaryTransfer(
+            boundary_transfer::BoundaryTransfer::new(fespace, components, physics)?,
+        ))
     }
 
     /// Truss / bar sub-model on a `SEG2` FE subspace. Material data (`E`, `A`)
@@ -363,17 +371,18 @@ impl SubModel {
     }
 
     /// Interface-exchange sub-model between two **conforming** boundary FE
-    /// subspaces — `j·n = h(c₁ − c₂)`, or its thermal twin. The transfer
-    /// coefficient `h` is supplied at assembly time. See
+    /// subspaces — `j·n = h(a₁ − a₂)` on each `(primal, dual)` pair given. The
+    /// coefficients `h_<primal>` are supplied at assembly time. See
     /// [`interface_transfer::InterfaceTransfer::new`].
     pub fn interface_transfer(
         side_a: Handle<SubFiniteElementSpace>,
         side_b: Handle<SubFiniteElementSpace>,
-        kind: interface_transfer::TransferKind,
+        components: Vec<(String, String)>,
+        physics: Physics,
         tol: f64,
     ) -> Result<Self> {
         Ok(SubModel::InterfaceTransfer(
-            interface_transfer::InterfaceTransfer::new(side_a, side_b, kind, tol)?,
+            interface_transfer::InterfaceTransfer::new(side_a, side_b, components, physics, tol)?,
         ))
     }
 
@@ -1016,7 +1025,8 @@ impl Model {
 
     /// Interface-exchange `Model` between two conforming boundary FE spaces —
     /// one [`SubModel::InterfaceTransfer`] per subspace pair, taken in order.
-    /// Parent-level named constructor; `h` is supplied at assembly time.
+    /// Parent-level named constructor; the coefficients `h_<primal>` are
+    /// supplied at assembly time.
     ///
     /// The two spaces must hold the **same number** of subspaces: an interface
     /// pairs zone with zone, and a mismatch is a modelling error, not something
@@ -1024,7 +1034,8 @@ impl Model {
     pub fn interface_transfer(
         side_a: &FiniteElementSpace,
         side_b: &FiniteElementSpace,
-        kind: interface_transfer::TransferKind,
+        components: Vec<(String, String)>,
+        physics: Physics,
         tol: f64,
     ) -> Result<Self> {
         if side_a.len() != side_b.len() {
@@ -1040,23 +1051,36 @@ impl Model {
             model.add_sub(insert(SubModel::interface_transfer(
                 a.clone(),
                 b.clone(),
-                kind,
+                components.clone(),
+                physics,
                 tol,
             )?))?;
         }
         Ok(model)
     }
 
-    /// Surface-convection (Robin / film) `Model` spanning **every** subspace of
-    /// a *boundary* `fes` — one [`SubModel::Convection`] per
-    /// [`SubFiniteElementSpace`]. Parent-level named constructor; the film
-    /// coefficient `"h"` is supplied at assembly time. Couples into a heat
-    /// conduction model on the shared `"T"`/`"q"` DOFs:
-    /// `Model::heat_conduction(&bulk)?.union(&Model::convection(&boundary)?)?`.
-    pub fn convection(fes: &FiniteElementSpace) -> Result<Self> {
+    /// Surface exchange `Model` spanning **every** subspace of a *boundary*
+    /// `fes` — one [`SubModel::BoundaryTransfer`] per
+    /// [`SubFiniteElementSpace`]. Parent-level named constructor; the
+    /// coefficients `h_<primal>` are supplied at assembly time. Couples into the
+    /// bulk physics whose DOFs it names:
+    ///
+    /// ```text
+    /// Model::heat_conduction(&bulk)?.union(
+    ///     &Model::boundary_transfer(&skin, vec![("T".into(), "q".into())], Physics::Thermal)?)?
+    /// ```
+    pub fn boundary_transfer(
+        fes: &FiniteElementSpace,
+        components: Vec<(String, String)>,
+        physics: Physics,
+    ) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
-            model.add_sub(insert(SubModel::convection(sub.clone())?))?;
+            model.add_sub(insert(SubModel::boundary_transfer(
+                sub.clone(),
+                components.clone(),
+                physics,
+            )?))?;
         }
         Ok(model)
     }

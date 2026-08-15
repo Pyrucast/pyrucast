@@ -30,7 +30,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
-use pyrucast::models::interface_transfer::TransferKind;
+use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
@@ -137,9 +137,14 @@ fn a_non_conforming_interface_is_rejected() -> Result<()> {
     let (a0, a1) = (node(1.0, 0.0)?, node(1.0, 1.0)?);
     // The facing edge sits at x = 1.5: the two sides do not describe one surface.
     let (b0, b1) = (node(1.5, 0.0)?, node(1.5, 1.0)?);
-    let err =
-        Model::interface_transfer(&edge(&a0, &a1)?, &edge(&b0, &b1)?, TransferKind::Mass, 1e-9)
-            .unwrap_err();
+    let err = Model::interface_transfer(
+        &edge(&a0, &a1)?,
+        &edge(&b0, &b1)?,
+        vec![("c".into(), "j".into())],
+        Physics::Diffusion,
+        1e-9,
+    )
+    .unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("not node-conforming"), "unexpected: {msg}");
     Ok(())
@@ -202,7 +207,8 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
         .union(&Model::interface_transfer(
             &face_left,
             &face_right,
-            TransferKind::Mass,
+            vec![("c".into(), "j".into())],
+            Physics::Diffusion,
             1e-9,
         )?)?
         .union(&Model::dirichlet(
@@ -217,7 +223,7 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
 
     // One material field for the whole model: the squares ask for `D`, the
     // interface for `h`, and each resolves its own zone by its components.
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("D", D), ("h", h)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("D", D), ("h_c", h)])?;
     Ok((Geometry { left, right }, model, materials))
 }
 

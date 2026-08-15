@@ -1332,7 +1332,7 @@ class Model:
         sign.
         """
     @classmethod
-    def interface_transfer(cls, side_a: FiniteElementSpace, side_b: FiniteElementSpace, kind: typing.Optional[builtins.str] = None, tol: typing.Optional[builtins.float] = None) -> Model:
+    def interface_transfer(cls, side_a: FiniteElementSpace, side_b: FiniteElementSpace, components: typing.Sequence[tuple[builtins.str, builtins.str]], physics: builtins.str, tol: typing.Optional[builtins.float] = None) -> Model:
         r"""
         `Model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
         exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
@@ -1351,15 +1351,26 @@ class Model:
         node it could not. The jump is `q/h` for a flux density `q`.
         """
     @classmethod
-    def convection(cls, fespace: FiniteElementSpace) -> Model:
+    def boundary_transfer(cls, fespace: FiniteElementSpace, components: typing.Sequence[tuple[builtins.str, builtins.str]], physics: builtins.str) -> Model:
         r"""
-        `Model.convection(fespace)` — surface-convection (Robin / film) model
-        spanning **every** subspace of a *boundary* `fespace` (edge mesh in 2-D,
-        surface mesh in 3-D). Same DOFs (`"T"`/`"q"`) as `heat_conduction`, so
-        it couples in with `|`:
-        `Model.heat_conduction(bulk) | Model.convection(boundary)`.
-        The film coefficient `"h"` is supplied at assembly time; the external
-        temperature enters as a load `h·T_ext·∫N_i dΓ`, built with `flux(...)`.
+        `Model.boundary_transfer(fespace, components, physics)` — surface
+        exchange with an **imposed ambient** (Robin / film) spanning every
+        subspace of a *boundary* `fespace` (edge mesh in 2-D, surface mesh in
+        3-D).
+        
+        `components` is a list of `(primal, dual)` pairs — naming the bulk
+        physics' own DOFs is what makes the boundary term couple into it:
+        
+        | you write | you get |
+        |---|---|
+        | `[("T", "q")], "thermal"` | Newton's law of cooling |
+        | `[("c_H2", "j_H2")], "diffusion"` | a surface mass-transfer law |
+        | `[("u_x", "f_x"), ("u_y", "f_y")], "mechanical"` | a Winkler elastic foundation |
+        
+        The coefficients `h_<primal>` (one per pair) are supplied at assembly
+        time; the ambient value enters as a load `h·a_ext·∫N_i dΓ`, built with
+        `flux(...)`. Compose with `|`:
+        `Model.heat_conduction(bulk) | Model.boundary_transfer(skin, [("T", "q")], "thermal")`.
         """
     @classmethod
     def truss(cls, fespace: FiniteElementSpace) -> Model:

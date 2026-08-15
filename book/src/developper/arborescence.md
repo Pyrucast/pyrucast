@@ -55,7 +55,8 @@ src/
 │   ├── mod.rs              # traits SubModelKind / Domain / Constraint, MatrixKind
 │   ├── kernel.rs           # LES DRIVERS parallèles au-dessus des noyaux purs
 │   ├── heat_conduction.rs
-│   ├── convection.rs       # échange surfacique (Robin / film)
+│   ├── boundary_transfer.rs # échange de surface avec une ambiante (Robin / film)
+│   ├── transfer.rs         # le noyau h∫NiNj partagé par les deux échanges
 │   ├── truss.rs
 │   ├── elasticity.rs
 │   ├── plasticity.rs       # von Mises parfaite

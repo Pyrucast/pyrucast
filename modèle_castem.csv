@@ -178,7 +178,7 @@ MECANIQUE - option globale;CONS / PHAS;Nom de constituant / de phase (multicouch
 THERMIQUE;CONDUCTION ISOTROPE;Conduction de Fourier isotrope (conductivité k) — comportement par défaut;thermal;isotropic;Model.heat_conduction (k, plus rho et cp facultatifs pour la capacité)
 THERMIQUE;CONDUCTION ORTHOTROPE;Conduction orthotrope (conductivité par direction);thermal;orthotropic;Model.heat_conduction_with_symmetry (symmetry=orthotropic) — k_1, k_2, k_3 + repère V1/V2
 THERMIQUE;CONDUCTION ANISOTROPE;Conduction anisotrope (tenseur de conductivité complet);thermal;anisotropic;Model.heat_conduction_with_symmetry (symmetry=anisotropic) — k_11..k_33 + repère V1/V2
-THERMIQUE;CONVECTION;Convection de surface (Robin / film, q·n = h(T − T_ext));thermal;kind=thermal;Model.convection (h) — échange entre DEUX surfaces en vis-à-vis (résistance de contact) : Model.interface_transfer(kind=thermal)
+THERMIQUE;CONVECTION;Convection de surface (Robin / film, q·n = h(T − T_ext));thermal;[("T","q")] + "thermal";Model.boundary_transfer (coefficient h_T) — échange entre DEUX surfaces en vis-à-vis (résistance de contact) : Model.interface_transfer, mêmes composantes
 THERMIQUE;CONVECTION SUPERIEURE / INFERIEURE;Face d'échange d'une coque (supérieure ou inférieure);—;—;—
 THERMIQUE;RAYONNEMENT INFINI;Rayonnement vers l'infini;thermal · radiation;—;Model.radiation (emis, T_inf — sigma facultatif) — rigidité linéarisée + tangente cohérente
 THERMIQUE;RAYONNEMENT FAC_A_FAC;Rayonnement face à face entre deux surfaces;—;—;—

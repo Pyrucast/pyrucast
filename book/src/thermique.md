@@ -289,7 +289,7 @@ une différence finie :
 
 ### Convection de surface (Robin / film)
 
-Le modèle `Convection` (`src/models/convection.rs`) ajoute un **échange
+Le modèle `BoundaryTransfer` (`src/models/boundary_transfer.rs`) ajoute un **échange
 convectif** avec un fluide à température ambiante \\(T_\text{ext}\\) sur un
 bord : la loi de Newton du refroidissement
 
@@ -307,8 +307,9 @@ bord de la forme faible de la conduction, elle se scinde en deux ingrédients :
 \\]
 
 Le modèle partage les variables **`"T"`** / **`"q"`** de la conduction, donc un
-sous-modèle `Convection` sur un maillage de bord **se couple directement** dans
-la raideur d'un `HeatConduction`. Le coefficient `h` voyage dans le champ
+sous-modèle `BoundaryTransfer` sur un maillage de bord **se couple directement** dans
+la raideur d'un `HeatConduction`. Le coefficient `h_T` — un par grandeur
+transférée, nommé d'après elle — voyage dans le champ
 matériau comme `k` (composante **`"h"`**).
 
 | | nom | rôle |

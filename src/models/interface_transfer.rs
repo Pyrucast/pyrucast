@@ -8,12 +8,23 @@
 //! j·n = h · (c₁ − c₂)
 //! ```
 //!
-//! `h` is the transfer coefficient (its inverse is the contact resistance). The
-//! same law describes a thermal contact resistance, with `T` and `q` in place of
-//! `c` and `j` — hence the [`TransferKind`] argument of
-//! [`Model::interface_transfer`](crate::containers::model::Model::interface_transfer),
-//! which picks the variable names and the physics nature and changes nothing
-//! else: the mathematics is identical.
+//! `h` is the transfer coefficient (its inverse is the contact resistance). What
+//! is transferred is the **caller's** to say: the sub-model is given
+//! `(primal, dual)` pairs — the same shape [`embedded`](crate::models::embedded)
+//! and [`contact`](crate::models::contact) take — and derives its coefficients
+//! `h_<primal>` and its fluxes `flux_<primal>` from them. The same law describes
+//! a thermal contact resistance (`("T", "q")`), a coating on a diffusion
+//! (`("c_H2", "j_H2")`) and a bonded joint of finite stiffness (the three
+//! displacement pairs): the mathematics is identical, only the names change.
+//!
+//! ## When *not* to use it on displacements
+//!
+//! Tying two surfaces by making `h` large is a **penalty** method, and a
+//! [`Mpc`](crate::models::mpc) does it exactly, without degrading the
+//! conditioning. The test is where the number comes from: if `h` comes from a
+//! measurement this is physics; if `h` was chosen "large enough", it wanted a
+//! constraint. See [`transfer`](crate::models::transfer), the module the two
+//! exchange laws share.
 //!
 //! ## Four blocks, two of them off-diagonal
 //!
@@ -57,63 +68,15 @@ use crate::containers::mesh::SubMesh;
 use crate::coords::Coords;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::models::owned_components;
+use crate::models::transfer::{
+    coefficient_indices, coefficient_name, exchange_matrix, flux_name, internal_force, jump_name,
+    material_contract, physics_slice,
+};
 use crate::models::{
     CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
 use crate::store::{read, Handle};
 use serde::{Deserialize, Serialize};
-
-/// Required material component: the transfer coefficient.
-pub const MATERIAL_COMPONENT: &str = "h";
-/// Material contract returned by [`Domain::material_components`].
-const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
-
-/// Which field the interface law transports — it fixes the variable names and
-/// the physics nature, nothing else. The mathematics is identical.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TransferKind {
-    /// Mass transfer: concentration `c`, flux `j`, nature `Diffusion`.
-    Mass,
-    /// Thermal contact resistance: temperature `T`, flux `q`, nature `Thermal`.
-    Thermal,
-}
-
-impl TransferKind {
-    /// Parse from a lowercase tag (`"mass"`, `"thermal"`).
-    pub fn from_tag(tag: &str) -> Option<Self> {
-        match tag {
-            "mass" => Some(Self::Mass),
-            "thermal" => Some(Self::Thermal),
-            _ => None,
-        }
-    }
-
-    /// The lowercase tag (the inverse of [`from_tag`](Self::from_tag)).
-    pub fn to_tag(self) -> &'static str {
-        match self {
-            Self::Mass => "mass",
-            Self::Thermal => "thermal",
-        }
-    }
-
-    /// `(primal, dual)` variable names — deliberately the **same** as the bulk
-    /// physics they border, so the interface term couples straight into it by
-    /// union of DOFs.
-    fn vars(self) -> (&'static str, &'static str) {
-        match self {
-            Self::Mass => ("c", "j"),
-            Self::Thermal => ("T", "q"),
-        }
-    }
-
-    fn physics(self) -> &'static [Physics] {
-        match self {
-            Self::Mass => &[Physics::Diffusion],
-            Self::Thermal => &[Physics::Thermal],
-        }
-    }
-}
 
 /// Exchange law between two conforming boundary FE subspaces.
 #[derive(Clone, Serialize, Deserialize)]
@@ -123,7 +86,11 @@ pub struct InterfaceTransfer {
     /// POI1 supports over each side's unique nodes.
     pub(crate) support_a: Handle<SubMesh>,
     pub(crate) support_b: Handle<SubMesh>,
-    pub(crate) kind: TransferKind,
+    /// The transferred quantities, as `(primal, dual)` pairs.
+    pub(crate) components: Vec<(String, String)>,
+    /// The physics nature this exchange belongs to — what `model.filter(…)`
+    /// selects it by. Free variable names cannot imply it, so it is declared.
+    pub(crate) physics: Physics,
 }
 
 impl InterfaceTransfer {
@@ -133,9 +100,11 @@ impl InterfaceTransfer {
     pub fn new(
         side_a: Handle<SubFiniteElementSpace>,
         side_b: Handle<SubFiniteElementSpace>,
-        kind: TransferKind,
+        components: Vec<(String, String)>,
+        physics: Physics,
         tol: f64,
     ) -> Result<Self> {
+        material_contract("InterfaceTransfer", &components)?;
         let (mesh_a, mesh_b) = (read(&side_a)?.submesh(), read(&side_b)?.submesh());
         check_conforming_geometry(&mesh_a, &mesh_b, tol)?;
         let support_a = read(&mesh_a)?.to_poi1()?;
@@ -145,7 +114,8 @@ impl InterfaceTransfer {
             side_b,
             support_a,
             support_b,
-            kind,
+            components,
+            physics,
         })
     }
 
@@ -187,15 +157,15 @@ impl InterfaceTransfer {
 
 impl SubModelKind for InterfaceTransfer {
     fn primal_vars(&self) -> Vec<String> {
-        vec![self.kind.vars().0.to_string()]
+        self.components.iter().map(|(p, _)| p.clone()).collect()
     }
 
     fn dual_vars(&self) -> Vec<String> {
-        vec![self.kind.vars().1.to_string()]
+        self.components.iter().map(|(_, d)| d.clone()).collect()
     }
 
     fn physics(&self) -> &'static [Physics] {
-        self.kind.physics()
+        physics_slice(self.physics)
     }
 
     fn as_domain(&self) -> Option<&dyn Domain> {
@@ -239,7 +209,8 @@ impl SubModelKind for InterfaceTransfer {
     ) -> Result<()> {
         let geom = &geoms[0];
         let mat = material.expect("InterfaceTransfer declares a material_fespace");
-        exchange_matrix(geom, geom, mat, 1.0, ke)
+        let coefficients = coefficient_indices(mat, &self.components)?;
+        exchange_matrix(geom, geom, mat, &coefficients, 1.0, ke)
     }
 
     /// An off-diagonal block: `−h ∫_Γ N_i^row N_j^col dΓ`. The sign lives here
@@ -253,7 +224,8 @@ impl SubModelKind for InterfaceTransfer {
         ke: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("InterfaceTransfer declares a material_fespace");
-        exchange_matrix(&row_geoms[0], &col_geoms[0], mat, -1.0, ke)
+        let coefficients = coefficient_indices(mat, &self.components)?;
+        exchange_matrix(&row_geoms[0], &col_geoms[0], mat, &coefficients, -1.0, ke)
     }
 
     /// Internal fluxes `q_i = ∫ N_i · flux dΓ` — weighted by `N`, not by `Bᵀ`,
@@ -265,16 +237,7 @@ impl SubModelKind for InterfaceTransfer {
         stress: &SubElementField,
         fe: &mut [f64],
     ) -> Result<()> {
-        let geom = &geoms[0];
-        for g in 0..geom.n_gauss {
-            let shape = geom.n_at_g(g)?;
-            let w = geom.det_j_w(g)?;
-            let flux = stress.value(geom.cell, g, OUTPUT_COMPONENT)?;
-            for i in 0..geom.n_nodes {
-                fe[i] += shape[i] * flux * w;
-            }
-        }
-        Ok(())
+        internal_force(&geoms[0], stress, &self.components, fe)
     }
 
     fn label(&self) -> &'static str {
@@ -282,29 +245,30 @@ impl SubModelKind for InterfaceTransfer {
     }
 
     fn render(&self, _opts: &DumpOptions) -> String {
-        let (primal, dual) = self.kind.vars();
+        let primal = self.primal_vars().join(", ");
+        let dual = self.dual_vars().join(", ");
         let cells = read(&self.side_a).and_then(|f| f.cell_count()).unwrap_or(0);
         format!(
-            "SubModel<InterfaceTransfer({})>\n  primal var(s): {primal}\n  \
-             dual var(s):   {dual}\n  interface: {cells} facing cell pair(s)",
-            self.kind.to_tag()
+            "SubModel<InterfaceTransfer>\n  primal var(s): {primal}\n  \
+             dual var(s):   {dual}\n  interface: {cells} facing cell pair(s)"
         )
     }
 }
-
-/// Behaviour-**input** component: the field jump across the interface, or simply
-/// the field interpolated at the Gauss points of one side.
-const INPUT_COMPONENT: &str = "jump";
-/// Behaviour-**output** component: the exchanged flux density `h·jump`.
-const OUTPUT_COMPONENT: &str = "flux";
 
 impl Domain for InterfaceTransfer {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.side_a.clone()
     }
 
+    /// One coefficient per transferred quantity, named after it — `h_T`,
+    /// `h_c_H2`, `h_u_x`.
     fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(MATERIAL_COMPONENTS))
+        Some(
+            self.components
+                .iter()
+                .map(|(p, _)| coefficient_name(p))
+                .collect(),
+        )
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
@@ -312,11 +276,11 @@ impl Domain for InterfaceTransfer {
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(vec![OUTPUT_COMPONENT.to_string()])
+        Ok(self.components.iter().map(|(p, _)| flux_name(p)).collect())
     }
 
-    /// The exchanged flux density `h·(c₁ − c₂)` at one Gauss point, from the jump
-    /// supplied as input.
+    /// The exchanged flux density `h·(a₁ − a₂)` at one Gauss point, from the jump
+    /// supplied as input (`jump_<primal>`), one transferred quantity at a time.
     fn integrate_point(
         &self,
         geom: &CellGeom,
@@ -328,38 +292,13 @@ impl Domain for InterfaceTransfer {
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("InterfaceTransfer declares a material_fespace");
-        let h = mat.value(geom.cell, g, MATERIAL_COMPONENT)?;
-        out[0] = h * input.value(geom.cell, g, INPUT_COMPONENT)?;
+        let cell = geom.cell;
+        for (v, (primal, _)) in self.components.iter().enumerate() {
+            let h = mat.value(cell, g, &coefficient_name(primal))?;
+            out[v] = h * input.value(cell, g, &jump_name(primal))?;
+        }
         Ok(())
     }
-}
-
-/// `sign · h ∫_Γ N_i^row N_j^col dΓ` over one facing cell pair.
-///
-/// The measure comes from the **row** side: on a conforming interface the two
-/// sides carry the same surface, so either would do — taking the row side keeps
-/// the diagonal and off-diagonal blocks integrated identically, which is what
-/// makes the four blocks sum to a consistent operator.
-fn exchange_matrix(
-    row_geom: &CellGeom,
-    col_geom: &CellGeom,
-    material: &SubElementField,
-    sign: f64,
-    ke: &mut [f64],
-) -> Result<()> {
-    let n_col = col_geom.n_nodes;
-    for g in 0..row_geom.n_gauss {
-        let row_shape = row_geom.n_at_g(g)?;
-        let col_shape = col_geom.n_at_g(g)?;
-        let w = row_geom.det_j_w(g)?;
-        let h = material.value(row_geom.cell, g, MATERIAL_COMPONENT)?;
-        for i in 0..row_geom.n_nodes {
-            for j in 0..n_col {
-                ke[i * n_col + j] += sign * h * row_shape[i] * col_shape[j] * w;
-            }
-        }
-    }
-    Ok(())
 }
 
 /// Verify that two boundary sub-meshes face each other cell for cell **and node

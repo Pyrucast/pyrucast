@@ -144,7 +144,8 @@ la traversée, tandis qu'un flux la franchit proportionnellement à ce saut :
 j\cdot n = h\\,\big(c_1 - c_2\big)
 \\]
 
-`h` est le coefficient de transfert (son inverse est la résistance de contact).
+`h_c` est le coefficient de transfert (son inverse est la résistance de
+contact) : un par grandeur transférée, nommé d'après elle.
 La même loi décrit une résistance de contact **thermique**, avec `T` et `q` — d'où
 le paramètre `kind` du constructeur.
 
@@ -152,9 +153,11 @@ le paramètre `kind` du constructeur.
 model = (
     pyrucast.Model.fick(gauche)
     | pyrucast.Model.fick(droite)
-    | pyrucast.Model.interface_transfer(face_gauche, face_droite)
+    | pyrucast.Model.interface_transfer(
+        face_gauche, face_droite, [("c", "j")], "diffusion"
+    )
 )
-materials = pyrucast.element_field.material_field(model, [("D", 2.0), ("h", 5.0)])
+materials = pyrucast.element_field.material_field(model, [("D", 2.0), ("h_c", 5.0)])
 ```
 
 #### Quatre blocs, dont deux hors-diagonale

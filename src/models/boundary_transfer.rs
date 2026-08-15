@@ -1,0 +1,216 @@
+//! Surface exchange with an imposed ambient — the Robin (film) boundary.
+//!
+//! On a boundary `Γ`, the outward flux obeys `q·n = h·(a − a_ext)`: Newton's law
+//! of cooling when `a` is a temperature, a surface mass-transfer law when it is a
+//! concentration, a Winkler elastic foundation when it is a displacement. The
+//! weak form,
+//!
+//! ```text
+//! ∮_Γ (q·n) δa dΓ = ∮_Γ h·(a − a_ext) δa dΓ,
+//! ```
+//!
+//! splits into a **film matrix** and an **ambient load**:
+//!
+//! ```text
+//! K_ij = h ∫_Γ N_i N_j dΓ    (this sub-model, into the stiffness),
+//! f_i  = h·a_ext ∫_Γ N_i dΓ  (a right-hand side, built with
+//!                             crate::ops::node_field::flux — not stored here).
+//! ```
+//!
+//! Only the first is here, and that is the whole difference from
+//! [`interface_transfer`](crate::models::interface_transfer): there the far side
+//! is an **unknown**, so what would be this right-hand side becomes a coupling
+//! block in the matrix. The two share their kernel, in
+//! [`transfer`](crate::models::transfer).
+//!
+//! ## What is exchanged is the caller's to say
+//!
+//! The sub-model is given `(primal, dual)` pairs and derives everything from
+//! them — the DOF names it couples into, the coefficient `h_<primal>` it reads,
+//! the flux `flux_<primal>` it reports. Passing `("T", "q")` reproduces the
+//! classical thermal film; passing the three displacement pairs gives an elastic
+//! foundation, with a stiffness per direction. The names being those of the bulk
+//! physics is what makes the boundary term **couple straight into** it, exactly
+//! as it always did for conduction.
+//!
+//! **No normal is needed.** The normal is already consumed in passing from `q·n`
+//! to `h·(a − a_ext)`; what remains under the integral is a scalar times the
+//! surface measure `dΓ = |J|`, which
+//! [`CellGeom::det_j_w`](crate::models::kernel::CellGeom::det_j_w) returns as
+//! `√det(JᵀJ)` — a magnitude, invariant under the boundary mesh's orientation
+//! (winding). Contrast a pressure or a signed flux, where the direction matters.
+
+use crate::containers::element_field::SubElementField;
+use crate::containers::finite_element_space::SubFiniteElementSpace;
+use crate::containers::matrix::DofOrdering;
+use crate::containers::mesh::SubMesh;
+use crate::dump::DumpOptions;
+use crate::error::Result;
+use crate::models::transfer::{
+    coefficient_indices, coefficient_name, exchange_matrix, flux_name, internal_force,
+    material_contract, physics_slice,
+};
+use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::store::{read, Handle};
+use serde::{Deserialize, Serialize};
+
+/// Surface exchange with an imposed ambient, on a boundary FE subspace.
+///
+/// Material data (the coefficients `h_<primal>`) is **not** stored here; it is
+/// supplied at assembly time via [`crate::ops::matrix::stiffness`], read from
+/// the boundary cells of the material field.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct BoundaryTransfer {
+    pub(crate) fespace: Handle<SubFiniteElementSpace>,
+    /// POI1 SubMesh covering the unique nodes of `fespace`'s submesh, built
+    /// once at construction. Reused as the row/col support of every assembled
+    /// film block — no per-assembly rebuild.
+    pub(crate) support: Handle<SubMesh>,
+    /// The transferred quantities, as `(primal, dual)` pairs.
+    pub(crate) components: Vec<(String, String)>,
+    /// The physics nature this exchange belongs to — what `model.filter(…)`
+    /// selects it by. It cannot be deduced from the variable names, which are
+    /// free, so the caller declares it.
+    pub(crate) physics: Physics,
+}
+
+impl BoundaryTransfer {
+    /// Surface exchange on a boundary FE subspace (an edge mesh in 2-D, a
+    /// surface mesh in 3-D). Builds the stable POI1 [`SubMesh`] covering the
+    /// subspace's unique nodes (reused as the row/col support of every assembled
+    /// block). Errors on an empty `components`.
+    pub fn new(
+        fespace: Handle<SubFiniteElementSpace>,
+        components: Vec<(String, String)>,
+        physics: Physics,
+    ) -> Result<Self> {
+        material_contract("BoundaryTransfer", &components)?;
+        let submesh = read(&fespace)?.submesh();
+        let support = read(&submesh)?.to_poi1()?;
+        Ok(Self {
+            fespace,
+            support,
+            components,
+            physics,
+        })
+    }
+}
+
+impl SubModelKind for BoundaryTransfer {
+    fn primal_vars(&self) -> Vec<String> {
+        self.components.iter().map(|(p, _)| p.clone()).collect()
+    }
+
+    fn dual_vars(&self) -> Vec<String> {
+        self.components.iter().map(|(_, d)| d.clone()).collect()
+    }
+
+    fn as_domain(&self) -> Option<&dyn Domain> {
+        Some(self)
+    }
+
+    fn stiffness_layout(&self) -> Option<MatrixLayout> {
+        Some(MatrixLayout {
+            fespaces: vec![self.fespace.clone()],
+            support: self.support.clone(),
+            dual_vars: self.dual_vars(),
+            primal_vars: self.primal_vars(),
+            ordering: DofOrdering::NodesThenVars,
+            symmetric: true,
+        })
+    }
+
+    /// The film matrix — the exchange kernel with both sides on the same cell,
+    /// which is exactly what an interface's diagonal block is.
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: Option<&SubElementField>,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material.expect("BoundaryTransfer requires a material field");
+        let coefficients = coefficient_indices(mat, &self.components)?;
+        exchange_matrix(geom, geom, mat, &coefficients, 1.0, ke)
+    }
+
+    /// Internal nodal fluxes `q_i = ∫ N_i · flux dΓ` — the **`N`-weighted**
+    /// boundary counterpart of the `Bᵀ` continuum default. For this linear law it
+    /// equals `(K·a)_i`, so it fits the « internal forces == K·u » invariant.
+    fn internal_force_element(
+        &self,
+        geoms: &[CellGeom],
+        stress: &SubElementField,
+        fe: &mut [f64],
+    ) -> Result<()> {
+        internal_force(&geoms[0], stress, &self.components, fe)
+    }
+
+    fn physics(&self) -> &'static [Physics] {
+        physics_slice(self.physics)
+    }
+
+    fn label(&self) -> &'static str {
+        "BoundaryTransfer"
+    }
+
+    fn render(&self, _opts: &DumpOptions) -> String {
+        let primal = self.primal_vars().join(", ");
+        let dual = self.dual_vars().join(", ");
+        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        format!(
+            "SubModel<BoundaryTransfer>\n  primal var(s): {primal}\n  \
+             dual var(s):   {dual}\n  support: {n} node(s)"
+        )
+    }
+}
+
+impl Domain for BoundaryTransfer {
+    fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    /// One coefficient per transferred quantity, named after it — `h_T`,
+    /// `h_c_H2`, `h_u_x`. Derived, which is why the contract had to become
+    /// owned.
+    fn material_components(&self) -> Option<Vec<String>> {
+        Some(
+            self.components
+                .iter()
+                .map(|(p, _)| coefficient_name(p))
+                .collect(),
+        )
+    }
+
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn behavior_output_components(&self) -> Result<Vec<String>> {
+        Ok(self.components.iter().map(|(p, _)| flux_name(p)).collect())
+    }
+
+    /// The linear film law, one quantity at a time: the weak-form flux density
+    /// `flux_<primal> = h_<primal> · <primal>` at one Gauss point, from the
+    /// interpolated field. This is what the assembled film matrix integrates
+    /// (`∫ N_i·flux = (K·a)_i`); the ambient part `h·a_ext` lives in the load,
+    /// not here. No internal state.
+    fn integrate_point(
+        &self,
+        geom: &CellGeom,
+        input: &SubElementField,
+        _prev: Option<&SubElementField>,
+        material: Option<&SubElementField>,
+        g: usize,
+        _dt: Option<f64>,
+        out: &mut [f64],
+    ) -> Result<()> {
+        let mat = material.expect("BoundaryTransfer declares a material_fespace");
+        let cell = geom.cell;
+        for (v, (primal, _)) in self.components.iter().enumerate() {
+            let h = mat.value(cell, g, &coefficient_name(primal))?;
+            out[v] = h * input.value(cell, g, primal)?;
+        }
+        Ok(())
+    }
+}

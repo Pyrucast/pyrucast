@@ -33,6 +33,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
+use pyrucast::models::Physics;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::store::insert;
 use pyrucast::Result;
@@ -82,12 +83,13 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
 
     let conduction = Model::heat_conduction(&fes)?;
-    let convection = Model::convection(&right_fes)?;
+    let convection =
+        Model::boundary_transfer(&right_fes, vec![("T".into(), "q".into())], Physics::Thermal)?;
     let model = conduction.union(&convection)?;
 
     // Matériau : k pour la conduction, h pour la convection (chaque sous-modèle
     // prélève la composante qu'il requiert dans la liste fournie).
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K), ("h", H)])?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K), ("h_T", H)])?;
 
     // ── Chargement ─────────────────────────────────────────────────────────
     // Source : flux uniforme (densité Q) sur le bord gauche, en charges nodales

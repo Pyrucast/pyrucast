@@ -90,13 +90,17 @@ deux variantes, et aucun consommateur générique ne change.
 
 ## Physiques — 17 sous-modèles
 
-Thermique : `HeatConduction`, `Convection` (échange de surface / film),
+Thermique : `HeatConduction`, `BoundaryTransfer` (échange de surface avec une
+ambiante — film thermique, transfert de masse, ou fondation élastique selon les
+composantes qu'on lui donne),
 `Radiation` (rayonnement à l'infini `σε(T⁴ − T_∞⁴)` : rigidité linéarisée autour
 de `T_∞`, résidu exact, tangente cohérente validée par différences finies ;
 première physique à déclarer **deux** natures, `[Thermal, Radiation]`).
 Diffusion : `Fick` (concentration `c` / flux `j`, nature `Diffusion` propre),
-`InterfaceTransfer` (échange `h(c₁ − c₂)` entre deux maillages non conformes en
-nœuds, variante thermique comprise).
+`InterfaceTransfer` (échange `h(a₁ − a₂)` entre deux maillages coïncidents mais
+numérotés séparément ; comme `BoundaryTransfer`, il prend ses grandeurs
+transférées en argument — thermique, diffusion, ou joint collé de raideur finie
+— et les deux partagent leur noyau dans `models::transfer`).
 Mécanique : `Truss`, `Elasticity` (contraintes/déformations planes,
 axisymétrique, 3-D), `Plasticity` (la **loi d'écoulement en attribut** : von Mises parfaite ou à
 écrouissage isotrope, Drucker-Prager non associé avec traitement du sommet,

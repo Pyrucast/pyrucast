@@ -5,7 +5,6 @@ use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::models::damage::DamageLaw;
 use crate::models::elasticity::ElasticityModel;
-use crate::models::interface_transfer::TransferKind;
 use crate::models::plastic::PlasticLaw;
 use crate::models::shell::ShellModel;
 use crate::models::symmetry::MaterialSymmetry;
@@ -16,6 +15,17 @@ use crate::py::node::PyNode;
 use crate::py::node_field::PyNodeField;
 use crate::store::{read, Handle};
 use pyo3::prelude::*;
+
+/// Parse a physics-nature tag — the one thing a free component list cannot
+/// imply, so the caller states it.
+fn parse_physics(what: &str, tag: &str) -> PyResult<Physics> {
+    Physics::from_tag(tag).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err(format!(
+            "{what}: unknown physics '{tag}' (expected {})",
+            Physics::tag_list()
+        ))
+    })
+}
 
 /// Parse the optional `symmetry` tag shared by every physics that reads an
 /// oriented material (`elasticity`, `heat_conduction`, `fick`). `None` means the
@@ -272,40 +282,53 @@ impl PyModel {
     /// This is what lets the field **jump** across the interface: with a shared
     /// node it could not. The jump is `q/h` for a flux density `q`.
     #[classmethod]
-    #[pyo3(signature = (side_a, side_b, kind=None, tol=None))]
+    #[pyo3(signature = (side_a, side_b, components, physics, tol=None))]
     fn interface_transfer(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         side_a: PyRef<PyFiniteElementSpace>,
         side_b: PyRef<PyFiniteElementSpace>,
-        kind: Option<&str>,
+        components: Vec<(String, String)>,
+        physics: &str,
         tol: Option<f64>,
     ) -> PyResult<Self> {
-        let k = match kind {
-            None => TransferKind::Mass,
-            Some(t) => TransferKind::from_tag(t).ok_or_else(|| {
-                pyo3::exceptions::PyValueError::new_err(format!(
-                    "interface_transfer: unknown kind '{t}' (expected mass|thermal)"
-                ))
-            })?,
-        };
-        let inner =
-            Model::interface_transfer(&side_a.inner, &side_b.inner, k, tol.unwrap_or(1e-9))?;
+        let p = parse_physics("interface_transfer", physics)?;
+        let inner = Model::interface_transfer(
+            &side_a.inner,
+            &side_b.inner,
+            components,
+            p,
+            tol.unwrap_or(1e-9),
+        )?;
         Ok(Self { inner })
     }
 
-    /// `Model.convection(fespace)` — surface-convection (Robin / film) model
-    /// spanning **every** subspace of a *boundary* `fespace` (edge mesh in 2-D,
-    /// surface mesh in 3-D). Same DOFs (`"T"`/`"q"`) as `heat_conduction`, so
-    /// it couples in with `|`:
-    /// `Model.heat_conduction(bulk) | Model.convection(boundary)`.
-    /// The film coefficient `"h"` is supplied at assembly time; the external
-    /// temperature enters as a load `h·T_ext·∫N_i dΓ`, built with `flux(...)`.
+    /// `Model.boundary_transfer(fespace, components, physics)` — surface
+    /// exchange with an **imposed ambient** (Robin / film) spanning every
+    /// subspace of a *boundary* `fespace` (edge mesh in 2-D, surface mesh in
+    /// 3-D).
+    ///
+    /// `components` is a list of `(primal, dual)` pairs — naming the bulk
+    /// physics' own DOFs is what makes the boundary term couple into it:
+    ///
+    /// | you write | you get |
+    /// |---|---|
+    /// | `[("T", "q")], "thermal"` | Newton's law of cooling |
+    /// | `[("c_H2", "j_H2")], "diffusion"` | a surface mass-transfer law |
+    /// | `[("u_x", "f_x"), ("u_y", "f_y")], "mechanical"` | a Winkler elastic foundation |
+    ///
+    /// The coefficients `h_<primal>` (one per pair) are supplied at assembly
+    /// time; the ambient value enters as a load `h·a_ext·∫N_i dΓ`, built with
+    /// `flux(...)`. Compose with `|`:
+    /// `Model.heat_conduction(bulk) | Model.boundary_transfer(skin, [("T", "q")], "thermal")`.
     #[classmethod]
-    fn convection(
+    fn boundary_transfer(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         fespace: PyRef<PyFiniteElementSpace>,
+        components: Vec<(String, String)>,
+        physics: &str,
     ) -> PyResult<Self> {
-        let inner = Model::convection(&fespace.inner)?;
+        let p = parse_physics("boundary_transfer", physics)?;
+        let inner = Model::boundary_transfer(&fespace.inner, components, p)?;
         Ok(Self { inner })
     }
 

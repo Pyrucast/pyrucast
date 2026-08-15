@@ -449,7 +449,7 @@ impl<'a> CellGeom<'a> {
     /// this accessor, that decides which side is « outside ». That is why the
     /// physics needing a normal (a pressure, a signed flux) are the ones that
     /// must care about their boundary mesh's orientation, while those that do
-    /// not ([`convection`](crate::models::convection),
+    /// not ([`boundary_transfer`](crate::models::boundary_transfer),
     /// [`radiation`](crate::models::radiation)) never call this: their direction
     /// is already consumed in writing `q·n`, and
     /// [`det_j_w`](Self::det_j_w) returns an orientation-invariant magnitude.

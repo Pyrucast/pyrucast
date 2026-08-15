@@ -35,23 +35,43 @@ def _two_squares():
 def test_interface_declares_its_variables_and_material():
     _c, left, right, _square, edge = _two_squares()
     model = pyrucast.Model.interface_transfer(
-        edge(left[1], left[2]), edge(right[0], right[3])
+        edge(left[1], left[2]), edge(right[0], right[3]), [("c", "j")], "diffusion"
     )
     assert model[0].primal_vars() == ["c"]
     assert model[0].dual_vars() == ["j"]
-    assert model[0].material_components() == ["h"]
+    assert model[0].material_components() == ["h_c"]
     assert model[0].physics() == ["diffusion"]
 
 
 def test_thermal_variant_is_a_contact_resistance():
     _c, left, right, _square, edge = _two_squares()
     model = pyrucast.Model.interface_transfer(
-        edge(left[1], left[2]), edge(right[0], right[3]), kind="thermal"
+        edge(left[1], left[2]), edge(right[0], right[3]), [("T", "q")], "thermal"
     )
     assert model[0].primal_vars() == ["T"]
     assert model[0].dual_vars() == ["q"]
+    assert model[0].material_components() == ["h_T"]
     # Same DOFs as heat conduction, so it couples straight into it.
     assert model[0].physics() == ["thermal"]
+
+
+def test_a_mechanical_joint_transfers_several_quantities_at_once():
+    """The generalisation: nothing about the law is thermal or diffusive.
+
+    Given the displacement pairs, the very same interface becomes a bonded joint
+    of finite stiffness — one coefficient per direction, and no new physics.
+    """
+    _c, left, right, _square, edge = _two_squares()
+    model = pyrucast.Model.interface_transfer(
+        edge(left[1], left[2]),
+        edge(right[0], right[3]),
+        [("u_x", "f_x"), ("u_y", "f_y")],
+        "mechanical",
+    )
+    assert model[0].primal_vars() == ["u_x", "u_y"]
+    assert model[0].dual_vars() == ["f_x", "f_y"]
+    assert model[0].material_components() == ["h_u_x", "h_u_y"]
+    assert model[0].physics() == ["mechanical"]
 
 
 def test_a_non_conforming_interface_is_rejected():
@@ -67,23 +87,36 @@ def test_a_non_conforming_interface_is_rejected():
     # A construction-time modelling error surfaces as `RuntimeError`; only the
     # tag parsing (a bad argument) is a `ValueError`.
     try:
-        pyrucast.Model.interface_transfer(edge(a), edge(b))
+        pyrucast.Model.interface_transfer(edge(a), edge(b), [("c", "j")], "diffusion")
     except RuntimeError as exc:
         assert "not node-conforming" in str(exc)
     else:  # pragma: no cover - the constructor must refuse
         raise AssertionError("a non-conforming interface must raise")
 
 
-def test_an_unknown_kind_is_rejected():
+def test_an_unknown_physics_is_rejected():
     _c, left, right, _square, edge = _two_squares()
     try:
         pyrucast.Model.interface_transfer(
-            edge(left[1], left[2]), edge(right[0], right[3]), kind="magnetic"
+            edge(left[1], left[2]), edge(right[0], right[3]), [("c", "j")], "magnetic"
         )
     except ValueError as exc:
         assert "magnetic" in str(exc)
     else:  # pragma: no cover
-        raise AssertionError("an unknown kind must raise")
+        raise AssertionError("an unknown physics must raise")
+
+
+def test_transferring_nothing_is_rejected():
+    """A law that transfers nothing has no matrix and no coefficient."""
+    _c, left, right, _square, edge = _two_squares()
+    try:
+        pyrucast.Model.interface_transfer(
+            edge(left[1], left[2]), edge(right[0], right[3]), [], "diffusion"
+        )
+    except RuntimeError as exc:
+        assert "nothing to transfer" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("an empty component list must raise")
 
 
 def test_the_field_jumps_by_q_over_h():
@@ -100,11 +133,11 @@ def test_the_field_jumps_by_q_over_h():
         pyrucast.Model.fick(square(left))
         | pyrucast.Model.fick(square(right))
         | pyrucast.Model.interface_transfer(
-            edge(left[1], left[2]), edge(right[0], right[3])
+            edge(left[1], left[2]), edge(right[0], right[3]), [("c", "j")], "diffusion"
         )
         | pyrucast.Model.dirichlet("c", "j", imposed, multiplier)
     )
-    materials = pyrucast.element_field.material_field(model, [("D", d), ("h", h)])
+    materials = pyrucast.element_field.material_field(model, [("D", d), ("h_c", h)])
 
     # Uniform flux density on the far-left edge, as consistent nodal loads.
     inlet = pyrucast.Mesh(c, "SEG2")

@@ -55,7 +55,7 @@ Ajouter une physique se réduit à **quatre** gestes :
 1. **`src/models/<ma_physique>.rs`** (nouveau) — une struct portant ses
    supports + un `impl SubModelKind` + un constructeur `new(...)` faisant le
    travail de construction (calque sur `heat_conduction.rs`, cas simple à
-   1 bloc avec raideur *et* masse, `convection.rs`, cas le plus court, ou
+   1 bloc avec raideur *et* masse, `boundary_transfer.rs`, cas le plus court, ou
    `dirichlet.rs`, contrainte de Lagrange à 2 blocs portée par des maillages
    fournis par l'utilisateur). La struct dérive `Serialize, Deserialize` (et
    `Clone` si ses champs le permettent).

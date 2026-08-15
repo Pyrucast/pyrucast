@@ -36,8 +36,8 @@ use serde::{Deserialize, Serialize};
 
 pub mod beam;
 pub mod bernoulli;
+pub mod boundary_transfer;
 pub mod contact;
-pub mod convection;
 pub mod damage;
 pub mod dirichlet;
 pub mod elasticity;
@@ -56,6 +56,7 @@ pub mod radiation;
 pub mod shell;
 pub mod symmetry;
 pub mod timoshenko;
+pub mod transfer;
 pub mod truss;
 
 pub use kernel::CellGeom;

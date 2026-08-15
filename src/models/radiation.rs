@@ -10,7 +10,7 @@
 //! dual `"q"` — the **same** DOFs as
 //! [`heat_conduction`](crate::models::heat_conduction), so a radiating boundary
 //! couples straight into the conduction stiffness, exactly like
-//! [`convection`](crate::models::convection).
+//! [`boundary_transfer`](crate::models::boundary_transfer).
 //!
 //! ## What makes it different from convection: it is non-linear
 //!

@@ -66,7 +66,7 @@ Elles sont presque toujours **différentes** :
 | Physique           | Primales (cols)    | Duales (rows)      |
 |---|---|---|
 | `HeatConduction`   | `T` (température)  | `q` (flux de chaleur) |
-| `Convection` (film) | `T` (partagée avec `HeatConduction`) | `q` (partagée) |
+| `BoundaryTransfer` (film) | `T` (partagée avec `HeatConduction`) | `q` (partagée) |
 | `Truss` / `LinearElasticity` | `u_x`, `u_y`, …   | `f_x`, `f_y`, …    |
 | `Dirichlet { imposed_variable: "T" }` | `lambda_T`         | `imposed_T`         |
 
@@ -104,11 +104,11 @@ constructeurs et les variables, vus du `Model` :
 |---|---|---|---|---|
 | `heat_conduction(fes)` | `T` | `q` | `k` | [Thermique](thermique.md) |
 | `heat_conduction_with_symmetry(fes, sym)` | `T` | `q` | `k_1…` / `k_11…` + repère | [Conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
-| `convection(fes)` | `T` | `q` | `h` | [Thermique](thermique.md#convection-de-surface-robin--film) |
+| `boundary_transfer(fes, comps, physics)` | libres | libres | `h_<primale>` | [Échange de surface](thermique.md#convection-de-surface-robin--film) |
 | `radiation(fes)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
 | `fick(fes)` | `c` | `j` | `D` ; `poro` facultatif | [Diffusion](diffusion.md) |
 | `fick_with_symmetry(fes, sym)` | `c` | `j` | `D_1…` / `D_11…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
-| `interface_transfer(a, b, kind, tol)` | `c` ou `T` | `j` ou `q` | `h` | [Transfert d'interface](diffusion.md#transfert-à-travers-une-interface) |
+| `interface_transfer(a, b, comps, physics, tol)` | libres | libres | `h_<primale>` | [Transfert d'interface](diffusion.md#transfert-à-travers-une-interface) |
 | `truss(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
 | `elasticity(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` | [Élasticité](mecanique/elasticite.md) |
 | `elasticity_with_symmetry(fes, model, sym)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E_1…G_23` / `C_11…C_66` + repère | [Orthotropie](mecanique/orthotropie.md) |
@@ -293,7 +293,7 @@ lecture des inconnues et des réactions) sont déroulés dans
 
 ## Limitations actuelles
 
-- **Physiques disponibles** : `HeatConduction` et `Convection` (échange de
+- **Physiques disponibles** : `HeatConduction` et `BoundaryTransfer` (échange de
   surface / film) ([thermique](thermique.md)) ; `Truss`, `Elasticity`,
   `Plasticity`, `Mazars`, `Timoshenko`, `Frame`, `Frame3d`
   ([mécanique](mecanique.md)) ; et les contraintes `Dirichlet`, `Mpc`,

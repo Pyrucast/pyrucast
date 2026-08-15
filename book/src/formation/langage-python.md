@@ -71,7 +71,9 @@ Sept conteneurs partagent un même protocole d'**agrégat** — la notion la
 plus proche de Gibiane `ET` :
 
 ```python
-modele = pc.Model.heat_conduction(fes) | pc.Model.convection(bord_fes)
+modele = pc.Model.heat_conduction(fes) | pc.Model.boundary_transfer(
+    bord_fes, [("T", "q")], "thermal"
+)
 modele = modele | pc.Model.dirichlet("T", "q", impose, multiplicateur)
 ```
 
