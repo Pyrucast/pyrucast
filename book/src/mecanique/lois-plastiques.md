@@ -17,7 +17,7 @@ formulation.
 |---|---|---|---|
 | `plasticity_perfect` | `q = σ_y` | métal sans écrouissage | `E, nu, sigma_y` |
 | `plasticity_isotropic` | `q = σ_y + H·p` | métal écrouissable | `+ H` |
-| `drucker_prager` | `q + α·I₁ = k` | sols, roches, poudres — sensibilité à la pression | `E, nu, friction, k, psi` |
+| `drucker_prager` | `α·I₁ + β·q = k` | sols, roches, poudres — sensibilité à la pression, écrouissage borné | `E, nu, friction, k, psi` (+ six facultatifs) |
 | `ottosen` | 4 paramètres, dépendante de l'angle de Lode | béton — traction ≠ compression | `E, nu, a, b, k_1, k_2, sigma_c` |
 
 Ce qui est mutualisé dans `src/models/plastic/` : le prédicteur élastique, la
@@ -192,6 +192,70 @@ et la consistance \\( f(\sigma_B) = 0 \\) se résout, comme en J2, sans itérer 
 Le terme \\( 9K\alpha\psi \\) au dénominateur est **le** couplage
 pression-cisaillement : c'est là que la dilatance rigidifie (ou non) la réponse,
 et il disparaît dès que \\( \psi = 0 \\).
+
+### Écrouissage et surface ultime
+
+La cohésion croît avec la déformation plastique cumulée, \\( dk = H\\,dp \\), le
+module \\( H \\) étant algébrique — un \\( H \\) négatif adoucit. Laissée seule
+cette croissance serait sans borne, aussi une seconde surface, dite **ultime**,
+l'arrête :
+
+\[
+\text{initiale } \alpha I_1 + \beta q = k,
+\qquad
+\text{ultime } \alpha_u I_1 + \beta_u q = k_u .
+\]
+
+Les deux sont lues comme les extrémités d'une seule interpolation, que
+l'écrouissage lui-même pilote :
+
+\[
+\lambda = \mathrm{clamp}\!\left(\frac{H\,p}{k_u - k},\, 0,\, 1\right),
+\qquad
+\big(\alpha, \beta, k\big)(p) = (1-\lambda)\,\big(\alpha, \beta, k\big) + \lambda\,\big(\alpha_u, \beta_u, k_u\big).
+\]
+
+**C'est une interprétation, et il vaut mieux le dire.** Cast3M donne les deux
+surfaces et \\( dK = H\,dp \\) sans préciser comment elles se rencontrent. Les
+lire comme une surface qui interpole a deux mérites : \\( k(p) = k + H p \\)
+exactement tant que la limite n'est pas atteinte, donc la loi d'écrouissage
+annoncée est reproduite telle quelle ; et la surface de charge reste **unique**,
+si bien que le retour garde un cône et un sommet au lieu de faire naître un coin
+entre deux.
+
+La contrepartie est que la condition de cohérence cesse d'être linéaire — la
+surface bouge avec le multiplicateur qu'on cherche. Elle est alors résolue par un
+Newton encadré, la solution linéaire servant à la fois de premier itéré et de
+borne. C'est le seul cas où cette loi itère : sans écrouissage, le retour reste
+la forme fermée ci-dessus.
+
+### Les neuf paramètres, et ce qu'ils redonnent
+
+| Cast3M | ici | défaut | rôle |
+|---|---|---|---|
+| `ALFA` | `friction` | requis | pente du cône |
+| `K` | `k` | requis | cohésion |
+| `GAMM` | `psi` | requis | dilatance du potentiel |
+| `BETA` | `beta` | 1 | poids déviatorique du critère |
+| `DELT` | `delta` | 1 | poids déviatorique du potentiel |
+| `H` | `H` | 0 | module d'écrouissage |
+| `ETA` | `friction_ult` | `friction` | pente de la surface ultime |
+| `MU` | `beta_ult` | `beta` | poids déviatorique ultime |
+| `KL` | `k_ult` | `k` | cohésion ultime |
+
+Six sur neuf sont facultatifs, et leurs défauts font du cône simple le cas sans
+configuration : \\( k_u = k \\) ne laisse aucune place à l'écrouissage,
+l'interpolation reste figée sur la surface initiale, et il ne reste que le cône
+parfaitement plastique — trois nombres, comme avant.
+
+Les deux modèles de Cast3M sont alors des préréglages de celui-ci :
+
+- **`PLASTIQUE DRUCKER_PARFAIT`** — `psi = friction` (et `delta = beta`), ce qui
+  rend l'écoulement associé, tous les autres à leur défaut. Cast3M le paramètre
+  par les limites en traction et compression simples, d'où l'on tire
+  \\( \text{friction} = \frac{|LCS| - LTR}{|LCS| + LTR} \\) et
+  \\( k = \frac{2\,|LCS|\,LTR}{|LCS| + LTR} \\).
+- **`PLASTIQUE DRUCKER_PRAGER`** — les neuf.
 
 ### Le sommet
 

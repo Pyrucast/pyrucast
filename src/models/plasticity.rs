@@ -365,7 +365,24 @@ impl Domain for Plasticity {
     /// wins, and thermal expansion is therefore out of reach for that law
     /// alone.
     fn optional_material_components(&self) -> &'static [&'static str] {
-        &["alpha", "rho"]
+        // A law may accept constitutive parameters it can do without. The
+        // general Drucker-Prager surface is nine numbers, of which six default
+        // to the simple cone — see [`crate::models::plastic::drucker_prager`].
+        // They ride the optional channel so that a three-parameter model stays
+        // writable in three numbers.
+        match self.law {
+            crate::models::plastic::PlasticLaw::DruckerPrager => &[
+                "alpha",
+                "rho",
+                "beta",
+                "delta",
+                "H",
+                "friction_ult",
+                "beta_ult",
+                "k_ult",
+            ],
+            _ => &["alpha", "rho"],
+        }
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {

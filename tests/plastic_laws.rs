@@ -206,9 +206,27 @@ fn every_law_has_a_consistent_tangent() -> Result<()> {
     // one good to machine precision, and pays only in its convergence *rate* —
     // and it is more honest to state the figure than to loosen every tolerance
     // to the worst case.
+    // Le cône **écrouissable** s'ajoute à la liste parce que son retour n'est
+    // plus en forme fermée : la surface bouge avec le multiplicateur, donc la
+    // condition de cohérence est résolue par Newton. Une tangente numérique au
+    // travers d'un retour itératif est exactement le montage où une convergence
+    // trop lâche se verrait — et ne se verrait que là.
+    let hardening = dp(&[
+        ("friction", 0.3),
+        ("k", 30.0),
+        ("psi", 0.1),
+        ("H", 8_000.0),
+        ("k_ult", 60.0),
+    ]);
     for (law, mat, disp, tol) in [
         (PlasticLaw::Isotropic, ISOTROPIC, uniaxial(0.02), 2e-3),
         (PlasticLaw::DruckerPrager, DRUCKER, shear(0.002), 2e-3),
+        (
+            PlasticLaw::DruckerPrager,
+            &hardening[..],
+            shear(0.004),
+            2e-3,
+        ),
         (PlasticLaw::Ottosen, OTTOSEN, uniaxial(0.01), 1e-1),
     ] {
         let cube = Cube::new(law, mat)?;
@@ -435,4 +453,134 @@ impl Cube {
         }
         Ok(())
     }
+}
+
+// ─── Le Drucker-Prager général (Cast3M PLASTIQUE DRUCKER_PRAGER) ────────────
+
+/// Élasticité commune à tous les jeux ci-dessous, pour que l'état d'essai soit
+/// comparable d'un cas à l'autre.
+const DP_ELASTIC: [(&str, f64); 2] = [("E", 20_000.0), ("nu", 0.2)];
+
+/// Un jeu Drucker-Prager, élasticité comprise.
+fn dp(extra: &[(&str, f64)]) -> Vec<(&'static str, f64)> {
+    let mut v: Vec<(&'static str, f64)> = DP_ELASTIC.to_vec();
+    v.extend(extra.iter().map(|(n, x)| {
+        (
+            Box::leak(n.to_string().into_boxed_str()) as &'static str,
+            *x,
+        )
+    }));
+    v
+}
+
+/// `beta` pondère la part déviatorique du critère. Le laisser à son défaut de 1
+/// redonne le cône simple ; le porter à 2 resserre la surface d'autant, et c'est
+/// sur *cette* surface que le retour doit atterrir.
+#[test]
+fn the_deviatoric_weight_reshapes_the_cone() -> Result<()> {
+    let cube = Cube::new(
+        PlasticLaw::DruckerPrager,
+        &dp(&[("friction", 0.3), ("k", 30.0), ("psi", 0.1), ("beta", 2.0)]),
+    )?;
+    let s = cube.stress(&shear(0.01))?;
+    assert!(s.p > 0.0, "l'incrément doit être plastique");
+    let f = 0.3 * trace(&s.sigma) + 2.0 * von_mises(&s.sigma) - 30.0;
+    assert!(f.abs() < 1e-6 * 30.0, "f = {f}, doit être nul sur le cône");
+    Ok(())
+}
+
+/// L'écrouissage `dk = H·dp` : la surface atteinte n'est plus `k` mais
+/// `k + H·p`, avec le `p` que le retour a lui-même produit. C'est la condition
+/// de cohérence qui devient non linéaire, et donc le seul cas où la loi itère.
+#[test]
+fn hardening_moves_the_surface_by_h_times_p() -> Result<()> {
+    let (k, h) = (30.0, 8_000.0);
+    let cube = Cube::new(
+        PlasticLaw::DruckerPrager,
+        &dp(&[
+            ("friction", 0.3),
+            ("k", k),
+            ("psi", 0.1),
+            ("H", h),
+            ("k_ult", 1e9), // assez loin pour ne pas plafonner
+        ]),
+    )?;
+    let s = cube.stress(&shear(0.02))?;
+    assert!(s.p > 0.0, "l'incrément doit être plastique");
+    let reached = 0.3 * trace(&s.sigma) + von_mises(&s.sigma);
+    let expected = k + h * s.p;
+    assert!(
+        (reached - expected).abs() < 1e-6 * expected,
+        "surface atteinte {reached}, attendue k + H·p = {expected} (p = {})",
+        s.p
+    );
+    // Et elle a bien bougé : sans écrouissage on serait resté sur `k`.
+    assert!(reached > k * 1.01, "la surface n'a pas durci : {reached}");
+    Ok(())
+}
+
+/// Le **critère ultime** borne l'écrouissage. Poussé assez loin, l'état atterrit
+/// sur la surface ultime et n'en bouge plus : deux déformations croissantes y
+/// donnent la même surface.
+#[test]
+fn the_ultimate_surface_caps_the_hardening() -> Result<()> {
+    let (k, k_ult) = (30.0, 45.0);
+    let cube = Cube::new(
+        PlasticLaw::DruckerPrager,
+        &dp(&[
+            ("friction", 0.3),
+            ("k", k),
+            ("psi", 0.1),
+            ("H", 50_000.0),
+            ("friction_ult", 0.2),
+            ("k_ult", k_ult),
+        ]),
+    )?;
+    let far = cube.stress(&shear(0.05))?;
+    let farther = cube.stress(&shear(0.08))?;
+    for (label, s) in [("0.05", &far), ("0.08", &farther)] {
+        let reached = 0.2 * trace(&s.sigma) + von_mises(&s.sigma);
+        assert!(
+            (reached - k_ult).abs() < 1e-5 * k_ult,
+            "{label} : surface {reached}, plafond attendu {k_ult}"
+        );
+    }
+    Ok(())
+}
+
+/// Cast3M `PLASTIQUE DRUCKER_PARFAIT` est ce modèle avec `psi = friction` — un
+/// écoulement **associé**. Ce qui le distingue est mesurable : le potentiel
+/// étant le critère, la chute volumique et la chute déviatorique sont dans le
+/// rapport que la normale à la surface impose, `9K·ψ / 3μ·δ`.
+///
+/// L'état d'essai est obtenu du même cube rendu élastique par une cohésion
+/// inatteignable — c'est ce qui permet de mesurer les deux chutes.
+#[test]
+fn associated_flow_recovers_the_perfect_model_of_cast3m() -> Result<()> {
+    let (e, nu, friction) = (20_000.0, 0.2, 0.3);
+    let (mu, bulk) = (e / (2.0 * (1.0 + nu)), e / (3.0 * (1.0 - 2.0 * nu)));
+
+    let elastic = Cube::new(
+        PlasticLaw::DruckerPrager,
+        &dp(&[("friction", friction), ("k", 1e9), ("psi", friction)]),
+    )?;
+    let trial = elastic.stress(&shear(0.01))?;
+    assert!(trial.p == 0.0, "le témoin doit rester élastique");
+
+    let cube = Cube::new(
+        PlasticLaw::DruckerPrager,
+        &dp(&[("friction", friction), ("k", 30.0), ("psi", friction)]),
+    )?;
+    let s = cube.stress(&shear(0.01))?;
+    assert!(s.p > 0.0, "l'incrément doit être plastique");
+
+    let drop_q = von_mises(&trial.sigma) - von_mises(&s.sigma);
+    let drop_i1 = trace(&trial.sigma) - trace(&s.sigma);
+    let expected = 9.0 * bulk * friction / (3.0 * mu);
+    let ratio = drop_i1 / drop_q;
+    assert!(
+        (ratio - expected).abs() < 1e-6 * expected,
+        "écoulement non normal : rapport {ratio}, attendu {expected}"
+    );
+    Ok(())
 }
