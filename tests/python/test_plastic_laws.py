@@ -57,7 +57,7 @@ def test_each_law_declares_its_own_material():
     contracts = {
         "plasticity_perfect": ["E", "nu", "sigma_y"],
         "plasticity_isotropic": ["E", "nu", "sigma_y", "H"],
-        "drucker_prager": ["E", "nu", "alpha", "k", "psi"],
+        "drucker_prager": ["E", "nu", "friction", "k", "psi"],
         "ottosen": ["E", "nu", "a", "b", "k_1", "k_2", "sigma_c"],
     }
     for name, expected in contracts.items():
@@ -82,7 +82,7 @@ def test_drucker_prager_lands_on_its_cone():
     model = pyrucast.Model.drucker_prager(fes, "solid")
     materials = pyrucast.element_field.material_field(
         model,
-        [("E", 20_000.0), ("nu", 0.2), ("alpha", 0.3), ("k", 30.0), ("psi", 0.1)],
+        [("E", 20_000.0), ("nu", 0.2), ("friction", 0.3), ("k", 30.0), ("psi", 0.1)],
     )
     sub = _stress(model, materials, c, nodes, corners, fes, 0.02)
     trace = sum(sub.value(0, 0, f"sigma_{n}") for n in ("xx", "yy", "zz"))

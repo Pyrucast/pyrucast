@@ -17,7 +17,7 @@ formulation.
 |---|---|---|---|
 | `plasticity_perfect` | `q = σ_y` | métal sans écrouissage | `E, nu, sigma_y` |
 | `plasticity_isotropic` | `q = σ_y + H·p` | métal écrouissable | `+ H` |
-| `drucker_prager` | `q + α·I₁ = k` | sols, roches, poudres — sensibilité à la pression | `E, nu, alpha, k, psi` |
+| `drucker_prager` | `q + α·I₁ = k` | sols, roches, poudres — sensibilité à la pression | `E, nu, friction, k, psi` |
 | `ottosen` | 4 paramètres, dépendante de l'angle de Lode | béton — traction ≠ compression | `E, nu, a, b, k_1, k_2, sigma_c` |
 
 Ce qui est mutualisé dans `src/models/plastic/` : le prédicteur élastique, la
@@ -346,7 +346,7 @@ annonce le chiffre plutôt que de le cacher derrière une tolérance lâche part
 model = pyrucast.Model.drucker_prager(fes, "solid")
 materials = pyrucast.element_field.material_field(
     model,
-    [("E", 20_000.0), ("nu", 0.2), ("alpha", 0.3), ("k", 30.0), ("psi", 0.1)],
+    [("E", 20_000.0), ("nu", 0.2), ("friction", 0.3), ("k", 30.0), ("psi", 0.1)],
 )
 strain = pyrucast.element_field.deformation(u, fes)
 state = pyrucast.element_field.integrate_behavior(model, strain, materials)

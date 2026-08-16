@@ -49,7 +49,7 @@ const ISOTROPIC: &[(&str, f64)] = &[
 const DRUCKER: &[(&str, f64)] = &[
     ("E", 20_000.0),
     ("nu", 0.2),
-    ("alpha", 0.3),
+    ("friction", 0.3),
     ("k", 30.0),
     ("psi", 0.1),
 ];

@@ -9,8 +9,10 @@
 //! f(σ) = q + α·I₁ − k          q = √(3 J₂),  I₁ = tr σ
 //! ```
 //!
-//! `α` is the friction coefficient (the cone's slope, `α = 0` giving back von
-//! Mises) and `k` the cohesion.
+//! `α` is the friction coefficient — the cone's slope, `α = 0` giving back von
+//! Mises — and `k` the cohesion. It travels through the material field as
+//! **`friction`**: `alpha` is the thermal expansion everywhere else in the
+//! crate, and a single component name cannot carry two meanings.
 //!
 //! ## Why the flow is non-associated
 //!
@@ -42,8 +44,14 @@ use crate::models::plastic::{
 };
 
 /// Read `(α, k, ψ)` and reject a non-physical set.
+///
+/// The cone's slope is the component **`friction`**, not `alpha`: that name is
+/// the thermal expansion everywhere else, and one slot cannot mean two things.
+/// The symbol stays `α` in the equations and in this file, exactly as `sigma_y`
+/// names what the algebra writes `σ_y`. It is not Cast3M's `BETA` either — that
+/// one weights `Seq`, which this surface fixes at 1.
 fn params(mat: &MatParams) -> Result<(f64, f64, f64)> {
-    let alpha = mat.get("alpha")?;
+    let alpha = mat.get("friction")?;
     let k = require_positive(PlasticLaw::DruckerPrager, "k", mat.get("k")?)?;
     let psi = mat.get("psi")?;
     Ok((alpha, k, psi))

@@ -177,7 +177,7 @@ impl PlasticLaw {
         match self {
             Self::Perfect => &["E", "nu", "sigma_y"],
             Self::Isotropic => &["E", "nu", "sigma_y", "H"],
-            Self::DruckerPrager => &["E", "nu", "alpha", "k", "psi"],
+            Self::DruckerPrager => &["E", "nu", "friction", "k", "psi"],
             Self::Ottosen => &["E", "nu", "a", "b", "k_1", "k_2", "sigma_c"],
             Self::CreepNorton => &["E", "nu", "K", "n"],
             Self::CreepBlackburn => &["E", "nu", "A_1", "alpha_1", "r_1", "B_s", "beta_s"],
